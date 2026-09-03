@@ -57,18 +57,9 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 {{< /slide >}}
 
 {{< slide key="files" track="files" class="dense" eyebrow="File map" title="The template puts required settings in the right place" subtitle="This lists the major files currently generated; template updates never silently overwrite product-owned content." legacy="false" >}}
-| Path | Purpose | Responsibility |
-| --- | --- | --- |
-| `.csarc/config.yml` | Template source, languages, branch strategy, and optional capabilities | Template-led |
-| `.github/ISSUE_TEMPLATE/`, `pull_request_template.md` | Work definition and PR contract | Template-led |
-| `.github/workflows/` | Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift and template-update-notice schedules, CodeQL SAST, and a container build-and-scan job | Template-led |
-| `AGENTS.md`, `README.md`, `CLAUDE.md` | Agent working rules and user entry point | Shared |
-| `policies/`, `CODEOWNERS`, `.github/REVIEWERS` | Desired settings, owners, and reviewers | Shared |
-| `scripts/` | Local verification, work synchronization, and repository settings | Template-led |
-| `docs/`, `site/` | Project guidance, specifications, decisions, and internal site | Shared |
-| `src/`, product tests, and product specifications | Product behavior | Project-owned |
+{{< file-map >}}
 
-This table stays at three columns on purpose: the side navigation already links each row's area to its page, and the maintainer-only CI/CD settings appendix already lists verification entry points per Journey in more detail than a column could. Adding page-name and verification-entry columns here would just duplicate both instead of adding information.
+The file map only lists path, purpose, and responsibility: the side navigation already links each item to its page, and the maintainer-only "CI/CD settings" appendix already lists verification entry points per Journey in more detail than this view could add; the tree view likewise avoids duplicating a page-name or verification-entry column.
 
 {{< detail key="files-update" title="How updates protect product content" >}}
 Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
