@@ -1,0 +1,66 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  auto-merge:
+    name: auto-merge
+    # `pull_request` (not `pull_request_target`) is deliberate. Dependabot
+    # pushes its update branch to this repository directly, never a fork, so
+    # this run is never a fork PR needing the base-branch execution context
+    # that `pull_request_target` provides. GitHub downgrades the default
+    # GITHUB_TOKEN to read-only for Dependabot-triggered pull_request runs,
+    # but has honored an explicit `permissions:` override since 2021-10-11
+    # (see GitHub Actions changelog "Workflows triggered by Dependabot PRs
+    # will respect permissions key in workflows"), so the job-level grant
+    # below is sufficient and keeps this workflow on the same trigger and
+    # trust boundary as every other PR in this repository.
+    #
+    # The gate reads github.event.pull_request.user.login, not
+    # github.actor: github.actor reflects the most recent actor to act on
+    # the run, which is not necessarily the pull request's opener, while
+    # pull_request.user.login is fixed at PR-open time and cannot be
+    # relabeled by a later push (zizmor bot-conditions audit).
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # contents: write is required by `gh pr merge --auto`, which enables
+      # GitHub's native auto-merge queue; it does not perform an immediate
+      # merge. The actual merge still only happens later, and only once the
+      # required `title`/`promotion`/`verify` checks and the branch
+      # protection review requirement in policies/rulesets.json are
+      # satisfied, at which point GitHub performs the merge itself.
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ github.token }}
+      - name: Enable auto-merge for minor and patch updates
+        if: >-
+          ${{ steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        # This repository is squash-merge-only; --squash matches that policy.
+        run: gh pr merge --auto --squash "$PR_URL"
+      - name: Flag major updates for manual review
+        if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-major' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr edit "$PR_URL" --add-label needs-manual-review
+          gh pr comment "$PR_URL" --body "This is a major version update, which may include breaking changes. Auto-merge is intentionally skipped; please review and merge manually."

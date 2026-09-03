@@ -19,6 +19,7 @@ paired_files=(
   .github/ISSUE_TEMPLATE/documentation.yml
   .github/ISSUE_TEMPLATE/feature.yml
   .github/ISSUE_TEMPLATE/task.yml
+  .github/workflows/dependabot-auto-merge.yml
   .github/workflows/issue-triage.yml
   .github/workflows/governance-comment.yml
   .github/workflows/milestone-lifecycle.yml
@@ -66,6 +67,7 @@ paired_files=(
   scripts/validate-pr-policy
   scripts/verify-dependencies
   tests/test_ci_tier.py
+  tests/test_dependabot_auto_merge.py
   tests/test_dependency_security.py
   tests/test_spec_to_issue.py
   tests/test_delivery_sync.py
