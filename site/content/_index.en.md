@@ -340,6 +340,16 @@ Root `.csarc/config.yml` records the capabilities selected by the template repos
 `noindex` and `robots.txt` reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 
 The renderer resolves the same Rules-governance-approved `.csarc/config.yml` keys documented in the governance configuration table above; it does not define a second, site-only list. Product-specific prose lives in `docs/site-content.md`, theme overrides remain in `docs/site-theme.css`, and the generated `docs/index.html` is never edited directly.
+
+**Custom theme for this page (the root site, Issue #527):** the `.csarc/config.yml` / `docs/site-theme.css` path above belongs to the generated-project handbook. A maintainer who forks or vendors this template repository itself and wants to restyle its own root decision site uses `site/theme.css` instead. Scope stays deliberately narrow: only override CSS custom properties already declared in `site/static/styles.css`'s `:root` block, plus narrow, purely-visual declarations on existing block-level classes -- no new HTML, JavaScript, or layout rules; ordinary PR review is the only gate, no extra tooling. This file always exists and is always inlined by the engine; it ships empty, so the default output keeps the template's palette unchanged:
+
+```css
+:root {
+  --yellow: #2e6b47;
+}
+```
+
+Rebuild with `./scripts/build-decision-site` after editing. This is a structural addition to the presentation template, so `site/version.json`'s `template` version and the `scripts/check-decision-site-versions` compatibility check cover it; see the "根網站自訂主題" section of `docs/adr/portable-decision-site.md` for the full record.
 {{< /detail >}}
 
 <aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>

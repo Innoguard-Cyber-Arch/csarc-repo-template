@@ -2038,6 +2038,40 @@ html[data-detail-level="simple"] .detail-panel {
   html[data-detail-level="simple"] .detail-panel { transform: none; }
 }
 </style>
+  <style data-bundled-from="../../site/theme.css">
+/* Project- or fork-owned decision-site theme overrides (Issue #527).
+ *
+ * A repository that carries this template's own root decision-site
+ * engine (`scripts/build_decision_site.py`, not the smaller generated-
+ * project handbook -- see `template/docs/site-theme.css.jinja` for that
+ * separate path) can restyle its copy of the presentation here, without
+ * forking the render engine or `site/static/styles.css`.
+ *
+ * Scope, deliberately narrow (see docs/adr/portable-decision-site.md):
+ *   - Override CSS custom properties already declared in
+ *     `site/static/styles.css`'s `:root` block (colors and other design
+ *     tokens).
+ *   - Narrow, purely-visual declarations (color/background/border) on
+ *     existing block-level classes are also allowed.
+ *   - Do not add new HTML, JavaScript, selectors that change markup
+ *     semantics, or layout/structural rules; there is no automated
+ *     linter for this boundary, review it like any other change.
+ *
+ * This file is always linked and inlined by `scripts/build_decision_site.py`
+ * / `scripts/render_site.py`, so it must exist, but it ships empty: the
+ * committed `docs/index.html` and `docs/index.en.html` reflect the base
+ * palette in `site/static/styles.css` unchanged until a fork adds an
+ * override below. Example:
+ *
+ *   :root {
+ *     --yellow: #2e6b47;
+ *   }
+ *
+ * After editing, rebuild with `./scripts/build-decision-site`.
+ */
+:root {
+}
+</style>
 </head>
 <body>
   <div class="reading-controls">
@@ -2257,7 +2291,7 @@ html[data-detail-level="simple"] .detail-panel {
   <h2>The template puts required settings in the right place</h2>
   <p class="subtitle">This lists the major files currently generated; template updates never silently overwrite product-owned content.</p>
 </header>
-<div class="markdown-body"><table><thead><tr><th>Path</th><th>Purpose</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>.csarc/config.yml</code></td><td>Template source, languages, branch strategy, and optional capabilities</td><td>Template-led</td></tr><tr><td><code>.github/ISSUE_TEMPLATE/</code>, <code>pull_request_template.md</code></td><td>Work definition and PR contract</td><td>Template-led</td></tr><tr><td><code>.github/workflows/</code></td><td>Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift and template-update-notice schedules, and CodeQL SAST</td><td>Template-led</td></tr><tr><td><code>AGENTS.md</code>, <code>README.md</code>, <code>CLAUDE.md</code></td><td>Agent working rules and user entry point</td><td>Shared</td></tr><tr><td><code>policies/</code>, <code>CODEOWNERS</code>, <code>.github/REVIEWERS</code></td><td>Desired settings, owners, and reviewers</td><td>Shared</td></tr><tr><td><code>scripts/</code></td><td>Local verification, work synchronization, and repository settings</td><td>Template-led</td></tr><tr><td><code>docs/</code>, <code>site/</code></td><td>Project guidance, specifications, decisions, and internal site</td><td>Shared</td></tr><tr><td><code>src/</code>, product tests, and product specifications</td><td>Product behavior</td><td>Project-owned</td></tr></tbody></table>
+<div class="markdown-body"><table><thead><tr><th>Path</th><th>Purpose</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>.csarc/config.yml</code></td><td>Template source, languages, branch strategy, and optional capabilities</td><td>Template-led</td></tr><tr><td><code>.github/ISSUE_TEMPLATE/</code>, <code>pull_request_template.md</code></td><td>Work definition and PR contract</td><td>Template-led</td></tr><tr><td><code>.github/workflows/</code></td><td>Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift and template-update-notice schedules, CodeQL SAST, and a container build-and-scan job</td><td>Template-led</td></tr><tr><td><code>AGENTS.md</code>, <code>README.md</code>, <code>CLAUDE.md</code></td><td>Agent working rules and user entry point</td><td>Shared</td></tr><tr><td><code>policies/</code>, <code>CODEOWNERS</code>, <code>.github/REVIEWERS</code></td><td>Desired settings, owners, and reviewers</td><td>Shared</td></tr><tr><td><code>scripts/</code></td><td>Local verification, work synchronization, and repository settings</td><td>Template-led</td></tr><tr><td><code>docs/</code>, <code>site/</code></td><td>Project guidance, specifications, decisions, and internal site</td><td>Shared</td></tr><tr><td><code>src/</code>, product tests, and product specifications</td><td>Product behavior</td><td>Project-owned</td></tr></tbody></table>
 <p>This table stays at three columns on purpose: the side navigation already links each row&#x27;s area to its page, and the maintainer-only CI/CD settings appendix already lists verification entry points per Journey in more detail than a column could. Adding page-name and verification-entry columns here would just duplicate both instead of adding information.</p>
 <aside class="technical-detail" data-content-key="files-update"><h3>How updates protect product content</h3>
 <p>Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.</p>
@@ -2992,7 +3026,12 @@ html[data-detail-level="simple"] .detail-panel {
 <details class="package-disclosure" data-content-key="portable-bundle"><summary><span class="tech-name">Markdown + Hugo → self-contained HTML</span></summary><div class="package-health"><p><code>docs/adr/</code> preserves canonical choices. Hugo owns content and HTML; the unchanged renderer only embeds assets and enforces safety checks. The final <code>docs/index.html</code> opens offline through <code>file://</code> without Pages, a CDN, or a JavaScript package runtime.</p></div></details>
 <aside class="technical-detail" data-content-key="docs-site-access"><h3>Access and maintenance boundaries</h3>
 <p><code>noindex</code> and <code>robots.txt</code> reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.</p>
-<p>The renderer resolves the same Rules-governance-approved <code>.csarc/config.yml</code> keys documented in the governance configuration table above; it does not define a second, site-only list. Product-specific prose lives in <code>docs/site-content.md</code>, theme overrides remain in <code>docs/site-theme.css</code>, and the generated <code>docs/index.html</code> is never edited directly.</p></aside>
+<p>The renderer resolves the same Rules-governance-approved <code>.csarc/config.yml</code> keys documented in the governance configuration table above; it does not define a second, site-only list. Product-specific prose lives in <code>docs/site-content.md</code>, theme overrides remain in <code>docs/site-theme.css</code>, and the generated <code>docs/index.html</code> is never edited directly.</p>
+<p><strong>Custom theme for this page (the root site, Issue #527):</strong> the <code>.csarc/config.yml</code> / <code>docs/site-theme.css</code> path above belongs to the generated-project handbook. A maintainer who forks or vendors this template repository itself and wants to restyle its own root decision site uses <code>site/theme.css</code> instead. Scope stays deliberately narrow: only override CSS custom properties already declared in <code>site/static/styles.css</code>&#x27;s <code>:root</code> block, plus narrow, purely-visual declarations on existing block-level classes -- no new HTML, JavaScript, or layout rules; ordinary PR review is the only gate, no extra tooling. This file always exists and is always inlined by the engine; it ships empty, so the default output keeps the template&#x27;s palette unchanged:</p>
+<pre class="command"><code>:root {
+  --yellow: #2e6b47;
+}</code></pre>
+<p>Rebuild with <code>./scripts/build-decision-site</code> after editing. This is a structural addition to the presentation template, so <code>site/version.json</code>&#x27;s <code>template</code> version and the <code>scripts/check-decision-site-versions</code> compatibility check cover it; see the &quot;根網站自訂主題&quot; section of <code>docs/adr/portable-decision-site.md</code> for the full record.</p></aside>
 <aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside></div>
 </section>
 <section class="slide markdown-slide dense" id="bridge" data-content-key="bridge" data-audience="maintainer" aria-label="Review the original principles against today&#x27;s implementation">
