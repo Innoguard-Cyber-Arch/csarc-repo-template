@@ -202,6 +202,7 @@ if [[ "$branch_strategy" == "delivery" ]]; then
 
   promotion_milestone=""
   promotion=false
+  tracker_promotion=false
   if [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
     promotion=true
     promotion_milestone="${BASH_REMATCH[1]}"
@@ -211,6 +212,7 @@ if [[ "$branch_strategy" == "delivery" ]]; then
       exit 1
     fi
     promotion=true
+    tracker_promotion=true
     promotion_milestone="${BASH_REMATCH[1]}"
   elif [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/i([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
     promotion=true
@@ -269,6 +271,13 @@ else
   IFS=$'\t' read -r issue_state issue_title issue_has_unchecked \
     issue_milestone_number issue_labels \
     <<<"$issue_payload"
+  if [[ "${tracker_promotion:-false}" == "true" ]]; then
+    issue_body="$(
+      gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
+        --jq 'select(.pull_request | not) | .body // ""' \
+        2>/dev/null || true
+    )"
+  fi
 fi
 if [[ "$issue_state" != "open" ]]; then
   echo "Issue #${issue_number} must exist and remain open until merge."
@@ -365,9 +374,22 @@ if [[ "${promotion:-false}" != "true" ]] && (( PR_NUMBER >= development_cutover_
     fi
   fi
 fi
-if [[ "$issue_has_unchecked" == "true" ]]; then
+if [[ "${tracker_promotion:-false}" != "true" ]] && [[ "$issue_has_unchecked" == "true" ]]; then
   echo "Issue #${issue_number} still has unchecked acceptance tasks."
   exit 1
+fi
+if [[ "${tracker_promotion:-false}" == "true" ]]; then
+  if [[ "$issue_title" != "Milestone ${promotion_milestone}: "* ]]; then
+    echo "A Milestone ${promotion_milestone} promotion must close its own tracker Issue."
+    exit 1
+  fi
+  if [[ "$issue_milestone_number" != "$promotion_milestone" ]]; then
+    echo "The tracker Issue Milestone must match the delivery branch number."
+    exit 1
+  fi
+  if ! printf '%s' "$issue_body" | python3 scripts/sync_milestone_state.py check-promotion; then
+    exit 1
+  fi
 fi
 if [[ -x ./scripts/validate-issue-title ]]; then
   ./scripts/validate-issue-title "$issue_title"
@@ -375,21 +397,23 @@ fi
 
 if [[ "$branch_strategy" == "delivery" ]]; then
   if [[ "${promotion:-false}" == "true" ]]; then
-    if [[ ",${issue_labels:-}," != *,promotion,* ]]; then
-      echo "A delivery promotion must close an Issue labeled promotion."
-      exit 1
-    fi
-    if [[ -n "${promotion_milestone:-}" && "$issue_milestone_number" != "$promotion_milestone" ]]; then
-      echo "The promotion Issue Milestone must match the delivery branch number."
-      exit 1
-    fi
-    if [[ -n "${promotion_issue:-}" && "$issue_number" != "$promotion_issue" ]]; then
-      echo "An isolated delivery branch must match its promotion Issue number."
-      exit 1
-    fi
-    if [[ -z "${promotion_milestone:-}" && "$issue_milestone_number" != "0" ]]; then
-      echo "A standalone promotion Issue must not belong to a Milestone."
-      exit 1
+    if [[ "${tracker_promotion:-false}" != "true" ]]; then
+      if [[ ",${issue_labels:-}," != *,promotion,* ]]; then
+        echo "A delivery promotion must close an Issue labeled promotion."
+        exit 1
+      fi
+      if [[ -n "${promotion_milestone:-}" && "$issue_milestone_number" != "$promotion_milestone" ]]; then
+        echo "The promotion Issue Milestone must match the delivery branch number."
+        exit 1
+      fi
+      if [[ -n "${promotion_issue:-}" && "$issue_number" != "$promotion_issue" ]]; then
+        echo "An isolated delivery branch must match its promotion Issue number."
+        exit 1
+      fi
+      if [[ -z "${promotion_milestone:-}" && "$issue_milestone_number" != "0" ]]; then
+        echo "A standalone promotion Issue must not belong to a Milestone."
+        exit 1
+      fi
     fi
     if [[ -n "${promotion_milestone:-}" ]]; then
       if [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]]; then

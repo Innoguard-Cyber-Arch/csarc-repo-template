@@ -8,11 +8,17 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Any
 
 CHECK_NAME = "Milestone approval"
-TRACKER_SECTIONS = ("Proposal", "Completion evidence", "Early termination")
+TRACKER_SECTIONS = (
+    "Proposal",
+    "Completion evidence",
+    "Early termination",
+    "Promotion",
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +78,50 @@ def acceptance_complete(description: str) -> bool:
         return False
     checkboxes = re.findall(r"(?m)^- \[([ xX])\] ", section)
     return bool(checkboxes) and all(mark.lower() == "x" for mark in checkboxes)
+
+
+def promotion_complete(body: str) -> bool:
+    """Return whether every checkbox in the tracker Promotion section is set."""
+    section = _section(body, "Promotion")
+    if section is None:
+        return False
+    checkboxes = re.findall(r"(?m)^- \[([ xX])\] ", section)
+    return bool(checkboxes) and all(mark.lower() == "x" for mark in checkboxes)
+
+
+def promotion_decision(body: str) -> Decision:
+    """Validate that a tracker's Promotion section is ready to close."""
+    if _section(body, "Promotion") is None:
+        return Decision(False, "The lifecycle Issue needs a Promotion section")
+    if not promotion_complete(body):
+        return Decision(
+            False, "Complete every Promotion readiness checkbox first"
+        )
+    return Decision(True, "Promotion checklist complete")
+
+
+def append_completion_evidence(body: str, evidence_url: str) -> str:
+    """Append one delivery evidence URL into the Completion evidence section.
+
+    Preserves any content already present in the section (stripping only the
+    placeholder HTML comment) instead of overwriting it, so a promotion
+    bridge merge never clobbers evidence recorded by an earlier checkpoint.
+    """
+    match = re.search(
+        r"(?ms)^(## Completion evidence\s*$\n)(.*?)(?=^## |\Z)", body
+    )
+    if match is None:
+        raise RuntimeError(
+            "The lifecycle Issue body is missing a Completion evidence section"
+        )
+    heading = match.group(1)
+    kept = re.sub(r"(?s)<!--.*?-->", "", match.group(2)).strip()
+    if evidence_url in kept:
+        return body
+    lines = [line for line in kept.splitlines() if line.strip()]
+    lines.append(evidence_url)
+    new_section = heading + "\n".join(lines) + "\n\n"
+    return body[: match.start()] + new_section + body[match.end() :]
 
 
 def load_snapshot(repo: str, number: int) -> dict[str, Any]:
@@ -238,6 +288,28 @@ def approval_decision(
     return Decision(True, f"Approved by {', '.join(sorted(approvals))}")
 
 
+def _completed_closure(snapshot: dict[str, Any], body: str) -> Decision:
+    """Validate the completed-closure evidence chain for one tracker."""
+    description = snapshot["milestone"].get("description", "")
+    if not acceptance_complete(description):
+        return Decision(False, "Complete every Milestone acceptance criterion")
+    if not promotion_complete(body):
+        return Decision(False, "Complete every Promotion readiness checkbox")
+    approval = approval_decision(snapshot, require_open=False)
+    if not approval.allowed:
+        return approval
+    evidence = _section(body, "Completion evidence")
+    if (
+        not isinstance(evidence, str)
+        or not _meaningful(evidence)
+        or "https://github.com/" not in evidence
+    ):
+        return Decision(
+            False, "Completed closure needs a GitHub delivery evidence URL"
+        )
+    return Decision(True, "Completed with approval and delivery evidence")
+
+
 def closure_decision(snapshot: dict[str, Any]) -> Decision:
     """Validate completed and not-planned lifecycle closure paths."""
     errors = tracker_errors(snapshot)
@@ -260,25 +332,7 @@ def closure_decision(snapshot: dict[str, Any]) -> Decision:
     body = item.get("body", "")
     reason = item.get("state_reason")
     if reason == "completed":
-        description = snapshot["milestone"].get("description", "")
-        if not acceptance_complete(description):
-            return Decision(
-                False, "Complete every Milestone acceptance criterion"
-            )
-        approval = approval_decision(snapshot, require_open=False)
-        if not approval.allowed:
-            return approval
-        evidence = _section(body, "Completion evidence")
-        if (
-            not isinstance(evidence, str)
-            or not _meaningful(evidence)
-            or "https://github.com/" not in evidence
-        ):
-            return Decision(
-                False,
-                "Completed closure needs a GitHub delivery evidence URL",
-            )
-        return Decision(True, "Completed with approval and delivery evidence")
+        return _completed_closure(snapshot, body)
     if reason == "not_planned":
         if not _meaningful(_section(body, "Early termination")):
             return Decision(False, "Not-planned closure needs an explanation")
@@ -404,6 +458,36 @@ def check_merge_group(repo: str, head_sha: str) -> Decision:
     return decision
 
 
+def record_promotion_evidence(
+    repo: str, tracker_number: int, evidence_url: str
+) -> Decision:
+    """Append one promotion merge evidence URL onto a tracker Issue."""
+    issue = json.loads(run_gh(["api", f"repos/{repo}/issues/{tracker_number}"]))
+    body = issue.get("body")
+    if not isinstance(body, str):
+        return Decision(False, "The lifecycle Issue body is missing")
+    try:
+        new_body = append_completion_evidence(body, evidence_url)
+    except RuntimeError as error:
+        return Decision(False, str(error))
+    if new_body == body:
+        return Decision(
+            True, f"Promotion evidence already recorded on #{tracker_number}"
+        )
+    run_gh(
+        [
+            "issue",
+            "edit",
+            str(tracker_number),
+            "--repo",
+            repo,
+            "--body",
+            new_body,
+        ]
+    )
+    return Decision(True, f"Recorded promotion evidence on #{tracker_number}")
+
+
 def reconcile(repo: str, number: int) -> Decision:
     """Synchronize one Milestone and refresh its open PR checks."""
     snapshot = load_snapshot(repo, number)
@@ -443,6 +527,11 @@ def main() -> None:
     queue = subparsers.add_parser("check-merge-group")
     queue.add_argument("--repo", required=True)
     queue.add_argument("--head-sha", required=True)
+    subparsers.add_parser("check-promotion")
+    record = subparsers.add_parser("record-promotion-evidence")
+    record.add_argument("--repo", required=True)
+    record.add_argument("--tracker", required=True, type=int)
+    record.add_argument("--evidence-url", required=True)
     sync = subparsers.add_parser("reconcile")
     sync.add_argument("--repo", required=True)
     sync.add_argument("--milestone", required=True, type=int)
@@ -451,6 +540,12 @@ def main() -> None:
         decision = check_pr(args.repo, args.pr)
     elif args.command == "check-merge-group":
         decision = check_merge_group(args.repo, args.head_sha)
+    elif args.command == "check-promotion":
+        decision = promotion_decision(sys.stdin.read())
+    elif args.command == "record-promotion-evidence":
+        decision = record_promotion_evidence(
+            args.repo, args.tracker, args.evidence_url
+        )
     else:
         decision = reconcile(args.repo, args.milestone)
     print(decision.summary)  # noqa: T201

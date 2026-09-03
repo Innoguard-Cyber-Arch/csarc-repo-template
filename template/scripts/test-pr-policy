@@ -658,9 +658,28 @@ PR_BASE="main" \
 PR_HEAD="promote/m7-staged-ci" \
 PR_BODY="Closes #42" \
 PR_ISSUE_STATE="open" \
+PR_ISSUE_TITLE="Milestone 7: Staged CI rollout" \
 PR_ISSUE_MILESTONE_NUMBER="7" \
-PR_ISSUE_LABELS="enhancement,promotion" \
+PR_ISSUE_LABELS="enhancement" \
+PR_ISSUE_BODY=$'## Proposal\n\nShip the reviewed batch.\n\n## Completion evidence\n\n<!-- Fill after release. -->\n\n## Early termination\n\n- [ ] Unrelated leftover bullet that must not block promotion.\n\n## Promotion\n\n- [x] All other Milestone Issues are closed.\n- [x] Review ledger resolved and maintainer-confirmed.' \
   "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote milestone seven bridge" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="promote/m7-staged-ci" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Milestone 7: Staged CI rollout" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_ISSUE_LABELS="enhancement" \
+  PR_ISSUE_BODY=$'## Proposal\n\nShip the reviewed batch.\n\n## Completion evidence\n\n<!-- Fill after release. -->\n\n## Early termination\n\n<!-- Fill only when stopped. -->\n\n## Promotion\n\n- [x] All other Milestone Issues are closed.\n- [ ] Review ledger resolved and maintainer-confirmed.' \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a promotion bridge with an unchecked Promotion box."
+  exit 1
+fi
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
@@ -697,8 +716,9 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_HEAD="promote/m7-staged-ci" \
   PR_BODY="Closes #42" \
   PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Milestone 7: Staged CI rollout" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
-  PR_ISSUE_LABELS="enhancement,promotion" \
+  PR_ISSUE_LABELS="enhancement" \
     "$validator" >/dev/null 2>&1; then
   echo "PR policy accepted an unlabeled promotion bridge."
   exit 1
@@ -712,10 +732,28 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_HEAD="promote/m7-staged-ci" \
   PR_BODY="Closes #42" \
   PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Milestone 8: Other delivery" \
   PR_ISSUE_MILESTONE_NUMBER="8" \
-  PR_ISSUE_LABELS="enhancement,promotion" \
+  PR_ISSUE_LABELS="enhancement" \
     "$validator" >/dev/null 2>&1; then
   echo "PR policy accepted a bridge for another Milestone."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote milestone seven bridge" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="promote/m7-staged-ci" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add a leaf promotion Issue" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+  PR_ISSUE_BODY="All acceptance tasks are complete." \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a promotion bridge closing a non-tracker Issue."
   exit 1
 fi
 

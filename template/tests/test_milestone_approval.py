@@ -27,7 +27,8 @@ def snapshot(*comments: dict[str, Any]) -> dict[str, Any]:
         "body": (
             "## Proposal\n\nShip the reviewed batch.\n\n"
             "## Completion evidence\n\n<!-- Fill after release. -->\n\n"
-            "## Early termination\n\n<!-- Fill only when stopped. -->\n"
+            "## Early termination\n\n<!-- Fill only when stopped. -->\n\n"
+            "## Promotion\n\n<!-- Fill when ready to promote. -->\n"
         ),
         "user": {"login": "proposer", "type": "User"},
         "labels": [{"name": "enhancement"}],

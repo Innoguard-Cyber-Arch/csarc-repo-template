@@ -40,17 +40,29 @@ def test_milestone_lifecycle_is_paired_and_bounded() -> None:
         },
         "issue_comment": {"types": ["created", "edited", "deleted"]},
         "milestone": {"types": ["created", "edited", "opened", "closed"]},
+        "pull_request": {"types": ["closed"]},
     }
     assert workflow["permissions"] == {}
     assert "schedule" not in triggers
-    assert set(workflow["jobs"]) == {"sync", "sync-previous"}
-    for job in workflow["jobs"].values():
-        assert job["permissions"] == {
-            "checks": "write",
-            "contents": "read",
-            "issues": "write",
-            "pull-requests": "read",
-        }
+    assert set(workflow["jobs"]) == {
+        "sync",
+        "sync-previous",
+        "record-promotion-evidence",
+    }
+    reconcile_jobs = {"sync", "sync-previous"}
+    for name, job in workflow["jobs"].items():
+        if name in reconcile_jobs:
+            assert job["permissions"] == {
+                "checks": "write",
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "read",
+            }
+        else:
+            assert job["permissions"] == {
+                "contents": "read",
+                "issues": "write",
+            }
         assert job["timeout-minutes"] == 5
         assert "matrix" not in job.get("strategy", {})
 
