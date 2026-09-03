@@ -65,6 +65,14 @@ Issue #209 經維護者實際檢視後，Hugo source 收斂到通用的 `site/` 
 
 `noindex` 與 `robots.txt` 不是存取控制。即使較高方案提供登入、IP 限制或受控發布，離線檔案一旦下載仍可能被轉寄；簡報必須持續標示資料邊界。
 
+## 2026-09-03 GitHub Pages 宣告式政策（#571）
+
+Repo 由 private 轉 public 後，維護者直接對 live GitHub 啟用了 GitHub Pages（`source.branch=main`、`source.path=/docs`，classic「deploy from branch」，`main` 有新 push 時自動重建）。Issue #571 把這個決定落地成 `policies/pages.json`（含可關閉的 `enabled` 欄位）與 `scripts/apply-repository-settings.sh` 的對應 apply／check 區塊，比照 `policies/rulesets.json` 既有的 plan-aware `DEGRADED` 偵測：GitHub Pages 對 private repository 需要 GitHub Enterprise Cloud，Free／Pro／Team 都無法在 private 啟用；public repository 則所有方案皆可免費使用。這正是上方「GitHub capability matrix」表格「核准的 Pages／內部 host 與寫入權限 allowed」一列描述的情境，本次只是把該能力從『可能可用』變成有實際宣告式政策與 live 驗證的具體案例。
+
+這個變更只是在既有 committed bundle 之上「新增」一種發布管道，不改變本 ADR 的核心保證：`docs/index.html`／`docs/index.en.html` 仍是完整內嵌、可 `file://` 直接開啟的單檔交付物；`docs/.nojekyll` 只是避免 GitHub Pages 對這個純靜態、已建置完成的 bundle 執行不必要的 Jekyll 處理，不引入任何 runtime 依賴或外部資產。Pages 發布失敗或不可用時，repository 內已提交的 bundle 仍是不下降的最低交付保證，與「發布失敗時回退 artifact／committed bundle，不降低內容驗證」的既有承諾一致。
+
+是否把這個能力開放成下游生成 repo 的可選 Copier 項目，留給後續 Issue 判斷；本次變更只涵蓋這個模板來源 repo 自己的宣告與驗證。
+
 ## 互動決策收納
 
 不自動保存聊天逐字稿。Agent 遇到 durable constraint 或 trade-off 時執行下列流程：
