@@ -24,6 +24,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import textwrap
 from pathlib import Path
 
@@ -474,13 +475,29 @@ def run_publish_release(
     state: Path,
     force_verify_fail: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    """Run the real scripts/publish-release with the fake `gh` in front."""
+    """Run the real scripts/publish-release with the fake `gh` in front.
+
+    Pins a fresh RUNNER_TEMP per invocation under the test's own state
+    directory instead of leaving it unset. On a real GitHub Actions
+    runner, RUNNER_TEMP is already set for the whole job -- inheriting
+    that ambient value here (via clean_environment()'s os.environ copy)
+    would make unrelated calls across tests, and across stage/publish
+    calls within one test, silently share the same
+    $RUNNER_TEMP/release-assets directory. scripts/publish-release then
+    treats stale leftover files from a previous call as "already
+    prepared" and skips rebuilding them, corrupting SHA256SUMS. Locally,
+    where RUNNER_TEMP is normally unset, the script's own `mktemp -d`
+    fallback happens to isolate each call, which is what made this bug
+    invisible outside CI.
+    """
     env = clean_environment()
     env["PATH"] = f"{bindir}:{env['PATH']}"
     env["FIXTURE_STATE"] = str(state)
     env["FIXTURE_REPO"] = str(repo)
     env["CSARC_PUBLISH_CANDIDATE_STATUS"] = "false"
     env["GH_TOKEN"] = "fixture-token"  # noqa: S105 -- fixture value, not a secret
+    runner_temp = Path(tempfile.mkdtemp(dir=state.parent))
+    env["RUNNER_TEMP"] = str(runner_temp)
     if force_verify_fail:
         (state / "force-verify-fail").touch()
     return subprocess.run(  # noqa: S603
