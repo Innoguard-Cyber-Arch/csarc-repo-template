@@ -100,6 +100,7 @@ class SiteData:
     glossary: dict[str, Any]
     config_examples: dict[str, Any]
     similar_tools: dict[str, Any]
+    file_map: dict[str, Any]
     version: dict[str, Any]
 
 
@@ -142,6 +143,7 @@ def load_site_data(root: Path) -> SiteData:
         glossary=glossary,
         config_examples=_load_json_file(data_dir / "config_examples.json"),
         similar_tools=_load_json_file(data_dir / "similar_tools.json"),
+        file_map=_load_json_file(data_dir / "file_map.json"),
         version=_load_json_file(root / "site/version.json"),
     )
 
@@ -376,6 +378,8 @@ def _render_self_closing(
 ) -> str:
     if name == "config-guidance":
         return render_config_guidance(attrs["track"], lang=lang, data=data)
+    if name == "file-map":
+        return render_file_map(lang=lang, data=data)
     if name == "similar-tools":
         return render_similar_tools(lang=lang, data=data)
     if name == "testing":
@@ -505,6 +509,151 @@ def render_config_guidance(track: str, *, lang: str, data: SiteData) -> str:
         f'<p class="config-overlay-path">{config_file_label}<code></code></p>'
         '<pre class="code"></pre>'
         "</div></aside>"
+    )
+
+
+# --- File map (Issue #534) -------------------------------------------
+
+
+@dataclass
+class _FileMapNode:
+    """One segment of the file-map tree, keyed by its path segment.
+
+    `children` keeps Python dict insertion order, so the tree renders in
+    the same top-to-bottom order `site/data/file_map.json` lists its
+    entries and each entry lists its `paths` -- no separate sort step.
+    `entry` is the owning `site/data/file_map.json` entry (purpose,
+    responsibility, optional `note`) when this exact node is one of that
+    entry's literal paths; intermediate directories implied only by a
+    longer sibling path (e.g. `.github/` itself) carry no entry.
+    """
+
+    name: str
+    is_dir: bool = False
+    children: dict[str, _FileMapNode] = field(default_factory=dict)
+    entry: dict[str, Any] | None = None
+
+
+def _insert_file_map_path(
+    children: dict[str, _FileMapNode], path: str, entry: dict[str, Any]
+) -> None:
+    """Insert one entry's literal path into the tree being built, in place.
+
+    A trailing "/" marks the whole path as a directory; any segment the
+    path continues through is a directory regardless, so two entries that
+    share a directory prefix (e.g. `.github/workflows/` and
+    `.github/REVIEWERS`) merge into one shared branch instead of two.
+    """
+    ends_with_slash = path.endswith("/")
+    segments = [segment for segment in path.split("/") if segment]
+    cursor = children
+    for index, segment in enumerate(segments):
+        is_last = index == len(segments) - 1
+        node = cursor.setdefault(segment, _FileMapNode(name=segment))
+        if not is_last or ends_with_slash:
+            node.is_dir = True
+        if is_last:
+            node.entry = entry
+        cursor = node.children
+
+
+def _build_file_map_tree(
+    entries: list[dict[str, Any]],
+) -> dict[str, _FileMapNode]:
+    root: dict[str, _FileMapNode] = {}
+    for entry in entries:
+        for path in entry["paths"]:
+            _insert_file_map_path(root, path, entry)
+    return root
+
+
+def _render_file_map_annotation(
+    entry: dict[str, Any], *, lang: str, responsibility_labels: dict[str, Any]
+) -> tuple[str, str]:
+    """Render one entry's note/tag (header line) and purpose (body line)."""
+    note = entry.get("note")
+    note_html = (
+        f'<span class="file-map-note">{_esc(note[lang])}</span>' if note else ""
+    )
+    kind = entry["responsibility"]
+    tag_label = _esc(responsibility_labels[kind][lang])
+    tag_html = (
+        f'<span class="file-map-tag file-map-tag-{_esc(kind)}">'
+        f"{tag_label}</span>"
+    )
+    purpose_html = (
+        f'<p class="file-map-purpose">{_esc(entry["purpose"][lang])}</p>'
+    )
+    return f"{note_html}{tag_html}", purpose_html
+
+
+def _render_file_map_node(
+    node: _FileMapNode, *, lang: str, responsibility_labels: dict[str, Any]
+) -> str:
+    """Port one `_FileMapNode` (and its subtree) to a `<li>` tree row."""
+    icon_class = "is-dir" if node.is_dir else "is-file"
+    display_name = _esc(node.name + ("/" if node.is_dir else ""))
+    header = (
+        f'<span class="file-map-icon {icon_class}" aria-hidden="true">'
+        f"</span>"
+        f'<code class="file-map-name">{display_name}</code>'
+    )
+    purpose_html = ""
+    if node.entry is not None:
+        annotation, purpose_html = _render_file_map_annotation(
+            node.entry, lang=lang, responsibility_labels=responsibility_labels
+        )
+        header += annotation
+    if node.children:
+        children_html = "".join(
+            _render_file_map_node(
+                child, lang=lang, responsibility_labels=responsibility_labels
+            )
+            for child in node.children.values()
+        )
+        return (
+            '<li class="file-map-node">'
+            '<details class="file-map-branch" open>'
+            f'<summary class="file-map-summary">'
+            f'<span class="file-map-row">{header}</span></summary>'
+            f"{purpose_html}"
+            f"<ul>{children_html}</ul>"
+            "</details></li>"
+        )
+    return (
+        '<li class="file-map-node">'
+        f'<div class="file-map-row">{header}</div>'
+        f"{purpose_html}</li>"
+    )
+
+
+def render_file_map(*, lang: str, data: SiteData) -> str:
+    """Render `{{< file-map >}}`: a file-explorer tree of the file map.
+
+    Replaces the flat three-column path/purpose/responsibility table (see
+    Issue #534) with a real nested tree built from each entry's literal
+    `paths` in `site/data/file_map.json`; content (paths, purpose,
+    responsibility) is unchanged from that table, only the presentation.
+    """
+    file_map = data.file_map
+    labels = file_map["labels"][lang]
+    responsibility_labels = file_map["responsibilityLabels"]
+    tree = _build_file_map_tree(file_map["entries"])
+    items = "".join(
+        _render_file_map_node(
+            node, lang=lang, responsibility_labels=responsibility_labels
+        )
+        for node in tree.values()
+    )
+    return (
+        '<div class="file-map-window">'
+        '<div class="file-map-toolbar">'
+        '<span class="file-map-dots" aria-hidden="true">'
+        "<i></i><i></i><i></i></span>"
+        f'<code class="file-map-address">{_esc(labels["address"])}</code>'
+        "</div>"
+        f'<ul class="file-map-tree">{items}</ul>'
+        "</div>"
     )
 
 

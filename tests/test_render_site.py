@@ -400,15 +400,28 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     english_delivery = english.split('{{< slide key="deploy"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
-    file_map = chinese.split('{{< slide key="files"', 1)[1].split(
-        "{{< /slide >}}", 1
-    )[0]
+    # The file-map's `.github/workflows/` purpose text moved from a
+    # markdown table cell (see the old `{{< slide key="files" >}}` body)
+    # into site/data/file_map.json's "workflows" entry when Issue #534
+    # replaced the flat table with a file-explorer-style tree (see
+    # scripts/build_decision_site.py's render_file_map); the sync
+    # invariant this test proves -- every active workflow file is
+    # mentioned by name -- carries over unchanged to that entry.
+    file_map_data = json.loads(
+        (root / "site/data/file_map.json").read_text(encoding="utf-8")
+    )
+    workflows_entry = next(
+        entry
+        for entry in file_map_data["entries"]
+        if entry["paths"] == [".github/workflows/"]
+    )
+    workflows_purpose = workflows_entry["purpose"]["zh-tw"]
     workflows = {
         path.name.removesuffix(".jinja")
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
-    assert "9 條共用流程" in file_map
+    assert "9 條共用流程" in workflows_purpose
     workflow_labels = {
         "ci.yml": "必要驗證",
         "codeql.yml": "CodeQL SAST",
@@ -426,7 +439,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     }
     assert workflows == set(workflow_labels)
     for workflow, label in workflow_labels.items():
-        assert label in file_map, (
+        assert label in workflows_purpose, (
             f"{workflow} lost its file-map mention ({label!r})"
         )
     # codeql.yml is conditional on enable_codeql (see copier.yml), exactly
@@ -436,10 +449,10 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     # is conditional on enable_docker: none of the four ship to every new
     # repo.
     assert "選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描" in (
-        file_map
+        workflows_purpose
     )
     for inactive in ("release-please.yml",):
-        assert inactive not in file_map
+        assert inactive not in workflows_purpose
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
     assert "需人審查版本 PR 的發版流程仍是候選" in flow
     assert "一支候選 release workflow" in chinese_delivery

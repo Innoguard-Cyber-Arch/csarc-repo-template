@@ -359,6 +359,68 @@
     .explorer-caption { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.18; }
     .explorer-caption strong { color: var(--ink); }
 
+    .file-map-window {
+      /* An explicit height keeps this grid item (see
+         .markdown-body > .file-map-window in detail-toggle.css) sized to
+         its true content height: a grid item with overflow other than
+         visible otherwise contributes an automatic minimum size of 0 to
+         its auto-sized row, which silently clips the tree instead of
+         letting the row grow to fit it. */
+      height: max-content;
+      overflow: hidden;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      background: white;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, .1);
+    }
+    .file-map-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 26px;
+      padding: 4px 10px;
+      border-bottom: 1px solid #bdbdb8;
+      background: #e9e9e6;
+    }
+    .file-map-dots { display: flex; flex: 0 0 auto; gap: 6px; }
+    .file-map-dots i { width: 9px; height: 9px; border-radius: 50%; background: #a5a5a0; }
+    .file-map-dots i:first-child { background: #e65c52; }
+    .file-map-dots i:nth-child(2) { background: #e9b949; }
+    .file-map-dots i:last-child { background: #48a967; }
+    .file-map-address { padding: 2px 8px; border: 1px solid #c7c7c2; border-radius: 5px; background: white; color: #3b3b39; font: 750 13px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .file-map-tree, .file-map-tree ul { margin: 0; padding: 0; list-style: none; }
+    .file-map-tree { padding: 4px 9px; }
+    .file-map-tree ul { margin-left: 8px; padding-left: 9px; border-left: 1px solid var(--line); }
+    .file-map-node { margin: 0; }
+    .file-map-branch > summary.file-map-summary { cursor: pointer; }
+    .file-map-branch > summary.file-map-summary::-webkit-details-marker { display: none; }
+    .file-map-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      column-gap: 7px;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .file-map-summary::before {
+      content: "▸";
+      display: inline-block;
+      width: 12px;
+      margin-right: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .file-map-branch[open] > .file-map-summary::before { content: "▾"; }
+    .file-map-icon { flex: 0 0 auto; align-self: center; width: 10px; height: 13px; border: 1px solid #7d8ca2; border-radius: 1px; background: white; }
+    .file-map-icon.is-dir { width: 13px; height: 9px; border-color: #b99317; border-radius: 2px; background: #f0c842; }
+    .file-map-name { font: 750 13px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #174f8b; }
+    .file-map-note { color: var(--muted); font-size: 12px; }
+    .file-map-tag { flex: 0 0 auto; margin-left: auto; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 850; white-space: nowrap; }
+    .file-map-tag-template { background: #ececea; color: #333; }
+    .file-map-tag-shared { background: var(--optional-soft); color: #174f8b; }
+    .file-map-tag-project { background: #ffe2d5; color: #8a3d20; }
+    .file-map-purpose { margin: 0 0 1px 25px; color: #333; font-size: 12px; line-height: 1.16; }
+
     .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
 
     .similar-tools-slide header { margin-bottom: 8px; }
@@ -1902,7 +1964,8 @@ html[data-detail-level="simple"] .technical-tour-trigger {
 }
 
 .markdown-body > p:first-child,
-.markdown-body > table {
+.markdown-body > table,
+.markdown-body > .file-map-window {
   grid-column: 1 / -1;
 }
 
@@ -2257,8 +2320,8 @@ html[data-detail-level="simple"] .detail-panel {
   <h2>The template puts required settings in the right place</h2>
   <p class="subtitle">This lists the major files currently generated; template updates never silently overwrite product-owned content.</p>
 </header>
-<div class="markdown-body"><table><thead><tr><th>Path</th><th>Purpose</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>.csarc/config.yml</code></td><td>Template source, languages, branch strategy, and optional capabilities</td><td>Template-led</td></tr><tr><td><code>.github/ISSUE_TEMPLATE/</code>, <code>pull_request_template.md</code></td><td>Work definition and PR contract</td><td>Template-led</td></tr><tr><td><code>.github/workflows/</code></td><td>Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift and template-update-notice schedules, and CodeQL SAST</td><td>Template-led</td></tr><tr><td><code>AGENTS.md</code>, <code>README.md</code>, <code>CLAUDE.md</code></td><td>Agent working rules and user entry point</td><td>Shared</td></tr><tr><td><code>policies/</code>, <code>CODEOWNERS</code>, <code>.github/REVIEWERS</code></td><td>Desired settings, owners, and reviewers</td><td>Shared</td></tr><tr><td><code>scripts/</code></td><td>Local verification, work synchronization, and repository settings</td><td>Template-led</td></tr><tr><td><code>docs/</code>, <code>site/</code></td><td>Project guidance, specifications, decisions, and internal site</td><td>Shared</td></tr><tr><td><code>src/</code>, product tests, and product specifications</td><td>Product behavior</td><td>Project-owned</td></tr></tbody></table>
-<p>This table stays at three columns on purpose: the side navigation already links each row&#x27;s area to its page, and the maintainer-only CI/CD settings appendix already lists verification entry points per Journey in more detail than a column could. Adding page-name and verification-entry columns here would just duplicate both instead of adding information.</p>
+<div class="markdown-body"><div class="file-map-window"><div class="file-map-toolbar"><span class="file-map-dots" aria-hidden="true"><i></i><i></i><i></i></span><code class="file-map-address">File Explorer | repository root</code></div><ul class="file-map-tree"><li class="file-map-node"><details class="file-map-branch" open><summary class="file-map-summary"><span class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">.csarc/</code></span></summary><ul><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">config.yml</code><span class="file-map-tag file-map-tag-template">Template-led</span></div><p class="file-map-purpose">Template source, languages, branch strategy, and optional capabilities</p></li></ul></details></li><li class="file-map-node"><details class="file-map-branch" open><summary class="file-map-summary"><span class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">.github/</code></span></summary><ul><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">ISSUE_TEMPLATE/</code><span class="file-map-tag file-map-tag-template">Template-led</span></div><p class="file-map-purpose">Work definition and PR contract</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">pull_request_template.md</code><span class="file-map-tag file-map-tag-template">Template-led</span></div><p class="file-map-purpose">Work definition and PR contract</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">workflows/</code><span class="file-map-tag file-map-tag-template">Template-led</span></div><p class="file-map-purpose">Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift and template-update-notice schedules, CodeQL SAST, and a container build-and-scan job</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">CODEOWNERS</code><span class="file-map-tag file-map-tag-shared">Shared</span></div><p class="file-map-purpose">Desired settings, owners, and reviewers</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">REVIEWERS</code><span class="file-map-tag file-map-tag-shared">Shared</span></div><p class="file-map-purpose">Desired settings, owners, and reviewers</p></li></ul></details></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">AGENTS.md</code><span class="file-map-tag file-map-tag-shared">Shared</span></div><p class="file-map-purpose">Agent working rules and user entry point</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">README.md</code><span class="file-map-tag file-map-tag-shared">Shared</span></div><p class="file-map-purpose">Agent working rules and user entry point</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">CLAUDE.md</code><span class="file-map-tag file-map-tag-shared">Shared</span></div><p class="file-map-purpose">Agent working rules and user entry point</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">policies/</code><span class="file-map-tag file-map-tag-shared">Shared</span></div><p class="file-map-purpose">Desired settings, owners, and reviewers</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">scripts/</code><span class="file-map-tag file-map-tag-template">Template-led</span></div><p class="file-map-purpose">Local verification, work synchronization, and repository settings</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">docs/</code><span class="file-map-tag file-map-tag-shared">Shared</span></div><p class="file-map-purpose">Project guidance, specifications, decisions, and internal site</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">site/</code><span class="file-map-tag file-map-tag-shared">Shared</span></div><p class="file-map-purpose">Project guidance, specifications, decisions, and internal site</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">src/</code><span class="file-map-note">, product tests, and product specifications</span><span class="file-map-tag file-map-tag-project">Project-owned</span></div><p class="file-map-purpose">Product behavior</p></li></ul></div>
+<p>The file map only lists path, purpose, and responsibility: the side navigation already links each item to its page, and the maintainer-only &quot;CI/CD settings&quot; appendix already lists verification entry points per Journey in more detail than this view could add; the tree view likewise avoids duplicating a page-name or verification-entry column.</p>
 <aside class="technical-detail" data-content-key="files-update"><h3>How updates protect product content</h3>
 <p>Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.</p>
 <p>Workflows, policies, scripts, and documents shared by root and <code>template/</code> are kept in sync. Files that differ because of project choices are verified by generating a real project. New repositories receive the release Action; adopted repositories keep their product-owned workflow.</p></aside>

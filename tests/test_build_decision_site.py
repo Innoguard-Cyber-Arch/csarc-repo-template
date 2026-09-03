@@ -15,6 +15,7 @@ render_mixed = SITE_MODULE["render_mixed"]
 render_detail = SITE_MODULE["render_detail"]
 render_disclosure = SITE_MODULE["render_disclosure"]
 render_config_guidance = SITE_MODULE["render_config_guidance"]
+render_file_map = SITE_MODULE["render_file_map"]
 render_similar_tools = SITE_MODULE["render_similar_tools"]
 render_testing = SITE_MODULE["render_testing"]
 render_journey_rail = SITE_MODULE["render_journey_rail"]
@@ -119,6 +120,18 @@ def _empty_data(**overrides: object) -> object:
                 },
                 "groups": [],
             },
+        },
+        "file_map": {
+            "labels": {
+                "zh-tw": {"address": "檔案總管｜專案根目錄"},
+                "en": {"address": "File Explorer | repository root"},
+            },
+            "responsibilityLabels": {
+                "template": {"zh-tw": "公版主導", "en": "Template-led"},
+                "shared": {"zh-tw": "共同維護", "en": "Shared"},
+                "project": {"zh-tw": "專案持有", "en": "Project-owned"},
+            },
+            "entries": [],
         },
         "version": {
             "engine": "1.0.0",
@@ -327,6 +340,157 @@ def test_config_guidance_matches_real_governance_item_newlines() -> None:
         )
         assert f'data-config-code="{expected_code}"' in html
         assert f'data-config-title="{item["title"][lang]}"' in html
+
+
+# --- file map (Issue #534) ----------------------------------------------
+
+
+def _file_map_data(entries: list[dict]) -> object:
+    return _empty_data(
+        file_map={
+            "labels": {
+                "zh-tw": {"address": "檔案總管"},
+                "en": {"address": "Address"},
+            },
+            "responsibilityLabels": {
+                "template": {"zh-tw": "公版主導", "en": "Template-led"},
+                "shared": {"zh-tw": "共同維護", "en": "Shared"},
+                "project": {"zh-tw": "專案持有", "en": "Project-owned"},
+            },
+            "entries": entries,
+        }
+    )
+
+
+def test_file_map_renders_single_path_leaf_with_icon_tag_and_purpose() -> None:
+    data = _file_map_data(
+        [
+            {
+                "paths": ["AGENTS.md"],
+                "responsibility": "template",
+                "purpose": {"zh-tw": "規範", "en": "Rules"},
+            }
+        ]
+    )
+    html = render_file_map(lang="en", data=data)
+    assert html == (
+        '<div class="file-map-window">'
+        '<div class="file-map-toolbar">'
+        '<span class="file-map-dots" aria-hidden="true">'
+        "<i></i><i></i><i></i></span>"
+        '<code class="file-map-address">Address</code></div>'
+        '<ul class="file-map-tree"><li class="file-map-node">'
+        '<div class="file-map-row">'
+        '<span class="file-map-icon is-file" aria-hidden="true"></span>'
+        '<code class="file-map-name">AGENTS.md</code>'
+        '<span class="file-map-tag file-map-tag-template">Template-led'
+        "</span></div>"
+        '<p class="file-map-purpose">Rules</p></li></ul></div>'
+    )
+
+
+def test_file_map_merges_shared_directory_prefix_from_separate_entries() -> (
+    None
+):
+    # `.github/workflows/` and `.github/REVIEWERS` are two distinct
+    # site/data/file_map.json entries (different purpose/responsibility),
+    # but they share a real directory prefix: the tree must merge them
+    # under one `.github/` branch instead of listing `.github/` twice.
+    data = _file_map_data(
+        [
+            {
+                "paths": [".github/workflows/"],
+                "responsibility": "template",
+                "purpose": {"zh-tw": "流程", "en": "Flows"},
+            },
+            {
+                "paths": [".github/REVIEWERS"],
+                "responsibility": "shared",
+                "purpose": {"zh-tw": "審查", "en": "Reviewers"},
+            },
+        ]
+    )
+    html = render_file_map(lang="en", data=data)
+    assert html == (
+        '<div class="file-map-window">'
+        '<div class="file-map-toolbar">'
+        '<span class="file-map-dots" aria-hidden="true">'
+        "<i></i><i></i><i></i></span>"
+        '<code class="file-map-address">Address</code></div>'
+        '<ul class="file-map-tree"><li class="file-map-node">'
+        '<details class="file-map-branch" open>'
+        '<summary class="file-map-summary">'
+        '<span class="file-map-row">'
+        '<span class="file-map-icon is-dir" aria-hidden="true"></span>'
+        '<code class="file-map-name">.github/</code></span></summary>'
+        "<ul>"
+        '<li class="file-map-node"><div class="file-map-row">'
+        '<span class="file-map-icon is-dir" aria-hidden="true"></span>'
+        '<code class="file-map-name">workflows/</code>'
+        '<span class="file-map-tag file-map-tag-template">Template-led'
+        "</span></div>"
+        '<p class="file-map-purpose">Flows</p></li>'
+        '<li class="file-map-node"><div class="file-map-row">'
+        '<span class="file-map-icon is-file" aria-hidden="true"></span>'
+        '<code class="file-map-name">REVIEWERS</code>'
+        '<span class="file-map-tag file-map-tag-shared">Shared</span>'
+        "</div>"
+        '<p class="file-map-purpose">Reviewers</p></li>'
+        "</ul></details></li></ul></div>"
+    )
+
+
+def test_file_map_renders_non_path_note_after_the_name() -> None:
+    # site/data/file_map.json's "src/" entry appends a non-path note
+    # ("product tests, and product specifications") that was part of the
+    # original table's path cell but isn't a real path itself.
+    data = _file_map_data(
+        [
+            {
+                "paths": ["src/"],
+                "responsibility": "project",
+                "note": {"zh-tw": "、額外文字", "en": ", extra text"},
+                "purpose": {"zh-tw": "行為", "en": "Behavior"},
+            }
+        ]
+    )
+    html = render_file_map(lang="en", data=data)
+    assert html == (
+        '<div class="file-map-window">'
+        '<div class="file-map-toolbar">'
+        '<span class="file-map-dots" aria-hidden="true">'
+        "<i></i><i></i><i></i></span>"
+        '<code class="file-map-address">Address</code></div>'
+        '<ul class="file-map-tree"><li class="file-map-node">'
+        '<div class="file-map-row">'
+        '<span class="file-map-icon is-dir" aria-hidden="true"></span>'
+        '<code class="file-map-name">src/</code>'
+        '<span class="file-map-note">, extra text</span>'
+        '<span class="file-map-tag file-map-tag-project">Project-owned'
+        "</span></div>"
+        '<p class="file-map-purpose">Behavior</p></li></ul></div>'
+    )
+
+
+def test_file_map_matches_real_workflow_directory_and_paths() -> None:
+    # Content-fidelity check against the real site/data/file_map.json (no
+    # Hugo, mirrors test_config_guidance_matches_real_governance_item_
+    # newlines): every literal path must exist in this repository, and the
+    # `.github/workflows/` entry's purpose must still name every active
+    # workflow file -- the same invariant
+    # tests/test_render_site.py::test_overview_matches_active_workflows_
+    # and_uses_plain_language proves from the other side.
+    data = load_site_data(ROOT)
+    file_map = data.file_map
+    for entry in file_map["entries"]:
+        for path in entry["paths"]:
+            assert (ROOT / path).exists(), f"file-map path missing: {path}"
+    html = render_file_map(lang="zh-tw", data=data)
+    assert "<code>" not in html  # never fall back to un-styled inline code
+    assert html.count('<span class="file-map-icon is-dir"') >= 1
+    assert html.count('<span class="file-map-icon is-file"') >= 1
+    for kind in ("template", "shared", "project"):
+        assert f'file-map-tag-{kind}"' in html
 
 
 # --- similar tools -----------------------------------------------------
@@ -858,6 +1022,23 @@ def _write_fixture_site(root: Path) -> None:
                     "duration": {"labels": {"zh-tw": {}, "en": {}}, "rows": []},
                     "groups": [],
                 },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (site / "data" / "file_map.json").write_text(
+        json.dumps(
+            {
+                "labels": {
+                    "zh-tw": {"address": "a"},
+                    "en": {"address": "a"},
+                },
+                "responsibilityLabels": {
+                    "template": {"zh-tw": "t", "en": "t"},
+                    "shared": {"zh-tw": "s", "en": "s"},
+                    "project": {"zh-tw": "p", "en": "p"},
+                },
+                "entries": [],
             }
         ),
         encoding="utf-8",

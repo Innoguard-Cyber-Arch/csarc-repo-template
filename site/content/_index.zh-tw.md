@@ -151,18 +151,9 @@ fit = "符合畫面"
 {{< /slide >}}
 
 {{< slide key="files" track="files" eyebrow="檔案地圖" title="模板把必要設定放到正確位置" subtitle="列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。" class="dense" legacy="false" >}}
-| 路徑 | 作用 | 責任 |
-| --- | --- | --- |
-| `.csarc/config.yml` | 記錄公版來源、語言、分支與選用能力 | 公版主導 |
-| `.github/ISSUE_TEMPLATE/`、`pull_request_template.md` | 工作定義與 PR 契約 | 公版主導 |
-| `.github/workflows/` | 9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描 | 公版主導 |
-| `AGENTS.md`、`README.md`、`CLAUDE.md` | Agent 工作方式與使用者入口 | 共同維護 |
-| `policies/`、`CODEOWNERS`、`.github/REVIEWERS` | 期望設定、owner 與 reviewer | 共同維護 |
-| `scripts/` | 本機驗證、工作同步與套用設定 | 公版主導 |
-| `docs/`、`site/` | 專案說明、規格、決策與內部網站 | 共同維護 |
-| `src/`、產品測試與規格 | 真正產品行為 | 專案持有 |
+{{< file-map >}}
 
-表格刻意維持三欄：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐 Journey 詳列驗證入口，細節比表格欄位更完整。另外加上「對應頁名」與「驗證入口」兩欄，只會重複這兩份既有內容。
+檔案地圖只列路徑、作用與責任：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐 Journey 詳列驗證入口，細節比這裡能呈現的更完整；樹狀呈現同樣不重複加上「對應頁名」或「驗證入口」。
 
 {{< detail key="files-update" title="更新時怎麼保護產品內容" >}}
 Copier 在短分支嘗試更新；若有衝突，只列出檔案且不修改 repo，調整後重跑，再由 PR 審查。建立、既有 repo 導入與同一 repo 後續 update 都有 fixture；回歸測試會刻意加入產品檔案，再確認更新後內容沒有被覆寫。
