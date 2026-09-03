@@ -19,6 +19,26 @@ organization 結構性沒有第二個真人帳號可以核准時，對該 repo �
 公開／私密設定影響，若成員關係設為私密，workflow 自己的 `GITHUB_TOKEN` 可能看不到正確
 關係，導致這項檢查不穩定；repo collaborator 權限不受此影響。
 
+底下每一張 work Issue 預設直接繼承 tracker 的核可狀態，不需要額外核可——維持「範圍內
+工作零額外成本」的現況特性。只有當一張 work Issue 的 body 包含逐字獨立一行的
+`Tracker scope: expanded`（`has_scope_sentinel()`，只認這個逐字 marker、不判斷語意），
+才代表提案者自己宣告這張 Issue 已超出 tracker 最初的 Proposal／Acceptance criteria
+範圍；此時這張 Issue 本身需要一次獨立的非提案者核可，或同一套 `admin` collaborator
+權限自核例外（`scope_decision()`；CLI：`check-scope --repo <repo> --issue <編號>`）。
+核可留言語彙（`/milestone approve`／`/milestone admin-approve: <理由>`／
+`/milestone object:`／`/milestone resolve:`）與判斷邏輯與 tracker 完全相同，只是核可
+對象換成這張 work Issue 自己的留言，而不是 tracker 的留言。
+
+個別 work PR 目前只跑 `scripts/validate-pr-policy` 的結構檢查（acceptance criteria
+checkbox 全打勾、`Closes #N` 存在且對應正確），刻意**不**加裝 GitHub 原生 required
+review（branch protection／Ruleset review gate），也不延伸 `/milestone` 留言語彙到
+個別 work PR。這是盤點後的明確決定，不是遺漏：這個 repo 實質上是單一真人帳號（或由
+agent 代為作者）撰寫每一張 work PR，GitHub 平台層級禁止「核准自己開的 PR」；在 tracker
+層級要求非提案者核可正是 `#512`／`#518`／`#546`／`#549`／`#550` 一連串 self-lock 事件的
+根因，若把同一機制套用在數量遠多於 tracker 的 work PR 上，會把同一個死結複製到每一張
+PR，且沒有對應每張 work PR 的例外機制可用。詳見
+`docs/adr/milestone-scope-and-closure-reconciliation.md`。
+
 ```markdown
 ## Problem
 
@@ -66,5 +86,19 @@ runbook，不得寫成必須在 merge 前勾選的 acceptance item。一張 `pro
 merge commit 網址回填進 `Completion evidence` 段落。一個 Milestone 只維護一張
 tracker Issue，不再另開獨立的 final promotion Issue——這捨棄了同一 Milestone 分多次
 checkpoint promotion 的彈性，因為重複樣板成本已判斷高於保留彈性的價值。
+
+把 tracker 收尾為 `completed` 前，`sync_milestone_state.py regenerate-reconciliation
+--repo <repo> --milestone <編號>` 會在 tracker body 額外維護第五個 H2 段落
+`Reconciliation`。這個段落不在建立 tracker 時要求存在——它只能在第一次執行
+regenerate-reconciliation 之後才會出現——而是自動重新產生：逐列列出這個 Milestone
+底下每一張非 tracker Issue 目前是否已關閉、其宣告 `Closes #N` 的 PR 是否已合併，標成
+`Delivered`／`Closed without a merged PR`／`Pending` 三種狀態之一，是給人核對用的真實
+交付清單，不只是「Milestone acceptance criteria checkbox 是否打勾」的形式檢查。段落
+開頭嵌入一個內容雜湊 marker；只要 tracker body 其他部分（`Proposal`／`Completion
+evidence`／`Early termination`／`Promotion` 任何一段）事後被編輯過，這個雜湊就會對不
+上，`closure_decision()` 會回報 `Reconciliation: stale, regenerate before closing`
+並拒絕把 Milestone 收尾為 completed，直到重新執行 regenerate-reconciliation 為止；
+`not_planned`（提前終止）收尾路徑不受影響，因為那條路徑本來就不宣稱交付完成。
+
 建立前須閱讀相關 open／closed Issues 的內文、comments 與 linked pull requests；
 不能只依 titles 或 labels 推翻既有決策。

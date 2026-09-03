@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -18,6 +19,21 @@ TRACKER_SECTIONS = (
     "Completion evidence",
     "Early termination",
     "Promotion",
+)
+# A work Issue self-declares scope expansion with this literal body line.
+# Its own presence (not its wording) is the whole signal -- see
+# `has_scope_sentinel()`.
+SCOPE_SENTINEL = "Tracker scope: expanded"
+# The tracker's auto-regenerated closure-verification section. Deliberately
+# not part of TRACKER_SECTIONS: it cannot exist before the first
+# `regenerate-reconciliation` run, so requiring it at tracker-creation time
+# would make a tracker permanently uncreatable.
+RECONCILIATION_HEADING = "Reconciliation"
+_FINGERPRINT_COMMENT = re.compile(
+    r"<!--\s*reconciliation-fingerprint:\s*([0-9a-f]+)\s*-->"
+)
+_CLOSING_KEYWORD = re.compile(
+    r"(?<!\w)(?:Closes|Fixes|Resolves)[ \t]+#(\d+)(?!\w)", re.IGNORECASE
 )
 
 
@@ -71,6 +87,29 @@ def _meaningful(text: str | None) -> bool:
     return bool(without_comments.strip())
 
 
+def _replace_section(body: str, heading: str, content: str) -> str:
+    """Replace one H2 section's content, or append it if not present."""
+    pattern = re.compile(
+        rf"(?ms)^(## {re.escape(heading)}\s*$\n)(.*?)(?=^## |\Z)"
+    )
+    block = f"## {heading}\n\n{content.strip()}\n\n"
+    match = pattern.search(body)
+    if match is not None:
+        return body[: match.start()] + block + body[match.end() :]
+    return body.rstrip("\n") + "\n\n" + block
+
+
+def _remove_section(body: str, heading: str) -> str:
+    """Return body with one whole H2 section (heading included) removed."""
+    pattern = re.compile(rf"(?ms)^## {re.escape(heading)}\s*$\n.*?(?=^## |\Z)")
+    return pattern.sub("", body, count=1).rstrip("\n") + "\n"
+
+
+def _fingerprint(text: str) -> str:
+    """Return one short, stable content fingerprint."""
+    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()[:16]
+
+
 def acceptance_complete(description: str) -> bool:
     """Return whether every checkbox in the acceptance section is checked."""
     section = _section(description, "Acceptance criteria")
@@ -78,6 +117,18 @@ def acceptance_complete(description: str) -> bool:
         return False
     checkboxes = re.findall(r"(?m)^- \[([ xX])\] ", section)
     return bool(checkboxes) and all(mark.lower() == "x" for mark in checkboxes)
+
+
+def has_scope_sentinel(body: str) -> bool:
+    """Return whether one work Issue has self-declared a scope expansion.
+
+    Detection is deliberately dumb: an exact, literal body line, matched
+    regardless of surrounding content. No natural-language judgment about
+    whether work actually exceeds the tracker's Proposal is attempted --
+    that judgment is exactly what the independent approval this triggers
+    is for.
+    """
+    return re.search(rf"(?m)^{re.escape(SCOPE_SENTINEL)}\s*$", body) is not None
 
 
 def promotion_complete(body: str) -> bool:
@@ -328,6 +379,43 @@ def _approval_records(
     return approvals, objections, resolved, admin_approvals
 
 
+def _gate_decision(
+    approvals: set[str],
+    objections: dict[str, str],
+    resolved: set[str],
+    admin_approvals: dict[str, str],
+    *,
+    missing_message: str,
+    approved_prefix: str = "Approved by",
+    admin_prefix: str = "Admin self-approved by",
+) -> Decision:
+    """Turn one collected approval-record set into a pass/fail Decision.
+
+    Shared by the tracker's own `/milestone approve` gate and a work
+    Issue's scope-expansion gate: both read the identical comment
+    vocabulary (`/milestone approve`, `/milestone admin-approve:`,
+    `/milestone object:`, `/milestone resolve:`) via `_approval_records()`,
+    and only differ in wording.
+    """
+    if not approvals and not admin_approvals:
+        return Decision(False, missing_message)
+    unresolved = sorted(set(objections) - resolved)
+    if unresolved:
+        return Decision(
+            False,
+            f"Resolve {len(unresolved)} objection(s) before work continues",
+        )
+    if approvals:
+        return Decision(
+            True, f"{approved_prefix} {', '.join(sorted(approvals))}"
+        )
+    admins = ", ".join(
+        f"{author} (reason: {reason})"
+        for author, reason in sorted(admin_approvals.items())
+    )
+    return Decision(True, f"{admin_prefix} {admins}")
+
+
 def approval_decision(
     snapshot: dict[str, Any], *, require_open: bool = True
 ) -> Decision:
@@ -347,21 +435,226 @@ def approval_decision(
     approvals, objections, resolved, admin_approvals = _approval_records(
         snapshot, proposer
     )
-    if not approvals and not admin_approvals:
-        return Decision(False, "A person other than the proposer must approve")
-    unresolved = sorted(set(objections) - resolved)
-    if unresolved:
-        return Decision(
-            False,
-            f"Resolve {len(unresolved)} objection(s) before work continues",
-        )
-    if approvals:
-        return Decision(True, f"Approved by {', '.join(sorted(approvals))}")
-    admins = ", ".join(
-        f"{author} (reason: {reason})"
-        for author, reason in sorted(admin_approvals.items())
+    return _gate_decision(
+        approvals,
+        objections,
+        resolved,
+        admin_approvals,
+        missing_message="A person other than the proposer must approve",
     )
-    return Decision(True, f"Admin self-approved by {admins}")
+
+
+def load_issue_snapshot(repo: str, number: int) -> dict[str, Any]:
+    """Read one work Issue and its own comments for scope-gate evaluation."""
+    issue = json.loads(run_gh(["api", f"repos/{repo}/issues/{number}"]))
+    comments = _pages(
+        run_gh(
+            [
+                "api",
+                "--paginate",
+                "--slurp",
+                f"repos/{repo}/issues/{number}/comments?per_page=100",
+            ]
+        )
+    )
+    return {"repo": repo, "issue": issue, "comments": comments}
+
+
+def scope_decision(snapshot: dict[str, Any]) -> Decision:
+    """Require independent approval only for a self-declared scope expansion.
+
+    A work Issue inherits its tracker's approval by default -- no sentinel
+    means no extra gate, exactly like today, keeping the common in-scope
+    case exactly as cheap as it already is. Only when the Issue's own body
+    contains the literal `Tracker scope: expanded` marker line does it need
+    its own non-proposer approval (or admin self-approval), evaluated with
+    the exact same `/milestone` comment vocabulary as the tracker's gate.
+    """
+    issue = snapshot.get("issue")
+    if not isinstance(issue, dict):
+        return Decision(False, "GitHub returned invalid Issue data")
+    body = issue.get("body")
+    if not isinstance(body, str) or not has_scope_sentinel(body):
+        return Decision(True, "In scope; inherits the tracker's approval")
+    proposer = issue.get("user", {}).get("login")
+    approvals, objections, resolved, admin_approvals = _approval_records(
+        snapshot, proposer
+    )
+    return _gate_decision(
+        approvals,
+        objections,
+        resolved,
+        admin_approvals,
+        missing_message=(
+            "Scope expansion declared: a person other than the proposer "
+            "must approve"
+        ),
+        approved_prefix="Scope expansion approved by",
+        admin_prefix="Scope expansion admin self-approved by",
+    )
+
+
+def check_scope(repo: str, number: int) -> Decision:
+    """Validate the scope-expansion gate for one work Issue."""
+    return scope_decision(load_issue_snapshot(repo, number))
+
+
+def _linked_work_items(
+    snapshot: dict[str, Any], tracker_number: int
+) -> list[dict[str, Any]]:
+    """Return every non-tracker Issue (not a pull request) in this Milestone."""
+    return [
+        issue
+        for issue in snapshot["issues"]
+        if issue.get("number") != tracker_number and "pull_request" not in issue
+    ]
+
+
+def _merged_at(pull_issue: dict[str, Any]) -> str | None:
+    """Return one pull request's merge timestamp, if it has merged."""
+    pull_request = pull_issue.get("pull_request")
+    if not isinstance(pull_request, dict):
+        return None
+    merged_at = pull_request.get("merged_at")
+    return merged_at if isinstance(merged_at, str) else None
+
+
+def _closing_pull_requests(
+    snapshot: dict[str, Any],
+) -> dict[int, list[dict[str, Any]]]:
+    """Map each Issue number to the pull requests that declare closing it."""
+    mapping: dict[int, list[dict[str, Any]]] = {}
+    for issue in snapshot["issues"]:
+        if "pull_request" not in issue:
+            continue
+        body = issue.get("body")
+        if not isinstance(body, str):
+            continue
+        for match in _CLOSING_KEYWORD.finditer(body):
+            mapping.setdefault(int(match.group(1)), []).append(issue)
+    return mapping
+
+
+def _delivery_row(
+    issue: dict[str, Any], pulls: list[dict[str, Any]]
+) -> tuple[str, str]:
+    """Return one reconciliation table row and its delivery status."""
+    number = issue.get("number")
+    title = str(issue.get("title", "")).replace("|", "\\|")
+    state = issue.get("state", "unknown")
+    merged_pulls = [pull for pull in pulls if _merged_at(pull)]
+    chosen = merged_pulls[0] if merged_pulls else (pulls[0] if pulls else None)
+    pr_cell = f"#{chosen['number']}" if chosen else "(none found)"
+    merged = chosen is not None and _merged_at(chosen) is not None
+    if state == "closed" and merged:
+        status = "Delivered"
+    elif state == "closed":
+        status = "Closed without a merged PR"
+    else:
+        status = "Pending"
+    row = (
+        f"| #{number} {title} | {state} | {pr_cell} | "
+        f"{'yes' if merged else 'no'} | {status} |"
+    )
+    return row, status
+
+
+def reconciliation_status(body: str) -> Decision:
+    """Return whether the tracker's Reconciliation section is fresh.
+
+    Fresh means: the section exists, carries its own fingerprint comment,
+    and that fingerprint still matches the rest of the tracker body today.
+    `regenerate_reconciliation()` only ever rewrites the Reconciliation
+    section itself, so this fingerprint changes only when a human or agent
+    edits some other part of the tracker body after the last regeneration
+    -- exactly the edit this check exists to catch, so a stale table can
+    never be relied on to justify closing the Milestone.
+    """
+    section = _section(body, RECONCILIATION_HEADING)
+    if not isinstance(section, str) or not _meaningful(section):
+        return Decision(False, "Reconciliation section is missing")
+    match = _FINGERPRINT_COMMENT.search(section)
+    if match is None:
+        return Decision(False, "Reconciliation section has no fingerprint")
+    rest = _remove_section(body, RECONCILIATION_HEADING)
+    if match.group(1) != _fingerprint(rest):
+        return Decision(
+            False, "Reconciliation: stale, regenerate before closing"
+        )
+    return Decision(True, "Reconciliation is fresh")
+
+
+def regenerate_reconciliation(snapshot: dict[str, Any]) -> str:
+    """Return the tracker body with a freshly rebuilt Reconciliation section.
+
+    Walks every Issue actually attached to this Milestone (the same set
+    `closure_decision()` already treats as authoritative) against its real
+    GitHub state: closed or not, and whether a pull request that declares
+    closing it has actually merged. This is a genuine per-line delivery
+    table for a human to sign off against the Milestone's own Acceptance
+    criteria, not a second checkbox scan.
+    """
+    item = tracker(snapshot)
+    if item is None:
+        raise RuntimeError("No unique lifecycle Issue found to reconcile")
+    body = item.get("body")
+    if not isinstance(body, str):
+        raise RuntimeError("The lifecycle Issue body is missing")
+    base = _remove_section(body, RECONCILIATION_HEADING)
+    fingerprint = _fingerprint(base)
+    items = sorted(
+        _linked_work_items(snapshot, item["number"]),
+        key=lambda issue: issue.get("number", 0),
+    )
+    closing = _closing_pull_requests(snapshot)
+    lines = [
+        f"<!-- reconciliation-fingerprint: {fingerprint} -->",
+        (
+            "Auto-regenerated from live Milestone state. Re-run "
+            "`regenerate-reconciliation` after editing this Issue and "
+            "before closing it as completed -- editing any other section "
+            "marks this one stale."
+        ),
+        "",
+        "| Work Issue | State | Delivering PR | Merged | Status |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    delivered = 0
+    for issue in items:
+        row, status = _delivery_row(issue, closing.get(issue.get("number"), []))
+        lines.append(row)
+        if status == "Delivered":
+            delivered += 1
+    if not items:
+        lines.append("| _(no linked work Issues found)_ | | | | |")
+    lines.append("")
+    lines.append(f"_{len(items)} linked work Issue(s); {delivered} delivered._")
+    return _replace_section(base, RECONCILIATION_HEADING, "\n".join(lines))
+
+
+def record_reconciliation(repo: str, milestone_number: int) -> Decision:
+    """Regenerate and persist the tracker's Reconciliation section."""
+    snapshot = load_snapshot(repo, milestone_number)
+    item = tracker(snapshot)
+    if item is None:
+        return Decision(False, "; ".join(tracker_errors(snapshot)))
+    try:
+        new_body = regenerate_reconciliation(snapshot)
+    except RuntimeError as error:
+        return Decision(False, str(error))
+    if new_body != item.get("body"):
+        run_gh(
+            [
+                "issue",
+                "edit",
+                str(item["number"]),
+                "--repo",
+                repo,
+                "--body",
+                new_body,
+            ]
+        )
+    return Decision(True, f"Recorded reconciliation on #{item['number']}")
 
 
 def _completed_closure(snapshot: dict[str, Any], body: str) -> Decision:
@@ -383,6 +676,9 @@ def _completed_closure(snapshot: dict[str, Any], body: str) -> Decision:
         return Decision(
             False, "Completed closure needs a GitHub delivery evidence URL"
         )
+    reconciliation = reconciliation_status(body)
+    if not reconciliation.allowed:
+        return reconciliation
     return Decision(True, "Completed with approval and delivery evidence")
 
 
@@ -608,6 +904,12 @@ def main() -> None:
     record.add_argument("--repo", required=True)
     record.add_argument("--tracker", required=True, type=int)
     record.add_argument("--evidence-url", required=True)
+    scope = subparsers.add_parser("check-scope")
+    scope.add_argument("--repo", required=True)
+    scope.add_argument("--issue", required=True, type=int)
+    reconciliation = subparsers.add_parser("regenerate-reconciliation")
+    reconciliation.add_argument("--repo", required=True)
+    reconciliation.add_argument("--milestone", required=True, type=int)
     sync = subparsers.add_parser("reconcile")
     sync.add_argument("--repo", required=True)
     sync.add_argument("--milestone", required=True, type=int)
@@ -622,6 +924,10 @@ def main() -> None:
         decision = record_promotion_evidence(
             args.repo, args.tracker, args.evidence_url
         )
+    elif args.command == "check-scope":
+        decision = check_scope(args.repo, args.issue)
+    elif args.command == "regenerate-reconciliation":
+        decision = record_reconciliation(args.repo, args.milestone)
     else:
         decision = reconcile(args.repo, args.milestone)
     print(decision.summary)  # noqa: T201
