@@ -105,6 +105,22 @@ timeout，只呼叫 `scripts/check-template-update`）。公開模板來源不�
 secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
 `pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
 
+生成 repo 另有一個選用容器能力（Issue #554 決定）：開啟 `enable_docker` 才產生
+`Dockerfile`、`docker-compose.yml` 兩份起始範本，以及
+`.github/workflows/docker-build-scan.yml`（`pull_request`，限 Dockerfile／
+docker-compose.yml／已選語言原始碼路徑變更，另加 `workflow_dispatch`；
+`contents: read`；20 分鐘 timeout）。該 job 只呼叫 `docker/build-push-action`
+（`push: false`）在 runner 本機建置映像，再用 `aquasecurity/trivy-action`
+掃描同一本機映像的已知漏洞（`HIGH`／`CRITICAL` 失敗），全程不登入、不推送任何
+registry，也不要求任何 secret。未開啟 `enable_docker` 的專案不會產生上述任一
+檔案，不會多一個觸發中的 job，也不會取得任何新權限；這維持
+`docs/adr/selective-ci-automation-adoption.md` 記錄的既有決定──「不預先幫所有
+repo 產生 container job，非容器專案不應支付 Docker runner 成本或取得 registry
+權限」──只是把它從「完全不提供」明確擴充為「非容器專案零影響的選配項」，兩者
+並不衝突：該 ADR 拒絕的是「預先幫『所有』repo 產生」，不是「讓明確選擇容器化的
+專案自行選用」。本模板 repo 自己的開發／CI 流程不引入 Docker，範圍僅限於是否
+提供這個選配能力給下游生成的專案。
+
 ## 驗證分級與實測成本
 
 驗證契約只有兩個成本邊界，粒度由粗到細另有一種本機專用、不屬於 CI 政策的第零層：
