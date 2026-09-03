@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression test for scripts/check-branch-fresh (Issue #514): proves the
+# three-way classification (up-to-date / behind / diverged-or-rewritten) is
+# correct using a local throwaway "origin" (a bare repo) plus a "work"
+# clone and a "peer" clone that simulates someone else pushing -- no live
+# GitHub state involved. Each case uses its own branch name so cases
+# cannot interfere with each other.
+
+script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-branch-fresh"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+
+bare="$fixture_root/origin.git"
+work="$fixture_root/work"
+peer="$fixture_root/peer"
+
+git init -q -b main --bare "$bare"
+git clone -q "$bare" "$work" 2>/dev/null
+git -C "$work" config user.email test@example.invalid
+git -C "$work" config user.name "Check Branch Fresh Test"
+printf 'base\n' >"$work/base.txt"
+git -C "$work" add base.txt
+git -C "$work" commit -q -m base
+git -C "$work" push -q origin main
+
+git clone -q "$bare" "$peer" 2>/dev/null
+git -C "$peer" config user.email peer@example.invalid
+git -C "$peer" config user.name "Check Branch Fresh Peer"
+
+# Case 1: up-to-date. work pushes a branch and never falls behind it.
+git -C "$work" checkout -q -b case-uptodate main
+printf 'uptodate\n' >"$work/uptodate.txt"
+git -C "$work" add uptodate.txt
+git -C "$work" commit -q -m uptodate
+git -C "$work" push -q origin case-uptodate
+
+uptodate_out="$(cd "$work" && "$script_path" case-uptodate)"
+grep -Fq 'STATUS: up-to-date' <<<"$uptodate_out"
+grep -Fq 'both point at' <<<"$uptodate_out"
+
+# Case 2: behind (fast-forward available). Peer adds a commit on top of the
+# same branch and pushes it; work's local tip never moves, so it is a pure
+# ancestor of origin's new tip.
+git -C "$work" checkout -q -b case-behind main
+printf 'behind-base\n' >"$work/behind.txt"
+git -C "$work" add behind.txt
+git -C "$work" commit -q -m behind_base
+git -C "$work" push -q origin case-behind
+
+git -C "$peer" fetch -q origin
+git -C "$peer" checkout -q -B case-behind origin/case-behind
+printf 'behind-base\nadvanced by peer\n' >"$peer/behind.txt"
+git -C "$peer" commit -q -am peer_advances_case_behind
+git -C "$peer" push -q origin case-behind
+
+set +e
+behind_out="$(cd "$work" && "$script_path" case-behind 2>&1)"
+behind_status=$?
+set -e
+[[ "$behind_status" -eq 1 ]]
+grep -Fq 'STATUS: behind (fast-forward available)' <<<"$behind_out"
+grep -Fq 'fast-forward' <<<"$behind_out"
+
+# Case 3: up-to-date, "ahead" sub-case. work commits locally but never
+# pushes; origin's tip is already contained in work's local tip, so it is
+# still safe and must still report up-to-date (not "behind").
+git -C "$work" checkout -q -b case-ahead main
+printf 'ahead-base\n' >"$work/ahead.txt"
+git -C "$work" add ahead.txt
+git -C "$work" commit -q -m ahead_base
+git -C "$work" push -q origin case-ahead
+printf 'ahead-base\nlocal only\n' >"$work/ahead.txt"
+git -C "$work" commit -q -am work_local_only_commit
+
+ahead_out="$(cd "$work" && "$script_path" case-ahead)"
+grep -Fq 'STATUS: up-to-date' <<<"$ahead_out"
+grep -Fq 'ahead of origin' <<<"$ahead_out"
+
+# Case 4: diverged or rewritten. work commits locally without pushing
+# while peer, independently, pushes its own commit on top of the same
+# shared base -- neither tip is an ancestor of the other. This is the
+# dangerous shape that also covers a force-pushed/rebuilt origin: the
+# is-ancestor check cannot tell "concurrent divergence" apart from
+# "history rewritten", and correctly refuses to assume either is safe.
+git -C "$work" checkout -q -b case-diverged main
+printf 'diverged-base\n' >"$work/diverged.txt"
+git -C "$work" add diverged.txt
+git -C "$work" commit -q -m diverged_base
+git -C "$work" push -q origin case-diverged
+printf 'diverged-base\nwork local commit\n' >"$work/diverged.txt"
+git -C "$work" commit -q -am work_diverges_locally
+
+git -C "$peer" fetch -q origin
+git -C "$peer" checkout -q -B case-diverged origin/case-diverged
+printf 'diverged-base\npeer independent commit\n' >"$peer/diverged.txt"
+git -C "$peer" commit -q -am peer_diverges_independently
+git -C "$peer" push -q origin case-diverged
+
+set +e
+diverged_out="$(cd "$work" && "$script_path" case-diverged 2>&1)"
+diverged_status=$?
+set -e
+[[ "$diverged_status" -eq 1 ]]
+grep -Fq 'STATUS: diverged or rewritten' <<<"$diverged_out"
+grep -Fq 'do not assume your branch reflects current state' <<<"$diverged_out"
+
+# Case 5: usage and setup errors are distinguished with exit 2, not 0/1.
+set +e
+usage_out="$(cd "$work" && "$script_path" 2>&1)"
+usage_status=$?
+set -e
+[[ "$usage_status" -eq 2 ]]
+grep -Fq 'usage:' <<<"$usage_out"
+
+set +e
+no_local_out="$(cd "$work" && "$script_path" case-does-not-exist-locally 2>&1)"
+no_local_status=$?
+set -e
+[[ "$no_local_status" -eq 2 ]]
+grep -Fq 'no local branch' <<<"$no_local_out"
+
+echo "Check-branch-fresh cases passed: 5"
