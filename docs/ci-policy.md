@@ -302,6 +302,59 @@ check 規則決定；本工具只負責把 job 層級噪音拆成正確的 step 
 呼叫的 product surface；`pr-policy.yml` 本身（含其 job/step 結構）仍照原樣
 下發給生成 repo，不受影響。
 
+### Scope-drift gate enforcement 與核可 fingerprint-binding（#632）
+
+`#552`（PR #609）落地了 `sync_milestone_state.py` 的 `has_scope_sentinel()`／
+`scope_decision()`：一張 work Issue 若在 body 逐字獨立一行寫下
+`Tracker scope: expanded`，就需要一次獨立的非提案者核可（或 `admin`
+collaborator 自核例外）才算通過，判斷邏輯與 tracker 層級的 `/milestone approve`
+完全共用。但 `#552` 當時只落地 `check-scope` CLI 子指令本身，刻意不接進任何
+`.github/workflows/*.yml`（見 `docs/adr/milestone-scope-and-closure-reconciliation.md`
+的「刻意不做的部分」），也沒有把核可綁定到特定版本的 body 內容。`#632` 補齊這兩
+個缺口：
+
+- **CI 接線：**`pr-policy.yml` 的 `title` job 新增「Validate the scope-drift
+  gate」step，在「Validate pull request policy」之後、`merge_group` 專屬 step
+  之前執行，呼叫新腳本 `scripts/check-scope-gate`。這支腳本從 PR body 解析
+  `Closes|Fixes|Resolves #<n>`（與 `scripts/validate-pr-policy` 自己用來核對
+  branch-derived Issue 編號的同一個 pattern，`#632` 不重新推導、只重用其結
+  論），找到連結的 work Issue 後呼叫 `sync_milestone_state.py check-scope`；
+  找不到連結 Issue（release 自動化、dependabot、main-sync bridge 等本來就沒
+  有連結 work Issue 的 PR）則直接放行、不擋。`check-scope` 回報未通過時腳本
+  以非 0 結束，比照本檔其他 gate 一貫的 fail-closed 模式擋下該 job；PR 沒有
+  宣告 `Tracker scope: expanded`，或已通過核可，都正常放行。這個 step 比照
+  `check-pr`／`check-merge-group` 既有的 rollout-safety 寫法：因為
+  `title` job 用 `pull_request.base.sha` checkout（刻意不信任 PR 自己送來的
+  policy 腳本），`scripts/check-scope-gate` 這支新腳本要等到落地 `#632` 的
+  這次 PR 本身合併進 base branch 之後才會出現在該 checkout 裡；因此 step 先
+  判斷腳本是否存在（`[[ -x ./scripts/check-scope-gate ]]`），不存在只印
+  `::notice::` 放行，同一張 PR 在自己身上驗證時不會因為這個 chicken-and-egg
+  落差而誤擋（PR #633 落地時已由真實 CI run 實測到這個落差並修正）。
+- **Fingerprint-binding：**`approval_decision()`（tracker 核可）與
+  `scope_decision()`（work Issue scope 核可）共用的 `_approval_records()`／
+  `_gate_decision()`，現在額外比對每則 `/milestone approve`／
+  `admin-approve:` 留言的 `created_at` 與該 Issue（或 tracker）自己的
+  `updated_at`。GitHub REST 不像 Reconciliation 段落的
+  `reconciliation-fingerprint`（bot 自己寫入、可以精確重算比對）那樣提供可
+  查詢的 body 編輯歷史；`updated_at` 是唯一可查的訊號，但它也會因為新留言、
+  label／Milestone／state 變更等與 body 編輯無關的活動而更新
+  （`_approval_is_stale()` 的 docstring 記錄了完整理由）。因此判定刻意走保
+  守方向：只要留言的 `created_at` 早於 `updated_at` 超過 60 秒的緩衝窗（吸收
+  GitHub 自己「留言建立」到「Issue.updated_at 反映該留言」之間，經對本
+  repo 既有 Issue 歷史實測約 1 秒的落差),就視為過期，需要重新核可——寧可提
+  高「需要重新核可」的誤判率，也不讓核可默默套用在已經變動過的 body 版本
+  上。缺少任一時間戳（例如舊測試 fixture 沒有填 `created_at`／`updated_at`）
+  一律視為「無法判斷」而非「一定過期」，維持 `#552` 既有行為不變。
+
+`tests/test_milestone_approval.py`／`tests/test_milestone_scope.py` 覆蓋
+staleness 邊界（含 60 秒緩衝窗、跨過緩衝窗即過期、過期後重新核可即恢復通過）；
+`scripts/test-check-scope-gate` 對 `check-scope-gate` 本身做端到端回歸測試
+（無連結 Issue、無 sentinel、有 sentinel 未核可、有 sentinel 已核可、核可過期
+四種結果，掛在 `scripts/verify-fast` 的 governance／template／workflow／shell
+scope 與 `scripts/verify-stage-regression-tests`）。這次變更不重新設計
+`has_scope_sentinel()` 的偵測邏輯，也不擴大 `/milestone approve`／
+`admin-approve` 留言語彙本身——只在既有機制上補上 CI 接線與版本綁定這兩層。
+
 ### `scripts/verify-template.sh` 階段盤點（#458）
 
 `scripts/verify-template.sh` 是一個薄聚合器：七個階段各自是 `scripts/verify-stage-*`
@@ -323,7 +376,7 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 | Static assets and paired files | `scripts/verify-stage-static-assets` | decision site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` tier 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
 | Python environment | `scripts/verify-stage-python-environment` | `uv.lock` 與 `pyproject.toml` 一致、環境可從鎖定版本安裝 | fast 的 `uv sync --locked` 是同一份鎖定契約；`uv lock --check` 只在 full 額外執行 |
 | Python quality | `scripts/verify-stage-python-quality` | 格式、lint、靜態型別 | fast 對相同原始碼跑相同三個命令，兩者呼叫同一份工具鏈設定，無額外邏輯 |
-| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／audit-fleet-adoption／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy 三個 shell 自我測試；base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status 與 `scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）五支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
+| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／audit-fleet-adoption／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate（`scripts/test-check-scope-gate`，見上方 Scope-drift gate enforcement 一節）四個 shell 自我測試；base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status 與 `scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）五支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
 | Package smoke test | `scripts/verify-stage-package-smoke` | wheel 可建置、已發布入口可從建置產物執行 | fast 不跑這個階段；改用範圍較窄的 Copier smoke copy（見下方 Journey 03 的 PR 級別 render/smoke） |
 | GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | workflow 權限與注入稽核（zizmor） | fast 不跑；workflow scope 的一般 PR 由 full 邊界（promotion／hotfix／merge queue／manual）覆蓋，不會被跳過 |
 

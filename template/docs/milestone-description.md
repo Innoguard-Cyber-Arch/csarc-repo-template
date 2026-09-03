@@ -39,6 +39,18 @@ agent 代為作者）撰寫每一張 work PR，GitHub 平台層級禁止「核�
 PR，且沒有對應每張 work PR 的例外機制可用。詳見
 `docs/adr/milestone-scope-and-closure-reconciliation.md`。
 
+上一段的「唯一合併前置檢查」在 `#632` 之後多了一道窄範圍例外：`pr-policy.yml` 額外呼叫
+`scripts/check-scope-gate`，只在該 PR 連結的 work Issue 自己宣告了
+`Tracker scope: expanded` 時才生效，把上方 `scope_decision()` 這個既有的 Issue-level
+gate 實際接上合併流程；沒有宣告的 work PR（現況的絕大多數）完全不受影響，行為與之前一
+致。這不是替 work PR 本身加裝 review gate，也沒有新增任何 `/milestone` 留言語彙——核可
+對象仍是 work Issue 自己的留言，`check-scope-gate` 只是把既有判斷結果實際擋在合併之
+前，而不是像 `#552` 落地時那樣只能靠人手動跑 `check-scope` CLI 才會被看見。核可另外綁定
+了 body 內容的 fingerprint：核可留言之後 Issue 又被編輯（`updated_at` 晚於核可留言
+`created_at` 超過緩衝窗），舊核可視為過期，需要重新核可，細節見
+`docs/ci-policy.md`「Scope-drift gate enforcement 與核可 fingerprint-binding（#632）」
+一節。
+
 ```markdown
 ## Problem
 

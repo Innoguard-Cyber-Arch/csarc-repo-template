@@ -41,6 +41,7 @@ paired_files=(
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
   scripts/promotion_gate.py
+  scripts/check-scope-gate
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
   scripts/converge-release-tag
@@ -58,6 +59,7 @@ paired_files=(
   scripts/spec_to_issue.py
   scripts/sync_milestone_state.py
   scripts/sync_work_item_metadata.py
+  scripts/test-check-scope-gate
   scripts/test-issue-triage
   scripts/test-pr-policy
   scripts/test-worktree-cleanup

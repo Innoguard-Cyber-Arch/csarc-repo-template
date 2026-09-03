@@ -15,6 +15,7 @@ approval_decision = MODULE["approval_decision"]
 check_pr = MODULE["check_pr"]
 check_merge_group = MODULE["check_merge_group"]
 tracker_errors = MODULE["tracker_errors"]
+_approval_is_stale = MODULE["_approval_is_stale"]
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +39,9 @@ def _stub_permission(
     )
 
 
-def snapshot(*comments: dict[str, Any]) -> dict[str, Any]:
+def snapshot(
+    *comments: dict[str, Any], tracker_updated_at: str | None = None
+) -> dict[str, Any]:
     """Build one valid open lifecycle snapshot."""
     tracker = {
         "number": 80,
@@ -53,6 +56,7 @@ def snapshot(*comments: dict[str, Any]) -> dict[str, Any]:
         ),
         "user": {"login": "proposer", "type": "User"},
         "labels": [{"name": "enhancement"}],
+        "updated_at": tracker_updated_at,
     }
     return {
         "repo": "acme/project",
@@ -77,12 +81,14 @@ def comment(
     body: str,
     *,
     author_type: str = "User",
+    created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build one auditable lifecycle comment."""
     return {
         "body": body,
         "html_url": f"https://github.com/acme/project/issues/80#issuecomment-{number}",
         "user": {"login": author, "type": author_type},
+        "created_at": created_at,
     }
 
 
@@ -335,3 +341,129 @@ def test_merge_group_rechecks_every_associated_pull_request(
 
     assert result.allowed
     assert recorded == [("acme/project", "queue-sha", result)]
+
+
+@pytest.mark.parametrize(
+    ("item_updated_at", "comment_created_at", "expected"),
+    [
+        (None, "2026-01-01T00:00:00Z", False),
+        ("2026-01-01T00:00:00Z", None, False),
+        (None, None, False),
+        # Same instant, or within the recording-lag grace window: fresh.
+        ("2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z", False),
+        ("2026-01-01T00:00:30Z", "2026-01-01T00:00:00Z", False),
+        # Comfortably beyond the grace window: stale.
+        ("2026-01-01T00:05:00Z", "2026-01-01T00:00:00Z", True),
+        # The comment is itself the later event: never stale.
+        ("2026-01-01T00:00:00Z", "2026-01-01T00:05:00Z", False),
+    ],
+)
+def test_approval_is_stale_uses_a_grace_window_around_recording_lag(
+    item_updated_at: str | None, comment_created_at: str | None, expected: bool
+) -> None:
+    """The staleness signal is `updated_at` vs. the comment's own timestamp.
+
+    A short grace window absorbs GitHub's own second-or-two lag between a
+    comment's `created_at` and the resulting bump to its parent Issue's
+    `updated_at` (see the module's own `_STALE_GRACE_SECONDS` docstring),
+    without weakening detection of a genuine later edit or comment.
+    """
+    assert _approval_is_stale(item_updated_at, comment_created_at) is expected
+
+
+def test_stale_approval_no_longer_opens_the_gate() -> None:
+    """An approval predating a later tracker update needs redoing (#632)."""
+    result = approval_decision(
+        snapshot(
+            comment(
+                1,
+                "reviewer",
+                "/milestone approve",
+                created_at="2026-01-01T00:00:00Z",
+            ),
+            tracker_updated_at="2026-01-01T01:00:00Z",
+        )
+    )
+
+    assert not result.allowed
+    assert "invalidated" in result.summary
+    assert "reviewer" in result.summary
+
+
+def test_approval_posted_after_the_last_update_is_not_stale() -> None:
+    """An approval posted after the tracker's own last update still counts."""
+    result = approval_decision(
+        snapshot(
+            comment(
+                1,
+                "reviewer",
+                "/milestone approve",
+                created_at="2026-01-02T00:00:00Z",
+            ),
+            tracker_updated_at="2026-01-01T00:00:00Z",
+        )
+    )
+
+    assert result.allowed
+    assert result.summary == "Approved by reviewer"
+
+
+def test_missing_timestamps_never_invent_staleness() -> None:
+    """No `created_at`/`updated_at` data reads as "cannot tell", not stale.
+
+    Locks in backward compatibility: every pre-#632 caller and test that
+    never supplied these fields keeps behaving exactly as before.
+    """
+    result = approval_decision(
+        snapshot(
+            comment(1, "reviewer", "/milestone approve"),
+            tracker_updated_at="2026-01-01T00:00:00Z",
+        )
+    )
+
+    assert result.allowed
+
+
+def test_stale_admin_self_approval_no_longer_opens_the_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later tracker edit invalidates an admin self-approval too."""
+    _stub_permission(monkeypatch, "admin")
+    result = approval_decision(
+        snapshot(
+            comment(
+                1,
+                "proposer",
+                "/milestone admin-approve: no reviewer before the deadline",
+                created_at="2026-01-01T00:00:00Z",
+            ),
+            tracker_updated_at="2026-01-01T01:00:00Z",
+        )
+    )
+
+    assert not result.allowed
+    assert "invalidated" in result.summary
+
+
+def test_fresh_approval_after_a_stale_one_still_opens_the_gate() -> None:
+    """A later re-approval past the edit satisfies the gate normally."""
+    result = approval_decision(
+        snapshot(
+            comment(
+                1,
+                "reviewer",
+                "/milestone approve",
+                created_at="2026-01-01T00:00:00Z",
+            ),
+            comment(
+                2,
+                "reviewer",
+                "/milestone approve",
+                created_at="2026-01-02T00:00:00Z",
+            ),
+            tracker_updated_at="2026-01-01T12:00:00Z",
+        )
+    )
+
+    assert result.allowed
+    assert result.summary == "Approved by reviewer"
