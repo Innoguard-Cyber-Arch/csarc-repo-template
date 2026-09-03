@@ -105,6 +105,10 @@ class FakeGitHub:
         self.quota_runner_id = 0
         self.quota_steps: list[dict[str, Any]] = []
         self.compare_status = "ahead"
+        self.ruleset_response: dict[str, object] = {
+            "enforcement": "active",
+            "bypass_actors": [],
+        }
 
     def viewer(self, explicit_actor: str = "") -> str:
         """Return the task's authenticated actor."""
@@ -256,7 +260,7 @@ class FakeGitHub:
                 *self.additional_check_rules,
             ]
         if path == "rulesets/7":
-            return {"enforcement": "active", "bypass_actors": []}
+            return self.ruleset_response
         if path == (f"compare/{self.destination_sha}...{self.head}"):
             return {"status": self.compare_status}
         if path == f"git/commits/{'a' * 40}":
@@ -1337,6 +1341,30 @@ def test_merge_snapshot_allows_agent_only_with_enforced_no_bypass_rules(
     )
     assert snapshot["merge_mode"] == "agent"
     github.protected = False
+    snapshot = merge_snapshot(
+        github,
+        lease_fixture(),
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["merge_mode"] == "human-only"
+
+
+def test_merge_snapshot_blocks_agent_when_ruleset_permits_bypass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-empty bypass_actors entry forces human-only, even when active."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
     snapshot = merge_snapshot(
         github,
         lease_fixture(),
