@@ -174,6 +174,36 @@ lease 機制原本要防的「立即搶寫」；`gh pr edit --add-label` 那行�
 （回歸測試見 `tests/test_pr_lifecycle.py` 的
 `test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist`）。
 
+`.github/workflows/release.yml` 裡 `googleapis/release-please-action` 這一步
+同樣未經過 lease 就會建立／更新自己的版本 PR，且從未有例外或對應 Issue 記錄過，
+直到 #643 才發現。理由與 dependabot 例外一致但更直接：release-please 建立的 PR
+不是本 repo 任何一條 task-PR 路線（獨立 Issue／Milestone Issue／`dev/i*`
+canary／hotfix），而是第五條、由維護者直接人工審查合併的獨立路徑（見
+`AGENTS.md`「Release execution」）；`release.yml` 本身已用
+`concurrency: group: release-${{ github.repository }}` 把自己序列化，且
+release-please 只會動到自己的 `release-please--branches--main--components--*`
+head ref（`scripts/release_policy.py` 的 `expected_head`，`scripts/
+promotion_gate.py` 對同一 ref 前綴的特殊處理），沒有任何 lease 保護的 agent
+流程會寫這個 ref。因此 #643 為 `scripts/pr_lifecycle.py` 新增
+`release_please_exemption`，只正面表列 `.github/workflows/release.yml` 這一個
+精確路徑（`template/.github/workflows/release.yml.jinja` 是 Jinja 樣板，
+`scan_writers` 的 glob 本來就不掃描它，不需要第二個路徑）（回歸測試見
+`test_release_please_exemption_is_an_exact_path_allowlist`）。
+
+同一次調查也發現 `command_writer_violations` 本身兩個誤判：它把整份檔案接成
+一個 block 比對，導致 `scripts/gh-issue-create` 裡兩句不相干的 `#` 註解（一句
+提到 `` `gh issue edit` ``、另一句列出 `--milestone` 這個透傳 flag）被誤判成
+「gh issue metadata write」；`scripts/validate-pr-policy`（#551 的 Milestone
+安全網）組給人看的 PR 留言訊息時，用反斜線跳脫的 `` \`...\` `` Markdown code
+span 描述維護者該手動下的指令，跳脫反引號在雙引號字串裡是字面字元、不是
+command substitution，這段文字從未被執行，但掃描器分不出「描述指令的文字」
+跟「真的呼叫」。#643 修正 `command_writer_violations`：比對前拿掉整行 `#`
+註解與反斜線跳脫的 `` \`...\` `` 區段，不放寬其餘偵測範圍——沒被註解、沒被
+跳脫的真實寫入仍會 fail closed（回歸測試見
+`test_writer_scanner_ignores_unrelated_comment_lines`、
+`test_writer_scanner_ignores_escaped_backtick_documentation`、
+`test_writer_scanner_still_catches_live_writes_beside_similar_text`）。
+
 **通則（自 #602 起生效）**：往後每新增一個 `scan_writers` 例外，都必須有
 自己對應的 tracking Issue 記錄理由與範圍（不能只在程式碼註解裡說明，也不能
 一次開一張 Issue 涵蓋多個例外）；且所有既有例外都要在專案脫離 beta 階段後
