@@ -65,6 +65,7 @@ paired_files=(
   scripts/resolve-cache-root
   scripts/scan-secrets
   scripts/spec_to_issue.py
+  scripts/stale_branch_detection.py
   scripts/sync_milestone_state.py
   scripts/sync_work_item_metadata.py
   scripts/test-apply-repository-settings
@@ -91,6 +92,7 @@ paired_files=(
   tests/test_release_policy.py
   tests/test_release_bundle.py
   tests/test_repo_capabilities.py
+  tests/test_stale_branch_detection.py
   tests/test_work_item_metadata.py
   tests/test_work_pr_closure.py
   zizmor.yml

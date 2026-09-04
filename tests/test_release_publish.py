@@ -266,6 +266,8 @@ def build_repo(tmp_path: Path) -> dict[str, str]:
     for name in (
         "release_bundle.py",
         "release_policy.py",
+        # release_policy.py imports this module (Issue #667) at load time.
+        "stale_branch_detection.py",
         "converge-release-tag",
         "verify-release-candidate",
         "publish-release",

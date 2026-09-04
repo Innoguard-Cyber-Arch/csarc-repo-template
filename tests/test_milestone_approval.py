@@ -16,6 +16,34 @@ check_pr = MODULE["check_pr"]
 check_merge_group = MODULE["check_merge_group"]
 tracker_errors = MODULE["tracker_errors"]
 _approval_is_stale = MODULE["_approval_is_stale"]
+preflight = MODULE["preflight"]
+
+_NO_STALE_BRANCHES = {
+    "available": True,
+    "reason": None,
+    "threshold_days": 30,
+    "candidates": [],
+    "summary": (
+        "No stale delivery branch candidates found (no open PR, idle >= 30d)."
+    ),
+}
+
+
+def _stub_stale_branch_report(
+    monkeypatch: pytest.MonkeyPatch, report: dict[str, Any]
+) -> list[str]:
+    """Replace the Issue #667 hygiene report with a fixed value."""
+    calls: list[str] = []
+
+    def fake_report(repo: str, **kwargs: object) -> dict[str, Any]:
+        del kwargs
+        calls.append(repo)
+        return report
+
+    monkeypatch.setattr(
+        MODULE["stale_branch_detection"], "stale_branch_report", fake_report
+    )
+    return calls
 
 
 @pytest.fixture(autouse=True)
@@ -467,3 +495,143 @@ def test_fresh_approval_after_a_stale_one_still_opens_the_gate() -> None:
 
     assert result.allowed
     assert result.summary == "Approved by reviewer"
+
+
+def test_preflight_passes_a_correctly_created_milestone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Milestone whose due date, tracker, and link already line up is
+    reported ready before any work-Issue pull request is even opened
+    (Issue #572), and its summary includes the repo-wide stale delivery
+    branch review list (Issue #667)."""
+    calls: list[tuple[str, int]] = []
+    monkeypatch.setitem(
+        preflight.__globals__,
+        "load_snapshot",
+        lambda repo, number: (calls.append((repo, number)), snapshot())[1],
+    )
+    hygiene_calls = _stub_stale_branch_report(monkeypatch, _NO_STALE_BRANCHES)
+
+    result = preflight("acme/project", 8)
+
+    assert result.allowed
+    assert calls == [("acme/project", 8)]
+    assert hygiene_calls == ["acme/project"]
+    assert "Milestone metadata is ready for work" in result.summary
+    assert "No stale delivery branch candidates found" in result.summary
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ("title", "Create exactly one Issue titled"),
+        ("label", "enhancement label"),
+        ("proposal", "Proposal section"),
+        ("link", "Lifecycle Issue"),
+        ("due-date", "real due date"),
+    ],
+)
+def test_preflight_fails_closed_on_the_same_contract_a_pr_would(
+    change: str, message: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`preflight` rejects exactly what `tracker_errors` rejects, so a bad
+    Milestone is caught at creation time instead of at the first PR's
+    "Validate Milestone approval" check (Issue #572)."""
+    state = snapshot()
+    item = state["issues"][0]
+    if change == "title":
+        item["title"] = "Milestone 8: Wrong title"
+    elif change == "label":
+        item["labels"] = []
+    elif change == "proposal":
+        item["body"] = item["body"].replace(
+            "Ship the reviewed batch.", "<!-- empty -->"
+        )
+    elif change == "due-date":
+        state["milestone"]["due_on"] = None
+    else:
+        state["milestone"]["description"] = (
+            "## Acceptance criteria\n\n- [ ] Deliver"
+        )
+    monkeypatch.setitem(
+        preflight.__globals__, "load_snapshot", lambda repo, number: state
+    )
+    _stub_stale_branch_report(monkeypatch, _NO_STALE_BRANCHES)
+
+    result = preflight("acme/project", 8)
+
+    assert not result.allowed
+    assert message in result.summary
+
+
+def test_preflight_reports_stale_branch_candidates_without_blocking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale-branch finding (Issue #667) is informational only: it never
+    flips an otherwise-valid Milestone's preflight result to failing, and
+    it is repo-wide -- unrelated to this Milestone's own metadata."""
+    monkeypatch.setitem(
+        preflight.__globals__,
+        "load_snapshot",
+        lambda repo, number: snapshot(),
+    )
+    _stub_stale_branch_report(
+        monkeypatch,
+        {
+            "available": True,
+            "reason": None,
+            "threshold_days": 30,
+            "candidates": [
+                {
+                    "name": "fix/441-delivery-manual-contract",
+                    "last_commit_sha": "a" * 40,
+                    "last_commit_date": "2026-07-01T00:00:00Z",
+                    "days_idle": 65,
+                }
+            ],
+            "summary": (
+                "1 stale delivery branch candidate(s) for manual review "
+                "(no open PR, idle >= 30d): "
+                "fix/441-delivery-manual-contract (65d idle). Not deleted "
+                "automatically -- confirm each is truly abandoned before "
+                "removing it."
+            ),
+        },
+    )
+
+    result = preflight("acme/project", 8)
+
+    assert result.allowed
+    assert "fix/441-delivery-manual-contract" in result.summary
+
+
+def test_preflight_never_raises_when_the_hygiene_check_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A transport failure inside the hygiene check degrades to an
+    "unavailable" note instead of ever propagating an exception out of
+    `preflight` -- Milestone metadata validation must not be blocked by an
+    unrelated, best-effort repo hygiene check."""
+    monkeypatch.setitem(
+        preflight.__globals__,
+        "load_snapshot",
+        lambda repo, number: snapshot(),
+    )
+    _stub_stale_branch_report(
+        monkeypatch,
+        {
+            "available": False,
+            "reason": "GitHub CLI (gh) is required",
+            "threshold_days": 30,
+            "candidates": [],
+            "summary": (
+                "Stale delivery branch check unavailable: GitHub CLI (gh) "
+                "is required"
+            ),
+        },
+    )
+
+    result = preflight("acme/project", 8)
+
+    assert result.allowed
+    assert "Stale delivery branch check unavailable" in result.summary
