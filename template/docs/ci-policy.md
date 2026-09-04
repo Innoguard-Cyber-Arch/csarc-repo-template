@@ -338,6 +338,97 @@ Issue、Promotion 區塊 checklist 與 promotion 標籤的完整驗證；`.githu
 齊全」——後者仍由 `scripts/promotion_gate.py` 的 `prepare()`／`finalize()` 在正式的 Milestone 交付流程中
 處理，範圍不變。
 
+### `verify` 必要檢查改為本機驗證聲明（#661）
+
+維護者決定：`verify` required check 的測試驗證本身要離開 GitHub Actions，改成固定在開發者本機執行
+——不是 Actions 壞掉時的備援，是刻意選擇的常態架構。`.github/workflows/ci.yml`（與
+`template/.github/workflows/ci.yml.jinja`）的 `verify` job 不再實際呼叫 `scripts/verify-fast`／
+`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`），只驗證這個 commit 是否已經帶有本機驗證
+通過的證據。
+
+**與 #171（已關閉）的區別**：`#171` 建立的「本機驗證聲明」機制範圍刻意收得很窄，只在 GitHub Actions 免費
+額度確認耗盡時啟用，且每次都要 human maintainer 親自確認耗盡原因、逐 commit 重新授權——本質是授權例外
+（Actions 壞掉時要不要放行這次合併的人為判斷）。本節機制本質不同：要驗證的是一個事實陳述（「這個 commit
+的內容，本機真的跑過測試且通過」），不是要不要放行的判斷，因此不需要人在每個 PR 上點頭確認，只要能自動、
+可靠地驗證這個事實陳述為真即可。兩者信任模型不同，`#171` 的 quota-only、human 每次確認流程不受本節影響，
+也不合併成同一套機制。
+
+**機制**：`scripts/verify-fast`／`scripts/verify-template.sh`（與生成 repo 對應的
+`scripts/verify-fast`／`scripts/verify`）驗證成功（exit 0）時，在結尾呼叫
+`scripts/write-verify-attestation <fast|full>`，於當下 HEAD commit 的訊息附加一行 trailer：
+
+```text
+Verified-locally: sha256=<tree hash> tier=fast|full at=<UTC ISO 8601>
+```
+
+- **`sha256=` 的值是 git 自己的 tree hash**（`git rev-parse HEAD^{tree}`），不是自製的檔案內容 hash——
+  這個值本來就已經是 deterministic、collision-resistant、且免費可算，另外發明一種 hash 只會多一個兩者
+  可能悄悄不同步的地方。欄位名稱固定寫 `sha256`，但實際演算法是這個 repository 設定的 git object format
+  （幾乎所有 repository，包含本 repo，都是 SHA-1；只有明確以 `--object-format=sha256` 初始化的 repository
+  才是 SHA-256）——欄位名稱是內容識別語意，不是演算法保證；驗證邏輯用完整字串比對，不靠固定長度判斷，見
+  `scripts/verify_attestation.py` 的 module docstring。
+- **寫入方式是 amend 現有 commit 的訊息，不是另開一個空 follow-up commit，也不是寫入本機檔案再轉成
+  commit**：只改訊息、不動 index 的 amend 不會改變 tree（`scripts/write-verify-attestation` 的註解有完整
+  推導），所以 amend 前算出的 tree hash，在 amend 後仍然正確描述同一個 commit；另外兩個方案都會讓「被驗證
+  的東西」跟「帶著證據的東西」變成兩個物件，一旦 HEAD 後續被 amend、rebase 或 force-push，沒有機制能保證
+  兩者不會悄悄分岔。代價是 HEAD 的 SHA 會變：如果這個 commit 已經 push 過，下一次 push 需要
+  `--force-with-lease`——這對 PR 自己的 topic branch 是正常、預期的操作，不是對共享整合分支的
+  force-push。
+- **寫入前要求工作目錄乾淨**（`git status --porcelain` 必須全空）：attestation 的核心主張是「這個確切的
+  tree 被測試過」，工作目錄若有未提交的變更，剛跑完的測試實際涵蓋的內容就不等於 `HEAD^{tree}`，繼續寫入
+  會是一句不實聲明。`scripts/write-verify-attestation` 在這種情況下略過（exit 0，因為測試真的通過了，不
+  是失敗），讓 hosted `verify` job 之後因為找不到 trailer 而 fail closed——這是刻意、安全的結果，逼著
+  「先 commit、再驗證、再 push」這個順序，而不是安靜地寫一句可能不實的聲明。
+
+**hosted `verify` job 現在只驗證三件事**（`scripts/check-verify-attestation`，核心邏輯在
+`scripts/verify_attestation.py`、可獨立單元測試）：
+
+1. **trailer 存在**——commit 訊息裡有格式正確的 `Verified-locally:` 一行。
+2. **hash 相符**——trailer 的 `sha256=` 與這個 commit 實際的 `^{tree}` 完全一致，擋「複製舊 commit 的
+   trailer、忘記重新驗證」這類非蓄意疏漏（新內容加進同一個 commit 卻沒重跑驗證，tree 會變、hash 就對不
+   上）。
+3. **timestamp 新鮮**——`at=` 距離現在不超過 24 小時（`--max-age-hours`，可覆寫），且不能是未來時間
+   （超過 5 分鐘 clock skew 就視為異常，`--max-clock-skew-minutes`）。24 小時沿用本文件 `release-drift.yml`
+   的 `RELEASE_DRIFT_HOURS` 同一個判斷慣例：長到不逼一般「本機驗證完、隔一段時間才 push」的正常工作節奏
+   重跑，短到「拿很久以前的驗證結果冒充」（Issue #661 原文用語）不會是一條直線通過的路。這裡的 staleness
+   本質不是防偽造——hash 已經把 trailer 綁死在確切內容上，同一段內容重放舊 trailer 只是在陳述一個依然為
+   真的歷史事實——而是防環境漂移：同一個 tree 現在重跑，可能因為依賴版本、lint 規則等外部因素改變而不再
+   通過，即使幾小時前確實通過過。**沒有「未來時間」檢查的話，staleness 判斷可以被一個刻意設在遙遠未來的
+   `at=` 完全繞過**（未來時間永遠不會被判定為「太舊」）——這是設計本節時特別要擋的一種讓 freshness 檢查
+   形同虛設的方式，不只是把日期往前搬那麼簡單的疏漏。
+
+**額外的第四項：tier 是否足夠**（`--required-tier`，來自同一個 job 已經算出的
+`scripts/ci_tier.py` 分類結果）。沒有這一項，任何人都可以永遠只跑便宜的 `scripts/verify-fast`（固定
+attest `tier=fast`），即使這個 PR 改到 `.github/workflows/` 之類、`ci_tier.py` 會判定需要 `full` 的路徑
+——hosted job 既然已經不重新執行任何東西，就完全沒有能力分辨兩者。`tier=full` 滿足任何要求；`tier=fast`
+只滿足 `docs`／`fast` 要求，不滿足 `full`。這個比對不重新實作 `ci_tier.py` 的分類邏輯，只是拿它已經算出
+的答案來比對，與 `promotion` job 重用 `route_for()` 是同一個原則。
+
+**已知、記錄在案、不視為本節缺陷的殘餘風險**：這個機制無法阻止「蓄意造假」——本機真的沒跑測試，卻手算出
+正確的 tree hash、手寫一行格式正確、timestamp 新鮮的 trailer。這在技術上完全可行（tree hash 不需要跑測試
+就能算出來），且與現在「直接在 PR 描述裡寫假話」風險同一等級。本節機制解決的是「忘記跑」「跑錯版本」這類
+非蓄意疏漏，不解決蓄意造假——這點與 #171 無關，`#171` 的 human 每次確認流程本來就不是為了解決同一個問題。
+
+**這個變更牽動既有的「push 並信任 hosted `verify` check」語句**：下方「Base-only re-merge 例外
+（#468）」原本容許已經本機全綠一次的 full-tier PR，之後因為重新合併 base 而直接 push、不用再本機重跑，
+理由是「hosted CI 對這次合併結果仍會重新執行完整驗證」。本節生效後這個前提不成立了——hosted `verify` job
+不再執行任何東西，重新合併產生的新 tip commit 沒有自己的 trailer，會被 hosted job 當成任何其他未經驗證
+的 push 一樣 fail closed。這不是本 Issue 範圍內要解決的問題（#661 的邊界明確排除治理類與其他既有機制的
+重新設計），下方 Base-only re-merge 一節已經加註這個交互作用；是否、以及如何讓 `#468` 的例外在新架構下
+繼續有意義，留給後續 Issue 決定。
+
+**回歸測試**：trailer 產生（成功時正確寫入、失敗時不寫入、工作目錄不乾淨時略過、重跑時取代而非疊加既有
+trailer）見 `scripts/test-verify-attestation`（對真實、拋棄式的 git repository 操作）；hash 相符／不符、
+timestamp 新鮮／過期／未來、trailer 缺失、tier 是否足夠等純邏輯見 `tests/test_verify_attestation.py`
+（不需要 git，直接測 `scripts/verify_attestation.py` 的純函式與 CLI）。兩者都掛在
+`scripts/verify-stage-regression-tests`（生成 repo 掛在 `scripts/verify` 的自我測試清單），並隨
+`scripts/verify_attestation.py`／`scripts/write-verify-attestation`／`scripts/check-verify-attestation`
+一起透過 `scripts/sync-paired-files.sh` 逐位元組下發到 `template/`。
+
+**`policies/rulesets-required-checks.json` 不需要改動**：required check 仍然叫 `verify`（context 名稱由
+job 的 `name:` 決定，不是由它做什麼決定），Ruleset 只認 context 名稱，不知道、也不需要知道 job 內部從「重
+新執行測試」換成「驗證一個聲明」。
+
 ## Current automation
 
 下表逐項列出 canonical file、owner、觸發（輸入）、權限／timeout、產物（輸出）、測試與
@@ -348,7 +439,7 @@ Issue、Promotion 區塊 checklist 與 promotion 標籤的完整驗證；`.githu
 
 | 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；30 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類後，中央模板呼叫 `scripts/verify-fast` 或 `scripts/verify-template.sh`，生成 repo 呼叫 `scripts/verify`；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py` | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success | active |
+| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428）；本機驗證聲明（#661） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；15 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類（仍在 runner 上執行，是變更路徑分類邏輯，不是測試）後，只用 `scripts/check-verify-attestation` 驗證這個 PR 的實際 HEAD commit（`pull_request` 事件讀 PR 自己的 head sha，不是 GitHub 產生的 merge commit）是否帶有格式正確、hash 與 tree 相符、timestamp 新鮮、tier 足夠的 `Verified-locally:` trailer；不再於 runner 上執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo：`scripts/verify`）——測試改在本機執行，成功時由這些腳本呼叫 `scripts/write-verify-attestation` 寫入 trailer；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py` 的 `test_root_ci_is_one_bounded_verification_job`／`test_generated_ci_uses_the_same_one_job_contract`；`tests/test_verify_attestation.py`（純邏輯）與 `scripts/test-verify-attestation`（對真實 git repository） | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success——此 run 早於 #661，只證明 `scripts/ci_tier.py` 分類與（當時仍在 runner 上執行的）驗證邏輯，不代表本機驗證聲明改造 | `scripts/ci_tier.py` 分類：active（邏輯未變）；本機驗證聲明改造（#661 本身）：candidate（待 `main` 落地並於首次 PR 觸發後轉 active） |
 | PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | 只給需要的 Issue／PR metadata 權限；固定 timeout | `title` job：Issue、route 與 review policy 判定；`promotion` job（#601）：呼叫 `scripts/promotion_gate.py check-route` 分類 route，回報 `promotion` required check（`not-applicable`／`milestone`／`isolated`／`hotfix`／`release-recovery`／`release-follow-up`／`merge-queue` 成功，`invalid-main-route` 失敗） | `scripts/test-pr-policy`；`promotion` job 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929)，2026-09-01，success；同日對 #448／#453／#457 等未完成 checklist 的候選 PR 正確擋下合併，證明門禁確實生效 | `title` job：active；`promotion` job：candidate（隨 #601 首次落地，尚無 live run，待 `main` 落地並於首次 PR 觸發後轉 active） |
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併） | `issues`、`issue_comment`、`milestone` 事件；`pull_request.closed`（里程碑工作 PR 合併進 `dev/m*` 或 `promote/m*` 晉升 PR 合併進 `main`） | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新）、`tests/test_work_pr_closure.py` | 尚未落地 `main`，無新 live run；三個前身 workflow（`issue-triage.yml`、`milestone-lifecycle.yml`、`work-item-closure.yml`）已刪除，其舊 run 證據（`33524318953`／`33524281794`／`33502286588`）不再代表現行檔案 | **root：candidate**（待 main 落地並觸發首次 issues／issue_comment／milestone／pull_request 事件才能取得新 live evidence）；#574 只把三個 workflow 檔的既有邏輯打包成一個 job 內的循序 step，不改變任一 step 本身的行為、權限需求或所呼叫的 script |
@@ -397,12 +488,15 @@ fail」（#572，本文件更新時仍為 open、尚未併入 `main`）。本節
 2. **日常 PR gate（`docs`／`fast`，同一個成本邊界）**——`scripts/ci_tier.py` 依事件、
    base／head、labels 與 changed paths 做 fail-closed 分類；未知或高風險內容升級為
    full。純文件／site 變更落在 `docs`，是 `fast` 的 early-exit 實作細節，不是獨立的第
-   四套政策；其餘一般變更落在 `fast`。兩者入口都是 `scripts/verify-fast`。
+   四套政策；其餘一般變更落在 `fast`。兩者入口都是 `scripts/verify-fast`，且自 #661 起
+   **一律本機執行**：hosted `verify` job 不再自己跑這個入口，只驗證它成功時留下的
+   attestation（見上方「`verify` 必要檢查改為本機驗證聲明（#661）」一節），所以即使是
+   `fast`／`docs` 這種輕量分級，push 前仍必須先在本機跑過一次。
 3. **完整交付驗證（`full`）**——只在 Milestone／canary 交付、hotfix、merge queue、手動
    執行或未知高風險路徑觸發；中央模板入口是 `scripts/verify-template.sh`，生成 repo
    入口是 `scripts/verify`（不帶參數即預設 full）。PR owner／integrator 只在自己的 PR
    本身就落在這個邊界時，才需要在本機另外執行一次；一般 `fast`／`docs` PR 不需要在本機
-   重跑 full。
+   重跑 full（但仍需要跑一次 `fast`，見上一點）。
 
 數據來自 #428／PR #431 在 2026-09-01 的最新 hosted run，目的是設定成本預期，不是永久 SLA；
 `full` 一列已由 #458 在 2026-09-02 於同一本機環境重新量測（見下方階段盤點與 PR 內文的
@@ -418,6 +512,19 @@ before／after 紀錄）。
 也不把測試 artifact 當成正式成品。#408 已把更細的 stage timing 輸出納入現行入口。
 
 ### Base-only re-merge 例外（#468）
+
+**#661 之後的現況（讀本節其餘部分前先看這段）**：本節原本的結論——四個條件同時成立時可以
+「直接 push 並信任 hosted `verify` check，不必再本機重跑」——所依賴的前提是「hosted CI 對這次
+合併結果仍會重新執行一次完整驗證」。`#661` 把 hosted `verify` job 改成只驗證本機留下的
+attestation、不再重新執行任何東西之後，這個前提不成立了：重新合併產生的新 tip commit 沒有自己
+的 trailer，會被 hosted job 當成任何其他未經驗證的 push 一樣 fail closed，不會因為它符合下列四
+個條件就自動放行。這不是 `#661` 範圍內要解決的問題（`#661` 的邊界明確只處理 attestation 機制本
+身，不重新設計本節），因此下列四個條件描述的判斷仍然正確、`scripts/check-base-only-remerge` 仍
+然如實回答「這次重新合併乾不乾淨、有沒有動到驗證基礎設施」——只有最後一步「所以可以直接 push、不
+用本機重跑」目前不成立：符合四個條件只證明重新合併本身沒有引入新風險，不能讓 hosted job 平白生出
+一個它本來就不會再產生的驗證結果。在後續 Issue 重新調和這兩個機制之前，即使四個條件都成立，仍要在
+本機對新的 tip 重跑一次 `./scripts/verify-template.sh`（生成 repo：`./scripts/verify`），取得它
+自己的 attestation。
 
 上表「full」列與 #458 規則只回答「這張 PR 要不要跑 full」：只有 PR 本身落在 full 邊界
 時，owner／integrator 才需要在最終候選樹本機執行一次 `./scripts/verify-template.sh`

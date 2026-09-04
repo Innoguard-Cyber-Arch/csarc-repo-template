@@ -282,7 +282,7 @@ def test_shared_ci_policy_names_the_generated_verifier() -> None:
     """Do not send generated repositories to a root-only command."""
     policy = (ROOT / "docs/ci-policy.md").read_text(encoding="utf-8")
 
-    assert "生成 repo 呼叫 `scripts/verify`" in policy
+    assert "（生成 repo：`scripts/verify`）" in policy  # noqa: RUF001
     assert "生成 repo 用 `scripts/verify full`" in policy
 
 

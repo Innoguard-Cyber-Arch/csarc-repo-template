@@ -87,6 +87,17 @@ main() {
   run_stage "Package smoke test" ./scripts/verify-stage-package-smoke
   run_stage "GitHub Actions audit" ./scripts/verify-stage-github-actions-audit
 
+  # Issue #661: record the local-attestation trailer only after every stage
+  # above has actually passed -- report_failure's `exit "$status"` inside
+  # the ERR trap means this line is unreachable if any run_stage call
+  # failed. Deliberately outside the run_stage/print_timing_summary
+  # seven-stage inventory documented in docs/ci-policy.md: this is not a
+  # verification stage that checks something about the tree, it is the
+  # side effect of every stage above already having passed. See
+  # scripts/write-verify-attestation and scripts/verify_attestation.py for
+  # the trailer format and the design reasoning.
+  ./scripts/write-verify-attestation full
+
   print_timing_summary
   trap - ERR
 }

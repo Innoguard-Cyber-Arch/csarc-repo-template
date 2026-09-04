@@ -176,7 +176,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 | 工具 | 用途 | 出現／設定位置 | 適用範圍 | 授權 |
 | --- | --- | --- | --- | --- |
 | [Copier](https://github.com/copier-org/copier) | 產生、導入與更新使用此模板的 repository | `copier.yml`、`template/`、`.csarc/config.yml` | 每個由此模板建立或導入的 repository | [MIT](https://github.com/copier-org/copier/blob/master/LICENSE) |
-| [zizmor](https://github.com/zizmorcore/zizmor) | 靜態稽核 GitHub Actions workflow 的安全性 | `pyproject.toml`、`scripts/verify-stage-github-actions-audit` | 本機與 CI 驗證（`github-actions-audit` 階段） | [MIT](https://github.com/zizmorcore/zizmor/blob/main/LICENSE) |
+| [zizmor](https://github.com/zizmorcore/zizmor) | 靜態稽核 GitHub Actions workflow 的安全性 | `pyproject.toml`、`scripts/verify-stage-github-actions-audit` | 只在本機驗證（`github-actions-audit` 階段）；hosted `verify` job 改驗證本機驗證聲明的 trailer，不再重新執行 | [MIT](https://github.com/zizmorcore/zizmor/blob/main/LICENSE) |
 | [Dependabot](https://github.com/dependabot/dependabot-core) | 開立相依套件更新 PR | `.github/dependabot.yml` | Root 與 template 的套件生態圈 | [MIT](https://github.com/dependabot/dependabot-core/blob/main/LICENSE) |
 | [OSV-Scanner](https://github.com/google/osv-scanner) | 掃描 lockfile 中已公開的漏洞 | `scripts/verify-dependencies`、`scripts/install-osv-scanner`、`.github/workflows/osv.yml` | 依賴變更 PR、交付候選、每週排程 | [Apache-2.0](https://github.com/google/osv-scanner/blob/main/LICENSE) |
 | [Syft](https://github.com/anchore/syft) | 產生發版用的 SPDX SBOM | `.github/workflows/release.yml`（`anchore/sbom-action`）、`scripts/release_assets.py` | 建立發版的交付 PR | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |

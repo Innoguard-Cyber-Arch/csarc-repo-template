@@ -2356,7 +2356,7 @@ html[data-detail-level="simple"] .detail-panel {
 					<td><a href="https://github.com/zizmorcore/zizmor">zizmor</a></td>
 					<td>靜態稽核 GitHub Actions workflow 的安全性</td>
 					<td><code>pyproject.toml</code>、<code>scripts/verify-stage-github-actions-audit</code></td>
-					<td>本機與 CI 驗證（<code>github-actions-audit</code> 階段）</td>
+					<td>只在本機驗證（<code>github-actions-audit</code> 階段）；hosted <code>verify</code> job 改驗證本機驗證聲明的 trailer，不再重新執行</td>
 					<td><a href="https://github.com/zizmorcore/zizmor/blob/main/LICENSE">MIT</a></td>
 			</tr>
 			<tr>

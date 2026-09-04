@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Write side of Issue #661's local-attestation design: called only from the
+# very end of scripts/verify-fast (tier "fast", including its "docs"
+# sub-case) and scripts/verify-template.sh (tier "full") -- and, in a
+# generated project, template/scripts/verify-fast.jinja and
+# template/scripts/verify.jinja's "full" mode -- after every check in that
+# entry point has already passed. `set -euo pipefail` in every one of those
+# callers means this line is never reached on a failing run, so "do not
+# write a trailer on failure" falls out of normal shell semantics rather
+# than needing its own guard here.
+#
+# Design choice: amend HEAD's message, not a separate follow-up commit.
+# Two alternatives were considered and rejected:
+#   - A separate empty follow-up commit carrying the trailer. This avoids
+#     changing HEAD's SHA, but then the *thing being verified* (HEAD) and
+#     the *commit carrying the proof* are two different objects, and
+#     nothing stops the follow-up commit from drifting away from HEAD
+#     later (a subsequent amend, rebase, or force-push of HEAD would leave
+#     a stale, orphaned attestation commit still claiming to describe a
+#     tree that no longer exists at that ref).
+#   - Writing to a local file that some later step turns into a commit.
+#     Same drift problem, plus a second artifact to keep in sync, and
+#     nothing to stop the file from being pushed alongside a HEAD it no
+#     longer describes.
+# Amending HEAD's message keeps exactly one thing to point at, and is safe
+# specifically because it happens locally, immediately before a push, on a
+# commit the amend's author already owns: git commit --amend that only
+# changes the message -- never touching the index -- never changes the
+# tree (see scripts/verify_attestation.py's module docstring), so the tree
+# hash computed below, *before* the amend, is still correct *after* it.
+# The real, unavoidable cost is that HEAD's SHA changes: if this exact
+# commit was already pushed, the next push needs
+# `git push --force-with-lease` (or an equivalent force push) -- normal
+# and expected for a PR's own topic branch, which the author already owns
+# and is not the same as force-pushing a shared integration branch.
+#
+# Usage: scripts/write-verify-attestation <fast|full>
+
+tier="${1:?Usage: scripts/write-verify-attestation <fast|full>}"
+if [[ "$tier" != "fast" && "$tier" != "full" ]]; then
+  echo "scripts/write-verify-attestation: tier must be 'fast' or 'full', got '$tier'" >&2
+  exit 2
+fi
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "scripts/write-verify-attestation: not inside a Git working tree; skipping attestation" >&2
+  exit 0
+fi
+if ! git rev-parse --verify --quiet HEAD >/dev/null; then
+  echo "scripts/write-verify-attestation: no commits yet on HEAD; skipping attestation" >&2
+  exit 0
+fi
+
+# The attestation's whole point is "this exact tree was tested". If the
+# working tree has any staged or unstaged change (or an untracked file),
+# whatever just got tested is NOT the same thing as HEAD^{tree} -- it is
+# either a superset of it or something else entirely -- so recording
+# HEAD^{tree} here would be a false claim, not a conservative one. Skip
+# (exit 0, not a failure -- the tests genuinely passed) rather than write a
+# misleading trailer; the hosted verify job will then fail closed for lack
+# of one, which is the correct, safe outcome, and pushes the contributor
+# toward the intended flow: commit your changes, then verify, then push.
+if [[ -n "$(git status --porcelain)" ]]; then
+  cat >&2 <<'EOF'
+scripts/write-verify-attestation: working tree has uncommitted changes;
+skipping the Verified-locally attestation because it would not truthfully
+describe what was just tested. Commit your changes first, then rerun
+verification, so the trailer can be written onto the exact commit whose
+tree was actually tested.
+EOF
+  exit 0
+fi
+
+# HEAD^{tree} is git's own rev-parse syntax, not a shell brace expansion;
+# the { and } here are literal and correct.
+# shellcheck disable=SC1083
+tree_hash="$(git rev-parse HEAD^{tree})"
+at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+trailer_line="$(python3 "$repo_root/scripts/verify_attestation.py" render \
+  --sha256 "$tree_hash" --tier "$tier" --at "$at")"
+
+# --if-exists replace keeps exactly one Verified-locally trailer per
+# commit across reruns (e.g. verify-fast run twice with nothing else
+# changed) instead of stacking a new one on every run; it leaves any other
+# trailer already on the commit (Co-authored-by, Closes #N, ...) alone.
+new_message="$(git log -1 --pretty=%B HEAD |
+  git interpret-trailers --if-exists replace --trailer "$trailer_line")"
+# --allow-empty: HEAD being an already-empty commit is unusual but not
+# this script's business to reject -- without the flag, git refuses to
+# amend an empty commit's *message alone* unless re-told it is meant to
+# stay empty, which would otherwise turn a message-only amend into a hard
+# failure unrelated to anything this script actually checks.
+printf '%s\n' "$new_message" | git commit --amend -q --allow-empty -F -
+
+echo "scripts/write-verify-attestation: recorded on $(git rev-parse HEAD): $trailer_line" >&2
+echo "scripts/write-verify-attestation: if this commit was already pushed, the next push needs --force-with-lease" >&2
