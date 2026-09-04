@@ -6,10 +6,10 @@ set -euo pipefail
 # gh, entirely locally with no network call, so a too-long/too-short/
 # malformed title is caught at "open Issue" time instead of after the fact.
 # Today that same rule only runs once the Issue already exists, inside
-# scripts/validate-issue-policy (called from .github/workflows/
-# issue-triage.yml's "classify" job) -- catching it there means a
-# follow-up `gh issue edit` to fix the title post-hoc. This wrapper moves
-# the same, unmodified check to the front of the create flow.
+# scripts/validate-issue-policy (called from the "Issue triage" step of
+# .github/workflows/work-item-lifecycle.yml's "process" job) -- catching it
+# there means a follow-up `gh issue edit` to fix the title post-hoc. This
+# wrapper moves the same, unmodified check to the front of the create flow.
 #
 # Transparently passes through every flag `gh issue create` accepts
 # (--title/-t, --body/-b, --body-file/-F, --label/-l, --milestone/-m,

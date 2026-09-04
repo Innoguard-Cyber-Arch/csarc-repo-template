@@ -30,9 +30,10 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─────→ main
 ```
 
 工作 PR 關閉單項工作；Milestone 交付負責批次進入 `main`。`promote/m<編號>-<簡稱>` PR 以
-`Closes #<tracker>` 直接關閉該 Milestone 的 tracker Issue，並由 `milestone-lifecycle.yml`
-的 `record-promotion-evidence` job 在合併後自動把 merge commit 網址回填進 tracker 的
-`Completion evidence` 段落（見 #512）；#400 與 #401 的自動結案契約不再是 blocked gap。
+`Closes #<tracker>` 直接關閉該 Milestone 的 tracker Issue，並由 `work-item-lifecycle.yml`
+的 `process` job（`record-promotion-evidence` step）在合併後自動把 merge commit 網址回填進
+tracker 的 `Completion evidence` 段落（見 #512）；#400 與 #401 的自動結案契約不再是
+blocked gap。
 delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
 
 ## PR lifecycle single-writer
@@ -208,6 +209,36 @@ lease 機制原本要防的「立即搶寫」；`gh pr edit --add-label` 那行�
 （回歸測試見 `tests/test_pr_lifecycle.py` 的
 `test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist`）。
 
+`.github/workflows/release.yml` 裡 `googleapis/release-please-action` 這一步
+同樣未經過 lease 就會建立／更新自己的版本 PR，且從未有例外或對應 Issue 記錄過，
+直到 #643 才發現。理由與 dependabot 例外一致但更直接：release-please 建立的 PR
+不是本 repo 任何一條 task-PR 路線（獨立 Issue／Milestone Issue／`dev/i*`
+canary／hotfix），而是第五條、由維護者直接人工審查合併的獨立路徑（見
+`AGENTS.md`「Release execution」）；`release.yml` 本身已用
+`concurrency: group: release-${{ github.repository }}` 把自己序列化，且
+release-please 只會動到自己的 `release-please--branches--main--components--*`
+head ref（`scripts/release_policy.py` 的 `expected_head`，`scripts/
+promotion_gate.py` 對同一 ref 前綴的特殊處理），沒有任何 lease 保護的 agent
+流程會寫這個 ref。因此 #643 為 `scripts/pr_lifecycle.py` 新增
+`release_please_exemption`，只正面表列 `.github/workflows/release.yml` 這一個
+精確路徑（`template/.github/workflows/release.yml.jinja` 是 Jinja 樣板，
+`scan_writers` 的 glob 本來就不掃描它，不需要第二個路徑）（回歸測試見
+`test_release_please_exemption_is_an_exact_path_allowlist`）。
+
+同一次調查也發現 `command_writer_violations` 本身兩個誤判：它把整份檔案接成
+一個 block 比對，導致 `scripts/gh-issue-create` 裡兩句不相干的 `#` 註解（一句
+提到 `` `gh issue edit` ``、另一句列出 `--milestone` 這個透傳 flag）被誤判成
+「gh issue metadata write」；`scripts/validate-pr-policy`（#551 的 Milestone
+安全網）組給人看的 PR 留言訊息時，用反斜線跳脫的 `` \`...\` `` Markdown code
+span 描述維護者該手動下的指令，跳脫反引號在雙引號字串裡是字面字元、不是
+command substitution，這段文字從未被執行，但掃描器分不出「描述指令的文字」
+跟「真的呼叫」。#643 修正 `command_writer_violations`：比對前拿掉整行 `#`
+註解與反斜線跳脫的 `` \`...\` `` 區段，不放寬其餘偵測範圍——沒被註解、沒被
+跳脫的真實寫入仍會 fail closed（回歸測試見
+`test_writer_scanner_ignores_unrelated_comment_lines`、
+`test_writer_scanner_ignores_escaped_backtick_documentation`、
+`test_writer_scanner_still_catches_live_writes_beside_similar_text`）。
+
 **通則（自 #602 起生效）**：往後每新增一個 `scan_writers` 例外，都必須有
 自己對應的 tracking Issue 記錄理由與範圍（不能只在程式碼註解裡說明，也不能
 一次開一張 Issue 涵蓋多個例外）；且所有既有例外都要在專案脫離 beta 階段後
@@ -264,10 +295,8 @@ fallback（#589）」一節的責任，兩者是各自獨立的問題，不合�
 | CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；30 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類後，中央模板呼叫 `scripts/verify-fast` 或 `scripts/verify-template.sh`，生成 repo 呼叫 `scripts/verify`；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py` | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success | active |
 | PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | PR metadata 事件（opened／edited／synchronize／labeled） | 只給需要的 Issue／PR metadata 權限；固定 timeout | title、Issue、route 與 review policy 判定 | `scripts/test-pr-policy` | run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929)，2026-09-01，success；同日對 #448／#453／#457 等未完成 checklist 的候選 PR 正確擋下合併，證明門禁確實生效 | active |
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
-| Issue triage | `.github/workflows/issue-triage.yml` | Issue 分流 | `issues` 事件 | 最小 Issue metadata write | label／milestone routing | `scripts/test-issue-triage` | run [33524318953](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33524318953)，2026-09-01，`main`，success | active |
+| Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併） | `issues`、`issue_comment`、`milestone` 事件；`pull_request.closed`（里程碑工作 PR 合併進 `dev/m*` 或 `promote/m*` 晉升 PR 合併進 `main`） | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新）、`tests/test_work_pr_closure.py` | 尚未落地 `main`，無新 live run；三個前身 workflow（`issue-triage.yml`、`milestone-lifecycle.yml`、`work-item-closure.yml`）已刪除，其舊 run 證據（`33524318953`／`33524281794`／`33502286588`）不再代表現行檔案 | **root：candidate**（待 main 落地並觸發首次 issues／issue_comment／milestone／pull_request 事件才能取得新 live evidence）；#574 只把三個 workflow 檔的既有邏輯打包成一個 job 內的循序 step，不改變任一 step 本身的行為、權限需求或所呼叫的 script |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
-| Milestone lifecycle | `.github/workflows/milestone-lifecycle.yml` | #400 | milestone／Issue 事件、核准 comment 偵測 | 最小 metadata write | lifecycle gate 狀態、closure 同步 | `tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新） | run [33524281794](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33524281794)，2026-09-01，`main`，success | active；完整結案契約仍由 #400／PR #444 擁有（尚未合併） |
-| Work Issue closure | `.github/workflows/work-item-closure.yml` | #401 | 里程碑工作 PR 合併進 `dev/m*`（`pull_request.closed`） | `contents: read`、Issue write；5 分鐘 | 對應 Issue 關閉 | `tests/test_work_pr_closure.py` | run [33502286588](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33502286588)，2026-09-01，**failure**（checkout 用 `pull_request.base.sha`，缺合併後才有的 `close-work` 指令） | active（workflow 已啟用並真的執行）；已知 live 失敗，修正候選見 #401／PR #453，尚未合併 |
 | Dependabot | `.github/dependabot.yml` | GitHub 原生＋依賴安全 | schedule／manifest 變更 | GitHub 原生 bot 邊界，無 repo workflow 權限 | dependency PR | GitHub 原生功能，無 repo-local 測試；設定格式由 `scripts/sync-paired-files.sh --check` 涵蓋 | GitHub 註冊為 `Dependabot Updates`（`dynamic/dependabot/dependabot-updates`），state active（原生排程不透過 `gh run list` 查詢單筆 run） | active |
 | Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598 | `main` push（post-merge）、manual rerun | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布 tag／GitHub Release／成品／checksum／SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py` | 已落地 `main` 並於 push 後實際觸發，`gh api tags`／`releases` 顯示過去確有真實 live 發版（`v0.12.2`／`v0.12.1`／`v0.12.0` 等）。`#588`（`docs/index.html` staleness）已由 `#593` 修正並於下一次 push 驗證：run [33763104406](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33763104406)（`6aa7724`，2026-09-03T13:47Z）的 `Static assets and paired files` 階段確實轉綠。但同一筆 run 在 `Regression tests` 階段仍以其他真實 pytest 失敗（`PR lifecycle blocked: Unleased PR lifecycle writer: .github/workflows/dependabot-auto-merge.yml`，導致生成專案 `scripts/verify` 失敗，牽連 `test_real_template_adoption_resumes_after_manifest_merge` 三種語言變體與 `test_real_existing_adoption_uses_fixed_ownership_policies`）——這是本輪盤點才發現、與 `#588`／`#591` 都無關的第四個獨立成因，尚未開對應 Issue。另外兩個較早的獨立成因：run [33719533651](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33719533651)（`9ed3594`）與 run [33730000169](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33730000169)（`99f52ef`）在 `Regression tests` 階段失敗於 `rm: cannot remove '.../work/.git': Directory not empty`，追蹤於 `#591`；run [33724898939](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33724898939)（`7719d2e4`）與 run [33729747815](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33729747815)（`ed7ab25`）在 `verify-template.sh` 全過後，於發版前 capability preflight 因 Actions policy HTTP 403 觸發 `#123` 既有設計的 fail-closed（`BLOCK_REASON: ... immutable_releases`），這是刻意行為、不是 bug | active for `verify`／`title`／`promotion`；`Regression tests` 階段三個獨立成因（PR-lifecycle writer 檢查 #602、`test_pr_lifecycle.py` 生成專案路徑 #617、zizmor template-injection #620）與 `#591` 均已修復並於 `verify-template.sh` 全綠驗證。但 hosted 版本發布（Automatic／Guided）確認為**已知永久限制**：`immutable_releases` capability probe 在 `GITHUB_TOKEN` 下結構性回傳 403（見 #626），`#123` 的 fail-closed 是刻意行為不會解除，也不透過本表修正——本機 `scripts/publish-release` 已升格為標準發版程序，見上方「hosted 發版路徑的已知限制」一節 |
 
@@ -283,6 +312,22 @@ timeout，只呼叫 `scripts/check-template-update`）。公開模板來源不�
 來源為 private repository 時，才由唯讀的 `CSARC_TEMPLATE_READ_TOKEN` repository
 secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
 `pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
+
+### 大規模派工前的 Milestone 合規預檢（#572／#574）
+
+M13 一次開 20 張 Issue、6 條平行線同時動的派工模式沒有節流機制：單一 Issue／PR 事件會
+同時觸發多個各自獨立的 workflow（見上表 Work item lifecycle 一列合併前的歷史狀態），
+GitHub Actions 依 job 計費（各自捨入到最近 1 分鐘、各自佔一個 concurrency slot）；3 天
+內累積 1203 次 run，約 1600-1800 分鐘。#574 決定兩項緩解：一是把 Issue triage／
+Milestone lifecycle／Work Issue closure 合併成單一 job（見上表），減少計費 job 數與
+concurrency slot 競爭；二是操作面規則——**大規模派工（多張 Issue／多個平行 agent）
+前，先手動跑一次 Milestone 合規預檢，確認目標 Milestone 本身沒問題，再一次性開多個
+Issue／PR，不要邊開邊試錯**。
+
+這個 `preflight` 子指令定義在「Enforce Milestone metadata at creation, not after PRs
+fail」（#572，本文件更新時仍為 open、尚未併入 `main`）。本節先記錄操作慣例與依賴關係；
+#572 併入前沒有可執行指令可用，不因此阻塞本 Issue 其餘的合併範圍。#572 併入後應回頭
+補上實際指令與呼叫方式。
 
 ## 驗證分級與實測成本
 
@@ -392,6 +437,41 @@ repo 的 full 入口是單一 `scripts/verify`，沒有本模板這種多階段�
 --check` 與 `scripts/check-update-conflicts` 兩者都乾淨），並確認上游變更沒有觸及上方
 條件 4 列出的路徑。
 
+### Acceptance-checklist 驗證時機（#573）
+
+歷史案例 #430（PR #448）示範過一種重試風暴：作者在 13 小時內邊做邊 push、邊勾
+checklist。`pr-policy.yml` 的觸發清單（`opened`／`edited`／`synchronize`／
+`reopened`／`ready_for_review`／`labeled` 等）讓幾乎每個動作都重新執行整支
+`scripts/validate-pr-policy`，其中包含兩個 acceptance-checklist 檢查——PR 本文自己
+的完成清單（「Complete every pull request checklist item...」）與連結 Issue 的
+acceptance criteria（「Issue #N still has unchecked acceptance tasks.」）。在工作
+真的還沒做完的中間狀態，這兩個檢查必然失敗；13 小時內因此重跑了 49 次，不是規則擋
+下的，只是恰好沒被更早發現。
+
+`scripts/validate-pr-policy` 現在讀取 `PR_DRAFT`（`.github/workflows/pr-policy.yml`
+的「Validate pull request policy」step 從 `github.event.pull_request.draft` 帶入），
+**只**在 `PR_DRAFT == "true"` 時略過這兩個 checklist 檢查；同一支腳本的其他規則——分
+支命名、`Closes #N` 是否存在、title 格式、label／assignee／Milestone 與 Issue 是否
+一致、base branch 鏈、Milestone tracker 的 Promotion checklist 等——不受影響，草稿
+PR 仍會在每次觸發時得到這些結構性錯誤的即時回饋。略過時會印
+`::notice::Skipping acceptance-checklist validation while the pull request is a
+draft...`，不是靜默跳過。
+
+這個時機收斂是安全的：GitHub 本來就不允許合併草稿 PR，草稿階段的 checklist 是否完
+整不影響任何合併資格判斷。把 PR 標記為 ready for review 會觸發自己的
+`ready_for_review` 事件（此次改動之前就已在觸發清單內），對當下這個即將被判定能否合
+併的 head commit 重新跑一次完整驗證，兩個 checklist 檢查都在其中。等於把「必驗證的
+時機」從「每一次 push，包括明知還沒做完的那些」收斂成「草稿轉 ready 的那一刻，以及
+之後的每一次 push／edit」——只要作者在完成前把 PR 留在草稿狀態，就不會再為每個中間
+commit 製造一個註定失敗的 check run。
+
+`scripts/test-pr-policy` 新增回歸案例，涵蓋：`PR_DRAFT=true` 時，PR 本文與連結
+Issue 個別未勾選都會被接受；`PR_DRAFT=false`（顯式或預設）時，同樣的未勾選狀態仍會
+被擋下；`PR_DRAFT=true` 不會連帶放行其他失敗原因（例如缺少 `Closes #N`），證明這個
+略過只收斂在兩個 checklist 檢查上。本節只改變「什麼時候驗證完整性」，不改變「什麼算
+完成」——打勾必須有真實證據的規則不變，也不在本節放寬；配套的流程規則見 AGENTS.md
+working loop。
+
 ### PR policy 逐 step 判讀（#513）
 
 `gh pr checks` 只回報每個 job 的整體 conclusion。`pr-policy.yml` 的 `title`
@@ -495,10 +575,14 @@ TOTAL（4002 秒／66 分 42 秒，尤其是 Regression tests 一階段的 3971 
 個欄位不構成第二套調度邏輯，暫不需要移除或重構；如果之後要精簡，需求方需先確認沒有其他
 消費者依賴這些欄位的 evidence 呈現。
 
-本機在不同 worktree 重跑驗證時，可把 `CSARC_CACHE_ROOT` 設為同一個絕對路徑；`uv`、
-`pnpm` 與固定版本工具會共用已驗證的下載內容並依版本與平台分隔。`.venv`、
-`node_modules`、生成 fixture、checkout 與測試結果仍逐 worktree 隔離，快取命中不代表
-測試通過；損壞內容依固定 checksum 重新下載或失敗。例如：
+`scripts/resolve-cache-root` 預設已經是使用者層級、跨 worktree 共用的位置（macOS 為
+`~/Library/Caches/csarc`；Linux／WSL2 依 XDG Base Directory 慣例，優先讀
+`$XDG_CACHE_HOME`，沒設定則用 `~/.cache/csarc`；判斷邏輯依 `uname` 明確分流平台，找
+不到或無法寫入時 fail-safe 退回 repo-local 的 `.cache/`，快取只是效能優化，不影響驗
+證正確性），`uv`、`pnpm` 與固定版本工具因此預設就會共用已驗證的下載內容並依版本與平
+台分隔，不必手動設定。`.venv`、`node_modules`、生成 fixture、checkout 與測試結果仍
+逐 worktree 隔離，快取命中不代表測試通過；損壞內容依固定 checksum 重新下載或失敗。
+想改用團隊約定的其他持久路徑，仍可用 `CSARC_CACHE_ROOT` 明確覆寫，例如：
 
 ```bash
 CSARC_CACHE_ROOT="$HOME/.cache/csarc" ./scripts/verify-template.sh

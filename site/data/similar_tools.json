@@ -275,7 +275,7 @@
             "shared": {
               "milestone": {
                 "files": [{"path": "scripts/test-issue-triage"}],
-                "automation": [{"path": ".github/workflows/issue-triage.yml", "job": "classify", "trigger": {"zh-tw": "Issue opened／edited／reopened／closed", "en": "Issue opened, edited, reopened, or closed"}, "timeout": "5 min"}]
+                "automation": [{"path": ".github/workflows/work-item-lifecycle.yml", "job": "process (classify)", "trigger": {"zh-tw": "Issue opened／edited／reopened／closed", "en": "Issue opened, edited, reopened, or closed"}, "timeout": "5 min"}]
               },
               "release": {"files": [{"path": "scripts/test-issue-triage"}]}
             },
@@ -306,7 +306,7 @@
             "shared": {
               "milestone": {
                 "files": [{"path": "tests/test_milestone_approval.py", "pending": true, "issue": 400}],
-                "automationNote": {"zh-tw": "既有 milestone-lifecycle Action 尚未驗證留言中的同意與反駁；由 #400 補上共用 validator。", "en": "The existing milestone-lifecycle Action does not yet validate agreement and objections in comments; #400 adds the shared validator."}
+                "automationNote": {"zh-tw": "既有 work-item-lifecycle Action 尚未驗證留言中的同意與反駁；由 #400 補上共用 validator。", "en": "The existing work-item-lifecycle Action does not yet validate agreement and objections in comments; #400 adds the shared validator."}
               }
             }
           }
@@ -549,7 +549,7 @@
             "shared": {
               "milestone": {
                 "files": [{"path": "tests/test_work_pr_closure.py"}, {"path": "scripts/pr_lifecycle.py"}],
-                "automation": [{"path": ".github/workflows/work-item-closure.yml", "job": "close-work", "trigger": {"zh-tw": "里程碑工作 PR 合併進 dev/m*", "en": "Milestone work PR merged into dev/m*"}, "timeout": "5 min"}],
+                "automation": [{"path": ".github/workflows/work-item-lifecycle.yml", "job": "process (close-work)", "trigger": {"zh-tw": "里程碑工作 PR 合併進 dev/m*", "en": "Milestone work PR merged into dev/m*"}, "timeout": "5 min"}],
                 "note": {"zh-tw": "直接進 main 的一般工作與 Hotfix 沿用 GitHub 原生關單，不啟動這支 Action。", "en": "Standalone work and hotfixes merged directly to main retain GitHub-native closure and do not start this Action."}
               }
             },
@@ -644,7 +644,7 @@
                   {"path": "tests/test_milestone_lifecycle.py"},
                   {"path": "tests/test_milestone_closure.py", "pending": true, "issue": 400}
                 ],
-                "automation": [{"path": ".github/workflows/milestone-lifecycle.yml", "job": "sync", "trigger": {"zh-tw": "生命週期追蹤 Issue closed／reopened／milestoned", "en": "Lifecycle Issue closed, reopened, or milestoned"}, "timeout": "5 min"}]
+                "automation": [{"path": ".github/workflows/work-item-lifecycle.yml", "job": "process (sync)", "trigger": {"zh-tw": "生命週期追蹤 Issue closed／reopened／milestoned", "en": "Lifecycle Issue closed, reopened, or milestoned"}, "timeout": "5 min"}]
               }
             },
             "templateOnly": {

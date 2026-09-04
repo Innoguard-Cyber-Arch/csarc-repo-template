@@ -341,8 +341,8 @@
       "items": [
         {
           "file": {
-            "zh-tw": "pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-closure.yml＋scripts/pr_lifecycle.py",
-            "en": "pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-closure.yml＋scripts/pr_lifecycle.py"
+            "zh-tw": "pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-lifecycle.yml＋scripts/pr_lifecycle.py",
+            "en": "pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-lifecycle.yml＋scripts/pr_lifecycle.py"
           },
           "title": {
             "zh-tw": "固定基線｜PR 格式與工作關聯",
@@ -549,8 +549,8 @@
       "items": [
         {
           "file": {
-            "zh-tw": "docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml",
-            "en": "docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml"
+            "zh-tw": "docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/work-item-lifecycle.yml",
+            "en": "docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/work-item-lifecycle.yml"
           },
           "title": {
             "zh-tw": "人工邊界｜交付與里程碑結案分開",
