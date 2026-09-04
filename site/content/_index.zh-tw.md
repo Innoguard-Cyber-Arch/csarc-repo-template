@@ -310,7 +310,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< detail key="contract-automation" title="目前有哪些自動化真的在跑" >}}
 以下狀態逐項對照 `docs/ci-policy.md` 的「Current automation」表與即時查詢（2026-09-03），不沿用建置當下可能已過期的數字：
 
-- **Active：**CI（`ci.yml`）、PR policy（`pr-policy.yml`）、Issue triage（`issue-triage.yml`）、Spec to Issue（`spec-to-issue.yml`）、Milestone lifecycle（`milestone-lifecycle.yml`）、Work Issue closure（`work-item-closure.yml`）、reviewer 指派（`governance-comment.yml`）與 Dependabot（GitHub 原生功能）都已註冊並有近期成功的 live run。
+- **Active：**CI（`ci.yml`）、PR policy（`pr-policy.yml`）、工作單生命週期（`work-item-lifecycle.yml`，整合 Issue triage、里程碑同步與 Work Issue closure）、Spec to Issue（`spec-to-issue.yml`）、reviewer 指派（`governance-comment.yml`）與 Dependabot（GitHub 原生功能）都已註冊並有近期成功的 live run。
 - **已修正的已知限制：**Work Issue closure 過去用 `pull_request.base.sha` checkout，合併後才存在的 `close-work` 指令因此找不到而失敗；#401／PR #453（2026-09-02 合併）已改用 `pull_request.merge_commit_sha`，2026-09-03 已有成功 live run。Milestone lifecycle 的核准／結案驗證覆蓋（`tests/test_milestone_approval.py`／`tests/test_milestone_closure.py`）也已在本候選中；追蹤 Issue #400 已於 2026-09-02 結案為 completed。
 - **依情境而定：**依賴安全（OSV）在生成 repo 是 active；在公版 root 自己身上仍是 candidate，理由見上方 aside。
 - **Candidate，本頁不重複驗證：**Version／Release（`release.yml`）目前確切狀態請直接查 `docs/ci-policy.md` 的「版本、發版、交付與部署矩陣」一節。

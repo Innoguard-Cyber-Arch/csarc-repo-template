@@ -44,8 +44,8 @@
           ],
           "automation": [
             {
-              "path": ".github/workflows/issue-triage.yml",
-              "job": "classify",
+              "path": ".github/workflows/work-item-lifecycle.yml",
+              "job": "process (classify)",
               "trigger": {
                 "zh-tw": "Issue opened／edited／reopened／closed",
                 "en": "Issue opened, edited, reopened, or closed"
