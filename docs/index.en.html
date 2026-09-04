@@ -2077,12 +2077,12 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
       <button type="button" data-detail-level="technical" aria-pressed="false">Maintenance</button>
     </div>
   </div>
-  <main class="deck" aria-live="polite"><section class="slide markdown-slide active presentation-slide" id="capability" data-content-key="capability" data-track="capability" aria-label="An updatable repository foundation">
+  <main class="deck" aria-live="polite"><section class="slide markdown-slide active presentation-slide" id="capability" data-content-key="capability" data-track="capability" aria-label="CSARC Repo Template">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human active" aria-current="step">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2141,11 +2141,14 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 </aside>
 
 <header>
-  <span class="selection-sequence">CSARC Repo Template · beta</span>
-  <h2>An updatable repository foundation</h2>
-  <p class="subtitle">Create a new project, adopt an existing one, or receive policy updates through verified pull requests.</p>
+  <span class="selection-sequence">Home</span>
+  <h2>CSARC Repo Template</h2>
+  <p class="subtitle">Cyber-Arch&#x27;s updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests.</p>
 </header>
-<div class="markdown-body"><p>Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. It explains what to do and what result to expect. Files, scripts, and GitHub Actions stay in Maintenance mode.</p>
+<div class="markdown-body"><p>Cyber-Arch&#x27;s updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests. Select only the shared workflow, or add Python, Rust, and TypeScript independently. Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> and stays synchronized across both languages.</p>
+<p class="template-version"><strong>Template release:</strong> v0.12.2<!-- x-release-please-version --></p>
+<table><thead><tr><th>Item</th><th>Current state</th></tr></thead><tbody><tr><td>Supported languages</td><td>Python, Rust, and TypeScript (select independently; select none for the shared workflow only)</td></tr><tr><td>Site template version</td><td>1.1.0</td></tr><tr><td>Decision-site render engine version</td><td>1.1.0</td></tr></tbody></table>
+<p><strong>Current state:</strong> Milestone 13 is extending the decision site and adoption experience. Only reviewed workflows under <code>.github/workflows/</code> run today; the rest stay archived. See the CI/CD settings appendix for the per-stage status.</p>
 <table><thead><tr><th>Choice</th><th>Production capability available today</th></tr></thead><tbody><tr><td>Programming languages</td><td>Select Python, Rust, and TypeScript independently; select none for the shared workflow only</td></tr><tr><td>Branch approach</td><td>One development branch per delivery batch, all changes directly into <code>main</code>, or one shared <code>dev</code> branch</td></tr><tr><td>Template settings</td><td>Creation or adoption writes choices to <code>.csarc/config.yml</code>; template updates maintain this single repository configuration</td></tr><tr><td>Shared capability</td><td>Work-item (Issue) and change-proposal (PR) forms, AI working rules, automated checks, dependency safety, version records, and template updates</td></tr></tbody></table>
 <aside class="technical-detail" data-content-key="capability-boundary"><h3>Adoption paths and current scope</h3>
 <ul><li><strong>New repository:</strong> choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.</li><li><strong>Existing repository:</strong> the template detects current languages and creates <code>.csarc/config.yml</code>, then previews the adoption diff while preserving product content.</li><li><strong>Repository already using the template:</strong> change options or upgrade through <code>csarc update</code>; the template updates the configuration and managed files together.</li><li><strong>Prerequisites:</strong> Git, GitHub CLI, and uv; Rust needs rustup, while TypeScript needs Node 24+ and pnpm 11. Local verification needs no token.</li></ul>
@@ -2156,7 +2159,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human active" aria-current="step">
       <a href="#install"><span>Install</span></a>
@@ -2234,7 +2237,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2308,7 +2311,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2385,7 +2388,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2460,7 +2463,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2534,7 +2537,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2613,7 +2616,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2686,7 +2689,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2758,7 +2761,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2832,7 +2835,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2915,7 +2918,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2996,7 +2999,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3075,7 +3078,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3155,7 +3158,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3227,7 +3230,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3297,7 +3300,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3367,7 +3370,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3440,7 +3443,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3512,7 +3515,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3584,7 +3587,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3656,7 +3659,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3729,7 +3732,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3801,7 +3804,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3873,7 +3876,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>

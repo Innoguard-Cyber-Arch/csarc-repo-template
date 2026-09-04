@@ -2077,12 +2077,12 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
       <button type="button" data-detail-level="technical" aria-pressed="false">維運</button>
     </div>
   </div>
-  <main class="deck" aria-live="polite"><section class="slide markdown-slide active legacy-slide capability-slide" id="capability" data-content-key="capability" data-track="capability" aria-label="可更新的 repo 公版">
+  <main class="deck" aria-live="polite"><section class="slide markdown-slide active legacy-slide capability-slide" id="capability" data-content-key="capability" data-track="capability" aria-label="CSARC Repo Template">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human active" aria-current="step">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -2141,9 +2141,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 </aside>
 
 <header class="basic-header">
-  <span class="selection-sequence">CSARC Repo Template · beta</span>
-  <h2>可更新的 repo 公版</h2>
-  <p class="subtitle">建立新案、導入舊案與接收政策更新，都先驗證再由 PR 合併。</p>
+  <span class="selection-sequence">首頁</span>
+  <h2>CSARC Repo Template</h2>
+  <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。</p>
 </header>
 <div class="legacy-content"><header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
@@ -2158,6 +2158,8 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
           <span class="package-badge">公版可持續更新</span>
           <span class="package-badge security">自動驗證／安全檢查</span>
           <span class="package-badge warning">免費私人 repo：無法強制保護 main</span>
+          <span class="package-badge">網站排版模板 v1.1.0</span>
+          <span class="package-badge">渲染引擎 v1.1.0</span>
         </div>
       </header>
       <div class="language-contract" aria-label="程式語言與公版設定">
@@ -2185,7 +2187,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
         <button class="setup-trigger" type="button" data-setup="mac" aria-expanded="false">macOS 安裝</button>
         <button class="setup-trigger" type="button" data-setup="windows" aria-expanded="false">Windows 安裝</button>
       </div></div>
-<div class="markdown-body basic-summary"><p>標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；內容先說明要做什麼、會看到什麼結果。設定檔、程式與 GitHub Actions 留在維運模式。</p>
+<div class="markdown-body basic-summary"><p>Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。本頁內容與 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a> 對齊、雙語同步維護。</p>
+<table><thead><tr><th>項目</th><th>目前狀態</th></tr></thead><tbody><tr><td>公版版本</td><td>v0.12.2</td></tr><tr><td>支援語言</td><td>Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程）</td></tr><tr><td>網站排版模板版本</td><td>1.1.0</td></tr><tr><td>決策網站渲染引擎版本</td><td>1.1.0</td></tr></tbody></table>
+<p><strong>目前狀態：</strong>Milestone 13 正在擴充決策網站與導入體驗；只有已審查且位於 <code>.github/workflows/</code> 的流程會執行，其他流程仍封存，啟用狀態以「CI/CD 設定」附錄為準。</p>
 <table><thead><tr><th>可以直接選擇</th><th>目前提供的正式能力</th></tr></thead><tbody><tr><td>程式語言</td><td>Python、Rust、TypeScript 可獨立複選；都不選時只使用共通工作流程</td></tr><tr><td>分支做法</td><td>每個交付批次有自己的開發分支、所有修改直接進 <code>main</code>，或先集中到 <code>dev</code></td></tr><tr><td>公版設定</td><td>建立／導入時把選項寫入 <code>.csarc/config.yml</code>；之後由公版更新，不必到不同檔案重複設定</td></tr><tr><td>共用能力</td><td>工作單（Issue）與變更提案（PR）表單、AI 工作規範、自動驗證、依賴安全、版本記錄與公版更新</td></tr></tbody></table>
 <aside class="technical-detail" data-content-key="capability-boundary"><h3>導入方法與目前範圍</h3>
 <ul><li><strong>新 repo：</strong> 選專案種類與分支做法；大型成果才拆成主要工作與可獨立驗收的子工作。</li><li><strong>既有 repo：</strong> 公版先偵測現有語言並產生 <code>.csarc/config.yml</code>，再預覽導入差異、保留產品內容。</li><li><strong>已使用公版：</strong> 透過 <code>csarc update</code> 調整選項或升級；公版同步設定與必要檔案，只審查這次差異。</li><li><strong>開始前必裝：</strong> Git、GitHub CLI、uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11。純本機驗證不需要 token。</li></ul>
@@ -2196,7 +2200,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human active" aria-current="step">
       <a href="#install"><span>安裝說明</span></a>
@@ -2274,7 +2278,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -2392,7 +2396,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -2469,7 +2473,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -2572,7 +2576,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -2652,7 +2656,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -2731,7 +2735,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -2813,7 +2817,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -2894,7 +2898,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -2980,7 +2984,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3083,7 +3087,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3185,7 +3189,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3264,7 +3268,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3353,7 +3357,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3448,7 +3452,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3518,7 +3522,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3588,7 +3592,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3671,7 +3675,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3755,7 +3759,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3846,7 +3850,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -3938,7 +3942,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -4027,7 +4031,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -4119,7 +4123,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
@@ -4217,7 +4221,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>使用公版</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
+      <a href="#capability"><span>首頁</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>

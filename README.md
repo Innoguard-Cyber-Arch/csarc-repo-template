@@ -1,13 +1,25 @@
 # CSARC Repo Template
 
-Cyber-Arch 的可更新 repo 公版，支援只使用共通流程，或獨立選擇 Python、Rust、TypeScript。新案、既有案與後續政策更新都經 Copier 形成可審查差異。
+Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。
 
-目前公版：v0.12.2 <!-- x-release-please-version -->
+| 項目 | 目前狀態 |
+| --- | --- |
+| 公版版本 | v0.12.2<!-- x-release-please-version --> |
+| 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
+| 網站排版模板版本 | 1.1.0 |
+| 決策網站渲染引擎版本 | 1.1.0 |
 
 > [!IMPORTANT]
-> Milestone 8 正在逐頁重定義產品規格。目前只有已審查且位於 `.github/workflows/` 的流程會執行；其他流程仍封存。各階段的啟用狀態以[CI/CD 設定](docs/index.html#testing)為準。
+> Milestone 13 正在擴充決策網站與導入體驗。目前只有已審查且位於 `.github/workflows/` 的流程會執行；其他流程仍封存。各階段的啟用狀態以[CI/CD 設定](docs/index.html#testing)為準。
 
-[開啟內部網站與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見網站內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）
+| 可以直接選擇 | 目前提供的正式能力 |
+| --- | --- |
+| 程式語言 | Python、Rust、TypeScript 可獨立複選；都不選時只使用共通工作流程 |
+| 分支做法 | 每個交付批次有自己的開發分支、所有修改直接進 `main`，或先集中到 `dev` |
+| 公版設定 | 建立／導入時把選項寫入 `.csarc/config.yml`；之後由公版更新，不必到不同檔案重複設定 |
+| 共用能力 | 工作單（Issue）與變更提案（PR）表單、AI 工作規範、自動驗證、依賴安全、版本記錄與公版更新 |
+
+本節內容與[內部決策網站](docs/index.html)的「首頁」投影片對齊，雙語（中／英）由該網站同步維護；[開啟內部網站與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見網站內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）。
 
 > **這份文件的定位：**README 只給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 [`AGENTS.md`](AGENTS.md)（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀[內部網站附錄](docs/index.html)。三份文件各自負責一層，避免同一套規則重複維護。
 

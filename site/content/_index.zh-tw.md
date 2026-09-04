@@ -16,7 +16,7 @@ zoom_in = "放大投影片"
 fit = "符合畫面"
 +++
 
-{{< slide key="capability" track="capability" eyebrow="CSARC Repo Template · beta" title="可更新的 repo 公版" subtitle="建立新案、導入舊案與接收政策更新，都先驗證再由 PR 合併。" class="legacy-slide capability-slide" legacy="true" >}}
+{{< slide key="capability" track="capability" eyebrow="首頁" title="CSARC Repo Template" subtitle="Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。" class="legacy-slide capability-slide" legacy="true" >}}
 {{< legacy >}}
       <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
@@ -31,6 +31,8 @@ fit = "符合畫面"
           <span class="package-badge">公版可持續更新</span>
           <span class="package-badge security">自動驗證／安全檢查</span>
           <span class="package-badge warning">免費私人 repo：無法強制保護 main</span>
+          <span class="package-badge">網站排版模板 v[[site_template_version]]</span>
+          <span class="package-badge">渲染引擎 v[[site_engine_version]]</span>
         </div>
       </header>
       <div class="language-contract" aria-label="程式語言與公版設定">
@@ -61,7 +63,16 @@ fit = "符合畫面"
 {{< /legacy >}}
 
 {{< basic >}}
-標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；內容先說明要做什麼、會看到什麼結果。設定檔、程式與 GitHub Actions 留在維運模式。
+Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。本頁內容與 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 對齊、雙語同步維護。
+
+| 項目 | 目前狀態 |
+| --- | --- |
+| 公版版本 | v0.12.2 |
+| 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
+| 網站排版模板版本 | [[site_template_version]] |
+| 決策網站渲染引擎版本 | [[site_engine_version]] |
+
+**目前狀態：**Milestone 13 正在擴充決策網站與導入體驗；只有已審查且位於 `.github/workflows/` 的流程會執行，其他流程仍封存，啟用狀態以「CI/CD 設定」附錄為準。
 
 | 可以直接選擇 | 目前提供的正式能力 |
 | --- | --- |

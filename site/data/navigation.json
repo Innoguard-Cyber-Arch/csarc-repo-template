@@ -22,7 +22,7 @@
     }
   },
   "items": [
-    {"key": "capability", "group": "use", "participation": "human", "labels": {"zh-tw": "能力／導入", "en": "Capability"}},
+    {"key": "capability", "group": "use", "participation": "human", "labels": {"zh-tw": "首頁", "en": "Home"}},
     {"key": "install", "group": "use", "participation": "human", "labels": {"zh-tw": "安裝說明", "en": "Install"}},
     {"key": "flow", "group": "use", "participation": "automated", "labels": {"zh-tw": "CI/CD 流程", "en": "CI/CD flow"}},
     {"key": "files", "group": "use", "participation": "human", "labels": {"zh-tw": "檔案地圖", "en": "File map"}},
