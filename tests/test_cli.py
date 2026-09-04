@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import shlex
+import shutil
 import stat
 import subprocess
 from collections.abc import Callable
@@ -81,6 +82,17 @@ def write_executable(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def copy_tracked_worktree(
+    source: Path, revision: str, destination: Path
+) -> None:
+    """Extract one Git revision's tracked files into a fresh directory."""
+    destination.mkdir(parents=True)
+    archive = destination.parent / f"{destination.name}.tar"
+    run(["git", "archive", "--output", str(archive), revision], source)
+    run(["tar", "-xf", str(archive), "-C", str(destination)], destination)
+    archive.unlink()
 
 
 def make_template(root: Path) -> tuple[Path, str]:
@@ -1581,6 +1593,129 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     )
     assert ignore_lines[:2] == ["product-cache/", ".env"]
     assert ignore_lines.count(".env") == 1
+
+
+@pytest.mark.large
+def test_real_self_adoption_treats_this_repository_like_any_product(
+    tmp_path: Path,
+) -> None:
+    """Adopt a full copy of this template's own repository with itself.
+
+    Regression coverage for Issue #537 (dogfooding): `csarc adopt` must
+    treat a copy of this template repository's own working tree exactly
+    like any other real, heavily customized existing repository -- with no
+    self-adoption-specific branch, error, or unresolved collision. This is
+    the one case where the Copier template source (`--source ROOT`) and the
+    adoption target both derive from the same repository, so it is also the
+    only fixture that can exercise the self-referential collision the Issue
+    calls out: this repository's own `template/` directory (the Copier
+    template's implementation) is not part of any generated project -- only
+    its contents render, at the destination root, via `_subdirectory:
+    template` -- yet a full self-copy still has a top-level `template/`
+    directory sitting there as ordinary, unmanaged product content.
+    """
+    revision_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "self-adopted-template"
+    copy_tracked_worktree(ROOT, revision_sha, project)
+
+    # This repository hand-authors its own `.csarc/config.yml` to describe
+    # itself as a private, already-existing product (it is not itself
+    # Copier-tracked -- there is no `.copier-answers.yml` and no `_commit`
+    # pin). A genuine not-yet-adopted repository would not carry that file,
+    # so drop it to model a realistic pre-adoption existing repository;
+    # otherwise `adopt` correctly refuses with "already has CSARC
+    # configuration; use csarc update" -- expected behavior, not a bug, but
+    # not the scenario this Issue is verifying.
+    shutil.rmtree(project / ".csarc")
+
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: self-adopted template snapshot")
+
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(ROOT),
+        "--to",
+        revision_sha,
+        "--allow-unreleased",
+        "--data",
+        "language=python",
+        "--data",
+        "security_reporting_channel=Use the synthetic fixture's "
+        "private reporting channel.",
+        "--data",
+        "project_verification_hook=",
+    ]
+    assert main([*arguments, "--dry-run"]) == 0
+    plan_path = (
+        tmp_path
+        / f"{project.name}-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    files = payload["files"]
+
+    # No collision anywhere is left unclassified -- this is the central
+    # claim of #537: self-adoption behaves exactly like adopting any other
+    # real repository, never falling into "Unable to determine".
+    assert files["unknown"] == []
+
+    # The self-referential `template/` collision: every `template/`-prefixed
+    # path in the self-copy lands in the ordinary "preserve" bucket (kept as
+    # product-owned content untouched by the template), never in any other
+    # bucket. No special case is required.
+    template_paths = [
+        name for name in files["preserve"] if name.startswith("template/")
+    ]
+    assert len(template_paths) > 50
+    for bucket_name in ("add", "automatic_merge", "manual_merge", "unknown"):
+        assert not [
+            name for name in files[bucket_name] if name.startswith("template/")
+        ], f"template/ path leaked into {bucket_name!r}: {files[bucket_name]}"
+
+    # Other meta-repository-only paths -- not shipped to any generated
+    # product -- are preserved the same ordinary way, confirming the
+    # `template/` check above is not a special case either.
+    assert "copier.yml" in files["preserve"]
+    assert "profiles/catalog.yaml" in files["preserve"]
+
+    # The standard adoption markers are queued for addition, and the one
+    # fixed-policy automatic merge (AGENTS.md) still applies.
+    assert cli.CONFIG_FILE.as_posix() in files["add"]
+    assert cli.PENDING_ADOPTION_FILE.as_posix() in files["add"]
+    assert "AGENTS.md" in files["automatic_merge"]
+
+    # Run the full two-stage `csarc adopt` entry point through to its
+    # standard "pending manual merge" outcome: this repository's real
+    # content differs from freshly rendered template defaults in the same
+    # ordinary way any customized existing repository's would, so it lands
+    # in the same well-defined "needs human review" state -- not a crash,
+    # not a silent skip, not an early completion special-cased for "this is
+    # the template adopting itself".
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 1
+    )
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+    # Preserved self-referential content -- including the collision this
+    # Issue named explicitly -- is left byte-identical by the write phase.
+    assert (project / "template" / "biome.json").read_bytes() == (
+        ROOT / "template" / "biome.json"
+    ).read_bytes()
 
 
 def test_adoption_report_classifies_unknown_content(
@@ -5401,6 +5536,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_legacy_update_conflict_leaves_target_unchanged",
         "test_project_hook_rejects_unsafe_or_unusable_paths",
         "test_real_existing_adoption_uses_fixed_ownership_policies",
+        "test_real_self_adoption_treats_this_repository_like_any_product",
         "test_real_template_adoption_resumes_after_manifest_merge",
         "test_update_check_dry_run_apply_and_conflict",
         "test_update_check_rejects_invalid_hook_without_writes",
