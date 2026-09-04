@@ -817,6 +817,70 @@ if PR_BRANCH_STRATEGY="main" \
 fi
 
 case_count=$((case_count + 1))
+if ! PR_DRAFT="true" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY=$'Closes #42\n\n- [ ] Verify live behavior' \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add verified report workflow" \
+  PR_ISSUE_BODY="All acceptance tasks are complete." \
+  "$validator" >/dev/null 2>&1; then
+  echo "PR policy blocked an unchecked pull request task while the pull request is a draft."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if ! PR_DRAFT="true" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY=$'Closes #42\n\n- [x] Run local verification' \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add verified report workflow" \
+  PR_ISSUE_BODY=$'## Acceptance criteria\n\n- [ ] Verify live behavior' \
+  "$validator" >/dev/null 2>&1; then
+  echo "PR policy blocked an Issue with unchecked acceptance tasks while the pull request is a draft."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_DRAFT="false" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY=$'Closes #42\n\n- [ ] Verify live behavior' \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add verified report workflow" \
+  PR_ISSUE_BODY="All acceptance tasks are complete." \
+  "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted an unchecked pull request task on an explicitly non-draft pull request."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_DRAFT="true" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="No closing keyword here" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add verified report workflow" \
+  PR_ISSUE_BODY="All acceptance tasks are complete." \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a missing closing keyword just because the pull request is a draft."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="main" \
   PR_TITLE="feat(api): add report" \
   PR_LABELS="enhancement" \

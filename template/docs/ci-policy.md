@@ -392,6 +392,41 @@ repo 的 full 入口是單一 `scripts/verify`，沒有本模板這種多階段�
 --check` 與 `scripts/check-update-conflicts` 兩者都乾淨），並確認上游變更沒有觸及上方
 條件 4 列出的路徑。
 
+### Acceptance-checklist 驗證時機（#573）
+
+歷史案例 #430（PR #448）示範過一種重試風暴：作者在 13 小時內邊做邊 push、邊勾
+checklist。`pr-policy.yml` 的觸發清單（`opened`／`edited`／`synchronize`／
+`reopened`／`ready_for_review`／`labeled` 等）讓幾乎每個動作都重新執行整支
+`scripts/validate-pr-policy`，其中包含兩個 acceptance-checklist 檢查——PR 本文自己
+的完成清單（「Complete every pull request checklist item...」）與連結 Issue 的
+acceptance criteria（「Issue #N still has unchecked acceptance tasks.」）。在工作
+真的還沒做完的中間狀態，這兩個檢查必然失敗；13 小時內因此重跑了 49 次，不是規則擋
+下的，只是恰好沒被更早發現。
+
+`scripts/validate-pr-policy` 現在讀取 `PR_DRAFT`（`.github/workflows/pr-policy.yml`
+的「Validate pull request policy」step 從 `github.event.pull_request.draft` 帶入），
+**只**在 `PR_DRAFT == "true"` 時略過這兩個 checklist 檢查；同一支腳本的其他規則——分
+支命名、`Closes #N` 是否存在、title 格式、label／assignee／Milestone 與 Issue 是否
+一致、base branch 鏈、Milestone tracker 的 Promotion checklist 等——不受影響，草稿
+PR 仍會在每次觸發時得到這些結構性錯誤的即時回饋。略過時會印
+`::notice::Skipping acceptance-checklist validation while the pull request is a
+draft...`，不是靜默跳過。
+
+這個時機收斂是安全的：GitHub 本來就不允許合併草稿 PR，草稿階段的 checklist 是否完
+整不影響任何合併資格判斷。把 PR 標記為 ready for review 會觸發自己的
+`ready_for_review` 事件（此次改動之前就已在觸發清單內），對當下這個即將被判定能否合
+併的 head commit 重新跑一次完整驗證，兩個 checklist 檢查都在其中。等於把「必驗證的
+時機」從「每一次 push，包括明知還沒做完的那些」收斂成「草稿轉 ready 的那一刻，以及
+之後的每一次 push／edit」——只要作者在完成前把 PR 留在草稿狀態，就不會再為每個中間
+commit 製造一個註定失敗的 check run。
+
+`scripts/test-pr-policy` 新增回歸案例，涵蓋：`PR_DRAFT=true` 時，PR 本文與連結
+Issue 個別未勾選都會被接受；`PR_DRAFT=false`（顯式或預設）時，同樣的未勾選狀態仍會
+被擋下；`PR_DRAFT=true` 不會連帶放行其他失敗原因（例如缺少 `Closes #N`），證明這個
+略過只收斂在兩個 checklist 檢查上。本節只改變「什麼時候驗證完整性」，不改變「什麼算
+完成」——打勾必須有真實證據的規則不變，也不在本節放寬；配套的流程規則見 AGENTS.md
+working loop。
+
 ### PR policy 逐 step 判讀（#513）
 
 `gh pr checks` 只回報每個 job 的整體 conclusion。`pr-policy.yml` 的 `title`
