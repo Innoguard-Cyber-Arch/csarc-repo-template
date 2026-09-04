@@ -35,6 +35,11 @@ CANONICAL_REPOSITORY_ID = 1_340_899_393
 DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
 CONFIG_FILE = Path(".csarc/config.yml")
 LEGACY_ANSWERS_FILE = Path(".copier-answers.yml")
+# Pre-dates CONFIG_FILE: a derived projection of a subset of Copier's own
+# answers (branch strategy, language modules, a since-removed container
+# feature). Every field it held is already part of the unified answers file,
+# so a migration only needs to retire it, never read it.
+LEGACY_PROFILE_FILE = Path(".csarc/profile.json")
 PROVENANCE_FILE = Path(".csarc/provenance.json")
 PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
@@ -4196,6 +4201,28 @@ def find_conflicts(target: Path) -> tuple[str, ...]:
     return tuple(sorted(conflicts))
 
 
+def require_legacy_migration_flags(saved: dict[str, object] | None) -> NoReturn:
+    """Raise an actionable error for a provenance record needing migration.
+
+    Distinguishes "no provenance was ever recorded" from "a provenance
+    record exists but is in an old, unverified format", since only the
+    latter has a Copier source/SHA and a `verification` label worth
+    naming in the error.
+    """
+    if saved is None:
+        raise CliError(
+            "Legacy repository has no verifiable provenance; review "
+            "the Copier source/SHA, then pass --accept-legacy and "
+            "--from-release <tag>."
+        )
+    raise CliError(
+        "Saved provenance uses an unverified legacy format "
+        f"({saved.get('verification')!r}); review the Copier "
+        "source/SHA, then pass --accept-legacy and --from-release "
+        "<tag> to migrate it."
+    )
+
+
 def current_revision(
     target: Path,
     source: str,
@@ -4221,13 +4248,18 @@ def current_revision(
             raise CliError("Saved provenance does not match Copier answers.")
         return revision, saved
 
-    if saved is None:
+    # Saved provenance predating the current schema (for example the
+    # "development-unreleased" shape an unverified adopt/update used to
+    # write) is present but was never fully verified, so it must not be
+    # graded against the strict `required` fields below; that check is
+    # reserved for a record that already claims to be "verified" but has
+    # drifted (a corruption/tampering signal, not a format migration). Both
+    # "absent" and "present but legacy format" require the same explicit
+    # human-authorized escape hatch, and are re-verified identically against
+    # the requested release once accepted.
+    if saved is None or saved.get("verification") != "verified":
         if not accept_legacy or from_release is None:
-            raise CliError(
-                "Legacy repository has no verifiable provenance; review the "
-                "Copier source/SHA, then pass --accept-legacy and "
-                "--from-release <tag>."
-            )
+            require_legacy_migration_flags(saved)
         revision = resolve_revision(
             source,
             from_release,
@@ -4557,7 +4589,59 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         temporary_root = Path(temporary).resolve()
         candidate = temporary_root / "candidate"
         clone_target(target, candidate)
+        baseline_head = run(
+            ["git", "-C", str(candidate), "rev-parse", "HEAD"], capture=True
+        ).stdout.strip()
         candidate_config_path = config_path(candidate)
+        migrating_legacy_config = (
+            target_uses_current_config
+            and candidate_config_path == candidate / LEGACY_ANSWERS_FILE
+        )
+        legacy_profile = candidate / LEGACY_PROFILE_FILE
+        retiring_legacy_profile = legacy_profile.is_file()
+        if migrating_legacy_config:
+            # Migrate the answers file to its current location *before*
+            # Copier runs, not only after. The target template's own
+            # finalize tasks (run by Copier itself as part of this exact
+            # `copier update` call, e.g. scripts/render_site.py) read
+            # CONFIG_FILE directly and would otherwise fail mid-update on a
+            # repository that still only has the legacy path.
+            migrated = candidate / CONFIG_FILE
+            migrated.parent.mkdir(parents=True, exist_ok=True)
+            candidate_config_path.replace(migrated)
+            candidate_config_path = migrated
+        if retiring_legacy_profile:
+            # Superseded by CONFIG_FILE (see LEGACY_PROFILE_FILE); every
+            # field it held is already carried by the migrated answers
+            # above, so retire the stale duplicate instead of leaving it
+            # behind for an update to trip over later.
+            legacy_profile.unlink()
+        if migrating_legacy_config or retiring_legacy_profile:
+            # Copier's own `update` refuses to run against a dirty
+            # destination, so commit this filesystem-only migration before
+            # invoking it; HEAD is moved back afterward (see below) without
+            # touching the working tree or index, so the migration still
+            # ends up part of the same uncommitted diff
+            # candidate_patch_effects() computes against baseline_head,
+            # alongside whatever Copier itself changes, and reaches the
+            # real target in one patch.
+            run(["git", "-C", str(candidate), "add", "-A"])
+            run(
+                [
+                    "git",
+                    "-C",
+                    str(candidate),
+                    "-c",
+                    "user.name=CSARC",
+                    "-c",
+                    "user.email=csarc@example.invalid",
+                    "commit",
+                    "--quiet",
+                    "--no-gpg-sign",
+                    "-m",
+                    "chore: migrate legacy repository configuration",
+                ]
+            )
         data_file = temporary_root / "data.yml"
         data_file.write_text(
             yaml.safe_dump(update_data, sort_keys=True), encoding="utf-8"
@@ -4592,13 +4676,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                 "the target was not changed. Resolve the listed files in "
                 "the target or template, then rerun the update."
             )
-        if (
-            target_uses_current_config
-            and candidate_config_path == candidate / LEGACY_ANSWERS_FILE
-        ):
-            migrated = candidate / CONFIG_FILE
-            migrated.parent.mkdir(parents=True, exist_ok=True)
-            candidate_config_path.replace(migrated)
+        if migrating_legacy_config or retiring_legacy_profile:
+            # Move HEAD back to the pre-migration commit without touching
+            # the working tree or index (see above): the migration and
+            # whatever Copier changed on top of it now both show up as one
+            # uncommitted diff against the repository's real prior state.
+            run(["git", "-C", str(candidate), "reset", "--soft", baseline_head])
         pin_answer_commit(candidate, str(status["target_sha"]))
         persist_release_answers(candidate, answers)
         verify_project(candidate)
