@@ -564,6 +564,23 @@ def record_promotion_evidence(
     return Decision(True, f"Recorded promotion evidence on #{tracker_number}")
 
 
+def preflight(repo: str, number: int) -> Decision:
+    """Validate a Milestone's own metadata before any work is dispatched.
+
+    Runs the exact due-date and tracker contract `tracker_errors()` already
+    enforces on every work-Issue pull request through `approval_decision()`,
+    but directly against a bare Milestone number -- so a missing due date or
+    a mistyped tracker title surfaces immediately after `gh api ... POST
+    milestones` / `gh issue create`, instead of waiting for the first PR to
+    fail "Validate Milestone approval" (Issue #572).
+    """
+    snapshot = load_snapshot(repo, number)
+    errors = tracker_errors(snapshot)
+    if errors:
+        return Decision(False, "; ".join(errors))
+    return Decision(True, "Milestone metadata is ready for work")
+
+
 def reconcile(repo: str, number: int) -> Decision:
     """Synchronize one Milestone and refresh its open PR checks."""
     snapshot = load_snapshot(repo, number)
@@ -611,6 +628,9 @@ def main() -> None:
     sync = subparsers.add_parser("reconcile")
     sync.add_argument("--repo", required=True)
     sync.add_argument("--milestone", required=True, type=int)
+    pre = subparsers.add_parser("preflight")
+    pre.add_argument("--repo", required=True)
+    pre.add_argument("--milestone", required=True, type=int)
     args = parser.parse_args()
     if args.command == "check-pr":
         decision = check_pr(args.repo, args.pr)
@@ -622,6 +642,8 @@ def main() -> None:
         decision = record_promotion_evidence(
             args.repo, args.tracker, args.evidence_url
         )
+    elif args.command == "preflight":
+        decision = preflight(args.repo, args.milestone)
     else:
         decision = reconcile(args.repo, args.milestone)
     print(decision.summary)  # noqa: T201

@@ -52,6 +52,7 @@ Duplicate triage may close an Issue without code changes when it links the canon
 - Daily PR gate: `./scripts/verify-fast` (same tiered entry point CI runs).
 - Full delivery verification: `./scripts/verify-template.sh` once by the pull request owner or integrator, only for a full-tier delivery boundary (see `docs/ci-policy.md`); a single `scripts/verify-stage-*` script reruns one of its stages without paying for the full run.
 - Release execution: hosted `release.yml`'s Automatic/Guided publish is a known permanent limitation, not a bug to chase — `GITHUB_TOKEN` cannot prove the Immutable Releases setting and this fails closed by design (#123). Run `scripts/publish-release` locally under the maintainer's own admin identity instead; see `docs/ci-policy.md`'s "hosted 發版路徑的已知限制" section.
+- Milestone creation: `scripts/create-milestone` atomically creates the GitHub Milestone (with a real due date) and its tracker Issue together, replacing the old two-step manual UI flow; `python3 scripts/sync_milestone_state.py preflight --repo <repo> --milestone <N>` re-validates an existing Milestone's due date, tracker title, and `Lifecycle Issue: #N` link before work is dispatched under it, instead of waiting for the first PR to fail `Validate Milestone approval` — see `docs/milestone-description.md`.
 
 ## Editing boundaries
 
