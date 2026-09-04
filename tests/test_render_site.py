@@ -400,21 +400,19 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
-    assert "10 條共用流程" in file_map
+    assert "8 條共用流程" in file_map
     workflow_labels = {
         "ci.yml": "必要驗證",
         "codeql.yml": "CodeQL SAST",
         "dependabot-auto-merge.yml": "Dependabot 自動合併",
         "governance-comment.yml": "reviewer 指派",
         "governance-drift.yml": "治理漂移",
-        "issue-triage.yml": "工作單整理",
-        "milestone-lifecycle.yml": "里程碑同步",
         "osv.yml": "漏洞排程",
         "pr-policy.yml": "PR 規則",
         "release.yml": "候選發版",
         "spec-to-issue.yml": "規格開單",
         "template-update.yml": "模板更新通知",
-        "work-item-closure.yml": "工作關單",
+        "work-item-lifecycle.yml": "工作單生命週期",
     }
     assert workflows == set(workflow_labels)
     for workflow, label in workflow_labels.items():
@@ -806,8 +804,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         {"path": "scripts/test-issue-triage"}
     ]
     assert testing_rows[0]["shared"]["milestone"]["automation"][0] == {
-        "path": ".github/workflows/issue-triage.yml",
-        "job": "classify",
+        "path": ".github/workflows/work-item-lifecycle.yml",
+        "job": "process (classify)",
         "trigger": {
             "zh-tw": "Issue opened／edited／reopened／closed",  # noqa: RUF001
             "en": "Issue opened, edited, reopened, or closed",
@@ -997,8 +995,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ]
     assert merge_rows[2]["shared"]["milestone"]["automation"] == [
         {
-            "path": ".github/workflows/work-item-closure.yml",
-            "job": "close-work",
+            "path": ".github/workflows/work-item-lifecycle.yml",
+            "job": "process (close-work)",
             "trigger": {
                 "zh-tw": "里程碑工作 PR 合併進 dev/m*",
                 "en": "Milestone work PR merged into dev/m*",

@@ -13,7 +13,10 @@ WORKFLOW_PATH = (
     Path(__file__).parents[1]
     / ".github"
     / "workflows"
-    / "work-item-closure.yml"
+    # #574 merged Work Issue closure into work-item-lifecycle.yml as a step
+    # inside the shared "process" job; see tests/test_journey06_workflows.py
+    # for that merged workflow's own structural regression tests.
+    / "work-item-lifecycle.yml"
 )
 SPEC = importlib.util.spec_from_file_location("work_pr_closure", MODULE_PATH)
 assert SPEC and SPEC.loader

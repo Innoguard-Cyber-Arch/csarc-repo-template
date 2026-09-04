@@ -1,4 +1,12 @@
-"""Regression tests for the intentionally active Journey 01 workflows."""
+"""Regression tests for the intentionally active Journey 01 workflows.
+
+Issue triage used to ship as its own `issue-triage.yml` workflow. #574 folded
+it, Milestone lifecycle, and Work Issue closure into one job with sequential
+steps inside `work-item-lifecycle.yml` to cut GitHub Actions job fan-out; that
+merged file's full shape (trigger scope, permissions, steps, and the
+failure-isolation contract) is covered by test_journey06_workflows.py, which
+already owned Milestone lifecycle's structural assertions before the merge.
+"""
 
 from pathlib import Path
 from typing import Any
@@ -7,7 +15,6 @@ import yaml
 
 REPO_ROOT = Path(__file__).parents[1]
 WORKFLOWS = {
-    "issue-triage.yml": 5,
     "spec-to-issue.yml": 10,
 }
 
@@ -48,9 +55,6 @@ def test_workflows_keep_the_approved_event_scope() -> None:
         workflow = load_yaml(REPO_ROOT / ".github" / "workflows" / filename)
         triggers[filename] = workflow.get("on", workflow.get(True))
 
-    assert triggers["issue-triage.yml"] == {
-        "issues": {"types": ["opened", "edited", "reopened", "closed"]}
-    }
     assert set(triggers["spec-to-issue.yml"]) == {"push", "workflow_dispatch"}
 
 
@@ -65,6 +69,9 @@ def test_workflows_delegate_to_the_existing_policy_scripts() -> None:
     issue_validator = (REPO_ROOT / "scripts/validate-issue-policy").read_text(
         encoding="utf-8"
     )
-    assert "./scripts/validate-issue-policy" in contents["issue-triage.yml"]
+    merged_workflow = (
+        REPO_ROOT / ".github/workflows/work-item-lifecycle.yml"
+    ).read_text(encoding="utf-8")
+    assert "run: ./scripts/validate-issue-policy" in merged_workflow
     assert "scripts/pr_lifecycle.py issue-edit" in issue_validator
     assert "scripts/spec_to_issue.py" in contents["spec-to-issue.yml"]
