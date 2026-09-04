@@ -73,6 +73,7 @@ jobs:
           PR_BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
           PR_DELIVERY_CUTOVER_ISSUE: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '185' || '0' }}
           PR_DEVELOPMENT_CUTOVER_PR: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '306' || '1' }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
