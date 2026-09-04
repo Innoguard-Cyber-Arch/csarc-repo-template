@@ -10,7 +10,21 @@ set -euo pipefail
 
 script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-branch-fresh"
 fixture_root="$(mktemp -d)"
-trap 'rm -rf "$fixture_root"' EXIT
+# Issue #591: a bare `rm -rf` here has intermittently failed on hosted CI
+# runners with "Directory not empty" on $fixture_root/work/.git, right
+# after the last git operation against it -- a TOCTOU race where something
+# (observed only on GitHub-hosted Linux runners, never reproduced locally)
+# briefly re-creates a file inside .git between rm -rf's directory listing
+# and its final rmdir. Retry with a short backoff so that transient window
+# doesn't fail the whole regression run.
+cleanup() {
+  for _ in 1 2 3 4 5; do
+    rm -rf "$fixture_root" 2>/dev/null && return 0
+    sleep 0.2
+  done
+  rm -rf "$fixture_root"
+}
+trap cleanup EXIT
 
 bare="$fixture_root/origin.git"
 work="$fixture_root/work"

@@ -19,17 +19,19 @@ paired_files=(
   .github/ISSUE_TEMPLATE/documentation.yml
   .github/ISSUE_TEMPLATE/feature.yml
   .github/ISSUE_TEMPLATE/task.yml
-  .github/workflows/issue-triage.yml
+  .github/workflows/dependabot-auto-merge.yml
   .github/workflows/governance-comment.yml
-  .github/workflows/milestone-lifecycle.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
   .github/workflows/spec-to-issue.yml
-  .github/workflows/work-item-closure.yml
+  .github/workflows/work-item-lifecycle.yml
   policies/actions.json
+  policies/issue-creation.json
   policies/labels.json
+  policies/pages.json
   policies/releases.json
   policies/repository.json
+  policies/security-scanning.json
   docs/ci-policy.md
   docs/milestone-description.md
   docs/adr/README.md
@@ -51,7 +53,9 @@ paired_files=(
   scripts/install-gitleaks
   scripts/install-osv-scanner
   scripts/install-shellcheck
+  scripts/install-syft
   scripts/lint-workflows-shell
+  scripts/publish-release
   scripts/release_bundle.py
   scripts/release_policy.py
   scripts/resolve-cache-root
@@ -59,6 +63,7 @@ paired_files=(
   scripts/spec_to_issue.py
   scripts/sync_milestone_state.py
   scripts/sync_work_item_metadata.py
+  scripts/test-apply-repository-settings
   scripts/test-check-scope-gate
   scripts/test-issue-triage
   scripts/test-pr-policy
@@ -69,6 +74,7 @@ paired_files=(
   scripts/validate-pr-policy
   scripts/verify-dependencies
   tests/test_ci_tier.py
+  tests/test_dependabot_auto_merge.py
   tests/test_dependency_security.py
   tests/test_spec_to_issue.py
   tests/test_delivery_sync.py
