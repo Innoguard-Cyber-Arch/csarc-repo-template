@@ -81,7 +81,8 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert 'release_bundle.py" prepare' in publish
     assert 'release_bundle.py" finalize' in publish
     assert 'release_bundle.py" verify' in publish
-    assert "releases/assets/$asset_id" in publish
+    assert "gh release upload" in publish
+    assert "--clobber" in publish
     assert "gh release edit" in publish
     assert "for attempt in $(seq 1 12)" in publish
     assert "gh release verify" in publish
