@@ -1087,6 +1087,65 @@ def test_render_page_orders_language_switcher_zh_tw_then_en() -> None:
     assert 'lang="zh-Hant-TW" aria-current="page"' in html
 
 
+def test_render_page_sources_the_about_slide_from_docs_when_root_is_given(
+    tmp_path: Path,
+) -> None:
+    # Issue #681: the "about" slide's body is authored once in docs/about.md
+    # (docs/about.<lang>.md for a non-primary language) instead of being
+    # duplicated into site/content/_index.<lang>.md.
+    content = (
+        "+++\n"
+        'title = "T"\n\n'
+        "[controls]\n"
+        'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
+        'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
+        'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        "+++\n\n"
+        '{{< slide key="about" title="About" legacy="false" >}}\n'
+        "stale inline body, must not appear in the output\n"
+        "{{< /slide >}}\n"
+    )
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "about.md").write_text(
+        "# About\n\nzh-tw body from docs/about.md.\n", encoding="utf-8"
+    )
+    (tmp_path / "docs" / "about.en.md").write_text(
+        "# About\n\nen body from docs/about.en.md.\n", encoding="utf-8"
+    )
+
+    zh_html = render_page(
+        content, lang="zh-tw", data=_empty_data(), root=tmp_path
+    )
+    en_html = render_page(content, lang="en", data=_empty_data(), root=tmp_path)
+
+    assert "zh-tw body from docs/about.md." in zh_html
+    assert "en body from docs/about.en.md." in en_html
+    assert "stale inline body" not in zh_html
+    assert "stale inline body" not in en_html
+    # The docs/ file's own "# About" heading is dropped -- the slide shell
+    # already renders attrs["title"] as an <h2>.
+    assert "<h1>" not in zh_html
+
+
+def test_render_page_ignores_external_sources_without_root() -> None:
+    # A caller that renders a synthetic fixture with no docs/ directory
+    # (e.g. the full-build integration tests below) must be unaffected.
+    content = (
+        "+++\n"
+        'title = "T"\n\n'
+        "[controls]\n"
+        'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
+        'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
+        'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        "+++\n\n"
+        '{{< slide key="about" title="About" legacy="false" >}}\n'
+        "inline body stays\n"
+        "{{< /slide >}}\n"
+    )
+    html = render_page(content, lang="zh-tw", data=_empty_data())
+    assert "inline body stays" in html
+
+
 # --- full-build integration (small fixture site) -------------------------
 
 
