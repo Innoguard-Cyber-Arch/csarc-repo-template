@@ -30,6 +30,7 @@ uv run pytest --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
 ./scripts/test-worktree-cleanup
 ./scripts/test-pr-policy
 ./scripts/test-apply-repository-settings
+./scripts/test-check-repo-capabilities
 ./scripts/test-check-scope-gate
 ./scripts/test-check-base-only-remerge
 ./scripts/test-gh-issue-create

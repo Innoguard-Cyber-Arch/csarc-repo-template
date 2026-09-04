@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-25
-- **來源 Issues：**[#18](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/18), [#28](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/28), [#62](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/62), [#65](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/65), [#87](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/146), [#163](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/163), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301), [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576), [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580), [#607](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/607)
+- **來源 Issues：**[#18](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/18), [#28](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/28), [#62](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/62), [#65](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/65), [#87](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/146), [#163](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/163), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301), [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576), [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580), [#607](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/607), [#531](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/531)
 - **實作 PRs：**[#25](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/25), [#59](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/59), [#63](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/63), [#66](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/66), [#90](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/90), [#128](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/128), [#154](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/154), [#165](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/165), [#306](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/306), [#579](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/579)
 
 ## 問題與限制
@@ -82,6 +82,28 @@ closed 擋下「`release_phase` 是 `release` 但任一 Ruleset 仍有非空 `by
 刻意保留空的 `bypass_actors`，不帶 `policies/project-stage.json` 或第二個 Ruleset
 檔；`scripts/apply-repository-settings.sh` 對這兩個新政策檔案的存在與否是條件式
 判斷，檔案不存在時（所有既有下游 repo）行為與 #607 之前完全一致。
+
+## Repo 能力矩陣：把「這個 repo 本身」也納入 capability preflight（#531）
+
+上方所有 disposition 都聚焦在 GitHub *方案*（Free／Team／Enterprise）能不能支援某項
+能力，由 `scripts/apply-repository-settings.sh` 的 plan／apply／check 偵測。Issue #531
+指出這不是唯一變因：同一個方案下，organization 政策、CODEOWNERS team 是否存在且可寫、
+token 權限範圍，仍可能個別擋住 `ruleset_enforcement`、`codeowners_enforcement`、
+`actions_pr_approval` 這類能力，而這一層過去沒有集中定義、也沒有自動檢查。
+
+維護者的決定：新增 `policies/capability-matrix.json` 作為聲明式的「repo 能力矩陣」，
+把每一項能力對應到最低權限／方案需求、偵測方式與 workaround；`scripts/
+repo_capabilities.py` 是可獨立單元測試的三態（`allowed`／`blocked`／`unknown`，延續本
+ADR 第 14 行既有的三態慣例）evaluator，`scripts/check-repo-capabilities` 是即時對這個
+repo 探測、組成 facts 後交給 evaluator 的唯讀入口，只回報缺口與對應 workaround，不寫入
+GitHub、也不是新的合併關卡（那仍是 `apply-repository-settings.sh check` 的工作）。內部
+網站新增雙語「進階安裝」附錄（`docs/index.html#advanced-install`）說明矩陣內容與如何
+解讀檢查結果；`docs/ci-policy.md`「Repo 能力自我檢查與 workaround 對照」一節記錄同一
+決定的執行細節。
+
+明確保留的邊界：這套機制不重新設計 `apply-repository-settings.sh` 既有的 `DEGRADED`
+標記——矩陣裡對應既有限制的每一列，workaround 直接引用同一段既有訊息，不是另建一套
+平行說法；`apply-repository-settings.sh` 本身在這個 Issue 沒有任何邏輯變動。
 
 ## 重新評估條件
 

@@ -831,6 +831,30 @@ repo-local 入口取代；promotion、delivery maintenance、release consumption
 - 沒有真實成品、owner、權限或 live run 時，狀態保持 manual、conditional、blocked 或
   not applicable，不以歷史成功補足。
 
+### Repo 能力自我檢查與 workaround 對照（capability matrix，#531）
+
+`scripts/apply-repository-settings.sh` 既有的 `DEGRADED` 機制回答的是「這個帳號的
+GitHub 方案允許什麼」；但同一個方案上，organization 政策、CODEOWNERS team 是否存在、
+token 權限範圍，仍可能個別擋住某一項能力——這一層目前沒有自動檢查，也沒有把 workaround
+集中寫清楚。`policies/capability-matrix.json` 補上這份「repo 能力矩陣」：每一項能力
+（`repository_admin`、`ruleset_enforcement`、`codeowners_enforcement`、
+`actions_pr_approval`、`security_and_analysis`、`github_pages`、
+`repository_settings_inspection`、`immutable_releases`）各自對應最低權限／方案需求、
+偵測方式與已記錄的 workaround。`scripts/repo_capabilities.py` 是純邏輯的 evaluator（三態
+`allowed`／`blocked`／`unknown`，與 `docs/adr/capability-aware-governance.md` 既有的
+三態慣例一致），`scripts/check-repo-capabilities` 則是即時對這個 repo 探測、組成 facts
+再交給 evaluator 的唯讀入口——只回報，不寫入 GitHub，也不是新的合併關卡。
+
+刻意的邊界（Issue #531）：這套機制不重新設計 `apply-repository-settings.sh` 既有的
+`DEGRADED` 標記本身；矩陣裡每一列的 workaround，只要底層限制原本就有對應的
+`DEGRADED` 字樣（Ruleset、CODEOWNERS 檢查、Actions PR 政策、`security_and_analysis`、
+GitHub Pages 五項），就直接引用同一段既有訊息，而不是另建一套平行說法。`policies/
+capability-matrix.json` 與內部網站「進階安裝」附錄（`docs/index.html#advanced-install`）
+互為單一來源：矩陣是機器可讀的權威內容，頁面是給人看的雙語呈現，兩者由
+`tests/test_advanced_install_content.py` 的每一個能力 id 都必須同時出現在雙語頁面這條
+規則機械式對齊。`immutable_releases` 一列例外：它無法單靠 repository 權限探測判斷，一律
+回報 `unknown`，並指向上面「hosted 發版路徑的已知限制」一節，而不是假裝可以自動判定。
+
 ### Release 發版不依賴 Actions 健康度的 fallback（#589，2026-09-03）
 
 2026-09-03 的實際事故（#587）證明「發版」目前完全綁在 `release.yml` 這一支 workflow 是否能在 GitHub Actions 上成功執行：M8 promotion 後，`docs/index.html` 過期讓 full-tier 驗證卡住，`main` 上每一次 push 觸發的 `release.yml` run 全部失敗，加上同一天稍早出現的 `pull_request` webhook 投遞間歇性異常，讓「能不能發版」完全停擺超過 8 小時、沒有人自動被通知，直到人工檢查 Releases 頁面才發現。既有的「Actions 額度 fallback」（見 [staged-delivery-and-verification ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/staged-delivery-and-verification.md)）解決的是不同的觸發條件：額度用盡有 GitHub 回傳的明確錯誤訊息（zero-step billing block），可以機械式偵測；本節處理的觸發條件——hosted runner 卡住、webhook 沒有投遞、或其他導致 Actions 本身不健康的狀況——**沒有對應的機械式訊號**：它看起來就是「什麼都沒發生」，而「什麼都沒發生」本來就有可能只是因為沒有東西需要發版。這個不對稱是本節 fallback 刻意設計成「人或 agent 主動決定啟用」而非自動觸發的原因，也是為什麼另外需要一道獨立排程的存量檢查——這道檢查因範圍與時間考量從 #589 拆分為獨立追蹤：見 [#605](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/605)。

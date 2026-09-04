@@ -109,6 +109,36 @@ csarc status <path> --json
 {{< /detail >}}
 {{< /slide >}}
 
+{{< slide key="advanced-install" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜Repo 能力矩陣" title="搞清楚這個 repo 實際能啟用什麼" subtitle="除了 apply-repository-settings.sh 既有的 GitHub 方案探測，scripts/check-repo-capabilities 再檢查這個 repo 與 token 本身實際具備什麼。" class="dense" legacy="false" >}}
+「規則治理」（Step 08）的方案能力表回答的是「這個帳號的 GitHub *方案* 允許什麼」；這是必要條件，但不夠：organization 政策、CODEOWNERS team 是否真的存在、token 權限範圍，都可能在方案本身支援的情況下仍然擋住某項能力。`policies/capability-matrix.json` 列出這個模板依賴的每一項能力、各自的最低需求與已記錄的 workaround；`scripts/check-repo-capabilities` 會即時對照這個 repo 實際狀態：
+
+```bash
+./scripts/check-repo-capabilities        # 人類可讀報告
+./scripts/check-repo-capabilities --json # 機器可讀的能力清單與統計
+```
+
+| 能力 | 啟用了什麼 | 最低需求 | 缺少時 |
+| --- | --- | --- | --- |
+| `repository_admin` | 以下每一項能力的前提 | 目前 token 的 `permissions.admin == true` | 請 owner／admin 執行 `apply`，或申請 Admin 角色 |
+| `ruleset_enforcement` | 預設分支的 Ruleset 分支保護 | public repository（任何方案），或 private 且 Pro／Team 以上 | DEGRADED 標記；`policies/rulesets.json` 保留為 desired state |
+| `codeowners_enforcement` | CODEOWNERS review 真的能擋下合併 | 需先具備上一項，且 `@org/team` 具寫入權限 | DEGRADED 標記；修正 team，或先用 `scripts/request-reviewer` |
+| `actions_pr_approval` | Actions 能自動核准 PR（例如 Dependabot auto-merge） | organization 允許 `can_approve_pull_request_reviews` | DEGRADED 標記；降級為人工核准 |
+| `security_and_analysis` | secret scanning、push protection、Dependabot security updates | public repository，或 private 且具備 GitHub Advanced Security | DEGRADED 標記；改用本機 `scripts/scan-secrets` |
+| `github_pages` | 將 `docs/index.html` 發布成 hosted 網站 | public repository，或 private 且為 GitHub Enterprise Cloud | DEGRADED 標記；改分享 commit 進 repo 的 HTML 檔案 |
+| `repository_settings_inspection` | `check` 模式能比對即時的管理員專屬欄位 | 與 `repository_admin` 相同 | DEGRADED 標記；改在具 admin 身分的可信環境執行 `check` |
+| `immutable_releases` | hosted Automatic／Guided 發版的必要條件 | 真人 admin 身分，絕非預設 `GITHUB_TOKEN` | 已知永久限制（#123／#626）；改在本機執行 `scripts/publish-release` |
+
+{{< detail key="advanced-install-results" title="怎麼解讀 check-repo-capabilities 的結果" >}}
+每一列會回報三態之一：`allowed`（現在就能用）、`blocked`（確實缺少某個條件）、`unknown`（單靠唯讀探測無法證實——例如某個 Actions 設定目前是關的，可能只是還沒開，不代表被 organization 政策擋住）。這是診斷用的 preflight，不是合併關卡：報告產出後一律回傳 `0`，也不會對 GitHub 做任何寫入。「即時設定是否真的符合宣告政策」仍然是 `apply-repository-settings.sh check` 的工作。
+
+`--facts <file>` 可以讀取預先準備好的 facts，不必呼叫 `gh`，因此同一份矩陣可以在沒有即時存取的情況下對照假設的權限組合——`scripts/test-check-repo-capabilities` 就是用這個方式，在完全不連網路的情況下驗證多種權限／方案組合的缺口清單是否正確。
+{{< /detail >}}
+
+{{< detail key="advanced-install-workarounds" title="Workaround 與既有的 DEGRADED 標記" >}}
+這份矩陣不是要取代或重新設計 `apply-repository-settings.sh` 既有的 DEGRADED 機制，而是把它寫清楚。凡是 workaround 寫「DEGRADED 標記」的列，用的都是 `apply-repository-settings.sh check`／`plan`／`apply` 對同一個限制本來就會印出的那個 fail-safe；兩邊不會互相矛盾，因為底層偵測（方案、visibility、admin 權限）完全相同。長期決策記錄在 `docs/ci-policy.md` 與[能力導向治理 ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md)；這一頁與 `policies/capability-matrix.json` 是兩邊共同參照、保持最新的單一來源。
+{{< /detail >}}
+{{< /slide >}}
+
 {{< slide key="flow" track="flow" eyebrow="CI/CD 流程" title="模板會帶你走完每次變更" subtitle="依表單填寫、提交 PR、查看結果；模板負責準備正確設定並指出要修正的地方。" class="legacy-slide pipeline-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
