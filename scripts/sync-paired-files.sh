@@ -18,6 +18,7 @@ paired_files=(
   .github/ISSUE_TEMPLATE/bug.yml
   .github/ISSUE_TEMPLATE/documentation.yml
   .github/ISSUE_TEMPLATE/feature.yml
+  .github/ISSUE_TEMPLATE/milestone-tracker.yml
   .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/dependabot-auto-merge.yml
   .github/workflows/governance-comment.yml

@@ -19,6 +19,12 @@ organization 結構性沒有第二個真人帳號可以核准時，對該 repo �
 公開／私密設定影響，若成員關係設為私密，workflow 自己的 `GITHUB_TOKEN` 可能看不到正確
 關係，導致這項檢查不穩定；repo collaborator 權限不受此影響。
 
+建立追蹤 Issue 時使用 `.github/ISSUE_TEMPLATE/milestone-tracker.yml`（Issue #555）：表單已
+預先帶入 `Proposal`／`Completion evidence`／`Early termination`／`Promotion` 四個 H2 段落骨架
+與說明文字，減少人工照抄漏段落的機率；`scripts/sync_milestone_state.py` 的 `tracker_errors()`
+仍在建立後把關格式是否正確——表單降低出錯機率，不取代驗證。這份表單只建立追蹤 Issue 本身，
+不是下方 GitHub Milestone 物件 `description` 使用的七段式格式，兩者不要混用同一份骨架。
+
 底下每一張 work Issue 預設直接繼承 tracker 的核可狀態，不需要額外核可——維持「範圍內
 工作零額外成本」的現況特性。只有當一張 work Issue 的 body 包含逐字獨立一行的
 `Tracker scope: expanded`（`has_scope_sentinel()`，只認這個逐字 marker、不判斷語意），
@@ -87,6 +93,18 @@ gate 實際接上合併流程；沒有宣告的 work PR（現況的絕大多數�
 只掛入直接推進 acceptance criteria 的 leaf Issues 與其 pull requests；Feature parent
 不掛 Milestone，避免 parent、subissue、PR 三重計算。Milestone 必須代表有真實期限
 的 delivery／release；沒有排程就不要建立 Milestone，也不要把它當 release label。
+
+已評估（Issue #555）改用 GitHub 原生 sub-issues（`parent`／`subIssuesSummary` 欄位與對應新增
+／移除 sub-issue REST 端點）取代上方純文字 `References` 列點，讓 tracker 直接掛住底下 work
+Issue；結論是**不採用**，理由記錄於 `docs/adr/spec-story-and-work-items.md`：GitHub 的
+sub-issue 關聯是單一 parent（一張 Issue 同時只能有一個 parent），這個 repo 已經把這個唯一的
+parent 欄位用在 Feature／Task／Bug 既有階層（例如 #586、#590 皆已是 Feature #524 的
+sub-issue）；若同時把 tracker 設成這些 work Issue 的 parent 會直接衝突，GitHub 不支援雙
+parent。退而求其次只掛「未被 Feature 收編」的頂層 leaf Issue，又會讓 sub-issue 進度條與
+`load_snapshot()` 既有的 `milestone=N` 查詢兩者涵蓋的集合系統性不一致（前者漏掉巢狀 Feature
+底下的 work Issue），比現況的 `References` 列點更容易誤導。`milestone=N` 查詢已經是完整、經
+測試驗證的 tracker↔work-Issue 連結來源，維持現況即可，不引入第二套會與既有 Feature 階層衝突
+又不完整的關聯機制。
 關閉最後一張 Issue 前，須勾選所有已驗證的 acceptance items；否則 lifecycle
 workflow 會讓未完成的 story 保持開啟。
 tracker 的 `Promotion` 段落只能描述合併前可驗證的條件（例如：其餘 Milestone Issue
