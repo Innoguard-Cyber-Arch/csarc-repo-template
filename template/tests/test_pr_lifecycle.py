@@ -728,6 +728,112 @@ def test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist(
         scan_writers(tmp_path)
 
 
+def test_writer_scanner_trusts_the_real_release_please_workflow(
+    tmp_path: Path,
+) -> None:
+    """The one exact release.yml path passes scan_writers.
+
+    Regression test for #643: this copies the actual committed
+    `.github/workflows/release.yml`, unleased `googleapis/
+    release-please-action@` reference included, into a scratch repository
+    root and proves scan_writers no longer fails closed on it.
+    """
+    candidate = REPO_ROOT / ".github/workflows/release.yml"
+    if not candidate.is_file():
+        # The template/ tree only ships release.yml.jinja (rendered to
+        # release.yml in a generated/adopted project); running this paired
+        # copy from inside template/tests/ against the meta-repo's own
+        # template/ source tree has no literal release.yml to copy, so
+        # there is nothing to prove here -- mirrors the "no template/ tree
+        # at all" skip in test_writer_scanner_trusts_the_real_dependabot_
+        # auto_merge_workflows above.
+        return
+    source = candidate.read_text(encoding="utf-8")
+    assert "googleapis/release-please-action@" in source
+    destination = tmp_path / ".github/workflows/release.yml"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(source, encoding="utf-8")
+    scan_writers(tmp_path)  # must not raise
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        ".github/workflows/some-other-release.yml",
+        "template/.github/workflows/some-other-release.yml",
+    ],
+)
+def test_release_please_exemption_is_an_exact_path_allowlist(
+    tmp_path: Path, relative: str
+) -> None:
+    """The exemption trusts one exact path only, not the reference itself.
+
+    Regression test for #643: a different workflow file reusing the same
+    unleased `googleapis/release-please-action@` reference must still be
+    caught by scan_writers, proving the #643 exemption is a positive list
+    of one exact path rather than a relaxation of the pattern it trips.
+    """
+    imposter = tmp_path / relative
+    imposter.parent.mkdir(parents=True, exist_ok=True)
+    imposter.write_text(
+        "uses: googleapis/release-please-action@abc123 # v5\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match=r"some-other-release\.yml"):
+        scan_writers(tmp_path)
+
+
+def test_writer_scanner_ignores_unrelated_comment_lines() -> None:
+    """Two separate comments describing different things must not combine.
+
+    Regression test for #643: `scripts/gh-issue-create` has a `#` comment
+    mentioning `gh issue edit` (describing the workflow it improves on) and
+    a separate `#` comment listing `--milestone` among passed-through
+    flags. Neither line is an invocation; the old whole-file joined block
+    used to fold them into a false "gh issue metadata write".
+    """
+    source = (
+        "#!/usr/bin/env bash\n"
+        "# A follow-up `gh issue edit` fixes the title post-hoc.\n"
+        "# Passes through --title/-t, --milestone/-m, --label/-l.\n"
+        'exec gh issue create "$@"\n'
+    )
+    assert not writer_violations(source)
+
+
+def test_writer_scanner_ignores_escaped_backtick_documentation() -> None:
+    """A human-facing message quoting example commands is not an invocation.
+
+    Regression test for #643: `scripts/validate-pr-policy`'s Issue #551
+    Milestone safeguard builds a PR-comment message that *describes*, in
+    backslash-escaped (literal, non-command-substitution) Markdown code
+    spans, the manual commands a maintainer should run. Neither described
+    command is ever executed by the script.
+    """
+    source = (
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'reminder_body="Run \\`gh api repos/${GITHUB_REPOSITORY}/issues/'
+        "${issue_number} --method PATCH -f milestone=${hint_number}\\`, "
+        'not \\`gh issue edit --milestone\\`."\n'
+    )
+    assert not writer_violations(source)
+
+
+def test_writer_scanner_still_catches_live_writes_beside_similar_text() -> None:
+    """Narrowing the false positives above must not blind real detection.
+
+    A genuine, unescaped, non-commented `gh issue edit --milestone` next to
+    the same kind of prose that #643 taught the scanner to ignore must
+    still fail closed.
+    """
+    source = (
+        "# Passes through --title/-t, --milestone/-m, --label/-l.\n"
+        "gh issue edit 42 --milestone v1\n"
+    )
+    assert "gh issue metadata write" in writer_violations(source)
+
+
 def test_issue_label_helper_rejects_a_pull_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
