@@ -525,10 +525,14 @@ TOTAL（4002 秒／66 分 42 秒，尤其是 Regression tests 一階段的 3971 
 個欄位不構成第二套調度邏輯，暫不需要移除或重構；如果之後要精簡，需求方需先確認沒有其他
 消費者依賴這些欄位的 evidence 呈現。
 
-本機在不同 worktree 重跑驗證時，可把 `CSARC_CACHE_ROOT` 設為同一個絕對路徑；`uv`、
-`pnpm` 與固定版本工具會共用已驗證的下載內容並依版本與平台分隔。`.venv`、
-`node_modules`、生成 fixture、checkout 與測試結果仍逐 worktree 隔離，快取命中不代表
-測試通過；損壞內容依固定 checksum 重新下載或失敗。例如：
+`scripts/resolve-cache-root` 預設已經是使用者層級、跨 worktree 共用的位置（macOS 為
+`~/Library/Caches/csarc`；Linux／WSL2 依 XDG Base Directory 慣例，優先讀
+`$XDG_CACHE_HOME`，沒設定則用 `~/.cache/csarc`；判斷邏輯依 `uname` 明確分流平台，找
+不到或無法寫入時 fail-safe 退回 repo-local 的 `.cache/`，快取只是效能優化，不影響驗
+證正確性），`uv`、`pnpm` 與固定版本工具因此預設就會共用已驗證的下載內容並依版本與平
+台分隔，不必手動設定。`.venv`、`node_modules`、生成 fixture、checkout 與測試結果仍
+逐 worktree 隔離，快取命中不代表測試通過；損壞內容依固定 checksum 重新下載或失敗。
+想改用團隊約定的其他持久路徑，仍可用 `CSARC_CACHE_ROOT` 明確覆寫，例如：
 
 ```bash
 CSARC_CACHE_ROOT="$HOME/.cache/csarc" ./scripts/verify-template.sh
