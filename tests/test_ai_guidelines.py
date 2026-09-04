@@ -70,6 +70,16 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     assert template_guidance.count("BEGIN CSARC MANAGED BLOCK") == 1
     assert template_guidance.count("END CSARC MANAGED BLOCK") == 1
 
-    readme = (ROOT / "template" / "README.md.jinja").read_text(encoding="utf-8")
+    # Issue #681: template/README.md.jinja's destination name now depends on
+    # the readme_primary_language answer, so its source filename is a Jinja
+    # expression too (e.g. "{% if ... == 'zh-tw' %}README{% else %}...").
+    # "zh-tw" always appears somewhere in that expression for the zh-tw
+    # content file, and never in the English one, so it is a reliable glob.
+    zh_tw_readme_matches = list((ROOT / "template").glob("*zh-tw*.md.jinja"))
+    assert len(zh_tw_readme_matches) == 1, (
+        f"expected exactly one zh-tw README template, found "
+        f"{zh_tw_readme_matches}"
+    )
+    readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
     assert "一般情況下不能自行合併" not in readme
     assert "08 規則治理" in readme

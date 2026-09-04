@@ -284,9 +284,16 @@ def test_readme_describes_markdown_site_source() -> None:
     """
     root = Path(__file__).parents[1]
     root_readme = (root / "README.md").read_text(encoding="utf-8")
-    template_readme = (root / "template/README.md.jinja").read_text(
-        encoding="utf-8"
+    # Issue #681: the zh-tw template README's destination name now depends
+    # on the readme_primary_language answer, so its source filename is a
+    # Jinja expression containing "zh-tw" (see test_ai_guidelines.py's
+    # equivalent glob for why this substring reliably identifies it alone).
+    zh_tw_readme_matches = list((root / "template").glob("*zh-tw*.md.jinja"))
+    assert len(zh_tw_readme_matches) == 1, (
+        f"expected exactly one zh-tw README template, found "
+        f"{zh_tw_readme_matches}"
     )
+    template_readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
 
     assert "docs/site-content.md" in root_readme
     assert "docs/site-content.md" in template_readme
@@ -295,8 +302,8 @@ def test_readme_describes_markdown_site_source() -> None:
     for line in template_readme.splitlines():
         if "site-content.js" in line:
             assert "遷移" in line, (
-                "docs/site-content.js may only appear in "
-                "template/README.md.jinja as a legacy-migration hint"
+                "docs/site-content.js may only appear in the zh-tw "
+                "template README as a legacy-migration hint"
             )
 
 
