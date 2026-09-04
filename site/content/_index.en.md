@@ -16,8 +16,18 @@ zoom_in = "Zoom in"
 fit = "Fit"
 +++
 
-{{< slide key="capability" track="capability" eyebrow="CSARC Repo Template · beta" title="An updatable repository foundation" subtitle="Create a new project, adopt an existing one, or receive policy updates through verified pull requests." legacy="false" class="presentation-slide" >}}
-Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. It explains what to do and what result to expect. Files, scripts, and GitHub Actions stay in Maintenance mode.
+{{< slide key="capability" track="capability" eyebrow="Home" title="CSARC Repo Template" subtitle="Cyber-Arch's updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests." legacy="false" class="presentation-slide" >}}
+Cyber-Arch's updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests. Select only the shared workflow, or add Python, Rust, and TypeScript independently. Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) and stays synchronized across both languages.
+
+<p class="template-version"><strong>Template release:</strong> v0.13.0<!-- x-release-please-version --></p>
+
+| Item | Current state |
+| --- | --- |
+| Supported languages | Python, Rust, and TypeScript (select independently; select none for the shared workflow only) |
+| Site template version | [[site_template_version]] |
+| Decision-site render engine version | [[site_engine_version]] |
+
+**Current state:** Milestone 13 is extending the decision site and adoption experience. Only reviewed workflows under `.github/workflows/` run today; the rest stay archived. See the CI/CD settings appendix for the per-stage status.
 
 | Choice | Production capability available today |
 | --- | --- |

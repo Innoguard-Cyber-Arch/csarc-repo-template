@@ -77,6 +77,22 @@ Issue #535 已完成稽核軌跡的資料自動產生機制：`scripts/generate_
 
 **驗證**：`tests/test_build_decision_site.py` 新增 `render_audit_trail` 的單元測試，並以一則內容一致性測試（比照既有 `test_file_map_matches_real_workflow_directory_and_paths`）直接呼叫 `scripts/generate_audit_trail.py` 的 `render_pr_audit_table`／`render_rule_change_log`，比對其實際 Markdown 表頭欄位與 `site/data/audit_trail.json` 手寫的欄位清單逐字相符，避免兩邊日後各自修改而悄悄漂移。`./scripts/build-decision-site --check` 確認新增 slide 後仍逐位元組重建；`parity="new"` 讓 keys-only parity 檢查正確判定這是遷移後新增的內容，不會被誤判為遺漏既有 legacy slide。
 
+## 2026-09-04 首頁與 README 對齊（Issue #526）
+
+Issue #526 要求首頁（原「能力／導入」slide，`key="capability"`）與 repository 根目錄 `README.md` 「看到的東西要一模一樣」，不再各自維護一份漂移的內容；這獨立於 Issue #425（研究中、blocked，尚無維護者核准的內容模型結論）進行——維護者已明確決定 #526 不等待 #425，用自己的判斷先交付，兩者結論若未來衝突再另行調解。
+
+**決定：README.md 使用的 GFM 語法**——只採用 GitHub 原生就能正確預覽、且本引擎（`scripts/build_decision_site.py`）也能安全渲染的最小交集：標題、段落、GFM pipe table、`> [!IMPORTANT]` alert（僅 README，GitHub 專屬語法，本引擎不解析 blockquote，因此網站側改用一般粗體段落表達同一段狀態說明）、連結。不使用 shields.io 或其他外部圖片徽章（README 目前完全不依賴外部圖片，維持零網路依賴的預覽）。
+
+**內容模型**：兩份「版本／能力」表格逐字（byte-for-byte）同時存在於 `README.md` 與 `site/content/_index.zh-tw.md` 的 `{{< basic >}}`（首頁預設顯示的簡易模式）區塊——一份是新增的「項目／目前狀態」版本表（公版版本、支援語言、網站排版模板版本、決策網站渲染引擎版本），一份是既有的「可以直接選擇／目前提供的正式能力」能力表；`tests/test_homepage_readme_parity.py` 的 `test_capability_table_is_identical_in_readme_and_zh_home` 把第二份表格的逐字相同直接寫成回歸測試。英文首頁（`_index.en.md`，`legacy="false"`，本來就沒有 legacy／basic 雙模式）同步採用相同表格結構的英文翻譯，維持「雙語皆同步」，但不對應一份不存在的英文 README。zh-tw 首頁的技術（`{{< legacy >}}`）視圖只補上兩顆新徽章，其餘既有的互動式安裝指令 overlay（`setup-trigger`／`legacy-components.js`）不在本 Issue 範圍內變動。
+
+**版本顯示**：支援語言、repo/CLI 版本號直接以文字呈現（repo/CLI 版本沿用既有 `<!-- x-release-please-version -->` 慣例，見下一段）；網站排版模板與渲染引擎版本使用 #524 已提供的 `[[site_template_version]]`／`[[site_engine_version]]` token（由 `site/version.json` 解析），因此模板／引擎版本升級後兩個語言的首頁都會自動更新，不需要人工同步；`README.md` 因為完全不經過本引擎的 token 替換，只能寫入當下的字面版本號，由 `tests/test_homepage_readme_parity.py` 的 `test_required_facts_appear_in_readme_and_both_home_slides` 檢查它與 `site/version.json` 的實際值相符，drift 時 fail closed。
+
+**已知的渲染限制**：本引擎的 Markdown 表格 cell 一律經過 HTML escape（無真正的行內 HTML 解析），因此 `<!-- x-release-please-version -->` 這類 comment marker 放進表格 cell 會被跳脫成可見的字面文字，而不是被瀏覽器隱藏的真正 comment——GitHub 自己的渲染器能正確處理，本引擎不行。因此：README.md 的版本表格 cell 內仍可直接放 marker（GitHub 安全）；zh-tw 首頁的版本表格改成純文字版本號（不放 marker），真正會被 release-please 更新的 marker 留在既有、已驗證安全的技術視圖徽章（`<span>` 在 `{{< legacy >}}` 的 raw HTML 區塊內）；`tests/test_homepage_readme_parity.py` 的 `test_zh_home_repo_version_mentions_stay_in_sync` 確保這兩處版本號不會日後各自漂移。英文首頁沒有 legacy 視圖可以借用，改為在 basic body 內新增一行獨立的 raw HTML（`<p class="template-version">...`），單獨占一整行以觸發本引擎「整行以 `<` 開頭即原樣輸出」的既有 passthrough 規則，`test_en_home_release_marker_is_on_its_own_raw_html_line` 把這個結構要求寫成測試。`release-please-config.json` 的 `extra-files` 新增 `site/content/_index.en.md`、`docs/index.en.html` 兩筆（原本只追蹤 zh-tw 與其對應輸出），讓兩個語言在下一次真實發版時都會更新，`test_release_please_tracks_both_language_home_files` 驗證兩個語言檔都已註冊。
+
+**內容長度限制**：定義在 `tests/test_homepage_readme_parity.py`——README hero（`# CSARC Repo Template` 到 `## 目錄` 之間）上限 1600 字元／28 個非空行；zh-tw 首頁 basic body（不含可摺疊的 `{{< detail >}}` 補充說明）上限 1200 字元／22 行；英文首頁上限 2400 字元／22 行（英文用字自然比中文長，門檻按語言分開訂，而非用單一跨語言門檻）。門檻是本 Issue 實際內容量（README 1141 字元／18 行、zh-tw 791 字元／14 行、en 1834 字元／14 行）加上合理但不過寬的緩衝，之後真的塞入完整 README 或整段無關內容會直接 fail closed。
+
+**驗證**：`./scripts/build-decision-site` 手動重建後人工檢視 `docs/index.html`／`docs/index.en.html` 對應 slide 的實際渲染 HTML，確認 marker 未被跳脫成可見文字、`[[site_template_version]]`／`[[site_engine_version]]` 已正確代入實際版號。`tests/test_homepage_readme_parity.py` 新增的測試涵蓋上述所有主張；`scripts/check-decision-site-parity --keys-only`（透過 `./scripts/build-decision-site --check` 呼叫）只比對 slide 層級的 key（`id="capability"`／`data-track="capability"`），本 Issue 未變動這兩個屬性，因此不受影響。GitHub repo page 的實際渲染以推送後於瀏覽器開啟該分支的 `README.md` 預覽為準，記錄在 Issue #526 的完成證據留言中；本機沒有復現 GitHub 自己 Markdown 渲染管線的能力，因此這一步無法在合併前於本機完全重現，只能在推送後於 GitHub 上直接檢視。
+
 ## Ownership 與更新
 
 | 內容 | Owner | Copier update 行為 |
