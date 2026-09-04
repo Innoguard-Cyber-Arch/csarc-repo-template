@@ -17,11 +17,17 @@ export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 git diff --check
 ./scripts/check-update-conflicts
 ./scripts/scan-secrets
+./scripts/check-bypass-lifecycle
 
 if [[ "$tier" == "docs" ]]; then
   python3 scripts/spec_to_issue.py validate
   ./scripts/build-decision-site --check
   exit 0
+fi
+
+if [[ "$scopes" == *,docs,* ]]; then
+  python3 scripts/spec_to_issue.py validate
+  ./scripts/build-decision-site --check
 fi
 
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
@@ -45,6 +51,7 @@ if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
   ./scripts/test-issue-triage
   ./scripts/test-worktree-cleanup
   ./scripts/test-pr-policy
+  ./scripts/test-apply-repository-settings
   ./scripts/test-check-scope-gate
 fi
 

@@ -7,6 +7,34 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.13.0] - 2026-09-04
+
+### Features
+
+* feat(delivery): allow audited milestone checkpoints (#367) (9893822)
+* feat(governance): use native issue forms (#384) (0bc1429)
+* feat(governance): restore Journey 01 actions (#386) (42834ea)
+* feat(site): promote Milestone 8 interactive docs and policy alignment (#542) (9ed3594)
+* feat(ci): auto-merge Dependabot pull requests after checks pass (#569) (49fcfe1)
+* feat(governance): collaborator-only creation and security scanning (#579) (1177157)
+* feat(release): make the publish stage runnable without Actions (#608) (f39f0b4)
+* feat(governance): declare and enforce a GitHub Pages policy (#578) (37b956b)
+
+### Bug Fixes
+
+* fix(governance): admin self-approval rejects organization MEMBER association (#548) (996abaf)
+* fix(governance): base admin self-approval on collaborator permission (#550) (7719d2e)
+* fix(governance): declare the required_status_checks Ruleset rule (#575) (6bdfc6c)
+* fix(ci): run the docs staleness check on mixed-scope fast-tier PRs (#593) (6aa7724)
+* fix(ci): run spec validation on mixed-scope docs PRs too (#598) (#600) (6c4f200)
+* fix(ci): retry the check-branch-fresh fixture teardown (#591) (#606) (4297604)
+* fix(ci): exempt dependabot-auto-merge.yml from the writer scanner (#611) (b9516e4)
+* fix(template): declare pyyaml for generated python projects (#614) (971bb98)
+* fix(tests): skip the template path in generated-project scanner test (#618) (c2c136e)
+* fix(ci): route release.yml template expressions through env vars (#621) (cfd38f4)
+* fix(ci): grant administration:read for the release capability probe (#623) (14bcb71)
+* fix(ci): revert the invalid administration permission key (#625) (aa98e55)
+
 ## [0.12.2](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.12.1...v0.12.2) (2026-08-27)
 
 

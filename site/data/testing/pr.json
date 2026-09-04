@@ -122,8 +122,8 @@
           ],
           "automation": [
             {
-              "path": ".github/workflows/work-item-closure.yml",
-              "job": "close-work",
+              "path": ".github/workflows/work-item-lifecycle.yml",
+              "job": "process (close-work)",
               "trigger": {
                 "zh-tw": "里程碑工作 PR 合併進 dev/m*",
                 "en": "Milestone work PR merged into dev/m*"

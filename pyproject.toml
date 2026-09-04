@@ -1,13 +1,13 @@
 [project]
 name = "csarc-repo-cli"
-version = "0.12.2"
+version = "0.13.0"
 description = "Prompt-ready lifecycle CLI for the CSARC repository template"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
     "copier>=9.17,<10",
     "pyyaml>=6.0.3,<7",
-    "reportlab>=4.4,<5",
+    "reportlab>=4.4,<6",
 ]
 
 [project.scripts]
@@ -32,7 +32,7 @@ dev = [
   "pytest-cov>=6.2,<8",
   "ruff>=0.12,<1",
   "ty==0.0.76",
-  "zizmor==1.29.0",
+  "zizmor==1.30.0",
 ]
 
 [tool.uv]

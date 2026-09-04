@@ -247,7 +247,19 @@ else
   fi
 fi
 unchecked_task_pattern='^[[:space:]]*-[[:space:]]+\[[[:space:]]*\]'
-if grep -Eq "$unchecked_task_pattern" <<<"${PR_BODY:-}"; then
+# The acceptance-checklist gate (this PR-body check and the linked Issue check
+# below) only enforces completeness once a pull request is not a draft: a
+# draft cannot be merged anyway, so re-validating an admittedly-unfinished
+# checklist on every push while still drafting only produces certain,
+# repeated failures (#430, PR #448 needed 49 pushes before the checklist was
+# actually done). Marking the pull request ready for review re-triggers this
+# workflow (`ready_for_review`) and revalidates in full; see docs/ci-policy.md's
+# "Acceptance-checklist 驗證時機（#573）" section.
+pr_draft="${PR_DRAFT:-false}"
+if [[ "$pr_draft" == "true" ]]; then
+  echo "::notice::Skipping acceptance-checklist validation while the pull request is a draft; it revalidates in full when marked ready for review."
+fi
+if [[ "$pr_draft" != "true" ]] && grep -Eq "$unchecked_task_pattern" <<<"${PR_BODY:-}"; then
   echo "Complete every pull request checklist item before using a closing keyword."
   exit 1
 fi
@@ -328,7 +340,7 @@ if [[ "$pr_milestone_number" == "0" && "$issue_milestone_number" == "0" ]]; then
       reminder_body="${reminder_marker}
 Neither this pull request nor Issue #${issue_number} has a Milestone, and exactly one Milestone is currently open: #${hint_number} ${hint_title}.
 
-If this work belongs to it, attach the Milestone to the Issue (closed Milestones need \`gh api repos/${GITHUB_REPOSITORY}/issues/${issue_number} --method PATCH -f milestone=${hint_number}\`, not \`gh issue edit --milestone\`) and to this pull request. Otherwise no action is needed -- many Issues and pull requests are not tied to any Milestone."
+If this work belongs to it, attach the Milestone to the Issue (see docs/ci-policy.md, section \"Milestone 掛勾安全網\", for the closed-Milestone REST API workaround) and to this pull request. Otherwise no action is needed -- many Issues and pull requests are not tied to any Milestone."
       if ! gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
         --body "$reminder_body" >/dev/null 2>&1; then
         echo "::notice::Could not post the Milestone safeguard reminder (non-blocking, Issue #551)."
@@ -415,7 +427,7 @@ if [[ "${promotion:-false}" != "true" ]] && (( PR_NUMBER >= development_cutover_
     fi
   fi
 fi
-if [[ "${tracker_promotion:-false}" != "true" ]] && [[ "$issue_has_unchecked" == "true" ]]; then
+if [[ "${tracker_promotion:-false}" != "true" ]] && [[ "$pr_draft" != "true" ]] && [[ "$issue_has_unchecked" == "true" ]]; then
   echo "Issue #${issue_number} still has unchecked acceptance tasks."
   exit 1
 fi

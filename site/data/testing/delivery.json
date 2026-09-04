@@ -247,8 +247,8 @@
           ],
           "automation": [
             {
-              "path": ".github/workflows/milestone-lifecycle.yml",
-              "job": "sync",
+              "path": ".github/workflows/work-item-lifecycle.yml",
+              "job": "process (sync)",
               "trigger": {
                 "zh-tw": "生命週期追蹤 Issue closed／reopened／milestoned",
                 "en": "Lifecycle Issue closed, reopened, or milestoned"

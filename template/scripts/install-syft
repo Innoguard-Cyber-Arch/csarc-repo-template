@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pinned local equivalent of the syft-version input release.yml passes to
+# anchore/sbom-action (see .github/workflows/release.yml and
+# docs/ci-policy.md). scripts/publish-release uses this binary to generate
+# the same SPDX SBOM locally that the hosted Action generates in Actions, so
+# a release published without Actions carries the exact same evidence.
+version="1.50.0"
+checksums_sha256="bb8824a06c27c625fc103db5d7e9d7131ba2cc6e7c7a79318ee71686ede3c3f0"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
+
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) asset="syft_${version}_darwin_arm64.tar.gz" ;;
+  Darwin-x86_64) asset="syft_${version}_darwin_amd64.tar.gz" ;;
+  Linux-aarch64 | Linux-arm64) asset="syft_${version}_linux_arm64.tar.gz" ;;
+  Linux-x86_64) asset="syft_${version}_linux_amd64.tar.gz" ;;
+  *)
+    printf 'Unsupported platform. Install Syft %s and place it on PATH.\n' "$version" >&2
+    exit 1
+    ;;
+esac
+
+cache_dir="$cache_root/syft/$version/$asset"
+binary="$cache_dir/syft"
+mkdir -p "$cache_dir"
+base_url="https://github.com/anchore/syft/releases/download/v${version}"
+if [[ ! -f "$cache_dir/checksums.txt" ]] ||
+  [[ "$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')" != \
+    "$checksums_sha256" ]]; then
+  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+    "$base_url/syft_${version}_checksums.txt" \
+    -o "$cache_dir/checksums.txt.tmp.$$"
+  mv "$cache_dir/checksums.txt.tmp.$$" "$cache_dir/checksums.txt"
+fi
+actual_checksums_sha256="$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')"
+if [[ "$actual_checksums_sha256" != "$checksums_sha256" ]]; then
+  echo "Syft checksum manifest does not match the pinned digest." >&2
+  exit 1
+fi
+
+expected_archive_sha256="$(awk -v name="$asset" '$2 == name {print $1}' "$cache_dir/checksums.txt")"
+if [[ -z "$expected_archive_sha256" ]]; then
+  echo "Syft release manifest does not contain the selected asset." >&2
+  exit 1
+fi
+archive="$cache_dir/$asset"
+if [[ ! -f "$archive" ]] ||
+  [[ "$(shasum -a 256 "$archive" | awk '{print $1}')" != \
+    "$expected_archive_sha256" ]]; then
+  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+    "$base_url/$asset" -o "$archive.tmp.$$"
+  mv "$archive.tmp.$$" "$archive"
+fi
+actual_archive_sha256="$(shasum -a 256 "$archive" | awk '{print $1}')"
+if [[ -z "$expected_archive_sha256" || "$actual_archive_sha256" != "$expected_archive_sha256" ]]; then
+  echo "Syft archive does not match the pinned release manifest." >&2
+  exit 1
+fi
+
+if [[ ! -f "$binary" ]]; then
+  extract_dir="$cache_dir/extract.$$"
+  mkdir -p "$extract_dir"
+  tar -xzf "$archive" -C "$extract_dir" syft
+  mv "$extract_dir/syft" "$binary.tmp.$$"
+  rm -rf "$extract_dir"
+  mv "$binary.tmp.$$" "$binary"
+fi
+
+chmod +x "$binary"
+printf '%s\n' "$binary"

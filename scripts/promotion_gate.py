@@ -164,6 +164,53 @@ def route_for(  # noqa: C901
     return Route("invalid-main-route", True)
 
 
+def check_route(args: argparse.Namespace) -> None:
+    """Report the `promotion` required check for one ordinary pull request.
+
+    Every pull request into `main` needs an explicit `promotion` check-run
+    so `policies/rulesets-required-checks.json`'s `required_status_checks`
+    never stays permanently pending for it. A `not-applicable` or a
+    recognized promotion route (milestone, isolated, hotfix, release
+    recovery, release follow-up, or a merge-queue re-check) succeeds;
+    only a `main`-targeting branch that matches none of those routes
+    fails closed. This intentionally reuses `route_for()` rather than
+    reimplementing branch/label classification, so this check and the
+    `prepare()` evidence pipeline it feeds can never disagree silently.
+    """
+    if args.event != "pull_request":
+        # A merge-queue commit was already classified when its source pull
+        # request opened; `prepare()` uses the identical fallback for the
+        # same reason.
+        route = Route("merge-queue", False)
+    else:
+        event = json.loads(args.event_path.read_text(encoding="utf-8"))
+        pull_request = event["pull_request"]
+        labels = {
+            item["name"]
+            for item in pull_request.get("labels", [])
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        }
+        base = pull_request["base"]["ref"]
+        head = pull_request["head"]["ref"]
+        route = route_for(base, head, labels, args.branch_strategy)
+    write_outputs(
+        args.github_output,
+        {"route": route.kind, "relevant": route.relevant},
+    )
+    if route.kind == "invalid-main-route":
+        write_summary(
+            args.summary,
+            ["- Promotion route — blocked: no recognized route targets `main`"],
+        )
+        raise RuntimeError(
+            "Only a promotion, hotfix, release recovery, or release "
+            "follow-up branch/label combination may target main; use a "
+            "topic branch instead, or the matching promotion route"
+        )
+    write_summary(args.summary, [f"- Promotion route — {route.kind}"])
+    print(f"Promotion route: {route.kind}")  # noqa: T201
+
+
 def classify_canary(command: str, environment: str) -> Canary:
     """Use an explicit tri-state instead of assuming an external environment."""
     if command and environment:
@@ -2273,6 +2320,15 @@ def parser() -> argparse.ArgumentParser:
     intent_command.add_argument("--bridge-head-sha")
     intent_command.add_argument("--titles-json")
     intent_command.set_defaults(handler=check_promotion_intent)
+    route_command = commands.add_parser("check-route")
+    route_command.add_argument("--event", required=True)
+    route_command.add_argument("--event-path", type=Path, required=True)
+    route_command.add_argument(
+        "--branch-strategy", choices=("main", "delivery"), required=True
+    )
+    route_command.add_argument("--github-output", type=Path)
+    route_command.add_argument("--summary", type=Path)
+    route_command.set_defaults(handler=check_route)
     prepare_command = commands.add_parser("prepare")
     prepare_command.add_argument("--event", required=True)
     prepare_command.add_argument("--event-path", type=Path, required=True)
