@@ -156,7 +156,7 @@ def _hugo_binary() -> str | None:
             text=True,
             timeout=120,
         )
-    except subprocess.CalledProcessError, OSError:
+    except (subprocess.CalledProcessError, OSError):  # fmt: skip
         return None
     stripped = result.stdout.strip()
     path = stripped.splitlines()[-1] if stripped else ""

@@ -1110,7 +1110,11 @@ def release_plan(root: Path, sha: str) -> tuple[str, str] | None:
                 )
             )
             parent_version = str(parent_manifest["."])
-        except subprocess.CalledProcessError, json.JSONDecodeError, KeyError:
+        except (  # fmt: skip -- ruff 0.16.5 strips these required parens
+            subprocess.CalledProcessError,
+            json.JSONDecodeError,
+            KeyError,
+        ):
             parent = ""
             parent_version = base
         if (
