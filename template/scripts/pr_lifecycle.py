@@ -2020,7 +2020,19 @@ def command_writer_violations(text: str) -> list[str]:
     """Find lifecycle writes in shell or YAML logical command blocks."""
     violations: list[str] = []
     shell = text.replace("\\\r\n", " ").replace("\\\n", " ")
-    blocks = [*shell.splitlines(), shell]
+    # A `\`` escaped backtick is a literal character inside a double-quoted
+    # bash string, never command substitution, so text between a pair of
+    # them is documentation (e.g. a human-facing message describing a
+    # command to run), not something this file executes. Drop those spans,
+    # and whole-line `#` comments for the same reason, before matching so
+    # described commands cannot combine with unrelated text into a false
+    # write (#643).
+    shell = re.sub(r"\\`.*?\\`", "", shell, flags=re.DOTALL)
+    lines = [
+        "" if line.lstrip().startswith("#") else line
+        for line in shell.splitlines()
+    ]
+    blocks = [*lines, "\n".join(lines)]
     for block in blocks:
         compact = compact_tokens(block)
         if any(
@@ -2310,16 +2322,15 @@ def writer_violations(text: str) -> list[str]:
     return sorted(set(found))
 
 
-def canonical_scanner_helper(root: Path, path: Path) -> bool:
-    """Trust only exact in-root helper paths without symlink components."""
+def _trusted_exact_path(
+    root: Path, path: Path, trusted: frozenset[str]
+) -> bool:
+    """Trust only exact in-root paths from `trusted`, rejecting symlinks."""
     try:
         relative = path.relative_to(root)
     except ValueError:
         return False
-    if relative.as_posix() not in {
-        "scripts/pr_lifecycle.py",
-        "template/scripts/pr_lifecycle.py",
-    }:
+    if relative.as_posix() not in trusted:
         return False
     current = root
     if current.is_symlink():
@@ -2339,6 +2350,91 @@ def canonical_scanner_helper(root: Path, path: Path) -> bool:
     return resolved == resolved_root / relative
 
 
+def canonical_scanner_helper(root: Path, path: Path) -> bool:
+    """Trust only exact in-root helper paths without symlink components."""
+    return _trusted_exact_path(
+        root,
+        path,
+        frozenset(
+            {"scripts/pr_lifecycle.py", "template/scripts/pr_lifecycle.py"}
+        ),
+    )
+
+
+def dependabot_auto_merge_exemption(root: Path, path: Path) -> bool:
+    """Trust the two exact dependabot-auto-merge.yml paths (see #602).
+
+    `gh pr merge --auto` only enqueues the pull request in GitHub's native
+    auto-merge queue; unlike the writes this scanner otherwise fails closed
+    on, it is not itself an immediate state mutation. The actual merge only
+    happens later, and only once GitHub confirms the required
+    `title`/`promotion`/`verify` checks and the branch protection review
+    requirement in policies/rulesets.json are satisfied — the same
+    reasoning already documented next to `contents: write` in the workflow
+    file itself. `gh pr edit --add-label needs-manual-review` in the same
+    workflow only ever fires on major-version updates that are explicitly
+    routed to human review rather than merged, so it carries no lifecycle
+    race either. That means neither write is the immediate-write race the
+    lease mechanism exists to prevent, so a narrow, exact-path exemption is
+    safe here without routing these writes through the lease.
+
+    This is a positive list, not a pattern relaxation: only these two exact
+    paths are trusted. A different file reusing the same unleased
+    `gh pr merge`/`gh pr edit --add-label` command text is still caught by
+    scan_writers.
+
+    Every scanner exemption must have its own tracking Issue (#602 is this
+    one's), and all exemptions are re-reviewed once the project leaves
+    beta — see docs/ci-policy.md's "PR lifecycle single-writer" section.
+    """
+    return _trusted_exact_path(
+        root,
+        path,
+        frozenset(
+            {
+                ".github/workflows/dependabot-auto-merge.yml",
+                "template/.github/workflows/dependabot-auto-merge.yml",
+            }
+        ),
+    )
+
+
+def release_please_exemption(root: Path, path: Path) -> bool:
+    """Trust the one exact release.yml path that runs release-please (#643).
+
+    `googleapis/release-please-action` creates or updates its own version
+    pull request without going through this file's lease -- it is a
+    third-party Action, not something this repo's Python tooling can wrap.
+    That PR is not one of this repo's task-PR routes (independent Issue,
+    Milestone Issue, `dev/i*` canary, or hotfix); it is reviewed and merged
+    by a maintainer directly (see AGENTS.md's "Release execution"), so no
+    lease-gated agent flow ever writes to it. The workflow already
+    serializes itself with `concurrency: group: release-${{
+    github.repository }}`, and release-please only ever touches its own
+    `release-please--branches--main--components--*` head ref (see
+    `scripts/release_policy.py`'s `expected_head`, and the same ref prefix
+    special-cased in `scripts/promotion_gate.py`) -- no other automation in
+    this repo writes that ref. That means this is not the immediate-write
+    race the lease mechanism exists to prevent, so a narrow, exact-path
+    exemption is safe here without routing a third-party Action through the
+    lease.
+
+    This is a positive list, not a pattern relaxation: only this one exact
+    path is trusted. A different file reusing the same
+    `googleapis/release-please-action@` reference is still caught by
+    scan_writers. `template/.github/workflows/release.yml.jinja` is a
+    Jinja template, not a `.yml`/`.yaml` file, so scan_writers's glob never
+    scans it in the first place -- there is no second path to exempt.
+
+    Every scanner exemption must have its own tracking Issue (#643 is this
+    one's), and all exemptions are re-reviewed once the project leaves
+    beta -- see docs/ci-policy.md's "PR lifecycle single-writer" section.
+    """
+    return _trusted_exact_path(
+        root, path, frozenset({".github/workflows/release.yml"})
+    )
+
+
 def scan_writers(root: Path) -> None:
     """Fail when repository automation bypasses the lifecycle tool."""
     paths = [
@@ -2356,6 +2452,8 @@ def scan_writers(root: Path) -> None:
             not path.is_file()
             or ("__pycache__" in relative.parts and path.suffix == ".pyc")
             or canonical_scanner_helper(root, path)
+            or dependabot_auto_merge_exemption(root, path)
+            or release_please_exemption(root, path)
         ):
             continue
         try:

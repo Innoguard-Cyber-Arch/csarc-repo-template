@@ -5,5 +5,6 @@
   {"name": "duplicate", "color": "CFD3D7", "description": "This issue already exists"},
   {"name": "hotfix", "color": "B60205", "description": "Urgent standalone change promoted directly to main"},
   {"name": "release-recovery", "color": "FBCA04", "description": "Audited direct-main recovery of a missing release"},
-  {"name": "promotion", "color": "5319E7", "description": "Final delivery branch promotion to main"}
+  {"name": "promotion", "color": "5319E7", "description": "Final delivery branch promotion to main"},
+  {"name": "needs-manual-review", "color": "D93F0B", "description": "Requires human review before merge; not eligible for automated merge"}
 ]

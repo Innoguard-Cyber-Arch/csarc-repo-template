@@ -87,6 +87,10 @@ def build_artifacts(root: Path, output: Path, version: str) -> None:
 
     if (root / "pyproject.toml").is_file():
         run("uv", "build", "--out-dir", str(output), cwd=root)
+        # uv build writes its own `.gitignore` (content: "*") into
+        # --out-dir as a build-tool convention marker; it is not release
+        # content and must not become part of the checksummed bundle.
+        (output / ".gitignore").unlink(missing_ok=True)
     if (root / "package.json").is_file():
         run("pnpm", "pack", "--pack-destination", str(output), cwd=root)
     if (root / "Cargo.toml").is_file():

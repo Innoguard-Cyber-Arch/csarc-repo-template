@@ -1082,7 +1082,7 @@ def is_regular_file(path: Path) -> bool:
     """Return whether a path is a regular file without following links."""
     try:
         return stat.S_ISREG(path.lstat().st_mode)
-    except FileNotFoundError, NotADirectoryError:
+    except (FileNotFoundError, NotADirectoryError):  # fmt: skip
         return False
 
 

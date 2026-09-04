@@ -12,7 +12,7 @@ def test_policy_tests_do_not_read_workflow_yaml() -> None:
         "scripts/test-pr-policy",
     ):
         source = (ROOT / relative_path).read_text()
-        assert ".github/workflows/issue-triage.yml" not in source
+        assert ".github/workflows/work-item-lifecycle.yml" not in source
         assert ".github/workflows/pr-policy.yml" not in source
         assert "Could not extract" not in source
 
@@ -27,7 +27,9 @@ def test_policy_validators_are_shipped_without_forks() -> None:
 
 def test_workflows_are_thin_trusted_wrappers() -> None:
     """Actions call shared validators checked out from trusted branches."""
-    issue_workflow = (ROOT / ".github/workflows/issue-triage.yml").read_text()
+    issue_workflow = (
+        ROOT / ".github/workflows/work-item-lifecycle.yml"
+    ).read_text()
     pr_workflow = (ROOT / ".github/workflows/pr-policy.yml").read_text()
 
     assert "run: ./scripts/validate-issue-policy" in issue_workflow
