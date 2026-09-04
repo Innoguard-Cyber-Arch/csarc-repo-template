@@ -17,6 +17,7 @@ export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 git diff --check
 ./scripts/check-update-conflicts
 ./scripts/scan-secrets
+./scripts/check-bypass-lifecycle
 
 if [[ "$tier" == "docs" ]]; then
   python3 scripts/spec_to_issue.py validate
@@ -25,6 +26,7 @@ if [[ "$tier" == "docs" ]]; then
 fi
 
 if [[ "$scopes" == *,docs,* ]]; then
+  python3 scripts/spec_to_issue.py validate
   ./scripts/build-decision-site --check
 fi
 

@@ -105,6 +105,10 @@ class FakeGitHub:
         self.quota_runner_id = 0
         self.quota_steps: list[dict[str, Any]] = []
         self.compare_status = "ahead"
+        self.ruleset_response: dict[str, object] = {
+            "enforcement": "active",
+            "bypass_actors": [],
+        }
 
     def viewer(self, explicit_actor: str = "") -> str:
         """Return the task's authenticated actor."""
@@ -256,7 +260,7 @@ class FakeGitHub:
                 *self.additional_check_rules,
             ]
         if path == "rulesets/7":
-            return {"enforcement": "active", "bypass_actors": []}
+            return self.ruleset_response
         if path == (f"compare/{self.destination_sha}...{self.head}"):
             return {"status": self.compare_status}
         if path == f"git/commits/{'a' * 40}":
@@ -654,6 +658,73 @@ def test_writer_scanner_does_not_trust_symlinked_canonical_paths(
     else:
         (tmp_path / "scripts").symlink_to(outside, target_is_directory=True)
     with pytest.raises(RuntimeError, match=r"scripts/pr_lifecycle\.py"):
+        scan_writers(tmp_path)
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows(
+    tmp_path: Path,
+) -> None:
+    """The two exact dependabot-auto-merge.yml paths pass scan_writers.
+
+    Regression test for #602: this copies the actual committed root and
+    template workflow files, unleased `gh pr merge --auto` / `gh pr edit
+    --add-label` writes included, into a scratch repository root and
+    proves scan_writers no longer fails closed on them.
+    """
+    for relative in (
+        ".github/workflows/dependabot-auto-merge.yml",
+        "template/.github/workflows/dependabot-auto-merge.yml",
+    ):
+        candidate = REPO_ROOT / relative
+        if not candidate.is_file():
+            # A generated/adopted project's own copy of this paired test
+            # file has no "template/" tree at all -- only the meta-repo
+            # that produces generated projects does. Skip a path this
+            # repository genuinely does not have instead of failing
+            # closed on a layout difference the test never intended to
+            # assert on.
+            continue
+        source = candidate.read_text(encoding="utf-8")
+        assert 'gh pr merge --auto --squash "$PR_URL"' in source
+        assert 'gh pr edit "$PR_URL" --add-label needs-manual-review' in source
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(source, encoding="utf-8")
+    scan_writers(tmp_path)  # must not raise
+
+
+@pytest.mark.parametrize(
+    "workflow_body",
+    [
+        'run: gh pr merge --auto --squash "$PR_URL"\n',
+        'run: gh pr edit "$PR_URL" --add-label needs-manual-review\n',
+    ],
+)
+@pytest.mark.parametrize(
+    "relative",
+    [
+        ".github/workflows/some-other-workflow.yml",
+        "template/.github/workflows/some-other-workflow.yml",
+    ],
+)
+def test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist(
+    tmp_path: Path, relative: str, workflow_body: str
+) -> None:
+    """The exemption trusts two exact paths only, not the write pattern.
+
+    Regression test for #602: a different workflow file reusing the same
+    unleased `gh pr merge` / `gh pr edit --add-label` command text must
+    still be caught by scan_writers, proving the #602 exemption is a
+    positive list of exact paths rather than a relaxation of the pattern
+    those two commands trip.
+    """
+    imposter = tmp_path / relative
+    imposter.parent.mkdir(parents=True, exist_ok=True)
+    imposter.write_text(workflow_body, encoding="utf-8")
+    with pytest.raises(RuntimeError, match=r"some-other-workflow\.yml"):
         scan_writers(tmp_path)
 
 
@@ -1337,6 +1408,30 @@ def test_merge_snapshot_allows_agent_only_with_enforced_no_bypass_rules(
     )
     assert snapshot["merge_mode"] == "agent"
     github.protected = False
+    snapshot = merge_snapshot(
+        github,
+        lease_fixture(),
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["merge_mode"] == "human-only"
+
+
+def test_merge_snapshot_blocks_agent_when_ruleset_permits_bypass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-empty bypass_actors entry forces human-only, even when active."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
     snapshot = merge_snapshot(
         github,
         lease_fixture(),

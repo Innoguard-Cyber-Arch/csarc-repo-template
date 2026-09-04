@@ -1,0 +1,267 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Single implementation of the publish stage of the release path (Issue
+# #589): everything from validating a merged version candidate through
+# publishing the GitHub Release, verifying an already-published rerun, and
+# keeping a failed mutable release in draft. Extracted from
+# .github/workflows/release.yml so release.yml and a human or agent running
+# the release locally (the "Actions is unhealthy" backup path; see
+# docs/ci-policy.md's "Release 發版不依賴 Actions 健康度的 fallback" section
+# and the release-security-and-dependencies ADR) call the exact same script
+# instead of maintaining two copies of this logic. Local execution never
+# skips the review a version pull request already requires; it only changes
+# who runs the publish step once that pull request is merged.
+#
+# scripts/release_policy.py plan/detect and prepare-candidate stay separate
+# (they decide *whether* and *how* to propose a version, not how to publish
+# one already merged to main) and are not duplicated here.
+#
+# Usage:
+#   scripts/publish-release stage --repo OWNER/NAME --sha SHA --tag TAG
+#     Validate the merged version pull request at SHA and converge the tag
+#     and draft Release for TAG (idempotent; safe to rerun).
+#
+#   scripts/publish-release resolve --repo OWNER/NAME --sha SHA \
+#       [--tag TAG] [--created true|false]
+#     Resolve the exact release state for SHA: none, draft, or published.
+#     Always safe to run, including on ordinary pushes with no release
+#     activity. Pass --tag when a prior `stage` (or, in Actions, the
+#     Automatic release-please-action run) already knows the tag; omit it to
+#     fall back to searching Git tags that point at SHA.
+#
+#   scripts/publish-release publish --repo OWNER/NAME --tag TAG
+#     Given TAG is in state=draft (confirmed by `resolve` first): build
+#     release artifacts, generate the SPDX SBOM if one is not already
+#     staged, finalize and verify the bundle, upload it, mark the Release
+#     published, and wait for it to become immutable and verifiable. Reverts
+#     the Release back to draft on any failure so a partially published
+#     mutable Release is never left half-public.
+#
+#   scripts/publish-release rerun-verify --repo OWNER/NAME --tag TAG
+#     Given TAG is in state=published (a rerun of an already-successful
+#     release, or a duplicate/resent event): download and verify the bundle
+#     and confirm the Release is immutable and verifiable. Never rebuilds or
+#     overwrites an already-published Release.
+#
+# GH_TOKEN/GITHUB_TOKEN must already authenticate `gh` (the short-lived
+# Actions token in a workflow, or a maintainer's own long-lived `gh auth
+# login` session locally). GITHUB_SERVER_URL, GITHUB_RUN_ID, and RUNNER_TEMP
+# default to sane local values when unset so this script runs the same way
+# outside Actions.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  scripts/publish-release stage   --repo OWNER/NAME --sha SHA --tag TAG
+  scripts/publish-release resolve --repo OWNER/NAME --sha SHA [--tag TAG] [--created true|false]
+  scripts/publish-release publish --repo OWNER/NAME --tag TAG
+  scripts/publish-release rerun-verify --repo OWNER/NAME --tag TAG
+EOF
+  exit 2
+}
+
+command="${1:-}"
+[[ -n "$command" ]] || usage
+shift
+
+repo=""
+sha=""
+tag=""
+created="false"
+output=""
+while (($#)); do
+  case "$1" in
+    --repo)
+      repo="$2"
+      shift 2
+      ;;
+    --sha)
+      sha="$2"
+      shift 2
+      ;;
+    --tag)
+      tag="$2"
+      shift 2
+      ;;
+    --created)
+      created="$2"
+      shift 2
+      ;;
+    --output)
+      output="$2"
+      shift 2
+      ;;
+    *)
+      usage
+      ;;
+  esac
+done
+[[ -n "$repo" ]] || usage
+
+# Local defaults for the GitHub Actions environment variables the reused
+# scripts/verify-release-candidate and scripts/release_bundle.py already
+# expect. A workflow run leaves these already set to their real values; a
+# local run gets a working, clearly-labeled substitute instead of an unbound
+# variable error under `set -u`.
+export GITHUB_REPOSITORY="$repo"
+export GITHUB_SERVER_URL="${GITHUB_SERVER_URL:-https://github.com}"
+export GITHUB_RUN_ID="${GITHUB_RUN_ID:-local}"
+export RUNNER_TEMP="${RUNNER_TEMP:-$(mktemp -d)}"
+mkdir -p "$RUNNER_TEMP"
+
+write_output() {
+  # Mirror a GitHub Actions `key=value` output line when $GITHUB_OUTPUT is
+  # set (in a workflow); a local run just prints it.
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    printf '%s\n' "$1" >>"$GITHUB_OUTPUT"
+  fi
+  printf '%s\n' "$1"
+}
+
+poll_immutable_and_verify() {
+  # Bounded retry for GitHub's eventual-consistency window between a
+  # Release edit and `isImmutable`/`gh release verify` reflecting it. Shared
+  # by `publish` (right after the Release is made non-draft) and
+  # `rerun-verify` (re-checking a Release that should already be immutable).
+  local release_tag="$1"
+  local attempt
+  for attempt in $(seq 1 12); do
+    local immutable
+    immutable="$(gh release view "$release_tag" --json isImmutable --jq .isImmutable || true)"
+    if [[ "$immutable" == true ]] &&
+      gh release verify "$release_tag" --repo "$GITHUB_REPOSITORY"; then
+      return 0
+    fi
+    if [[ "$attempt" == 12 ]]; then
+      echo "Release did not become immutable and verifiable within 60 seconds." >&2
+      return 1
+    fi
+    sleep 5
+  done
+}
+
+cmd_stage() {
+  [[ -n "$sha" && -n "$tag" ]] || usage
+  local status_url="${STATUS_URL:-$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$sha}"
+  export STATUS_URL="$status_url"
+
+  local numbers
+  mapfile -t numbers < <(gh api \
+    -H 'Accept: application/vnd.github+json' \
+    "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" \
+    --jq ".[] | select(.merged_at != null and .base.ref == \"main\" and .merge_commit_sha == \"$sha\") | .number")
+  test "${#numbers[@]}" -eq 1
+  local pr
+  pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/${numbers[0]}")"
+  test "$(jq -r .merge_commit_sha <<<"$pr")" = "$sha"
+  jq -n --argjson pr "$pr" '{
+    number: $pr.number,
+    sha: $pr.head.sha,
+    headBranchName: $pr.head.ref,
+    baseBranchName: $pr.base.ref
+  }' >"$RUNNER_TEMP/release-pr.json"
+  "$repo_root/scripts/verify-release-candidate" "$RUNNER_TEMP/release-pr.json"
+  git -C "$repo_root" checkout --detach "$sha"
+  "$repo_root/scripts/converge-release-tag" --repo "$GITHUB_REPOSITORY" --sha "$sha" --tag "$tag"
+  write_output "tag=$tag"
+}
+
+cmd_resolve() {
+  [[ -n "$sha" ]] || usage
+  git -C "$repo_root" fetch --force --tags origin
+  local tag="$tag"
+  if [[ -z "$tag" ]]; then
+    local tags
+    mapfile -t tags < <(git -C "$repo_root" tag --points-at "$sha" |
+      grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || true)
+    [[ "${#tags[@]}" -le 1 ]]
+    tag="${tags[0]:-}"
+  fi
+  local state=none
+  if [[ -n "$tag" ]]; then
+    test "$(git -C "$repo_root" rev-parse "$tag^{commit}")" = "$sha"
+    local release
+    release="$(gh release view "$tag" --json isDraft,isImmutable,tagName)"
+    test "$(jq -r .tagName <<<"$release")" = "$tag"
+    if [[ "$(jq -r .isDraft <<<"$release")" == true ]]; then
+      state=draft
+    else
+      state=published
+    fi
+  fi
+  if [[ "$created" == true ]]; then
+    test "$state" = draft
+  fi
+  write_output "state=$state"
+  write_output "tag=$tag"
+}
+
+cmd_publish() {
+  [[ -n "$tag" ]] || usage
+  local assets="${output:-$RUNNER_TEMP/release-assets}"
+  revert_to_draft_on_failure() {
+    local exit_code=$?
+    if [[ "$exit_code" -ne 0 ]]; then
+      if [[ "$(gh release view "$tag" --json isImmutable --jq .isImmutable 2>/dev/null)" == false ]]; then
+        gh release edit "$tag" --draft || true
+      fi
+    fi
+    return "$exit_code"
+  }
+  trap revert_to_draft_on_failure EXIT
+
+  # A hosted run already staged artifacts via its own "Prepare release
+  # assets" step (a one-line call to release_bundle.py, so nothing to
+  # extract or duplicate there); only build them here when nobody has yet
+  # -- e.g. a local, one-shot `publish` with no preceding steps. Never call
+  # `release_bundle.py prepare` when $assets is already populated: it wipes
+  # its output directory first, which would destroy an already-staged SBOM.
+  if [[ ! -d "$assets" ]] || [[ -z "$(find "$assets" -mindepth 1 -maxdepth 1 2>/dev/null)" ]]; then
+    python3 "$repo_root/scripts/release_bundle.py" prepare --tag "$tag" --output "$assets"
+  fi
+  if [[ ! -f "$assets/sbom.spdx.json" ]]; then
+    # No preceding step (e.g. a hosted anchore/sbom-action step) already
+    # staged an SBOM, so generate the same pinned Syft SPDX document
+    # directly -- the local-execution equivalent documented in
+    # docs/ci-policy.md and the release-security-and-dependencies ADR.
+    local syft_bin
+    syft_bin="$("$repo_root/scripts/install-syft")"
+    "$syft_bin" scan "dir:$repo_root" \
+      --source-name "$GITHUB_REPOSITORY" --source-version "$tag" \
+      -o "spdx-json=$assets/sbom.spdx.json"
+  fi
+  python3 "$repo_root/scripts/release_bundle.py" finalize --tag "$tag" --output "$assets"
+  python3 "$repo_root/scripts/release_bundle.py" verify --tag "$tag" --output "$assets"
+  gh release view "$tag" --json assets \
+    --jq '.assets[].id' | while read -r asset_id; do
+    gh api --method DELETE \
+      "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+  done
+  gh release upload "$tag" "$assets"/* --clobber
+  local downloaded
+  downloaded="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
+  gh release download "$tag" --dir "$downloaded"
+  python3 "$repo_root/scripts/release_bundle.py" verify --tag "$tag" --output "$downloaded"
+  gh release edit "$tag" --draft=false --latest
+  poll_immutable_and_verify "$tag"
+}
+
+cmd_rerun_verify() {
+  [[ -n "$tag" ]] || usage
+  local downloaded
+  downloaded="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
+  gh release download "$tag" --dir "$downloaded"
+  python3 "$repo_root/scripts/release_bundle.py" verify --tag "$tag" --output "$downloaded"
+  poll_immutable_and_verify "$tag"
+}
+
+case "$command" in
+  stage) cmd_stage ;;
+  resolve) cmd_resolve ;;
+  publish) cmd_publish ;;
+  rerun-verify) cmd_rerun_verify ;;
+  *) usage ;;
+esac

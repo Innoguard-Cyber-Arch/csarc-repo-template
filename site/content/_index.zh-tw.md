@@ -24,7 +24,7 @@ fit = "符合畫面"
         <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由變更提案（PR）合併。</p>
         <p class="subtitle">標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；維運模式才補充設定檔、程式與技術理由。快速導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
-          <span class="package-badge beta">v0.12.2</span><!-- x-release-please-version -->
+          <span class="package-badge beta">v0.13.0</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">三種分支做法</span>
@@ -461,6 +461,8 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
 公版與新 repo 各自由自己的 release workflow 發布；既有 repo 保留 product-owned workflow。所有流程都要有唯一 owner、最小權限、完整 SHA pinning、timeout、concurrency、失敗復原與 runner 成本；歷史 run 只能當歷史資料。
 
 Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`、adoption plan、Markdown/PDF report 與 `.csarc/provenance.json` 一致揭露同一個明確的 `release_ownership`——`csarc-owned`、`product-owned` 或 `verification-only`——以及選定的 workflow 路徑、其 `workflow_dispatch` 必要 inputs、settings owner、是否要求 immutable Releases，以及降級為 `verification-only` 的原因（沒有找到 writer，或找到一個以上）。CSARC 不會 dispatch product-owned workflow，也不從名稱推測其 input contract；只讀取該 workflow 自己宣告的內容。
+
+`release_ownership: csarc-owned` 的生成 repo（含本模板 root 自己）另外取得一條不依賴 GitHub Actions 是否健康的本機發版 backup：`release.yml` 的發布階段抽成單一腳本 `scripts/publish-release`，維護者或 agent 在本機（或任何持有 admin／write 權限的環境）呼叫同一份腳本即可完成 tag、Release、成品與 SBOM，Guided 模式的啟用條件也從「組織政策擋住 Actions 建 PR」擴大為包含「判斷 Actions／webhook 目前不可信任」。這條路徑仍要求版本 PR 經過與其他 `main` PR 相同的 review。驗證（`verify`／`title`／`promotion`）仍只能、也仍建議由 hosted Actions 產生；但實際切版本／發 Release 這一步，hosted job 自己的 `GITHUB_TOKEN` 永遠無法證明 GitHub 的 Immutable Releases 設定（這是一個 GitHub Actions 任何 permission 都無法開放的 repo administration 能力）——所以這條本機路徑現在是標準發版程序，不是備援；細節見 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) 與 [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。這不是一個新的 Copier 選項——既有的 `release_ownership` 已經正確路由這個能力。
 
 里程碑完成時人工確認交付證據後再結案；#400、#401 尚未完成的 lifecycle gap 不在本頁複製 validator。工作分支合併後清理，里程碑 delivery branch 則等結案與未完成工作處置完成後才清理。
 {{< /detail >}}

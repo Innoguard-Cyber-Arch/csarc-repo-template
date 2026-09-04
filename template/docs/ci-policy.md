@@ -49,13 +49,15 @@ lease，並透過 `scripts/pr_lifecycle.py` 執行；`scripts/verify` 會拒絕�
    的 conclusion 就一併略過——用 #513 的 `scripts/check-pr-policy-status`（完成前，
    改用 `gh run view <run-id> --log | grep -E "Validate pull request policy|##\[error\]"`
    手動確認）。
-2. Ruleset 的 self-approval 結構性卡點，見下方「Alpha 自我核准 bypass」。
+2. Ruleset 的 self-approval 結構性卡點，見下方「Alpha 自我核准 bypass」及其後的
+   「Release phase 與 bypass 範圍收斂」。
 
 **`--admin` 本身不足以繞過任何 Ruleset 規則。** 舊版 classic branch protection 會自動
-給 repository admin 身分繞過，但 Ruleset 只認 `policies/rulesets.json` 頂層
-`bypass_actors`（不在 `rules` 陣列內）明列的項目；沒有對應 `bypass_actors` 項目時，
-`--admin` 對 Ruleset 直接無效，merge 會被拒絕（#580 的既有踩坑：`gh pr merge --admin`
-對新版 Ruleset 也不生效，不像舊版 classic branch protection 那樣自動給 admin 身分繞過）。
+給 repository admin 身分繞過，但 Ruleset 只認 `policies/rulesets.json`（或本節後述
+拆分後的第二個 Ruleset 檔）頂層 `bypass_actors`（不在 `rules` 陣列內）明列的項目；
+沒有對應 `bypass_actors` 項目時，`--admin` 對 Ruleset 直接無效，merge 會被拒絕（#580
+的既有踩坑：`gh pr merge --admin` 對新版 Ruleset 也不生效，不像舊版 classic branch
+protection 那樣自動給 admin 身分繞過）。
 
 ### Alpha 自我核准 bypass（#580）
 
@@ -77,7 +79,9 @@ PR——GitHub 回報「Review Can not approve your own pull request」，這是
 check-run 時，加了這個 bypass 仍可成功 merge，且不會出現「Required status check ...
 is expected」錯誤，先前沒有這個 bypass 時會明確卡在這個錯誤。也就是說目前的設定等於
 「alpha 期間 PR 相關規則全部不擋」，不是原本想像的「只放寬 review」。它不影響
-`non_fast_forward`：force-push／history rewrite 仍被禁止。
+`non_fast_forward`：force-push／history rewrite 仍被禁止。這個「alpha 期間」的暫時性
+範圍其後由 #607 正式收斂為可宣告、可查核的 `release_phase` 機制，見下一節「Release
+phase 與 bypass 範圍收斂」。
 
 用這個 bypass 合併一張只卡在 self-approve、內容已獨立驗證的 PR：本機
 `verify-fast`（或適用時 `verify-template.sh`）綠燈，加上另一個獨立管道（例如 review
@@ -96,6 +100,120 @@ CI／webhook 是否正常運作（#580 驗證過：同日 GitHub `pull_request` 
 `template/policies/rulesets.json.jinja` 刻意保留空的 `bypass_actors`，只有真的撞上
 同一個「結構性只有一個真人帳號」問題的下游 repo，才需要自行在自己的
 `policies/rulesets.json` 加上等效項目。
+
+### Release phase 與 bypass 範圍收斂（#607）
+
+如上一節所述，#580 記錄並落地了目前 live 已套用的 Ruleset self-approval bypass
+（`RepositoryRole` admin、`bypass_mode: "pull_request"`），同時發現它的實際涵蓋範圍
+比原本以為的更廣：因為 GitHub 的 `bypass_actors` 是綁在整個 Ruleset 上，沒有「只對
+某個 rule type 生效」的欄位，這個 bypass 連 `required_status_checks` 都一併放寬。
+#607 的問題：這個較寬的涵蓋範圍不能是永久、不分專案發展階段的事實，尤其是
+required_status_checks 這種「必要檢查真的有沒有過」的保證，不該無限期依賴人工自律。
+
+**`release_phase`** 是這個 repo 自己的整案發布成熟度宣告，寫在
+`policies/project-stage.json`（`{"release_phase": "alpha"}`），只有三個合法值：
+`alpha`／`beta`／`release`。它跟本 repo 既有兩個外形相似但軸線不同的「stage」概念
+刻意分開，避免第三次命名碰撞——`scripts/generate_audit_trail.py` 的
+`governance_stage`（alpha/beta/**stable**）分類的是「單一 PR 用哪種來源分支模式
+抵達 target」，`profiles/catalog.yaml` 的 `stage` 分類的是「單一語言／工具 profile
+自己的成熟度」；`release_phase` 兩者都不是，它是整個專案自己的發布階段，且第三個
+值是 **release**、不是 stable。三者的完整區分寫在
+`scripts/release_phase_rulesets.py` 的 module docstring。跟 `profiles/catalog.yaml`
+的 per-profile `stage` 一樣，`release_phase` 是人工宣告、不是自動推斷（不從分支
+模式或 semver 反推）——維護者判斷專案真的進入下一階段時，手動改這個值並送 PR。
+
+| release_phase | required_status_checks 可否 bypass | review self-approve 可否 bypass | 使用留痕 |
+| --- | --- | --- | --- |
+| alpha | 可以 | 可以 | 每次使用都必須留痕 |
+| beta | **不行**（必要檢查一定要真的過） | 可以 | 每次使用都必須留痕 |
+| release | 不行 | 不行（bypass 整體自動失效） | N/A（bypass 已經不存在） |
+
+`bypass_actors` 是 Ruleset 層級欄位，要達成「review 可以 bypass、
+required_status_checks 不行」，必須把兩種規則拆進兩個 Ruleset：
+
+* `policies/rulesets.json`（"CSARC protected branches"）——`non_fast_forward` ＋
+  `pull_request` 規則，`bypass_actors` 帶上述 admin 角色項目。
+* `policies/rulesets-required-checks.json`（"CSARC required checks"）——只有
+  `required_status_checks` 規則，`bypass_actors` 永遠是 `[]`。
+
+`scripts/release_phase_rulesets.py`（`apply-repository-settings.sh` 呼叫它的
+`assemble` 子命令）依 `release_phase` 決定 `required_status_checks` 規則實際生效在
+哪個 Ruleset：alpha 時把它併入帶 bypass 的 Ruleset（兩個規則一起被 bypass）；beta
+起維持分離，`required_status_checks` 留在永遠空 bypass 的第二個 Ruleset。
+`scripts/apply-repository-settings.sh check` 的既有 drift 比對（比較
+`gh api repos/{repo}/rules/branches/{branch}` 回傳的「該分支目前有效的規則聯集」）
+也相應改為比較兩個檔案 `rules` 的聯集，不管哪個規則實際放在哪個 Ruleset 物件裡。
+
+**release 階段的自動失效是結構性保證，不是人工步驟**：`scripts/check-bypass-lifecycle`
+（已接進 `./scripts/verify-fast`，每次 PR 都跑）讀取 `policies/project-stage.json`，
+只要 `release_phase` 是 `"release"`，`policies/rulesets.json` 或
+`policies/rulesets-required-checks.json` 裡有任何非空 `bypass_actors`，就直接
+fail——逼著「release_phase 已經正式進入 release，但 bypass_actors 忘記清空」這個
+狀態不可能被合併，而不是靠人記得清空。回歸測試在
+`tests/test_release_phase_rulesets.py`。
+
+**使用留痕（alpha／beta 都要）**：每次真的用這個 bypass（`gh pr merge --admin`）合併
+PR，必須在同一張 PR 上、合併之前，用 `gh pr comment` 留下一行結構化訊息：
+
+```text
+bypass-trace: release_phase=<alpha|beta> actor=<github-login> reason=<簡短原因>
+```
+
+`scripts/check-bypass-trace <PR 編號> --repo <owner/repo>`（核心比對邏輯在
+`scripts/check_bypass_trace.py`，回歸測試在 `tests/test_check_bypass_trace.py`）
+查核一張已合併 PR 是否在合併時間之前留有符合格式的留痕註解；PR 未合併時回報
+「尚無需查核」，已合併但找不到留痕則 fail closed（exit 1）。自動判斷「這張 PR
+是否真的用了 bypass」（交叉核對 review／required-check 實際狀態，
+`scripts/generate_audit_trail.py` 已在抓這些欄位）目前不在這個查核工具範圍內：
+`generate_audit_trail.py`（#535／#564）尚未併入 `main`，屬於獨立進行中的
+Milestone 13 work，本 Issue（#607）維持獨立、不依賴它；一旦它併入 `main`，可以
+再擴充 `check-bypass-trace` 交叉核對哪些 PR 疑似用了 bypass。目前的查核方式是
+operator 在每次 bypass-merge 後主動對該 PR 執行這個工具確認留痕存在，跟
+`scripts/check-pr-policy-status` 的用法一樣是針對單一 PR 主動查核，不是排程掃描。
+
+這是只在「repo 結構性只有一個真人帳號」這段 alpha／beta 期間才成立的例外，不是長期
+設計；`release_phase` 進入 `release` 後這整個 bypass 結構性消失。與 #570
+（`required_status_checks` Ruleset 定義修復）及 #552（Milestone 核可重新設計，同樣
+處理單一真人帳號 org 的自我核准風險）相關但範圍不同。Milestone tracker Issue 的
+`/milestone admin-approve` 自核（見 `docs/milestone-description.md`）是另一個獨立
+機制，只適用於 Milestone 核准留言，不是同一件事，不要混用。
+
+這整套 `release_phase` 機制是否要在本 repo 之外的下游生成 repo 也套用，不在本節
+範圍——公版 `template/policies/rulesets.json.jinja` 刻意保留空的 `bypass_actors`、
+不帶 `policies/project-stage.json` 或第二個 Ruleset 檔，只有真的撞上同一個「結構性
+只有一個真人帳號」問題的下游 repo，才需要自行決定是否套用等效機制（沿用 #580 已
+落地的判斷）。`scripts/apply-repository-settings.sh` 對這兩個新政策檔案的存在與否
+是條件式判斷：檔案不存在時（所有既有下游 repo）行為與本 Issue 之前完全一致。
+
+`scripts/pr_lifecycle.py` 的 `scan_writers`（`command_writer_violations`／
+`declarative_writer_violations`）掃描 `.github/workflows/`、`scripts/`
+與各自的 `template/` 對應目錄，對任何繞過 lease 直接寫入 PR 狀態的 `gh pr`／
+GraphQL／REST 呼叫 fail closed；`canonical_scanner_helper` 只白名單
+`pr_lifecycle.py` 自己這一支腳本（root 與 `template/` 兩份精確路徑，且逐段
+拒絕 symlink）。`.github/workflows/dependabot-auto-merge.yml`（root 與
+`template/.github/workflows/dependabot-auto-merge.yml`，#569 新增）裡的
+`gh pr merge --auto --squash` 與 `gh pr edit --add-label
+needs-manual-review` 兩處寫入向來未經過 lease，因此曾被 `scan_writers` 判定
+為「Unleased PR lifecycle writer」而 fail closed，連帶讓三種語言生成專案的
+`scripts/verify` 全部失敗（根因分析見 #597；例外本身見 #602）。維護者已確認
+方向：不強行把這兩行改走 lease——`gh pr merge --auto` 語意是排進 GitHub
+原生佇列，實際合併仍卡在 `title`／`promotion`／`verify` 必要檢查與
+`policies/rulesets.json` 的 branch protection review requirement，不是
+lease 機制原本要防的「立即搶寫」；`gh pr edit --add-label` 那行只在 major
+版本更新、本就要人工複核而非自動合併時才觸發，同樣不構成即時寫入競態。因此
+`scripts/pr_lifecycle.py` 新增一個與 `canonical_scanner_helper` 同風格、
+共用同一段 symlink 安全檢查的姊妹函式 `dependabot_auto_merge_exemption`，
+只正面表列這兩個精確路徑，不是放寬 pattern 本身——換一個檔名重現同樣的
+`gh pr merge`／`gh pr edit --add-label` 寫法仍會被 `scan_writers` 抓到
+（回歸測試見 `tests/test_pr_lifecycle.py` 的
+`test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist`）。
+
+**通則（自 #602 起生效）**：往後每新增一個 `scan_writers` 例外，都必須有
+自己對應的 tracking Issue 記錄理由與範圍（不能只在程式碼註解裡說明，也不能
+一次開一張 Issue 涵蓋多個例外）；且所有既有例外都要在專案脫離 beta 階段後
+重新審核一次，確認當時的安全假設（例如「排隊等 required check」這類語意）
+仍然成立。這不是本節唯一的例外——`canonical_scanner_helper` 對
+`pr_lifecycle.py` 自身的例外也適用同一條通則，往後新增例外一律比照辦理。
 
 ### 不屬於里程碑的工作
 
@@ -120,6 +238,19 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 4. `fix` 預設表達 patch 意圖；破壞相容性時明列 `!`。Release Please 會據此更新版本 PR；
    版本 PR 尚未審查、合併且正式成品尚未發布前，hotfix 仍只算已交付、尚未發版。
 
+### Release recovery
+
+`release-recovery` 標籤（`policies/labels.json`）標出「`main` 缺少一次應有發版、需要直接對
+`main` 提出稽核過的修正」這條路徑，與 hotfix 結構相近但目的不同：hotfix 修正 `main` 上的
+缺陷本身，release recovery 修正「發版流程沒有正確完成」這件事。`scripts/promotion_gate.py`
+的 `route_for()` 只在分支符合 `fix/<Issue>-<slug>`、PR 標題型別為 `fix`、target `main`，且
+**沒有**同時掛 `hotfix` 標籤時，才把掛了 `release-recovery` 標籤的 PR 分類為
+`release-recovery` route；`scripts/validate-pr-policy` 對同一組條件做本機可重跑的驗證，違反
+任一條就擋下合併。`scripts/ci_tier.py` 讓這條路徑比照 hotfix 一律升級為 `full` 驗證分級，不
+得降級為 `fast`。這一節只回答「一次 release recovery PR 如何審查後進入 `main`」；`main` 進去
+之後如何算出版本、建 tag、發布 Release 與成品，是上方「Release 發版不依賴 Actions 健康度的
+fallback（#589）」一節的責任，兩者是各自獨立的問題，不合併成同一節。
+
 ## Current automation
 
 下表逐項列出 canonical file、owner、觸發（輸入）、權限／timeout、產物（輸出）、測試與
@@ -138,7 +269,7 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 | Milestone lifecycle | `.github/workflows/milestone-lifecycle.yml` | #400 | milestone／Issue 事件、核准 comment 偵測 | 最小 metadata write | lifecycle gate 狀態、closure 同步 | `tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新） | run [33524281794](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33524281794)，2026-09-01，`main`，success | active；完整結案契約仍由 #400／PR #444 擁有（尚未合併） |
 | Work Issue closure | `.github/workflows/work-item-closure.yml` | #401 | 里程碑工作 PR 合併進 `dev/m*`（`pull_request.closed`） | `contents: read`、Issue write；5 分鐘 | 對應 Issue 關閉 | `tests/test_work_pr_closure.py` | run [33502286588](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33502286588)，2026-09-01，**failure**（checkout 用 `pull_request.base.sha`，缺合併後才有的 `close-work` 指令） | active（workflow 已啟用並真的執行）；已知 live 失敗，修正候選見 #401／PR #453，尚未合併 |
 | Dependabot | `.github/dependabot.yml` | GitHub 原生＋依賴安全 | schedule／manifest 變更 | GitHub 原生 bot 邊界，無 repo workflow 權限 | dependency PR | GitHub 原生功能，無 repo-local 測試；設定格式由 `scripts/sync-paired-files.sh --check` 涵蓋 | GitHub 註冊為 `Dependabot Updates`（`dynamic/dependabot/dependabot-updates`），state active（原生排程不透過 `gh run list` 查詢單筆 run） | active |
-| Version／Release | `.github/workflows/release.yml` | #369／#430／#588 | `main` push（post-merge）、manual rerun | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布 tag／GitHub Release／成品／checksum／SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py` | 已落地 `main` 並於 push 後實際觸發：run [33744428560](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33744428560)（`49fcfe1`，2026-09-03，failure）與 run [33744438607](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33744438607)（`1177157`，2026-09-03，failure）皆在 `Static assets and paired files` 階段以 `docs/index.html is stale` failure；根因是 #569 混合 scope 略過 `build-decision-site --check`（見 #588），非 release job 權限或 tag／Release 發布邏輯本身的問題 | active（已落地並執行）；目前 failure，根因已定位、修正見 #588（尚未合併），合併後待下一次 `main` push 重新驗證轉綠 |
+| Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598 | `main` push（post-merge）、manual rerun | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布 tag／GitHub Release／成品／checksum／SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py` | 已落地 `main` 並於 push 後實際觸發，`gh api tags`／`releases` 顯示過去確有真實 live 發版（`v0.12.2`／`v0.12.1`／`v0.12.0` 等）。`#588`（`docs/index.html` staleness）已由 `#593` 修正並於下一次 push 驗證：run [33763104406](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33763104406)（`6aa7724`，2026-09-03T13:47Z）的 `Static assets and paired files` 階段確實轉綠。但同一筆 run 在 `Regression tests` 階段仍以其他真實 pytest 失敗（`PR lifecycle blocked: Unleased PR lifecycle writer: .github/workflows/dependabot-auto-merge.yml`，導致生成專案 `scripts/verify` 失敗，牽連 `test_real_template_adoption_resumes_after_manifest_merge` 三種語言變體與 `test_real_existing_adoption_uses_fixed_ownership_policies`）——這是本輪盤點才發現、與 `#588`／`#591` 都無關的第四個獨立成因，尚未開對應 Issue。另外兩個較早的獨立成因：run [33719533651](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33719533651)（`9ed3594`）與 run [33730000169](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33730000169)（`99f52ef`）在 `Regression tests` 階段失敗於 `rm: cannot remove '.../work/.git': Directory not empty`，追蹤於 `#591`；run [33724898939](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33724898939)（`7719d2e4`）與 run [33729747815](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33729747815)（`ed7ab25`）在 `verify-template.sh` 全過後，於發版前 capability preflight 因 Actions policy HTTP 403 觸發 `#123` 既有設計的 fail-closed（`BLOCK_REASON: ... immutable_releases`），這是刻意行為、不是 bug | active for `verify`／`title`／`promotion`；`Regression tests` 階段三個獨立成因（PR-lifecycle writer 檢查 #602、`test_pr_lifecycle.py` 生成專案路徑 #617、zizmor template-injection #620）與 `#591` 均已修復並於 `verify-template.sh` 全綠驗證。但 hosted 版本發布（Automatic／Guided）確認為**已知永久限制**：`immutable_releases` capability probe 在 `GITHUB_TOKEN` 下結構性回傳 403（見 #626），`#123` 的 fail-closed 是刻意行為不會解除，也不透過本表修正——本機 `scripts/publish-release` 已升格為標準發版程序，見上方「hosted 發版路徑的已知限制」一節 |
 
 所有第三方 Actions 鎖定完整 commit SHA，旁註可讀 release tag。Workflow YAML 只負責
 event、權限、環境與呼叫；分類與驗證規則留在本機可測的 scripts。Repository 預設
@@ -420,3 +551,33 @@ repo-local 入口取代；promotion、delivery maintenance、release consumption
   刪除。`scripts/cleanup-worktrees --apply` 只清除乾淨、未鎖定且可證明已合併的本機 worktree。
 - 沒有真實成品、owner、權限或 live run 時，狀態保持 manual、conditional、blocked 或
   not applicable，不以歷史成功補足。
+
+### Release 發版不依賴 Actions 健康度的 fallback（#589，2026-09-03）
+
+2026-09-03 的實際事故（#587）證明「發版」目前完全綁在 `release.yml` 這一支 workflow 是否能在 GitHub Actions 上成功執行：M8 promotion 後，`docs/index.html` 過期讓 full-tier 驗證卡住，`main` 上每一次 push 觸發的 `release.yml` run 全部失敗，加上同一天稍早出現的 `pull_request` webhook 投遞間歇性異常，讓「能不能發版」完全停擺超過 8 小時、沒有人自動被通知，直到人工檢查 Releases 頁面才發現。既有的「Actions 額度 fallback」（見 [staged-delivery-and-verification ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/staged-delivery-and-verification.md)）解決的是不同的觸發條件：額度用盡有 GitHub 回傳的明確錯誤訊息（zero-step billing block），可以機械式偵測；本節處理的觸發條件——hosted runner 卡住、webhook 沒有投遞、或其他導致 Actions 本身不健康的狀況——**沒有對應的機械式訊號**：它看起來就是「什麼都沒發生」，而「什麼都沒發生」本來就有可能只是因為沒有東西需要發版。這個不對稱是本節 fallback 刻意設計成「人或 agent 主動決定啟用」而非自動觸發的原因，也是為什麼另外需要一道獨立排程的存量檢查——這道檢查因範圍與時間考量從 #589 拆分為獨立追蹤：見 [#605](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/605)。
+
+**設計：** Guided 模式（[版本／交付 ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md) 決策）原本只在「組織政策禁止 Actions 建立 PR」時啟用；本節把同一條路徑的啟用條件擴大為「維護者或 agent 判斷 Actions／webhook 目前不可信任」時同樣可以啟用，機制不變：`python3 scripts/release_policy.py prepare-candidate` 在本機計算版本與 CHANGELOG，人或 agent 開一般 PR，經過與其他 `main` PR 相同的 review 才能合併——本機執行不能成為省略審查的手段。合併後的發布步驟（建 tag、draft Release、build 成品、checksum、SPDX SBOM、`gh release` 系列指令）改抽成 `scripts/publish-release`，`release.yml` 與本機路徑呼叫同一份實作，不維持兩套邏輯。
+
+**代價（不能只講好處）：**
+
+- **放棄 hosted runner 的乾淨、一致環境保證。** 本機執行的環境不由 GitHub 控管；只有本機 `full` 驗證全綠才能視為等同 hosted 的證明強度。
+- **需要本機或執行者持有具備 admin／write 權限的長效憑證，而不是 Actions 短效 `GITHUB_TOKEN`。** 這不是為所有 CSARC-owned repo 新增一項標準要求——`scripts/apply-repository-settings.sh apply` 本來就已經要求 repo admin 用自己的 `gh` 身分執行；本節只是讓同一位已經持有這個權限的維護者，多一個「用同一身分完成發版」的選項。
+- **沒有 merge 後自動觸發，需要人或排程主動執行。** 需要另外一道獨立排程的存量檢查偵測「`main` 已經前進但過去 N 小時內沒有成功的 `release.yml` run 或本機發版紀錄」，取代目前完全仰賴人工檢查 Releases 頁面才會發現的狀態；這道檢查追蹤於 [#605](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/605)，尚未落地。
+- **本機執行結果的可稽核性不如 hosted run 的公開 log。** 緩解方式是強制在合併說明或 Issue 留言記錄執行者、commit SHA、指令與結果。
+- **local-vs-hosted 邏輯漂移風險。** 緩解方式是本節設計的第一原則——單一 repo-local 腳本被兩種呼叫方式共用。
+
+**明確保留 GitHub Actions 為預設／建議路徑，不是全面棄用**：`verify`／`title`／`promotion` 三個 required status check 仍然、也必須繼續只由 hosted Actions 產生；CodeQL 上傳到 GitHub 原生 code-scanning 介面同樣不在本節適用範圍。
+
+### hosted 發版路徑的已知限制，本機路徑升格為標準程序（2026-09-03）
+
+上一段原本建議「一般情況下仍走 hosted `release.yml`」；當天稍後的補發版嘗試（接續 #587）證明這個建議不成立，予以修正：
+
+`scripts/release_policy.py::detect_runtime_capabilities()` 對 `immutable_releases` 的 capability probe（`GET repos/{repo}/immutable-releases`）在 hosted release job 自己的 `GITHUB_TOKEN` 下**結構性、永久性**回傳無法判斷（HTTP 403）——這個端點屬於 repo administration 層級設定，GitHub Actions 的 `permissions:` 區塊沒有對應的合法 key 能開放給 `GITHUB_TOKEN`（曾誤加 `administration: read` 這個不存在的 key，直接讓 workflow YAML 整個 parse 失敗，見 #623／#624 的踩坑與回退記錄）。`select_release_mode()` 的 `PUBLISH_CAPABILITIES` 判定是 all-or-nothing（`contents`／`release`／`immutable_releases` 任一項 `blocked` 或 `unknown` 就整組判 `blocked`），Automatic 與 Guided 共用同一個前置關卡，兩條路徑都永遠過不了這一關——不是暫時性環境問題，也不是這次補發版才出現的新退化。
+
+`docs/ci-policy.md` 更早已經記錄過同一現象源自 #123 的既有設計：HTTP 403 時 fail-closed 是**刻意的安全姿態**（拿不到證據就不發版），不是 bug。盤點過三個修法方向後（見 [#626](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/626) 完整記錄）：
+
+1. 改成信任 `policies/releases.json` 宣告值、不再即時 probe——會推翻 #123 的立場，驗證變裝飾性，**不採用**。
+2. 給 release job 一個只有 `administration: read` 的窄範圍 PAT repo secret——技術可行、不推翻 #123，但需要新增並之後輪替一個 secret，維護者評估管理成本後**不採用**。
+3. **採用**：正式承認 hosted Automatic／Guided 對 `immutable_releases` 永遠無法自證，把本節上方的本機 `scripts/publish-release` 路徑從「fallback」升格為**標準發版程序**——不是備援，是預設做法；由 agent（Claude Code session）在維護者授權下本機執行，用維護者自己的 admin 身份，天生就能真的讀到這個設定，不需要額外 secret，也不推翻 #123。「自動化」的著力點從「push 進 main 自動觸發」改成「agent 執行、人不用碰指令」。
+
+hosted `release.yml` 保留在 repo 裡（`verify`／`title`／`promotion` 仍然只能由它產生，不受影響），但它的 Automatic／Guided 版本發布功能正式標註為**已知限制，非待修復項目**——除非之後方向一或方向三的取捨改變，不會投入資源讓它自己成功發布。

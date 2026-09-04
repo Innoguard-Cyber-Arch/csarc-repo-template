@@ -48,6 +48,72 @@ issue_creation_policy_payload="$repo_root/policies/issue-creation.json"
 # PATCH atomically, so it is kept out of policies/repository.json and PATCHed
 # in its own dedicated call instead.
 security_scanning_payload="$repo_root/policies/security-scanning.json"
+# release_phase (Issue #607): whole-project release maturity, hand-declared
+# in policies/project-stage.json -- a THIRD axis, deliberately distinct
+# from generate_audit_trail.py's per-PR governance_stage and
+# profiles/catalog.yaml's per-profile stage (see
+# scripts/release_phase_rulesets.py's module docstring for the full
+# naming-collision warning). It gates how far the Alpha self-approval
+# Ruleset bypass (#580) is allowed to reach: required_status_checks may
+# only inherit the bypass in "alpha"; from "beta" onward it lives in its
+# own Ruleset (policies/rulesets-required-checks.json) with an always-empty
+# bypass_actors. Only this repository ships both policy files today --
+# template-generated repositories keep the pre-#607 single-Ruleset layout
+# and are unaffected by any logic gated on release_phase_gated below.
+project_stage_payload="$repo_root/policies/project-stage.json"
+required_checks_ruleset_payload="$repo_root/policies/rulesets-required-checks.json"
+release_phase_module="$repo_root/scripts/release_phase_rulesets.py"
+release_phase_gated=false
+release_phase=""
+if [[ -f "$project_stage_payload" && -f "$required_checks_ruleset_payload" ]]; then
+  release_phase_gated=true
+  release_phase="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["release_phase"])' "$project_stage_payload")"
+fi
+# effective_ruleset_payload / effective_required_checks_ruleset_payload are
+# the per-Ruleset payload(s) actually pushed to or compared against GitHub.
+# When release_phase_gated they are release_phase-assembled temp files
+# (scripts/release_phase_rulesets.py assemble); otherwise they are exactly
+# the checked-in files, unchanged from pre-#607 behavior.
+effective_ruleset_payload="$ruleset_payload"
+effective_required_checks_ruleset_payload="$required_checks_ruleset_payload"
+if [[ "$release_phase_gated" == true ]]; then
+  release_phase_tempdir="$(mktemp -d)"
+  trap 'rm -rf "$release_phase_tempdir"' EXIT
+  effective_ruleset_payload="$release_phase_tempdir/review-ruleset.json"
+  effective_required_checks_ruleset_payload="$release_phase_tempdir/required-checks-ruleset.json"
+  if ! release_phase_assembly_error="$(
+    python3 "$release_phase_module" assemble \
+      --project-stage "$project_stage_payload" \
+      --review-ruleset "$ruleset_payload" \
+      --required-checks-ruleset "$required_checks_ruleset_payload" \
+      2>&1 1>"$release_phase_tempdir/assembled.json"
+  )"; then
+    echo "Cannot assemble release_phase-gated Rulesets." >&2
+    echo "$release_phase_assembly_error" >&2
+    exit 1
+  fi
+  python3 - "$release_phase_tempdir/assembled.json" \
+    "$effective_ruleset_payload" "$effective_required_checks_ruleset_payload" <<'PY'
+import json
+import sys
+
+rulesets = json.load(open(sys.argv[1], encoding="utf-8"))
+with open(sys.argv[2], "w", encoding="utf-8") as handle:
+    json.dump(rulesets[0], handle)
+with open(sys.argv[3], "w", encoding="utf-8") as handle:
+    json.dump(rulesets[1], handle)
+PY
+fi
+# check_desired_rules_payload_extra is only used by the check-mode drift
+# comparison below: the effective-rules-branches endpoint returns the
+# union of rules enforced across every applicable Ruleset, not scoped by
+# name, so verifying "is required_status_checks in effect" must compare
+# against the union of both files' rules regardless of which live
+# Ruleset object currently carries that rule.
+check_desired_rules_payload_extra=""
+if [[ -f "$required_checks_ruleset_payload" ]]; then
+  check_desired_rules_payload_extra="$required_checks_ruleset_payload"
+fi
 ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$ruleset_payload")"
 desired_issue_creation_policy="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["issue_creation_policy"])' "$issue_creation_policy_payload")"
 legacy_ruleset_name="CSARC preserve dev next"
@@ -83,6 +149,17 @@ case "$account_plan" in
   pro) plan_label="GitHub Pro" ;;
   *) plan_label="Unknown ($account_plan)" ;;
 esac
+
+pages_policy="$repo_root/policies/pages.json"
+pages_policy_enabled="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["enabled"]))' "$pages_policy")"
+# GitHub Pages is free for public repositories on every plan; a private
+# repository requires GitHub Enterprise Cloud regardless of Ruleset
+# enforcement availability, so this is computed independently of
+# ruleset_enforcement_available above.
+pages_enforcement_available=true
+if [[ "$repo_visibility" != "public" && "$plan_label" != "GitHub Enterprise" ]]; then
+  pages_enforcement_available=false
+fi
 
 codeowners_validation=""
 codeowners_inspection_error=""
@@ -419,6 +496,43 @@ PY
     echo "Immutable Releases match policies/releases.json."
   fi
 
+  if [[ "$pages_policy_enabled" != "true" ]]; then
+    echo "Pages policy disabled: policies/pages.json requests enabled=false; no live GitHub Pages check performed."
+  elif [[ "$pages_enforcement_available" != true ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+      echo "::warning title=GitHub Pages degraded::GitHub Pages is unavailable for this private repository on $plan_label."
+    echo "DEGRADED GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. policies/pages.json stays enabled=true for when this repository is public or the account upgrades; the template must keep working on every GitHub plan and visibility, so this account-plan and visibility limitation does not fail closed."
+    check_degraded=$((check_degraded + 1))
+  elif ! pages_state="$(gh api "repos/$repo/pages" 2>&1)"; then
+    if [[ "$pages_state" == *"Not Found"* ]]; then
+      echo "Pages settings drift: GitHub Pages is not enabled for $repo; policies/pages.json requests enabled=true." >&2
+      check_errors=$((check_errors + 1))
+    else
+      echo "Cannot inspect GitHub Pages settings for $repo." >&2
+      echo "$pages_state" >&2
+      check_errors=$((check_errors + 1))
+    fi
+  elif ! pages_drift="$(python3 - "$pages_policy" "$pages_state" 2>&1 <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))["source"]
+actual = json.loads(sys.argv[2]).get("source", {})
+drift = [
+    f"source.{key}: desired {value!r}, live {actual.get(key)!r}"
+    for key, value in desired.items()
+    if actual.get(key) != value
+]
+if drift:
+    raise SystemExit("; ".join(drift))
+PY
+  )"; then
+    echo "Pages settings drift: $pages_drift" >&2
+    check_errors=$((check_errors + 1))
+  else
+    echo "Pages settings match policies/pages.json."
+  fi
+
   if ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
     if [[ "$repo_admin" != "true" && "$actions_state" == *"Resource not accessible by integration"* ]]; then
       [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
@@ -520,12 +634,21 @@ PY
     echo "Cannot inspect effective rules for $repo:$default_branch." >&2
     echo "$branch_rules" >&2
     check_errors=$((check_errors + 1))
-  elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$branch_rules" 2>&1 <<'PY'
+  elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$branch_rules" "$check_desired_rules_payload_extra" 2>&1 <<'PY'
 import json
 import sys
 
 desired = json.load(open(sys.argv[1], encoding="utf-8"))
 effective = json.loads(sys.argv[2])
+# Issue #607: required_status_checks may live in a separate Ruleset
+# (policies/rulesets-required-checks.json) from beta onward. The
+# effective-rules-branches endpoint returns the union of rules enforced
+# across every applicable Ruleset, not scoped by name, so "desired" must
+# be the union of both files' rules too -- see check_desired_rules_payload_extra
+# where this script computes the third argument.
+if len(sys.argv) > 3 and sys.argv[3]:
+    extra_desired = json.load(open(sys.argv[3], encoding="utf-8"))
+    desired = {**desired, "rules": [*desired["rules"], *extra_desired["rules"]]}
 desired_by_type = {rule["type"]: rule for rule in desired["rules"]}
 effective_by_type = {}
 for rule in effective:
@@ -597,6 +720,13 @@ echo "Deployment plan:"
 echo "- APPLY policies/repository.json"
 echo "- APPLY policies/issue-creation.json (issue_creation_policy via GraphQL)"
 echo "- APPLY policies/releases.json (immutable Releases)"
+if [[ "$pages_policy_enabled" != "true" ]]; then
+  echo "- SKIP policies/pages.json (enabled=false)"
+elif [[ "$pages_enforcement_available" == true ]]; then
+  echo "- APPLY policies/pages.json (GitHub Pages)"
+else
+  echo "- DEGRADED policies/pages.json: GitHub Pages requires GitHub Enterprise Cloud for a private repository on $plan_label"
+fi
 echo "- APPLY policies/actions.json when account policy permits it"
 echo "- APPLY policies/security-scanning.json (security_and_analysis) when GitHub Advanced Security or repository visibility permits it"
 echo "- APPLY policies/labels.json (create or update policy labels)"
@@ -625,7 +755,11 @@ else
   echo "- KEEP labels outside policy (default additive mode)"
 fi
 if [[ "$ruleset_enforcement_available" == true ]]; then
-  echo "- APPLY policies/rulesets.json (enforced by GitHub)"
+  if [[ "$release_phase_gated" == true ]]; then
+    echo "- APPLY policies/rulesets.json + policies/rulesets-required-checks.json (release_phase=$release_phase, enforced by GitHub)"
+  else
+    echo "- APPLY policies/rulesets.json (enforced by GitHub)"
+  fi
   echo "CODEOWNERS team: $code_owner"
 elif [[ "$ruleset_inventory_available" == true ]]; then
   echo "- PRESERVE policies/rulesets.json locally (public APIs cannot create a Ruleset on this plan)"
@@ -675,6 +809,26 @@ if ! release_policy_error="$(
   echo "Cannot enable required immutable Releases for $repo." >&2
   echo "$release_policy_error" >&2
   exit 1
+fi
+pages_policy_applied=true
+if [[ "$pages_policy_enabled" == "true" ]]; then
+  if [[ "$pages_enforcement_available" != true ]]; then
+    pages_policy_applied=false
+    echo "DEGRADED GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. policies/pages.json stays enabled=true for when this repository is public or the account upgrades."
+  else
+    pages_source_payload="$(python3 -c 'import json,sys; policy=json.load(open(sys.argv[1], encoding="utf-8")); print(json.dumps({"source": policy["source"]}))' "$pages_policy")"
+    if gh api "repos/$repo/pages" >/dev/null 2>&1; then
+      if ! pages_policy_error="$(echo "$pages_source_payload" | gh api --method PUT "repos/$repo/pages" --input - 2>&1)"; then
+        echo "Cannot update GitHub Pages settings for $repo." >&2
+        echo "$pages_policy_error" >&2
+        exit 1
+      fi
+    elif ! pages_policy_error="$(echo "$pages_source_payload" | gh api --method POST "repos/$repo/pages" --input - 2>&1)"; then
+      echo "Cannot enable GitHub Pages for $repo." >&2
+      echo "$pages_policy_error" >&2
+      exit 1
+    fi
+  fi
 fi
 actions_policy_applied=true
 if ! actions_policy_error="$(
@@ -732,28 +886,42 @@ if [[ "$prune_labels" == true ]]; then
   done <<<"$existing_labels"
 fi
 
+apply_ruleset_payload() {
+  # Create-or-update a single live Ruleset by the `name` field inside the
+  # given payload file, against the repository/rulesets inventory already
+  # fetched into $ruleset_access. Shared by the always-present review
+  # Ruleset and, when release_phase_gated, the required-checks Ruleset
+  # (Issue #607) -- both follow the identical GitHub API shape.
+  local payload_file="$1"
+  local payload_name payload_id
+  payload_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$payload_file")"
+  payload_id="$(
+    uv run --no-project python -c \
+      'import json,sys; name=sys.argv[1]; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == name), ""))' \
+      "$payload_name" <<<"$ruleset_access"
+  )"
+  if [[ -n "$payload_id" ]]; then
+    gh api --method PUT "repos/$repo/rulesets/$payload_id" \
+      --input "$payload_file" >/dev/null
+  else
+    gh api --method POST "repos/$repo/rulesets" \
+      --input "$payload_file" >/dev/null
+  fi
+}
+
 if [[ "$ruleset_enforcement_available" == true ]]; then
   if [[ "$legacy_ruleset_id" != "-" ]]; then
     gh api --method DELETE "repos/$repo/rulesets/$legacy_ruleset_id" >/dev/null
   fi
-  current_ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$ruleset_payload")"
-  ruleset_id="$(
-    uv run --no-project python -c \
-      'import json,sys; name=sys.argv[1]; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == name), ""))' \
-      "$current_ruleset_name" <<<"$ruleset_access"
-  )"
-  if [[ -n "$ruleset_id" ]]; then
-    gh api --method PUT "repos/$repo/rulesets/$ruleset_id" \
-      --input "$ruleset_payload" >/dev/null
-  else
-    gh api --method POST "repos/$repo/rulesets" \
-      --input "$ruleset_payload" >/dev/null
+  apply_ruleset_payload "$effective_ruleset_payload"
+  if [[ "$release_phase_gated" == true ]]; then
+    apply_ruleset_payload "$effective_required_checks_ruleset_payload"
   fi
 fi
 
 GH_REPO="$repo" "$0" check
 if [[ "$ruleset_enforcement_available" == true && "$actions_policy_applied" == true &&
-  "$security_and_analysis_applied" == true ]]; then
+  "$pages_policy_applied" == true && "$security_and_analysis_applied" == true ]]; then
   echo "Required repository settings applied, including branch protection."
 else
   echo "DEGRADED repository settings applied; unavailable policy remains declarative and runtime workflows adapt."
