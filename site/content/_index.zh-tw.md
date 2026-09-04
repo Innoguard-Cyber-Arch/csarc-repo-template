@@ -67,7 +67,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.12.2 |
+| 公版版本 | v0.13.0 |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
 | 網站排版模板版本 | [[site_template_version]] |
 | 決策網站渲染引擎版本 | [[site_engine_version]] |
