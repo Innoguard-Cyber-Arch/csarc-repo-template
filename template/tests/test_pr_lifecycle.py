@@ -610,8 +610,8 @@ def test_writer_scanner_allows_the_shipped_pr_policy_validator() -> None:
             # that produces generated projects does. Skip a path this
             # repository genuinely does not have instead of failing closed
             # on a layout difference the test never intended to assert on
-            # (see test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows
-            # below for the same established pattern).
+            # (same established pattern as the dependabot-auto-merge writer
+            # scan test below).
             continue
         text = candidate.read_text(encoding="utf-8")
         assert writer_violations(text) == [], relative
