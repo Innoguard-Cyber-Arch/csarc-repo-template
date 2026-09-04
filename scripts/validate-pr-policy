@@ -328,7 +328,7 @@ if [[ "$pr_milestone_number" == "0" && "$issue_milestone_number" == "0" ]]; then
       reminder_body="${reminder_marker}
 Neither this pull request nor Issue #${issue_number} has a Milestone, and exactly one Milestone is currently open: #${hint_number} ${hint_title}.
 
-If this work belongs to it, attach the Milestone to the Issue (closed Milestones need \`gh api repos/${GITHUB_REPOSITORY}/issues/${issue_number} --method PATCH -f milestone=${hint_number}\`, not \`gh issue edit --milestone\`) and to this pull request. Otherwise no action is needed -- many Issues and pull requests are not tied to any Milestone."
+If this work belongs to it, attach the Milestone to the Issue (see docs/ci-policy.md, section \"Milestone 掛勾安全網\", for the closed-Milestone REST API workaround) and to this pull request. Otherwise no action is needed -- many Issues and pull requests are not tied to any Milestone."
       if ! gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
         --body "$reminder_body" >/dev/null 2>&1; then
         echo "::notice::Could not post the Milestone safeguard reminder (non-blocking, Issue #551)."
