@@ -52,7 +52,9 @@ case "$1" in
     # GraphQL document, not a REST path). Matching on the full argument
     # string mirrors scripts/test-apply-repository-settings's fake `gh`.
     if [[ "$*" == *"issueCreationPolicy"* ]]; then
-      echo '{"data": {"repository": {"issueCreationPolicy": "COLLABORATORS_ONLY"}}}'
+      issue_creation_json='{"data": {"repository": '
+      issue_creation_json+='{"issueCreationPolicy": "COLLABORATORS_ONLY"}}}'
+      echo "$issue_creation_json"
       exit 0
     fi
     method="GET"
