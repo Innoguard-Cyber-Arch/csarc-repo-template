@@ -2131,6 +2131,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2205,6 +2206,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2228,6 +2230,85 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 <p>If <code>apply-repository-settings.sh check</code> itself cannot run (for example, <code>gh</code> is not authenticated or there is no network), <code>csarc status</code> does not assume policy drift. It falls back to <code>current</code> and marks <code>policy_check.available</code> as <code>false</code>, leaving the confirmation to a human.</p></aside>
 <aside class="technical-detail" data-content-key="install-agent"><h3>One prompt for an agent</h3>
 <p>The full contract lives in <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/agent-install.md" target="_blank" rel="noreferrer"><code>docs/agent-install.md</code></a>: an agent always runs <code>csarc status</code> first and follows the row matching its returned <code>state</code>, instead of guessing which situation applies. All of the classification logic lives in the CLI (<code>detect_install_state</code>); the agent only calls it and acts on the result, so the same repository state never produces a different answer just because a different agent ran it.</p></aside></div>
+</section>
+<section class="slide markdown-slide dense" id="advanced-install" data-content-key="advanced-install" data-audience="maintainer" data-parity="supplemental" aria-label="Know what this specific repository can actually enable">
+  <aside class="journey-rail" aria-label="Presentation outline">
+  <h3>Use template</h3>
+  <ol class="journey-use">
+    <li class="journey-item human">
+      <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#flow"><span>CI/CD flow</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#files"><span>File map</span></a>
+    </li>
+  </ol>
+  <h3>Workflow</h3>
+  <ol class="journey-main">
+    <li class="journey-item human">
+      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
+    </li>
+  </ol>
+  <h3>Maintenance</h3>
+  <ol class="journey-support">
+    <li class="journey-item human">
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer active-selection" data-audience="maintainer" href="#advanced-install" aria-current="page">Advanced</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
+  <div class="journey-legend" aria-label="Color key">
+    <span><i class="human" aria-hidden="true"></i>Human decision</span>
+    <span><i class="automated" aria-hidden="true"></i>Automated by default</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>Maintainers only</span>
+  </div>
+</aside>
+
+<header>
+  <span class="selection-sequence">Maintenance appendix | Repo capability matrix</span>
+  <h2>Know what this specific repository can actually enable</h2>
+  <p class="subtitle">Beyond the GitHub-plan probing apply-repository-settings.sh already performs, scripts/check-repo-capabilities checks what this repository and token actually have.</p>
+</header>
+<div class="markdown-body"><p>The Governance step&#x27;s plan table (Step 08) answers &quot;what does the account&#x27;s GitHub *plan* allow.&quot; That is necessary but not sufficient: organization policy, CODEOWNERS team membership, and token scope can still block a capability on a plan that would otherwise support it. <code>policies/capability-matrix.json</code> names every capability this template relies on, its minimum requirement, and a documented workaround; <code>scripts/check-repo-capabilities</code> evaluates it against this repository live:</p>
+<pre class="command"><code>./scripts/check-repo-capabilities        # human-readable report
+./scripts/check-repo-capabilities --json # machine-readable capabilities + summary</code></pre>
+<table><thead><tr><th>Capability</th><th>What it enables</th><th>Minimum requirement</th><th>If missing</th></tr></thead><tbody><tr><td><code>repository_admin</code></td><td>Prerequisite for every row below</td><td><code>permissions.admin == true</code> for the acting token</td><td>Ask an owner/admin to run <code>apply</code>, or request the Admin role</td></tr><tr><td><code>ruleset_enforcement</code></td><td>Branch protection Ruleset on the default branch</td><td>Public repository (any plan), or private on Pro/Team or above</td><td>DEGRADED marker; desired Ruleset stays declarative in <code>policies/rulesets.json</code></td></tr><tr><td><code>codeowners_enforcement</code></td><td>CODEOWNERS review actually blocks merge</td><td>Ruleset above, plus a <code>@org/team</code> with write access</td><td>DEGRADED marker; fix the team, or use <code>scripts/request-reviewer</code> meanwhile</td></tr><tr><td><code>actions_pr_approval</code></td><td>Actions can auto-approve pull requests (for example Dependabot auto-merge)</td><td>Organization allows <code>can_approve_pull_request_reviews</code></td><td>DEGRADED marker; fall back to manual human approval</td></tr><tr><td><code>security_and_analysis</code></td><td>Secret scanning, push protection, Dependabot security updates</td><td>Public repository, or GitHub Advanced Security if private</td><td>DEGRADED marker; rely on local <code>scripts/scan-secrets</code> instead</td></tr><tr><td><code>github_pages</code></td><td>Hosts <code>docs/index.html</code> as a live site</td><td>Public repository, or GitHub Enterprise Cloud if private</td><td>DEGRADED marker; distribute the committed HTML file instead</td></tr><tr><td><code>repository_settings_inspection</code></td><td><code>check</code> mode can compare live admin-only fields</td><td>Same as <code>repository_admin</code></td><td>DEGRADED marker; run <code>check</code> from a trusted admin checkout</td></tr><tr><td><code>immutable_releases</code></td><td>Required before hosted Automatic/Guided publish can run</td><td>A real admin identity, never the default <code>GITHUB_TOKEN</code></td><td>Known permanent limitation (#123/#626); run <code>scripts/publish-release</code> locally</td></tr></tbody></table>
+<aside class="technical-detail" data-content-key="advanced-install-results"><h3>How to read a check-repo-capabilities result</h3>
+<p>Every row reports one of three states: <code>allowed</code> (usable now), <code>blocked</code> (a real, currently-missing requirement), or <code>unknown</code> (cannot be proven from a read-only probe alone -- for example, an Actions setting that is off might just be unset rather than organization-blocked). This is a diagnostic preflight, not a merge gate: it always exits <code>0</code> once the report is produced, and it never mutates GitHub. Whether live settings actually *match* declared policy remains <code>apply-repository-settings.sh check</code>&#x27;s job.</p>
+<p><code>--facts &lt;file&gt;</code> reads pre-built facts instead of calling <code>gh</code>, so the same matrix can be evaluated against a hypothetical permission combination without live access -- this is also how <code>scripts/test-check-repo-capabilities</code> proves the gap list for several permission/plan combinations without any network access.</p></aside>
+<aside class="technical-detail" data-content-key="advanced-install-workarounds"><h3>Workarounds and the existing DEGRADED marker</h3>
+<p>This matrix does not replace or redesign <code>apply-repository-settings.sh</code>&#x27;s DEGRADED mechanism -- it documents it. Every row whose workaround says &quot;DEGRADED marker&quot; reuses the exact same fail-safe already printed by <code>apply-repository-settings.sh check</code>/<code>plan</code>/<code>apply</code> for that limitation; the two never disagree because the underlying detection (plan, visibility, admin permission) is the same. <code>docs/ci-policy.md</code> and <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md" target="_blank" rel="noreferrer">the capability-aware governance ADR</a> record the durable decision; this page and <code>policies/capability-matrix.json</code> are what stay current as the single source both consult.</p></aside></div>
 </section>
 <section class="slide markdown-slide candidate-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="The template guides every change">
   <aside class="journey-rail" aria-label="Presentation outline">
@@ -2283,6 +2364,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2357,6 +2439,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2434,6 +2517,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2509,6 +2593,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2583,6 +2668,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2662,6 +2748,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2735,6 +2822,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2807,6 +2895,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2881,6 +2970,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2969,6 +3059,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3050,6 +3141,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3129,6 +3221,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3209,6 +3302,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer active-selection" data-audience="maintainer" href="#bridge" aria-current="page">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3281,6 +3375,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human active-selection" href="#similar-tools" aria-current="page">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3351,6 +3446,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer active-selection" data-audience="maintainer" href="#testing" aria-current="page">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3421,6 +3517,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3494,6 +3591,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3566,6 +3664,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3638,6 +3737,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3710,6 +3810,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3783,6 +3884,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3855,6 +3957,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3927,6 +4030,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">

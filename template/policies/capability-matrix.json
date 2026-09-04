@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "description": "Repo capability matrix (Issue #531): what this specific repository/token can actually enable, beyond GitHub-plan probing already performed by scripts/apply-repository-settings.sh. scripts/check-repo-capabilities evaluates this matrix against live facts and scripts/repo_capabilities.py implements the pure evaluation logic. Every non-'allowed' status below has a workaround documented in the 'workaround' field; several reuse the existing DEGRADED marker apply-repository-settings.sh already prints.",
+  "capabilities": [
+    {
+      "id": "repository_admin",
+      "title": {
+        "en": "Repository administrator permission",
+        "zh-tw": "Repository 管理員權限"
+      },
+      "behavior": {
+        "en": "Prerequisite for every other capability below: applying policies/*.json, enabling a Ruleset, security scanning, GitHub Pages, Actions permissions, and the issue creation policy all require the acting token to hold Admin on this specific repository.",
+        "zh-tw": "以下每一項能力的前提：套用 policies/*.json、啟用 Ruleset、安全掃描、GitHub Pages、Actions 權限與 issue 建立政策，都需要目前使用的 token 對這個 repository 具備 Admin 權限。"
+      },
+      "requirement": {
+        "en": "`permissions.admin == true` on `GET /repos/{owner}/{repo}` for the acting account or token.",
+        "zh-tw": "目前帳號或 token 在 `GET /repos/{owner}/{repo}` 回傳的 `permissions.admin` 必須是 `true`。"
+      },
+      "detection": {
+        "en": "Read-only: the same `permissions.admin` field `scripts/apply-repository-settings.sh` already requires before `apply`/`plan`.",
+        "zh-tw": "唯讀偵測：與 `scripts/apply-repository-settings.sh` 在 `apply`／`plan` 前既有要求相同的 `permissions.admin` 欄位。"
+      },
+      "workaround": {
+        "en": "Without Admin, only `apply-repository-settings.sh check` (read-only) can run; ask the repository owner or an organization admin to run `plan`/`apply`, or request the Admin role for the acting account.",
+        "zh-tw": "沒有 Admin 時只能執行 `apply-repository-settings.sh check`（唯讀）；請 repository owner 或 organization admin 執行 `plan`／`apply`，或為目前帳號申請 Admin 角色。"
+      },
+      "related_degraded_marker": null
+    },
+    {
+      "id": "ruleset_enforcement",
+      "title": {
+        "en": "Branch protection via GitHub Ruleset",
+        "zh-tw": "透過 GitHub Ruleset 的分支保護"
+      },
+      "behavior": {
+        "en": "Enforces non-fast-forward pushes, required pull request review, and required status checks on the default branch (`policies/rulesets.json`).",
+        "zh-tw": "在預設分支上強制 non-fast-forward push、必要的 PR review 與必要的 status check（`policies/rulesets.json`）。"
+      },
+      "requirement": {
+        "en": "Public repository on any GitHub plan; or a private repository on GitHub Pro (personal account) / GitHub Team or above (organization).",
+        "zh-tw": "public repository 在任何 GitHub 方案皆可；private repository 需要 GitHub Pro（個人帳號）或 GitHub Team 以上（organization）。"
+      },
+      "detection": {
+        "en": "Live probe: `GET /repos/{owner}/{repo}/rulesets`; a 403 with \"Upgrade to GitHub Pro or make this repository public\" confirms the plan limitation.",
+        "zh-tw": "即時探測：`GET /repos/{owner}/{repo}/rulesets`；回傳 403 且訊息含 \"Upgrade to GitHub Pro or make this repository public\" 即確認為方案限制。"
+      },
+      "workaround": {
+        "en": "Existing DEGRADED marker: `apply-repository-settings.sh check`/`plan` prints \"DEGRADED required governance\" and keeps the desired Ruleset declarative in `policies/rulesets.json`; an admin may stage a disabled Ruleset manually in the web UI (`https://github.com/{repo}/settings/rules`) for later enforcement, or upgrade the plan, or make the repository public.",
+        "zh-tw": "既有 DEGRADED 標記：`apply-repository-settings.sh check`／`plan` 會印出「DEGRADED required governance」，並讓 `policies/rulesets.json` 保留為 desired state；admin 可在 GitHub 網頁（`https://github.com/{repo}/settings/rules`）手動預先建立一個停用的 Ruleset 供之後啟用，或升級方案，或改為 public。"
+      },
+      "related_degraded_marker": "DEGRADED required governance"
+    },
+    {
+      "id": "codeowners_enforcement",
+      "title": {
+        "en": "CODEOWNERS review enforcement",
+        "zh-tw": "CODEOWNERS review 強制"
+      },
+      "behavior": {
+        "en": "The Ruleset's `require_code_owner_review` only actually blocks merge when the `.github/CODEOWNERS` team (`@org/team`) exists and has write-or-above access, and this repository can inspect that team's permission.",
+        "zh-tw": "Ruleset 的 `require_code_owner_review` 只有在 `.github/CODEOWNERS` 指定的 team（`@org/team`）確實存在且具備 write 以上權限，且這個 repository 能查驗該權限時，才會真正擋下合併。"
+      },
+      "requirement": {
+        "en": "Depends on `ruleset_enforcement`; additionally the CODEOWNERS team must exist with write-or-above access, readable via `GET /repos/{owner}/{repo}/teams` (needs organization read, effectively an admin-scope token).",
+        "zh-tw": "依賴 `ruleset_enforcement`；此外 CODEOWNERS 指定的 team 必須存在且具備 write 以上權限，並可透過 `GET /repos/{owner}/{repo}/teams` 讀取（需要 organization read，實務上即 admin 等級的 token）。"
+      },
+      "detection": {
+        "en": "Live probe: parse `.github/CODEOWNERS`'s configured `@org/team`, then look it up in `GET /repos/{owner}/{repo}/teams` and check its `permission`.",
+        "zh-tw": "即時探測：解析 `.github/CODEOWNERS` 設定的 `@org/team`，於 `GET /repos/{owner}/{repo}/teams` 查找並檢查其 `permission`。"
+      },
+      "workaround": {
+        "en": "Existing DEGRADED marker: \"DEGRADED CODEOWNERS inspection\" when the token cannot validate owners at all; when the team is genuinely missing or not writable, create or fix `@org/team`'s repository access, or fall back to manually assigning a reviewer with `scripts/request-reviewer` until the team is in place.",
+        "zh-tw": "既有 DEGRADED 標記：token 完全無法驗證 owners 時印出「DEGRADED CODEOWNERS inspection」；若 team 確實不存在或權限不足，建立或修正 `@org/team` 的 repository 存取權，或在 team 到位前改用 `scripts/request-reviewer` 手動指派 reviewer。"
+      },
+      "related_degraded_marker": "DEGRADED CODEOWNERS inspection"
+    },
+    {
+      "id": "actions_pr_approval",
+      "title": {
+        "en": "Actions-driven pull request auto-approval",
+        "zh-tw": "Actions 驅動的 PR 自動核准"
+      },
+      "behavior": {
+        "en": "Lets a repository's Actions workflows (its `GITHUB_TOKEN`) approve pull requests automatically -- used by automated flows such as Dependabot auto-merge.",
+        "zh-tw": "讓 repository 的 Actions workflow（其 `GITHUB_TOKEN`）能自動核准 PR，供 Dependabot auto-merge 等自動化流程使用。"
+      },
+      "requirement": {
+        "en": "Repository (or organization) Actions settings must allow `can_approve_pull_request_reviews`; some organizations disable this by policy and it cannot be enabled from this repository alone.",
+        "zh-tw": "repository（或 organization）Actions 設定必須允許 `can_approve_pull_request_reviews`；部分 organization 以政策禁止此項，單一 repository 無法自行開啟。"
+      },
+      "detection": {
+        "en": "Live probe: `GET /repos/{owner}/{repo}/actions/permissions/workflow`. A `true` value confirms the capability is currently active; `false` only shows the current toggle, not whether an organization policy would block turning it on -- only an actual `apply` attempt (caught by `apply-repository-settings.sh`) proves that.",
+        "zh-tw": "即時探測：`GET /repos/{owner}/{repo}/actions/permissions/workflow`。回傳 `true` 可確認目前確實可用；`false` 只反映目前的開關狀態，無法判斷是否有 organization 政策擋下開啟——只有實際嘗試 `apply`（由 `apply-repository-settings.sh` 捕捉）才能證實。"
+      },
+      "workaround": {
+        "en": "Existing DEGRADED marker: \"DEGRADED Actions PR policy\" when an `apply` attempt is rejected. Downgrade to manual human approval for automated pull requests, or ask an organization owner to allow Actions to approve PRs; the documented alpha self-approval Ruleset bypass (`policies/rulesets.json` `bypass_actors`, see `docs/ci-policy.md`) is a separate, narrower mechanism and not a substitute for this capability.",
+        "zh-tw": "既有 DEGRADED 標記：`apply` 嘗試被拒絕時印出「DEGRADED Actions PR policy」。降級為人工核准自動化 PR，或請 organization owner 允許 Actions 核准 PR；既有的 alpha 自我核准 Ruleset bypass（`policies/rulesets.json` 的 `bypass_actors`，見 `docs/ci-policy.md`）是另一套範圍更窄的機制，不能取代這項能力。"
+      },
+      "related_degraded_marker": "DEGRADED Actions PR policy"
+    },
+    {
+      "id": "security_and_analysis",
+      "title": {
+        "en": "Advanced security scanning (secret scanning, push protection, Dependabot security updates)",
+        "zh-tw": "進階安全掃描（secret scanning、push protection、Dependabot security updates）"
+      },
+      "behavior": {
+        "en": "Enables GitHub-hosted secret scanning, push protection, and Dependabot security updates (`policies/security-scanning.json`).",
+        "zh-tw": "啟用 GitHub 代管的 secret scanning、push protection 與 Dependabot security updates（`policies/security-scanning.json`）。"
+      },
+      "requirement": {
+        "en": "Free on every plan for a public repository; a private repository requires a GitHub Advanced Security entitlement (Enterprise, or a purchased GHAS add-on).",
+        "zh-tw": "public repository 在任何方案皆免費；private repository 需要 GitHub Advanced Security 授權（Enterprise，或額外購買 GHAS）。"
+      },
+      "detection": {
+        "en": "Live probe: `security_and_analysis.*.status` on `GET /repos/{owner}/{repo}`, compared against `policies/security-scanning.json`; observed \"disabled\" on a private repository is treated as the plan limitation, matching `apply-repository-settings.sh check`'s existing rule.",
+        "zh-tw": "即時探測：`GET /repos/{owner}/{repo}` 的 `security_and_analysis.*.status`，對照 `policies/security-scanning.json`；private repository 觀察到 disabled 時視為方案限制，與 `apply-repository-settings.sh check` 既有規則一致。"
+      },
+      "workaround": {
+        "en": "Existing DEGRADED marker: \"DEGRADED security_and_analysis\". Rely on local scanning (`scripts/scan-secrets`, gitleaks) instead of hosted secret scanning; consider making the repository public or purchasing GitHub Advanced Security.",
+        "zh-tw": "既有 DEGRADED 標記：「DEGRADED security_and_analysis」。改用本機掃描（`scripts/scan-secrets`、gitleaks）取代 hosted secret scanning；可考慮改為 public 或購買 GitHub Advanced Security。"
+      },
+      "related_degraded_marker": "DEGRADED security_and_analysis"
+    },
+    {
+      "id": "github_pages",
+      "title": {
+        "en": "Hosted GitHub Pages for the decision site",
+        "zh-tw": "決策網站的 GitHub Pages 代管"
+      },
+      "behavior": {
+        "en": "Publishes `docs/index.html`/`docs/index.en.html` as a hosted site (`policies/pages.json`).",
+        "zh-tw": "把 `docs/index.html`／`docs/index.en.html` 發布成 hosted 網站（`policies/pages.json`）。"
+      },
+      "requirement": {
+        "en": "Free on every plan for a public repository; a private repository requires GitHub Enterprise Cloud.",
+        "zh-tw": "public repository 在任何方案皆免費；private repository 需要 GitHub Enterprise Cloud。"
+      },
+      "detection": {
+        "en": "Deterministic from already-observed `repo_visibility` and account `plan_label`; no extra live call is required beyond the repository/account lookups every other row also uses.",
+        "zh-tw": "由已取得的 `repo_visibility` 與帳號 `plan_label` 直接判定；不需要額外的即時呼叫，沿用其他列已使用的 repository／帳號查詢即可。"
+      },
+      "workaround": {
+        "en": "Existing DEGRADED marker: \"DEGRADED GitHub Pages\". Keep distributing `docs/index.html` as a committed, downloadable file instead of a hosted URL, or make the repository public, or upgrade to GitHub Enterprise Cloud.",
+        "zh-tw": "既有 DEGRADED 標記：「DEGRADED GitHub Pages」。改以 commit 進 repo 的 `docs/index.html` 檔案分享，而非 hosted 網址；或改為 public，或升級到 GitHub Enterprise Cloud。"
+      },
+      "related_degraded_marker": "DEGRADED GitHub Pages"
+    },
+    {
+      "id": "repository_settings_inspection",
+      "title": {
+        "en": "Administrator-only repository field visibility",
+        "zh-tw": "管理員專屬 repository 欄位可見性"
+      },
+      "behavior": {
+        "en": "Lets `apply-repository-settings.sh check` compare live administrator-only repository fields (from `policies/repository.json`) against desired policy, instead of skipping them.",
+        "zh-tw": "讓 `apply-repository-settings.sh check` 能比對即時的管理員專屬 repository 欄位（來自 `policies/repository.json`）與 desired policy，而不是略過不查。"
+      },
+      "requirement": {
+        "en": "Same as `repository_admin`: a non-admin token (for example the default `GITHUB_TOKEN` in a hosted workflow) cannot read these fields at all.",
+        "zh-tw": "與 `repository_admin` 相同：非 admin 的 token（例如 hosted workflow 預設的 `GITHUB_TOKEN`）完全無法讀取這些欄位。"
+      },
+      "detection": {
+        "en": "Derived directly from the `repository_admin` fact; no separate live probe.",
+        "zh-tw": "直接沿用 `repository_admin` 的偵測結果，不另外探測。"
+      },
+      "workaround": {
+        "en": "Existing DEGRADED marker: \"DEGRADED repository inspection\". Run `apply-repository-settings.sh check` from a trusted local checkout authenticated as an admin instead of relying on a hosted workflow's default token.",
+        "zh-tw": "既有 DEGRADED 標記：「DEGRADED repository inspection」。改在具備 admin 身分的可信本機環境執行 `apply-repository-settings.sh check`，而非仰賴 hosted workflow 的預設 token。"
+      },
+      "related_degraded_marker": "DEGRADED repository inspection"
+    },
+    {
+      "id": "immutable_releases",
+      "title": {
+        "en": "Immutable Releases (required for hosted publishing)",
+        "zh-tw": "Immutable Releases（hosted 發版必要條件）"
+      },
+      "behavior": {
+        "en": "Required before `release.yml`'s Automatic or Guided mode can publish a GitHub Release.",
+        "zh-tw": "`release.yml` 的 Automatic 或 Guided 模式要能發布 GitHub Release 前的必要條件。"
+      },
+      "requirement": {
+        "en": "A real user account or PAT with repository Admin; the default hosted `GITHUB_TOKEN` cannot prove this setting -- a structural, permanent GitHub Actions limitation (Issue #123/#626), not something this repository's configuration can change.",
+        "zh-tw": "需要具備 repository Admin 的真人帳號或 PAT；hosted 預設的 `GITHUB_TOKEN` 無法證明此設定——這是 GitHub Actions 結構性、永久性的限制（Issue #123／#626），並非這個 repository 的設定能改變。"
+      },
+      "detection": {
+        "en": "Not reliably detectable from a repository-permission probe; `scripts/check-repo-capabilities` always reports this row as `unknown` with a fixed explanatory note instead of guessing.",
+        "zh-tw": "無法單靠 repository 權限探測可靠判斷；`scripts/check-repo-capabilities` 對這一列一律回報 `unknown`，並附固定說明，而非用猜測代替。"
+      },
+      "workaround": {
+        "en": "Documented permanent limitation, not a bug to chase: run `scripts/publish-release` locally under the maintainer's own admin identity, per `docs/ci-policy.md`'s \"hosted 發版路徑的已知限制\" section.",
+        "zh-tw": "已記錄的永久限制，非待修復事項：依 `docs/ci-policy.md`「hosted 發版路徑的已知限制」一節，改在本機以維護者自己的 admin 身分執行 `scripts/publish-release`。"
+      },
+      "related_degraded_marker": null
+    }
+  ]
+}

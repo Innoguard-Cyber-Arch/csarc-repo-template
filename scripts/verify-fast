@@ -53,6 +53,7 @@ if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
   ./scripts/test-pr-policy
   ./scripts/test-apply-repository-settings
   ./scripts/test-check-scope-gate
+  ./scripts/test-check-repo-capabilities
 fi
 
 if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||

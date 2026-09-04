@@ -2131,6 +2131,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -2245,6 +2246,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -2268,6 +2270,85 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 <p>若 <code>apply-repository-settings.sh check</code> 本身跑不動（例如 <code>gh</code> 未登入、沒有網路），<code>csarc status</code> 不會冒然回報「政策已變」；會退回 <code>current</code> 並在 <code>policy_check.available</code> 標示 <code>false</code>，保留由人工再次確認。</p></aside>
 <aside class="technical-detail" data-content-key="install-agent"><h3>給 agent 的一個 prompt</h3>
 <p>安裝流程的完整契約在 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/agent-install.md" target="_blank" rel="noreferrer"><code>docs/agent-install.md</code></a>：agent 一律先執行 <code>csarc status</code>，依回傳的 <code>state</code> 走上表對應流程，不自行判斷現在是哪一種情境。判斷邏輯全部寫在 CLI 裡（<code>detect_install_state</code>），agent 只負責呼叫與依結果行動，同一個 repo 狀態不會因為換一次 agent 執行就得到不同答案。</p></aside></div>
+</section>
+<section class="slide markdown-slide dense" id="advanced-install" data-content-key="advanced-install" data-audience="maintainer" data-parity="supplemental" aria-label="搞清楚這個 repo 實際能啟用什麼">
+  <aside class="journey-rail" aria-label="簡報目錄">
+  <h3>使用公版</h3>
+  <ol class="journey-use">
+    <li class="journey-item human">
+      <a href="#capability"><span>能力／導入</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#flow"><span>CI/CD 流程</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#files"><span>檔案地圖</span></a>
+    </li>
+  </ol>
+  <h3>開發與維護</h3>
+  <ol class="journey-main">
+    <li class="journey-item human">
+      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
+    </li>
+  </ol>
+  <h3>公版管理</h3>
+  <ol class="journey-support">
+    <li class="journey-item human">
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer active-selection" data-audience="maintainer" href="#advanced-install" aria-current="page">進階安裝</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
+  <div class="journey-legend" aria-label="顏色說明">
+    <span><i class="human" aria-hidden="true"></i>需要人決策</span>
+    <span><i class="automated" aria-hidden="true"></i>預設自動完成</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>僅維運可見</span>
+  </div>
+</aside>
+
+<header>
+  <span class="selection-sequence">維運附錄｜Repo 能力矩陣</span>
+  <h2>搞清楚這個 repo 實際能啟用什麼</h2>
+  <p class="subtitle">除了 apply-repository-settings.sh 既有的 GitHub 方案探測，scripts/check-repo-capabilities 再檢查這個 repo 與 token 本身實際具備什麼。</p>
+</header>
+<div class="markdown-body"><p>「規則治理」（Step 08）的方案能力表回答的是「這個帳號的 GitHub *方案* 允許什麼」；這是必要條件，但不夠：organization 政策、CODEOWNERS team 是否真的存在、token 權限範圍，都可能在方案本身支援的情況下仍然擋住某項能力。<code>policies/capability-matrix.json</code> 列出這個模板依賴的每一項能力、各自的最低需求與已記錄的 workaround；<code>scripts/check-repo-capabilities</code> 會即時對照這個 repo 實際狀態：</p>
+<pre class="command"><code>./scripts/check-repo-capabilities        # 人類可讀報告
+./scripts/check-repo-capabilities --json # 機器可讀的能力清單與統計</code></pre>
+<table><thead><tr><th>能力</th><th>啟用了什麼</th><th>最低需求</th><th>缺少時</th></tr></thead><tbody><tr><td><code>repository_admin</code></td><td>以下每一項能力的前提</td><td>目前 token 的 <code>permissions.admin == true</code></td><td>請 owner／admin 執行 <code>apply</code>，或申請 Admin 角色</td></tr><tr><td><code>ruleset_enforcement</code></td><td>預設分支的 Ruleset 分支保護</td><td>public repository（任何方案），或 private 且 Pro／Team 以上</td><td>DEGRADED 標記；<code>policies/rulesets.json</code> 保留為 desired state</td></tr><tr><td><code>codeowners_enforcement</code></td><td>CODEOWNERS review 真的能擋下合併</td><td>需先具備上一項，且 <code>@org/team</code> 具寫入權限</td><td>DEGRADED 標記；修正 team，或先用 <code>scripts/request-reviewer</code></td></tr><tr><td><code>actions_pr_approval</code></td><td>Actions 能自動核准 PR（例如 Dependabot auto-merge）</td><td>organization 允許 <code>can_approve_pull_request_reviews</code></td><td>DEGRADED 標記；降級為人工核准</td></tr><tr><td><code>security_and_analysis</code></td><td>secret scanning、push protection、Dependabot security updates</td><td>public repository，或 private 且具備 GitHub Advanced Security</td><td>DEGRADED 標記；改用本機 <code>scripts/scan-secrets</code></td></tr><tr><td><code>github_pages</code></td><td>將 <code>docs/index.html</code> 發布成 hosted 網站</td><td>public repository，或 private 且為 GitHub Enterprise Cloud</td><td>DEGRADED 標記；改分享 commit 進 repo 的 HTML 檔案</td></tr><tr><td><code>repository_settings_inspection</code></td><td><code>check</code> 模式能比對即時的管理員專屬欄位</td><td>與 <code>repository_admin</code> 相同</td><td>DEGRADED 標記；改在具 admin 身分的可信環境執行 <code>check</code></td></tr><tr><td><code>immutable_releases</code></td><td>hosted Automatic／Guided 發版的必要條件</td><td>真人 admin 身分，絕非預設 <code>GITHUB_TOKEN</code></td><td>已知永久限制（#123／#626）；改在本機執行 <code>scripts/publish-release</code></td></tr></tbody></table>
+<aside class="technical-detail" data-content-key="advanced-install-results"><h3>怎麼解讀 check-repo-capabilities 的結果</h3>
+<p>每一列會回報三態之一：<code>allowed</code>（現在就能用）、<code>blocked</code>（確實缺少某個條件）、<code>unknown</code>（單靠唯讀探測無法證實——例如某個 Actions 設定目前是關的，可能只是還沒開，不代表被 organization 政策擋住）。這是診斷用的 preflight，不是合併關卡：報告產出後一律回傳 <code>0</code>，也不會對 GitHub 做任何寫入。「即時設定是否真的符合宣告政策」仍然是 <code>apply-repository-settings.sh check</code> 的工作。</p>
+<p><code>--facts &lt;file&gt;</code> 可以讀取預先準備好的 facts，不必呼叫 <code>gh</code>，因此同一份矩陣可以在沒有即時存取的情況下對照假設的權限組合——<code>scripts/test-check-repo-capabilities</code> 就是用這個方式，在完全不連網路的情況下驗證多種權限／方案組合的缺口清單是否正確。</p></aside>
+<aside class="technical-detail" data-content-key="advanced-install-workarounds"><h3>Workaround 與既有的 DEGRADED 標記</h3>
+<p>這份矩陣不是要取代或重新設計 <code>apply-repository-settings.sh</code> 既有的 DEGRADED 機制，而是把它寫清楚。凡是 workaround 寫「DEGRADED 標記」的列，用的都是 <code>apply-repository-settings.sh check</code>／<code>plan</code>／<code>apply</code> 對同一個限制本來就會印出的那個 fail-safe；兩邊不會互相矛盾，因為底層偵測（方案、visibility、admin 權限）完全相同。長期決策記錄在 <code>docs/ci-policy.md</code> 與<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md" target="_blank" rel="noreferrer">能力導向治理 ADR</a>；這一頁與 <code>policies/capability-matrix.json</code> 是兩邊共同參照、保持最新的單一來源。</p></aside></div>
 </section>
 <section class="slide markdown-slide legacy-slide pipeline-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="模板會帶你走完每次變更">
   <aside class="journey-rail" aria-label="簡報目錄">
@@ -2323,6 +2404,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -2441,6 +2523,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -2518,6 +2601,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -2621,6 +2705,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -2701,6 +2786,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -2780,6 +2866,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -2862,6 +2949,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -2943,6 +3031,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3029,6 +3118,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3137,6 +3227,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3239,6 +3330,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3318,6 +3410,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3407,6 +3500,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer active-selection" data-audience="maintainer" href="#bridge" aria-current="page">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3502,6 +3596,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human active-selection" href="#similar-tools" aria-current="page">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3572,6 +3667,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer active-selection" data-audience="maintainer" href="#testing" aria-current="page">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3642,6 +3738,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3725,6 +3822,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3809,6 +3907,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3900,6 +3999,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -3992,6 +4092,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -4081,6 +4182,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -4173,6 +4275,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">
@@ -4271,6 +4374,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">進階安裝</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
   <div class="journey-legend" aria-label="顏色說明">

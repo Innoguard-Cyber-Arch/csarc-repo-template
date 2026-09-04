@@ -27,6 +27,7 @@ paired_files=(
   .github/workflows/spec-to-issue.yml
   .github/workflows/work-item-lifecycle.yml
   policies/actions.json
+  policies/capability-matrix.json
   policies/issue-creation.json
   policies/labels.json
   policies/pages.json
@@ -39,6 +40,8 @@ paired_files=(
   scripts/render_site.py
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
+  scripts/check-repo-capabilities
+  scripts/repo_capabilities.py
   scripts/request-reviewer
   scripts/ci_tier.py
   scripts/delivery_sync.py
@@ -65,6 +68,7 @@ paired_files=(
   scripts/sync_milestone_state.py
   scripts/sync_work_item_metadata.py
   scripts/test-apply-repository-settings
+  scripts/test-check-repo-capabilities
   scripts/test-check-scope-gate
   scripts/test-issue-triage
   scripts/test-pr-policy
@@ -86,6 +90,7 @@ paired_files=(
   tests/test_milestone_scope.py
   tests/test_release_policy.py
   tests/test_release_bundle.py
+  tests/test_repo_capabilities.py
   tests/test_work_item_metadata.py
   tests/test_work_pr_closure.py
   zizmor.yml

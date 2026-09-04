@@ -92,3 +92,12 @@
     every administrator-only field; run the full check from a trusted checkout
     with repository Administration read access, and never expose that token to
     untrusted pull request code.
+13. Beyond GitHub-plan probing, `scripts/check-repo-capabilities` reports which
+    of this specific repository's own capabilities/permissions (Ruleset
+    enforcement, CODEOWNERS review, Actions PR auto-approval, security
+    scanning, GitHub Pages, and more) are `allowed`, `blocked`, or `unknown`
+    against `policies/capability-matrix.json`, plus the documented workaround
+    for each gap. It never writes anything, so an agent may run it and report
+    the result without separate confirmation. See the "Advanced" appendix on
+    the internal decision site (`docs/index.html#advanced-install`) for the
+    full matrix and how to read a result.

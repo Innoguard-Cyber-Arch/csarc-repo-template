@@ -39,6 +39,7 @@
   ],
   "appendices": [
     {"key": "similar-tools", "participation": "human", "labels": {"zh-tw": "相似工具", "en": "Similar"}},
+    {"key": "advanced-install", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "進階安裝", "en": "Advanced"}},
     {"key": "testing", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "CI/CD 設定", "en": "CI/CD"}},
     {"key": "bridge", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "五月盤點", "en": "May review"}}
   ]
