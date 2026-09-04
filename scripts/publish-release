@@ -235,11 +235,11 @@ cmd_publish() {
   fi
   python3 "$repo_root/scripts/release_bundle.py" finalize --tag "$tag" --output "$assets"
   python3 "$repo_root/scripts/release_bundle.py" verify --tag "$tag" --output "$assets"
-  gh release view "$tag" --json assets \
-    --jq '.assets[].id' | while read -r asset_id; do
-    gh api --method DELETE \
-      "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
-  done
+  # gh release upload's own --clobber already deletes and re-uploads any
+  # existing same-named asset -- a separate list-then-DELETE pass here was
+  # redundant, and both the list (GET .../releases/tags/{tag}) and delete
+  # (DELETE .../releases/assets/{id}) REST endpoints are unreliable for a
+  # draft release's assets regardless of which query method finds them.
   gh release upload "$tag" "$assets"/* --clobber
   local downloaded
   downloaded="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
