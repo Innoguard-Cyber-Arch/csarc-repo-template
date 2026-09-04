@@ -194,7 +194,10 @@ def _make_repo(tmp_path: Path, config_yaml: str) -> Path:
     # scripts/apply-repository-settings.sh without this fixture also
     # providing scripts/release_phase_rulesets.py, which it has no reason to
     # need.
-    root_repo_only_policies = {"project-stage.json", "rulesets-required-checks.json"}
+    root_repo_only_policies = {
+        "project-stage.json",
+        "rulesets-required-checks.json",
+    }
     policies_dir = repo / "policies"
     policies_dir.mkdir()
     for policy_file in POLICIES_SOURCE.glob("*.json"):
