@@ -3753,6 +3753,99 @@ def test_update_migrates_legacy_copier_answers_to_single_config(
     assert not (project / ".copier-answers.yml").exists()
 
 
+@pytest.mark.large
+def test_update_migrates_legacy_profile_json_before_finalize_tasks(
+    tmp_path: Path,
+) -> None:
+    """Seed the new config path before Copier's own finalize tasks run.
+
+    A repository adopted before .csarc/config.yml existed has both a
+    .copier-answers.yml (Copier's own tracking) and a .csarc/profile.json
+    (an older, now-unused derivative of a subset of those same answers:
+    branch strategy, language modules, a since-removed container feature).
+    Every field profile.json held is already part of the unified answers
+    file, so migrating it is a matter of retiring it, not reading it.
+
+    The real failure this reproduces is a timing bug, not a missing
+    rename: the target template version's own finalize tasks run inside
+    the same `copier update` subprocess call and read .csarc/config.yml
+    directly (this is exactly what scripts/render_site.py does in the
+    real template). If the answers file is renamed only *after* that
+    subprocess returns, those tasks fail mid-update on a legacy
+    repository that still only has .copier-answers.yml. This template
+    fixture adds an equivalent finalize task to prove the seeding now
+    happens early enough for it to see the migrated file.
+    """
+    source, project, _ = initialize_project(tmp_path)
+    (project / ".csarc/profile.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "template_mode": "existing",
+                "branch_strategy": "main",
+                "language_profile": "ci",
+                "modules": {
+                    "ci_cd": True,
+                    "container": False,
+                    "python": False,
+                    "typescript": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated legacy project with profile.json")
+
+    copier_config = source / "copier.yml"
+    config = yaml.safe_load(copier_config.read_text(encoding="utf-8"))
+    config["_answers_file"] = ".csarc/config.yml"
+    config["_tasks"] = [
+        {
+            "command": [
+                "python3",
+                "-c",
+                "import pathlib, sys; "
+                "sys.exit(0 if pathlib.Path('.csarc/config.yml')"
+                ".is_file() else 1)",
+            ]
+        }
+    ]
+    copier_config.write_text(
+        yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+    )
+    verify = source / "template/scripts/verify"
+    verify.write_text(
+        verify.read_text(encoding="utf-8").replace(
+            ".copier-answers.yml", ".csarc/config.yml"
+        ),
+        encoding="utf-8",
+    )
+    second_sha = commit(source, "test: require config.yml during finalize")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                second_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    config_path = project / ".csarc/config.yml"
+    assert config_path.is_file()
+    assert f"_commit: {second_sha}" in config_path.read_text(encoding="utf-8")
+    assert not (project / ".copier-answers.yml").exists()
+    assert not (project / ".csarc/profile.json").exists()
+
+
 def test_update_check_validates_hook_without_running_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -4669,6 +4762,19 @@ def test_provenance_validation_and_legacy_migration(tmp_path: Path) -> None:
             from_release=None,
             client=FakeReleaseClient(),
         )
+    # A record that still claims "verified" but fails the strict field
+    # check is corrupted or tampered, not merely an old format; the legacy
+    # escape hatch must not become a way to bypass that distinction.
+    with pytest.raises(CliError, match="repository_id"):
+        cli.current_revision(
+            target,
+            cli.CANONICAL_SOURCE,
+            commit_sha,
+            allow_unreleased=False,
+            accept_legacy=True,
+            from_release="v1.2.3",
+            client=FakeReleaseClient(),
+        )
 
     saved_path.unlink()
     with pytest.raises(CliError, match="Legacy repository"):
@@ -4692,6 +4798,90 @@ def test_provenance_validation_and_legacy_migration(tmp_path: Path) -> None:
     )
     assert migrated.verified
     assert prior is not None and prior["verification"] == "legacy-unverified"
+
+
+def test_update_migrates_present_but_unverified_provenance_format(
+    tmp_path: Path,
+) -> None:
+    """Offer a legal migration for provenance saved in the old unverified shape.
+
+    A repository adopted before the "verified" provenance schema existed
+    (for example one written by an --allow-unreleased adopt against an
+    older CLI) has a provenance.json that is present but was never fully
+    verified: `verification` is "development-unreleased" rather than
+    "verified", and `repository_id`/`release_immutable`/
+    `release_attestation_verified`/`signature_verified` are absent or
+    false. This must not fall into the strict "verified" field check
+    (which would reject it with an opaque "field ... is not trusted"
+    error unrelated to any actual version comparison), nor should it be
+    silently accepted; it needs the same explicit, human-authorized
+    --accept-legacy/--from-release migration already offered when
+    provenance is completely absent.
+    """
+    target = tmp_path / "project"
+    target.mkdir()
+    commit_sha = "b" * 40
+    provenance_path = target / cli.PROVENANCE_FILE
+    provenance_path.parent.mkdir(parents=True)
+    provenance_path.write_text(
+        json.dumps(
+            {
+                "applied_at": "2026-08-27T00:00:00Z",
+                "commit_sha": commit_sha,
+                "guide_url": "unavailable-for-unverified-development-source",
+                "release_attestation_verified": False,
+                "release_id": None,
+                "release_immutable": False,
+                "release_tag": "v0.12.2",
+                "repository": "/local/dev/source",
+                "repository_id": None,
+                "schema_version": 1,
+                "signature_verified": False,
+                "verification": "development-unreleased",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # Without the explicit migration flags this must fail actionably; it
+    # must not silently proceed to compare versions, and it must not reuse
+    # the "no verifiable provenance" wording, which would tell an operator
+    # to review a Copier source/SHA answer that in this case already exists.
+    with pytest.raises(CliError, match="unverified legacy format"):
+        cli.current_revision(
+            target,
+            cli.CANONICAL_SOURCE,
+            commit_sha,
+            allow_unreleased=False,
+            accept_legacy=False,
+            from_release=None,
+            client=FakeReleaseClient(),
+        )
+    # accept_legacy alone, without a target release to re-verify against,
+    # is not enough either.
+    with pytest.raises(CliError, match="unverified legacy format"):
+        cli.current_revision(
+            target,
+            cli.CANONICAL_SOURCE,
+            commit_sha,
+            allow_unreleased=False,
+            accept_legacy=True,
+            from_release=None,
+            client=FakeReleaseClient(),
+        )
+
+    migrated, prior = cli.current_revision(
+        target,
+        cli.CANONICAL_SOURCE,
+        commit_sha,
+        allow_unreleased=False,
+        accept_legacy=True,
+        from_release="v1.2.3",
+        client=FakeReleaseClient(),
+    )
+    assert migrated.verified
+    assert prior is not None and prior["verification"] == "legacy-unverified"
+    assert prior["commit_sha"] == commit_sha
 
 
 def test_github_api_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4859,6 +5049,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_update_check_reports_capability_drift_at_same_revision",
         "test_update_hook_failure_leaves_target_unchanged",
         "test_update_migrates_legacy_copier_answers_to_single_config",
+        "test_update_migrates_legacy_profile_json_before_finalize_tasks",
         "test_update_plan_resolves_target_answers_and_capabilities",
         "test_update_rechecks_committed_head_after_confirmation",
         "test_update_rechecks_repository_context_after_confirmation",
