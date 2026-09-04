@@ -2386,6 +2386,110 @@ def test_adopt_infers_unicode_repository_and_applies_exact_plan(
     assert (project / cli.PROVENANCE_FILE).is_file()
 
 
+def test_adopt_apply_plan_updates_report_to_applied_state(
+    tmp_path: Path,
+) -> None:
+    """Update the same dry-run report in place once adoption is applied."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "applied-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: applied product")
+
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--dry-run",
+    ]
+    assert main(arguments) == 0
+    report_dir = tmp_path / "applied-product-csarc-adoption-report"
+    markdown_path = report_dir / "csarc-adoption-dry-run.md"
+    plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
+    before_markdown = markdown_path.read_text(encoding="utf-8")
+    assert "Decision: Ready to adopt" in before_markdown
+    assert "Adoption applied: `false`" in before_markdown
+    assert "## If you approve" in before_markdown
+    assert "## Adoption applied" not in before_markdown
+    before_payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert "applied" not in before_payload["adoption"]
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+
+    after_markdown = markdown_path.read_text(encoding="utf-8")
+    assert "Decision: Adopted" in after_markdown
+    assert "Adoption applied: `true`" in after_markdown
+    assert "## Adoption applied" in after_markdown
+    assert "## If you approve" not in after_markdown
+    after_payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert after_payload["adoption"]["applied"] is True
+    assert isinstance(after_payload["adoption"]["applied_at"], str)
+    pdf_text = (
+        PdfReader(report_dir / "csarc-adoption-dry-run.pdf")
+        .pages[0]
+        .extract_text()
+    )
+    assert "Applied" in pdf_text
+
+
+def test_adopt_finalize_apply_updates_report_to_applied_state(
+    tmp_path: Path,
+) -> None:
+    """Finalize records the post-adoption state in the same report file."""
+    _, project = initialize_pending_adoption(tmp_path)
+    report_dir = tmp_path / "pending-product-csarc-adoption-report"
+    markdown_path = report_dir / "csarc-adoption-dry-run.md"
+
+    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    before_markdown = markdown_path.read_text(encoding="utf-8")
+    assert "Adoption applied: `false`" in before_markdown
+    assert "## Adoption applied" not in before_markdown
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--apply-plan",
+                str(finalize_plan_path(project)),
+                "--non-interactive",
+                "--yes",
+            ]
+        )
+        == 0
+    )
+
+    after_markdown = markdown_path.read_text(encoding="utf-8")
+    assert "Decision: Adopted" in after_markdown
+    assert "Adoption applied: `true`" in after_markdown
+    assert "## Adoption applied" in after_markdown
+    payload = json.loads(
+        (report_dir / cli.ADOPTION_PLAN_BASENAME).read_text(encoding="utf-8")
+    )
+    assert payload["adoption"]["applied"] is True
+    assert isinstance(payload["adoption"]["applied_at"], str)
+
+
 @pytest.mark.large
 def test_adopt_rejects_plan_tampering_and_target_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
