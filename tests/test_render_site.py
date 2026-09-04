@@ -400,7 +400,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
-    assert "8 條共用流程" in file_map
+    assert "9 條共用流程" in file_map
     workflow_labels = {
         "ci.yml": "必要驗證",
         "codeql.yml": "CodeQL SAST",
@@ -410,6 +410,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "osv.yml": "漏洞排程",
         "pr-policy.yml": "PR 規則",
         "release.yml": "候選發版",
+        "release-drift.yml": "發版漂移偵測",
         "spec-to-issue.yml": "規格開單",
         "template-update.yml": "模板更新通知",
         "work-item-lifecycle.yml": "工作單生命週期",

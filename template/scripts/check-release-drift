@@ -1,0 +1,379 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Independent, read-only, scheduled drift check for the release path
+# (Issue #605, split out of #589). #589 made publishing runnable locally
+# when GitHub Actions is unhealthy, but nothing previously noticed that the
+# fallback was needed: `main` could advance with zero successful
+# `release.yml` runs and zero local-publish record, discoverable only by
+# manually checking the GitHub Releases page. Issue #587 was found exactly
+# that way, over 8 hours after release automation had actually stopped.
+#
+# This script must not run as a step inside release.yml itself -- a stuck
+# or broken release pipeline cannot reliably alert on its own breakage. It
+# is invoked by the independent, separately scheduled
+# .github/workflows/release-drift.yml, and is also runnable standalone
+# locally with no arguments beyond `gh` authentication.
+#
+# Detection condition (both must hold):
+#   (a) `main` HEAD is not the commit of the last successful `release.yml`
+#       run on main, nor the commit recorded by the most recent local
+#       publish record -- i.e. main has advanced past the last known
+#       release-path activity.
+#   (b) No successful `release.yml` run AND no local publish record was
+#       observed in the last N hours (wall clock from "now").
+#
+# `release.yml` triggers on every push to main and completes successfully
+# even when release_policy.py decides no release is warranted (a "no
+# release needed today" push is not a failure); so in the healthy case,
+# the last successful run's commit tracks main directly and condition (a)
+# never fires. Drift only surfaces once release.yml stops completing
+# altogether while main keeps moving through ordinary merged pull requests
+# (which do not require release.yml to succeed -- it is a separate
+# push-triggered workflow, not a merge gate).
+#
+# N defaults to 24 hours: release.yml normally finishes within minutes of
+# any push to main, and 24h covers a normal day with no release-relevant
+# push without false-positiving, while still catching a real stall within
+# the same working day (unlike #587's multi-day gap). Override with
+# --hours, or the RELEASE_DRIFT_HOURS environment variable (the workflow
+# also exposes it as a workflow_dispatch input).
+#
+# Local publish record convention (Issue #605 makes this convention
+# concrete; #589 only described it in prose): a line anywhere in either
+# (1) a commit message on `main` (i.e. a merge/squash commit description)
+# or (2) a comment on this script's own open tracking Issue, matching:
+#
+#   Release-publish-record: operator=<@handle> commit=<sha> command="<cmd>" result=<result>
+#
+# `operator`, `commit`, `command`, and `result` are free-form key=value
+# pairs (quote a value that contains spaces); only `commit` is required
+# for detection, but recording all four is the point -- see docs/ci-policy.md's
+# "Release 發版不依賴 Actions 健康度的 fallback（#589）" section for why
+# auditability of a local run needs this trail.
+#
+# This script only detects and reports; it never triggers a release.yml
+# rerun or runs scripts/publish-release itself. Whether to take over
+# publishing stays a human/agent judgment call (see #589).
+#
+# Usage:
+#   scripts/check-release-drift [--repo OWNER/NAME] [--hours N] [--now ISO8601]
+#
+#   --repo OWNER/NAME  Repository to query. Defaults to `gh repo view`.
+#   --hours N          Drift threshold in hours. Defaults to
+#                       $RELEASE_DRIFT_HOURS, or 24 if that is also unset.
+#   --now ISO8601      Override "current time" (UTC). Used by
+#                       scripts/test-check-release-drift for determinism;
+#                       defaults to the real current time.
+#
+# Exit status: 0 when no drift is detected (prints the evidence either
+# way); non-zero when drift is detected (after opening or updating the
+# tracking Issue) so the scheduled workflow run itself also shows failed,
+# same convention as scripts/check-governance-drift.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: scripts/check-release-drift [--repo OWNER/NAME] [--hours N] [--now ISO8601]
+EOF
+  exit 2
+}
+
+repo=""
+hours="${RELEASE_DRIFT_HOURS:-}"
+now_override=""
+while (($#)); do
+  case "$1" in
+    --repo)
+      [[ $# -ge 2 ]] || usage
+      repo="$2"
+      shift 2
+      ;;
+    --hours)
+      [[ $# -ge 2 ]] || usage
+      hours="$2"
+      shift 2
+      ;;
+    --now)
+      [[ $# -ge 2 ]] || usage
+      now_override="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      ;;
+    *)
+      usage
+      ;;
+  esac
+done
+hours="${hours:-24}"
+
+command -v gh >/dev/null 2>&1 || {
+  echo "check-release-drift: the gh CLI is required but was not found on PATH" >&2
+  exit 1
+}
+command -v python3 >/dev/null 2>&1 || {
+  echo "check-release-drift: python3 is required but was not found on PATH" >&2
+  exit 1
+}
+
+if [[ -z "$repo" ]]; then
+  repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+fi
+
+branch="main"
+title="Release publish drift detected"
+marker_prefix="Release-publish-record:"
+
+work_dir="$(mktemp -d)"
+trap 'rm -rf "$work_dir"' EXIT
+
+main_commit_json="$(gh api "repos/$repo/commits/$branch" --jq '{sha: .sha, date: .commit.committer.date}')"
+
+last_run_json="$(gh api "repos/$repo/actions/workflows/release.yml/runs?branch=$branch&status=success&per_page=1" --jq '.workflow_runs[0] // {}')"
+
+# Resolve "now" (and the derived "since" cutoff) through python so date
+# arithmetic stays portable across the GNU/BSD `date` split (Issue #605
+# runs from both Linux Actions runners and maintainer macOS machines).
+now_iso="$(python3 -c '
+import sys
+from datetime import datetime, timezone
+
+override = sys.argv[1]
+if override:
+    dt = datetime.fromisoformat(override.replace("Z", "+00:00"))
+else:
+    dt = datetime.now(timezone.utc)
+print(dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
+' "$now_override")"
+
+since_iso="$(python3 -c '
+import sys
+from datetime import datetime, timedelta, timezone
+
+now = datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))
+hours = float(sys.argv[2])
+print((now - timedelta(hours=hours)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
+' "$now_iso" "$hours")"
+
+commits_json="$(gh api "repos/$repo/commits?sha=$branch&since=$since_iso&per_page=100" --jq '[.[] | {sha: .sha, date: .commit.committer.date, message: .commit.message}]')"
+
+issue_number="$(
+  gh issue list --state open --limit 100 --json number,title \
+    --jq ".[] | select(.title == \"$title\") | .number" |
+    head -n 1
+)"
+
+comments_json="[]"
+if [[ -n "$issue_number" ]]; then
+  comments_json="$(gh api "repos/$repo/issues/$issue_number/comments?per_page=100" --jq '[.[] | {body: .body, date: .created_at}]')"
+fi
+
+result_file="$work_dir/result.json"
+
+python3 - "$result_file" "$repo" "$branch" "$hours" "$now_iso" "$since_iso" \
+  "$marker_prefix" "$title" <<'PY' "$main_commit_json" "$last_run_json" "$commits_json" "$comments_json"
+import json
+import re
+import sys
+from datetime import datetime
+
+(result_path, repo, branch, hours_raw, now_raw, since_raw,
+ marker_prefix, title) = sys.argv[1:9]
+main_commit_raw, last_run_raw, commits_raw, comments_raw = sys.argv[9:13]
+
+
+def parse_time(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+main_commit = json.loads(main_commit_raw)
+last_run = json.loads(last_run_raw) or None
+commits = json.loads(commits_raw)
+comments = json.loads(comments_raw)
+now = parse_time(now_raw)
+since = parse_time(since_raw)
+hours = float(hours_raw)
+
+main_sha = main_commit["sha"]
+main_date = main_commit["date"]
+
+last_success_sha = last_run.get("head_sha") if last_run else None
+last_success_time_raw = last_run.get("updated_at") if last_run else None
+last_success_time = parse_time(last_success_time_raw) if last_success_time_raw else None
+last_success_url = last_run.get("html_url") if last_run else None
+
+record_pattern = re.compile(re.escape(marker_prefix) + r"\s*(?P<fields>.+)")
+field_pattern = re.compile(r'(\w+)=("[^"]*"|\S+)')
+
+
+def parse_record(text: str) -> dict[str, str] | None:
+    match = record_pattern.search(text or "")
+    if not match:
+        return None
+    fields = {
+        key: raw_value.strip('"')
+        for key, raw_value in field_pattern.findall(match.group("fields"))
+    }
+    return fields if "commit" in fields else None
+
+
+candidates = []
+for commit in commits:
+    fields = parse_record(commit.get("message", ""))
+    if fields:
+        candidates.append(
+            {
+                "source": f"commit {commit['sha'][:12]} on {branch}",
+                "time": commit["date"],
+                "fields": fields,
+            }
+        )
+for comment in comments:
+    fields = parse_record(comment.get("body", ""))
+    if fields:
+        candidates.append(
+            {
+                "source": "tracking Issue comment",
+                "time": comment["date"],
+                "fields": fields,
+            }
+        )
+
+record = max(candidates, key=lambda item: parse_time(item["time"])) if candidates else None
+record_sha = record["fields"].get("commit") if record else None
+record_time = parse_time(record["time"]) if record else None
+
+released_shas = {sha for sha in (last_success_sha, record_sha) if sha}
+main_advanced = main_sha not in released_shas
+
+success_recent = bool(last_success_time and last_success_time >= since)
+record_recent = bool(record_time and record_time >= since)
+recent_activity = success_recent or record_recent
+
+drift = main_advanced and not recent_activity
+
+lines = [
+    f"Release drift check for {repo} (branch: {branch}, threshold: {hours:g}h, now: {now_raw})",
+    f"main HEAD: {main_sha} ({main_date})",
+]
+if last_run:
+    lines.append(
+        f"Last successful release.yml run: {last_success_sha} at {last_success_time_raw} ({last_success_url})"
+    )
+else:
+    lines.append("Last successful release.yml run: none found")
+if record:
+    lines.append(
+        "Local publish record: "
+        + " ".join(f"{key}={value}" for key, value in record["fields"].items())
+        + f" (from {record['source']} at {record['time']})"
+    )
+else:
+    lines.append("Local publish record: none found")
+lines.append(
+    "Result: "
+    + (
+        "DRIFT DETECTED"
+        if drift
+        else "no drift (main not advanced past the last known release activity)"
+        if not main_advanced
+        else "no drift (recent release activity within the threshold)"
+    )
+)
+summary = "\n".join(lines)
+
+if drift:
+    last_success_evidence = (
+        f"- 最後一次成功的 `release.yml` run：`{last_success_sha}`，{last_success_time_raw}（{last_success_url}）"
+        if last_run
+        else "- 最後一次成功的 `release.yml` run：找不到任何成功 run"
+    )
+    record_evidence = (
+        "- 本機發版紀錄：`{fields}`（來源：{source}，時間：{time}）".format(
+            fields=" ".join(f"{key}={value}" for key, value in record["fields"].items()),
+            source=record["source"],
+            time=record["time"],
+        )
+        if record
+        else "- 本機發版紀錄：找不到符合格式的紀錄"
+    )
+    issue_body = f"""### 問題
+
+排程執行的 `scripts/check-release-drift` 偵測到 `main` 已經前進，但過去 {hours:g} 小時內
+沒有找到任何一次成功的 `release.yml` run，也沒有找到本機發版紀錄。這代表發版流程可能已經
+停擺，且過去沒有人會自動被通知——見 #587（2026-09-03，同樣的狀況拖了超過 8 小時才被人工
+發現 Releases 頁面停在舊版本）與 #605（本檢查本身的設計背景）。此通知不會自動觸發
+`release.yml` 重跑，也不會自動執行本機發版；是否接手仍由人或 agent 判斷。
+
+### 目前證據
+
+- `main` HEAD：`{main_sha}`，{main_date}
+{last_success_evidence}
+{record_evidence}
+- 判定門檻：過去 {hours:g} 小時（可用 `RELEASE_DRIFT_HOURS` 環境變數或
+  `.github/workflows/release-drift.yml` 的 `hours` workflow_dispatch input 調整）
+
+### 完成條件
+
+- [ ] 確認這是真的發版停擺，還是預期中「一整天沒有東西需要發版」的正常空窗期
+- [ ] 若確認停擺：檢查 `release.yml` 最近幾次 run 失敗原因
+      （`gh run list --workflow release.yml` 或 Actions 頁面），修好 hosted 路徑；或依
+      `docs/ci-policy.md` 的「Release 發版不依賴 Actions 健康度的 fallback（#589）」一節，
+      由具備 admin 權限的維護者本機執行 `scripts/publish-release`
+- [ ] 執行本機發版後，依約定在合併說明或本 Issue 留言記錄：
+      `` `Release-publish-record: operator=<@handle> commit=<sha> command="<command>" result=<result>` ``
+- [ ] 重新排程執行（或手動觸發 `.github/workflows/release-drift.yml`）確認已恢復，並手動
+      關閉本 Issue
+
+### 補充
+
+此 Issue 由排程 workflow（`.github/workflows/release-drift.yml`）自動開立或更新；它只負責
+偵測與通知，不會自動觸發 `release.yml` 重跑或自動執行本機發版。
+"""
+else:
+    issue_body = ""
+
+json.dump(
+    {
+        "drift": drift,
+        "summary": summary,
+        "issue_title": title,
+        "issue_body": issue_body,
+    },
+    open(result_path, "w", encoding="utf-8"),
+)
+PY
+
+summary="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["summary"])' "$result_file")"
+drift="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["drift"])' "$result_file")"
+
+printf '%s\n' "$summary"
+
+if [[ "$drift" != "True" ]]; then
+  echo "No release publish drift detected."
+  exit 0
+fi
+
+echo "Release publish drift detected." >&2
+
+issue_body_file="$work_dir/issue-body.md"
+python3 -c 'import json,sys; sys.stdout.write(json.load(open(sys.argv[1], encoding="utf-8"))["issue_body"])' "$result_file" >"$issue_body_file"
+
+if [[ -n "$issue_number" ]]; then
+  gh issue edit "$issue_number" --body-file "$issue_body_file" >/dev/null
+  echo "Updated release drift tracking Issue #$issue_number."
+else
+  gh issue create \
+    --title "$title" \
+    --label bug \
+    --type Bug \
+    --assignee @me \
+    --body-file "$issue_body_file" >/dev/null
+  echo "Opened a release drift tracking Issue."
+fi
+
+exit 1
