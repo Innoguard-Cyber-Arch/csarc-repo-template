@@ -2,7 +2,7 @@
 
 Cyber-Arch 的可更新 repo 公版，支援只使用共通流程，或獨立選擇 Python、Rust、TypeScript。新案、既有案與後續政策更新都經 Copier 形成可審查差異。
 
-目前公版：v0.13.0 <!-- x-release-please-version -->
+目前公版：v0.14.0 <!-- x-release-please-version -->
 
 > [!IMPORTANT]
 > Milestone 8 正在逐頁重定義產品規格。目前只有已審查且位於 `.github/workflows/` 的流程會執行；其他流程仍封存。各階段的啟用狀態以[CI/CD 設定](docs/index.html#testing)為準。

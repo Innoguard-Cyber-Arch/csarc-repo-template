@@ -7,6 +7,26 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.14.0] - 2026-09-04
+
+### Features
+
+* feat(governance): gate self-approval bypass scope to release phase (#615) (876aa9c)
+* feat(scripts): default the tool cache root to a shared user-level path (#650) (c0f5bfc)
+* feat(governance): merge Issue triage, Milestone lifecycle, and Work Issue closure into one job (#653) (fb18b73)
+* feat(ci): produce the promotion required check for ordinary PRs (#654) (baa9666)
+* feat(governance): add Milestone creation preflight and atomic creation tool (#655) (5161454)
+* feat(ci): add scheduled release-publish drift alert (#656) (39258f2)
+* feat(ci): verify PRs via local attestation instead of hosted Actions (#671) (a52022d)
+
+### Bug Fixes
+
+* fix(release): use gh release view for draft asset listing (#644) (152c6a7)
+* fix(release): remove redundant asset cleanup and stray gitignore (#647) (8687e6b)
+* fix(docs): render README bold-prefix line correctly on GitHub (#640) (b66f36a)
+* fix(ci): exempt release-please and narrow the writer scanner (#643) (#649) (c8d3efc)
+* fix(governance): stop the acceptance-checklist retry storm (#651) (51fe2b7)
+
 ## [0.13.0] - 2026-09-04
 
 ### Features

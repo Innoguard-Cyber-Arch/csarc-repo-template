@@ -24,7 +24,7 @@ fit = "符合畫面"
         <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由變更提案（PR）合併。</p>
         <p class="subtitle">標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；維運模式才補充設定檔、程式與技術理由。快速導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
-          <span class="package-badge beta">v0.13.0</span><!-- x-release-please-version -->
+          <span class="package-badge beta">v0.14.0</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">三種分支做法</span>
