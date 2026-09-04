@@ -2087,6 +2087,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -2215,6 +2218,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human active" aria-current="step">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -2303,6 +2309,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -2381,6 +2390,93 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 <aside class="technical-detail" data-content-key="advanced-install-workarounds"><h3>Workaround 與既有的 DEGRADED 標記</h3>
 <p>這份矩陣不是要取代或重新設計 <code>apply-repository-settings.sh</code> 既有的 DEGRADED 機制，而是把它寫清楚。凡是 workaround 寫「DEGRADED 標記」的列，用的都是 <code>apply-repository-settings.sh check</code>／<code>plan</code>／<code>apply</code> 對同一個限制本來就會印出的那個 fail-safe；兩邊不會互相矛盾，因為底層偵測（方案、visibility、admin 權限）完全相同。長期決策記錄在 <code>docs/ci-policy.md</code> 與<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md" target="_blank" rel="noreferrer">能力導向治理 ADR</a>；這一頁與 <code>policies/capability-matrix.json</code> 是兩邊共同參照、保持最新的單一來源。</p></aside></div>
 </section>
+<section class="slide markdown-slide dense" id="about" data-content-key="about" data-track="about" aria-label="CSARC 是什麼、給誰用">
+  <aside class="journey-rail" aria-label="簡報目錄">
+  <h3>功能</h3>
+  <ol class="journey-use">
+    <li class="journey-item human">
+      <a href="#capability"><span>首頁</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human active" aria-current="step">
+      <a href="#about"><span>關於</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#flow"><span>CI/CD 流程</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#files"><span>檔案地圖</span></a>
+    </li>
+  </ol>
+  <h3>模組</h3>
+  <ol class="journey-main">
+    <li class="journey-item human">
+      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
+    </li>
+  </ol>
+  <h3>維運</h3>
+  <ol class="journey-support">
+    <li class="journey-item human">
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#similar-tools"><span class="journey-code">11</span><span>相似工具</span></a>
+    </li>
+    <li class="journey-item maintainer" data-audience="maintainer">
+      <a href="#advanced-install"><span class="journey-code">12</span><span>進階安裝</span></a>
+    </li>
+    <li class="journey-item maintainer" data-audience="maintainer">
+      <a href="#testing"><span class="journey-code">13</span><span>CI/CD 設定</span></a>
+    </li>
+    <li class="journey-item maintainer" data-audience="maintainer">
+      <a href="#bridge"><span class="journey-code">14</span><span>五月盤點</span></a>
+    </li>
+  </ol>
+
+  <div class="journey-legend" aria-label="顏色說明">
+    <span><i class="human" aria-hidden="true"></i>需要人決策</span>
+    <span><i class="automated" aria-hidden="true"></i>預設自動完成</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>僅維運可見</span>
+  </div>
+</aside>
+
+<header>
+  <span class="selection-sequence">關於</span>
+  <h2>CSARC 是什麼、給誰用</h2>
+  <p class="subtitle">可更新的 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。</p>
+</header>
+<div class="markdown-body"><p>本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。<code>template/</code> 是下發給使用者專案的內容；根目錄則讓公版本身使用同一套規則（self-hosting）。</p>
+<p>目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證；生成專案另可選配 <code>enable_docker</code>，取得 Dockerfile／docker-compose 起始範本與一支唯讀、不推送的容器建置掃描 CI job。</p>
+<table><thead><tr><th>可以直接選擇</th><th>選項</th></tr></thead><tbody><tr><td>程式語言</td><td>Python、Rust、TypeScript 可獨立複選；都不選時只使用共通工作流程</td></tr><tr><td>分支做法</td><td>每個交付批次有自己的開發分支、所有修改直接進 <code>main</code>，或先集中到 <code>dev</code></td></tr><tr><td>公版設定</td><td>建立／導入時把選項寫入 <code>.csarc/config.yml</code>；之後由公版更新，不必到不同檔案重複設定</td></tr></tbody></table>
+<aside class="technical-detail" data-content-key="about-doc-map"><h3>這份文件跟 README、AGENTS.md 的分工</h3>
+<p><code>README.md</code> 給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 <code>AGENTS.md</code>（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，就是這個內部決策網站本身。三份文件各自負責一層，避免同一套規則重複維護。<code>docs/about.md</code>／<code>docs/install.md</code> 是這個頁面與「安裝說明」頁的可維護來源。</p></aside></div>
+</section>
 <section class="slide markdown-slide legacy-slide pipeline-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="模板會帶你走完每次變更">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>功能</h3>
@@ -2390,6 +2486,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated active" aria-current="step">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -2519,6 +2618,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -2605,6 +2707,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -2719,6 +2824,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -2809,6 +2917,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -2897,6 +3008,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -2990,6 +3104,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -3080,6 +3197,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -3176,6 +3296,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -3295,6 +3418,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -3407,6 +3533,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -3495,6 +3624,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -3594,6 +3726,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -3700,6 +3835,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -3780,6 +3918,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -3859,6 +4000,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -3953,6 +4097,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -4046,6 +4193,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -4147,6 +4297,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -4250,6 +4403,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
@@ -4348,6 +4504,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -4450,6 +4609,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
@@ -4558,6 +4720,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>安裝說明</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>關於</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD 流程</span></a>
