@@ -49,20 +49,22 @@ lease，並透過 `scripts/pr_lifecycle.py` 執行；`scripts/verify` 會拒絕�
    的 conclusion 就一併略過——用 #513 的 `scripts/check-pr-policy-status`（完成前，
    改用 `gh run view <run-id> --log | grep -E "Validate pull request policy|##\[error\]"`
    手動確認）。
-2. Ruleset 的 self-approval 結構性卡點，見下方「Release phase 與 bypass 範圍收斂」。
+2. Ruleset 的 self-approval 結構性卡點，見下方「Alpha 自我核准 bypass」及其後的
+   「Release phase 與 bypass 範圍收斂」。
 
 **`--admin` 本身不足以繞過任何 Ruleset 規則。** 舊版 classic branch protection 會自動
 給 repository admin 身分繞過，但 Ruleset 只認 `policies/rulesets.json`（或本節後述
 拆分後的第二個 Ruleset 檔）頂層 `bypass_actors`（不在 `rules` 陣列內）明列的項目；
-沒有對應 `bypass_actors` 項目時，`--admin` 對 Ruleset 直接無效，merge 會被拒絕。
+沒有對應 `bypass_actors` 項目時，`--admin` 對 Ruleset 直接無效，merge 會被拒絕（#580
+的既有踩坑：`gh pr merge --admin` 對新版 Ruleset 也不生效，不像舊版 classic branch
+protection 那樣自動給 admin 身分繞過）。
 
-### Release phase 與 bypass 範圍收斂（#607）
+### Alpha 自我核准 bypass（#580）
 
 Repository 結構性只有一個真人帳號、沒有第二人可核准時，`require_code_owner_review`／
 `required_approving_review_count` 一旦透過 Ruleset 生效，任何人都無法核准自己開的
 PR——GitHub 回報「Review Can not approve your own pull request」，這是 GitHub 平台
-全站限制，不是本 repo 政策，review 端無法繞過（#580 記錄了這個結構性卡點與
-`actor_id: 5` 對應 repository **admin** 角色的實測結果）。
+全站限制，不是本 repo 政策，review 端無法繞過。
 
 解法是在 Ruleset 的 `bypass_actors` 加入：
 
@@ -70,11 +72,43 @@ PR——GitHub 回報「Review Can not approve your own pull request」，這是
 {"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "pull_request"}
 ```
 
-#580 也發現這個 bypass 的實際涵蓋範圍比字面看起來寬：`bypass_mode: "pull_request"`
-不只放寬 `pull_request` 規則本身（`require_code_owner_review`、
-`required_approving_review_count`），也一併放寬 `required_status_checks`
-規則——因為 GitHub 的 `bypass_actors` 是綁在整個 Ruleset 上，沒有「只對某個 rule
-type 生效」的欄位。#607 的決定：這個較寬的涵蓋範圍不能是永久、不分階段的事實。
+`actor_id: 5` 經實測確認對應 repository **admin** 角色（以角色身份設定，不綁特定帳號）。
+`bypass_mode: "pull_request"` 的實際涵蓋範圍比字面看起來寬：不只放寬 `pull_request`
+規則本身（`require_code_owner_review`、`required_approving_review_count`），也一併
+放寬 `required_status_checks` 規則——實測見 #580：required check 完全沒有產生
+check-run 時，加了這個 bypass 仍可成功 merge，且不會出現「Required status check ...
+is expected」錯誤，先前沒有這個 bypass 時會明確卡在這個錯誤。也就是說目前的設定等於
+「alpha 期間 PR 相關規則全部不擋」，不是原本想像的「只放寬 review」。它不影響
+`non_fast_forward`：force-push／history rewrite 仍被禁止。這個「alpha 期間」的暫時性
+範圍其後由 #607 正式收斂為可宣告、可查核的 `release_phase` 機制，見下一節「Release
+phase 與 bypass 範圍收斂」。
+
+用這個 bypass 合併一張只卡在 self-approve、內容已獨立驗證的 PR：本機
+`verify-fast`（或適用時 `verify-template.sh`）綠燈，加上另一個獨立管道（例如 review
+agent）對 diff 內容做審查確認，再執行 `gh pr merge --admin`。這條路徑不依賴 hosted
+CI／webhook 是否正常運作（#580 驗證過：同日 GitHub `pull_request` webhook 投遞異常
+期間，仍可只靠本機驗證＋這個 bypass 完成合併）。
+
+這是只在「repo 結構性只有一個真人帳號」這段 alpha 期間才成立的例外，不是長期設計；
+有第二個真正的 collaborator 後應重新檢視是否移除，方向由維護者決定（追蹤於 #580）。
+與 #570（`required_status_checks` Ruleset 定義修復）及 #552（Milestone 核可重新設計，
+同樣處理單一真人帳號 org 的自我核准風險）相關但範圍不同。Milestone tracker Issue 的
+`/milestone admin-approve` 自核（見 `docs/milestone-description.md`）是另一個獨立機制，
+只適用於 Milestone 核准留言，不是同一件事，不要混用。
+
+這個 bypass 是否要在本 repo 之外的下游生成 repo 也預設套用，不在本節範圍——公版
+`template/policies/rulesets.json.jinja` 刻意保留空的 `bypass_actors`，只有真的撞上
+同一個「結構性只有一個真人帳號」問題的下游 repo，才需要自行在自己的
+`policies/rulesets.json` 加上等效項目。
+
+### Release phase 與 bypass 範圍收斂（#607）
+
+如上一節所述，#580 記錄並落地了目前 live 已套用的 Ruleset self-approval bypass
+（`RepositoryRole` admin、`bypass_mode: "pull_request"`），同時發現它的實際涵蓋範圍
+比原本以為的更廣：因為 GitHub 的 `bypass_actors` 是綁在整個 Ruleset 上，沒有「只對
+某個 rule type 生效」的欄位，這個 bypass 連 `required_status_checks` 都一併放寬。
+#607 的問題：這個較寬的涵蓋範圍不能是永久、不分專案發展階段的事實，尤其是
+required_status_checks 這種「必要檢查真的有沒有過」的保證，不該無限期依賴人工自律。
 
 **`release_phase`** 是這個 repo 自己的整案發布成熟度宣告，寫在
 `policies/project-stage.json`（`{"release_phase": "alpha"}`），只有三個合法值：
