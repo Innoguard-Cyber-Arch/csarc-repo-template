@@ -282,6 +282,52 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 之後如何算出版本、建 tag、發布 Release 與成品，是上方「Release 發版不依賴 Actions 健康度的
 fallback（#589）」一節的責任，兩者是各自獨立的問題，不合併成同一節。
 
+### `promotion` 必要檢查的產生條件（#601）
+
+`policies/rulesets-required-checks.json`（與 `template/policies/rulesets.json.jinja` 的 `required_status_checks`）
+長期要求 `title`／`promotion`／`verify` 三個 context，但在 #601 之前，沒有任何 workflow 對一般（非 Milestone
+交付）PR 產生 `promotion` 這個 check-run——`main`、`dev/m*` 交付分支與所有現存 PR 皆缺這個 context，required
+check 因此對這類 PR 永遠卡在 pending。`.github/workflows/pr-policy.yml` 新增的 `promotion` job（與
+`title` job同檔、同觸發條件，`template/` 同步一份）補上這個缺口，呼叫新增的 `scripts/promotion_gate.py
+check-route` 子指令。
+
+跟 `title` job 一樣，`promotion` job 對 `pull_request` 事件 checkout 的是 PR 的 base（trusted）commit，
+不是 PR 自己的 head／merge commit——避免一個惡意 PR 改寫 `route_for()` 自我核准。這代表 `check-route`
+子指令要等這個子指令本身合併進 `main` 之後，後續 PR 的 `promotion` job 才會真的執行到它；`promotion`
+job 沿用 `title` job「Validate Milestone approval」step 已經在用的同一種 bootstrap 寫法——先用
+`python3 scripts/promotion_gate.py --help | grep -q check-route` 探測 base commit 上是否已經有這個子
+指令，沒有就印一則 `::notice::` 直接成功，不 fail closed；引入 `check-route` 本身的這個 PR 靠
+`tests/test_promotion_gate.py` 的 `test_check_route_*` 在本機驗證新邏輯，不靠這個 PR 自己的即時 CI
+執行到它。
+
+這個 job 刻意不是獨立的 `promotion.yml` 檔案：本 repo 在 2026-08-27 的 workflow 全面暫停（#372／#375）之前
+確實有過一支同名、遠更複雜的 `promotion.yml`（含 canary 證據、`prepare()`／`finalize()` 全流程）與其配對的
+`promotion-post-merge.yml`（合併後 ref 清理），原始檔保留在 `git show
+bc05942:archive/ci-cd/2026-08-27/root-workflows/promotion.yml` 可查，`tests/test_delivery_sync.py::
+test_milestone_promotion_check_and_cleanup_cover_delivery_refs` 仍以「`.github/workflows/promotion.yml`
+存在與否」為 skip 條件保留當年的斷言、等待那支被暫停的完整流程有一天正式復原。#601 的範圍與那支舊
+workflow 不同（見 Issue 本文「補充」段的拆分說明），本節新增的 `promotion` check 只解決「required check
+永遠 pending」這一個獨立問題，刻意不使用會誤觸該 skip 條件的檔名，也不重建那支已暫停、且已經跟現在的
+`branch_strategy`／`route_for()` 設計脫節的舊流程；job 的 check-run context 由 job 的 `name:` 決定、跟
+workflow 檔名無關，所以 `promotion` context 一樣被正確產生。
+
+`check-route` 只重用既有的 `route_for()` 分類器（`prepare()` 產生完整交付證據時用的同一份函式），不重新實作
+分支／標籤判斷邏輯，避免兩者對同一個 PR 的路由判斷不一致：
+
+- `pull_request` 事件：直接從 webhook payload 讀 base／head／labels（不需要額外 `GH_TOKEN` 呼叫），呼叫
+  `route_for()`。任何 `not-applicable`（一般 topic branch、`dependabot/*`、`automation/*`）或已知的合法路由
+  （`milestone`／`isolated`／`hotfix`／`release-recovery`／`release-follow-up`）都回報成功；只有 target
+  `main` 卻不符合任何已知路由的分支（`invalid-main-route`）才 fail closed。
+- `merge_group` 事件：直接視為 `Route("merge-queue", False)`——來源 PR 開啟當下已經分類過，佇列重跑不必
+  重新讀 event payload（與 `prepare()` 對非 `pull_request` 事件的既有 fallback 一致）。
+
+這個 job **不**取代既有的 Milestone 交付驗證：`title` job（`scripts/validate-pr-policy`）仍然負責 tracker
+Issue、Promotion 區塊 checklist 與 promotion 標籤的完整驗證；`.github/workflows/milestone-lifecycle.yml` 的
+`Milestone approval` check（不在 `required_status_checks` 名單內）仍然獨立存在，兩者都不受本節變更影響。
+`promotion` 這個 required check 的責任範圍只到「這個 PR 是否走一條被承認的路由」，不到「這條路由的證據是否
+齊全」——後者仍由 `scripts/promotion_gate.py` 的 `prepare()`／`finalize()` 在正式的 Milestone 交付流程中
+處理，範圍不變。
+
 ## Current automation
 
 下表逐項列出 canonical file、owner、觸發（輸入）、權限／timeout、產物（輸出）、測試與
@@ -293,7 +339,7 @@ fallback（#589）」一節的責任，兩者是各自獨立的問題，不合�
 | 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；30 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類後，中央模板呼叫 `scripts/verify-fast` 或 `scripts/verify-template.sh`，生成 repo 呼叫 `scripts/verify`；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py` | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success | active |
-| PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | PR metadata 事件（opened／edited／synchronize／labeled） | 只給需要的 Issue／PR metadata 權限；固定 timeout | title、Issue、route 與 review policy 判定 | `scripts/test-pr-policy` | run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929)，2026-09-01，success；同日對 #448／#453／#457 等未完成 checklist 的候選 PR 正確擋下合併，證明門禁確實生效 | active |
+| PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | 只給需要的 Issue／PR metadata 權限；固定 timeout | `title` job：Issue、route 與 review policy 判定；`promotion` job（#601）：呼叫 `scripts/promotion_gate.py check-route` 分類 route，回報 `promotion` required check（`not-applicable`／`milestone`／`isolated`／`hotfix`／`release-recovery`／`release-follow-up`／`merge-queue` 成功，`invalid-main-route` 失敗） | `scripts/test-pr-policy`；`promotion` job 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929)，2026-09-01，success；同日對 #448／#453／#457 等未完成 checklist 的候選 PR 正確擋下合併，證明門禁確實生效 | `title` job：active；`promotion` job：candidate（隨 #601 首次落地，尚無 live run，待 `main` 落地並於首次 PR 觸發後轉 active） |
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併） | `issues`、`issue_comment`、`milestone` 事件；`pull_request.closed`（里程碑工作 PR 合併進 `dev/m*` 或 `promote/m*` 晉升 PR 合併進 `main`） | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新）、`tests/test_work_pr_closure.py` | 尚未落地 `main`，無新 live run；三個前身 workflow（`issue-triage.yml`、`milestone-lifecycle.yml`、`work-item-closure.yml`）已刪除，其舊 run 證據（`33524318953`／`33524281794`／`33502286588`）不再代表現行檔案 | **root：candidate**（待 main 落地並觸發首次 issues／issue_comment／milestone／pull_request 事件才能取得新 live evidence）；#574 只把三個 workflow 檔的既有邏輯打包成一個 job 內的循序 step，不改變任一 step 本身的行為、權限需求或所呼叫的 script |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
