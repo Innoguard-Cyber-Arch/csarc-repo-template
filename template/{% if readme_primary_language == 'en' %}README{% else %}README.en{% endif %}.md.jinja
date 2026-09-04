@@ -3,6 +3,8 @@
 {% set has_rust = "rust" in languages -%}
 # {{ project_name }}
 
+[繁體中文]({{ 'README.md' if readme_primary_language == 'zh-tw' else 'README.zh-tw.md' }})
+
 > [!IMPORTANT]
 > [`AGENTS.md`](AGENTS.md) is the single source for AI working rules; only workflows under `.github/workflows/` execute. Review and merge eligibility follow [08 Governance](docs/index.html#governance).
 

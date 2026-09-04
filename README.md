@@ -1,5 +1,7 @@
 # CSARC Repo Template
 
+[English](README.en.md)
+
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。
 
 | 項目 | 目前狀態 |
