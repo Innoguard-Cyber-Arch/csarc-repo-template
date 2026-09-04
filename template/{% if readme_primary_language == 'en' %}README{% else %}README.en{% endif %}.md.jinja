@@ -1,0 +1,189 @@
+{% set has_python = "python" in languages -%}
+{% set has_typescript = "typescript" in languages -%}
+{% set has_rust = "rust" in languages -%}
+# {{ project_name }}
+
+> [!IMPORTANT]
+> [`AGENTS.md`](AGENTS.md) is the single source for AI working rules; only workflows under `.github/workflows/` execute. Review and merge eligibility follow [08 Governance](docs/index.html#governance).
+
+<!-- csarc-project-description:start -->
+{{ project_description }}
+<!-- csarc-project-description:end -->
+
+[Open the project's internal site](docs/index.html)
+
+## Table of contents
+
+- [Overview](#overview)
+- [Quick start](#quick-start)
+- [Technology and layout](#technology-and-layout)
+- [Development and verification](#development-and-verification)
+- [Configuration and secrets](#configuration-and-secrets)
+- [Release and operations](#release-and-operations)
+- [Template updates](#template-updates)
+- [Owners and support](#owners-and-support)
+
+## Overview
+
+This repo uses the CSARC template, with {% if languages %}`{{ languages | join('`, `') }}`{% else %}the common CI/CD baseline only{% endif %} as its language module(s). The full team workflow lives on the internal site and is not duplicated here.
+
+## Quick start
+
+Git, GitHub CLI, and uv are always required.{% if has_typescript %} This project also needs Node 24+ and pnpm 11.{% endif %}{% if has_rust %} This project also needs Rust 1.98.{% endif %}
+
+`scripts/resolve-cache-root` already points at a user-level cache location shared across worktrees by default (`~/Library/Caches/csarc` on macOS; on Linux/WSL2 it follows the XDG Base Directory convention, preferring `$XDG_CACHE_HOME` and falling back to `~/.cache/csarc`), so `uv`{% if has_typescript %}, `pnpm`{% endif %}, and the pinned-version tool install scripts that read that location through `scripts/resolve-cache-root` (`scripts/install-gitleaks`/`install-actionlint`/`install-shellcheck`/`install-osv-scanner`) need no extra setup to share verified downloads across worktrees. If that shared location can't be found or written to, it fails safe back to a repo-local `.cache/`; this is a pure local performance optimization -- verification correctness and results are unaffected either way, only re-downloads become necessary and slower without a shared cache. To use a different persistent path by team convention, add `export CSARC_CACHE_ROOT="<path>"` to your own shell profile (e.g. `~/.zshrc`, `~/.bashrc`, or `~/.config/fish/config.fish`, depending on your shell) to override it explicitly.
+
+Open the Codex/agent workspace from the actual Git root; opening it from a parent directory means a subdirectory's `AGENTS.md` may not auto-load. Before starting, run `test "$(git rev-parse --show-toplevel)" = "$(pwd -P)"` in the working directory, and switch to the printed Git root on failure rather than copying another copy of the instructions to a parent directory.
+
+```bash
+git clone {{ repository_url }}
+cd {{ project_slug }}
+./scripts/verify
+./scripts/apply-repository-settings.sh plan
+```
+
+The shortest command that successfully starts or invokes the product:
+
+<!-- csarc-project-run-command:start -->
+```bash
+{{ project_run_command }}
+```
+<!-- csarc-project-run-command:end -->
+
+`project_run_command` only describes how the product starts; it is never treated as a verification hook. A hook must not resolve to or re-enter the canonical `scripts/verify`; `update` verifies it in a staged clone before writing it.{% if project_verification_hook | default('', true) %} Full verification separately runs `{{ project_verification_hook }}` exactly once.{% elif project_mode == "existing" %} No explicit hook was set; if a project-owned `scripts/verify-product` exists and is executable, it runs once as a compatibility fallback.{% endif %}
+
+{% if project_mode == "existing" %}> Existing-project adoption: Copier preserved the original manifest. Manually merge dev dependencies, versions, and tool settings first, then rebuild the lockfile; `coverage_mode=diff` compares against `origin/main` by default.{% endif %}
+{% if branch_strategy == "delivery" %}> This project uses delivery mode: `main` is the only permanent branch; Milestones use short-lived `dev/m<number>-<slug>` branches, and an ordinary standalone Issue creates a topic branch from the latest `main` and merges straight back to `main` via PR. Only an Issue that genuinely needs independent soak/canary testing uses a one-off `dev/i<issue-number>-<slug>` promotion.{% else %}> This project uses main mode: short branches merge straight to `main` after a PR.{% endif %}
+{% if branch_strategy == "delivery" %}
+```mermaid
+flowchart LR
+  A["Milestone A Issues"] --> MA["dev/m7-delivery"]
+  B["Milestone B Issues"] --> MB["dev/m8-auth"]
+  S["Standalone Issues"] --> MAIN
+  I["Issue #42 needing independent canary"] --> DI["dev/i42-canary"]
+  H["Urgent fix/* + hotfix"] --> MAIN["main"]
+  MA -->|promotion: full + canary| MAIN
+  MB -->|promotion: full + canary| MAIN
+  DI -->|standalone promotion| MAIN
+  MAIN -. "reviewed sync PR" .-> MA
+  MAIN -. "reviewed sync PR" .-> MB
+  MAIN -. "reviewed sync PR" .-> DI
+```
+
+`main` moving forward never makes an ordinary Milestone PR stale, and never fans out a sync automatically. Each Milestone opens one reviewed `sync/main-to-m*` PR right before its final delivery to pick up the latest `main`; a branch is synced earlier only when its owner records a real dependency. A `dev/i*` canary must also include the then-latest `main` before its own delivery.
+{% endif %}
+
+## Technology and layout
+
+| Scope | Location / tool |
+| --- | --- |
+| Shared | `.github/`, `policies/`, `docs/adr/`, `docs/specs/`, `scripts/verify` |
+{% if has_python %}| Python | `src/`, `tests/`, uv, Ruff, ty, pytest; CI verifies {% if python_support_mode == "latest" %}3.14.0 and the latest 3.14.x{% else %}{{ python_min_version }}.0, plus the latest patch of every feature release from {{ python_min_version }} through 3.14{% endif %} |
+{% endif %}{% if has_rust %}| Rust | `src/`, Cargo, rustfmt, Clippy, built-in tests; Rust 1.98 |
+{% endif %}{% if has_typescript %}| TypeScript | `typescript/`, pnpm 11, Biome, strict TypeScript, Vitest; Node 24+ |
+{% endif %}| Internal site | `site/` is the template-owned source; `docs/site-content.md` and `docs/site-theme.css` hold project content; `docs/index.html` is the portable bundle; if an older repo still has a pre-migration `docs/site-content.js`, the renderer keeps that file and shows a migration notice |
+
+Template configuration lives in `.csarc/config.yml`; the languages are chosen at create or adopt time, and `scripts/detect-language-profile --suggest` checks whether the actual files still agree with it. Change template options through `csarc update --data` rather than editing the configuration file directly.
+{% if has_python %}The Python minimum option starts at 3.12; 3.11 is not declared as supported. The chosen feature release's `.0` is the actual `requires-python` lower bound -- CI does not test only the newer patch.{% endif %}
+
+This template's Durable Project Memory supports Spec-Driven Development (SDD), Architecture Decision Records (ADR), Test-Driven Development (TDD) regression evidence, and Behavior-Driven Development (BDD) required scenarios together; see [`docs/README.md`](docs/README.md) for the full breakdown.
+
+## Development and verification
+
+The work model is "SDD → Feature parent → Task/Bug subissues → their own PRs." Only work that can be independently owned, tested, or delivered gets split into a subissue; a dependency means a real block/blocked-by relationship. A Milestone is instead a dated delivery/release bucket that holds leaf Issues and their PRs, not a Feature parent. GitHub Projects stays disabled. Before creating a work item, an agent searches a bounded number of open/closed Issues with concrete keywords, reads the candidates' body, comments, and linked PRs, and summarizes them to the user first; once creation is authorized, each decision is recorded in the supplement or the Milestone's `References` as retained, superseded, or rejected, with a reason. A Milestone closes only once its last open Issue closes and every acceptance checkbox is confirmed; it reopens if an Issue reopens, a new open Issue is added to it, or a criterion is unchecked.
+
+1. Open a "Development work" Issue for simple work; titles use 12-80 ASCII characters and at least three words to describe the outcome directly, e.g. `Add dependency policy checks`. An Issue does not use the PR's Conventional Commit format.
+2. Create work from the Feature, Task, Bug, or Documentation form; each form sets the native `Feature`, `Task`, `Bug`, or `Task` Type directly, and an `enhancement`, `bug`, or `documentation` Label keeps cross-Issue/PR classification. A UI creator assigns themselves; an agent/CLI creator uses `--assignee @me`. `duplicate` is a closing disposition for an existing Issue, not a creation type.
+3. {% if branch_strategy == "delivery" %}A Milestone Issue creates its work branch from the matching `dev/m<milestone-number>-<slug>`; without a Milestone, create it from the latest `main`. Only when an Issue records a genuine standalone soak/canary reason does it use a one-off `dev/i<issue-number>-<slug>` work and delivery directly.{% else %}Create it from `{{ branch_strategy }}`, or from an unmerged work branch whose final PR targets `{{ branch_strategy }}`.{% endif %} An ordinary work branch is created with `gh issue develop <issue> --base <base> --name type/<issue-number>-short-slug` to ensure the native GitHub Development link; open a separate Issue and branch when new scope exceeds the current Issue's acceptance criteria. If later confirmed a duplicate, link the canonical Issue and close with GitHub's native Duplicate reason; pure triage that changes no files needs no branch or PR.
+4. Run `./scripts/verify`. AI follows `AGENTS.md`; review, merge eligibility, and the Alpha self-merge exception follow [08 Governance](docs/index.html#governance).
+5. A PR targets {% if branch_strategy == "delivery" %}the matching delivery branch{% else %} `{{ branch_strategy }}`{% endif %}, or the direct upstream branch in a stack; the whole chain of open PRs must eventually reach that integration branch. Before using `Closes #<issue-number>`, neither the PR nor its referenced Issue may have an unchecked task; risks or rollback notes go in the optional supplement. A PR has no native Issue Type/Issue Form and uses only the Markdown template; the author assigns themselves, and the Milestone plus exactly one of `bug`, `enhancement`, or `documentation` classification Label match the linked Issue.
+6. Before merging, check the currently effective review requirements, required checks, Ruleset, and explicit authorization per governance; the README defines no separate self-merge exception.{% if branch_strategy == "delivery" %} Creating a Milestone also creates a `promotion` Issue, closed by the `dev/m* → main` PR once the Milestone completes. An ordinary standalone work item merges straight to `main`; a `dev/i*`'s own numbered Issue is itself the promotion Issue, and the temporary branch is deleted after merge. A standalone `fix/*` is an urgent release boundary only once it carries the `hotfix` label.{% endif %}
+
+When multiple writable agents run in parallel, one task uses one branch and one dedicated worktree, and only mutually independent work runs in parallel; before starting, check whether you are already inside a worktree managed by the agent platform, do not force the same branch into multiple worktrees, and never delete a worktree created by another tool or one holding uncommitted changes. Native [`git worktree`](https://git-scm.com/docs/git-worktree) is the portable baseline; [Worktrunk](https://github.com/max-sixty/worktrunk) can optionally simplify creating, switching, and cleaning them up, but it is a local/agent-orchestration convenience, not a dependency of this template or a generated repo. A worktree only isolates the working directory; integration still relies on PR, CI, human review, and post-merge full verification.
+
+GitHub Actions cannot see local worktrees on an agent host, so the agent that created a worktree is also responsible for reclaiming it after its PR merges: leave that worktree and update the integration ref first, then run `./scripts/cleanup-worktrees --apply --worktree <path> origin/{% if branch_strategy == "delivery" %}<delivery-branch>{% else %}{{ branch_strategy }}{% endif %}` from another checkout. The script lists candidates only by default, and only accepts a branch worktree with real evidence of a merged GitHub PR, already in the integration ref, clean, and unlocked; a maintainer cleaning the whole repo runs a dry run without `--apply` first, then omits `--worktree` to apply every candidate.
+
+`./scripts/verify` is the shared local and CI entry point. The current `.github/workflows/ci.yml` has a single `verify` job that selects docs/fast/full by the change and calls the same repo-local program; an ordinary PR does not spin up a separate runner each for fast, full, security, and an aggregate. Promotion, hotfix, release recovery, merge queue, and manual runs use full, with a single 30-minute job timeout. During development, run the narrowest focused check directly; the daily PR gate is whichever CI auto-selects, docs or fast (`./scripts/verify-fast`); only when the PR itself falls on the full boundary does the owner/integrator additionally run `./scripts/verify` once locally. See [`docs/ci-policy.md`](docs/ci-policy.md) for the full tiering and current archive boundary.
+
+{% if branch_strategy == "delivery" %}Separate promotion, release handoff, registry publisher, and deployment workflows are not enabled; the single `release.yml` is a candidate, counted Active only after its first successful live run. Version/delivery archived YAML judged not to be restored has been removed. OSV is enabled; Zizmor, remote governance, and other legacy workflows still awaiting their owner's decision stay in the central template archive and are not shipped. Reviewer assignment and the optional governance-drift schedule are covered in "Configuration and secrets" below.{% endif %}
+
+### One-off verification when Actions quota is exhausted
+
+A local fallback is only ever possible once GitHub Actions' zero-step billing block is mechanically confirmed and local verification passes; a runner annotation alone is not evidence. An ordinary Issue PR may leave one explanatory comment; a direct-to-main standalone merge remains human-only{% if branch_strategy == "delivery" %}, and delivery to `main` still requires both human attestation and authorization, bound to the candidate tree, with tree identity re-checked after merge -- local evidence is never used for a release{% endif %}. The complete procedure has one canonical copy; see [`docs/ci-policy.md`](docs/ci-policy.md#failure-與-fallback).
+
+`./scripts/scan-secrets` scans the full reachable Git history whenever a commit exists, and always separately scans the current working tree; a brand-new project with no `git init` yet can still scan its working tree safely. A large repo that has explicitly accepted a narrower history range can pass e.g. `--log-opts='--since=2026-01-01'`; the full history is scanned by default.
+
+{% if enable_codeql | default(false) %}This project has a generated CodeQL workflow analyzing the selected Python/TypeScript modules; it complements SAST checks such as cross-function data flow, but can still produce false positives and negatives that need human triage.{% else %}SAST is not enabled for this project. Language linting and OSV separately cover code quality and known dependency vulnerabilities; neither substitutes for SAST. A public repo can regenerate and enable `enable_codeql`; a private/internal repo must first confirm GitHub Code Security licensing, or the project can choose an approved alternative tool.{% endif %}
+
+{% if enable_docker | default(false) %}This project has generated a `Dockerfile`, `docker-compose.yml` starter, and `.github/workflows/docker-build-scan.yml`: it triggers only when a build- or scan-relevant path changes, uses read-only `contents: read` permission, builds the image only on the runner locally (never pushed), and scans it with Trivy for known vulnerabilities, without logging into or pushing to any registry or requiring any secret; the `Dockerfile` and `docker-compose.yml` are only a starting point and still need adjustment to the actual build stages, base image, and final CMD.{% else %}This project has no container template enabled. Enable `enable_docker` through a Copier update when needed, to get a starter `Dockerfile`, `docker-compose.yml`, and a read-only, non-pushing container build-scan CI; until then, no container-related file, job, or permission is generated.{% endif %}
+
+`./scripts/verify-template.sh` and the root-only upgrade/sync tooling belong only to the central template repo and are never shipped here; this project's local and CI verification entry point is always `./scripts/verify`.
+
+{% if not languages %}Verification currently covers spec, README, JSON, workflow, and secret-string checks; with no language module selected, no language tests or packaging run.
+{% else %}Verification currently includes{% if has_python %} Ruff, ty, pytest, {{ coverage_threshold }}% coverage, wheel, and dependency lower bounds{% endif %}{% if has_python and (has_rust or has_typescript) %}, and{% endif %}{% if has_rust %} rustfmt, Clippy, tests, a release build, and a Cargo package{% endif %}{% if has_rust and has_typescript %}, and{% endif %}{% if has_typescript %} Biome, TypeScript, Vitest {{ coverage_threshold }}% coverage, and an npm tarball{% endif %}, followed by spec, secret-string, and lockfile checks.
+
+{% if has_python or has_typescript %}
+Coverage is a signal for finding untested code, not a measure of test quality, and it does not substitute for risk analysis or human review. A new project establishes a global-coverage baseline; an existing project first constrains this change with diff coverage. Adjust the {{ coverage_threshold }}% threshold only for a recorded defect, a critical module, or a real change in risk -- do not add tests with no verified behavior just to raise the percentage.
+{% endif %}
+{% endif %}
+
+## Configuration and secrets
+
+Creating a repo from the template or adopting via Copier only copies files, never repository settings.{% if project_mode == "new" %} A new project's administrator must run `./scripts/apply-repository-settings.sh plan` from a trusted checkout before the first release, confirm it, run `apply`, and finally verify with `check` that immutable Releases and the other required settings are enabled; skipping this step fails the release workflow closed.{% else %}Whether release settings apply to an existing project is decided by its product-owned release process; the rest of CSARC's governance can still have an administrator run `plan`, confirm, run `apply`, and verify with `check`.{% endif %} `check` performs a read-only comparison of CODEOWNERS, the repository, immutable Releases, Actions, policy labels, and an effective Ruleset. A fixable difference fails the check; a Free private Ruleset or an organization policy restriction is explicitly marked `DEGRADED` with the specific gap recorded; being unable to read the required immutable-Releases status also fails, rather than assuming it is enabled. Use a `gh` credential with repository Administration read access to verify every governed field; never expose an administrative token to untrusted PR code. When no Git remote is configured yet, set `GH_REPO=owner/repo` explicitly. Labels update additively by default and keep custom entries; only an explicit `--prune-labels` removes labels outside policy. Copier never guesses the remote plan during local file generation.
+
+| GitHub plan and visibility | `apply` result | `check`/PR/CI behavior |
+| --- | --- | --- |
+| Free + public | Applies via REST and enables the Ruleset | Verifies `main`'s effective rules; fails on any gap or mismatch |
+| Free organization + private | Applies baseline settings and keeps the desired Ruleset recorded in `policies/rulesets.json`; the public API cannot create a Ruleset | The workflow assigns one individual reviewer from the configured list and warns `DEGRADED` that it is not enforced; a team request, a red check, or missing approval cannot become a merge gate |
+| Pro individual account + private | Applies and enables the Ruleset | Same as Free public |
+| Team/Enterprise organization + private | Confirms the CODEOWNERS team, then applies and enables the Ruleset | Required review, CODEOWNERS, and status checks become merge gates; a policy mismatch fails closed |
+
+`policies/rulesets.json` is the desired state shared across every plan. On every plan, the settings script verifies through the repository teams API that the team configured in the PR exists and has write access to the repo; this check is independent of whether the Ruleset itself can be enforced, and does not depend on a default branch's CODEOWNERS being up to date yet. `.github/workflows/governance-comment.yml` separately assigns one individual reviewer from `.github/REVIEWERS`, excluding the author, whenever a non-draft PR opens, reopens, or turns ready, requesting review with a short-lived `GITHUB_TOKEN` and needing no PAT or GitHub App. Copier's `reviewers` accepts one or more comma-separated candidates. Free private supports neither team review requests nor multiple simultaneous reviewers; those need GitHub Team or above. A Free organization private repo's settings page offers a Ruleset editor, but GitHub's REST and GraphQL APIs both reject creating or updating one (including `disabled`) without an upgrade or making the repo public, so `gh` cannot pre-stage it automatically. An administrator can manually create a disabled Ruleset in the web UI; `check` then reports it as `STAGED`, meaning only that it is saved, not that `main` is actually protected. After a repo turns public or the organization upgrades, rerun `plan`/`apply`/`check` so the script applies the `active` policy and verifies the effective rules.
+
+{% if enable_governance_drift_check %}`enable_governance_drift_check` is enabled: a daily and manually triggered Action calls the same `scripts/check-governance-drift`; a fixable drift opens or updates a tracking Issue.{% else %}`enable_governance_drift_check` is not enabled: no scheduled Action or checker script is generated; enable the option through a Copier update when needed.{% endif %} Each check is a point-in-time snapshot and cannot substitute for the GitHub audit log.
+
+{% if languages %}Local and release workflows build packages for the selected languages with the same native tools; the GitHub Release also attaches a checksum and an SPDX SBOM. Registry publishing, artifact attestation, and consumer-side gating are for the product itself to configure when it actually needs them, and are not template options.{% endif %}
+
+A new project gets `release.yml`. When GitHub allows an Action to open a PR, Release Please creates the version PR automatically; when an upstream policy forbids it, run `python3 scripts/release_policy.py prepare-candidate` and open an ordinary PR from its printed branch/title. Either path validates a trusted author, the allowed files, version/CHANGELOG consistency, and packageability before the same workflow publishes a GitHub Release once the version PR merges; it never requires a GitHub App, a PAT, or a registry token, and no local command creates a tag or Release. An existing project keeps its own product-owned release workflow; Copier never overwrites it or publishes a second time.
+
+The same read-only preflight also marks the optional Renovate App as `available`, `request-owner`, or `fallback`, based on personal/organization ownership and repo/organization admin status. `available` only offers the [install entry point](https://github.com/apps/renovate/installations/new); the permissions still need agreeing to on GitHub, scoped to this repo only; an organization member with repo admin still needs organization-owner approval. On unknown permissions, an API failure, or no admin access, nothing is guessed -- Dependabot and the existing CI/CD stay as-is. The CLI never silently installs an App or requests a long-lived, broad-scope PAT. Before a new repo has an origin, setting `GH_REPO=owner/repo` lets `csarc init` check the intended target; after pushing, `python scripts/release_policy.py preflight --repo owner/repo` can re-check it.
+
+## Release and operations
+
+Version intent, an official version, a release, delivery, and deployment are distinct stages: a PR title only expresses major/minor/patch/no-release; the exact version and CHANGELOG are written together in one reviewed PR; merging to `main` is repository delivery; only an immutable tag, GitHub Release, listed artifacts, and verifiable evidence together count as a release. Deploying to a real runtime is out of this template's scope.
+
+{% if project_mode == "new" %}`release.yml` creates a reviewable version PR from Conventional Commits; once merged, it runs full verification and then creates a draft Release with a source archive{% if has_python %}, a wheel/sdist{% endif %}{% if has_typescript %}, an npm tarball{% endif %}{% if has_rust %}, a Cargo package{% endif %}, a checksum, and an SPDX SBOM, publishing only after that verification succeeds.{% else %}This is an existing-project adoption; its original product-owned release workflow and artifact definitions are kept, and CSARC never guesses a filename or creates a second release owner. `.csarc/config.yml` records ownership, the chosen workflow, required inputs, the settings owner, the immutable-Releases requirement, and the verification-only reason; CSARC never dispatches the product's own workflow.{% endif %}
+
+| Capability | Current status | How it works today |
+| --- | --- | --- |
+| A PR's SemVer intent | Active | `fix`/`revert` is patch, `feat` is minor, `!` is major, everything else is no-release |
+| Official version and CHANGELOG | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}Automatic or Guided mode creates the same kind of reviewed PR{% else %}Follows the product's existing rules{% endif %}; a published version is never rewritten |
+| Tag / GitHub Release | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}Published automatically once the version PR merges and full verification passes; counted Active only after the first successful live run{% else %}The template never creates a second owner{% endif %} |
+| Checksum / SBOM | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}Created, downloaded, and re-verified in the same run as the exact-tag artifact; counted Active only after the first successful live run{% else %}Decided by the product's own release workflow{% endif %} |
+| Attestation | Product-owned | The product configures this separately per its registry and supply-chain needs |
+| PyPI / npm / GHCR | Product-owned | The template offers no publisher option or job |
+| Production deployment | Not applicable | The product defines its own environment, health checks, approval, and rollback |
+
+In Automatic mode, a version PR created by a `GITHUB_TOKEN` workflow may wait on human approval, so the original release run re-verifies the candidate SHA. Guided mode only hands creating the version PR to a human or an agent; version decisions, candidate verification, and post-merge publishing still share the same entry point. A version PR always requires human review -- the workflow never self-approves; when GitHub refuses a tag/Release write, it is marked Blocked rather than falling back to a direct local publish.
+
+## Template updates
+
+First choose a team-approved version with `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template`, then get its full 40-character SHA with `gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/<approved-release-tag> --jq .sha`. Review that commit, then paste it into the parameters below rather than typing a placeholder directly.
+
+```bash
+git switch main
+git switch -c chore/<issue-number>-update-repo-template
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<reviewed-full-commit-sha>' csarc update --to <approved-release-tag> \
+  --expected-sha <reviewed-full-commit-sha> --dry-run
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<reviewed-full-commit-sha>' csarc update --to <approved-release-tag> \
+  --expected-sha <reviewed-full-commit-sha> --yes --non-interactive
+```
+
+The CLI first previews the Copier smart diff, conflict risk, and any Milestone-description migration; only after confirmation does it run the update, `./scripts/verify`, and the repository settings plan. On a conflict, the CLI lists the affected files without modifying the repo; resolve them on the current branch, then rerun. It updates the `site/` template and rebuilds the single-file bundle without overwriting `docs/site-content.md` or `docs/site-theme.css`, and it never applies settings, pushes, or opens a PR on its own. If the project still has a pre-migration `docs/site-content.js`, that file is likewise never overwritten; the renderer keeps the old file and shows a migration notice in the output until a maintainer moves the text worth keeping into Markdown and deletes the old file. Dependency updates generally wait three days;{% if has_typescript %} if pnpm detects a publisher-trust downgrade it stops the install -- confirm the package's publisher and provenance rather than disabling the policy directly;{% endif %} OSV notifies immediately for a publicly known vulnerability.
+{% if enable_template_update_notifications %}
+Running the template-update workflow weekly on Monday, or manually, only creates or updates a notification Issue; it never applies or merges a change automatically. A public template source needs no secret; if `_src_path` points at a private GitHub repository, set `CSARC_TEMPLATE_READ_TOKEN` scoped to Contents read on only that source repository.
+{% endif %}
+
+## Owners and support
+
+The code and policy owner is `{{ code_owner }}`; the governance workflow assigns one non-author reviewer from `.github/REVIEWERS`. Report a general question or a suspected security issue through the approved channel in [`SECURITY.md`](SECURITY.md); the default GitHub Issue is public, so never post secrets, credentials, personal data, or other sensitive content there.

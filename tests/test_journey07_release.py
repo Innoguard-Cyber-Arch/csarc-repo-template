@@ -255,9 +255,16 @@ def test_guided_path_has_no_repo_local_publisher() -> None:
 def test_release_status_stays_candidate_until_default_branch_evidence() -> None:
     """Keep root, generated README, and both site languages honest."""
     root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    template_readme = (ROOT / "template/README.md.jinja").read_text(
-        encoding="utf-8"
+    # Issue #681: template/README.md.jinja's destination name now depends
+    # on the readme_primary_language answer, so its source filename is a
+    # Jinja expression; "zh-tw" always appears in the zh-tw content file's
+    # name and never in the English one, so it is a reliable glob.
+    zh_tw_readme_matches = list((ROOT / "template").glob("*zh-tw*.md.jinja"))
+    assert len(zh_tw_readme_matches) == 1, (
+        f"expected exactly one zh-tw README template, found "
+        f"{zh_tw_readme_matches}"
     )
+    template_readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
     chinese = (ROOT / "site/content/_index.zh-tw.md").read_text(
         encoding="utf-8"
     )

@@ -12,6 +12,7 @@ _exclude:
   - ".DS_Store"
   - ".svn"
   - "{% if project_mode == 'existing' %}/README.md{% else %}__keep_project_readme__{% endif %}"
+  - "{% if project_mode == 'existing' %}/README.{{ 'en' if readme_primary_language == 'zh-tw' else 'zh-tw' }}.md{% else %}__keep_project_readme_secondary__{% endif %}"
   - "{% if project_mode == 'existing' %}/CHANGELOG.md{% else %}__keep_project_changelog__{% endif %}"
   - "{% if enable_precommit %}__keep_precommit__{% else %}.pre-commit-config.yaml{% endif %}"
   - "{% if enable_template_update_notifications %}__keep_template_update_workflow__{% else %}.github/workflows/template-update.yml{% endif %}"
@@ -209,6 +210,14 @@ branch_strategy:
     Main with short-lived Milestone delivery branches: delivery
     Short branch → pull request → main: main
   default: delivery
+
+readme_primary_language:
+  type: str
+  help: Which README language GitHub shows by default at README.md; the other language is generated as README.<lang>.md
+  choices:
+    繁體中文 (Traditional Chinese): zh-tw
+    English: en
+  default: zh-tw
 
 package_name:
   type: str
