@@ -290,6 +290,15 @@ check 因此對這類 PR 永遠卡在 pending。`.github/workflows/pr-policy.yml
 `title` job同檔、同觸發條件，`template/` 同步一份）補上這個缺口，呼叫新增的 `scripts/promotion_gate.py
 check-route` 子指令。
 
+跟 `title` job 一樣，`promotion` job 對 `pull_request` 事件 checkout 的是 PR 的 base（trusted）commit，
+不是 PR 自己的 head／merge commit——避免一個惡意 PR 改寫 `route_for()` 自我核准。這代表 `check-route`
+子指令要等這個子指令本身合併進 `main` 之後，後續 PR 的 `promotion` job 才會真的執行到它；`promotion`
+job 沿用 `title` job「Validate Milestone approval」step 已經在用的同一種 bootstrap 寫法——先用
+`python3 scripts/promotion_gate.py --help | grep -q check-route` 探測 base commit 上是否已經有這個子
+指令，沒有就印一則 `::notice::` 直接成功，不 fail closed；引入 `check-route` 本身的這個 PR 靠
+`tests/test_promotion_gate.py` 的 `test_check_route_*` 在本機驗證新邏輯，不靠這個 PR 自己的即時 CI
+執行到它。
+
 這個 job 刻意不是獨立的 `promotion.yml` 檔案：本 repo 在 2026-08-27 的 workflow 全面暫停（#372／#375）之前
 確實有過一支同名、遠更複雜的 `promotion.yml`（含 canary 證據、`prepare()`／`finalize()` 全流程）與其配對的
 `promotion-post-merge.yml`（合併後 ref 清理），原始檔保留在 `git show

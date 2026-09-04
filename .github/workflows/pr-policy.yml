@@ -164,9 +164,13 @@ jobs:
               branch_strategy="$(python3 scripts/csarc_config.py branch_strategy)"
             fi
           fi
-          python3 scripts/promotion_gate.py check-route \
-            --event "$GITHUB_EVENT_NAME" \
-            --event-path "$GITHUB_EVENT_PATH" \
-            --branch-strategy "$branch_strategy" \
-            --github-output "$GITHUB_OUTPUT" \
-            --summary "$GITHUB_STEP_SUMMARY"
+          if python3 scripts/promotion_gate.py --help | grep -q check-route; then
+            python3 scripts/promotion_gate.py check-route \
+              --event "$GITHUB_EVENT_NAME" \
+              --event-path "$GITHUB_EVENT_PATH" \
+              --branch-strategy "$branch_strategy" \
+              --github-output "$GITHUB_OUTPUT" \
+              --summary "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice::Promotion route classification starts after this pull request reaches its base branch."
+          fi
