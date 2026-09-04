@@ -289,6 +289,34 @@ A generated repository with `release_ownership: csarc-owned` (including this tem
 Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.
 {{< /detail >}}
 
+{{< detail key="release-notes-format" title="Where to read release history, and what the format means" >}}
+To learn what actually changed in a version, why it shipped, and how it differs from the
+prior one, go straight to GitHub's
+[Releases page](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases): one
+Release per version, always carrying three fields — the **version number** (the Release
+title, equal to the `vMAJOR.MINOR.PATCH` tag), the **release date** (GitHub's own publish
+timestamp, shown automatically), and a **change summary** (GitHub's auto-generated "What's
+Changed" list built from the PR titles merged since the prior version, plus a full-compare
+link back to it).
+
+None of the three is hand-typed, and none varies by who runs the release: whether GitHub
+Actions triggers it automatically or a maintainer runs `scripts/publish-release` locally
+because Actions looks unhealthy, both paths call the exact same `scripts/converge-release-tag`
+script and the same `gh release create ... --generate-notes` command to produce the Release
+body — there is no second implementation that could drift into a different style.
+
+The root `CHANGELOG.md` is a different, equally real view of the same history: it groups
+changes by Conventional Commit type (Breaking Changes, Features, Bug Fixes), while the GitHub
+Release body lists merged PRs under "What's Changed." The two are not expected to match word
+for word — same underlying changes, two different groupings. Every Release is not required to
+carry a "Known limitations" or "Backward compatibility" section: most versions have nothing
+substantive to say there, and a limitation that holds across many releases (not one version in
+particular) belongs here and in `docs/ci-policy.md` instead of being repeated release after
+release. The full format contract and the reasoning behind this scope live in the "Release
+說明文字的最低格式規範" section of
+[ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md).
+{{< /detail >}}
+
 {{< config-guidance track="deploy" >}}
 {{< /slide >}}
 
