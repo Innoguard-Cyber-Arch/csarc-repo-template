@@ -434,13 +434,13 @@ Root `.csarc/config.yml` records the capabilities the template repository select
 {{< config-guidance track="template-release" >}}
 {{< /slide >}}
 
-{{< slide key="docs-site" track="docs-site" eyebrow="Step 10" title="A portable single file remains the baseline" subtitle="Hugo owns content structure; the existing renderer produces an offline, forwardable HTML file." legacy="false"  class="candidate-slide" >}}
+{{< slide key="docs-site" track="docs-site" eyebrow="Step 10" title="A portable single file remains the baseline" subtitle="A built-in Python render engine turns the site/content/ Markdown sources into content structure; the existing renderer produces a single offline, forwardable HTML file." legacy="false"  class="candidate-slide" >}}
 - `site/content/` holds bilingual Markdown with matching content keys.
-- `site/static/styles.css` retains the presentation identity; Hugo shortcodes produce the shared content structure.
+- `site/static/styles.css` retains the presentation identity; `scripts/build_decision_site.py`'s shortcode-block parser produces the shared content structure.
 - `scripts/render_site.py` embeds CSS, JavaScript, fonts, and images and rejects external runtime assets.
 
-{{< disclosure key="portable-bundle" title="Markdown + Hugo → self-contained HTML" >}}
-`docs/adr/` preserves canonical choices. Hugo owns content and HTML; the unchanged renderer only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime.
+{{< disclosure key="portable-bundle" title="Markdown + the Python render engine → self-contained HTML" >}}
+`docs/adr/` preserves canonical choices. `scripts/build_decision_site.py` owns content and HTML; the unchanged `scripts/render_site.py` only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime. This single downloadable HTML file is a committed baseline feature, not a stopgap -- even once Pages or other hosting exists, this downloadable, offline-capable output stays.
 {{< /disclosure >}}
 
 {{< detail key="docs-site-access" title="Access and maintenance boundaries" >}}

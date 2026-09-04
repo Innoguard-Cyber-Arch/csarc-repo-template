@@ -1127,6 +1127,10 @@ def render_journey_rail(
             if is_active:
                 classes += " active"
             aria = ' aria-current="step"' if is_active else ""
+            audience = item.get("audience")
+            audience_attr = (
+                f' data-audience="{_esc(audience)}"' if audience else ""
+            )
             item_code = _esc(item.get("code", ""))
             code = (
                 f'<span class="journey-code">{item_code}</span>'
@@ -1136,7 +1140,8 @@ def render_journey_rail(
             label = _esc(item["labels"][lang])
             link = f'<a href="#{item["key"]}">{code}<span>{label}</span></a>'
             parts.append(
-                f'    <li class="{classes}"{aria}>\n      {link}\n    </li>'
+                f'    <li class="{classes}"{audience_attr}{aria}>\n'
+                f"      {link}\n    </li>"
             )
         return "\n".join(parts)
 

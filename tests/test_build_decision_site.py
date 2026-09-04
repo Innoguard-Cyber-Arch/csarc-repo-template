@@ -859,6 +859,30 @@ def test_journey_rail_marks_active_item_and_omits_code_for_use_group() -> None:
     assert 'data-audience="maintainer"' in html
 
 
+def test_journey_rail_threads_audience_onto_ordinary_items() -> None:
+    # Issue #681: a maintainer-only item living directly in "items" (not
+    # the separate "appendices" bookend list) must still carry
+    # data-audience="maintainer" on its <li>, so the existing
+    # detail-toggle.js/[data-audience="maintainer"] show/hide mechanism
+    # keeps working after folding appendix links into a regular group.
+    nav = _empty_data().navigation
+    nav["items"].append(
+        {
+            "key": "three",
+            "code": "02",
+            "group": "workflow",
+            "participation": "maintainer",
+            "audience": "maintainer",
+            "labels": {"zh-tw": "第三", "en": "Three"},
+        }
+    )
+    html = render_journey_rail(nav, lang="en", active_key="two")
+    assert (
+        '<li class="journey-item maintainer" data-audience="maintainer">'
+        in html
+    )
+
+
 # --- llms.txt --------------------------------------------------------------
 
 
