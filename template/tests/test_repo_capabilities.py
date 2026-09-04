@@ -16,15 +16,25 @@ matrix and this module's expectations -- is caught here immediately.
 from __future__ import annotations
 
 import json
+import runpy
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-import repo_capabilities as rc  # noqa: E402
+# `ty` only resolves static imports and does not search `scripts/`, so a
+# plain `sys.path.insert` + `import repo_capabilities` passes at runtime but
+# fails `ty check` on a generated project (Issue #665). `runpy.run_path`
+# loads the module by executing it directly, which `ty` never tries to
+# statically resolve -- the same convention `test_promotion_gate.py` already
+# uses. Wrapped in a `SimpleNamespace` so every existing `rc.xxx` call below
+# keeps working unchanged.
+rc = SimpleNamespace(
+    **runpy.run_path(str(ROOT / "scripts" / "repo_capabilities.py"))
+)
 
 REAL_MATRIX_PATH = ROOT / "policies" / "capability-matrix.json"
 REAL_CAPABILITY_IDS = (
