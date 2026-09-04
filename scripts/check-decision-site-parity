@@ -7,10 +7,19 @@ did not silently drop a slide. Slide *text* is expected to keep evolving
 after that one-time migration, so `--keys-only` (the mode wired into
 ongoing CI by `scripts/build-decision-site`) only checks that every
 legacy slide key still has a matching candidate key -- it does not
-require the text to still match verbatim. The full text/image comparison
-still exists for local, manual use, but as of Issue #586/#590 it fails
-for most existing slides simply because content moved on after the
-fixture was frozen; see #590 for the plan to reconcile that backlog.
+require the text to still match verbatim.
+
+The full text/image comparison (no `--keys-only`) stays manual-only by
+deliberate decision (Issue #590, 2026-09-04): a 2026-09-04 audit of all
+16 drifted slides confirmed every one is normal, intentional content
+evolution after the migration snapshot froze (a privacy-motivated
+rewrite, a new policy subsection, plain-language rewrites, and so on),
+none is an accidental loss. Wiring the full comparison into CI would
+either fail on every routine content edit (false positives) or require
+constantly re-freezing `site/legacy/index.html` to match, which defeats
+its purpose as a fixed migration-integrity snapshot. Run it by hand only
+when specifically auditing for accidental content loss, not as a
+routine check.
 """
 
 from __future__ import annotations
