@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression test for Issue #661's local-attestation trailer: proves
+# scripts/write-verify-attestation and scripts/check-verify-attestation
+# behave correctly against a real, disposable git repository (not the
+# checkout running this test) -- the git-plumbing half of the design
+# (amend, git interpret-trailers, working-tree cleanliness) that
+# tests/test_verify_attestation.py's pure-Python unit tests cannot exercise
+# on their own. Covers, in order: a clean-tree write that a check then
+# accepts; a dirty tree causing the write to skip rather than lie; a
+# tampered hash being rejected; a stale timestamp being rejected; tier
+# insufficiency (fast attested, full required) being rejected; and a
+# second write on unchanged content replacing rather than stacking the
+# trailer.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd .. && pwd)"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+repo="$fixture_root/repo"
+
+mkdir -p "$repo/scripts"
+git init -q -b main "$repo"
+git -C "$repo" config user.email test@example.invalid
+git -C "$repo" config user.name "Verify Attestation Test"
+cp "$repo_root/scripts/verify_attestation.py" "$repo/scripts/verify_attestation.py"
+cp "$repo_root/scripts/write-verify-attestation" "$repo/scripts/write-verify-attestation"
+cp "$repo_root/scripts/check-verify-attestation" "$repo/scripts/check-verify-attestation"
+chmod +x "$repo/scripts/write-verify-attestation" "$repo/scripts/check-verify-attestation"
+printf 'hello\n' >"$repo/a.txt"
+git -C "$repo" add scripts a.txt
+git -C "$repo" commit -q -m "Initial commit"
+
+write() { (cd "$repo" && ./scripts/write-verify-attestation "$@"); }
+check() { (cd "$repo" && ./scripts/check-verify-attestation "$@"); }
+
+# Case 1: clean tree -- write succeeds, exactly one trailer, check accepts it.
+write fast >/dev/null
+message="$(git -C "$repo" log -1 --pretty=%B)"
+trailer_count="$(grep -c '^Verified-locally:' <<<"$message")"
+[[ "$trailer_count" -eq 1 ]]
+grep -Fq 'tier=fast' <<<"$message"
+check "$(git -C "$repo" rev-parse HEAD)" --required-tier fast >/dev/null
+
+# Case 2: dirty tree -- write must skip (exit 0), leaving the message and
+# tree hash it already carries untouched; it must not fabricate a trailer
+# that describes a tree different from what was actually just tested.
+echo "uncommitted" >>"$repo/a.txt"
+sha_before="$(git -C "$repo" rev-parse HEAD)"
+set +e
+dirty_out="$(write fast 2>&1)"
+dirty_status=$?
+set -e
+[[ "$dirty_status" -eq 0 ]]
+grep -Fq 'skipping the Verified-locally attestation' <<<"$dirty_out"
+[[ "$(git -C "$repo" rev-parse HEAD)" == "$sha_before" ]]
+git -C "$repo" checkout -q -- a.txt
+
+# Case 3: tampered hash -- a trailer whose sha256 does not match the
+# commit's real tree must fail closed, not be trusted at face value.
+# HEAD^{tree} is git's own rev-parse syntax, not a shell brace expansion;
+# the { and } here are literal and correct.
+# shellcheck disable=SC1083
+real_tree="$(git -C "$repo" rev-parse HEAD^{tree})"
+git -C "$repo" commit -q --amend --allow-empty -m "Initial commit
+
+Verified-locally: sha256=0000000000000000000000000000000000000d tier=fast at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+set +e
+tamper_out="$(check "$(git -C "$repo" rev-parse HEAD)" 2>&1)"
+tamper_status=$?
+set -e
+[[ "$tamper_status" -ne 0 ]]
+grep -Fq 'does not match' <<<"$tamper_out"
+
+# Case 4: stale timestamp -- an otherwise well-formed, hash-correct
+# trailer must still fail once it is older than the freshness window.
+git -C "$repo" commit -q --amend --allow-empty -m "Initial commit
+
+Verified-locally: sha256=$real_tree tier=fast at=2020-01-01T00:00:00Z"
+set +e
+stale_out="$(check "$(git -C "$repo" rev-parse HEAD)" 2>&1)"
+stale_status=$?
+set -e
+[[ "$stale_status" -ne 0 ]]
+grep -Fq 'stale' <<<"$stale_out"
+
+# Case 5: tier insufficiency -- a fresh, hash-correct tier=fast attestation
+# must still fail when the caller demands tier=full, and a fresh tier=full
+# attestation must satisfy a tier=fast (or docs) requirement.
+write fast >/dev/null
+set +e
+weak_out="$(check "$(git -C "$repo" rev-parse HEAD)" --required-tier full 2>&1)"
+weak_status=$?
+set -e
+[[ "$weak_status" -ne 0 ]]
+grep -Fq "needs 'full' verification" <<<"$weak_out"
+
+write full >/dev/null
+check "$(git -C "$repo" rev-parse HEAD)" --required-tier fast >/dev/null
+check "$(git -C "$repo" rev-parse HEAD)" --required-tier docs >/dev/null
+check "$(git -C "$repo" rev-parse HEAD)" --required-tier full >/dev/null
+
+# Case 6: rerun on unchanged content replaces, never stacks, the trailer.
+sha_after_first="$(git -C "$repo" rev-parse HEAD)"
+sleep 1
+write fast >/dev/null
+sha_after_second="$(git -C "$repo" rev-parse HEAD)"
+final_message="$(git -C "$repo" log -1 --pretty=%B)"
+[[ "$(grep -c '^Verified-locally:' <<<"$final_message")" -eq 1 ]]
+grep -Fq 'tier=fast' <<<"$final_message"
+# The amend changes the commit SHA (fresh timestamp) even though the tree
+# is unchanged -- proves this is a real replace-in-place, not a no-op.
+[[ "$sha_after_first" != "$sha_after_second" ]]
+
+echo "scripts/test-verify-attestation: PASSED"

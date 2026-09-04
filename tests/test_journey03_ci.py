@@ -126,7 +126,14 @@ def test_pinned_tool_caches_are_platform_scoped_and_revalidated() -> None:
 
 
 def test_root_ci_is_one_bounded_verification_job() -> None:
-    """Spend at most one runner on each template-repository change."""
+    """Spend at most one runner on each template-repository change.
+
+    Issue #661: the `verify` required check no longer re-executes
+    scripts/verify-fast or scripts/verify-template.sh on the runner --
+    those now run locally, and the hosted job only checks the
+    Verified-locally attestation they leave behind (see
+    scripts/check-verify-attestation / scripts/verify_attestation.py).
+    """
     path = REPO_ROOT / ".github/workflows/ci.yml"
     workflow = load_yaml(path)
     triggers = workflow.get("on", workflow.get(True))
@@ -138,13 +145,15 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     }
     assert set(workflow["permissions"]) == {"contents"}
     assert set(workflow["jobs"]) == {"verify"}
-    assert workflow["jobs"]["verify"]["timeout-minutes"] == 30
+    assert workflow["jobs"]["verify"]["timeout-minutes"] == 15
 
     source = path.read_text(encoding="utf-8")
     assert "python3 scripts/ci_tier.py" in source
-    assert "run: ./scripts/verify-fast" in source
-    assert "run: ./scripts/verify-template.sh" in source
-    assert "CSARC_RUN_OSV: ${{ steps.plan.outputs.run_osv }}" in source
+    assert "run: ./scripts/check-verify-attestation" in source
+    assert "--required-tier" in source
+    assert "run: ./scripts/verify-fast" not in source
+    assert "run: ./scripts/verify-template.sh" not in source
+    assert "CSARC_RUN_OSV" not in source
     assert all(
         name not in source
         for name in ("zizmor", "matrix:", "schedule:", "push:")
@@ -152,17 +161,23 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
 
 
 def test_generated_ci_uses_the_same_one_job_contract() -> None:
-    """Give generated repositories the same local-first wrapper."""
+    """Give generated repositories the same local-first wrapper.
+
+    Issue #661: same shift as the central template's own ci.yml above --
+    the hosted job checks the attestation scripts/verify-fast.jinja /
+    scripts/verify.jinja leave behind rather than re-running either.
+    """
     path = REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
     source = path.read_text(encoding="utf-8")
 
     assert "jobs:\n  verify:" in source
-    assert "timeout-minutes: 30" in source
+    assert "timeout-minutes: 15" in source
     assert "python3 scripts/ci_tier.py" in source
-    assert "run: ./scripts/verify-fast" in source
-    assert "run: ./scripts/verify" in source
-    assert "CSARC_RUN_OSV:" in source
-    assert "steps.plan.outputs.run_osv" in source
+    assert "run: ./scripts/check-verify-attestation" in source
+    assert "--required-tier" in source
+    assert "run: ./scripts/verify-fast" not in source
+    assert "run: ./scripts/verify" not in source
+    assert "CSARC_RUN_OSV" not in source
     assert all(
         name not in source
         for name in ("zizmor", "matrix:", "schedule:", "push:")

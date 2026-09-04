@@ -40,6 +40,7 @@ paired_files=(
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
   scripts/check-release-drift
+  scripts/check-verify-attestation
   scripts/request-reviewer
   scripts/ci_tier.py
   scripts/delivery_sync.py
@@ -66,12 +67,15 @@ paired_files=(
   scripts/test-apply-repository-settings
   scripts/test-issue-triage
   scripts/test-pr-policy
+  scripts/test-verify-attestation
   scripts/test-worktree-cleanup
   scripts/verify-release-candidate
+  scripts/verify_attestation.py
   scripts/validate-issue-policy
   scripts/validate-issue-title
   scripts/validate-pr-policy
   scripts/verify-dependencies
+  scripts/write-verify-attestation
   tests/test_ci_tier.py
   tests/test_dependabot_auto_merge.py
   tests/test_dependency_security.py
@@ -83,6 +87,7 @@ paired_files=(
   tests/test_milestone_closure.py
   tests/test_release_policy.py
   tests/test_release_bundle.py
+  tests/test_verify_attestation.py
   tests/test_work_item_metadata.py
   tests/test_work_pr_closure.py
   zizmor.yml

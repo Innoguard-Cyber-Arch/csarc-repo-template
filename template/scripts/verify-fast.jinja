@@ -25,6 +25,7 @@ git diff --check
 if [[ "$tier" == "docs" ]]; then
   python3 scripts/spec_to_issue.py validate
   python3 scripts/render_site.py --check
+  ./scripts/write-verify-attestation fast
   exit 0
 fi
 
@@ -68,3 +69,10 @@ cargo fmt --all -- --check
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --all-features
 {% endif -%}
+
+# Issue #661: every check above passed (set -euo pipefail would already
+# have exited otherwise) -- record the local-attestation trailer that lets
+# the hosted `verify` check pass without re-running anything. This is the
+# only other place this tier ("fast", covering both the "fast" and, above,
+# the early-exit "docs" sub-case) exits successfully.
+./scripts/write-verify-attestation fast

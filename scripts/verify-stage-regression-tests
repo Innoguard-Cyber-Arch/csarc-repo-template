@@ -8,7 +8,7 @@ set -Eeuo pipefail
 # with a coverage floor, plus the Issue-triage, worktree-cleanup, PR-policy,
 # apply-repository-settings, base-only-remerge, gh-issue-create,
 # check-branch-fresh, PR-policy-status, release-drift, audit-fleet-adoption,
-# and create-milestone self-tests.
+# verify-attestation (Issue #661), and create-milestone self-tests.
 # This is the single executable regression source for create/adopt/update
 # preservation; do not replace it with generated-profile runs elsewhere.
 # Runnable standalone to re-check just this stage without paying for the
@@ -37,3 +37,4 @@ uv run pytest --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
 ./scripts/test-check-release-drift
 ./scripts/test-audit-fleet-adoption
 ./scripts/test-create-milestone
+./scripts/test-verify-attestation
