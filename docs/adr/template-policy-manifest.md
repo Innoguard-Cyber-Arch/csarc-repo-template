@@ -3,7 +3,7 @@
 - **狀態：**Accepted
 - **日期：**2026-09-04
 - **來源 Issue：**[#532](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/532)
-- **實作 PR：**[#532 的實作 PR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/532)（合併後改連對應 PR 編號）
+- **實作 PR：**[#637](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/637)
 
 ## 問題與限制
 
