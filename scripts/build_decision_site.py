@@ -1302,8 +1302,23 @@ _REORDER_SCRIPT: Final = """\
   </script>"""
 
 
-def render_page(markdown_text: str, *, lang: str, data: SiteData) -> str:
-    """Render one language's complete pre-bundle HTML source."""
+def render_page(
+    markdown_text: str,
+    *,
+    lang: str,
+    data: SiteData,
+    root: Path | None = None,
+) -> str:
+    """Render one language's complete pre-bundle HTML source.
+
+    When `root` is given, a slide whose `key` is in `_EXTERNAL_SLIDE_SOURCES`
+    has its inline body replaced with Markdown read from a docs/ file, so
+    that page's single source of truth lives in one plain Markdown file
+    instead of being duplicated into this shortcode source. `root` is
+    optional (and the lookup only fires for a key that is actually present)
+    so callers that render a synthetic fixture with no docs/ directory,
+    such as unit tests, are unaffected.
+    """
     substituted = _substitute_version_tokens(markdown_text, data)
     metadata, body = _parse_front_matter(substituted)
     title = metadata["title"]
@@ -1313,7 +1328,13 @@ def render_page(markdown_text: str, *, lang: str, data: SiteData) -> str:
     slides = [
         render_slide(
             attrs,
-            slide_body,
+            (
+                _external_slide_body(
+                    root, _EXTERNAL_SLIDE_SOURCES[attrs["key"]], lang
+                )
+                if root is not None and attrs["key"] in _EXTERNAL_SLIDE_SOURCES
+                else slide_body
+            ),
             lang=lang,
             data=data,
             state=state,
@@ -1432,6 +1453,29 @@ def render_llms_txt(data: SiteData) -> str:
 # --- CLI --------------------------------------------------------------
 
 
+# Slide keys whose body is authored once in docs/<stem>{.<lang>}.md instead
+# of being duplicated into site/content/_index.{lang}.md; the primary
+# language (_LANGUAGE_ORDER[0]) reads the bare stem, other languages read
+# the stem with their language code appended, matching how a downstream
+# repo's own README.md / README.<lang>.md pairs will resolve.
+_EXTERNAL_SLIDE_SOURCES: Final = {"about": "about"}
+
+
+def _external_slide_body(root: Path, stem: str, lang: str) -> str:
+    suffix = "" if lang == _LANGUAGE_ORDER[0] else f".{lang}"
+    path = root / "docs" / f"{stem}{suffix}.md"
+    text = path.read_text(encoding="utf-8")
+    # The slide shell already renders attrs["title"] as an <h2>; drop the
+    # docs/ file's own leading "# Title" line (plus the blank line after
+    # it) so the title is not shown twice.
+    lines = text.splitlines()
+    if lines and lines[0].startswith("# "):
+        lines = lines[1:]
+        if lines and not lines[0].strip():
+            lines = lines[1:]
+    return "\n".join(lines)
+
+
 def build(root: Path, output_dir: Path) -> dict[str, Path]:
     """Render both languages and the shared llms.txt into `output_dir`."""
     data = load_site_data(root)
@@ -1440,7 +1484,10 @@ def build(root: Path, output_dir: Path) -> dict[str, Path]:
     for lang in _LANGUAGE_ORDER:
         source = root / "site/content" / f"_index.{lang}.md"
         html_text = render_page(
-            source.read_text(encoding="utf-8"), lang=lang, data=data
+            source.read_text(encoding="utf-8"),
+            lang=lang,
+            data=data,
+            root=root,
         )
         output_path = output_dir / _LANGUAGES[lang]["output"]
         output_path.write_text(html_text, encoding="utf-8")
