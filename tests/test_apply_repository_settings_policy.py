@@ -305,9 +305,7 @@ def test_enabled_policies_are_still_applied_and_checked(
     check_result = _run(repo, tmp_path, "check", log_path=check_log)
     check_output = check_result.stdout + check_result.stderr
     assert check_result.returncode == 0, check_output
-    assert (
-        "Repository settings match policies/repository.json." in check_output
-    )
+    assert "Repository settings match policies/repository.json." in check_output
     assert "Immutable Releases match policies/releases.json." in check_output
     assert (
         "Actions workflow permissions match policies/actions.json."
@@ -356,9 +354,7 @@ def test_legacy_config_without_policy_keys_defaults_every_area_on(
     plan_output = plan_result.stdout + plan_result.stderr
     assert plan_result.returncode == 0, plan_output
     assert "- APPLY policies/repository.json" in plan_output
-    assert (
-        "- APPLY policies/releases.json (immutable Releases)" in plan_output
-    )
+    assert "- APPLY policies/releases.json (immutable Releases)" in plan_output
     assert (
         "- APPLY policies/actions.json when account policy permits it"
         in plan_output
@@ -386,9 +382,7 @@ def test_policy_toggle_value_is_readable_through_csarc_config(
     tmp_path: Path, toggle_key: str
 ) -> None:
     """Each toggle round-trips through the shared config reader as a bool."""
-    repo = _make_repo(
-        tmp_path, f"languages: []\n{toggle_key}: false\n"
-    )
+    repo = _make_repo(tmp_path, f"languages: []\n{toggle_key}: false\n")
     result = subprocess.run(  # noqa: S603
         [sys.executable, "scripts/csarc_config.py", toggle_key],
         cwd=repo,
