@@ -19,6 +19,8 @@ _exclude:
   - "{% if enable_governance_drift_check %}__keep_governance_drift_workflow__{% else %}.github/workflows/governance-drift.yml{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}scripts/check-governance-drift{% endif %}"
   - "{% if project_mode == 'new' %}__keep_release_workflow__{% else %}.github/workflows/release.yml{% endif %}"
+  - "{% if project_mode == 'new' %}__keep_release_drift_workflow__{% else %}.github/workflows/release-drift.yml{% endif %}"
+  - "{% if project_mode == 'new' %}__keep_release_drift_script__{% else %}scripts/check-release-drift{% endif %}"
   - "{% if enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
   - "{% if 'python' in languages %}__keep_python_version__{% else %}.python-version{% endif %}"
   - "{% if 'python' in languages %}__keep_python_project__{% else %}pyproject.toml{% endif %}"

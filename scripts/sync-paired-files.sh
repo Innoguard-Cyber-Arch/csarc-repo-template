@@ -25,6 +25,7 @@ paired_files=(
   .github/workflows/milestone-lifecycle.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
+  .github/workflows/release-drift.yml
   .github/workflows/spec-to-issue.yml
   .github/workflows/work-item-closure.yml
   policies/actions.json
@@ -40,6 +41,7 @@ paired_files=(
   scripts/render_site.py
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
+  scripts/check-release-drift
   scripts/request-reviewer
   scripts/ci_tier.py
   scripts/delivery_sync.py

@@ -284,3 +284,99 @@ def test_shared_ci_policy_names_the_generated_verifier() -> None:
 
     assert "生成 repo 呼叫 `scripts/verify`" in policy
     assert "生成 repo 用 `scripts/verify full`" in policy
+
+
+def test_release_drift_check_is_independent_of_release_yml() -> None:
+    """Issue #605: a stuck release.yml must not gate its own drift alert.
+
+    Mirrors the .github/workflows/governance-drift.yml pattern (schedule +
+    workflow_dispatch, least-privilege permissions, logic in a repo-local
+    check-* script) but is a genuinely separate workflow file so a hung or
+    failing release.yml cannot suppress it.
+    """
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/release-drift.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    source = (ROOT / ".github/workflows/release-drift.yml").read_text(
+        encoding="utf-8"
+    )
+    triggers = workflow.get("on", workflow.get(True))
+
+    assert "schedule" in triggers
+    assert "workflow_dispatch" in triggers
+    assert workflow["permissions"] == {
+        "actions": "read",
+        "contents": "read",
+        "issues": "write",
+    }
+    assert workflow["jobs"]["check"]["timeout-minutes"] == 5
+    assert "run: ./scripts/check-release-drift" in source
+    # Not a step inside release.yml itself, and does not share its trigger.
+    release_source = (ROOT / ".github/workflows/release.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "check-release-drift" not in release_source
+    assert workflow["concurrency"]["cancel-in-progress"] is False
+
+
+def test_release_drift_script_documents_its_threshold_and_record_format() -> (
+    None
+):
+    """The 24h default and the local-record convention must be self-documented.
+
+    Issue #605 pins N=24h (release.yml normally finishes within minutes of
+    a push to main, and 24h both tolerates a release-free day and still
+    catches a same-day stall) and defines the Release-publish-record
+    marker line #589 only described in prose; both need to live in the
+    script's own header, not only in an Issue body.
+    """
+    script = (ROOT / "scripts/check-release-drift").read_text(encoding="utf-8")
+
+    assert "RELEASE_DRIFT_HOURS" in script
+    assert "24" in script
+    assert "Release-publish-record:" in script
+    assert "operator=" in script
+    assert "commit=" in script
+    assert 'gh api "repos/$repo/actions/workflows/release.yml/runs' in script
+    assert "gh issue create" in script
+    assert "gh issue edit" in script
+    assert "exit 1" in script
+
+
+def test_release_drift_check_ships_with_release_ownership() -> None:
+    """Only a repository that owns release.yml needs its drift check.
+
+    Reuses release.yml's own project_mode == 'new' exclude condition
+    instead of adding a second Copier option -- consistent with the
+    release-security-and-dependencies ADR's "本節也不新增 Copier 選項"
+    principle for this same capability pairing.
+    """
+    copier = (ROOT / "copier.yml").read_text(encoding="utf-8")
+    paired = (ROOT / "scripts/sync-paired-files.sh").read_text(encoding="utf-8")
+
+    assert (
+        "{% if project_mode == 'new' %}__keep_release_drift_workflow__"
+        "{% else %}.github/workflows/release-drift.yml{% endif %}" in copier
+    )
+    assert (
+        "{% if project_mode == 'new' %}__keep_release_drift_script__"
+        "{% else %}scripts/check-release-drift{% endif %}" in copier
+    )
+    assert ".github/workflows/release-drift.yml" in paired
+    assert "scripts/check-release-drift" in paired
+
+    template_workflow = (
+        ROOT / "template/.github/workflows/release-drift.yml"
+    ).read_bytes()
+    template_script = (
+        ROOT / "template/scripts/check-release-drift"
+    ).read_bytes()
+    assert (
+        template_workflow
+        == (ROOT / ".github/workflows/release-drift.yml").read_bytes()
+    )
+    assert (
+        template_script == (ROOT / "scripts/check-release-drift").read_bytes()
+    )
