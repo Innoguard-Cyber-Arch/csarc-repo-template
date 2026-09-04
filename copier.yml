@@ -321,3 +321,23 @@ enable_governance_drift_check:
   type: bool
   help: Reserve the optional scheduled governance drift check; keep disabled until its GitHub Action is active
   default: false
+
+policy_repository_settings:
+  type: bool
+  help: Apply this template's repository settings policy (merge strategies, wiki, projects, issues, delete-branch-on-merge) from policies/repository.json
+  default: true
+
+policy_actions_permissions:
+  type: bool
+  help: Apply this template's Actions workflow permissions policy (default token permissions and PR-approval capability) from policies/actions.json
+  default: true
+
+policy_labels:
+  type: bool
+  help: Create and maintain this template's governance labels (bug, enhancement, hotfix, and the rest) from policies/labels.json
+  default: true
+
+policy_branch_ruleset:
+  type: bool
+  help: Enforce this template's branch protection Ruleset (required review, non-fast-forward) from policies/rulesets.json where the GitHub plan allows it
+  default: true

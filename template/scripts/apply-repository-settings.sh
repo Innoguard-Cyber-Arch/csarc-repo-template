@@ -119,6 +119,42 @@ desired_issue_creation_policy="$(python3 -c 'import json,sys; print(json.load(op
 legacy_ruleset_name="CSARC preserve dev next"
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
 
+# Policy toggles (Issue #532) let a project opt out of one template-owned
+# policy area at a time. A key absent from .csarc/config.yml -- including
+# every repository generated before this feature existed -- means "on", the
+# pre-toggle behavior, so nothing silently loses coverage. Immutable
+# Releases reuses the existing release_immutable_releases contract instead
+# of a duplicate toggle: "required" (csarc-owned) is the only mode that asks
+# this script to enforce it; "product-defined" and "not-required" mean the
+# product's own release contract decides, not this template.
+config_reader="$repo_root/scripts/csarc_config.py"
+policy_config_value() {
+  local key="$1" fallback_value="$2" value
+  if [[ -f "$repo_root/.csarc/config.yml" ]] &&
+    value="$(python3 "$config_reader" "$key" 2>/dev/null)" &&
+    [[ -n "$value" ]]; then
+    printf '%s' "$value"
+  else
+    printf '%s' "$fallback_value"
+  fi
+}
+policy_repository_settings="$(policy_config_value policy_repository_settings true)"
+policy_actions_permissions="$(policy_config_value policy_actions_permissions true)"
+policy_labels="$(policy_config_value policy_labels true)"
+policy_branch_ruleset="$(policy_config_value policy_branch_ruleset true)"
+release_immutable_releases="$(policy_config_value release_immutable_releases required)"
+for policy_toggle in policy_repository_settings policy_actions_permissions \
+  policy_labels policy_branch_ruleset; do
+  if [[ "${!policy_toggle}" != "true" && "${!policy_toggle}" != "false" ]]; then
+    echo "Invalid $policy_toggle in .csarc/config.yml: ${!policy_toggle} (expected true or false)." >&2
+    exit 1
+  fi
+done
+apply_release_policy=false
+if [[ "$release_immutable_releases" == "required" ]]; then
+  apply_release_policy=true
+fi
+
 if ! repo_context="$({
   gh api "repos/$repo" \
     --jq '[.owner.login, .owner.type, (.visibility // (if .private then "private" else "public" end)), .permissions.admin, .default_branch] | @tsv'
@@ -338,7 +374,7 @@ if [[ "$mode" == "check" ]]; then
   repository_drift=""
   repository_state_available=false
 
-  if [[ "$legacy_ruleset_id" != "-" ]]; then
+  if [[ "$policy_branch_ruleset" == "true" && "$legacy_ruleset_id" != "-" ]]; then
     echo "Stale Ruleset must be removed: $legacy_ruleset_name ($legacy_ruleset_id)." >&2
     check_errors=$((check_errors + 1))
   fi
@@ -361,7 +397,9 @@ if [[ "$mode" == "check" ]]; then
     echo "CODEOWNERS owners are valid and have repository write access."
   fi
 
-  if ! repository_state="$(gh api "repos/$repo" 2>&1)"; then
+  if [[ "$policy_repository_settings" != "true" ]]; then
+    echo "SKIPPED policies/repository.json (policy_repository_settings=false in .csarc/config.yml)."
+  elif ! repository_state="$(gh api "repos/$repo" 2>&1)"; then
     echo "Cannot inspect repository settings for $repo." >&2
     echo "$repository_state" >&2
     check_errors=$((check_errors + 1))
@@ -423,15 +461,19 @@ PY
     echo "Issue creation policy matches policies/issue-creation.json."
   fi
 
-  # security_and_analysis is compared per field using the same repository
-  # GET response fetched above; desired "enabled" but live "disabled" (or
-  # missing) is treated as DEGRADED (a plan/GHAS limitation), any other
-  # mismatch is treated as actionable drift. This mirrors the "DEGRADED
-  # Actions PR policy" true-vs-false heuristic used for Actions permissions.
-  if [[ "$repository_state_available" != "true" ]]; then
-    echo "Cannot inspect security_and_analysis for $repo: repository settings were not observable." >&2
+  # security_and_analysis is compared per field, desired "enabled" but live
+  # "disabled" (or missing) is treated as DEGRADED (a plan/GHAS limitation),
+  # any other mismatch is treated as actionable drift. This mirrors the
+  # "DEGRADED Actions PR policy" true-vs-false heuristic used for Actions
+  # permissions. It is a distinct concern from the policy_repository_settings
+  # toggle (Issue #532): that toggle only skips the policies/repository.json
+  # field-drift comparison below, so this fetches repository state on its
+  # own rather than depending on the toggle-gated $repository_state there.
+  if ! security_and_analysis_repository_state="$(gh api "repos/$repo" 2>&1)"; then
+    echo "Cannot inspect security_and_analysis for $repo." >&2
+    echo "$security_and_analysis_repository_state" >&2
     check_errors=$((check_errors + 1))
-  elif ! security_and_analysis_status="$(python3 - "$security_scanning_payload" "$repository_state" 2>&1 <<'PY'
+  elif ! security_and_analysis_status="$(python3 - "$security_scanning_payload" "$security_and_analysis_repository_state" 2>&1 <<'PY'
 import json
 import sys
 
@@ -472,7 +514,9 @@ PY
     done <<<"$security_and_analysis_status"
   fi
 
-  if ! release_state="$(gh api "repos/$repo/immutable-releases" 2>&1)"; then
+  if [[ "$apply_release_policy" != "true" ]]; then
+    echo "SKIPPED policies/releases.json (release_immutable_releases=$release_immutable_releases; not required by this release ownership)."
+  elif ! release_state="$(gh api "repos/$repo/immutable-releases" 2>&1)"; then
     echo "Cannot inspect the required immutable Releases setting for $repo." >&2
     echo "$release_state" >&2
     check_errors=$((check_errors + 1))
@@ -533,7 +577,9 @@ PY
     echo "Pages settings match policies/pages.json."
   fi
 
-  if ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
+  if [[ "$policy_actions_permissions" != "true" ]]; then
+    echo "SKIPPED policies/actions.json (policy_actions_permissions=false in .csarc/config.yml)."
+  elif ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
     if [[ "$repo_admin" != "true" && "$actions_state" == *"Resource not accessible by integration"* ]]; then
       [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
         echo "::warning title=Actions inspection degraded::The token cannot read administrator-only Actions settings."
@@ -585,7 +631,9 @@ PY
     fi
   fi
 
-  if ! labels_state="$(gh label list --repo "$repo" --limit 1000 --json name,color,description 2>&1)"; then
+  if [[ "$policy_labels" != "true" ]]; then
+    echo "SKIPPED policies/labels.json (policy_labels=false in .csarc/config.yml)."
+  elif ! labels_state="$(gh label list --repo "$repo" --limit 1000 --json name,color,description 2>&1)"; then
     echo "Cannot inspect labels for $repo." >&2
     echo "$labels_state" >&2
     check_errors=$((check_errors + 1))
@@ -615,7 +663,9 @@ PY
     echo "Policy labels match policies/labels.json; extra labels are allowed."
   fi
 
-  if [[ "$ruleset_enforcement_available" != true ]]; then
+  if [[ "$policy_branch_ruleset" != "true" ]]; then
+    echo "SKIPPED policies/rulesets.json (policy_branch_ruleset=false in .csarc/config.yml)."
+  elif [[ "$ruleset_enforcement_available" != true ]]; then
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
       echo "::warning title=Repository governance degraded::Required branch protection is unavailable for this private repository; continuing without it."
     if [[ "$ruleset_inventory_available" != true ]]; then
@@ -717,9 +767,17 @@ echo "Mode: $mode"
 echo "Account plan: $plan_label"
 echo "Repository visibility: $repo_visibility"
 echo "Deployment plan:"
-echo "- APPLY policies/repository.json"
+if [[ "$policy_repository_settings" == "true" ]]; then
+  echo "- APPLY policies/repository.json"
+else
+  echo "- SKIP policies/repository.json (disabled by policy_repository_settings=false)"
+fi
 echo "- APPLY policies/issue-creation.json (issue_creation_policy via GraphQL)"
-echo "- APPLY policies/releases.json (immutable Releases)"
+if [[ "$apply_release_policy" == "true" ]]; then
+  echo "- APPLY policies/releases.json (immutable Releases)"
+else
+  echo "- SKIP policies/releases.json (release_immutable_releases=$release_immutable_releases; not required by this release ownership)"
+fi
 if [[ "$pages_policy_enabled" != "true" ]]; then
   echo "- SKIP policies/pages.json (enabled=false)"
 elif [[ "$pages_enforcement_available" == true ]]; then
@@ -727,34 +785,46 @@ elif [[ "$pages_enforcement_available" == true ]]; then
 else
   echo "- DEGRADED policies/pages.json: GitHub Pages requires GitHub Enterprise Cloud for a private repository on $plan_label"
 fi
-echo "- APPLY policies/actions.json when account policy permits it"
+if [[ "$policy_actions_permissions" == "true" ]]; then
+  echo "- APPLY policies/actions.json when account policy permits it"
+else
+  echo "- SKIP policies/actions.json (disabled by policy_actions_permissions=false)"
+fi
 echo "- APPLY policies/security-scanning.json (security_and_analysis) when GitHub Advanced Security or repository visibility permits it"
-echo "- APPLY policies/labels.json (create or update policy labels)"
-if [[ "$legacy_ruleset_id" != "-" ]]; then
+if [[ "$policy_labels" == "true" ]]; then
+  echo "- APPLY policies/labels.json (create or update policy labels)"
+else
+  echo "- SKIP policies/labels.json (disabled by policy_labels=false)"
+fi
+if [[ "$policy_branch_ruleset" == "true" && "$legacy_ruleset_id" != "-" ]]; then
   echo "- DELETE stale Ruleset: $legacy_ruleset_name ($legacy_ruleset_id)"
 fi
-existing_labels="$(gh label list --repo "$repo" --limit 1000 --json name --jq '.[].name')"
-desired_labels="$({
-  uv run --no-project python - "$repo_root/policies/labels.json" <<'PY'
+if [[ "$policy_labels" == "true" ]]; then
+  existing_labels="$(gh label list --repo "$repo" --limit 1000 --json name --jq '.[].name')"
+  desired_labels="$({
+    uv run --no-project python - "$repo_root/policies/labels.json" <<'PY'
 import json
 import sys
 
 for label in json.load(open(sys.argv[1], encoding="utf-8")):
     print(label["name"])
 PY
-})"
-if [[ "$prune_labels" == true ]]; then
-  echo "- PRUNE labels outside policy (explicit --prune-labels)"
-  while IFS= read -r existing_label; do
-    [[ -z "$existing_label" ]] && continue
-    if ! grep -Fxq "$existing_label" <<<"$desired_labels"; then
-      echo "  - DELETE label: $existing_label"
-    fi
-  done <<<"$existing_labels"
-else
-  echo "- KEEP labels outside policy (default additive mode)"
+  })"
+  if [[ "$prune_labels" == true ]]; then
+    echo "- PRUNE labels outside policy (explicit --prune-labels)"
+    while IFS= read -r existing_label; do
+      [[ -z "$existing_label" ]] && continue
+      if ! grep -Fxq "$existing_label" <<<"$desired_labels"; then
+        echo "  - DELETE label: $existing_label"
+      fi
+    done <<<"$existing_labels"
+  else
+    echo "- KEEP labels outside policy (default additive mode)"
+  fi
 fi
-if [[ "$ruleset_enforcement_available" == true ]]; then
+if [[ "$policy_branch_ruleset" != "true" ]]; then
+  echo "- SKIP policies/rulesets.json (disabled by policy_branch_ruleset=false)"
+elif [[ "$ruleset_enforcement_available" == true ]]; then
   if [[ "$release_phase_gated" == true ]]; then
     echo "- APPLY policies/rulesets.json + policies/rulesets-required-checks.json (release_phase=$release_phase, enforced by GitHub)"
   else
@@ -781,7 +851,9 @@ if [[ "$mode" == "plan" ]]; then
   echo "No changes applied. Re-run with 'apply' after review."
   exit 0
 fi
-gh api --method PATCH "repos/$repo" --input "$repo_root/policies/repository.json" >/dev/null
+if [[ "$policy_repository_settings" == "true" ]]; then
+  gh api --method PATCH "repos/$repo" --input "$repo_root/policies/repository.json" >/dev/null
+fi
 # REST has no issue_creation_policy field, so this is applied through the
 # GraphQL updateRepository mutation instead of the flat PATCH above. This
 # capability has not been observed to be plan/visibility-gated, so a failure
@@ -803,12 +875,14 @@ if ! issue_creation_policy_apply_error="$(
   echo "$issue_creation_policy_apply_error" >&2
   exit 1
 fi
-if ! release_policy_error="$(
-  gh api --method PUT "repos/$repo/immutable-releases" 2>&1
-)"; then
-  echo "Cannot enable required immutable Releases for $repo." >&2
-  echo "$release_policy_error" >&2
-  exit 1
+if [[ "$apply_release_policy" == "true" ]]; then
+  if ! release_policy_error="$(
+    gh api --method PUT "repos/$repo/immutable-releases" 2>&1
+  )"; then
+    echo "Cannot enable required immutable Releases for $repo." >&2
+    echo "$release_policy_error" >&2
+    exit 1
+  fi
 fi
 pages_policy_applied=true
 if [[ "$pages_policy_enabled" == "true" ]]; then
@@ -831,18 +905,20 @@ if [[ "$pages_policy_enabled" == "true" ]]; then
   fi
 fi
 actions_policy_applied=true
-if ! actions_policy_error="$(
-  gh api --method PUT "repos/$repo/actions/permissions/workflow" \
-    --input "$repo_root/policies/actions.json" 2>&1
-)"; then
-  if [[ "$actions_policy_error" =~ (403|409|not\ permitted) ]]; then
-    actions_policy_applied=false
-    echo "DEGRADED Actions PR policy: $actions_policy_error"
-    echo "No release workflow is enabled; record this degraded capability before designing one."
-  else
-    echo "Cannot apply Actions workflow permissions for $repo." >&2
-    echo "$actions_policy_error" >&2
-    exit 1
+if [[ "$policy_actions_permissions" == "true" ]]; then
+  if ! actions_policy_error="$(
+    gh api --method PUT "repos/$repo/actions/permissions/workflow" \
+      --input "$repo_root/policies/actions.json" 2>&1
+  )"; then
+    if [[ "$actions_policy_error" =~ (403|409|not\ permitted) ]]; then
+      actions_policy_applied=false
+      echo "DEGRADED Actions PR policy: $actions_policy_error"
+      echo "No release workflow is enabled; record this degraded capability before designing one."
+    else
+      echo "Cannot apply Actions workflow permissions for $repo." >&2
+      echo "$actions_policy_error" >&2
+      exit 1
+    fi
   fi
 fi
 
@@ -864,26 +940,28 @@ if ! security_and_analysis_error="$(
   fi
 fi
 
-while IFS=$'\t' read -r name color description; do
-  gh label create "$name" --repo "$repo" --color "$color" \
-    --description "$description" --force >/dev/null
-done < <(
-  uv run --no-project python - "$repo_root/policies/labels.json" <<'PY'
+if [[ "$policy_labels" == "true" ]]; then
+  while IFS=$'\t' read -r name color description; do
+    gh label create "$name" --repo "$repo" --color "$color" \
+      --description "$description" --force >/dev/null
+  done < <(
+    uv run --no-project python - "$repo_root/policies/labels.json" <<'PY'
 import json
 import sys
 
 for label in json.load(open(sys.argv[1], encoding="utf-8")):
     print(label["name"], label["color"], label["description"], sep="\t")
 PY
-)
+  )
 
-if [[ "$prune_labels" == true ]]; then
-  while IFS= read -r existing_label; do
-    [[ -z "$existing_label" ]] && continue
-    if ! grep -Fxq "$existing_label" <<<"$desired_labels"; then
-      gh label delete "$existing_label" --repo "$repo" --yes >/dev/null
-    fi
-  done <<<"$existing_labels"
+  if [[ "$prune_labels" == true ]]; then
+    while IFS= read -r existing_label; do
+      [[ -z "$existing_label" ]] && continue
+      if ! grep -Fxq "$existing_label" <<<"$desired_labels"; then
+        gh label delete "$existing_label" --repo "$repo" --yes >/dev/null
+      fi
+    done <<<"$existing_labels"
+  fi
 fi
 
 apply_ruleset_payload() {
@@ -909,7 +987,7 @@ apply_ruleset_payload() {
   fi
 }
 
-if [[ "$ruleset_enforcement_available" == true ]]; then
+if [[ "$policy_branch_ruleset" == "true" && "$ruleset_enforcement_available" == true ]]; then
   if [[ "$legacy_ruleset_id" != "-" ]]; then
     gh api --method DELETE "repos/$repo/rulesets/$legacy_ruleset_id" >/dev/null
   fi
@@ -920,9 +998,11 @@ if [[ "$ruleset_enforcement_available" == true ]]; then
 fi
 
 GH_REPO="$repo" "$0" check
-if [[ "$ruleset_enforcement_available" == true && "$actions_policy_applied" == true &&
+if [[ "$policy_branch_ruleset" == "true" && "$ruleset_enforcement_available" == true && "$actions_policy_applied" == true &&
   "$pages_policy_applied" == true && "$security_and_analysis_applied" == true ]]; then
   echo "Required repository settings applied, including branch protection."
+elif [[ "$policy_branch_ruleset" != "true" ]]; then
+  echo "Repository settings applied; branch protection Ruleset is disabled by policy_branch_ruleset=false."
 else
   echo "DEGRADED repository settings applied; unavailable policy remains declarative and runtime workflows adapt."
 fi

@@ -48,6 +48,7 @@
 - [`spec-story-and-work-items.md`](adr/spec-story-and-work-items.md)
 - [`agent-collaboration.md`](adr/agent-collaboration.md)
 - [`portable-decision-site.md`](adr/portable-decision-site.md)
+- [`template-policy-manifest.md`](adr/template-policy-manifest.md)
 
 2026-08-24 的完整 GitHub 盤點、2026-08-25 的 work-item metadata normalization 與每條決策線對照，見 [`history-audit-2026-08.md`](history-audit-2026-08.md)。
 
