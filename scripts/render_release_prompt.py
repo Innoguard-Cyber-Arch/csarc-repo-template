@@ -61,6 +61,43 @@ def prompt(mode: str, tag: str, sha: str) -> str:
     )
 
 
+def status_prompt(tag: str, sha: str) -> str:
+    """Return the pinned-release agent prompt for install status detection.
+
+    Mirrors the everyday, unpinned "自動判斷" prompt in README.md (added by
+    #528/PR #566) so a pinned-release install path — for example an older
+    README or agent-install link that points at a specific release tag —
+    gets the same fixed-version install-status-detection instructions.
+    """
+    command = (
+        "uvx --python 3.14 --from "
+        f"'git+https://github.com/{REPOSITORY}.git@{sha}' csarc status"
+    )
+    return "\n".join(
+        (
+            "請判斷目前 workspace／既有 Git repository 屬於哪一種安裝狀態；"
+            "自行判斷 repo root。",
+            "",
+            f"來源 repository：https://github.com/{REPOSITORY}",
+            f"核准版本：{tag}",
+            f"核准 commit：{sha}",
+            "安裝指南：https://raw.githubusercontent.com/"
+            f"{REPOSITORY}/{sha}/docs/agent-install.md",
+            "",
+            "請先讀取該固定 commit 的安裝指南，以 "
+            f"`{command}` 為基礎，加上 "
+            f"`--to {tag} --expected-sha {sha} --json` 執行；不要自行判斷或"
+            "假設目前狀態。依回傳的 state 與 next_command：create 或 adopt 或 "
+            "update 時，改用同一批 pinned prompt 中對應的 init／adopt／update "
+            "prompt 並等待確認；current 時回報不需動作；policy-only-update "
+            "時只執行 `scripts/apply-repository-settings.sh plan`、摘要差異"
+            "並等待確認，確認後才 `apply`，不要重新走完整 adopt 或 update。"
+            "全程不要自行 stash、commit、apply GitHub settings、push 或"
+            "建立 PR。",
+        )
+    )
+
+
 def render(tag: str, sha: str, body: str) -> tuple[str, str, str]:
     """Render prompt text, provenance JSON, and appended release notes."""
     if not tag.startswith("v") or any(character.isspace() for character in tag):
@@ -75,6 +112,7 @@ def render(tag: str, sha: str, body: str) -> tuple[str, str, str]:
                 prompt("init", tag, sha),
                 prompt("adopt", tag, sha),
                 prompt("update", tag, sha),
+                status_prompt(tag, sha),
             )
         )
         + "\n"
