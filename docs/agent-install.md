@@ -45,9 +45,10 @@
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
    overwrite, preserve, automatic merge, manual merge, or unable to determine.
-   Review the generated Markdown and machine plan, plus the PDF when available,
-   including the exact project verification hook path, result, and reason,
-   then report
+   Review the generated Markdown report (its own new/edited/removed file
+   counts, impact analysis, and items requiring a decision) and machine
+   plan, including the exact project verification hook path, result, and
+   reason, then report
    the terminal's separate Milestone
    description classifications: upgrade, current, or manual review. Neither
    source guarantees the absence of semantic or runtime conflicts. Unknown
