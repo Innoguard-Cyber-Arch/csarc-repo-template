@@ -603,7 +603,17 @@ def test_writer_scanner_allows_the_shipped_pr_policy_validator() -> None:
         "template/scripts/validate-pr-policy",
     )
     for relative in relative_paths:
-        text = (root / relative).read_text(encoding="utf-8")
+        candidate = root / relative
+        if not candidate.is_file():
+            # A generated/adopted project's own copy of this paired test
+            # file has no "template/" tree at all -- only the meta-repo
+            # that produces generated projects does. Skip a path this
+            # repository genuinely does not have instead of failing closed
+            # on a layout difference the test never intended to assert on
+            # (see test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows
+            # below for the same established pattern).
+            continue
+        text = candidate.read_text(encoding="utf-8")
         assert writer_violations(text) == [], relative
 
 
