@@ -424,9 +424,18 @@ concurrency slot 競爭；二是操作面規則——**大規模派工（多張 
 Issue／PR，不要邊開邊試錯**。
 
 這個 `preflight` 子指令定義在「Enforce Milestone metadata at creation, not after PRs
-fail」（#572，本文件更新時仍為 open、尚未併入 `main`）。本節先記錄操作慣例與依賴關係；
-#572 併入前沒有可執行指令可用，不因此阻塞本 Issue 其餘的合併範圍。#572 併入後應回頭
-補上實際指令與呼叫方式。
+fail」（#572，已併入 `main` 為 #655；本 Milestone delivery branch 尚未同步當時的
+`main`，#667 直接把這個子指令原樣移入本分支，理由與作法見下方「過時 delivery branch
+偵測（#667）」一節）。實際呼叫方式：
+
+```console
+python3 scripts/sync_milestone_state.py preflight --repo <owner>/<repo> --milestone <N>
+```
+
+`preflight` 驗證 due date、tracker 標題與 `Lifecycle Issue:` 連結是否就緒，成功會印出
+`Milestone metadata is ready for work`；失敗會列出缺漏並以非零結束碼結束，供派工前手動
+確認一次。同一次呼叫也會附帶 #667 的過時 branch review 清單（純提示，不影響這個
+Milestone 本身是否就緒的判定）。
 
 ## 驗證分級與實測成本
 
@@ -830,6 +839,63 @@ repo-local 入口取代；promotion、delivery maintenance、release consumption
   刪除。`scripts/cleanup-worktrees --apply` 只清除乾淨、未鎖定且可證明已合併的本機 worktree。
 - 沒有真實成品、owner、權限或 live run 時，狀態保持 manual、conditional、blocked 或
   not applicable，不以歷史成功補足。
+
+### 過時 delivery branch 偵測（stale branch detection，#667）
+
+2026-09-04 人工盤點遠端 branch 時找到 9 個長期殘留的過時 branch（例如
+`type/524-lightweight-render-engine`、`fix/441-delivery-manual-contract`、
+`dev/m9-decision-site-adoption`）。逐一查證：全部對應 PR 都是**關閉但未合併**，實際
+work 都已透過後續重新命名或重新開的 PR 落地，只能手動刪除。
+
+**根因**：上面「合併後自動刪除一般來源 branch」這條 fallback 依賴的是
+`delete_branch_on_merge`（`policies/repository.json`）——這個設定只在 PR **合併**時
+觸發，一個 PR 被**關閉但未合併**時，它的來源 branch 完全不受這個設定保護，會無限期
+殘留，過去沒有任何偵測機制。這批 debris 本身是這個設定生效之前留下的舊帳，不是設定
+持續在漏；但設定本身也從未被驗證過仍是 `true`，且 Milestone-adjacent 但被遺忘的
+branch（如 `dev/m9-decision-site-adoption`）沒有任何提醒機制，只能靠人工偶然發現。
+
+**分工（兩者互補，不重疊）：**
+
+| 機制 | 觸發時機 | 涵蓋範圍 | 動作 |
+| --- | --- | --- | --- |
+| `delete_branch_on_merge`（既有） | PR 合併瞬間 | 合併成功的 PR 來源 branch | 自動刪除 |
+| `scripts/apply-repository-settings.sh check`（既有，本節確認涵蓋） | 手動／CI 執行時 | `delete_branch_on_merge` 這個 repo 設定本身是否仍是 `true` | 只回報 drift，不刪除任何 branch |
+| `scripts/stale_branch_detection.py`（本節新增） | Milestone preflight／release preflight 執行時 | 關閉未合併、或從未開過 PR 的過時 branch | 只回報候選清單，**不刪除** |
+
+**`apply-repository-settings.sh check` 的確認結果**：`delete_branch_on_merge` 已經是
+`policies/repository.json` 的既有欄位，`check` 子指令既有的 repository-settings drift
+比對是對這個檔案裡每一個欄位做通用逐一比對（與 `pull_request_creation_policy` 完全
+同一段邏輯，沒有各自獨立的程式碼），因此 `delete_branch_on_merge` 被意外關閉時本來就
+會被這段既有邏輯抓到——不需要新增專屬程式碼，只需要補上一個回歸測試案例證明涵蓋範圍
+（`scripts/test-apply-repository-settings` 的 Case 3b）。
+
+**偵測邏輯（`scripts/stale_branch_detection.py`）**：列出遠端 branch 中同時符合以下
+三項的候選：(a) 沒有對應的 open PR（含跨 repo fork PR 不算數，因為那個 PR 的
+`headRefName` 是 fork 裡的 branch，不是本 repo 的）、(b) 不是 `main`、`dev/m<N>-<slug>`
+（Milestone delivery branch，形狀與 `promotion_gate.py` 的 `MILESTONE_BRANCH` 一致）、
+或 `csarc/*`（機器管理的基礎設施 ref：`scripts/pr_lifecycle.py` 寫入的
+`csarc/leases/*` PR lifecycle lease，與交易 ledger `csarc/dev-next-preservation-ledger`
+——兩者都不是 work branch）、(c) 最後一次 commit 距今超過門檻天數。只回報候選清單，
+**從不自動刪除**——沒有 PR 的 branch 也可能只是還沒開 PR 的進行中工作，自動刪除風險
+太高。
+
+**門檻：預設 30 天。** 一個關閉未合併的 branch 幾乎肯定永久不會再有新 commit，所以門檻
+本身對「真的殘留」而言不敏感；真正的風險方向相反——誤判仍在進行中的正常工作為
+「過時」。本 repo 常態同時有數十條各自獨立 worktree／branch 平行推進（見本文件多處
+描述的派工模式），因 review 排隊或依賴其他 PR 而安靜一到數週是正常現象，不代表放棄。
+30 天足以涵蓋這種正常空窗期，同時仍能在大約一個月內就攔截真正的殘留，不會像這次找到
+的 9 個 branch 一樣累積數月才被人工發現。可用 `threshold_days` 參數覆寫。
+
+**掛載點（兩個既有自我檢核入口，刻意不新開排程 workflow）：**
+
+- `scripts/sync_milestone_state.py preflight`：每次驗證 Milestone metadata 時，一併
+  印出過時 branch review 清單（純提示，never 影響 `preflight` 本身的 pass/fail —
+  這與這個 Milestone 的 metadata 是否就緒無關）。
+- `scripts/release_policy.py preflight`：與既有 `integrations`（Renovate 安裝建議）
+  同一種 advisory 資料，掛在 JSON 報告的 `repo_hygiene` 欄位下——發版是另一個天然的
+  「該回頭看一下 repo 衛生狀況」時機點，同樣純提示，never 讓一次發版因為有過時 branch
+  候選而被擋下。任何 `gh` 呼叫失敗都會被吸收成 `"available": false` 而不是拋出例外，
+  因為這個檢查不應該因為自己不可用就連帶擋住不相關的 Milestone 或發版流程。
 
 ### Repo 能力自我檢查與 workaround 對照（capability matrix，#531）
 

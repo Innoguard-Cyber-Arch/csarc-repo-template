@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import re
 import shutil
@@ -12,7 +13,16 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    stale_branch_detection = importlib.import_module("stale_branch_detection")
+else:
+    stale_branch_detection = importlib.import_module(
+        f"{__package__}.stale_branch_detection"
+    )
 
 CHECK_NAME = "Milestone approval"
 TRACKER_SECTIONS = (
@@ -958,6 +968,34 @@ def record_promotion_evidence(
     return Decision(True, f"Recorded promotion evidence on #{tracker_number}")
 
 
+def preflight(repo: str, number: int) -> Decision:
+    """Validate a Milestone's own metadata before any work is dispatched.
+
+    Runs the exact due-date and tracker contract `tracker_errors()` already
+    enforces on every work-Issue pull request through `approval_decision()`,
+    but directly against a bare Milestone number -- so a missing due date or
+    a mistyped tracker title surfaces immediately after `gh api ... POST
+    milestones` / `gh issue create`, instead of waiting for the first PR to
+    fail "Validate Milestone approval" (Issue #572, landed on `main` as
+    #655; ported here directly rather than waiting for a full `main` sync
+    of this Milestone delivery branch, since #667 below depends on this
+    exact subcommand existing).
+
+    Also surfaces a repo-wide stale-delivery-branch review list (Issue
+    #667: detection only, see `stale_branch_detection`). That check is
+    unrelated to this Milestone's own metadata, so a stale-branch finding
+    never flips `allowed` to False -- it is appended to the summary purely
+    for visibility, on both the pass and fail path.
+    """
+    snapshot = load_snapshot(repo, number)
+    errors = tracker_errors(snapshot)
+    hygiene = stale_branch_detection.stale_branch_report(repo)["summary"]
+    base = (
+        "; ".join(errors) if errors else "Milestone metadata is ready for work"
+    )
+    return Decision(not errors, f"{base} | {hygiene}")
+
+
 def reconcile(repo: str, number: int) -> Decision:
     """Synchronize one Milestone and refresh its open PR checks."""
     snapshot = load_snapshot(repo, number)
@@ -1011,6 +1049,9 @@ def main() -> None:
     sync = subparsers.add_parser("reconcile")
     sync.add_argument("--repo", required=True)
     sync.add_argument("--milestone", required=True, type=int)
+    pre = subparsers.add_parser("preflight")
+    pre.add_argument("--repo", required=True)
+    pre.add_argument("--milestone", required=True, type=int)
     args = parser.parse_args()
     if args.command == "check-pr":
         decision = check_pr(args.repo, args.pr)
@@ -1026,6 +1067,8 @@ def main() -> None:
         decision = check_scope(args.repo, args.issue)
     elif args.command == "regenerate-reconciliation":
         decision = record_reconciliation(args.repo, args.milestone)
+    elif args.command == "preflight":
+        decision = preflight(args.repo, args.milestone)
     else:
         decision = reconcile(args.repo, args.milestone)
     print(decision.summary)  # noqa: T201
