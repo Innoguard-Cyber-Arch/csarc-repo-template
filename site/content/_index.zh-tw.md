@@ -489,6 +489,28 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
 
 里程碑完成時人工確認交付證據後再結案；#400、#401 尚未完成的 lifecycle gap 不在本頁複製 validator。工作分支合併後清理，里程碑 delivery branch 則等結案與未完成工作處置完成後才清理。
 {{< /detail >}}
+
+{{< detail key="release-notes-format" title="發版紀錄在哪裡看、格式代表什麼" >}}
+想知道某個版本實際變了什麼、為什麼發、跟上一版差在哪，直接看 GitHub 的
+[Releases 頁面](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases)：每個
+版本一則 Release，固定包含三項：**版本號**（Release 標題，等於 `vMAJOR.MINOR.PATCH` tag）、
+**發布日期**（GitHub 自動標示的發布時間，不需要另外找）、**變更摘要**（GitHub 依這段期間
+merge 進來的 PR 標題自動整理成「What's Changed」清單，附上跟前一版的完整比較連結）。
+
+這三項不是靠人手動填寫、也不會因為誰執行發版而有不同風格：不管是 hosted GitHub Actions
+自動觸發，還是維護者判斷 Actions 不健康時改在本機執行 `scripts/publish-release`，兩條路徑
+最終都呼叫同一支 `scripts/converge-release-tag`、用同一個 `gh release create ...
+--generate-notes` 指令產生 Release 說明，結構上不存在兩份可能各自長出不同格式的實作。
+
+根目錄的 `CHANGELOG.md` 是另一個同樣真實、但分類方式不同的視角：它依 Conventional
+Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Release 說明文字則是
+依 PR 列出「What's Changed」。兩者不會逐字對照，也不需要——同一批變更，兩種排列方式。
+沒有另外要求每則 Release 都寫「已知限制」或「回溯相容性」段落：多數版本沒有實質內容可
+填，跨版本持續有效的已知限制改記在這裡與 `docs/ci-policy.md`，不在每則 Release 裡重複。
+完整規範與為什麼採取這個範圍，見
+[ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md)
+的「Release 說明文字的最低格式規範」一節。
+{{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
 

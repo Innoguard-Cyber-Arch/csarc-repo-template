@@ -860,3 +860,83 @@ repo-local 入口取代；promotion、delivery maintenance、release consumption
 3. **採用**：正式承認 hosted Automatic／Guided 對 `immutable_releases` 永遠無法自證，把本節上方的本機 `scripts/publish-release` 路徑從「fallback」升格為**標準發版程序**——不是備援，是預設做法；由 agent（Claude Code session）在維護者授權下本機執行，用維護者自己的 admin 身份，天生就能真的讀到這個設定，不需要額外 secret，也不推翻 #123。「自動化」的著力點從「push 進 main 自動觸發」改成「agent 執行、人不用碰指令」。
 
 hosted `release.yml` 保留在 repo 裡（`verify`／`title`／`promotion` 仍然只能由它產生，不受影響），但它的 Automatic／Guided 版本發布功能正式標註為**已知限制，非待修復項目**——除非之後方向一或方向三的取捨改變，不會投入資源讓它自己成功發布。
+
+### Release 說明文字的最低格式規範（#616）
+
+M8 補發版（#587）過程中發現：`release.yml` 產生的 GitHub Release 說明文字，完全交給
+`googleapis/release-please-action`（Automatic）或本機 candidate 產生，沒有任何規定
+「一則正式 Release 的說明文字最低限度要包含什麼」。上兩節把本機 `scripts/publish-release`
+從 fallback 升格為標準程序後，Release 內容理論上可能來自兩種不同執行環境（hosted
+Actions 或本機），本節盤點實際程式碼路徑，回答這個風險是否需要額外規範或檢查。
+
+**盤點結論：整個 repo 只有一個程式碼路徑會建立 Release 說明文字。**
+`scripts/converge-release-tag` 是唯一呼叫 `gh release create` 的地方：
+
+```bash
+gh release create "$tag" --target "$sha" \
+  --title "$tag" --draft --generate-notes
+```
+
+`scripts/publish-release stage`（Automatic 與 Guided 共用同一個進入點）呼叫這支腳本；
+`release.yml` 與本機執行都呼叫同一份 `scripts/publish-release`。`googleapis/
+release-please-action` 在 Automatic 路徑只負責開版本 PR、同步版本檔與 CHANGELOG，
+不建立 Release 也不寫入 Release 說明；`release_policy.py prepare-candidate` 在 Guided
+路徑同樣只改版本檔與 CHANGELOG，不建立 Release。兩條路徑最終都收斂到
+`converge-release-tag` 這同一行呼叫——不是兩套各自維護、恰好長得很像的邏輯，而是結構上
+只有一份實作，呼應 #589 決定本身的第一原則（單一 repo-local 腳本被兩種呼叫方式共用）。
+`scripts/publish-release` 之後唯二對同一 Release 的寫入是 `gh release edit "$tag"
+--draft` 與 `gh release edit "$tag" --draft=false --latest`（`cmd_publish`／
+`revert_to_draft_on_failure`），兩者都不帶 `--notes`／`--notes-file`，不會覆寫或附加任何
+自由格式文字到 `--generate-notes` 已寫入的內容。
+
+**最低必要欄位——已經是結構保證，不是待補的規範：**
+
+| 欄位 | 來源 | 保證方式 |
+| --- | --- | --- |
+| 版本號 | `gh release create "$tag" --title "$tag"` | Release 標題固定等於 `release_policy.py` 算出的 tag；不存在自由輸入版本號的路徑 |
+| 發布日期 | GitHub 平台的 Release 建立／`publishedAt` metadata | `--draft=false` 轉為正式發布時由 GitHub 自動蓋章；不需要、也不必在說明文字內容裡重複 |
+| 變更摘要 | `--generate-notes` 產生的「What's Changed」PR 清單＋前一版比較連結 | GitHub 依 merged PR 標題（本 repo 的合併 commit 標題慣例採 Conventional Commits，`release_policy.py::release_intent` 依此判斷版本影響）自動彙整；沒有人工輸入步驟可以省略或打錯 |
+
+**刻意不要求「已知限制」／「回溯相容性」等額外欄位，不強制每則 Release 都要有這兩段：**
+
+1. 大部分 patch／dependency-bump 等級的 Release 沒有實質已知限制或破壞性變更；逐則
+   要求填寫只會製造樣板空段落，稀釋真正需要注意的內容，不會提高訊號。
+2. 破壞性變更本身已經有機制承載：PR／commit 標題的 `!` 標記與 `BREAKING CHANGE:` 會被
+   `release_policy.py::release_intent` 判成 major，反映在 Guided 路徑
+   `_write_changelog` 產生的 CHANGELOG.md「Breaking Changes」小節與 Automatic 路徑
+   release-please 自己產生的 CHANGELOG 段落；`--generate-notes` 的 PR 清單本身也會列出
+   該次變更對應的 PR，讀者可從 PR 內容取得細節，不需要在 Release 說明文字裡重述一次。
+3. 真正跨版本持續有效、不是「這一版特有」的已知限制（例如上一節的 hosted
+   Automatic／Guided 對 `immutable_releases` 永遠無法自證），本來就屬於維護一次、隨時
+   查閱的專案文件，而不是需要在每一則 Release 說明文字裡重複貼一次、還容易隨時間跟實際
+   狀況脫節的內容——這類內容留在 `docs/ci-policy.md` 與決策網站，Release 說明文字不必
+   自我複製（見下方決策網站頁面章節）。
+
+**CHANGELOG.md 與 GitHub Release 說明文字是兩個各自獨立、都真實但不相同的視角，刻意不
+強制兩者逐字一致：** `CHANGELOG.md`（Guided 路徑的 `_write_changelog`，或 Automatic 路徑
+release-please 自己的產生邏輯）以 Conventional Commit 的 intent 分類（Breaking
+Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 說明文字
+（`--generate-notes`）以 PR 層級列出「What's Changed」＋作者＋比較連結。兩者的分類軸線
+不同，但共同來源都是同一批 merged 內容，不會出現「這個環境看得到的變更、另一個環境看
+不到」的實質落差，只是呈現角度不同——讀者在任一邊都能找到同一批變更。
+
+**評估結論：不需要額外的結構化格式一致性檢查腳本。** 理由：
+
+1. 上面盤點已經證明 hosted 與本機路徑呼叫的是同一支 `scripts/publish-release`（進而
+   呼叫同一支 `scripts/converge-release-tag`）——不存在兩份平行實作會長期漂移的風險；
+   #589 設計本身的第一原則已經涵蓋這裡，不需要為這個 Issue 另外重新解決一次。
+2. 一個額外的格式檢查腳本，若要驗證的對象是 `--generate-notes` 產生的自由格式文字內容
+   本身，等於要對 GitHub 平台自己產生、不受本 repo 控制的文字做格式驗證；其確切呈現
+   （標題階層、項目符號、compare 連結措辭）屬於 GitHub 產品行為，寫死格式斷言容易在
+   GitHub 調整呈現方式時變成假陽性失敗，卻不代表本 repo 自己的邏輯真的壞了。
+3. 真正值得防的風險——未來有人繞過 `converge-release-tag`、另開一個呼叫路徑，各自帶
+   不同 flag（例如漏掉 `--generate-notes`，或加上覆寫用的 `--notes`）——是程式碼結構
+   層級的問題，用回歸測試斷言「整個 repo 只有一個 `gh release create` 呼叫點，且該
+   呼叫點的 flag 組合不變、沒有其他地方對 Release 呼叫 `--notes`／`--notes-file`」就能
+   可靠涵蓋，不需要解析或驗證產生出來的自由格式文字內容本身。
+   `tests/test_release_notes_format.py` 落地這個斷言，掛在 `scripts/verify-fast`
+   既有的 `uv run pytest` 範圍內，每次 PR 都跑，不需要另外的 full-tier 專屬階段。
+
+**下發到 `template/`：** `scripts/converge-release-tag`／`scripts/publish-release` 已
+透過 `scripts/sync-paired-files.sh` 與 root 逐位元組同步（見上兩節），本節的格式契約
+不需要第二份實作，也不需要另外的 Copier 選項或下發決定。
