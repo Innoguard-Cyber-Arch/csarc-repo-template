@@ -654,7 +654,7 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 {{< config-guidance track="template-release" >}}
 {{< /slide >}}
 
-{{< slide key="docs-site" track="docs-site" eyebrow="步驟 10" title="單檔永遠可交付" subtitle="Hugo 管內容結構，既有 renderer 打包成可離線轉寄的 HTML。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="docs-site" track="docs-site" eyebrow="步驟 10" title="單檔永遠可交付" subtitle="site/content/ 的 Markdown 來源交給內建 Python 渲染引擎組出內容結構，既有 renderer 打包成可離線轉寄的單一 HTML。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <h2>單檔永遠可交付，<span class="accent">平台能力只做加成</span></h2>
@@ -670,11 +670,11 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 
 {{< basic >}}
 - `site/content/` 是中英文 Markdown 來源；兩種語言必須有相同 content keys。
-- `site/static/styles.css` 保留特殊簡報視覺；Hugo shortcode 將內容轉成共用結構。
+- `site/static/styles.css` 保留特殊簡報視覺；`scripts/build_decision_site.py` 的 shortcode-block 解析器將內容轉成共用結構。
 - `scripts/render_site.py` 內嵌 CSS、JavaScript、font 與圖片，拒絕外部 runtime asset。
 
-{{< disclosure key="portable-bundle" title="Markdown＋Hugo → self-contained HTML" >}}
-`docs/adr/` 保存 canonical 選型；Hugo 負責內容與 HTML；未修改的 renderer 只處理資產內嵌與安全檢查。最終的 `docs/index.html` 可用 `file://` 離線開啟，不依賴 Pages、CDN 或 JavaScript package runtime。
+{{< disclosure key="portable-bundle" title="Markdown＋Python 渲染引擎 → self-contained HTML" >}}
+`docs/adr/` 保存 canonical 選型；`scripts/build_decision_site.py` 負責內容與 HTML；未修改的 `scripts/render_site.py` 只處理資產內嵌與安全檢查。最終的 `docs/index.html` 可用 `file://` 離線開啟，不依賴 Pages、CDN 或 JavaScript package runtime。這份單一可下載 HTML 是本站的既定基準特色，不是過渡方案：即使未來加上 Pages 或其他託管，仍要保留可下載、離線可用的這份輸出。
 {{< /disclosure >}}
 
 {{< detail key="docs-site-access" title="存取與維護邊界" >}}

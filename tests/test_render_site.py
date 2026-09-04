@@ -569,13 +569,23 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     # navigation.json into its class, rather than hardcoding it; check two
     # different data-driven values instead of asserting on retired Hugo
     # template syntax (`{{ .participation }}`).
-    assert 'class="journey-bookend appendix maintainer"' in journey_rail
+    # Issue #681 folded the appendix bookend links into the "support" group
+    # as ordinary numbered items, so maintainer-only entries now render as
+    # journey-item <li> elements (with a threaded data-audience attribute)
+    # instead of journey-bookend appendix links.
+    assert 'class="journey-bookend appendix' not in journey_rail
+    assert 'class="journey-item maintainer"' in journey_rail
     assert (
         'class="journey-item human active" aria-current="step">' in journey_rail
     )
-    assert navigation["appendices"][-2]["key"] == "testing"
-    assert navigation["appendices"][-1]["key"] == "bridge"
-    assert navigation["appendices"][-2]["audience"] == "maintainer"
+    support_items = {
+        item["key"]: item
+        for item in navigation["items"]
+        if item["group"] == "support"
+    }
+    assert support_items["testing"]["audience"] == "maintainer"
+    assert support_items["bridge"]["audience"] == "maintainer"
+    assert navigation["appendices"] == []
     assert navigation["labels"]["zh-tw"]["human"] == "需要人決策"
     assert navigation["labels"]["zh-tw"]["automated"] == "預設自動完成"
     assert navigation["labels"]["zh-tw"]["maintainer"] == "僅維運可見"
