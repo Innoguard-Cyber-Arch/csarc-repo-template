@@ -247,7 +247,19 @@ else
   fi
 fi
 unchecked_task_pattern='^[[:space:]]*-[[:space:]]+\[[[:space:]]*\]'
-if grep -Eq "$unchecked_task_pattern" <<<"${PR_BODY:-}"; then
+# The acceptance-checklist gate (this PR-body check and the linked Issue check
+# below) only enforces completeness once a pull request is not a draft: a
+# draft cannot be merged anyway, so re-validating an admittedly-unfinished
+# checklist on every push while still drafting only produces certain,
+# repeated failures (#430, PR #448 needed 49 pushes before the checklist was
+# actually done). Marking the pull request ready for review re-triggers this
+# workflow (`ready_for_review`) and revalidates in full; see docs/ci-policy.md's
+# "Acceptance-checklist 驗證時機（#573）" section.
+pr_draft="${PR_DRAFT:-false}"
+if [[ "$pr_draft" == "true" ]]; then
+  echo "::notice::Skipping acceptance-checklist validation while the pull request is a draft; it revalidates in full when marked ready for review."
+fi
+if [[ "$pr_draft" != "true" ]] && grep -Eq "$unchecked_task_pattern" <<<"${PR_BODY:-}"; then
   echo "Complete every pull request checklist item before using a closing keyword."
   exit 1
 fi
@@ -374,7 +386,7 @@ if [[ "${promotion:-false}" != "true" ]] && (( PR_NUMBER >= development_cutover_
     fi
   fi
 fi
-if [[ "${tracker_promotion:-false}" != "true" ]] && [[ "$issue_has_unchecked" == "true" ]]; then
+if [[ "${tracker_promotion:-false}" != "true" ]] && [[ "$pr_draft" != "true" ]] && [[ "$issue_has_unchecked" == "true" ]]; then
   echo "Issue #${issue_number} still has unchecked acceptance tasks."
   exit 1
 fi

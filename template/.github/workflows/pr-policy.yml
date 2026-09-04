@@ -73,6 +73,7 @@ jobs:
           PR_BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
           PR_DELIVERY_CUTOVER_ISSUE: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '185' || '0' }}
           PR_DEVELOPMENT_CUTOVER_PR: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '306' || '1' }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -120,3 +121,56 @@ jobs:
           --head-ref "$PR_HEAD"
           --head-sha "$PR_HEAD_SHA"
           --pr-number "$PR_NUMBER"
+  promotion:
+    name: promotion
+    # Produces the `promotion` required status check
+    # (policies/rulesets-required-checks.json) for every pull request into
+    # `main`, including an ordinary non-Milestone-delivery pull request.
+    # Before this job existed, no workflow ever reported a `promotion`
+    # check-run for those pull requests, so the required check stayed
+    # permanently pending (#601). It only classifies the delivery-promotion
+    # route via `scripts/promotion_gate.py check-route` (the same
+    # `route_for()` classifier the heavier promotion evidence pipeline in
+    # `scripts/promotion_gate.py::prepare()` uses); it does not duplicate
+    # the Milestone tracker or evidence validation already owned by the
+    # `title` job above (`scripts/validate-pr-policy`) and
+    # `.github/workflows/milestone-lifecycle.yml`'s `Milestone approval`
+    # check.
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the trusted base commit
+        if: ${{ github.event_name == 'merge_group' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.merge_group.base_sha }}
+      - name: Check out the trusted base commit
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Classify the delivery-promotion route
+        env:
+          PR_BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
+        run: |
+          branch_strategy="$PR_BRANCH_STRATEGY"
+          if [[ -z "$branch_strategy" ]]; then
+            branch_strategy="main"
+            if [[ -f .csarc/config.yml ]]; then
+              branch_strategy="$(python3 scripts/csarc_config.py branch_strategy)"
+            fi
+          fi
+          if python3 scripts/promotion_gate.py --help | grep -q check-route; then
+            python3 scripts/promotion_gate.py check-route \
+              --event "$GITHUB_EVENT_NAME" \
+              --event-path "$GITHUB_EVENT_PATH" \
+              --branch-strategy "$branch_strategy" \
+              --github-output "$GITHUB_OUTPUT" \
+              --summary "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice::Promotion route classification starts after this pull request reaches its base branch."
+          fi

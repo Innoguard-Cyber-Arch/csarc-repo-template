@@ -2197,7 +2197,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>Eleven shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, Dependabot auto-merge, a candidate release flow, and a release-publish drift check, plus the optional governance-drift and template-update-notice schedules, and CodeQL SAST</td>
+					<td>Nine shared flows: work item lifecycle (folding in Issue triage, Milestone sync, and work item closure), spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, Dependabot auto-merge, a candidate release flow, and a release-publish drift check, plus the optional governance-drift and template-update-notice schedules, and CodeQL SAST</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
@@ -2904,9 +2904,9 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="config-guidance">
   <strong>Fixed and adjustable policy</strong>
   <p>Only the template&#39;s main policy, adjustable options, and setting locations are listed.</p>
-  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-pr" data-config-index="0" data-config-title="Fixed baseline | PR format and its work-item link" data-config-goal="One work PR completes one Issue; an Action verifies and closes Milestone work, while work that lands directly on main relies on GitHub&#39;s native closing keywords." data-config-file="pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-closure.yml＋scripts/pr_lifecycle.py" data-config-code="title: feat(scope): English summary&#10;branch: feat/123-short-slug&#10;body: Closes #123&#10;label: enhancement&#10;assignee: PR author&#10;milestone: same as Issue #123">
+  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-pr" data-config-index="0" data-config-title="Fixed baseline | PR format and its work-item link" data-config-goal="One work PR completes one Issue; an Action verifies and closes Milestone work, while work that lands directly on main relies on GitHub&#39;s native closing keywords." data-config-file="pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-lifecycle.yml＋scripts/pr_lifecycle.py" data-config-code="title: feat(scope): English summary&#10;branch: feat/123-short-slug&#10;body: Closes #123&#10;label: enhancement&#10;assignee: PR author&#10;milestone: same as Issue #123">
       <span class="config-trigger-title">Fixed baseline | PR format and its work-item link</span>
-      <span class="config-trigger-file">pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-closure.yml＋scripts/pr_lifecycle.py</span>
+      <span class="config-trigger-file">pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-lifecycle.yml＋scripts/pr_lifecycle.py</span>
       <span class="config-trigger-summary">The title and base branch must follow the rules; the classification label and Milestone must match the Issue, the PR author must be listed as Assignee, and the body must use Closes #N to link back to the matching open Issue.</span>
     </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-pr" data-config-index="1" data-config-title="Adjustable | The work PR&#39;s branch model" data-config-goal="Milestone work lands on `dev/m*` first, while an ordinary independent task goes straight to main; once main moves forward, a PR syncs it back instead of rewriting the delivery branch directly." data-config-file="copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py" data-config-code="branch_strategy: delivery  # delivery | main&#10;&#10;work:    type/123-short-slug -&gt; dev/m8-*&#10;release: dev/m8-* -&gt; main&#10;sync:    sync/main-to-m8-*-&lt;sha&gt; -&gt; dev/m8-*">
       <span class="config-trigger-title">Adjustable | The work PR&#39;s branch model</span>
@@ -3216,9 +3216,9 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="config-guidance">
   <strong>Fixed and adjustable policy</strong>
   <p>Only the template&#39;s main policy, adjustable options, and setting locations are listed.</p>
-  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-deploy" data-config-index="0" data-config-title="Human boundary | Delivery and Milestone closure stay separate" data-config-goal="Merging into main is not a release; a Milestone still needs its owner to confirm the outcome and the required evidence." data-config-file="docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml" data-config-code="normal completion:&#10;  delivery evidence: recorded&#10;  unfinished Issues: none&#10;  lifecycle Issue: completed&#10;&#10;early termination:&#10;  reason: recorded&#10;  unfinished Issues: moved or not planned&#10;  lifecycle Issue: not planned">
+  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-deploy" data-config-index="0" data-config-title="Human boundary | Delivery and Milestone closure stay separate" data-config-goal="Merging into main is not a release; a Milestone still needs its owner to confirm the outcome and the required evidence." data-config-file="docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/work-item-lifecycle.yml" data-config-code="normal completion:&#10;  delivery evidence: recorded&#10;  unfinished Issues: none&#10;  lifecycle Issue: completed&#10;&#10;early termination:&#10;  reason: recorded&#10;  unfinished Issues: moved or not planned&#10;  lifecycle Issue: not planned">
       <span class="config-trigger-title">Human boundary | Delivery and Milestone closure stay separate</span>
-      <span class="config-trigger-file">docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml</span>
+      <span class="config-trigger-file">docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/work-item-lifecycle.yml</span>
       <span class="config-trigger-summary">Until #400 is complete, both normal closure and early termination stay manual; a release workflow never infers completion on its own.</span>
     </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-deploy" data-config-index="1" data-config-title="Current state | Release automation is not enabled" data-config-goal="Documentation claims only the capability that the repository&#39;s current active files and current runs can actually prove." data-config-file="docs/adr/release-security-and-dependencies.md" data-config-code="version intent: active&#10;version &#43; changelog: manual&#10;tag &#43; GitHub Release: blocked (#369)&#10;artifact evidence: conditional&#10;deployment: not applicable">
       <span class="config-trigger-title">Current state | Release automation is not enabled</span>
@@ -4475,7 +4475,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Issue work boundary</strong><span>Title, type, assignee, labels, and duplicate disposition must converge.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Before work starts</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened, edited, reopened, or closed · Timeout：5 min</span></li></ul></div>
+              <strong>Before work starts</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/work-item-lifecycle.yml</code>／<code>process (classify)</code><span>Trigger：Issue opened, edited, reopened, or closed · Timeout：5 min</span></li></ul></div>
             </li>
             <li>
               <strong>When work ends</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div>
@@ -4501,7 +4501,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Milestone kickoff gate</strong><span>One lifecycle Issue records agreement and objections. Work starts only with one non-proposer agreement and no unresolved objection.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Before work starts</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_approval.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">Pending #400</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>The existing milestone-lifecycle Action does not yet validate agreement and objections in comments; #400 adds the shared validator.</span></div>
+              <strong>Before work starts</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_approval.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">Pending #400</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>The existing work-item-lifecycle Action does not yet validate agreement and objections in comments; #400 adds the shared validator.</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4752,7 +4752,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Close the Issue after its work PR merges</strong><span>Close the matching Issue only after its work PR enters the correct dev branch. The release PR does not close it again.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_pr_closure.py</code></li><li><code>scripts/pr_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/work-item-closure.yml</code>／<code>close-work</code><span>Trigger：Milestone work PR merged into dev/m* · Timeout：5 min</span></li></ul></div><span>Standalone work and hotfixes merged directly to main retain GitHub-native closure and do not start this Action.</span>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_pr_closure.py</code></li><li><code>scripts/pr_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/work-item-lifecycle.yml</code>／<code>process (close-work)</code><span>Trigger：Milestone work PR merged into dev/m* · Timeout：5 min</span></li></ul></div><span>Standalone work and hotfixes merged directly to main retain GitHub-native closure and do not start this Action.</span>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4835,7 +4835,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Milestone closure</strong><span>Normal completion confirms release and delivery evidence. Early termination records a reason and first moves or cancels unfinished Issues.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>After delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li><li><code>tests/test_milestone_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">Pending #400</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Lifecycle Issue closed, reopened, or milestoned · Timeout：5 min</span></li></ul></div>
+              <strong>After delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li><li><code>tests/test_milestone_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">Pending #400</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/work-item-lifecycle.yml</code>／<code>process (sync)</code><span>Trigger：Lifecycle Issue closed, reopened, or milestoned · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">

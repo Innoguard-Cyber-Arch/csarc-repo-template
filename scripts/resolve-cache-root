@@ -1,8 +1,72 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Resolve where pinned-tool installers and uv/pnpm should cache downloads.
+#
+# `CSARC_CACHE_ROOT`, when set, always wins and is used exactly as given
+# (existing override behavior; unchanged).
+#
+# Otherwise the default now prefers a user-level location that every git
+# worktree of this repo shares, instead of the old per-checkout
+# `<repo_root>/.cache`. Multiple worktrees of the same repo are this
+# project's normal working pattern (one worktree per Issue); without a
+# shared root, each worktree redundantly re-downloads the same
+# tool/version/checksum. Caching is a pure performance optimization, so if
+# the shared location cannot be determined or turns out not to be writable,
+# this always falls back to the repo-local `.cache/` rather than failing.
+#
+# Platform default (explicitly branched, not assumed to match across
+# platforms):
+#   - macOS: `~/Library/Caches/csarc`, the native per-app cache convention
+#     (Finder, Spotlight, and macOS's own cache-cleanup tooling all expect
+#     app caches there; the Linux `~/.cache` convention would also work but
+#     would not be a native location on macOS).
+#   - Linux/WSL2 (README already requires Windows users to run under WSL2,
+#     so this branch is POSIX-only and never needs a native Windows path):
+#     XDG Base Directory convention, i.e. `$XDG_CACHE_HOME/csarc` if
+#     `XDG_CACHE_HOME` is set to an absolute path, else `~/.cache/csarc`.
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cache_root="${CSARC_CACHE_ROOT:-$repo_root/.cache}"
+repo_local_cache_root="$repo_root/.cache"
+
+# Print the user-level, cross-worktree-shared default candidate for this
+# platform, or exit non-zero if it cannot be determined (e.g. no $HOME).
+default_shared_cache_root() {
+  local home_dir platform base_dir
+  home_dir="${HOME:-}"
+  if [[ -z "$home_dir" || "$home_dir" != /* ]]; then
+    return 1
+  fi
+
+  platform="$(uname -s 2>/dev/null || echo unknown)"
+  case "$platform" in
+    Darwin)
+      base_dir="$home_dir/Library/Caches"
+      ;;
+    *)
+      if [[ -n "${XDG_CACHE_HOME:-}" && "${XDG_CACHE_HOME}" == /* ]]; then
+        base_dir="$XDG_CACHE_HOME"
+      else
+        base_dir="$home_dir/.cache"
+      fi
+      ;;
+  esac
+
+  printf '%s/csarc\n' "$base_dir"
+}
+
+if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
+  cache_root="$CSARC_CACHE_ROOT"
+else
+  cache_root=""
+  if candidate="$(default_shared_cache_root)" && [[ -n "$candidate" ]] &&
+    mkdir -p "$candidate" 2>/dev/null && [[ -w "$candidate" ]]; then
+    cache_root="$candidate"
+  fi
+  if [[ -z "$cache_root" ]]; then
+    cache_root="$repo_local_cache_root"
+  fi
+fi
 
 if [[ "$cache_root" != /* ]]; then
   printf 'CSARC_CACHE_ROOT must be an absolute path: %s\n' "$cache_root" >&2

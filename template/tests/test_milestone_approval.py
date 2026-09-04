@@ -15,6 +15,7 @@ approval_decision = MODULE["approval_decision"]
 check_pr = MODULE["check_pr"]
 check_merge_group = MODULE["check_merge_group"]
 tracker_errors = MODULE["tracker_errors"]
+preflight = MODULE["preflight"]
 
 
 @pytest.fixture(autouse=True)
@@ -335,3 +336,64 @@ def test_merge_group_rechecks_every_associated_pull_request(
 
     assert result.allowed
     assert recorded == [("acme/project", "queue-sha", result)]
+
+
+def test_preflight_passes_a_correctly_created_milestone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Milestone whose due date, tracker, and link already line up is
+    reported ready before any work-Issue pull request is even opened
+    (Issue #572)."""
+    calls: list[tuple[str, int]] = []
+    monkeypatch.setitem(
+        preflight.__globals__,
+        "load_snapshot",
+        lambda repo, number: (calls.append((repo, number)), snapshot())[1],
+    )
+
+    result = preflight("acme/project", 8)
+
+    assert result.allowed
+    assert calls == [("acme/project", 8)]
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ("title", "Create exactly one Issue titled"),
+        ("label", "enhancement label"),
+        ("proposal", "Proposal section"),
+        ("link", "Lifecycle Issue"),
+        ("due-date", "real due date"),
+    ],
+)
+def test_preflight_fails_closed_on_the_same_contract_a_pr_would(
+    change: str, message: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`preflight` rejects exactly what `tracker_errors` rejects, so a bad
+    Milestone is caught at creation time instead of at the first PR's
+    "Validate Milestone approval" check (Issue #572)."""
+    state = snapshot()
+    item = state["issues"][0]
+    if change == "title":
+        item["title"] = "Milestone 8: Wrong title"
+    elif change == "label":
+        item["labels"] = []
+    elif change == "proposal":
+        item["body"] = item["body"].replace(
+            "Ship the reviewed batch.", "<!-- empty -->"
+        )
+    elif change == "due-date":
+        state["milestone"]["due_on"] = None
+    else:
+        state["milestone"]["description"] = (
+            "## Acceptance criteria\n\n- [ ] Deliver"
+        )
+    monkeypatch.setitem(
+        preflight.__globals__, "load_snapshot", lambda repo, number: state
+    )
+
+    result = preflight("acme/project", 8)
+
+    assert not result.allowed
+    assert message in result.summary

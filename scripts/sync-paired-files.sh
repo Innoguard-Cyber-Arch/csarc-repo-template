@@ -20,14 +20,12 @@ paired_files=(
   .github/ISSUE_TEMPLATE/feature.yml
   .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/dependabot-auto-merge.yml
-  .github/workflows/issue-triage.yml
   .github/workflows/governance-comment.yml
-  .github/workflows/milestone-lifecycle.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
   .github/workflows/release-drift.yml
   .github/workflows/spec-to-issue.yml
-  .github/workflows/work-item-closure.yml
+  .github/workflows/work-item-lifecycle.yml
   policies/actions.json
   policies/issue-creation.json
   policies/labels.json
