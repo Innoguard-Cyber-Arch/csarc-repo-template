@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-from pypdf import PdfReader
 
 import csarc_cli.cli as cli
 from csarc_cli.cli import CliError, main
@@ -966,15 +965,14 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     assert not (project / ".copier-answers.yml").exists()
     report_dir = tmp_path / "legacy-product-csarc-adoption-report"
     markdown = report_dir / "csarc-adoption-dry-run.md"
-    pdf = report_dir / "csarc-adoption-dry-run.pdf"
     assert markdown.is_file()
-    assert pdf.is_file()
-    assert "Decision: Review required" in markdown.read_text(encoding="utf-8")
-    reader = PdfReader(pdf)
-    assert len(reader.pages) == 1
-    pdf_text = reader.pages[0].extract_text()
-    assert "Review required" in pdf_text
-    assert "Manual merge" in pdf_text
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
+    report_text = markdown.read_text(encoding="utf-8")
+    assert "Decision: Review required" in report_text
+    assert (
+        f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
+        in report_text
+    )
     assert main([*arguments, "--dry-run"]) == 0
     assert git(project, "status", "--porcelain") == before
     plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
@@ -1532,16 +1530,9 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "Selected release workflow: `.github/workflows/release.yml`" in markdown
     )
     assert "Required release inputs: `version`" in markdown
-    pdf = "\n".join(
-        page.extract_text() or ""
-        for page in PdfReader(
-            plan_path.with_name(f"{cli.ADOPTION_REPORT_BASENAME}.pdf")
-        ).pages
-    )
-    assert "Release workflow" in pdf
-    assert ".github/workflows/release.yml" in pdf
-    assert "Release inputs" in pdf
-    assert "version" in pdf
+    assert not plan_path.with_name(
+        f"{cli.ADOPTION_REPORT_BASENAME}.pdf"
+    ).exists()
 
     assert (
         main(
@@ -1634,11 +1625,16 @@ def test_adoption_report_classifies_unknown_content(
     assert (
         f"Markdown report: {report_dir / 'csarc-adoption-dry-run.md'}" in output
     )
-    assert f"PDF report: {report_dir / 'csarc-adoption-dry-run.pdf'}" in output
+    assert "PDF report:" not in output
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
     report = (report_dir / "csarc-adoption-dry-run.md").read_text(
         encoding="utf-8"
     )
     assert "Decision: Unable to determine" in report
+    assert (
+        f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
+        in report
+    )
     assert "- Repository: `(none)`" in report
     assert "- Repository visibility: `private` (`safe-default`)" in report
     assert f"- Template source: `{source}`" in report
@@ -1653,107 +1649,12 @@ def test_adoption_report_classifies_unknown_content(
     assert "| Preserve | 1 |" in report
     assert "| Manual merge | 2 |" in report
     assert "| Unable to determine | 1 |" in report
-    pdf_text = (
-        PdfReader(report_dir / "csarc-adoption-dry-run.pdf")
-        .pages[0]
-        .extract_text()
-    )
-    assert "Unable to determine" in pdf_text
-    assert "binary.dat" in pdf_text
-    assert "Repository" in pdf_text and "(none)" in pdf_text
-    assert "Visibility" in pdf_text and "private (safe-default)" in pdf_text
-    assert "Template source" in pdf_text
-    placements: list[tuple[str, float, float]] = []
-
-    def record_pdf_text(
-        text: str,
-        _cm: list[float],
-        tm: list[float],
-        _font: dict[str, object] | None,
-        _size: float,
-    ) -> None:
-        if clean := text.strip():
-            placements.append((clean, tm[4], tm[5]))
-
-    PdfReader(report_dir / "csarc-adoption-dry-run.pdf").pages[0].extract_text(
-        visitor_text=record_pdf_text
-    )
-    labels = {
-        "Target",
-        "Repository",
-        "Visibility",
-        "Template source",
-        "Template",
-        "Verification",
-        "Profile",
-        "Project hook",
-        "Hook configured",
-        "Hook result",
-        "Hook reason",
-    }
-    for label, label_x, label_y in (
-        item for item in placements if item[0] in labels
-    ):
-        value, value_x, _ = next(
-            item
-            for item in placements
-            if item[2] == label_y and item[1] > label_x
-        )
-        assert (
-            value_x - label_x - cli.stringWidth(label, "Helvetica-Bold", 8)
-            >= 7.9
-        )
-        assert (
-            value_x + cli.stringWidth(value, "Helvetica", 8) <= cli.A4[0] - 48
-        )
-    assert git(project, "status", "--porcelain") == before
-
-
-@pytest.mark.large
-def test_adoption_report_failure_keeps_markdown(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A PDF failure leaves the useful Markdown report and target untouched."""
-    source, revision = make_template(tmp_path)
-    project = tmp_path / "report-failure-product"
-    project.mkdir()
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    (project / "README.md").write_text("product\n", encoding="utf-8")
-    commit(project, "test: report failure product")
-    report_dir = tmp_path / "failed-report"
-
-    arguments = [
-        "adopt",
-        str(project),
-        "--source",
-        str(source),
-        "--to",
-        revision,
-        "--allow-unreleased",
-        "--dry-run",
-        "--report-dir",
-        str(report_dir),
-    ]
-    assert main(arguments) == 0
-    assert (report_dir / "csarc-adoption-dry-run.pdf").is_file()
-    capsys.readouterr()
-
-    def fail_pdf(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("fixture PDF failure")
-
-    monkeypatch.setattr(cli, "draw_adoption_pdf", fail_pdf)
-    before = git(project, "status", "--porcelain")
-    assert main(arguments) == 0
-    output = capsys.readouterr()
-    assert "machine plan remain usable" in output.err
-    assert "PDF report:" not in output.out
-    assert (report_dir / "csarc-adoption-dry-run.md").is_file()
-    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
-    assert (report_dir / cli.ADOPTION_PLAN_BASENAME).is_file()
+    assert "| Remove | 0 |" in report
+    assert "## Summary of file changes" in report
+    assert "| Edited files | 0 |" in report
+    assert "| Removed files | 0 |" in report
+    assert "## Impact analysis" in report
+    assert "## Items requiring your decision" in report
     assert git(project, "status", "--porcelain") == before
 
 
@@ -1761,7 +1662,6 @@ def test_adoption_report_failure_keeps_markdown(
     "temporary_name",
     [
         f"{cli.ADOPTION_REPORT_BASENAME}.md.tmp",
-        f"{cli.ADOPTION_REPORT_BASENAME}.pdf.tmp",
         cli.ADOPTION_PLAN_BASENAME.replace(".json", ".json.tmp"),
     ],
 )
@@ -1807,12 +1707,12 @@ def test_adoption_reports_ignore_predictable_temporary_symlinks(
     assert planted.is_symlink()
     for name in (
         f"{cli.ADOPTION_REPORT_BASENAME}.md",
-        f"{cli.ADOPTION_REPORT_BASENAME}.pdf",
         cli.ADOPTION_PLAN_BASENAME,
     ):
         output = report_dir / name
         assert output.is_file()
         assert not output.is_symlink()
+    assert not (report_dir / f"{cli.ADOPTION_REPORT_BASENAME}.pdf").exists()
 
 
 def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
@@ -1915,13 +1815,182 @@ def test_adoption_markdown_reports_repository_context(
         cli.resolve_release_answers(
             tmp_path, {"language": "ci", "project_mode": "existing"}
         ),
-        cli.Plan((), (), (), (), (), ()),
+        cli.Plan((), (), (), (), (), (), ()),
         "2026-08-24T00:00:00+00:00",
     )
 
     assert repository_line in report
     assert visibility_line in report
     assert f"- Template source: `{source}`" in report
+
+
+def test_adoption_report_records_template_version(tmp_path: Path) -> None:
+    """Record the report's own independently-versioned template number."""
+    report = cli.adoption_report_markdown(
+        tmp_path,
+        cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
+        cli.RepositoryContext(
+            None, None, None, "private", "safe-default", False
+        ),
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
+        cli.Plan((), (), (), (), (), (), ()),
+        "2026-08-24T00:00:00+00:00",
+    )
+
+    assert (
+        f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
+        in report
+    )
+
+
+def test_readme_displays_adoption_report_template_version() -> None:
+    """Keep README's displayed report version in sync with the constant."""
+    marker = "ADOPTION_REPORT_TEMPLATE_VERSION"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    lines_mentioning_constant = [
+        line for line in readme.splitlines() if marker in line
+    ]
+    assert lines_mentioning_constant, (
+        f"README.md should reference {marker} so a template version bump "
+        "is caught here."
+    )
+    assert any(
+        cli.ADOPTION_REPORT_TEMPLATE_VERSION in line
+        for line in lines_mentioning_constant
+    ), (
+        "README.md's displayed adoption report template version "
+        f"({lines_mentioning_constant}) does not match {marker} "
+        f"({cli.ADOPTION_REPORT_TEMPLATE_VERSION})."
+    )
+
+
+def test_adoption_report_computes_new_edited_removed_counts(
+    tmp_path: Path,
+) -> None:
+    """Verify New/Edited/Removed/Preserved statistics for a simulated plan."""
+    plan = cli.Plan(
+        add=("new-a.txt", "new-b.txt", "new-c.txt"),
+        overwrite=("overwritten.txt",),
+        remove=("gone-a.txt", "gone-b.txt"),
+        preserve=("kept-a.txt", "kept-b.txt", "kept-c.txt", "kept-d.txt"),
+        merge=("AGENTS.md",),
+        manual=("conflict.txt",),
+        unknown=("weird.bin",),
+    )
+    report = cli.adoption_report_markdown(
+        tmp_path,
+        cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
+        cli.RepositoryContext(
+            None, None, None, "private", "safe-default", False
+        ),
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
+        plan,
+        "2026-08-24T00:00:00+00:00",
+    )
+
+    # 3 new, (1 overwrite + 1 automatic merge) = 2 edited, 2 removed.
+    assert "## Summary of file changes" in report
+    assert "| New files | 3 |" in report
+    assert "| Edited files | 2 |" in report
+    assert "| Removed files | 2 |" in report
+    assert "| Preserved files | 4 |" in report
+    assert "## Expected file effects" in report
+    assert "| Add | 3 |" in report
+    assert "| Overwrite | 1 |" in report
+    assert "| Remove | 2 |" in report
+    assert "| Preserve | 4 |" in report
+    assert "| Automatic merge | 1 |" in report
+    assert "| Manual merge | 1 |" in report
+    assert "| Unable to determine | 1 |" in report
+    assert "## Impact analysis" in report
+    assert (
+        "This plan changes 7 file(s) in "
+        f"`{tmp_path}`: 3 new, 2 edited, 2 removed; 4 file(s) stay "
+        "preserved." in report
+    )
+    assert "## Items requiring your decision" in report
+    assert "`conflict.txt` - template and repository contain different" in (
+        report
+    )
+    assert "`weird.bin` - file type, executable bit" in report
+
+
+def test_adoption_report_zero_removed_files_is_explicit(tmp_path: Path) -> None:
+    """Report a real, computed zero rather than omitting removed files."""
+    plan = cli.Plan(
+        add=("new.txt",),
+        overwrite=(),
+        remove=(),
+        preserve=(),
+        merge=(),
+        manual=(),
+        unknown=(),
+    )
+    report = cli.adoption_report_markdown(
+        tmp_path,
+        cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
+        cli.RepositoryContext(
+            None, None, None, "private", "safe-default", False
+        ),
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
+        plan,
+        "2026-08-24T00:00:00+00:00",
+    )
+
+    assert "| New files | 1 |" in report
+    assert "| Edited files | 0 |" in report
+    assert "| Removed files | 0 |" in report
+    assert "| Remove | 0 |" in report
+
+
+def test_adoption_report_lists_codeowner_blocked_as_decision_item(
+    tmp_path: Path,
+) -> None:
+    """Surface a blocked CODEOWNER as an explicit decision, not just prose."""
+    report = cli.adoption_report_markdown(
+        tmp_path,
+        cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
+        cli.RepositoryContext(
+            "owner/repo", "owner", "Organization", "public", "github", True
+        ),
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
+        cli.Plan((), (), (), (), (), (), ()),
+        "2026-08-24T00:00:00+00:00",
+        {
+            "applicable": False,
+            "clean": True,
+            "code_owner": {
+                "reason": "Team is not attached to the target repository.",
+                "state": "blocked",
+                "value": "@owner/missing-team",
+            },
+            "generated_at": "2026-08-24T00:00:00+00:00",
+            "project_verification_hook": {
+                "configured": False,
+                "path": None,
+                "reason": "No project verification hook configured.",
+                "result": "not-run",
+                "source": "none",
+            },
+            "target_changes": [],
+            "target_head": "a" * 40,
+            "verification": "passed",
+        },
+    )
+
+    assert "## Items requiring your decision" in report
+    assert (
+        "- CODEOWNER `@owner/missing-team` verification is `blocked` - "
+        "Team is not attached to the target repository." in report
+    )
 
 
 def test_adopt_help_describes_report_directory(
@@ -2066,8 +2135,7 @@ def test_adopt_rejects_dirty_path_not_classified_as_preserve(
     )
     assert "Decision: Not ready to adopt" in markdown
     assert "Do not apply this plan" in markdown
-    pdf = PdfReader(report_dir / "csarc-adoption-dry-run.pdf")
-    assert "Not ready to adopt" in pdf.pages[0].extract_text()
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
     assert main(["adopt", str(project), "--apply-plan", str(plan)]) == 2
     assert not (project / ".copier-answers.yml").exists()
 
@@ -2443,12 +2511,7 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     after_payload = json.loads(plan_path.read_text(encoding="utf-8"))
     assert after_payload["adoption"]["applied"] is True
     assert isinstance(after_payload["adoption"]["applied_at"], str)
-    pdf_text = (
-        PdfReader(report_dir / "csarc-adoption-dry-run.pdf")
-        .pages[0]
-        .extract_text()
-    )
-    assert "Applied" in pdf_text
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
 
 
 def test_adopt_finalize_apply_updates_report_to_applied_state(
@@ -2899,8 +2962,12 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
         encoding="utf-8"
     )
     assert "Decision: Not ready to adopt" in markdown
-    pdf = PdfReader(plan_path.with_name("csarc-adoption-dry-run.pdf"))
-    assert "Not ready to adopt" in pdf.pages[0].extract_text()
+    assert not plan_path.with_name("csarc-adoption-dry-run.pdf").exists()
+    assert (
+        "Project verification hook `scripts/verify-product` failed - "
+        "Project verification hook exited non-zero: "
+        "scripts/verify-product." in markdown
+    )
     assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
     assert git(project, "status", "--porcelain") == before
     assert not (project / "managed.txt").exists()
@@ -3014,15 +3081,7 @@ def test_adoption_records_and_replays_explicit_project_hook(
         "Project verification reason: `Project verification hook completed "
         "successfully.`" in markdown
     )
-    pdf = "\n".join(
-        page.extract_text()
-        for page in PdfReader(report_dir / "csarc-adoption-dry-run.pdf").pages
-    )
-    assert "Project hook" in pdf and "scripts/verify-skills" in pdf
-    assert "Hook configured" in pdf and "true" in pdf
-    assert "Hook result" in pdf and "passed" in pdf
-    assert "Hook reason" in pdf
-    assert "Project verification hook completed successfully." in pdf
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
 
     assert (
         main(
@@ -5337,7 +5396,6 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_adopt_rejects_plan_tampering_and_target_drift",
         "test_adoption_preserves_executable_and_checked_patch_symlink",
         "test_adoption_records_and_replays_explicit_project_hook",
-        "test_adoption_report_failure_keeps_markdown",
         "test_init_dry_run_and_apply_pin_full_sha",
         "test_invalid_project_hook_blocks_pending_adoption_without_writes",
         "test_legacy_update_conflict_leaves_target_unchanged",
