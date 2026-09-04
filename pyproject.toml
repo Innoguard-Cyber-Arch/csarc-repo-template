@@ -1,5 +1,5 @@
 [project]
-name = "csarc-repo-cli"
+name = "csarc-repo-template"
 version = "0.14.0"
 description = "Prompt-ready lifecycle CLI for the CSARC repository template"
 readme = "README.md"
