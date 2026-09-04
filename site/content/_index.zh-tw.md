@@ -16,7 +16,7 @@ zoom_in = "放大投影片"
 fit = "符合畫面"
 +++
 
-{{< slide key="capability" track="capability" eyebrow="CSARC Repo Template · beta" title="可更新的 repo 公版" subtitle="建立新案、導入舊案與接收政策更新，都先驗證再由 PR 合併。" class="legacy-slide capability-slide" legacy="true" >}}
+{{< slide key="capability" track="capability" eyebrow="首頁" title="CSARC Repo Template" subtitle="Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。" class="legacy-slide capability-slide" legacy="true" >}}
 {{< legacy >}}
       <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
@@ -31,6 +31,8 @@ fit = "符合畫面"
           <span class="package-badge">公版可持續更新</span>
           <span class="package-badge security">自動驗證／安全檢查</span>
           <span class="package-badge warning">免費私人 repo：無法強制保護 main</span>
+          <span class="package-badge">網站排版模板 v[[site_template_version]]</span>
+          <span class="package-badge">渲染引擎 v[[site_engine_version]]</span>
         </div>
       </header>
       <div class="language-contract" aria-label="程式語言與公版設定">
@@ -61,7 +63,16 @@ fit = "符合畫面"
 {{< /legacy >}}
 
 {{< basic >}}
-標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；內容先說明要做什麼、會看到什麼結果。設定檔、程式與 GitHub Actions 留在維運模式。
+Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。本頁內容與 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 對齊、雙語同步維護。
+
+| 項目 | 目前狀態 |
+| --- | --- |
+| 公版版本 | v0.13.0 |
+| 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
+| 網站排版模板版本 | [[site_template_version]] |
+| 決策網站渲染引擎版本 | [[site_engine_version]] |
+
+**目前狀態：**Milestone 13 正在擴充決策網站與導入體驗；只有已審查且位於 `.github/workflows/` 的流程會執行，其他流程仍封存，啟用狀態以「CI/CD 設定」附錄為準。
 
 | 可以直接選擇 | 目前提供的正式能力 |
 | --- | --- |
@@ -106,6 +117,36 @@ csarc status <path> --json
 
 {{< detail key="install-agent" title="給 agent 的一個 prompt" >}}
 安裝流程的完整契約在 [`docs/agent-install.md`](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/agent-install.md)：agent 一律先執行 `csarc status`，依回傳的 `state` 走上表對應流程，不自行判斷現在是哪一種情境。判斷邏輯全部寫在 CLI 裡（`detect_install_state`），agent 只負責呼叫與依結果行動，同一個 repo 狀態不會因為換一次 agent 執行就得到不同答案。
+{{< /detail >}}
+{{< /slide >}}
+
+{{< slide key="advanced-install" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜Repo 能力矩陣" title="搞清楚這個 repo 實際能啟用什麼" subtitle="除了 apply-repository-settings.sh 既有的 GitHub 方案探測，scripts/check-repo-capabilities 再檢查這個 repo 與 token 本身實際具備什麼。" class="dense" legacy="false" >}}
+「規則治理」（Step 08）的方案能力表回答的是「這個帳號的 GitHub *方案* 允許什麼」；這是必要條件，但不夠：organization 政策、CODEOWNERS team 是否真的存在、token 權限範圍，都可能在方案本身支援的情況下仍然擋住某項能力。`policies/capability-matrix.json` 列出這個模板依賴的每一項能力、各自的最低需求與已記錄的 workaround；`scripts/check-repo-capabilities` 會即時對照這個 repo 實際狀態：
+
+```bash
+./scripts/check-repo-capabilities        # 人類可讀報告
+./scripts/check-repo-capabilities --json # 機器可讀的能力清單與統計
+```
+
+| 能力 | 啟用了什麼 | 最低需求 | 缺少時 |
+| --- | --- | --- | --- |
+| `repository_admin` | 以下每一項能力的前提 | 目前 token 的 `permissions.admin == true` | 請 owner／admin 執行 `apply`，或申請 Admin 角色 |
+| `ruleset_enforcement` | 預設分支的 Ruleset 分支保護 | public repository（任何方案），或 private 且 Pro／Team 以上 | DEGRADED 標記；`policies/rulesets.json` 保留為 desired state |
+| `codeowners_enforcement` | CODEOWNERS review 真的能擋下合併 | 需先具備上一項，且 `@org/team` 具寫入權限 | DEGRADED 標記；修正 team，或先用 `scripts/request-reviewer` |
+| `actions_pr_approval` | Actions 能自動核准 PR（例如 Dependabot auto-merge） | organization 允許 `can_approve_pull_request_reviews` | DEGRADED 標記；降級為人工核准 |
+| `security_and_analysis` | secret scanning、push protection、Dependabot security updates | public repository，或 private 且具備 GitHub Advanced Security | DEGRADED 標記；改用本機 `scripts/scan-secrets` |
+| `github_pages` | 將 `docs/index.html` 發布成 hosted 網站 | public repository，或 private 且為 GitHub Enterprise Cloud | DEGRADED 標記；改分享 commit 進 repo 的 HTML 檔案 |
+| `repository_settings_inspection` | `check` 模式能比對即時的管理員專屬欄位 | 與 `repository_admin` 相同 | DEGRADED 標記；改在具 admin 身分的可信環境執行 `check` |
+| `immutable_releases` | hosted Automatic／Guided 發版的必要條件 | 真人 admin 身分，絕非預設 `GITHUB_TOKEN` | 已知永久限制（#123／#626）；改在本機執行 `scripts/publish-release` |
+
+{{< detail key="advanced-install-results" title="怎麼解讀 check-repo-capabilities 的結果" >}}
+每一列會回報三態之一：`allowed`（現在就能用）、`blocked`（確實缺少某個條件）、`unknown`（單靠唯讀探測無法證實——例如某個 Actions 設定目前是關的，可能只是還沒開，不代表被 organization 政策擋住）。這是診斷用的 preflight，不是合併關卡：報告產出後一律回傳 `0`，也不會對 GitHub 做任何寫入。「即時設定是否真的符合宣告政策」仍然是 `apply-repository-settings.sh check` 的工作。
+
+`--facts <file>` 可以讀取預先準備好的 facts，不必呼叫 `gh`，因此同一份矩陣可以在沒有即時存取的情況下對照假設的權限組合——`scripts/test-check-repo-capabilities` 就是用這個方式，在完全不連網路的情況下驗證多種權限／方案組合的缺口清單是否正確。
+{{< /detail >}}
+
+{{< detail key="advanced-install-workarounds" title="Workaround 與既有的 DEGRADED 標記" >}}
+這份矩陣不是要取代或重新設計 `apply-repository-settings.sh` 既有的 DEGRADED 機制，而是把它寫清楚。凡是 workaround 寫「DEGRADED 標記」的列，用的都是 `apply-repository-settings.sh check`／`plan`／`apply` 對同一個限制本來就會印出的那個 fail-safe；兩邊不會互相矛盾，因為底層偵測（方案、visibility、admin 權限）完全相同。長期決策記錄在 `docs/ci-policy.md` 與[能力導向治理 ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md)；這一頁與 `policies/capability-matrix.json` 是兩邊共同參照、保持最新的單一來源。
 {{< /detail >}}
 {{< /slide >}}
 
@@ -488,6 +529,28 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
 `release_ownership: csarc-owned` 的生成 repo（含本模板 root 自己）另外取得一條不依賴 GitHub Actions 是否健康的本機發版 backup：`release.yml` 的發布階段抽成單一腳本 `scripts/publish-release`，維護者或 agent 在本機（或任何持有 admin／write 權限的環境）呼叫同一份腳本即可完成 tag、Release、成品與 SBOM，Guided 模式的啟用條件也從「組織政策擋住 Actions 建 PR」擴大為包含「判斷 Actions／webhook 目前不可信任」。這條路徑仍要求版本 PR 經過與其他 `main` PR 相同的 review。驗證（`verify`／`title`／`promotion`）仍只能、也仍建議由 hosted Actions 產生；但實際切版本／發 Release 這一步，hosted job 自己的 `GITHUB_TOKEN` 永遠無法證明 GitHub 的 Immutable Releases 設定（這是一個 GitHub Actions 任何 permission 都無法開放的 repo administration 能力）——所以這條本機路徑現在是標準發版程序，不是備援；細節見 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) 與 [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。這不是一個新的 Copier 選項——既有的 `release_ownership` 已經正確路由這個能力。
 
 里程碑完成時人工確認交付證據後再結案；#400、#401 尚未完成的 lifecycle gap 不在本頁複製 validator。工作分支合併後清理，里程碑 delivery branch 則等結案與未完成工作處置完成後才清理。
+{{< /detail >}}
+
+{{< detail key="release-notes-format" title="發版紀錄在哪裡看、格式代表什麼" >}}
+想知道某個版本實際變了什麼、為什麼發、跟上一版差在哪，直接看 GitHub 的
+[Releases 頁面](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases)：每個
+版本一則 Release，固定包含三項：**版本號**（Release 標題，等於 `vMAJOR.MINOR.PATCH` tag）、
+**發布日期**（GitHub 自動標示的發布時間，不需要另外找）、**變更摘要**（GitHub 依這段期間
+merge 進來的 PR 標題自動整理成「What's Changed」清單，附上跟前一版的完整比較連結）。
+
+這三項不是靠人手動填寫、也不會因為誰執行發版而有不同風格：不管是 hosted GitHub Actions
+自動觸發，還是維護者判斷 Actions 不健康時改在本機執行 `scripts/publish-release`，兩條路徑
+最終都呼叫同一支 `scripts/converge-release-tag`、用同一個 `gh release create ...
+--generate-notes` 指令產生 Release 說明，結構上不存在兩份可能各自長出不同格式的實作。
+
+根目錄的 `CHANGELOG.md` 是另一個同樣真實、但分類方式不同的視角：它依 Conventional
+Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Release 說明文字則是
+依 PR 列出「What's Changed」。兩者不會逐字對照，也不需要——同一批變更，兩種排列方式。
+沒有另外要求每則 Release 都寫「已知限制」或「回溯相容性」段落：多數版本沒有實質內容可
+填，跨版本持續有效的已知限制改記在這裡與 `docs/ci-policy.md`，不在每則 Release 裡重複。
+完整規範與為什麼採取這個範圍，見
+[ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md)
+的「Release 說明文字的最低格式規範」一節。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}

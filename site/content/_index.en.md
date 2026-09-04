@@ -16,8 +16,18 @@ zoom_in = "Zoom in"
 fit = "Fit"
 +++
 
-{{< slide key="capability" track="capability" eyebrow="CSARC Repo Template · beta" title="An updatable repository foundation" subtitle="Create a new project, adopt an existing one, or receive policy updates through verified pull requests." legacy="false" class="presentation-slide" >}}
-Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. It explains what to do and what result to expect. Files, scripts, and GitHub Actions stay in Maintenance mode.
+{{< slide key="capability" track="capability" eyebrow="Home" title="CSARC Repo Template" subtitle="Cyber-Arch's updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests." legacy="false" class="presentation-slide" >}}
+Cyber-Arch's updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests. Select only the shared workflow, or add Python, Rust, and TypeScript independently. Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) and stays synchronized across both languages.
+
+<p class="template-version"><strong>Template release:</strong> v0.13.0<!-- x-release-please-version --></p>
+
+| Item | Current state |
+| --- | --- |
+| Supported languages | Python, Rust, and TypeScript (select independently; select none for the shared workflow only) |
+| Site template version | [[site_template_version]] |
+| Decision-site render engine version | [[site_engine_version]] |
+
+**Current state:** Milestone 13 is extending the decision site and adoption experience. Only reviewed workflows under `.github/workflows/` run today; the rest stay archived. See the CI/CD settings appendix for the per-stage status.
 
 | Choice | Production capability available today |
 | --- | --- |
@@ -61,6 +71,36 @@ If `apply-repository-settings.sh check` itself cannot run (for example, `gh` is 
 
 {{< detail key="install-agent" title="One prompt for an agent" >}}
 The full contract lives in [`docs/agent-install.md`](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/agent-install.md): an agent always runs `csarc status` first and follows the row matching its returned `state`, instead of guessing which situation applies. All of the classification logic lives in the CLI (`detect_install_state`); the agent only calls it and acts on the result, so the same repository state never produces a different answer just because a different agent ran it.
+{{< /detail >}}
+{{< /slide >}}
+
+{{< slide key="advanced-install" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | Repo capability matrix" title="Know what this specific repository can actually enable" subtitle="Beyond the GitHub-plan probing apply-repository-settings.sh already performs, scripts/check-repo-capabilities checks what this repository and token actually have." class="dense" legacy="false" >}}
+The Governance step's plan table (Step 08) answers "what does the account's GitHub *plan* allow." That is necessary but not sufficient: organization policy, CODEOWNERS team membership, and token scope can still block a capability on a plan that would otherwise support it. `policies/capability-matrix.json` names every capability this template relies on, its minimum requirement, and a documented workaround; `scripts/check-repo-capabilities` evaluates it against this repository live:
+
+```bash
+./scripts/check-repo-capabilities        # human-readable report
+./scripts/check-repo-capabilities --json # machine-readable capabilities + summary
+```
+
+| Capability | What it enables | Minimum requirement | If missing |
+| --- | --- | --- | --- |
+| `repository_admin` | Prerequisite for every row below | `permissions.admin == true` for the acting token | Ask an owner/admin to run `apply`, or request the Admin role |
+| `ruleset_enforcement` | Branch protection Ruleset on the default branch | Public repository (any plan), or private on Pro/Team or above | DEGRADED marker; desired Ruleset stays declarative in `policies/rulesets.json` |
+| `codeowners_enforcement` | CODEOWNERS review actually blocks merge | Ruleset above, plus a `@org/team` with write access | DEGRADED marker; fix the team, or use `scripts/request-reviewer` meanwhile |
+| `actions_pr_approval` | Actions can auto-approve pull requests (for example Dependabot auto-merge) | Organization allows `can_approve_pull_request_reviews` | DEGRADED marker; fall back to manual human approval |
+| `security_and_analysis` | Secret scanning, push protection, Dependabot security updates | Public repository, or GitHub Advanced Security if private | DEGRADED marker; rely on local `scripts/scan-secrets` instead |
+| `github_pages` | Hosts `docs/index.html` as a live site | Public repository, or GitHub Enterprise Cloud if private | DEGRADED marker; distribute the committed HTML file instead |
+| `repository_settings_inspection` | `check` mode can compare live admin-only fields | Same as `repository_admin` | DEGRADED marker; run `check` from a trusted admin checkout |
+| `immutable_releases` | Required before hosted Automatic/Guided publish can run | A real admin identity, never the default `GITHUB_TOKEN` | Known permanent limitation (#123/#626); run `scripts/publish-release` locally |
+
+{{< detail key="advanced-install-results" title="How to read a check-repo-capabilities result" >}}
+Every row reports one of three states: `allowed` (usable now), `blocked` (a real, currently-missing requirement), or `unknown` (cannot be proven from a read-only probe alone -- for example, an Actions setting that is off might just be unset rather than organization-blocked). This is a diagnostic preflight, not a merge gate: it always exits `0` once the report is produced, and it never mutates GitHub. Whether live settings actually *match* declared policy remains `apply-repository-settings.sh check`'s job.
+
+`--facts <file>` reads pre-built facts instead of calling `gh`, so the same matrix can be evaluated against a hypothetical permission combination without live access -- this is also how `scripts/test-check-repo-capabilities` proves the gap list for several permission/plan combinations without any network access.
+{{< /detail >}}
+
+{{< detail key="advanced-install-workarounds" title="Workarounds and the existing DEGRADED marker" >}}
+This matrix does not replace or redesign `apply-repository-settings.sh`'s DEGRADED mechanism -- it documents it. Every row whose workaround says "DEGRADED marker" reuses the exact same fail-safe already printed by `apply-repository-settings.sh check`/`plan`/`apply` for that limitation; the two never disagree because the underlying detection (plan, visibility, admin permission) is the same. `docs/ci-policy.md` and [the capability-aware governance ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md) record the durable decision; this page and `policies/capability-matrix.json` are what stay current as the single source both consult.
 {{< /detail >}}
 {{< /slide >}}
 
@@ -287,6 +327,34 @@ Adoption and update never infer this from a workflow filename. `.csarc/config.ym
 A generated repository with `release_ownership: csarc-owned` (including this template's own root) also gets a local publish backup that does not depend on GitHub Actions being healthy: the publish stage of `release.yml` is a single script, `scripts/publish-release`, and a maintainer or agent running locally (or in any environment holding admin/write permission) calls that same script to cut the tag, Release, artifacts, and SBOM. Guided mode's trigger also widens beyond an organization policy that blocks Actions from creating PRs, to also cover a maintainer or agent judging Actions or its webhook delivery currently unhealthy. This path still requires the version pull request to go through the same review as any other `main` PR. GitHub Actions remains the default, recommended path for verification (`verify`/`title`/`promotion` are hosted-only) — but for cutting the actual tag/Release, the hosted job's own `GITHUB_TOKEN` can never prove GitHub's Immutable Releases setting (a repo-administration capability outside any permission scope Actions can grant itself), so this local path is now the standard publish procedure, not a fallback; see [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) and the [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md) for details. This is not a new Copier option — the existing `release_ownership` already routes this capability correctly.
 
 Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.
+{{< /detail >}}
+
+{{< detail key="release-notes-format" title="Where to read release history, and what the format means" >}}
+To learn what actually changed in a version, why it shipped, and how it differs from the
+prior one, go straight to GitHub's
+[Releases page](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases): one
+Release per version, always carrying three fields — the **version number** (the Release
+title, equal to the `vMAJOR.MINOR.PATCH` tag), the **release date** (GitHub's own publish
+timestamp, shown automatically), and a **change summary** (GitHub's auto-generated "What's
+Changed" list built from the PR titles merged since the prior version, plus a full-compare
+link back to it).
+
+None of the three is hand-typed, and none varies by who runs the release: whether GitHub
+Actions triggers it automatically or a maintainer runs `scripts/publish-release` locally
+because Actions looks unhealthy, both paths call the exact same `scripts/converge-release-tag`
+script and the same `gh release create ... --generate-notes` command to produce the Release
+body — there is no second implementation that could drift into a different style.
+
+The root `CHANGELOG.md` is a different, equally real view of the same history: it groups
+changes by Conventional Commit type (Breaking Changes, Features, Bug Fixes), while the GitHub
+Release body lists merged PRs under "What's Changed." The two are not expected to match word
+for word — same underlying changes, two different groupings. Every Release is not required to
+carry a "Known limitations" or "Backward compatibility" section: most versions have nothing
+substantive to say there, and a limitation that holds across many releases (not one version in
+particular) belongs here and in `docs/ci-policy.md` instead of being repeated release after
+release. The full format contract and the reasoning behind this scope live in the "Release
+說明文字的最低格式規範" section of
+[ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md).
 {{< /detail >}}
 
 {{< config-guidance track="deploy" >}}

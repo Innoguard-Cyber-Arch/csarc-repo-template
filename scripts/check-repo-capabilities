@@ -1,0 +1,268 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Auto-detect this specific repository's capability/permission gaps (Issue
+# #531), beyond the GitHub-plan probing scripts/apply-repository-settings.sh
+# already performs.
+#
+# scripts/apply-repository-settings.sh answers "what does the account's
+# GitHub plan allow" and prints a DEGRADED marker per limitation it
+# encounters while planning/applying/checking policies/*.json. This script
+# answers a related but distinct question -- "what does THIS repository and
+# THIS token/account actually have right now" -- against the declarative
+# matrix in policies/capability-matrix.json, and reports the result as a
+# structured gap list with a documented workaround for every gap. It never
+# writes anything to GitHub: every probe below is a read-only `gh api` call.
+#
+# This script deliberately does not redesign the DEGRADED mechanism: several
+# capabilities below reuse that exact marker text in their workaround, and
+# scripts/apply-repository-settings.sh is unchanged by Issue #531.
+#
+# Usage:
+#   scripts/check-repo-capabilities [--repo <owner/repo>] [--json]
+#   scripts/check-repo-capabilities --facts <file> [--json]
+#
+# --repo defaults to GH_REPO, then the repository `gh repo view` detects.
+#
+# --facts reads a pre-built facts JSON file instead of calling `gh`, so the
+# regression test (scripts/test-check-repo-capabilities) can exercise the
+# matrix evaluation against fixture permission combinations -- with no
+# network access or GitHub auth required. A real run never passes --facts.
+#
+# --json prints the full machine-readable result (capabilities + summary)
+# instead of the human-readable report.
+#
+# Exit status: 0 once the report is produced, regardless of how many
+# capabilities are blocked or unknown -- this is a preflight/diagnostic
+# tool, not a merge gate (that remains apply-repository-settings.sh check's
+# job). Non-zero only when the report itself could not be produced.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+matrix_payload="$repo_root/policies/capability-matrix.json"
+evaluator="$repo_root/scripts/repo_capabilities.py"
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: scripts/check-repo-capabilities [--repo <owner/repo>] [--json]
+       scripts/check-repo-capabilities --facts <file> [--json]
+EOF
+}
+
+repo="${GH_REPO:-}"
+facts_file=""
+json_output=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)
+      [[ $# -ge 2 ]] || { usage; exit 2; }
+      repo="$2"
+      shift 2
+      ;;
+    --facts)
+      [[ $# -ge 2 ]] || { usage; exit 2; }
+      facts_file="$2"
+      shift 2
+      ;;
+    --json)
+      json_output=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -n "$facts_file" ]]; then
+  if [[ ! -f "$facts_file" ]]; then
+    echo "check-repo-capabilities: no such file: $facts_file" >&2
+    exit 2
+  fi
+else
+  command -v gh >/dev/null || { echo "Install and authenticate GitHub CLI first." >&2; exit 1; }
+
+  if [[ -z "$repo" ]]; then
+    if ! repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>&1)"; then
+      echo "Cannot identify the GitHub repository." >&2
+      echo "Run inside a Git repository with a GitHub remote, or pass --repo owner/repo." >&2
+      echo "GitHub CLI: $repo" >&2
+      exit 1
+    fi
+  fi
+
+  if ! repo_state_json="$(gh api "repos/$repo" 2>&1)"; then
+    echo "Cannot read repository metadata for $repo." >&2
+    echo "$repo_state_json" >&2
+    exit 1
+  fi
+  owner="$(jq -r '.owner.login' <<<"$repo_state_json")"
+  owner_type="$(jq -r '.owner.type' <<<"$repo_state_json")"
+  repo_visibility="$(jq -r '.visibility // (if .private then "private" else "public" end)' <<<"$repo_state_json")"
+  repo_admin="$(jq -r '.permissions.admin' <<<"$repo_state_json")"
+
+  account_endpoint="users/$owner"
+  [[ "$owner_type" == "Organization" ]] && account_endpoint="orgs/$owner"
+  account_plan="$(gh api "$account_endpoint" --jq '.plan.name // "unknown"' 2>/dev/null || echo unknown)"
+  case "$account_plan" in
+    free) plan_label="GitHub Free" ;;
+    team) plan_label="GitHub Team" ;;
+    business | business_plus | enterprise) plan_label="GitHub Enterprise" ;;
+    pro) plan_label="GitHub Pro" ;;
+    *) plan_label="Unknown ($account_plan)" ;;
+  esac
+
+  # repository_admin / repository_settings_inspection: both derived
+  # directly from permissions.admin -- see policies/capability-matrix.json.
+  if [[ "$repo_admin" == "true" ]]; then
+    admin_status="allowed"
+    admin_detail="permissions.admin is true for the acting account/token"
+  else
+    admin_status="blocked"
+    admin_detail="permissions.admin is false for the acting account/token"
+  fi
+
+  # ruleset_enforcement
+  if ruleset_probe="$(gh api "repos/$repo/rulesets" 2>&1)"; then
+    ruleset_status="allowed"
+    ruleset_detail="repos/$repo/rulesets is accessible"
+  elif [[ "$ruleset_probe" == *"Upgrade to GitHub Pro or make this repository public"* ]]; then
+    ruleset_status="blocked"
+    ruleset_detail="$plan_label private repository cannot enforce Rulesets"
+  else
+    ruleset_status="unknown"
+    ruleset_detail="cannot determine Ruleset capability: $ruleset_probe"
+  fi
+
+  # codeowners_enforcement
+  code_owner=""
+  if [[ -f "$repo_root/.github/CODEOWNERS" ]]; then
+    code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
+  fi
+  if [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
+    codeowners_status="blocked"
+    codeowners_detail="CODEOWNERS must reference a GitHub team (@org/team); got: ${code_owner:-<empty>}"
+  elif ! teams_pages="$(gh api "repos/$repo/teams" --paginate --slurp 2>&1)"; then
+    codeowners_status="unknown"
+    codeowners_detail="cannot list repository teams: $teams_pages"
+  else
+    codeowners_result="$(python3 - "$code_owner" "$teams_pages" <<'PY'
+import json
+import sys
+
+owner = sys.argv[1]
+slug = owner.split("/", 1)[1].casefold()
+pages = json.loads(sys.argv[2])
+teams = [team for page in pages for team in page]
+team = next((t for t in teams if t.get("slug", "").casefold() == slug), None)
+if team is None:
+    print(f"blocked|{owner} is missing, invisible, or lacks repository access")
+else:
+    permissions = team.get("permissions") or {}
+    writable = team.get("permission") in {"push", "maintain", "admin"} or any(
+        permissions.get(level) is True for level in ("push", "maintain", "admin")
+    )
+    if writable:
+        print(f"allowed|{owner} has repository write access")
+    else:
+        print(
+            f"blocked|{owner} lacks repository write access "
+            f"(permission: {team.get('permission', 'unknown')})"
+        )
+PY
+    )"
+    codeowners_status="${codeowners_result%%|*}"
+    codeowners_detail="${codeowners_result#*|}"
+  fi
+
+  # actions_pr_approval
+  if ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
+    actions_status="unknown"
+    actions_detail="cannot read Actions workflow permissions: $actions_state"
+  else
+    can_approve="$(jq -r '.can_approve_pull_request_reviews' <<<"$actions_state")"
+    if [[ "$can_approve" == "true" ]]; then
+      actions_status="allowed"
+      actions_detail="can_approve_pull_request_reviews is currently true"
+    else
+      actions_status="unknown"
+      actions_detail="can_approve_pull_request_reviews is currently false; run apply-repository-settings.sh apply to discover whether an organization policy blocks enabling it"
+    fi
+  fi
+
+  # security_and_analysis
+  if [[ "$repo_visibility" == "public" ]]; then
+    security_status="allowed"
+    security_detail="public repository; secret scanning and push protection are free on every plan"
+  else
+    security_disabled="$(python3 - "$repo_root/policies/security-scanning.json" "$repo_state_json" <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))["security_and_analysis"]
+actual = (json.loads(sys.argv[2]) or {}).get("security_and_analysis") or {}
+disabled = [
+    field
+    for field, expected in desired.items()
+    if expected["status"] == "enabled"
+    and (actual.get(field) or {}).get("status") != "enabled"
+]
+print(",".join(disabled))
+PY
+    )"
+    if [[ -z "$security_disabled" ]]; then
+      security_status="allowed"
+      security_detail="private repository; all desired security_and_analysis fields are enabled"
+    else
+      security_status="blocked"
+      security_detail="private repository; disabled fields require GitHub Advanced Security: $security_disabled"
+    fi
+  fi
+
+  # github_pages: deterministic from visibility + plan, same rule
+  # apply-repository-settings.sh already uses for pages_enforcement_available.
+  if [[ "$repo_visibility" == "public" ]]; then
+    pages_status="allowed"
+    pages_detail="public repository; GitHub Pages is free on every plan"
+  elif [[ "$plan_label" == "GitHub Enterprise" ]]; then
+    pages_status="allowed"
+    pages_detail="private repository on GitHub Enterprise Cloud"
+  elif [[ "$plan_label" == Unknown* ]]; then
+    pages_status="unknown"
+    pages_detail="cannot determine account plan: $plan_label"
+  else
+    pages_status="blocked"
+    pages_detail="private repository on $plan_label; GitHub Pages requires GitHub Enterprise Cloud"
+  fi
+
+  facts_json="$(jq -n \
+    --arg admin_status "$admin_status" --arg admin_detail "$admin_detail" \
+    --arg ruleset_status "$ruleset_status" --arg ruleset_detail "$ruleset_detail" \
+    --arg codeowners_status "$codeowners_status" --arg codeowners_detail "$codeowners_detail" \
+    --arg actions_status "$actions_status" --arg actions_detail "$actions_detail" \
+    --arg security_status "$security_status" --arg security_detail "$security_detail" \
+    --arg pages_status "$pages_status" --arg pages_detail "$pages_detail" \
+    '{
+      repository_admin: {status: $admin_status, detail: $admin_detail},
+      ruleset_enforcement: {status: $ruleset_status, detail: $ruleset_detail},
+      codeowners_enforcement: {status: $codeowners_status, detail: $codeowners_detail},
+      actions_pr_approval: {status: $actions_status, detail: $actions_detail},
+      security_and_analysis: {status: $security_status, detail: $security_detail},
+      github_pages: {status: $pages_status, detail: $pages_detail},
+      repository_settings_inspection: {status: $admin_status, detail: $admin_detail},
+      immutable_releases: {status: "unknown", detail: "Not detectable via a repository-permission probe; GITHUB_TOKEN structurally cannot prove this (Issue #123/#626). Always run scripts/publish-release locally under an admin identity."}
+    }')"
+
+  facts_file="$(mktemp)"
+  trap 'rm -f "$facts_file"' EXIT
+  printf '%s' "$facts_json" >"$facts_file"
+fi
+
+python_args=(python3 "$evaluator" check --matrix "$matrix_payload" --facts "$facts_file")
+$json_output && python_args+=(--json)
+"${python_args[@]}"

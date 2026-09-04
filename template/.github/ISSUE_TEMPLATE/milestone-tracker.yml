@@ -1,0 +1,84 @@
+name: Milestone tracker｜里程碑生命週期追蹤
+description: 建立單一 Milestone 的生命週期追蹤 Issue（Proposal／Completion evidence／Early termination／Promotion 四段式格式）
+title: ""
+labels: ["enhancement"]
+type: "Feature"
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        **標題規則：**標題必須是 `Milestone <編號>: <里程碑名稱>`，冒號後的文字須與 GitHub
+        Milestone 名稱逐字相同，例如 `Milestone 8: Interactive docs and policy alignment`；
+        不要在標題內描述核准或提前終止狀態，那些寫在下方段落與留言。**這份表單只建立追蹤
+        Issue 本身**，不是 GitHub Milestone 物件的 `description`（`Problem`／`Outcome`／
+        `Acceptance criteria`／`Plan`／`Out of scope`／`Verification`／`References` 七段式，
+        用 `gh milestone edit` 或 GitHub UI 另外維護）——兩者是不同的東西，不要混用同一份格式。
+        建立 Milestone 物件與本追蹤 Issue 前，先確認尚未有既有 Issue 涵蓋相同範圍；可用
+        `scripts/create-milestone`（若此 repo 已具備）一次呼叫建立兩者並自動跑
+        `python3 scripts/sync_milestone_state.py preflight --repo <owner/repo> --milestone <N>`
+        自我驗證，取代分開手動建立兩步。下方四個段落（`Proposal`／`Completion evidence`／
+        `Early termination`／`Promotion`）是 `scripts/sync_milestone_state.py` 的
+        `tracker_errors()` 檢查的固定契約：H2 標題文字（含大小寫）不可更動、刪除或翻譯，
+        只有 `Proposal` 段落要求非空白的真實內容，其餘三段可以先保留說明用的 HTML 註解，
+        待實際發生時再填入內容——這份表單先把骨架帶好，減少手動照抄漏段落的機率，
+        `tracker_errors()` 仍會在建立後把關格式是否正確。核准一律要求非提案者留言
+        `/milestone approve`；細節見 AGENTS.md 與 `docs/milestone-description.md`。UI 建立者
+        請把自己設為 Assignee；agent／CLI 建立時明確使用 `--assignee @me`。
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: >-
+        說明這個 Milestone 要收斂的工作範圍與依據；必須是非空白的真實內容（`tracker_errors()`
+        會拒絕只留下方註解、沒有實際內容的 Proposal）。開始或繼續合併前，須由至少一位
+        非提案者同意，且沒有尚未解決的反駁。
+      value: |
+        <!-- 用一小段話交代這個 Milestone 收斂的工作範圍，以及所屬 Issue（例如 #100-#110）。
+        開始或繼續合併前，須由至少一位非提案者留言 `/milestone approve`，且沒有尚未解決的
+        `/milestone object:` 反駁。 -->
+    validations:
+      required: true
+  - type: textarea
+    id: completion_evidence
+    attributes:
+      label: Completion evidence
+      description: >-
+        正常完成時，填入 GitHub Release、PR 或 workflow 的交付證據 URL；建立當下留下下方
+        註解即可，`tracker_errors()` 只要求這個段落存在，不要求現在就有內容。
+      value: |
+        <!-- 正常完成時填入 GitHub Release、PR 或 workflow 的交付證據 URL。 -->
+    validations:
+      required: true
+  - type: textarea
+    id: early_termination
+    attributes:
+      label: Early termination
+      description: >-
+        只有提前終止時才需要填寫原因，以及未完成 Issue 已移轉或取消的說明；建立當下留下
+        下方註解即可。
+      value: |
+        <!-- 提前終止時說明原因，以及未完成 Issue 已移轉或取消。 -->
+    validations:
+      required: true
+  - type: textarea
+    id: promotion
+    attributes:
+      label: Promotion
+      description: >-
+        只能描述合併前可驗證的條件（例如其餘 Milestone Issue 已關閉、雙語／accessibility／
+        bundle／完整驗證通過、promotion evidence 已綁定 base／head／candidate tree）；由
+        merge 觸發的 tracker 關閉與 branch／worktree 清理屬於 post-merge runbook，記錄在
+        「補充」，不要寫成合併前必須勾選的項目。建立當下留下下方註解即可，待其餘 Issue
+        關閉後再具體化。
+      value: |
+        <!-- 待其餘 Milestone Issue 關閉後具體化，只能描述合併前可驗證的條件。 -->
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: 選填：列出本 Milestone 所屬的 leaf Issue（例如 #100-#110）與相關既有決策，註明沿用、取代或駁回的理由。
+      placeholder: "- #N — 說明"
+    validations:
+      required: false

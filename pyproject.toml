@@ -58,6 +58,9 @@ known-first-party = ["csarc_cli", "scripts"]
 "scripts/build_decision_site.py" = ["RUF001", "RUF002"]
 "tests/test_release_prompt.py" = ["D", "S101", "RUF001"]
 "tests/test_build_decision_site.py" = ["D", "S101", "RUF001"]
+# Mirrors README.md/site content verbatim (full-width CJK punctuation
+# included) to prove byte-for-byte parity, same as test_build_decision_site.py.
+"tests/test_homepage_readme_parity.py" = ["D", "S101", "RUF001"]
 "tests/**" = ["D", "S101"]
 "template/tests/**" = ["D", "S101"]
 
