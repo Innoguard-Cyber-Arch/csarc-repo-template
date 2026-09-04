@@ -1,0 +1,181 @@
+name: Work item lifecycle
+
+# Merges three formerly independent workflows (Issue triage, Milestone
+# lifecycle, Work Issue closure) into one job with sequential steps. GitHub
+# Actions bills and queues per job (rounded up to the nearest minute, each
+# its own concurrency slot); steps inside one job do not bill or queue
+# separately. All three trigger on issues/issue_comment/milestone events (or
+# pull_request closed), are lightweight, and need the same governance
+# permissions, so folding them into one job cuts fan-out without changing
+# their logic. See Issue #574.
+#
+# Deliberately NOT merged here (keep reading before adding anything):
+# - CI (ci.yml): grows independently with rust/node/python toolchain checks,
+#   at a different pace than these lightweight governance checks.
+# - Reviewer assignment (governance-comment.yml): runs on pull_request_target
+#   with the base repo's write-privileged token, while PR-branch code (CI,
+#   PR policy) runs on pull_request with the untrusted head branch checked
+#   out. Combining those two permission models in one job would let a fork
+#   PR's code reach a write-privileged token. This is a hard security
+#   boundary, not a performance tradeoff — never merge it in.
+#
+# Each step below is independently gated with its original job-level `if:`
+# condition (plus an explicit event/action check where the original trigger
+# filter is what used to provide that scoping) so one step's failure does
+# not silently skip or mask another: every step uses `!cancelled()` so it
+# still runs after an earlier step in this job fails, and only bails out if
+# the whole run itself was cancelled.
+
+on:
+  issues:
+    types:
+      [
+        opened,
+        edited,
+        closed,
+        reopened,
+        labeled,
+        unlabeled,
+        milestoned,
+        demilestoned,
+      ]
+  issue_comment:
+    types: [created, edited, deleted]
+  milestone:
+    types: [created, edited, opened, closed]
+  pull_request:
+    types: [closed]
+
+permissions:
+  checks: write
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: work-item-lifecycle-${{ github.repository }}-${{ github.event.issue.milestone.number || github.event.changes.milestone.from.number || github.event.milestone.number || github.event.pull_request.milestone.number || github.event.issue.number || github.event.pull_request.number || 'misc' }}
+  cancel-in-progress: ${{ github.event.issue.milestone.number == null && github.event.changes.milestone.from.number == null && github.event.milestone.number == null && github.event.pull_request.milestone.number == null }}
+
+jobs:
+  process:
+    name: process
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # -- Issue triage: assign the author and apply issue classification --
+      - name: "Issue triage: assign author and apply issue classification"
+        if: >-
+          !cancelled() &&
+          github.event_name == 'issues' &&
+          contains(fromJSON('["opened","edited","reopened","closed"]'), github.event.action) &&
+          github.event.issue.user.type == 'User'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_STATE_REASON: ${{ github.event.issue.state_reason }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_TYPE: ${{ github.event.issue.type.name }}
+        run: ./scripts/validate-issue-policy
+
+      # -- Milestone lifecycle: reconcile the current Milestone --
+      - name: "Milestone lifecycle: reconcile lifecycle and refresh PR checks"
+        if: >-
+          !cancelled() &&
+          (github.event.issue.milestone.number != null || github.event.milestone.number != null)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MILESTONE_NUMBER: ${{ github.event.issue.milestone.number || github.event.milestone.number }}
+        run: >-
+          python3 scripts/sync_milestone_state.py reconcile
+          --repo "$GITHUB_REPOSITORY"
+          --milestone "$MILESTONE_NUMBER"
+
+      # -- Milestone lifecycle: reconcile the Milestone an Issue moved off of --
+      - name: "Milestone lifecycle: reconcile the previous Milestone"
+        if: >-
+          !cancelled() &&
+          github.event.changes.milestone.from.number != null &&
+          github.event.changes.milestone.from.number != github.event.issue.milestone.number
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MILESTONE_NUMBER: ${{ github.event.changes.milestone.from.number }}
+        run: >-
+          python3 scripts/sync_milestone_state.py reconcile
+          --repo "$GITHUB_REPOSITORY"
+          --milestone "$MILESTONE_NUMBER"
+
+      # -- Milestone lifecycle: record promotion evidence for a merged promote/m* PR --
+      - name: "Milestone lifecycle: resolve the tracker Issue this promotion closes"
+        id: tracker
+        if: >-
+          !cancelled() &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.base.ref == 'main' &&
+          startsWith(github.event.pull_request.head.ref, 'promote/m')
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          tracker_number="$(python3 -c '
+          import os
+          import re
+          import sys
+
+          body = os.environ.get("PR_BODY") or ""
+          match = re.search(
+              r"(?<!\w)(?:Closes|Fixes|Resolves)[ \t]+#([0-9]+)(?!\w)", body
+          )
+          if match is None:
+              sys.exit("No closing Issue reference found in the pull request body")
+          print(match.group(1))
+          ')"
+          echo "number=$tracker_number" >> "$GITHUB_OUTPUT"
+      - name: "Milestone lifecycle: record the merge commit as delivery evidence"
+        if: >-
+          !cancelled() &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.base.ref == 'main' &&
+          startsWith(github.event.pull_request.head.ref, 'promote/m')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRACKER_NUMBER: ${{ steps.tracker.outputs.number }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: >-
+          python3 scripts/sync_milestone_state.py record-promotion-evidence
+          --repo "$GITHUB_REPOSITORY"
+          --tracker "$TRACKER_NUMBER"
+          --evidence-url "https://github.com/$GITHUB_REPOSITORY/commit/$MERGE_SHA"
+
+      # -- Work Issue closure: close the Issue a merged dev/m* work PR completes --
+      - name: "Work Issue closure: checkout the merge commit"
+        if: >-
+          !cancelled() &&
+          github.event.pull_request.merged == true &&
+          startsWith(github.event.pull_request.base.ref, 'dev/m') &&
+          !startsWith(github.event.pull_request.head.ref, 'sync/')
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - name: "Work Issue closure: close the completed work Issue"
+        if: >-
+          !cancelled() &&
+          github.event.pull_request.merged == true &&
+          startsWith(github.event.pull_request.base.ref, 'dev/m') &&
+          !startsWith(github.event.pull_request.head.ref, 'sync/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          python3 scripts/pr_lifecycle.py close-work
+          --repo "$GITHUB_REPOSITORY"
+          --pr-number "$PR_NUMBER"
+          --head-sha "$PR_HEAD_SHA"
