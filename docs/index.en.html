@@ -2087,6 +2087,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2173,6 +2176,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human active" aria-current="step">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -2262,6 +2268,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2340,6 +2349,93 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 <aside class="technical-detail" data-content-key="advanced-install-workarounds"><h3>Workarounds and the existing DEGRADED marker</h3>
 <p>This matrix does not replace or redesign <code>apply-repository-settings.sh</code>&#x27;s DEGRADED mechanism -- it documents it. Every row whose workaround says &quot;DEGRADED marker&quot; reuses the exact same fail-safe already printed by <code>apply-repository-settings.sh check</code>/<code>plan</code>/<code>apply</code> for that limitation; the two never disagree because the underlying detection (plan, visibility, admin permission) is the same. <code>docs/ci-policy.md</code> and <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md" target="_blank" rel="noreferrer">the capability-aware governance ADR</a> record the durable decision; this page and <code>policies/capability-matrix.json</code> are what stay current as the single source both consult.</p></aside></div>
 </section>
+<section class="slide markdown-slide dense" id="about" data-content-key="about" data-track="about" aria-label="What CSARC is, and who it is for">
+  <aside class="journey-rail" aria-label="Presentation outline">
+  <h3>Features</h3>
+  <ol class="journey-use">
+    <li class="journey-item human">
+      <a href="#capability"><span>Home</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human active" aria-current="step">
+      <a href="#about"><span>About</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#flow"><span>CI/CD flow</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#files"><span>File map</span></a>
+    </li>
+  </ol>
+  <h3>Modules</h3>
+  <ol class="journey-main">
+    <li class="journey-item human">
+      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
+    </li>
+  </ol>
+  <h3>Ops</h3>
+  <ol class="journey-support">
+    <li class="journey-item human">
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#similar-tools"><span class="journey-code">11</span><span>Similar</span></a>
+    </li>
+    <li class="journey-item maintainer" data-audience="maintainer">
+      <a href="#advanced-install"><span class="journey-code">12</span><span>Advanced</span></a>
+    </li>
+    <li class="journey-item maintainer" data-audience="maintainer">
+      <a href="#testing"><span class="journey-code">13</span><span>CI/CD</span></a>
+    </li>
+    <li class="journey-item maintainer" data-audience="maintainer">
+      <a href="#bridge"><span class="journey-code">14</span><span>May review</span></a>
+    </li>
+  </ol>
+
+  <div class="journey-legend" aria-label="Color key">
+    <span><i class="human" aria-hidden="true"></i>Human decision</span>
+    <span><i class="automated" aria-hidden="true"></i>Automated by default</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>Maintainers only</span>
+  </div>
+</aside>
+
+<header>
+  <span class="selection-sequence">About</span>
+  <h2>What CSARC is, and who it is for</h2>
+  <p class="subtitle">An updatable repository foundation: creating, adopting, and receiving policy updates all preview and verify before a PR merges them.</p>
+</header>
+<div class="markdown-body"><p>This repository maintains a Copier template, shared CI, security checks, and GitHub configuration drafts. <code>template/</code> is what downstream projects receive; the root of this repository follows the same rules on itself (self-hosting).</p>
+<p>Available today: a common CI/CD baseline plus independently selectable Python, Rust, and TypeScript language modules, along with Issue/spec, PR checks, and verification. A generated project can also opt into <code>enable_docker</code> for a Dockerfile/docker-compose starter and a read-only, non-pushing container build-scan CI job.</p>
+<table><thead><tr><th>Choose directly</th><th>Options</th></tr></thead><tbody><tr><td>Language</td><td>Python, Rust, TypeScript are independently multi-selectable; choosing none uses only the common workflow</td></tr><tr><td>Branching</td><td>Each delivery batch gets its own development branch, changes merge straight to <code>main</code>, or work first collects on <code>dev</code></td></tr><tr><td>Template configuration</td><td>Choices made at create/adopt time are written to <code>.csarc/config.yml</code>; later template updates read the same file instead of duplicating settings elsewhere</td></tr></tbody></table>
+<aside class="technical-detail" data-content-key="about-doc-map"><h3>How this relates to README and AGENTS.md</h3>
+<p><code>README.md</code> tells a general adopter what this is, whether to use it, how to start, and where to learn more. To contribute to this repository itself, read <code>AGENTS.md</code> (the executable working rules). For the &quot;why&quot; behind these choices, that is this internal decision site itself. Each document owns one layer, so the same rules are not maintained twice. <code>docs/about.md</code>/<code>docs/install.md</code> are the maintainable source for this page and the &quot;Install&quot; page.</p></aside></div>
+</section>
 <section class="slide markdown-slide candidate-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="The template guides every change">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Features</h3>
@@ -2349,6 +2445,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated active" aria-current="step">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -2433,6 +2532,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -2521,6 +2623,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2606,6 +2711,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2689,6 +2797,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -2779,6 +2890,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2862,6 +2976,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2943,6 +3060,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -3027,6 +3147,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -3126,6 +3249,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -3217,6 +3343,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -3305,6 +3434,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -3396,6 +3528,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -3478,6 +3613,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -3558,6 +3696,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -3637,6 +3778,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -3721,6 +3865,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -3802,6 +3949,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -3885,6 +4035,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -3966,6 +4119,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -4050,6 +4206,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -4132,6 +4291,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -4213,6 +4375,9 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#about"><span>About</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>

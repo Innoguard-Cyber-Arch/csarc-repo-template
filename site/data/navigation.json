@@ -24,6 +24,7 @@
   "items": [
     {"key": "capability", "group": "use", "participation": "human", "labels": {"zh-tw": "首頁", "en": "Home"}},
     {"key": "install", "group": "use", "participation": "human", "labels": {"zh-tw": "安裝說明", "en": "Install"}},
+    {"key": "about", "group": "use", "participation": "human", "labels": {"zh-tw": "關於", "en": "About"}},
     {"key": "flow", "group": "use", "participation": "automated", "labels": {"zh-tw": "CI/CD 流程", "en": "CI/CD flow"}},
     {"key": "files", "group": "use", "participation": "human", "labels": {"zh-tw": "檔案地圖", "en": "File map"}},
     {"key": "method", "code": "01", "group": "workflow", "participation": "human", "labels": {"zh-tw": "工作定義", "en": "Work"}},

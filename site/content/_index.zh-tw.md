@@ -150,6 +150,22 @@ csarc status <path> --json
 {{< /detail >}}
 {{< /slide >}}
 
+{{< slide key="about" track="about" eyebrow="關於" title="CSARC 是什麼、給誰用" subtitle="可更新的 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。" class="dense" legacy="false" >}}
+本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發給使用者專案的內容；根目錄則讓公版本身使用同一套規則（self-hosting）。
+
+目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證；生成專案另可選配 `enable_docker`，取得 Dockerfile／docker-compose 起始範本與一支唯讀、不推送的容器建置掃描 CI job。
+
+| 可以直接選擇 | 選項 |
+| --- | --- |
+| 程式語言 | Python、Rust、TypeScript 可獨立複選；都不選時只使用共通工作流程 |
+| 分支做法 | 每個交付批次有自己的開發分支、所有修改直接進 `main`，或先集中到 `dev` |
+| 公版設定 | 建立／導入時把選項寫入 `.csarc/config.yml`；之後由公版更新，不必到不同檔案重複設定 |
+
+{{< detail key="about-doc-map" title="這份文件跟 README、AGENTS.md 的分工" >}}
+`README.md` 給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 `AGENTS.md`（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，就是這個內部決策網站本身。三份文件各自負責一層，避免同一套規則重複維護。`docs/about.md`／`docs/install.md` 是這個頁面與「安裝說明」頁的可維護來源。
+{{< /detail >}}
+{{< /slide >}}
+
 {{< slide key="flow" track="flow" eyebrow="CI/CD 流程" title="模板會帶你走完每次變更" subtitle="依表單填寫、提交 PR、查看結果；模板負責準備正確設定並指出要修正的地方。" class="legacy-slide pipeline-slide" legacy="true" >}}
 {{< legacy >}}
       <header>

@@ -104,6 +104,22 @@ This matrix does not replace or redesign `apply-repository-settings.sh`'s DEGRAD
 {{< /detail >}}
 {{< /slide >}}
 
+{{< slide key="about" track="about" eyebrow="About" title="What CSARC is, and who it is for" subtitle="An updatable repository foundation: creating, adopting, and receiving policy updates all preview and verify before a PR merges them." class="dense" legacy="false" >}}
+This repository maintains a Copier template, shared CI, security checks, and GitHub configuration drafts. `template/` is what downstream projects receive; the root of this repository follows the same rules on itself (self-hosting).
+
+Available today: a common CI/CD baseline plus independently selectable Python, Rust, and TypeScript language modules, along with Issue/spec, PR checks, and verification. A generated project can also opt into `enable_docker` for a Dockerfile/docker-compose starter and a read-only, non-pushing container build-scan CI job.
+
+| Choose directly | Options |
+| --- | --- |
+| Language | Python, Rust, TypeScript are independently multi-selectable; choosing none uses only the common workflow |
+| Branching | Each delivery batch gets its own development branch, changes merge straight to `main`, or work first collects on `dev` |
+| Template configuration | Choices made at create/adopt time are written to `.csarc/config.yml`; later template updates read the same file instead of duplicating settings elsewhere |
+
+{{< detail key="about-doc-map" title="How this relates to README and AGENTS.md" >}}
+`README.md` tells a general adopter what this is, whether to use it, how to start, and where to learn more. To contribute to this repository itself, read `AGENTS.md` (the executable working rules). For the "why" behind these choices, that is this internal decision site itself. Each document owns one layer, so the same rules are not maintained twice. `docs/about.md`/`docs/install.md` are the maintainable source for this page and the "Install" page.
+{{< /detail >}}
+{{< /slide >}}
+
 {{< slide key="flow" track="flow" eyebrow="CI/CD flow" title="The template guides every change" subtitle="Follow the Issue and PR prompts; the template prepares the right settings and tells you what needs attention." legacy="false"  class="candidate-slide" >}}
 | What you are doing | How the template guides you |
 | --- | --- |
