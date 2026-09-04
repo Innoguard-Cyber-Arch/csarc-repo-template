@@ -36,6 +36,16 @@ tracker 的 `Completion evidence` 段落（見 #512）；#400 與 #401 的自動
 blocked gap。
 delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
 
+### 新發現問題的預設歸屬（#668）
+
+在 Milestone 工作過程中發現的新問題，開新 Issue 時預設留在同一個 Milestone（掛該
+Milestone、以其 `dev/m<N>` 為 base），不預設拆成 standalone。只有明顯符合下列任一
+例外才 standalone：問題本身跨越多個 Milestone，或是影響所有未來 Milestone 的治理／
+工具機制本身（不是這個 Milestone 自己的功能範圍）；緊急生產事故，等不到 Milestone
+收尾；問題來源明確是外部回報（其他協作者或 peer session），與本 Milestone 工作內容
+沒有直接因果關係。不確定屬於例外時，預設留在 Milestone 內——例外是窄範圍判準，不是
+圖方便的預設退路。完整規則見 `AGENTS.md` working loop 步驟 6。
+
 ## PR lifecycle single-writer
 
 Agent 或 automation 若要變更 PR 的 ready／draft、授權或 metadata，必須先取得 remote
