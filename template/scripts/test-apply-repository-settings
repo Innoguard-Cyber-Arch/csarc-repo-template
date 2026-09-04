@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression coverage for the parts of scripts/apply-repository-settings.sh
+# added by Issue #576: the independent issue_creation_policy (GraphQL) and
+# security_and_analysis (REST, DEGRADED-tolerant) check blocks, plus the new
+# pull_request_creation_policy key riding the existing flat repository.json
+# comparison. `gh` is stubbed so this never touches a live repository.
+#
+# The stubbed rulesets endpoint always reports the Free-private "upgrade or
+# make public" error, which routes the script through its existing DEGRADED
+# governance branch instead of the effective-rules comparison. That sidesteps
+# a pre-existing, separately tracked bug (Issue #570: policies/rulesets.json
+# has no required_status_checks rule, which crashes that comparison with a
+# Python KeyError) that is unrelated to what this test exercises.
+#
+# The stubbed repository is public (see the `@tsv` case below), so the
+# GitHub Pages check added by Issue #571 is always enforcement-available
+# here; the `pages` endpoint stub below reports a live source that matches
+# policies/pages.json so the "fully matching fixture" case (Case 1) reports
+# no drift. Pages' own drift/DEGRADED/enforcement-availability behavior is
+# covered independently in tests/test_apply_repository_settings.py.
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+script_path="$repo_root/scripts/apply-repository-settings.sh"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+mkdir -p "$fixture_root/bin"
+case_count=0
+
+test_repo="Test-Org/test-repo"
+test_owner="Test-Org"
+test_branch="main"
+
+cat >"$fixture_root/bin/gh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$repo_root"
+test_repo="$test_repo"
+test_owner="$test_owner"
+test_branch="$test_branch"
+args="\$*"
+
+case "\$args" in
+  *"@tsv"*)
+    printf '%s\t%s\t%s\t%s\t%s\n' "\$test_owner" "Organization" "public" "true" "\$test_branch"
+    ;;
+  *".plan.name"*)
+    printf 'free\n'
+    ;;
+  *"/teams"*)
+    printf '[[{"slug": "arch", "permission": "push"}]]\n'
+    ;;
+  *"issueCreationPolicy"*)
+    python3 -c 'import json, os; print(json.dumps({"data": {"repository": {"issueCreationPolicy": os.environ.get("LIVE_ISSUE_CREATION_POLICY", "COLLABORATORS_ONLY")}}}))'
+    ;;
+  "api repos/\$test_repo/rulesets")
+    echo "Upgrade to GitHub Pro or make this repository public to use rulesets." >&2
+    exit 1
+    ;;
+  *"rulesets(first"*)
+    printf '{"data": {"repository": {"rulesets": {"nodes": []}}}}\n'
+    ;;
+  "api repos/\$test_repo")
+    python3 - <<'PY'
+import json
+import os
+
+desired = json.load(open(os.path.join(os.environ["REPO_ROOT"], "policies/repository.json"), encoding="utf-8"))
+desired["pull_request_creation_policy"] = os.environ.get("LIVE_PR_CREATION_POLICY", "collaborators_only")
+desired["security_and_analysis"] = {
+    "secret_scanning": {"status": os.environ.get("LIVE_SECRET_SCANNING", "enabled")},
+    "secret_scanning_push_protection": {"status": os.environ.get("LIVE_PUSH_PROTECTION", "enabled")},
+    "dependabot_security_updates": {"status": os.environ.get("LIVE_DEPENDABOT_SECURITY", "enabled")},
+}
+desired["node_id"] = "R_test"
+print(json.dumps(desired))
+PY
+    ;;
+  "api repos/\$test_repo/immutable-releases")
+    cat "\$repo_root/policies/releases.json"
+    ;;
+  "api repos/\$test_repo/pages")
+    python3 - <<'PY'
+import json
+import os
+
+desired = json.load(open(os.path.join(os.environ["REPO_ROOT"], "policies/pages.json"), encoding="utf-8"))
+print(json.dumps({"source": desired["source"], "status": "built"}))
+PY
+    ;;
+  "api repos/\$test_repo/actions/permissions/workflow")
+    python3 - <<'PY'
+import json
+import os
+
+desired = json.load(open(os.path.join(os.environ["REPO_ROOT"], "policies/actions.json"), encoding="utf-8"))
+desired["can_approve_pull_request_reviews"] = os.environ.get("LIVE_CAN_APPROVE_PR", "true") == "true"
+print(json.dumps(desired))
+PY
+    ;;
+  "label list --repo \$test_repo --limit 1000 --json name,color,description")
+    cat "\$repo_root/policies/labels.json"
+    ;;
+  *)
+    echo "unstubbed gh invocation: \$args" >&2
+    exit 99
+    ;;
+esac
+EOF
+chmod +x "$fixture_root/bin/gh"
+export REPO_ROOT="$repo_root"
+
+run_check() {
+  status=0
+  output="$(PATH="$fixture_root/bin:$PATH" GH_REPO="$test_repo" "$script_path" check 2>&1)" || status=$?
+}
+
+# Case 1: every new field matches its declared policy; check exits clean.
+case_count=$((case_count + 1))
+run_check
+if [[ "$status" != 0 ]]; then
+  echo "check failed on a fully matching fixture (exit $status):"
+  printf '%s\n' "$output"
+  exit 1
+fi
+grep -qF "Issue creation policy matches policies/issue-creation.json." <<<"$output"
+grep -qF "security_and_analysis.secret_scanning matches policies/security-scanning.json (enabled)." <<<"$output"
+grep -qF "security_and_analysis.secret_scanning_push_protection matches policies/security-scanning.json (enabled)." <<<"$output"
+grep -qF "security_and_analysis.dependabot_security_updates matches policies/security-scanning.json (enabled)." <<<"$output"
+grep -qF "Repository settings match policies/repository.json." <<<"$output"
+grep -qF "Pages settings match policies/pages.json." <<<"$output"
+
+# Case 2: issue_creation_policy drift (REST cannot see this field at all, so
+# this exercises the dedicated GraphQL check path, not the flat PATCH loop).
+case_count=$((case_count + 1))
+LIVE_ISSUE_CREATION_POLICY="ALL" run_check
+if [[ "$status" == 0 ]]; then
+  echo "check passed despite issue_creation_policy drift."
+  exit 1
+fi
+grep -qF "Issue creation policy drift: desired COLLABORATORS_ONLY, live ALL." <<<"$output"
+
+# Case 3: pull_request_creation_policy drift, riding the existing generic
+# flat repository.json comparison (no dedicated code of its own).
+case_count=$((case_count + 1))
+LIVE_PR_CREATION_POLICY="all" run_check
+if [[ "$status" == 0 ]]; then
+  echo "check passed despite pull_request_creation_policy drift."
+  exit 1
+fi
+grep -qF "pull_request_creation_policy: desired 'collaborators_only', live 'all'" <<<"$output"
+
+# Case 4: all three security_and_analysis fields disabled, simulating a
+# private repository without GitHub Advanced Security. This must report
+# DEGRADED (a plan/GHAS limitation) and still exit 0, never fail closed.
+case_count=$((case_count + 1))
+LIVE_SECRET_SCANNING="disabled" LIVE_PUSH_PROTECTION="disabled" \
+  LIVE_DEPENDABOT_SECURITY="disabled" run_check
+if [[ "$status" != 0 ]]; then
+  echo "check exited non-zero on an all-disabled DEGRADED security_and_analysis fixture (exit $status):"
+  printf '%s\n' "$output"
+  exit 1
+fi
+grep -qF "DEGRADED security_and_analysis.secret_scanning: desired enabled, live disabled; GitHub Advanced Security or an organization/plan policy may block this capability on this repository." <<<"$output"
+grep -qF "DEGRADED security_and_analysis.secret_scanning_push_protection: desired enabled, live disabled;" <<<"$output"
+grep -qF "DEGRADED security_and_analysis.dependabot_security_updates: desired enabled, live disabled;" <<<"$output"
+grep -qF "degraded capability difference(s)." <<<"$output"
+
+# Case 5: a security_and_analysis field reports a status this script does
+# not recognize as "just disabled" (neither "enabled" nor "disabled"). This
+# must surface as actionable drift, not be silently folded into DEGRADED.
+case_count=$((case_count + 1))
+LIVE_DEPENDABOT_SECURITY="restricted" run_check
+if [[ "$status" == 0 ]]; then
+  echo "check passed despite an unrecognized security_and_analysis status."
+  exit 1
+fi
+grep -qF "security_and_analysis drift: dependabot_security_updates desired enabled, live restricted." <<<"$output"
+
+echo "apply-repository-settings check cases passed: $case_count"

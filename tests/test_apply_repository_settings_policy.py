@@ -46,6 +46,15 @@ printf '%s\n' "$*" >>"$FAKE_GH_LOG"
 case "$1" in
   api)
     shift
+    # issue_creation_policy (Issue #576) has no REST field and is queried
+    # through `gh api graphql`, which does not fit the flag-parsing loop
+    # below (its `-f query=...`/`-f owner=...`/`-f name=...` payload is a
+    # GraphQL document, not a REST path). Matching on the full argument
+    # string mirrors scripts/test-apply-repository-settings's fake `gh`.
+    if [[ "$*" == *"issueCreationPolicy"* ]]; then
+      echo '{"data": {"repository": {"issueCreationPolicy": "COLLABORATORS_ONLY"}}}'
+      exit 0
+    fi
     method="GET"
     jq_filter=""
     path=""
@@ -177,9 +186,20 @@ def _make_repo(tmp_path: Path, config_yaml: str) -> Path:
         CONFIG_READER_SOURCE.read_text(encoding="utf-8"), encoding="utf-8"
     )
 
+    # project-stage.json and rulesets-required-checks.json are root-repo-only
+    # (Issue #607's release_phase gating of the Alpha self-approval bypass);
+    # template-generated repositories never receive them and keep the
+    # pre-#607 single-Ruleset layout. Copying them into this generic-repo
+    # fixture would spuriously flip release_phase_gated on in
+    # scripts/apply-repository-settings.sh without this fixture also
+    # providing scripts/release_phase_rulesets.py, which it has no reason to
+    # need.
+    root_repo_only_policies = {"project-stage.json", "rulesets-required-checks.json"}
     policies_dir = repo / "policies"
     policies_dir.mkdir()
     for policy_file in POLICIES_SOURCE.glob("*.json"):
+        if policy_file.name in root_repo_only_policies:
+            continue
         (policies_dir / policy_file.name).write_text(
             policy_file.read_text(encoding="utf-8"), encoding="utf-8"
         )
@@ -269,7 +289,30 @@ def test_disabled_policies_are_skipped_in_check_and_apply(
         "SKIPPED policies/rulesets.json (policy_branch_ruleset=false"
         in check_output
     )
-    assert "All observable repository settings match policy." in check_output
+    # issue_creation_policy, security_and_analysis, and GitHub Pages (Issues
+    # #576/#571) are independent of every policy_* toggle above -- #532
+    # never gave them a toggle since they did not exist when it was
+    # designed -- so they still run here. This fixture's minimal live
+    # repository state (no security_and_analysis, a private repo on
+    # GitHub Team) makes security_and_analysis and Pages degrade rather
+    # than match, which is correct, expected behavior, not a regression:
+    # DEGRADED still exits 0.
+    assert (
+        "Issue creation policy matches policies/issue-creation.json."
+        in check_output
+    )
+    assert (
+        "DEGRADED security_and_analysis.secret_scanning: desired enabled"
+        in check_output
+    )
+    assert (
+        "DEGRADED GitHub Pages: private repositories require "
+        "GitHub Enterprise Cloud" in check_output
+    )
+    assert (
+        "Repository settings check completed with 4 degraded capability "
+        "difference(s)." in check_output
+    )
 
     apply_log = tmp_path / "gh-apply.log"
     apply_result = _run(repo, tmp_path, "apply", log_path=apply_log)
@@ -288,7 +331,18 @@ def test_disabled_policies_are_skipped_in_check_and_apply(
     full_log = check_log.read_text(encoding="utf-8") + apply_log.read_text(
         encoding="utf-8"
     )
-    assert "--method PATCH repos/acme/repo-test" not in full_log
+    # policies/repository.json itself must not be PATCHed
+    # (policy_repository_settings=false), but the independent
+    # security_and_analysis PATCH (Issue #576, no policy_* toggle of its
+    # own) legitimately still hits the same repos/$repo REST endpoint with a
+    # different --input file, so the assertion below is specific to
+    # repository.json rather than "no PATCH to repos/$repo at all".
+    assert not any(
+        "--method PATCH repos/acme/repo-test" in line
+        and "policies/repository.json" in line
+        for line in full_log.splitlines()
+    )
+    assert "policies/security-scanning.json" in full_log
     assert "immutable-releases" not in full_log
     assert "actions/permissions/workflow" not in full_log
     assert "label create" not in full_log

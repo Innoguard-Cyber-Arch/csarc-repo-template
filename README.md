@@ -2,14 +2,14 @@
 
 Cyber-Arch 的可更新 repo 公版，支援只使用共通流程，或獨立選擇 Python、Rust、TypeScript。新案、既有案與後續政策更新都經 Copier 形成可審查差異。
 
-目前公版：v0.12.2 <!-- x-release-please-version -->
+目前公版：v0.13.0 <!-- x-release-please-version -->
 
 > [!IMPORTANT]
 > Milestone 8 正在逐頁重定義產品規格。目前只有已審查且位於 `.github/workflows/` 的流程會執行；其他流程仍封存。各階段的啟用狀態以[CI/CD 設定](docs/index.html#testing)為準。
 
 [開啟內部網站與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見網站內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）
 
-> **這份文件的定位：**README 只給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 [`AGENTS.md`](AGENTS.md)（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀[內部網站附錄](docs/index.html)。三份文件各自負責一層，避免同一套規則重複維護。
+> **這份文件的定位：** README 只給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 [`AGENTS.md`](AGENTS.md)（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀[內部網站附錄](docs/index.html)。三份文件各自負責一層，避免同一套規則重複維護。
 
 ## 目錄
 
@@ -33,7 +33,7 @@ Cyber-Arch 的可更新 repo 公版，支援只使用共通流程，或獨立選
 
 共同需求是 Git、GitHub CLI、uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11；三個語言模組都不選（`language: ci`）則不需要額外語言工具鏈。CSARC 交付的是 CI/CD 範本與治理流程，Python 只用來執行 init／adopt／update 的薄 CLI；`uvx --python 3.14` 會按次取得隔離 runtime，不要求使用者預先安裝或維護全域 Python。Windows 請在 WSL2 執行。逐項 macOS／Windows 安裝指令，以及「使用者安裝專案」與「模板貢獻者」兩種情境的完整工具清單，見下方[前置需求](#前置需求)。
 
-建議每位開發者在自己 shell 的 profile 檔（例如 `~/.zshrc`、`~/.bashrc`、`~/.config/fish/config.fish`，依實際使用的 shell 而定）加入 `export CSARC_CACHE_ROOT="$HOME/.cache/csarc"`（或團隊約定的其他持久路徑）。這會讓 `uv`、`pnpm`，以及透過 `scripts/resolve-cache-root` 取得快取位置的固定版本工具安裝腳本（`scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner`）跨 worktree、跨 `csarc adopt --finalize` 產生的臨時候選目錄共用已驗證的下載內容。這純粹是本機效能最佳化：未設定時，`scripts/resolve-cache-root` 會退回各自 repo-local 的 `.cache/`，驗證正確性與結果完全不受影響，只是不同 worktree／臨時目錄之間不共用快取，需要各自重新下載，速度較慢。
+`scripts/resolve-cache-root` 預設就會指向使用者層級、跨 worktree 共用的快取位置（macOS 為 `~/Library/Caches/csarc`；Linux／WSL2 依 XDG Base Directory 慣例，優先讀 `$XDG_CACHE_HOME`，沒設定則用 `~/.cache/csarc`），讓 `uv`、`pnpm`，以及透過 `scripts/resolve-cache-root` 取得快取位置的固定版本工具安裝腳本（`scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner`／`install-hugo`）不需要額外設定，就能跨 worktree、跨 `csarc adopt --finalize` 產生的臨時候選目錄共用已驗證的下載內容。這個共用位置找不到或無法寫入時會 fail-safe 退回 repo-local 的 `.cache/`；這純粹是本機效能最佳化，不論退回與否，驗證正確性與結果都完全不受影響，只是不共用快取時需要各自重新下載，速度較慢。想改用團隊約定的其他持久路徑，仍可在自己 shell 的 profile 檔（例如 `~/.zshrc`、`~/.bashrc`、`~/.config/fish/config.fish`，依實際使用的 shell 而定）加入 `export CSARC_CACHE_ROOT="<路徑>"` 明確覆寫。
 
 請從實際 Git root 開啟 Codex／agent workspace；從 repo 上層開啟時，子目錄的 `AGENTS.md` 不一定會自動載入。開始前先在工作目錄執行 `test "$(git rev-parse --show-toplevel)" = "$(pwd -P)"`，失敗就切換到輸出的 Git root，不要複製另一份指引到父目錄。
 
@@ -153,7 +153,7 @@ Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 re
 
 ## 設定與密鑰
 
-GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository、immutable Releases、Actions、政策標籤與有效 Ruleset，可修正差異會失敗，Free private Ruleset 或組織政策限制則明確標為 `DEGRADED`，不會誤稱為沒有 drift；生成 repo 開啟 `enable_governance_drift_check` 時，`.github/workflows/governance-drift.yml` 每天重跑同一個 `check` 並在可修正的漂移出現時開立或更新追蹤 Issue，本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。非 draft PR 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer（`.github/workflows/governance-comment.yml`）；這只是提出 review request，不是強制合併門禁。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見[內部網站附錄](docs/index.html)「先辨識 GitHub 方案」章節。
+GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗，Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud；`policies/pages.json` 的 `enabled` 欄位可關閉）、組織政策限制或缺少 GitHub Advanced Security 則明確標為 `DEGRADED`，不會誤稱為沒有 drift；生成 repo 開啟 `enable_governance_drift_check` 時，`.github/workflows/governance-drift.yml` 每天重跑同一個 `check` 並在可修正的漂移出現時開立或更新追蹤 Issue，本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。非 draft PR 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer（`.github/workflows/governance-comment.yml`）；這只是提出 review request，不是強制合併門禁。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見[內部網站附錄](docs/index.html)「先辨識 GitHub 方案」章節。
 
 `.csarc/config.yml` 的 `policy_repository_settings`／`policy_actions_permissions`／`policy_labels`／`policy_branch_ruleset` 四個布林開關（Issue #532）讓專案各自決定要不要套用對應的 `policies/repository.json`／`policies/actions.json`／`policies/labels.json`／`policies/rulesets.json`；immutable Releases 不另開新鍵，沿用既有 `release_immutable_releases`（只有 `csarc-owned` 對應的 `required` 會套用，`product-owned`／`verification-only` 對應的 `product-defined`／`not-required` 交由既有 release ownership 決定，本模板不強制）。四個開關預設皆為 `true`，維持關閉本功能前的全套用行為；`.csarc/config.yml` 缺鍵一律視為開啟，既有 repo 更新後不會悄悄少掉涵蓋範圍。關掉某個政策時，`plan`／`apply`／`check` 都印出對應的 `SKIP`／`SKIPPED` 行、不呼叫該政策的 GitHub API，也不計入 `check` 的 drift 或 `DEGRADED` 計數。
 

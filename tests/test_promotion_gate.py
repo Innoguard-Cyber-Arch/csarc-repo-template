@@ -19,6 +19,7 @@ MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "promotion_gate.py")
 )
 checkpoint_issue_numbers = MODULE["checkpoint_issue_numbers"]
+check_route = MODULE["check_route"]
 classify_canary = MODULE["classify_canary"]
 finalize = MODULE["finalize"]
 finalize_quota_fallback = MODULE["finalize_quota_fallback"]
@@ -156,6 +157,127 @@ def test_isolated_issue_route_binds_the_issue_number() -> None:
     route = route_for("main", "dev/i42-payment-soak", {"promotion"}, "delivery")
     assert route.kind == "isolated"
     assert route.issue == 42
+
+
+def _promotion_event_path(
+    tmp_path: Path,
+    *,
+    base: str,
+    head: str,
+    labels: list[str],
+) -> Path:
+    """Write one minimal `pull_request` webhook payload for `check_route`."""
+    event = {
+        "pull_request": {
+            "base": {"ref": base},
+            "head": {"ref": head},
+            "labels": [{"name": name} for name in labels],
+        }
+    }
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps(event), encoding="utf-8")
+    return event_path
+
+
+@pytest.mark.parametrize(
+    ("head", "labels", "expected_kind"),
+    [
+        ("feat/601-promotion-status-check", [], "not-applicable"),
+        ("dependabot/pip/ruff-1.0", [], "not-applicable"),
+        ("dev/m7-staged-ci", ["promotion"], "milestone"),
+        ("dev/i42-payment-soak", ["promotion"], "isolated"),
+        ("fix/42-outage", ["hotfix"], "hotfix"),
+        (
+            "fix/321-recover-v012-release",
+            ["release-recovery"],
+            "release-recovery",
+        ),
+        ("release/v1.2.3", [], "release-follow-up"),
+    ],
+)
+def test_check_route_succeeds_for_every_recognized_route(
+    tmp_path: Path, head: str, labels: list[str], expected_kind: str
+) -> None:
+    """#601: every recognized route reports the `promotion` check as passing.
+
+    This covers both an ordinary non-Milestone-delivery pull request (the
+    `not-applicable` and `dependabot/` cases, which previously had no
+    workflow reporting the `promotion` context at all) and the existing
+    Milestone/isolated/hotfix/release-recovery/release-follow-up routes,
+    which must keep succeeding unchanged.
+    """
+    event_path = _promotion_event_path(
+        tmp_path, base="main", head=head, labels=labels
+    )
+    github_output = tmp_path / "output.txt"
+    summary = tmp_path / "summary.md"
+    arguments = SimpleNamespace(
+        event="pull_request",
+        event_path=event_path,
+        branch_strategy="delivery",
+        github_output=github_output,
+        summary=summary,
+    )
+    check_route(arguments)  # Must not raise.
+    outputs = github_output.read_text(encoding="utf-8")
+    assert f"route={expected_kind}" in outputs
+    assert expected_kind in summary.read_text(encoding="utf-8")
+
+
+def test_check_route_blocks_an_unrecognized_branch_targeting_main(
+    tmp_path: Path,
+) -> None:
+    """A `main`-targeting branch matching no delivery route fails closed."""
+    event_path = _promotion_event_path(
+        tmp_path, base="main", head="unexpected-branch", labels=["promotion"]
+    )
+    arguments = SimpleNamespace(
+        event="pull_request",
+        event_path=event_path,
+        branch_strategy="delivery",
+        github_output=None,
+        summary=None,
+    )
+    with pytest.raises(RuntimeError, match="promotion, hotfix"):
+        check_route(arguments)
+
+
+def test_check_route_treats_a_merge_queue_commit_as_not_relevant(
+    tmp_path: Path,
+) -> None:
+    """A merge-queue commit was already classified when its PR opened."""
+    # The merge_group event payload has no `pull_request` key at all;
+    # check_route must never try to read one for a non-pull_request event.
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps({"merge_group": {}}), encoding="utf-8")
+    github_output = tmp_path / "output.txt"
+    arguments = SimpleNamespace(
+        event="merge_group",
+        event_path=event_path,
+        branch_strategy="delivery",
+        github_output=github_output,
+        summary=None,
+    )
+    check_route(arguments)  # Must not raise.
+    assert "route=merge-queue" in github_output.read_text(encoding="utf-8")
+    assert "relevant=false" in github_output.read_text(encoding="utf-8")
+
+
+def test_check_route_is_not_applicable_outside_delivery_mode(
+    tmp_path: Path,
+) -> None:
+    """A single-branch (`main` strategy) repository never expects a route."""
+    event_path = _promotion_event_path(
+        tmp_path, base="main", head="feat/12-work", labels=[]
+    )
+    arguments = SimpleNamespace(
+        event="pull_request",
+        event_path=event_path,
+        branch_strategy="main",
+        github_output=None,
+        summary=None,
+    )
+    check_route(arguments)  # Must not raise.
 
 
 @pytest.mark.parametrize(

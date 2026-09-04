@@ -51,3 +51,27 @@ repository. Not approved for restoration; the root copy has been removed,
 and the dangling Copier questions, CLI settings report entries, and site
 config-guidance example have been removed with it. Git and Issue #495 retain
 the historical design and decision.
+
+## 2026-09-03 disposition (#592)
+
+Two capabilities this README's "2026-09-01 disposition" still listed as
+belonging to other Milestone 8 owners had, by this date, already been
+restored under a new design — but their archive copies were never removed
+in that same change, drifting from this file's own stated rule (and from
+the introduction above, which already claimed `milestone-lifecycle` had
+"moved back to its active location"). Issue #592 corrected that drift:
+
+- Milestone lifecycle (#400): the archived `milestone-policy.yml` (root and
+  template) is a genuinely different, earlier design from the active
+  `.github/workflows/milestone-lifecycle.yml` — confirmed by diff, not just
+  a rename — and has been removed from both `root-workflows/` and
+  `template-workflows/`.
+- CodeQL: `template-workflows/codeql.yml.jinja` is superseded by the active
+  `template/.github/workflows/codeql.yml.jinja` and has been removed. No
+  root copy was ever archived for CodeQL — it only ever applied to
+  generated projects.
+
+`zizmor.yml` (root and template) remains here unchanged: no active
+replacement exists yet in either `.github/workflows/` or
+`template/.github/workflows/`, so it still belongs to its Milestone 8 owner
+per this README's original rule.

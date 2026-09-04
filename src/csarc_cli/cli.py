@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, NoReturn, Protocol, cast
@@ -1082,7 +1082,7 @@ def is_regular_file(path: Path) -> bool:
     """Return whether a path is a regular file without following links."""
     try:
         return stat.S_ISREG(path.lstat().st_mode)
-    except FileNotFoundError, NotADirectoryError:
+    except (FileNotFoundError, NotADirectoryError):  # fmt: skip
         return False
 
 
@@ -1193,6 +1193,12 @@ def plan_status(
     plan: Plan, adoption: Mapping[str, object] | None = None
 ) -> tuple[str, str]:
     """Return the strongest adoption decision and its limitation."""
+    if adoption is not None and adoption.get("applied") is True:
+        return (
+            "Adopted",
+            "Formal adoption completed; this report now records the "
+            "post-adoption state.",
+        )
     if adoption is not None and adoption.get("applicable") is not True:
         return (
             "Not ready to adopt",
@@ -1339,6 +1345,7 @@ def adoption_report_markdown(
                 else "dirty; review only"
             )
         )
+        applied = adoption.get("applied") is True
         lines[12:12] = [
             f"- Target HEAD: `{markdown_code(adoption.get('target_head'))}`",
             f"- Working tree: {working_tree}",
@@ -1352,6 +1359,12 @@ def adoption_report_markdown(
             f"{markdown_code(hook.get('reason'))}`",
             "- Candidate verification: `"
             f"{markdown_code(adoption.get('verification'))}`",
+            f"- Adoption applied: `{str(applied).lower()}`",
+            *(
+                [f"- Adopted at: `{markdown_code(adoption.get('applied_at'))}`"]
+                if applied
+                else []
+            ),
         ]
         changes = adoption.get("target_changes")
         if isinstance(changes, list) and changes:
@@ -1395,7 +1408,20 @@ def adoption_report_markdown(
                 ),
             )
         )
-    if adoption is not None and adoption.get("applicable") is not True:
+    if adoption is not None and adoption.get("applied") is True:
+        lines.extend(
+            (
+                "",
+                "## Adoption applied",
+                "",
+                "Formal adoption completed at `"
+                f"{markdown_code(adoption.get('applied_at'))}`. This report "
+                "was updated in place to record the post-adoption state; no "
+                "plan remains to apply.",
+                "",
+            )
+        )
+    elif adoption is not None and adoption.get("applicable") is not True:
         lines.extend(
             (
                 "",
@@ -1454,6 +1480,7 @@ def draw_adoption_pdf(
     document = Canvas(output, pagesize=A4, pageCompression=1)
     status, reason = plan_status(plan, adoption)
     status_color = {
+        "Adopted": colors.HexColor("#DDEFE2"),
         "Ready to adopt": colors.HexColor("#DDEFE2"),
         "Review required": colors.HexColor("#F7E9B5"),
         "Unable to determine": colors.HexColor("#F4D7D5"),
@@ -1595,10 +1622,24 @@ def draw_adoption_pdf(
     document.roundRect(48, 84, page_width - 96, 68, 7, fill=1, stroke=0)
     document.setFillColor(colors.HexColor("#17212B"))
     document.setFont("Helvetica-Bold", 10)
+    applied = adoption is not None and adoption.get("applied") is True
     applicable = adoption is None or adoption.get("applicable") is True
-    document.drawString(62, 132, "If approved" if applicable else "Next step")
+    heading = (
+        "Applied" if applied else ("If approved" if applicable else "Next step")
+    )
+    document.drawString(62, 132, heading)
     document.setFont("Helvetica", 8)
-    if applicable:
+    if applied:
+        document.drawString(
+            62,
+            116,
+            "Formal adoption completed at "
+            f"{pdf_text(adoption.get('applied_at') if adoption else None)}.",
+        )
+        document.drawString(
+            62, 101, "This report now reflects the post-adoption state."
+        )
+    elif applicable:
         document.drawString(
             62,
             116,
@@ -1812,6 +1853,23 @@ def code_owner_verification(
         "state": "verified",
         "value": value,
     }
+
+
+def mark_adoption_applied(plan: ResolvedPlan, applied_at: str) -> ResolvedPlan:
+    """Return a copy of one adoption plan tagged with its applied state.
+
+    Formal adoption must update the same adoption report in place once it
+    completes, recording both the pre-adoption (dry-run) and post-adoption
+    state (#529). The report's detailed format is out of this scope (#530);
+    this only tags the existing plan so the existing renderers can record
+    that the plan was actually applied, and when.
+    """
+    if plan.adoption is None:
+        raise CliError("Adoption report requires target state.")
+    adoption = dict(plan.adoption)
+    adoption["applied"] = True
+    adoption["applied_at"] = applied_at
+    return replace(plan, adoption=adoption)
 
 
 def write_adoption_reports(
@@ -3563,8 +3621,6 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         raise CliError(
             "adopt --finalize cannot combine --apply-plan and --dry-run."
         )
-    if args.report_dir is not None and not args.dry_run:
-        raise CliError("--report-dir requires adopt --finalize --dry-run.")
     if args.json and not args.dry_run:
         raise CliError("--json requires --dry-run for adopt --finalize.")
     if args.json and args.report_dir is not None:
@@ -3855,6 +3911,13 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         )
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
+    write_adoption_reports(
+        mark_adoption_applied(
+            plan, datetime.now(UTC).replace(microsecond=0).isoformat()
+        ),
+        args.report_dir,
+        emit=not args.json,
+    )
     print("Adoption complete.")
     return 0
 
@@ -3964,10 +4027,9 @@ def command_apply_adoption_plan(  # noqa: C901
     args: argparse.Namespace, target: Path
 ) -> int:
     """Rebuild, verify, and apply exactly one saved adoption plan."""
-    if args.dry_run or args.report_dir is not None or args.json:
+    if args.dry_run or args.json:
         raise CliError(
-            "--apply-plan cannot be combined with --dry-run, --report-dir, "
-            "or --json."
+            "--apply-plan cannot be combined with --dry-run or --json."
         )
     if any((args.source, args.to, args.expected_sha, args.allow_unreleased)):
         raise CliError(
@@ -4102,6 +4164,13 @@ def command_apply_adoption_plan(  # noqa: C901
         return 1
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
+    write_adoption_reports(
+        mark_adoption_applied(
+            fresh, datetime.now(UTC).replace(microsecond=0).isoformat()
+        ),
+        args.report_dir,
+        emit=not args.json,
+    )
     print("Adoption complete.")
     return 0
 
@@ -4885,7 +4954,10 @@ def parser() -> argparse.ArgumentParser:
                 "--report-dir",
                 type=Path,
                 metavar="PATH",
-                help="write dry-run Markdown and PDF reports outside the repo",
+                help=(
+                    "write or update the adoption Markdown and PDF reports "
+                    "outside the repo (dry-run, then applied)"
+                ),
             )
         add_write_options(subparser)
 
