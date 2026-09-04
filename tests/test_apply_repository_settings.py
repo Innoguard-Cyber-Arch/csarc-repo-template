@@ -1,7 +1,7 @@
 """Regression tests for policy-drift logic embedded in
 scripts/apply-repository-settings.sh.
 
-This file covers two independently added pieces of the script, each
+This file covers three independently added pieces of the script, each
 extracted verbatim from the shipped script (not reimplemented) and
 executed via subprocess against crafted fixtures, so a regression in
 either the script's guard clauses or its heredoc/conditional boundaries is
@@ -17,7 +17,11 @@ caught here without mocking the full `gh` CLI surface that
    effective rule sets already contained a `required_status_checks` entry
    (`desired_by_type["required_status_checks"]`); when policies/rulesets.json
    was missing that rule, the drift-check crashed with an unhandled
-   `KeyError` instead of reporting a clear policy error.
+   `KeyError` instead of reporting a clear policy error. From release_phase
+   "beta" onward (Issue #607), that same rule instead lives in a second
+   file, policies/rulesets-required-checks.json, passed as a third
+   positional argument (`extra_desired` in the test harness below); the
+   drift-check must treat the union of both files' rules as "desired".
 
 2. The GitHub Pages policy logic (Issue #571). GitHub Pages is a separate
    REST resource (`/repos/{owner}/{repo}/pages`), not a field on the
@@ -73,7 +77,7 @@ def _extract(start_marker: str, end_marker: str) -> str:
 
 DRIFT_CHECK_SOURCE = _extract(
     'elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$branch_rules" '
-    "2>&1 <<'PY'\n",
+    "\"$check_desired_rules_payload_extra\" 2>&1 <<'PY'\n",
     "\nPY\n",
 )
 
@@ -93,6 +97,7 @@ def run_drift_check(
     desired: dict[str, object],
     effective: list[dict[str, object]],
     tmp_path: Path,
+    extra_desired: dict[str, object] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Execute the extracted ruleset drift-check heredoc against fixture JSON.
 
@@ -101,11 +106,32 @@ def run_drift_check(
     before deciding what to print. Mirror that here by redirecting stderr
     into stdout, so `result.stdout` reflects exactly what an operator
     would see from `apply-repository-settings.sh check`.
+
+    `extra_desired`, when given, mirrors what the script passes as its
+    third positional argument once Issue #607 splits
+    policies/rulesets-required-checks.json out of policies/rulesets.json:
+    a second "desired" file whose `rules` get unioned into `desired`'s
+    before the comparison, because the live effective-rules-branches
+    endpoint returns rules from every applicable Ruleset, not scoped by
+    name (see check_desired_rules_payload_extra in the shipped script).
     """
     payload_path = tmp_path / "rulesets.json"
     payload_path.write_text(json.dumps(desired), encoding="utf-8")
+    extra_arg = ""
+    if extra_desired is not None:
+        extra_payload_path = tmp_path / "rulesets-required-checks.json"
+        extra_payload_path.write_text(
+            json.dumps(extra_desired), encoding="utf-8"
+        )
+        extra_arg = str(extra_payload_path)
     return subprocess.run(  # noqa: S603
-        [sys.executable, "-", str(payload_path), json.dumps(effective)],
+        [
+            sys.executable,
+            "-",
+            str(payload_path),
+            json.dumps(effective),
+            extra_arg,
+        ],
         input=DRIFT_CHECK_SOURCE,
         text=True,
         stdout=subprocess.PIPE,
@@ -311,6 +337,69 @@ def test_missing_effective_check_is_reported_by_context(
 
     assert result.returncode != 0
     assert f"missing required checks: {missing_context}" in result.stdout
+
+
+def test_required_status_checks_desired_from_a_second_file_passes(
+    tmp_path: Path,
+) -> None:
+    """Issue #607: required_status_checks may live in its own Ruleset file.
+
+    From release_phase "beta" onward, policies/rulesets.json no longer
+    carries a required_status_checks rule -- it moves to
+    policies/rulesets-required-checks.json so it can keep its own,
+    always-empty bypass_actors. The drift check must still treat the
+    branch as compliant when the union of both files covers all three
+    rule types, even though `desired` (the first file) alone does not.
+    """
+    desired_review_only = {
+        "rules": [
+            rule
+            for rule in DESIRED_ALL_RULES["rules"]
+            if rule["type"] != "required_status_checks"
+        ]
+    }
+    desired_required_checks_only = {
+        "rules": [
+            rule
+            for rule in DESIRED_ALL_RULES["rules"]
+            if rule["type"] == "required_status_checks"
+        ]
+    }
+
+    result = run_drift_check(
+        desired_review_only,
+        EFFECTIVE_ALL_RULES,
+        tmp_path,
+        extra_desired=desired_required_checks_only,
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert result.stdout == ""
+
+
+def test_required_status_checks_missing_from_both_files_still_reported(
+    tmp_path: Path,
+) -> None:
+    """The Issue #570 clean-error guard still applies when neither file
+    supplies required_status_checks (extra_desired present but empty)."""
+    desired_review_only = {
+        "rules": [
+            rule
+            for rule in DESIRED_ALL_RULES["rules"]
+            if rule["type"] != "required_status_checks"
+        ]
+    }
+
+    result = run_drift_check(
+        desired_review_only,
+        EFFECTIVE_ALL_RULES,
+        tmp_path,
+        extra_desired={"rules": []},
+    )
+
+    assert result.returncode != 0
+    assert "Traceback" not in result.stdout
+    assert "policy is missing a required_status_checks rule" in result.stdout
 
 
 # ---------------------------------------------------------------------------

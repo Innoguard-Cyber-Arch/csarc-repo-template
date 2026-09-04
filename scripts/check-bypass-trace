@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Audit one pull request for the required Alpha/Beta bypass-merge usage
+# trace (Issue #607 acceptance criterion 4).
+#
+# Every PR actually merged with the Ruleset self-approval bypass (#580)
+# while release_phase is "alpha" or "beta" must carry a structured
+# `gh pr comment` trace, left before the merge:
+#
+#   bypass-trace: release_phase=<alpha|beta> actor=<github-login> reason=<text>
+#
+# Run this right after (or as part of) an admin-bypass merge to confirm
+# the trace was actually recorded -- the same way scripts/check-pr-policy-status
+# is run deliberately per PR, not on a schedule. It reports PASS/exit 0
+# once a matching trace comment predating the merge is found, and fails
+# (exit 1) when the PR is merged but no such comment exists.
+#
+# The parsing/matching logic lives in scripts/check_bypass_trace.py (see
+# its module docstring for why automatic "did this PR use the bypass"
+# detection is out of scope for now) and is unit tested directly in
+# tests/test_check_bypass_trace.py; this script is a thin entry point.
+#
+# Usage: scripts/check-bypass-trace <pr-number> --repo <owner/repo>
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec python3 "$repo_root/scripts/check_bypass_trace.py" "$@"
