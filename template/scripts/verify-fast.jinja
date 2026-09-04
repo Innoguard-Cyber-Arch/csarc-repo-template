@@ -47,6 +47,7 @@ if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
   ./scripts/test-worktree-cleanup
   ./scripts/test-pr-policy
   ./scripts/test-apply-repository-settings
+  ./scripts/test-check-repo-capabilities
   ./scripts/test-check-scope-gate
 fi
 {% if has_python -%}

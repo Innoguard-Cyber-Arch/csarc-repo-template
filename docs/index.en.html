@@ -2077,12 +2077,12 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
       <button type="button" data-detail-level="technical" aria-pressed="false">Maintenance</button>
     </div>
   </div>
-  <main class="deck" aria-live="polite"><section class="slide markdown-slide active presentation-slide" id="capability" data-content-key="capability" data-track="capability" aria-label="An updatable repository foundation">
+  <main class="deck" aria-live="polite"><section class="slide markdown-slide active presentation-slide" id="capability" data-content-key="capability" data-track="capability" aria-label="CSARC Repo Template">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human active" aria-current="step">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2131,6 +2131,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2141,11 +2142,14 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 </aside>
 
 <header>
-  <span class="selection-sequence">CSARC Repo Template · beta</span>
-  <h2>An updatable repository foundation</h2>
-  <p class="subtitle">Create a new project, adopt an existing one, or receive policy updates through verified pull requests.</p>
+  <span class="selection-sequence">Home</span>
+  <h2>CSARC Repo Template</h2>
+  <p class="subtitle">Cyber-Arch&#x27;s updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests.</p>
 </header>
-<div class="markdown-body"><p>Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. It explains what to do and what result to expect. Files, scripts, and GitHub Actions stay in Maintenance mode.</p>
+<div class="markdown-body"><p>Cyber-Arch&#x27;s updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests. Select only the shared workflow, or add Python, Rust, and TypeScript independently. Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> and stays synchronized across both languages.</p>
+<p class="template-version"><strong>Template release:</strong> v0.13.0<!-- x-release-please-version --></p>
+<table><thead><tr><th>Item</th><th>Current state</th></tr></thead><tbody><tr><td>Supported languages</td><td>Python, Rust, and TypeScript (select independently; select none for the shared workflow only)</td></tr><tr><td>Site template version</td><td>1.1.0</td></tr><tr><td>Decision-site render engine version</td><td>1.1.0</td></tr></tbody></table>
+<p><strong>Current state:</strong> Milestone 13 is extending the decision site and adoption experience. Only reviewed workflows under <code>.github/workflows/</code> run today; the rest stay archived. See the CI/CD settings appendix for the per-stage status.</p>
 <table><thead><tr><th>Choice</th><th>Production capability available today</th></tr></thead><tbody><tr><td>Programming languages</td><td>Select Python, Rust, and TypeScript independently; select none for the shared workflow only</td></tr><tr><td>Branch approach</td><td>One development branch per delivery batch, all changes directly into <code>main</code>, or one shared <code>dev</code> branch</td></tr><tr><td>Template settings</td><td>Creation or adoption writes choices to <code>.csarc/config.yml</code>; template updates maintain this single repository configuration</td></tr><tr><td>Shared capability</td><td>Work-item (Issue) and change-proposal (PR) forms, AI working rules, automated checks, dependency safety, version records, and template updates</td></tr></tbody></table>
 <aside class="technical-detail" data-content-key="capability-boundary"><h3>Adoption paths and current scope</h3>
 <ul><li><strong>New repository:</strong> choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.</li><li><strong>Existing repository:</strong> the template detects current languages and creates <code>.csarc/config.yml</code>, then previews the adoption diff while preserving product content.</li><li><strong>Repository already using the template:</strong> change options or upgrade through <code>csarc update</code>; the template updates the configuration and managed files together.</li><li><strong>Prerequisites:</strong> Git, GitHub CLI, and uv; Rust needs rustup, while TypeScript needs Node 24+ and pnpm 11. Local verification needs no token.</li></ul>
@@ -2156,7 +2160,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human active" aria-current="step">
       <a href="#install"><span>Install</span></a>
@@ -2205,6 +2209,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2229,12 +2234,91 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 <aside class="technical-detail" data-content-key="install-agent"><h3>One prompt for an agent</h3>
 <p>The full contract lives in <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/agent-install.md" target="_blank" rel="noreferrer"><code>docs/agent-install.md</code></a>: an agent always runs <code>csarc status</code> first and follows the row matching its returned <code>state</code>, instead of guessing which situation applies. All of the classification logic lives in the CLI (<code>detect_install_state</code>); the agent only calls it and acts on the result, so the same repository state never produces a different answer just because a different agent ran it.</p></aside></div>
 </section>
-<section class="slide markdown-slide candidate-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="The template guides every change">
+<section class="slide markdown-slide dense" id="advanced-install" data-content-key="advanced-install" data-audience="maintainer" data-parity="supplemental" aria-label="Know what this specific repository can actually enable">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#flow"><span>CI/CD flow</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#files"><span>File map</span></a>
+    </li>
+  </ol>
+  <h3>Workflow</h3>
+  <ol class="journey-main">
+    <li class="journey-item human">
+      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
+    </li>
+  </ol>
+  <h3>Maintenance</h3>
+  <ol class="journey-support">
+    <li class="journey-item human">
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer active-selection" data-audience="maintainer" href="#advanced-install" aria-current="page">Advanced</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
+  <div class="journey-legend" aria-label="Color key">
+    <span><i class="human" aria-hidden="true"></i>Human decision</span>
+    <span><i class="automated" aria-hidden="true"></i>Automated by default</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>Maintainers only</span>
+  </div>
+</aside>
+
+<header>
+  <span class="selection-sequence">Maintenance appendix | Repo capability matrix</span>
+  <h2>Know what this specific repository can actually enable</h2>
+  <p class="subtitle">Beyond the GitHub-plan probing apply-repository-settings.sh already performs, scripts/check-repo-capabilities checks what this repository and token actually have.</p>
+</header>
+<div class="markdown-body"><p>The Governance step&#x27;s plan table (Step 08) answers &quot;what does the account&#x27;s GitHub *plan* allow.&quot; That is necessary but not sufficient: organization policy, CODEOWNERS team membership, and token scope can still block a capability on a plan that would otherwise support it. <code>policies/capability-matrix.json</code> names every capability this template relies on, its minimum requirement, and a documented workaround; <code>scripts/check-repo-capabilities</code> evaluates it against this repository live:</p>
+<pre class="command"><code>./scripts/check-repo-capabilities        # human-readable report
+./scripts/check-repo-capabilities --json # machine-readable capabilities + summary</code></pre>
+<table><thead><tr><th>Capability</th><th>What it enables</th><th>Minimum requirement</th><th>If missing</th></tr></thead><tbody><tr><td><code>repository_admin</code></td><td>Prerequisite for every row below</td><td><code>permissions.admin == true</code> for the acting token</td><td>Ask an owner/admin to run <code>apply</code>, or request the Admin role</td></tr><tr><td><code>ruleset_enforcement</code></td><td>Branch protection Ruleset on the default branch</td><td>Public repository (any plan), or private on Pro/Team or above</td><td>DEGRADED marker; desired Ruleset stays declarative in <code>policies/rulesets.json</code></td></tr><tr><td><code>codeowners_enforcement</code></td><td>CODEOWNERS review actually blocks merge</td><td>Ruleset above, plus a <code>@org/team</code> with write access</td><td>DEGRADED marker; fix the team, or use <code>scripts/request-reviewer</code> meanwhile</td></tr><tr><td><code>actions_pr_approval</code></td><td>Actions can auto-approve pull requests (for example Dependabot auto-merge)</td><td>Organization allows <code>can_approve_pull_request_reviews</code></td><td>DEGRADED marker; fall back to manual human approval</td></tr><tr><td><code>security_and_analysis</code></td><td>Secret scanning, push protection, Dependabot security updates</td><td>Public repository, or GitHub Advanced Security if private</td><td>DEGRADED marker; rely on local <code>scripts/scan-secrets</code> instead</td></tr><tr><td><code>github_pages</code></td><td>Hosts <code>docs/index.html</code> as a live site</td><td>Public repository, or GitHub Enterprise Cloud if private</td><td>DEGRADED marker; distribute the committed HTML file instead</td></tr><tr><td><code>repository_settings_inspection</code></td><td><code>check</code> mode can compare live admin-only fields</td><td>Same as <code>repository_admin</code></td><td>DEGRADED marker; run <code>check</code> from a trusted admin checkout</td></tr><tr><td><code>immutable_releases</code></td><td>Required before hosted Automatic/Guided publish can run</td><td>A real admin identity, never the default <code>GITHUB_TOKEN</code></td><td>Known permanent limitation (#123/#626); run <code>scripts/publish-release</code> locally</td></tr></tbody></table>
+<aside class="technical-detail" data-content-key="advanced-install-results"><h3>How to read a check-repo-capabilities result</h3>
+<p>Every row reports one of three states: <code>allowed</code> (usable now), <code>blocked</code> (a real, currently-missing requirement), or <code>unknown</code> (cannot be proven from a read-only probe alone -- for example, an Actions setting that is off might just be unset rather than organization-blocked). This is a diagnostic preflight, not a merge gate: it always exits <code>0</code> once the report is produced, and it never mutates GitHub. Whether live settings actually *match* declared policy remains <code>apply-repository-settings.sh check</code>&#x27;s job.</p>
+<p><code>--facts &lt;file&gt;</code> reads pre-built facts instead of calling <code>gh</code>, so the same matrix can be evaluated against a hypothetical permission combination without live access -- this is also how <code>scripts/test-check-repo-capabilities</code> proves the gap list for several permission/plan combinations without any network access.</p></aside>
+<aside class="technical-detail" data-content-key="advanced-install-workarounds"><h3>Workarounds and the existing DEGRADED marker</h3>
+<p>This matrix does not replace or redesign <code>apply-repository-settings.sh</code>&#x27;s DEGRADED mechanism -- it documents it. Every row whose workaround says &quot;DEGRADED marker&quot; reuses the exact same fail-safe already printed by <code>apply-repository-settings.sh check</code>/<code>plan</code>/<code>apply</code> for that limitation; the two never disagree because the underlying detection (plan, visibility, admin permission) is the same. <code>docs/ci-policy.md</code> and <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md" target="_blank" rel="noreferrer">the capability-aware governance ADR</a> record the durable decision; this page and <code>policies/capability-matrix.json</code> are what stay current as the single source both consult.</p></aside></div>
+</section>
+<section class="slide markdown-slide candidate-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="The template guides every change">
+  <aside class="journey-rail" aria-label="Presentation outline">
+  <h3>Use template</h3>
+  <ol class="journey-use">
+    <li class="journey-item human">
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2283,6 +2367,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2308,7 +2393,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2357,6 +2442,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2385,7 +2471,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2434,6 +2520,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2460,7 +2547,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2509,6 +2596,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2534,7 +2622,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2583,6 +2671,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2613,7 +2702,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2662,6 +2751,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2686,7 +2776,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2735,6 +2825,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2758,7 +2849,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2807,6 +2898,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2832,7 +2924,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2881,6 +2973,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2909,6 +3002,10 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 <p>Adoption and update never infer this from a workflow filename. <code>.csarc/config.yml</code>, the adoption plan, the Markdown/PDF report, and <code>.csarc/provenance.json</code> all disclose the same explicit <code>release_ownership</code> — <code>csarc-owned</code>, <code>product-owned</code>, or <code>verification-only</code> — plus the selected workflow path, its required <code>workflow_dispatch</code> inputs, the settings owner, whether immutable Releases are required, and the reason a repository degrades to <code>verification-only</code> (no writer found, or more than one). CSARC never dispatches a product-owned workflow or infers its input contract from a name; it only reads what the workflow itself declares.</p>
 <p>A generated repository with <code>release_ownership: csarc-owned</code> (including this template&#x27;s own root) also gets a local publish backup that does not depend on GitHub Actions being healthy: the publish stage of <code>release.yml</code> is a single script, <code>scripts/publish-release</code>, and a maintainer or agent running locally (or in any environment holding admin/write permission) calls that same script to cut the tag, Release, artifacts, and SBOM. Guided mode&#x27;s trigger also widens beyond an organization policy that blocks Actions from creating PRs, to also cover a maintainer or agent judging Actions or its webhook delivery currently unhealthy. This path still requires the version pull request to go through the same review as any other <code>main</code> PR. GitHub Actions remains the default, recommended path for verification (<code>verify</code>/<code>title</code>/<code>promotion</code> are hosted-only) — but for cutting the actual tag/Release, the hosted job&#x27;s own <code>GITHUB_TOKEN</code> can never prove GitHub&#x27;s Immutable Releases setting (a repo-administration capability outside any permission scope Actions can grant itself), so this local path is now the standard publish procedure, not a fallback; see <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md" target="_blank" rel="noreferrer">ci-policy.md</a> and the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md" target="_blank" rel="noreferrer">release-security-and-dependencies ADR</a> for details. This is not a new Copier option — the existing <code>release_ownership</code> already routes this capability correctly.</p>
 <p>Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.</p></aside>
+<aside class="technical-detail" data-content-key="release-notes-format"><h3>Where to read release history, and what the format means</h3>
+<p>To learn what actually changed in a version, why it shipped, and how it differs from the prior one, go straight to GitHub&#x27;s <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases" target="_blank" rel="noreferrer">Releases page</a>: one Release per version, always carrying three fields — the <strong>version number</strong> (the Release title, equal to the <code>vMAJOR.MINOR.PATCH</code> tag), the <strong>release date</strong> (GitHub&#x27;s own publish timestamp, shown automatically), and a <strong>change summary</strong> (GitHub&#x27;s auto-generated &quot;What&#x27;s Changed&quot; list built from the PR titles merged since the prior version, plus a full-compare link back to it).</p>
+<p>None of the three is hand-typed, and none varies by who runs the release: whether GitHub Actions triggers it automatically or a maintainer runs <code>scripts/publish-release</code> locally because Actions looks unhealthy, both paths call the exact same <code>scripts/converge-release-tag</code> script and the same <code>gh release create ... --generate-notes</code> command to produce the Release body — there is no second implementation that could drift into a different style.</p>
+<p>The root <code>CHANGELOG.md</code> is a different, equally real view of the same history: it groups changes by Conventional Commit type (Breaking Changes, Features, Bug Fixes), while the GitHub Release body lists merged PRs under &quot;What&#x27;s Changed.&quot; The two are not expected to match word for word — same underlying changes, two different groupings. Every Release is not required to carry a &quot;Known limitations&quot; or &quot;Backward compatibility&quot; section: most versions have nothing substantive to say there, and a limitation that holds across many releases (not one version in particular) belongs here and in <code>docs/ci-policy.md</code> instead of being repeated release after release. The full format contract and the reasoning behind this scope live in the &quot;Release 說明文字的最低格式規範&quot; section of <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md" target="_blank" rel="noreferrer">ci-policy.md</a>.</p></aside>
 <aside class="config-guidance" data-content-key="config-deploy"><strong>Fixed and adjustable policy</strong><p>Only the template&#x27;s main policy, adjustable options, and setting locations are listed.</p><div class="config-items"><article class="config-item"><h4>Human boundary | Delivery and Milestone closure stay separate</h4><p>Merging into main is not a release; a Milestone still needs its owner to confirm the outcome and the required evidence.</p><p class="config-item-path">Config file: <code>docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/work-item-lifecycle.yml</code></p><pre class="code">normal completion:&#10;  delivery evidence: recorded&#10;  unfinished Issues: none&#10;  lifecycle Issue: completed&#10;&#10;early termination:&#10;  reason: recorded&#10;  unfinished Issues: moved or not planned&#10;  lifecycle Issue: not planned</pre></article><article class="config-item"><h4>Current state | Release automation is not enabled</h4><p>Documentation claims only the capability that the repository&#x27;s current active files and current runs can actually prove.</p><p class="config-item-path">Config file: <code>docs/adr/release-security-and-dependencies.md</code></p><pre class="code">version intent: active&#10;version + changelog: manual&#10;tag + GitHub Release: blocked (#369)&#10;artifact evidence: conditional&#10;deployment: not applicable</pre></article><article class="config-item"><h4>Retained contract | Artifact and consumption verification can rerun locally</h4><p>The exact-tag, checksum, SBOM, provenance, and consumption fail-closed boundaries are kept in place, without pretending a publisher already exists.</p><p class="config-item-path">Config file: <code>scripts/release_assets.py＋scripts/verify_release_consumption.py</code></p><pre class="code">build exact-tag artifacts&#10;verify SHA-256 + SPDX 2.3 + source identity&#10;publish only after an owner is approved&#10;consumer verifies its own policy</pre></article></div></aside></div>
 </section>
 <section class="slide markdown-slide dense" id="governance" data-content-key="governance" data-track="governance" aria-label="Apply only the controls GitHub can enforce">
@@ -2916,7 +3013,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -2965,6 +3062,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -2997,7 +3095,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3046,6 +3144,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3076,7 +3175,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3125,6 +3224,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3156,7 +3256,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3205,6 +3305,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer active-selection" data-audience="maintainer" href="#bridge" aria-current="page">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3228,7 +3329,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3277,6 +3378,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human active-selection" href="#similar-tools" aria-current="page">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3298,7 +3400,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3347,6 +3449,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer active-selection" data-audience="maintainer" href="#testing" aria-current="page">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3368,7 +3471,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3417,6 +3520,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3441,7 +3545,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3490,6 +3594,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3513,7 +3618,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3562,6 +3667,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3585,7 +3691,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3634,6 +3740,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3657,7 +3764,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3706,6 +3813,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3730,7 +3838,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3779,6 +3887,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3802,7 +3911,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3851,6 +3960,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">
@@ -3874,7 +3984,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
+      <a href="#capability"><span>Home</span></a>
     </li>
     <li class="journey-item human">
       <a href="#install"><span>Install</span></a>
@@ -3923,6 +4033,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#advanced-install">Advanced</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
   <div class="journey-legend" aria-label="Color key">

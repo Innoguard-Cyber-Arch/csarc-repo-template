@@ -30,11 +30,19 @@
         },
         {
           "type": "generic",
+          "path": "site/content/_index.en.md"
+        },
+        {
+          "type": "generic",
           "path": "site/legacy/index.html"
         },
         {
           "type": "generic",
           "path": "docs/index.html"
+        },
+        {
+          "type": "generic",
+          "path": "docs/index.en.html"
         }
       ]
     }
