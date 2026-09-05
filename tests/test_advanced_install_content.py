@@ -49,12 +49,18 @@ def test_every_matrix_capability_id_is_mentioned_in_both_language_slides() -> (
         )
 
 
-def test_navigation_declares_the_advanced_install_appendix() -> None:
+def test_navigation_declares_the_advanced_install_entry() -> None:
     import json
 
     navigation = json.loads(
         (ROOT / "site" / "data" / "navigation.json").read_text(encoding="utf-8")
     )
-    appendix_keys = {item["key"] for item in navigation["appendices"]}
+    # Issue #681 folded the former appendix bookend links into the "support"
+    # group as ordinary numbered items.
+    support_keys = {
+        item["key"]
+        for item in navigation["items"]
+        if item["group"] == "support"
+    }
 
-    assert "advanced-install" in appendix_keys
+    assert "advanced-install" in support_keys

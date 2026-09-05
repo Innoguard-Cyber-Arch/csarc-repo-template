@@ -421,6 +421,10 @@ def _render_shortcode(
             data=data,
             state=state,
         )
+    if node.kind in ("standard", "ops"):
+        return render_mode_content(
+            node.kind, node.attrs, node.body, lang=lang, data=data, state=state
+        )
     return _render_self_closing(node.kind, node.attrs, lang=lang, data=data)
 
 
@@ -458,6 +462,37 @@ def render_detail(
     return (
         f'<aside class="technical-detail" data-content-key="{key}">'
         f"{heading}{inner}</aside>"
+    )
+
+
+def render_mode_content(
+    mode: str,
+    attrs: dict[str, str],
+    body: str,
+    *,
+    lang: str,
+    data: SiteData,
+    state: RenderState,
+) -> str:
+    """Render a `{{< standard >}}`/`{{< ops >}}` full-pane reading-mode variant.
+
+    Issue #681 decision F: a slide that needs both a standard and an ops
+    reading of the same topic wraps each full version in one of these two
+    shortcodes instead of sprinkling `{{< detail >}}` asides next to shared
+    prose. `detail-toggle.js` shows exactly one `.mode-content` block at a
+    time and swaps the whole thing on toggle, instead of collapsing an aside
+    in place. `key`/`title` are required (like `detail`/`disclosure`) so
+    `scripts/check-decision-site-translations` can enforce that both
+    language sources declare a matching pair; `title` is exposed only as an
+    `aria-label` since the reading-mode toggle button already names the
+    mode visually.
+    """
+    key = _esc(attrs["key"])
+    title = _esc(attrs["title"])
+    inner = render_mixed(body, lang=lang, data=data, state=state)
+    return (
+        f'<div class="mode-content" data-mode="{mode}" '
+        f'data-content-key="{key}" aria-label="{title}">{inner}</div>'
     )
 
 
@@ -1127,6 +1162,10 @@ def render_journey_rail(
             if is_active:
                 classes += " active"
             aria = ' aria-current="step"' if is_active else ""
+            audience = item.get("audience")
+            audience_attr = (
+                f' data-audience="{_esc(audience)}"' if audience else ""
+            )
             item_code = _esc(item.get("code", ""))
             code = (
                 f'<span class="journey-code">{item_code}</span>'
@@ -1136,7 +1175,8 @@ def render_journey_rail(
             label = _esc(item["labels"][lang])
             link = f'<a href="#{item["key"]}">{code}<span>{label}</span></a>'
             parts.append(
-                f'    <li class="{classes}"{aria}>\n      {link}\n    </li>'
+                f'    <li class="{classes}"{audience_attr}{aria}>\n'
+                f"      {link}\n    </li>"
             )
         return "\n".join(parts)
 
@@ -1199,7 +1239,21 @@ def _render_header(attrs: dict[str, str], *, legacy: bool) -> str:
 def _render_legacy_body(
     body: str, *, lang: str, data: SiteData, state: RenderState
 ) -> str:
-    """Render a `legacy="true"` slide's Inner (raw HTML, safeHTML in Hugo)."""
+    """Render a `legacy="true"` slide's Inner (raw HTML, safeHTML in Hugo).
+
+    Issue #681 decision F: `{{< legacy >}}` is this slide's standard-mode
+    pane (raw HTML, usually a hand-built diagram) and `{{< basic >}}` is its
+    ops-mode pane -- the same full-pane-swap contract as the `{{< standard
+    >}}`/`{{< ops >}}` shortcode pair used by non-legacy slides, just
+    authored with Hugo's older two-block syntax because these slides
+    predate that pair and their standard-mode content is raw HTML, not
+    Markdown. Both panes get `.mode-content[data-mode]` so one shared
+    `detail-toggle.css` rule shows exactly one of them at a time; `{{<
+    basic >}}` renders its *entire* body now (prose, tables, and nested
+    `{{< detail >}}`/`{{< config-guidance >}}` cards alike) instead of only
+    the nested detail cards, so ops mode gets a complete write-up, not
+    fragments left behind by the standard-mode diagram.
+    """
     bare = _BARE_SELF_CLOSING.match(body.strip())
     if bare:
         return _render_self_closing(
@@ -1220,11 +1274,11 @@ def _render_legacy_body(
     if prefix:
         pieces.append(prefix)
     pieces.append(
-        '<div class="legacy-content">'
+        '<div class="legacy-content mode-content" data-mode="standard">'
         f"{render_raw(legacy_inner, lang=lang, data=data, state=state)}</div>"
     )
     pieces.append(
-        '<div class="markdown-body basic-summary">'
+        '<div class="markdown-body basic-summary mode-content" data-mode="ops">'
         f"{render_mixed(basic_inner, lang=lang, data=data, state=state)}</div>"
     )
     return "\n".join(pieces)
@@ -1297,18 +1351,66 @@ _REORDER_SCRIPT: Final = """\
   </script>"""
 
 
-def render_page(markdown_text: str, *, lang: str, data: SiteData) -> str:
-    """Render one language's complete pre-bundle HTML source."""
+def render_page(
+    markdown_text: str,
+    *,
+    lang: str,
+    data: SiteData,
+    root: Path | None = None,
+) -> str:
+    """Render one language's complete pre-bundle HTML source.
+
+    When `root` is given, README.md (README.<lang>.md for a non-primary
+    language) is this page's live source for two things, so its wording
+    can never silently drift from the site's -- neither is hand-copied
+    into site/content/_index.<lang>.md:
+
+    - A slide whose `key` is in `_README_SLIDE_SECTIONS` has its entire
+      inline body replaced with the named README H2 section's body,
+      verbatim (see `_split_readme_sections`).
+    - A `<!-- csarc-readme-<name>:start -->...<!-- csarc-readme-<name>:end
+      -->` span anywhere in the source is replaced with the matching
+      README fragment (see `_inject_readme_markers`), for a narrower
+      injection point inside a slide that otherwise keeps bespoke markup
+      (e.g. the capability slide's legacy hero).
+
+    `root` is optional (and both lookups only fire for content actually
+    present) so callers that render a synthetic fixture with no README,
+    such as unit tests, are unaffected.
+    """
     substituted = _substitute_version_tokens(markdown_text, data)
+    if root is not None:
+        substituted = _inject_readme_markers(substituted, root=root, lang=lang)
     metadata, body = _parse_front_matter(substituted)
     title = metadata["title"]
     controls = metadata["controls"]
+
+    readme_sections_by_lang: dict[str, str] | None = None
+
+    def _slide_body(attrs: dict[str, str], slide_body: str) -> str:
+        nonlocal readme_sections_by_lang
+        if root is None or attrs["key"] not in _README_SLIDE_SECTIONS:
+            return slide_body
+        if readme_sections_by_lang is None:
+            readme_sections_by_lang = {}
+        if lang not in readme_sections_by_lang:
+            _preamble, sections = _split_readme_sections(
+                _readme_text(root, lang)
+            )
+            readme_sections_by_lang = sections
+        heading = _README_SLIDE_SECTIONS[attrs["key"]][lang]
+        if heading not in readme_sections_by_lang:
+            raise ValueError(
+                f"README ({lang}) is missing the {heading!r} section "
+                f"needed by the {attrs['key']!r} slide"
+            )
+        return readme_sections_by_lang[heading]
 
     state = RenderState()
     slides = [
         render_slide(
             attrs,
-            slide_body,
+            _slide_body(attrs, slide_body),
             lang=lang,
             data=data,
             state=state,
@@ -1424,7 +1526,101 @@ def render_llms_txt(data: SiteData) -> str:
     return text
 
 
-# --- CLI --------------------------------------------------------------
+# --- README as a live content source -----------------------------------
+
+# A decision-site slide key mapped to README's literal H2 heading text per
+# language (README.md for the primary language _LANGUAGE_ORDER[0],
+# README.<lang>.md otherwise) whose body becomes that slide's entire
+# content, verbatim. Add an entry here -- not a hand-copied paraphrase in
+# site/content/_index.<lang>.md -- whenever a slide's whole purpose is to
+# show a specific README section; the heading text must match README
+# exactly, so a renamed heading fails the build instead of silently
+# drifting.
+_README_SLIDE_SECTIONS: Final = {
+    "about": {"zh-tw": "專案概述", "en": "Overview"},
+}
+
+_H2_HEADING: Final = re.compile(r"^## (?P<title>.+)$", re.MULTILINE)
+_H1_HEADING: Final = re.compile(r"^# .+\n")
+_README_MARKER: Final = re.compile(
+    r"<!-- csarc-readme-(?P<name>[a-z0-9-]+):start -->"
+    r".*?"
+    r"<!-- csarc-readme-(?P=name):end -->",
+    re.DOTALL,
+)
+
+
+def _readme_text(root: Path, lang: str) -> str:
+    suffix = "" if lang == _LANGUAGE_ORDER[0] else f".{lang}"
+    return (root / f"README{suffix}.md").read_text(encoding="utf-8")
+
+
+def _split_readme_sections(text: str) -> tuple[str, dict[str, str]]:
+    """Split a README into its preamble and each H2 section's body.
+
+    The preamble is everything after the H1, before the first H2; each
+    section is keyed by its heading text verbatim.
+    """
+    matches = list(_H2_HEADING.finditer(text))
+    h1_match = _H1_HEADING.match(text)
+    preamble_start = h1_match.end() if h1_match else 0
+    preamble_end = matches[0].start() if matches else len(text)
+    preamble = text[preamble_start:preamble_end].strip("\n")
+    sections = {
+        match.group("title").strip(): text[
+            match.end() : (
+                matches[index + 1].start()
+                if index + 1 < len(matches)
+                else len(text)
+            )
+        ].strip("\n")
+        for index, match in enumerate(matches)
+    }
+    return preamble, sections
+
+
+_LINK_ONLY_PARAGRAPH: Final = re.compile(r"^\[[^\]]+\]\([^)]+\)$")
+
+
+def _readme_preamble_first_paragraph(root: Path, lang: str) -> str:
+    """Return the README's own opening prose paragraph, read fresh.
+
+    Lets a slide's hero tagline quote it instead of keeping a hand-typed,
+    driftable copy. Skips a leading paragraph that is only the
+    "[English](README.en.md)"-style language-switcher link, which carries
+    no content to quote.
+    """
+    preamble, _sections = _split_readme_sections(_readme_text(root, lang))
+    for paragraph in preamble.split("\n\n"):
+        paragraph = paragraph.strip()
+        if paragraph and not _LINK_ONLY_PARAGRAPH.match(paragraph):
+            return paragraph
+    raise ValueError(f"README ({lang}) preamble has no prose paragraph")
+
+
+# Named markers a site/content/_index.<lang>.md source may embed as
+# <!-- csarc-readme-<name>:start -->...<!-- csarc-readme-<name>:end -->;
+# each resolves to a README fragment read fresh at build time. Add an entry
+# here for a new narrow injection point inside a slide that otherwise keeps
+# bespoke markup (see _README_SLIDE_SECTIONS instead when the *entire*
+# slide body should be one README section).
+_README_MARKERS: Final = {
+    "preamble-tagline": _readme_preamble_first_paragraph,
+}
+
+
+def _inject_readme_markers(markdown_text: str, *, root: Path, lang: str) -> str:
+    def _replace(match: re.Match[str]) -> str:
+        name = match.group("name")
+        if name not in _README_MARKERS:
+            raise ValueError(f"Unknown csarc-readme marker: {name!r}")
+        replacement = _README_MARKERS[name](root, lang)
+        return (
+            f"<!-- csarc-readme-{name}:start -->{replacement}"
+            f"<!-- csarc-readme-{name}:end -->"
+        )
+
+    return _README_MARKER.sub(_replace, markdown_text)
 
 
 def build(root: Path, output_dir: Path) -> dict[str, Path]:
@@ -1435,7 +1631,10 @@ def build(root: Path, output_dir: Path) -> dict[str, Path]:
     for lang in _LANGUAGE_ORDER:
         source = root / "site/content" / f"_index.{lang}.md"
         html_text = render_page(
-            source.read_text(encoding="utf-8"), lang=lang, data=data
+            source.read_text(encoding="utf-8"),
+            lang=lang,
+            data=data,
+            root=root,
         )
         output_path = output_dir / _LANGUAGES[lang]["output"]
         output_path.write_text(html_text, encoding="utf-8")

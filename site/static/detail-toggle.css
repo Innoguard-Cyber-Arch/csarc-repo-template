@@ -123,19 +123,11 @@ html[data-detail-level="technical"] .detail-level-control button[aria-pressed="t
   display: none;
 }
 
-html[data-detail-level="simple"] .legacy-slide > .basic-summary {
-  display: none;
-}
-
-/* Issue #525: technical mode directly replaces the content page instead
-   of expanding an inline box inside it -- .basic-summary (the
-   {{< basic >}} block's rendering, appended right after .legacy-content)
-   becomes visible as a second, full content-page section. Its plain
-   prose duplicates .legacy-content's own simple-mode content, so only
-   its {{< detail >}} output (.technical-detail) is shown. */
-.legacy-slide > .basic-summary > :not(.technical-detail) {
-  display: none;
-}
+/* Issue #681 decision F: .legacy-content (standard) and .basic-summary
+   (ops) are each other's full-pane alternative -- see the generic
+   `.mode-content[data-mode]` rule below, which shows exactly one of them
+   at a time. .basic-summary renders its entire body now, not only its
+   nested {{< detail >}} cards (superseded Issue #525 behavior). */
 
 .journey-code {
   flex: 0 0 27px;
@@ -295,19 +287,52 @@ html[data-detail-level="simple"] .technical-tour-trigger {
 
 .markdown-body > p:first-child,
 .markdown-body > table,
-.markdown-body > .file-map-window {
+.markdown-body > .file-map-window,
+.mode-content > p:first-child,
+.mode-content > table {
   grid-column: 1 / -1;
 }
 
-.markdown-body > .technical-detail {
+.markdown-body > .technical-detail,
+.mode-content > .technical-detail,
+.mode-content > .package-disclosure {
   grid-column: 1 / -1;
 }
 
-html[data-detail-level="simple"] .markdown-body > .technical-detail {
+html[data-detail-level="simple"] .markdown-body > .technical-detail,
+html[data-detail-level="simple"] .markdown-body > .config-guidance {
   display: none;
 }
 
+/* Issue #681 decision F: a `{{< standard >}}`/`{{< ops >}}` pair replaces
+   the slide's entire content pane instead of revealing an aside next to it
+   -- exactly one of the two is ever in the box tree at a time. `.mode-
+   content` is `display: contents` so its own children lay out as direct
+   `.markdown-body` grid items (see the `:first-child`/`> table` rule
+   above), matching a slide that never split into standard/ops at all. */
+.markdown-body > .mode-content {
+  display: contents;
+}
+
+/* Generic rule: a legacy slide's `.legacy-content`/`.basic-summary` pair
+   (see `_render_legacy_body()`) carries the same `.mode-content[data-mode]`
+   contract but is not always a `.markdown-body` child, so this is
+   deliberately unscoped -- it is the one rule that decides which pane of
+   any standard/ops pair is visible, anywhere in the deck. */
+html[data-detail-level="simple"] .mode-content[data-mode="ops"],
+html[data-detail-level="technical"] .mode-content[data-mode="standard"] {
+  display: none !important;
+}
+
 .markdown-body > p:first-child {
+  padding: 12px 15px;
+  border-left: 7px solid var(--yellow);
+  background: #fffbea;
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.mode-content > p:first-child {
   padding: 12px 15px;
   border-left: 7px solid var(--yellow);
   background: #fffbea;
@@ -319,7 +344,10 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 .markdown-body > ol,
 .markdown-body > table,
 .technical-detail,
-.markdown-body > .package-disclosure {
+.markdown-body > .package-disclosure,
+.mode-content > ul,
+.mode-content > ol,
+.mode-content > table {
   margin: 0;
   padding: 16px 20px;
   border: 1px solid var(--line);
@@ -328,8 +356,27 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 }
 
 .markdown-body > ul,
-.markdown-body > ol {
+.markdown-body > ol,
+.mode-content > ul,
+.mode-content > ol {
   padding-left: 40px;
+}
+
+.markdown-body > pre.mermaid,
+.mode-content > pre.mermaid {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-top: 7px solid var(--yellow);
+  background: white;
+  text-align: center;
+}
+
+.markdown-body > pre.mermaid svg,
+.mode-content > pre.mermaid svg {
+  max-width: 100%;
+  height: auto;
 }
 
 .markdown-body li,

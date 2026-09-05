@@ -16,8 +16,8 @@ zoom_in = "Zoom in"
 fit = "Fit"
 +++
 
-{{< slide key="capability" track="capability" eyebrow="Home" title="CSARC Repo Template" subtitle="Cyber-Arch's updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests." legacy="false" class="presentation-slide" >}}
-Cyber-Arch's updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests. Select only the shared workflow, or add Python, Rust, and TypeScript independently. Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) and stays synchronized across both languages.
+{{< slide key="capability" track="capability" eyebrow="Home" title="CSARC Repo Template" subtitle="Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them." legacy="false" class="presentation-slide" >}}
+<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) and stays synchronized across both languages.
 
 <p class="template-version"><strong>Template release:</strong> v0.13.0<!-- x-release-please-version --></p>
 
@@ -104,6 +104,14 @@ This matrix does not replace or redesign `apply-repository-settings.sh`'s DEGRAD
 {{< /detail >}}
 {{< /slide >}}
 
+{{< slide key="about" track="about" eyebrow="About" title="What CSARC is, and who it is for" subtitle="An updatable repository foundation: creating, adopting, and receiving policy updates all preview and verify before a PR merges them." class="dense" legacy="false" >}}
+<!-- This body is overridden at build time by scripts/build_decision_site.py's
+     _README_SLIDE_SECTIONS mechanism; the real content is read verbatim
+     from root README.en.md's "## Overview" section (README.md's
+     "## 專案概述" for zh-tw). Edit README.en.md, not this file; left
+     blank here only so the shortcode stays syntactically complete. -->
+{{< /slide >}}
+
 {{< slide key="flow" track="flow" eyebrow="CI/CD flow" title="The template guides every change" subtitle="Follow the Issue and PR prompts; the template prepares the right settings and tells you what needs attention." legacy="false"  class="candidate-slide" >}}
 | What you are doing | How the template guides you |
 | --- | --- |
@@ -129,6 +137,23 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 
 The file map only lists path, purpose, and responsibility: the side navigation already links each item to its page, and the maintainer-only "CI/CD settings" appendix already lists verification entry points per step in more detail than this view could add; the tree view likewise avoids duplicating a page-name or verification-entry column.
 
+{{< standard key="files-mode-standard" title="Update flow and integrated tools" >}}
+```mermaid
+flowchart LR
+    A[Template finds an updatable file] --> B{Any conflict}
+    B -- No --> C[Apply the update]
+    B -- Yes --> D[List the affected files]
+    D --> E[You adjust, then rerun]
+    C --> F[Open a PR for review]
+    E --> F
+```
+
+Every update goes through PR review; nothing silently overwrites content you wrote. On a conflict the template only tells you which files are affected -- it never edits them for you.
+
+The template already wires up the tools you'd otherwise have to find and configure yourself: project generation and updates, code security scanning, dependency-update reminders, known-vulnerability scanning, release notes, and the internal site you're reading right now.
+{{< /standard >}}
+
+{{< ops key="files-mode-ops" title="Technical detail on the update mechanism and tools" >}}
 {{< detail key="files-update" title="How updates protect product content" >}}
 Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
 
@@ -148,6 +173,7 @@ Only tools this template directly integrates, executes, or produces into the rep
 | [Release Please](https://github.com/googleapis/release-please) | Maintains the version/changelog pull request and creates the GitHub Release | `.github/workflows/release.yml`, `release-please-config.json`, `.release-please-manifest.json` | Delivery branch to `main` | [Apache-2.0](https://github.com/googleapis/release-please/blob/main/LICENSE) |
 | Decision-site render engine | In-house, dependency-free Python engine that builds the bilingual internal site and `llms.txt` from Markdown; replaced Hugo on 2026-09-03 | `scripts/build_decision_site.py`, `scripts/build-decision-site`, `scripts/render_site.py`, `site/version.json` | `docs/index.html`, `docs/index.en.html`, `llms.txt` | In-house (this repository) |
 {{< /detail >}}
+{{< /ops >}}
 {{< /slide >}}
 
 {{< slide key="method" track="method" eyebrow="Step 01" title="Define the work before implementation" subtitle="Turn a request into an actionable Issue; create a Milestone only when several work items must move together." legacy="false"  class="candidate-slide dense single-column" >}}
@@ -434,13 +460,13 @@ Root `.csarc/config.yml` records the capabilities the template repository select
 {{< config-guidance track="template-release" >}}
 {{< /slide >}}
 
-{{< slide key="docs-site" track="docs-site" eyebrow="Step 10" title="A portable single file remains the baseline" subtitle="Hugo owns content structure; the existing renderer produces an offline, forwardable HTML file." legacy="false"  class="candidate-slide" >}}
+{{< slide key="docs-site" track="docs-site" eyebrow="Step 10" title="A portable single file remains the baseline" subtitle="A built-in Python render engine turns the site/content/ Markdown sources into content structure; the existing renderer produces a single offline, forwardable HTML file." legacy="false"  class="candidate-slide" >}}
 - `site/content/` holds bilingual Markdown with matching content keys.
-- `site/static/styles.css` retains the presentation identity; Hugo shortcodes produce the shared content structure.
+- `site/static/styles.css` retains the presentation identity; `scripts/build_decision_site.py`'s shortcode-block parser produces the shared content structure.
 - `scripts/render_site.py` embeds CSS, JavaScript, fonts, and images and rejects external runtime assets.
 
-{{< disclosure key="portable-bundle" title="Markdown + Hugo → self-contained HTML" >}}
-`docs/adr/` preserves canonical choices. Hugo owns content and HTML; the unchanged renderer only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime.
+{{< disclosure key="portable-bundle" title="Markdown + the Python render engine → self-contained HTML" >}}
+`docs/adr/` preserves canonical choices. `scripts/build_decision_site.py` owns content and HTML; the unchanged `scripts/render_site.py` only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime. This single downloadable HTML file is a committed baseline feature, not a stopgap -- even once Pages or other hosting exists, this downloadable, offline-capable output stays.
 {{< /disclosure >}}
 
 {{< detail key="docs-site-access" title="Access and maintenance boundaries" >}}

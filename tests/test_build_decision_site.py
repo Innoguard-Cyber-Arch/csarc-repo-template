@@ -3,6 +3,8 @@ import re
 import runpy
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).parents[1]
 SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "build_decision_site.py"))
 RENDER_SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "render_site.py"))
@@ -859,6 +861,30 @@ def test_journey_rail_marks_active_item_and_omits_code_for_use_group() -> None:
     assert 'data-audience="maintainer"' in html
 
 
+def test_journey_rail_threads_audience_onto_ordinary_items() -> None:
+    # Issue #681: a maintainer-only item living directly in "items" (not
+    # the separate "appendices" bookend list) must still carry
+    # data-audience="maintainer" on its <li>, so the existing
+    # detail-toggle.js/[data-audience="maintainer"] show/hide mechanism
+    # keeps working after folding appendix links into a regular group.
+    nav = _empty_data().navigation
+    nav["items"].append(
+        {
+            "key": "three",
+            "code": "02",
+            "group": "workflow",
+            "participation": "maintainer",
+            "audience": "maintainer",
+            "labels": {"zh-tw": "第三", "en": "Three"},
+        }
+    )
+    html = render_journey_rail(nav, lang="en", active_key="two")
+    assert (
+        '<li class="journey-item maintainer" data-audience="maintainer">'
+        in html
+    )
+
+
 # --- llms.txt --------------------------------------------------------------
 
 
@@ -989,10 +1015,15 @@ def test_render_slide_legacy_true_wraps_legacy_and_basic_blocks() -> None:
     )
     assert '<header class="basic-header">' in html
     assert '<aside class="selection-note">Note</aside>' in html
-    assert '<div class="legacy-content"><p>Raw HTML</p></div>' in html
+    # Issue #681 decision F: both panes carry .mode-content[data-mode] so
+    # detail-toggle.css can show exactly one full pane at a time.
     assert (
-        '<div class="markdown-body basic-summary"><p>Prose text.</p></div>'
-        in html
+        '<div class="legacy-content mode-content" data-mode="standard">'
+        "<p>Raw HTML</p></div>" in html
+    )
+    assert (
+        '<div class="markdown-body basic-summary mode-content" '
+        'data-mode="ops"><p>Prose text.</p></div>' in html
     )
 
 
@@ -1061,6 +1092,139 @@ def test_render_page_orders_language_switcher_zh_tw_then_en() -> None:
     en_index = html.index("index.en.html")
     assert zh_index < en_index
     assert 'lang="zh-Hant-TW" aria-current="page"' in html
+
+
+def _readme_fixture(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text(
+        "# T\n\n"
+        "[English](README.en.md)\n\n"
+        "zh-tw tagline paragraph.\n\n"
+        "## 目錄\n\ntoc\n\n"
+        "## 專案概述\n\nzh-tw overview body.\n\n"
+        "## 快速開始\n\nzh-tw quickstart body.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.en.md").write_text(
+        "# T\n\n"
+        "[繁體中文](README.md)\n\n"
+        "en tagline paragraph.\n\n"
+        "## Table of contents\n\ntoc\n\n"
+        "## Overview\n\nen overview body.\n\n"
+        "## Quick start\n\nen quickstart body.\n",
+        encoding="utf-8",
+    )
+
+
+def test_render_page_sources_the_about_slide_from_readme_when_root_is_given(
+    tmp_path: Path,
+) -> None:
+    # Issue #681: the "about" slide's body is README's own "## 專案概述"/
+    # "## Overview" H2 section, read fresh, instead of a paraphrase hand-
+    # copied into site/content/_index.<lang>.md.
+    _readme_fixture(tmp_path)
+    content = (
+        "+++\n"
+        'title = "T"\n\n'
+        "[controls]\n"
+        'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
+        'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
+        'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        "+++\n\n"
+        '{{< slide key="about" title="About" legacy="false" >}}\n'
+        "stale inline body, must not appear in the output\n"
+        "{{< /slide >}}\n"
+    )
+
+    zh_html = render_page(
+        content, lang="zh-tw", data=_empty_data(), root=tmp_path
+    )
+    en_html = render_page(content, lang="en", data=_empty_data(), root=tmp_path)
+
+    assert "zh-tw overview body." in zh_html
+    assert "en overview body." in en_html
+    assert "stale inline body" not in zh_html
+    assert "stale inline body" not in en_html
+
+
+def test_render_page_raises_when_readme_is_missing_a_mapped_section(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "README.md").write_text(
+        "# T\n\nno H2 sections at all here.\n", encoding="utf-8"
+    )
+    content = (
+        "+++\n"
+        'title = "T"\n\n'
+        "[controls]\n"
+        'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
+        'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
+        'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        "+++\n\n"
+        '{{< slide key="about" title="About" legacy="false" >}}\n'
+        "body\n"
+        "{{< /slide >}}\n"
+    )
+    with pytest.raises(ValueError, match="專案概述"):
+        render_page(content, lang="zh-tw", data=_empty_data(), root=tmp_path)
+
+
+def test_render_page_ignores_readme_sourcing_without_root() -> None:
+    # A caller that renders a synthetic fixture with no README (e.g. the
+    # full-build integration tests below) must be unaffected.
+    content = (
+        "+++\n"
+        'title = "T"\n\n'
+        "[controls]\n"
+        'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
+        'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
+        'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        "+++\n\n"
+        '{{< slide key="about" title="About" legacy="false" >}}\n'
+        "inline body stays\n"
+        "{{< /slide >}}\n"
+    )
+    html = render_page(content, lang="zh-tw", data=_empty_data())
+    assert "inline body stays" in html
+
+
+def test_render_page_fills_a_readme_marker_span(tmp_path: Path) -> None:
+    # Issue #681: a <!-- csarc-readme-<name>:start/end --> span anywhere in
+    # a slide's body is replaced with the matching README fragment, for a
+    # narrower injection than replacing the whole slide (e.g. the
+    # capability slide's hero tagline, which otherwise keeps bespoke
+    # legacy HTML around it).
+    _readme_fixture(tmp_path)
+    content = (
+        "+++\n"
+        'title = "T"\n\n'
+        "[controls]\n"
+        'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
+        'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
+        'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        "+++\n\n"
+        '{{< slide key="capability" title="Cap" legacy="false" >}}\n'
+        "<p><!-- csarc-readme-preamble-tagline:start -->stale"
+        "<!-- csarc-readme-preamble-tagline:end --></p>\n"
+        "{{< /slide >}}\n"
+    )
+
+    zh_html = render_page(
+        content, lang="zh-tw", data=_empty_data(), root=tmp_path
+    )
+    en_html = render_page(content, lang="en", data=_empty_data(), root=tmp_path)
+
+    assert "zh-tw tagline paragraph." in zh_html
+    assert "en tagline paragraph." in en_html
+    assert "stale" not in zh_html
+    assert "stale" not in en_html
+
+
+def test_readme_preamble_first_paragraph_skips_the_language_switcher_link(
+    tmp_path: Path,
+) -> None:
+    _readme_fixture(tmp_path)
+    tagline = SITE_MODULE["_readme_preamble_first_paragraph"](tmp_path, "zh-tw")
+    assert tagline == "zh-tw tagline paragraph."
 
 
 # --- full-build integration (small fixture site) -------------------------

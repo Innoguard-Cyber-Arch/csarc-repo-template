@@ -284,9 +284,16 @@ def test_readme_describes_markdown_site_source() -> None:
     """
     root = Path(__file__).parents[1]
     root_readme = (root / "README.md").read_text(encoding="utf-8")
-    template_readme = (root / "template/README.md.jinja").read_text(
-        encoding="utf-8"
+    # Issue #681: the zh-tw template README's destination name now depends
+    # on the readme_primary_language answer, so its source filename is a
+    # Jinja expression containing "zh-tw" (see test_ai_guidelines.py's
+    # equivalent glob for why this substring reliably identifies it alone).
+    zh_tw_readme_matches = list((root / "template").glob("*zh-tw*.md.jinja"))
+    assert len(zh_tw_readme_matches) == 1, (
+        f"expected exactly one zh-tw README template, found "
+        f"{zh_tw_readme_matches}"
     )
+    template_readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
 
     assert "docs/site-content.md" in root_readme
     assert "docs/site-content.md" in template_readme
@@ -295,8 +302,8 @@ def test_readme_describes_markdown_site_source() -> None:
     for line in template_readme.splitlines():
         if "site-content.js" in line:
             assert "遷移" in line, (
-                "docs/site-content.js may only appear in "
-                "template/README.md.jinja as a legacy-migration hint"
+                "docs/site-content.js may only appear in the zh-tw "
+                "template README as a legacy-migration hint"
             )
 
 
@@ -569,13 +576,23 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     # navigation.json into its class, rather than hardcoding it; check two
     # different data-driven values instead of asserting on retired Hugo
     # template syntax (`{{ .participation }}`).
-    assert 'class="journey-bookend appendix maintainer"' in journey_rail
+    # Issue #681 folded the appendix bookend links into the "support" group
+    # as ordinary numbered items, so maintainer-only entries now render as
+    # journey-item <li> elements (with a threaded data-audience attribute)
+    # instead of journey-bookend appendix links.
+    assert 'class="journey-bookend appendix' not in journey_rail
+    assert 'class="journey-item maintainer"' in journey_rail
     assert (
         'class="journey-item human active" aria-current="step">' in journey_rail
     )
-    assert navigation["appendices"][-2]["key"] == "testing"
-    assert navigation["appendices"][-1]["key"] == "bridge"
-    assert navigation["appendices"][-2]["audience"] == "maintainer"
+    support_items = {
+        item["key"]: item
+        for item in navigation["items"]
+        if item["group"] == "support"
+    }
+    assert support_items["testing"]["audience"] == "maintainer"
+    assert support_items["bridge"]["audience"] == "maintainer"
+    assert navigation["appendices"] == []
     assert navigation["labels"]["zh-tw"]["human"] == "需要人決策"
     assert navigation["labels"]["zh-tw"]["automated"] == "預設自動完成"
     assert navigation["labels"]["zh-tw"]["maintainer"] == "僅維運可見"
