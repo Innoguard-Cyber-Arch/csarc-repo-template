@@ -21,7 +21,7 @@ fit = "符合畫面"
       <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
-        <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。</p>
+        <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。<!-- csarc-readme-preamble-tagline:end --></p>
         <p class="subtitle">標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；維運模式才補充設定檔、程式與技術理由。快速導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
           <span class="package-badge beta">v0.13.0</span><!-- x-release-please-version -->
@@ -151,9 +151,10 @@ csarc status <path> --json
 {{< /slide >}}
 
 {{< slide key="about" track="about" eyebrow="關於" title="CSARC 是什麼、給誰用" subtitle="可更新的 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。" class="dense" legacy="false" >}}
-<!-- 這段 body 在 build 時被 scripts/build_decision_site.py 的 _EXTERNAL_SLIDE_SOURCES
-     機制覆寫，實際內容讀自 docs/about.md（en 版讀 docs/about.en.md）。
-     改內容請直接編輯那兩個檔案，不要編輯這裡；這裡留空白只是讓 shortcode 語法完整。 -->
+<!-- 這段 body 在 build 時被 scripts/build_decision_site.py 的 _README_SLIDE_SECTIONS
+     機制覆寫，實際內容逐字讀自根目錄 README.md 的「## 專案概述」章節（en 版讀
+     README.en.md 的「## Overview」）。改內容請直接編輯 README.md，不要編輯這裡；
+     這裡留空白只是讓 shortcode 語法完整。 -->
 {{< /slide >}}
 
 {{< slide key="flow" track="flow" eyebrow="CI/CD 流程" title="模板會帶你走完每次變更" subtitle="依表單填寫、提交 PR、查看結果；模板負責準備正確設定並指出要修正的地方。" class="legacy-slide pipeline-slide" legacy="true" >}}

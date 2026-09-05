@@ -2161,7 +2161,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 <div class="legacy-content"><header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
-        <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。</p>
+        <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。<!-- csarc-readme-preamble-tagline:end --></p>
         <p class="subtitle">標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；維運模式才補充設定檔、程式與技術理由。快速導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
           <span class="package-badge beta">v0.13.0</span><!-- x-release-please-version -->
@@ -2471,16 +2471,8 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h2>CSARC 是什麼、給誰用</h2>
   <p class="subtitle">可更新的 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。</p>
 </header>
-<div class="markdown-body"><p>CSARC Repo Template 是 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。</p>
-<h2 id="這是什麼">這是什麼</h2>
-<p>本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。<code>template/</code> 是下發給使用者專案的內容；根目錄則讓公版本身使用同一套規則（self-hosting）。</p>
-<p>目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證；生成專案另可選配 <code>enable_docker</code>，取得 Dockerfile／docker-compose 起始範本與一支唯讀、不推送的容器建置掃描 CI job。自動版本 PR、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；registry publishing 與通用部署流程仍未啟用，未開啟 <code>enable_docker</code> 的專案不會產生任何容器相關檔案、job 或權限。</p>
-<h2 id="可以直接選擇">可以直接選擇</h2>
-<table><thead><tr><th>項目</th><th>選項</th></tr></thead><tbody><tr><td>程式語言</td><td>Python、Rust、TypeScript 可獨立複選；都不選時只使用共通工作流程</td></tr><tr><td>分支做法</td><td>每個交付批次有自己的開發分支、所有修改直接進 <code>main</code>，或先集中到 <code>dev</code></td></tr><tr><td>公版設定</td><td>建立／導入時把選項寫入 <code>.csarc/config.yml</code>；之後由公版更新，不必到不同檔案重複設定</td></tr></tbody></table>
-<h2 id="共用能力">共用能力</h2>
-<p>工作單（Issue）與變更提案（PR）表單、AI 工作規範、自動驗證、依賴安全、版本記錄與公版更新。</p>
-<h2 id="這份文件的定位">這份文件的定位</h2>
-<p><code>README.md</code> 給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 <a href="../AGENTS.md"><code>AGENTS.md</code></a>（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀<a href="index.html">內部決策網站</a>。開始安裝或導入，請見<a href="install.md">安裝說明</a>。</p></div>
+<div class="markdown-body"><p>本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。<code>template/</code> 是下發內容；根目錄則讓公版本身使用同一套規則。</p>
+<p>目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證；生成專案另可選配 <code>enable_docker</code>，取得 Dockerfile／docker-compose 起始範本與一支唯讀、不推送的容器建置掃描 CI job。自動版本 PR、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；registry publishing 與通用部署流程仍未啟用，未開啟 <code>enable_docker</code> 的專案不會產生任何容器相關檔案、job 或權限。GitHub 設定腳本會先辨識方案與實際 API 能力。</p></div>
 </section>
 <section class="slide markdown-slide legacy-slide pipeline-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="模板會帶你走完每次變更">
   <aside class="journey-rail" aria-label="簡報目錄">

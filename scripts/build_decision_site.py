@@ -1311,30 +1311,57 @@ def render_page(
 ) -> str:
     """Render one language's complete pre-bundle HTML source.
 
-    When `root` is given, a slide whose `key` is in `_EXTERNAL_SLIDE_SOURCES`
-    has its inline body replaced with Markdown read from a docs/ file, so
-    that page's single source of truth lives in one plain Markdown file
-    instead of being duplicated into this shortcode source. `root` is
-    optional (and the lookup only fires for a key that is actually present)
-    so callers that render a synthetic fixture with no docs/ directory,
+    When `root` is given, README.md (README.<lang>.md for a non-primary
+    language) is this page's live source for two things, so its wording
+    can never silently drift from the site's -- neither is hand-copied
+    into site/content/_index.<lang>.md:
+
+    - A slide whose `key` is in `_README_SLIDE_SECTIONS` has its entire
+      inline body replaced with the named README H2 section's body,
+      verbatim (see `_split_readme_sections`).
+    - A `<!-- csarc-readme-<name>:start -->...<!-- csarc-readme-<name>:end
+      -->` span anywhere in the source is replaced with the matching
+      README fragment (see `_inject_readme_markers`), for a narrower
+      injection point inside a slide that otherwise keeps bespoke markup
+      (e.g. the capability slide's legacy hero).
+
+    `root` is optional (and both lookups only fire for content actually
+    present) so callers that render a synthetic fixture with no README,
     such as unit tests, are unaffected.
     """
     substituted = _substitute_version_tokens(markdown_text, data)
+    if root is not None:
+        substituted = _inject_readme_markers(substituted, root=root, lang=lang)
     metadata, body = _parse_front_matter(substituted)
     title = metadata["title"]
     controls = metadata["controls"]
+
+    readme_sections_by_lang: dict[str, str] | None = None
+
+    def _slide_body(attrs: dict[str, str], slide_body: str) -> str:
+        nonlocal readme_sections_by_lang
+        if root is None or attrs["key"] not in _README_SLIDE_SECTIONS:
+            return slide_body
+        if readme_sections_by_lang is None:
+            readme_sections_by_lang = {}
+        if lang not in readme_sections_by_lang:
+            _preamble, sections = _split_readme_sections(
+                _readme_text(root, lang)
+            )
+            readme_sections_by_lang = sections
+        heading = _README_SLIDE_SECTIONS[attrs["key"]][lang]
+        if heading not in readme_sections_by_lang:
+            raise ValueError(
+                f"README ({lang}) is missing the {heading!r} section "
+                f"needed by the {attrs['key']!r} slide"
+            )
+        return readme_sections_by_lang[heading]
 
     state = RenderState()
     slides = [
         render_slide(
             attrs,
-            (
-                _external_slide_body(
-                    root, _EXTERNAL_SLIDE_SOURCES[attrs["key"]], lang
-                )
-                if root is not None and attrs["key"] in _EXTERNAL_SLIDE_SOURCES
-                else slide_body
-            ),
+            _slide_body(attrs, slide_body),
             lang=lang,
             data=data,
             state=state,
@@ -1450,30 +1477,101 @@ def render_llms_txt(data: SiteData) -> str:
     return text
 
 
-# --- CLI --------------------------------------------------------------
+# --- README as a live content source -----------------------------------
+
+# A decision-site slide key mapped to README's literal H2 heading text per
+# language (README.md for the primary language _LANGUAGE_ORDER[0],
+# README.<lang>.md otherwise) whose body becomes that slide's entire
+# content, verbatim. Add an entry here -- not a hand-copied paraphrase in
+# site/content/_index.<lang>.md -- whenever a slide's whole purpose is to
+# show a specific README section; the heading text must match README
+# exactly, so a renamed heading fails the build instead of silently
+# drifting.
+_README_SLIDE_SECTIONS: Final = {
+    "about": {"zh-tw": "專案概述", "en": "Overview"},
+}
+
+_H2_HEADING: Final = re.compile(r"^## (?P<title>.+)$", re.MULTILINE)
+_H1_HEADING: Final = re.compile(r"^# .+\n")
+_README_MARKER: Final = re.compile(
+    r"<!-- csarc-readme-(?P<name>[a-z0-9-]+):start -->"
+    r".*?"
+    r"<!-- csarc-readme-(?P=name):end -->",
+    re.DOTALL,
+)
 
 
-# Slide keys whose body is authored once in docs/<stem>{.<lang>}.md instead
-# of being duplicated into site/content/_index.{lang}.md; the primary
-# language (_LANGUAGE_ORDER[0]) reads the bare stem, other languages read
-# the stem with their language code appended, matching how a downstream
-# repo's own README.md / README.<lang>.md pairs will resolve.
-_EXTERNAL_SLIDE_SOURCES: Final = {"about": "about"}
-
-
-def _external_slide_body(root: Path, stem: str, lang: str) -> str:
+def _readme_text(root: Path, lang: str) -> str:
     suffix = "" if lang == _LANGUAGE_ORDER[0] else f".{lang}"
-    path = root / "docs" / f"{stem}{suffix}.md"
-    text = path.read_text(encoding="utf-8")
-    # The slide shell already renders attrs["title"] as an <h2>; drop the
-    # docs/ file's own leading "# Title" line (plus the blank line after
-    # it) so the title is not shown twice.
-    lines = text.splitlines()
-    if lines and lines[0].startswith("# "):
-        lines = lines[1:]
-        if lines and not lines[0].strip():
-            lines = lines[1:]
-    return "\n".join(lines)
+    return (root / f"README{suffix}.md").read_text(encoding="utf-8")
+
+
+def _split_readme_sections(text: str) -> tuple[str, dict[str, str]]:
+    """Split a README into its preamble and each H2 section's body.
+
+    The preamble is everything after the H1, before the first H2; each
+    section is keyed by its heading text verbatim.
+    """
+    matches = list(_H2_HEADING.finditer(text))
+    h1_match = _H1_HEADING.match(text)
+    preamble_start = h1_match.end() if h1_match else 0
+    preamble_end = matches[0].start() if matches else len(text)
+    preamble = text[preamble_start:preamble_end].strip("\n")
+    sections = {
+        match.group("title").strip(): text[
+            match.end() : (
+                matches[index + 1].start()
+                if index + 1 < len(matches)
+                else len(text)
+            )
+        ].strip("\n")
+        for index, match in enumerate(matches)
+    }
+    return preamble, sections
+
+
+_LINK_ONLY_PARAGRAPH: Final = re.compile(r"^\[[^\]]+\]\([^)]+\)$")
+
+
+def _readme_preamble_first_paragraph(root: Path, lang: str) -> str:
+    """Return the README's own opening prose paragraph, read fresh.
+
+    Lets a slide's hero tagline quote it instead of keeping a hand-typed,
+    driftable copy. Skips a leading paragraph that is only the
+    "[English](README.en.md)"-style language-switcher link, which carries
+    no content to quote.
+    """
+    preamble, _sections = _split_readme_sections(_readme_text(root, lang))
+    for paragraph in preamble.split("\n\n"):
+        paragraph = paragraph.strip()
+        if paragraph and not _LINK_ONLY_PARAGRAPH.match(paragraph):
+            return paragraph
+    raise ValueError(f"README ({lang}) preamble has no prose paragraph")
+
+
+# Named markers a site/content/_index.<lang>.md source may embed as
+# <!-- csarc-readme-<name>:start -->...<!-- csarc-readme-<name>:end -->;
+# each resolves to a README fragment read fresh at build time. Add an entry
+# here for a new narrow injection point inside a slide that otherwise keeps
+# bespoke markup (see _README_SLIDE_SECTIONS instead when the *entire*
+# slide body should be one README section).
+_README_MARKERS: Final = {
+    "preamble-tagline": _readme_preamble_first_paragraph,
+}
+
+
+def _inject_readme_markers(markdown_text: str, *, root: Path, lang: str) -> str:
+    def _replace(match: re.Match[str]) -> str:
+        name = match.group("name")
+        if name not in _README_MARKERS:
+            raise ValueError(f"Unknown csarc-readme marker: {name!r}")
+        replacement = _README_MARKERS[name](root, lang)
+        return (
+            f"<!-- csarc-readme-{name}:start -->{replacement}"
+            f"<!-- csarc-readme-{name}:end -->"
+        )
+
+    return _README_MARKER.sub(_replace, markdown_text)
 
 
 def build(root: Path, output_dir: Path) -> dict[str, Path]:

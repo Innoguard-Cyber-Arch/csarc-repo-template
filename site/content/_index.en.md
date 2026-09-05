@@ -16,8 +16,8 @@ zoom_in = "Zoom in"
 fit = "Fit"
 +++
 
-{{< slide key="capability" track="capability" eyebrow="Home" title="CSARC Repo Template" subtitle="Cyber-Arch's updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests." legacy="false" class="presentation-slide" >}}
-Cyber-Arch's updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests. Select only the shared workflow, or add Python, Rust, and TypeScript independently. Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) and stays synchronized across both languages.
+{{< slide key="capability" track="capability" eyebrow="Home" title="CSARC Repo Template" subtitle="Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them." legacy="false" class="presentation-slide" >}}
+<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) and stays synchronized across both languages.
 
 <p class="template-version"><strong>Template release:</strong> v0.13.0<!-- x-release-please-version --></p>
 
@@ -106,9 +106,10 @@ This matrix does not replace or redesign `apply-repository-settings.sh`'s DEGRAD
 
 {{< slide key="about" track="about" eyebrow="About" title="What CSARC is, and who it is for" subtitle="An updatable repository foundation: creating, adopting, and receiving policy updates all preview and verify before a PR merges them." class="dense" legacy="false" >}}
 <!-- This body is overridden at build time by scripts/build_decision_site.py's
-     _EXTERNAL_SLIDE_SOURCES mechanism; the real content is read from
-     docs/about.en.md. Edit that file, not this one; left blank here only
-     so the shortcode stays syntactically complete. -->
+     _README_SLIDE_SECTIONS mechanism; the real content is read verbatim
+     from root README.en.md's "## Overview" section (README.md's
+     "## 專案概述" for zh-tw). Edit README.en.md, not this file; left
+     blank here only so the shortcode stays syntactically complete. -->
 {{< /slide >}}
 
 {{< slide key="flow" track="flow" eyebrow="CI/CD flow" title="The template guides every change" subtitle="Follow the Issue and PR prompts; the template prepares the right settings and tells you what needs attention." legacy="false"  class="candidate-slide" >}}
