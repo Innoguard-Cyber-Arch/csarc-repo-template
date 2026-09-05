@@ -10,11 +10,20 @@ and only imports the regexes below.
 
 The syntax has three shapes, all used by the content files:
 - a *container* block: `{{< name attr="value" >}}...{{< /name >}}`; only
-  `slide`, `legacy`, `basic`, `detail`, and `disclosure` are containers, and
-  none of them nest inside another block of the same name;
+  `slide`, `legacy`, `basic`, `detail`, `disclosure`, `standard`, and `ops`
+  are containers, and none of them nest inside another block of the same
+  name;
 - a *self-closing* call with attributes: `{{< config-guidance track="x" >}}`;
 - a bare self-closing call: `{{< file-map >}}`, `{{< similar-tools >}}`,
   `{{< testing >}}`.
+
+`standard` and `ops` (Issue #681 decision F) mark a slide's two full-pane
+reading-mode variants: everything inside `{{< standard >}} ... {{< /standard
+>}}` is the version shown in standard mode, everything inside
+`{{< ops >}} ... {{< /ops >}}` is the version shown in ops mode. Unlike
+`detail`, which nests inside prose and only ever hides an aside next to the
+standard content, a `standard`/`ops` pair replaces the *entire* slide body
+depending on the active reading mode -- see `detail-toggle.js`.
 """
 
 from __future__ import annotations
@@ -26,13 +35,13 @@ from typing import Final
 # Reused verbatim by scripts/check-decision-site-translations for its own
 # flat, order-preserving shape comparison of both language sources.
 BLOCK: Final = re.compile(
-    r"(?={{<\s*(slide|detail|disclosure)\b([^>]*)>}}"
+    r"(?={{<\s*(slide|detail|disclosure|standard|ops)\b([^>]*)>}}"
     r"(.*?){{<\s*/\1\s*>}})",
     re.DOTALL,
 )
 ATTRIBUTE: Final = re.compile(r'(\w+)="([^"]*)"')
 NESTED_BLOCK: Final = re.compile(
-    r"{{<\s*(detail|disclosure)\b[^>]*>}}.*?{{<\s*/\1\s*>}}",
+    r"{{<\s*(detail|disclosure|standard|ops)\b[^>]*>}}.*?{{<\s*/\1\s*>}}",
     re.DOTALL,
 )
 
@@ -48,7 +57,8 @@ SELF_CLOSING_NAMES: Final = (
 )
 # Shortcodes that always pair with a close tag and never nest inside their
 # own name, but may nest inside a `basic` or non-legacy slide body.
-CONTAINER_NAMES: Final = ("detail", "disclosure")
+# `detail`/`disclosure` may also nest inside `standard`/`ops`.
+CONTAINER_NAMES: Final = ("detail", "disclosure", "standard", "ops")
 
 _MIXED_TOKEN: Final = re.compile(
     r"{{<\s*(?P<self_name>" + "|".join(SELF_CLOSING_NAMES) + r")\b"

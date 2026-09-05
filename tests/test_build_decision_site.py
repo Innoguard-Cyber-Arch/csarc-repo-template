@@ -1015,10 +1015,15 @@ def test_render_slide_legacy_true_wraps_legacy_and_basic_blocks() -> None:
     )
     assert '<header class="basic-header">' in html
     assert '<aside class="selection-note">Note</aside>' in html
-    assert '<div class="legacy-content"><p>Raw HTML</p></div>' in html
+    # Issue #681 decision F: both panes carry .mode-content[data-mode] so
+    # detail-toggle.css can show exactly one full pane at a time.
     assert (
-        '<div class="markdown-body basic-summary"><p>Prose text.</p></div>'
-        in html
+        '<div class="legacy-content mode-content" data-mode="standard">'
+        "<p>Raw HTML</p></div>" in html
+    )
+    assert (
+        '<div class="markdown-body basic-summary mode-content" '
+        'data-mode="ops"><p>Prose text.</p></div>' in html
     )
 
 

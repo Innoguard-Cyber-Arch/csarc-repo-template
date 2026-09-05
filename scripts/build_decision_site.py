@@ -421,6 +421,10 @@ def _render_shortcode(
             data=data,
             state=state,
         )
+    if node.kind in ("standard", "ops"):
+        return render_mode_content(
+            node.kind, node.attrs, node.body, lang=lang, data=data, state=state
+        )
     return _render_self_closing(node.kind, node.attrs, lang=lang, data=data)
 
 
@@ -458,6 +462,37 @@ def render_detail(
     return (
         f'<aside class="technical-detail" data-content-key="{key}">'
         f"{heading}{inner}</aside>"
+    )
+
+
+def render_mode_content(
+    mode: str,
+    attrs: dict[str, str],
+    body: str,
+    *,
+    lang: str,
+    data: SiteData,
+    state: RenderState,
+) -> str:
+    """Render a `{{< standard >}}`/`{{< ops >}}` full-pane reading-mode variant.
+
+    Issue #681 decision F: a slide that needs both a standard and an ops
+    reading of the same topic wraps each full version in one of these two
+    shortcodes instead of sprinkling `{{< detail >}}` asides next to shared
+    prose. `detail-toggle.js` shows exactly one `.mode-content` block at a
+    time and swaps the whole thing on toggle, instead of collapsing an aside
+    in place. `key`/`title` are required (like `detail`/`disclosure`) so
+    `scripts/check-decision-site-translations` can enforce that both
+    language sources declare a matching pair; `title` is exposed only as an
+    `aria-label` since the reading-mode toggle button already names the
+    mode visually.
+    """
+    key = _esc(attrs["key"])
+    title = _esc(attrs["title"])
+    inner = render_mixed(body, lang=lang, data=data, state=state)
+    return (
+        f'<div class="mode-content" data-mode="{mode}" '
+        f'data-content-key="{key}" aria-label="{title}">{inner}</div>'
     )
 
 
@@ -1204,7 +1239,21 @@ def _render_header(attrs: dict[str, str], *, legacy: bool) -> str:
 def _render_legacy_body(
     body: str, *, lang: str, data: SiteData, state: RenderState
 ) -> str:
-    """Render a `legacy="true"` slide's Inner (raw HTML, safeHTML in Hugo)."""
+    """Render a `legacy="true"` slide's Inner (raw HTML, safeHTML in Hugo).
+
+    Issue #681 decision F: `{{< legacy >}}` is this slide's standard-mode
+    pane (raw HTML, usually a hand-built diagram) and `{{< basic >}}` is its
+    ops-mode pane -- the same full-pane-swap contract as the `{{< standard
+    >}}`/`{{< ops >}}` shortcode pair used by non-legacy slides, just
+    authored with Hugo's older two-block syntax because these slides
+    predate that pair and their standard-mode content is raw HTML, not
+    Markdown. Both panes get `.mode-content[data-mode]` so one shared
+    `detail-toggle.css` rule shows exactly one of them at a time; `{{<
+    basic >}}` renders its *entire* body now (prose, tables, and nested
+    `{{< detail >}}`/`{{< config-guidance >}}` cards alike) instead of only
+    the nested detail cards, so ops mode gets a complete write-up, not
+    fragments left behind by the standard-mode diagram.
+    """
     bare = _BARE_SELF_CLOSING.match(body.strip())
     if bare:
         return _render_self_closing(
@@ -1225,11 +1274,11 @@ def _render_legacy_body(
     if prefix:
         pieces.append(prefix)
     pieces.append(
-        '<div class="legacy-content">'
+        '<div class="legacy-content mode-content" data-mode="standard">'
         f"{render_raw(legacy_inner, lang=lang, data=data, state=state)}</div>"
     )
     pieces.append(
-        '<div class="markdown-body basic-summary">'
+        '<div class="markdown-body basic-summary mode-content" data-mode="ops">'
         f"{render_mixed(basic_inner, lang=lang, data=data, state=state)}</div>"
     )
     return "\n".join(pieces)
