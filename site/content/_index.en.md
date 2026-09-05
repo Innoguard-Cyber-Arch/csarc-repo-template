@@ -137,6 +137,23 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 
 The file map only lists path, purpose, and responsibility: the side navigation already links each item to its page, and the maintainer-only "CI/CD settings" appendix already lists verification entry points per step in more detail than this view could add; the tree view likewise avoids duplicating a page-name or verification-entry column.
 
+{{< standard key="files-mode-standard" title="Update flow and integrated tools" >}}
+```mermaid
+flowchart LR
+    A[Template finds an updatable file] --> B{Any conflict}
+    B -- No --> C[Apply the update]
+    B -- Yes --> D[List the affected files]
+    D --> E[You adjust, then rerun]
+    C --> F[Open a PR for review]
+    E --> F
+```
+
+Every update goes through PR review; nothing silently overwrites content you wrote. On a conflict the template only tells you which files are affected -- it never edits them for you.
+
+The template already wires up the tools you'd otherwise have to find and configure yourself: project generation and updates, code security scanning, dependency-update reminders, known-vulnerability scanning, release notes, and the internal site you're reading right now.
+{{< /standard >}}
+
+{{< ops key="files-mode-ops" title="Technical detail on the update mechanism and tools" >}}
 {{< detail key="files-update" title="How updates protect product content" >}}
 Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
 
@@ -156,6 +173,7 @@ Only tools this template directly integrates, executes, or produces into the rep
 | [Release Please](https://github.com/googleapis/release-please) | Maintains the version/changelog pull request and creates the GitHub Release | `.github/workflows/release.yml`, `release-please-config.json`, `.release-please-manifest.json` | Delivery branch to `main` | [Apache-2.0](https://github.com/googleapis/release-please/blob/main/LICENSE) |
 | Decision-site render engine | In-house, dependency-free Python engine that builds the bilingual internal site and `llms.txt` from Markdown; replaced Hugo on 2026-09-03 | `scripts/build_decision_site.py`, `scripts/build-decision-site`, `scripts/render_site.py`, `site/version.json` | `docs/index.html`, `docs/index.en.html`, `llms.txt` | In-house (this repository) |
 {{< /detail >}}
+{{< /ops >}}
 {{< /slide >}}
 
 {{< slide key="method" track="method" eyebrow="Step 01" title="Define the work before implementation" subtitle="Turn a request into an actionable Issue; create a Milestone only when several work items must move together." legacy="false"  class="candidate-slide dense single-column" >}}
