@@ -4,10 +4,10 @@
         title: '建立新 repo',
         goal: 'CLI 會選取核准 release、解析完整 commit SHA、顯示計畫，確認後才以 Copier 建立與驗證。',
         location: 'Terminal',
-        code: `uvx --from csarc-repo-cli csarc init ./my-project
+        code: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>' csarc init ./my-project
 
 # CI or an explicitly authorized agent:
-uvx --from csarc-repo-cli csarc init ./my-project \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>' csarc init ./my-project \\
   --yes --non-interactive`
       },
       existing: {
@@ -15,17 +15,17 @@ uvx --from csarc-repo-cli csarc init ./my-project \\
         goal: '先用 --dry-run 在 repo 外產生短版 Markdown 與一頁 PDF，預覽新增、覆寫、保留、人工合併與無法判定項目；必須是乾淨 Git working tree，預設保留產品內容。報告只描述已知風險，不保證沒有語意或執行期衝突。',
         location: '既有 repo 根目錄',
         code: `git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from csarc-repo-cli csarc adopt . --dry-run \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>' csarc adopt . --dry-run \\
   --report-dir ../csarc-adoption-report
-uvx --from csarc-repo-cli csarc adopt .`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>' csarc adopt .`
       },
       update: {
         title: '更新已使用公版的 repo',
         goal: 'CLI 讀取 .csarc/config.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
         location: '專案 repo 根目錄',
         code: `git switch -c chore/<issue-number>-update-repo-template
-uvx --from csarc-repo-cli csarc update --check --json
-uvx --from csarc-repo-cli csarc update`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>' csarc update --check --json
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>' csarc update`
       },
       mac: {
         title: 'macOS 本機需求',
