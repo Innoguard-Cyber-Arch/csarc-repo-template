@@ -11,7 +11,7 @@
       "standardConclusion": "結論：目前沒有一個套件整體涵蓋這個模板的所有能力；下表列出目的最接近、值得參考的專案。",
       "primaryTabOverline": "整體接近",
       "primaryTab": "主要相似工具",
-      "primaryLegend": "整體目的相近｜至少涵蓋 5 個 Journey，且近 6 個月有發版",
+      "primaryLegend": "整體目的相近｜至少涵蓋 5 個 Journey（左側編號模組），且近 6 個月有發版",
       "coverageLegend": "完整＝深綠　部分＝淺綠",
       "package": "套件名稱",
       "version": "比較版本（發行日）",
