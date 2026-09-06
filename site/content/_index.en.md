@@ -22,9 +22,9 @@ fit = "Fit"
       <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
-        <p class="subtitle lead-question">How does this template make sure every change -- by a person or by AI -- gets defined, verified, reviewed, and leaves evidence behind?</p>
+        <p class="subtitle lead-question">How does this template get every change -- human or AI -- defined, verified, reviewed, and evidenced?</p>
         <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --></p>
-        <p class="subtitle flow-line"><strong>Result:</strong> whether a person or an AI proposes it, a change has to state what it does and pass its checks, then get human review, before it actually merges -- and it leaves evidence of what happened.</p>
+        <p class="subtitle flow-line"><strong>Result:</strong> every change, human or AI, is scoped, checked, and reviewed before it merges -- leaving evidence behind.</p>
         <p class="subtitle">Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Maintenance mode adds configuration files, code, and technical rationale. See the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a> for quick-start commands.</p>
         <div class="package-badges" aria-label="Package status">
           <span class="package-badge beta">beta</span>
@@ -42,17 +42,17 @@ fit = "Fit"
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="What the template provides">
-          <h3>The template prepares your repo with</h3>
+          <h3>What the template prepares</h3>
           <p class="scope-row"><strong>Planning and AI rules</strong><span>Work is scoped first; only large outcomes split into sub-items</span></p>
           <p class="scope-row"><strong>Verification and merging</strong><span>Checks run locally first; GitHub reruns them, then the team reviews</span></p>
-          <p class="scope-row"><strong>Dependency and delivery evidence</strong><span>Pinned versions, a soak period, vulnerability scans, and a build content record</span></p>
+          <p class="scope-row"><strong>Dependency evidence</strong><span>Pinned versions, a soak period, vulnerability scans, a build manifest</span></p>
           <p class="scope-row"><strong>Continuous sync</strong><span>Template updates arrive as a reviewable diff, never a silent overwrite</span></p>
         </section>
         <section class="start-paths" aria-label="Three ways to start">
-          <h3>Start from your repository's current state</h3>
-          <article class="start-path primary"><h3>Create a new repo</h3><p>Files are generated only after you settle on a type and branch approach; nothing is created or pushed to GitHub before that.</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">Start now</button></article>
+          <h3>Start from your repo's current state</h3>
+          <article class="start-path primary"><h3>Create a new repo</h3><p>Settle on a type and branch approach first; nothing is created or pushed to GitHub before that.</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">Start now</button></article>
           <article class="start-path"><h3>Adopt an existing repo</h3><p>Preview the diff on an isolated branch, keeping your content untouched.</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">Adoption command</button></article>
-          <article class="start-path"><h3>Update a repo already on the template</h3><p>Produces a reviewable diff (a dry run) first; it merges only after you confirm, and never overwrites main directly.</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">Update command</button></article>
+          <article class="start-path"><h3>Update a repo already on the template</h3><p>A dry run produces a reviewable diff first; it merges only after you confirm, never straight into main.</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">Update command</button></article>
         </section>
       </div>
       <div class="prerequisite-line product-prerequisites">
@@ -64,7 +64,7 @@ fit = "Fit"
 {{< /legacy >}}
 
 {{< basic >}}
-<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) and stays synchronized across both languages.
+<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> and stays synchronized across both languages.
 
 <p class="template-version"><strong>Template release:</strong> v0.13.0<!-- x-release-please-version --></p>
 
