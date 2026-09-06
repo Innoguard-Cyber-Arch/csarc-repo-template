@@ -686,7 +686,7 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 | 階段（`run_stage` 名稱） | 獨立入口 | 涵蓋風險 | 與 fast tier／其他檢查的關係 |
 | --- | --- | --- | --- |
 | Repository contracts | `scripts/verify-stage-repository-contracts` | changed-tree hygiene、未解決的 Copier／Git 衝突標記、機密掃描、已知漏洞掃描 | fast 每次都跑 `git diff --check`／`check-update-conflicts`／`scan-secrets`；`verify-dependencies` 只在 dependency scope 才跑，呼叫同一支腳本，不是重複邏輯 |
-| Static assets and paired files | `scripts/verify-stage-static-assets` | decision site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` tier 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
+| Static assets and paired files | `scripts/verify-stage-static-assets` | repo-site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` tier 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
 | Python environment | `scripts/verify-stage-python-environment` | `uv.lock` 與 `pyproject.toml` 一致、環境可從鎖定版本安裝 | fast 的 `uv sync --locked` 是同一份鎖定契約；`uv lock --check` 只在 full 額外執行 |
 | Python quality | `scripts/verify-stage-python-quality` | 格式、lint、靜態型別 | fast 對相同原始碼跑相同三個命令，兩者呼叫同一份工具鏈設定，無額外邏輯 |
 | Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／audit-fleet-adoption／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate（`scripts/test-check-scope-gate`，見上方 Scope-drift gate enforcement 一節）四個 shell 自我測試；base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status 與 `scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）五支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
@@ -915,8 +915,8 @@ token 權限範圍，仍可能個別擋住某一項能力——這一層目前�
 `DEGRADED` 標記本身；矩陣裡每一列的 workaround，只要底層限制原本就有對應的
 `DEGRADED` 字樣（Ruleset、CODEOWNERS 檢查、Actions PR 政策、`security_and_analysis`、
 GitHub Pages 五項），就直接引用同一段既有訊息，而不是另建一套平行說法。`policies/
-capability-matrix.json` 與內部網站「進階安裝」附錄（`docs/index.html#advanced-install`）
-互為單一來源：矩陣是機器可讀的權威內容，頁面是給人看的雙語呈現，兩者由
+capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能力矩陣說明框
+（`docs/index.html#install`）互為單一來源：矩陣是機器可讀的權威內容，頁面是給人看的雙語呈現，兩者由
 `tests/test_advanced_install_content.py` 的每一個能力 id 都必須同時出現在雙語頁面這條
 規則機械式對齊。`immutable_releases` 一列例外：它無法單靠 repository 權限探測判斷，一律
 回報 `unknown`，並指向上面「hosted 發版路徑的已知限制」一節，而不是假裝可以自動判定。
@@ -999,8 +999,8 @@ release-please-action` 在 Automatic 路徑只負責開版本 PR、同步版本�
 3. 真正跨版本持續有效、不是「這一版特有」的已知限制（例如上一節的 hosted
    Automatic／Guided 對 `immutable_releases` 永遠無法自證），本來就屬於維護一次、隨時
    查閱的專案文件，而不是需要在每一則 Release 說明文字裡重複貼一次、還容易隨時間跟實際
-   狀況脫節的內容——這類內容留在 `docs/ci-policy.md` 與決策網站，Release 說明文字不必
-   自我複製（見下方決策網站頁面章節）。
+   狀況脫節的內容——這類內容留在 `docs/ci-policy.md` 與 repo-site，Release 說明文字不必
+   自我複製（見下方 repo-site 頁面章節）。
 
 **CHANGELOG.md 與 GitHub Release 說明文字是兩個各自獨立、都真實但不相同的視角，刻意不
 強制兩者逐字一致：** `CHANGELOG.md`（Guided 路徑的 `_write_changelog`，或 Automatic 路徑

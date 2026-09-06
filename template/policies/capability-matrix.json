@@ -125,8 +125,8 @@
     {
       "id": "github_pages",
       "title": {
-        "en": "Hosted GitHub Pages for the decision site",
-        "zh-tw": "決策網站的 GitHub Pages 代管"
+        "en": "Hosted GitHub Pages for the repo site",
+        "zh-tw": "repo-site 的 GitHub Pages 代管"
       },
       "behavior": {
         "en": "Publishes `docs/index.html`/`docs/index.en.html` as a hosted site (`policies/pages.json`).",
