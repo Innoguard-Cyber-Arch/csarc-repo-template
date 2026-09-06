@@ -49,6 +49,9 @@ _skip_if_exists:
   - "docs/adr/**/*.md"
   - "docs/site-content.md"
   - "docs/site-theme.css"
+  - "site/content/_index.zh-tw.md"
+  - "site/content/_index.en.md"
+  - "site/data/navigation.json"
   - "{% if project_mode == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
   - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
@@ -63,7 +66,7 @@ _tasks:
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'typescript' in languages }}"
   - command: "cargo generate-lockfile"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'rust' in languages }}"
-  - command: "uv run --no-project python scripts/render_site.py"
+  - command: "bash scripts/build-repo-site"
 _migrations:
   - command:
       - python3
@@ -108,7 +111,7 @@ _migrations:
       - "import hashlib, pathlib, shutil, sys; target = pathlib.Path('tests/test_spec_to_issue.py'); expected = 'cb936cab1f2e239b28c1f9d59edb714a7c8758633f95cbb98989571fa3b2a5fa'; current = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else ''; shutil.copy2(sys.argv[1], target) if current == expected else None"
       - "{{ _copier_conf.src_path }}/template/tests/test_spec_to_issue.py"
     when: "{{ _stage == 'after' }}"
-  - command: "uv run --no-project python scripts/render_site.py"
+  - command: "bash scripts/build-repo-site"
     when: "{{ _stage == 'after' }}"
 _message_after_copy: |
   {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% else %}Project created with the CSARC release workflow. Confirm .csarc/config.yml, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.

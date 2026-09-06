@@ -175,8 +175,8 @@ def test_documentation_tier_validates_the_generated_site() -> None:
         REPO_ROOT / "template/scripts/verify-fast.jinja"
     ).read_text(encoding="utf-8")
 
-    assert "./scripts/build-decision-site --check" in root_fast
-    assert "python3 scripts/render_site.py --check" in template_fast
+    assert "./scripts/build-repo-site --check" in root_fast
+    assert "./scripts/build-repo-site --check" in template_fast
 
 
 def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
@@ -185,7 +185,7 @@ def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
     Issue #588: a PR with scopes = {"workflow", "docs", ...} classifies as
     tier "fast", not "docs", so the docs-only early-exit branch never runs.
     Both docs checks it used to bundle -- spec validation and the
-    decision-site staleness check -- must also fire from a second gate,
+    repo-site staleness check -- must also fire from a second gate,
     keyed on scopes rather than tier, that survives past that early exit.
     Issue #598: #593 fixed only the staleness check in that second gate and
     left spec_to_issue.py validate behind, silently skipped for any mixed-
@@ -197,8 +197,8 @@ def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
     ).read_text(encoding="utf-8")
 
     for source, staleness_check in (
-        (root_fast, "./scripts/build-decision-site --check"),
-        (template_fast, "python3 scripts/render_site.py --check"),
+        (root_fast, "./scripts/build-repo-site --check"),
+        (template_fast, "./scripts/build-repo-site --check"),
     ):
         docs_tier_start = source.index('if [[ "$tier" == "docs" ]]; then')
         docs_tier_exit = source.index("exit 0", docs_tier_start)

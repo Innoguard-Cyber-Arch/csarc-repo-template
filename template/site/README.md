@@ -1,13 +1,27 @@
-# Decision site source
+# This project's repo-site
 
-本目錄由 CSARC 公版維護，只定義 portable presentation 的版型與樣式。請在下列 project-owned 檔案維護專案差異：
+`site/content/_index.zh-tw.md` and `_index.en.md` are the Markdown sources for
+this project's own presentation-style site (`docs/index.html` /
+`docs/index.en.html`), built by `scripts/build-repo-site`. Once generated,
+both files are yours to edit -- a later `csarc update` never overwrites them.
 
-- `docs/site-content.md`：一般 Markdown 內容；`[[key]]` 從 `.csarc/config.yml` 讀取
-- `docs/site-theme.css`：允許的色彩、字型與少量版面覆寫
-- `docs/adr/`：經確認與 PR 審查的 Architecture Decision Records（ADR）
+- Add a page by adding a new `{{< slide key="..." track="..." ... >}}...{{< /slide >}}`
+  block to both language files (same `key`, same structure) and a matching
+  entry to `site/data/navigation.json`'s `items` array.
+- `{{< standard >}}` holds the plain-language pane most readers see;
+  `{{< ops >}}` holds the maintainer-facing detail shown in Maintenance mode.
+- `[[project_name]]`, `[[project_description]]`, `[[languages]]`,
+  `[[branch_strategy]]`, `[[project_visibility]]`, `[[code_owner]]`,
+  `[[reviewers]]`, and `[[repository_url]]` resolve from `.csarc/config.yml`
+  at build time -- editing that file (or running `csarc update`) is enough to
+  refresh them, no template update needed.
+- `scripts/check-repo-site-translations` fails the build when the two
+  language files' slide/content keys drift apart; keep both in sync.
+- Never hand-edit `docs/index.html` / `docs/index.en.html` -- they are
+  rebuilt from these sources.
 
-修改後執行 `uv run --no-project python scripts/render_site.py`。`docs/index.html` 會把 CSS、JavaScript、font 與 image 內嵌成可離線交付的單一檔案，不要直接修改它。
-
-Markdown 支援標題、段落、粗體、連結、行內／區塊程式碼與清單。二級標題會產生左側導覽；三級標題會顯示成預設收合的進階說明。網站名稱、說明、語言、負責人與分支策略沿用 `.csarc/config.yml`，不要建立另一份網站設定。
-
-送 PR 前直接用瀏覽器開啟 `docs/index.html`，在離線狀態重新載入，並以桌面與約 390px 寬的 viewport 檢查導覽、表格與內容是否可讀；用 Tab 走過 skip link 與導覽連結。自動檢查成功不代表外部託管或存取控制已啟用。
+This is the same engine and component set (`site/static/styles.css`,
+`detail-toggle.css`, `deck.js`, ...) as the
+[csarc-repo-template](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template)
+project's own root site; see that project's `site/content/_index.zh-tw.md`
+for a much larger example of the same block syntax in use.

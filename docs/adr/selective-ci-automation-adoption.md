@@ -25,7 +25,7 @@ CI/CD 設定不能因為別處存在就整批搬入。每多一項 workflow 都�
 
 ## Ownership 與驗證
 
-Dependency owner 審查官方 Actions 分組是否仍維持共同來源與相近風險。`.github/dependabot.yml` 與回歸測試是這項保留決策的 executable evidence；decision site 只摘要同一決策，不取代設定與測試。
+Dependency owner 審查官方 Actions 分組是否仍維持共同來源與相近風險。`.github/dependabot.yml` 與回歸測試是這項保留決策的 executable evidence；repo-site 只摘要同一決策，不取代設定與測試。
 
 回退官方 Actions 分組只需移除 `groups.official-actions`，個別更新仍會繼續提出。既有產品的 Containerfile、workflow 與部署仍由產品擁有；Copier 不接管、覆寫或宣稱已驗證這些能力。
 

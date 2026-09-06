@@ -38,6 +38,11 @@ paired_files=(
   docs/milestone-description.md
   docs/adr/README.md
   scripts/render_site.py
+  scripts/build_repo_site.py
+  scripts/repo_site_blocks.py
+  scripts/check-repo-site-navigation
+  scripts/check-repo-site-translations
+  scripts/check-repo-site-versions
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
   scripts/check-repo-capabilities

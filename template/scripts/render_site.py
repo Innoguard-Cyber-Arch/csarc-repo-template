@@ -62,8 +62,8 @@ _INLINE_CODE = re.compile(r"`([^`]+)`")
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 # Non-greedy across any character, not just non-"*" ones: a bold span that
 # wraps an inline code span containing a literal "*" (e.g. `` **a `dev/m*`
-# label** ``, found while porting the root decision site to
-# scripts/build_decision_site.py in Issue #524) must still close instead of
+# label** ``, found while porting the root repo site to
+# scripts/build_repo_site.py in Issue #524) must still close instead of
 # silently staying literal "**...**" text.
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
 _MARKDOWN_NAV = "<!-- CSARC_SITE_NAV -->"

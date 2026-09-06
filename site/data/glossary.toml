@@ -73,7 +73,7 @@ title_en = "Verification and capability"
   term_en = "Platform capability state"
   summary_zh_tw = "以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。"
   summary_en = "Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names."
-  path = "docs/adr/portable-decision-site.md"
+  path = "docs/adr/portable-repo-site.md"
 
   [[groups.terms]]
   key = "degraded-governance"
@@ -97,7 +97,7 @@ title_en = "Verification and capability"
   term_en = "Portable artifact"
   summary_zh_tw = "沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。"
   summary_en = "A single-file deliverable with no external runtime assets that remains usable through file://."
-  path = "docs/adr/portable-decision-site.md"
+  path = "docs/adr/portable-repo-site.md"
 
 [[groups]]
 key = "delivery"

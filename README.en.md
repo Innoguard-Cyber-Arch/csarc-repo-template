@@ -8,11 +8,11 @@ Cyber-Arch's updatable repository foundation: creating a new project, adopting a
 | --- | --- |
 | Template version | v0.13.0<!-- x-release-please-version --> |
 | Supported languages | Python, Rust, TypeScript (independently multi-selectable; choosing none uses only the common workflow) |
-| Site presentation template version | 1.1.0 |
-| Decision-site render engine version | 1.1.0 |
+| repo-site presentation template version | 1.1.0 |
+| repo-site render engine version | 1.1.0 |
 
 > [!IMPORTANT]
-> Milestone 13 is expanding the decision site and the adoption experience. Only reviewed workflows under `.github/workflows/` currently execute; the rest stay archived. See [CI/CD settings](docs/index.html#testing) for each stage's enabled status.
+> Milestone 13 is expanding the repo site and the adoption experience. Only reviewed workflows under `.github/workflows/` currently execute; the rest stay archived. See [CI/CD settings](docs/index.html#testing) for each stage's enabled status.
 
 | Choose directly | Formally available today |
 | --- | --- |
@@ -21,9 +21,9 @@ Cyber-Arch's updatable repository foundation: creating a new project, adopting a
 | Template configuration | Choices made at create/adopt time are written to `.csarc/config.yml`; later template updates read the same file instead of duplicating settings elsewhere |
 | Shared capabilities | Issue and pull request forms, AI working rules, automated verification, dependency security, version records, and template updates |
 
-This section is aligned with the "home" slide on the [internal decision site](docs/index.html); the site maintains both languages (zh/en) in sync. [Open the internal site and full decision rationale](docs/index.html) (internal audience only -- do not share this link publicly; `noindex`/`robots.txt` are only a temporary safeguard, not access control -- see the "Access control decision" section on the site and [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)).
+This section is aligned with the "home" slide on the [repo-site](docs/index.html); it maintains both languages (zh/en) in sync. [Open the repo-site and full decision rationale](docs/index.html) (internal audience only -- do not share this link publicly; `noindex`/`robots.txt` are only a temporary safeguard, not access control -- see the "Access control decision" section on the site and [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)).
 
-> **What this document is for:** README tells a general adopter of this template what this is, whether to use it, how to start, and where to learn more. To contribute to this repository itself, read [`AGENTS.md`](AGENTS.md) (the executable working rules). For the "why" behind these choices, read the [internal site appendix](docs/index.html). Each document owns one layer, so the same rules are not maintained twice.
+> **What this document is for:** README tells a general adopter of this template what this is, whether to use it, how to start, and where to learn more. To contribute to this repository itself, read [`AGENTS.md`](AGENTS.md) (the executable working rules). For the "why" behind these choices, read the [repo-site appendix](docs/index.html). Each document owns one layer, so the same rules are not maintained twice.
 
 ## Table of contents
 
@@ -80,14 +80,14 @@ Only `uv` is always required; `uvx --python 3.14` creates an isolated runtime pe
 | pnpm 11 | Only with the `typescript` language module | `brew install pnpm` | `winget install -e --id pnpm.pnpm` |
 | rustup/Cargo | Only with the `rust` language module | `brew install rustup` (keg-only; the formula no longer ships `rustup-init`, so just add `$(brew --prefix rustup)/bin` to `PATH` to finish installing); or the official script `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` |
 
-On Windows, run the repo itself and the `csarc` CLI from inside WSL2 (Ubuntu); the table's Windows column (winget/choco) is for installing an individual tool natively on Windows (e.g. installing `git`/`gh` before entering WSL2). macOS/WSL2 Ubuntu install examples live on the [internal site appendix](docs/index.html).
+On Windows, run the repo itself and the `csarc` CLI from inside WSL2 (Ubuntu); the table's Windows column (winget/choco) is for installing an individual tool natively on Windows (e.g. installing `git`/`gh` before entering WSL2). macOS/WSL2 Ubuntu install examples live on the [repo-site appendix](docs/index.html).
 
 ### Developing/contributing to `csarc-repo-template` itself
 
 Beyond `uv` and `gh` from the table above, you also need:
 
 - **pnpm 11, rustup/Cargo**: running the full `./scripts/verify-template.sh` generates and verifies each of the Python, TypeScript, and Rust language modules' own native validator in turn (see `tests/test_language_profiles.py`), so all three toolchains are required. Running just the daily PR gate `./scripts/verify-fast` usually does not need rustup/Cargo, unless a change triggers the template smoke test. Install commands are the same as the table above.
-- **The decision site build needs no extra tool.** `scripts/build-decision-site`'s underlying `scripts/build_decision_site.py` is pure stdlib Python (see that file's header comment) and no longer depends on Hugo or any external renderer; the `uv` (or a system `python3`) from the table above is enough to rebuild `docs/index.html`/`docs/index.en.html`.
+- **The repo-site build needs no extra tool.** `scripts/build-repo-site`'s underlying `scripts/build_repo_site.py` is pure stdlib Python (see that file's header comment) and no longer depends on Hugo or any external renderer; the `uv` (or a system `python3`) from the table above is enough to rebuild `docs/index.html`/`docs/index.en.html`.
 - **gitleaks, actionlint, ShellCheck, OSV-Scanner: no manual install needed.** `scripts/verify-template.sh`/`scripts/verify-fast` call `scripts/install-gitleaks`/`install-actionlint`/`install-shellcheck`/`install-osv-scanner`, which auto-download, checksum-verify, and cache a pinned version on macOS/Linux (including WSL2); only the first run needs network access. The commands below are only for using these tools independently in an editor or locally:
 
   | Tool | macOS (Homebrew) | Windows (winget/Chocolatey) |
@@ -123,7 +123,7 @@ This is a separate question from "what tools does developing this template repo 
 | `scripts/verify-template.sh` | Create, update, language, and supply-chain regression |
 | `src/csarc_cli/` | The thin Copier orchestration layer behind `csarc init`/`adopt`/`update` |
 | `docs/README.md`, `docs/specs/`, `docs/adr/` | The Durable Project Memory map, Spec-Driven Development (SDD) specs, and Architecture Decision Records (ADR) |
-| `site/`, `scripts/build-decision-site` | Decision-site content, the pure-Python render engine, styles, and the reproducible single-file build entry point |
+| `site/`, `scripts/build-repo-site` | repo-site content, the pure-Python render engine, styles, and the reproducible single-file build entry point |
 | `docs/index.html`, `docs/index.en.html` | The offline-deliverable bilingual generated presentation; currently only `noindex`/`robots.txt` as a temporary safeguard, with no real access control yet |
 
 Python currently baselines on 3.14, uv, Ruff, ty, pytest, and a src layout; CI verifies both the exact lower bound 3.14.0 and the latest 3.14.x. A generated project in minimum mode verifies the chosen version's `.0` lower bound, plus the latest patch of every feature release up to 3.14; 3.11 support is deliberately not declared. Rust baselines on 1.98, `Cargo.lock`, rustfmt, Clippy, `cargo test`, and a release build. TypeScript baselines on Node 24, pnpm 11, Biome, strict TypeScript, and Vitest.
@@ -167,7 +167,7 @@ A local fallback is only ever possible once GitHub Actions' zero-step billing bl
 
 ## Configuration and secrets
 
-Creating a repo from GitHub or adopting via Copier only copies files, never repository settings; a newly generated repo's administrator must run `./scripts/apply-repository-settings.sh plan`/`apply`/`check` in order before the first release, to enable immutable Releases and the other release prerequisites. `check` performs a read-only comparison of CODEOWNERS, the repository (including narrowing Issue/PR creation to collaborators-only), immutable Releases, GitHub Pages, Actions, `security_and_analysis` (secret scanning, push protection, Dependabot security updates), policy labels, and an effective Ruleset. A fixable difference fails the check; a Free private Ruleset, a private repo's GitHub Pages (needs GitHub Enterprise Cloud; `policies/pages.json`'s `enabled` field can turn it off), an organization policy restriction, or missing GitHub Advanced Security is explicitly marked `DEGRADED` rather than misreported as no drift. When a generated repo enables `enable_governance_drift_check`, `.github/workflows/governance-drift.yml` reruns the same `check` daily and opens or updates a tracking Issue when a fixable drift appears; this template's own source repo keeps only the same local checker, without a separate schedule. A non-draft PR gets one non-author reviewer assigned from `.github/REVIEWERS` (`.github/workflows/governance-comment.yml`); this only requests review and is not a merge gate. See the "Identify the GitHub plan first" section on the [internal site appendix](docs/index.html) for `apply`/`check` and review capability's actual behavior under each GitHub plan.
+Creating a repo from GitHub or adopting via Copier only copies files, never repository settings; a newly generated repo's administrator must run `./scripts/apply-repository-settings.sh plan`/`apply`/`check` in order before the first release, to enable immutable Releases and the other release prerequisites. `check` performs a read-only comparison of CODEOWNERS, the repository (including narrowing Issue/PR creation to collaborators-only), immutable Releases, GitHub Pages, Actions, `security_and_analysis` (secret scanning, push protection, Dependabot security updates), policy labels, and an effective Ruleset. A fixable difference fails the check; a Free private Ruleset, a private repo's GitHub Pages (needs GitHub Enterprise Cloud; `policies/pages.json`'s `enabled` field can turn it off), an organization policy restriction, or missing GitHub Advanced Security is explicitly marked `DEGRADED` rather than misreported as no drift. When a generated repo enables `enable_governance_drift_check`, `.github/workflows/governance-drift.yml` reruns the same `check` daily and opens or updates a tracking Issue when a fixable drift appears; this template's own source repo keeps only the same local checker, without a separate schedule. A non-draft PR gets one non-author reviewer assigned from `.github/REVIEWERS` (`.github/workflows/governance-comment.yml`); this only requests review and is not a merge gate. See the "Identify the GitHub plan first" section on the [repo-site appendix](docs/index.html) for `apply`/`check` and review capability's actual behavior under each GitHub plan.
 
 `.csarc/config.yml`'s four boolean switches `policy_repository_settings`/`policy_actions_permissions`/`policy_labels`/`policy_branch_ruleset` (Issue #532) let a project decide individually whether to apply the matching `policies/repository.json`/`policies/actions.json`/`policies/labels.json`/`policies/rulesets.json`; immutable Releases does not get a new key, reusing the existing `release_immutable_releases` (only `csarc-owned`'s `required` is applied; `product-owned`/`verification-only`'s `product-defined`/`not-required` is left to existing release ownership, and this template never forces it). All four switches default to `true`, keeping the pre-toggle behavior of applying everything; a missing key in `.csarc/config.yml` is always treated as enabled, so an existing repo's coverage never silently shrinks after an update. Turning a policy off makes `plan`/`apply`/`check` all print the matching `SKIP`/`SKIPPED` line, skip that policy's GitHub API calls, and exclude it from `check`'s drift or `DEGRADED` count.
 
@@ -276,7 +276,7 @@ The root CLI is not published to a package registry; a formal prompt always runs
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<full-commit-sha>' csarc --help
 ```
 
-To adjust an advanced Copier answer, repeat `--data KEY=VALUE` after the CLI command; to pin a specific formal version, use `--to vX.Y.Z --expected-sha <full-commit-sha>`. When an old repo has no provenance, first manually review its existing answers, then migrate explicitly with `update --from-release <tag> --accept-legacy` -- the CLI never assumes the old state is already verified by default. `docs/site-content.md` and `docs/site-theme.css` are a generated project's own maintained site source; a template version update never overwrites them, and rebuilds the portable `docs/index.html`.
+To adjust an advanced Copier answer, repeat `--data KEY=VALUE` after the CLI command; to pin a specific formal version, use `--to vX.Y.Z --expected-sha <full-commit-sha>`. When an old repo has no provenance, first manually review its existing answers, then migrate explicitly with `update --from-release <tag> --accept-legacy` -- the CLI never assumes the old state is already verified by default. `site/content/_index.zh-tw.md` / `_index.en.md` and `docs/site-theme.css` are a generated project's own maintained site source; a template version update never overwrites them, and rebuilds the portable `docs/index.html` / `docs/index.en.html`. The older `docs/site-content.md` is retired; its content is not migrated automatically -- `./scripts/build-repo-site` prints a notice when that file still exists, asking a maintainer to port it and remove the file.
 
 ### Verification boundary
 

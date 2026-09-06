@@ -8,7 +8,7 @@
       "descriptionColumn": "內容",
       "columnsColumn": "欄位",
       "freshnessLabel": "資料新鮮度與觸發機制",
-      "freshnessNote": "這個決策網站是逐位元組重建、可用 `file://` 離線開啟的靜態單檔，不會、也不能嵌入即時查詢到的 GitHub 資料——下表只說明兩份輸出檔案各自的欄位結構，不是任何時間點的實際內容。比照 `scripts/check-governance-drift` 的既有先例（腳本保留供本機／CI 驗證，不另外啟用排程），這裡同樣不設定排程或 on-merge 自動產生並提交快照。維護者需在本機或 CI 執行下列指令，自行產生當下的稽核快照。",
+      "freshnessNote": "這個 repo-site 是逐位元組重建、可用 `file://` 離線開啟的靜態單檔，不會、也不能嵌入即時查詢到的 GitHub 資料——下表只說明兩份輸出檔案各自的欄位結構，不是任何時間點的實際內容。比照 `scripts/check-governance-drift` 的既有先例（腳本保留供本機／CI 驗證，不另外啟用排程），這裡同樣不設定排程或 on-merge 自動產生並提交快照。維護者需在本機或 CI 執行下列指令，自行產生當下的稽核快照。",
       "commandIntro": "重新產生：",
       "commandOutro": "（省略 `--repo` 會自動偵測目前 repository；預設寫入 `docs/audit-trail/`，不會自動提交）",
       "evidenceIntro": "延伸閱讀：呈現與觸發機制的決策記錄於"
@@ -20,7 +20,7 @@
       "descriptionColumn": "Contents",
       "columnsColumn": "Columns",
       "freshnessLabel": "Freshness and trigger mechanism",
-      "freshnessNote": "This decision site is a byte-reproducible, `file://`-openable static bundle -- it never embeds live-fetched GitHub data, and cannot. The table below only documents each output file's column structure, not a snapshot of actual content at any point in time. Following the existing `scripts/check-governance-drift` precedent (the script stays available for local/CI verification only, with no additional schedule), this module is not wired into a schedule or an on-merge job that would generate and commit a snapshot either. Run the command below locally or in CI to produce a current audit snapshot yourself.",
+      "freshnessNote": "This repo site is a byte-reproducible, `file://`-openable static bundle -- it never embeds live-fetched GitHub data, and cannot. The table below only documents each output file's column structure, not a snapshot of actual content at any point in time. Following the existing `scripts/check-governance-drift` precedent (the script stays available for local/CI verification only, with no additional schedule), this module is not wired into a schedule or an on-merge job that would generate and commit a snapshot either. Run the command below locally or in CI to produce a current audit snapshot yourself.",
       "commandIntro": "Regenerate with:",
       "commandOutro": "(omit `--repo` to auto-detect the current repository; writes to `docs/audit-trail/` by default, and nothing is committed automatically)",
       "evidenceIntro": "Further reading: the presentation and trigger decision is recorded in"

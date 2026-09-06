@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that the decision-site translations have the same structure."""
+"""Verify that the repo-site translations have the same structure."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ LANGUAGE_FILES = ("_index.zh-tw.md", "_index.en.md")
 type Shape = str | dict[str, "Shape"]
 type Block = tuple[str, str, tuple[str, ...]]
 
-# Shared with scripts/build_decision_site.py so the two only-Hugo-block-
+# Shared with scripts/build_repo_site.py so the two only-Hugo-block-
 # syntax consumers (this shape checker and the render engine) parse
 # `{{< name attr="value" >}}...{{< /name >}}` the same way instead of each
 # keeping its own regex.
 _BLOCKS: Final = runpy.run_path(
-    str(Path(__file__).resolve().parent / "decision_site_blocks.py")
+    str(Path(__file__).resolve().parent / "repo_site_blocks.py")
 )
 BLOCK = _BLOCKS["BLOCK"]
 ATTRIBUTE = _BLOCKS["ATTRIBUTE"]
@@ -91,20 +91,20 @@ def main() -> int:
         ValueError,
         tomllib.TOMLDecodeError,
     ) as error:
-        sys.stderr.write(f"decision-site translations invalid: {error}\n")
+        sys.stderr.write(f"repo-site translations invalid: {error}\n")
         return 1
     if sources[0][0] != sources[1][0]:
         sys.stderr.write(
-            "decision-site translations have different front-matter keys\n"
+            "repo-site translations have different front-matter keys\n"
         )
         return 1
     if sources[0][1] != sources[1][1]:
         sys.stderr.write(
-            "decision-site translations have different content keys\n"
+            "repo-site translations have different content keys\n"
         )
         return 1
     sys.stdout.write(
-        f"Decision-site translations: {len(sources[0][1])} keyed blocks\n"
+        f"Repo-site translations: {len(sources[0][1])} keyed blocks\n"
     )
     return 0
 

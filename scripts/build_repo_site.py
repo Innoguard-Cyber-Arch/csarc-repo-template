@@ -1,19 +1,19 @@
-"""Render the bilingual decision-site presentation from Markdown sources.
+"""Render the bilingual repo-site presentation from Markdown sources.
 
 Pure-Python, stdlib-only replacement for the retired Hugo build (Issue
 #524). `site/content/_index.{zh-tw,en}.md` keep their existing
 `{{< slide key="..." >}}...{{< /slide >}}`-style block syntax unchanged;
-this module parses that syntax (via `scripts/decision_site_blocks.py`) and
+this module parses that syntax (via `scripts/repo_site_blocks.py`) and
 ports each Hugo shortcode/partial/home layout under `site/layouts/` to a
 plain Python function reading the same `site/data/*.json`/`*.toml` files.
 
 This module only produces the two languages' *pre-bundle* HTML sources
-(under `dist/decision-site/`) plus the shared `llms.txt` index.
+(under `dist/repo-site/`) plus the shared `llms.txt` index.
 `scripts/render_site.py`'s `render()` -- completely unmodified -- then
 inlines local CSS/JS/images and rejects any external runtime asset, exactly
 as it already does for the generated-project handbook. That inlining step,
 and the portable-bundle contract it enforces, are out of this module's
-scope by design; see `docs/adr/portable-decision-site.md`.
+scope by design; see `docs/adr/portable-repo-site.md`.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, Final, Protocol
 
 _ROOT: Final = Path(__file__).resolve().parents[1]
-_BLOCKS: Final = runpy.run_path(str(_ROOT / "scripts/decision_site_blocks.py"))
+_BLOCKS: Final = runpy.run_path(str(_ROOT / "scripts/repo_site_blocks.py"))
 _RENDER_SITE: Final = runpy.run_path(str(_ROOT / "scripts/render_site.py"))
 # Reused verbatim rather than reimplemented: the same small inline-Markdown
 # subset (bold/code/links) already used for the generated-project handbook
@@ -66,7 +66,70 @@ def _substitute_version_tokens(markdown: str, data: SiteData) -> str:
     return _VERSION_TOKEN.sub(replace, markdown)
 
 
-# Both outputs are written as siblings under dist/decision-site/, two
+# Issue #681 decision N: a downstream Copier-generated project's minimal
+# repo-site (`template/site/content/`) uses this engine unmodified but
+# needs its own project facts, which live in `.csarc/config.yml`, not in a
+# hand-written slide. Reusing the same `[[key]]` syntax as the version
+# tokens above (rather than Jinja, which only resolves once at `copier
+# copy`/`copier update` time) means a project's own later `.csarc/
+# config.yml` edit reaches the site on the next local `./scripts/build-
+# repo-site` -- no re-run of Copier needed. Most of the allowlist below is
+# not a second schema: it is exactly the "規則治理" governance-config
+# approved-key table (Issue #474), the existing list of keys the site is
+# allowed to surface; `repository_url` is the one addition, a public,
+# non-sensitive fact already asked at generation time and needed for the
+# minimal starter's own clone command. An unlisted `[[...]]` (root's own
+# docs-site/governance slides use the literal string `` `[[key]]` `` as a
+# prose example) never matches this regex, so it is left untouched rather
+# than resolved or rejected.
+_CONFIG_TOKENS: Final = (
+    "project_name",
+    "project_description",
+    "languages",
+    "branch_strategy",
+    "project_visibility",
+    "code_owner",
+    "reviewers",
+    "repository_url",
+)
+_CONFIG_TOKEN: Final = re.compile(
+    r"\[\[(?P<key>" + "|".join(_CONFIG_TOKENS) + r")\]\]"
+)
+
+
+def _config_token_text(value: object, *, lang: str) -> str:
+    """Format one `.csarc/config.yml` value for bilingual site prose."""
+    if isinstance(value, list):
+        separator = "、" if lang == "zh-tw" else ", "
+        return separator.join(str(item) for item in value)
+    if isinstance(value, bool):
+        if lang == "zh-tw":
+            return "是" if value else "否"
+        return str(value).lower()
+    return "" if value is None else str(value)
+
+
+def _substitute_config_tokens(
+    markdown: str, config: dict[str, Any], *, lang: str
+) -> str:
+    """Resolve a downstream project's `[[project_name]]`-style tokens.
+
+    Fails closed (like the retired generated-project `_substitute_config`
+    it replaces) when the source uses an allowlisted token name that this
+    project's `.csarc/config.yml` does not actually define, instead of
+    silently rendering an empty string.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        key = match.group("key")
+        if key not in config:
+            raise BuildError(f"Unknown site content setting: {key}")
+        return _config_token_text(config[key], lang=lang)
+
+    return _CONFIG_TOKEN.sub(replace, markdown)
+
+
+# Both outputs are written as siblings under dist/repo-site/, two
 # directories below the repository root, so they share one relative asset
 # path -- no more Hugo `en/` subdirectory or per-language `../` prefix.
 _ASSET_PREFIX: Final = "../../"
@@ -156,27 +219,47 @@ _TESTING_STEP_ORDER: Final = (
 
 
 def load_site_data(root: Path) -> SiteData:
-    """Load every `site/data/*` source the render functions consume."""
+    """Load every `site/data/*` source the render functions consume.
+
+    Every file here is optional except `navigation.json` and
+    `site/version.json`: a minimal downstream site (Issue #681) whose
+    content never uses `{{< similar-tools >}}`, `{{< testing >}}`,
+    `{{< config-guidance >}}`, `{{< file-map >}}`, or `{{< audit-trail >}}`
+    has no reason to ship placeholder JSON those shortcodes would never
+    read -- this is what makes the engine actually reusable by `template/`
+    instead of root-specific. A file that does exist is still parsed
+    strictly; only its absence is tolerated.
+    """
     data_dir = root / "site/data"
-    with (data_dir / "glossary.toml").open("rb") as stream:
-        glossary = tomllib.load(stream)
-    similar_tools = _load_json_file(data_dir / "similar_tools.json")
-    similar_tools["testing"]["groups"] = _load_testing_groups(
-        data_dir / "testing"
-    )
+    glossary_path = data_dir / "glossary.toml"
+    glossary: dict[str, Any] = {}
+    if glossary_path.is_file():
+        with glossary_path.open("rb") as stream:
+            glossary = tomllib.load(stream)
+    similar_tools = _load_json_file_or_default(data_dir / "similar_tools.json")
+    if "testing" in similar_tools:
+        similar_tools["testing"]["groups"] = _load_testing_groups(
+            data_dir / "testing"
+        )
     return SiteData(
         navigation=_load_json_file(data_dir / "navigation.json"),
         glossary=glossary,
-        config_examples=_load_json_file(data_dir / "config_examples.json"),
+        config_examples=_load_json_file_or_default(
+            data_dir / "config_examples.json"
+        ),
         similar_tools=similar_tools,
-        file_map=_load_json_file(data_dir / "file_map.json"),
-        audit_trail=_load_json_file(data_dir / "audit_trail.json"),
+        file_map=_load_json_file_or_default(data_dir / "file_map.json"),
+        audit_trail=_load_json_file_or_default(data_dir / "audit_trail.json"),
         version=_load_json_file(root / "site/version.json"),
     )
 
 
 def _load_json_file(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_json_file_or_default(path: Path) -> dict[str, Any]:
+    return _load_json_file(path) if path.is_file() else {}
 
 
 def _load_testing_groups(testing_dir: Path) -> list[dict[str, Any]]:
@@ -394,7 +477,7 @@ def render_raw(
 
 
 class _MixedNode(Protocol):
-    """Structural shape of `decision_site_blocks.MixedNode`.
+    """Structural shape of `repo_site_blocks.MixedNode`.
 
     That dataclass is loaded dynamically via `runpy` (see `_BLOCKS` above),
     so it has no static type this module can import directly; a Protocol
@@ -420,6 +503,10 @@ def _render_shortcode(
             lang=lang,
             data=data,
             state=state,
+        )
+    if node.kind in ("standard", "ops"):
+        return render_mode_content(
+            node.kind, node.attrs, node.body, lang=lang, data=data, state=state
         )
     return _render_self_closing(node.kind, node.attrs, lang=lang, data=data)
 
@@ -461,6 +548,37 @@ def render_detail(
     )
 
 
+def render_mode_content(
+    mode: str,
+    attrs: dict[str, str],
+    body: str,
+    *,
+    lang: str,
+    data: SiteData,
+    state: RenderState,
+) -> str:
+    """Render a `{{< standard >}}`/`{{< ops >}}` full-pane reading-mode variant.
+
+    Issue #681 decision F: a slide that needs both a standard and an ops
+    reading of the same topic wraps each full version in one of these two
+    shortcodes instead of sprinkling `{{< detail >}}` asides next to shared
+    prose. `detail-toggle.js` shows exactly one `.mode-content` block at a
+    time and swaps the whole thing on toggle, instead of collapsing an aside
+    in place. `key`/`title` are required (like `detail`/`disclosure`) so
+    `scripts/check-repo-site-translations` can enforce that both
+    language sources declare a matching pair; `title` is exposed only as an
+    `aria-label` since the reading-mode toggle button already names the
+    mode visually.
+    """
+    key = _esc(attrs["key"])
+    title = _esc(attrs["title"])
+    inner = render_mixed(body, lang=lang, data=data, state=state)
+    return (
+        f'<div class="mode-content" data-mode="{mode}" '
+        f'data-content-key="{key}" aria-label="{title}">{inner}</div>'
+    )
+
+
 def render_disclosure(
     attrs: dict[str, str],
     body: str,
@@ -488,15 +606,24 @@ def render_config_guidance(track: str, *, lang: str, data: SiteData) -> str:
 
     Issue #525 retired the old two-mode disclosure -- a fold-open
     `<details>` for "direct" tracks, a button plus modal-overlay-with-
-    pager for the rest -- in favor of one static block. The
-    simple/technical toggle (see detail-toggle.css's `.config-guidance`
-    rule) already shows or hides this whole element directly in the
-    content page; once it is visible, every item is already in view, so
-    no further click-to-reveal layer is needed inside it. The `direct`
-    field in site/data/config_examples.json is no longer read here (both
-    prior styles collapsed into this one), but is left in the data file
-    since it still documents which tracks were considered "fixed
-    baseline" content when that distinction was authored.
+    pager for the rest -- in favor of one static block, always fully
+    expanded once Maintenance mode made it visible at all. Issue #681/
+    #682 decision Q supersedes that specific point: once every visible
+    slide's font floor rose to honor a real reading distance (never
+    below 12pt as rendered), a track with several config-item cards
+    (each a title, goal, path, and full code sample) no longer fits the
+    fixed 900px canvas without a second, in-page scrollbar -- exactly
+    what the deck's "no scroll" contract forbids. A single collapsed
+    `<details>` per track keeps every example one click away instead of
+    always paying its full height, while the simple/technical toggle
+    (see detail-toggle.css's `.config-guidance` rule) still decides
+    whether the track is offered at all. The `direct` field in
+    site/data/config_examples.json is still not read here, for the same
+    reason Issue #525 stopped reading it: both prior styles already
+    collapsed into one shape, and this reopens no distinction between
+    them -- it is left in the data file only as a record of which
+    tracks were considered "fixed baseline" when that distinction was
+    authored.
     """
     tracks = data.config_examples["tracks"]
     if track not in tracks:
@@ -524,11 +651,11 @@ def render_config_guidance(track: str, *, lang: str, data: SiteData) -> str:
             "</article>"
         )
     return (
-        '<aside class="config-guidance" '
+        '<details class="config-guidance" '
         f'data-content-key="config-{_esc(track)}">'
-        f"<strong>{_esc(labels['heading'])}</strong>"
+        f"<summary>{_esc(labels['heading'])}</summary>"
         f"<p>{_esc(labels['intro'])}</p>"
-        f'<div class="config-items">{"".join(entries)}</div></aside>'
+        f'<div class="config-items">{"".join(entries)}</div></details>'
     )
 
 
@@ -1053,9 +1180,9 @@ def render_audit_trail(*, lang: str, data: SiteData) -> str:
     """Render `{{< audit-trail >}}`: present the governance audit trail.
 
     `scripts/generate_audit_trail.py` (Issue #535) queries live GitHub
-    state and writes two Markdown tables. This decision site is the
+    state and writes two Markdown tables. This repo site is the
     byte-reproducible, `file://`-openable static bundle
-    `docs/adr/portable-decision-site.md` requires, so it can never embed
+    `docs/adr/portable-repo-site.md` requires, so it can never embed
     that live query's result as if it were current -- Issue #559 decided
     this shortcode instead documents each output file's *structure*
     (paths and columns, sourced once here so both languages stay in sync
@@ -1159,18 +1286,26 @@ def render_journey_rail(
             f"{current}>{label}</a>"
         )
 
+    # Issue #681/#682: whether a group's items show a leading code badge
+    # (01, 02, ...) is declared per group in navigation.json's `groups`
+    # array (`numbered`), not hardcoded per section here -- adding a group
+    # like "notes" that never numbers its items needs no code change.
+    def render_section(group: dict[str, Any]) -> str:
+        items_html = render_items(
+            group_items(group["key"]), with_code=group["numbered"]
+        )
+        return (
+            f"  <h3>{_esc(group['labels'][lang])}</h3>\n"
+            f'  <ol class="{_esc(group["listClass"])}">\n'
+            f"{items_html}\n  </ol>\n"
+        )
+
+    sections = "".join(render_section(group) for group in nav["groups"])
+
     aria_label = _esc(labels["ariaLabel"])
     return (
         f'<aside class="journey-rail" aria-label="{aria_label}">\n'
-        f"  <h3>{_esc(labels['use'])}</h3>\n"
-        '  <ol class="journey-use">\n'
-        f"{render_items(group_items('use'), with_code=False)}\n  </ol>\n"
-        f"  <h3>{_esc(labels['workflow'])}</h3>\n"
-        '  <ol class="journey-main">\n'
-        f"{render_items(group_items('workflow'), with_code=True)}\n  </ol>\n"
-        f"  <h3>{_esc(labels['support'])}</h3>\n"
-        '  <ol class="journey-support">\n'
-        f"{render_items(group_items('support'), with_code=True)}\n  </ol>\n"
+        f"{sections}"
         f"{chr(10).join(appendices)}\n"
         f'  <div class="journey-legend" aria-label="{_esc(labels["legend"])}">'
         "\n"
@@ -1204,7 +1339,21 @@ def _render_header(attrs: dict[str, str], *, legacy: bool) -> str:
 def _render_legacy_body(
     body: str, *, lang: str, data: SiteData, state: RenderState
 ) -> str:
-    """Render a `legacy="true"` slide's Inner (raw HTML, safeHTML in Hugo)."""
+    """Render a `legacy="true"` slide's Inner (raw HTML, safeHTML in Hugo).
+
+    Issue #681 decision F: `{{< legacy >}}` is this slide's standard-mode
+    pane (raw HTML, usually a hand-built diagram) and `{{< basic >}}` is its
+    ops-mode pane -- the same full-pane-swap contract as the `{{< standard
+    >}}`/`{{< ops >}}` shortcode pair used by non-legacy slides, just
+    authored with Hugo's older two-block syntax because these slides
+    predate that pair and their standard-mode content is raw HTML, not
+    Markdown. Both panes get `.mode-content[data-mode]` so one shared
+    `detail-toggle.css` rule shows exactly one of them at a time; `{{<
+    basic >}}` renders its *entire* body now (prose, tables, and nested
+    `{{< detail >}}`/`{{< config-guidance >}}` cards alike) instead of only
+    the nested detail cards, so ops mode gets a complete write-up, not
+    fragments left behind by the standard-mode diagram.
+    """
     bare = _BARE_SELF_CLOSING.match(body.strip())
     if bare:
         return _render_self_closing(
@@ -1225,11 +1374,11 @@ def _render_legacy_body(
     if prefix:
         pieces.append(prefix)
     pieces.append(
-        '<div class="legacy-content">'
+        '<div class="legacy-content mode-content" data-mode="standard">'
         f"{render_raw(legacy_inner, lang=lang, data=data, state=state)}</div>"
     )
     pieces.append(
-        '<div class="markdown-body basic-summary">'
+        '<div class="markdown-body basic-summary mode-content" data-mode="ops">'
         f"{render_mixed(basic_inner, lang=lang, data=data, state=state)}</div>"
     )
     return "\n".join(pieces)
@@ -1308,60 +1457,52 @@ def render_page(
     lang: str,
     data: SiteData,
     root: Path | None = None,
+    config: dict[str, Any] | None = None,
+    theme_href: str = "site/theme.css",
 ) -> str:
     """Render one language's complete pre-bundle HTML source.
 
     When `root` is given, README.md (README.<lang>.md for a non-primary
-    language) is this page's live source for two things, so its wording
-    can never silently drift from the site's -- neither is hand-copied
-    into site/content/_index.<lang>.md:
+    language) is this page's live source for one narrower thing, so that
+    wording can never silently drift from the site's without also being
+    hand-copied into site/content/_index.<lang>.md: a `<!-- csarc-readme-
+    <name>:start -->...<!-- csarc-readme-<name>:end -->` span anywhere in
+    the source is replaced with the matching README fragment (see
+    `_inject_readme_markers`) -- for example, the capability slide's hero
+    tagline. The `about` slide used to be sourced this way in full (its
+    entire body mirrored README's "## 專案概述"/"## Overview" section);
+    Issue #681 decision D reversed that so About and README can each say
+    something genuinely different, About being why CSARC exists and README
+    being whether and how to adopt it.
 
-    - A slide whose `key` is in `_README_SLIDE_SECTIONS` has its entire
-      inline body replaced with the named README H2 section's body,
-      verbatim (see `_split_readme_sections`).
-    - A `<!-- csarc-readme-<name>:start -->...<!-- csarc-readme-<name>:end
-      -->` span anywhere in the source is replaced with the matching
-      README fragment (see `_inject_readme_markers`), for a narrower
-      injection point inside a slide that otherwise keeps bespoke markup
-      (e.g. the capability slide's legacy hero).
-
-    `root` is optional (and both lookups only fire for content actually
+    `root` is optional (the marker lookup only fires for content actually
     present) so callers that render a synthetic fixture with no README,
-    such as unit tests, are unaffected.
+    such as unit tests, are unaffected. `config` is likewise optional and
+    only meaningful for a downstream project's `.csarc/config.yml`-backed
+    `[[project_name]]`-style tokens (see `_substitute_config_tokens`);
+    root's own content never uses an allowlisted token name, so passing
+    `None` here is a no-op rather than an error.
+
+    `theme_href` points at the one project-specific stylesheet a fork or
+    consuming project may safely override (Issue #527): root's own
+    `site/theme.css` for root's build, `docs/site-theme.css` for a
+    downstream project's, so an already-generated repo's existing override
+    file keeps working without a rename.
     """
     substituted = _substitute_version_tokens(markdown_text, data)
+    if config is not None:
+        substituted = _substitute_config_tokens(substituted, config, lang=lang)
     if root is not None:
         substituted = _inject_readme_markers(substituted, root=root, lang=lang)
     metadata, body = _parse_front_matter(substituted)
     title = metadata["title"]
     controls = metadata["controls"]
 
-    readme_sections_by_lang: dict[str, str] | None = None
-
-    def _slide_body(attrs: dict[str, str], slide_body: str) -> str:
-        nonlocal readme_sections_by_lang
-        if root is None or attrs["key"] not in _README_SLIDE_SECTIONS:
-            return slide_body
-        if readme_sections_by_lang is None:
-            readme_sections_by_lang = {}
-        if lang not in readme_sections_by_lang:
-            _preamble, sections = _split_readme_sections(
-                _readme_text(root, lang)
-            )
-            readme_sections_by_lang = sections
-        heading = _README_SLIDE_SECTIONS[attrs["key"]][lang]
-        if heading not in readme_sections_by_lang:
-            raise ValueError(
-                f"README ({lang}) is missing the {heading!r} section "
-                f"needed by the {attrs['key']!r} slide"
-            )
-        return readme_sections_by_lang[heading]
-
     state = RenderState()
     slides = [
         render_slide(
             attrs,
-            _slide_body(attrs, slide_body),
+            slide_body,
             lang=lang,
             data=data,
             state=state,
@@ -1387,8 +1528,36 @@ def render_page(
         mermaid_block = (
             f'\n  <script src="{mermaid_src}"></script>\n'
             "  <script>\n"
-            "    mermaid.initialize({ startOnLoad: true, "
-            'securityLevel: "strict" });\n'
+            "    mermaid.initialize({ startOnLoad: false, "
+            'securityLevel: "strict", '
+            # htmlLabels:false forces plain SVG <text> for node labels
+            # instead of a <foreignObject><div>...</div></foreignObject>,
+            # which needs a synchronous HTML layout pass to measure label
+            # size before mermaid can size the node around it.
+            "flowchart: { htmlLabels: false } });\n"
+            # `startOnLoad`'s one-shot scan processes every `.mermaid`
+            # block on the page regardless of visibility; one sitting in
+            # a `.slide` that is not yet `.active`, or a `.mode-content`
+            # pane that is not yet shown, measures as a zero-size box and
+            # is permanently marked `data-processed` with that broken
+            # result -- a later, ordinary re-run treats it as already
+            # done and never retries it. window.csarcMermaidRun() is
+            # called here (for whatever is visible at load) and again by
+            # deck.js's show() and detail-toggle.js's setDetailLevel()
+            # (for whatever a slide change or mode toggle just revealed),
+            # each time filtered to elements actually visible right now,
+            # so a still-hidden diagram is left untouched -- and
+            # unprocessed -- until the moment it truly becomes visible.
+            "    window.csarcMermaidRun = function () {\n"
+            "      var nodes = Array.prototype.filter.call(\n"
+            "        document.querySelectorAll(\n"
+            '          "pre.mermaid:not([data-processed])"\n'
+            "        ),\n"
+            "        function (el) { return el.offsetParent !== null; }\n"
+            "      );\n"
+            "      if (nodes.length) mermaid.run({ nodes: nodes });\n"
+            "    };\n"
+            "    window.csarcMermaidRun();\n"
             "  </script>"
         )
 
@@ -1404,10 +1573,12 @@ def render_page(
 {_DETAIL_LEVEL_SCRIPT}
   <link rel="stylesheet" href="{_ASSET_PREFIX}site/static/styles.css">
   <link rel="stylesheet" href="{_ASSET_PREFIX}site/static/detail-toggle.css">
-  <link rel="stylesheet" href="{_ASSET_PREFIX}site/theme.css">
+  <link rel="stylesheet" href="{_ASSET_PREFIX}{theme_href}">
 </head>
 <body>
   <div class="reading-controls">
+    <button type="button" id="nav-toggle" class="nav-toggle" \
+aria-label="{_esc(controls["menu"])}" aria-expanded="false">☰</button>
     <nav class="language-control" aria-label="{_esc(controls["language"])}">
 {language_links}
     </nav>
@@ -1479,18 +1650,6 @@ def render_llms_txt(data: SiteData) -> str:
 
 # --- README as a live content source -----------------------------------
 
-# A decision-site slide key mapped to README's literal H2 heading text per
-# language (README.md for the primary language _LANGUAGE_ORDER[0],
-# README.<lang>.md otherwise) whose body becomes that slide's entire
-# content, verbatim. Add an entry here -- not a hand-copied paraphrase in
-# site/content/_index.<lang>.md -- whenever a slide's whole purpose is to
-# show a specific README section; the heading text must match README
-# exactly, so a renamed heading fails the build instead of silently
-# drifting.
-_README_SLIDE_SECTIONS: Final = {
-    "about": {"zh-tw": "專案概述", "en": "Overview"},
-}
-
 _H2_HEADING: Final = re.compile(r"^## (?P<title>.+)$", re.MULTILINE)
 _H1_HEADING: Final = re.compile(r"^# .+\n")
 _README_MARKER: Final = re.compile(
@@ -1552,9 +1711,8 @@ def _readme_preamble_first_paragraph(root: Path, lang: str) -> str:
 # Named markers a site/content/_index.<lang>.md source may embed as
 # <!-- csarc-readme-<name>:start -->...<!-- csarc-readme-<name>:end -->;
 # each resolves to a README fragment read fresh at build time. Add an entry
-# here for a new narrow injection point inside a slide that otherwise keeps
-# bespoke markup (see _README_SLIDE_SECTIONS instead when the *entire*
-# slide body should be one README section).
+# here for a narrow injection point inside a slide that otherwise keeps
+# bespoke markup.
 _README_MARKERS: Final = {
     "preamble-tagline": _readme_preamble_first_paragraph,
 }
@@ -1574,9 +1732,29 @@ def _inject_readme_markers(markdown_text: str, *, root: Path, lang: str) -> str:
     return _README_MARKER.sub(_replace, markdown_text)
 
 
-def build(root: Path, output_dir: Path) -> dict[str, Path]:
+def _load_downstream_config(root: Path) -> dict[str, Any] | None:
+    """Load `.csarc/config.yml` for `[[project_name]]`-style tokens.
+
+    Returns `None` when the file does not exist (root's own build: root
+    dogfoods the template and does carry a `.csarc/config.yml`, but its own
+    content never uses an allowlisted token name, so loading it would be
+    harmless either way -- `None` here is simply cheaper than reading a
+    file this call will not use).
+    """
+    config_path = root / ".csarc/config.yml"
+    if not config_path.is_file():
+        return None
+    config_module = runpy.run_path(str(root / "scripts/csarc_config.py"))
+    load_config = config_module["load_config"]
+    return load_config(config_path)
+
+
+def build(
+    root: Path, output_dir: Path, *, theme_href: str = "site/theme.css"
+) -> dict[str, Path]:
     """Render both languages and the shared llms.txt into `output_dir`."""
     data = load_site_data(root)
+    config = _load_downstream_config(root)
     output_dir.mkdir(parents=True, exist_ok=True)
     outputs: dict[str, Path] = {}
     for lang in _LANGUAGE_ORDER:
@@ -1586,6 +1764,8 @@ def build(root: Path, output_dir: Path) -> dict[str, Path]:
             lang=lang,
             data=data,
             root=root,
+            config=config,
+            theme_href=theme_href,
         )
         output_path = output_dir / _LANGUAGES[lang]["output"]
         output_path.write_text(html_text, encoding="utf-8")
@@ -1600,7 +1780,16 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument(
-        "--output-dir", type=Path, default=Path("dist/decision-site")
+        "--output-dir", type=Path, default=Path("dist/repo-site")
+    )
+    parser.add_argument(
+        "--theme-href",
+        default="site/theme.css",
+        help=(
+            "Repo-root-relative path to the one project-specific stylesheet "
+            "override (default: root's own site/theme.css; a downstream "
+            "project passes docs/site-theme.css)."
+        ),
     )
     return parser
 
@@ -1610,14 +1799,16 @@ def main() -> int:
     args = _parser().parse_args()
     root = args.root.resolve()
     try:
-        outputs = build(root, root / args.output_dir)
+        outputs = build(
+            root, root / args.output_dir, theme_href=args.theme_href
+        )
     except (
         BuildError,
         OSError,
         UnicodeError,
         tomllib.TOMLDecodeError,
     ) as error:
-        sys.stderr.write(f"decision site build failed: {error}\n")
+        sys.stderr.write(f"repo site build failed: {error}\n")
         return 1
     for name, path in outputs.items():
         sys.stdout.write(f"{name}: {path}\n")

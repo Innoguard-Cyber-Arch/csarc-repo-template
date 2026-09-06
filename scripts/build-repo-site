@@ -2,26 +2,26 @@
 set -euo pipefail
 
 if (($# > 1)) || { (($# == 1)) && [[ "$1" != "--check" ]]; }; then
-  printf 'Usage: scripts/build-decision-site [--check]\n' >&2
+  printf 'Usage: scripts/build-repo-site [--check]\n' >&2
   exit 2
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-python3 "$repo_root/scripts/check-decision-site-navigation"
-python3 "$repo_root/scripts/check-decision-site-versions"
+python3 "$repo_root/scripts/check-repo-site-navigation"
+python3 "$repo_root/scripts/check-repo-site-versions"
 
-build_dir="$repo_root/dist/decision-site"
-python3 "$repo_root/scripts/build_decision_site.py" \
+build_dir="$repo_root/dist/repo-site"
+python3 "$repo_root/scripts/build_repo_site.py" \
   --root "$repo_root" \
   --output-dir "$build_dir"
 
 if (($# == 1)); then
   # --keys-only: verify no slide key silently vanished or appeared without
   # acknowledgment (RETIRED_LEGACY_KEYS / parity="supplemental"|"new").
-  # The exact-text comparison is not wired in; see check-decision-site-
+  # The exact-text comparison is not wired in; see check-repo-site-
   # parity's module docstring and Issue #590 for why.
-  python3 "$repo_root/scripts/check-decision-site-parity" \
+  python3 "$repo_root/scripts/check-repo-site-parity" \
     --legacy "$repo_root/site/legacy/index.html" \
     --candidate "$build_dir/index.html" \
     --keys-only
@@ -48,7 +48,7 @@ llms_outputs=(llms.txt docs/llms.txt)
 if (($# == 1)); then
   for output in "${llms_outputs[@]}"; do
     if ! cmp -s "$llms_source" "$repo_root/$output"; then
-      printf '%s is stale; run scripts/build-decision-site\n' "$output" >&2
+      printf '%s is stale; run scripts/build-repo-site\n' "$output" >&2
       exit 1
     fi
   done
@@ -58,7 +58,7 @@ else
   done
 fi
 
-printf 'Decision site: %s, %s\n' \
+printf 'Repo site: %s, %s\n' \
   "$repo_root/${outputs[0]}" "$repo_root/${outputs[1]}"
 printf 'LLM indexes: %s, %s\n' \
   "$repo_root/${llms_outputs[0]}" "$repo_root/${llms_outputs[1]}"

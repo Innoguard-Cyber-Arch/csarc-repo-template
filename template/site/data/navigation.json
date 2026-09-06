@@ -1,0 +1,59 @@
+{
+  "labels": {
+    "zh-tw": {
+      "ariaLabel": "簡報目錄",
+      "legend": "顏色說明",
+      "human": "需要人決策",
+      "automated": "預設自動完成",
+      "maintainer": "僅維運可見"
+    },
+    "en": {
+      "ariaLabel": "Presentation outline",
+      "legend": "Color key",
+      "human": "Human decision",
+      "automated": "Automated by default",
+      "maintainer": "Maintainers only"
+    }
+  },
+  "groups": [
+    {
+      "key": "use",
+      "listClass": "journey-use",
+      "numbered": false,
+      "labels": {
+        "zh-tw": "功能",
+        "en": "Features"
+      }
+    }
+  ],
+  "items": [
+    {
+      "key": "index",
+      "group": "use",
+      "participation": "human",
+      "labels": {
+        "zh-tw": "首頁",
+        "en": "Home"
+      }
+    },
+    {
+      "key": "install",
+      "group": "use",
+      "participation": "human",
+      "labels": {
+        "zh-tw": "安裝說明",
+        "en": "Install"
+      }
+    },
+    {
+      "key": "about",
+      "group": "use",
+      "participation": "human",
+      "labels": {
+        "zh-tw": "關於",
+        "en": "About"
+      }
+    }
+  ],
+  "appendices": []
+}

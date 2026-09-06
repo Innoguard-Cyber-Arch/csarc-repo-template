@@ -1,18 +1,20 @@
 import json
 import runpy
+import shutil
 from pathlib import Path
 
 import pytest
-from jinja2 import Environment, StrictUndefined
+from copier import run_copy
 
+ROOT = Path(__file__).parents[1]
 SITE_MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "render_site.py")
 )
 PARITY_MODULE = runpy.run_path(
-    str(Path(__file__).parents[1] / "scripts" / "check-decision-site-parity")
+    str(Path(__file__).parents[1] / "scripts" / "check-repo-site-parity")
 )
 BUILD_MODULE = runpy.run_path(
-    str(Path(__file__).parents[1] / "scripts" / "build_decision_site.py")
+    str(Path(__file__).parents[1] / "scripts" / "build_repo_site.py")
 )
 BundleError = SITE_MODULE["BundleError"]
 render = SITE_MODULE["render"]
@@ -188,32 +190,38 @@ def test_render_reflects_different_project_name_values(tmp_path: Path) -> None:
     assert alpha_bundle != beta_bundle
 
 
-def test_branch_strategy_switches_generated_site_content() -> None:
-    """The already-approved `branch_strategy` key must actually switch the
-    handbook's standard-vs-delivery guidance at Copier generation time,
-    proving that "mode switching" is config-driven rather than a second,
-    site-only setting."""
+def test_branch_strategy_reaches_generated_site_content() -> None:
+    """The already-approved `branch_strategy` key must actually reach the
+    generated repo-site at build time, proving that a downstream project's
+    facts are config-driven rather than a second, site-only setting.
+
+    Issue #681 decision N replaced the retired docs/site-content.md
+    handbook (which resolved `branch_strategy` via Jinja at `copier copy`/
+    `update` time, so this test used to render template/docs/site-
+    content.md.jinja directly) with the same repo-site engine root uses,
+    reading `.csarc/config.yml` at every local build instead -- see
+    test_build_repo_site.py's `_substitute_config_tokens`/
+    `_load_downstream_config` tests for that mechanism's unit coverage.
+    """
     root = Path(__file__).parents[1]
-    template = (root / "template/docs/site-content.md.jinja").read_text(
-        encoding="utf-8"
+    build_module = runpy.run_path(
+        str(root / "template/scripts/build_repo_site.py")
     )
-    environment = Environment(autoescape=True, undefined=StrictUndefined)
+    substitute_config_tokens = build_module["_substitute_config_tokens"]
 
     def render_for(branch_strategy: str) -> str:
-        return environment.from_string(template).render(
-            branch_strategy=branch_strategy,
-            enable_governance_drift_check=False,
-            project_mode="new",
+        return substitute_config_tokens(
+            "Branch strategy: [[branch_strategy]].",
+            {"branch_strategy": branch_strategy},
+            lang="en",
         )
 
     delivery = render_for("delivery")
-    standard = render_for("main")
+    main = render_for("main")
 
-    assert "Delivery route" in delivery
-    assert "批次邊界" in delivery
-    assert "Delivery route" not in standard
-    assert "批次邊界" not in standard
-    assert delivery != standard
+    assert delivery == "Branch strategy: delivery."
+    assert main == "Branch strategy: main."
+    assert delivery != main
 
 
 def test_internal_site_keys_are_documented_once() -> None:
@@ -255,32 +263,48 @@ def test_render_surfaces_preserved_legacy_content(tmp_path: Path) -> None:
 
 
 def test_generated_site_uses_project_owned_markdown() -> None:
+    """Issue #681 decision N: the downstream repo-site is now the same
+    engine and bilingual-Markdown-source contract as root's, not the
+    retired docs/site-content.md handbook (a single Jinja-templated
+    Markdown file resolved once at `copier copy`/`update` time)."""
     root = Path(__file__).parents[1]
     copier = (root / "copier.yml").read_text(encoding="utf-8")
-    shell = (root / "template/site/index.html.jinja").read_text(
+    engine = (root / "template/scripts/build_repo_site.py").read_text(
         encoding="utf-8"
     )
-    content = (root / "template/docs/site-content.md.jinja").read_text(
+    zh_tw = (root / "template/site/content/_index.zh-tw.md").read_text(
+        encoding="utf-8"
+    )
+    en = (root / "template/site/content/_index.en.md").read_text(
         encoding="utf-8"
     )
 
-    assert '  - "docs/site-content.md"' in copier
+    assert '  - "site/content/_index.zh-tw.md"' in copier
+    assert '  - "site/content/_index.en.md"' in copier
+    assert "bash scripts/build-repo-site" in copier
     assert "site-content.js" not in copier
-    assert "CSARC_SITE_CONTENT" in shell
-    assert "site-content.js" not in shell
-    assert "[[project_name]]" in content
-    assert "[[languages]]" in content
-    assert "[[project_visibility]]" in content
+    for content in (zh_tw, en):
+        assert "[[project_name]]" in content
+        assert "[[languages]]" in content
+        assert "[[project_visibility]]" in content
+        assert "{{< slide" in content
+    # The engine itself is copied verbatim from root, not hand-simplified;
+    # a real divergence would defeat the point of sharing one contract.
+    assert engine == (root / "scripts/build_repo_site.py").read_text(
+        encoding="utf-8"
+    )
     assert not (root / "template/site/app.js").exists()
+    assert not (root / "template/site/index.html.jinja").exists()
+    assert not (root / "template/docs/site-content.md.jinja").exists()
     assert not (root / "template/docs/site-content.js.jinja").exists()
 
 
-def test_readme_describes_markdown_site_source() -> None:
-    """README.md and template/README.md.jinja must name the current,
-    maintained site source (docs/site-content.md), not the retired
-    docs/site-content.js. Any remaining docs/site-content.js mention in the
-    downstream-facing template README must be a legacy-migration hint,
-    matching docs/adr/portable-decision-site.md.
+def test_readme_describes_repo_site_source() -> None:
+    """README.md and the template READMEs must name the current,
+    maintained site source (site/content/_index.*.md), not the retired
+    docs/site-content.md/.js. A remaining docs/site-content.md mention in
+    a README must be about the migration off it, matching
+    docs/adr/portable-repo-site.md.
     """
     root = Path(__file__).parents[1]
     root_readme = (root / "README.md").read_text(encoding="utf-8")
@@ -295,16 +319,16 @@ def test_readme_describes_markdown_site_source() -> None:
     )
     template_readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
 
-    assert "docs/site-content.md" in root_readme
-    assert "docs/site-content.md" in template_readme
-    assert "site-content.js" not in root_readme
-
-    for line in template_readme.splitlines():
-        if "site-content.js" in line:
-            assert "遷移" in line, (
-                "docs/site-content.js may only appear in the zh-tw "
-                "template README as a legacy-migration hint"
-            )
+    for readme in (root_readme, template_readme):
+        assert "site/content/_index.zh-tw.md" in readme
+        assert "site-content.js" not in readme
+        for line in readme.splitlines():
+            if "docs/site-content.md" in line:
+                assert "遷移" in line or "retired" in line, (
+                    "docs/site-content.md may only appear as a "
+                    "migration/retirement note now that site/content/"
+                    "_index.*.md is the current source"
+                )
 
 
 def test_render_rejects_incomplete_markdown_shell(tmp_path: Path) -> None:
@@ -389,10 +413,10 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         encoding="utf-8"
     )
     english = (root / "site/content/_index.en.md").read_text(encoding="utf-8")
-    chinese_home = chinese.split('{{< slide key="capability"', 1)[1].split(
+    chinese_home = chinese.split('{{< slide key="index"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
-    english_home = english.split('{{< slide key="capability"', 1)[1].split(
+    english_home = english.split('{{< slide key="index"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
     flow = chinese.split('{{< slide key="flow"', 1)[1].split(
@@ -411,7 +435,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     # markdown table cell (see the old `{{< slide key="files" >}}` body)
     # into site/data/file_map.json's "workflows" entry when Issue #534
     # replaced the flat table with a file-explorer-style tree (see
-    # scripts/build_decision_site.py's render_file_map); the sync
+    # scripts/build_repo_site.py's render_file_map); the sync
     # invariant this test proves -- every active workflow file is
     # mentioned by name -- carries over unchanged to that entry.
     file_map_data = json.loads(
@@ -494,20 +518,22 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     assert '<article class="decision-step' not in journey_decisions
     # Issue #533 merged the "contract" (Step 03) and "template-release"
     # (Step 09) slides' simple/technical split into one legacy="false" body
-    # each, so they no longer carry a legacy `decision-strip`. That leaves 7
-    # of the original 9 legacy decision-workflow slides (method, agents,
-    # languages, pr, supply, deploy, governance) with their usual pair of
-    # "other approaches" / "our choice" decision-step-fold blocks.
-    assert journey_decisions.count('class="decision-step decision-fold') == 14
-    assert (
-        journey_decisions.count('class="decision-step decision-fold" open') == 7
-    )
-    assert (
-        journey_decisions.count(
-            'class="decision-step decision-fold recommended" open'
-        )
-        == 7
-    )
+    # each, so they no longer carry a legacy `decision-strip`. The 2026-09-06
+    # redesign round then replaced every remaining "Step" slide's
+    # single-choice bullet card (method, agents, languages, pr, supply,
+    # deploy, governance, docs-site) with a reusable diagram archetype --
+    # `.relation-map` for a sequence or gated flow, `.capability-map` for
+    # parallel/independent items, `.step-flow` for docs-site's source ->
+    # render -> output -> reader pipeline -- because a single centered
+    # bullet card was still just a bullet card, not a real composition.
+    # `.decision-strip`/`.decision-fold` now only remain in the (currently
+    # bilingually mismatched, see Issue #681 decision N) zh-tw-only archive
+    # slides outside this "method".."similar-tools" range, so none of these
+    # Step slides contribute a decision-fold any more.
+    assert journey_decisions.count('class="decision-step decision-fold') == 0
+    assert '<div class="relation-map"' in journey_decisions
+    assert '<div class="capability-map' in journey_decisions
+    assert '<div class="step-flow"' in journey_decisions
 
 
 def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:  # noqa: C901
@@ -527,7 +553,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     # sibling "testing" fields read straight from the raw file, can keep
     # indexing `data["testing"]["groups"]` unchanged.
     data["testing"]["groups"] = site_data.similar_tools["testing"]["groups"]
-    # Rendered by the engine (scripts/build_decision_site.py) rather than
+    # Rendered by the engine (scripts/build_repo_site.py) rather than
     # read from the retired Hugo shortcode/partial/home-layout sources
     # those variable names originally referenced (Issue #524).
     shortcode = render_similar_tools(lang="zh-tw", data=site_data)
@@ -585,13 +611,20 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert (
         'class="journey-item human active" aria-current="step">' in journey_rail
     )
-    support_items = {
+    # Issue #681/#682: a later UX review moved testing/bridge (and, at the
+    # time, advanced-install -- since merged into "install"'s own Ops pane)
+    # out of "support" into their own unnumbered "notes" group (see
+    # navigation.json's `groups` array), so they're no longer findable
+    # under "support".
+    notes_items = {
         item["key"]: item
         for item in navigation["items"]
-        if item["group"] == "support"
+        if item["group"] == "notes"
     }
-    assert support_items["testing"]["audience"] == "maintainer"
-    assert support_items["bridge"]["audience"] == "maintainer"
+    assert notes_items["testing"]["audience"] == "maintainer"
+    assert notes_items["bridge"]["audience"] == "maintainer"
+    assert "code" not in notes_items["testing"]
+    assert "code" not in notes_items["bridge"]
     assert navigation["appendices"] == []
     assert navigation["labels"]["zh-tw"]["human"] == "需要人決策"
     assert navigation["labels"]["zh-tw"]["automated"] == "預設自動完成"
@@ -682,7 +715,16 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "background: var(--yellow);" in controls
     assert "overflow-y: auto;" in styles
     assert ".journey-rail {\n      position: fixed;" in styles
-    assert ".slide.active > .legacy-content > * { flex-shrink: 0; }" in styles
+    # Issue #681/#682: a `.mode-content` pane is itself `display: contents`
+    # (detail-toggle.css), so its children need this reaching them
+    # directly -- `.legacy-content > *` alone missed the ops pane, which
+    # never carries that class, letting some browsers silently shrink its
+    # content to fit instead of showing the same overflow every browser
+    # agrees on.
+    assert (
+        ".slide.active > .legacy-content > *,\n"
+        "    .slide.active > .mode-content > * { flex-shrink: 0; }"
+    ) in styles
     assert ".similar-tools-tabs button {\n      flex: 0 0 auto;" in styles
     assert "min-width: 210px;" not in styles
     direct_tracks = {
@@ -1224,3 +1266,67 @@ def test_parity_ignores_explicit_supplemental_slides(tmp_path: Path) -> None:
     assert parse_parity(legacy, candidate=False) == parse_parity(
         candidate, candidate=True
     )
+
+
+def test_copier_generated_project_builds_its_own_bilingual_repo_site(
+    tmp_path: Path,
+) -> None:
+    """Issue #681 decision N/O end-to-end: a real `copier copy` -- not a
+    hand-assembled equivalent fixture -- proves the shared engine actually
+    works through the Copier templating layer, not just when called
+    directly. `languages: []` keeps this in the fast suite (no uv/pnpm/
+    cargo lockfile task fires), while the unconditional `bash scripts/
+    build-repo-site` task still runs and must produce a real bilingual,
+    offline-openable repo-site from `.csarc/config.yml` facts alone.
+    """
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "generated-project"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": [],
+            "project_name": "Generated Project",
+            "project_slug": "generated-project",
+            "project_description": (
+                "Exercises the shared repo-site engine through Copier."
+            ),
+            "repository_url": "https://github.com/example/generated-project",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "public",
+            "code_owner": "@Innoguard-Cyber-Arch/generated-project-team",
+            "reviewers": "@octocat",
+        },
+        defaults=True,
+        unsafe=True,
+    )
+
+    # The retired handbook source is not generated at all any more --
+    # there is no template/docs/site-content.md.jinja left to copy from.
+    assert not (project / "docs/site-content.md").exists()
+    assert (project / "site/content/_index.zh-tw.md").is_file()
+    assert (project / "site/content/_index.en.md").is_file()
+
+    for output in ("docs/index.html", "docs/index.en.html"):
+        html = (project / output).read_text(encoding="utf-8")
+        # Not a bare "{{<": the bundled CSS/JS legitimately mention that
+        # syntax in their own prose comments (e.g. "a `{{< standard >}}`/
+        # `{{< ops >}}` pair replaces..."); an actual unparsed block always
+        # keeps its `key="..."` attribute, which prose never does.
+        assert "{{< slide key=" not in html
+        assert "{{< standard key=" not in html
+        assert "{{< ops key=" not in html
+        assert "[[project_name]]" not in html
+        assert "[[repository_url]]" not in html
+        assert "Generated Project" in html
+        assert "Exercises the shared repo-site engine through Copier." in html
+        assert "@Innoguard-Cyber-Arch/generated-project-team" in html
+        assert "@octocat" in html
+        assert "https://github.com/example/generated-project" in html
+        assert '<link rel="stylesheet"' not in html
+        assert "<script src=" not in html
+        assert 'data-mode="standard"' in html
+        assert 'data-mode="ops"' in html

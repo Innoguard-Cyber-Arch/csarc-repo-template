@@ -83,8 +83,8 @@ def scope_for(path: str) -> str:
     return "unknown"
 
 
-def affects_decision_site(path: str) -> bool:
-    """Return whether a changed path affects the portable decision site."""
+def affects_repo_site(path: str) -> bool:
+    """Return whether a changed path affects the portable repo-site build."""
     return path.startswith(("site/", "template/site/")) or path in {
         "docs/index.html",
         "docs/site-content.js",
@@ -161,7 +161,7 @@ def classify(
         upload_site=(
             force_full
             or promotion
-            or any(map(affects_decision_site, changed_files))
+            or any(map(affects_repo_site, changed_files))
         ),
     )
 

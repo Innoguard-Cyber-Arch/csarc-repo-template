@@ -43,4 +43,4 @@ Start with auto-detection: `csarc status` reads only local files and, if already
 
 ## Full detail
 
-For how `<approved-full-commit-sha>` is obtained, required fields like `project_description`/`project_run_command`/`security_reporting_channel`, the manual-merge list for an existing-repo adoption, conflict handling, and troubleshooting, see the root [`README.md`](../README.md#quick-start)'s "Quick start" and "Template updates" sections, and the real adoption evidence in [`docs/pilot-adoption.md`](pilot-adoption.md). For the "why" behind these choices, read the [internal decision site](index.en.html).
+For how `<approved-full-commit-sha>` is obtained, required fields like `project_description`/`project_run_command`/`security_reporting_channel`, the manual-merge list for an existing-repo adoption, conflict handling, and troubleshooting, see the root [`README.md`](../README.md#quick-start)'s "Quick start" and "Template updates" sections, and the real adoption evidence in [`docs/pilot-adoption.md`](pilot-adoption.md). For the "why" behind these choices, read the [repo-site](index.en.html).

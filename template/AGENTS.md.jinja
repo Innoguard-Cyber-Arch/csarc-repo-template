@@ -16,7 +16,7 @@
 - `.csarc/config.yml` is the template-managed source for enabled language and repository modules.
 - Use the linked Issue or `docs/specs/` SDD contract for scope; `docs/README.md` maps durable project memory.
 - Use `docs/adr/` for decisions. On updated projects, also search project-owned `docs/decisions/`; never move or overwrite it automatically.
-- Edit project site content in `docs/site-content.md` and theme overrides in `docs/site-theme.css`, then rebuild `docs/index.html`; do not hand-edit the generated bundle.
+- Edit project site content in `site/content/_index.zh-tw.md` / `_index.en.md` and theme overrides in `docs/site-theme.css`, then rebuild with `./scripts/build-repo-site`; do not hand-edit the generated `docs/index.html` / `docs/index.en.html`.
 
 ## Working loop
 
@@ -50,7 +50,7 @@ Existing-repository history changes start read-only: propose semantic story grou
 {% endif %}{% if "typescript" in languages %}- TypeScript setup: `corepack enable && pnpm install --frozen-lockfile`.
 {% endif %}{% if "rust" in languages %}- Rust setup: `rustup show && cargo fetch --locked`.
 {% endif %}{% if not languages %}- Environment setup: no language toolchain install is required.
-{% endif %}- Site source check: `uv run --no-project python scripts/render_site.py --check`.
+{% endif %}- Site source check: `./scripts/build-repo-site --check`.
 {% if "python" in languages %}- Python iteration: `uv run ruff check <paths>`, `uv run ty check`, and `uv run pytest <test-path>`.
 {% endif %}{% if "typescript" in languages %}- TypeScript iteration: `pnpm exec biome check <paths>`, `pnpm exec tsc --noEmit`, and `pnpm exec vitest run <test-path>`.
 {% endif %}{% if "rust" in languages %}- Rust iteration: `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, and `cargo test --locked`.

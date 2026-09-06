@@ -41,7 +41,7 @@ def main() -> int:
 
     if violations:
         sys.stderr.write(
-            "Decision-site navigation labels must be rewritten to fit "
+            "Repo-site navigation labels must be rewritten to fit "
             "the sidebar:\n"
         )
         sys.stderr.write(
@@ -50,7 +50,7 @@ def main() -> int:
         return 1
 
     sys.stdout.write(
-        f"Decision-site navigation: {count} labels fit within five "
+        f"Repo-site navigation: {count} labels fit within five "
         "full-width characters\n"
     )
     return 0

@@ -1,6 +1,6 @@
 """Regression coverage for Issue #472: config_examples.json + the
 config-guidance shortcode (now `render_config_guidance` in
-scripts/build_decision_site.py; see Issue #524's Hugo-to-Python port)
+scripts/build_repo_site.py; see Issue #524's Hugo-to-Python port)
 replace the old hardcoded, zh-tw-only `configExamples` JS objects in
 site/static/{app,legacy-components}.js.
 
@@ -13,7 +13,7 @@ Covers:
 End-to-end rendering coverage (the right number of config-trigger /
 inline-detail items per track, and multi-line `code` samples surviving
 rendering byte-for-byte in both languages) now lives in
-tests/test_build_decision_site.py, exercising `render_config_guidance`
+tests/test_build_repo_site.py, exercising `render_config_guidance`
 directly -- no Hugo build required.
 """
 
@@ -130,7 +130,7 @@ def test_app_js_rollout_track_only_serves_the_legacy_fixture() -> None:
     live, Markdown-driven content (as an `audience="archive"` appendix, once
     it confirmed the original content had been dropped, not redistributed
     elsewhere). That live slide is unrelated to app.js: the new engine
-    (`scripts/build_decision_site.py` / `scripts/render_site.py`) never
+    (`scripts/build_repo_site.py` / `scripts/render_site.py`) never
     references app.js, so nothing in its output can run the fixture-only
     script this test protects, regardless of which `data-track` values the
     live content uses.
@@ -139,12 +139,12 @@ def test_app_js_rollout_track_only_serves_the_legacy_fixture() -> None:
     legacy_fixture = (ROOT / "site/legacy/index.html").read_text(
         encoding="utf-8"
     )
-    build_decision_site = (ROOT / "scripts/build_decision_site.py").read_text(
+    build_repo_site = (ROOT / "scripts/build_repo_site.py").read_text(
         encoding="utf-8"
     )
     render_site = (ROOT / "scripts/render_site.py").read_text(encoding="utf-8")
     assert "rollout:" in app_js
     assert 'data-track="rollout"' in legacy_fixture
     assert '<script src="app.js"></script>' in legacy_fixture
-    assert "app.js" not in build_decision_site
+    assert "app.js" not in build_repo_site
     assert "app.js" not in render_site

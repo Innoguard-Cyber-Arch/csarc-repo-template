@@ -1,20 +1,29 @@
 """Shared `{{< name attr="value" >}}...{{< /name >}}` block parsing.
 
-Both `scripts/check-decision-site-translations` (structural shape
-comparison of the two language sources) and `scripts/build_decision_site.py`
+Both `scripts/check-repo-site-translations` (structural shape
+comparison of the two language sources) and `scripts/build_repo_site.py`
 (the rendering engine) need to recognize the same Hugo-shortcode-style block
 syntax still used, unchanged, by `site/content/_index.{zh-tw,en}.md`. This
 module is the single parser for that syntax so neither caller reimplements
-it; `check-decision-site-translations` keeps its own shape-comparison logic
+it; `check-repo-site-translations` keeps its own shape-comparison logic
 and only imports the regexes below.
 
 The syntax has three shapes, all used by the content files:
 - a *container* block: `{{< name attr="value" >}}...{{< /name >}}`; only
-  `slide`, `legacy`, `basic`, `detail`, and `disclosure` are containers, and
-  none of them nest inside another block of the same name;
+  `slide`, `legacy`, `basic`, `detail`, `disclosure`, `standard`, and `ops`
+  are containers, and none of them nest inside another block of the same
+  name;
 - a *self-closing* call with attributes: `{{< config-guidance track="x" >}}`;
 - a bare self-closing call: `{{< file-map >}}`, `{{< similar-tools >}}`,
   `{{< testing >}}`.
+
+`standard` and `ops` (Issue #681 decision F) mark a slide's two full-pane
+reading-mode variants: everything inside `{{< standard >}} ... {{< /standard
+>}}` is the version shown in standard mode, everything inside
+`{{< ops >}} ... {{< /ops >}}` is the version shown in ops mode. Unlike
+`detail`, which nests inside prose and only ever hides an aside next to the
+standard content, a `standard`/`ops` pair replaces the *entire* slide body
+depending on the active reading mode -- see `detail-toggle.js`.
 """
 
 from __future__ import annotations
@@ -23,14 +32,19 @@ import re
 from dataclasses import dataclass, field
 from typing import Final
 
-# Reused verbatim by scripts/check-decision-site-translations for its own
+# Reused verbatim by scripts/check-repo-site-translations for its own
 # flat, order-preserving shape comparison of both language sources.
 BLOCK: Final = re.compile(
-    r"(?={{<\s*(slide|detail|disclosure)\b([^>]*)>}}"
+    r"(?={{<\s*(slide|detail|disclosure|standard|ops)\b([^>]*)>}}"
     r"(.*?){{<\s*/\1\s*>}})",
     re.DOTALL,
 )
 ATTRIBUTE: Final = re.compile(r'(\w+)="([^"]*)"')
+# Deliberately excludes `standard`/`ops`: unlike `detail`/`disclosure`, which
+# only ever hold a fragment next to a slide's own direct prose, a `standard`/
+# `ops` pair can legitimately be the slide's *entire* body (see render_slide
+# in scripts/build_repo_site.py). Stripping them before the "is this
+# slide empty" check below would make every such slide a false positive.
 NESTED_BLOCK: Final = re.compile(
     r"{{<\s*(detail|disclosure)\b[^>]*>}}.*?{{<\s*/\1\s*>}}",
     re.DOTALL,
@@ -39,7 +53,7 @@ NESTED_BLOCK: Final = re.compile(
 # Shortcodes that can appear inside a slide body without a matching
 # `{{< /name >}}` close tag; site/content/*.md never nests one inside
 # another (verified by the content-fidelity ports in
-# tests/test_build_decision_site.py).
+# tests/test_build_repo_site.py).
 SELF_CLOSING_NAMES: Final = (
     "config-guidance",
     "file-map",
@@ -48,7 +62,8 @@ SELF_CLOSING_NAMES: Final = (
 )
 # Shortcodes that always pair with a close tag and never nest inside their
 # own name, but may nest inside a `basic` or non-legacy slide body.
-CONTAINER_NAMES: Final = ("detail", "disclosure")
+# `detail`/`disclosure` may also nest inside `standard`/`ops`.
+CONTAINER_NAMES: Final = ("detail", "disclosure", "standard", "ops")
 
 _MIXED_TOKEN: Final = re.compile(
     r"{{<\s*(?P<self_name>" + "|".join(SELF_CLOSING_NAMES) + r")\b"

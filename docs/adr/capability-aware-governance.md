@@ -96,10 +96,11 @@ token 權限範圍，仍可能個別擋住 `ruleset_enforcement`、`codeowners_e
 repo_capabilities.py` 是可獨立單元測試的三態（`allowed`／`blocked`／`unknown`，延續本
 ADR 第 14 行既有的三態慣例）evaluator，`scripts/check-repo-capabilities` 是即時對這個
 repo 探測、組成 facts 後交給 evaluator 的唯讀入口，只回報缺口與對應 workaround，不寫入
-GitHub、也不是新的合併關卡（那仍是 `apply-repository-settings.sh check` 的工作）。內部
-網站新增雙語「進階安裝」附錄（`docs/index.html#advanced-install`）說明矩陣內容與如何
-解讀檢查結果；`docs/ci-policy.md`「Repo 能力自我檢查與 workaround 對照」一節記錄同一
-決定的執行細節。
+GitHub、也不是新的合併關卡（那仍是 `apply-repository-settings.sh check` 的工作）。
+repo-site「安裝說明」頁的維運模式新增雙語能力矩陣說明框（`docs/index.html#install`；
+Issue #681/#682 決定 R 前是獨立的「進階安裝」附錄頁，後併入 install 頁的 Ops 面板）
+說明矩陣內容與如何解讀檢查結果；`docs/ci-policy.md`「Repo 能力自我檢查與 workaround
+對照」一節記錄同一決定的執行細節。
 
 明確保留的邊界：這套機制不重新設計 `apply-repository-settings.sh` 既有的 `DEGRADED`
 標記——矩陣裡對應既有限制的每一列，workaround 直接引用同一段既有訊息，不是另建一套

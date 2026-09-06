@@ -1,6 +1,6 @@
 ---
 id: SPEC-007
-title: Maintain portable decision documentation
+title: Maintain portable repo-site documentation
 owner: @Innoguard-Cyber-Arch/arch
 priority: P2
 estimate: ongoing
@@ -42,7 +42,7 @@ README、agent instructions、深入決策與簡報若各自重述同一件事�
 
 ## Verification
 
-- `uv run --no-project python scripts/render_site.py --check`
+- `./scripts/build-repo-site --check`
 - `./scripts/verify-template.sh`
 - 離線、鍵盤與窄螢幕檢查依 `site/README.md` 執行。
 
@@ -52,4 +52,4 @@ README、agent instructions、深入決策與簡報若各自重述同一件事�
 - [Issue #177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)／[PR #185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)
 - [Issue #178](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178)／[PR #187](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/187)
 - Planned work: [#194](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/194), [#205–#209](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/205)
-- [Portable decision site architecture ADR](../adr/portable-decision-site.md)
+- [Portable repo-site architecture ADR](../adr/portable-repo-site.md)
