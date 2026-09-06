@@ -295,7 +295,7 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 
 {{< slide key="files" track="files" eyebrow="檔案地圖" title="模板把必要設定放到正確位置" subtitle="列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。" class="dense" legacy="false" >}}
 {{< standard key="files-mode-standard" title="更新流程與已整合工具" >}}
-檔案放在哪裡不是重點；誰能改它才是。每個檔案屬於三種歸屬之一：<strong>公版主導</strong>（模板更新時可能改動，通常不要在生成後直接改）、<strong>共同維護</strong>（你可以直接改，但下次公版更新可能要你合併差異）、<strong>專案持有</strong>（完全由你決定，公版永遠不會覆寫）。
+檔案放在哪裡不是重點；誰能改它才是。每個檔案屬於三種歸屬之一：**公版主導**（模板更新時可能改動，通常不要在生成後直接改）、**共同維護**（你可以直接改，但下次公版更新可能要你合併差異）、**專案持有**（完全由你決定，公版永遠不會覆寫）。
 
 <div class="capability-map"><div class="capability-node"><h3>公版設定 <span class="ownership-tag shared">共同維護</span></h3><p><code>.csarc/config.yml</code>、<code>policies/</code>：語言、分支規則、負責人與審查者都記在這裡。</p></div><div class="capability-node"><h3>GitHub 工作流程 <span class="ownership-tag template">公版主導</span></h3><p><code>.github/</code>：Issue／PR 表單與自動檢查流程。</p></div><div class="capability-node"><h3>Agent 規範 <span class="ownership-tag shared">共同維護</span></h3><p><code>AGENTS.md</code>：agent 在這個 repo 裡怎麼做事。</p></div><div class="capability-node"><h3>專案文件 <span class="ownership-tag shared">共同維護</span></h3><p><code>README.md</code>、<code>docs/</code>、<code>site/</code>：給人看的說明，以及你正在看的這個網站。</p></div><div class="capability-node"><h3>產品程式 <span class="ownership-tag project">專案持有</span></h3><p><code>src/</code>：真正的產品程式碼、測試與規格。</p></div></div>
 
