@@ -1170,6 +1170,18 @@
       font-weight: 850;
     }
     .copy-command:hover, .copy-command:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
+    .copy-command.copy-command-failed { border-color: #b42318; background: #fff0ed; color: #8a1c12; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     /* Issue #681/#682: the full agent prompt used to live only in the
        copy button's `data-copy-text` attribute -- a reader could copy a
        prompt they were never shown, with no way to check it before
@@ -5606,6 +5618,11 @@ html[data-detail-level="technical"] .mode-content[data-mode="standard"] {
   });
   addEventListener('keydown', event => {
     if (event.target.closest('summary, button, a, input, textarea, select')) return;
+    // Issue #681/#682: an open install-command (or term) overlay is a
+    // modal dialog -- arrow keys inside it must never fall through to
+    // slide navigation, even when focus sits on non-interactive markup
+    // inside the dialog (e.g. its heading) rather than on a button.
+    if (document.querySelector('.config-overlay:not([hidden])')) return;
     if (['ArrowRight', 'PageDown', ' '].includes(event.key)) show(current + 1);
     if (['ArrowLeft', 'PageUp'].includes(event.key)) show(current - 1);
   });
@@ -5772,7 +5789,9 @@ gh auth status`
           interactive: 'Interactive',
           ci: 'CI / already-authorized agent',
           copy: 'Copy',
-          copied: 'Copied'
+          copied: 'Copied',
+          copyFailedShort: 'Copy failed',
+          copyFailed: 'Copy failed — select the text above and copy it by hand.'
         }
       : {
           overlayLabel: '導入與安裝指令',
@@ -5781,7 +5800,9 @@ gh auth status`
           interactive: '互動執行',
           ci: 'CI／已授權 agent',
           copy: '複製',
-          copied: '已複製'
+          copied: '已複製',
+          copyFailedShort: '複製失敗',
+          copyFailed: '複製失敗，請自行選取上方文字複製。'
         };
 
     // Issue #681/#682 2026-09-06 redesign round: generic, not gated behind
@@ -5794,19 +5815,51 @@ gh auth status`
     // copied text can never drift apart. A downstream project's minimal
     // repo-site (Issue #681 decision N) has no `.capability-slide` at
     // all, so this would otherwise never run there.
+    // Issue #681/#682: a single shared `aria-live` region announces every
+    // copy outcome. Relying on the clicked button's own text change is not
+    // enough -- some screen readers only announce a focused control's
+    // label change on the *next* interaction, not the moment it happens --
+    // so this region is the actual, reliable feedback channel; the button
+    // text swap stays as the sighted-user confirmation.
+    let copyStatusRegion = document.getElementById('copy-status-region');
+    if (!copyStatusRegion) {
+      copyStatusRegion = document.createElement('div');
+      copyStatusRegion.id = 'copy-status-region';
+      copyStatusRegion.className = 'sr-only';
+      copyStatusRegion.setAttribute('role', 'status');
+      copyStatusRegion.setAttribute('aria-live', 'polite');
+      document.body.append(copyStatusRegion);
+    }
+    function announceCopyStatus(message) {
+      copyStatusRegion.textContent = '';
+      // Force a DOM mutation even when the same message repeats back to
+      // back (e.g. two quick failed copies) so assistive tech re-announces.
+      requestAnimationFrame(() => { copyStatusRegion.textContent = message; });
+    }
     function copyCommandText(text, button) {
       const restore = button.textContent;
       const onCopied = () => {
         button.textContent = uiText.copied;
+        button.classList.remove('copy-command-failed');
+        announceCopyStatus(uiText.copied);
         setTimeout(() => { button.textContent = restore; }, 1500);
       };
+      const onFailed = () => {
+        button.textContent = uiText.copyFailedShort;
+        button.classList.add('copy-command-failed');
+        announceCopyStatus(uiText.copyFailed);
+        setTimeout(() => {
+          button.textContent = restore;
+          button.classList.remove('copy-command-failed');
+        }, 3000);
+      };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(onCopied, () => copyCommandTextFallback(text, onCopied));
+        navigator.clipboard.writeText(text).then(onCopied, () => copyCommandTextFallback(text, onCopied, onFailed));
       } else {
-        copyCommandTextFallback(text, onCopied);
+        copyCommandTextFallback(text, onCopied, onFailed);
       }
     }
-    function copyCommandTextFallback(text, onCopied) {
+    function copyCommandTextFallback(text, onCopied, onFailed) {
       const textarea = document.createElement('textarea');
       textarea.value = text;
       textarea.style.position = 'fixed';
@@ -5815,9 +5868,11 @@ gh auth status`
       textarea.select();
       try {
         if (document.execCommand('copy')) onCopied();
+        else onFailed();
       } catch {
         // Clipboard unavailable in this context; the command text is
         // still visible in the <pre> for the reader to select by hand.
+        onFailed();
       }
       textarea.remove();
     }
@@ -5832,6 +5887,20 @@ gh auth status`
     const capabilitySlide = document.querySelector('.capability-slide');
     if (!capabilitySlide) return;
 
+    // Issue #681/#682: the install-command overlay (and the term-trigger
+    // glossary popovers sharing the same `.config-overlay` markup) is a
+    // true modal dialog now, not a passive `role="region"` aside -- it
+    // takes focus on open, traps Tab inside itself, and returns focus to
+    // whichever button opened it on close (Esc, the close button, or a
+    // click outside the card all go through this one function).
+    let activeOverlayTrigger = null;
+
+    function getFocusable(container) {
+      return [...container.querySelectorAll(
+        'button, a[href], input, textarea, select, [tabindex]:not([tabindex="-1"])'
+      )].filter(el => !el.hidden && el.offsetParent !== null);
+    }
+
     function closeConfigOverlays() {
       document.querySelectorAll('.config-overlay').forEach(overlay => {
         overlay.hidden = true;
@@ -5840,7 +5909,44 @@ gh auth status`
       document.querySelectorAll('.config-trigger[aria-expanded="true"], .setup-trigger[aria-expanded="true"], .term-trigger[aria-expanded="true"]').forEach(trigger => {
         trigger.setAttribute('aria-expanded', 'false');
       });
+      if (activeOverlayTrigger) {
+        const trigger = activeOverlayTrigger;
+        activeOverlayTrigger = null;
+        trigger.focus();
+      }
     }
+
+    function openConfigOverlay(overlay, trigger) {
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      activeOverlayTrigger = trigger;
+      const focusable = getFocusable(overlay);
+      (focusable[0] || overlay).focus();
+    }
+
+    addEventListener('keydown', event => {
+      const overlay = document.querySelector('.config-overlay:not([hidden])');
+      if (!overlay) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeConfigOverlays();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusable(overlay);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
 
     function closePackageDisclosures(except = null) {
       document.querySelectorAll('.package-disclosure[open]').forEach(detail => {
@@ -5864,7 +5970,8 @@ gh auth status`
     setupOverlay.id = 'setup-overlay';
     setupOverlay.className = 'config-overlay';
     setupOverlay.hidden = true;
-    setupOverlay.setAttribute('role', 'region');
+    setupOverlay.tabIndex = -1;
+    setupOverlay.setAttribute('role', 'dialog');
     setupOverlay.setAttribute('aria-label', uiText.overlayLabel);
     setupOverlay.innerHTML = `<div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="${uiText.closeLabel}">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">${uiText.location}<code></code></p><div class="command-block"><div class="command-block-head"><span class="command-block-label">${uiText.interactive}</span><button class="copy-command" type="button">${uiText.copy}</button></div><pre class="code"></pre></div><div class="command-block ci-block" hidden><div class="command-block-head"><span class="command-block-label">${uiText.ci}</span><button class="copy-command" type="button">${uiText.copy}</button></div><pre class="code"></pre></div></div>`;
     capabilitySlide.append(setupOverlay);
@@ -5893,8 +6000,7 @@ gh auth status`
         ciBlock.hidden = !setting.ciCode;
         if (setting.ciCode) ciBlock.querySelector('pre').textContent = setting.ciCode;
         setupOverlay.dataset.itemIndex = key;
-        setupOverlay.hidden = false;
-        trigger.setAttribute('aria-expanded', 'true');
+        openConfigOverlay(setupOverlay, trigger);
       });
     });
     setupOverlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
@@ -5902,12 +6008,12 @@ gh auth status`
     document.querySelectorAll('.term-trigger').forEach(trigger => {
       const overlay = document.querySelector(`#${trigger.getAttribute('aria-controls')}`);
       if (!overlay) return;
+      overlay.tabIndex = -1;
       trigger.addEventListener('click', () => {
         const isOpen = !overlay.hidden;
         closeConfigOverlays();
         if (isOpen) return;
-        overlay.hidden = false;
-        trigger.setAttribute('aria-expanded', 'true');
+        openConfigOverlay(overlay, trigger);
       });
       overlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
     });

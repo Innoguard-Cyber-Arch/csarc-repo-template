@@ -1154,6 +1154,18 @@
       font-weight: 850;
     }
     .copy-command:hover, .copy-command:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
+    .copy-command.copy-command-failed { border-color: #b42318; background: #fff0ed; color: #8a1c12; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     /* Issue #681/#682: the full agent prompt used to live only in the
        copy button's `data-copy-text` attribute -- a reader could copy a
        prompt they were never shown, with no way to check it before
