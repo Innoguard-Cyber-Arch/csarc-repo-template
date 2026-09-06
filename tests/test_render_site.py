@@ -1323,9 +1323,7 @@ def test_module_step_order_matches_labels_and_navigation() -> None:
         ("en", ROOT / "site/content/_index.en.md"),
     ):
         source = path.read_text(encoding="utf-8")
-        positions = [
-            source.index(f'key="{key}"') for key in _STEP_ORDER_KEYS
-        ]
+        positions = [source.index(f'key="{key}"') for key in _STEP_ORDER_KEYS]
         assert positions == sorted(positions), (
             f"{lang}: {_STEP_ORDER_KEYS} are not declared in that order"
         )
@@ -1401,8 +1399,7 @@ def test_install_prompt_is_visible_and_matches_what_gets_copied() -> None:
         button_label, prompt_text = match.groups()
         assert button_label.strip(), f"{lang}: copy button has no label"
         assert len(prompt_text) > 100, (
-            f"{lang}: visible prompt text looks too short to be the real "
-            "prompt"
+            f"{lang}: visible prompt text looks too short to be the real prompt"
         )
         assert "csarc status" in prompt_text or "csarc" in prompt_text.lower()
 
