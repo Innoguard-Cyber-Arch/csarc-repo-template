@@ -8,6 +8,10 @@
   gap: 6px;
 }
 
+/* Only meaningful once styles.css's narrow-screen rules give it a real
+   (flex) display -- see that file for the drawer it opens. */
+.nav-toggle { display: none; }
+
 .detail-level-control {
   display: flex;
   align-items: center;
@@ -18,7 +22,7 @@
   background: rgba(255, 255, 255, .94);
   box-shadow: 0 4px 14px rgba(23, 23, 23, .12);
   color: var(--ink);
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 800;
 }
 
@@ -64,7 +68,7 @@ html[data-detail-level="technical"] .detail-level-control button[aria-pressed="t
   border-radius: 20px;
   background: rgba(255, 255, 255, .94);
   box-shadow: 0 4px 14px rgba(23, 23, 23, .12);
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 800;
 }
 
@@ -271,7 +275,7 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   min-height: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
-  gap: 12px;
+  gap: 9px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 6px;
@@ -294,6 +298,7 @@ html[data-detail-level="simple"] .technical-tour-trigger {
 }
 
 .markdown-body > .technical-detail,
+.markdown-body > .config-guidance,
 .mode-content > .technical-detail,
 .mode-content > .package-disclosure {
   grid-column: 1 / -1;
@@ -373,9 +378,43 @@ html[data-detail-level="technical"] .mode-content[data-mode="standard"] {
   text-align: center;
 }
 
+.markdown-body > .plan-grid,
+.mode-content > .plan-grid {
+  /* .plan-grid/.plan-card (styles.css) is an existing reusable card-row
+     component (governance, rollout, access-control); reused here for a
+     standard-mode slide's outcome cards instead of a one-off layout.
+     Needs an explicit full-width span here the way it never did in a
+     legacy slide's raw-HTML pane, which was never itself a grid item of
+     a `.markdown-body`/`.mode-content` two-column grid. */
+  grid-column: 1 / -1;
+}
+
+.markdown-body > pre.command,
+.mode-content > pre.command {
+  /* A `<pre>` never wraps by default (`white-space: pre`), which is fine
+     for a short one-line shell command but overflows its grid cell --
+     overlapping whatever sits next to it -- for a long, unbroken
+     natural-language paragraph inside a ```text fence (e.g. an agent
+     prompt block). This card was otherwise unstyled: none of the other
+     `.markdown-body > *` card rules above list `pre.command`. */
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 16px 20px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border: 1px solid var(--line);
+  border-top: 7px solid var(--yellow);
+  background: white;
+}
+
 .markdown-body > pre.mermaid svg,
 .mode-content > pre.mermaid svg {
-  max-width: 100%;
+  /* mermaid.js sets its own inline `style="max-width: <Npx>"`, capped to
+     the diagram's own native pixel width (correct once `htmlLabels:
+     false` above makes label measurement reliable) -- deliberately not
+     overridden here. Forcing it wider than native would stretch a
+     naturally narrow/tall diagram (e.g. a top-down flowchart) to fill
+     the card and blow its height up proportionally huge. */
   height: auto;
 }
 
@@ -384,12 +423,12 @@ html[data-detail-level="technical"] .mode-content[data-mode="standard"] {
 .markdown-body th,
 .technical-detail p {
   font-size: 19px;
-  line-height: 1.35;
+  line-height: 1.28;
 }
 
 .markdown-body li + li,
 .technical-detail p + p {
-  margin-top: 8px;
+  margin-top: 5px;
 }
 
 .markdown-body th,
@@ -410,7 +449,7 @@ html[data-detail-level="technical"] .mode-content[data-mode="standard"] {
 .markdown-slide.dense .markdown-body td,
 .markdown-slide.dense .markdown-body th,
 .markdown-slide.dense .technical-detail p {
-  font-size: 15px;
+  font-size: 18px;
   line-height: 1.22;
 }
 

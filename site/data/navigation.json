@@ -2,9 +2,6 @@
   "labels": {
     "zh-tw": {
       "ariaLabel": "簡報目錄",
-      "use": "功能",
-      "workflow": "模組",
-      "support": "維運",
       "legend": "顏色說明",
       "human": "需要人決策",
       "automated": "預設自動完成",
@@ -12,17 +9,20 @@
     },
     "en": {
       "ariaLabel": "Presentation outline",
-      "use": "Features",
-      "workflow": "Modules",
-      "support": "Ops",
       "legend": "Color key",
       "human": "Human decision",
       "automated": "Automated by default",
       "maintainer": "Maintainers only"
     }
   },
+  "groups": [
+    {"key": "use", "listClass": "journey-use", "numbered": false, "labels": {"zh-tw": "功能", "en": "Features"}},
+    {"key": "workflow", "listClass": "journey-main", "numbered": true, "labels": {"zh-tw": "模組", "en": "Modules"}},
+    {"key": "support", "listClass": "journey-support", "numbered": true, "labels": {"zh-tw": "維運", "en": "Ops"}},
+    {"key": "notes", "listClass": "journey-notes", "numbered": false, "labels": {"zh-tw": "備註", "en": "Notes"}}
+  ],
   "items": [
-    {"key": "capability", "group": "use", "participation": "human", "labels": {"zh-tw": "首頁", "en": "Home"}},
+    {"key": "index", "group": "use", "participation": "human", "labels": {"zh-tw": "首頁", "en": "Home"}},
     {"key": "install", "group": "use", "participation": "human", "labels": {"zh-tw": "安裝說明", "en": "Install"}},
     {"key": "about", "group": "use", "participation": "human", "labels": {"zh-tw": "關於", "en": "About"}},
     {"key": "flow", "group": "use", "participation": "automated", "labels": {"zh-tw": "CI/CD 流程", "en": "CI/CD flow"}},
@@ -36,11 +36,10 @@
     {"key": "deploy", "code": "07", "group": "workflow", "participation": "human", "labels": {"zh-tw": "版本／交付", "en": "Delivery"}},
     {"key": "governance", "code": "08", "group": "workflow", "participation": "human", "labels": {"zh-tw": "規則治理", "en": "Governance"}},
     {"key": "template-release", "code": "09", "group": "support", "participation": "human", "labels": {"zh-tw": "模板升級", "en": "Updates"}},
-    {"key": "docs-site", "code": "10", "group": "support", "participation": "automated", "labels": {"zh-tw": "內部網站", "en": "Docs site"}},
+    {"key": "docs-site", "code": "10", "group": "support", "participation": "automated", "labels": {"zh-tw": "repo-site", "en": "Repo-site"}},
     {"key": "similar-tools", "code": "11", "group": "support", "participation": "human", "labels": {"zh-tw": "相似工具", "en": "Similar"}},
-    {"key": "advanced-install", "code": "12", "group": "support", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "進階安裝", "en": "Advanced"}},
-    {"key": "testing", "code": "13", "group": "support", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "CI/CD 設定", "en": "CI/CD"}},
-    {"key": "bridge", "code": "14", "group": "support", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "五月盤點", "en": "May review"}}
+    {"key": "testing", "group": "notes", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "CI/CD 設定", "en": "CI/CD"}},
+    {"key": "bridge", "group": "notes", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "五月盤點", "en": "May review"}}
   ],
   "appendices": []
 }

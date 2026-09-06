@@ -125,7 +125,7 @@ def test_ci_policy_records_the_minimum_release_notes_fields() -> None:
     assert "tests/test_release_notes_format.py" in policy
 
 
-def test_decision_site_explains_where_to_read_release_history() -> None:
+def test_repo_site_explains_where_to_read_release_history() -> None:
     """An adopter must be able to find this without reading raw Release JSON."""
     zh = (ROOT / "site/content/_index.zh-tw.md").read_text(encoding="utf-8")
     en = (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8")

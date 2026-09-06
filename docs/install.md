@@ -43,4 +43,4 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ## 完整細節
 
-`<approved-full-commit-sha>` 的取得方式、`project_description`／`project_run_command`／`security_reporting_channel` 等必填欄位、既有 repo 導入的 manual merge 清單、衝突處理與 troubleshooting，見根目錄 [`README.md`](../README.md#快速開始) 的「快速開始」「公版更新」章節與 [`docs/pilot-adoption.md`](pilot-adoption.md) 的實際導入證據。要理解「為什麼這樣設計」，請讀[內部決策網站](index.html)。
+`<approved-full-commit-sha>` 的取得方式、`project_description`／`project_run_command`／`security_reporting_channel` 等必填欄位、既有 repo 導入的 manual merge 清單、衝突處理與 troubleshooting，見根目錄 [`README.md`](../README.md#快速開始) 的「快速開始」「公版更新」章節與 [`docs/pilot-adoption.md`](pilot-adoption.md) 的實際導入證據。要理解「為什麼這樣設計」，請讀 [repo-site](index.html)。

@@ -139,7 +139,10 @@
     slide.append(overlay);
 
     const guidance = legacy.querySelector('.config-guidance');
-    (guidance || legacy.querySelector('.decision-strip, .plan-grid')).after(launcher);
+    const anchor = guidance
+      || legacy.querySelector('.decision-strip, .plan-grid, .relation-map');
+    if (anchor) anchor.after(launcher);
+    else legacy.append(launcher);
 
     let current = 0;
     function showPage(index, direction = 1) {
@@ -205,6 +208,14 @@
         overlay.hidden = true;
       });
     }
+    // A `.mode-content[data-mode]` pane's own visibility is pure CSS (see
+    // detail-toggle.css), so a `{{< standard >}}`/`{{< ops >}}` pair's
+    // mermaid diagram can flip from hidden to visible here without any
+    // JS-driven element above noticing. window.csarcMermaidRun() (see the
+    // mermaid init script) renders it now if it is visible and not yet
+    // processed; it is a no-op for a diagram already rendered or still
+    // hidden in the other pane.
+    if (typeof window.csarcMermaidRun === 'function') window.csarcMermaidRun();
     dispatchEvent(new CustomEvent('csarc:detail-level', { detail: selected }));
     if (!persist) return;
     try {

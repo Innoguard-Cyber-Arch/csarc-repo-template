@@ -56,14 +56,38 @@
       height: 900px;
       padding: 3.7% 4.7%;
       overflow-x: hidden;
+      /* Issue #681/#682: desktop must keep a presentation feel -- content
+         is authored to fit this 900px canvas, not to scroll inside it.
+         `auto` is a fail-safe for an authoring mistake, never the intended
+         reading mode; if a slide scrolls here, trim its content instead of
+         relying on this. Verify with `slide.scrollHeight <=
+         slide.clientHeight` after any content change, in both detail
+         levels. (Mobile's narrow-screen override below is a deliberate,
+         separate exception: native page scroll, not this canvas.) */
       overflow-y: auto;
       overscroll-behavior: contain;
       background: var(--paper);
       box-shadow: none;
     }
     .slide.active { display: flex; flex-direction: column; animation: enter .2s ease-out; }
+    /* Issue #681/#682: a `.mode-content` pane (render_mode_content() and
+       the ops side of _render_legacy_body()) is a flex child of `.slide`
+       but is itself `display: contents` (detail-toggle.css), so its own
+       children become flex items of `.slide` too. Without flex-shrink: 0
+       reaching those grandchildren, a browser is free to shrink an ops
+       pane's content (almost always the longer of the two) below its
+       natural size to force it into the 900px canvas -- which can read as
+       "no overflow" in one browser's flex implementation while a
+       different browser refuses to shrink the same content (a table, for
+       example) and shows a real scrollbar instead. Selecting `*` only
+       (previously `.legacy-content > *`, which the ops pane's own class
+       list never carried) makes every mode-content pane's real content
+       height win consistently, so a genuine overflow always surfaces the
+       same way everywhere instead of silently compressing in some
+       browsers and scrolling in others. */
     .slide.active > :not(.journey-rail),
-    .slide.active > .legacy-content > * { flex-shrink: 0; }
+    .slide.active > .legacy-content > *,
+    .slide.active > .mode-content > * { flex-shrink: 0; }
     @keyframes enter { from { opacity: 0; transform: translateX(10px); } }
     .slide::after {
       content: attr(data-page);
@@ -280,7 +304,7 @@
       font-size: 18px;
       font-weight: 850;
     }
-    .file-rows { display: grid; flex: 1; min-height: 0; grid-template-rows: repeat(15, minmax(0, 1fr)); }
+    .file-rows { display: grid; flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(15, minmax(0, 1fr)); }
     .file-row { border-bottom: 1px solid #e4e4e0; }
     .file-row:nth-child(even) { background: #fbfbfa; }
     .file-row:hover { background: #fffbea; }
@@ -315,7 +339,7 @@
       height: 25px;
       place-items: center;
       border-radius: 50%;
-      font-size: 17.5px;
+      font-size: 18px;
       font-weight: 900;
       line-height: 1;
     }
@@ -331,7 +355,7 @@
       padding: 4px 2px;
       border-left: 4px solid #baaa00;
       background: #fffbea;
-      font-size: 17.5px;
+      font-size: 18px;
       font-weight: 800;
       line-height: 1.08;
       text-align: center;
@@ -373,7 +397,11 @@
     .file-map-dots i:last-child { background: #48a967; }
     .file-map-address { padding: 2px 8px; border: 1px solid #c7c7c2; border-radius: 5px; background: white; color: #3b3b39; font: 750 13px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     .file-map-tree, .file-map-tree ul { margin: 0; padding: 0; list-style: none; }
-    .file-map-tree { padding: 4px 9px; }
+    .file-map-tree {
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 4px 9px;
+    }
     .file-map-tree ul { margin-left: 8px; padding-left: 9px; border-left: 1px solid var(--line); }
     .file-map-node { margin: 0; }
     .file-map-branch > summary.file-map-summary { cursor: pointer; }
@@ -398,18 +426,24 @@
     .file-map-icon { flex: 0 0 auto; align-self: center; width: 10px; height: 13px; border: 1px solid #7d8ca2; border-radius: 1px; background: white; }
     .file-map-icon.is-dir { width: 13px; height: 9px; border-color: #b99317; border-radius: 2px; background: #f0c842; }
     .file-map-name { font: 750 13px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #174f8b; }
-    .file-map-note { color: var(--muted); font-size: 12px; }
-    .file-map-tag { flex: 0 0 auto; margin-left: auto; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 850; white-space: nowrap; }
+    .file-map-note { color: var(--muted); font-size: 18px; }
+    .file-map-tag { flex: 0 0 auto; margin-left: auto; padding: 0 6px; border-radius: 999px; font-size: 18px; font-weight: 850; white-space: nowrap; }
     .file-map-tag-template { background: #ececea; color: #333; }
     .file-map-tag-shared { background: var(--optional-soft); color: #174f8b; }
     .file-map-tag-project { background: #ffe2d5; color: #8a3d20; }
-    .file-map-purpose { margin: 0 0 1px 25px; color: #333; font-size: 12px; line-height: 1.16; }
+    .file-map-purpose { margin: 0 0 1px 25px; color: #333; font-size: 18px; line-height: 1.16; }
 
     .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
 
     .similar-tools-slide header { margin-bottom: 8px; }
     .similar-tools-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
-    .similar-tools-tabs { display: flex; align-items: end; gap: 4px; margin-bottom: -1px; padding-left: 10px; z-index: 2; }
+    /* Issue #681/#682 2026-09-06 redesign round: 9 tabs (overall match +
+       8 journeys) at English label lengths ("Journey 08 Delivery") run
+       past the canvas edge and were silently clipped by `.slide`'s own
+       `overflow-x: hidden`; zh-tw's shorter labels happened to fit. A
+       horizontal-scrolling tab strip (not the page itself) keeps every
+       tab reachable without pushing the table below it down a row. */
+    .similar-tools-tabs { display: flex; align-items: end; gap: 4px; margin-bottom: -1px; padding-left: 10px; overflow-x: auto; z-index: 2; }
     .similar-tools-tabs button {
       flex: 0 0 auto;
       min-width: 136px;
@@ -420,17 +454,17 @@
       background: #e9e9e4;
       color: #4b4b47;
       cursor: pointer;
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 900;
       text-align: left;
       white-space: nowrap;
     }
-    .similar-tools-tabs button small { display: block; margin-bottom: 2px; font-size: 12px; letter-spacing: .03em; }
+    .similar-tools-tabs button small { display: block; margin-bottom: 2px; font-size: 18px; letter-spacing: .03em; }
     .similar-tools-tabs button[aria-selected="true"] { border-top: 5px solid var(--yellow); border-bottom-color: white; background: white; color: var(--ink); }
     .similar-tools-tabs button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
     .similar-tools-panel { display: flex; flex: 1; min-height: 0; flex-direction: column; }
     .similar-tools-panel[hidden] { display: none; }
-    .similar-tools-legend { display: flex; gap: 7px; margin-bottom: 7px; font-size: 14px; font-weight: 850; }
+    .similar-tools-legend { display: flex; gap: 7px; margin-bottom: 7px; font-size: 18px; font-weight: 850; }
     .similar-tools-legend span { padding: 5px 8px; border-left: 6px solid; }
     .similar-tools-legend .competitor { border-color: #b9a700; background: #fffbea; }
     .similar-tools-legend .reference { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
@@ -438,42 +472,42 @@
     .similar-tools-legend .capture-date { margin-left: auto; border-color: var(--line); background: white; color: var(--muted); }
     .similar-tools-table-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); background: white; }
     .similar-tools-table-wrap:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
-    .similar-tools-matrix { width: 100%; min-height: 100%; table-layout: fixed; border-collapse: collapse; font-size: 14.5px; line-height: 1.22; }
+    .similar-tools-matrix { width: 100%; min-height: 100%; table-layout: fixed; border-collapse: collapse; font-size: 18px; line-height: 1.22; }
     .similar-tools-matrix th, .similar-tools-matrix td { padding: 7px 8px; border: 1px solid var(--line); overflow-wrap: anywhere; vertical-align: top; }
     .similar-tools-matrix thead th { position: sticky; top: 0; z-index: 2; text-align: center; }
     .similar-tools-matrix thead th:first-child { left: 0; z-index: 4; width: 18%; }
-    .similar-tools-matrix tbody th { position: sticky; left: 0; z-index: 1; width: 18%; background: #fffbea; color: var(--ink); font-size: 14.5px; text-align: left; }
+    .similar-tools-matrix tbody th { position: sticky; left: 0; z-index: 1; width: 18%; background: #fffbea; color: var(--ink); font-size: 18px; text-align: left; }
     .similar-tools-matrix tbody tr:nth-child(even) td { background: #fafaf8; }
     .similar-tools-matrix td strong { color: #174f8b; }
     .similar-tools-matrix td a { color: #174f8b; text-underline-offset: 2px; }
-    .similar-tools-primary-matrix { min-height: 0; font-size: 15px; line-height: 1.28; }
+    .similar-tools-primary-matrix { min-height: 0; font-size: 18px; line-height: 1.28; }
     .similar-tools-primary-matrix thead th:first-child { width: 13%; }
     .similar-tools-primary-matrix thead th:nth-child(2) { width: 14%; }
     .similar-tools-primary-matrix thead th:nth-child(3) { width: 13%; }
     .similar-tools-primary-matrix thead th:nth-child(4) { width: 21%; }
     .similar-tools-primary-matrix thead th:nth-child(5) { width: 25%; }
     .similar-tools-primary-matrix thead th:nth-child(6) { width: 14%; }
-    .similar-tools-primary-matrix tbody th { width: 13%; font-size: 15px; }
+    .similar-tools-primary-matrix tbody th { width: 13%; font-size: 18px; }
     .similar-tools-primary-matrix td ul { margin: 0; padding-left: 18px; }
     .similar-tools-primary-matrix td li + li { margin-top: 4px; }
     .coverage-tags { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px; }
-    .coverage-tag { display: inline-flex; min-width: 29px; min-height: 23px; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 999px; color: white; font-size: 12px; font-style: normal; font-weight: 900; line-height: 1; }
+    .coverage-tag { display: inline-flex; min-width: 29px; min-height: 23px; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 999px; color: white; font-size: 18px; font-style: normal; font-weight: 900; line-height: 1; }
     .coverage-tag.full { background: var(--best); }
     .coverage-tag.partial { background: var(--best-soft); box-shadow: inset 0 0 0 1px #6db091; color: #0b6540; }
-    .similar-tools-philosophy-matrix { min-height: 0; font-size: 14px; line-height: 1.22; }
+    .similar-tools-philosophy-matrix { min-height: 0; font-size: 18px; line-height: 1.22; }
     .similar-tools-philosophy-matrix thead th:first-child { width: 32%; }
     .similar-tools-philosophy-matrix thead th:nth-child(2) { width: 45%; }
     .similar-tools-philosophy-matrix thead th:nth-child(3) { width: 23%; }
     .similar-tools-philosophy-matrix tbody th { width: 32%; }
-    .similar-tools-philosophy-matrix tbody th strong { display: block; font-size: 15px; }
+    .similar-tools-philosophy-matrix tbody th strong { display: block; font-size: 18px; }
     .similar-tools-philosophy-matrix tbody th span { display: block; margin-top: 3px; color: var(--muted); font-weight: 500; }
     .similar-tools-philosophy-matrix tbody td:first-of-type { background: #fffdf0; box-shadow: inset 4px 0 #b9a700; }
-    .similar-tools-philosophy-matrix tbody td:last-child { font-size: 13px; }
+    .similar-tools-philosophy-matrix tbody td:last-child { font-size: 18px; }
     .similar-tools-philosophy-matrix td ul { margin: 0; padding-left: 18px; }
     .similar-tools-philosophy-matrix td li + li { margin-top: 4px; }
     .similar-tools-philosophy-matrix .tool-comparison-detail { display: block; margin: 2px 0 0 12px; }
-    .similar-tools-philosophy-matrix .tool-meta { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; margin-left: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
-    .similar-tools-testing-intro { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-bottom: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 14px; line-height: 1.2; }
+    .similar-tools-philosophy-matrix .tool-meta { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; margin-left: 6px; color: var(--muted); font-size: 18px; font-weight: 700; }
+    .similar-tools-testing-intro { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-bottom: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 18px; line-height: 1.2; }
     .similar-tools-testing-intro > span { color: var(--muted); }
     .similar-tools-testing-intro p { grid-column: 1 / -1; margin: 2px 0 0; }
     .similar-tools-testing-matrix { min-height: 0; font-size: 18px; line-height: 1.22; }
@@ -490,14 +524,14 @@
     .testing-duration-total { margin: 7px 0 0; padding-top: 6px; border-top: 1px solid var(--line); }
     .testing-stage-list { margin: 0; padding-left: 18px; }
     .testing-stage-list > li + li { margin-top: 6px; }
-    .testing-stage-list > li > strong { font-size: 17px; }
+    .testing-stage-list > li > strong { font-size: 18px; }
     .testing-stage-list ul { margin: 3px 0 0; padding-left: 18px; }
     .testing-stage-list span { display: block; margin-top: 3px; color: var(--muted); }
     .testing-kind { margin-top: 4px; }
-    .testing-kind > b { display: block; font-size: 15px; }
-    .testing-kind li > span { font-size: 14px; }
-    .testing-pending-tag { display: inline-flex; margin-left: 6px; padding: 2px 7px; border: 1px solid #b9a700; border-radius: 999px; background: #fff7a8; color: #655900 !important; font-size: 13px; font-weight: 900; line-height: 1.25; text-decoration: none; white-space: nowrap; }
-    .similar-tools-note { margin-top: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 16px; line-height: 1.22; }
+    .testing-kind > b { display: block; font-size: 18px; }
+    .testing-kind li > span { font-size: 18px; }
+    .testing-pending-tag { display: inline-flex; margin-left: 6px; padding: 2px 7px; border: 1px solid #b9a700; border-radius: 999px; background: #fff7a8; color: #655900 !important; font-size: 18px; font-weight: 900; line-height: 1.25; text-decoration: none; white-space: nowrap; }
+    .similar-tools-note { margin-top: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 18px; line-height: 1.22; }
     .selection-sequence {
       position: absolute;
       top: 0;
@@ -583,7 +617,7 @@
     .supply-chain-table .config-col { width: 35%; }
     .supply-chain-table .cmd-col { width: 35%; }
 
-    .checks { display: grid; gap: 7px; }
+    .checks { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; }
     .check {
       display: grid;
       grid-template-columns: 16px 1fr;
@@ -605,28 +639,33 @@
 
     .decision-slide { padding-left: 13.7%; }
     .decision-slide header { margin-bottom: 0; }
+    /* Issue #681/#682 2026-09-06 redesign round: this line's English text
+       is routinely longer than its zh-tw source at the same font size
+       (confirmed on `method`'s "next step" line: 1403px of text in a
+       1334px box) -- a fixed single-line `nowrap`/`ellipsis` clipped it
+       outright, which the desktop no-clipping contract forbids. Wrapping
+       to as many lines as the text needs is the same trade both `.slide`
+       itself and every other reusable component here already make. */
     .context-line {
       margin: 7px 0 12px;
       padding: 5px 0 6px;
-      overflow: hidden;
       color: var(--muted);
       font-size: 18px;
       line-height: 1.25;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      white-space: normal;
     }
     .context-line strong { color: var(--ink); }
     .journey-rail {
       position: fixed;
       left: 2.1%;
       top: 4.5%;
-      bottom: 4.8%;
+      bottom: 3.4%;
       width: 9.7%;
       display: flex;
       flex-direction: column;
     }
     .journey-rail h3 {
-      margin: 6px 0 4px;
+      margin: 3px 0 2px;
       color: var(--muted);
       font-size: 18px;
       letter-spacing: .02em;
@@ -664,15 +703,16 @@
     .journey-bookend.maintainer-bookend.active-selection { background: var(--optional); color: white; }
     .journey-bookend:hover, .journey-bookend:focus-visible { background: #fffbea; outline: 3px solid var(--yellow); outline-offset: 1px; }
     .overview-slide .journey-rail, .repo-explorer-slide .journey-rail, .responsibility-slide .journey-rail, .quickstart-slide .journey-rail { width: 9.7%; }
-    .overview-slide .journey-bookend, .repo-explorer-slide .journey-bookend, .responsibility-slide .journey-bookend, .quickstart-slide .journey-bookend { padding: 4px; font-size: 17.5px; }
-    .overview-slide .journey-rail h3, .repo-explorer-slide .journey-rail h3, .responsibility-slide .journey-rail h3, .quickstart-slide .journey-rail h3 { font-size: 17.5px; white-space: nowrap; }
-    .overview-slide .journey-item, .repo-explorer-slide .journey-item, .responsibility-slide .journey-item, .quickstart-slide .journey-item { font-size: 17.5px; white-space: nowrap; }
+    .overview-slide .journey-bookend, .repo-explorer-slide .journey-bookend, .responsibility-slide .journey-bookend, .quickstart-slide .journey-bookend { padding: 4px; font-size: 18px; }
+    .overview-slide .journey-rail h3, .repo-explorer-slide .journey-rail h3, .responsibility-slide .journey-rail h3, .quickstart-slide .journey-rail h3 { font-size: 18px; white-space: nowrap; }
+    .overview-slide .journey-item, .repo-explorer-slide .journey-item, .responsibility-slide .journey-item, .quickstart-slide .journey-item { font-size: 18px; white-space: nowrap; }
     .overview-slide .journey-item a, .repo-explorer-slide .journey-item a, .responsibility-slide .journey-item a, .quickstart-slide .journey-item a { padding-right: 2px; padding-left: 3px; }
     .journey-rail ol {
       display: grid;
       flex: 0 0 auto;
       min-height: 0;
-      gap: 3px;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2px;
       margin: 0;
       padding: 0;
       overflow: hidden;
@@ -728,12 +768,12 @@
     .journey-legend {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 2px;
-      margin-top: 7px;
+      gap: 1px;
+      margin-top: 4px;
       color: var(--muted);
-      font-size: 14px;
+      font-size: 18px;
       font-weight: 750;
-      line-height: 1.15;
+      line-height: 1.05;
     }
     .journey-legend span { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
     .journey-legend i { width: 11px; height: 11px; border: 1px solid; }
@@ -746,7 +786,7 @@
       padding: 3px 7px;
       border-left: 5px solid;
       color: var(--ink);
-      font-size: 17.5px;
+      font-size: 18px;
       font-weight: 900;
       line-height: 1;
       vertical-align: 1px;
@@ -783,8 +823,6 @@
     .decision-step h3 { margin-bottom: 9px; font-size: 22px; }
     .decision-step p, .decision-step li { font-size: 18px; line-height: 1.34; }
     .decision-step li + li { margin-top: 7px; }
-    .decision-slide[data-track="method"] .decision-step li + li { margin-top: 2px; }
-    .decision-slide[data-track="method"] .decision-fold[open] { max-height: 430px; overflow: auto; }
     .decision-fold { align-self: start; }
     .decision-fold > summary {
       position: relative;
@@ -815,18 +853,53 @@
     .decision-fold-title { display: block; font-size: 22px; font-weight: 850; line-height: 1.2; }
     .decision-fold[open] > summary { margin-bottom: 9px; }
     .work-definition-list ul { margin-top: 3px; padding-left: 19px; }
-    .work-definition-list ul li { font-size: 17px; }
+    .work-definition-list ul li { font-size: 18px; }
     .plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     .plan-card { padding: 13px 14px; border: 1px solid var(--line); border-top: 7px solid var(--rail); background: white; }
     .plan-card.current { border-top-color: var(--yellow); background: #fffdf0; }
     .plan-card.team { border-top-color: var(--best); }
     .plan-card.enterprise { border-top-color: var(--optional); }
     .plan-card h3 { margin-bottom: 7px; font-size: 22px; }
-    .plan-card p, .plan-card li { font-size: 17px; line-height: 1.27; }
+    .plan-card p, .plan-card li { font-size: 18px; line-height: 1.27; }
     .plan-card ul { margin: 7px 0 0; padding-left: 20px; }
     .plan-card li + li { margin-top: 4px; }
-    .plan-state { display: inline-block; margin-left: 5px; padding: 2px 7px; border-radius: 999px; background: var(--soft); font-size: 15px; font-weight: 850; }
-    .package-disclosure { position: relative; z-index: 30; margin-bottom: 9px; }
+    .plan-state { display: inline-block; margin-left: 5px; padding: 2px 7px; border-radius: 999px; background: var(--soft); font-size: 18px; font-weight: 850; }
+    /* Issue #681/#682 UX review: a standard-mode pane whose main content
+       is a short .plan-grid (contract's docs/fast/full tiers, and
+       similarly on files/template-release) or a short bullet list
+       (about) packs to the top of `.markdown-body`'s grid --
+       `align-content: start` below is set so a long, multi-row ops pane
+       doesn't stretch its own rows apart, but the same rule leaves a
+       short standard pane's content sitting at the top with the rest of
+       the 900px canvas empty below it, exactly like a lone
+       decision-strip card once did. `:has()` re-centers only a
+       `.markdown-body` whose *visible* standard pane is one of these
+       two short shapes; a long ops pane already fills or exceeds the
+       height so centering it changes nothing, and any other standard
+       pane that already fills the canvas on its own (the file explorer,
+       dense prose) never matches either selector. */
+    .markdown-body:has(> .mode-content[data-mode="standard"] > .plan-grid),
+    .markdown-body:has(> .mode-content[data-mode="standard"] > ul) {
+      align-content: center;
+    }
+    .mode-content[data-mode="standard"] > .plan-grid .plan-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 4% 5%;
+    }
+    .mode-content[data-mode="standard"] > .plan-grid .plan-card h3 { margin-bottom: 12px; font-size: 30px; }
+    .mode-content[data-mode="standard"] > .plan-grid .plan-card p,
+    .mode-content[data-mode="standard"] > .plan-grid .plan-card li { font-size: 20px; line-height: 1.4; }
+    .mode-content[data-mode="standard"] > ul {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin: 0;
+      padding-left: 28px;
+    }
+    .mode-content[data-mode="standard"] > ul > li { font-size: 21px; line-height: 1.5; }
+    .package-disclosure { position: relative; z-index: 30; margin-bottom: 4px; }
     .package-disclosure[open] { z-index: 38; }
     .package-disclosure summary {
       display: block;
@@ -877,25 +950,36 @@
     .package-health a { color: #174f8b; font-weight: 850; text-underline-offset: 2px; }
     .release-policy-health { width: min(800px, 175%); }
     .release-policy-matrix { width: 100%; border-collapse: collapse; }
-    .release-policy-matrix th, .release-policy-matrix td { padding: 5px 6px; border: 1px solid var(--line); font-size: 14px; line-height: 1.18; text-align: left; vertical-align: top; }
+    .release-policy-matrix th, .release-policy-matrix td { padding: 5px 6px; border: 1px solid var(--line); font-size: 18px; line-height: 1.18; text-align: left; vertical-align: top; }
     .release-policy-matrix th { background: var(--soft); font-weight: 850; }
     .config-guidance {
-      margin-top: 12px;
+      margin-top: 6px;
       padding: 9px 12px;
       border-left: 6px solid var(--yellow);
       background: var(--soft);
       font-size: 18px;
       line-height: 1.32;
     }
-    .config-guidance > strong { display: block; color: var(--ink); }
+    .config-guidance > summary {
+      display: block;
+      color: var(--ink);
+      font-weight: 850;
+      cursor: pointer;
+    }
+    .config-guidance > summary::-webkit-details-marker { color: var(--ink); }
+    .config-guidance > summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
     .config-guidance > p { margin: 1px 0 6px; color: var(--muted); font-size: 18px; }
-    /* Issue #525: config-guidance is now one static block (no
-       click-to-expand `<details>` fold or per-item disclosure) --
-       .config-items lists every item directly, in the page's own flow,
-       so the simple/technical toggle alone decides whether it's visible
-       at all (see detail-toggle.css's `.config-guidance` rule). */
-    .config-items {
+    /* Issue #681/#682 decision Q supersedes Issue #525's "one static
+       block, no fold" call: the 12pt-floor redesign made a multi-item
+       track's full code samples taller than the 900px canvas, so
+       config-guidance is a collapsed `<details>` again -- one click
+       reveals every item in .config-items, in the page's own flow (no
+       popover), while the simple/technical toggle alone still decides
+       whether the track is offered at all (see detail-toggle.css's
+       `.config-guidance` rule). */
+    .config-guidance[open] .config-items {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       gap: 6px;
       margin-top: 6px;
     }
@@ -906,10 +990,10 @@
       background: white;
     }
     .config-item h4 { margin: 0 0 3px; font-size: 18px; font-weight: 750; }
-    .config-item p { margin: 0; font-size: 16px; line-height: 1.22; color: #4f4f4f; }
+    .config-item p { margin: 0; font-size: 18px; line-height: 1.22; color: #4f4f4f; }
     .config-item-path { margin-top: 4px; }
     .config-item-path code { margin-left: 4px; color: #174f8b; font-weight: 750; }
-    .config-item pre.code { margin: 6px 0 0; max-height: 190px; overflow: auto; font-size: 14px; }
+    .config-item pre.code { margin: 6px 0 0; max-height: 190px; overflow: auto; font-size: 18px; }
     .config-trigger {
       display: grid;
       grid-template-columns: minmax(0, 57%) minmax(0, 43%);
@@ -987,6 +1071,25 @@
     .config-overlay-path { margin: 8px 0 6px; font-size: 18px; font-weight: 850; }
     .config-overlay-path code { color: #174f8b; }
     .config-overlay .code { max-height: 245px; overflow: auto; font-size: 18px; line-height: 1.25; }
+    .command-block + .command-block { margin-top: 10px; }
+    .command-block-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .command-block-label { color: var(--muted); font-size: 18px; font-weight: 850; }
+    .copy-command {
+      padding: 3px 10px;
+      border: 2px solid var(--ink);
+      border-radius: 4px;
+      background: white;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 850;
+    }
+    .copy-command:hover, .copy-command:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
     .term-trigger {
       display: inline;
       padding: 0;
@@ -1026,7 +1129,18 @@
     .dense-flow { margin-top: 8px !important; margin-bottom: 0; }
     .dense-flow .flow-step { padding: 8px 10px; }
 
-    .pipeline-map { display: grid; flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; }
+    /* Issue #681 decision O: `grid-template-columns` was never set here,
+       so the single implicit column defaulted to `auto` -- sized to fit
+       `.pipeline-track`'s max-content width even when that is wider than
+       `.pipeline-map` itself, instead of clamping to the space actually
+       available. Desktop's own 5-column `.pipeline-track` happens to fit
+       within the space this leaves, so it never surfaced there; the
+       narrow-screen 1-column collapse exposed it (a `.pipeline-stage`
+       card's un-wrapped content overflowed to 533px on a 354px-wide
+       phone canvas, clipped invisibly by `.slide`'s `overflow-x:
+       hidden`). Explicit `minmax(0, 1fr)` matches every other grid in
+       this file that intentionally allows its item to shrink. */
+    .pipeline-map { display: grid; flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; }
     .pipeline-track { display: grid; min-height: 0; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; }
     .pipeline-stage {
       position: relative;
@@ -1047,7 +1161,7 @@
       font-size: 22px;
       font-weight: 950;
     }
-    .pipeline-phase { display: block; margin-bottom: 9px; color: var(--muted); font-size: 17px; font-weight: 850; }
+    .pipeline-phase { display: block; margin-bottom: 9px; color: var(--muted); font-size: 18px; font-weight: 850; }
     .pipeline-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
     .pipeline-tag {
       display: inline-flex;
@@ -1060,12 +1174,12 @@
       border-radius: 999px;
       background: var(--yellow);
       color: var(--ink);
-      font-size: 17px;
+      font-size: 18px;
       font-weight: 900;
     }
     .pipeline-tag.best { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
     .pipeline-stage h3 { font-size: 21px; }
-    .pipeline-stage p { margin-top: 7px; color: var(--muted); font-size: 17.5px; line-height: 1.28; }
+    .pipeline-stage p { margin-top: 7px; color: var(--muted); font-size: 18px; line-height: 1.28; }
     .pipeline-loop {
       display: flex;
       align-items: center;
@@ -1083,11 +1197,149 @@
     .pipeline-foundation-card { padding: 10px 12px; border: 1px solid var(--line); background: white; }
     .pipeline-foundation-label { border-left: 7px solid var(--ink); background: var(--ink); color: white; }
     .pipeline-foundation-label strong { display: block; font-size: 20px; }
-    .pipeline-foundation-label span { display: block; margin-top: 5px; font-size: 17px; line-height: 1.22; }
+    .pipeline-foundation-label span { display: block; margin-top: 5px; font-size: 18px; line-height: 1.22; }
     .pipeline-foundation-card { border-top: 6px solid var(--yellow); }
     .pipeline-foundation-card.best { border-top-color: var(--best); background: var(--best-soft); }
     .pipeline-foundation-card h3 { display: flex; align-items: center; gap: 7px; font-size: 19px; }
-    .pipeline-foundation-card p { margin-top: 5px; color: var(--muted); font-size: 17px; line-height: 1.22; }
+    .pipeline-foundation-card p { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.22; }
+
+    /* Issue #681/#682 2026-09-06 redesign round: a small set of reusable
+       Standard-mode archetypes (process/timeline, annotated capability
+       map, relationship diagram), so each simplified page composes an
+       existing visual instead of growing its own one-off CSS. */
+
+    /* Process/timeline archetype: 3-5 ordered steps, each an icon-number
+       eyebrow + short label + one-line "why". Used by `install`. */
+    .step-flow {
+      display: grid;
+      flex: 1;
+      min-height: 0;
+      grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+      align-content: center;
+      gap: 18px;
+    }
+    .step-flow-item {
+      position: relative;
+      padding: 22px 20px;
+      border: 1px solid var(--line);
+      border-top: 7px solid var(--yellow);
+      background: #fffbea;
+    }
+    .step-flow-item:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -21px;
+      top: 50%;
+      z-index: 1;
+      color: var(--ink);
+      font-size: 26px;
+      font-weight: 950;
+      transform: translateY(-50%);
+    }
+    .step-flow-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      margin-bottom: 10px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: white;
+      font-size: 18px;
+      font-weight: 850;
+    }
+    .step-flow-item h3 { font-size: 23px; }
+    .step-flow-item p { margin-top: 7px; color: var(--muted); font-size: 18px; line-height: 1.35; }
+
+    /* Annotated capability map: a short label anchors a one-line "why it
+       matters" note, instead of a plain bullet list. Used by `about`. */
+    .capability-map {
+      display: grid;
+      flex: 1;
+      min-height: 0;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-content: center;
+      gap: 12px;
+    }
+    .capability-node {
+      padding: 14px 18px;
+      border: 1px solid var(--line);
+      border-left: 7px solid var(--yellow);
+      background: white;
+    }
+    .capability-node h3 { font-size: 20px; }
+    .capability-node p { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.32; }
+    .capability-node .capability-pointer {
+      display: inline-block;
+      margin-top: 7px;
+      color: #174f8b;
+      font-size: 18px;
+      font-weight: 850;
+    }
+    /* Modifier for a set of parallel (non-sequential) items that reads
+       better as one row than a 2-column list -- e.g. `agents`' three
+       ownership areas or `languages`' three per-language cards. */
+    .capability-map.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    /* Relationship diagram: ordered nodes connected by arrows, with an
+       optional conditional/grouping node stacked above one of them. Used
+       by `method` (Issue -> Branch -> PR, Milestone grouping Issues). */
+    .relation-map { display: flex; flex: 1; min-height: 0; align-items: center; }
+    .relation-track {
+      display: grid;
+      flex: 1;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: end;
+      gap: 26px;
+    }
+    .relation-track > * {
+      position: relative;
+      min-width: 0;
+    }
+    .relation-track > *:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -24px;
+      bottom: 30%;
+      z-index: 1;
+      color: var(--ink);
+      font-size: 26px;
+      font-weight: 950;
+    }
+    .relation-node {
+      padding: 18px 18px 16px;
+      border: 1px solid var(--line);
+      border-top: 7px solid var(--yellow);
+      background: #fffbea;
+    }
+    .relation-kind { display: block; margin-bottom: 8px; color: var(--muted); font-size: 18px; font-weight: 850; }
+    .relation-node h3 { font-size: 22px; }
+    .relation-node p { margin-top: 6px; color: var(--muted); font-size: 18px; line-height: 1.3; }
+    /* Modifier for a node that is currently degraded/blocked instead of
+       fully in effect -- e.g. `governance`'s Free-plan merge protection. */
+    .relation-node.warning { border-top-color: #b42318; background: #fff0ed; }
+    .relation-node.warning .relation-kind { color: #8a1c12; }
+    .relation-col { display: flex; flex-direction: column; gap: 8px; }
+    .relation-group {
+      padding: 10px 14px;
+      border: 2px dashed var(--rail);
+      background: var(--soft);
+      text-align: center;
+    }
+    .relation-group-label {
+      display: inline-block;
+      margin-bottom: 4px;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: white;
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 850;
+    }
+    .relation-group strong { display: block; font-size: 18px; }
+    .relation-group-note { display: block; margin-top: 3px; color: var(--muted); font-size: 18px; line-height: 1.25; }
+    .relation-group-arrow { display: block; color: var(--muted); font-size: 18px; text-align: center; }
 
     .phase-line { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1vw; }
     .phase { padding: 14px; border-top: 6px solid #aaa; background: var(--soft); }
@@ -1106,6 +1358,16 @@
     .bridge-table th, .bridge-table td { padding: 3px 7px; line-height: 1.12; }
     .bridge-table tbody tr:nth-child(even) td { background: #fafaf8; }
     .bridge-table td:first-child { color: var(--muted); font-weight: 850; text-align: center; }
+    /* Higher specificity than detail-toggle.css's `.markdown-body td/th`
+       (font-size 19px, line-height 1.35, padding 8px 10px), which would
+       otherwise win by source order and make all 12 rows too tall for
+       this maintainer-only page's fixed 900px canvas (Issue #681). */
+    .markdown-body .bridge-table th,
+    .markdown-body .bridge-table td { font-size: 18px; line-height: 1.15; padding: 2px 6px; }
+    .bridge-slide .markdown-body { gap: 6px; }
+    .bridge-slide .technical-detail { padding: 10px 14px; }
+    .bridge-slide .technical-detail h3 { margin-bottom: 4px; font-size: 16px; }
+    .bridge-slide .technical-detail p { font-size: 14px; line-height: 1.25; }
     .bridge-status {
       display: inline-block;
       min-width: 82px;
@@ -1136,13 +1398,13 @@
     .bridge-detail summary::after {
       content: "+";
       display: grid;
-      width: 22px;
-      height: 22px;
-      flex: 0 0 22px;
+      width: 16px;
+      height: 16px;
+      flex: 0 0 16px;
       place-items: center;
       border-radius: 4px;
       background: var(--yellow);
-      font-size: 20px;
+      font-size: 14px;
       line-height: 1;
     }
     .bridge-detail[open] summary::after { content: "−"; }
@@ -1170,6 +1432,19 @@
     .review-notes-slide { padding-top: 3%; padding-bottom: 2.7%; padding-left: 13.7%; }
     .review-notes-slide header { position: relative; margin-bottom: 1%; padding-right: 155px; }
     .review-notes-slide h2 { font-size: clamp(29px, 2.05vw, 35px); }
+    /* Maintenance mode's plain-markdown table mirrors the Standard-mode
+       legacy pane's richer audit-register in fewer columns, but the 12pt
+       floor still made the longest of these (English prose runs longer
+       than zh-tw) taller than the row this slide has left after its own
+       always-visible footer note. A bounded, scrollable table keeps every
+       row reachable without the whole slide relying on the `.markdown-
+       body` fail-safe scroll -- the same accepted pattern as the similar-
+       tools comparison matrix elsewhere in the deck. */
+    .review-notes-slide .markdown-body > table {
+      display: block;
+      max-height: 520px;
+      overflow-y: auto;
+    }
     .review-note-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1186,15 +1461,15 @@
       background: #faf9f4;
     }
     .review-note h3 { font-size: 20px; line-height: 1.15; }
-    .review-note p { margin-top: 4px; color: #2f2f2f; font-size: 17.5px; line-height: 1.27; }
+    .review-note p { margin-top: 4px; color: #2f2f2f; font-size: 18px; line-height: 1.27; }
     .review-note strong { color: #655900; }
     .review-note code { color: #174f8b; font-weight: 800; }
     .review-note-footer {
-      margin-top: 8px;
+      margin-top: 3px;
       padding: 7px 10px;
       border: 1px solid #c9c9c9;
       background: #ececea;
-      font-size: 17.5px;
+      font-size: 18px;
       line-height: 1.25;
     }
 
@@ -1216,7 +1491,7 @@
     .capability-slide .package-hero { margin-bottom: 8px; padding-bottom: 9px; }
     .package-kicker {
       color: var(--muted);
-      font: 800 17.5px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font: 800 18px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       letter-spacing: .02em;
     }
     .capability-slide .package-hero h1 {
@@ -1225,7 +1500,13 @@
       letter-spacing: -.045em;
     }
     .package-hero h1 code { font: inherit; }
-    .package-badges { display: flex; flex-wrap: nowrap; gap: 6px; margin-top: 2px; }
+    /* Issue #681/#682 2026-09-06 redesign round: English badge labels for
+       the same facts (e.g. "Free private repo: cannot enforce main
+       protection") run measurably longer than zh-tw's; `nowrap` clipped
+       the row's tail off the right edge of the canvas in English while
+       zh-tw fit by coincidence. Wrapping to a second row costs a little
+       vertical space but never crops content outright. */
+    .package-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
     .package-badge {
       display: inline-flex;
       align-items: center;
@@ -1235,7 +1516,7 @@
       border-radius: 999px;
       background: white;
       color: #333;
-      font-size: 17.5px;
+      font-size: 18px;
       font-weight: 850;
       line-height: 1;
       text-decoration: none;
@@ -1263,7 +1544,7 @@
     }
     .capability-promise strong { font-size: 28px; line-height: 1.12; }
     .capability-promise p { margin-top: 12px; color: var(--muted); font-size: 20px; line-height: 1.35; }
-    .capability-list { display: grid; min-height: 0; grid-template-rows: repeat(4, minmax(0, 1fr)); }
+    .capability-list { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(4, minmax(0, 1fr)); }
     .capability-row {
       display: grid;
       grid-template-columns: 27% minmax(0, 1fr);
@@ -1285,12 +1566,12 @@
       grid-template-columns: 38% minmax(0, 1fr);
       border: 1px solid var(--line);
     }
-    .product-scope { display: grid; grid-template-rows: auto repeat(4, minmax(0, 1fr)); padding: 14px 16px; border-right: 1px solid var(--line); background: #fafaf8; }
+    .product-scope { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto repeat(4, minmax(0, 1fr)); padding: 14px 16px; border-right: 1px solid var(--line); background: #fafaf8; }
     .product-scope > h3, .start-paths > h3 { margin-bottom: 8px; font-size: 21px; }
     .scope-row { display: flex; flex-direction: column; justify-content: center; padding: 8px 0; border-top: 1px solid var(--line); }
     .scope-row strong { display: block; font-size: 19px; }
     .scope-row span { display: block; margin-top: 2px; color: #333; font-size: 18px; line-height: 1.25; }
-    .start-paths { display: grid; grid-template-rows: auto repeat(3, minmax(0, 1fr)); padding: 14px 16px; }
+    .start-paths { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto repeat(3, minmax(0, 1fr)); padding: 14px 16px; }
     .start-path {
       display: grid;
       grid-template-columns: 25% minmax(0, 1fr) auto;
@@ -1301,6 +1582,15 @@
     }
     .start-path h3 { font-size: 20px; }
     .start-path p { color: #333; font-size: 18px; line-height: 1.25; }
+    /* Issue #681/#682 UX review, P1: the hero listed three equally-weighted
+       entry points with no single "start now" action; the new-repo path is
+       the most common first action, so it alone gets the accent treatment
+       while the other two stay available but visually secondary. */
+    .start-path.primary { background: #fffbea; }
+    .start-path.primary .setup-trigger {
+      border-left-width: 10px;
+      background: var(--yellow);
+    }
     .product-prerequisites { grid-template-columns: 1fr auto auto; }
     .product-prerequisites {
       min-height: 58px;
@@ -1371,7 +1661,7 @@
       border: 1px solid var(--line);
       border-left: 6px solid var(--yellow);
       background: #fffbea;
-      font-size: 17.5px;
+      font-size: 18px;
       line-height: 1.22;
     }
     .language-card.shared { border-left-color: var(--best); background: var(--best-soft); }
@@ -1427,7 +1717,7 @@
     }
     .repo-map-head { min-height: 31px; padding: 0 11px; border-bottom: 1px solid var(--line); background: #f4f4f2; color: var(--muted); font-size: 18px; font-weight: 850; }
     .repo-map-head span:nth-child(2) { color: transparent; }
-    .repo-map-body { display: grid; flex: 1; min-height: 0; grid-template-rows: repeat(5, minmax(0, 1fr)); }
+    .repo-map-body { display: grid; flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(5, minmax(0, 1fr)); }
     .repo-map-row { padding: 4px 11px; border-bottom: 1px solid #e0e0dc; }
     .repo-map-row:last-child { border-bottom: 0; }
     .repo-map-row:nth-child(even) { background: #fbfbfa; }
@@ -1460,8 +1750,8 @@
     .repo-function { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 9px; padding-right: 10px; }
     .function-icon { display: grid; width: 32px; height: 32px; place-items: center; border: 2px solid var(--ink); border-radius: 50%; background: var(--yellow); font-size: 20px; font-weight: 900; }
     .repo-function strong { display: block; font-size: 19px; }
-    .repo-function span { display: block; margin-top: 2px; color: #444; font-size: 17.5px; line-height: 1.2; }
-    .repo-destination { padding: 7px 8px; border-left: 5px solid var(--best); background: var(--best-soft); color: #0b6540; font-size: 17.5px; font-weight: 850; line-height: 1.22; }
+    .repo-function span { display: block; margin-top: 2px; color: #444; font-size: 18px; line-height: 1.2; }
+    .repo-destination { padding: 7px 8px; border-left: 5px solid var(--best); background: var(--best-soft); color: #0b6540; font-size: 18px; font-weight: 850; line-height: 1.22; }
 
     .repo-tree-head, .repo-tree-row {
       display: grid;
@@ -1475,16 +1765,17 @@
       border-bottom: 1px solid var(--line);
       background: #f4f4f2;
       color: var(--muted);
-      font-size: 17.5px;
+      font-size: 18px;
       font-weight: 850;
     }
     .repo-tree-body {
       display: grid;
       flex: 1;
       min-height: 0;
+      grid-template-columns: minmax(0, 1fr);
       grid-template-rows: repeat(18, minmax(0, 1fr));
     }
-    .repo-tree-row { border-bottom: 1px solid #e4e4e0; font-size: 17.5px; line-height: 1.08; }
+    .repo-tree-row { border-bottom: 1px solid #e4e4e0; font-size: 18px; line-height: 1.08; }
     .repo-tree-row:nth-child(even) { background: #fbfbfa; }
     .repo-tree-row.project-owned { border-left: 6px solid #e7794b; background: #fff4ef; }
     .repo-tree-path {
@@ -1522,7 +1813,7 @@
       padding: 2px 6px;
       border-radius: 999px;
       white-space: nowrap;
-      font-size: 17.5px;
+      font-size: 18px;
       font-weight: 850;
     }
     .scope-badge.shared { background: var(--best-soft); color: #0b6540; }
@@ -1540,52 +1831,67 @@
       padding: 5px 10px;
       border-top: 1px solid var(--line);
       background: #f4f4f2;
-      font-size: 17.5px;
+      font-size: 18px;
       line-height: 1.16;
     }
     .repo-map-legend strong { color: var(--ink); }
 
-    .decision-register { flex: 1; min-height: 0; font-size: 17.5px; }
+    .decision-register { flex: 1; min-height: 0; font-size: 18px; }
     .decision-register th, .decision-register td { padding: 5px 8px; line-height: 1.18; }
     .decision-register th:first-child { width: 31%; }
     .decision-register td:first-child { border-left: 6px solid var(--yellow); font-weight: 850; }
     .decision-register tbody tr:nth-child(even) td { background: #fafaf8; }
     .audit-register th:nth-child(2), .audit-register td:nth-child(2) { width: 12%; text-align: center; }
+    /* Issue #681 decision O: benchmark's 9-row audit-register table (the
+       densest in either language) overflowed only in English -- longer
+       prose per cell at the same font/line-height pushed the slide 50px
+       past 900px, measured directly rather than assumed from the zh-tw
+       fit. Same trim pattern as the capability-slide hero above. */
+    html[lang="en"] .decision-register { font-size: 18px; }
+    html[lang="en"] .decision-register th,
+    html[lang="en"] .decision-register td { line-height: 1.12; }
     .language-appendix-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 8px; }
     .language-appendix-card { padding: 8px 10px; border: 1px solid var(--line); border-top: 6px solid var(--yellow); background: #fffbea; }
     .language-appendix-card:nth-child(2), .language-appendix-card:nth-child(3) { border-top-color: var(--best); background: var(--best-soft); }
     .language-appendix-card:nth-child(4) { border-top-color: var(--optional); background: var(--optional-soft); }
     .language-appendix-card h3 { font-size: 19px; }
-    .language-appendix-card p { margin-top: 3px; font-size: 17.5px; line-height: 1.2; }
-    .ruff-map { flex: 1; min-height: 0; font-size: 17.5px; }
+    .language-appendix-card p { margin-top: 3px; font-size: 18px; line-height: 1.2; }
+    .ruff-map { flex: 1; min-height: 0; font-size: 18px; }
     .ruff-map th, .ruff-map td { padding: 4px 7px; line-height: 1.16; }
     .ruff-map th:first-child { width: 25%; }
     .ruff-map th:nth-child(2) { width: 30%; }
     .ruff-map tbody tr:nth-child(even) td { background: #fafaf8; }
 
     .journey-rail { left: 1.45%; width: 8.35%; }
-    .journey-rail h3 { margin-top: 5px; font-size: 17.5px; white-space: nowrap; }
+    .journey-rail h3 { margin-top: 2px; font-size: 18px; white-space: nowrap; }
     .journey-rail .journey-use { flex: 0 0 auto; grid-auto-rows: 32px; }
     .journey-rail .journey-main { flex: 0 0 auto; grid-auto-rows: 34px; }
     .journey-rail .journey-support { flex: 0 0 auto; grid-auto-rows: 34px; }
+    .journey-rail .journey-notes { flex: 0 0 auto; grid-auto-rows: 32px; }
     .journey-rail .journey-item + .journey-item { margin-top: 0; }
-    .journey-item { font-size: 17.5px; white-space: nowrap; }
-    .journey-bookend { flex-basis: 31px; padding: 3px 5px; font-size: 17.5px; }
+    .journey-item { font-size: 18px; white-space: nowrap; }
+    .journey-bookend { flex-basis: 31px; padding: 3px 5px; font-size: 18px; }
     .journey-bookend.appendix { margin-top: 3px; border-left: 6px solid var(--optional); }
     .journey-rail > .journey-bookend:first-of-type { margin-top: 8px; }
 
-    .controls, .view-controls { opacity: .24; transition: opacity .15s ease; }
-    .controls:hover, .controls:focus-within, .view-controls:hover, .view-controls:focus-within { opacity: .92; }
+    /* Issue #681/#682 UX review: a 24%-opacity, hover-to-reveal baseline
+       has no equivalent on touch (no hover state before the first tap),
+       and is hard to notice even with a mouse. A visible-but-quiet
+       baseline that still brightens on hover/focus serves both input
+       types; buttons are at least 44px, the common touch-target
+       minimum, up from 36px. */
+    .controls, .view-controls { opacity: .6; transition: opacity .15s ease; }
+    .controls:hover, .controls:focus-within, .view-controls:hover, .view-controls:focus-within { opacity: .95; }
     .controls { position: fixed; right: 18px; bottom: 12px; display: flex; align-items: center; gap: 6px; z-index: 5; }
-    .controls button { width: 36px; height: 36px; border: 1px solid rgba(23, 23, 23, .16); border-radius: 50%; background: rgba(255, 255, 255, .78); color: var(--ink); cursor: pointer; }
+    .controls button { width: 44px; height: 44px; border: 1px solid rgba(23, 23, 23, .16); border-radius: 50%; background: rgba(255, 255, 255, .78); color: var(--ink); cursor: pointer; }
     .controls button:hover, .controls button:focus-visible { border-color: var(--ink); background: white; outline: none; }
     .controls button:disabled { opacity: .35; cursor: default; }
-    .counter { min-width: 58px; color: var(--ink); font-size: 17px; font-weight: 800; text-align: center; }
+    .counter { min-width: 58px; color: var(--ink); font-size: 18px; font-weight: 800; text-align: center; }
     .view-controls { position: fixed; left: 18px; bottom: 12px; display: flex; align-items: center; gap: 6px; z-index: 5; }
-    .view-controls button { min-width: 36px; height: 36px; padding: 0 9px; border: 1px solid rgba(23, 23, 23, .16); border-radius: 18px; background: rgba(255, 255, 255, .78); color: var(--ink); cursor: pointer; }
+    .view-controls button { min-width: 44px; height: 44px; padding: 0 9px; border: 1px solid rgba(23, 23, 23, .16); border-radius: 22px; background: rgba(255, 255, 255, .78); color: var(--ink); cursor: pointer; }
     .view-controls button:hover, .view-controls button:focus-visible { border-color: var(--ink); background: white; outline: none; }
     .view-controls button:disabled { opacity: .35; cursor: default; }
-    .zoom-level { min-width: 44px; color: var(--ink); font-size: 17px; font-weight: 800; text-align: center; }
+    .zoom-level { min-width: 44px; color: var(--ink); font-size: 18px; font-weight: 800; text-align: center; }
     .progress { position: fixed; left: 0; right: 0; bottom: 0; height: 3px; background: #e5e5e2; z-index: 6; }
     .progress span { display: block; height: 100%; background: var(--yellow); }
 
@@ -1600,3 +1906,206 @@
       .controls, .view-controls, .progress { display: none; }
     }
     @media (prefers-reduced-motion: reduce) { .slide.active { animation: none; } }
+
+    /* Issue #681/#682 UX review, P0: on a narrow screen the deck used to
+       stay a fixed 1600x900 canvas, scaled down as a whole (as low as
+       ~24% on a 390px-wide phone) -- every font shrank along with the
+       canvas, so text that reads fine at native size became illegible.
+       Below, `.narrow-screen` (toggled by deck.js's `fit()` at
+       innerWidth <= 640) instead drops the whole-canvas transform and
+       lets the active slide reflow as a natural single-column, natively
+       scrolling document at its own (already-reasonable, 18px+) font
+       sizes. This is a broad, structural fix -- it does not hand-tune
+       every one of this file's several dozen bespoke multi-column
+       layouts for a phone-width column, so a handful of very
+       data-dense components (wide tables, the file explorer) stay only
+       horizontally scrollable rather than individually redesigned. */
+    html.narrow-screen .deck {
+      position: static;
+      width: 100%;
+      height: auto;
+      transform: none !important;
+    }
+    html.narrow-screen .slide {
+      position: static;
+      display: none;
+      width: 100%;
+      height: auto;
+      min-height: 100vh;
+      /* Top: clears the fixed .reading-controls row instead of running
+         under it. Bottom: clears the fixed prev/next bar so it never
+         permanently covers the last bit of scrolled content. */
+      padding: 56px 18px 70px !important;
+      overflow: visible;
+      box-shadow: none;
+    }
+    html.narrow-screen .slide.active { display: flex; }
+    html.narrow-screen .slide::after { display: none; }
+    html.narrow-screen header { padding-right: 0 !important; }
+    html.narrow-screen .selection-sequence {
+      position: static;
+      display: inline-block;
+      margin-bottom: 6px;
+    }
+    html.narrow-screen h1, html.narrow-screen h2 { white-space: normal !important; font-size: clamp(24px, 7vw, 32px) !important; }
+
+    /* The journey rail was a permanently visible sidebar with content
+       padded out of its way (the many `padding-left: 13.7%`-style rules
+       above); on a phone it becomes a full-height off-canvas drawer
+       toggled by #nav-toggle, and everything that reserved space for it
+       gets that space back. */
+    html.narrow-screen [class*="-slide"] { padding-left: 18px !important; }
+    html.narrow-screen .journey-rail {
+      position: fixed;
+      inset: 0 18% 0 0;
+      left: 0;
+      width: auto;
+      z-index: 55;
+      padding: 60px 16px 16px;
+      background: white;
+      overflow-y: auto;
+      transform: translateX(-100%);
+      transition: transform .2s ease;
+      box-shadow: 2px 0 18px rgba(0, 0, 0, .18);
+    }
+    html.narrow-screen.nav-open .journey-rail { transform: translateX(0); }
+    html.narrow-screen .journey-rail h3 { font-size: 15px; }
+    html.narrow-screen .journey-item, html.narrow-screen .journey-bookend { font-size: 15px; white-space: normal; }
+    html.narrow-screen .nav-toggle {
+      display: flex;
+      width: 40px;
+      height: 40px;
+      align-items: center;
+      justify-content: center;
+      margin-right: 4px;
+      border: 1px solid rgba(23, 23, 23, .2);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: 0 4px 14px rgba(23, 23, 23, .12);
+      color: var(--ink);
+      font-size: 18px;
+      cursor: pointer;
+    }
+    html.narrow-screen.nav-open .nav-toggle { background: var(--ink); color: white; }
+    /* A dimmed backdrop closes the drawer on tap outside it. */
+    html.narrow-screen.nav-open::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 54;
+      background: rgba(0, 0, 0, .35);
+    }
+
+    /* Collapse this file's recurring multi-column card/comparison grids
+       to one column. Not exhaustive (see the note above), but covers
+       every frequently reused layout primitive. */
+    html.narrow-screen .markdown-body,
+    html.narrow-screen .plan-grid,
+    html.narrow-screen .decision-strip,
+    html.narrow-screen .pipeline-track,
+    html.narrow-screen .pipeline-foundation,
+    html.narrow-screen .language-contract,
+    html.narrow-screen .reading-contract,
+    html.narrow-screen .quick-grid,
+    html.narrow-screen .repo-file-cluster,
+    html.narrow-screen .language-appendix-grid,
+    html.narrow-screen .grid-2,
+    html.narrow-screen .grid-3,
+    html.narrow-screen .grid-4,
+    html.narrow-screen .phase-line,
+    html.narrow-screen .step-flow,
+    html.narrow-screen .capability-map,
+    html.narrow-screen .relation-track,
+    html.narrow-screen .explorer-body {
+      /* Issue #681 decision O: a bare `1fr` track keeps its implicit
+         `auto` minimum (content's min-content width) even with only one
+         column, so a wide child (e.g. `flow`'s `.pipeline-stage` cards)
+         does not actually shrink to the phone's width -- it silently
+         overflows past `overflow-x: hidden` and gets clipped, cutting
+         off text on the right edge instead of wrapping it. `minmax(0,
+         1fr)` removes that implicit minimum, matching how every desktop
+         multi-column version of these same grids already avoids this
+         (e.g. `.pipeline-track { grid-template-columns: repeat(5,
+         minmax(0, 1fr)) }`). Found via a full mobile sweep of all 27
+         slides, not a visual spot check. */
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
+    /* The desktop-canvas archetypes above (Issue #681/#682 2026-09-06
+       redesign round) grow into spare 900px height and connect their
+       items with an absolutely-positioned "→"; on a phone there is no
+       fixed canvas and a rightward arrow next to a now full-width,
+       stacked item reads as a stray mark, not a connector. Issue #681
+       decision O: `flow`'s pre-existing `.pipeline-stage` uses the same
+       "→" connector pattern and needs the same treatment once it
+       collapses to one column. */
+    html.narrow-screen .step-flow,
+    html.narrow-screen .relation-map {
+      flex: none;
+    }
+    html.narrow-screen .step-flow-item::after,
+    html.narrow-screen .relation-track > *::after,
+    html.narrow-screen .pipeline-stage::after {
+      display: none;
+    }
+    html.narrow-screen .capability-map {
+      align-content: start;
+    }
+
+    /* Data tables keep their real column structure (collapsing a table
+       to one column destroys it) but scroll horizontally instead of
+       forcing columns to an unreadable width. */
+    html.narrow-screen table { display: block; overflow-x: auto; white-space: nowrap; }
+
+    html.narrow-screen .package-badges { flex-wrap: wrap; }
+    /* A long English badge label (longer than its zh-tw equivalent for
+       the same meaning) can exceed the phone viewport width on its own;
+       nowrap alone only wraps to a new row, it cannot shrink a single
+       overlong pill. Let the pill itself wrap its text instead. */
+    html.narrow-screen .package-badge { max-width: 100%; white-space: normal; text-align: center; }
+    /* A fixed-height/single-line hack that fit a specific desktop-canvas
+       layout; a phone should just let the content flow to whatever
+       height it needs, no inner scrollbar of its own. (`.context-line`
+       itself now wraps by default on desktop too -- see that rule.) */
+    html.narrow-screen .decision-fold[open] { max-height: none !important; overflow: visible !important; }
+    /* Issue #681 decision O: `.pipeline-loop`'s row layout (a `<strong>`
+       label plus a `<span>` description, spaced with `justify-content:
+       space-between`) has no min-width:0 on either child, so shrinking
+       to phone width squeezed the description into an ever-narrower
+       column instead of wrapping normally -- one word per line, 225px
+       tall, still overflowing the canvas width. Found via a full mobile
+       sweep of all 27 slides. Stacking removes the competition for
+       horizontal space entirely. */
+    html.narrow-screen .pipeline-loop {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    /* The desktop label is one line by design (`nowrap`); at phone width
+       the same sentence is long enough to need to wrap instead of
+       pushing the canvas wider. */
+    html.narrow-screen .pipeline-loop strong { white-space: normal; }
+    /* A file path or flag string inside inline `<code>` has no spaces to
+       wrap at, so normal word-wrapping cannot break it -- it stays one
+       unbreakable run and overflows the canvas at phone width instead of
+       clipping into it. Desktop has enough width that this never comes
+       up. Found via a full mobile sweep of all 27 slides. */
+    html.narrow-screen code { overflow-wrap: anywhere; }
+    /* Issue #681/#682: the desktop plan-grid/standard-ul fill treatment
+       below scales type up and grows into spare 900px canvas height --
+       on a phone there is no fixed canvas to fill and the deck isn't
+       scaled/positioned at all here (.deck's narrow-screen rule above),
+       so let content take its natural flow height and reuse the same
+       reading sizes as everything else instead of carrying the desktop
+       enlargement over. */
+    html.narrow-screen .markdown-body {
+      align-content: start !important;
+    }
+    html.narrow-screen .mode-content[data-mode="standard"] > .plan-grid .plan-card h3 { font-size: 22px; }
+    html.narrow-screen .mode-content[data-mode="standard"] > .plan-grid .plan-card p,
+    html.narrow-screen .mode-content[data-mode="standard"] > .plan-grid .plan-card li { font-size: 18px; }
+    html.narrow-screen .mode-content[data-mode="standard"] > ul > li { font-size: 18px; }
+    html.narrow-screen .reading-controls { top: 8px; right: 8px; }
+    html.narrow-screen .controls { opacity: .85; }
+    /* The zoom controls drive `--deck-scale`, but `.deck`'s transform is
+       forced off above -- on a phone they would do nothing while still
+       occupying fixed screen space over real content. */
+    html.narrow-screen .view-controls { display: none; }

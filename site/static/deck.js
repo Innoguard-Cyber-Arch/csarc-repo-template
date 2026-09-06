@@ -11,6 +11,7 @@
   const slideControls = document.querySelector('.controls');
   const viewControls = document.querySelector('.view-controls');
   const progress = document.querySelector('.progress');
+  const navToggle = document.querySelector('#nav-toggle');
   let current = 0;
   let zoom = 1;
   let slides = [];
@@ -60,7 +61,21 @@
     bar.style.width = `${((current + 1) / slides.length) * 100}%`;
     previous.disabled = current === 0;
     next.disabled = current === slides.length - 1;
-    if (updateHash) history.replaceState(null, '', `#${current + 1}`);
+    // Issue #681/#682 UX review, P2: write the slide's own id, not its
+    // numeric position, so a shared link keeps resolving to the same
+    // content -- standard and ops modes hide a different set of slides
+    // (refreshSlides() above), so the same slide sits at a different
+    // number in each, and a numeric hash saved from one mode could open
+    // the wrong slide in the other.
+    if (updateHash) history.replaceState(null, '', `#${slides[current].id}`);
+    // window.csarcMermaidRun() (defined in the mermaid init script, only
+    // once a mermaid block actually appears on this page) renders any
+    // `.mermaid` block that is visible now and not yet processed --
+    // including one in this slide that just became `.active` and so was
+    // still hidden the last time it ran. See that script for why a
+    // visibility filter is required here instead of a plain
+    // `mermaid.run()`.
+    if (typeof window.csarcMermaidRun === 'function') window.csarcMermaidRun();
   }
 
   function fit() {
@@ -108,6 +123,29 @@
     if (['ArrowRight', 'PageDown', ' '].includes(event.key)) show(current + 1);
     if (['ArrowLeft', 'PageUp'].includes(event.key)) show(current - 1);
   });
+
+  // Issue #681/#682 UX review, P0: on a narrow screen (styles.css's
+  // `html.narrow-screen` rules) the always-visible journey rail becomes
+  // an off-canvas drawer instead, opened by this button and by no other
+  // means -- there is no hover state on touch to reveal a persistent
+  // sidebar. `nav-open` on <html> is the single source of truth for
+  // whether it is showing.
+  function setNavOpen(open) {
+    document.documentElement.classList.toggle('nav-open', open);
+    navToggle.setAttribute('aria-expanded', String(open));
+  }
+  navToggle.addEventListener('click', () => {
+    setNavOpen(!document.documentElement.classList.contains('nav-open'));
+  });
+  document.addEventListener('click', event => {
+    if (!document.documentElement.classList.contains('nav-open')) return;
+    if (event.target.closest('.journey-rail, #nav-toggle')) return;
+    setNavOpen(false);
+  });
+  addEventListener('keydown', event => {
+    if (event.key === 'Escape') setNavOpen(false);
+  });
+  addEventListener('hashchange', () => setNavOpen(false));
 
   refreshSlides();
   fit();

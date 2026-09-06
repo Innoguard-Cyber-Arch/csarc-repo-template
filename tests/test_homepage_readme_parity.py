@@ -1,7 +1,8 @@
 """Regression checks for Issue #526: homepage / README.md content parity.
 
-The decision site's former "capability" slide (now labeled "首頁"/"Home")
-must show the same core content as the repository `README.md` hero -- the
+The repo-site's "index" slide (key renamed from "capability", now
+labeled "首頁"/"Home") must show the same core content as the repository
+`README.md` hero -- the
 same capability table, the same required version/language facts -- and
 that shared content must stay within an explicit, enforced length limit
 (the "首頁" slide is one screen; `README.md`'s hero is the part GitHub
@@ -71,20 +72,35 @@ def _readme_hero() -> str:
     return hero
 
 
+def _before_first_collapsible_boundary(basic: str) -> str:
+    # `{{< detail` (always-visible aside) and `{{< disclosure` (collapsed
+    # `<details>`) both mark the start of collapsible/secondary content,
+    # not part of the always-visible home content this limit governs --
+    # whichever one appears first ends the visible body.
+    boundaries = [
+        index
+        for index in (basic.find("{{< detail"), basic.find("{{< disclosure"))
+        if index != -1
+    ]
+    return basic[: min(boundaries)] if boundaries else basic
+
+
 def _zh_home_visible_body() -> str:
     zh = (ROOT / "site/content/_index.zh-tw.md").read_text(encoding="utf-8")
     basic = zh.split("{{< basic >}}", 1)[1].split("{{< /basic >}}", 1)[0]
-    # The boundary `{{< detail >}}` is collapsible supplementary content,
-    # not part of the always-visible home content this limit governs.
-    return basic.split("{{< detail", 1)[0]
+    return _before_first_collapsible_boundary(basic)
 
 
 def _en_home_visible_body() -> str:
+    # Issue #681/#682 UX review, P1: the en home slide now carries the
+    # same legacy (standard-mode interactive hero) / basic (ops-mode plain
+    # body, mirroring README) split as zh-tw's, instead of one flat body
+    # -- see _zh_home_visible_body. This length limit governs only the
+    # always-visible basic/README-mirroring content, not the interactive
+    # hero, whose HTML markup is not comparable to README prose length.
     en = (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8")
-    tag_start = en.index('{{< slide key="capability"')
-    tag_end = en.index(">}}", tag_start) + len(">}}")
-    body = en[tag_end:].split("{{< /slide >}}", 1)[0]
-    return body.split("{{< detail", 1)[0]
+    basic = en.split("{{< basic >}}", 1)[1].split("{{< /basic >}}", 1)[0]
+    return _before_first_collapsible_boundary(basic)
 
 
 def test_readme_hero_exists_before_toc() -> None:
@@ -139,7 +155,7 @@ def test_home_slide_renamed_in_navigation() -> None:
         (ROOT / "site/data/navigation.json").read_text(encoding="utf-8")
     )
     entry = next(
-        item for item in navigation["items"] if item["key"] == "capability"
+        item for item in navigation["items"] if item["key"] == "index"
     )
     assert entry["labels"]["zh-tw"] == "首頁"
     assert entry["labels"]["en"] == "Home"
@@ -168,13 +184,13 @@ def test_required_facts_appear_in_readme_and_both_home_slides() -> None:
     # text (it is never run through the site's `[[...]]` token
     # substitution), while both home slides use the live
     # `[[site_template_version]]` / `[[site_engine_version]]` tokens
-    # (scripts/build_decision_site.py, Issue #524) instead of a literal
+    # (scripts/build_repo_site.py, Issue #524) instead of a literal
     # number, so a template/engine bump can never leave this page stale.
     version_data = json.loads(
         (ROOT / "site/version.json").read_text(encoding="utf-8")
     )
-    assert f"| 網站排版模板版本 | {version_data['template']} |" in readme
-    assert f"| 決策網站渲染引擎版本 | {version_data['engine']} |" in readme
+    assert f"| repo-site 排版模板版本 | {version_data['template']} |" in readme
+    assert f"| repo-site 渲染引擎版本 | {version_data['engine']} |" in readme
     assert "[[site_template_version]]" in zh
     assert "[[site_engine_version]]" in zh
     assert "[[site_template_version]]" in en
@@ -217,24 +233,50 @@ def test_readme_and_manifest_versions_match() -> None:
     assert match.group(1) == f"v{manifest['.']}"
 
 
-def test_en_home_release_marker_is_on_its_own_raw_html_line() -> None:
-    """The en home slide has no legacy/basic split, so its
-    `x-release-please-version` marker must live on a single raw-HTML
-    line (the renderer only passes a full line through unescaped when it
-    starts with `<`; anywhere else the literal comment text would leak
-    into the rendered page -- see the zh-tw case this guards against)."""
+def test_en_home_release_markers_are_each_on_their_own_raw_html_line() -> None:
+    """Issue #681/#682 UX review, P1: since the en home slide gained the
+    same legacy (badge)/basic (plain text) split as zh-tw, it now marks
+    the repo/CLI version in two places, matching zh-tw's own count (see
+    test_zh_home_repo_version_mentions_stay_in_sync). Each must still sit
+    on its own raw-HTML line (the renderer only passes a full line
+    through unescaped when it starts with `<`; anywhere else the literal
+    comment text would leak into the rendered page)."""
     en = (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8")
     lines = en.splitlines()
     marker_lines = [
         line for line in lines if "x-release-please-version" in line
     ]
-    assert len(marker_lines) == 1
-    (marker_line,) = marker_lines
-    assert marker_line.strip().startswith("<"), (
-        "the release marker must sit on its own raw-HTML line so the "
-        "engine's Markdown-table escaping (see test_"
-        "zh_home_repo_version_mentions_stay_in_sync's docstring) cannot "
-        "turn it into visible text"
+    assert len(marker_lines) == 2
+    for marker_line in marker_lines:
+        assert marker_line.strip().startswith("<"), (
+            "each release marker must sit on its own raw-HTML line so "
+            "the engine's Markdown-table escaping (see test_"
+            "zh_home_repo_version_mentions_stay_in_sync's docstring) "
+            "cannot turn it into visible text"
+        )
+
+
+def test_en_home_repo_version_mentions_stay_in_sync() -> None:
+    """Issue #681/#682 UX review, P1: mirrors
+    test_zh_home_repo_version_mentions_stay_in_sync now that the en home
+    slide also mentions the repo/CLI version twice -- once in the legacy
+    hero's badge, once in the always-visible basic-mode paragraph."""
+    en = (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8")
+    badge_match = re.search(
+        r'<span class="package-badge beta">(v[\d.]+)</span>'
+        r"<!-- x-release-please-version -->",
+        en,
+    )
+    paragraph_match = re.search(
+        r"Template release:</strong> (v[\d.]+)"
+        r"<!-- x-release-please-version -->",
+        en,
+    )
+    assert badge_match, "legacy badge's marked version mention is missing"
+    assert paragraph_match, "basic-mode paragraph's marked version is missing"
+    assert badge_match.group(1) == paragraph_match.group(1), (
+        "en home content's two repo-version mentions drifted: "
+        f"badge={badge_match.group(1)!r} paragraph={paragraph_match.group(1)!r}"
     )
 
 

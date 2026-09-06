@@ -34,11 +34,11 @@
       }
     },
     {
-      "paths": ["AGENTS.md", "README.md", "CLAUDE.md"],
+      "paths": ["AGENTS.md", "README.md", "README.en.md", "CLAUDE.md"],
       "responsibility": "shared",
       "purpose": {
-        "zh-tw": "Agent 工作方式與使用者入口",
-        "en": "Agent working rules and user entry point"
+        "zh-tw": "Agent 工作方式與雙語使用者入口",
+        "en": "Agent working rules and the bilingual user entry point"
       }
     },
     {
@@ -61,8 +61,16 @@
       "paths": ["docs/", "site/"],
       "responsibility": "shared",
       "purpose": {
-        "zh-tw": "專案說明、規格、決策與內部網站",
-        "en": "Project guidance, specifications, decisions, and internal site"
+        "zh-tw": "專案說明、規格、決策與 repo-site",
+        "en": "Project guidance, specifications, decisions, and repo-site"
+      }
+    },
+    {
+      "paths": ["template/"],
+      "responsibility": "template",
+      "purpose": {
+        "zh-tw": "下發到生成／導入專案的公版內容本體",
+        "en": "The actual template content delivered to a generated or adopted project"
       }
     },
     {

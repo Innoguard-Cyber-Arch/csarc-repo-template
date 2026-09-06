@@ -99,6 +99,6 @@
     scanning, GitHub Pages, and more) are `allowed`, `blocked`, or `unknown`
     against `policies/capability-matrix.json`, plus the documented workaround
     for each gap. It never writes anything, so an agent may run it and report
-    the result without separate confirmation. See the "Advanced" appendix on
-    the internal decision site (`docs/index.html#advanced-install`) for the
-    full matrix and how to read a result.
+    the result without separate confirmation. See the "install" slide's
+    Maintenance-mode disclosures on the repo-site (`docs/index.html#install`)
+    for the full matrix and how to read a result.

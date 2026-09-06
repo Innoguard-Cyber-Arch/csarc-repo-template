@@ -8,11 +8,11 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 | --- | --- |
 | 公版版本 | v0.13.0<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
-| 網站排版模板版本 | 1.1.0 |
-| 決策網站渲染引擎版本 | 1.1.0 |
+| repo-site 排版模板版本 | 1.1.0 |
+| repo-site 渲染引擎版本 | 1.1.0 |
 
 > [!IMPORTANT]
-> Milestone 13 正在擴充決策網站與導入體驗。目前只有已審查且位於 `.github/workflows/` 的流程會執行；其他流程仍封存。各階段的啟用狀態以[CI/CD 設定](docs/index.html#testing)為準。
+> Milestone 13 正在擴充 repo-site 與導入體驗。目前只有已審查且位於 `.github/workflows/` 的流程會執行；其他流程仍封存。各階段的啟用狀態以[CI/CD 設定](docs/index.html#testing)為準。
 
 | 可以直接選擇 | 目前提供的正式能力 |
 | --- | --- |
@@ -21,9 +21,9 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 | 公版設定 | 建立／導入時把選項寫入 `.csarc/config.yml`；之後由公版更新，不必到不同檔案重複設定 |
 | 共用能力 | 工作單（Issue）與變更提案（PR）表單、AI 工作規範、自動驗證、依賴安全、版本記錄與公版更新 |
 
-本節內容與[內部決策網站](docs/index.html)的「首頁」投影片對齊，雙語（中／英）由該網站同步維護；[開啟內部網站與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見網站內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）。
+本節內容與 [repo-site](docs/index.html) 的「首頁」投影片對齊，雙語（中／英）由該站台同步維護；[開啟 repo-site 與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見站台內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）。
 
-> **這份文件的定位：** README 只給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 [`AGENTS.md`](AGENTS.md)（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀[內部網站附錄](docs/index.html)。三份文件各自負責一層，避免同一套規則重複維護。
+> **這份文件的定位：** README 只給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 [`AGENTS.md`](AGENTS.md)（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀 [repo-site 附錄](docs/index.html)。三份文件各自負責一層，避免同一套規則重複維護。
 
 ## 目錄
 
@@ -80,14 +80,14 @@ CSARC 有兩種完全不同的情境，各自需要的工具不同：**使用 cs
 | pnpm 11 | 只有選 `typescript` 語言模組時需要 | `brew install pnpm` | `winget install -e --id pnpm.pnpm` |
 | rustup／Cargo | 只有選 `rust` 語言模組時需要 | `brew install rustup`（keg-only；該 formula 已不再提供 `rustup-init`，只需把 `$(brew --prefix rustup)/bin` 加入 `PATH` 即完成安裝）；或官方腳本 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` |
 
-Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表 Windows 欄位的 winget／choco 指令供在原生 Windows 單獨安裝個別工具時使用（例如先裝 `git`／`gh` 再進 WSL2），macOS／WSL2 內的 Ubuntu 安裝範例見[內部網站附錄](docs/index.html)。
+Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表 Windows 欄位的 winget／choco 指令供在原生 Windows 單獨安裝個別工具時使用（例如先裝 `git`／`gh` 再進 WSL2），macOS／WSL2 內的 Ubuntu 安裝範例見 [repo-site 附錄](docs/index.html)。
 
 ### 開發／貢獻 `csarc-repo-template` 本身
 
 除了上表的 `uv`、`gh` 外，另需要：
 
 - **pnpm 11、rustup／Cargo**：完整跑 `./scripts/verify-template.sh` 會依序產生並驗證 Python、TypeScript、Rust 三種語言模組各自的原生驗證器（見 `tests/test_language_profiles.py`），三者都要具備；只跑日常 PR gate `./scripts/verify-fast` 通常不需要 rustup／Cargo，除非變更觸發模板 smoke test。安裝指令同上表。
-- **決策網站建置不需要額外工具。** `scripts/build-decision-site` 背後的 `scripts/build_decision_site.py` 是純 stdlib Python（見該檔案開頭註解），不再依賴 Hugo 或任何外部渲染器；只要有上表的 `uv`（或系統 `python3`）即可重建 `docs/index.html`／`docs/index.en.html`。
+- **repo-site 建置不需要額外工具。** `scripts/build-repo-site` 背後的 `scripts/build_repo_site.py` 是純 stdlib Python（見該檔案開頭註解），不再依賴 Hugo 或任何外部渲染器；只要有上表的 `uv`（或系統 `python3`）即可重建 `docs/index.html`／`docs/index.en.html`。
 - **gitleaks、actionlint、ShellCheck、OSV-Scanner：不需要手動安裝。** `scripts/verify-template.sh`／`scripts/verify-fast` 呼叫的 `scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner` 會在 macOS／Linux（含 WSL2）上自動下載、驗證 checksum 並快取固定版本，第一次執行只需要網路存取。以下指令僅供想在編輯器或本機獨立使用這些工具時參考：
 
   | 工具 | macOS（Homebrew） | Windows（winget／Chocolatey） |
@@ -123,7 +123,7 @@ Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表 Win
 | `scripts/verify-template.sh` | 建立、更新、語言與供應鏈回歸 |
 | `src/csarc_cli/` | `csarc init`／`adopt`／`update` 的薄層 Copier orchestration |
 | `docs/README.md`、`docs/specs/`、`docs/adr/` | Durable Project Memory 地圖、Spec-Driven Development（SDD）規格與 Architecture Decision Records（ADR） |
-| `site/`、`scripts/build-decision-site` | 決策網站內容、純 Python 渲染引擎、樣式與可重現的單檔建置入口 |
+| `site/`、`scripts/build-repo-site` | repo-site 內容、純 Python 渲染引擎、樣式與可重現的單檔建置入口 |
 | `docs/index.html`、`docs/index.en.html` | 可離線交付的中英文生成簡報；目前只有 `noindex`／`robots.txt` 臨時防護，尚無實際存取控制 |
 
 Python 目前以 3.14、uv、Ruff、ty、pytest 與 src layout 為基線；CI 會同時驗證精確下界 3.14.0 與最新 3.14.x。生成專案若選 minimum 模式，會驗證所選版本的 `.0` 下界，以及一路到 3.14 的每個 feature release 最新 patch；目前刻意不宣告 3.11 支援。Rust 以 1.98、Cargo.lock、rustfmt、Clippy、cargo test 與 release build 為基線。TypeScript 以 Node 24、pnpm 11、Biome、strict TypeScript 與 Vitest 為基線。
@@ -167,7 +167,7 @@ Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 re
 
 ## 設定與密鑰
 
-GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗，Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud；`policies/pages.json` 的 `enabled` 欄位可關閉）、組織政策限制或缺少 GitHub Advanced Security 則明確標為 `DEGRADED`，不會誤稱為沒有 drift；生成 repo 開啟 `enable_governance_drift_check` 時，`.github/workflows/governance-drift.yml` 每天重跑同一個 `check` 並在可修正的漂移出現時開立或更新追蹤 Issue，本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。非 draft PR 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer（`.github/workflows/governance-comment.yml`）；這只是提出 review request，不是強制合併門禁。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見[內部網站附錄](docs/index.html)「先辨識 GitHub 方案」章節。
+GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗，Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud；`policies/pages.json` 的 `enabled` 欄位可關閉）、組織政策限制或缺少 GitHub Advanced Security 則明確標為 `DEGRADED`，不會誤稱為沒有 drift；生成 repo 開啟 `enable_governance_drift_check` 時，`.github/workflows/governance-drift.yml` 每天重跑同一個 `check` 並在可修正的漂移出現時開立或更新追蹤 Issue，本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。非 draft PR 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer（`.github/workflows/governance-comment.yml`）；這只是提出 review request，不是強制合併門禁。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見 [repo-site 附錄](docs/index.html)「先辨識 GitHub 方案」章節。
 
 `.csarc/config.yml` 的 `policy_repository_settings`／`policy_actions_permissions`／`policy_labels`／`policy_branch_ruleset` 四個布林開關（Issue #532）讓專案各自決定要不要套用對應的 `policies/repository.json`／`policies/actions.json`／`policies/labels.json`／`policies/rulesets.json`；immutable Releases 不另開新鍵，沿用既有 `release_immutable_releases`（只有 `csarc-owned` 對應的 `required` 會套用，`product-owned`／`verification-only` 對應的 `product-defined`／`not-required` 交由既有 release ownership 決定，本模板不強制）。四個開關預設皆為 `true`，維持關閉本功能前的全套用行為；`.csarc/config.yml` 缺鍵一律視為開啟，既有 repo 更新後不會悄悄少掉涵蓋範圍。關掉某個政策時，`plan`／`apply`／`check` 都印出對應的 `SKIP`／`SKIPPED` 行、不呼叫該政策的 GitHub API，也不計入 `check` 的 drift 或 `DEGRADED` 計數。
 
@@ -276,7 +276,7 @@ Root CLI 不發布到 package registry；正式 prompt 一律從核准 GitHub Re
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<full-commit-sha>' csarc --help
 ```
 
-若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance 時，先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移，CLI 不會默認宣稱舊狀態已驗證。`docs/site-content.md` 與 `docs/site-theme.css` 是生成專案自行維護的網站來源；Copier 更新版型時不會覆寫它們，並會重建 portable `docs/index.html`。
+若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance 時，先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移，CLI 不會默認宣稱舊狀態已驗證。`site/content/_index.zh-tw.md`／`_index.en.md` 與 `docs/site-theme.css` 是生成專案自行維護的網站來源；Copier 更新版型時不會覆寫它們，並會重建 portable `docs/index.html`／`docs/index.en.html`。舊版 `docs/site-content.md` 已停用，其內容不會自動搬到新來源；`./scripts/build-repo-site` 偵測到該檔仍存在時會提示手動遷移後刪除。
 
 ### 驗證邊界
 
