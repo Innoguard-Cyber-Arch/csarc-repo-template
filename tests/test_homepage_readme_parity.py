@@ -206,7 +206,7 @@ def test_zh_home_repo_version_mentions_stay_in_sync() -> None:
     of silently drifting."""
     zh = (ROOT / "site/content/_index.zh-tw.md").read_text(encoding="utf-8")
     badge_match = re.search(
-        r'<span class="package-badge beta">(v[\d.]+)</span>'
+        r'<span class="package-badge muted">(v[\d.]+)</span>'
         r"<!-- x-release-please-version -->",
         zh,
     )
@@ -261,7 +261,7 @@ def test_en_home_repo_version_mentions_stay_in_sync() -> None:
     hero's badge, once in the always-visible basic-mode paragraph."""
     en = (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8")
     badge_match = re.search(
-        r'<span class="package-badge beta">(v[\d.]+)</span>'
+        r'<span class="package-badge muted">(v[\d.]+)</span>'
         r"<!-- x-release-please-version -->",
         en,
     )

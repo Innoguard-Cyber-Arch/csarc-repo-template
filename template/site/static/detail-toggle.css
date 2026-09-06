@@ -299,6 +299,15 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   grid-column: 1 / -1;
 }
 
+.markdown-body > .step-flow,
+.markdown-body > .command-block,
+.markdown-body > .install-promise,
+.mode-content > .step-flow,
+.mode-content > .command-block,
+.mode-content > .install-promise {
+  grid-column: 1 / -1;
+}
+
 .markdown-body > .technical-detail,
 .markdown-body > .config-guidance,
 .mode-content > .technical-detail,

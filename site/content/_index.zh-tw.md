@@ -22,18 +22,17 @@ fit = "符合畫面"
       <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
+        <p class="subtitle lead-question">這套公版如何讓人和 AI 的每次修改，都經過定義、驗證、審查並留下證據？</p>
         <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。<!-- csarc-readme-preamble-tagline:end --></p>
+        <p class="subtitle flow-line"><strong>結果：</strong>不論是人或 AI 提出的修改，都要先說清楚要做什麼、通過檢查、再經人工審查，才會真的合併，並留下當時的證據。</p>
         <p class="subtitle">標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；維運模式才補充設定檔、程式與技術理由。快速導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
-          <span class="package-badge beta">v0.13.0</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
-          <span class="package-badge">三種分支做法</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge security">自動驗證／安全檢查</span>
-          <span class="package-badge warning">免費私人 repo：無法強制保護 main</span>
-          <span class="package-badge">網站排版模板 v[[site_template_version]]</span>
-          <span class="package-badge">渲染引擎 v[[site_engine_version]]</span>
+          <span class="package-badge muted">v0.13.0</span><!-- x-release-please-version -->
+          <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
+          <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
       </header>
       <div class="language-contract" aria-label="程式語言與公版設定">
@@ -51,16 +50,17 @@ fit = "符合畫面"
         </section>
         <section class="start-paths" aria-label="三種導入方式">
           <h3>依你現在的 repo 狀態開始</h3>
-          <article class="start-path primary"><h3>新 repo</h3><p>選專案種類與分支做法；多張工作需要一起交付時才建立里程碑。</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">立即開始</button></article>
-          <article class="start-path"><h3>既有 repo</h3><p>先在獨立分支預覽差異，保留原有產品內容，再逐項處理衝突。</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">導入指令</button></article>
-          <article class="start-path"><h3>已使用公版</h3><p>選定已審查的公版版本，只審查這次更新帶來的差異。</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">更新指令</button></article>
+          <article class="start-path primary"><h3>建立新 repo</h3><p>選好種類與分支做法才產生檔案；完成前不會建立或推送任何 GitHub 內容。</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">立即開始</button></article>
+          <article class="start-path"><h3>導入既有 repo</h3><p>先在獨立分支預覽差異，保留原有產品內容，再逐項處理衝突。</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">導入指令</button></article>
+          <article class="start-path"><h3>更新已使用公版的 repo</h3><p>先產生可審查的差異（dry-run），確認後才合併，不會直接覆蓋 main。</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">更新指令</button></article>
         </section>
       </div>
       <div class="prerequisite-line product-prerequisites">
-        <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+、pnpm 11。純本機驗證不用 token；套用 GitHub 設定與端到端測試前才登入 <code>gh</code>。</p>
+        <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；完整清單（含 Rust／TypeScript 選用工具）請切換「維運」模式查看。</p>
         <button class="setup-trigger" type="button" data-setup="mac" aria-expanded="false">macOS 安裝</button>
         <button class="setup-trigger" type="button" data-setup="windows" aria-expanded="false">Windows 安裝</button>
       </div>
+      <p class="subtitle bridge-line"><strong>下一步：</strong>「安裝說明」頁提供一句貼給 agent 的完整指令，先預覽、才動手；維運模式另有狀態判斷的精確條件。</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -98,6 +98,10 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 {{< standard key="install-mode-standard" title="貼給 agent 的一句話" >}}
 <div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>貼上</h3><p>把下面這段完整指令貼給你的 coding agent，不用自己記指令。</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI 判斷</h3><p>Agent 執行 <code>csarc status</code>，由 CLI（不是 agent 自由判斷）自動分類這是新建、既有導入、有更新，還是只是政策變動。</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>先預覽</h3><p>不管哪一種結果，agent 都會先讓你看過計畫，確認後才真的動手。</p></article></div>
+
+結果會是以下其中一種：**建立**新專案、**導入**既有專案、套用可用**更新**、**已是最新**不用做事，或**只有政策設定**要補套用；不論哪一種，agent 都會先讓你確認才動手。
+
+<p class="install-promise"><strong>這一步的承諾：</strong>這一步只檢查目前狀態並提出計畫；在你確認前，不修改檔案、不變更 GitHub 設定，也不會建立 PR。</p>
 
 <div class="command-block"><div class="command-block-head"><span class="command-block-label">貼給 agent 的完整指令</span><button class="copy-command" type="button">複製指令</button></div><pre class="command-block-text">請使用 uv。先從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 查出目前最新的正式 GitHub Release（例如執行 `gh release view --repo Innoguard-Cyber-Arch/csarc-repo-template --json tagName,targetCommitish`，或直接看該 repository 的 Releases 頁面），記下這個 release 的 tag 與完整 commit SHA——一律使用這個已驗證的 release，不要用 main 或未經確認的分支。用這個 SHA 執行官方 csarc CLI 的 `status` 子指令，判斷目前 workspace／既有 Git repository 屬於哪一種安裝狀態；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。先執行 `csarc status --json`，不要自行判斷或假設目前狀態。依回傳的 state 與 next_command：create 或 adopt 或 update 時，改用對應的 init／adopt／update dry-run prompt 並等待確認；current 時回報不需動作；policy-only-update 時只執行 `scripts/apply-repository-settings.sh plan`、摘要差異並等待確認，確認後才 `apply`，不要重新走完整 adopt 或 update。全程不要修改全域環境、push 或開 PR。</pre></div>
 

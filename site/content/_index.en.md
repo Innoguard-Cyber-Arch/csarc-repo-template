@@ -25,7 +25,7 @@ fit = "Fit"
         <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --></p>
         <p class="subtitle">Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Maintenance mode adds configuration files, code, and technical rationale. See the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a> for quick-start commands.</p>
         <div class="package-badges" aria-label="Package status">
-          <span class="package-badge beta">v0.13.0</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.13.0</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">3 branch strategies</span>

@@ -136,6 +136,7 @@
       line-height: 1.3;
       text-align: left;
     }
+    .subtitle.lead-question { color: var(--ink); font-weight: 800; font-size: 21px; }
     .accent { background: linear-gradient(transparent 58%, var(--yellow) 58%); }
     .muted { color: var(--muted); }
 
@@ -1625,6 +1626,14 @@
     .package-badge.python { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
     .package-badge.security { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
     .package-badge.warning { border-color: #b42318; background: #fff0ed; color: #8a1c12; }
+    .package-badge.muted { border-color: #ccc; background: #f5f5f5; color: #666; font-weight: 700; }
+    .install-promise {
+      padding: 12px 15px;
+      border-left: 7px solid var(--yellow);
+      background: #fffbea;
+      font-size: 20px;
+      line-height: 1.35;
+    }
     .package-badge:hover, .package-badge:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
     .capability-lead {
       display: grid;
@@ -2511,6 +2520,15 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   grid-column: 1 / -1;
 }
 
+.markdown-body > .step-flow,
+.markdown-body > .command-block,
+.markdown-body > .install-promise,
+.mode-content > .step-flow,
+.mode-content > .command-block,
+.mode-content > .install-promise {
+  grid-column: 1 / -1;
+}
+
 .markdown-body > .technical-detail,
 .markdown-body > .config-guidance,
 .mode-content > .technical-detail,
@@ -2870,7 +2888,7 @@ html[data-detail-level="technical"] .mode-content[data-mode="standard"] {
         <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --></p>
         <p class="subtitle">Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Maintenance mode adds configuration files, code, and technical rationale. See the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a> for quick-start commands.</p>
         <div class="package-badges" aria-label="Package status">
-          <span class="package-badge beta">v0.13.0</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.13.0</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">3 branch strategies</span>
