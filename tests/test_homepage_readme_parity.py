@@ -154,9 +154,7 @@ def test_home_slide_renamed_in_navigation() -> None:
     navigation = json.loads(
         (ROOT / "site/data/navigation.json").read_text(encoding="utf-8")
     )
-    entry = next(
-        item for item in navigation["items"] if item["key"] == "index"
-    )
+    entry = next(item for item in navigation["items"] if item["key"] == "index")
     assert entry["labels"]["zh-tw"] == "首頁"
     assert entry["labels"]["en"] == "Home"
     assert entry["labels"]["zh-tw"] != "能力／導入"

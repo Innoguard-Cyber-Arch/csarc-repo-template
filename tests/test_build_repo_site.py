@@ -6,9 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "build_repo_site.py"))
 RENDER_SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "render_site.py"))
-PARITY_MODULE = runpy.run_path(
-    str(ROOT / "scripts" / "check-repo-site-parity")
-)
+PARITY_MODULE = runpy.run_path(str(ROOT / "scripts" / "check-repo-site-parity"))
 AUDIT_TRAIL_GENERATOR_MODULE = runpy.run_path(
     str(ROOT / "scripts" / "generate_audit_trail.py")
 )
@@ -1481,7 +1479,7 @@ def _write_fixture_site(root: Path) -> None:
             'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
             'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
             'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
-        'menu = "M"\n'
+            'menu = "M"\n'
             "+++\n\n"
             '{{< slide key="capability" title="Cap" legacy="false" >}}\n'
             "Body paragraph.\n"
