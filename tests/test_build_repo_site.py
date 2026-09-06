@@ -693,6 +693,7 @@ def test_testing_pending_automation_defaults_issue_number() -> None:
         "zh-tw": dict.fromkeys(
             (
                 "title",
+                "readingMap",
                 "purpose",
                 "shared",
                 "templateOnly",
@@ -710,6 +711,7 @@ def test_testing_pending_automation_defaults_issue_number() -> None:
         "en": dict.fromkeys(
             (
                 "title",
+                "readingMap",
                 "purpose",
                 "shared",
                 "templateOnly",

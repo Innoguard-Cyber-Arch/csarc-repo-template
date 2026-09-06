@@ -8,7 +8,7 @@
       "eyebrow": "相似工具",
       "title": "相似工具｜整體競品與局部參考",
       "subtitle": "標準模式先看整體目的接近的套件；維運模式可再按旅程檢查各項具體做法。這個模板直接整合的工具改列在「檔案地圖」。",
-      "standardConclusion": "結論：目前沒有一個套件整體涵蓋這個模板的所有能力；下表列出目的最接近、值得參考的專案。",
+      "standardConclusion": "理解整套流程後，再看哪些現有工具與其中哪些部分相似。結論：目前沒有一個套件整體涵蓋這個模板的所有能力；下表列出目的最接近、值得參考的專案。",
       "primaryTabOverline": "整體接近",
       "primaryTab": "主要相似工具",
       "primaryLegend": "整體目的相近｜至少涵蓋 5 個 Journey（左側編號模組），且近 6 個月有發版",
@@ -33,7 +33,7 @@
       "eyebrow": "Similar tools",
       "title": "Similar tools | Direct alternatives and focused references",
       "subtitle": "Standard mode shows projects with a similar overall purpose; Maintenance mode adds concrete comparisons by journey. Tools this template directly integrates are on the File map instead.",
-      "standardConclusion": "Conclusion: no single package covers everything this template does; the table below lists the closest, most useful references.",
+      "standardConclusion": "Now that the whole flow makes sense, here is how existing tools compare to parts of it. Conclusion: no single package covers everything this template does; the table below lists the closest, most useful references.",
       "primaryTabOverline": "Overall match",
       "primaryTab": "Primary similar tools",
       "primaryLegend": "Similar overall purpose | covers at least five journeys and released within six months",
@@ -133,6 +133,7 @@
     "labels": {
       "zh-tw": {
         "title": "CI/CD 設定",
+        "readingMap": "先看懂再查表：這裡有四組對照——「任何使用本模板的 repo」與「repo-template 額外」（同一份規則適用範圍不同）；「工作 PR」與「交付 PR」（審查時機不同）；本機入口與 hosted workflow（在哪裡執行）；下方「預計執行時間」表是估算，各 Journey 分頁裡的時間才是最近一次實測。",
         "purpose": "測試目的",
         "shared": "任何使用本模板的 repo",
         "templateOnly": "repo-template 額外",
@@ -147,6 +148,7 @@
       },
       "en": {
         "title": "CI/CD settings",
+        "readingMap": "Read this before the table: four pairings recur throughout — \"every repository using the template\" vs. \"additional repo-template checks\" (same rules, different scope); \"work PR\" vs. \"delivery PR\" (different review point); local entry point vs. hosted workflow (where it runs); and the \"expected runtime\" table below is an estimate, while each journey tab's own time is the latest actual measurement.",
         "purpose": "Test purpose",
         "shared": "Every repository using the template",
         "templateOnly": "Additional repo-template checks",
