@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail closed when the site template version leaves the engine's range.
 
-The rendering engine (`scripts/build_decision_site.py`) and the
+The rendering engine (`scripts/build_repo_site.py`) and the
 presentation template (theme/CSS under `site/static/`) each carry their own
 version, independent of the repository/CLI's overall SemVer (Issue #524).
 `site/version.json` records both plus the range of template versions the
@@ -62,7 +62,7 @@ def check(data: dict[str, object]) -> str:
             f"compatible_template_range {compatible_range!r}"
         )
     return (
-        f"Decision-site versions: engine {engine}, template {template}, "
+        f"Repo-site versions: engine {engine}, template {template}, "
         f"compatible with {compatible_range}\n"
     )
 
@@ -76,7 +76,7 @@ def main() -> int:
         status = check(data)
     except (OSError, KeyError, ValueError, json.JSONDecodeError) as error:
         sys.stderr.write(
-            f"decision-site version contract invalid ({VERSION_FILE}): "
+            f"repo-site version contract invalid ({VERSION_FILE}): "
             f"{error}\n"
         )
         return 1

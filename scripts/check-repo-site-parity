@@ -5,7 +5,7 @@
 Hugo output, kept only to prove the Hugo-to-Python port (Issue #524/#577)
 did not silently drop a slide. Slide *text* is expected to keep evolving
 after that one-time migration, so `--keys-only` (the mode wired into
-ongoing CI by `scripts/build-decision-site`) only checks that every
+ongoing CI by `scripts/build-repo-site`) only checks that every
 legacy slide key still has a matching candidate key -- it does not
 require the text to still match verbatim.
 
@@ -80,6 +80,15 @@ RETIRED_LEGACY_KEYS = {
         "legacy step-09 slide superseded by new candidate-authored M8 "
         "content (Issue #533)"
     ),
+}
+
+# A legacy key whose slide is still present with the same role and content
+# lineage, just under a new `id`/`data-track` -- unlike RETIRED_LEGACY_KEYS,
+# this is not content loss or redistribution, so the legacy key's slide
+# still counts toward parity; it is just looked up under its new candidate
+# key instead of its own.
+RENAMED_LEGACY_KEYS = {
+    "capability": "index",  # Issue #681/#682: home slide's key clarified
 }
 
 
@@ -182,19 +191,25 @@ def compare(
     keys_only: bool,
 ) -> list[str]:
     """Return parity problems between a legacy and a candidate slide map."""
-    required_legacy_keys = legacy.keys() - RETIRED_LEGACY_KEYS.keys()
-    if required_legacy_keys != candidate.keys():
-        missing = sorted(required_legacy_keys - candidate.keys())
-        extra = sorted(candidate.keys() - required_legacy_keys)
+    # required maps each key the candidate must have back to the legacy
+    # key its content lineage traces to -- the same key, unless
+    # RENAMED_LEGACY_KEYS says the candidate now uses a different one.
+    required = {
+        RENAMED_LEGACY_KEYS.get(key, key): key
+        for key in legacy.keys() - RETIRED_LEGACY_KEYS.keys()
+    }
+    if required.keys() != candidate.keys():
+        missing = sorted(required.keys() - candidate.keys())
+        extra = sorted(candidate.keys() - required.keys())
         return [
-            f"decision-site slide mismatch; missing={missing}, extra={extra}"
+            f"repo-site slide mismatch; missing={missing}, extra={extra}"
         ]
     if keys_only:
         return []
     return [
-        f"decision-site content mismatch: {key}"
-        for key in sorted(required_legacy_keys)
-        if legacy[key] != candidate[key]
+        f"repo-site content mismatch: {candidate_key}"
+        for candidate_key, legacy_key in sorted(required.items())
+        if legacy[legacy_key] != candidate[candidate_key]
     ]
 
 
@@ -204,7 +219,7 @@ def main() -> int:
         "--legacy", type=Path, default=Path("site/legacy/index.html")
     )
     parser.add_argument(
-        "--candidate", type=Path, default=Path("dist/decision-site/index.html")
+        "--candidate", type=Path, default=Path("dist/repo-site/index.html")
     )
     parser.add_argument(
         "--keys-only",
@@ -221,7 +236,7 @@ def main() -> int:
         legacy = parse(args.legacy, candidate=False)
         candidate = parse(args.candidate, candidate=True)
     except (OSError, UnicodeError) as error:
-        sys.stderr.write(f"decision-site parity check failed: {error}\n")
+        sys.stderr.write(f"repo-site parity check failed: {error}\n")
         return 1
 
     problems = compare(legacy, candidate, keys_only=args.keys_only)
@@ -238,7 +253,7 @@ def main() -> int:
     )
     unit = "keys" if args.keys_only else "slides"
     sys.stdout.write(
-        f"Decision-site parity: {len(required_legacy_keys)} {unit}, "
+        f"Repo-site parity: {len(required_legacy_keys)} {unit}, "
         f"{image_count} images\n"
     )
     return 0

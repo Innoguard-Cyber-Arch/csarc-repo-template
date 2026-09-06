@@ -3,13 +3,11 @@ import re
 import runpy
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).parents[1]
-SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "build_decision_site.py"))
+SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "build_repo_site.py"))
 RENDER_SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "render_site.py"))
 PARITY_MODULE = runpy.run_path(
-    str(ROOT / "scripts" / "check-decision-site-parity")
+    str(ROOT / "scripts" / "check-repo-site-parity")
 )
 AUDIT_TRAIL_GENERATOR_MODULE = runpy.run_path(
     str(ROOT / "scripts" / "generate_audit_trail.py")
@@ -34,6 +32,8 @@ render_llms_txt = SITE_MODULE["render_llms_txt"]
 load_site_data = SITE_MODULE["load_site_data"]
 build = SITE_MODULE["build"]
 _substitute_version_tokens = SITE_MODULE["_substitute_version_tokens"]
+_substitute_config_tokens = SITE_MODULE["_substitute_config_tokens"]
+_load_downstream_config = SITE_MODULE["_load_downstream_config"]
 render = RENDER_SITE_MODULE["render"]
 parse_parity = PARITY_MODULE["parse"]
 compare_parity = PARITY_MODULE["compare"]
@@ -46,9 +46,6 @@ def _empty_data(**overrides: object) -> object:
             "labels": {
                 "zh-tw": {
                     "ariaLabel": "簡報目錄",
-                    "use": "使用",
-                    "workflow": "流程",
-                    "support": "管理",
                     "legend": "顏色說明",
                     "human": "需要人決策",
                     "automated": "自動完成",
@@ -56,15 +53,38 @@ def _empty_data(**overrides: object) -> object:
                 },
                 "en": {
                     "ariaLabel": "Outline",
-                    "use": "Use",
-                    "workflow": "Workflow",
-                    "support": "Maintenance",
                     "legend": "Color key",
                     "human": "Human decision",
                     "automated": "Automated",
                     "maintainer": "Maintainers only",
                 },
             },
+            "groups": [
+                {
+                    "key": "use",
+                    "listClass": "journey-use",
+                    "numbered": False,
+                    "labels": {"zh-tw": "使用", "en": "Use"},
+                },
+                {
+                    "key": "workflow",
+                    "listClass": "journey-main",
+                    "numbered": True,
+                    "labels": {"zh-tw": "流程", "en": "Workflow"},
+                },
+                {
+                    "key": "support",
+                    "listClass": "journey-support",
+                    "numbered": True,
+                    "labels": {"zh-tw": "管理", "en": "Maintenance"},
+                },
+                {
+                    "key": "notes",
+                    "listClass": "journey-notes",
+                    "numbered": False,
+                    "labels": {"zh-tw": "備註", "en": "Notes"},
+                },
+            ],
             "items": [
                 {
                     "key": "one",
@@ -335,34 +355,38 @@ def test_config_guidance_unknown_track_raises() -> None:
         raise AssertionError("expected BuildError")
 
 
-def test_config_guidance_renders_one_static_block_regardless_of_direct() -> (
+def test_config_guidance_renders_one_collapsed_block_regardless_of_direct() -> (
     None
 ):
-    # Issue #525: the old fold-open/overlay-with-pager split collapsed into
-    # one static block -- the simple/technical toggle alone (see
-    # detail-toggle.css's `.config-guidance` rule) decides whether readers
-    # see it at all, so the `direct` field no longer changes the markup.
+    # Issue #525 made this one static, always-expanded block regardless of
+    # the retired fold/overlay split; Issue #681/#682 decision Q supersedes
+    # that specific point once the 12pt font floor made a multi-item
+    # track's full code samples taller than the 900px canvas -- it is a
+    # single collapsed `<details>` again, so the `direct` field still does
+    # not change the markup (both prior styles already collapsed into one
+    # shape before this).
     for direct in (False, True):
         data = _empty_data()
         track = {**_CONFIG_TRACK, "direct": direct}
         data.config_examples["tracks"]["pr"] = track
         html = render_config_guidance("pr", lang="en", data=data)
         assert html == (
-            '<aside class="config-guidance" data-content-key="config-pr">'
-            "<strong>Policy</strong><p>Intro</p>"
+            '<details class="config-guidance" data-content-key="config-pr">'
+            "<summary>Policy</summary><p>Intro</p>"
             '<div class="config-items">'
             '<article class="config-item">'
             "<h4>Title</h4><p>Goal</p>"
             '<p class="config-item-path">Config file: <code>a.yml</code></p>'
             '<pre class="code">line one&#10;&#10;line two</pre>'
-            "</article></div></aside>"
+            "</article></div></details>"
         )
-        # No click-to-reveal layer of any kind survives: no trigger button,
-        # no fold, no overlay markup.
+        # No OTHER click-to-reveal layer survives: no trigger button, no
+        # per-item fold, no JS-driven overlay -- just the one native
+        # `<details>` wrapping every item together.
         assert "config-trigger" not in html
         assert "config-guidance-fold" not in html
         assert "config-overlay" not in html
-        assert "<details" not in html
+        assert html.count("<details") == 1
 
 
 def test_config_guidance_matches_real_governance_item_newlines() -> None:
@@ -791,7 +815,7 @@ def test_audit_trail_renders_file_rows_with_path_description_and_columns() -> (
 def test_audit_trail_never_embeds_a_live_or_scheduled_snapshot() -> None:
     # Issue #559's decision: this static, file://-openable bundle can never
     # show live GitHub data, and no schedule/on-merge job generates and
-    # commits one either -- see docs/adr/portable-decision-site.md. The
+    # commits one either -- see docs/adr/portable-repo-site.md. The
     # rendered copy must say so explicitly rather than implying real-time
     # or automatically refreshed content.
     data = _empty_data()
@@ -971,6 +995,51 @@ def test_substitute_version_tokens_ignores_unrelated_bracket_text() -> None:
     assert text == "see `[[key]]` for details"
 
 
+def test_substitute_config_tokens_resolves_known_keys_only() -> None:
+    # Issue #681 decision N: a downstream project's minimal repo-site uses
+    # this to reach `.csarc/config.yml` facts at build time.
+    config = {
+        "project_name": "Demo Project",
+        "languages": ["python", "typescript"],
+        "project_visibility": "private",
+    }
+    text = _substitute_config_tokens(
+        "[[project_name]] uses [[languages]] ([[project_visibility]])",
+        config,
+        lang="en",
+    )
+    assert text == "Demo Project uses python, typescript (private)"
+
+
+def test_substitute_config_tokens_uses_zh_tw_list_separator() -> None:
+    config = {"languages": ["python", "typescript"]}
+    text = _substitute_config_tokens("[[languages]]", config, lang="zh-tw")
+    assert text == "python、typescript"
+
+
+def test_substitute_config_tokens_ignores_unrelated_bracket_text() -> None:
+    # Same non-goal as the version-token equivalent above: root's own
+    # docs-site/governance slides use the literal string `` `[[key]]` `` as
+    # a prose example, which must never be treated as a config token.
+    text = _substitute_config_tokens("see `[[key]]` for details", {}, lang="en")
+    assert text == "see `[[key]]` for details"
+
+
+def test_substitute_config_tokens_fails_closed_on_missing_key() -> None:
+    try:
+        _substitute_config_tokens("[[project_name]]", {}, lang="en")
+    except BuildError as error:
+        assert "project_name" in str(error)
+    else:
+        raise AssertionError("expected BuildError for an unset config key")
+
+
+def test_load_downstream_config_is_none_without_a_config_file(
+    tmp_path: Path,
+) -> None:
+    assert _load_downstream_config(tmp_path) is None
+
+
 # --- slide / page assembly ----------------------------------------------
 
 
@@ -1035,6 +1104,7 @@ def test_render_page_includes_mermaid_only_when_used() -> None:
         'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
         'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
         'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        'menu = "M"\n'
         "+++\n\n"
         '{{< slide key="a" title="A" legacy="false" >}}\n'
         "no diagram here\n"
@@ -1065,6 +1135,7 @@ def test_render_page_links_theme_css_after_base_stylesheet() -> None:
         'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
         'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
         'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        'menu = "M"\n'
         "+++\n\n"
         '{{< slide key="a" title="A" legacy="false" >}}\nbody\n{{< /slide >}}\n'
     )
@@ -1084,6 +1155,7 @@ def test_render_page_orders_language_switcher_zh_tw_then_en() -> None:
         'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
         'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
         'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        'menu = "M"\n'
         "+++\n\n"
         '{{< slide key="a" title="A" legacy="false" >}}\nbody\n{{< /slide >}}\n'
     )
@@ -1115,59 +1187,6 @@ def _readme_fixture(tmp_path: Path) -> None:
     )
 
 
-def test_render_page_sources_the_about_slide_from_readme_when_root_is_given(
-    tmp_path: Path,
-) -> None:
-    # Issue #681: the "about" slide's body is README's own "## 專案概述"/
-    # "## Overview" H2 section, read fresh, instead of a paraphrase hand-
-    # copied into site/content/_index.<lang>.md.
-    _readme_fixture(tmp_path)
-    content = (
-        "+++\n"
-        'title = "T"\n\n'
-        "[controls]\n"
-        'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
-        'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
-        'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
-        "+++\n\n"
-        '{{< slide key="about" title="About" legacy="false" >}}\n'
-        "stale inline body, must not appear in the output\n"
-        "{{< /slide >}}\n"
-    )
-
-    zh_html = render_page(
-        content, lang="zh-tw", data=_empty_data(), root=tmp_path
-    )
-    en_html = render_page(content, lang="en", data=_empty_data(), root=tmp_path)
-
-    assert "zh-tw overview body." in zh_html
-    assert "en overview body." in en_html
-    assert "stale inline body" not in zh_html
-    assert "stale inline body" not in en_html
-
-
-def test_render_page_raises_when_readme_is_missing_a_mapped_section(
-    tmp_path: Path,
-) -> None:
-    (tmp_path / "README.md").write_text(
-        "# T\n\nno H2 sections at all here.\n", encoding="utf-8"
-    )
-    content = (
-        "+++\n"
-        'title = "T"\n\n'
-        "[controls]\n"
-        'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
-        'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
-        'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
-        "+++\n\n"
-        '{{< slide key="about" title="About" legacy="false" >}}\n'
-        "body\n"
-        "{{< /slide >}}\n"
-    )
-    with pytest.raises(ValueError, match="專案概述"):
-        render_page(content, lang="zh-tw", data=_empty_data(), root=tmp_path)
-
-
 def test_render_page_ignores_readme_sourcing_without_root() -> None:
     # A caller that renders a synthetic fixture with no README (e.g. the
     # full-build integration tests below) must be unaffected.
@@ -1178,6 +1197,7 @@ def test_render_page_ignores_readme_sourcing_without_root() -> None:
         'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
         'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
         'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        'menu = "M"\n'
         "+++\n\n"
         '{{< slide key="about" title="About" legacy="false" >}}\n'
         "inline body stays\n"
@@ -1201,6 +1221,7 @@ def test_render_page_fills_a_readme_marker_span(tmp_path: Path) -> None:
         'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
         'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
         'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        'menu = "M"\n'
         "+++\n\n"
         '{{< slide key="capability" title="Cap" legacy="false" >}}\n'
         "<p><!-- csarc-readme-preamble-tagline:start -->stale"
@@ -1259,9 +1280,6 @@ def _write_fixture_site(root: Path) -> None:
                 "labels": {
                     "zh-tw": {
                         "ariaLabel": "a",
-                        "use": "u",
-                        "workflow": "w",
-                        "support": "s",
                         "legend": "l",
                         "human": "h",
                         "automated": "au",
@@ -1269,15 +1287,38 @@ def _write_fixture_site(root: Path) -> None:
                     },
                     "en": {
                         "ariaLabel": "a",
-                        "use": "u",
-                        "workflow": "w",
-                        "support": "s",
                         "legend": "l",
                         "human": "h",
                         "automated": "au",
                         "maintainer": "m",
                     },
                 },
+                "groups": [
+                    {
+                        "key": "use",
+                        "listClass": "journey-use",
+                        "numbered": False,
+                        "labels": {"zh-tw": "u", "en": "u"},
+                    },
+                    {
+                        "key": "workflow",
+                        "listClass": "journey-main",
+                        "numbered": True,
+                        "labels": {"zh-tw": "w", "en": "w"},
+                    },
+                    {
+                        "key": "support",
+                        "listClass": "journey-support",
+                        "numbered": True,
+                        "labels": {"zh-tw": "s", "en": "s"},
+                    },
+                    {
+                        "key": "notes",
+                        "listClass": "journey-notes",
+                        "numbered": False,
+                        "labels": {"zh-tw": "n", "en": "n"},
+                    },
+                ],
                 "items": [
                     {
                         "key": "capability",
@@ -1440,6 +1481,7 @@ def _write_fixture_site(root: Path) -> None:
             'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
             'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
             'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        'menu = "M"\n'
             "+++\n\n"
             '{{< slide key="capability" title="Cap" legacy="false" >}}\n'
             "Body paragraph.\n"
@@ -1459,7 +1501,7 @@ def test_testing_groups_reject_an_unexpected_extra_file(tmp_path: Path) -> None:
         json.dumps({"key": "zzz-extra"}), encoding="utf-8"
     )
     try:
-        build(tmp_path, tmp_path / "dist/decision-site")
+        build(tmp_path, tmp_path / "dist/repo-site")
     except BuildError as error:
         assert "unexpected" in str(error)
         assert "zzz-extra" in str(error)
@@ -1469,7 +1511,7 @@ def test_testing_groups_reject_an_unexpected_extra_file(tmp_path: Path) -> None:
 
 def test_build_writes_both_languages_and_llms_txt(tmp_path: Path) -> None:
     _write_fixture_site(tmp_path)
-    outputs = build(tmp_path, tmp_path / "dist/decision-site")
+    outputs = build(tmp_path, tmp_path / "dist/repo-site")
     assert set(outputs) == {"zh-tw", "en", "llms"}
     for path in outputs.values():
         assert path.is_file()
@@ -1481,7 +1523,7 @@ def test_build_output_feeds_render_site_unmodified(tmp_path: Path) -> None:
     # The engine's job stops at the pre-bundle HTML; render() -- completely
     # unmodified -- must still be able to inline it into a portable bundle.
     _write_fixture_site(tmp_path)
-    outputs = build(tmp_path, tmp_path / "dist/decision-site")
+    outputs = build(tmp_path, tmp_path / "dist/repo-site")
     bundled = render(outputs["zh-tw"], root=tmp_path)
     assert '<link rel="stylesheet"' not in bundled
     assert "<script src=" not in bundled
@@ -1492,7 +1534,7 @@ def test_theme_css_default_is_a_no_op_override(tmp_path: Path) -> None:
     # Issue #527: site/theme.css ships empty, so the default build must not
     # change the palette declared in site/static/styles.css.
     _write_fixture_site(tmp_path)
-    outputs = build(tmp_path, tmp_path / "dist/decision-site")
+    outputs = build(tmp_path, tmp_path / "dist/repo-site")
     bundled = render(outputs["zh-tw"], root=tmp_path)
     assert bundled.count("--yellow:#ffe600;") == 1
 
@@ -1504,12 +1546,153 @@ def test_theme_css_override_cascades_after_base_styles(tmp_path: Path) -> None:
     (tmp_path / "site" / "theme.css").write_text(
         ":root {\n  --yellow: #123456;\n}\n", encoding="utf-8"
     )
-    outputs = build(tmp_path, tmp_path / "dist/decision-site")
+    outputs = build(tmp_path, tmp_path / "dist/repo-site")
     bundled = render(outputs["zh-tw"], root=tmp_path)
     assert "--yellow: #123456;" in bundled
     assert bundled.index("--yellow:#ffe600;") < bundled.index(
         "--yellow: #123456;"
     )
+
+
+def _write_minimal_downstream_fixture(root: Path) -> None:
+    """A `template/site/`-shaped fixture: only navigation.json and
+    version.json, no glossary/similar-tools/config-examples/file-map/
+    audit-trail data, plus a `.csarc/config.yml` -- proving the engine
+    `template/` actually ships is the same one this test suite already
+    covers for root, not a hand-simplified fork of it (Issue #681
+    decision N)."""
+    site = root / "site"
+    (site / "content").mkdir(parents=True)
+    (site / "data").mkdir(parents=True)
+    (site / "static").mkdir(parents=True)
+    (site / "static" / "styles.css").write_text("", encoding="utf-8")
+    (site / "static" / "detail-toggle.css").write_text("", encoding="utf-8")
+    (site / "static" / "deck.js").write_text("", encoding="utf-8")
+    (site / "static" / "legacy-components.js").write_text("", encoding="utf-8")
+    (site / "static" / "detail-toggle.js").write_text("", encoding="utf-8")
+    (site / "version.json").write_text(
+        json.dumps(
+            {
+                "engine": "1.0.0",
+                "template": "1.0.0",
+                "compatible_template_range": ">=1.0.0 <2.0.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+    labels = {
+        "ariaLabel": "a",
+        "legend": "l",
+        "human": "h",
+        "automated": "au",
+        "maintainer": "m",
+    }
+    (site / "data" / "navigation.json").write_text(
+        json.dumps(
+            {
+                "labels": {"zh-tw": labels, "en": labels},
+                "groups": [
+                    {
+                        "key": "use",
+                        "listClass": "journey-use",
+                        "numbered": False,
+                        "labels": {"zh-tw": "u", "en": "u"},
+                    }
+                ],
+                "items": [
+                    {
+                        "key": "index",
+                        "group": "use",
+                        "participation": "human",
+                        "labels": {"zh-tw": "首頁", "en": "Home"},
+                    }
+                ],
+                "appendices": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    # A minimal downstream project still ships this (Copier-templated from
+    # `.csarc/config.yml` at generation time, see template/site/data/
+    # glossary.toml.jinja) -- only the richer, root-only sources
+    # (similar_tools.json, config_examples.json, file_map.json,
+    # audit_trail.json) are genuinely optional.
+    (site / "data" / "glossary.toml").write_text(
+        'title = "Demo Project"\n'
+        'title_zh_tw = "t"\ntitle_en = "t"\n'
+        'intro_zh_tw = "i"\nintro_en = "i"\n'
+        'source_label_zh_tw = "s"\nsource_label_en = "s"\n'
+        'summary_zh_tw = "A demo downstream project."\n'
+        'summary_en = "A demo downstream project."\n'
+        'source_base = "https://github.com/example-org/demo-project/blob/main/"\n',
+        encoding="utf-8",
+    )
+    for lang, eyebrow in (("zh-tw", "首頁"), ("en", "Home")):
+        (site / "content" / f"_index.{lang}.md").write_text(
+            f'+++\ntitle = "[[project_name]]"\n\n[controls]\n'
+            f'menu = "m"\nlanguage = "l"\ndetail = "d"\nsimple = "s"\n'
+            f'technical = "t"\nslides = "sl"\nprevious = "p"\nnext = "n"\n'
+            f'zoom = "z"\nzoom_out = "zo"\nzoom_reset = "zr"\nzoom_in = "zi"\n'
+            f'fit = "f"\n+++\n\n'
+            f'{{{{< slide key="index" track="index" eyebrow="{eyebrow}" '
+            f'title="[[project_name]]" subtitle="[[project_description]]" '
+            f'class="dense" legacy="false" >}}}}\n'
+            f'{{{{< standard key="index-standard" title="s" >}}}}\n'
+            f"Languages: [[languages]]. Visibility: [[project_visibility]].\n"
+            f"{{{{< /standard >}}}}\n\n"
+            f'{{{{< ops key="index-ops" title="o" >}}}}\n'
+            f"Owner: [[code_owner]]. Reviewers: [[reviewers]]. "
+            f"Branch strategy: [[branch_strategy]]. "
+            f"Clone: [[repository_url]].\n"
+            f"{{{{< /ops >}}}}\n"
+            f"{{{{< /slide >}}}}\n",
+            encoding="utf-8",
+        )
+    scripts = root / "scripts"
+    scripts.mkdir(exist_ok=True)
+    (scripts / "csarc_config.py").write_text(
+        (ROOT / "scripts/csarc_config.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    config_dir = root / ".csarc"
+    config_dir.mkdir()
+    (config_dir / "config.yml").write_text(
+        "project_name: Demo Project\n"
+        "project_description: A demo downstream project.\n"
+        "languages: ['python', 'typescript']\n"
+        "branch_strategy: delivery\n"
+        "project_visibility: private\n"
+        "code_owner: '@example-org/demo-team'\n"
+        "reviewers: ['alice', 'bob']\n"
+        "repository_url: https://github.com/example-org/demo-project\n",
+        encoding="utf-8",
+    )
+
+
+def test_minimal_downstream_fixture_builds_without_optional_data_files(
+    tmp_path: Path,
+) -> None:
+    _write_minimal_downstream_fixture(tmp_path)
+    outputs = build(
+        tmp_path, tmp_path / "dist/repo-site", theme_href="docs/site-theme.css"
+    )
+    zh_tw = outputs["zh-tw"].read_text(encoding="utf-8")
+    en = outputs["en"].read_text(encoding="utf-8")
+
+    assert "{{<" not in zh_tw
+    assert "{{<" not in en
+    assert '<link rel="stylesheet" href="../../docs/site-theme.css">' in zh_tw
+
+    # `.csarc/config.yml` facts reach both languages' standard and ops
+    # panes without a Copier re-run (Issue #681 decision N).
+    assert "Demo Project" in zh_tw
+    assert "python、typescript" in zh_tw
+    assert "python, typescript" in en
+    assert "private" in zh_tw
+    assert "@example-org/demo-team" in zh_tw
+    assert "alice、bob" in zh_tw
+    assert "delivery" in zh_tw
+    assert "https://github.com/example-org/demo-project" in zh_tw
 
 
 # --- real content regression (no Hugo) ------------------------------------
@@ -1518,7 +1701,7 @@ def test_theme_css_override_cascades_after_base_styles(tmp_path: Path) -> None:
 def test_real_content_builds_with_no_leftover_shortcode_markup(
     tmp_path: Path,
 ) -> None:
-    outputs = build(ROOT, tmp_path / "dist/decision-site")
+    outputs = build(ROOT, tmp_path / "dist/repo-site")
     for lang in ("zh-tw", "en"):
         text = outputs[lang].read_text(encoding="utf-8")
         assert "{{<" not in text
@@ -1527,21 +1710,21 @@ def test_real_content_builds_with_no_leftover_shortcode_markup(
 
 def test_real_content_slide_ids_match_navigation_items(tmp_path: Path) -> None:
     data = load_site_data(ROOT)
-    outputs = build(ROOT, tmp_path / "dist/decision-site")
+    outputs = build(ROOT, tmp_path / "dist/repo-site")
     text = outputs["en"].read_text(encoding="utf-8")
     ids = set(re.findall(r'data-content-key="([^"]*)"', text))
     for item in data.navigation["items"]:
         assert item["key"] in ids
 
 
-def test_real_content_keeps_decision_site_key_parity(tmp_path: Path) -> None:
+def test_real_content_keeps_repo_site_key_parity(tmp_path: Path) -> None:
     """No slide key silently vanishes or appears unacknowledged (Issue #586).
 
     Only the key set is checked here (`keys_only=True`), matching what
-    `scripts/build-decision-site --check` wires into CI. The exact-text
+    `scripts/build-repo-site --check` wires into CI. The exact-text
     comparison is not part of this regression; see Issue #590.
     """
-    outputs = build(ROOT, tmp_path / "dist/decision-site")
+    outputs = build(ROOT, tmp_path / "dist/repo-site")
     legacy = parse_parity(ROOT / "site/legacy/index.html", candidate=False)
     candidate = parse_parity(outputs["zh-tw"], candidate=True)
     assert compare_parity(legacy, candidate, keys_only=True) == []

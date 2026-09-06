@@ -1,11 +1,11 @@
 """Shared `{{< name attr="value" >}}...{{< /name >}}` block parsing.
 
-Both `scripts/check-decision-site-translations` (structural shape
-comparison of the two language sources) and `scripts/build_decision_site.py`
+Both `scripts/check-repo-site-translations` (structural shape
+comparison of the two language sources) and `scripts/build_repo_site.py`
 (the rendering engine) need to recognize the same Hugo-shortcode-style block
 syntax still used, unchanged, by `site/content/_index.{zh-tw,en}.md`. This
 module is the single parser for that syntax so neither caller reimplements
-it; `check-decision-site-translations` keeps its own shape-comparison logic
+it; `check-repo-site-translations` keeps its own shape-comparison logic
 and only imports the regexes below.
 
 The syntax has three shapes, all used by the content files:
@@ -32,7 +32,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Final
 
-# Reused verbatim by scripts/check-decision-site-translations for its own
+# Reused verbatim by scripts/check-repo-site-translations for its own
 # flat, order-preserving shape comparison of both language sources.
 BLOCK: Final = re.compile(
     r"(?={{<\s*(slide|detail|disclosure|standard|ops)\b([^>]*)>}}"
@@ -40,15 +40,20 @@ BLOCK: Final = re.compile(
     re.DOTALL,
 )
 ATTRIBUTE: Final = re.compile(r'(\w+)="([^"]*)"')
+# Deliberately excludes `standard`/`ops`: unlike `detail`/`disclosure`, which
+# only ever hold a fragment next to a slide's own direct prose, a `standard`/
+# `ops` pair can legitimately be the slide's *entire* body (see render_slide
+# in scripts/build_repo_site.py). Stripping them before the "is this
+# slide empty" check below would make every such slide a false positive.
 NESTED_BLOCK: Final = re.compile(
-    r"{{<\s*(detail|disclosure|standard|ops)\b[^>]*>}}.*?{{<\s*/\1\s*>}}",
+    r"{{<\s*(detail|disclosure)\b[^>]*>}}.*?{{<\s*/\1\s*>}}",
     re.DOTALL,
 )
 
 # Shortcodes that can appear inside a slide body without a matching
 # `{{< /name >}}` close tag; site/content/*.md never nests one inside
 # another (verified by the content-fidelity ports in
-# tests/test_build_decision_site.py).
+# tests/test_build_repo_site.py).
 SELF_CLOSING_NAMES: Final = (
     "config-guidance",
     "file-map",
