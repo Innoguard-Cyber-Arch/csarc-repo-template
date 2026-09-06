@@ -1,4 +1,5 @@
 import json
+import re
 import runpy
 import shutil
 from pathlib import Path
@@ -24,6 +25,7 @@ render_similar_tools = BUILD_MODULE["render_similar_tools"]
 render_testing = BUILD_MODULE["render_testing"]
 render_journey_rail = BUILD_MODULE["render_journey_rail"]
 render_config_guidance = BUILD_MODULE["render_config_guidance"]
+render_page = BUILD_MODULE["render_page"]
 
 
 def _write_markdown_site(
@@ -660,7 +662,16 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     )
     assert "名詞與約定" not in chinese
     assert "testing.after(bridge)" in presentation
-    assert "supply.before(pr)" in presentation
+    # Issue #681/#682: this client-side reorder used to paper over pr and
+    # supply being declared in the wrong order (04 languages -> 06 pr ->
+    # 05 supply -> 07 deploy) in site/content/_index.*.md, contradicting
+    # their own "步驟 05/06" labels, the sidebar rail, and
+    # navigation.json's already-correct order. The source order is fixed
+    # now, so this patch is gone, and languages/supply/pr/deploy appear in
+    # that order in the rendered source directly.
+    assert "supply.before(pr)" not in presentation
+    assert chinese.index('key="supply"') < chinese.index('key="pr"')
+    assert english.index('key="supply"') < english.index('key="pr"')
     assert "slide.dataset.audience !== 'archive'" in deck
     assert "Cloudflare Pages" in chinese
     assert "存取 #79" in chinese
@@ -1266,6 +1277,134 @@ def test_parity_ignores_explicit_supplemental_slides(tmp_path: Path) -> None:
     assert parse_parity(legacy, candidate=False) == parse_parity(
         candidate, candidate=True
     )
+
+
+_STEP_ORDER_KEYS = (
+    "method",
+    "agents",
+    "contract",
+    "languages",
+    "supply",
+    "pr",
+    "deploy",
+    "governance",
+)
+
+
+def test_module_step_order_matches_labels_and_navigation() -> None:
+    """Issue #681/#682: 04 languages -> 06 pr -> 05 supply -> 07 deploy was
+    declared in that (wrong) order in both site/content/_index.*.md files,
+    contradicting their own "步驟 05/06" eyebrow labels and
+    navigation.json's already-correct order for the same eight keys. Only
+    navigation.json (which drives the sidebar rail) was right; the actual
+    slide declaration order -- what deck.js's prev/next, keyboard
+    navigation, and (before today) a client-side reorder patch in
+    `_REORDER_SCRIPT` operated on -- was not. This pins both the source
+    declaration order and navigation.json to the same sequence so they
+    cannot silently diverge again, and confirms the old reorder patch is
+    gone rather than re-hiding a future drift.
+    """
+    navigation = json.loads(
+        (ROOT / "site/data/navigation.json").read_text(encoding="utf-8")
+    )
+    nav_workflow_keys = tuple(
+        item["key"]
+        for item in navigation["items"]
+        if item["group"] == "workflow"
+    )
+    assert nav_workflow_keys == _STEP_ORDER_KEYS
+
+    presentation = BUILD_MODULE["_REORDER_SCRIPT"]
+    assert "supply.before(pr)" not in presentation
+    assert "pr.before(supply)" not in presentation
+
+    for lang, path in (
+        ("zh-tw", ROOT / "site/content/_index.zh-tw.md"),
+        ("en", ROOT / "site/content/_index.en.md"),
+    ):
+        source = path.read_text(encoding="utf-8")
+        positions = [
+            source.index(f'key="{key}"') for key in _STEP_ORDER_KEYS
+        ]
+        assert positions == sorted(positions), (
+            f"{lang}: {_STEP_ORDER_KEYS} are not declared in that order"
+        )
+
+
+def test_standard_and_maintenance_mode_page_counts() -> None:
+    """Issue #681/#682 acceptance criteria: Standard mode shows exactly 16
+    slides and Maintenance mode exactly 18, matching deck.js's own filter
+    (`data-audience !== 'archive' && (data-audience !== 'maintainer' ||
+    maintenance)`). Pins the two counts so a slide added, removed, or
+    reassigned to a different `audience` is caught here instead of only
+    by someone clicking through both modes by hand.
+    """
+    site_data = load_site_data(ROOT)
+    for lang, path in (
+        ("zh-tw", ROOT / "site/content/_index.zh-tw.md"),
+        ("en", ROOT / "site/content/_index.en.md"),
+    ):
+        markdown_text = path.read_text(encoding="utf-8")
+        html = render_page(markdown_text, lang=lang, data=site_data, root=ROOT)
+        # Scoped to each <section class="slide" ...> opening tag itself --
+        # `data-audience="maintainer"` also appears on many inline elements
+        # throughout the page content (e.g. journey-rail entries, similar-
+        # tools tabs), so a site-wide count would wildly overcount.
+        section_tags = re.findall(r"<section class=\"slide[^>]*>", html)
+        total = len(section_tags)
+        archive = sum(
+            1 for tag in section_tags if 'data-audience="archive"' in tag
+        )
+        maintainer_only = sum(
+            1 for tag in section_tags if 'data-audience="maintainer"' in tag
+        )
+        standard_count = total - archive - maintainer_only
+        maintenance_count = total - archive
+        assert standard_count == 16, (
+            f"{lang}: Standard mode has {standard_count} slides, not 16"
+        )
+        assert maintenance_count == 18, (
+            f"{lang}: Maintenance mode has {maintenance_count} slides, not 18"
+        )
+
+
+def test_install_prompt_is_visible_and_matches_what_gets_copied() -> None:
+    """Issue #681/#682: the install page's full agent prompt used to live
+    only in the copy button's `data-copy-text` attribute -- a reader could
+    copy a prompt they were never shown, with no way to check it before
+    pasting it into an agent. The prompt must now be visible body text
+    (a sibling `<pre class="command-block-text">`), and no `.command-block`
+    anywhere may carry `data-copy-text`, since legacy-components.js's
+    click handler prefers that attribute over the visible `<pre>` when
+    both exist -- keeping both in sync would depend on nobody ever
+    forgetting to update one when editing the other.
+    """
+    site_data = load_site_data(ROOT)
+    for lang, path in (
+        ("zh-tw", ROOT / "site/content/_index.zh-tw.md"),
+        ("en", ROOT / "site/content/_index.en.md"),
+    ):
+        markdown_text = path.read_text(encoding="utf-8")
+        html = render_page(markdown_text, lang=lang, data=site_data, root=ROOT)
+        assert "data-copy-text" not in html, (
+            f"{lang}: a copy button still hides its text in an attribute"
+        )
+        match = re.search(
+            r'<div class="command-block">.*?'
+            r'<button class="copy-command" type="button">([^<]*)</button>'
+            r"</div>"
+            r'<pre class="command-block-text">(.*?)</pre>',
+            html,
+            re.DOTALL,
+        )
+        assert match, f"{lang}: install's command-block/pre pair not found"
+        button_label, prompt_text = match.groups()
+        assert button_label.strip(), f"{lang}: copy button has no label"
+        assert len(prompt_text) > 100, (
+            f"{lang}: visible prompt text looks too short to be the real "
+            "prompt"
+        )
+        assert "csarc status" in prompt_text or "csarc" in prompt_text.lower()
 
 
 def test_copier_generated_project_builds_its_own_bilingual_repo_site(

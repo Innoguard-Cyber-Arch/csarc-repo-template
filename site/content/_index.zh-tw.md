@@ -99,7 +99,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 {{< standard key="install-mode-standard" title="貼給 agent 的一句話" >}}
 <div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>貼上</h3><p>把下面這段完整指令貼給你的 coding agent，不用自己記指令。</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>AI 判斷</h3><p>Agent 執行 <code>csarc status</code>，自動判斷這是新建、既有導入、有更新，還是只是政策變動。</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>先預覽</h3><p>不管哪一種結果，agent 都會先讓你看過計畫，確認後才真的動手。</p></article></div>
 
-<div class="command-block"><div class="command-block-head"><span class="command-block-label">貼給 agent 的完整指令</span><button class="copy-command" type="button" data-copy-text="請使用 uv 從 canonical GitHub repository 的核准 release commit 執行官方 csarc CLI 的 `status` 子指令，判斷目前 workspace／既有 Git repository 屬於哪一種安裝狀態；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。先執行 `csarc status --json`，不要自行判斷或假設目前狀態。依回傳的 state 與 next_command：create 或 adopt 或 update 時，改用對應的 init／adopt／update dry-run prompt 並等待確認；current 時回報不需動作；policy-only-update 時只執行 `scripts/apply-repository-settings.sh plan`、摘要差異並等待確認，確認後才 `apply`，不要重新走完整 adopt 或 update。全程不要修改全域環境、push 或開 PR。">複製指令</button></div></div>
+<div class="command-block"><div class="command-block-head"><span class="command-block-label">貼給 agent 的完整指令</span><button class="copy-command" type="button">複製指令</button></div><pre class="command-block-text">請使用 uv 從 canonical GitHub repository 的核准 release commit 執行官方 csarc CLI 的 `status` 子指令，判斷目前 workspace／既有 Git repository 屬於哪一種安裝狀態；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。先執行 `csarc status --json`，不要自行判斷或假設目前狀態。依回傳的 state 與 next_command：create 或 adopt 或 update 時，改用對應的 init／adopt／update dry-run prompt 並等待確認；current 時回報不需動作；policy-only-update 時只執行 `scripts/apply-repository-settings.sh plan`、摘要差異並等待確認，確認後才 `apply`，不要重新走完整 adopt 或 update。全程不要修改全域環境、push 或開 PR。</pre></div>
 
 判斷邏輯全部在 CLI 裡，換一個 agent 執行也會得到同樣答案；其他三種情境（新建／既有導入／更新）的完整 prompt 收在 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme)。
 {{< /standard >}}
@@ -272,9 +272,11 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 {{< /slide >}}
 
 {{< slide key="files" track="files" eyebrow="檔案地圖" title="模板把必要設定放到正確位置" subtitle="列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。" class="dense" legacy="false" >}}
-{{< file-map >}}
-
 {{< standard key="files-mode-standard" title="更新流程與已整合工具" >}}
+<div class="capability-map"><div class="capability-node"><h3>公版設定</h3><p><code>.csarc/config.yml</code>、<code>policies/</code>：語言、分支規則、負責人與審查者都記在這裡。</p></div><div class="capability-node"><h3>GitHub 工作流程</h3><p><code>.github/</code>：Issue／PR 表單與自動檢查流程。</p></div><div class="capability-node"><h3>Agent 規範</h3><p><code>AGENTS.md</code>：agent 在這個 repo 裡怎麼做事。</p></div><div class="capability-node"><h3>專案文件</h3><p><code>README.md</code>、<code>docs/</code>、<code>site/</code>：給人看的說明，以及你正在看的這個網站。</p></div><div class="capability-node"><h3>產品程式</h3><p><code>src/</code>：真正的產品程式碼、測試與規格。</p></div></div>
+
+完整檔案樹與每個檔案的責任歸屬，請切換「維運」模式查看。
+
 模板發現有檔案可以更新時：
 
 <div class="plan-grid">
@@ -287,6 +289,8 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 {{< /standard >}}
 
 {{< ops key="files-mode-ops" title="更新機制與工具清單的技術細節" >}}
+{{< file-map >}}
+
 {{< disclosure key="files-map-scope" title="為什麼檔案地圖只列路徑、作用與責任三欄" >}}
 側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐步驟詳列驗證入口，細節比這裡能呈現的更完整；樹狀呈現因此不重複加上「對應頁名」或「驗證入口」欄位。
 {{< /disclosure >}}
@@ -366,7 +370,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <p class="subtitle"><strong>基本導入。</strong>Issue 劃定這次工作；<code>AGENTS.md</code> 說明怎麼做；程式與測試提供證據，人保留需求方向與重大風險決策。</p>
       </header>
       <p class="context-line"><strong>模板的作用｜</strong>自動產生並檢查 agent 開始前要讀什麼、可修改到哪裡、如何隔離平行工作與怎樣留下驗證；只有客製規範、重大決策與例外需要人判斷。</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>工作與脈絡</h3><p>GitHub Issue／PR 記錄範圍、進度與證據；重大決策記在核准的 spec／ADR。</p></div><div class="capability-node"><h3>AI 規範</h3><p>根目錄 <code>AGENTS.md</code> 是唯一來源，agent 開始前一律先讀這份。</p></div><div class="capability-node"><h3>決策與授權</h3><p>需求方向、重大取捨與不可逆操作仍由人決定；agent 負責照規範執行與留下驗證。</p></div></div>
+      <div class="capability-map cols-3"><div class="capability-node"><h3>工作與脈絡</h3><p>GitHub Issue／PR 記錄範圍、進度與證據；重大決策記在核准的 spec／ADR（規格與架構決策紀錄）。</p></div><div class="capability-node"><h3>AI 規範</h3><p>根目錄 <code>AGENTS.md</code> 是唯一來源，agent 開始前一律先讀這份。</p></div><div class="capability-node"><h3>決策與授權</h3><p>需求方向、重大取捨與不可逆操作仍由人決定；agent 負責照規範執行與留下驗證。</p></div></div>
       <p class="context-line"><strong>下一步｜</strong>照 <code>AGENTS.md</code> 開始讓 agent 工作；修改隔離、驗證證據與模板更新規則的細節請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
@@ -392,7 +396,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="contract" track="contract" eyebrow="步驟 03" title="先驗證改動，再讓 CI 重跑同一套規則" subtitle="Issue PR 依變更範圍分級；只有高風險交付邊界才跑完整驗證。" class="candidate-slide" legacy="false" >}}
+{{< slide key="contract" track="contract" eyebrow="步驟 03" title="先驗證改動，再讓 CI 重跑同一套規則" subtitle="Issue 與 PR 依變更範圍分級；只有高風險交付邊界才跑完整驗證。" class="candidate-slide" legacy="false" >}}
 {{< standard key="contract-mode-standard" title="改動大小決定驗證輕重" >}}
 開發中只跑能證明這次修改的檢查，不用等整條流程；提出 PR 後，系統自動依變更範圍決定要跑哪一級：
 
@@ -474,46 +478,6 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="pr" track="pr" eyebrow="步驟 06" title="讓完成的改動可審查、可交付" subtitle="獨立工作直接進 main；只有需要共同驗收的 Milestone 才使用交付 PR。" class="legacy-slide decision-slide" legacy="true" >}}
-{{< legacy >}}
-      <header>
-        <h2>步驟 6｜<span class="accent">讓完成的改動可審查、可交付</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>這一頁從準備開 PR 開始：工作 PR 完成一張 Issue，發版 PR 再確認整批成果。</p>
-      </header>
-      <p class="context-line"><strong>模板的作用｜</strong>把完成的修改帶到正確分支，確認它連回原工作、通過驗證並在合併後結束對應工作。</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>工作 PR</h3><p>一張 PR 只完成一張可驗收 Issue；合併後連動關閉同號 Issue。</p></div><div class="capability-node"><h3>發版 PR</h3><p>里程碑工作全部完成後才整批驗證與交付。</p></div><div class="capability-node"><h3>例外：Hotfix</h3><p>可直接進 main 修正問題，但仍要 Issue、審查與驗證。</p></div></div>
-      <p class="context-line"><strong>下一步｜</strong>完成一張 Issue 就開一張工作 PR；PR 標題格式、分支命名與其他合併模型比較請切換「維運」模式查看。</p>
-{{< /legacy >}}
-
-{{< basic >}}
-### 我們的選擇
-
-| PR 階段 | 目的地 | 這一步完成什麼 |
-| --- | --- | --- |
-| 獨立工作 PR | topic → main | 審查一項改動；合併後關閉連結的 Issue |
-| Milestone 工作 PR | topic → `dev/m*` | 審查批次內的一項改動 |
-| 交付 PR | `dev/m*` 或明列的 `dev/i*` → main | 完整驗證整批成果後交付；維護者再結束里程碑與清理交付分支 |
-
-{{< disclosure key="pr-version-intent" title="PR 標題、分支與例外" >}}
-- 工作分支使用 `type/<Issue>-short-slug`，並連回同號未結案 Issue。
-- PR 標題使用 Angular／Conventional Commits 格式：`type(scope)!: English summary`。type 可用 `feat` 新功能、`fix` 修錯、`docs` 文件、`refactor` 重構、`test` 測試、`build` 建置／相依、`ci` 自動化、`chore` 維護、`revert` 撤回；scope 與 `!` 可省略。版本意圖為 `feat`＝minor、`fix`／`revert`＝patch、`!`＝breaking／major，其餘不主動升版。
-- 工作 Label 與里程碑要和 Issue 一致；PR 作者必須列為負責人。
-- 里程碑工作進 `dev/m<里程碑>-*`；一般獨立工作直接進 `main`。
-- `sync/main-to-*` PR 在 Milestone／canary 最終交付前納入最新 main；只有 owner 記錄真實相依時才提前同步，不對所有分支 fan-out。
-- 只有明確標示的 standalone hotfix 可直接進 main；誰能合併由「規則治理」決定。
-{{< /disclosure >}}
-
-### 其他常見做法
-
-- **GitHub Flow：**每張完成的 PR 直接進 main，路徑最短，適合可持續交付的團隊。
-- **長期整合分支：**多項工作先在 dev／release branch 集中驗收，代價是要處理同步。
-- **Stacked PR：**把大型改動拆成相依的小 PR，審查較聚焦，但需要維護堆疊順序。
-- **Merge queue：**把已核准 PR 依最新 main 重新驗證後排序合併，需要平台門禁支援。
-
-{{< config-guidance track="pr" >}}
-{{< /basic >}}
-{{< /slide >}}
-
 {{< slide key="supply" track="supply" eyebrow="步驟 05" title="第三方套件分開更新、檢查與記錄" subtitle="一般新版先觀察，已知漏洞立即處理，發版成品留下可追查清單。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
@@ -555,14 +519,54 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="deploy" track="deploy" eyebrow="步驟 07" title="先分清版本、發版、交付與部署" subtitle="工作先交付到 main；需要新版本時，系統建立一張仍須人工審查的版本 PR。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="pr" track="pr" eyebrow="步驟 06" title="讓完成的改動可審查、可交付" subtitle="獨立工作直接進 main；只有需要共同驗收的 Milestone 才使用交付 PR。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< legacy >}}
+      <header>
+        <h2>步驟 6｜<span class="accent">讓完成的改動可審查、可交付</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>這一頁從準備開 PR 開始：工作 PR 完成一張 Issue，發版 PR 再確認整批成果。</p>
+      </header>
+      <p class="context-line"><strong>模板的作用｜</strong>把完成的修改帶到正確分支，確認它連回原工作、通過驗證並在合併後結束對應工作。</p>
+      <div class="capability-map cols-3"><div class="capability-node"><h3>工作 PR</h3><p>一張 PR 只完成一張可驗收 Issue；合併後連動關閉同號 Issue。</p></div><div class="capability-node"><h3>發版 PR</h3><p>里程碑工作全部完成後才整批驗證與交付。</p></div><div class="capability-node"><h3>例外：Hotfix</h3><p>可直接進 main 修正問題，但仍要 Issue、審查與驗證。</p></div></div>
+      <p class="context-line"><strong>下一步｜</strong>完成一張 Issue 就開一張工作 PR；PR 標題格式、分支命名與其他合併模型比較請切換「維運」模式查看。</p>
+{{< /legacy >}}
+
+{{< basic >}}
+### 我們的選擇
+
+| PR 階段 | 目的地 | 這一步完成什麼 |
+| --- | --- | --- |
+| 獨立工作 PR | topic → main | 審查一項改動；合併後關閉連結的 Issue |
+| Milestone 工作 PR | topic → `dev/m*` | 審查批次內的一項改動 |
+| 交付 PR | `dev/m*` 或明列的 `dev/i*` → main | 完整驗證整批成果後交付；維護者再結束里程碑與清理交付分支 |
+
+{{< disclosure key="pr-version-intent" title="PR 標題、分支與例外" >}}
+- 工作分支使用 `type/<Issue>-short-slug`，並連回同號未結案 Issue。
+- PR 標題使用 Angular／Conventional Commits 格式：`type(scope)!: English summary`。type 可用 `feat` 新功能、`fix` 修錯、`docs` 文件、`refactor` 重構、`test` 測試、`build` 建置／相依、`ci` 自動化、`chore` 維護、`revert` 撤回；scope 與 `!` 可省略。版本意圖為 `feat`＝minor、`fix`／`revert`＝patch、`!`＝breaking／major，其餘不主動升版。
+- 工作 Label 與里程碑要和 Issue 一致；PR 作者必須列為負責人。
+- 里程碑工作進 `dev/m<里程碑>-*`；一般獨立工作直接進 `main`。
+- `sync/main-to-*` PR 在 Milestone／canary 最終交付前納入最新 main；只有 owner 記錄真實相依時才提前同步，不對所有分支 fan-out。
+- 只有明確標示的 standalone hotfix 可直接進 main；誰能合併由「規則治理」決定。
+{{< /disclosure >}}
+
+### 其他常見做法
+
+- **GitHub Flow：**每張完成的 PR 直接進 main，路徑最短，適合可持續交付的團隊。
+- **長期整合分支：**多項工作先在 dev／release branch 集中驗收，代價是要處理同步。
+- **Stacked PR：**把大型改動拆成相依的小 PR，審查較聚焦，但需要維護堆疊順序。
+- **Merge queue：**把已核准 PR 依最新 main 重新驗證後排序合併，需要平台門禁支援。
+
+{{< config-guidance track="pr" >}}
+{{< /basic >}}
+{{< /slide >}}
+
+{{< slide key="deploy" track="deploy" eyebrow="步驟 07" title="先分清版本、發版與交付；部署交給專案自己決定" subtitle="工作先交付到 main；需要新版本時，系統建立一張仍須人工審查的版本 PR。模板負責到 Release，不含部署。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <h2>步驟 7｜<span class="accent">版本規則與成品接續</span></h2>
-        <p class="subtitle"><strong>先交付、再審查版本、最後發布：</strong>工作 PR 不直接改版本；Release Please 集中更新版本與 CHANGELOG。</p>
+        <p class="subtitle"><strong>先交付、再審查版本、最後發布：</strong>工作 PR 不直接改版本；Release Please（自動整理版本號的工具）集中更新版本與 CHANGELOG。</p>
       </header>
       <p class="context-line"><strong>設計流程｜</strong>工作 PR 只宣告版本影響；版本 PR 經人審查合併後，系統才建立並驗證 Release。</p>
-      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">先交付</span><h3>獨立工作</h3><p>能自己驗收且沒有共同期限或相依時，受審查 PR 可直接進 main。</p></article><article class="relation-node"><span class="relation-kind">再審查版本</span><h3>正式版本</h3><p>需要新版本時，系統依 PR 標題建立版本 PR，同步版本與 CHANGELOG。</p></article><article class="relation-node"><span class="relation-kind">最後發布</span><h3>Release</h3><p>版本 PR 合併後，系統驗證成品、checksum 與 SBOM，成功才公開不可變 GitHub Release。</p></article></div></div>
+      <div class="relation-map"><div class="relation-track cols-4"><article class="relation-node"><span class="relation-kind">1｜工作完成並合併</span><h3>獨立工作</h3><p>能自己驗收且沒有共同期限或相依時，受審查 PR 可直接進 main。</p></article><article class="relation-node"><span class="relation-kind">2｜準備版本</span><h3>正式版本</h3><p>需要新版本時，系統依 PR 標題建立版本 PR，同步版本與 CHANGELOG。</p></article><article class="relation-node"><span class="relation-kind">3｜建立 Release</span><h3>Release</h3><p>版本 PR 合併後，系統驗證成品、checksum（檔案校驗碼）與 SBOM，成功才公開不可變 GitHub Release。</p></article><article class="relation-node"><span class="relation-kind">4｜模板不負責這步</span><h3>部署</h3><p>模板負責到 Release；實際部署到 runtime，由個別專案自行設定。</p></article></div></div>
       <p class="context-line"><strong>下一步｜</strong>一般工作合併到 main 就完成交付；里程碑分支、Hotfix 與其他版本工具比較請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
@@ -737,7 +741,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 
 {{< slide key="template-release" track="template-release" eyebrow="步驟 09" title="Copier 保持同步，公版也吃自己的規則" subtitle="模板錯誤會一次影響多個專案，因此建立、導入與更新都要實跑。" class="candidate-slide" legacy="false" >}}
 {{< standard key="template-release-mode-standard" title="公版怎麼把更新安全地帶回你的 repo" >}}
-Copier 在你的 repo 之外先產生一份更新計畫：
+Copier（用來建立並持續更新公版的工具）在你的 repo 之外先產生一份更新計畫：
 
 <div class="plan-grid">
   <article class="plan-card current"><h3>沒有衝突</h3><p>直接套用。</p></article>
@@ -785,7 +789,7 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 {{< legacy >}}
       <header>
         <h2>單檔永遠可交付，<span class="accent">平台能力只做加成</span></h2>
-        <p class="subtitle"><strong>已確認選型。</strong><code>docs/index.html</code> 必須可下載、轉寄並用 <code>file://</code> 離線開啟；Pages、外部託管與 CDN 都不是 portable baseline。</p>
+        <p class="subtitle"><strong>已確認選型。</strong>單一 <code>docs/index.html</code> 檔案即可下載、轉寄與離線開啟；GitHub Pages 或其他網站託管只是額外選項，不是必要條件。</p>
       </header>
       <p class="context-line"><strong>問題與目的｜</strong>保留特殊簡報設計與單檔交付，同時避免內容、樣式、互動、選型來源與逐字測試繼續綁在同一個人工維護檔案。</p>
       <div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>來源</h3><p><code>site/content/</code> 的中英文 Markdown，跟排版、程式分開存放，不用手動同步。</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>渲染</h3><p>內建 Python 引擎組出內容結構，不需要 Node 或額外的樣板引擎。</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>產出</h3><p><code>docs/index.html</code> 內嵌所有樣式、程式與圖片；每一頁固定一個畫面，桌面版不用往下捲動找重點。</p></article><article class="step-flow-item"><span class="step-flow-number">4</span><h3>使用者</h3><p>下載後用瀏覽器直接開啟就能看到完整內容；有 Pages 或其他託管只是多一個瀏覽管道，不影響離線使用。</p></article></div>

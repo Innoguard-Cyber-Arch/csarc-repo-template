@@ -1,7 +1,7 @@
 {
   "labels": {
-    "zh-tw": {"address": "檔案總管｜專案根目錄"},
-    "en": {"address": "File Explorer | repository root"}
+    "zh-tw": {"address": "檔案總管｜專案根目錄", "scrollHint": "可上下捲動查看完整檔案樹"},
+    "en": {"address": "File Explorer | repository root", "scrollHint": "Scroll to see the complete file tree"}
   },
   "responsibilityLabels": {
     "template": {"zh-tw": "公版主導", "en": "Template-led"},

@@ -152,8 +152,14 @@ def _empty_data(**overrides: object) -> object:
         },
         "file_map": {
             "labels": {
-                "zh-tw": {"address": "檔案總管｜專案根目錄"},
-                "en": {"address": "File Explorer | repository root"},
+                "zh-tw": {
+                    "address": "檔案總管｜專案根目錄",
+                    "scrollHint": "可捲動",
+                },
+                "en": {
+                    "address": "File Explorer | repository root",
+                    "scrollHint": "Scroll",
+                },
             },
             "responsibilityLabels": {
                 "template": {"zh-tw": "公版主導", "en": "Template-led"},
@@ -419,8 +425,8 @@ def _file_map_data(entries: list[dict]) -> object:
     return _empty_data(
         file_map={
             "labels": {
-                "zh-tw": {"address": "檔案總管"},
-                "en": {"address": "Address"},
+                "zh-tw": {"address": "檔案總管", "scrollHint": "可捲動"},
+                "en": {"address": "Address", "scrollHint": "Scroll"},
             },
             "responsibilityLabels": {
                 "template": {"zh-tw": "公版主導", "en": "Template-led"},
@@ -455,7 +461,8 @@ def test_file_map_renders_single_path_leaf_with_icon_tag_and_purpose() -> None:
         '<code class="file-map-name">AGENTS.md</code>'
         '<span class="file-map-tag file-map-tag-template">Template-led'
         "</span></div>"
-        '<p class="file-map-purpose">Rules</p></li></ul></div>'
+        '<p class="file-map-purpose">Rules</p></li></ul>'
+        '<p class="file-map-scroll-hint">Scroll</p></div>'
     )
 
 
@@ -506,7 +513,8 @@ def test_file_map_merges_shared_directory_prefix_from_separate_entries() -> (
         '<span class="file-map-tag file-map-tag-shared">Shared</span>'
         "</div>"
         '<p class="file-map-purpose">Reviewers</p></li>'
-        "</ul></details></li></ul></div>"
+        "</ul></details></li></ul>"
+        '<p class="file-map-scroll-hint">Scroll</p></div>'
     )
 
 
@@ -538,7 +546,8 @@ def test_file_map_renders_non_path_note_after_the_name() -> None:
         '<span class="file-map-note">, extra text</span>'
         '<span class="file-map-tag file-map-tag-project">Project-owned'
         "</span></div>"
-        '<p class="file-map-purpose">Behavior</p></li></ul></div>'
+        '<p class="file-map-purpose">Behavior</p></li></ul>'
+        '<p class="file-map-scroll-hint">Scroll</p></div>'
     )
 
 
@@ -589,6 +598,7 @@ def _tool(
 
 _SIMILAR_TOOLS_LABEL_KEYS = (
     "title",
+    "standardConclusion",
     "primaryTabOverline",
     "primaryTab",
     "primaryLegend",
@@ -1423,8 +1433,8 @@ def _write_fixture_site(root: Path) -> None:
         json.dumps(
             {
                 "labels": {
-                    "zh-tw": {"address": "a"},
-                    "en": {"address": "a"},
+                    "zh-tw": {"address": "a", "scrollHint": "a"},
+                    "en": {"address": "a", "scrollHint": "a"},
                 },
                 "responsibilityLabels": {
                     "template": {"zh-tw": "t", "en": "t"},
