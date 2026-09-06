@@ -16,8 +16,8 @@ zoom_in = "Zoom in"
 fit = "Fit"
 +++
 
-{{< slide key="capability" track="capability" eyebrow="Home" title="CSARC Repo Template" subtitle="Cyber-Arch's updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests." legacy="false" class="presentation-slide" >}}
-Cyber-Arch's updatable repository foundation: create a new project, adopt an existing one, or receive policy updates through verified pull requests. Select only the shared workflow, or add Python, Rust, and TypeScript independently. Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) and stays synchronized across both languages.
+{{< slide key="capability" track="capability" eyebrow="Home" title="CSARC Repo Template" subtitle="Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them." legacy="false" class="presentation-slide" >}}
+<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) and stays synchronized across both languages.
 
 <p class="template-version"><strong>Template release:</strong> v0.13.0<!-- x-release-please-version --></p>
 
@@ -102,6 +102,14 @@ Every row reports one of three states: `allowed` (usable now), `blocked` (a real
 {{< detail key="advanced-install-workarounds" title="Workarounds and the existing DEGRADED marker" >}}
 This matrix does not replace or redesign `apply-repository-settings.sh`'s DEGRADED mechanism -- it documents it. Every row whose workaround says "DEGRADED marker" reuses the exact same fail-safe already printed by `apply-repository-settings.sh check`/`plan`/`apply` for that limitation; the two never disagree because the underlying detection (plan, visibility, admin permission) is the same. `docs/ci-policy.md` and [the capability-aware governance ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md) record the durable decision; this page and `policies/capability-matrix.json` are what stay current as the single source both consult.
 {{< /detail >}}
+{{< /slide >}}
+
+{{< slide key="about" track="about" eyebrow="About" title="What CSARC is, and who it is for" subtitle="An updatable repository foundation: creating, adopting, and receiving policy updates all preview and verify before a PR merges them." class="dense" legacy="false" >}}
+<!-- This body is overridden at build time by scripts/build_decision_site.py's
+     _README_SLIDE_SECTIONS mechanism; the real content is read verbatim
+     from root README.en.md's "## Overview" section (README.md's
+     "## 專案概述" for zh-tw). Edit README.en.md, not this file; left
+     blank here only so the shortcode stays syntactically complete. -->
 {{< /slide >}}
 
 {{< slide key="flow" track="flow" eyebrow="CI/CD flow" title="The template guides every change" subtitle="Follow the Issue and PR prompts; the template prepares the right settings and tells you what needs attention." legacy="false"  class="candidate-slide" >}}
@@ -434,13 +442,13 @@ Root `.csarc/config.yml` records the capabilities the template repository select
 {{< config-guidance track="template-release" >}}
 {{< /slide >}}
 
-{{< slide key="docs-site" track="docs-site" eyebrow="Step 10" title="A portable single file remains the baseline" subtitle="Hugo owns content structure; the existing renderer produces an offline, forwardable HTML file." legacy="false"  class="candidate-slide" >}}
+{{< slide key="docs-site" track="docs-site" eyebrow="Step 10" title="A portable single file remains the baseline" subtitle="A built-in Python render engine turns the site/content/ Markdown sources into content structure; the existing renderer produces a single offline, forwardable HTML file." legacy="false"  class="candidate-slide" >}}
 - `site/content/` holds bilingual Markdown with matching content keys.
-- `site/static/styles.css` retains the presentation identity; Hugo shortcodes produce the shared content structure.
+- `site/static/styles.css` retains the presentation identity; `scripts/build_decision_site.py`'s shortcode-block parser produces the shared content structure.
 - `scripts/render_site.py` embeds CSS, JavaScript, fonts, and images and rejects external runtime assets.
 
-{{< disclosure key="portable-bundle" title="Markdown + Hugo → self-contained HTML" >}}
-`docs/adr/` preserves canonical choices. Hugo owns content and HTML; the unchanged renderer only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime.
+{{< disclosure key="portable-bundle" title="Markdown + the Python render engine → self-contained HTML" >}}
+`docs/adr/` preserves canonical choices. `scripts/build_decision_site.py` owns content and HTML; the unchanged `scripts/render_site.py` only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime. This single downloadable HTML file is a committed baseline feature, not a stopgap -- even once Pages or other hosting exists, this downloadable, offline-capable output stays.
 {{< /disclosure >}}
 
 {{< detail key="docs-site-access" title="Access and maintenance boundaries" >}}

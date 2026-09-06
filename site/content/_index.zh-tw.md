@@ -21,7 +21,7 @@ fit = "符合畫面"
       <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
-        <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由變更提案（PR）合併。</p>
+        <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。<!-- csarc-readme-preamble-tagline:end --></p>
         <p class="subtitle">標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；維運模式才補充設定檔、程式與技術理由。快速導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
           <span class="package-badge beta">v0.13.0</span><!-- x-release-please-version -->
@@ -148,6 +148,13 @@ csarc status <path> --json
 {{< detail key="advanced-install-workarounds" title="Workaround 與既有的 DEGRADED 標記" >}}
 這份矩陣不是要取代或重新設計 `apply-repository-settings.sh` 既有的 DEGRADED 機制，而是把它寫清楚。凡是 workaround 寫「DEGRADED 標記」的列，用的都是 `apply-repository-settings.sh check`／`plan`／`apply` 對同一個限制本來就會印出的那個 fail-safe；兩邊不會互相矛盾，因為底層偵測（方案、visibility、admin 權限）完全相同。長期決策記錄在 `docs/ci-policy.md` 與[能力導向治理 ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md)；這一頁與 `policies/capability-matrix.json` 是兩邊共同參照、保持最新的單一來源。
 {{< /detail >}}
+{{< /slide >}}
+
+{{< slide key="about" track="about" eyebrow="關於" title="CSARC 是什麼、給誰用" subtitle="可更新的 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。" class="dense" legacy="false" >}}
+<!-- 這段 body 在 build 時被 scripts/build_decision_site.py 的 _README_SLIDE_SECTIONS
+     機制覆寫，實際內容逐字讀自根目錄 README.md 的「## 專案概述」章節（en 版讀
+     README.en.md 的「## Overview」）。改內容請直接編輯 README.md，不要編輯這裡；
+     這裡留空白只是讓 shortcode 語法完整。 -->
 {{< /slide >}}
 
 {{< slide key="flow" track="flow" eyebrow="CI/CD 流程" title="模板會帶你走完每次變更" subtitle="依表單填寫、提交 PR、查看結果；模板負責準備正確設定並指出要修正的地方。" class="legacy-slide pipeline-slide" legacy="true" >}}
@@ -654,7 +661,7 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 {{< config-guidance track="template-release" >}}
 {{< /slide >}}
 
-{{< slide key="docs-site" track="docs-site" eyebrow="步驟 10" title="單檔永遠可交付" subtitle="Hugo 管內容結構，既有 renderer 打包成可離線轉寄的 HTML。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="docs-site" track="docs-site" eyebrow="步驟 10" title="單檔永遠可交付" subtitle="site/content/ 的 Markdown 來源交給內建 Python 渲染引擎組出內容結構，既有 renderer 打包成可離線轉寄的單一 HTML。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <h2>單檔永遠可交付，<span class="accent">平台能力只做加成</span></h2>
@@ -670,11 +677,11 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 
 {{< basic >}}
 - `site/content/` 是中英文 Markdown 來源；兩種語言必須有相同 content keys。
-- `site/static/styles.css` 保留特殊簡報視覺；Hugo shortcode 將內容轉成共用結構。
+- `site/static/styles.css` 保留特殊簡報視覺；`scripts/build_decision_site.py` 的 shortcode-block 解析器將內容轉成共用結構。
 - `scripts/render_site.py` 內嵌 CSS、JavaScript、font 與圖片，拒絕外部 runtime asset。
 
-{{< disclosure key="portable-bundle" title="Markdown＋Hugo → self-contained HTML" >}}
-`docs/adr/` 保存 canonical 選型；Hugo 負責內容與 HTML；未修改的 renderer 只處理資產內嵌與安全檢查。最終的 `docs/index.html` 可用 `file://` 離線開啟，不依賴 Pages、CDN 或 JavaScript package runtime。
+{{< disclosure key="portable-bundle" title="Markdown＋Python 渲染引擎 → self-contained HTML" >}}
+`docs/adr/` 保存 canonical 選型；`scripts/build_decision_site.py` 負責內容與 HTML；未修改的 `scripts/render_site.py` 只處理資產內嵌與安全檢查。最終的 `docs/index.html` 可用 `file://` 離線開啟，不依賴 Pages、CDN 或 JavaScript package runtime。這份單一可下載 HTML 是本站的既定基準特色，不是過渡方案：即使未來加上 Pages 或其他託管，仍要保留可下載、離線可用的這份輸出。
 {{< /disclosure >}}
 
 {{< detail key="docs-site-access" title="存取與維護邊界" >}}

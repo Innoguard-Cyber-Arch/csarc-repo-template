@@ -3,6 +3,8 @@
 {% set has_rust = "rust" in languages -%}
 # {{ project_name }}
 
+[English]({{ 'README.md' if readme_primary_language == 'en' else 'README.en.md' }})
+
 > [!IMPORTANT]
 > AI 工作規範以 [`AGENTS.md`](AGENTS.md) 為唯一來源；只有 `.github/workflows/` 內的流程會執行，審查與合併資格以[08 規則治理](docs/index.html#governance)為準。
 
