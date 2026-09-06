@@ -2504,15 +2504,26 @@ html[data-detail-level="simple"] .technical-tour-trigger {
 .markdown-body > p:first-child,
 .markdown-body > table,
 .markdown-body > .file-map-window,
+.markdown-body > h3,
 .mode-content > p:first-child,
-.mode-content > table {
+.mode-content > table,
+.mode-content > h3 {
   grid-column: 1 / -1;
 }
 
 .markdown-body > .technical-detail,
 .markdown-body > .config-guidance,
 .mode-content > .technical-detail,
-.mode-content > .package-disclosure {
+.mode-content > .package-disclosure,
+/* `.mode-content > .config-guidance` (not `.markdown-body > .config-guidance`
+   above): a full standard/ops pane swap (e.g. contract, template-release)
+   nests `{{< config-guidance >}}` inside `{{< ops >}}`, so its real DOM
+   parent is `.mode-content`, not `.markdown-body`, even though `.mode-
+   content`'s `display: contents` makes it lay out as a `.markdown-body`
+   grid item -- CSS selector matching still follows the DOM tree. Without
+   this line it fell back to the grid's implicit one-column placement and
+   left the other column blank beside it. */
+.mode-content > .config-guidance {
   grid-column: 1 / -1;
 }
 
@@ -2570,6 +2581,22 @@ html[data-detail-level="technical"] .mode-content[data-mode="standard"] {
   border: 1px solid var(--line);
   border-top: 7px solid var(--yellow);
   background: white;
+}
+
+/* Issue #681/#682: a page's primary `### heading` + bullet list (e.g.
+   method/agents/languages "我們的選擇") has no natural second card to
+   pair with in this grid's other column -- left at the grid's implicit
+   one-column-per-item placement, the heading claimed column 1 alone (a
+   `<h3>` was never in the full-width allowlist above) and the list that
+   followed it landed in column 2, leaving column 1 empty for the
+   height of that entire row. The heading now spans full width (see the
+   `> h3` rule above); the list does too, so it reads as one balanced
+   passage instead of a cramped single column beside a blank one. */
+.markdown-body > ul,
+.markdown-body > ol,
+.mode-content > ul,
+.mode-content > ol {
+  grid-column: 1 / -1;
 }
 
 .markdown-body > ul,
