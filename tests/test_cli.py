@@ -4145,6 +4145,96 @@ def test_update_migrates_legacy_profile_json_before_finalize_tasks(
     assert not (project / ".csarc/profile.json").exists()
 
 
+@pytest.mark.large
+def test_update_real_template_legacy_two_file_schema_end_to_end(
+    tmp_path: Path,
+) -> None:
+    """Reproduce Issue #683 against the real, unmodified root copier.yml.
+
+    #648/PR #662 were both verified only against the synthetic minimal
+    fixture template built by make_template(), which has no `_migrations`
+    block at all. The real root copier.yml's `_migrations` step for
+    `_stage == 'before'` unconditionally read `.copier-answers.yml` with
+    no existence check; by the time it runs during `csarc update`, the
+    CLI's own legacy migration (see `migrating_legacy_config` in
+    command_update) has already renamed that file to `.csarc/config.yml`
+    earlier in the same call, so that read raised FileNotFoundError on
+    every real repository using the exact reproduction from #683: a
+    `.copier-answers.yml` (Copier's own tracking) plus a `.csarc/profile.json`
+    (a since-superseded derivative), with no `.csarc/config.yml` yet. Drive
+    the actual root copier.yml end to end -- not a hand-rolled fixture --
+    so a regression here fails a test instead of only a real adoption.
+    """
+    from_sha = git(ROOT, "rev-parse", "HEAD~1")
+    to_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "legacy-real-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                from_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "project_mode=new",
+                "--data",
+                "language=ci",
+                "--data",
+                "project_visibility=private",
+            ]
+        )
+        == 0
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: initial modern-schema project")
+    (project / ".csarc/config.yml").rename(project / ".copier-answers.yml")
+    (project / ".csarc/profile.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "template_mode": "existing",
+                "branch_strategy": "main",
+                "language_profile": "ci",
+                "modules": {
+                    "ci_cd": True,
+                    "container": False,
+                    "python": False,
+                    "typescript": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    commit(project, "test: simulate the real #683 two-file legacy schema")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                to_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    config_path = project / ".csarc/config.yml"
+    assert config_path.is_file()
+    assert f"_commit: {to_sha}" in config_path.read_text(encoding="utf-8")
+    assert not (project / ".copier-answers.yml").exists()
+    assert not (project / ".csarc/profile.json").exists()
+
+
 def test_update_check_validates_hook_without_running_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -5735,6 +5825,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_update_migrates_legacy_copier_answers_to_single_config",
         "test_update_migrates_legacy_profile_json_before_finalize_tasks",
         "test_update_plan_resolves_target_answers_and_capabilities",
+        "test_update_real_template_legacy_two_file_schema_end_to_end",
         "test_update_rechecks_committed_head_after_confirmation",
         "test_update_rechecks_repository_context_after_confirmation",
         "test_update_rechecks_snapshot_after_repository_context",
