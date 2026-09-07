@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import runpy
 import subprocess
 from pathlib import Path
@@ -1109,6 +1110,85 @@ def test_guided_candidate_only_materializes_local_release_files(
     report_payload = release_plan_report(tmp_path, "HEAD")
     assert report_payload["version"] == "0.2.0"
     assert report_payload["status"] == "candidate"
+
+
+def test_zh_home_version_paragraph_updates_automatically_on_bump(
+    tmp_path: Path,
+) -> None:
+    """Issue #694: prove a real bump keeps the zh-tw home slide's
+    basic-mode version mention in sync automatically, not just detect
+    drift after the fact (tests/test_homepage_readme_parity.py already
+    covers detection). This copies the actual production file -- not a
+    synthetic fixture -- so a future regression that moves the version
+    back into an unmarked plain-text table cell (the pre-#694 design
+    that needed a manual fix on both v0.14.0 and v0.15.0) fails here."""
+    zh_source = (
+        Path(__file__).parents[1] / "site/content/_index.zh-tw.md"
+    ).read_text(encoding="utf-8")
+    marker_lines = [
+        line
+        for line in zh_source.splitlines()
+        if "x-release-please-version" in line
+    ]
+    assert len(marker_lines) == 2, (
+        "expected exactly the legacy badge and basic-mode paragraph "
+        "markers; update this test if the zh-tw home slide's version "
+        "mentions change"
+    )
+
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    zh_path = tmp_path / "site/content/_index.zh-tw.md"
+    zh_path.parent.mkdir(parents=True)
+    zh_path.write_text(zh_source.replace("v0.14.0", "v0.1.0"), encoding="utf-8")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {"type": "generic", "path": "README.md"},
+                            {
+                                "type": "generic",
+                                "path": "site/content/_index.zh-tw.md",
+                            },
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: guided release")
+    sha = git(tmp_path, "rev-parse", "HEAD")
+
+    payload = prepare_release_candidate(tmp_path, sha)
+
+    assert payload["version"] == "0.2.0"
+    bumped = zh_path.read_text(encoding="utf-8")
+    badge_match = re.search(
+        r'<span class="package-badge muted">(v[\d.]+)</span>'
+        r"<!-- x-release-please-version -->",
+        bumped,
+    )
+    paragraph_match = re.search(
+        r"公版版本[^<]*</strong>(v[\d.]+)<!-- x-release-please-version -->",
+        bumped,
+    )
+    assert badge_match and badge_match.group(1) == "v0.2.0"
+    assert paragraph_match and paragraph_match.group(1) == "v0.2.0", (
+        "basic-mode version paragraph did not update with the release "
+        "bump -- it drifted back to needing a manual fix"
+    )
 
 
 def test_candidate_version_is_recomputed_from_base(tmp_path: Path) -> None:
