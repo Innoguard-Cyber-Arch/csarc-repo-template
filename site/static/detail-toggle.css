@@ -289,11 +289,11 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   grid-column: 1;
 }
 
-.markdown-body > p:first-child,
+.markdown-body > p,
 .markdown-body > table,
 .markdown-body > .file-map-window,
 .markdown-body > h3,
-.mode-content > p:first-child,
+.mode-content > p,
 .mode-content > table,
 .mode-content > h3 {
   grid-column: 1 / -1;
