@@ -668,6 +668,19 @@ def test_similar_tools_sorts_primary_by_coverage_before_ecosystem() -> None:
     assert "BigStars" not in html
 
 
+def test_similar_tools_renders_standard_conclusion_before_the_tabs() -> None:
+    data = _empty_data()
+    data.similar_tools["tools"] = []
+    labels = _similar_tools_labels()
+    labels["en"]["standardConclusion"] = "Closing summary sentence."
+    data.similar_tools["labels"] = labels
+    html = render_similar_tools(lang="en", data=data)
+    conclusion_index = html.index('<p class="similar-tools-conclusion">')
+    tabs_index = html.index('<div class="similar-tools-tabs"')
+    assert "Closing summary sentence." in html
+    assert conclusion_index < tabs_index
+
+
 def test_similar_tools_unknown_release_date_is_never_primary() -> None:
     data = _empty_data()
     data.similar_tools["tools"] = [
@@ -793,6 +806,52 @@ def test_testing_pending_automation_defaults_issue_number() -> None:
     html = render_testing(lang="en", data=data)
     assert "csarc-repo-template/issues/385" in html  # default automation issue
     assert '<div id="testing-panel-work"' in html
+    reading_map_index = html.index('<p class="testing-reading-map">x</p>')
+    tabs_index = html.index('<div class="similar-tools-tabs"')
+    assert reading_map_index < tabs_index  # reading map precedes the tabs
+
+
+def test_testing_omits_reading_map_paragraph_when_label_is_empty() -> None:
+    data = _empty_data()
+    data.similar_tools["testing"]["labels"] = {
+        "zh-tw": {"readingMap": "", "title": "x", "step": "x"},
+        "en": {"readingMap": "", "title": "x", "step": "x"},
+    }
+    data.similar_tools["testing"]["duration"]["labels"] = {
+        "zh-tw": dict.fromkeys(
+            (
+                "overline",
+                "title",
+                "heading",
+                "scope",
+                "runnerNote",
+                "archiveNote",
+                "stage",
+                "shared",
+                "templateOnly",
+                "total",
+            ),
+            "x",
+        ),
+        "en": dict.fromkeys(
+            (
+                "overline",
+                "title",
+                "heading",
+                "scope",
+                "runnerNote",
+                "archiveNote",
+                "stage",
+                "shared",
+                "templateOnly",
+                "total",
+            ),
+            "x",
+        ),
+    }
+    data.similar_tools["testing"]["groups"] = []
+    html = render_testing(lang="en", data=data)
+    assert "testing-reading-map" not in html
 
 
 # --- governance audit trail (Issue #559) ----------------------------------
