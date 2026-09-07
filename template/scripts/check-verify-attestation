@@ -17,6 +17,14 @@ set -euo pipefail
 # pushing: scripts/check-verify-attestation HEAD
 #
 # Usage: scripts/check-verify-attestation <commit-sha> [--required-tier fast|full|docs] [--max-age-hours N]
+#
+# --resolve-merge-source --github-repo OWNER/NAME (Issue #699): for a
+# commit that was pushed to main by a squash-merge, not a PR branch tip --
+# release.yml's use case, not the `verify` required check's -- resolve the
+# commit to the PR head it was merged from and validate that instead, so
+# an unrelated PR landing on main between local verification and this
+# PR's own merge cannot fail the check. See scripts/verify_attestation.py
+# for the full reasoning.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 exec python3 "$repo_root/scripts/verify_attestation.py" check "$@"

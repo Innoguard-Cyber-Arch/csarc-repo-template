@@ -51,9 +51,15 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     # already wrote instead of re-verifying from scratch (mirrors
     # .github/workflows/ci.yml's "Validate local verification attestation"
     # step; see test_root_ci_is_one_bounded_verification_job).
-    assert "run: ./scripts/check-verify-attestation" in source
+    assert './scripts/check-verify-attestation "$GITHUB_SHA"' in source
     assert "run: ./scripts/verify-template.sh" not in source
     assert "run: ./scripts/verify full" not in source
+    # Issue #699: $GITHUB_SHA here is whatever squash-merge produced, not
+    # the PR branch tip that was actually verified locally -- resolve to
+    # the originating PR's head commit first (see
+    # test_release_attestation_check_resolves_the_merged_pr_head).
+    assert "--resolve-merge-source" in source
+    assert '--github-repo "$GITHUB_REPOSITORY"' in source
     assert "scripts/release_bundle.py prepare" in source
     assert "./scripts/publish-release stage" in source
     assert "./scripts/publish-release resolve" in source
@@ -111,6 +117,33 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     # "Keep a failed mutable release in draft" step into this same script.
     assert "revert_to_draft_on_failure" in publish
     assert "trap revert_to_draft_on_failure EXIT" in publish
+
+
+def test_release_attestation_check_resolves_the_merged_pr_head() -> None:
+    """Issue #699: validate the resolved PR head, not the squash commit.
+
+    Behavioral proof (fake `gh`, real subprocess) that
+    `scripts/check-verify-attestation --resolve-merge-source` actually
+    resolves a pushed commit to the PR it was merged from lives in
+    tests/test_verify_attestation.py
+    (test_cli_check_resolve_merge_source_validates_the_pr_head); this test
+    only proves release.yml's own step is wired to call it that way, with
+    the `GH_TOKEN` the underlying `gh api` calls need -- a step this
+    workflow never previously required GitHub API access for.
+    """
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["release"]["steps"]
+    step = next(
+        candidate
+        for candidate in steps
+        if candidate.get("name")
+        == "Validate the pushed main commit's verification attestation"
+    )
+    assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert "--resolve-merge-source" in step["run"]
+    assert '--github-repo "$GITHUB_REPOSITORY"' in step["run"]
 
 
 def test_release_converges_a_repeated_or_concurrent_run_to_one_release() -> (
@@ -196,7 +229,9 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
 
     assert "project_mode == 'new'" in copier
     assert ".github/workflows/release.yml" in copier
-    assert "./scripts/check-verify-attestation" in template
+    assert './scripts/check-verify-attestation "$GITHUB_SHA"' in template
+    assert "--resolve-merge-source" in template
+    assert '--github-repo "$GITHUB_REPOSITORY"' in template
     assert "./scripts/verify-release-candidate" in template
     assert '{% if "typescript" in languages %}' in template
     assert '{% if "rust" in languages %}' in template
