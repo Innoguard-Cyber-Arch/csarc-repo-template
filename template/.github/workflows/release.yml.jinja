@@ -49,8 +49,23 @@ jobs:
           rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
           rustup default 1.98.0
 {% endraw %}{% endif %}{% raw %}
-      - name: Verify the current main commit
-        run: ./scripts/verify full
+      # Issue #661 moved verification off the hosted runner: the `verify`
+      # required check that already gated this commit's merge to main no
+      # longer re-executes anything either, it only validates the
+      # `Verified-locally:` trailer scripts/write-verify-attestation wrote
+      # after a real local run (see .github/workflows/ci.yml.jinja). This
+      # step used to call ./scripts/verify full directly, which -- since
+      # #661 -- ends every successful run by trying to `git commit
+      # --amend` a fresh trailer onto HEAD; a hosted runner has no
+      # configured git identity, so that amend always failed with
+      # "Committer identity unknown" (exit 128), failing this job on every
+      # push to main regardless of whether main was actually healthy
+      # (#684). The commit already carries a trailer from its PR's own
+      # `verify` check, so re-validate that instead of re-verifying from
+      # scratch; no --required-tier here because the PR gate already
+      # enforced whatever tier scripts/ci_tier.py classified it as needing.
+      - name: Validate the pushed main commit's verification attestation
+        run: ./scripts/check-verify-attestation "$GITHUB_SHA"
       - name: Plan the next version from repository history
         id: plan
         run: |

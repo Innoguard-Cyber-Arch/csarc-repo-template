@@ -41,6 +41,19 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "mode == 'blocked'" in source
     assert "release_policy.py prepare-candidate" in source
     assert "./scripts/verify-release-candidate" in source
+    # Issue #684: this step used to call ./scripts/verify-template.sh (or
+    # ./scripts/verify full) directly. Since Issue #661 made every success
+    # path of those two end with `git commit --amend`ing a fresh
+    # Verified-locally trailer onto HEAD, running either one on a hosted
+    # runner with no configured git identity always failed with
+    # "Committer identity unknown" -- failing this job on every push to
+    # main. Re-validate the attestation the commit's own PR `verify` check
+    # already wrote instead of re-verifying from scratch (mirrors
+    # .github/workflows/ci.yml's "Validate local verification attestation"
+    # step; see test_root_ci_is_one_bounded_verification_job).
+    assert "run: ./scripts/check-verify-attestation" in source
+    assert "run: ./scripts/verify-template.sh" not in source
+    assert "run: ./scripts/verify full" not in source
     assert "scripts/release_bundle.py prepare" in source
     assert "./scripts/publish-release stage" in source
     assert "./scripts/publish-release resolve" in source
@@ -183,7 +196,7 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
 
     assert "project_mode == 'new'" in copier
     assert ".github/workflows/release.yml" in copier
-    assert "./scripts/verify full" in template
+    assert "./scripts/check-verify-attestation" in template
     assert "./scripts/verify-release-candidate" in template
     assert '{% if "typescript" in languages %}' in template
     assert '{% if "rust" in languages %}' in template
