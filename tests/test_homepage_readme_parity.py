@@ -168,15 +168,19 @@ def test_required_facts_appear_in_readme_and_both_home_slides() -> None:
     readme = _readme_hero()
     zh = _zh_home_visible_body()
     en = _en_home_visible_body()
+    manifest = json.loads(
+        (ROOT / ".release-please-manifest.json").read_text(encoding="utf-8")
+    )
+    repo_version = f"v{manifest['.']}"
 
     for text, label in ((readme, "README"), (zh, "zh home")):
         assert "Python、Rust、TypeScript" in text, (
             f"{label} is missing the supported-languages line"
         )
-        assert "v0.14.0" in text, f"{label} is missing the repo/CLI version"
+        assert repo_version in text, f"{label} is missing the repo/CLI version"
 
     assert "Python, Rust, and TypeScript" in en
-    assert "v0.14.0" in en
+    assert repo_version in en
 
     # Site template / render engine versions: README states them as plain
     # text (it is never run through the site's `[[...]]` token
