@@ -7,6 +7,16 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.15.1] - 2026-09-07
+
+### Bug Fixes
+
+* fix: legacy two-file schema breaks every csarc update (#691) (ac97030)
+* fix(ci): stop release.yml from re-verifying and self-attesting (#684) (#692) (bec66d3)
+* fix(site): keep zh-tw home version cell synced automatically on release bump (#698) (9bb28a3)
+* fix(ci): resolve release.yml's attestation check to the merged PR head (#700) (e7e12dc)
+* fix(template): skip root-only zh-tw version markers downstream (#703) (4e61993)
+
 ## [0.15.0] - 2026-09-07
 
 ### Features
