@@ -1115,7 +1115,7 @@ def test_guided_candidate_only_materializes_local_release_files(
 def test_zh_home_version_paragraph_updates_automatically_on_bump(
     tmp_path: Path,
 ) -> None:
-    """Issue #694: prove a real bump keeps the zh-tw home slide's
+    """Issue #694: prove a real bump keeps a zh-tw home slide's
     basic-mode version mention in sync automatically, not just detect
     drift after the fact (tests/test_homepage_readme_parity.py already
     covers detection). This copies the actual production file -- not a
@@ -1124,7 +1124,18 @@ def test_zh_home_version_paragraph_updates_automatically_on_bump(
     that needed a manual fix on both v0.14.0 and v0.15.0) fails here.
     The baseline version is normalized on marker lines only, not
     hardcoded (Issue #695/#696's own lesson: a literal version string
-    goes stale on every release)."""
+    goes stale on every release).
+
+    scripts/sync-paired-files.sh ships this file byte-for-byte into
+    template/tests/, and from there into every generated project's own
+    tests/ -- where the same relative path resolves to that project's
+    own site/content/_index.zh-tw.md, a generic page describing *using*
+    csarc-repo-template rather than *being* it, which structurally never
+    carries these two self-referential markers. Skip rather than fail
+    when they are absent (Issue #699/#702's own lesson: a paired test
+    that hardcodes root-only content fails on every fresh checkout
+    downstream) -- root's own real file, where this test has teeth, is
+    unaffected."""
     zh_source = (
         Path(__file__).parents[1] / "site/content/_index.zh-tw.md"
     ).read_text(encoding="utf-8")
@@ -1133,6 +1144,11 @@ def test_zh_home_version_paragraph_updates_automatically_on_bump(
         for line in zh_source.splitlines()
         if "x-release-please-version" in line
     ]
+    if not marker_lines:
+        pytest.skip(
+            "this project's zh-tw home page has no "
+            "x-release-please-version markers to keep in sync"
+        )
     assert len(marker_lines) == 2, (
         "expected exactly the legacy badge and basic-mode paragraph "
         "markers; update this test if the zh-tw home slide's version "
