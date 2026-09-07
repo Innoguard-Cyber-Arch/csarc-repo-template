@@ -66,9 +66,10 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。本頁內容與 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 對齊、雙語同步維護。
 
+<p class="template-version"><strong>公版版本：</strong>v0.15.0<!-- x-release-please-version --></p>
+
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.15.0 |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | [[site_template_version]] |
 | repo-site 渲染引擎版本 | [[site_engine_version]] |

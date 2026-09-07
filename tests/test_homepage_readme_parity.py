@@ -200,27 +200,60 @@ def test_required_facts_appear_in_readme_and_both_home_slides() -> None:
 
 
 def test_zh_home_repo_version_mentions_stay_in_sync() -> None:
-    """The zh-tw file mentions the repo/CLI version twice: once with the
-    live `x-release-please-version` marker (in the legacy/technical
-    badge -- the sole spot release-please actually rewrites), and once as
-    plain text in the always-visible basic-mode table (kept plain because
-    the site's own minimal Markdown renderer -- unlike GitHub's -- HTML-
-    escapes a raw comment placed inside a table cell). A release bump
-    that only updates the marked occurrence must be caught here instead
-    of silently drifting."""
+    """Issue #694: the zh-tw file mentions the repo/CLI version twice,
+    both carrying a live `x-release-please-version` marker -- once in
+    the legacy/technical badge, once in the always-visible basic-mode
+    paragraph (`<p class="template-version">`, mirroring en's own
+    structure -- see test_en_home_repo_version_mentions_stay_in_sync).
+    The version used to sit as unmarked plain text in a table cell
+    instead (the site's own minimal Markdown renderer -- unlike
+    GitHub's -- HTML-escapes a raw comment placed inside a table cell,
+    so a marker could not go there safely), which meant a release bump
+    only updated the badge and silently drifted the table cell on every
+    release (v0.14.0 and v0.15.0 both needed a manual fix). Moving it to
+    its own raw-HTML line lets the marker live there safely, so both
+    mentions now update automatically together; this test just guards
+    against the two ever drifting again."""
     zh = (ROOT / "site/content/_index.zh-tw.md").read_text(encoding="utf-8")
     badge_match = re.search(
         r'<span class="package-badge muted">(v[\d.]+)</span>'
         r"<!-- x-release-please-version -->",
         zh,
     )
-    table_match = re.search(r"\| 公版版本 \| (v[\d.]+) \|", zh)
-    assert badge_match, "legacy badge's marked version mention is missing"
-    assert table_match, "basic-mode table's plain version mention is missing"
-    assert badge_match.group(1) == table_match.group(1), (
-        "zh-tw home content's two repo-version mentions drifted: "
-        f"badge={badge_match.group(1)!r} table={table_match.group(1)!r}"
+    paragraph_match = re.search(
+        r"公版版本：</strong>(v[\d.]+)<!-- x-release-please-version -->",
+        zh,
     )
+    assert badge_match, "legacy badge's marked version mention is missing"
+    assert paragraph_match, "basic-mode paragraph's marked version is missing"
+    assert badge_match.group(1) == paragraph_match.group(1), (
+        "zh-tw home content's two repo-version mentions drifted: "
+        f"badge={badge_match.group(1)!r} paragraph={paragraph_match.group(1)!r}"
+    )
+
+
+def test_zh_home_release_markers_are_each_on_their_own_raw_html_line() -> None:
+    """Issue #694: mirrors
+    test_en_home_release_markers_are_each_on_their_own_raw_html_line now
+    that zh-tw's basic-mode version mention is also a raw-HTML line
+    instead of a table cell. Each marker must sit on its own line
+    starting with `<` -- the only form the renderer passes through
+    unescaped -- or the literal comment text leaks into the rendered
+    page (see test_zh_home_repo_version_mentions_stay_in_sync's
+    docstring for why a table cell cannot carry the marker safely)."""
+    zh = (ROOT / "site/content/_index.zh-tw.md").read_text(encoding="utf-8")
+    lines = zh.splitlines()
+    marker_lines = [
+        line for line in lines if "x-release-please-version" in line
+    ]
+    assert len(marker_lines) == 2
+    for marker_line in marker_lines:
+        assert marker_line.strip().startswith("<"), (
+            "each release marker must sit on its own raw-HTML line so "
+            "the engine's Markdown-table escaping (see test_"
+            "zh_home_repo_version_mentions_stay_in_sync's docstring) "
+            "cannot turn it into visible text"
+        )
 
 
 def test_readme_and_manifest_versions_match() -> None:
@@ -237,12 +270,15 @@ def test_readme_and_manifest_versions_match() -> None:
 
 def test_en_home_release_markers_are_each_on_their_own_raw_html_line() -> None:
     """Issue #681/#682 UX review, P1: since the en home slide gained the
-    same legacy (badge)/basic (plain text) split as zh-tw, it now marks
+    same legacy (badge)/basic (paragraph) split as zh-tw, it now marks
     the repo/CLI version in two places, matching zh-tw's own count (see
-    test_zh_home_repo_version_mentions_stay_in_sync). Each must still sit
-    on its own raw-HTML line (the renderer only passes a full line
-    through unescaped when it starts with `<`; anywhere else the literal
-    comment text would leak into the rendered page)."""
+    test_zh_home_repo_version_mentions_stay_in_sync and its sibling
+    test_zh_home_release_markers_are_each_on_their_own_raw_html_line,
+    which now mirrors this test since Issue #694 gave zh-tw's own
+    basic-mode mention the same raw-HTML-line structure). Each must
+    still sit on its own raw-HTML line (the renderer only passes a full
+    line through unescaped when it starts with `<`; anywhere else the
+    literal comment text would leak into the rendered page)."""
     en = (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8")
     lines = en.splitlines()
     marker_lines = [
