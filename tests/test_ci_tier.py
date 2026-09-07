@@ -19,7 +19,7 @@ scope_for = MODULE["scope_for"]
     [
         ("docs/guide.md", "docs"),
         ("site/app.js", "docs"),
-        ("template/site/styles.css", "docs"),
+        ("template/site/static/styles.css", "docs"),
         (".github/ISSUE_TEMPLATE/feature.yml", "docs"),
         (".gitignore", "source"),
         ("README.md", "docs"),
@@ -65,7 +65,7 @@ def test_docs_only_uses_docs_tier() -> None:
         "docs/site-content.js",
         "docs/site-content.md",
         "scripts/render_site.py",
-        "template/site/index.html.jinja",
+        "template/site/content/_index.zh-tw.md",
         "template/docs/site-theme.css.jinja",
     ],
 )

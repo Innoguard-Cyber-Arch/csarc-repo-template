@@ -1,0 +1,132 @@
+{
+  "key": "contract",
+  "code": "03",
+  "labels": {
+    "zh-tw": {
+      "title": "驗證／CI",
+      "heading": "步驟 03／分階段驗證",
+      "scope": "一般 repo 只驗證自己的改動；repo-template 在交付候選額外驗證生成、導入與更新。Action 只呼叫同一份本機程式。"
+    },
+    "en": {
+      "title": "Verification / CI",
+      "heading": "Step 03 / Staged verification",
+      "scope": "A normal repository verifies its own change. A repo-template delivery candidate also verifies generation, adoption, and updates. Actions only call the same local programs."
+    }
+  },
+  "rows": [
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "判斷這次要跑多少",
+          "description": "開發時自行跑 focused check；CI 依變更路徑與交付階段選 docs、fast 或 full，未知路徑升級為 full。"
+        },
+        "en": {
+          "title": "Decide how much to run",
+          "description": "Developers run focused checks directly. CI selects docs, fast, or full from changed paths and delivery stage, with unknown paths escalating to full."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/ci_tier.py"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "工作 PR（topic → main 或 dev/m*）",
+                "en": "Work PR (topic → main or dev/m*)"
+              },
+              "timeout": "30 min"
+            }
+          ]
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/ci_tier.py"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "promotion／merge group／hotfix／手動執行",
+                "en": "Promotion, merge group, hotfix, or manual dispatch"
+              },
+              "timeout": "30 min"
+            }
+          ]
+        }
+      },
+      "templateOnly": {}
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "Issue PR 的快速回饋",
+          "description": "只跑與本次修改相關的格式、靜態檢查、一般測試與必要 smoke；不跑完整 profile／adopt／update 矩陣。"
+        },
+        "en": {
+          "title": "Fast feedback for an Issue PR",
+          "description": "Run relevant formatting, static checks, ordinary tests, and necessary smoke checks without the full profile, adoption, or update matrix."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/verify-fast"
+            }
+          ]
+        }
+      },
+      "templateOnly": {
+        "milestone": {
+          "note": {
+            "zh-tw": "template、workflow 或 shell 有變更時，fast 會額外產生一個代表性 repo 做 smoke 驗證。",
+            "en": "When template, workflow, or shell files change, fast also generates one representative repository for a smoke check."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "交付候選的完整證據",
+          "description": "只對固定且未再變動的交付候選跑一次完整驗證；成功後以 SHA／tree 證明合併的是同一份內容。"
+        },
+        "en": {
+          "title": "Complete evidence for a delivery candidate",
+          "description": "Run full verification once on a fixed, unchanged candidate, then bind the merge to the same SHA and tree."
+        }
+      },
+      "shared": {
+        "release": {
+          "files": [
+            {
+              "path": "scripts/verify"
+            }
+          ]
+        }
+      },
+      "templateOnly": {
+        "release": {
+          "files": [
+            {
+              "path": "scripts/verify-template.sh"
+            }
+          ],
+          "note": {
+            "zh-tw": "額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑；每個 `scripts/verify-stage-*` 都能單獨重跑一個階段，`scripts/verify-template.sh` 仍是唯一必要的最終聚合入口。",
+            "en": "Additionally verifies the template, generated output, and existing-repository adoption and update paths; each scripts/verify-stage-* script can rerun one stage on its own, while scripts/verify-template.sh remains the one required final aggregate entry point."
+          }
+        }
+      }
+    }
+  ]
+}

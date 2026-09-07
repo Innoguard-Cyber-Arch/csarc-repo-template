@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Shared heuristic behind Issue #551's Milestone safeguard: "is there
+# currently exactly one open Milestone that a new Issue or pull request
+# plausibly belongs to". Used by both scripts/gh-issue-create (local
+# prompt at Issue-creation time) and scripts/validate-pr-policy
+# (non-blocking pull request comment in CI, see docs/ci-policy.md's
+# Milestone safeguard section) so the two callers never drift on what
+# counts as "detected".
+#
+# This is deliberately conservative and non-authoritative: zero open
+# Milestones means there is nothing to suggest, and two or more means
+# guessing which one applies would be more misleading than helpful, so
+# both are treated identically to "nothing detected". Any gh failure
+# (auth, network, rate limit, malformed response) is treated the same
+# way -- this script only ever feeds a soft nudge and must never be the
+# reason an Issue/pull request creation or validation flow breaks.
+#
+# Usage: scripts/detect-open-milestone [--repo OWNER/NAME]
+#   --repo defaults to the current directory's repository, via gh api's
+#   {owner}/{repo} placeholder -- the same repository `gh issue create`
+#   itself infers when --repo/-R is omitted.
+#
+# stdout (only on exit 0): "<number>\t<title>" for the single open
+#   Milestone; callers split on the first tab.
+# exit 0: exactly one open Milestone found.
+# exit 1: zero or 2+ open Milestones -- nothing to suggest.
+# exit 2: could not query GitHub at all -- callers must treat this
+#   identically to exit 1, never as an error to surface.
+
+repo_path="repos/{owner}/{repo}"
+while (( $# > 0 )); do
+  case "$1" in
+    --repo)
+      if (( $# < 2 )); then
+        exit 2
+      fi
+      repo_path="repos/$2"
+      shift 2
+      ;;
+    --repo=*)
+      repo_path="repos/${1#--repo=}"
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if ! milestones_json="$(gh api --method GET "$repo_path/milestones" -f state=open 2>/dev/null)"; then
+  exit 2
+fi
+if ! jq -e 'type == "array"' <<<"$milestones_json" >/dev/null 2>&1; then
+  exit 2
+fi
+if [[ "$(jq 'length' <<<"$milestones_json")" != "1" ]]; then
+  exit 1
+fi
+jq -r '.[0] | "\(.number)\t\(.title)"' <<<"$milestones_json"

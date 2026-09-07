@@ -1,5 +1,12 @@
 # CSARC agent install contract
 
+> This file is the **agent's automated install contract** only (the machine-driven
+> `csarc init`/`adopt`/`update` flow). Human prerequisite tool installation —
+> macOS (Homebrew) and Windows (winget/Chocolatey) commands, split by "install
+> and use a csarc-generated project" versus "contribute to this template
+> repository itself" — lives in [README.md's Prerequisites
+> section](../README.md#前置需求), not here.
+
 1. Resolve the current Git repository root yourself. Ask only when a new
    repository's name or location cannot be inferred unambiguously; do not put
    a guessed path into the user prompt.
@@ -7,11 +14,25 @@
 3. Run the CLI from the verified release commit:
    `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>'`.
    `uv` obtains an isolated Python when needed; never require a global Python
-   installation or edit a shell profile or global environment. Run the
-   requested `csarc init`, `adopt`, or `update` command as a dry-run first;
-   `adopt` and `adopt --finalize` default to dry-run when no `--apply-plan` is
-   supplied. For a release-specific request, pass both `--to` and
-   `--expected-sha`. Before `init` or `adopt`, confirm the project description,
+   installation or edit a shell profile or global environment. Before doing
+   anything else, run `csarc status <path> --json` (append `csarc` to the
+   `uvx` invocation above). It deterministically classifies the repository
+   into exactly one of five states — `create`, `adopt`, `update`, `current`,
+   or `policy-only-update` — from `.csarc/config.yml`, the pinned Copier
+   revision, and `policies/` drift; the classification logic lives entirely
+   in the CLI, so never infer the state from context, memory, or free-form
+   judgment, and running it again against unchanged repository state always
+   returns the same answer. Follow the returned `next_command`: for
+   `create`, `adopt`, or `update`, run the matching `csarc init`, `adopt`, or
+   `update` command as a dry-run first; `adopt` and `adopt --finalize`
+   default to dry-run when no `--apply-plan` is supplied. `current` needs no
+   action. `policy-only-update` means the Copier revision is already current
+   but live repository settings have drifted from `policies/`; skip Copier
+   entirely and run `scripts/apply-repository-settings.sh plan`, then
+   `apply` after the confirmation in step 5 — never rerun a full adopt or
+   update just to change a policy setting. For a release-specific request,
+   pass both `--to` and `--expected-sha`. Before `init` or `adopt`, confirm
+   the project description,
    shortest working product command, and security reporting channel. For an
    existing repository, separately confirm an optional repository-relative
    executable `project_verification_hook`; the product run command is never a
@@ -24,9 +45,10 @@
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
    overwrite, preserve, automatic merge, manual merge, or unable to determine.
-   Review the generated Markdown and machine plan, plus the PDF when available,
-   including the exact project verification hook path, result, and reason,
-   then report
+   Review the generated Markdown report (its own new/edited/removed file
+   counts, impact analysis, and items requiring a decision) and machine
+   plan, including the exact project verification hook path, result, and
+   reason, then report
    the terminal's separate Milestone
    description classifications: upgrade, current, or manual review. Neither
    source guarantees the absence of semantic or runtime conflicts. Unknown
@@ -71,3 +93,12 @@
     every administrator-only field; run the full check from a trusted checkout
     with repository Administration read access, and never expose that token to
     untrusted pull request code.
+13. Beyond GitHub-plan probing, `scripts/check-repo-capabilities` reports which
+    of this specific repository's own capabilities/permissions (Ruleset
+    enforcement, CODEOWNERS review, Actions PR auto-approval, security
+    scanning, GitHub Pages, and more) are `allowed`, `blocked`, or `unknown`
+    against `policies/capability-matrix.json`, plus the documented workaround
+    for each gap. It never writes anything, so an agent may run it and report
+    the result without separate confirmation. See the "install" slide's
+    Maintenance-mode disclosures on the repo-site (`docs/index.html#install`)
+    for the full matrix and how to read a result.

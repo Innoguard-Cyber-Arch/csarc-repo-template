@@ -1,20 +1,35 @@
 # CSARC Repo Template
 
-Cyber-Arch 的可更新 repo 公版，支援只使用共通流程，或獨立選擇 Python、Rust、TypeScript。新案、既有案與後續政策更新都經 Copier 形成可審查差異。
+[English](README.en.md)
 
-目前公版：v0.14.0 <!-- x-release-please-version -->
+Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。
+
+| 項目 | 目前狀態 |
+| --- | --- |
+| 公版版本 | v0.14.0<!-- x-release-please-version --> |
+| 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
+| repo-site 排版模板版本 | 1.1.0 |
+| repo-site 渲染引擎版本 | 1.1.0 |
 
 > [!IMPORTANT]
-> Milestone 8 正在逐頁重定義產品規格。目前只有已審查且位於 `.github/workflows/` 的流程會執行；其他流程仍封存。各階段的啟用狀態以[CI/CD 設定](docs/index.html#testing)為準。
+> Milestone 13 正在擴充 repo-site 與導入體驗。目前只有已審查且位於 `.github/workflows/` 的流程會執行；其他流程仍封存。各階段的啟用狀態以[CI/CD 設定](docs/index.html#testing)為準。
 
-[開啟內部網站與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見網站內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）
+| 可以直接選擇 | 目前提供的正式能力 |
+| --- | --- |
+| 程式語言 | Python、Rust、TypeScript 可獨立複選；都不選時只使用共通工作流程 |
+| 分支做法 | 每個交付批次有自己的開發分支、所有修改直接進 `main`，或先集中到 `dev` |
+| 公版設定 | 建立／導入時把選項寫入 `.csarc/config.yml`；之後由公版更新，不必到不同檔案重複設定 |
+| 共用能力 | 工作單（Issue）與變更提案（PR）表單、AI 工作規範、自動驗證、依賴安全、版本記錄與公版更新 |
 
-> **這份文件的定位：** README 只給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 [`AGENTS.md`](AGENTS.md)（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀[內部網站附錄](docs/index.html)。三份文件各自負責一層，避免同一套規則重複維護。
+本節內容與 [repo-site](docs/index.html) 的「首頁」投影片對齊，雙語（中／英）由該站台同步維護；[開啟 repo-site 與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見站台內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）。
+
+> **這份文件的定位：** README 只給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 [`AGENTS.md`](AGENTS.md)（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀 [repo-site 附錄](docs/index.html)。三份文件各自負責一層，避免同一套規則重複維護。
 
 ## 目錄
 
 - [專案概述](#專案概述)
 - [快速開始](#快速開始)
+- [前置需求](#前置需求)
 - [技術與目錄](#技術與目錄)
 - [開發與驗證](#開發與驗證)
 - [設定與密鑰](#設定與密鑰)
@@ -26,11 +41,11 @@ Cyber-Arch 的可更新 repo 公版，支援只使用共通流程，或獨立選
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證。自動版本 PR、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；容器驗證、registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會先辨識方案與實際 API 能力。
+目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證；生成專案另可選配 `enable_docker`，取得 Dockerfile／docker-compose 起始範本與一支唯讀、不推送的容器建置掃描 CI job。自動版本 PR、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；registry publishing 與通用部署流程仍未啟用，未開啟 `enable_docker` 的專案不會產生任何容器相關檔案、job 或權限。GitHub 設定腳本會先辨識方案與實際 API 能力。
 
 ## 快速開始
 
-共同需求是 Git、GitHub CLI、uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11。CSARC 交付的是 CI/CD 範本與治理流程，Python 只用來執行 init／adopt／update 的薄 CLI；`uvx --python 3.14` 會按次取得隔離 runtime，不要求使用者預先安裝或維護全域 Python。Windows 請在 WSL2 執行。
+共同需求是 Git、GitHub CLI、uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11；三個語言模組都不選（`language: ci`）則不需要額外語言工具鏈。CSARC 交付的是 CI/CD 範本與治理流程，Python 只用來執行 init／adopt／update 的薄 CLI；`uvx --python 3.14` 會按次取得隔離 runtime，不要求使用者預先安裝或維護全域 Python。Windows 請在 WSL2 執行。逐項 macOS／Windows 安裝指令，以及「使用者安裝專案」與「模板貢獻者」兩種情境的完整工具清單，見下方[前置需求](#前置需求)。
 
 `scripts/resolve-cache-root` 預設就會指向使用者層級、跨 worktree 共用的快取位置（macOS 為 `~/Library/Caches/csarc`；Linux／WSL2 依 XDG Base Directory 慣例，優先讀 `$XDG_CACHE_HOME`，沒設定則用 `~/.cache/csarc`），讓 `uv`、`pnpm`，以及透過 `scripts/resolve-cache-root` 取得快取位置的固定版本工具安裝腳本（`scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner`／`install-hugo`）不需要額外設定，就能跨 worktree、跨 `csarc adopt --finalize` 產生的臨時候選目錄共用已驗證的下載內容。這個共用位置找不到或無法寫入時會 fail-safe 退回 repo-local 的 `.cache/`；這純粹是本機效能最佳化，不論退回與否，驗證正確性與結果都完全不受影響，只是不共用快取時需要各自重新下載，速度較慢。想改用團隊約定的其他持久路徑，仍可在自己 shell 的 profile 檔（例如 `~/.zshrc`、`~/.bashrc`、`~/.config/fish/config.fish`，依實際使用的 shell 而定）加入 `export CSARC_CACHE_ROOT="<路徑>"` 明確覆寫。
 
@@ -48,6 +63,55 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 CLI 固定驗證 canonical repository numeric ID、immutable stable Release、release attestation、tag 指向與 commit signature，再把 GitHub Release 解析成完整 commit SHA 並顯示計畫；任何不一致都會在 Copier 寫檔前停止。互動模式等使用者確認，CI 或 agent 則要同時明確給 `--yes --non-interactive`。範本來源目前是 private repo，需先以 `gh auth login` 登入；root CLI 不發布到 PyPI。
 
+## 前置需求
+
+CSARC 有兩種完全不同的情境，各自需要的工具不同：**使用 csarc 建立或更新專案**（一般使用者、既有 repo 導入者）與**開發／貢獻 `csarc-repo-template` 這個模板本身**（模板貢獻者）。以下分別列出兩種情境實際需要的工具，並附上 macOS（Homebrew）與 Windows（winget／Chocolatey）安裝指令；沒有官方套件管理器套件的工具改附官方安裝腳本連結。`docs/agent-install.md` 只是 agent 的自動安裝 contract，不涵蓋這裡的人類前置工具安裝步驟。
+
+### 使用 csarc 建立或更新專案
+
+一律只需要 `uv`；`uvx --python 3.14` 會按次建立隔離 runtime，不要求全域 Python。選擇的語言模組另需對應工具鏈；`languages` 全部不勾選（即下方說明的 `language: ci`）時，不需要任何額外語言工具鏈。
+
+| 工具 | 何時需要 | macOS（Homebrew） | Windows（winget／Chocolatey） |
+| --- | --- | --- | --- |
+| Git | 一律需要 | `brew install git` | `winget install --id Git.Git -e` |
+| GitHub CLI（`gh`） | 只有 GitHub 連線操作（`gh auth login`、repository settings 腳本）需要 | `brew install gh` | `winget install --id GitHub.cli --source winget`（或 `choco install gh`） |
+| uv | 一律需要；即使選 `ci`，生成專案的 `./scripts/verify` 仍以 `uv run --no-project python` 執行檢查腳本 | `brew install uv` | `winget install --id=astral-sh.uv -e`；沒有 winget 時用官方安裝腳本 `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"`（見 [uv 安裝文件](https://docs.astral.sh/uv/getting-started/installation/)） |
+| Node.js 24+ | 只有選 `typescript` 語言模組時需要 | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` |
+| pnpm 11 | 只有選 `typescript` 語言模組時需要 | `brew install pnpm` | `winget install -e --id pnpm.pnpm` |
+| rustup／Cargo | 只有選 `rust` 語言模組時需要 | `brew install rustup`（keg-only；該 formula 已不再提供 `rustup-init`，只需把 `$(brew --prefix rustup)/bin` 加入 `PATH` 即完成安裝）；或官方腳本 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` |
+
+Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表 Windows 欄位的 winget／choco 指令供在原生 Windows 單獨安裝個別工具時使用（例如先裝 `git`／`gh` 再進 WSL2），macOS／WSL2 內的 Ubuntu 安裝範例見 [repo-site 附錄](docs/index.html)。
+
+### 開發／貢獻 `csarc-repo-template` 本身
+
+除了上表的 `uv`、`gh` 外，另需要：
+
+- **pnpm 11、rustup／Cargo**：完整跑 `./scripts/verify-template.sh` 會依序產生並驗證 Python、TypeScript、Rust 三種語言模組各自的原生驗證器（見 `tests/test_language_profiles.py`），三者都要具備；只跑日常 PR gate `./scripts/verify-fast` 通常不需要 rustup／Cargo，除非變更觸發模板 smoke test。安裝指令同上表。
+- **repo-site 建置不需要額外工具。** `scripts/build-repo-site` 背後的 `scripts/build_repo_site.py` 是純 stdlib Python（見該檔案開頭註解），不再依賴 Hugo 或任何外部渲染器；只要有上表的 `uv`（或系統 `python3`）即可重建 `docs/index.html`／`docs/index.en.html`。
+- **gitleaks、actionlint、ShellCheck、OSV-Scanner：不需要手動安裝。** `scripts/verify-template.sh`／`scripts/verify-fast` 呼叫的 `scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner` 會在 macOS／Linux（含 WSL2）上自動下載、驗證 checksum 並快取固定版本，第一次執行只需要網路存取。以下指令僅供想在編輯器或本機獨立使用這些工具時參考：
+
+  | 工具 | macOS（Homebrew） | Windows（winget／Chocolatey） |
+  | --- | --- | --- |
+  | gitleaks | `brew install gitleaks` | `winget install --id Gitleaks.Gitleaks`（或 `choco install gitleaks`） |
+  | actionlint | `brew install actionlint` | `winget install -e --id rhysd.actionlint`（或 `choco install actionlint`） |
+  | ShellCheck | `brew install shellcheck` | `winget install --id koalaman.shellcheck`（或 `choco install shellcheck`） |
+  | OSV-Scanner | `brew install osv-scanner` | `winget install Google.OSVScanner` |
+
+- **zizmor：不需要手動安裝。** 它是 `pyproject.toml` 的 `uv` dev dependency（`zizmor==1.29.0`），`uv sync --locked` 就會安裝；`scripts/verify-stage-github-actions-audit` 用 `uv run zizmor` 執行。
+
+完整驗證入口是 `./scripts/verify-template.sh`；日常請先用最窄的 `./scripts/verify-fast` 或單一 `scripts/verify-stage-<name>`，何時才需要在本機另外跑一次完整版見 [`AGENTS.md`](AGENTS.md#commands) 與 [`docs/ci-policy.md`](docs/ci-policy.md)。
+
+### `language: ci`：正式支援的「不選語言」選項
+
+`copier.yml` 的 `languages`（multiselect）故意允許全部不勾選；這在底層等同舊版單選欄位的 `language: ci` 值，是**正式受支援、非遺漏或半成品**的「CI/CD 基線」選項，不是「還沒決定要選哪個語言」的暫時狀態。選擇後，Copier 依 `copier.yml` 的 `_exclude` 規則跳過對應語言模組的檔案與工具鏈：
+
+- 不選 `python`：不產生 `pyproject.toml`、`.python-version`、`src/<package_name>/`、`tests/`，不需要 Python 專案工具鏈。
+- 不選 `typescript`：不產生 `package.json`、`.node-version`、`pnpm-workspace.yaml`、`biome.json`、`tsconfig*.json`、`vitest.config.ts`、`typescript/`，不需要 Node／pnpm。
+- 不選 `rust`：不產生 `Cargo.toml`、`rust-toolchain.toml`、`src/lib.rs`，不需要 rustup／Cargo。
+- 三者都不選（即 `ci`）：生成專案的 `./scripts/verify` 只執行共通檢查（secret 掃描、依賴檢查、workflow lint、policy JSON 驗證、spec 驗證等），全程只用 `uv run --no-project python` 執行既有 Python 工具腳本；不需要任何 Python／Node／Rust 專案套件工具鏈，但仍需要 `uv` 本身，因為這些檢查腳本用 Python 撰寫。
+
+這與「開發本模板 repo 自己需要哪些工具」是兩件事：使用者安裝並使用 csarc 產生的專案時可以只選 `ci`，前置需求極簡（見上表）；但貢獻本模板 repo 時，因為 `tests/test_language_profiles.py` 要對 python／typescript／rust 三種 profile 各自產生專案並跑其原生驗證器，完整 `./scripts/verify-template.sh` 仍需要三種語言工具鏈都具備。
+
 ## 技術與目錄
 
 | 路徑 | 用途 |
@@ -59,7 +123,7 @@ CLI 固定驗證 canonical repository numeric ID、immutable stable Release、re
 | `scripts/verify-template.sh` | 建立、更新、語言與供應鏈回歸 |
 | `src/csarc_cli/` | `csarc init`／`adopt`／`update` 的薄層 Copier orchestration |
 | `docs/README.md`、`docs/specs/`、`docs/adr/` | Durable Project Memory 地圖、Spec-Driven Development（SDD）規格與 Architecture Decision Records（ADR） |
-| `site/`、`scripts/build-decision-site` | Hugo 內容、模板、樣式與可重現的單檔建置入口 |
+| `site/`、`scripts/build-repo-site` | repo-site 內容、純 Python 渲染引擎、樣式與可重現的單檔建置入口 |
 | `docs/index.html`、`docs/index.en.html` | 可離線交付的中英文生成簡報；目前只有 `noindex`／`robots.txt` 臨時防護，尚無實際存取控制 |
 
 Python 目前以 3.14、uv、Ruff、ty、pytest 與 src layout 為基線；CI 會同時驗證精確下界 3.14.0 與最新 3.14.x。生成專案若選 minimum 模式，會驗證所選版本的 `.0` 下界，以及一路到 3.14 的每個 feature release 最新 patch；目前刻意不宣告 3.11 支援。Rust 以 1.98、Cargo.lock、rustfmt、Clippy、cargo test 與 release build 為基線。TypeScript 以 Node 24、pnpm 11、Biome、strict TypeScript 與 Vitest 為基線。
@@ -103,9 +167,13 @@ Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 re
 
 ## 設定與密鑰
 
-GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗，Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud；`policies/pages.json` 的 `enabled` 欄位可關閉）、組織政策限制或缺少 GitHub Advanced Security 則明確標為 `DEGRADED`，不會誤稱為沒有 drift；生成 repo 開啟 `enable_governance_drift_check` 時，`.github/workflows/governance-drift.yml` 每天重跑同一個 `check` 並在可修正的漂移出現時開立或更新追蹤 Issue，本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。非 draft PR 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer（`.github/workflows/governance-comment.yml`）；這只是提出 review request，不是強制合併門禁。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見[內部網站附錄](docs/index.html)「先辨識 GitHub 方案」章節。
+GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗，Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud；`policies/pages.json` 的 `enabled` 欄位可關閉）、組織政策限制或缺少 GitHub Advanced Security 則明確標為 `DEGRADED`，不會誤稱為沒有 drift；生成 repo 開啟 `enable_governance_drift_check` 時，`.github/workflows/governance-drift.yml` 每天重跑同一個 `check` 並在可修正的漂移出現時開立或更新追蹤 Issue，本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。非 draft PR 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer（`.github/workflows/governance-comment.yml`）；這只是提出 review request，不是強制合併門禁。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見 [repo-site 附錄](docs/index.html)「先辨識 GitHub 方案」章節。
+
+`.csarc/config.yml` 的 `policy_repository_settings`／`policy_actions_permissions`／`policy_labels`／`policy_branch_ruleset` 四個布林開關（Issue #532）讓專案各自決定要不要套用對應的 `policies/repository.json`／`policies/actions.json`／`policies/labels.json`／`policies/rulesets.json`；immutable Releases 不另開新鍵，沿用既有 `release_immutable_releases`（只有 `csarc-owned` 對應的 `required` 會套用，`product-owned`／`verification-only` 對應的 `product-defined`／`not-required` 交由既有 release ownership 決定，本模板不強制）。四個開關預設皆為 `true`，維持關閉本功能前的全套用行為；`.csarc/config.yml` 缺鍵一律視為開啟，既有 repo 更新後不會悄悄少掉涵蓋範圍。關掉某個政策時，`plan`／`apply`／`check` 都印出對應的 `SKIP`／`SKIPPED` 行、不呼叫該政策的 GitHub API，也不計入 `check` 的 drift 或 `DEGRADED` 計數。
 
 生成 repo 開啟 `enable_template_update_notifications` 時另會取得 `template-update.yml`：`schedule`（每週一）／`workflow_dispatch` 觸發、`contents: read`＋`issues: write`、10 分鐘 timeout，只呼叫 `scripts/check-template-update` 建立或更新一張通知 Issue，不會自動套用或合併變更。公開模板來源不需要 secret；`_src_path` 指向 private GitHub repository 時，才需設定只有該來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN` repository secret，且只有 `schedule`／`workflow_dispatch` 讀得到，不會流向 `pull_request` workflow。本模板 repo 是來源本身，不消費也不排程它。
+
+生成 repo 開啟 `enable_docker`（Issue #554）時會取得 `Dockerfile`、`docker-compose.yml` 兩份起始範本，以及 `.github/workflows/docker-build-scan.yml`：`pull_request`（限 Dockerfile／compose／已選語言原始碼路徑變更）與 `workflow_dispatch` 觸發、`contents: read`、20 分鐘 timeout；job 用 `docker/build-push-action`（`push: false`）只在 runner 本機建置映像，再用 `aquasecurity/trivy-action` 掃描該本機映像的已知漏洞，不登入、不推送任何 registry，也不要求任何 secret。未開啟 `enable_docker` 的專案完全不會產生上述任一檔案，不會觸發新 job，也不會取得任何新權限，維持 [`docs/adr/selective-ci-automation-adoption.md`](docs/adr/selective-ci-automation-adoption.md) 記錄的「非容器專案不應支付 Docker runner 成本或取得 registry 權限」邊界。
 
 選配整合（Renovate）與 SAST 啟用依偵測到的平台能力與方案提供建議，不需要導入者建立 PAT 或額外 GitHub App；`csarc init`／`adopt`／`update` 會先顯示唯讀 preflight 結果。選配整合依目前權限引導，分成 `available`／`request-owner`／`fallback` 三種狀態，決定能否直接開啟 [Renovate App 安裝頁](https://github.com/apps/renovate/installations/new)。這個 preflight 不會啟用發版流程。完整能力矩陣與 Fleet 治理觸發門檻見附錄。
 Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`，不要把 token、私鑰或實際密碼寫進 repo。`./scripts/verify-template.sh` 只證明靜態與合成驗證；歷史 live-integration 與 artifact-consumption run 只證明當時的 commit，不能當成現行能力。封存證據與未來恢復條件見 [`docs/live-integration.md`](docs/live-integration.md) 及 [`docs/artifact-consumption.md`](docs/artifact-consumption.md)。
@@ -154,9 +222,9 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 ```
 
-`adopt` 預設就是 dry-run；明確寫出 `--dry-run` 仍相容。它只產生 repo 外的 Markdown、PDF 與 machine-readable plan，不修改 repo。若 dirty path 全部是未 staged 的 tracked modification 且由 plan 明列為 `preserve`，CLI 會用原始 bytes 建立並驗證候選，允許套用同一份 plan；其他 dirty 狀態只能審查。plan 鎖定 target HEAD、完整 working-tree 狀態、Release full SHA、answers 與輸出 digest，任何漂移都會停止。CLI 會先在暫存 clone 產生完整候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
+`adopt` 預設就是 dry-run；明確寫出 `--dry-run` 仍相容。它只產生 repo 外的純 Markdown 導入報告（不再產生 PDF）與 machine-readable plan，不修改 repo。導入報告本身有獨立版本號（目前為 `1.0.0`，即 `ADOPTION_REPORT_TEMPLATE_VERSION`，記錄在報告檔案內），內容具體包含新增／編輯／移除檔案數、衝擊分析，以及需要使用者做決策的項目清單；試導入與正式導入完成後更新的是同一份報告檔案、同一套版本控制邏輯，不會另外產生第二份檔案。若 dirty path 全部是未 staged 的 tracked modification 且由 plan 明列為 `preserve`，CLI 會用原始 bytes 建立並驗證候選，允許套用同一份 plan；其他 dirty 狀態只能審查。plan 鎖定 target HEAD、完整 working-tree 狀態、Release full SHA、answers 與輸出 digest，任何漂移都會停止。CLI 會先在暫存 clone 產生完整候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
 
-導入時可以 `--data project_verification_hook=scripts/verify-skills` 指定產品驗證。該值必須是 repo 內存在、可執行的相對檔案，不會透過 shell 解析，也不得解析成或間接呼叫 canonical `scripts/verify`；plan、Markdown 與 PDF 都會列出精確路徑、結果與原因。沒有顯式設定時，只在既有 `scripts/verify-product` 可執行時使用相容 fallback；同一路徑只執行一次。`update --check` 會先驗證設定，正式 update 則在暫存 clone 通過 canonical 與產品驗證後才寫入 target。
+導入時可以 `--data project_verification_hook=scripts/verify-skills` 指定產品驗證。該值必須是 repo 內存在、可執行的相對檔案，不會透過 shell 解析，也不得解析成或間接呼叫 canonical `scripts/verify`；plan 與 Markdown 報告都會列出精確路徑、結果與原因。沒有顯式設定時，只在既有 `scripts/verify-product` 可執行時使用相容 fallback；同一路徑只執行一次。`update --check` 會先驗證設定，正式 update 則在暫存 clone 通過 canonical 與產品驗證後才寫入 target。
 
 若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize`；它同樣預設為 dry-run，會重建並驗證完整候選，將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 套用；任何 plan 後漂移都會停止。
 
@@ -172,7 +240,15 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ### Agent prompt
 
-固定版本的安裝契約是 [`docs/agent-install.md`](docs/agent-install.md)。下列三個 prompt 只選擇 lifecycle；CLI 會從 canonical immutable Release 解析並驗證 full SHA，再把它鎖進 plan 與 provenance。需要預先固定版本時，改用 Release 附件中的三個 pinned prompts。
+固定版本的安裝契約是 [`docs/agent-install.md`](docs/agent-install.md)。下列四個 prompt 只選擇 lifecycle；CLI 會從 canonical immutable Release 解析並驗證 full SHA，再把它鎖進 plan 與 provenance。需要預先固定版本時，改用 Release 附件中的四個 pinned prompts。
+
+不確定目前 repo 狀態、或想讓 CLI 自動判斷時，先用「自動判斷」prompt：`csarc status` 只讀取本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，把結果分成五種狀態（`create`／`adopt`／`update`／`current`／`policy-only-update`），判斷邏輯全部在 CLI 裡、不靠 agent 自由發揮，同一個狀態多次執行結果一致；再依回傳的 `next_command` 走下方對應的新建、既有導入或更新 prompt，或（僅政策設定變動時）直接執行 `scripts/apply-repository-settings.sh plan` 再 `apply`，不必重新走一次完整 adopt／update。
+
+自動判斷（推薦）：
+
+```text
+請使用 uv 從 canonical GitHub repository 的核准 release commit 執行官方 csarc CLI 的 `status` 子指令，判斷目前 workspace／既有 Git repository 屬於哪一種安裝狀態；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。先執行 `csarc status --json`，不要自行判斷或假設目前狀態。依回傳的 state 與 next_command：create 或 adopt 或 update 時，改用對應的 init／adopt／update dry-run prompt 並等待確認；current 時回報不需動作；policy-only-update 時只執行 `scripts/apply-repository-settings.sh plan`、摘要差異並等待確認，確認後才 `apply`，不要重新走完整 adopt 或 update。全程不要修改全域環境、push 或開 PR。
+```
 
 新建：
 
@@ -200,7 +276,7 @@ Root CLI 不發布到 package registry；正式 prompt 一律從核准 GitHub Re
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<full-commit-sha>' csarc --help
 ```
 
-若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance，或雖有 `.csarc/provenance.json` 但仍是舊版未驗證格式(例如 `verification` 不是 `verified`，常見於較早的 `--allow-unreleased` adopt)時，兩種情況都需要先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移；CLI 不會默認宣稱舊狀態已驗證，也不會把「格式過舊」與「欄位遭竄改」混為一談——已標示 `verified` 卻欄位對不上的記錄，即使加上 `--accept-legacy` 仍會被拒絕。仍在用舊檔名 `.copier-answers.yml`(或已停用的 `.csarc/profile.json`)的既有 repo，`update` 會在套用新版模板前把設定自動遷移到現行的 `.csarc/config.yml`，不需要手動搬檔案。`docs/site-content.md` 與 `docs/site-theme.css` 是生成專案自行維護的網站來源；Copier 更新版型時不會覆寫它們，並會重建 portable `docs/index.html`。
+若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance，或雖有 `.csarc/provenance.json` 但仍是舊版未驗證格式(例如 `verification` 不是 `verified`，常見於較早的 `--allow-unreleased` adopt)時，兩種情況都需要先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移；CLI 不會默認宣稱舊狀態已驗證，也不會把「格式過舊」與「欄位遭竄改」混為一談——已標示 `verified` 卻欄位對不上的記錄，即使加上 `--accept-legacy` 仍會被拒絕。仍在用舊檔名 `.copier-answers.yml`(或已停用的 `.csarc/profile.json`)的既有 repo，`update` 會在套用新版模板前把設定自動遷移到現行的 `.csarc/config.yml`，不需要手動搬檔案。`site/content/_index.zh-tw.md`／`_index.en.md` 與 `docs/site-theme.css` 是生成專案自行維護的網站來源；Copier 更新版型時不會覆寫它們，並會重建 portable `docs/index.html`／`docs/index.en.html`。舊版 `docs/site-content.md` 已停用，其內容不會自動搬到新來源；`./scripts/build-repo-site` 偵測到該檔仍存在時會提示手動遷移後刪除。
 
 ### 驗證邊界
 

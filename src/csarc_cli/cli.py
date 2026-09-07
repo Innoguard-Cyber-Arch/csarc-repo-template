@@ -12,20 +12,14 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import BinaryIO, NoReturn, Protocol, cast
+from typing import NoReturn, Protocol, cast
 from urllib.parse import quote
 
 import yaml  # type: ignore[import-untyped]
-from reportlab.lib import colors  # type: ignore[import-untyped]
-from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
-from reportlab.pdfbase.pdfmetrics import (  # type: ignore[import-untyped]
-    stringWidth,
-)
-from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 
 CANONICAL_SOURCE = (
     "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git"
@@ -44,6 +38,10 @@ PROVENANCE_FILE = Path(".csarc/provenance.json")
 PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
 ADOPTION_PLAN_BASENAME = "csarc-adoption-plan.json"
+# Version of the adoption report's own Markdown template, independent from
+# the CLI package version. Bump this when the report's structure or field
+# set changes; README.md displays the same value (#530).
+ADOPTION_REPORT_TEMPLATE_VERSION = "1.0.0"
 AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -57,6 +55,29 @@ RELEASE_WRITER_MARKERS = (
     "ncipollo/release-action@",
     "softprops/action-gh-release@",
 )
+INSTALL_STATE_CREATE = "create"
+INSTALL_STATE_ADOPT = "adopt"
+INSTALL_STATE_UPDATE = "update"
+INSTALL_STATE_CURRENT = "current"
+INSTALL_STATE_POLICY_ONLY = "policy-only-update"
+INSTALL_STATE_NEXT_COMMAND = {
+    INSTALL_STATE_CREATE: (
+        "csarc init <path> --dry-run to preview, then --yes --non-interactive"
+    ),
+    INSTALL_STATE_ADOPT: (
+        "csarc adopt <path> to write a dry-run plan, review it, then "
+        "csarc adopt <path> --apply-plan <plan>"
+    ),
+    INSTALL_STATE_UPDATE: (
+        "csarc update <path> --check to preview, then csarc update <path>"
+    ),
+    INSTALL_STATE_CURRENT: "no action needed",
+    INSTALL_STATE_POLICY_ONLY: (
+        "scripts/apply-repository-settings.sh plan to preview, then "
+        "scripts/apply-repository-settings.sh apply"
+    ),
+}
+POLICY_CHECK_COMPLETED_MARKER = "Repository settings check failed with"
 LEGACY_MILESTONE_HEADINGS = (
     "problem",
     "outcome",
@@ -158,10 +179,19 @@ class ReleaseClient(Protocol):
 
 @dataclass(frozen=True)
 class Plan:
-    """File effects for an init or adoption operation."""
+    """File effects for an init or adoption operation.
+
+    ``remove`` is always empty today: init and adoption only add or update
+    files in the target repository, never delete existing ones. The field
+    stays a first-class, independently countable part of the plan (rather
+    than a hardcoded report constant) so the adoption report's removed-file
+    statistic is genuinely computed, and future removal-aware flows have
+    somewhere real to report into (#530).
+    """
 
     add: tuple[str, ...]
     overwrite: tuple[str, ...]
+    remove: tuple[str, ...]
     preserve: tuple[str, ...]
     merge: tuple[str, ...]
     manual: tuple[str, ...]
@@ -235,6 +265,7 @@ class ResolvedPlan:
                 "manual_merge": list(self.files.manual),
                 "overwrite": list(self.files.overwrite),
                 "preserve": list(self.files.preserve),
+                "remove": list(self.files.remove),
                 "unknown": list(self.files.unknown),
             }
         if self.update is not None:
@@ -242,6 +273,15 @@ class ResolvedPlan:
         if self.adoption is not None:
             result["adoption"] = self.adoption
         return result
+
+
+@dataclass(frozen=True)
+class PolicyCheckResult:
+    """Outcome of comparing live repository settings with checked-in policy."""
+
+    available: bool
+    drifted: bool | None
+    detail: str
 
 
 @dataclass(frozen=True)
@@ -1155,6 +1195,7 @@ def compare_stage(
     return Plan(
         tuple(sorted(add)),
         (),
+        (),
         tuple(sorted(set(preserve))),
         tuple(sorted(merge)),
         tuple(sorted(manual)),
@@ -1166,6 +1207,12 @@ def plan_status(
     plan: Plan, adoption: Mapping[str, object] | None = None
 ) -> tuple[str, str]:
     """Return the strongest adoption decision and its limitation."""
+    if adoption is not None and adoption.get("applied") is True:
+        return (
+            "Adopted",
+            "Formal adoption completed; this report now records the "
+            "post-adoption state.",
+        )
     if adoption is not None and adoption.get("applicable") is not True:
         return (
             "Not ready to adopt",
@@ -1208,12 +1255,17 @@ def report_settings(data: dict[str, object]) -> str:
         "coverage_mode",
         "coverage_threshold",
         "enable_codeql",
+        "enable_docker",
         "enable_governance_drift_check",
         "enable_precommit",
         "enable_template_update_notifications",
         "language",
         "languages",
         "package_name",
+        "policy_actions_permissions",
+        "policy_branch_ruleset",
+        "policy_labels",
+        "policy_repository_settings",
         "project_description",
         "project_mode",
         "project_name",
@@ -1231,7 +1283,7 @@ def report_settings(data: dict[str, object]) -> str:
     )
 
 
-def adoption_report_markdown(
+def adoption_report_markdown(  # noqa: C901
     target: Path,
     revision: Revision,
     repository: RepositoryContext,
@@ -1240,64 +1292,41 @@ def adoption_report_markdown(
     generated_at: str,
     adoption: dict[str, object] | None = None,
 ) -> str:
-    """Render the complete, shareable adoption decision report."""
+    """Render the complete, shareable adoption decision report.
+
+    The report is pure Markdown (#530): no PDF or other binary artifact is
+    produced. Its own structure is versioned independently from the CLI
+    package through ``ADOPTION_REPORT_TEMPLATE_VERSION``, recorded in the
+    report itself and displayed in README.md.
+    """
     status, reason = plan_status(plan, adoption)
     release = release_contract(data)
     workflow = release["selected_workflow"] or "(none)"
     inputs = ", ".join(cast(list[str], release["required_inputs"])) or "(none)"
-    counts = (
+    new_count = len(plan.add)
+    edited_count = len(plan.overwrite) + len(plan.merge)
+    removed_count = len(plan.remove)
+    detail_counts = (
         ("Add", len(plan.add)),
         ("Overwrite", len(plan.overwrite)),
+        ("Remove", len(plan.remove)),
         ("Preserve", len(plan.preserve)),
         ("Automatic merge", len(plan.merge)),
         ("Manual merge", len(plan.manual)),
         ("Unable to determine", len(plan.unknown)),
     )
-    lines = [
-        "# CSARC adoption dry-run",
-        "",
-        f"> **Decision: {status}.** {reason}",
-        "",
-        "## Snapshot",
-        "",
-        f"- Target: `{markdown_code(target)}`",
-        f"- Repository: `{markdown_code(repository.repository or '(none)')}`",
-        "- Repository visibility: `"
-        f"{markdown_code(repository.visibility)}` "
-        f"(`{markdown_code(repository.source)}`)",
-        f"- Template source: `{markdown_code(revision.source)}`",
-        f"- Template: `{markdown_code(revision.label)}` / `{revision.sha}`",
-        "- Release verification: "
-        + ("verified immutable release" if revision.verified else "UNVERIFIED"),
-        f"- Release ownership: `{release['ownership']}`",
-        f"- Selected release workflow: `{workflow}`",
-        f"- Required release inputs: `{inputs}`",
-        f"- Release ownership reason: {release['reason']}",
-        "- Release repository settings: "
-        f"`{release['settings_owner']}` / immutable Releases "
-        f"`{release['immutable_releases']}`",
-        f"- Settings: {report_settings(data)}",
-        f"- Generated: `{generated_at}`",
-        "",
-        "## Expected file effects",
-        "",
-        "| Effect | Files |",
-        "| --- | ---: |",
-        *(f"| {label} | {count} |" for label, count in counts),
-        "",
-        "## Files needing attention",
-        "",
-    ]
+
+    owner: dict[str, object] = {}
+    owner_state = "unknown"
+    hook: dict[str, object] = {}
+    working_tree = "unknown"
+    applied = False
     if adoption is not None:
-        owner = adoption.get("code_owner")
-        owner_state = (
-            owner.get("state", "unknown")
-            if isinstance(owner, dict)
-            else "unknown"
-        )
+        raw_owner = adoption.get("code_owner")
+        owner = raw_owner if isinstance(raw_owner, dict) else {}
+        owner_state = str(owner.get("state", "unknown"))
         raw_hook = adoption.get("project_verification_hook")
         hook = raw_hook if isinstance(raw_hook, dict) else {}
-        hook_path = hook.get("path") or "(none)"
         working_tree = (
             "clean"
             if adoption.get("clean")
@@ -1307,26 +1336,124 @@ def adoption_report_markdown(
                 else "dirty; review only"
             )
         )
-        lines[12:12] = [
-            f"- Target HEAD: `{markdown_code(adoption.get('target_head'))}`",
-            f"- Working tree: {working_tree}",
-            f"- CODEOWNER verification: `{markdown_code(owner_state)}`",
-            f"- Project verification hook: `{markdown_code(hook_path)}`",
-            "- Project verification hook configured: `"
-            f"{str(hook.get('configured') is True).lower()}`",
-            "- Project verification result: `"
-            f"{markdown_code(hook.get('result'))}`",
-            "- Project verification reason: `"
-            f"{markdown_code(hook.get('reason'))}`",
-            "- Candidate verification: `"
-            f"{markdown_code(adoption.get('verification'))}`",
-        ]
+        applied = adoption.get("applied") is True
+
+    snapshot = ["## Snapshot", "", f"- Target: `{markdown_code(target)}`"]
+    if adoption is not None:
+        snapshot.append(
+            f"- Target HEAD: `{markdown_code(adoption.get('target_head'))}`"
+        )
+        snapshot.append(f"- Working tree: {working_tree}")
+    snapshot.append(
+        f"- Repository: `{markdown_code(repository.repository or '(none)')}`"
+    )
+    snapshot.append(
+        "- Repository visibility: `"
+        f"{markdown_code(repository.visibility)}` "
+        f"(`{markdown_code(repository.source)}`)"
+    )
+    if adoption is not None:
         changes = adoption.get("target_changes")
         if isinstance(changes, list) and changes:
-            lines[14:14] = [
+            snapshot.append(
                 "- Working-tree entries: "
                 + ", ".join(f"`{markdown_code(value)}`" for value in changes)
+            )
+    snapshot.extend(
+        [
+            f"- Template source: `{markdown_code(revision.source)}`",
+            f"- Template: `{markdown_code(revision.label)}` / `{revision.sha}`",
+            "- Release verification: "
+            + (
+                "verified immutable release"
+                if revision.verified
+                else "UNVERIFIED"
+            ),
+            f"- Release ownership: `{release['ownership']}`",
+            f"- Selected release workflow: `{workflow}`",
+            f"- Required release inputs: `{inputs}`",
+            f"- Release ownership reason: {release['reason']}",
+            "- Release repository settings: "
+            f"`{release['settings_owner']}` / immutable Releases "
+            f"`{release['immutable_releases']}`",
+        ]
+    )
+    if adoption is not None:
+        snapshot.extend(
+            [
+                f"- CODEOWNER verification: `{markdown_code(owner_state)}`",
+                "- Project verification hook: `"
+                f"{markdown_code(hook.get('path') or '(none)')}`",
+                "- Project verification hook configured: `"
+                f"{str(hook.get('configured') is True).lower()}`",
+                "- Project verification result: `"
+                f"{markdown_code(hook.get('result'))}`",
+                "- Project verification reason: `"
+                f"{markdown_code(hook.get('reason'))}`",
+                "- Candidate verification: `"
+                f"{markdown_code(adoption.get('verification'))}`",
+                f"- Adoption applied: `{str(applied).lower()}`",
             ]
+        )
+        if applied:
+            snapshot.append(
+                f"- Adopted at: `{markdown_code(adoption.get('applied_at'))}`"
+            )
+    snapshot.append(f"- Settings: {report_settings(data)}")
+    snapshot.append(f"- Generated: `{generated_at}`")
+
+    summary_lines = [
+        "## Summary of file changes",
+        "",
+        "| Change | Files |",
+        "| --- | ---: |",
+        f"| New files | {new_count} |",
+        f"| Edited files | {edited_count} |",
+        f"| Removed files | {removed_count} |",
+        f"| Preserved files | {len(plan.preserve)} |",
+    ]
+
+    detail_lines = [
+        "## Expected file effects",
+        "",
+        "| Effect | Files |",
+        "| --- | ---: |",
+        *(f"| {label} | {count} |" for label, count in detail_counts),
+    ]
+
+    impact_lines = [
+        "## Impact analysis",
+        "",
+        f"- This plan changes {new_count + edited_count + removed_count} "
+        f"file(s) in `{markdown_code(target)}`: {new_count} new, "
+        f"{edited_count} edited, {removed_count} removed; "
+        f"{len(plan.preserve)} file(s) stay preserved.",
+        f"- Release ownership is `{release['ownership']}` using workflow "
+        f"`{workflow}`; {release['reason']}",
+    ]
+    if adoption is not None:
+        impact_lines.extend(
+            [
+                f"- Working tree before adoption: {working_tree}.",
+                f"- CODEOWNER verification: `{markdown_code(owner_state)}`.",
+                "- Candidate verification: `"
+                f"{markdown_code(adoption.get('verification'))}`.",
+            ]
+        )
+
+    decision_items: list[str] = []
+    if adoption is not None and owner_state in {"blocked", "unknown"}:
+        decision_items.append(
+            f"- CODEOWNER `{markdown_code(owner.get('value', 'unknown'))}` "
+            f"verification is `{markdown_code(owner_state)}` - "
+            f"{markdown_code(owner.get('reason', 'No details available.'))}."
+        )
+    if adoption is not None and hook.get("result") == "failed":
+        decision_items.append(
+            "- Project verification hook `"
+            f"{markdown_code(hook.get('path') or '(none)')}` failed - "
+            f"{markdown_code(hook.get('reason', 'No details available.'))}."
+        )
     attention = (
         (path, "template and repository contain different UTF-8 text")
         for path in plan.manual
@@ -1340,17 +1467,36 @@ def adoption_report_markdown(
         )
         for path in plan.unknown
     )
-    items = (*attention, *unknown)
-    if items:
-        lines.extend(
-            f"- `{markdown_code(path)}` - {item_reason}."
-            for path, item_reason in items
-        )
+    decision_items.extend(
+        f"- `{markdown_code(path)}` - {item_reason}."
+        for path, item_reason in (*attention, *unknown)
+    )
+    decision_lines = ["## Items requiring your decision", ""]
+    if decision_items:
+        decision_lines.extend(decision_items)
     else:
-        lines.append(
+        decision_lines.append(
             "- No known file conflicts. This does not guarantee semantic or "
             "runtime compatibility."
         )
+
+    lines = [
+        "# CSARC adoption dry-run",
+        "",
+        f"> **Decision: {status}.** {reason}",
+        "",
+        f"Report template version: `{ADOPTION_REPORT_TEMPLATE_VERSION}`",
+        "",
+        *snapshot,
+        "",
+        *summary_lines,
+        "",
+        *detail_lines,
+        "",
+        *impact_lines,
+        "",
+        *decision_lines,
+    ]
     if plan.merge:
         lines.extend(
             (
@@ -1363,7 +1509,20 @@ def adoption_report_markdown(
                 ),
             )
         )
-    if adoption is not None and adoption.get("applicable") is not True:
+    if adoption is not None and adoption.get("applied") is True:
+        lines.extend(
+            (
+                "",
+                "## Adoption applied",
+                "",
+                "Formal adoption completed at `"
+                f"{markdown_code(adoption.get('applied_at'))}`. This report "
+                "was updated in place to record the post-adoption state; no "
+                "plan remains to apply.",
+                "",
+            )
+        )
+    elif adoption is not None and adoption.get("applicable") is not True:
         lines.extend(
             (
                 "",
@@ -1390,205 +1549,6 @@ def adoption_report_markdown(
             )
         )
     return "\n".join(lines)
-
-
-def pdf_text(
-    value: object, limit: int = 92, max_width: float | None = None
-) -> str:
-    """Return printable ASCII text supported by the bundled PDF font."""
-    escaped = printable(value).encode("ascii", "backslashreplace").decode()
-    text = escaped if len(escaped) <= limit else escaped[: limit - 3] + "..."
-    while (
-        max_width is not None
-        and len(text) > 3
-        and stringWidth(text, "Helvetica", 8) > max_width
-    ):
-        text = text[:-4] + "..."
-    return text
-
-
-def draw_adoption_pdf(
-    output: BinaryIO,
-    target: Path,
-    revision: Revision,
-    repository: RepositoryContext,
-    data: dict[str, object],
-    plan: Plan,
-    generated_at: str,
-    adoption: Mapping[str, object] | None = None,
-) -> None:
-    """Draw a concise, selectable-text adoption decision PDF."""
-    page_width, page_height = A4
-    document = Canvas(output, pagesize=A4, pageCompression=1)
-    status, reason = plan_status(plan, adoption)
-    status_color = {
-        "Ready to adopt": colors.HexColor("#DDEFE2"),
-        "Review required": colors.HexColor("#F7E9B5"),
-        "Unable to determine": colors.HexColor("#F4D7D5"),
-        "Not ready to adopt": colors.HexColor("#F4D7D5"),
-    }[status]
-
-    document.setTitle("CSARC adoption dry-run")
-    document.setAuthor("CSARC Repo Template")
-    document.setFillColor(colors.HexColor("#17324D"))
-    document.setFont("Helvetica-Bold", 8)
-    document.drawString(48, page_height - 44, "CSARC REPO TEMPLATE")
-    document.setFont("Helvetica-Bold", 22)
-    document.drawString(48, page_height - 72, "Adoption dry-run")
-    document.setFillColor(colors.HexColor("#52606D"))
-    document.setFont("Helvetica", 8)
-    document.drawRightString(
-        page_width - 48, page_height - 44, pdf_text(generated_at)
-    )
-
-    document.setFillColor(status_color)
-    document.roundRect(
-        48, page_height - 150, page_width - 96, 54, 7, fill=1, stroke=0
-    )
-    document.setFillColor(colors.HexColor("#17212B"))
-    document.setFont("Helvetica-Bold", 14)
-    document.drawString(62, page_height - 118, status)
-    document.setFont("Helvetica", 8)
-    document.drawString(62, page_height - 135, pdf_text(reason))
-
-    raw_hook = (
-        adoption.get("project_verification_hook")
-        if adoption is not None
-        else None
-    )
-    hook = raw_hook if isinstance(raw_hook, dict) else {}
-    hook_path = hook.get("path") or "(none)"
-    hook_result = hook.get("result") or "not-run"
-    release = release_contract(data)
-    release_inputs = cast(list[str], release["required_inputs"])
-    metadata = (
-        ("Target", target),
-        ("Repository", repository.repository or "(none)"),
-        (
-            "Visibility",
-            f"{repository.visibility} ({repository.source})",
-        ),
-        ("Template source", revision.source),
-        ("Template", f"{revision.label} / {revision.sha}"),
-        (
-            "Verification",
-            "verified immutable release" if revision.verified else "UNVERIFIED",
-        ),
-        ("Release ownership", release["ownership"]),
-        ("Release workflow", release["selected_workflow"] or "(none)"),
-        ("Release inputs", ", ".join(release_inputs) or "(none)"),
-        ("Release reason", release["reason"]),
-        ("Release settings owner", release["settings_owner"]),
-        ("Immutable Releases", release["immutable_releases"]),
-        ("Languages", data.get("languages", "unknown")),
-        ("Project hook", hook_path),
-        ("Hook configured", str(hook.get("configured") is True).lower()),
-        ("Hook result", hook_result),
-        ("Hook reason", hook.get("reason") or "(none)"),
-    )
-    value_x = 56 + max(
-        stringWidth(label, "Helvetica-Bold", 8) for label, _ in metadata
-    )
-    value_width = page_width - 48 - value_x
-    y = page_height - 178
-    for label, value in metadata:
-        document.setFont("Helvetica-Bold", 8)
-        document.drawString(48, y, label)
-        document.setFont("Helvetica", 8)
-        document.drawString(value_x, y, pdf_text(value, 105, value_width))
-        y -= 15
-
-    counts = (
-        ("Add", len(plan.add), "#2F6B8A"),
-        ("Overwrite", len(plan.overwrite), "#477E94"),
-        ("Preserve", len(plan.preserve), "#7298A8"),
-        ("Automatic merge", len(plan.merge), "#4D7C5B"),
-        ("Manual merge", len(plan.manual), "#A7833B"),
-        ("Unknown", len(plan.unknown), "#9A5550"),
-    )
-    document.setFillColor(colors.HexColor("#17212B"))
-    document.setFont("Helvetica-Bold", 11)
-    document.drawString(48, y - 10, "Expected file effects")
-    maximum = max((count for _, count, _ in counts), default=1) or 1
-    y -= 34
-    for label, count, color in counts:
-        document.setFillColor(colors.HexColor("#52606D"))
-        document.setFont("Helvetica", 8)
-        document.drawString(48, y, label)
-        document.setFillColor(colors.HexColor("#E8EDF1"))
-        document.roundRect(128, y - 2, 330, 8, 4, fill=1, stroke=0)
-        document.setFillColor(colors.HexColor(color))
-        width = 0 if count == 0 else max(4, 330 * count / maximum)
-        if width:
-            document.roundRect(128, y - 2, width, 8, 4, fill=1, stroke=0)
-        document.setFillColor(colors.HexColor("#17212B"))
-        document.setFont("Helvetica-Bold", 8)
-        document.drawRightString(page_width - 48, y, str(count))
-        y -= 20
-
-    document.setFont("Helvetica-Bold", 11)
-    document.drawString(48, y - 4, "Files needing attention")
-    y -= 25
-    attention = [
-        (path, "different text - manual merge") for path in plan.manual
-    ] + [
-        (path, "different file traits or non-text content - inspect")
-        for path in plan.unknown
-    ]
-    if not attention:
-        document.setFont("Helvetica", 8)
-        document.drawString(
-            48,
-            y,
-            "No known file conflicts. Semantic and runtime conflicts remain "
-            "possible.",
-        )
-    else:
-        document.setFont("Helvetica", 8)
-        for path, item_reason in attention[:7]:
-            document.drawString(48, y, f"- {pdf_text(path, 68)}")
-            document.setFillColor(colors.HexColor("#52606D"))
-            document.drawRightString(page_width - 48, y, item_reason)
-            document.setFillColor(colors.HexColor("#17212B"))
-            y -= 15
-        if len(attention) > 7:
-            document.drawString(
-                48,
-                y,
-                f"- {len(attention) - 7} more item(s); see the Markdown "
-                "report.",
-            )
-
-    document.setFillColor(colors.HexColor("#F1F4F6"))
-    document.roundRect(48, 84, page_width - 96, 68, 7, fill=1, stroke=0)
-    document.setFillColor(colors.HexColor("#17212B"))
-    document.setFont("Helvetica-Bold", 10)
-    applicable = adoption is None or adoption.get("applicable") is True
-    document.drawString(62, 132, "If approved" if applicable else "Next step")
-    document.setFont("Helvetica", 8)
-    if applicable:
-        document.drawString(
-            62,
-            116,
-            "Adoption adds planned files, runs ./scripts/verify, and previews "
-            "settings.",
-        )
-        document.drawString(
-            62, 101, "It does not apply settings, push, or open a pull request."
-        )
-    else:
-        document.drawString(
-            62, 116, "Do not apply this plan. Resolve the reported gate and"
-        )
-        document.drawString(62, 101, "create a new dry-run plan.")
-    document.setStrokeColor(colors.HexColor("#D5DCE1"))
-    document.line(48, 65, page_width - 48, 65)
-    document.setFillColor(colors.HexColor("#52606D"))
-    document.setFont("Helvetica", 7)
-    document.drawString(48, 50, "Generated by csarc adopt --dry-run")
-    document.drawRightString(page_width - 48, 50, "Page 1 of 1")
-    document.showPage()
-    document.save()
 
 
 def adoption_report_directory(target: Path, requested: Path | None) -> Path:
@@ -1782,18 +1742,42 @@ def code_owner_verification(
     }
 
 
+def mark_adoption_applied(plan: ResolvedPlan, applied_at: str) -> ResolvedPlan:
+    """Return a copy of one adoption plan tagged with its applied state.
+
+    Formal adoption must update the same adoption report in place once it
+    completes, recording both the pre-adoption (dry-run) and post-adoption
+    state (#529). The report's detailed Markdown format is rendered by
+    ``adoption_report_markdown`` (#530); this only tags the existing plan
+    so that renderer can record that the plan was actually applied, and
+    when.
+    """
+    if plan.adoption is None:
+        raise CliError("Adoption report requires target state.")
+    adoption = dict(plan.adoption)
+    adoption["applied"] = True
+    adoption["applied_at"] = applied_at
+    return replace(plan, adoption=adoption)
+
+
 def write_adoption_reports(
     plan: ResolvedPlan,
     requested_directory: Path | None,
     *,
     emit: bool = True,
-) -> tuple[Path, Path, Path]:
-    """Atomically replace the latest adoption reports outside the repo."""
+) -> tuple[Path, Path]:
+    """Atomically replace the latest adoption Markdown report and plan.
+
+    Dry-run and the post-apply update that follows (adopt --apply-plan,
+    adopt --finalize --apply-plan) both call this on the same report
+    directory and basename, so the applied state is recorded in place in
+    the same versioned Markdown file rather than a separate artifact
+    (#529, #530).
+    """
     if plan.files is None or plan.adoption is None:
         raise CliError("Adoption report requires file and target state.")
     directory = adoption_report_directory(plan.target, requested_directory)
     markdown_path = directory / f"{ADOPTION_REPORT_BASENAME}.md"
-    pdf_path = directory / f"{ADOPTION_REPORT_BASENAME}.pdf"
     plan_path = directory / ADOPTION_PLAN_BASENAME
     directory.mkdir(parents=True, exist_ok=True)
     generated_at = str(plan.adoption["generated_at"])
@@ -1814,43 +1798,10 @@ def write_adoption_reports(
         json.dumps(adoption_plan_payload(plan), indent=2, sort_keys=True)
         + "\n",
     )
-    pdf_path.unlink(missing_ok=True)
-    pdf_temporary: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="wb",
-            dir=directory,
-            prefix=f".{pdf_path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as pdf:
-            pdf_temporary = Path(pdf.name)
-            draw_adoption_pdf(
-                cast(BinaryIO, pdf),
-                plan.target,
-                plan.revision,
-                plan.repository,
-                plan.answers,
-                plan.files,
-                generated_at,
-                plan.adoption,
-            )
-            pdf.flush()
-        pdf_temporary.replace(pdf_path)
-    except Exception as error:
-        if pdf_temporary is not None:
-            pdf_temporary.unlink(missing_ok=True)
-        print(
-            "WARNING: PDF report generation failed; Markdown and the machine "
-            f"plan remain usable at {directory}: {error}",
-            file=sys.stderr,
-        )
     if emit:
         print(f"Markdown report: {markdown_path}")
-        if pdf_path.is_file() and not pdf_path.is_symlink():
-            print(f"PDF report: {pdf_path}")
         print(f"Machine plan: {plan_path}")
-    return markdown_path, pdf_path, plan_path
+    return markdown_path, plan_path
 
 
 def print_group(title: str, paths: tuple[str, ...]) -> None:
@@ -1975,6 +1926,7 @@ def print_plan(plan: ResolvedPlan) -> None:
     if plan.files is not None:
         print_group("Add", plan.files.add)
         print_group("Overwrite", plan.files.overwrite)
+        print_group("Remove", plan.files.remove)
         print_group("Preserve", plan.files.preserve)
         print_group("Automatic merge", plan.files.merge)
         print_group("Manual merge", plan.files.manual)
@@ -2242,6 +2194,7 @@ def candidate_effects(
         Plan(
             tuple(sorted(additions)),
             tuple(sorted(overwrites)),
+            planned.remove,
             planned.preserve,
             tuple(sorted(merges)),
             planned.manual,
@@ -3531,8 +3484,6 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         raise CliError(
             "adopt --finalize cannot combine --apply-plan and --dry-run."
         )
-    if args.report_dir is not None and not args.dry_run:
-        raise CliError("--report-dir requires adopt --finalize --dry-run.")
     if args.json and not args.dry_run:
         raise CliError("--json requires --dry-run for adopt --finalize.")
     if args.json and args.report_dir is not None:
@@ -3745,7 +3696,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         effects, artifacts = candidate_effects(
             candidate,
             target,
-            Plan((), (), (), (), (), ()),
+            Plan((), (), (), (), (), (), ()),
         )
         head, changes, status_sha256 = target_state(target)
         target_files = target_file_snapshot(target)
@@ -3823,6 +3774,13 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         )
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
+    write_adoption_reports(
+        mark_adoption_applied(
+            plan, datetime.now(UTC).replace(microsecond=0).isoformat()
+        ),
+        args.report_dir,
+        emit=not args.json,
+    )
     print("Adoption complete.")
     return 0
 
@@ -3840,6 +3798,7 @@ def predicted_adoption_effects(target: Path, planned: Plan) -> Plan:
     return Plan(
         tuple(sorted(additions)),
         planned.overwrite,
+        planned.remove,
         planned.preserve,
         planned.merge,
         planned.manual,
@@ -3932,10 +3891,9 @@ def command_apply_adoption_plan(  # noqa: C901
     args: argparse.Namespace, target: Path
 ) -> int:
     """Rebuild, verify, and apply exactly one saved adoption plan."""
-    if args.dry_run or args.report_dir is not None or args.json:
+    if args.dry_run or args.json:
         raise CliError(
-            "--apply-plan cannot be combined with --dry-run, --report-dir, "
-            "or --json."
+            "--apply-plan cannot be combined with --dry-run or --json."
         )
     if any((args.source, args.to, args.expected_sha, args.allow_unreleased)):
         raise CliError(
@@ -4070,6 +4028,13 @@ def command_apply_adoption_plan(  # noqa: C901
         return 1
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
+    write_adoption_reports(
+        mark_adoption_applied(
+            fresh, datetime.now(UTC).replace(microsecond=0).isoformat()
+        ),
+        args.report_dir,
+        emit=not args.json,
+    )
     print("Adoption complete.")
     return 0
 
@@ -4349,6 +4314,187 @@ def update_status(
         "update_available": previous_revision.sha != target_revision.sha,
     }
     return status, target_revision, previous
+
+
+def repository_target_is_new(target: Path) -> bool:
+    """Return whether a target is unwritten: missing or an empty directory.
+
+    Mirrors the `init` scope check in `validate_copy_target` so the two
+    functions never disagree about what counts as a brand-new project.
+    """
+    return not target.exists() or not any(target.iterdir())
+
+
+def run_policy_settings_check(
+    target: Path,
+) -> subprocess.CompletedProcess[str]:
+    """Run one target's own read-only repository policy-drift check."""
+    script = target / "scripts" / "apply-repository-settings.sh"
+    if not script.is_file():
+        return subprocess.CompletedProcess(
+            [str(script), "check"],
+            127,
+            "",
+            "scripts/apply-repository-settings.sh is missing.",
+        )
+    return run([str(script), "check"], cwd=target, capture=True, check=False)
+
+
+def classify_policy_check(
+    result: subprocess.CompletedProcess[str],
+) -> PolicyCheckResult:
+    """Classify one policy-drift check without guessing at ambiguous output.
+
+    `scripts/apply-repository-settings.sh check` either runs its full
+    comparison to completion -- exit 0 for a clean match, or exit 1 with its
+    own `POLICY_CHECK_COMPLETED_MARKER` summary line once it has counted at
+    least one actionable difference -- or it hard-stops early on something
+    it cannot recover from: missing/unauthenticated `gh`, an unidentifiable
+    repository, unreadable repository metadata, a transient or
+    rate-limited `gh api` call (for example its own "Cannot determine
+    Ruleset capability" guard), an unusable invocation, or a missing script.
+    Keying off the script's own completion marker -- rather than
+    enumerating every hard-stop message the script can print -- means any
+    hard-stop path the script has today or gains later is treated as
+    unavailable by default instead of silently being misread as confirmed
+    drift.
+    """
+    output = "\n".join(
+        part for part in (result.stdout, result.stderr) if part
+    ).strip()
+    if result.returncode == 0:
+        return PolicyCheckResult(True, False, output or "no drift detected")
+    if POLICY_CHECK_COMPLETED_MARKER in output:
+        return PolicyCheckResult(True, True, output or "policy drift detected")
+    return PolicyCheckResult(False, None, output or "policy check unavailable")
+
+
+def detect_install_state(
+    target: Path,
+    *,
+    requested: str | None = None,
+    expected_sha: str | None = None,
+    allow_unreleased: bool = False,
+    accept_legacy: bool = False,
+    from_release: str | None = None,
+    client: ReleaseClient | None = None,
+    policy_check: (
+        Callable[[Path], subprocess.CompletedProcess[str]] | None
+    ) = None,
+) -> dict[str, object]:
+    """Deterministically classify a target into one of five install states.
+
+    Reads only `.csarc/config.yml` (or legacy Copier answers), the pinned
+    Copier revision, and `policies/` drift; it never infers a state from
+    free-form judgment, so repeated runs against unchanged repository state
+    always return the same classification. The five states are: `create`
+    (no target yet, or an empty directory), `adopt` (an existing repository
+    without CSARC configuration), `update` (a pinned Copier revision behind
+    the resolved target release), `current` (revision and policy settings
+    both match), and `policy-only-update` (revision matches but the live
+    repository policy settings have drifted from `policies/`).
+    """
+    if repository_target_is_new(target):
+        return {
+            "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_CREATE],
+            "reason": f"{target} does not exist or is an empty directory.",
+            "state": INSTALL_STATE_CREATE,
+        }
+    answers_path = config_path(target)
+    if not answers_path.is_file():
+        return {
+            "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_ADOPT],
+            "reason": (
+                f"{target} has no {CONFIG_FILE}; it is not yet CSARC-managed."
+            ),
+            "state": INSTALL_STATE_ADOPT,
+        }
+    status, _target_revision, _previous = update_status(
+        target,
+        requested,
+        expected_sha=expected_sha,
+        allow_unreleased=allow_unreleased,
+        accept_legacy=accept_legacy,
+        from_release=from_release,
+        client=client,
+    )
+    if status["update_available"]:
+        return {
+            "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_UPDATE],
+            "reason": (
+                f"Copier revision {status['current_sha']} is behind "
+                f"target {status['target_sha']}."
+            ),
+            "state": INSTALL_STATE_UPDATE,
+            "update_status": status,
+        }
+    check_result = (policy_check or run_policy_settings_check)(target)
+    policy = classify_policy_check(check_result)
+    policy_report = {
+        "available": policy.available,
+        "detail": policy.detail,
+        "drifted": policy.drifted,
+    }
+    if not policy.available:
+        return {
+            "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_CURRENT],
+            "policy_check": policy_report,
+            "reason": (
+                "Copier revision is current; repository policy drift could "
+                f"not be checked: {policy.detail}"
+            ),
+            "state": INSTALL_STATE_CURRENT,
+            "update_status": status,
+        }
+    if policy.drifted:
+        return {
+            "next_command": (
+                INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_POLICY_ONLY]
+            ),
+            "policy_check": policy_report,
+            "reason": (
+                "Copier revision is current; repository policy settings "
+                "have drifted from policies/."
+            ),
+            "state": INSTALL_STATE_POLICY_ONLY,
+            "update_status": status,
+        }
+    return {
+        "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_CURRENT],
+        "policy_check": policy_report,
+        "reason": (
+            "Copier revision and repository policy settings are both current."
+        ),
+        "state": INSTALL_STATE_CURRENT,
+        "update_status": status,
+    }
+
+
+def command_status(args: argparse.Namespace) -> int:
+    """Report the deterministic install state without changing anything."""
+    raw_target = args.path.expanduser()
+    target = (
+        raw_target.resolve()
+        if repository_target_is_new(raw_target)
+        else resolve_repository_target(raw_target)
+    )
+    result = detect_install_state(
+        target,
+        requested=args.to,
+        expected_sha=args.expected_sha,
+        allow_unreleased=args.allow_unreleased,
+        accept_legacy=args.accept_legacy,
+        from_release=args.from_release,
+    )
+    result["target"] = str(target)
+    if args.json:
+        print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+    else:
+        print(f"Target: {result['target']}")
+        print(f"Install state: {result['state']}")
+        print(f"Reason: {result['reason']}")
+        print(f"Next: {result['next_command']}")
+    return 0
 
 
 def update_plan_answers(  # noqa: C901
@@ -4750,7 +4896,10 @@ def parser() -> argparse.ArgumentParser:
                 "--report-dir",
                 type=Path,
                 metavar="PATH",
-                help="write dry-run Markdown and PDF reports outside the repo",
+                help=(
+                    "write or update the adoption Markdown report "
+                    "outside the repo (dry-run, then applied)"
+                ),
             )
         add_write_options(subparser)
 
@@ -4769,6 +4918,21 @@ def parser() -> argparse.ArgumentParser:
         "--data", action="append", default=[], metavar="KEY=VALUE"
     )
     add_write_options(update)
+
+    status = subparsers.add_parser(
+        "status",
+        help=(
+            "the one-prompt entry point: deterministically classify a "
+            "repository as create/adopt/update/current/policy-only-update"
+        ),
+    )
+    status.add_argument("path", nargs="?", type=Path, default=Path.cwd())
+    status.add_argument("--to", metavar="RELEASE_OR_SHA")
+    status.add_argument("--expected-sha", metavar="FULL_SHA")
+    status.add_argument("--from-release", metavar="RELEASE")
+    status.add_argument("--accept-legacy", action="store_true")
+    status.add_argument("--allow-unreleased", action="store_true")
+    status.add_argument("--json", action="store_true")
     return result
 
 
@@ -4780,6 +4944,8 @@ def main(arguments: list[str] | None = None) -> int:
             raise CliError("Native Windows is unsupported; run csarc in WSL2.")
         if args.command in {"init", "adopt"}:
             return command_copy(args, args.command)
+        if args.command == "status":
+            return command_status(args)
         if args.json and not args.check:
             raise CliError("--json is only valid with update --check.")
         return command_update(args)

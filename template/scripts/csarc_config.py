@@ -14,6 +14,17 @@ RELEASE_SETTINGS = {
     "product-owned": ("product-admin", "product-defined"),
     "verification-only": ("none", "not-required"),
 }
+# One flat boolean per template-owned policy area a project can opt out of
+# (Issue #532). A key absent from .csarc/config.yml means "on" -- the
+# pre-toggle behavior -- so upgrading an older answers file never silently
+# drops coverage. Immutable Releases has no toggle here: it reuses the
+# existing release_immutable_releases contract instead of a duplicate key.
+POLICY_TOGGLES = (
+    "policy_repository_settings",
+    "policy_actions_permissions",
+    "policy_labels",
+    "policy_branch_ruleset",
+)
 
 
 def _scalar(value: str) -> object:
@@ -135,6 +146,13 @@ def validate_config(
             raise ValueError(f"Duplicate languages in {path}")
 
     validate_release_config(config)
+
+    for toggle in POLICY_TOGGLES:
+        value = config.get(toggle)
+        if value is not None and not isinstance(value, bool):
+            raise ValueError(
+                f"Invalid {toggle} in {path}: {value!r}; expected true or false"
+            )
 
     threshold = config.get("coverage_threshold")
     if threshold is not None and (

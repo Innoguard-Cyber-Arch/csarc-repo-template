@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (($# > 1)) || { (($# == 1)) && [[ "$1" != "--check" ]]; }; then
+  printf 'Usage: scripts/build-repo-site [--check]\n' >&2
+  exit 2
+fi
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Issue #681 decision N: this repo-site engine replaces the retired
+# docs/site-content.md handbook renderer. A repository generated before
+# this change keeps that file (project-owned, never silently deleted), but
+# it is no longer read by anything -- port anything worth keeping into
+# site/content/_index.zh-tw.md / _index.en.md (see site/README.md), then
+# remove docs/site-content.md once its content has a new home.
+if [[ -f "$repo_root/docs/site-content.md" ]]; then
+  printf 'Notice: docs/site-content.md is no longer used by the repo-site build.\n' >&2
+  printf '  Port anything worth keeping into site/content/_index.zh-tw.md / _index.en.md,\n' >&2
+  printf '  then remove docs/site-content.md.\n' >&2
+fi
+
+python3 "$repo_root/scripts/check-repo-site-navigation"
+python3 "$repo_root/scripts/check-repo-site-versions"
+python3 "$repo_root/scripts/check-repo-site-translations"
+
+build_dir="$repo_root/dist/repo-site"
+python3 "$repo_root/scripts/build_repo_site.py" \
+  --root "$repo_root" \
+  --output-dir "$build_dir" \
+  --theme-href docs/site-theme.css
+
+sources=("$build_dir/index.html" "$build_dir/index.en.html")
+outputs=(docs/index.html docs/index.en.html)
+
+for index in 0 1; do
+  render_args=(
+    --root "$repo_root"
+    --source "${sources[$index]}"
+    --output "${outputs[$index]}"
+  )
+  if (($# == 1)); then
+    render_args+=(--check)
+  fi
+  python3 "$repo_root/scripts/render_site.py" "${render_args[@]}"
+done
+
+printf 'Repo site: %s, %s\n' \
+  "$repo_root/${outputs[0]}" "$repo_root/${outputs[1]}"

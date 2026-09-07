@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression test for scripts/check-scope-gate (Issue #632): proves the
+# pr-policy.yml integration point -- resolve the linked work Issue from
+# the pull request body, then evaluate scope_decision() for it -- behaves
+# correctly end to end against a stubbed `gh`, entirely locally, for the
+# three outcomes the workflow step depends on: no closing Issue reference
+# (skip), a scope-expanded Issue with no independent approval (blocked),
+# and one that is either not scope-expanded or already approved (allowed).
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+cd "$repo_root"
+gate="$repo_root/scripts/check-scope-gate"
+fixture="$(mktemp -d)"
+trap 'rm -rf "$fixture"' EXIT
+case_count=0
+
+cat >"$fixture/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$#" -eq 2 && "$1" == "api" && "$2" == "repos/$GITHUB_REPOSITORY/issues/$SCOPE_GATE_ISSUE_NUMBER" ]]; then
+  jq -cn \
+    --arg body "${SCOPE_GATE_ISSUE_BODY:-}" \
+    --arg updated_at "${SCOPE_GATE_ISSUE_UPDATED_AT:-2026-01-01T00:00:00Z}" \
+    --argjson number "$SCOPE_GATE_ISSUE_NUMBER" \
+    '{number: $number, body: $body, user: {login: "worker", type: "User"}, updated_at: $updated_at}'
+  exit 0
+fi
+
+if [[ "$*" == *"/issues/$SCOPE_GATE_ISSUE_NUMBER/comments"* ]]; then
+  printf '%s' "${SCOPE_GATE_COMMENTS_JSON:-[]}"
+  exit 0
+fi
+
+echo "unexpected gh invocation: $*" >&2
+exit 1
+SH
+chmod +x "$fixture/gh"
+
+export PATH="$fixture:$PATH"
+export GITHUB_REPOSITORY="acme/project"
+
+IN_SCOPE_BODY='## Acceptance criteria
+
+- [ ] Ship the retry queue.'
+EXPANDED_BODY='## Acceptance criteria
+
+- [ ] Ship the retry queue.
+
+Tracker scope: expanded
+
+Also touches the dead-letter queue.'
+
+# Case 1: no closing Issue reference at all -- a silent, passing no-op
+# (release automation, dependabot, a main-sync bridge all reach this
+# script with no linked work Issue).
+case_count=$((case_count + 1))
+if ! output="$(PR_BODY="No closing keyword here." "$gate" 2>&1)"; then
+  echo "check-scope-gate blocked a pull request with no closing Issue reference."
+  echo "$output"
+  exit 1
+fi
+grep -Fq "does not apply" <<<"$output"
+
+# Case 2: linked Issue has no sentinel -- allowed regardless of comments.
+case_count=$((case_count + 1))
+SCOPE_GATE_ISSUE_NUMBER="101" \
+SCOPE_GATE_ISSUE_BODY="$IN_SCOPE_BODY" \
+PR_BODY="Closes #101" \
+  "$gate" >/dev/null
+
+# Case 3: linked Issue declares scope expansion and has no approval --
+# blocked (fail-closed).
+case_count=$((case_count + 1))
+if SCOPE_GATE_ISSUE_NUMBER="102" \
+  SCOPE_GATE_ISSUE_BODY="$EXPANDED_BODY" \
+  PR_BODY="Closes #102" \
+    "$gate" >/dev/null 2>&1; then
+  echo "check-scope-gate allowed an unapproved scope-expanded Issue through."
+  exit 1
+fi
+
+# Case 4: linked Issue declares scope expansion and has a fresh
+# non-proposer approval -- allowed.
+case_count=$((case_count + 1))
+SCOPE_GATE_ISSUE_NUMBER="103" \
+SCOPE_GATE_ISSUE_BODY="$EXPANDED_BODY" \
+SCOPE_GATE_ISSUE_UPDATED_AT="2026-01-01T00:00:00Z" \
+SCOPE_GATE_COMMENTS_JSON='[{"body":"/milestone approve","html_url":"https://github.com/acme/project/issues/103#issuecomment-1","user":{"login":"reviewer","type":"User"},"created_at":"2026-01-02T00:00:00Z"}]' \
+PR_BODY="Closes #103" \
+  "$gate" >/dev/null
+
+# Case 5: the same approval, but predating a later edit to the Issue --
+# stale, so still blocked (fingerprint-binding, #632).
+case_count=$((case_count + 1))
+if SCOPE_GATE_ISSUE_NUMBER="104" \
+  SCOPE_GATE_ISSUE_BODY="$EXPANDED_BODY" \
+  SCOPE_GATE_ISSUE_UPDATED_AT="2026-01-02T00:00:00Z" \
+  SCOPE_GATE_COMMENTS_JSON='[{"body":"/milestone approve","html_url":"https://github.com/acme/project/issues/104#issuecomment-1","user":{"login":"reviewer","type":"User"},"created_at":"2026-01-01T00:00:00Z"}]' \
+  PR_BODY="Closes #104" \
+    "$gate" >/dev/null 2>&1; then
+  echo "check-scope-gate allowed a stale, edit-invalidated approval through."
+  exit 1
+fi
+
+# Case 6: a Fixes/Resolves keyword resolves the same way as Closes.
+for keyword in Fixes Resolves; do
+  case_count=$((case_count + 1))
+  SCOPE_GATE_ISSUE_NUMBER="105" \
+  SCOPE_GATE_ISSUE_BODY="$IN_SCOPE_BODY" \
+  PR_BODY="$keyword #105" \
+    "$gate" >/dev/null
+done
+
+echo "check-scope-gate cases passed: $case_count"

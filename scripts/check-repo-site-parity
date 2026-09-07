@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""Verify that the Hugo technical view preserves legacy text and images.
+
+`site/legacy/index.html` is a frozen, read-only snapshot of the retired
+Hugo output, kept only to prove the Hugo-to-Python port (Issue #524/#577)
+did not silently drop a slide. Slide *text* is expected to keep evolving
+after that one-time migration, so `--keys-only` (the mode wired into
+ongoing CI by `scripts/build-repo-site`) only checks that every
+legacy slide key still has a matching candidate key -- it does not
+require the text to still match verbatim.
+
+The full text/image comparison (no `--keys-only`) stays manual-only by
+deliberate decision (Issue #590, 2026-09-04): a 2026-09-04 audit of all
+16 drifted slides confirmed every one is normal, intentional content
+evolution after the migration snapshot froze (a privacy-motivated
+rewrite, a new policy subsection, plain-language rewrites, and so on),
+none is an accidental loss. Wiring the full comparison into CI would
+either fail on every routine content edit (false positives) or require
+constantly re-freezing `site/legacy/index.html` to match, which defeats
+its purpose as a fixed migration-integrity snapshot. Run it by hand only
+when specifically auditing for accidental content loss, not as a
+routine check.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from html.parser import HTMLParser
+from pathlib import Path
+
+VOID_ELEMENTS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+}
+SPECIAL_KEYS = {
+    "五月版 SDLC 建議盤點": "bridge",
+    "開源工具選型總覽": "ecosystem",
+    "內部網站存取控制決策": "access-control",
+    "決策附錄核心原則": "principles",
+    "2026-08 外部基準與線上實測比較": "benchmark",
+    "Fleet 治理採用盤點": "fleet-inventory",
+    "Fleet 治理採用門檻": "fleet-governance-thresholds",
+    "Spec Kit 格式決策": "spec-format",
+}
+# Legacy keys deliberately excluded from required candidate parity: the
+# Hugo-to-Python port (Issue #524/#577) intentionally redistributed or
+# re-scoped this content instead of losing it, but the legacy fixture (a
+# frozen, read-only snapshot) still requires an exact key -- see Issue #586.
+RETIRED_LEGACY_KEYS = {
+    "ecosystem": (
+        "tool-selection overview split into the 'files' slide's tool table "
+        "and the 'similar-tools' maintainer appendix"
+    ),
+    "files": (
+        "managed-files-slide table superseded by a richer, actively "
+        "maintained file map (Issue #534)"
+    ),
+    "bridge": (
+        "re-scoped to audience=maintainer; visibility decision pending "
+        "re-audit in Issue #536"
+    ),
+    "contract": (
+        "legacy step-03 slide superseded by new candidate-authored M8 "
+        "content (Issue #533)"
+    ),
+    "template-release": (
+        "legacy step-09 slide superseded by new candidate-authored M8 "
+        "content (Issue #533)"
+    ),
+}
+
+# A legacy key whose slide is still present with the same role and content
+# lineage, just under a new `id`/`data-track` -- unlike RETIRED_LEGACY_KEYS,
+# this is not content loss or redistribution, so the legacy key's slide
+# still counts toward parity; it is just looked up under its new candidate
+# key instead of its own.
+RENAMED_LEGACY_KEYS = {
+    "capability": "index",  # Issue #681/#682: home slide's key clarified
+}
+
+
+class ContentParser(HTMLParser):
+    """Collect normalized slide text and image descriptions."""
+
+    def __init__(self, *, candidate: bool) -> None:
+        super().__init__(convert_charrefs=True)
+        self.candidate = candidate
+        self.stack: list[str] = []
+        self.slide_depth: int | None = None
+        self.legacy_depth: int | None = None
+        self.key: str | None = None
+        self.text: list[str] = []
+        self.images: list[tuple[str, str]] = []
+        self.slides: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {}
+
+    def handle_starttag(
+        self, tag: str, attrs_list: list[tuple[str, str | None]]
+    ) -> None:
+        attrs = dict(attrs_list)
+        classes = set((attrs.get("class") or "").split())
+        if tag not in VOID_ELEMENTS:
+            self.stack.append(tag)
+        if tag == "section" and "slide" in classes and self.slide_depth is None:
+            self.slide_depth = len(self.stack)
+            if self.candidate:
+                # "supplemental": optional maintainer-appendix content with
+                # no legacy predecessor by design (e.g. similar-tools).
+                # "new": a genuinely new slide added after the legacy
+                # fixture was frozen, so it has no predecessor to match
+                # either, even though it is not optional (e.g. languages).
+                self.key = (
+                    None
+                    if attrs.get("data-audience") == "maintainer"
+                    or attrs.get("data-parity") in ("supplemental", "new")
+                    else attrs.get("id")
+                )
+            else:
+                self.key = attrs.get("data-track") or SPECIAL_KEYS.get(
+                    attrs.get("aria-label") or ""
+                )
+        if (
+            self.candidate
+            and self.key
+            and tag == "div"
+            and "legacy-content" in classes
+        ):
+            self.legacy_depth = len(self.stack)
+        if tag == "img" and self._capturing():
+            self.images.append((attrs.get("src") or "", attrs.get("alt") or ""))
+
+    def handle_startendtag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        self.handle_starttag(tag, attrs)
+        if tag not in VOID_ELEMENTS:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        depth = len(self.stack)
+        if self.candidate and tag == "div" and depth == self.legacy_depth:
+            self.legacy_depth = None
+        if tag == "section" and depth == self.slide_depth:
+            if self.key and (not self.candidate or self.text):
+                normalized = " ".join(" ".join(self.text).split())
+                self.slides[self.key] = (normalized, tuple(self.images))
+            self.slide_depth = None
+            self.legacy_depth = None
+            self.key = None
+            self.text = []
+            self.images = []
+        if self.stack:
+            self.stack.pop()
+
+    def handle_data(self, data: str) -> None:
+        if self._capturing() and data.strip():
+            self.text.append(data)
+
+    def _capturing(self) -> bool:
+        return bool(
+            self.key
+            and self.slide_depth is not None
+            and (not self.candidate or self.legacy_depth is not None)
+        )
+
+
+def parse(
+    path: Path, *, candidate: bool
+) -> dict[str, tuple[str, tuple[tuple[str, str], ...]]]:
+    parser = ContentParser(candidate=candidate)
+    parser.feed(path.read_text(encoding="utf-8"))
+    return parser.slides
+
+
+def compare(
+    legacy: dict[str, tuple[str, tuple[tuple[str, str], ...]]],
+    candidate: dict[str, tuple[str, tuple[tuple[str, str], ...]]],
+    *,
+    keys_only: bool,
+) -> list[str]:
+    """Return parity problems between a legacy and a candidate slide map."""
+    # required maps each key the candidate must have back to the legacy
+    # key its content lineage traces to -- the same key, unless
+    # RENAMED_LEGACY_KEYS says the candidate now uses a different one.
+    required = {
+        RENAMED_LEGACY_KEYS.get(key, key): key
+        for key in legacy.keys() - RETIRED_LEGACY_KEYS.keys()
+    }
+    if required.keys() != candidate.keys():
+        missing = sorted(required.keys() - candidate.keys())
+        extra = sorted(candidate.keys() - required.keys())
+        return [
+            f"repo-site slide mismatch; missing={missing}, extra={extra}"
+        ]
+    if keys_only:
+        return []
+    return [
+        f"repo-site content mismatch: {candidate_key}"
+        for candidate_key, legacy_key in sorted(required.items())
+        if legacy[legacy_key] != candidate[candidate_key]
+    ]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--legacy", type=Path, default=Path("site/legacy/index.html")
+    )
+    parser.add_argument(
+        "--candidate", type=Path, default=Path("dist/repo-site/index.html")
+    )
+    parser.add_argument(
+        "--keys-only",
+        action="store_true",
+        help=(
+            "only check that legacy and candidate slide keys match; skip "
+            "the exact-text comparison (see the module docstring and "
+            "Issue #590 for why the text comparison is not a reliable "
+            "ongoing gate)"
+        ),
+    )
+    args = parser.parse_args()
+    try:
+        legacy = parse(args.legacy, candidate=False)
+        candidate = parse(args.candidate, candidate=True)
+    except (OSError, UnicodeError) as error:
+        sys.stderr.write(f"repo-site parity check failed: {error}\n")
+        return 1
+
+    problems = compare(legacy, candidate, keys_only=args.keys_only)
+    if problems:
+        for problem in problems:
+            sys.stderr.write(problem + "\n")
+        return 1
+
+    required_legacy_keys = legacy.keys() - RETIRED_LEGACY_KEYS.keys()
+    image_count = sum(
+        len(value[1])
+        for key, value in legacy.items()
+        if key in required_legacy_keys
+    )
+    unit = "keys" if args.keys_only else "slides"
+    sys.stdout.write(
+        f"Repo-site parity: {len(required_legacy_keys)} {unit}, "
+        f"{image_count} images\n"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

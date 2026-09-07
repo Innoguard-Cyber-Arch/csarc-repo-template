@@ -17,6 +17,17 @@ mkdir -p "$stub_bin"
 call_log="$fixture_root/gh-calls.log"
 cat >"$stub_bin/gh" <<EOF
 #!/usr/bin/env bash
+# Issue #551: intercept scripts/detect-open-milestone's query so its
+# result is controllable per case via OPEN_MILESTONES_JSON, without
+# disturbing the plain call-logging every other case below relies on
+# (OPEN_MILESTONES_JSON defaults to "[]" -- zero open Milestones -- so
+# cases that never set it see no detected Milestone, exactly like today).
+case "\$*" in
+  *"/milestones -f state=open"*)
+    printf '%s' "\${OPEN_MILESTONES_JSON:-[]}"
+    exit 0
+    ;;
+esac
 printf '%s\n' "\$@" >"$call_log"
 EOF
 chmod +x "$stub_bin/gh"
@@ -121,4 +132,66 @@ no_title_args=("${logged_args[@]}")
 [[ "${no_title_args[2]}" == "--body" ]]
 [[ "${no_title_args[3]}" == "no title given" ]]
 
-echo "gh-issue-create cases passed: 5"
+
+# Case 6 (Issue #551): --milestone already given -- even though exactly
+# one open Milestone exists, the wrapper must not consult
+# scripts/detect-open-milestone at all, must print no notice, and must
+# pass every argument through completely unchanged (no duplicate
+# --milestone appended).
+: >"$call_log"
+milestone_given_out="$(
+  OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9: Decision site and adoption experience overhaul"}]' \
+    run_with_stub --title "$title_arg" --body desc --milestone M8 2>&1
+)"
+if grep -Fq 'One open Milestone is currently active' <<<"$milestone_given_out"; then
+  echo "gh-issue-create printed a Milestone notice even though --milestone was already given."
+  exit 1
+fi
+read_logged_args
+milestone_given_expected=(issue create --title "$title_arg" --body desc --milestone M8)
+[[ "${#logged_args[@]}" -eq "${#milestone_given_expected[@]}" ]]
+for idx in "${!milestone_given_expected[@]}"; do
+  [[ "${logged_args[$idx]}" == "${milestone_given_expected[$idx]}" ]]
+done
+
+# Case 7 (Issue #551): no --milestone, and exactly one open Milestone --
+# the wrapper surfaces it. This test runs non-interactively (stdin is not
+# a terminal), so it must only print a notice and still create the Issue
+# with the original arguments, never block and never auto-inject
+# --milestone on the caller's behalf.
+: >"$call_log"
+one_open_out="$(
+  OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9: Decision site and adoption experience overhaul"}]' \
+    run_with_stub --title "$title_arg" --body desc 2>&1
+)"
+grep -Fq 'One open Milestone is currently active: #9 Milestone 9: Decision site and adoption experience overhaul' <<<"$one_open_out"
+grep -Fq 'Not attached automatically (non-interactive)' <<<"$one_open_out"
+read_logged_args
+one_open_expected=(issue create --title "$title_arg" --body desc)
+[[ "${#logged_args[@]}" -eq "${#one_open_expected[@]}" ]]
+for idx in "${!one_open_expected[@]}"; do
+  [[ "${logged_args[$idx]}" == "${one_open_expected[$idx]}" ]]
+done
+
+# Case 8 (Issue #551): zero open Milestones -- nothing to suggest, no
+# notice, silent passthrough (the default OPEN_MILESTONES_JSON="[]").
+: >"$call_log"
+zero_open_out="$(run_with_stub --title "$title_arg" --body desc 2>&1)"
+if grep -Fq 'One open Milestone is currently active' <<<"$zero_open_out"; then
+  echo "gh-issue-create printed a Milestone notice with zero open Milestones."
+  exit 1
+fi
+
+# Case 9 (Issue #551): two open Milestones -- ambiguous, treated the same
+# as zero rather than guessing which one applies.
+: >"$call_log"
+two_open_out="$(
+  OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9"},{"number":12,"title":"Research"}]' \
+    run_with_stub --title "$title_arg" --body desc 2>&1
+)"
+if grep -Fq 'One open Milestone is currently active' <<<"$two_open_out"; then
+  echo "gh-issue-create printed a Milestone notice with two open Milestones."
+  exit 1
+fi
+
+echo "gh-issue-create cases passed: 9"

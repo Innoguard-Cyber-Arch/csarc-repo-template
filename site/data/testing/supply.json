@@ -1,0 +1,223 @@
+{
+  "key": "supply",
+  "code": "05",
+  "labels": {
+    "zh-tw": {
+      "title": "依賴安全",
+      "heading": "步驟 05／依賴安全",
+      "scope": "依賴異動先重現鎖檔安裝；已知漏洞只在依賴變更與交付候選加跑，週期掃描另補沒有 PR 的時段。"
+    },
+    "en": {
+      "title": "Dependency security",
+      "heading": "Step 05 / Dependency security",
+      "scope": "Dependency changes first reproduce the locked install. Vulnerability checks run for dependency changes and delivery candidates, while a schedule covers periods without PRs."
+    }
+  },
+  "rows": [
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "鎖定版本可重現安裝",
+          "description": "依 lockfile 安裝，拒絕未記錄的解析結果；TypeScript 另執行三天觀察期與發布者 trust policy。"
+        },
+        "en": {
+          "title": "Reproduce the locked dependency set",
+          "description": "Install from the lockfile and reject unrecorded resolution. TypeScript also enforces a three-day observation window and publisher trust policy."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/verify-fast"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "依賴檔案變更的 Issue PR",
+                "en": "Issue PR changing dependency files"
+              },
+              "timeout": "30 min"
+            }
+          ]
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/verify"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "交付 PR／merge group／手動完整驗證",
+                "en": "Delivery PR, merge group, or manual full verification"
+              },
+              "timeout": "30 min"
+            }
+          ]
+        }
+      },
+      "templateOnly": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/verify-fast"
+            }
+          ],
+          "note": {
+            "zh-tw": "依賴設定變更時，額外產生一個代表性 repo 驗證生成結果。",
+            "en": "A dependency-setting change also generates one representative repository to verify the rendered result."
+          }
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/verify-template.sh"
+            }
+          ],
+          "note": {
+            "zh-tw": "完整測試所有 profile 的生成與鎖檔契約。",
+            "en": "Fully tests generated profiles and their lockfile contract."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "一般更新自動提出 PR",
+          "description": "Dependabot 依生態圈分組更新，一般新版等三天；安全修補不套用等待期。"
+        },
+        "en": {
+          "title": "Open routine update PRs",
+          "description": "Dependabot groups updates by ecosystem and waits three days for ordinary releases without delaying security fixes."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": ".github/dependabot.yml"
+            }
+          ],
+          "automationNote": {
+            "zh-tw": "每週依生態圈提出更新 PR；建立的 PR 仍走同一個 CI job。",
+            "en": "Opens weekly update PRs by ecosystem; generated PRs still use the same CI job."
+          }
+        }
+      },
+      "templateOnly": {
+        "release": {
+          "files": [
+            {
+              "path": "tests/test_dependency_security.py"
+            }
+          ],
+          "note": {
+            "zh-tw": "確認不同 profile 只生成適用的更新生態圈。",
+            "en": "Confirms that each profile emits only its applicable update ecosystems."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "已公開漏洞立即檢查",
+          "description": "依賴檔案變更與交付候選使用同一個 OSV 本機入口；每週排程補上沒有 PR 的期間。"
+        },
+        "en": {
+          "title": "Check disclosed vulnerabilities immediately",
+          "description": "Dependency changes and delivery candidates share one local OSV entrypoint; a weekly schedule covers periods without PRs."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/verify-dependencies"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "依賴檔案變更的 Issue PR",
+                "en": "Issue PR changing dependency files"
+              },
+              "timeout": "30 min"
+            }
+          ]
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/verify-dependencies"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "交付 PR／merge group／手動完整驗證",
+                "en": "Delivery PR, merge group, or manual full verification"
+              },
+              "timeout": "30 min"
+            },
+            {
+              "path": ".github/workflows/osv.yml",
+              "job": "scan",
+              "trigger": {
+                "zh-tw": "每週一／手動掃描",
+                "en": "Weekly Monday or manual scan"
+              },
+              "timeout": "10 min"
+            }
+          ],
+          "automationNote": {
+            "zh-tw": "每週與手動掃描另由薄 workflow 呼叫同一入口，不複製掃描邏輯。",
+            "en": "A thin weekly and manual workflow calls the same entrypoint without duplicating scanning logic."
+          }
+        }
+      },
+      "templateOnly": {}
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "發版成品清冊與雜湊",
+          "description": "從精確 tag 的真正成品建立 SPDX SBOM、checksum 與相互綁定的證據。"
+        },
+        "en": {
+          "title": "Release inventory and digests",
+          "description": "Build an SPDX SBOM, checksums, and mutually bound evidence from the real artifacts at the exact tag."
+        }
+      },
+      "shared": {
+        "release": {
+          "files": [
+            {
+              "path": "scripts/release_assets.py"
+            },
+            {
+              "path": "tests/test_release_assets.py"
+            }
+          ],
+          "automationNote": {
+            "zh-tw": "依賴安全擁有 SBOM 規格與驗證；真正成品出現時由發版流程觸發，但不把責任移到「版本／交付」。",
+            "en": "Dependency security owns the SBOM contract and validation. The release flow triggers it when real artifacts exist without taking ownership of the rule."
+          }
+        }
+      },
+      "templateOnly": {}
+    }
+  ]
+}

@@ -18,6 +18,13 @@ export PR_HEAD_REPOSITORY="acme/project"
 export PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 export PR_NUMBER="41"
 export PR_POLICY_FIXTURE=true
+# Issue #551: scripts/validate-pr-policy's non-blocking Milestone-safeguard
+# reminder calls `gh issue comment`; capture those calls here (append-mode,
+# cleared per case below) instead of the generic overwrite-based logging
+# the stub below uses for everything else, so a case can assert both
+# whether a comment was posted and, if so, what it said.
+export PR_COMMENT_CALLS_LOG="$fixture/comment-calls.log"
+: > "$PR_COMMENT_CALLS_LOG"
 
 release_component="$(
   python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["packages"]["."]["component"])' \
@@ -97,6 +104,27 @@ if [[ "$*" == *"closingIssuesReferences"* ]]; then
     *) exit 2 ;;
   esac
   exit 0
+fi
+
+if [[ "$*" == "api --method GET repos/$GITHUB_REPOSITORY/milestones -f state=open" ]]; then
+  printf '%s' "${PR_OPEN_MILESTONES_JSON:-[]}"
+  exit 0
+fi
+
+if [[ "$*" == *"/issues/$PR_NUMBER/comments"* ]]; then
+  if [[ "${PR_COMMENT_LIST_STATE:-valid}" == "api-error" ]]; then
+    exit 1
+  fi
+  printf '%s' "${PR_EXISTING_COMMENT_BODIES_JSON:-[]}"
+  exit 0
+fi
+
+if [[ "$1 $2" == "issue comment" ]]; then
+  printf '%s\n' "$*" >> "$PR_COMMENT_CALLS_LOG"
+  case "${PR_COMMENT_POST_STATE:-valid}" in
+    api-error) exit 1 ;;
+    *) exit 0 ;;
+  esac
 fi
 
 case "$*" in
@@ -524,6 +552,78 @@ if PR_BRANCH_STRATEGY="main" \
   echo "PR policy accepted a Milestone that differs from the linked Issue."
   exit 1
 fi
+
+# Issue #551: neither this pull request nor its linked Issue has a
+# Milestone (the mismatch check above cannot catch "both silently
+# unset"), and exactly one Milestone is currently open -- a non-blocking
+# reminder comment is posted once, carrying the marker used for
+# idempotency, and the check itself still passes.
+milestone_safeguard_fixture=(
+  PR_BRANCH_STRATEGY="main"
+  PR_NUMBER="41"
+  PR_TITLE="feat(api): finish work without a milestone"
+  PR_LABELS="enhancement"
+  PR_BASE="main"
+  PR_HEAD="feat/301-active-work"
+  PR_BODY="Closes #301"
+  PR_ISSUE_STATE="open"
+  PR_ISSUE_TITLE="Add verified report workflow"
+  PR_CLOSING_ISSUES_JSON=""
+)
+
+case_count=$((case_count + 1))
+: > "$PR_COMMENT_CALLS_LOG"
+env "${milestone_safeguard_fixture[@]}" \
+  PR_OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9: Decision site and adoption experience overhaul"}]' \
+  "$validator" >/dev/null
+grep -Fq 'csarc-milestone-safeguard:551' "$PR_COMMENT_CALLS_LOG"
+grep -Fq 'Milestone 9: Decision site and adoption experience overhaul' "$PR_COMMENT_CALLS_LOG"
+
+# Idempotency: the same scenario, but a prior reminder comment (carrying
+# the marker) already exists -- no second comment is posted.
+case_count=$((case_count + 1))
+: > "$PR_COMMENT_CALLS_LOG"
+env "${milestone_safeguard_fixture[@]}" \
+  PR_OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9"}]' \
+  PR_EXISTING_COMMENT_BODIES_JSON='["unrelated comment","<!-- csarc-milestone-safeguard:551 -->\nAlready reminded."]' \
+  "$validator" >/dev/null
+[[ ! -s "$PR_COMMENT_CALLS_LOG" ]]
+
+# Zero open Milestones -- nothing to suggest, no comment posted.
+case_count=$((case_count + 1))
+: > "$PR_COMMENT_CALLS_LOG"
+env "${milestone_safeguard_fixture[@]}" "$validator" >/dev/null
+[[ ! -s "$PR_COMMENT_CALLS_LOG" ]]
+
+# Two open Milestones -- ambiguous, treated the same as zero rather than
+# guessing which one applies.
+case_count=$((case_count + 1))
+: > "$PR_COMMENT_CALLS_LOG"
+env "${milestone_safeguard_fixture[@]}" \
+  PR_OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9"},{"number":12,"title":"Research"}]' \
+  "$validator" >/dev/null
+[[ ! -s "$PR_COMMENT_CALLS_LOG" ]]
+
+# Posting the reminder itself fails (e.g. a transient API error) --
+# still non-blocking; the check must still exit 0.
+case_count=$((case_count + 1))
+: > "$PR_COMMENT_CALLS_LOG"
+env "${milestone_safeguard_fixture[@]}" \
+  PR_OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9"}]' \
+  PR_COMMENT_POST_STATE="api-error" \
+  "$validator" >/dev/null
+
+# Listing existing comments (the idempotency check) fails -- also
+# non-blocking. This locks in a real bug found during development: a
+# bare `var="$(cmd)"` assignment is not exempt from `set -e` the way an
+# `if`/`&&` condition is, so an earlier version of this safeguard aborted
+# the entire policy check on a transient comments-listing failure.
+case_count=$((case_count + 1))
+: > "$PR_COMMENT_CALLS_LOG"
+env "${milestone_safeguard_fixture[@]}" \
+  PR_OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9"}]' \
+  PR_COMMENT_LIST_STATE="api-error" \
+  "$validator" >/dev/null
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \

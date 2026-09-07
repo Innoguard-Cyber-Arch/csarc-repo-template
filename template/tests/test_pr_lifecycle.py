@@ -583,6 +583,40 @@ urllib.request.Request("https://api.github.com/repos/o/r/issues/42")
     assert not writer_violations(source)
 
 
+def test_writer_scanner_allows_the_shipped_pr_policy_validator() -> None:
+    """The real validator must never trip its own writer scan.
+
+    scripts/validate-pr-policy's non-blocking Milestone reminder comment
+    (Issue #551) once quoted a literal `gh api ... --method PATCH` /
+    `gh issue edit --milestone` example as human guidance. writer_violations
+    cannot distinguish that quoted example from an actual unleased write, so
+    every downstream project's own scripts/verify (rendered from
+    template/scripts/verify.jinja, which runs `pr_lifecycle.py scan-writers`)
+    failed before its configured verification hook ever ran -- this was only
+    ever caught by the full-tier, real-template adoption tests. Regression
+    coverage for Issue #645: scan the exact shipped files directly so a
+    reintroduced literal example fails fast, without needing a real render.
+    """
+    root = Path(__file__).resolve().parents[1]
+    relative_paths = (
+        "scripts/validate-pr-policy",
+        "template/scripts/validate-pr-policy",
+    )
+    for relative in relative_paths:
+        candidate = root / relative
+        if not candidate.is_file():
+            # A generated/adopted project's own copy of this paired test
+            # file has no "template/" tree at all -- only the meta-repo
+            # that produces generated projects does. Skip a path this
+            # repository genuinely does not have instead of failing closed
+            # on a layout difference the test never intended to assert on
+            # (same established pattern as the dependabot-auto-merge writer
+            # scan test below).
+            continue
+        text = candidate.read_text(encoding="utf-8")
+        assert writer_violations(text) == [], relative
+
+
 def test_writer_scanner_covers_root_and_template_automation(
     tmp_path: Path,
 ) -> None:

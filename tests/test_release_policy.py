@@ -18,6 +18,7 @@ aggregate_release_boundaries = MODULE["aggregate_release_boundaries"]
 bump_version = MODULE["bump_version"]
 classify_probe = MODULE["classify_probe"]
 detect_runtime_capabilities = MODULE["detect_runtime_capabilities"]
+main = MODULE["main"]
 prepare_release_candidate = MODULE["prepare_release_candidate"]
 preflight_capabilities = MODULE["preflight_capabilities"]
 preflight_policy_observations = MODULE["preflight_policy_observations"]
@@ -459,6 +460,50 @@ def test_cli_preflight_separates_policy_from_token_permission(
         "unknown"
     )
     assert payload["effective"]["mode"] == "blocked"
+
+
+def test_cli_preflight_includes_advisory_repo_hygiene_report(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The `preflight` CLI command surfaces Issue #667's stale-branch
+    review list as advisory output, reusing the same detection module the
+    Milestone preflight subcommand calls, without affecting the existing
+    capability `mode`/`reason` decision."""
+    monkeypatch.setattr(MODULE["shutil"], "which", lambda _: None)
+    canned = {
+        "available": True,
+        "reason": None,
+        "threshold_days": 30,
+        "candidates": [
+            {
+                "name": "fix/441-delivery-manual-contract",
+                "last_commit_sha": "a" * 40,
+                "last_commit_date": "2026-07-01T00:00:00Z",
+                "days_idle": 65,
+            }
+        ],
+        "summary": (
+            "1 stale delivery branch candidate(s) for manual review "
+            "(no open PR, idle >= 30d): "
+            "fix/441-delivery-manual-contract (65d idle). Not deleted "
+            "automatically -- confirm each is truly abandoned before "
+            "removing it."
+        ),
+    }
+    calls: list[str] = []
+    monkeypatch.setattr(
+        MODULE["stale_branch_detection"],
+        "stale_branch_report",
+        lambda repo, **kwargs: (calls.append(repo), canned)[1],
+    )
+
+    exit_code = main(["preflight", "--repo", "acme/project"])
+
+    assert exit_code == 0
+    assert calls == ["acme/project"]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["repo_hygiene"] == canned
+    assert payload["mode"] in {"automatic", "guided", "blocked"}
 
 
 @pytest.mark.parametrize("status", [403, 409])

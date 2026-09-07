@@ -42,6 +42,8 @@ def repository(tmp_path: Path) -> Path:
     (root / "scripts").mkdir(parents=True)
     shutil.copy2(ROOT / "scripts/release_bundle.py", root / "scripts")
     shutil.copy2(ROOT / "scripts/release_policy.py", root / "scripts")
+    # release_policy.py imports this module (Issue #667) at load time.
+    shutil.copy2(ROOT / "scripts/stale_branch_detection.py", root / "scripts")
     (root / "release-please-config.json").write_text(
         json.dumps(
             {

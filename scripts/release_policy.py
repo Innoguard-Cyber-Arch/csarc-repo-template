@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import tomllib
 import urllib.error
@@ -18,6 +20,14 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    stale_branch_detection = importlib.import_module("stale_branch_detection")
+else:
+    stale_branch_detection = importlib.import_module(
+        f"{__package__}.stale_branch_detection"
+    )
 
 STATES = {"allowed", "blocked", "unknown"}
 SEMVER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
@@ -1766,6 +1776,14 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
                 "cli-preflight",
                 policies=policies,
                 integrations=optional_integration_preflight(args.repo),
+                # Issue #667: advisory, non-blocking repo-hygiene review
+                # list -- never affects `mode`/`reason` above, and a
+                # transport failure degrades to "available": False rather
+                # than raising. See stale_branch_detection's module
+                # docstring for what this does and does not catch.
+                repo_hygiene=stale_branch_detection.stale_branch_report(
+                    args.repo
+                ),
             ),
             None,
             None,

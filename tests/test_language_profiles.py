@@ -382,3 +382,120 @@ def test_disabling_codeql_omits_the_workflow(tmp_path: Path) -> None:
     )
 
     assert not (project / ".github/workflows/codeql.yml").exists()
+
+
+def test_enable_docker_generates_container_starter_files(
+    tmp_path: Path,
+) -> None:
+    """Prove enable_docker=true renders a usable Dockerfile, compose file,
+    and an opt-in, registry-free build-and-scan CI workflow (#554).
+
+    Direction 1 (opt-in Dockerfile/docker-compose template) and direction 2
+    (opt-in CI build-and-scan job) were both selected for downstream
+    projects that are or want to be containerized, without reopening the
+    "no pre-provisioned container job for every repo" boundary recorded in
+    docs/adr/selective-ci-automation-adoption.md: the workflow only exists
+    when a project opts in, and it never authenticates to or pushes to any
+    registry.
+    """
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "docker-fixture"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": ["python"],
+            "project_name": "Docker Fixture",
+            "project_slug": "docker-fixture",
+            "project_description": "Exercises the Docker option generator.",
+            "repository_url": "https://github.com/example/docker-fixture",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "private",
+            "enable_docker": True,
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+    )
+
+    dockerfile = project / "Dockerfile"
+    compose = project / "docker-compose.yml"
+    workflow_path = project / ".github/workflows/docker-build-scan.yml"
+    assert dockerfile.is_file()
+    assert compose.is_file()
+    assert workflow_path.is_file()
+
+    dockerfile_text = dockerfile.read_text(encoding="utf-8")
+    assert "{%" not in dockerfile_text
+    assert "FROM python:3.14-slim AS python-build" in dockerfile_text
+    assert "FROM python:3.14-slim AS runtime" in dockerfile_text
+    # Only the selected language's build stage is present.
+    assert "typescript-build" not in dockerfile_text
+    assert "rust-build" not in dockerfile_text
+
+    compose_text = compose.read_text(encoding="utf-8")
+    assert "{%" not in compose_text
+    compose_doc = yaml.safe_load(compose_text)
+    assert compose_doc["services"]["docker-fixture"]["build"] == "."
+    assert compose_doc["services"]["docker-fixture"]["image"] == (
+        "docker-fixture:local"
+    )
+
+    raw = workflow_path.read_text(encoding="utf-8")
+    assert "{%" not in raw
+    workflow = yaml.safe_load(raw)
+    assert workflow["permissions"] == {"contents": "read"}
+    triggers = workflow.get("on", workflow.get(True))
+    assert "Dockerfile" in triggers["pull_request"]["paths"]
+    assert "workflow_dispatch" in triggers
+
+    job = workflow["jobs"]["build-and-scan"]
+    assert "permissions" not in job  # no job-level permission escalation
+    steps = job["steps"]
+    uses = [step.get("uses") for step in steps]
+    # No registry login step and no push of the built image: the job only
+    # builds locally on the runner and scans that local image.
+    assert not any(str(u).startswith("docker/login-action") for u in uses)
+    assert any(u and u.startswith("docker/build-push-action") for u in uses)
+    assert any(u and u.startswith("aquasecurity/trivy-action") for u in uses)
+    build_step = next(
+        step
+        for step in steps
+        if str(step.get("uses", "")).startswith("docker/build-push-action")
+    )
+    assert build_step["with"]["push"] is False
+
+
+def test_disabling_docker_omits_container_files(tmp_path: Path) -> None:
+    """Keep the exclude-list branch honest when the Docker option stays off:
+    a non-container project must gain no Dockerfile, no compose file, and no
+    triggered CI job (#554)."""
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "no-docker-fixture"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": ["python"],
+            "project_name": "No Docker Fixture",
+            "project_slug": "no-docker-fixture",
+            "project_description": "Exercises the disabled Docker path.",
+            "repository_url": "https://github.com/example/no-docker-fixture",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "private",
+            "enable_docker": False,
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+    )
+
+    assert not (project / "Dockerfile").exists()
+    assert not (project / "docker-compose.yml").exists()
+    assert not (project / ".github/workflows/docker-build-scan.yml").exists()

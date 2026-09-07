@@ -18,6 +18,7 @@ paired_files=(
   .github/ISSUE_TEMPLATE/bug.yml
   .github/ISSUE_TEMPLATE/documentation.yml
   .github/ISSUE_TEMPLATE/feature.yml
+  .github/ISSUE_TEMPLATE/milestone-tracker.yml
   .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/dependabot-auto-merge.yml
   .github/workflows/governance-comment.yml
@@ -27,6 +28,7 @@ paired_files=(
   .github/workflows/spec-to-issue.yml
   .github/workflows/work-item-lifecycle.yml
   policies/actions.json
+  policies/capability-matrix.json
   policies/issue-creation.json
   policies/labels.json
   policies/pages.json
@@ -37,8 +39,15 @@ paired_files=(
   docs/milestone-description.md
   docs/adr/README.md
   scripts/render_site.py
+  scripts/build_repo_site.py
+  scripts/repo_site_blocks.py
+  scripts/check-repo-site-navigation
+  scripts/check-repo-site-translations
+  scripts/check-repo-site-versions
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
+  scripts/check-repo-capabilities
+  scripts/repo_capabilities.py
   scripts/check-release-drift
   scripts/check-verify-attestation
   scripts/request-reviewer
@@ -46,10 +55,12 @@ paired_files=(
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
   scripts/promotion_gate.py
+  scripts/check-scope-gate
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
   scripts/converge-release-tag
   scripts/csarc_config.py
+  scripts/detect-open-milestone
   scripts/install-actionlint
   scripts/install-gitleaks
   scripts/install-osv-scanner
@@ -62,9 +73,12 @@ paired_files=(
   scripts/resolve-cache-root
   scripts/scan-secrets
   scripts/spec_to_issue.py
+  scripts/stale_branch_detection.py
   scripts/sync_milestone_state.py
   scripts/sync_work_item_metadata.py
   scripts/test-apply-repository-settings
+  scripts/test-check-repo-capabilities
+  scripts/test-check-scope-gate
   scripts/test-issue-triage
   scripts/test-pr-policy
   scripts/test-verify-attestation
@@ -85,8 +99,11 @@ paired_files=(
   tests/test_promotion_gate.py
   tests/test_milestone_approval.py
   tests/test_milestone_closure.py
+  tests/test_milestone_scope.py
   tests/test_release_policy.py
   tests/test_release_bundle.py
+  tests/test_repo_capabilities.py
+  tests/test_stale_branch_detection.py
   tests/test_verify_attestation.py
   tests/test_work_item_metadata.py
   tests/test_work_pr_closure.py

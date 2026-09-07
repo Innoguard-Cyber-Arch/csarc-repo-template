@@ -6,13 +6,14 @@ import hashlib
 import json
 import re
 import shlex
+import shutil
 import stat
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 import yaml
-from pypdf import PdfReader
 
 import csarc_cli.cli as cli
 from csarc_cli.cli import CliError, main
@@ -81,6 +82,17 @@ def write_executable(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def copy_tracked_worktree(
+    source: Path, revision: str, destination: Path
+) -> None:
+    """Extract one Git revision's tracked files into a fresh directory."""
+    destination.mkdir(parents=True)
+    archive = destination.parent / f"{destination.name}.tar"
+    run(["git", "archive", "--output", str(archive), revision], source)
+    run(["tar", "-xf", str(archive), "-C", str(destination)], destination)
+    archive.unlink()
 
 
 def make_template(root: Path) -> tuple[Path, str]:
@@ -965,15 +977,14 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     assert not (project / ".copier-answers.yml").exists()
     report_dir = tmp_path / "legacy-product-csarc-adoption-report"
     markdown = report_dir / "csarc-adoption-dry-run.md"
-    pdf = report_dir / "csarc-adoption-dry-run.pdf"
     assert markdown.is_file()
-    assert pdf.is_file()
-    assert "Decision: Review required" in markdown.read_text(encoding="utf-8")
-    reader = PdfReader(pdf)
-    assert len(reader.pages) == 1
-    pdf_text = reader.pages[0].extract_text()
-    assert "Review required" in pdf_text
-    assert "Manual merge" in pdf_text
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
+    report_text = markdown.read_text(encoding="utf-8")
+    assert "Decision: Review required" in report_text
+    assert (
+        f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
+        in report_text
+    )
     assert main([*arguments, "--dry-run"]) == 0
     assert git(project, "status", "--porcelain") == before
     plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
@@ -1531,16 +1542,9 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "Selected release workflow: `.github/workflows/release.yml`" in markdown
     )
     assert "Required release inputs: `version`" in markdown
-    pdf = "\n".join(
-        page.extract_text() or ""
-        for page in PdfReader(
-            plan_path.with_name(f"{cli.ADOPTION_REPORT_BASENAME}.pdf")
-        ).pages
-    )
-    assert "Release workflow" in pdf
-    assert ".github/workflows/release.yml" in pdf
-    assert "Release inputs" in pdf
-    assert "version" in pdf
+    assert not plan_path.with_name(
+        f"{cli.ADOPTION_REPORT_BASENAME}.pdf"
+    ).exists()
 
     assert (
         main(
@@ -1591,6 +1595,129 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert ignore_lines.count(".env") == 1
 
 
+@pytest.mark.large
+def test_real_self_adoption_treats_this_repository_like_any_product(
+    tmp_path: Path,
+) -> None:
+    """Adopt a full copy of this template's own repository with itself.
+
+    Regression coverage for Issue #537 (dogfooding): `csarc adopt` must
+    treat a copy of this template repository's own working tree exactly
+    like any other real, heavily customized existing repository -- with no
+    self-adoption-specific branch, error, or unresolved collision. This is
+    the one case where the Copier template source (`--source ROOT`) and the
+    adoption target both derive from the same repository, so it is also the
+    only fixture that can exercise the self-referential collision the Issue
+    calls out: this repository's own `template/` directory (the Copier
+    template's implementation) is not part of any generated project -- only
+    its contents render, at the destination root, via `_subdirectory:
+    template` -- yet a full self-copy still has a top-level `template/`
+    directory sitting there as ordinary, unmanaged product content.
+    """
+    revision_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "self-adopted-template"
+    copy_tracked_worktree(ROOT, revision_sha, project)
+
+    # This repository hand-authors its own `.csarc/config.yml` to describe
+    # itself as a private, already-existing product (it is not itself
+    # Copier-tracked -- there is no `.copier-answers.yml` and no `_commit`
+    # pin). A genuine not-yet-adopted repository would not carry that file,
+    # so drop it to model a realistic pre-adoption existing repository;
+    # otherwise `adopt` correctly refuses with "already has CSARC
+    # configuration; use csarc update" -- expected behavior, not a bug, but
+    # not the scenario this Issue is verifying.
+    shutil.rmtree(project / ".csarc")
+
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: self-adopted template snapshot")
+
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(ROOT),
+        "--to",
+        revision_sha,
+        "--allow-unreleased",
+        "--data",
+        "language=python",
+        "--data",
+        "security_reporting_channel=Use the synthetic fixture's "
+        "private reporting channel.",
+        "--data",
+        "project_verification_hook=",
+    ]
+    assert main([*arguments, "--dry-run"]) == 0
+    plan_path = (
+        tmp_path
+        / f"{project.name}-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    files = payload["files"]
+
+    # No collision anywhere is left unclassified -- this is the central
+    # claim of #537: self-adoption behaves exactly like adopting any other
+    # real repository, never falling into "Unable to determine".
+    assert files["unknown"] == []
+
+    # The self-referential `template/` collision: every `template/`-prefixed
+    # path in the self-copy lands in the ordinary "preserve" bucket (kept as
+    # product-owned content untouched by the template), never in any other
+    # bucket. No special case is required.
+    template_paths = [
+        name for name in files["preserve"] if name.startswith("template/")
+    ]
+    assert len(template_paths) > 50
+    for bucket_name in ("add", "automatic_merge", "manual_merge", "unknown"):
+        assert not [
+            name for name in files[bucket_name] if name.startswith("template/")
+        ], f"template/ path leaked into {bucket_name!r}: {files[bucket_name]}"
+
+    # Other meta-repository-only paths -- not shipped to any generated
+    # product -- are preserved the same ordinary way, confirming the
+    # `template/` check above is not a special case either.
+    assert "copier.yml" in files["preserve"]
+    assert "profiles/catalog.yaml" in files["preserve"]
+
+    # The standard adoption markers are queued for addition, and the one
+    # fixed-policy automatic merge (AGENTS.md) still applies.
+    assert cli.CONFIG_FILE.as_posix() in files["add"]
+    assert cli.PENDING_ADOPTION_FILE.as_posix() in files["add"]
+    assert "AGENTS.md" in files["automatic_merge"]
+
+    # Run the full two-stage `csarc adopt` entry point through to its
+    # standard "pending manual merge" outcome: this repository's real
+    # content differs from freshly rendered template defaults in the same
+    # ordinary way any customized existing repository's would, so it lands
+    # in the same well-defined "needs human review" state -- not a crash,
+    # not a silent skip, not an early completion special-cased for "this is
+    # the template adopting itself".
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 1
+    )
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+    # Preserved self-referential content -- including the collision this
+    # Issue named explicitly -- is left byte-identical by the write phase.
+    assert (project / "template" / "biome.json").read_bytes() == (
+        ROOT / "template" / "biome.json"
+    ).read_bytes()
+
+
 def test_adoption_report_classifies_unknown_content(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1633,11 +1760,16 @@ def test_adoption_report_classifies_unknown_content(
     assert (
         f"Markdown report: {report_dir / 'csarc-adoption-dry-run.md'}" in output
     )
-    assert f"PDF report: {report_dir / 'csarc-adoption-dry-run.pdf'}" in output
+    assert "PDF report:" not in output
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
     report = (report_dir / "csarc-adoption-dry-run.md").read_text(
         encoding="utf-8"
     )
     assert "Decision: Unable to determine" in report
+    assert (
+        f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
+        in report
+    )
     assert "- Repository: `(none)`" in report
     assert "- Repository visibility: `private` (`safe-default`)" in report
     assert f"- Template source: `{source}`" in report
@@ -1652,107 +1784,12 @@ def test_adoption_report_classifies_unknown_content(
     assert "| Preserve | 1 |" in report
     assert "| Manual merge | 2 |" in report
     assert "| Unable to determine | 1 |" in report
-    pdf_text = (
-        PdfReader(report_dir / "csarc-adoption-dry-run.pdf")
-        .pages[0]
-        .extract_text()
-    )
-    assert "Unable to determine" in pdf_text
-    assert "binary.dat" in pdf_text
-    assert "Repository" in pdf_text and "(none)" in pdf_text
-    assert "Visibility" in pdf_text and "private (safe-default)" in pdf_text
-    assert "Template source" in pdf_text
-    placements: list[tuple[str, float, float]] = []
-
-    def record_pdf_text(
-        text: str,
-        _cm: list[float],
-        tm: list[float],
-        _font: dict[str, object] | None,
-        _size: float,
-    ) -> None:
-        if clean := text.strip():
-            placements.append((clean, tm[4], tm[5]))
-
-    PdfReader(report_dir / "csarc-adoption-dry-run.pdf").pages[0].extract_text(
-        visitor_text=record_pdf_text
-    )
-    labels = {
-        "Target",
-        "Repository",
-        "Visibility",
-        "Template source",
-        "Template",
-        "Verification",
-        "Profile",
-        "Project hook",
-        "Hook configured",
-        "Hook result",
-        "Hook reason",
-    }
-    for label, label_x, label_y in (
-        item for item in placements if item[0] in labels
-    ):
-        value, value_x, _ = next(
-            item
-            for item in placements
-            if item[2] == label_y and item[1] > label_x
-        )
-        assert (
-            value_x - label_x - cli.stringWidth(label, "Helvetica-Bold", 8)
-            >= 7.9
-        )
-        assert (
-            value_x + cli.stringWidth(value, "Helvetica", 8) <= cli.A4[0] - 48
-        )
-    assert git(project, "status", "--porcelain") == before
-
-
-@pytest.mark.large
-def test_adoption_report_failure_keeps_markdown(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A PDF failure leaves the useful Markdown report and target untouched."""
-    source, revision = make_template(tmp_path)
-    project = tmp_path / "report-failure-product"
-    project.mkdir()
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    (project / "README.md").write_text("product\n", encoding="utf-8")
-    commit(project, "test: report failure product")
-    report_dir = tmp_path / "failed-report"
-
-    arguments = [
-        "adopt",
-        str(project),
-        "--source",
-        str(source),
-        "--to",
-        revision,
-        "--allow-unreleased",
-        "--dry-run",
-        "--report-dir",
-        str(report_dir),
-    ]
-    assert main(arguments) == 0
-    assert (report_dir / "csarc-adoption-dry-run.pdf").is_file()
-    capsys.readouterr()
-
-    def fail_pdf(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("fixture PDF failure")
-
-    monkeypatch.setattr(cli, "draw_adoption_pdf", fail_pdf)
-    before = git(project, "status", "--porcelain")
-    assert main(arguments) == 0
-    output = capsys.readouterr()
-    assert "machine plan remain usable" in output.err
-    assert "PDF report:" not in output.out
-    assert (report_dir / "csarc-adoption-dry-run.md").is_file()
-    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
-    assert (report_dir / cli.ADOPTION_PLAN_BASENAME).is_file()
+    assert "| Remove | 0 |" in report
+    assert "## Summary of file changes" in report
+    assert "| Edited files | 0 |" in report
+    assert "| Removed files | 0 |" in report
+    assert "## Impact analysis" in report
+    assert "## Items requiring your decision" in report
     assert git(project, "status", "--porcelain") == before
 
 
@@ -1760,7 +1797,6 @@ def test_adoption_report_failure_keeps_markdown(
     "temporary_name",
     [
         f"{cli.ADOPTION_REPORT_BASENAME}.md.tmp",
-        f"{cli.ADOPTION_REPORT_BASENAME}.pdf.tmp",
         cli.ADOPTION_PLAN_BASENAME.replace(".json", ".json.tmp"),
     ],
 )
@@ -1806,12 +1842,12 @@ def test_adoption_reports_ignore_predictable_temporary_symlinks(
     assert planted.is_symlink()
     for name in (
         f"{cli.ADOPTION_REPORT_BASENAME}.md",
-        f"{cli.ADOPTION_REPORT_BASENAME}.pdf",
         cli.ADOPTION_PLAN_BASENAME,
     ):
         output = report_dir / name
         assert output.is_file()
         assert not output.is_symlink()
+    assert not (report_dir / f"{cli.ADOPTION_REPORT_BASENAME}.pdf").exists()
 
 
 def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
@@ -1914,13 +1950,182 @@ def test_adoption_markdown_reports_repository_context(
         cli.resolve_release_answers(
             tmp_path, {"language": "ci", "project_mode": "existing"}
         ),
-        cli.Plan((), (), (), (), (), ()),
+        cli.Plan((), (), (), (), (), (), ()),
         "2026-08-24T00:00:00+00:00",
     )
 
     assert repository_line in report
     assert visibility_line in report
     assert f"- Template source: `{source}`" in report
+
+
+def test_adoption_report_records_template_version(tmp_path: Path) -> None:
+    """Record the report's own independently-versioned template number."""
+    report = cli.adoption_report_markdown(
+        tmp_path,
+        cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
+        cli.RepositoryContext(
+            None, None, None, "private", "safe-default", False
+        ),
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
+        cli.Plan((), (), (), (), (), (), ()),
+        "2026-08-24T00:00:00+00:00",
+    )
+
+    assert (
+        f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
+        in report
+    )
+
+
+def test_readme_displays_adoption_report_template_version() -> None:
+    """Keep README's displayed report version in sync with the constant."""
+    marker = "ADOPTION_REPORT_TEMPLATE_VERSION"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    lines_mentioning_constant = [
+        line for line in readme.splitlines() if marker in line
+    ]
+    assert lines_mentioning_constant, (
+        f"README.md should reference {marker} so a template version bump "
+        "is caught here."
+    )
+    assert any(
+        cli.ADOPTION_REPORT_TEMPLATE_VERSION in line
+        for line in lines_mentioning_constant
+    ), (
+        "README.md's displayed adoption report template version "
+        f"({lines_mentioning_constant}) does not match {marker} "
+        f"({cli.ADOPTION_REPORT_TEMPLATE_VERSION})."
+    )
+
+
+def test_adoption_report_computes_new_edited_removed_counts(
+    tmp_path: Path,
+) -> None:
+    """Verify New/Edited/Removed/Preserved statistics for a simulated plan."""
+    plan = cli.Plan(
+        add=("new-a.txt", "new-b.txt", "new-c.txt"),
+        overwrite=("overwritten.txt",),
+        remove=("gone-a.txt", "gone-b.txt"),
+        preserve=("kept-a.txt", "kept-b.txt", "kept-c.txt", "kept-d.txt"),
+        merge=("AGENTS.md",),
+        manual=("conflict.txt",),
+        unknown=("weird.bin",),
+    )
+    report = cli.adoption_report_markdown(
+        tmp_path,
+        cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
+        cli.RepositoryContext(
+            None, None, None, "private", "safe-default", False
+        ),
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
+        plan,
+        "2026-08-24T00:00:00+00:00",
+    )
+
+    # 3 new, (1 overwrite + 1 automatic merge) = 2 edited, 2 removed.
+    assert "## Summary of file changes" in report
+    assert "| New files | 3 |" in report
+    assert "| Edited files | 2 |" in report
+    assert "| Removed files | 2 |" in report
+    assert "| Preserved files | 4 |" in report
+    assert "## Expected file effects" in report
+    assert "| Add | 3 |" in report
+    assert "| Overwrite | 1 |" in report
+    assert "| Remove | 2 |" in report
+    assert "| Preserve | 4 |" in report
+    assert "| Automatic merge | 1 |" in report
+    assert "| Manual merge | 1 |" in report
+    assert "| Unable to determine | 1 |" in report
+    assert "## Impact analysis" in report
+    assert (
+        "This plan changes 7 file(s) in "
+        f"`{tmp_path}`: 3 new, 2 edited, 2 removed; 4 file(s) stay "
+        "preserved." in report
+    )
+    assert "## Items requiring your decision" in report
+    assert "`conflict.txt` - template and repository contain different" in (
+        report
+    )
+    assert "`weird.bin` - file type, executable bit" in report
+
+
+def test_adoption_report_zero_removed_files_is_explicit(tmp_path: Path) -> None:
+    """Report a real, computed zero rather than omitting removed files."""
+    plan = cli.Plan(
+        add=("new.txt",),
+        overwrite=(),
+        remove=(),
+        preserve=(),
+        merge=(),
+        manual=(),
+        unknown=(),
+    )
+    report = cli.adoption_report_markdown(
+        tmp_path,
+        cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
+        cli.RepositoryContext(
+            None, None, None, "private", "safe-default", False
+        ),
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
+        plan,
+        "2026-08-24T00:00:00+00:00",
+    )
+
+    assert "| New files | 1 |" in report
+    assert "| Edited files | 0 |" in report
+    assert "| Removed files | 0 |" in report
+    assert "| Remove | 0 |" in report
+
+
+def test_adoption_report_lists_codeowner_blocked_as_decision_item(
+    tmp_path: Path,
+) -> None:
+    """Surface a blocked CODEOWNER as an explicit decision, not just prose."""
+    report = cli.adoption_report_markdown(
+        tmp_path,
+        cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
+        cli.RepositoryContext(
+            "owner/repo", "owner", "Organization", "public", "github", True
+        ),
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
+        cli.Plan((), (), (), (), (), (), ()),
+        "2026-08-24T00:00:00+00:00",
+        {
+            "applicable": False,
+            "clean": True,
+            "code_owner": {
+                "reason": "Team is not attached to the target repository.",
+                "state": "blocked",
+                "value": "@owner/missing-team",
+            },
+            "generated_at": "2026-08-24T00:00:00+00:00",
+            "project_verification_hook": {
+                "configured": False,
+                "path": None,
+                "reason": "No project verification hook configured.",
+                "result": "not-run",
+                "source": "none",
+            },
+            "target_changes": [],
+            "target_head": "a" * 40,
+            "verification": "passed",
+        },
+    )
+
+    assert "## Items requiring your decision" in report
+    assert (
+        "- CODEOWNER `@owner/missing-team` verification is `blocked` - "
+        "Team is not attached to the target repository." in report
+    )
 
 
 def test_adopt_help_describes_report_directory(
@@ -2065,8 +2270,7 @@ def test_adopt_rejects_dirty_path_not_classified_as_preserve(
     )
     assert "Decision: Not ready to adopt" in markdown
     assert "Do not apply this plan" in markdown
-    pdf = PdfReader(report_dir / "csarc-adoption-dry-run.pdf")
-    assert "Not ready to adopt" in pdf.pages[0].extract_text()
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
     assert main(["adopt", str(project), "--apply-plan", str(plan)]) == 2
     assert not (project / ".copier-answers.yml").exists()
 
@@ -2383,6 +2587,105 @@ def test_adopt_infers_unicode_repository_and_applies_exact_plan(
         == 0
     )
     assert (project / cli.PROVENANCE_FILE).is_file()
+
+
+def test_adopt_apply_plan_updates_report_to_applied_state(
+    tmp_path: Path,
+) -> None:
+    """Update the same dry-run report in place once adoption is applied."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "applied-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: applied product")
+
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--dry-run",
+    ]
+    assert main(arguments) == 0
+    report_dir = tmp_path / "applied-product-csarc-adoption-report"
+    markdown_path = report_dir / "csarc-adoption-dry-run.md"
+    plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
+    before_markdown = markdown_path.read_text(encoding="utf-8")
+    assert "Decision: Ready to adopt" in before_markdown
+    assert "Adoption applied: `false`" in before_markdown
+    assert "## If you approve" in before_markdown
+    assert "## Adoption applied" not in before_markdown
+    before_payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert "applied" not in before_payload["adoption"]
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+
+    after_markdown = markdown_path.read_text(encoding="utf-8")
+    assert "Decision: Adopted" in after_markdown
+    assert "Adoption applied: `true`" in after_markdown
+    assert "## Adoption applied" in after_markdown
+    assert "## If you approve" not in after_markdown
+    after_payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert after_payload["adoption"]["applied"] is True
+    assert isinstance(after_payload["adoption"]["applied_at"], str)
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
+
+
+def test_adopt_finalize_apply_updates_report_to_applied_state(
+    tmp_path: Path,
+) -> None:
+    """Finalize records the post-adoption state in the same report file."""
+    _, project = initialize_pending_adoption(tmp_path)
+    report_dir = tmp_path / "pending-product-csarc-adoption-report"
+    markdown_path = report_dir / "csarc-adoption-dry-run.md"
+
+    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    before_markdown = markdown_path.read_text(encoding="utf-8")
+    assert "Adoption applied: `false`" in before_markdown
+    assert "## Adoption applied" not in before_markdown
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--apply-plan",
+                str(finalize_plan_path(project)),
+                "--non-interactive",
+                "--yes",
+            ]
+        )
+        == 0
+    )
+
+    after_markdown = markdown_path.read_text(encoding="utf-8")
+    assert "Decision: Adopted" in after_markdown
+    assert "Adoption applied: `true`" in after_markdown
+    assert "## Adoption applied" in after_markdown
+    payload = json.loads(
+        (report_dir / cli.ADOPTION_PLAN_BASENAME).read_text(encoding="utf-8")
+    )
+    assert payload["adoption"]["applied"] is True
+    assert isinstance(payload["adoption"]["applied_at"], str)
 
 
 @pytest.mark.large
@@ -2794,8 +3097,12 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
         encoding="utf-8"
     )
     assert "Decision: Not ready to adopt" in markdown
-    pdf = PdfReader(plan_path.with_name("csarc-adoption-dry-run.pdf"))
-    assert "Not ready to adopt" in pdf.pages[0].extract_text()
+    assert not plan_path.with_name("csarc-adoption-dry-run.pdf").exists()
+    assert (
+        "Project verification hook `scripts/verify-product` failed - "
+        "Project verification hook exited non-zero: "
+        "scripts/verify-product." in markdown
+    )
     assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
     assert git(project, "status", "--porcelain") == before
     assert not (project / "managed.txt").exists()
@@ -2909,15 +3216,7 @@ def test_adoption_records_and_replays_explicit_project_hook(
         "Project verification reason: `Project verification hook completed "
         "successfully.`" in markdown
     )
-    pdf = "\n".join(
-        page.extract_text()
-        for page in PdfReader(report_dir / "csarc-adoption-dry-run.pdf").pages
-    )
-    assert "Project hook" in pdf and "scripts/verify-skills" in pdf
-    assert "Hook configured" in pdf and "true" in pdf
-    assert "Hook result" in pdf and "passed" in pdf
-    assert "Hook reason" in pdf
-    assert "Project verification hook completed successfully." in pdf
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
 
     assert (
         main(
@@ -4464,6 +4763,391 @@ def test_update_check_reports_capability_drift_at_same_revision(
     assert payload["update_available"] is True
 
 
+def fake_policy_check(
+    mode: str,
+) -> Callable[[Path], subprocess.CompletedProcess[str]]:
+    """Build a deterministic stand-in for one policy-drift check outcome."""
+
+    def run(target: Path) -> subprocess.CompletedProcess[str]:
+        args = [str(target / "scripts" / "apply-repository-settings.sh")]
+        if mode == "match":
+            return subprocess.CompletedProcess(
+                args, 0, "All observable repository settings match policy.\n"
+            )
+        if mode == "drift":
+            return subprocess.CompletedProcess(
+                args,
+                1,
+                "",
+                "Ruleset settings drift: missing required checks: verify\n"
+                "Repository settings check failed with 1 actionable "
+                "difference(s).\n",
+            )
+        if mode == "transient-failure":
+            return subprocess.CompletedProcess(
+                args,
+                1,
+                "",
+                "Cannot determine Ruleset capability for owner/repo.\n"
+                "gh: Secondary rate limit reached; wait and retry "
+                "(HTTP 403)\n",
+            )
+        return subprocess.CompletedProcess(
+            args, 1, "", "Install and authenticate GitHub CLI first.\n"
+        )
+
+    return run
+
+
+def write_policy_check_script(project: Path, mode: str) -> None:
+    """Install one deterministic check-mode fake into a project fixture."""
+    if mode == "match":
+        body = (
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "${1:-}" = check\n'
+            "echo 'All observable repository settings match policy.'\n"
+        )
+    elif mode == "drift":
+        body = (
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "${1:-}" = check\n'
+            "echo 'Ruleset settings drift: missing required checks: verify' "
+            ">&2\n"
+            "echo 'Repository settings check failed with 1 actionable "
+            "difference(s).' >&2\n"
+            "exit 1\n"
+        )
+    elif mode == "transient-failure":
+        body = (
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "${1:-}" = check\n'
+            "echo 'Cannot determine Ruleset capability for owner/repo.' >&2\n"
+            "echo 'gh: Secondary rate limit reached; wait and retry "
+            "(HTTP 403)' >&2\n"
+            "exit 1\n"
+        )
+    else:
+        body = (
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "${1:-}" = check\n'
+            "echo 'Install and authenticate GitHub CLI first.'\nexit 1\n"
+        )
+    write_executable(project / "scripts" / "apply-repository-settings.sh", body)
+
+
+def test_install_state_detects_create_for_missing_or_empty_target(
+    tmp_path: Path,
+) -> None:
+    """Classify a missing or empty target as create, never adopt."""
+    missing = tmp_path / "missing-project"
+    missing_state = cli.detect_install_state(missing)["state"]
+    assert missing_state == cli.INSTALL_STATE_CREATE
+
+    empty = tmp_path / "empty-project"
+    empty.mkdir()
+    empty_state = cli.detect_install_state(empty)["state"]
+    assert empty_state == cli.INSTALL_STATE_CREATE
+
+    non_empty = tmp_path / "non-empty-project"
+    non_empty.mkdir()
+    (non_empty / "file.txt").write_text("content\n", encoding="utf-8")
+    assert (
+        cli.detect_install_state(non_empty)["state"] != cli.INSTALL_STATE_CREATE
+    )
+
+
+def test_install_state_detects_adopt_for_repository_without_config(
+    tmp_path: Path,
+) -> None:
+    """Classify an existing repository with no CSARC config as adopt."""
+    project = tmp_path / "legacy-project"
+    project.mkdir()
+    (project / "README.md").write_text("legacy project\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: legacy project")
+
+    result = cli.detect_install_state(project)
+    assert result["state"] == cli.INSTALL_STATE_ADOPT
+    assert "csarc adopt" in result["next_command"]
+
+
+def test_install_state_does_not_detect_adopt_once_csarc_managed(
+    tmp_path: Path,
+) -> None:
+    """Do not classify a repository with CSARC config as adopt."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("match"),
+    )
+    assert result["state"] != cli.INSTALL_STATE_ADOPT
+
+
+def test_install_state_detects_update_when_revision_is_behind(
+    tmp_path: Path,
+) -> None:
+    """Classify a pinned revision behind the target release as update."""
+    source, project, first_sha = initialize_project(tmp_path)
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+
+    behind = cli.detect_install_state(
+        project, requested=second_sha, allow_unreleased=True
+    )
+    assert behind["state"] == cli.INSTALL_STATE_UPDATE
+    assert behind["update_status"]["update_available"] is True
+
+    current = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("match"),
+    )
+    assert current["state"] != cli.INSTALL_STATE_UPDATE
+
+
+def test_install_state_detects_current_when_policy_settings_match(
+    tmp_path: Path,
+) -> None:
+    """Classify a current revision with matching policy settings as current."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("match"),
+    )
+    assert result["state"] == cli.INSTALL_STATE_CURRENT
+    assert result["policy_check"] == {
+        "available": True,
+        "detail": "All observable repository settings match policy.",
+        "drifted": False,
+    }
+
+
+def test_install_state_detects_policy_only_update_when_settings_drift(
+    tmp_path: Path,
+) -> None:
+    """Classify a current revision with drifted policy as policy-only-update."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("drift"),
+    )
+    assert result["state"] == cli.INSTALL_STATE_POLICY_ONLY
+    assert result["policy_check"]["drifted"] is True
+    assert "policies/" in result["reason"]
+
+    not_drifted = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("match"),
+    )
+    assert not_drifted["state"] != cli.INSTALL_STATE_POLICY_ONLY
+
+
+def test_install_state_reports_current_when_policy_check_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    """Fail closed to current, not policy-only-update, when unauthenticated."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("unavailable"),
+    )
+    assert result["state"] == cli.INSTALL_STATE_CURRENT
+    assert result["policy_check"]["available"] is False
+    assert result["policy_check"]["drifted"] is None
+
+
+def test_install_state_reports_current_when_policy_check_fails_transiently(
+    tmp_path: Path,
+) -> None:
+    """Fail closed to current on a non-marker `gh api` hard stop.
+
+    Reproduces the PR #566 review finding: `apply-repository-settings.sh
+    check` hard-stops before its own check loop with "Cannot determine
+    Ruleset capability for $repo." whenever `gh api repos/$repo/rulesets`
+    fails with anything other than the one GitHub Free plan message it
+    specifically recognizes -- a plausible transient or rate-limited
+    failure. That message never matched any of the three originally
+    hardcoded "unavailable" markers, so it used to be misclassified as
+    confirmed drift (`available=True, drifted=True`) and would have told
+    an agent to run `apply` against live GitHub settings even though the
+    check never actually completed.
+    """
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("transient-failure"),
+    )
+    assert result["state"] == cli.INSTALL_STATE_CURRENT
+    assert result["policy_check"]["available"] is False
+    assert result["policy_check"]["drifted"] is None
+
+
+def test_classify_policy_check_flags_transient_failure_unavailable() -> None:
+    """Classify a non-marker `gh api` hard stop as unavailable, not drift.
+
+    Direct reproduction of the reviewer's first experiment against PR #566:
+    piping a `CompletedProcess` carrying the script's "Cannot determine
+    Ruleset capability" hard-stop message through `classify_policy_check`
+    used to return `available=True, drifted=True` because that message
+    matched none of the three hardcoded unavailable markers.
+    """
+    result = subprocess.CompletedProcess(
+        ["scripts/apply-repository-settings.sh", "check"],
+        1,
+        "",
+        "Cannot determine Ruleset capability for owner/repo.\n"
+        "gh: Secondary rate limit reached; wait and retry (HTTP 403)\n",
+    )
+    policy = cli.classify_policy_check(result)
+    assert policy.available is False
+    assert policy.drifted is None
+
+
+def test_classify_policy_check_reports_missing_script_as_unavailable(
+    tmp_path: Path,
+) -> None:
+    """Classify a missing script as unavailable, not confirmed drift.
+
+    Direct reproduction of the reviewer's second experiment against PR
+    #566: piping `run_policy_settings_check`'s result for a target with no
+    `scripts/apply-repository-settings.sh` through `classify_policy_check`
+    used to return `available=True, drifted=True` because "scripts/
+    apply-repository-settings.sh is missing." matched none of the three
+    hardcoded unavailable markers either.
+    """
+    result = cli.run_policy_settings_check(tmp_path)
+    policy = cli.classify_policy_check(result)
+    assert policy.available is False
+    assert policy.drifted is None
+
+
+def test_run_policy_settings_check_reports_missing_script(
+    tmp_path: Path,
+) -> None:
+    """Report a missing policy script instead of raising an exception."""
+    result = cli.run_policy_settings_check(tmp_path)
+    assert result.returncode == 127
+    assert "missing" in result.stderr
+
+
+def test_status_command_reports_create_without_writes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Report the create state as plain JSON without touching the target."""
+    target = tmp_path / "brand-new"
+    assert main(["status", str(target), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == cli.INSTALL_STATE_CREATE
+    assert not target.exists()
+
+
+def test_status_command_reports_adopt_in_human_readable_form(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Print a human-readable state, reason, and next command by default."""
+    project = tmp_path / "legacy-project"
+    project.mkdir()
+    (project / "README.md").write_text("legacy project\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: legacy project")
+
+    assert main(["status", str(project)]) == 0
+    output = capsys.readouterr().out
+    assert "Install state: adopt" in output
+    assert "csarc adopt" in output
+
+
+def test_status_command_reports_update_available(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Report update via the CLI when the pinned revision is stale."""
+    source, project, _first_sha = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+    capsys.readouterr()
+
+    assert (
+        main(
+            [
+                "status",
+                str(project),
+                "--to",
+                second_sha,
+                "--allow-unreleased",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == cli.INSTALL_STATE_UPDATE
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_state"),
+    [
+        ("match", cli.INSTALL_STATE_CURRENT),
+        ("drift", cli.INSTALL_STATE_POLICY_ONLY),
+        ("transient-failure", cli.INSTALL_STATE_CURRENT),
+    ],
+)
+def test_status_command_end_to_end_policy_only_update(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+    expected_state: str,
+) -> None:
+    """Run the real target policy script through the status subcommand."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    write_policy_check_script(project, mode)
+    capsys.readouterr()
+
+    assert (
+        main(
+            [
+                "status",
+                str(project),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == expected_state
+
+
 def test_non_interactive_writes_require_yes(tmp_path: Path) -> None:
     """Automation cannot mutate a target without explicit approval."""
     source, first_sha = make_template(tmp_path)
@@ -5037,12 +5721,12 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_adopt_rejects_plan_tampering_and_target_drift",
         "test_adoption_preserves_executable_and_checked_patch_symlink",
         "test_adoption_records_and_replays_explicit_project_hook",
-        "test_adoption_report_failure_keeps_markdown",
         "test_init_dry_run_and_apply_pin_full_sha",
         "test_invalid_project_hook_blocks_pending_adoption_without_writes",
         "test_legacy_update_conflict_leaves_target_unchanged",
         "test_project_hook_rejects_unsafe_or_unusable_paths",
         "test_real_existing_adoption_uses_fixed_ownership_policies",
+        "test_real_self_adoption_treats_this_repository_like_any_product",
         "test_real_template_adoption_resumes_after_manifest_merge",
         "test_update_check_dry_run_apply_and_conflict",
         "test_update_check_rejects_invalid_hook_without_writes",

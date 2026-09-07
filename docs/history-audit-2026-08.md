@@ -87,7 +87,7 @@ Producer 只輸出 aggregate counts、各 endpoint 的成功／預期數與缺�
 | Security and dependencies | [SPEC-006](specs/SPEC-006-trusted-release-provenance.md) | [Release, security, and dependencies](adr/release-security-and-dependencies.md) | #35/#92, #36/#51, #74/#111, #101/#119, #103/#120, #110/#143 | Current |
 | Spec, story, and work item | [SPEC-002](specs/SPEC-002-durable-project-memory.md) | [Spec, story, and work-item boundaries](adr/spec-story-and-work-items.md) | #15/#20, #34/#58, #77/#89, #122/#125, #148/#153, #159/#161 | Current |
 | Agent collaboration | [SPEC-002](specs/SPEC-002-durable-project-memory.md) | [Agent collaboration and durable handoff](adr/agent-collaboration.md) | #126/#127, #145/#147, #155/#158, #171/#173 | Current; startup cleanup open |
-| Documentation and presentation | [SPEC-007](specs/SPEC-007-portable-decision-documentation.md) | [Portable decision site](adr/portable-decision-site.md) | #166–#169/#172–#176, #177/#185, #178/#187, #205–#209 | Current renderer; Hugo cutover not active |
+| Documentation and presentation | [SPEC-007](specs/SPEC-007-portable-repo-site-documentation.md) | [Portable repo-site](adr/portable-repo-site.md) | #166–#169/#172–#176, #177/#185, #178/#187, #205–#209 | Current renderer; Hugo cutover not active |
 
 ## Historical cautions retained
 

@@ -7,7 +7,6 @@ requires-python = ">=3.14,<3.15"
 dependencies = [
     "copier>=9.17,<10",
     "pyyaml>=6.0.3,<7",
-    "reportlab>=4.4,<6",
 ]
 
 [project.scripts]
@@ -27,7 +26,6 @@ packages = ["src/csarc_cli"]
 dev = [
   "coverage[toml]>=7.10,<8",
   "diff-cover>=9.7,<11",
-  "pypdf>=6,<7",
   "pytest>=8.4,<10",
   "pytest-cov>=6.2,<8",
   "ruff>=0.12,<1",
@@ -55,7 +53,17 @@ known-first-party = ["csarc_cli", "scripts"]
 [tool.ruff.lint.per-file-ignores]
 "src/csarc_cli/cli.py" = ["T20"]
 "scripts/render_release_prompt.py" = ["RUF001"]
+# Bilingual repo-site HTML strings embed full-width CJK punctuation
+# (｜／：（） etc.) throughout by design, same as render_release_prompt.py.
+# template/scripts/build_repo_site.py is a byte-for-byte copy of this file
+# (scripts/sync-paired-files.sh), so it needs the identical ignore.
+"scripts/build_repo_site.py" = ["RUF001", "RUF002"]
+"template/scripts/build_repo_site.py" = ["RUF001", "RUF002"]
 "tests/test_release_prompt.py" = ["D", "S101", "RUF001"]
+"tests/test_build_repo_site.py" = ["D", "S101", "RUF001"]
+# Mirrors README.md/site content verbatim (full-width CJK punctuation
+# included) to prove byte-for-byte parity, same as test_build_repo_site.py.
+"tests/test_homepage_readme_parity.py" = ["D", "S101", "RUF001"]
 "tests/**" = ["D", "S101"]
 "template/tests/**" = ["D", "S101"]
 

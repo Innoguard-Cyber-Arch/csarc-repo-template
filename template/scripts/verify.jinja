@@ -181,12 +181,14 @@ fi
 ./scripts/check-update-conflicts
 ./scripts/verify-dependencies
 ./scripts/check-project-metadata
-uv run --no-project python scripts/render_site.py --check
+./scripts/build-repo-site --check
 ./scripts/detect-language-profile
 ./scripts/test-issue-triage
 ./scripts/test-worktree-cleanup
 ./scripts/test-pr-policy
 ./scripts/test-apply-repository-settings
+./scripts/test-check-repo-capabilities
+./scripts/test-check-scope-gate
 ./scripts/test-verify-attestation
 ./scripts/lint-workflows-shell
 

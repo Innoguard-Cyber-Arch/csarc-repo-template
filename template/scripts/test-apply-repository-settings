@@ -70,6 +70,7 @@ import os
 
 desired = json.load(open(os.path.join(os.environ["REPO_ROOT"], "policies/repository.json"), encoding="utf-8"))
 desired["pull_request_creation_policy"] = os.environ.get("LIVE_PR_CREATION_POLICY", "collaborators_only")
+desired["delete_branch_on_merge"] = os.environ.get("LIVE_DELETE_BRANCH_ON_MERGE", "true") == "true"
 desired["security_and_analysis"] = {
     "secret_scanning": {"status": os.environ.get("LIVE_SECRET_SCANNING", "enabled")},
     "secret_scanning_push_protection": {"status": os.environ.get("LIVE_PUSH_PROTECTION", "enabled")},
@@ -152,6 +153,23 @@ if [[ "$status" == 0 ]]; then
   exit 1
 fi
 grep -qF "pull_request_creation_policy: desired 'collaborators_only', live 'all'" <<<"$output"
+
+# Case 3b (Issue #667): delete_branch_on_merge drift. Confirms this field --
+# the repo-level setting that auto-deletes an ordinary branch's remote copy
+# the instant its pull request merges -- already rides the exact same
+# generic flat policies/repository.json comparison Case 3 proves above for
+# pull_request_creation_policy, with no dedicated code of its own. See
+# docs/ci-policy.md's stale-branch-detection section for how this generic
+# check (accidental disable of the setting itself) divides labor with the
+# new #667 detection (branches the setting structurally cannot reach: a
+# pull request closed without merging).
+case_count=$((case_count + 1))
+LIVE_DELETE_BRANCH_ON_MERGE="false" run_check
+if [[ "$status" == 0 ]]; then
+  echo "check passed despite delete_branch_on_merge drift."
+  exit 1
+fi
+grep -qF "delete_branch_on_merge: desired True, live False" <<<"$output"
 
 # Case 4: all three security_and_analysis fields disabled, simulating a
 # private repository without GitHub Advanced Security. This must report

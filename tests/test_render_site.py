@@ -1,19 +1,31 @@
 import json
+import re
 import runpy
+import shutil
 from pathlib import Path
 
 import pytest
-from jinja2 import Environment, StrictUndefined
+from copier import run_copy
 
+ROOT = Path(__file__).parents[1]
 SITE_MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "render_site.py")
 )
 PARITY_MODULE = runpy.run_path(
-    str(Path(__file__).parents[1] / "scripts" / "check-decision-site-parity")
+    str(Path(__file__).parents[1] / "scripts" / "check-repo-site-parity")
+)
+BUILD_MODULE = runpy.run_path(
+    str(Path(__file__).parents[1] / "scripts" / "build_repo_site.py")
 )
 BundleError = SITE_MODULE["BundleError"]
 render = SITE_MODULE["render"]
 parse_parity = PARITY_MODULE["parse"]
+load_site_data = BUILD_MODULE["load_site_data"]
+render_similar_tools = BUILD_MODULE["render_similar_tools"]
+render_testing = BUILD_MODULE["render_testing"]
+render_journey_rail = BUILD_MODULE["render_journey_rail"]
+render_config_guidance = BUILD_MODULE["render_config_guidance"]
+render_page = BUILD_MODULE["render_page"]
 
 
 def _write_markdown_site(
@@ -180,32 +192,38 @@ def test_render_reflects_different_project_name_values(tmp_path: Path) -> None:
     assert alpha_bundle != beta_bundle
 
 
-def test_branch_strategy_switches_generated_site_content() -> None:
-    """The already-approved `branch_strategy` key must actually switch the
-    handbook's standard-vs-delivery guidance at Copier generation time,
-    proving that "mode switching" is config-driven rather than a second,
-    site-only setting."""
+def test_branch_strategy_reaches_generated_site_content() -> None:
+    """The already-approved `branch_strategy` key must actually reach the
+    generated repo-site at build time, proving that a downstream project's
+    facts are config-driven rather than a second, site-only setting.
+
+    Issue #681 decision N replaced the retired docs/site-content.md
+    handbook (which resolved `branch_strategy` via Jinja at `copier copy`/
+    `update` time, so this test used to render template/docs/site-
+    content.md.jinja directly) with the same repo-site engine root uses,
+    reading `.csarc/config.yml` at every local build instead -- see
+    test_build_repo_site.py's `_substitute_config_tokens`/
+    `_load_downstream_config` tests for that mechanism's unit coverage.
+    """
     root = Path(__file__).parents[1]
-    template = (root / "template/docs/site-content.md.jinja").read_text(
-        encoding="utf-8"
+    build_module = runpy.run_path(
+        str(root / "template/scripts/build_repo_site.py")
     )
-    environment = Environment(autoescape=True, undefined=StrictUndefined)
+    substitute_config_tokens = build_module["_substitute_config_tokens"]
 
     def render_for(branch_strategy: str) -> str:
-        return environment.from_string(template).render(
-            branch_strategy=branch_strategy,
-            enable_governance_drift_check=False,
-            project_mode="new",
+        return substitute_config_tokens(
+            "Branch strategy: [[branch_strategy]].",
+            {"branch_strategy": branch_strategy},
+            lang="en",
         )
 
     delivery = render_for("delivery")
-    standard = render_for("main")
+    main = render_for("main")
 
-    assert "Delivery route" in delivery
-    assert "批次邊界" in delivery
-    assert "Delivery route" not in standard
-    assert "批次邊界" not in standard
-    assert delivery != standard
+    assert delivery == "Branch strategy: delivery."
+    assert main == "Branch strategy: main."
+    assert delivery != main
 
 
 def test_internal_site_keys_are_documented_once() -> None:
@@ -247,49 +265,72 @@ def test_render_surfaces_preserved_legacy_content(tmp_path: Path) -> None:
 
 
 def test_generated_site_uses_project_owned_markdown() -> None:
+    """Issue #681 decision N: the downstream repo-site is now the same
+    engine and bilingual-Markdown-source contract as root's, not the
+    retired docs/site-content.md handbook (a single Jinja-templated
+    Markdown file resolved once at `copier copy`/`update` time)."""
     root = Path(__file__).parents[1]
     copier = (root / "copier.yml").read_text(encoding="utf-8")
-    shell = (root / "template/site/index.html.jinja").read_text(
+    engine = (root / "template/scripts/build_repo_site.py").read_text(
         encoding="utf-8"
     )
-    content = (root / "template/docs/site-content.md.jinja").read_text(
+    zh_tw = (root / "template/site/content/_index.zh-tw.md").read_text(
+        encoding="utf-8"
+    )
+    en = (root / "template/site/content/_index.en.md").read_text(
         encoding="utf-8"
     )
 
-    assert '  - "docs/site-content.md"' in copier
+    assert '  - "site/content/_index.zh-tw.md"' in copier
+    assert '  - "site/content/_index.en.md"' in copier
+    assert "bash scripts/build-repo-site" in copier
     assert "site-content.js" not in copier
-    assert "CSARC_SITE_CONTENT" in shell
-    assert "site-content.js" not in shell
-    assert "[[project_name]]" in content
-    assert "[[languages]]" in content
-    assert "[[project_visibility]]" in content
+    for content in (zh_tw, en):
+        assert "[[project_name]]" in content
+        assert "[[languages]]" in content
+        assert "[[project_visibility]]" in content
+        assert "{{< slide" in content
+    # The engine itself is copied verbatim from root, not hand-simplified;
+    # a real divergence would defeat the point of sharing one contract.
+    assert engine == (root / "scripts/build_repo_site.py").read_text(
+        encoding="utf-8"
+    )
     assert not (root / "template/site/app.js").exists()
+    assert not (root / "template/site/index.html.jinja").exists()
+    assert not (root / "template/docs/site-content.md.jinja").exists()
     assert not (root / "template/docs/site-content.js.jinja").exists()
 
 
-def test_readme_describes_markdown_site_source() -> None:
-    """README.md and template/README.md.jinja must name the current,
-    maintained site source (docs/site-content.md), not the retired
-    docs/site-content.js. Any remaining docs/site-content.js mention in the
-    downstream-facing template README must be a legacy-migration hint,
-    matching docs/adr/portable-decision-site.md.
+def test_readme_describes_repo_site_source() -> None:
+    """README.md and the template READMEs must name the current,
+    maintained site source (site/content/_index.*.md), not the retired
+    docs/site-content.md/.js. A remaining docs/site-content.md mention in
+    a README must be about the migration off it, matching
+    docs/adr/portable-repo-site.md.
     """
     root = Path(__file__).parents[1]
     root_readme = (root / "README.md").read_text(encoding="utf-8")
-    template_readme = (root / "template/README.md.jinja").read_text(
-        encoding="utf-8"
+    # Issue #681: the zh-tw template README's destination name now depends
+    # on the readme_primary_language answer, so its source filename is a
+    # Jinja expression containing "zh-tw" (see test_ai_guidelines.py's
+    # equivalent glob for why this substring reliably identifies it alone).
+    zh_tw_readme_matches = list((root / "template").glob("*zh-tw*.md.jinja"))
+    assert len(zh_tw_readme_matches) == 1, (
+        f"expected exactly one zh-tw README template, found "
+        f"{zh_tw_readme_matches}"
     )
+    template_readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
 
-    assert "docs/site-content.md" in root_readme
-    assert "docs/site-content.md" in template_readme
-    assert "site-content.js" not in root_readme
-
-    for line in template_readme.splitlines():
-        if "site-content.js" in line:
-            assert "遷移" in line, (
-                "docs/site-content.js may only appear in "
-                "template/README.md.jinja as a legacy-migration hint"
-            )
+    for readme in (root_readme, template_readme):
+        assert "site/content/_index.zh-tw.md" in readme
+        assert "site-content.js" not in readme
+        for line in readme.splitlines():
+            if "docs/site-content.md" in line:
+                assert "遷移" in line or "retired" in line, (
+                    "docs/site-content.md may only appear as a "
+                    "migration/retirement note now that site/content/"
+                    "_index.*.md is the current source"
+                )
 
 
 def test_render_rejects_incomplete_markdown_shell(tmp_path: Path) -> None:
@@ -374,10 +415,10 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         encoding="utf-8"
     )
     english = (root / "site/content/_index.en.md").read_text(encoding="utf-8")
-    chinese_home = chinese.split('{{< slide key="capability"', 1)[1].split(
+    chinese_home = chinese.split('{{< slide key="index"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
-    english_home = english.split('{{< slide key="capability"', 1)[1].split(
+    english_home = english.split('{{< slide key="index"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
     flow = chinese.split('{{< slide key="flow"', 1)[1].split(
@@ -392,18 +433,32 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     english_delivery = english.split('{{< slide key="deploy"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
-    file_map = chinese.split('{{< slide key="files"', 1)[1].split(
-        "{{< /slide >}}", 1
-    )[0]
+    # The file-map's `.github/workflows/` purpose text moved from a
+    # markdown table cell (see the old `{{< slide key="files" >}}` body)
+    # into site/data/file_map.json's "workflows" entry when Issue #534
+    # replaced the flat table with a file-explorer-style tree (see
+    # scripts/build_repo_site.py's render_file_map); the sync
+    # invariant this test proves -- every active workflow file is
+    # mentioned by name -- carries over unchanged to that entry.
+    file_map_data = json.loads(
+        (root / "site/data/file_map.json").read_text(encoding="utf-8")
+    )
+    workflows_entry = next(
+        entry
+        for entry in file_map_data["entries"]
+        if entry["paths"] == [".github/workflows/"]
+    )
+    workflows_purpose = workflows_entry["purpose"]["zh-tw"]
     workflows = {
         path.name.removesuffix(".jinja")
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
-    assert "9 條共用流程" in file_map
+    assert "9 條共用流程" in workflows_purpose
     workflow_labels = {
         "ci.yml": "必要驗證",
         "codeql.yml": "CodeQL SAST",
+        "docker-build-scan.yml": "容器建置掃描",
         "dependabot-auto-merge.yml": "Dependabot 自動合併",
         "governance-comment.yml": "reviewer 指派",
         "governance-drift.yml": "治理漂移",
@@ -417,20 +472,29 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     }
     assert workflows == set(workflow_labels)
     for workflow, label in workflow_labels.items():
-        assert label in file_map, (
+        assert label in workflows_purpose, (
             f"{workflow} lost its file-map mention ({label!r})"
         )
     # codeql.yml is conditional on enable_codeql (see copier.yml), exactly
     # like template-update.yml is conditional on
-    # enable_template_update_notifications and governance-drift.yml is
-    # conditional on enable_governance_drift_check: none of the three ship
-    # to every new repo.
-    assert "選配的治理漂移、模板更新通知排程與 CodeQL SAST" in file_map
+    # enable_template_update_notifications, governance-drift.yml is
+    # conditional on enable_governance_drift_check, and docker-build-scan.yml
+    # is conditional on enable_docker: none of the four ship to every new
+    # repo.
+    assert "選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描" in (
+        workflows_purpose
+    )
     for inactive in ("release-please.yml",):
-        assert inactive not in file_map
+        assert inactive not in workflows_purpose
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
     assert "需人審查版本 PR 的發版流程仍是候選" in flow
-    assert "一支候選 release workflow" in chinese_delivery
+    # Issue #525: the "Current state" selection-note that used to carry
+    # this "candidate release workflow" phrasing was removed along with
+    # every other such box; the Candidate/Blocked status in the
+    # decision-register table below still conveys the same
+    # not-yet-proven-on-default-branch fact, without the retired
+    # legacy-vs-current framing.
+    assert "一支候選 release workflow" not in chinese_delivery
     assert "Candidate／Blocked" in chinese_delivery  # noqa: RUF001
     assert "promotion-gated adaptive release" not in chinese_delivery
     assert "下方 technical view 保留 2026-08" not in chinese_delivery
@@ -455,16 +519,24 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         '{{< slide key="similar-tools"', 1
     )[0]
     assert '<article class="decision-step' not in journey_decisions
-    assert journey_decisions.count('class="decision-step decision-fold') == 18
-    assert (
-        journey_decisions.count('class="decision-step decision-fold" open') == 9
-    )
-    assert (
-        journey_decisions.count(
-            'class="decision-step decision-fold recommended" open'
-        )
-        == 9
-    )
+    # Issue #533 merged the "contract" (Step 03) and "template-release"
+    # (Step 09) slides' simple/technical split into one legacy="false" body
+    # each, so they no longer carry a legacy `decision-strip`. The 2026-09-06
+    # redesign round then replaced every remaining "Step" slide's
+    # single-choice bullet card (method, agents, languages, pr, supply,
+    # deploy, governance, docs-site) with a reusable diagram archetype --
+    # `.relation-map` for a sequence or gated flow, `.capability-map` for
+    # parallel/independent items, `.step-flow` for docs-site's source ->
+    # render -> output -> reader pipeline -- because a single centered
+    # bullet card was still just a bullet card, not a real composition.
+    # `.decision-strip`/`.decision-fold` now only remain in the (currently
+    # bilingually mismatched, see Issue #681 decision N) zh-tw-only archive
+    # slides outside this "method".."similar-tools" range, so none of these
+    # Step slides contribute a decision-fold any more.
+    assert journey_decisions.count('class="decision-step decision-fold') == 0
+    assert '<div class="relation-map"' in journey_decisions
+    assert '<div class="capability-map' in journey_decisions
+    assert '<div class="step-flow"' in journey_decisions
 
 
 def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:  # noqa: C901
@@ -476,20 +548,27 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     data = json.loads(
         (root / "site/data/similar_tools.json").read_text(encoding="utf-8")
     )
-    shortcode = (root / "site/layouts/shortcodes/similar-tools.html").read_text(
-        encoding="utf-8"
-    )
-    testing_shortcode = (
-        root / "site/layouts/shortcodes/testing.html"
-    ).read_text(encoding="utf-8")
-    journey_rail = (root / "site/layouts/partials/journey-rail.html").read_text(
-        encoding="utf-8"
+    site_data = load_site_data(root)
+    # site/data/similar_tools.json no longer inlines "testing.groups" -- each
+    # step now lives in its own site/data/testing/<key>.json, assembled in
+    # tab order by `load_site_data` (Issue #533). Merge the assembled list
+    # back into the raw-parsed `data` so the assertions below, which compare
+    # sibling "testing" fields read straight from the raw file, can keep
+    # indexing `data["testing"]["groups"]` unchanged.
+    data["testing"]["groups"] = site_data.similar_tools["testing"]["groups"]
+    # Rendered by the engine (scripts/build_repo_site.py) rather than
+    # read from the retired Hugo shortcode/partial/home-layout sources
+    # those variable names originally referenced (Issue #524).
+    shortcode = render_similar_tools(lang="zh-tw", data=site_data)
+    testing_shortcode = render_testing(lang="zh-tw", data=site_data)
+    journey_rail = render_journey_rail(
+        site_data.navigation, lang="zh-tw", active_key="method"
     )
     navigation = json.loads(
         (root / "site/data/navigation.json").read_text(encoding="utf-8")
     )
-    presentation = (root / "site/layouts/home.presentation.html").read_text(
-        encoding="utf-8"
+    presentation = "\n".join(
+        (BUILD_MODULE["_REORDER_SCRIPT"], BUILD_MODULE["_DETAIL_LEVEL_SCRIPT"])
     )
     deck = (root / "site/static/deck.js").read_text(encoding="utf-8")
     styles = (root / "site/static/styles.css").read_text(encoding="utf-8")
@@ -522,13 +601,34 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert 'id="testing-panel-duration"' in testing_shortcode
     assert "statusLabel" not in data["testing"]["labels"]["zh-tw"]
     assert "statusLabel" not in data["testing"]["labels"]["en"]
+    # render_journey_rail() threads each item's `participation` value from
+    # navigation.json into its class, rather than hardcoding it; check two
+    # different data-driven values instead of asserting on retired Hugo
+    # template syntax (`{{ .participation }}`).
+    # Issue #681 folded the appendix bookend links into the "support" group
+    # as ordinary numbered items, so maintainer-only entries now render as
+    # journey-item <li> elements (with a threaded data-audience attribute)
+    # instead of journey-bookend appendix links.
+    assert 'class="journey-bookend appendix' not in journey_rail
+    assert 'class="journey-item maintainer"' in journey_rail
     assert (
-        'class="journey-bookend appendix {{ .participation }}' in journey_rail
+        'class="journey-item human active" aria-current="step">' in journey_rail
     )
-    assert 'class="journey-item {{ .participation }}' in journey_rail
-    assert navigation["appendices"][-2]["key"] == "testing"
-    assert navigation["appendices"][-1]["key"] == "bridge"
-    assert navigation["appendices"][-2]["audience"] == "maintainer"
+    # Issue #681/#682: a later UX review moved testing/bridge (and, at the
+    # time, advanced-install -- since merged into "install"'s own Ops pane)
+    # out of "support" into their own unnumbered "notes" group (see
+    # navigation.json's `groups` array), so they're no longer findable
+    # under "support".
+    notes_items = {
+        item["key"]: item
+        for item in navigation["items"]
+        if item["group"] == "notes"
+    }
+    assert notes_items["testing"]["audience"] == "maintainer"
+    assert notes_items["bridge"]["audience"] == "maintainer"
+    assert "code" not in notes_items["testing"]
+    assert "code" not in notes_items["bridge"]
+    assert navigation["appendices"] == []
     assert navigation["labels"]["zh-tw"]["human"] == "需要人決策"
     assert navigation["labels"]["zh-tw"]["automated"] == "預設自動完成"
     assert navigation["labels"]["zh-tw"]["maintainer"] == "僅維運可見"
@@ -563,7 +663,16 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     )
     assert "名詞與約定" not in chinese
     assert "testing.after(bridge)" in presentation
-    assert "supply.before(pr)" in presentation
+    # Issue #681/#682: this client-side reorder used to paper over pr and
+    # supply being declared in the wrong order (04 languages -> 06 pr ->
+    # 05 supply -> 07 deploy) in site/content/_index.*.md, contradicting
+    # their own "步驟 05/06" labels, the sidebar rail, and
+    # navigation.json's already-correct order. The source order is fixed
+    # now, so this patch is gone, and languages/supply/pr/deploy appear in
+    # that order in the rendered source directly.
+    assert "supply.before(pr)" not in presentation
+    assert chinese.index('key="supply"') < chinese.index('key="pr"')
+    assert english.index('key="supply"') < english.index('key="pr"')
     assert "slide.dataset.audience !== 'archive'" in deck
     assert "Cloudflare Pages" in chinese
     assert "存取 #79" in chinese
@@ -618,7 +727,16 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "background: var(--yellow);" in controls
     assert "overflow-y: auto;" in styles
     assert ".journey-rail {\n      position: fixed;" in styles
-    assert ".slide.active > .legacy-content > * { flex-shrink: 0; }" in styles
+    # Issue #681/#682: a `.mode-content` pane is itself `display: contents`
+    # (detail-toggle.css), so its children need this reaching them
+    # directly -- `.legacy-content > *` alone missed the ops pane, which
+    # never carries that class, letting some browsers silently shrink its
+    # content to fit instead of showing the same overflow every browser
+    # agrees on.
+    assert (
+        ".slide.active > .legacy-content > *,\n"
+        "    .slide.active > .mode-content > * { flex-shrink: 0; }"
+    ) in styles
     assert ".similar-tools-tabs button {\n      flex: 0 0 auto;" in styles
     assert "min-width: 210px;" not in styles
     direct_tracks = {
@@ -630,17 +748,24 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     for source in (chinese, english):
         for track in direct_tracks:
             assert f'{{{{< config-guidance track="{track}" >}}}}' in source
-    guidance_shortcode = (
-        root / "site/layouts/shortcodes/config-guidance.html"
-    ).read_text(encoding="utf-8")
-    assert 'data-config-direct="true"' in guidance_shortcode
-    assert "guidance.dataset.configDirect === 'true'" not in active_components
+    # Issue #525: config-guidance no longer has a fold-open/overlay split --
+    # one static block regardless of the (now presentation-inert) `direct`
+    # data field, with no click-to-reveal layer, so none of that wiring
+    # remains in either script.
+    guidance_shortcode = render_config_guidance(
+        "method", lang="zh-tw", data=site_data
+    )
+    assert "data-config-direct" not in guidance_shortcode
+    assert "config-trigger" not in guidance_shortcode
+    assert "configDirect" not in active_components
     assert (
         'not([data-config-direct="true"]) .config-trigger'
-    ) in active_components
-    assert "guidance.dataset.configDirect === 'true'" in (
-        root / "site/static/detail-toggle.js"
-    ).read_text(encoding="utf-8")
+    ) not in active_components
+    presentation_js = (root / "site/static/detail-toggle.js").read_text(
+        encoding="utf-8"
+    )
+    assert "configDirect" not in presentation_js
+    assert "config-guidance-fold" not in presentation_js
     assert (
         "規則治理單獨定義合併資格、權限與例外"
         in config_examples["tracks"]["agents"]["items"][-1]["goal"]["zh-tw"]
@@ -735,7 +860,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "declarativeState",
         "templateLifecycle",
     ]
-    assert [group["journey"] for group in data["testing"]["groups"]] == [
+    assert [group["code"] for group in data["testing"]["groups"]] == [
         "01",
         "02",
         "03",
@@ -787,7 +912,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         value.index("Python") < value.index("Rust") < value.index("TypeScript")
         for value in language_durations
     )
-    assert data["testing"]["groups"][0]["journey"] == "01"
+    assert data["testing"]["groups"][0]["code"] == "01"
     testing_rows = data["testing"]["groups"][0]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
         "Issue 工作邊界",
@@ -825,7 +950,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ]
     assert "release" not in testing_rows[2]["shared"]
     agent_rows = data["testing"]["groups"][1]["rows"]
-    assert data["testing"]["groups"][1]["journey"] == "02"
+    assert data["testing"]["groups"][1]["code"] == "02"
     assert agent_rows[0]["shared"] == {}
     assert agent_rows[0]["templateOnly"]["milestone"]["files"] == [
         {"path": "tests/test_ai_guidelines.py"}
@@ -846,7 +971,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         for stage in scope.values()
     )
     verification_rows = data["testing"]["groups"][2]["rows"]
-    assert data["testing"]["groups"][2]["journey"] == "03"
+    assert data["testing"]["groups"][2]["code"] == "03"
     assert [row["purpose"]["zh-tw"]["title"] for row in verification_rows] == [
         "判斷這次要跑多少",
         "Issue PR 的快速回饋",
@@ -856,7 +981,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         {"path": "scripts/ci_tier.py"}
     ]
     language_rows = data["testing"]["groups"][3]["rows"]
-    assert data["testing"]["groups"][3]["journey"] == "04"
+    assert data["testing"]["groups"][3]["code"] == "04"
     assert [row["purpose"]["zh-tw"]["title"] for row in language_rows] == [
         "設定與實際檔案一致",
         "各語言使用自己的檢查",
@@ -865,7 +990,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "path": ".csarc/config.yml"
     }
     supply_rows = data["testing"]["groups"][4]["rows"]
-    assert data["testing"]["groups"][4]["journey"] == "05"
+    assert data["testing"]["groups"][4]["code"] == "05"
     assert [row["purpose"]["zh-tw"]["title"] for row in supply_rows] == [
         "鎖定版本可重現安裝",
         "一般更新自動提出 PR",
@@ -881,7 +1006,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert supply_rows[2]["shared"]["release"]["automation"][1]["path"] == (
         ".github/workflows/osv.yml"
     )
-    assert data["testing"]["groups"][6]["journey"] == "07"
+    assert data["testing"]["groups"][6]["code"] == "07"
     delivery_rows = data["testing"]["groups"][6]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in delivery_rows] == [
         "獨立工作直接交付",
@@ -922,7 +1047,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         },
     ]
     governance_rows = data["testing"]["groups"][7]["rows"]
-    assert data["testing"]["groups"][7]["journey"] == "08"
+    assert data["testing"]["groups"][7]["code"] == "08"
     assert [row["purpose"]["zh-tw"]["title"] for row in governance_rows] == [
         "輪派審查人",
         "偵測治理設定漂移",
@@ -943,7 +1068,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         for automation in governance_rows[1]["shared"]["release"]["automation"]
     )
     template_rows = data["testing"]["groups"][8]["rows"]
-    assert data["testing"]["groups"][8]["journey"] == "09"
+    assert data["testing"]["groups"][8]["code"] == "09"
     assert [row["purpose"]["zh-tw"]["title"] for row in template_rows] == [
         "建立新 repo",
         "首次導入既有 repo",
@@ -980,7 +1105,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ]
     assert verification_rows[0]["templateOnly"] == {}
     merge_rows = data["testing"]["groups"][5]["rows"]
-    assert data["testing"]["groups"][5]["journey"] == "06"
+    assert data["testing"]["groups"][5]["code"] == "06"
     assert [row["purpose"]["zh-tw"]["title"] for row in merge_rows] == [
         "PR 資料與目的分支",
         "候選內容包含最新基準",
@@ -1021,7 +1146,11 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert data["threshold"] == 5
     assert data["starThreshold"] == 1000
     assert 'class="tool-meta"' in shortcode
-    assert shortcode.count('class="capture-date"') == 2
+    # Every panel -- the primary table plus each feature-comparison group --
+    # shows its own capture-date marker.
+    assert shortcode.count('class="capture-date"') == 1 + len(
+        data["featureGroups"]
+    )
     assert data["labels"]["zh-tw"]["stars"] == "GitHub Stars"
     assert data["labels"]["en"]["stars"] == "GitHub Stars"
 
@@ -1139,6 +1268,9 @@ def test_parity_ignores_explicit_supplemental_slides(tmp_path: Path) -> None:
 <section class="slide" id="public-supplement" data-parity="supplemental">
 <div class="legacy-content">Supplemental public copy</div>
 </section>
+<section class="slide" id="new-without-predecessor" data-parity="new">
+<div class="legacy-content">Genuinely new copy</div>
+</section>
 """,
         encoding="utf-8",
     )
@@ -1146,3 +1278,192 @@ def test_parity_ignores_explicit_supplemental_slides(tmp_path: Path) -> None:
     assert parse_parity(legacy, candidate=False) == parse_parity(
         candidate, candidate=True
     )
+
+
+_STEP_ORDER_KEYS = (
+    "method",
+    "agents",
+    "contract",
+    "languages",
+    "supply",
+    "pr",
+    "deploy",
+    "governance",
+)
+
+
+def test_module_step_order_matches_labels_and_navigation() -> None:
+    """Issue #681/#682: 04 languages -> 06 pr -> 05 supply -> 07 deploy was
+    declared in that (wrong) order in both site/content/_index.*.md files,
+    contradicting their own "步驟 05/06" eyebrow labels and
+    navigation.json's already-correct order for the same eight keys. Only
+    navigation.json (which drives the sidebar rail) was right; the actual
+    slide declaration order -- what deck.js's prev/next, keyboard
+    navigation, and (before today) a client-side reorder patch in
+    `_REORDER_SCRIPT` operated on -- was not. This pins both the source
+    declaration order and navigation.json to the same sequence so they
+    cannot silently diverge again, and confirms the old reorder patch is
+    gone rather than re-hiding a future drift.
+    """
+    navigation = json.loads(
+        (ROOT / "site/data/navigation.json").read_text(encoding="utf-8")
+    )
+    nav_workflow_keys = tuple(
+        item["key"]
+        for item in navigation["items"]
+        if item["group"] == "workflow"
+    )
+    assert nav_workflow_keys == _STEP_ORDER_KEYS
+
+    presentation = BUILD_MODULE["_REORDER_SCRIPT"]
+    assert "supply.before(pr)" not in presentation
+    assert "pr.before(supply)" not in presentation
+
+    for lang, path in (
+        ("zh-tw", ROOT / "site/content/_index.zh-tw.md"),
+        ("en", ROOT / "site/content/_index.en.md"),
+    ):
+        source = path.read_text(encoding="utf-8")
+        positions = [source.index(f'key="{key}"') for key in _STEP_ORDER_KEYS]
+        assert positions == sorted(positions), (
+            f"{lang}: {_STEP_ORDER_KEYS} are not declared in that order"
+        )
+
+
+def test_standard_and_maintenance_mode_page_counts() -> None:
+    """Issue #681/#682 acceptance criteria: Standard mode shows exactly 16
+    slides and Maintenance mode exactly 18, matching deck.js's own filter
+    (`data-audience !== 'archive' && (data-audience !== 'maintainer' ||
+    maintenance)`). Pins the two counts so a slide added, removed, or
+    reassigned to a different `audience` is caught here instead of only
+    by someone clicking through both modes by hand.
+    """
+    site_data = load_site_data(ROOT)
+    for lang, path in (
+        ("zh-tw", ROOT / "site/content/_index.zh-tw.md"),
+        ("en", ROOT / "site/content/_index.en.md"),
+    ):
+        markdown_text = path.read_text(encoding="utf-8")
+        html = render_page(markdown_text, lang=lang, data=site_data, root=ROOT)
+        # Scoped to each <section class="slide" ...> opening tag itself --
+        # `data-audience="maintainer"` also appears on many inline elements
+        # throughout the page content (e.g. journey-rail entries, similar-
+        # tools tabs), so a site-wide count would wildly overcount.
+        section_tags = re.findall(r"<section class=\"slide[^>]*>", html)
+        total = len(section_tags)
+        archive = sum(
+            1 for tag in section_tags if 'data-audience="archive"' in tag
+        )
+        maintainer_only = sum(
+            1 for tag in section_tags if 'data-audience="maintainer"' in tag
+        )
+        standard_count = total - archive - maintainer_only
+        maintenance_count = total - archive
+        assert standard_count == 16, (
+            f"{lang}: Standard mode has {standard_count} slides, not 16"
+        )
+        assert maintenance_count == 18, (
+            f"{lang}: Maintenance mode has {maintenance_count} slides, not 18"
+        )
+
+
+def test_install_prompt_is_visible_and_matches_what_gets_copied() -> None:
+    """Issue #681/#682: the install page's full agent prompt used to live
+    only in the copy button's `data-copy-text` attribute -- a reader could
+    copy a prompt they were never shown, with no way to check it before
+    pasting it into an agent. The prompt must now be visible body text
+    (a sibling `<pre class="command-block-text">`), and no `.command-block`
+    anywhere may carry `data-copy-text`, since legacy-components.js's
+    click handler prefers that attribute over the visible `<pre>` when
+    both exist -- keeping both in sync would depend on nobody ever
+    forgetting to update one when editing the other.
+    """
+    site_data = load_site_data(ROOT)
+    for lang, path in (
+        ("zh-tw", ROOT / "site/content/_index.zh-tw.md"),
+        ("en", ROOT / "site/content/_index.en.md"),
+    ):
+        markdown_text = path.read_text(encoding="utf-8")
+        html = render_page(markdown_text, lang=lang, data=site_data, root=ROOT)
+        assert "data-copy-text" not in html, (
+            f"{lang}: a copy button still hides its text in an attribute"
+        )
+        match = re.search(
+            r'<div class="command-block">.*?'
+            r'<button class="copy-command" type="button">([^<]*)</button>'
+            r"</div>"
+            r'<pre class="command-block-text">(.*?)</pre>',
+            html,
+            re.DOTALL,
+        )
+        assert match, f"{lang}: install's command-block/pre pair not found"
+        button_label, prompt_text = match.groups()
+        assert button_label.strip(), f"{lang}: copy button has no label"
+        assert len(prompt_text) > 100, (
+            f"{lang}: visible prompt text looks too short to be the real prompt"
+        )
+        assert "csarc status" in prompt_text or "csarc" in prompt_text.lower()
+
+
+def test_copier_generated_project_builds_its_own_bilingual_repo_site(
+    tmp_path: Path,
+) -> None:
+    """Issue #681 decision N/O end-to-end: a real `copier copy` -- not a
+    hand-assembled equivalent fixture -- proves the shared engine actually
+    works through the Copier templating layer, not just when called
+    directly. `languages: []` keeps this in the fast suite (no uv/pnpm/
+    cargo lockfile task fires), while the unconditional `bash scripts/
+    build-repo-site` task still runs and must produce a real bilingual,
+    offline-openable repo-site from `.csarc/config.yml` facts alone.
+    """
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "generated-project"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": [],
+            "project_name": "Generated Project",
+            "project_slug": "generated-project",
+            "project_description": (
+                "Exercises the shared repo-site engine through Copier."
+            ),
+            "repository_url": "https://github.com/example/generated-project",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "public",
+            "code_owner": "@Innoguard-Cyber-Arch/generated-project-team",
+            "reviewers": "@octocat",
+        },
+        defaults=True,
+        unsafe=True,
+    )
+
+    # The retired handbook source is not generated at all any more --
+    # there is no template/docs/site-content.md.jinja left to copy from.
+    assert not (project / "docs/site-content.md").exists()
+    assert (project / "site/content/_index.zh-tw.md").is_file()
+    assert (project / "site/content/_index.en.md").is_file()
+
+    for output in ("docs/index.html", "docs/index.en.html"):
+        html = (project / output).read_text(encoding="utf-8")
+        # Not a bare "{{<": the bundled CSS/JS legitimately mention that
+        # syntax in their own prose comments (e.g. "a `{{< standard >}}`/
+        # `{{< ops >}}` pair replaces..."); an actual unparsed block always
+        # keeps its `key="..."` attribute, which prose never does.
+        assert "{{< slide key=" not in html
+        assert "{{< standard key=" not in html
+        assert "{{< ops key=" not in html
+        assert "[[project_name]]" not in html
+        assert "[[repository_url]]" not in html
+        assert "Generated Project" in html
+        assert "Exercises the shared repo-site engine through Copier." in html
+        assert "@Innoguard-Cyber-Arch/generated-project-team" in html
+        assert "@octocat" in html
+        assert "https://github.com/example/generated-project" in html
+        assert '<link rel="stylesheet"' not in html
+        assert "<script src=" not in html
+        assert 'data-mode="standard"' in html
+        assert 'data-mode="ops"' in html

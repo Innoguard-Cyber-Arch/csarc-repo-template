@@ -36,6 +36,44 @@ tracker 的 `Completion evidence` 段落（見 #512）；#400 與 #401 的自動
 blocked gap。
 delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
 
+## Milestone 掛勾安全網（#551）
+
+Milestone 8 收尾階段 #546–#550 五張 Issue／PR 全部沒有掛 Milestone，且沒有任何工具或
+檢查會提醒——純粹是開 Issue 時忘記加 `--milestone`。#551 為此補上兩層非阻擋性提醒，
+刻意不要求強制 fail-closed：許多 Issue／PR 本來就與任何 Milestone 無關（見 Issue #551
+的「邊界」段落）。
+
+- `scripts/gh-issue-create`：本機開 Issue 當下，若沒有帶 `--milestone`／`-m`，且
+  `scripts/detect-open-milestone` 判定目前恰好只有一個 open Milestone，會印出提示；
+  互動式終端機（`stdin` 是 tty）額外詢問是否要帶入該 Milestone，非互動環境
+  （agent／CI／腳本呼叫）只印出提醒，不阻擋 Issue 建立。
+- `scripts/validate-pr-policy`（CI 端：`pr-policy.yml` 的 `title` job「Validate
+  pull request policy」step）：PR 與其 linked Issue 兩邊都沒有掛任何 Milestone、且同樣
+  恰好有一個 open Milestone 時，於 PR 留言一次性提醒（內嵌 HTML comment marker 避免
+  重複留言）；檢查本身仍維持 pass，不 fail-closed，留言失敗（例如暫時性 API 錯誤）也
+  只印 `::notice::`，不影響結果。
+- 兩者共用同一支 `scripts/detect-open-milestone` 判斷式：0 個或 2 個以上 open
+  Milestone 都視為「無法判斷」，一律不提醒——避免在多 Milestone 並行時猜錯、誤導。
+- 這兩個安全網只在**建立／驗證當下**新增這層提醒。既有的「Issue 已掛 Milestone 但 PR
+  沒有（或反之、或兩者不同）」仍由 `scripts/validate-pr-policy` 既有的 fail-closed 比對
+  規則擋下（見下方 PR policy 逐 step 判讀一節），未被本次變更影響或放寬。
+
+**Milestone 一旦關閉，事後補掛不能用 `gh issue edit --milestone <name>`**——它只用
+名稱查找 open milestone，Milestone 關閉後查不到，會誤以為沒有這個 Milestone、或誤報
+找不到。正確做法是改用 REST API 直接指定 milestone number：
+
+```bash
+gh api repos/{owner}/{repo}/issues/{n} --method PATCH -f milestone=<number>
+```
+
+`<number>` 是 Milestone 的數字 ID（不是標題），可用下列指令查出，closed Milestone 也
+查得到：
+
+```bash
+gh api repos/{owner}/{repo}/milestones --method GET -f state=all \
+  --jq '.[] | "\(.number)\t\(.title)\t\(.state)"'
+```
+
 ### 新發現問題的預設歸屬（#668）
 
 在 Milestone 工作過程中發現的新問題，開新 Issue 時預設留在同一個 Milestone（掛該
@@ -461,6 +499,22 @@ timeout，只呼叫 `scripts/check-template-update`）。公開模板來源不�
 secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
 `pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
 
+生成 repo 另有一個選用容器能力（Issue #554 決定）：開啟 `enable_docker` 才產生
+`Dockerfile`、`docker-compose.yml` 兩份起始範本，以及
+`.github/workflows/docker-build-scan.yml`（`pull_request`，限 Dockerfile／
+docker-compose.yml／已選語言原始碼路徑變更，另加 `workflow_dispatch`；
+`contents: read`；20 分鐘 timeout）。該 job 只呼叫 `docker/build-push-action`
+（`push: false`）在 runner 本機建置映像，再用 `aquasecurity/trivy-action`
+掃描同一本機映像的已知漏洞（`HIGH`／`CRITICAL` 失敗），全程不登入、不推送任何
+registry，也不要求任何 secret。未開啟 `enable_docker` 的專案不會產生上述任一
+檔案，不會多一個觸發中的 job，也不會取得任何新權限；這維持
+`docs/adr/selective-ci-automation-adoption.md` 記錄的既有決定──「不預先幫所有
+repo 產生 container job，非容器專案不應支付 Docker runner 成本或取得 registry
+權限」──只是把它從「完全不提供」明確擴充為「非容器專案零影響的選配項」，兩者
+並不衝突：該 ADR 拒絕的是「預先幫『所有』repo 產生」，不是「讓明確選擇容器化的
+專案自行選用」。本模板 repo 自己的開發／CI 流程不引入 Docker，範圍僅限於是否
+提供這個選配能力給下游生成的專案。
+
 ### 大規模派工前的 Milestone 合規預檢（#572／#574）
 
 M13 一次開 20 張 Issue、6 條平行線同時動的派工模式沒有節流機制：單一 Issue／PR 事件會
@@ -473,9 +527,18 @@ concurrency slot 競爭；二是操作面規則——**大規模派工（多張 
 Issue／PR，不要邊開邊試錯**。
 
 這個 `preflight` 子指令定義在「Enforce Milestone metadata at creation, not after PRs
-fail」（#572，本文件更新時仍為 open、尚未併入 `main`）。本節先記錄操作慣例與依賴關係；
-#572 併入前沒有可執行指令可用，不因此阻塞本 Issue 其餘的合併範圍。#572 併入後應回頭
-補上實際指令與呼叫方式。
+fail」（#572，已併入 `main` 為 #655；本 Milestone delivery branch 尚未同步當時的
+`main`，#667 直接把這個子指令原樣移入本分支，理由與作法見下方「過時 delivery branch
+偵測（#667）」一節）。實際呼叫方式：
+
+```console
+python3 scripts/sync_milestone_state.py preflight --repo <owner>/<repo> --milestone <N>
+```
+
+`preflight` 驗證 due date、tracker 標題與 `Lifecycle Issue:` 連結是否就緒，成功會印出
+`Milestone metadata is ready for work`；失敗會列出缺漏並以非零結束碼結束，供派工前手動
+確認一次。同一次呼叫也會附帶 #667 的過時 branch review 清單（純提示，不影響這個
+Milestone 本身是否就緒的判定）。
 
 ## 驗證分級與實測成本
 
@@ -671,6 +734,59 @@ check 規則決定；本工具只負責把 job 層級噪音拆成正確的 step 
 呼叫的 product surface；`pr-policy.yml` 本身（含其 job/step 結構）仍照原樣
 下發給生成 repo，不受影響。
 
+### Scope-drift gate enforcement 與核可 fingerprint-binding（#632）
+
+`#552`（PR #609）落地了 `sync_milestone_state.py` 的 `has_scope_sentinel()`／
+`scope_decision()`：一張 work Issue 若在 body 逐字獨立一行寫下
+`Tracker scope: expanded`，就需要一次獨立的非提案者核可（或 `admin`
+collaborator 自核例外）才算通過，判斷邏輯與 tracker 層級的 `/milestone approve`
+完全共用。但 `#552` 當時只落地 `check-scope` CLI 子指令本身，刻意不接進任何
+`.github/workflows/*.yml`（見 `docs/adr/milestone-scope-and-closure-reconciliation.md`
+的「刻意不做的部分」），也沒有把核可綁定到特定版本的 body 內容。`#632` 補齊這兩
+個缺口：
+
+- **CI 接線：**`pr-policy.yml` 的 `title` job 新增「Validate the scope-drift
+  gate」step，在「Validate pull request policy」之後、`merge_group` 專屬 step
+  之前執行，呼叫新腳本 `scripts/check-scope-gate`。這支腳本從 PR body 解析
+  `Closes|Fixes|Resolves #<n>`（與 `scripts/validate-pr-policy` 自己用來核對
+  branch-derived Issue 編號的同一個 pattern，`#632` 不重新推導、只重用其結
+  論），找到連結的 work Issue 後呼叫 `sync_milestone_state.py check-scope`；
+  找不到連結 Issue（release 自動化、dependabot、main-sync bridge 等本來就沒
+  有連結 work Issue 的 PR）則直接放行、不擋。`check-scope` 回報未通過時腳本
+  以非 0 結束，比照本檔其他 gate 一貫的 fail-closed 模式擋下該 job；PR 沒有
+  宣告 `Tracker scope: expanded`，或已通過核可，都正常放行。這個 step 比照
+  `check-pr`／`check-merge-group` 既有的 rollout-safety 寫法：因為
+  `title` job 用 `pull_request.base.sha` checkout（刻意不信任 PR 自己送來的
+  policy 腳本），`scripts/check-scope-gate` 這支新腳本要等到落地 `#632` 的
+  這次 PR 本身合併進 base branch 之後才會出現在該 checkout 裡；因此 step 先
+  判斷腳本是否存在（`[[ -x ./scripts/check-scope-gate ]]`），不存在只印
+  `::notice::` 放行，同一張 PR 在自己身上驗證時不會因為這個 chicken-and-egg
+  落差而誤擋（PR #633 落地時已由真實 CI run 實測到這個落差並修正）。
+- **Fingerprint-binding：**`approval_decision()`（tracker 核可）與
+  `scope_decision()`（work Issue scope 核可）共用的 `_approval_records()`／
+  `_gate_decision()`，現在額外比對每則 `/milestone approve`／
+  `admin-approve:` 留言的 `created_at` 與該 Issue（或 tracker）自己的
+  `updated_at`。GitHub REST 不像 Reconciliation 段落的
+  `reconciliation-fingerprint`（bot 自己寫入、可以精確重算比對）那樣提供可
+  查詢的 body 編輯歷史；`updated_at` 是唯一可查的訊號，但它也會因為新留言、
+  label／Milestone／state 變更等與 body 編輯無關的活動而更新
+  （`_approval_is_stale()` 的 docstring 記錄了完整理由）。因此判定刻意走保
+  守方向：只要留言的 `created_at` 早於 `updated_at` 超過 60 秒的緩衝窗（吸收
+  GitHub 自己「留言建立」到「Issue.updated_at 反映該留言」之間，經對本
+  repo 既有 Issue 歷史實測約 1 秒的落差),就視為過期，需要重新核可——寧可提
+  高「需要重新核可」的誤判率，也不讓核可默默套用在已經變動過的 body 版本
+  上。缺少任一時間戳（例如舊測試 fixture 沒有填 `created_at`／`updated_at`）
+  一律視為「無法判斷」而非「一定過期」，維持 `#552` 既有行為不變。
+
+`tests/test_milestone_approval.py`／`tests/test_milestone_scope.py` 覆蓋
+staleness 邊界（含 60 秒緩衝窗、跨過緩衝窗即過期、過期後重新核可即恢復通過）；
+`scripts/test-check-scope-gate` 對 `check-scope-gate` 本身做端到端回歸測試
+（無連結 Issue、無 sentinel、有 sentinel 未核可、有 sentinel 已核可、核可過期
+四種結果，掛在 `scripts/verify-fast` 的 governance／template／workflow／shell
+scope 與 `scripts/verify-stage-regression-tests`）。這次變更不重新設計
+`has_scope_sentinel()` 的偵測邏輯，也不擴大 `/milestone approve`／
+`admin-approve` 留言語彙本身——只在既有機制上補上 CI 接線與版本綁定這兩層。
+
 ### `scripts/verify-template.sh` 階段盤點（#458）
 
 `scripts/verify-template.sh` 是一個薄聚合器：七個階段各自是 `scripts/verify-stage-*`
@@ -689,10 +805,10 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 | 階段（`run_stage` 名稱） | 獨立入口 | 涵蓋風險 | 與 fast tier／其他檢查的關係 |
 | --- | --- | --- | --- |
 | Repository contracts | `scripts/verify-stage-repository-contracts` | changed-tree hygiene、未解決的 Copier／Git 衝突標記、機密掃描、已知漏洞掃描 | fast 每次都跑 `git diff --check`／`check-update-conflicts`／`scan-secrets`；`verify-dependencies` 只在 dependency scope 才跑，呼叫同一支腳本，不是重複邏輯 |
-| Static assets and paired files | `scripts/verify-stage-static-assets` | decision site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` tier 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
+| Static assets and paired files | `scripts/verify-stage-static-assets` | repo-site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` tier 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
 | Python environment | `scripts/verify-stage-python-environment` | `uv.lock` 與 `pyproject.toml` 一致、環境可從鎖定版本安裝 | fast 的 `uv sync --locked` 是同一份鎖定契約；`uv lock --check` 只在 full 額外執行 |
 | Python quality | `scripts/verify-stage-python-quality` | 格式、lint、靜態型別 | fast 對相同原始碼跑相同三個命令，兩者呼叫同一份工具鏈設定，無額外邏輯 |
-| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／release-drift／audit-fleet-adoption／create-milestone／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy 三個 shell 自我測試；base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status、`scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）與 `scripts/create-milestone`（原子建立 Milestone 與其 tracker Issue，見 `docs/milestone-description.md`；#572）六支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`scripts/test-check-release-drift`（mock `gh`，驗證上方「發版存量漂移偵測（`release-drift.yml`，#605）」一節的 drift 判定邏輯）也只掛在這個 full 專屬階段——`scripts/check-release-drift` 本身像 `release.yml` 一樣逐位元組下發到 `template/`，但比照 `release.yml`／`ci.yml` 沒有生成 repo 端本機再測試的既有慣例（下發前的 root 測試已足夠證明這份靜態、無 Jinja 條件式的實作正確），不隨腳本一起下發、也不掛進生成 repo 的 `scripts/verify`；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
+| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／release-drift／audit-fleet-adoption／create-milestone／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate（`scripts/test-check-scope-gate`，見上方 Scope-drift gate enforcement 一節）四個 shell 自我測試；base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status、`scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）與 `scripts/create-milestone`（原子建立 Milestone 與其 tracker Issue，見 `docs/milestone-description.md`；#572）六支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`scripts/test-check-release-drift`（mock `gh`，驗證上方「發版存量漂移偵測（`release-drift.yml`，#605）」一節的 drift 判定邏輯）也只掛在這個 full 專屬階段——`scripts/check-release-drift` 本身像 `release.yml` 一樣逐位元組下發到 `template/`，但比照 `release.yml`／`ci.yml` 沒有生成 repo 端本機再測試的既有慣例（下發前的 root 測試已足夠證明這份靜態、無 Jinja 條件式的實作正確），不隨腳本一起下發、也不掛進生成 repo 的 `scripts/verify`；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
 | Package smoke test | `scripts/verify-stage-package-smoke` | wheel 可建置、已發布入口可從建置產物執行 | fast 不跑這個階段；改用範圍較窄的 Copier smoke copy（見下方 Journey 03 的 PR 級別 render/smoke） |
 | GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | workflow 權限與注入稽核（zizmor） | fast 不跑；workflow scope 的一般 PR 由 full 邊界（promotion／hotfix／merge queue／manual）覆蓋，不會被跳過 |
 
@@ -752,6 +868,52 @@ TOTAL（4002 秒／66 分 42 秒，尤其是 Regression tests 一階段的 3971 
 CSARC_CACHE_ROOT="$HOME/.cache/csarc" ./scripts/verify-template.sh
 ```
 
+### 本機驗證分級判斷原則（cheap-stage-first，#538）
+
+上方三層成本邊界只回答「這次改動落在哪一級」，Base-only re-merge 例外只回答「同一張已經
+驗證過的 PR 要不要重跑」。這裡把兩者之間還沒寫清楚的問題——「這次到底要不要在本機跑一次
+full」與「真的要跑時如何排序」——寫成可執行原則，延續這次 session 已經在用、源自
+Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本機測試反覆鬼打牆
+（redundant full rerun、網路瞬斷、環境競爭噪音耗掉大量時間）。
+
+**先判斷要不要在本機跑，依序四步：**
+
+1. 這張 PR 本身是不是 full-tier 邊界？不是的話，不必為了保險另外在本機跑一次 full；本機
+   義務仍是對應分級的 `./scripts/verify-fast`（tier 由變更範圍決定），成功後留下的
+   attestation 就是 hosted `verify` job 唯一驗證的東西（#661），不是「不必本機跑，直接信
+   任 hosted」。
+2. 是 full-tier 邊界：這個 branch 自己這一輪內容有沒有本機全綠跑過一次
+   `./scripts/verify-template.sh`（生成 repo 是 `./scripts/verify`）？沒有的話，這正是
+   #458 規則要求的那一次，不能省略。
+3. 已經全綠過、現在只是因為 base 前進被迫重新合併：套用上方「Base-only re-merge 例外
+   （#468）」四項條件，只回答「這次重新合併本身乾不乾淨、有沒有引入新風險」；但 #661 之
+   後，即使四項條件全部成立，新的 tip commit 仍沒有自己的 attestation，仍要在本機對它重
+   跑一次才能 push——見上方「#661 之後的現況」，這條例外目前省不下本機重跑本身。
+4. 以上都不成立，才真的執行一次本機 full；開始前先確認沒有其他 worktree／`pytest`／
+   `verify`／`copier` 程序同時佔用本機資源——上方「逐階段耗時量測（#465）」記錄的 4002
+   秒即混入另一個 worktree 的背景負載，不是乾淨基準，容易把負載噪音誤判成回歸。
+
+**真的要在本機跑一次全套時，依 cheap-stage-first 排序，不要悶頭跑到底才發現問題：**
+
+- 先跑上方「`scripts/verify-template.sh` 階段盤點（#458）」六個便宜階段（Repository
+  contracts、Static assets and paired files、Python environment、Python quality、
+  Package smoke test、GitHub Actions audit；#465 量測每階段 ≤10 秒），用對應的
+  `scripts/verify-stage-<name>` 逐一單獨執行，不必等待整條聚合器。
+- 六個便宜階段全部 PASSED，才進入唯一昂貴的 Regression tests 階段（#465 量測 3971 秒，
+  佔同次 TOTAL 九成以上）；任一便宜階段先失敗，就先處理該階段本身，不必先跑完昂貴階段。
+- Regression tests 若因暫時性錯誤中止（例如 #465 記錄的
+  `curl: (92) HTTP/2 stream ... PROTOCOL_ERROR` 網路瞬斷），只用
+  `scripts/verify-stage-regression-tests` 單獨重跑這一階段，不必連同已經 PASSED 的六個
+  便宜階段一起重跑整支聚合器。
+- 任務進行中一旦發現「其實有更便宜的路徑」（例如原本以為要本機全跑，後來發現符合
+  base-only re-merge 例外，或某階段本次 session 已經驗證過），立刻重新評估同一 session
+  內所有**還沒開始**的驗證步驟，不要因為原計畫已經寫好就照舊執行；已經真正執行並拿到結果
+  的步驟不必重跑。
+
+以上四步起頭判斷與 cheap-stage-first 排序，都不是放寬「full-tier PR 一定要本機全綠跑過
+一次」的既有規則（#458），只回答「什麼時候該跑」與「真的要跑時怎麼跑最省時間」；merge
+資格與 required check 仍由 Journey 08 與本文件既有規則決定。
+
 ## 版本、發版、交付與部署矩陣
 
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
@@ -800,6 +962,87 @@ repo-local 入口取代；promotion、delivery maintenance、release consumption
 - 沒有真實成品、owner、權限或 live run 時，狀態保持 manual、conditional、blocked 或
   not applicable，不以歷史成功補足。
 
+### 過時 delivery branch 偵測（stale branch detection，#667）
+
+2026-09-04 人工盤點遠端 branch 時找到 9 個長期殘留的過時 branch（例如
+`type/524-lightweight-render-engine`、`fix/441-delivery-manual-contract`、
+`dev/m9-decision-site-adoption`）。逐一查證：全部對應 PR 都是**關閉但未合併**，實際
+work 都已透過後續重新命名或重新開的 PR 落地，只能手動刪除。
+
+**根因**：上面「合併後自動刪除一般來源 branch」這條 fallback 依賴的是
+`delete_branch_on_merge`（`policies/repository.json`）——這個設定只在 PR **合併**時
+觸發，一個 PR 被**關閉但未合併**時，它的來源 branch 完全不受這個設定保護，會無限期
+殘留，過去沒有任何偵測機制。這批 debris 本身是這個設定生效之前留下的舊帳，不是設定
+持續在漏；但設定本身也從未被驗證過仍是 `true`，且 Milestone-adjacent 但被遺忘的
+branch（如 `dev/m9-decision-site-adoption`）沒有任何提醒機制，只能靠人工偶然發現。
+
+**分工（兩者互補，不重疊）：**
+
+| 機制 | 觸發時機 | 涵蓋範圍 | 動作 |
+| --- | --- | --- | --- |
+| `delete_branch_on_merge`（既有） | PR 合併瞬間 | 合併成功的 PR 來源 branch | 自動刪除 |
+| `scripts/apply-repository-settings.sh check`（既有，本節確認涵蓋） | 手動／CI 執行時 | `delete_branch_on_merge` 這個 repo 設定本身是否仍是 `true` | 只回報 drift，不刪除任何 branch |
+| `scripts/stale_branch_detection.py`（本節新增） | Milestone preflight／release preflight 執行時 | 關閉未合併、或從未開過 PR 的過時 branch | 只回報候選清單，**不刪除** |
+
+**`apply-repository-settings.sh check` 的確認結果**：`delete_branch_on_merge` 已經是
+`policies/repository.json` 的既有欄位，`check` 子指令既有的 repository-settings drift
+比對是對這個檔案裡每一個欄位做通用逐一比對（與 `pull_request_creation_policy` 完全
+同一段邏輯，沒有各自獨立的程式碼），因此 `delete_branch_on_merge` 被意外關閉時本來就
+會被這段既有邏輯抓到——不需要新增專屬程式碼，只需要補上一個回歸測試案例證明涵蓋範圍
+（`scripts/test-apply-repository-settings` 的 Case 3b）。
+
+**偵測邏輯（`scripts/stale_branch_detection.py`）**：列出遠端 branch 中同時符合以下
+三項的候選：(a) 沒有對應的 open PR（含跨 repo fork PR 不算數，因為那個 PR 的
+`headRefName` 是 fork 裡的 branch，不是本 repo 的）、(b) 不是 `main`、`dev/m<N>-<slug>`
+（Milestone delivery branch，形狀與 `promotion_gate.py` 的 `MILESTONE_BRANCH` 一致）、
+或 `csarc/*`（機器管理的基礎設施 ref：`scripts/pr_lifecycle.py` 寫入的
+`csarc/leases/*` PR lifecycle lease，與交易 ledger `csarc/dev-next-preservation-ledger`
+——兩者都不是 work branch）、(c) 最後一次 commit 距今超過門檻天數。只回報候選清單，
+**從不自動刪除**——沒有 PR 的 branch 也可能只是還沒開 PR 的進行中工作，自動刪除風險
+太高。
+
+**門檻：預設 30 天。** 一個關閉未合併的 branch 幾乎肯定永久不會再有新 commit，所以門檻
+本身對「真的殘留」而言不敏感；真正的風險方向相反——誤判仍在進行中的正常工作為
+「過時」。本 repo 常態同時有數十條各自獨立 worktree／branch 平行推進（見本文件多處
+描述的派工模式），因 review 排隊或依賴其他 PR 而安靜一到數週是正常現象，不代表放棄。
+30 天足以涵蓋這種正常空窗期，同時仍能在大約一個月內就攔截真正的殘留，不會像這次找到
+的 9 個 branch 一樣累積數月才被人工發現。可用 `threshold_days` 參數覆寫。
+
+**掛載點（兩個既有自我檢核入口，刻意不新開排程 workflow）：**
+
+- `scripts/sync_milestone_state.py preflight`：每次驗證 Milestone metadata 時，一併
+  印出過時 branch review 清單（純提示，never 影響 `preflight` 本身的 pass/fail —
+  這與這個 Milestone 的 metadata 是否就緒無關）。
+- `scripts/release_policy.py preflight`：與既有 `integrations`（Renovate 安裝建議）
+  同一種 advisory 資料，掛在 JSON 報告的 `repo_hygiene` 欄位下——發版是另一個天然的
+  「該回頭看一下 repo 衛生狀況」時機點，同樣純提示，never 讓一次發版因為有過時 branch
+  候選而被擋下。任何 `gh` 呼叫失敗都會被吸收成 `"available": false` 而不是拋出例外，
+  因為這個檢查不應該因為自己不可用就連帶擋住不相關的 Milestone 或發版流程。
+
+### Repo 能力自我檢查與 workaround 對照（capability matrix，#531）
+
+`scripts/apply-repository-settings.sh` 既有的 `DEGRADED` 機制回答的是「這個帳號的
+GitHub 方案允許什麼」；但同一個方案上，organization 政策、CODEOWNERS team 是否存在、
+token 權限範圍，仍可能個別擋住某一項能力——這一層目前沒有自動檢查，也沒有把 workaround
+集中寫清楚。`policies/capability-matrix.json` 補上這份「repo 能力矩陣」：每一項能力
+（`repository_admin`、`ruleset_enforcement`、`codeowners_enforcement`、
+`actions_pr_approval`、`security_and_analysis`、`github_pages`、
+`repository_settings_inspection`、`immutable_releases`）各自對應最低權限／方案需求、
+偵測方式與已記錄的 workaround。`scripts/repo_capabilities.py` 是純邏輯的 evaluator（三態
+`allowed`／`blocked`／`unknown`，與 `docs/adr/capability-aware-governance.md` 既有的
+三態慣例一致），`scripts/check-repo-capabilities` 則是即時對這個 repo 探測、組成 facts
+再交給 evaluator 的唯讀入口——只回報，不寫入 GitHub，也不是新的合併關卡。
+
+刻意的邊界（Issue #531）：這套機制不重新設計 `apply-repository-settings.sh` 既有的
+`DEGRADED` 標記本身；矩陣裡每一列的 workaround，只要底層限制原本就有對應的
+`DEGRADED` 字樣（Ruleset、CODEOWNERS 檢查、Actions PR 政策、`security_and_analysis`、
+GitHub Pages 五項），就直接引用同一段既有訊息，而不是另建一套平行說法。`policies/
+capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能力矩陣說明框
+（`docs/index.html#install`）互為單一來源：矩陣是機器可讀的權威內容，頁面是給人看的雙語呈現，兩者由
+`tests/test_advanced_install_content.py` 的每一個能力 id 都必須同時出現在雙語頁面這條
+規則機械式對齊。`immutable_releases` 一列例外：它無法單靠 repository 權限探測判斷，一律
+回報 `unknown`，並指向上面「hosted 發版路徑的已知限制」一節，而不是假裝可以自動判定。
+
 ### Release 發版不依賴 Actions 健康度的 fallback（#589，2026-09-03）
 
 2026-09-03 的實際事故（#587）證明「發版」目前完全綁在 `release.yml` 這一支 workflow 是否能在 GitHub Actions 上成功執行：M8 promotion 後，`docs/index.html` 過期讓 full-tier 驗證卡住，`main` 上每一次 push 觸發的 `release.yml` run 全部失敗，加上同一天稍早出現的 `pull_request` webhook 投遞間歇性異常，讓「能不能發版」完全停擺超過 8 小時、沒有人自動被通知，直到人工檢查 Releases 頁面才發現。既有的「Actions 額度 fallback」（見 [staged-delivery-and-verification ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/staged-delivery-and-verification.md)）解決的是不同的觸發條件：額度用盡有 GitHub 回傳的明確錯誤訊息（zero-step billing block），可以機械式偵測；本節處理的觸發條件——hosted runner 卡住、webhook 沒有投遞、或其他導致 Actions 本身不健康的狀況——**沒有對應的機械式訊號**：它看起來就是「什麼都沒發生」，而「什麼都沒發生」本來就有可能只是因為沒有東西需要發版。這個不對稱是本節 fallback 刻意設計成「人或 agent 主動決定啟用」而非自動觸發的原因，也是為什麼另外需要一道獨立排程的存量檢查——這道檢查因範圍與時間考量從 #589 拆分為獨立追蹤，已落地為下方「發版存量漂移偵測（`release-drift.yml`，#605）」一節。
@@ -829,6 +1072,86 @@ repo-local 入口取代；promotion、delivery maintenance、release consumption
 3. **採用**：正式承認 hosted Automatic／Guided 對 `immutable_releases` 永遠無法自證，把本節上方的本機 `scripts/publish-release` 路徑從「fallback」升格為**標準發版程序**——不是備援，是預設做法；由 agent（Claude Code session）在維護者授權下本機執行，用維護者自己的 admin 身份，天生就能真的讀到這個設定，不需要額外 secret，也不推翻 #123。「自動化」的著力點從「push 進 main 自動觸發」改成「agent 執行、人不用碰指令」。
 
 hosted `release.yml` 保留在 repo 裡（`verify`／`title`／`promotion` 仍然只能由它產生，不受影響），但它的 Automatic／Guided 版本發布功能正式標註為**已知限制，非待修復項目**——除非之後方向一或方向三的取捨改變，不會投入資源讓它自己成功發布。
+
+### Release 說明文字的最低格式規範（#616）
+
+M8 補發版（#587）過程中發現：`release.yml` 產生的 GitHub Release 說明文字，完全交給
+`googleapis/release-please-action`（Automatic）或本機 candidate 產生，沒有任何規定
+「一則正式 Release 的說明文字最低限度要包含什麼」。上兩節把本機 `scripts/publish-release`
+從 fallback 升格為標準程序後，Release 內容理論上可能來自兩種不同執行環境（hosted
+Actions 或本機），本節盤點實際程式碼路徑，回答這個風險是否需要額外規範或檢查。
+
+**盤點結論：整個 repo 只有一個程式碼路徑會建立 Release 說明文字。**
+`scripts/converge-release-tag` 是唯一呼叫 `gh release create` 的地方：
+
+```bash
+gh release create "$tag" --target "$sha" \
+  --title "$tag" --draft --generate-notes
+```
+
+`scripts/publish-release stage`（Automatic 與 Guided 共用同一個進入點）呼叫這支腳本；
+`release.yml` 與本機執行都呼叫同一份 `scripts/publish-release`。`googleapis/
+release-please-action` 在 Automatic 路徑只負責開版本 PR、同步版本檔與 CHANGELOG，
+不建立 Release 也不寫入 Release 說明；`release_policy.py prepare-candidate` 在 Guided
+路徑同樣只改版本檔與 CHANGELOG，不建立 Release。兩條路徑最終都收斂到
+`converge-release-tag` 這同一行呼叫——不是兩套各自維護、恰好長得很像的邏輯，而是結構上
+只有一份實作，呼應 #589 決定本身的第一原則（單一 repo-local 腳本被兩種呼叫方式共用）。
+`scripts/publish-release` 之後唯二對同一 Release 的寫入是 `gh release edit "$tag"
+--draft` 與 `gh release edit "$tag" --draft=false --latest`（`cmd_publish`／
+`revert_to_draft_on_failure`），兩者都不帶 `--notes`／`--notes-file`，不會覆寫或附加任何
+自由格式文字到 `--generate-notes` 已寫入的內容。
+
+**最低必要欄位——已經是結構保證，不是待補的規範：**
+
+| 欄位 | 來源 | 保證方式 |
+| --- | --- | --- |
+| 版本號 | `gh release create "$tag" --title "$tag"` | Release 標題固定等於 `release_policy.py` 算出的 tag；不存在自由輸入版本號的路徑 |
+| 發布日期 | GitHub 平台的 Release 建立／`publishedAt` metadata | `--draft=false` 轉為正式發布時由 GitHub 自動蓋章；不需要、也不必在說明文字內容裡重複 |
+| 變更摘要 | `--generate-notes` 產生的「What's Changed」PR 清單＋前一版比較連結 | GitHub 依 merged PR 標題（本 repo 的合併 commit 標題慣例採 Conventional Commits，`release_policy.py::release_intent` 依此判斷版本影響）自動彙整；沒有人工輸入步驟可以省略或打錯 |
+
+**刻意不要求「已知限制」／「回溯相容性」等額外欄位，不強制每則 Release 都要有這兩段：**
+
+1. 大部分 patch／dependency-bump 等級的 Release 沒有實質已知限制或破壞性變更；逐則
+   要求填寫只會製造樣板空段落，稀釋真正需要注意的內容，不會提高訊號。
+2. 破壞性變更本身已經有機制承載：PR／commit 標題的 `!` 標記與 `BREAKING CHANGE:` 會被
+   `release_policy.py::release_intent` 判成 major，反映在 Guided 路徑
+   `_write_changelog` 產生的 CHANGELOG.md「Breaking Changes」小節與 Automatic 路徑
+   release-please 自己產生的 CHANGELOG 段落；`--generate-notes` 的 PR 清單本身也會列出
+   該次變更對應的 PR，讀者可從 PR 內容取得細節，不需要在 Release 說明文字裡重述一次。
+3. 真正跨版本持續有效、不是「這一版特有」的已知限制（例如上一節的 hosted
+   Automatic／Guided 對 `immutable_releases` 永遠無法自證），本來就屬於維護一次、隨時
+   查閱的專案文件，而不是需要在每一則 Release 說明文字裡重複貼一次、還容易隨時間跟實際
+   狀況脫節的內容——這類內容留在 `docs/ci-policy.md` 與 repo-site，Release 說明文字不必
+   自我複製（見下方 repo-site 頁面章節）。
+
+**CHANGELOG.md 與 GitHub Release 說明文字是兩個各自獨立、都真實但不相同的視角，刻意不
+強制兩者逐字一致：** `CHANGELOG.md`（Guided 路徑的 `_write_changelog`，或 Automatic 路徑
+release-please 自己的產生邏輯）以 Conventional Commit 的 intent 分類（Breaking
+Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 說明文字
+（`--generate-notes`）以 PR 層級列出「What's Changed」＋作者＋比較連結。兩者的分類軸線
+不同，但共同來源都是同一批 merged 內容，不會出現「這個環境看得到的變更、另一個環境看
+不到」的實質落差，只是呈現角度不同——讀者在任一邊都能找到同一批變更。
+
+**評估結論：不需要額外的結構化格式一致性檢查腳本。** 理由：
+
+1. 上面盤點已經證明 hosted 與本機路徑呼叫的是同一支 `scripts/publish-release`（進而
+   呼叫同一支 `scripts/converge-release-tag`）——不存在兩份平行實作會長期漂移的風險；
+   #589 設計本身的第一原則已經涵蓋這裡，不需要為這個 Issue 另外重新解決一次。
+2. 一個額外的格式檢查腳本，若要驗證的對象是 `--generate-notes` 產生的自由格式文字內容
+   本身，等於要對 GitHub 平台自己產生、不受本 repo 控制的文字做格式驗證；其確切呈現
+   （標題階層、項目符號、compare 連結措辭）屬於 GitHub 產品行為，寫死格式斷言容易在
+   GitHub 調整呈現方式時變成假陽性失敗，卻不代表本 repo 自己的邏輯真的壞了。
+3. 真正值得防的風險——未來有人繞過 `converge-release-tag`、另開一個呼叫路徑，各自帶
+   不同 flag（例如漏掉 `--generate-notes`，或加上覆寫用的 `--notes`）——是程式碼結構
+   層級的問題，用回歸測試斷言「整個 repo 只有一個 `gh release create` 呼叫點，且該
+   呼叫點的 flag 組合不變、沒有其他地方對 Release 呼叫 `--notes`／`--notes-file`」就能
+   可靠涵蓋，不需要解析或驗證產生出來的自由格式文字內容本身。
+   `tests/test_release_notes_format.py` 落地這個斷言，掛在 `scripts/verify-fast`
+   既有的 `uv run pytest` 範圍內，每次 PR 都跑，不需要另外的 full-tier 專屬階段。
+
+**下發到 `template/`：** `scripts/converge-release-tag`／`scripts/publish-release` 已
+透過 `scripts/sync-paired-files.sh` 與 root 逐位元組同步（見上兩節），本節的格式契約
+不需要第二份實作，也不需要另外的 Copier 選項或下發決定。
 
 ### 發版存量漂移偵測（`release-drift.yml`，#605）
 

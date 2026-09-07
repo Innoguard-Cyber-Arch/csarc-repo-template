@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression test for scripts/check-repo-capabilities (Issue #531): proves
+# the wrapper actually loads policies/capability-matrix.json, evaluates it
+# against pre-built --facts fixtures for several distinct permission/plan
+# combinations, and reports the correct gap list and exit code for each --
+# without ever calling `gh` or needing network/auth, since --facts bypasses
+# the live-gathering path entirely (mirrors scripts/test-audit-fleet-adoption's
+# --input fixture approach).
+
+script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-repo-capabilities"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+
+allowed_facts() {
+  # All eight real capability ids, defaulting to "allowed"
+  # (immutable_releases defaults to "unknown", its only real status -- see
+  # policies/capability-matrix.json), with any positional NAME=STATUS
+  # overrides applied on top via jq, one at a time. Plain bash (no
+  # associative arrays), matching this repository's other shell scripts.
+  local result='{
+    "repository_admin": {"status": "allowed", "detail": "fixture"},
+    "ruleset_enforcement": {"status": "allowed", "detail": "fixture"},
+    "codeowners_enforcement": {"status": "allowed", "detail": "fixture"},
+    "actions_pr_approval": {"status": "allowed", "detail": "fixture"},
+    "security_and_analysis": {"status": "allowed", "detail": "fixture"},
+    "github_pages": {"status": "allowed", "detail": "fixture"},
+    "repository_settings_inspection": {"status": "allowed", "detail": "fixture"},
+    "immutable_releases": {"status": "unknown", "detail": "fixture"}
+  }'
+  local override key value
+  for override in "$@"; do
+    key="${override%%=*}"
+    value="${override#*=}"
+    result="$(jq --arg k "$key" --arg v "$value" '.[$k].status = $v' <<<"$result")"
+  done
+  printf '%s' "$result"
+}
+
+# Case 1: admin on a public repo with full org support -- only the
+# never-detectable immutable_releases row remains a gap.
+allowed_facts >"$fixture_root/best_case.json"
+out="$("$script_path" --facts "$fixture_root/best_case.json")"
+grep -Fq "[ALLOWED] repository_admin" <<<"$out"
+grep -Fq "[ALLOWED] ruleset_enforcement" <<<"$out"
+grep -Fq "[UNKNOWN] immutable_releases" <<<"$out"
+grep -Fq "7 allowed, 0 blocked, 1 unknown out of 8 capabilities." <<<"$out"
+
+# Case 2: Free-plan private repository -- plan-gated rows degrade
+# (ruleset, security scanning, Pages) while admin-only rows stay allowed.
+allowed_facts \
+  ruleset_enforcement=blocked \
+  security_and_analysis=blocked \
+  github_pages=blocked \
+  actions_pr_approval=unknown \
+  >"$fixture_root/free_private.json"
+out="$("$script_path" --facts "$fixture_root/free_private.json")"
+grep -Fq "[BLOCKED] ruleset_enforcement" <<<"$out"
+grep -Fq "[BLOCKED] security_and_analysis" <<<"$out"
+grep -Fq "[BLOCKED] github_pages" <<<"$out"
+grep -Fq "[ALLOWED] repository_admin" <<<"$out"
+grep -Fq "[ALLOWED] codeowners_enforcement" <<<"$out"
+
+# Case 3: non-admin token -- admin-gated rows blocked, plan-derived rows
+# (ruleset/security/pages) unaffected, proving the two gating axes are
+# independent.
+allowed_facts \
+  repository_admin=blocked \
+  repository_settings_inspection=blocked \
+  codeowners_enforcement=unknown \
+  actions_pr_approval=unknown \
+  >"$fixture_root/non_admin.json"
+out="$("$script_path" --facts "$fixture_root/non_admin.json")"
+grep -Fq "[BLOCKED] repository_admin" <<<"$out"
+grep -Fq "[BLOCKED] repository_settings_inspection" <<<"$out"
+grep -Fq "[ALLOWED] ruleset_enforcement" <<<"$out"
+grep -Fq "[ALLOWED] security_and_analysis" <<<"$out"
+grep -Fq "[ALLOWED] github_pages" <<<"$out"
+
+# Case 4: every gap prints a requirement and a workaround line, and no
+# allowed row does -- proving checklist item 4 (every gap has a documented
+# workaround) holds structurally, not just for one hand-picked capability.
+out="$("$script_path" --facts "$fixture_root/free_private.json")"
+gap_count="$(grep -c '^\[BLOCKED\]\|^\[UNKNOWN\]' <<<"$out")"
+requirement_count="$(grep -c '  requirement: ' <<<"$out")"
+workaround_count="$(grep -c '  workaround: ' <<<"$out")"
+[[ "$requirement_count" -eq "$gap_count" ]]
+[[ "$workaround_count" -eq "$gap_count" ]]
+
+# Case 5: --json emits one machine-readable object with a matching summary.
+out_json="$("$script_path" --facts "$fixture_root/best_case.json" --json)"
+echo "$out_json" | jq -e '.summary.allowed == 7 and .summary.unknown == 1' >/dev/null
+echo "$out_json" | jq -e '.capabilities | length == 8' >/dev/null
+
+# Case 6: --facts never writes, caches, or mutates anything -- the fixture
+# directory is byte-identical before and after every run above.
+before_listing="$(find "$fixture_root" -type f | sort)"
+"$script_path" --facts "$fixture_root/best_case.json" >/dev/null
+after_listing="$(find "$fixture_root" -type f | sort)"
+[[ "$before_listing" == "$after_listing" ]]
+
+# Case 7: a missing --facts file is a usage error, not a silent empty report.
+set +e
+"$script_path" --facts "$fixture_root/does-not-exist.json" >/dev/null 2>/dev/null
+missing_status=$?
+set -e
+[[ "$missing_status" -ne 0 ]]
+
+echo "test-check-repo-capabilities: all permission-combination cases passed."

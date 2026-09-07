@@ -1,0 +1,247 @@
+{
+  "key": "template-upgrade",
+  "code": "09",
+  "labels": {
+    "zh-tw": {
+      "title": "模板升級",
+      "heading": "步驟 09／建立、導入與更新",
+      "scope": "公版 repo 驗證建立、既有 repo 首次導入與後續更新；生成 repo 只保留自己的驗證入口與選用的更新通知。首次導入沒有可信任 base 時由人核准，不執行 PR head 新增的程式。"
+    },
+    "en": {
+      "title": "Template upgrades",
+      "heading": "Step 09 / Create, adopt, and update",
+      "scope": "The template repository verifies creation, first adoption, and later updates. Generated repositories keep only their own verification entrypoint and optional update notice. A person approves a first adoption whose base has no trusted verifier; PR-head programs are not executed."
+    }
+  },
+  "rows": [
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "建立新 repo",
+          "description": "由固定公版版本產生所選設定與語言模組，再執行生成 repo 自己的驗證。"
+        },
+        "en": {
+          "title": "Create a new repository",
+          "description": "Generate the selected settings and language modules from a pinned template revision, then run the generated repository's own verification."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/verify"
+            }
+          ],
+          "note": {
+            "zh-tw": "生成完成後只執行自己的驗證；不下發公版專用測試。",
+            "en": "After creation, the generated repository runs only its own verification; template-only tests are not delivered."
+          }
+        }
+      },
+      "templateOnly": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/verify-fast"
+            }
+          ],
+          "note": {
+            "zh-tw": "建立一個代表性 repo 做 smoke；不在每張 Issue PR 跑完整矩陣。",
+            "en": "Creates one representative repository for a smoke check without running the complete matrix on every Issue PR."
+          }
+        },
+        "release": {
+          "files": [
+            {
+              "path": "tests/test_cli.py"
+            },
+            {
+              "path": "scripts/verify-template.sh"
+            }
+          ],
+          "note": {
+            "zh-tw": "完整重跑建立矩陣。",
+            "en": "Reruns the complete creation matrix."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "首次導入既有 repo",
+          "description": "repo 外的固定 CLI 產生 machine plan 並套用同一份 plan；第一張 PR 由人核對來源、diff 與本機證據。"
+        },
+        "en": {
+          "title": "First adoption of an existing repository",
+          "description": "A pinned CLI outside the repository creates a machine plan and applies that same plan. A person reviews the source, diff, and local evidence in the first PR."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "automationNote": {
+            "zh-tw": "人工門檻：base 尚無可信任 verifier 時不執行 PR head 程式；合併後才啟用一般自動檢查。",
+            "en": "Manual gate: when the base has no trusted verifier, no PR-head program runs. Normal automation starts after merge."
+          }
+        }
+      },
+      "templateOnly": {
+        "milestone": {
+          "files": [
+            {
+              "path": "tests/test_cli.py"
+            }
+          ],
+          "note": {
+            "zh-tw": "修改導入邏輯時在本機跑受影響的 focused case；大型導入矩陣不放進 fast。",
+            "en": "Changes to adoption logic run the affected focused case locally; the large adoption matrix stays out of fast."
+          }
+        },
+        "release": {
+          "files": [
+            {
+              "path": "tests/test_cli.py"
+            },
+            {
+              "path": "scripts/verify-template.sh"
+            }
+          ],
+          "note": {
+            "zh-tw": "完整重跑導入、人工衝突與失敗不改 target。",
+            "en": "Fully reruns adoption, manual conflicts, and leaving the target untouched on failure."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "後續更新與衝突",
+          "description": "先在 candidate 完成 Copier update 與驗證；通過後才修改 target，失敗或衝突可修正後重跑。"
+        },
+        "en": {
+          "title": "Later updates and conflicts",
+          "description": "Complete the Copier update and verification in a candidate first. Change the target only after success; failures and conflicts can be corrected and rerun."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/verify"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "首次導入已合併後的更新 Issue PR",
+                "en": "Update Issue PRs after the first adoption has merged"
+              },
+              "timeout": "30 min"
+            }
+          ],
+          "automationNote": {
+            "zh-tw": "base 上的 PR policy 先驗證規則，唯讀 CI 再執行候選內容。",
+            "en": "The PR policy from the base validates rules first, then read-only CI runs the candidate."
+          }
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/verify"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "含模板更新的發版 PR",
+                "en": "Release PRs containing a template update"
+              },
+              "timeout": "30 min"
+            }
+          ],
+          "automationNote": {
+            "zh-tw": "沿用唯讀 contents 權限的 CI；Action 只選擇並呼叫 repo-local 驗證。",
+            "en": "Uses CI with read-only contents permission; the Action only selects and calls repository-local verification."
+          }
+        }
+      },
+      "templateOnly": {
+        "milestone": {
+          "files": [
+            {
+              "path": "tests/test_cli.py"
+            }
+          ],
+          "note": {
+            "zh-tw": "修改更新邏輯時在本機跑受影響的 focused case；大型 update 矩陣不放進 fast。",
+            "en": "Changes to update logic run the affected focused case locally; the large update matrix stays out of fast."
+          }
+        },
+        "release": {
+          "files": [
+            {
+              "path": "tests/test_cli.py"
+            },
+            {
+              "path": "scripts/verify-template.sh"
+            }
+          ],
+          "note": {
+            "zh-tw": "完整驗證同一 repo 的 update、legacy conflict 與原子失敗。",
+            "en": "Fully verifies updates on the same repository, legacy conflicts, and atomic failure."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "通知有新版公版",
+          "description": "通知只提示維護者評估新版，不會自動套用或合併。"
+        },
+        "en": {
+          "title": "Notify maintainers about a new template",
+          "description": "A notification only asks maintainers to evaluate a new revision; it never applies or merges one automatically."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/check-template-update"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/template-update.yml",
+              "job": "check",
+              "trigger": {
+                "zh-tw": "每週一／手動執行；只有設定開啟才產生",
+                "en": "Every Monday or manual dispatch; generated only when enabled"
+              },
+              "timeout": "10 min"
+            }
+          ]
+        }
+      },
+      "templateOnly": {
+        "release": {
+          "files": [
+            {
+              "path": "tests/test_template_update_notifications.py"
+            }
+          ],
+          "note": {
+            "zh-tw": "確認開啟時 workflow 與 checker 同時產生，關閉時兩者都不存在，而且 root 不會誤執行。",
+            "en": "Confirms that the workflow and checker are both generated when enabled, both absent when disabled, and never run in the template root."
+          }
+        }
+      }
+    }
+  ]
+}

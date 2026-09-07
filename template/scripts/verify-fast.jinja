@@ -24,14 +24,14 @@ git diff --check
 
 if [[ "$tier" == "docs" ]]; then
   python3 scripts/spec_to_issue.py validate
-  python3 scripts/render_site.py --check
+  ./scripts/build-repo-site --check
   ./scripts/write-verify-attestation fast
   exit 0
 fi
 
 if [[ "$scopes" == *,docs,* ]]; then
   python3 scripts/spec_to_issue.py validate
-  python3 scripts/render_site.py --check
+  ./scripts/build-repo-site --check
 fi
 
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
@@ -48,6 +48,8 @@ if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
   ./scripts/test-worktree-cleanup
   ./scripts/test-pr-policy
   ./scripts/test-apply-repository-settings
+  ./scripts/test-check-repo-capabilities
+  ./scripts/test-check-scope-gate
 fi
 {% if has_python -%}
 python_version="$UV_PYTHON"
