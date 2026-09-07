@@ -17,7 +17,7 @@
         },
         existing: {
           title: '把公版導入既有 repo',
-          goal: '先用 --dry-run 在 repo 外產生短版 Markdown 與一頁 PDF，預覽新增、覆寫、保留、人工合併與無法判定項目；必須是乾淨 Git working tree，預設保留產品內容。報告只描述已知風險，不保證沒有語意或執行期衝突。',
+          goal: '先用 --dry-run 在 repo 外產生一份 Markdown 報告，預覽新增、覆寫、保留、人工合併與無法判定項目；必須是乾淨 Git working tree，預設保留產品內容。報告只描述已知風險，不保證沒有語意或執行期衝突。',
           location: '既有 repo 根目錄',
           code: `git switch -c chore/<issue-number>-adopt-csarc-template
 uvx --from csarc-repo-cli csarc adopt . --dry-run \\
@@ -73,7 +73,7 @@ gh auth status`
         },
         existing: {
           title: 'Adopt the template into an existing repo',
-          goal: 'A --dry-run run first produces a short Markdown report and a one-page PDF outside the repo, previewing additions, overwrites, kept content, manual-merge items, and anything it cannot classify; the working tree must be clean, and product content is kept by default. The report only describes known risk -- it does not guarantee there is no semantic or runtime conflict.',
+          goal: 'A --dry-run run first produces a Markdown report outside the repo, previewing additions, overwrites, kept content, manual-merge items, and anything it cannot classify; the working tree must be clean, and product content is kept by default. The report only describes known risk -- it does not guarantee there is no semantic or runtime conflict.',
           location: 'Existing repo root',
           code: `git switch -c chore/<issue-number>-adopt-csarc-template
 uvx --from csarc-repo-cli csarc adopt . --dry-run \\

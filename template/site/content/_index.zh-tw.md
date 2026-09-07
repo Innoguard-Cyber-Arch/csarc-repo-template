@@ -52,7 +52,7 @@ git clone [[repository_url]]
 ./scripts/verify-fast
 ```
 
-`scripts/verify-fast` 是這個 repo 日常 PR 走的驗證分層入口，跟 CI 共用同一套邏輯；只有 Milestone／canary 交付、hotfix 或 merge queue 才需要跑完整的 `scripts/verify-template.sh`。本機需求（語言工具鏈、`gh` 登入等）與這個 repo 選用的語言（[[languages]]）有關，詳見 README。
+`scripts/verify-fast` 是這個 repo 日常 PR 走的驗證分層入口；push 前務必先跑過，因為 hosted CI 不再重新執行它，只核對它成功時留下的 `Verified-locally:` 驗證聲明。只有 Milestone／canary 交付、hotfix 或 merge queue 才需要跑完整的 `scripts/verify-template.sh`。本機需求（語言工具鏈、`gh` 登入等）與這個 repo 選用的語言（[[languages]]）有關，詳見 README。
 {{< /ops >}}
 {{< /slide >}}
 

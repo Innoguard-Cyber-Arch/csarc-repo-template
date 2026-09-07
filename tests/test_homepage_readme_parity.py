@@ -173,10 +173,10 @@ def test_required_facts_appear_in_readme_and_both_home_slides() -> None:
         assert "Python、Rust、TypeScript" in text, (
             f"{label} is missing the supported-languages line"
         )
-        assert "v0.13.0" in text, f"{label} is missing the repo/CLI version"
+        assert "v0.14.0" in text, f"{label} is missing the repo/CLI version"
 
     assert "Python, Rust, and TypeScript" in en
-    assert "v0.13.0" in en
+    assert "v0.14.0" in en
 
     # Site template / render engine versions: README states them as plain
     # text (it is never run through the site's `[[...]]` token

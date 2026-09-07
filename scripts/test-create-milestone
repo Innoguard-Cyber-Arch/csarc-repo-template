@@ -1,0 +1,328 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression test for scripts/create-milestone (Issue #572): proves the
+# script (1) blocks invalid input locally -- before `gh` is ever invoked --
+# for a missing/malformed --repo, an empty --due-on, a missing/empty
+# --proposal-file, and a --description-file that does not exist; (2) on a
+# valid run, creates the Milestone with a real due date, derives the
+# tracker Issue title from the Milestone number GitHub itself returns
+# (never a hand-typed number), carries the required `enhancement` label
+# and a `Lifecycle Issue: #<N>` link in the Milestone description, and
+# reports the final `sync_milestone_state.py preflight` success; and
+# (3) when the created objects would still fail that same contract (e.g.
+# an empty Proposal section), reports the failure and manual-cleanup
+# guidance instead of declaring success -- GitHub has no multi-object
+# transaction, so nothing is called "ready" until preflight re-validates
+# the result.
+#
+# `gh` is stubbed with a tiny stateful fake so no network access is
+# required and no real Milestone or Issue is ever created. The fake
+# persists state to a JSON file because a real `gh` invocation happens in
+# a fresh process each time create-milestone's own calls and the nested
+# `sync_milestone_state.py preflight` re-read what an earlier call wrote.
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_path="$script_dir/create-milestone"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+
+stub_bin="$fixture_root/bin"
+mkdir -p "$stub_bin"
+cat >"$stub_bin/gh" <<'PY'
+#!/usr/bin/env python3
+"""Fake `gh`: backs the `gh api` / `gh issue create` calls
+scripts/create-milestone and sync_milestone_state.py's `preflight` make,
+against a small JSON file so state written by one call (e.g. the
+Milestone description) is read back correctly by a later, separate `gh`
+process invocation. No network access.
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+STATE_PATH = Path(os.environ["FAKE_GH_STATE"])
+
+
+def _load() -> dict:
+    if STATE_PATH.exists():
+        return json.loads(STATE_PATH.read_text())
+    return {"next_milestone": 100, "next_issue": 900, "milestones": {}, "issues": {}}
+
+
+def _save(state: dict) -> None:
+    STATE_PATH.write_text(json.dumps(state))
+
+
+def _raw_fields(argv: list[str]) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--raw-field":
+            key, _, value = argv[i + 1].partition("=")
+            fields[key] = value
+            i += 2
+        else:
+            i += 1
+    return fields
+
+
+def _flag(argv: list[str], name: str) -> str | None:
+    if name in argv:
+        return argv[argv.index(name) + 1]
+    return None
+
+
+def api(argv: list[str]) -> int:
+    method = _flag(argv, "--method") or "GET"
+    jq_expr = _flag(argv, "--jq")
+    positionals = []
+    skip_next = False
+    for arg in argv:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in ("--method", "--raw-field", "--jq"):
+            skip_next = True
+            continue
+        if arg in ("--paginate", "--slurp"):
+            continue
+        positionals.append(arg)
+    endpoint = positionals[0]
+    state = _load()
+
+    parts = endpoint.split("?")[0].strip("/").split("/")
+    resource = parts[3]
+
+    if resource == "milestones" and len(parts) == 4 and method == "POST":
+        fields = _raw_fields(argv)
+        number = state["next_milestone"]
+        state["next_milestone"] += 1
+        state["milestones"][str(number)] = {
+            "number": number,
+            "title": fields.get("title", ""),
+            "due_on": fields.get("due_on"),
+            "description": fields.get("description", ""),
+        }
+        _save(state)
+        if jq_expr == ".number":
+            print(number)
+        else:
+            print(json.dumps(state["milestones"][str(number)]))
+        return 0
+
+    if resource == "milestones" and len(parts) == 5 and method == "PATCH":
+        number = parts[4]
+        fields = _raw_fields(argv)
+        milestone = state["milestones"][number]
+        if "description" in fields:
+            milestone["description"] = fields["description"]
+        if "due_on" in fields:
+            milestone["due_on"] = fields["due_on"]
+        _save(state)
+        print(json.dumps(milestone))
+        return 0
+
+    if resource == "milestones" and len(parts) == 5 and method == "GET":
+        print(json.dumps(state["milestones"][parts[4]]))
+        return 0
+
+    if resource == "issues" and "milestone=" in endpoint:
+        milestone_number = endpoint.split("milestone=")[1].split("&")[0]
+        matches = [
+            issue
+            for issue in state["issues"].values()
+            if str(issue.get("milestone_number")) == milestone_number
+        ]
+        print(json.dumps(matches))
+        return 0
+
+    if resource == "issues" and len(parts) >= 6 and parts[5] == "comments":
+        print(json.dumps([]))
+        return 0
+
+    print(f"fake gh: unhandled api call: {argv}", file=sys.stderr)
+    return 1
+
+
+def issue_create(argv: list[str]) -> int:
+    repo = _flag(argv, "--repo")
+    title = _flag(argv, "--title")
+    body = _flag(argv, "--body")
+    label = _flag(argv, "--label")
+    assignee = _flag(argv, "--assignee")
+    issue_type = _flag(argv, "--type")
+    state = _load()
+    number = state["next_issue"]
+    state["next_issue"] += 1
+    milestone_number = max((int(n) for n in state["milestones"]), default=None)
+    state["issues"][str(number)] = {
+        "number": number,
+        "title": title,
+        "body": body,
+        "labels": [{"name": label}] if label else [],
+        "user": {"login": (assignee or "tester").lstrip("@"), "type": "User"},
+        "assignee": assignee,
+        "type": issue_type,
+        "state": "open",
+        "state_reason": None,
+        "milestone_number": milestone_number,
+    }
+    _save(state)
+    print(f"https://github.com/{repo}/issues/{number}")
+    return 0
+
+
+def main() -> int:
+    argv = sys.argv[1:]
+    if not argv:
+        return 1
+    if argv[0] == "api":
+        return api(argv[1:])
+    if argv[0] == "issue" and len(argv) > 1 and argv[1] == "create":
+        return issue_create(argv[2:])
+    print(f"fake gh: unhandled command: {argv}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+PY
+chmod +x "$stub_bin/gh"
+
+case_count=0
+new_state() {
+  case_count=$((case_count + 1))
+  export FAKE_GH_STATE="$fixture_root/state-$case_count.json"
+}
+
+run_with_stub() {
+  PATH="$stub_bin:$PATH" "$script_path" "$@"
+}
+
+state_field() {
+  # state_field <jq filter>
+  jq -r "$1" "$FAKE_GH_STATE"
+}
+
+: >"$fixture_root/empty-proposal.txt"
+printf '<!-- TBD -->\n' >"$fixture_root/comment-only-proposal.txt"
+printf 'Ship the reviewed batch of adoption fixes.\n' >"$fixture_root/proposal.txt"
+printf '## Problem\n\nSample problem text.\n' >"$fixture_root/description.txt"
+
+assert_no_gh_call() {
+  [[ ! -e "$FAKE_GH_STATE" ]]
+}
+
+# Case 1: missing --repo is rejected locally; gh is never invoked.
+new_state
+set +e
+out="$(run_with_stub --title "Ship the Q4 batch" --due-on 2026-12-01 \
+  --proposal-file "$fixture_root/proposal.txt" 2>&1)"
+status=$?
+set -e
+[[ "$status" -eq 2 ]]
+grep -Fq 'Provide --repo as owner/repo.' <<<"$out"
+assert_no_gh_call
+
+# Case 2: malformed --due-on is rejected locally; gh is never invoked.
+new_state
+set +e
+out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
+  --due-on 2026/12/01 --proposal-file "$fixture_root/proposal.txt" 2>&1)"
+status=$?
+set -e
+[[ "$status" -eq 2 ]]
+grep -Fq -- '--due-on' <<<"$out"
+assert_no_gh_call
+
+# Case 3: empty --proposal-file is rejected locally; gh is never invoked.
+new_state
+set +e
+out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
+  --due-on 2026-12-01 --proposal-file "$fixture_root/empty-proposal.txt" 2>&1)"
+status=$?
+set -e
+[[ "$status" -eq 2 ]]
+grep -Fq -- '--proposal-file' <<<"$out"
+assert_no_gh_call
+
+# Case 4: nonexistent --description-file is rejected locally; gh is never
+# invoked.
+new_state
+set +e
+out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
+  --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" \
+  --description-file "$fixture_root/does-not-exist.txt" 2>&1)"
+status=$?
+set -e
+[[ "$status" -eq 2 ]]
+grep -Fq -- '--description-file does not exist' <<<"$out"
+assert_no_gh_call
+
+# Case 5: a valid run with only required flags creates a Milestone with a
+# real due date, a tracker Issue titled from the number GitHub returned,
+# the required `enhancement` label and default Feature type/@me assignee,
+# a `Lifecycle Issue: #<N>` link plus a placeholder Acceptance criteria
+# section (no --description-file given), and reports preflight success.
+new_state
+out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
+  --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" 2>&1)"
+grep -Fq 'No --description-file given' <<<"$out"
+grep -Fq 'Milestone metadata is ready for work' <<<"$out"
+grep -Fq 'Milestone #100 (due 2026-12-01) is ready: https://github.com/acme/project/issues/900' <<<"$out"
+[[ "$(state_field '.milestones["100"].due_on')" == "2026-12-01T00:00:00Z" ]]
+[[ "$(state_field '.milestones["100"].description')" == *'Lifecycle Issue: #900'* ]]
+[[ "$(state_field '.milestones["100"].description')" == *'## Acceptance criteria'* ]]
+[[ "$(state_field '.issues["900"].title')" == "Milestone 100: Ship the Q4 batch" ]]
+[[ "$(state_field '.issues["900"].body')" == *'## Proposal'* ]]
+[[ "$(state_field '.issues["900"].body')" == *'Ship the reviewed batch of adoption fixes.'* ]]
+[[ "$(state_field '.issues["900"].body')" == *'## Completion evidence'* ]]
+[[ "$(state_field '.issues["900"].body')" == *'## Early termination'* ]]
+[[ "$(state_field '.issues["900"].body')" == *'## Promotion'* ]]
+[[ "$(state_field '.issues["900"].labels[0].name')" == "enhancement" ]]
+[[ "$(state_field '.issues["900"].type')" == "Feature" ]]
+[[ "$(state_field '.issues["900"].assignee')" == "@me" ]]
+
+# Case 6: --description-file, --assignee, and --type are honored, and the
+# placeholder Acceptance criteria reminder is not printed once a real
+# description is supplied.
+new_state
+out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
+  --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" \
+  --description-file "$fixture_root/description.txt" \
+  --assignee reviewer --type Task 2>&1)"
+if grep -Fq 'No --description-file given' <<<"$out"; then
+  echo "expected no placeholder reminder when --description-file is given" >&2
+  exit 1
+fi
+grep -Fq 'Milestone metadata is ready for work' <<<"$out"
+[[ "$(state_field '.milestones["100"].description')" == *'Lifecycle Issue: #900'* ]]
+[[ "$(state_field '.milestones["100"].description')" == *'Sample problem text.'* ]]
+[[ "$(state_field '.issues["900"].assignee')" == "reviewer" ]]
+[[ "$(state_field '.issues["900"].type')" == "Task" ]]
+
+# Case 7: when the created tracker still fails
+# sync_milestone_state.py's own contract (here: a comment-only, non-
+# meaningful Proposal section), the script reports that failure and
+# manual-cleanup guidance -- never a success -- even though the Milestone
+# and tracker Issue were already created (best-effort atomicity: nothing
+# is declared ready until preflight re-validates the result).
+new_state
+set +e
+out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
+  --due-on 2026-12-01 \
+  --proposal-file "$fixture_root/comment-only-proposal.txt" 2>&1)"
+status=$?
+set -e
+[[ "$status" -eq 1 ]]
+grep -Fq 'Proposal section' <<<"$out"
+grep -Fq 'did not pass preflight' <<<"$out"
+grep -Fq 'gh issue delete 900 --repo acme/project' <<<"$out"
+grep -Fq 'gh api --method DELETE repos/acme/project/milestones/100' <<<"$out"
+[[ "$(state_field '.milestones["100"].due_on')" == "2026-12-01T00:00:00Z" ]]
+
+echo "create-milestone cases passed: 7"

@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression test for scripts/check-release-drift (Issue #605): proves the
+# drift condition (main advanced past the last known release activity AND
+# no successful release.yml run or local publish record within the
+# threshold) using a mocked `gh` binary, so this never makes a real network
+# call. The mock applies the real `jq` binary to each `--jq` query against
+# a raw-shaped GitHub API fixture, so it exercises the exact filters
+# scripts/check-release-drift sends rather than pre-baked output. Covers:
+# a successful recent run (no drift), a stale/missing run with no local
+# record (drift, new tracking Issue), an existing open tracking Issue
+# (update instead of duplicate), a local publish record found via a commit
+# message that clears the drift condition even with no successful
+# release.yml run, and the `gh`-missing misuse guard.
+
+script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-release-drift"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+mkdir -p "$fixture_root/bin"
+
+mock_repo="octo/example"
+main_sha="mainsha0000000000000000000000000000000"
+
+cat >"$fixture_root/bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Print the value following the first occurrence of $1 among the
+# remaining arguments, or nothing if $1 is not present. Never fails, so a
+# missing flag under `set -e` in the caller does not abort the mock.
+find_flag_value() {
+  local flag="$1"
+  shift
+  local i
+  for ((i = 1; i <= $#; i++)); do
+    if [[ "${!i}" == "$flag" ]]; then
+      local next=$((i + 1))
+      printf '%s' "${!next}"
+      break
+    fi
+  done
+  return 0
+}
+
+case "$1" in
+  repo)
+    if [[ "$2" == "view" ]]; then
+      printf '%s\n' "$MOCK_REPO"
+      exit 0
+    fi
+    echo "mock gh: unexpected repo subcommand: $*" >&2
+    exit 2
+    ;;
+  issue)
+    case "$2" in
+      list)
+        jq_query="$(find_flag_value --jq "$@")"
+        jq -r "$jq_query" "$MOCK_ROOT/open-issues.json"
+        ;;
+      edit)
+        issue_number="$3"
+        body_file="$(find_flag_value --body-file "$@")"
+        echo "edit $issue_number" >>"$MOCK_ROOT/issue-calls.log"
+        cp "$body_file" "$MOCK_ROOT/last-issue-body.md"
+        ;;
+      create)
+        body_file="$(find_flag_value --body-file "$@")"
+        echo "create" >>"$MOCK_ROOT/issue-calls.log"
+        cp "$body_file" "$MOCK_ROOT/last-issue-body.md"
+        ;;
+      *)
+        echo "mock gh: unexpected issue subcommand: $*" >&2
+        exit 2
+        ;;
+    esac
+    exit 0
+    ;;
+  api)
+    path="$2"
+    jq_query="$(find_flag_value --jq "$@")"
+    if [[ "$path" == repos/*/commits/main ]]; then
+      fixture="$MOCK_ROOT/main-commit.json"
+    elif [[ "$path" == repos/*/actions/workflows/release.yml/runs* ]]; then
+      fixture="$MOCK_ROOT/last-run.json"
+    elif [[ "$path" == repos/*/commits\?sha=main* ]]; then
+      fixture="$MOCK_ROOT/recent-commits.json"
+    elif [[ "$path" == repos/*/issues/*/comments* ]]; then
+      fixture="$MOCK_ROOT/issue-comments.json"
+    else
+      echo "mock gh: unexpected api path: $path" >&2
+      exit 2
+    fi
+    if [[ -n "$jq_query" ]]; then
+      jq -c "$jq_query" "$fixture"
+    else
+      cat "$fixture"
+    fi
+    exit 0
+    ;;
+  *)
+    echo "mock gh: unexpected command: $*" >&2
+    exit 2
+    ;;
+esac
+MOCK
+chmod +x "$fixture_root/bin/gh"
+
+export MOCK_ROOT="$fixture_root"
+export MOCK_REPO="$mock_repo"
+
+run_mocked() {
+  PATH="$fixture_root/bin:$PATH" "$script_path" --now "2026-09-04T12:00:00Z" "$@"
+}
+
+reset_fixtures() {
+  printf '[]\n' >"$fixture_root/open-issues.json"
+  printf '[]\n' >"$fixture_root/recent-commits.json"
+  printf '[]\n' >"$fixture_root/issue-comments.json"
+  printf '{"workflow_runs": []}\n' >"$fixture_root/last-run.json"
+  : >"$fixture_root/issue-calls.log"
+  rm -f "$fixture_root/last-issue-body.md"
+  printf '{"sha": "%s", "commit": {"committer": {"date": "2026-09-04T11:55:00Z"}}}\n' \
+    "$main_sha" >"$fixture_root/main-commit.json"
+}
+
+# Case 1: release.yml succeeded recently at the current main HEAD. No
+# drift regardless of the 24h threshold -- the common, healthy case.
+reset_fixtures
+cat >"$fixture_root/last-run.json" <<JSON
+{"workflow_runs": [{"head_sha": "$main_sha", "updated_at": "2026-09-04T11:56:00Z", "html_url": "https://example.invalid/runs/1"}]}
+JSON
+healthy_output="$(run_mocked)"
+grep -Fq "no drift (main not advanced past the last known release activity)" <<<"$healthy_output"
+[[ ! -s "$fixture_root/issue-calls.log" ]]
+
+# Case 2: main has advanced past the last successful run, and that run is
+# also older than the 24h threshold, with no local publish record anywhere
+# -- drift. No existing tracking Issue, so a new one is opened.
+reset_fixtures
+cat >"$fixture_root/last-run.json" <<JSON
+{"workflow_runs": [{"head_sha": "stalesha0000000000000000000000000000000", "updated_at": "2026-09-02T00:00:00Z", "html_url": "https://example.invalid/runs/2"}]}
+JSON
+set +e
+drift_output="$(run_mocked --repo "$mock_repo" 2>&1)"
+drift_status=$?
+set -e
+[[ "$drift_status" -ne 0 ]]
+grep -Fq "DRIFT DETECTED" <<<"$drift_output"
+grep -Fq "create" "$fixture_root/issue-calls.log"
+grep -Fq "已經前進" "$fixture_root/last-issue-body.md"
+
+# Case 3: same stale state, but a tracking Issue is already open -- update
+# it instead of opening a duplicate.
+reset_fixtures
+cat >"$fixture_root/last-run.json" <<JSON
+{"workflow_runs": [{"head_sha": "stalesha0000000000000000000000000000000", "updated_at": "2026-09-02T00:00:00Z", "html_url": "https://example.invalid/runs/2"}]}
+JSON
+cat >"$fixture_root/open-issues.json" <<'JSON'
+[{"number": 77, "title": "Release publish drift detected"}]
+JSON
+set +e
+update_output="$(run_mocked 2>&1)"
+update_status=$?
+set -e
+[[ "$update_status" -ne 0 ]]
+grep -Fq "DRIFT DETECTED" <<<"$update_output"
+grep -Fq "edit 77" "$fixture_root/issue-calls.log"
+[[ "$(cat "$fixture_root/issue-calls.log")" != *create* ]]
+
+# Case 4: no successful release.yml run at all, and main has advanced past
+# the commit the local publish record names, but that record is recent --
+# no drift, since a human/agent is actively managing releases.
+reset_fixtures
+previous_sha="previoussha000000000000000000000000000"
+cat >"$fixture_root/recent-commits.json" <<JSON
+[{"sha": "recordcommit0000000000000000000000000000", "commit": {"committer": {"date": "2026-09-04T10:00:00Z"}, "message": "chore(main): release 1.2.3\n\nRelease-publish-record: operator=@octocat commit=$previous_sha command=\"scripts/publish-release publish --repo octo/example --tag v1.2.3\" result=published"}}]
+JSON
+record_output="$(run_mocked)"
+grep -Fq "no drift (recent release activity within the threshold)" <<<"$record_output"
+grep -Fq "Local publish record: operator=@octocat commit=$previous_sha" <<<"$record_output"
+[[ ! -s "$fixture_root/issue-calls.log" ]]
+
+# Misuse guard: `gh` missing from PATH must fail clearly, not silently
+# produce a wrong or empty answer.
+set +e
+no_gh_output="$(PATH="/usr/bin:/bin" "$script_path" --repo "$mock_repo" 2>&1)"
+no_gh_status=$?
+set -e
+[[ "$no_gh_status" -ne 0 ]]
+grep -Fiq "gh" <<<"$no_gh_output"
+
+echo "Release drift check cases passed: 5"

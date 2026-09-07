@@ -30,12 +30,13 @@ def test_render_uses_one_release_identity_everywhere() -> None:
     source = f"git+https://github.com/{REPOSITORY}.git@{sha}"
     assert prompts.count(f"uvx --python 3.14 --from '{source}'") == 4
     assert "--from csarc-repo-cli" not in prompts
+    assert "--from csarc-repo-template" not in prompts
     assert "目標路徑：" not in prompts
     assert "csarc init" in prompts
     assert "csarc adopt" in prompts
     assert "--apply-plan" in prompts
     assert "repo-relative executable project_verification_hook" in prompts
-    assert "檢視 repo 外的 Markdown、PDF 與 machine plan" in prompts
+    assert "檢視 repo 外的 Markdown 與 machine plan" in prompts
     assert "csarc update" in prompts
     assert "csarc status" in prompts
     assert provenance["commit_sha"] == sha

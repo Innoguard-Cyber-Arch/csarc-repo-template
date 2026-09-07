@@ -18,7 +18,14 @@ jobs:
   verify:
     name: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Issue #661: this job no longer re-executes any test -- it only checks
+    # that the commit already carries proof it was verified locally (see
+    # scripts/verify_attestation.py and scripts/check-verify-attestation).
+    # 30 minutes was sized for running the full test suite on the runner;
+    # 15 stays generous for the one thing here that still does real work,
+    # the guided-release-candidate packaging step below, while catching a
+    # hang in the now-lightweight common path far sooner than before.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -57,38 +64,53 @@ jobs:
             --github-output "$GITHUB_OUTPUT" \
             --summary "$GITHUB_STEP_SUMMARY" \
             "${args[@]}"
-      - if: ${{ steps.plan.outputs.tier != 'docs' }}
+      # Issue #661: the sole content of the `verify` required check now.
+      # scripts/ci_tier.py's classification above still runs -- it is
+      # change-aware routing logic, not test execution, and its "tier"
+      # output is exactly what makes this a fail-closed check rather than
+      # a rubber stamp: it independently reruns the same classification the
+      # PR author's own local run used, so a fast-tier attestation cannot
+      # satisfy a change scripts/ci_tier.py itself classifies as needing
+      # full verification (e.g. a .github/workflows/ edit). HEAD_SHA
+      # reuses the exact expression above rather than plain `github.sha`,
+      # because for a pull_request event `github.sha` is GitHub's
+      # synthetic merge commit, not the commit the contributor actually
+      # verified and pushed -- only that real commit can carry the
+      # trailer scripts/write-verify-attestation amended onto it.
+      - name: Validate local verification attestation
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          REQUIRED_TIER: ${{ steps.plan.outputs.tier }}
+        run: ./scripts/check-verify-attestation "$HEAD_SHA" --required-tier "$REQUIRED_TIER"
+      # Everything below this point is unrelated to Issue #661 and stays
+      # exactly as it worked before: scripts/verify-release-candidate still
+      # needs a real Python (and, if this repository ever gains a
+      # package.json / Cargo.toml, Node/Rust) toolchain to build the
+      # candidate's packages via scripts/release_bundle.py, so these
+      # toolchain-setup steps stay -- only their gating condition changes,
+      # from "which tier was selected" (now meaningless here, nothing
+      # downstream consumes a toolchain) to "is this actually a guided
+      # release-candidate PR", matching the one remaining step that uses
+      # them.
+      - if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
-      - if: ${{ steps.plan.outputs.tier != 'docs' }}
+      - if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - if: ${{ steps.plan.outputs.tier == 'full' }}
+      - if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: "11.22.0"
           run_install: false
-      - if: ${{ steps.plan.outputs.tier == 'full' }}
+      - if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
-      - if: ${{ steps.plan.outputs.tier == 'full' }}
+      - if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}
         run: |
           rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
           rustup default 1.98.0
-      - name: Run bounded verification
-        if: ${{ steps.plan.outputs.tier == 'docs' || steps.plan.outputs.tier == 'fast' }}
-        env:
-          CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
-          CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
-          CSARC_PYTHON_VERSION: "3.14"
-          CSARC_RUN_OSV: ${{ steps.plan.outputs.run_osv }}
-        run: ./scripts/verify-fast
-      - name: Run full verification
-        if: ${{ steps.plan.outputs.tier == 'full' }}
-        env:
-          CSARC_PYTHON_VERSION: "3.14"
-        run: ./scripts/verify-template.sh
       - name: Validate the guided release candidate
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}
         env:
