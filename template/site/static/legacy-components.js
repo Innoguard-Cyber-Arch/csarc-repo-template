@@ -142,13 +142,14 @@ gh auth status`
 
     // Issue #681/#682 2026-09-06 redesign round: generic, not gated behind
     // the home-hero-only `capabilitySlide` check below, so any page's
-    // `.command-block > .copy-command` works the same way -- e.g.
-    // `install`'s standard-mode pane copies its full agent prompt from a
-    // `data-copy-text` attribute without ever rendering that prompt as
-    // visible body text (`data-copy-text` takes precedence over a sibling
-    // `<pre>` when both exist). A downstream project's minimal repo-site
-    // (Issue #681 decision N) has no `.capability-slide` at all, so this
-    // would otherwise never run there.
+    // `.command-block > .copy-command` works the same way. A later review
+    // (same Issue) removed every `data-copy-text` attribute: a reader
+    // could copy a full agent prompt they were never shown, with no way
+    // to check it before pasting it into an agent. The sibling `<pre>`
+    // fallback below is now the only source, so the visible text and the
+    // copied text can never drift apart. A downstream project's minimal
+    // repo-site (Issue #681 decision N) has no `.capability-slide` at
+    // all, so this would otherwise never run there.
     function copyCommandText(text, button) {
       const restore = button.textContent;
       const onCopied = () => {

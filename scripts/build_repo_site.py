@@ -800,6 +800,7 @@ def render_file_map(*, lang: str, data: SiteData) -> str:
         f'<code class="file-map-address">{_esc(labels["address"])}</code>'
         "</div>"
         f'<ul class="file-map-tree">{items}</ul>'
+        f'<p class="file-map-scroll-hint">{_esc(labels["scrollHint"])}</p>'
         "</div>"
     )
 
@@ -955,8 +956,10 @@ def render_similar_tools(*, lang: str, data: SiteData) -> str:  # noqa: C901
             f"<tbody>{''.join(body_rows)}</tbody></table></div></div>"
         )
 
+    conclusion = _esc(labels["standardConclusion"])
     return (
         '<div class="legacy-content similar-tools-content">'
+        f'<p class="similar-tools-conclusion">{conclusion}</p>'
         '<div class="similar-tools-tabs" role="tablist" '
         f'aria-label="{_esc(labels["title"])}" data-audience="maintainer">'
         f"{''.join(tabs)}</div>"
@@ -1441,11 +1444,17 @@ _DETAIL_LEVEL_SCRIPT: Final = """\
 _REORDER_SCRIPT: Final = """\
   <script>
     (() => {
-      const pr = document.querySelector('[data-track="pr"]');
-      const supply = document.querySelector('[data-track="supply"]');
+      // Issue #681/#682: this used to also force `pr` before `supply` at
+      // runtime, papering over the two slides being declared in the wrong
+      // order in site/content/_index.*.md (04 languages -> 06 pr -> 05
+      // supply -> 07 deploy, contradicting their own "步驟 05/06" labels,
+      // the sidebar rail, and navigation.json's already-correct order).
+      // The source order is fixed now, so prev/next, keyboard nav, and
+      // the journey rail agree without a client-side patch; only the
+      // still-genuinely-out-of-source-order testing/bridge notes pair
+      // needs one.
       const testing = document.querySelector("#testing");
       const bridge = document.querySelector("#bridge");
-      if (pr && supply) supply.before(pr);
       if (testing && bridge) testing.after(bridge);
     })();
   </script>"""

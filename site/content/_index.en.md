@@ -98,9 +98,9 @@ The template promises only capabilities that are implemented and tested. Go, gen
 Whether the repository is brand new, an existing one, or already CSARC-managed, the way you find out is the same: you do not need to remember a command yourself -- paste the text below straight to your coding agent (Claude Code, Copilot, and the like) and let it run and judge for you.
 
 {{< standard key="install-mode-standard" title="The prompt to paste to your agent" >}}
-<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Paste it</h3><p>Paste the full prompt below to your coding agent -- no command to remember.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>AI decides</h3><p>The agent runs <code>csarc status</code>, which detects create, adopt, update, or a policy-only change on its own.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Preview first</h3><p>Whatever the result, the agent shows you the plan and waits for confirmation before doing anything.</p></article></div>
+<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Paste it</h3><p>Paste the full prompt below to your coding agent -- no command to remember.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI decides</h3><p>The agent runs <code>csarc status</code>; the CLI itself (not the agent's own judgment) classifies create, adopt, update, or a policy-only change.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Preview first</h3><p>Whatever the result, the agent shows you the plan and waits for confirmation before doing anything.</p></article></div>
 
-<div class="command-block"><div class="command-block-head"><span class="command-block-label">The full prompt to paste to your agent</span><button class="copy-command" type="button" data-copy-text="Using uv, run the official csarc CLI's `status` subcommand from the canonical GitHub repository's approved release commit, to determine which installation state the current workspace/existing Git repository is in; uv should manage an isolated Python 3.14 per invocation, requiring no global Python. Run `csarc status --json` first -- do not judge or assume the current state yourself. Based on the returned state and next_command: for create, adopt, or update, switch to the matching init/adopt/update dry-run prompt and wait for confirmation; for current, report that no action is needed; for policy-only-update, only run `scripts/apply-repository-settings.sh plan`, summarize the diff, and wait for confirmation before running `apply` -- do not redo a full adopt or update. Never modify the global environment, push, or open a PR throughout.">Copy prompt</button></div></div>
+<div class="command-block"><div class="command-block-head"><span class="command-block-label">The full prompt to paste to your agent</span><button class="copy-command" type="button">Copy prompt</button></div><pre class="command-block-text">Using uv. First, find the latest published GitHub Release of https://github.com/Innoguard-Cyber-Arch/csarc-repo-template (for example, run `gh release view --repo Innoguard-Cyber-Arch/csarc-repo-template --json tagName,targetCommitish`, or check that repository's Releases page), and note that release's tag and full commit SHA -- always use this verified release, never `main` or an unconfirmed branch. Using that SHA, run the official csarc CLI's `status` subcommand to determine which installation state the current workspace/existing Git repository is in; uv should manage an isolated Python 3.14 per invocation, requiring no global Python. Run `csarc status --json` first -- do not judge or assume the current state yourself. Based on the returned state and next_command: for create, adopt, or update, switch to the matching init/adopt/update dry-run prompt and wait for confirmation; for current, report that no action is needed; for policy-only-update, only run `scripts/apply-repository-settings.sh plan`, summarize the diff, and wait for confirmation before running `apply` -- do not redo a full adopt or update. Never modify the global environment, push, or open a PR throughout.</pre></div>
 
 The classification logic all lives in the CLI, so a different agent running it gets the same answer; the other three situation prompts (create/adopt/update) live in the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme).
 {{< /standard >}}
@@ -273,9 +273,11 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 {{< /slide >}}
 
 {{< slide key="files" track="files" class="dense" eyebrow="File map" title="The template puts required settings in the right place" subtitle="This lists the major files currently generated; template updates never silently overwrite product-owned content." legacy="false" >}}
-{{< file-map >}}
-
 {{< standard key="files-mode-standard" title="Update flow and integrated tools" >}}
+<div class="capability-map"><div class="capability-node"><h3>Template settings</h3><p><code>.csarc/config.yml</code>, <code>policies/</code>: languages, branch strategy, owners, and reviewers all live here.</p></div><div class="capability-node"><h3>GitHub workflow</h3><p><code>.github/</code>: Issue/PR forms and automated checks.</p></div><div class="capability-node"><h3>Agent rules</h3><p><code>AGENTS.md</code>: how an agent works in this repository.</p></div><div class="capability-node"><h3>Project docs</h3><p><code>README.md</code>, <code>docs/</code>, <code>site/</code>: docs for people, and the site you're reading right now.</p></div><div class="capability-node"><h3>Product code</h3><p><code>src/</code>: the actual product code, tests, and specs.</p></div></div>
+
+Switch to Maintenance mode for the full file tree and each file's owner.
+
 When the template finds a file it can update:
 
 <div class="plan-grid">
@@ -288,6 +290,8 @@ The template already wires up the tools you'd otherwise have to find and configu
 {{< /standard >}}
 
 {{< ops key="files-mode-ops" title="Technical detail on the update mechanism and tools" >}}
+{{< file-map >}}
+
 {{< disclosure key="files-map-scope" title="Why the file map only lists path, purpose, and responsibility" >}}
 The side navigation already links each item to its page, and the maintainer-only "CI/CD settings" appendix already lists verification entry points per step in more detail than this view could add; the tree view therefore avoids duplicating a page-name or verification-entry column.
 {{< /disclosure >}}
@@ -367,7 +371,7 @@ Only tools this template directly integrates, executes, or produces into the rep
         <p class="subtitle"><strong>Baseline.</strong> An Issue bounds the work; <code>AGENTS.md</code> explains how to work; code and tests provide evidence, and people retain product direction and material-risk decisions.</p>
       </header>
       <p class="context-line"><strong>What the template does｜</strong>generates and checks what an agent must read before starting, where it may change files, how to isolate parallel work, and what evidence to leave; only custom policy, material decisions, and exceptions need a person.</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>Work and context</h3><p>GitHub Issues and PRs record scope, progress, and evidence; material decisions live in an approved spec or ADR.</p></div><div class="capability-node"><h3>AI rules</h3><p>The root <code>AGENTS.md</code> is the single source -- an agent reads it before starting anything.</p></div><div class="capability-node"><h3>Decisions and authorization</h3><p>Requirement direction, material trade-offs, and irreversible operations still stay with a person; an agent follows the rules and leaves evidence.</p></div></div>
+      <div class="capability-map cols-3"><div class="capability-node"><h3>Work and context</h3><p>GitHub Issues and PRs record scope, progress, and evidence; material decisions live in an approved spec or ADR (a written record of the requirement and the architecture decision behind it).</p></div><div class="capability-node"><h3>AI rules</h3><p>The root <code>AGENTS.md</code> is the single source -- an agent reads it before starting anything.</p></div><div class="capability-node"><h3>Decisions and authorization</h3><p>Requirement direction, material trade-offs, and irreversible operations still stay with a person; an agent follows the rules and leaves evidence.</p></div></div>
       <p class="context-line"><strong>Next step｜</strong>point your agent at <code>AGENTS.md</code> and let it start working; change isolation, verification evidence, and template-update rules are covered in Maintenance mode.</p>
 {{< /legacy >}}
 
@@ -477,46 +481,6 @@ Each language is its own independent component (module), selected independently.
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="pr" track="pr" eyebrow="Step 06" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a delivery PR then carries the verified batch into main." class="legacy-slide decision-slide" legacy="true" >}}
-{{< legacy >}}
-      <header>
-        <h2>Step 6｜<span class="accent">Make completed changes reviewable and deliverable</span></h2>
-        <p class="subtitle"><strong>Baseline.</strong> This page starts once a PR is ready: a work PR completes one Issue, and a delivery PR then confirms the whole batch.</p>
-      </header>
-      <p class="context-line"><strong>What the template does｜</strong>carries a completed change to the right branch, confirms it links back to its work, passes verification, and closes that work once merged.</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>Work PR</h3><p>One PR completes one reviewable Issue; merging it closes the same-numbered Issue.</p></div><div class="capability-node"><h3>Delivery PR</h3><p>Only once all of a Milestone's work is done does it fully verify and deliver the batch.</p></div><div class="capability-node"><h3>Exception: hotfix</h3><p>May target main directly, but still needs an Issue, review, and verification.</p></div></div>
-      <p class="context-line"><strong>Next step｜</strong>open a work PR once an Issue is done; PR title format, branch naming, and other merge-model comparisons are covered in Maintenance mode.</p>
-{{< /legacy >}}
-
-{{< basic >}}
-### Our choice
-
-| PR stage | Destination | What this stage completes |
-| --- | --- | --- |
-| Standalone work PR | Topic branch → main | Review one change and close its linked Issue after merge |
-| Milestone work PR | Topic branch → `dev/m*` | Review one change inside a real delivery batch |
-| Delivery PR | `dev/m*` or explicit `dev/i*` → main | Fully verify and deliver the batch; maintainers then close the Milestone and clean up the delivery branch |
-
-{{< disclosure key="pr-version-intent" title="PR titles, branches, and exceptions" >}}
-- Work branches use `type/<Issue>-short-slug`, and the PR links the matching open Issue.
-- PR titles use the Angular / Conventional Commits form `type(scope)!: English summary`: `feat` adds a feature, `fix` corrects behavior, `docs` changes documentation, `refactor` restructures code, `test` changes tests, `build` changes builds or dependencies, `ci` changes automation, `chore` performs maintenance, and `revert` undoes a change. Scope and `!` are optional. Release intent is minor for `feat`, patch for `fix` / `revert`, major for `!`, and no release for the other types.
-- The classification label and Milestone match the linked Issue; the PR author must be an assignee.
-- Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work targets `main` directly.
-- A `sync/main-to-*` PR updates a Milestone or explicit canary branch before final delivery, or earlier only when its owner records a real dependency. It never fans out to every branch.
-- Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.
-{{< /disclosure >}}
-
-### Other common approaches
-
-- **GitHub Flow:** every completed PR goes straight to main -- the shortest path, suited to teams that deliver continuously.
-- **Long-lived integration branches:** several work items are accepted together on a dev/release branch, at the cost of keeping them in sync.
-- **Stacked PRs:** a large change splits into dependent smaller PRs for a more focused review, at the cost of maintaining stack order.
-- **Merge queue:** approved PRs are re-verified against the latest main and merged in order, which needs platform gate support.
-
-{{< config-guidance track="pr" >}}
-{{< /basic >}}
-{{< /slide >}}
-
 {{< slide key="supply" track="supply" eyebrow="Step 05" title="Update, check, and record third-party packages separately" subtitle="Observe ordinary releases, act on known vulnerabilities immediately, and retain a traceable release inventory." class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
@@ -558,14 +522,54 @@ Routine updates and security checks run automatically. People step in only for u
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="deploy" track="deploy" eyebrow="Step 07" title="Separate version, release, delivery, and deployment" subtitle="Work reaches main first; when a version is needed, the system opens a version PR for human review." class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="pr" track="pr" eyebrow="Step 06" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a delivery PR then carries the verified batch into main." class="legacy-slide decision-slide" legacy="true" >}}
+{{< legacy >}}
+      <header>
+        <h2>Step 6｜<span class="accent">Make completed changes reviewable and deliverable</span></h2>
+        <p class="subtitle"><strong>Baseline.</strong> This page starts once a PR is ready: a work PR completes one Issue, and a delivery PR then confirms the whole batch.</p>
+      </header>
+      <p class="context-line"><strong>What the template does｜</strong>carries a completed change to the right branch, confirms it links back to its work, passes verification, and closes that work once merged.</p>
+      <div class="capability-map cols-3"><div class="capability-node"><h3>Work PR</h3><p>One PR completes one reviewable Issue; merging it closes the same-numbered Issue.</p></div><div class="capability-node"><h3>Delivery PR</h3><p>Only once all of a Milestone's work is done does it fully verify and deliver the batch.</p></div><div class="capability-node"><h3>Exception: hotfix</h3><p>May target main directly, but still needs an Issue, review, and verification.</p></div></div>
+      <p class="context-line"><strong>Next step｜</strong>open a work PR once an Issue is done; PR title format, branch naming, and other merge-model comparisons are covered in Maintenance mode.</p>
+{{< /legacy >}}
+
+{{< basic >}}
+### Our choice
+
+| PR stage | Destination | What this stage completes |
+| --- | --- | --- |
+| Standalone work PR | Topic branch → main | Review one change and close its linked Issue after merge |
+| Milestone work PR | Topic branch → `dev/m*` | Review one change inside a real delivery batch |
+| Delivery PR | `dev/m*` or explicit `dev/i*` → main | Fully verify and deliver the batch; maintainers then close the Milestone and clean up the delivery branch |
+
+{{< disclosure key="pr-version-intent" title="PR titles, branches, and exceptions" >}}
+- Work branches use `type/<Issue>-short-slug`, and the PR links the matching open Issue.
+- PR titles use the Angular / Conventional Commits form `type(scope)!: English summary`: `feat` adds a feature, `fix` corrects behavior, `docs` changes documentation, `refactor` restructures code, `test` changes tests, `build` changes builds or dependencies, `ci` changes automation, `chore` performs maintenance, and `revert` undoes a change. Scope and `!` are optional. Release intent is minor for `feat`, patch for `fix` / `revert`, major for `!`, and no release for the other types.
+- The classification label and Milestone match the linked Issue; the PR author must be an assignee.
+- Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work targets `main` directly.
+- A `sync/main-to-*` PR updates a Milestone or explicit canary branch before final delivery, or earlier only when its owner records a real dependency. It never fans out to every branch.
+- Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.
+{{< /disclosure >}}
+
+### Other common approaches
+
+- **GitHub Flow:** every completed PR goes straight to main -- the shortest path, suited to teams that deliver continuously.
+- **Long-lived integration branches:** several work items are accepted together on a dev/release branch, at the cost of keeping them in sync.
+- **Stacked PRs:** a large change splits into dependent smaller PRs for a more focused review, at the cost of maintaining stack order.
+- **Merge queue:** approved PRs are re-verified against the latest main and merged in order, which needs platform gate support.
+
+{{< config-guidance track="pr" >}}
+{{< /basic >}}
+{{< /slide >}}
+
+{{< slide key="deploy" track="deploy" eyebrow="Step 07" title="Separate version, release, and delivery; deployment is the project's own call" subtitle="Work reaches main first; when a version is needed, the system opens a version PR for human review. The template's job ends at Release, not deployment." class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <h2>Step 7｜<span class="accent">Version rules and what follows an artifact</span></h2>
-        <p class="subtitle"><strong>Deliver first, review the version, publish last:</strong> a work PR never edits the version directly; Release Please centralizes version and CHANGELOG updates.</p>
+        <p class="subtitle"><strong>Deliver first, review the version, publish last:</strong> a work PR never edits the version directly; Release Please (a tool that automates version numbers) centralizes version and CHANGELOG updates.</p>
       </header>
       <p class="context-line"><strong>Design flow｜</strong>a work PR only declares its version impact; only after a person reviews and merges the version PR does the system create and verify the Release.</p>
-      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">Deliver first</span><h3>Standalone work</h3><p>When it can be reviewed on its own with no shared deadline or dependency, a reviewed PR may target main directly.</p></article><article class="relation-node"><span class="relation-kind">Then review the version</span><h3>Version materialization</h3><p>When a new version is needed, the system opens a version PR from PR titles and syncs the version and CHANGELOG.</p></article><article class="relation-node"><span class="relation-kind">Publish last</span><h3>Release</h3><p>Once the version PR merges, the system verifies the artifact, checksum, and SBOM, then publishes an immutable GitHub Release.</p></article></div></div>
+      <div class="relation-map"><div class="relation-track cols-4"><article class="relation-node"><span class="relation-kind">1｜Work merges</span><h3>Standalone work</h3><p>When it can be reviewed on its own with no shared deadline or dependency, a reviewed PR may target main directly.</p></article><article class="relation-node"><span class="relation-kind">2｜Version prepared</span><h3>Version materialization</h3><p>When a new version is needed, the system opens a version PR from PR titles and syncs the version and CHANGELOG.</p></article><article class="relation-node"><span class="relation-kind">3｜Release created</span><h3>Release</h3><p>Once the version PR merges, the system verifies the artifact, checksum (a file-integrity code), and SBOM, then publishes an immutable GitHub Release.</p></article><article class="relation-node"><span class="relation-kind">4｜Not the template's job</span><h3>Deployment</h3><p>The template's job ends at Release; deploying to a real runtime is configured by each individual project.</p></article></div></div>
       <p class="context-line"><strong>Next step｜</strong>merging ordinary work into main already completes delivery; Milestone branches, hotfixes, and other version-tool comparisons are covered in Maintenance mode.</p>
 {{< /legacy >}}
 
@@ -746,7 +750,7 @@ Use a linked Issue to record the proposer, a different approver, expiry, evidenc
 
 {{< slide key="template-release" track="template-release" eyebrow="Step 09" title="Copier keeps repositories aligned, and the template dogfoods its rules" subtitle="A template defect affects many projects, so creation, adoption, and update all run as real tests." legacy="false"  class="candidate-slide" >}}
 {{< standard key="template-release-mode-standard" title="How template updates reach your repository safely" >}}
-Copier builds an update plan outside your repository first:
+Copier (the tool that creates and keeps updating the template) builds an update plan outside your repository first:
 
 <div class="plan-grid">
   <article class="plan-card current"><h3>No conflict</h3><p>The plan applies directly.</p></article>
@@ -794,7 +798,7 @@ Root `.csarc/config.yml` records the capabilities the template repository select
 {{< legacy >}}
       <header>
         <h2>A single file stays deliverable forever,<span class="accent"> platform features are only a bonus</span></h2>
-        <p class="subtitle"><strong>Choice confirmed.</strong> <code>docs/index.html</code> must be downloadable, forwardable, and opened offline through <code>file://</code>; Pages, external hosting, and a CDN are never the portable baseline.</p>
+        <p class="subtitle"><strong>Choice confirmed.</strong> The single <code>docs/index.html</code> file can be downloaded, forwarded, and opened offline; GitHub Pages or any other hosting is an extra option, never a requirement.</p>
       </header>
       <p class="context-line"><strong>Problem and goal｜</strong>keep the distinctive presentation design and single-file delivery, without leaving content, styling, interaction, source choices, and word-for-word tests tangled inside one hand-maintained file.</p>
       <div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Source</h3><p>Bilingual Markdown in <code>site/content/</code>, kept apart from layout and code so nothing needs manual syncing.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>Render</h3><p>A built-in Python engine assembles the content structure -- no Node or extra templating engine needed.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Output</h3><p><code>docs/index.html</code> embeds every style, script, and image; each page fits one screen, nothing to scroll to find the point.</p></article><article class="step-flow-item"><span class="step-flow-number">4</span><h3>Reader</h3><p>Download it and open it in a browser to see the whole page; Pages or other hosting is only one more way to browse, never a requirement.</p></article></div>
