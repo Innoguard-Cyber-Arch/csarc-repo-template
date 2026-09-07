@@ -7,6 +7,18 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.15.0] - 2026-09-07
+
+### Features
+
+* feat(site): promote Milestone 13 repo-site rewrite and adoption redesign (#689) (f89d2de)
+
+### Bug Fixes
+
+* fix(packaging): rename Python distribution to csarc-repo-template (#680) (2d1a6c8)
+* fix(site): replace unresolvable uvx examples in legacy-components.js (#679) (09103d7)
+* fix(test): read the repo version from the manifest, not a literal (#696) (e8b5d03)
+
 ## [0.14.0] - 2026-09-04
 
 ### Features
