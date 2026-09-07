@@ -81,15 +81,51 @@ exception, not a routine mechanism -- see that Issue and
 `docs/ci-policy.md`) does not close this gap either. See
 `scripts/write-verify-attestation` for the write-side half of this design,
 including why the working tree must be clean before a trailer is written.
+
+## Checking a pushed `main` commit instead of a PR branch tip (Issue #699)
+
+`check_attestation()` compares a trailer against *some* tree hash; the CLI
+`check` subcommand normally supplies the tree hash of the exact commit-ish
+you pass it, read from the local checkout. That is correct for `ci.yml`'s
+`verify` required check, which validates a pull request's own branch tip
+before it is ever merged -- exactly the commit `scripts/write-verify
+-attestation` amended.
+
+It is *not* correct for `.github/workflows/release.yml`'s post-merge check
+of `$GITHUB_SHA` on a push to `main`. GitHub's squash-merge composes the
+PR's diff onto whatever `main` looks like at merge time and creates a new
+commit; that new commit's *tree* reflects both the PR's own changes and
+anything else that landed on `main` in between, but its *message* (and
+thus the trailer) is inherited verbatim from the PR's own commit. If any
+other PR merged to `main` between "the contributor ran verification
+locally" and "this PR's squash-merge actually landed" -- not rare in a
+repository with more than one concurrent contributor or agent session --
+the squash commit's tree differs from the tree the trailer actually
+describes, and a straight tree-hash comparison against `$GITHUB_SHA`
+itself fails closed even though the PR's own diff was genuinely verified.
+
+`--resolve-merge-source` (paired with `--github-repo`) fixes this by
+resolving the pushed commit to the PR it was merged from via the GitHub
+API (`GET /repos/{repo}/commits/{sha}/pulls`) and validating the
+attestation against *that PR's original head commit* -- fetched by SHA
+through the API rather than local git, since `actions/checkout`'s
+`persist-credentials: false` leaves no authenticated remote to fetch an
+otherwise-unreachable, branch-deleted commit from, and a shallow or
+partial checkout may not have the object at all. When GitHub reports no
+associated pull request (a direct push, or any merge strategy where
+`$GITHUB_SHA` already *is* the head commit), resolution is a no-op and
+the check degrades to the original, unresolved behavior.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -303,6 +339,59 @@ def _parse_utc(value: str) -> dt.datetime:
     )
 
 
+GhRunner = Callable[[list[str]], str]
+
+
+def _run_gh(arguments: list[str]) -> str:
+    """Run the GitHub CLI and return its raw stdout."""
+    result = subprocess.run(  # noqa: S603
+        ["gh", *arguments],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"gh {' '.join(arguments)} failed: {result.stderr.strip()}"
+        )
+    return result.stdout
+
+
+def resolve_merge_source(
+    commit: str, github_repo: str, *, run: GhRunner = _run_gh
+) -> str:
+    """Resolve a pushed commit to the head of the PR it was merged from.
+
+    See the module docstring's "Checking a pushed main commit" section for
+    why this matters. Returns `commit` unchanged when GitHub reports no
+    associated pull request.
+    """
+    head_sha = run(
+        [
+            "api",
+            f"repos/{github_repo}/commits/{commit}/pulls",
+            "--jq",
+            ".[0].head.sha // empty",
+        ]
+    ).strip()
+    return head_sha or commit
+
+
+def fetch_commit_via_api(
+    sha: str, github_repo: str, *, run: GhRunner = _run_gh
+) -> tuple[str, str]:
+    """Return (message, tree_sha) for one commit via the GitHub REST API.
+
+    Used only for a resolved PR head commit that may not be reachable from
+    the local checkout (a squash-merged PR's branch, and its commit, no
+    longer exist on `main`'s ancestry, and `actions/checkout`'s
+    `persist-credentials: false` leaves no authenticated remote to fetch
+    it with even if it were still reachable by SHA).
+    """
+    payload = json.loads(run(["api", f"repos/{github_repo}/git/commits/{sha}"]))
+    return payload["message"], payload["tree"]["sha"]
+
+
 def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -335,6 +424,22 @@ def _main(argv: list[str]) -> int:
     check_parser.add_argument(
         "--repo", default=None, help="Path to the git repository (default: cwd)"
     )
+    check_parser.add_argument(
+        "--resolve-merge-source",
+        action="store_true",
+        help=(
+            "Treat `commit` as a pushed main commit that may be a "
+            "squash-merge, and validate the PR head it was merged from "
+            "instead (see the module docstring, Issue #699); requires "
+            "--github-repo"
+        ),
+    )
+    check_parser.add_argument(
+        "--github-repo",
+        default=None,
+        metavar="OWNER/NAME",
+        help="Required with --resolve-merge-source",
+    )
 
     args = parser.parse_args(argv)
 
@@ -343,15 +448,33 @@ def _main(argv: list[str]) -> int:
         print(render_trailer(args.sha256, args.tier, at))  # noqa: T201
         return 0
 
-    repo = Path(args.repo) if args.repo else None
-    try:
-        tree_hash = _run_git(
-            ["rev-parse", f"{args.commit}^{{tree}}"], cwd=repo
-        ).strip()
-        message = _run_git(["log", "-1", "--pretty=%B", args.commit], cwd=repo)
-    except RuntimeError as error:
-        print(str(error), file=sys.stderr)  # noqa: T201
-        return 2
+    if args.resolve_merge_source:
+        if not args.github_repo:
+            print(  # noqa: T201
+                "check --resolve-merge-source requires --github-repo",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            resolved = resolve_merge_source(args.commit, args.github_repo)
+            message, tree_hash = fetch_commit_via_api(
+                resolved, args.github_repo
+            )
+        except RuntimeError as error:
+            print(str(error), file=sys.stderr)  # noqa: T201
+            return 2
+    else:
+        repo = Path(args.repo) if args.repo else None
+        try:
+            tree_hash = _run_git(
+                ["rev-parse", f"{args.commit}^{{tree}}"], cwd=repo
+            ).strip()
+            message = _run_git(
+                ["log", "-1", "--pretty=%B", args.commit], cwd=repo
+            )
+        except RuntimeError as error:
+            print(str(error), file=sys.stderr)  # noqa: T201
+            return 2
 
     now = _parse_utc(args.now) if args.now else None
     result = check_attestation(

@@ -61,8 +61,20 @@ jobs:
       # own `verify` check, so re-validate that instead of re-verifying
       # from scratch; no --required-tier here because the PR gate already
       # enforced whatever tier scripts/ci_tier.py classified it as needing.
+      #
+      # --resolve-merge-source (Issue #699): $GITHUB_SHA here is whatever
+      # squash-merge produced, not the PR branch tip that was actually
+      # verified locally -- its tree also reflects any other PR that
+      # landed on main in between, so comparing the trailer's hash against
+      # $GITHUB_SHA's own tree fails closed even when this PR's own diff
+      # was genuinely verified. Resolve to the originating PR's head
+      # commit first and validate that instead.
       - name: Validate the pushed main commit's verification attestation
-        run: ./scripts/check-verify-attestation "$GITHUB_SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/check-verify-attestation "$GITHUB_SHA" \
+            --resolve-merge-source --github-repo "$GITHUB_REPOSITORY"
       - name: Plan the next version from repository history
         id: plan
         run: |

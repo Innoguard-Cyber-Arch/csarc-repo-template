@@ -13,7 +13,10 @@ counterpart for the validation logic itself.
 from __future__ import annotations
 
 import datetime as dt
+import json
+import os
 import runpy
+import stat
 import subprocess
 import sys
 import types
@@ -268,6 +271,68 @@ def test_check_attestation_rejects_an_unknown_required_tier() -> None:
         )
 
 
+# --- resolve_merge_source / fetch_commit_via_api (Issue #699) ------------
+
+
+def test_resolve_merge_source_returns_the_pr_head_sha() -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(arguments: list[str]) -> str:
+        calls.append(arguments)
+        return "deadbeef" * 5 + "\n"
+
+    resolved = va.resolve_merge_source(
+        "1234567" * 5 + "0", "owner/name", run=fake_run
+    )
+
+    assert resolved == "deadbeef" * 5
+    assert calls == [
+        [
+            "api",
+            f"repos/owner/name/commits/{'1234567' * 5}0/pulls",
+            "--jq",
+            ".[0].head.sha // empty",
+        ]
+    ]
+
+
+def test_resolve_merge_source_falls_back_when_no_pr_is_found() -> None:
+    commit = "cafe" * 10
+
+    def fake_run(arguments: list[str]) -> str:
+        return "\n"
+
+    assert va.resolve_merge_source(commit, "owner/name", run=fake_run) == commit
+
+
+def test_resolve_merge_source_propagates_a_gh_failure() -> None:
+    def fake_run(arguments: list[str]) -> str:
+        raise RuntimeError("gh api ... failed: HTTP 403")
+
+    with pytest.raises(RuntimeError, match="HTTP 403"):
+        va.resolve_merge_source("a" * 40, "owner/name", run=fake_run)
+
+
+def test_fetch_commit_via_api_returns_message_and_tree_sha() -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(arguments: list[str]) -> str:
+        calls.append(arguments)
+        return (
+            '{"message": "fix: thing\\n\\nVerified-locally: '
+            "sha256=" + TREE + ' tier=fast at=2026-09-07T00:00:00Z\\n", '
+            '"tree": {"sha": "' + TREE + '"}}'
+        )
+
+    message, tree_sha = va.fetch_commit_via_api(
+        "b" * 40, "owner/name", run=fake_run
+    )
+
+    assert tree_sha == TREE
+    assert "Verified-locally" in message
+    assert calls == [["api", f"repos/owner/name/git/commits/{'b' * 40}"]]
+
+
 # --- CLI -------------------------------------------------------------
 #
 # Both helpers below hardcode their own executable ("git" / sys.executable)
@@ -355,3 +420,115 @@ def test_cli_check_reports_a_bad_git_invocation_as_exit_2(
     result = _cli("check", "not-a-real-sha", "--repo", str(tmp_path))
     assert result.returncode == 2
     assert "git" in result.stderr
+
+
+def _write_fake_gh(tmp_path: Path, script: str) -> None:
+    fake_gh = tmp_path / "gh"
+    fake_gh.write_text(script, encoding="utf-8")
+    fake_gh.chmod(fake_gh.stat().st_mode | stat.S_IXUSR)
+
+
+def test_cli_check_resolve_merge_source_requires_github_repo() -> None:
+    result = _cli("check", "e" * 40, "--resolve-merge-source")
+    assert result.returncode == 2
+    assert "--github-repo" in result.stderr
+
+
+def test_cli_check_resolve_merge_source_validates_the_pr_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #699: validate the resolved PR head, not the squash commit.
+
+    A fake `gh` stands in for both API calls `--resolve-merge-source`
+    makes: the squash commit resolves to a PR head commit whose own tree
+    is TREE (deliberately different from the squash commit's own, unused,
+    tree), carrying a trailer that matches it -- proving the check
+    validated the *resolved* commit, not `$GITHUB_SHA` itself.
+    """
+    real_trailer = va.render_trailer(TREE, "fast", utc(2026, 9, 7))
+    payload = json.dumps(
+        {"message": f"fix: thing\n\n{real_trailer}\n", "tree": {"sha": TREE}}
+    )
+    _write_fake_gh(
+        tmp_path,
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'if [[ "$2" == */pulls ]]; then\n'
+        f'  echo "{"c" * 40}"\n'
+        "else\n"
+        f"  printf '%s' '{payload}'\n"
+        "fi\n",
+    )
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+
+    result = _cli(
+        "check",
+        "d" * 40,
+        "--now",
+        "2026-09-07T00:10:00Z",
+        "--resolve-merge-source",
+        "--github-repo",
+        "owner/name",
+    )
+
+    assert result.returncode == 0
+    assert "verified: tier=fast" in result.stdout
+
+
+def test_cli_check_resolve_merge_source_falls_back_without_a_pr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No associated PR (a direct push): validate the pushed sha itself.
+
+    Still resolved through the GitHub API, not local git -- the fake `gh`
+    here has no git-plumbing counterpart at all, proving this path never
+    falls back to `_run_git`.
+    """
+    real_trailer = va.render_trailer(TREE, "full", utc(2026, 9, 7))
+    message = f"chore: direct push\n\n{real_trailer}\n"
+    payload = json.dumps({"message": message, "tree": {"sha": TREE}})
+    _write_fake_gh(
+        tmp_path,
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'if [[ "$2" == */pulls ]]; then\n'
+        "  echo ''\n"
+        "else\n"
+        f"  printf '%s' '{payload}'\n"
+        "fi\n",
+    )
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+
+    result = _cli(
+        "check",
+        "a" * 40,
+        "--now",
+        "2026-09-07T00:10:00Z",
+        "--resolve-merge-source",
+        "--github-repo",
+        "owner/name",
+    )
+
+    assert result.returncode == 0
+    assert "verified: tier=full" in result.stdout
+
+
+def test_cli_check_resolve_merge_source_reports_a_gh_failure_as_exit_2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_fake_gh(
+        tmp_path,
+        "#!/usr/bin/env bash\necho 'gh: rate limited' >&2\nexit 1\n",
+    )
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+
+    result = _cli(
+        "check",
+        "f" * 40,
+        "--resolve-merge-source",
+        "--github-repo",
+        "owner/name",
+    )
+
+    assert result.returncode == 2
+    assert "rate limited" in result.stderr
