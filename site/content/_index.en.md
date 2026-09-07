@@ -22,18 +22,17 @@ fit = "Fit"
       <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
+        <p class="subtitle lead-question">How does this template get every change -- human or AI -- defined, verified, reviewed, and evidenced?</p>
         <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --></p>
+        <p class="subtitle flow-line"><strong>Result:</strong> every change, human or AI, is scoped, checked, and reviewed before it merges -- leaving evidence behind.</p>
         <p class="subtitle">Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Maintenance mode adds configuration files, code, and technical rationale. See the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a> for quick-start commands.</p>
         <div class="package-badges" aria-label="Package status">
-          <span class="package-badge beta">v0.13.0</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
-          <span class="package-badge">3 branch strategies</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge security">Automated verification / security checks</span>
-          <span class="package-badge warning">Free private repo: cannot enforce main protection</span>
-          <span class="package-badge">Site template v[[site_template_version]]</span>
-          <span class="package-badge">Render engine v[[site_engine_version]]</span>
+          <span class="package-badge muted">v0.13.0</span><!-- x-release-please-version -->
+          <span class="package-badge muted">Site template v[[site_template_version]]</span>
+          <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
       </header>
       <div class="language-contract" aria-label="Languages and template settings">
@@ -43,28 +42,29 @@ fit = "Fit"
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="What the template provides">
-          <h3>The template prepares your repo with</h3>
+          <h3>What the template prepares</h3>
           <p class="scope-row"><strong>Planning and AI rules</strong><span>Work is scoped first; only large outcomes split into sub-items</span></p>
           <p class="scope-row"><strong>Verification and merging</strong><span>Checks run locally first; GitHub reruns them, then the team reviews</span></p>
-          <p class="scope-row"><strong>Dependency and delivery evidence</strong><span>Pinned versions, a soak period, vulnerability scans, and a build content record</span></p>
+          <p class="scope-row"><strong>Dependency evidence</strong><span>Pinned versions, a soak period, vulnerability scans, a build manifest</span></p>
           <p class="scope-row"><strong>Continuous sync</strong><span>Template updates arrive as a reviewable diff, never a silent overwrite</span></p>
         </section>
         <section class="start-paths" aria-label="Three ways to start">
-          <h3>Start from your repository's current state</h3>
-          <article class="start-path primary"><h3>New repo</h3><p>Choose a project type and branch approach; add a Milestone only when items ship together.</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">Start now</button></article>
-          <article class="start-path"><h3>Existing repo</h3><p>Preview the diff on an isolated branch, keeping your content untouched.</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">Adoption command</button></article>
-          <article class="start-path"><h3>Already on the template</h3><p>Pin a reviewed release and review only this update's diff.</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">Update command</button></article>
+          <h3>Start from your repo's current state</h3>
+          <article class="start-path primary"><h3>Create a new repo</h3><p>Settle on a type and branch approach first; nothing is created or pushed to GitHub before that.</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">Start now</button></article>
+          <article class="start-path"><h3>Adopt an existing repo</h3><p>Preview the diff on an isolated branch, keeping your content untouched.</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">Adoption command</button></article>
+          <article class="start-path"><h3>Update a repo already on the template</h3><p>A dry run produces a reviewable diff first; it merges only after you confirm, never straight into main.</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">Update command</button></article>
         </section>
       </div>
       <div class="prerequisite-line product-prerequisites">
-        <p><strong>Install before you start</strong>Git, GitHub CLI, and uv; Rust also needs rustup, TypeScript also needs Node 24+ and pnpm 11. Local-only verification needs no token; sign in to <code>gh</code> only before applying GitHub settings or running end-to-end tests.</p>
+        <p><strong>Install before you start</strong>Git, GitHub CLI, and uv; see the full list, including optional Rust/TypeScript tooling, in Maintenance mode.</p>
         <button class="setup-trigger" type="button" data-setup="mac" aria-expanded="false">macOS setup</button>
         <button class="setup-trigger" type="button" data-setup="windows" aria-expanded="false">Windows setup</button>
       </div>
+      <p class="subtitle bridge-line"><strong>Next:</strong> the Install guide page gives you one complete prompt to paste to your agent -- it previews first and acts only after you confirm; Maintenance mode covers the exact state-detection rules.</p>
 {{< /legacy >}}
 
 {{< basic >}}
-<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) and stays synchronized across both languages.
+<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> and stays synchronized across both languages.
 
 <p class="template-version"><strong>Template release:</strong> v0.13.0<!-- x-release-please-version --></p>
 
@@ -99,6 +99,10 @@ Whether the repository is brand new, an existing one, or already CSARC-managed, 
 
 {{< standard key="install-mode-standard" title="The prompt to paste to your agent" >}}
 <div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Paste it</h3><p>Paste the full prompt below to your coding agent -- no command to remember.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI decides</h3><p>The agent runs <code>csarc status</code>; the CLI itself (not the agent's own judgment) classifies create, adopt, update, or a policy-only change.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Preview first</h3><p>Whatever the result, the agent shows you the plan and waits for confirmation before doing anything.</p></article></div>
+
+The result will be one of: **create** a new project, **adopt** an existing one, apply an available **update**, find it **already current** with nothing to do, or apply **policy-only** settings -- whichever it is, the agent always shows you the plan before touching anything.
+
+<p class="install-promise"><strong>The promise at this step:</strong> this step only checks the current state and proposes a plan; nothing is modified, no GitHub setting changes, and no PR opens until you confirm.</p>
 
 <div class="command-block"><div class="command-block-head"><span class="command-block-label">The full prompt to paste to your agent</span><button class="copy-command" type="button">Copy prompt</button></div><pre class="command-block-text">Using uv. First, find the latest published GitHub Release of https://github.com/Innoguard-Cyber-Arch/csarc-repo-template (for example, run `gh release view --repo Innoguard-Cyber-Arch/csarc-repo-template --json tagName,targetCommitish`, or check that repository's Releases page), and note that release's tag and full commit SHA -- always use this verified release, never `main` or an unconfirmed branch. Using that SHA, run the official csarc CLI's `status` subcommand to determine which installation state the current workspace/existing Git repository is in; uv should manage an isolated Python 3.14 per invocation, requiring no global Python. Run `csarc status --json` first -- do not judge or assume the current state yourself. Based on the returned state and next_command: for create, adopt, or update, switch to the matching init/adopt/update dry-run prompt and wait for confirmation; for current, report that no action is needed; for policy-only-update, only run `scripts/apply-repository-settings.sh plan`, summarize the diff, and wait for confirmation before running `apply` -- do not redo a full adopt or update. Never modify the global environment, push, or open a PR throughout.</pre></div>
 
@@ -166,17 +170,27 @@ This matrix does not replace or redesign `apply-repository-settings.sh`'s DEGRAD
 
 {{< slide key="about" track="about" eyebrow="About" title="CSARC is an updatable governance baseline that keeps working alongside your repo" subtitle="Not a template that stops once it generates files; creating, adopting, and upgrading all preview the diff before anything applies." class="dense single-column" legacy="false" >}}
 {{< standard key="about-mode-standard" title="What CSARC actually keeps doing" >}}
-Most templates stop once they generate files. CSARC keeps working alongside your repo:
+Most templates are done the moment they generate files. CSARC keeps working alongside your repo, through a full lifecycle:
 
-<div class="capability-map"><div class="capability-node"><h3>Every piece of work is one Issue</h3><p>States what to do and what "done" means; the change happens on its own branch so work never collides.</p><span class="capability-pointer">See "Work"</span></div><div class="capability-node"><h3>Adopting previews the diff first</h3><p>The system builds a preview on the side, listing what would be added, kept, or need your own judgment.</p><span class="capability-pointer">See "Updates"</span></div><div class="capability-node"><h3>Every change goes through review</h3><p>Automated checks run first, then a person reviews the PR; nothing reaches main without both.</p><span class="capability-pointer">See "Verify" and "PR merge"</span></div><div class="capability-node"><h3>Template updates preview too</h3><p>You confirm before an update lands, so it never quietly overwrites code you wrote.</p><span class="capability-pointer">See "Updates"</span></div><div class="capability-node"><h3>Routine security checks run alone</h3><p>Package versions, known vulnerabilities, and the release inventory are scheduled automatically.</p><span class="capability-pointer">See "Supply" and "Delivery"</span></div><div class="capability-node"><h3>This site is the same principle</h3><p>Download <code>docs/index.html</code> and it opens offline, no separate hosting needed.</p><span class="capability-pointer">See "Repo-site"</span></div></div>
+<div class="capability-map"><div class="capability-node"><h3>1｜Preview the diff before you touch anything</h3><p>Whether you're creating a new repo or adopting an existing one, a preview is built on the side first, listing what would be added, kept, or needs your own judgment; you apply it only after reviewing, never as a silent overwrite.</p><span class="capability-pointer">See "Install guide" and "Template updates"</span></div><div class="capability-node"><h3>2｜Day-to-day changes follow rules and get verified</h3><p>Each piece of work starts as an Issue stating what to do and what "done" means; the change happens on its own branch, gets checked locally first, then GitHub reruns it, while routine package and known-vulnerability checks run automatically on their own schedule.</p><span class="capability-pointer">See "Work", "Verify / CI", and "Supply chain"</span></div><div class="capability-node"><h3>3｜Merging leaves evidence behind</h3><p>A PR merges only after human review; when needed, a version and Release are created that record exactly which packages shipped, so "what actually happened" can always be checked later.</p><span class="capability-pointer">See "PR merge" and "Version / delivery"</span></div><div class="capability-node"><h3>4｜Future template updates still preview first</h3><p>A template update works the same way adoption does: it produces a reviewable diff first, and you confirm before it applies. This site itself is built on the same principle -- download <code>docs/index.html</code> and it opens offline.</p><span class="capability-pointer">See "Template updates" and "Repo-site"</span></div></div>
 
-A good fit if you already have a GitHub repository that cannot risk being overwritten, want coding agents in day-to-day development with clear rule boundaries, or want several repositories to share one workflow. If you just want to scaffold an empty project quickly with no ongoing maintenance, a lighter template probably fits better.
+This rhythm fits you if: you already have a GitHub repository that cannot risk being overwritten wholesale; you want coding agents in day-to-day development with clear rule boundaries; or you want several projects to share one workflow. If you just want to scaffold an empty project quickly with no ongoing maintenance, a lighter template probably fits better.
 {{< /standard >}}
 
 {{< ops key="about-mode-ops" title="The thinking behind the governance baseline" >}}
 CSARC is not just a file generator: creating a new project, adopting an existing one, and rolling out later policy updates all go through a process that previews, verifies, and stays traceable -- what it delivers is a verifiable way of working, not just files.
 
 <div class="capability-map"><div class="capability-node"><h3>Adopting an existing repository safely</h3><p>Builds a full candidate in isolation and verifies it first; reconfirms no drift before applying; stops on conflict or failure without touching the target repo.</p></div><div class="capability-node"><h3>Rolling out governance policy continuously</h3><p>Keeps repository choices, the template revision, GitHub's desired policy, and the platform's actual state separate; a fixable gap is called out, an unsupported capability is labeled <code>DEGRADED</code>.</p></div><div class="capability-node"><h3>Keeping an evidence chain you can check</h3><p>Issue -&gt; PR -&gt; verification -&gt; delivery candidate -&gt; merge -&gt; release -&gt; checksum/SBOM -&gt; audit trail, each step pointing back to the exact version before it.</p></div></div>
+
+{{< disclosure key="about-three-layers" title="Three layers: why a written policy doesn't always mean an enforced one" >}}
+CSARC splits "governance" into three layers that can drift out of sync with each other, so no single layer alone proves a control is actually in effect:
+
+1. **Template source:** `template/`, `policies/`, and `profiles/catalog.yaml` -- the shared definitions the template team maintains, describing what "should" be provided.
+2. **The repo-local contract:** `.csarc/config.yml`, `policies/*.json`, and `AGENTS.md` left in this repository after generation or adoption -- what this repository chose from the template, and what it expects.
+3. **What actually takes effect on GitHub:** branch protection, Rulesets, Actions permissions, and the GitHub plan's own limits -- what the platform is really enforcing right now.
+
+A template update only touches layer 1; applying it to a repository only touches layer 2; and whether the policy written into layer 2 actually takes effect still depends on whether layer 3 -- the GitHub plan and permissions -- can support it. `apply-repository-settings.sh`'s `plan`/`apply`/`check` exist precisely to reconcile layer 2 against layer 3: when they agree, it applies and `check` verifies it; when the platform genuinely cannot support it, the result is marked `DEGRADED` and handed back to a person, never pretended as enforced.
+{{< /disclosure >}}
 
 {{< disclosure key="about-design-philosophy" title="Why it is designed this way: people/agent split, repo-local, who this fits" >}}
 ### Designed for people and coding agents together
@@ -207,39 +221,40 @@ A good fit if you: already have a GitHub repository that cannot risk a template 
 {{< legacy >}}
       <header>
         <h2>The template carries every change<span class="accent"> to the right place</span></h2>
-        <p class="subtitle">You follow the Issue and PR prompts; the template prepares forms, settings, and the necessary checks. Maintenance mode is only for the actual workflow names.</p>
+        <p class="subtitle"><strong>CI/CD here means:</strong> once a change is submitted, a separate clean environment re-checks it before deciding whether it can merge or ship -- it does not mean automatic deployment to production.</p>
+        <p class="subtitle">For example: the team is adding a sign-in-timeout reminder to the product -- the five steps below all use this example.</p>
       </header>
       <div class="pipeline-map">
         <div class="pipeline-track" aria-label="Everyday development and delivery flow">
           <article class="pipeline-stage">
             <span class="pipeline-phase">Step 1｜State it clearly</span>
             <h3>Open the work</h3>
-            <p>The Issue form prompts for the problem, completion criteria, and necessary context.</p>
+            <p><strong>Person:</strong> writes an Issue (a work item) -- "Add a sign-in-timeout reminder" -- with the completion condition that a reminder shows before timeout, backed by a test. <strong>Template:</strong> the form prompts for the required fields. <strong>Result:</strong> one clearly scoped, independently verifiable piece of work.</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">Step 2｜Make the change</span>
             <h3>Complete the change</h3>
-            <p>A person or an AI follows in-repo guidance and runs the most relevant local check first.</p>
+            <p><strong>Person/AI:</strong> changes the code following in-repo guidance, running the most relevant local check first. <strong>Template:</strong> prepares that guidance and the check scripts. <strong>Result:</strong> a self-checked change ready to send for review.</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">Step 3｜Hand it to the team</span>
             <h3>Open a PR</h3>
-            <p>The PR template prompts for the linked Issue and a summary of what was done and verified.</p>
+            <p><strong>Person:</strong> opens a PR (a change proposal) linked back to the original Issue. <strong>Template:</strong> the template prompts for what changed and how it was verified. <strong>Result:</strong> a proposal a reviewer can understand quickly.</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">Step 4｜The system helps</span>
             <h3>Verify and check dependencies</h3>
-            <p>The template selects the necessary checks; a dependency change also confirms the locked versions still install.</p>
+            <p><strong>GitHub:</strong> reruns the checks on a separate clean machine (this is CI); a dependency change also gets checked against known vulnerabilities. <strong>Template:</strong> selects the verification the change actually needs. <strong>Result:</strong> anyone who reruns it gets the same result -- not just "looks fine on the author's machine."</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">Step 5｜Confirm the result</span>
             <h3>Review and merge</h3>
-            <p>Merge once the result and review are both clear; enforcement depends on the GitHub plan's capability.</p>
+            <p><strong>Person:</strong> approves the merge once both the result and the review are clear. <strong>GitHub:</strong> enforces merge protection to whatever degree the plan supports. <strong>Result:</strong> the sign-in-timeout reminder lands in main, with a full record of this change.</p>
           </article>
         </div>
         <div class="pipeline-loop" aria-label="CI feedback loop">
-          <strong>↶ A failed check: fix it and update the same PR</strong>
-          <span>A new problem found after merge gets its own, clearly scoped Issue.</span>
+          <strong>↺ A check fails → fix it on the same work branch → update the same PR → get a fresh result</strong>
+          <span>A new problem found after merge gets its own, clearly scoped Issue, instead of reopening the branch that already merged.</span>
         </div>
         <div class="pipeline-foundation" aria-label="Platform capability underneath the whole flow">
           <div class="pipeline-foundation-label"><strong>The template prepares this first</strong><span>Most users just follow the prompts; only a maintainer adjusts settings.</span></div>
@@ -262,6 +277,13 @@ A good fit if you: already have a GitHub repository that cannot risk a template 
 
 Users do not need to memorize workflow or script names. Current automation covers work items, PR rules, necessary verification, and a reviewed automatic version-and-release path.
 
+**Responsibility handoff (local scripts → GitHub Actions → PR gate → Release):**
+
+- **Local scripts (`Active`):** `scripts/verify-fast` / `scripts/verify-template.sh` run once locally by the developer first, catching most low-level mistakes.
+- **GitHub Actions (`Active`):** once a PR opens, `.github/workflows/` reruns the same policy in a clean environment, never trusting the local result.
+- **PR gate (depends on the GitHub plan):** where supported, a Ruleset / branch protection blocks a merge that failed checks or lacks review; where not supported, it is marked `DEGRADED` and falls back to human discipline (see "Rules governance").
+- **Release (`Active`, but needs a human trigger):** version and release evidence is produced by someone with admin permission running `scripts/publish-release` locally; the hosted Automatic/Guided publish path is a known limitation, not the default path (see "Version / delivery").
+
 {{< detail key="flow-foundation" title="Three foundations across the whole flow" >}}
 - **08 Governance:** prepares repository policy, then applies only the controls the live GitHub plan supports.
 - **09 Template updates:** Copier carries policy changes back through reviewable PRs.
@@ -274,16 +296,18 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 
 {{< slide key="files" track="files" class="dense" eyebrow="File map" title="The template puts required settings in the right place" subtitle="This lists the major files currently generated; template updates never silently overwrite product-owned content." legacy="false" >}}
 {{< standard key="files-mode-standard" title="Update flow and integrated tools" >}}
-<div class="capability-map"><div class="capability-node"><h3>Template settings</h3><p><code>.csarc/config.yml</code>, <code>policies/</code>: languages, branch strategy, owners, and reviewers all live here.</p></div><div class="capability-node"><h3>GitHub workflow</h3><p><code>.github/</code>: Issue/PR forms and automated checks.</p></div><div class="capability-node"><h3>Agent rules</h3><p><code>AGENTS.md</code>: how an agent works in this repository.</p></div><div class="capability-node"><h3>Project docs</h3><p><code>README.md</code>, <code>docs/</code>, <code>site/</code>: docs for people, and the site you're reading right now.</p></div><div class="capability-node"><h3>Product code</h3><p><code>src/</code>: the actual product code, tests, and specs.</p></div></div>
+Where a file lives matters less than who can change it. Every file falls into one of three ownership categories: **template-led** (a template update may change it; avoid editing it directly after generation), **shared** (you can edit it directly, but the next template update may ask you to merge in a diff), or **project-owned** (entirely yours -- the template never overwrites it).
+
+<div class="capability-map"><div class="capability-node"><h3>Template settings <span class="ownership-tag shared">Shared</span></h3><p><code>.csarc/config.yml</code>, <code>policies/</code>: languages, branch strategy, owners, and reviewers all live here.</p></div><div class="capability-node"><h3>GitHub workflow <span class="ownership-tag template">Template-led</span></h3><p><code>.github/</code>: Issue/PR forms and automated checks.</p></div><div class="capability-node"><h3>Agent rules <span class="ownership-tag shared">Shared</span></h3><p><code>AGENTS.md</code>: how an agent works in this repository.</p></div><div class="capability-node"><h3>Project docs <span class="ownership-tag shared">Shared</span></h3><p><code>README.md</code>, <code>docs/</code>, <code>site/</code>: docs for people, and the site you're reading right now.</p></div><div class="capability-node"><h3>Product code <span class="ownership-tag project">Project-owned</span></h3><p><code>src/</code>: the actual product code, tests, and specs.</p></div></div>
 
 Switch to Maintenance mode for the full file tree and each file's owner.
 
-When the template finds a file it can update:
+When the template finds a file it can update, it first builds a candidate in an isolated environment on the side, without touching this repo, then compares files one by one:
 
 <div class="plan-grid">
-  <article class="plan-card current"><h3>No conflict</h3><p>The update applies directly, no action needed.</p></article>
-  <article class="plan-card team"><h3>Conflict</h3><p>Only the affected files are listed; your content stays untouched.</p></article>
-  <article class="plan-card enterprise"><h3>PR review</h3><p>Either way, a person reviews and merges it; nothing silently overwrites your content.</p></article>
+  <article class="plan-card current"><h3>Update the worktree when there's no conflict</h3><p>The update applies directly, no action needed.</p></article>
+  <article class="plan-card team"><h3>Keep your content when there's a conflict</h3><p>Only the affected files are listed; your content stays untouched.</p></article>
+  <article class="plan-card enterprise"><h3>Always reviewed by PR before reaching the real branch</h3><p>Either way, a person reviews and merges it; nothing silently overwrites your content.</p></article>
 </div>
 
 The template already wires up the tools you'd otherwise have to find and configure yourself: project generation and updates, code security scanning, dependency-update reminders, known-vulnerability scanning, release notes, and the repo site you're reading right now.
@@ -294,6 +318,8 @@ The template already wires up the tools you'd otherwise have to find and configu
 
 {{< disclosure key="files-map-scope" title="Why the file map only lists path, purpose, and responsibility" >}}
 The side navigation already links each item to its page, and the maintainer-only "CI/CD settings" appendix already lists verification entry points per step in more detail than this view could add; the tree view therefore avoids duplicating a page-name or verification-entry column.
+
+The "responsibility" column is also editing guidance: avoid editing a `Template-led` file directly in a generated repo -- route the change through Template updates instead; a `Shared` file is a reasonable place to edit directly, but the next template update may ask you to merge in a diff; a `Project-owned` file is entirely yours, and the template never touches it.
 {{< /disclosure >}}
 
 {{< disclosure key="files-update" title="How updates protect product content" >}}
@@ -325,7 +351,8 @@ Only tools this template directly integrates, executes, or produces into the rep
         <p class="subtitle"><strong>Baseline.</strong> One Issue defines one change that can be completed independently; only use a Milestone when several work items share an outcome and deadline.</p>
       </header>
       <p class="context-line"><strong>What the template does｜</strong>keeps Issue and Milestone content consistent, so a person or an agent knows what to solve and what "done" means before starting.</p>
-      <div class="relation-map"><div class="relation-track"><div class="relation-col"><div class="relation-group"><span class="relation-group-label">Only when needed</span><strong>Milestone</strong><span class="relation-group-note">Create one only when several Issues share an outcome, deadline, or delivery batch</span></div><span class="relation-group-arrow" aria-hidden="true">↓</span><article class="relation-node"><span class="relation-kind">State it clearly</span><h3>Issue</h3><p>Problem, completion criteria, verification, and owner; add no other document once that is enough to start.</p></article></div><article class="relation-node"><span class="relation-kind">Start implementing</span><h3>Work branch</h3><p>One short-lived branch per Issue; do not mix unrelated work into it.</p></article><article class="relation-node"><span class="relation-kind">Review, then merge</span><h3>PR</h3><p>Matches the same Issue; merges to main only after checks and human review pass.</p></article></div></div>
+      <p class="context-line"><strong>For example｜</strong>Issue: add a sign-in-timeout reminder / completion condition: a reminder shows before timeout, backed by a test; the work branch matches this Issue; the PR delivers only this one change.</p>
+      <div class="relation-map"><div class="relation-track"><div class="relation-col"><div class="relation-group"><span class="relation-group-label">Only when needed</span><strong>Milestone</strong><span class="relation-group-note">Only put multiple Issues into the same Milestone when they need a shared deadline or shared acceptance</span></div><span class="relation-group-arrow" aria-hidden="true">↓</span><article class="relation-node"><span class="relation-kind">State it clearly</span><h3>Issue</h3><p>Problem, completion criteria, verification, and owner; add no other document once that is enough to start.</p></article></div><article class="relation-node"><span class="relation-kind">Start implementing</span><h3>Work branch</h3><p>One short-lived branch per Issue; do not mix unrelated work into it.</p></article><article class="relation-node"><span class="relation-kind">Review, then merge</span><h3>PR</h3><p>Matches the same Issue; merges to main only after checks and human review pass.</p></article></div></div>
       <p class="context-line"><strong>Next step｜</strong>open an Issue and cut a work branch to start implementing; naming rules, Milestone detail, Issue splitting, and exceptions are covered in Maintenance mode.</p>
 {{< /legacy >}}
 
@@ -371,7 +398,7 @@ Only tools this template directly integrates, executes, or produces into the rep
         <p class="subtitle"><strong>Baseline.</strong> An Issue bounds the work; <code>AGENTS.md</code> explains how to work; code and tests provide evidence, and people retain product direction and material-risk decisions.</p>
       </header>
       <p class="context-line"><strong>What the template does｜</strong>generates and checks what an agent must read before starting, where it may change files, how to isolate parallel work, and what evidence to leave; only custom policy, material decisions, and exceptions need a person.</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>Work and context</h3><p>GitHub Issues and PRs record scope, progress, and evidence; material decisions live in an approved spec or ADR (a written record of the requirement and the architecture decision behind it).</p></div><div class="capability-node"><h3>AI rules</h3><p>The root <code>AGENTS.md</code> is the single source -- an agent reads it before starting anything.</p></div><div class="capability-node"><h3>Decisions and authorization</h3><p>Requirement direction, material trade-offs, and irreversible operations still stay with a person; an agent follows the rules and leaves evidence.</p></div></div>
+      <div class="capability-map cols-3"><div class="capability-node"><h3>Issue: this time's scope</h3><p>States what to complete this time and what "done" means; scope and progress live here, while material decisions live in an approved spec/ADR (a written record of the requirement and the architecture decision behind it).</p></div><div class="capability-node"><h3>AGENTS.md: how to work in this repo</h3><p>The working rulebook that travels with the repository under version control; an agent reads it before starting anything, instead of guessing at convention.</p></div><div class="capability-node"><h3>Evidence and decisions</h3><p>scripts/tests provide verification evidence anyone can rerun; requirement direction, material trade-offs, and irreversible operations still stay with a person.</p></div></div>
       <p class="context-line"><strong>Next step｜</strong>point your agent at <code>AGENTS.md</code> and let it start working; change isolation, verification evidence, and template-update rules are covered in Maintenance mode.</p>
 {{< /legacy >}}
 
@@ -385,6 +412,11 @@ Only tools this template directly integrates, executes, or produces into the rep
 - **Verification evidence:** a local program is the only logic; an Action only calls it.
 - **Decisions and authorization:** people keep material decisions; review and merge rules are defined only by Rules governance.
 - **Template creation and updates:** Copier owns the shared baseline; an existing repository's updates are defined by Template upgrades.
+
+{{< disclosure key="agents-priority-and-isolation" title="Rule priority and change isolation" >}}
+- **Rule priority:** the root `AGENTS.md` governs the whole repository; add a nearer `AGENTS.md` in a subtree only when its commands or safety boundaries genuinely differ, in which case the nearer rule wins inside that subtree while everything else still falls back to the root. `CLAUDE.md` always just thinly imports the root `AGENTS.md` and never redefines rules of its own.
+- **Change isolation:** each writable task uses its own Git branch and worktree, so parallel work never interferes; read-only work (for example, just looking something up) needs neither a branch nor a worktree.
+{{< /disclosure >}}
 
 {{< disclosure key="agents-alternatives" title="Other common approaches" >}}
 - **In-repo guidance:** keep fixed commands and boundaries under version control so different agents read the same rules.
@@ -401,12 +433,12 @@ Only tools this template directly integrates, executes, or produces into the rep
 
 {{< slide key="contract" track="contract" eyebrow="Step 03" title="Verify the change, then let CI rerun the same rules" subtitle="Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries." legacy="false"  class="candidate-slide" >}}
 {{< standard key="contract-mode-standard" title="Change size decides how heavy verification gets" >}}
-During development you only run the check that proves your own change, no waiting on the full pipeline. Once you open a PR, the system decides automatically which tier applies:
+Developers first run a quick check on their own machine; once a PR opens, GitHub confirms the evidence and requirements against the same policy -- locally you only run the check that proves this change, no need to wait for the full pipeline. Once the PR is open, the system automatically decides which tier applies based on the change's scope:
 
 <div class="plan-grid">
-  <article class="plan-card current"><h3>docs</h3><p>Docs-only changes get the lightest check.</p></article>
-  <article class="plan-card team"><h3>fast</h3><p>Ordinary changes default to this tier.</p></article>
-  <article class="plan-card enterprise"><h3>full</h3><p>Milestone delivery, a hotfix, or unpinnable risk.</p></article>
+  <article class="plan-card current"><h3>docs</h3><p>Docs-only changes get the lightest check. Example: editing a single explainer document.</p></article>
+  <article class="plan-card team"><h3>fast</h3><p>Ordinary changes default to this tier. Example: a routine code or config change.</p></article>
+  <article class="plan-card enterprise"><h3>full</h3><p>Milestone delivery, a hotfix, or unpinnable risk. Example: Milestone/canary delivery, a hotfix, a merge queue.</p></article>
 </div>
 
 The same logic runs locally and in CI, so there is never a second, drifting copy of the rule.
@@ -453,8 +485,8 @@ These numbers come from `docs/ci-policy.md`'s most recent measurement. They set 
         <h2>Step 4｜<span class="accent">Each language manages itself</span></h2>
         <p class="subtitle"><strong>Baseline.</strong> Choose a project language and the template produces the matching version, lockfile, formatting, static checks, tests, and build configuration.</p>
       </header>
-      <p class="context-line"><strong>What the template does｜</strong>prepares checks for the languages you choose; selecting several never repeats a shared check.</p>
-      <p class="context-line"><strong>Every project｜</strong>checks work rules, documentation, secrets, and dependency risk, regardless of language.</p>
+      <p class="context-line"><strong>What the template does｜</strong>you only select the languages this repo actually uses; the template wires up each language's native checks, while everything still flows through the same PR pipeline.</p>
+      <p class="context-line"><strong>The shared pipeline｜</strong>select a language → generate its matching tooling and lockfile → run format/lint/test/package → hand the result to the same verification entry point (see "Verify / CI").</p>
       <div class="capability-map cols-3"><div class="capability-node"><h3>Python</h3><p>Checks formatting, types, tests, and the installable package.</p></div><div class="capability-node"><h3>Rust</h3><p>Checks formatting, common mistakes, tests, and whether the release build packages.</p></div><div class="capability-node"><h3>TypeScript</h3><p>Checks formatting, types, tests, and the installable package.</p></div></div>
       <p class="context-line"><strong>Next step｜</strong>just check the languages you need at creation or adoption; several at once combine checks and a shared item still runs once; other approaches are covered in Maintenance mode.</p>
 {{< /legacy >}}
@@ -469,7 +501,7 @@ Choose a project language and the template prepares the matching checks:
 - **Rust:** checks formatting, common mistakes, tests, the release build, and the installable package.
 - **TypeScript:** checks formatting, types, tests, and the installable package.
 
-Each language is its own independent component (module), selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations.
+Each language is its own independent component (module), selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations. Version sources and lockfiles stay independent too: Python reads `pyproject.toml`/`uv.lock`, Rust reads `Cargo.toml`/`Cargo.lock`, and TypeScript reads `package.json`/`pnpm-lock.yaml`; after a change, just run the single verification entry point listed below under "Fixed baseline | One entry point verifies and packages."
 
 ### Other common approaches
 
@@ -487,8 +519,9 @@ Each language is its own independent component (module), selected independently.
         <h2>Step 5｜<span class="accent">Update, check, and record third-party packages separately</span></h2>
         <p class="subtitle"><strong>Baseline.</strong> Where a package updates from, whether it can be reinstalled, whether it has a known vulnerability, and what a release actually contains are four things worth confirming separately.</p>
       </header>
-      <p class="context-line"><strong>What the template does｜</strong>a dependency change must reinstall and verify cleanly; an ordinary release gets an observation window, a disclosed vulnerability never waits, and a release lists what it actually contains.</p>
-      <div class="capability-map"><div class="capability-node"><h3>Install</h3><p>Reinstalls from the locked-version list (lockfile), so every run gets the same packages.</p></div><div class="capability-node"><h3>Update</h3><p>An automated service opens a PR weekly; ordinary releases wait three days, security patches never do.</p></div><div class="capability-node"><h3>Vulnerability</h3><p>A known-vulnerability scan checks dependency changes and delivery candidates, without waiting for the observation window.</p></div><div class="capability-node"><h3>Software bill of materials (SBOM)</h3><p>Lists packages in the artifact at release time, for later investigation.</p></div></div>
+      <p class="context-line"><strong>For example｜</strong>when development adds or updates a third-party package, the template splits "can it be reinstalled," "is there an update," "is there a known vulnerability," and "what did the release actually install" into four separate, sequential steps:</p>
+      <div class="capability-map"><div class="capability-node"><h3>1｜Lock what gets installed</h3><p>Reinstalls from the locked-version list (lockfile), so every run gets the same packages. <strong>You'll see:</strong> install/CI use the locked versions directly. <strong>Blocks merge?</strong> Yes, if the lockfile and the declared versions disagree.</p></div><div class="capability-node"><h3>2｜Dependabot opens an update PR</h3><p>The automated update service opens a PR weekly; ordinary releases wait a three-day observation window, security patches never do. <strong>You'll see:</strong> an update PR waiting for review. <strong>Blocks merge?</strong> Not automatically, but it still has to pass ordinary PR verification.</p></div><div class="capability-node"><h3>3｜OSV checks known vulnerabilities</h3><p>The known-vulnerability scan checks dependency changes and delivery candidates, without waiting for the observation window. <strong>You'll see:</strong> scan results attached to the PR or delivery candidate. <strong>Blocks merge?</strong> Yes, if a known vulnerability turns up.</p></div><div class="capability-node"><h3>4｜Release produces an SBOM</h3><p>At release time, lists the packages the artifact actually contains (a bill of materials), for later investigation. <strong>You'll see:</strong> the SBOM file attached to the Release. <strong>Blocks merge?</strong> No -- it's an inventory, not a gate.</p></div></div>
+      <p class="context-line"><strong>Keep in mind｜</strong>a lockfile only guarantees the packages reinstall -- it says nothing about known vulnerabilities; a known security patch never waits out the three-day observation window; OSV only recognizes already-disclosed vulnerabilities, so it cannot guarantee catching every problem; and an SBOM is an inventory for investigation -- it does not, by itself, patch or block any vulnerability.</p>
       <p class="context-line"><strong>Next step｜</strong>a package update opens a PR on its own -- review and merge it when you see it; why each protection stays separate is covered in Maintenance mode.</p>
 {{< /legacy >}}
 
@@ -522,14 +555,14 @@ Routine updates and security checks run automatically. People step in only for u
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="pr" track="pr" eyebrow="Step 06" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a delivery PR then carries the verified batch into main." class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="pr" track="pr" eyebrow="Step 06" title="Make completed changes reviewable and deliverable" subtitle="Standalone work goes straight into main; only a Milestone that needs shared acceptance uses a delivery PR." class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <h2>Step 6｜<span class="accent">Make completed changes reviewable and deliverable</span></h2>
-        <p class="subtitle"><strong>Baseline.</strong> This page starts once a PR is ready: a work PR completes one Issue, and a delivery PR then confirms the whole batch.</p>
+        <p class="subtitle"><strong>Baseline.</strong> This page starts once a PR is ready: a work PR completes one Issue, and a delivery PR then confirms the whole batch -- the next page, "Version / delivery," is where the version PR comes in.</p>
       </header>
       <p class="context-line"><strong>What the template does｜</strong>carries a completed change to the right branch, confirms it links back to its work, passes verification, and closes that work once merged.</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>Work PR</h3><p>One PR completes one reviewable Issue; merging it closes the same-numbered Issue.</p></div><div class="capability-node"><h3>Delivery PR</h3><p>Only once all of a Milestone's work is done does it fully verify and deliver the batch.</p></div><div class="capability-node"><h3>Exception: hotfix</h3><p>May target main directly, but still needs an Issue, review, and verification.</p></div></div>
+      <div class="capability-map cols-3"><div class="capability-node"><h3>Standalone work</h3><p>topic → main: one PR completes one reviewable Issue; merging it closes the same-numbered Issue.</p></div><div class="capability-node"><h3>Milestone work</h3><p>topic → <code>dev/m*</code> → delivery PR → main: each PR in the batch lands in <code>dev/m*</code> first, then the delivery PR fully verifies and delivers the whole batch into main once everything is done.</p></div><div class="capability-node"><h3>Exception: hotfix</h3><p>A fix branch may target main directly, but still needs an Issue, review, and full verification.</p></div></div>
       <p class="context-line"><strong>Next step｜</strong>open a work PR once an Issue is done; PR title format, branch naming, and other merge-model comparisons are covered in Maintenance mode.</p>
 {{< /legacy >}}
 
@@ -566,7 +599,7 @@ Routine updates and security checks run automatically. People step in only for u
 {{< legacy >}}
       <header>
         <h2>Step 7｜<span class="accent">Version rules and what follows an artifact</span></h2>
-        <p class="subtitle"><strong>Deliver first, review the version, publish last:</strong> a work PR never edits the version directly; Release Please (a tool that automates version numbers) centralizes version and CHANGELOG updates.</p>
+        <p class="subtitle"><strong>Merging is not releasing, and releasing is not deploying.</strong> A work PR never edits the version directly; Release Please (a tool that automates version numbers) centralizes version and CHANGELOG updates.</p>
       </header>
       <p class="context-line"><strong>Design flow｜</strong>a work PR only declares its version impact; only after a person reviews and merges the version PR does the system create and verify the Release.</p>
       <div class="relation-map"><div class="relation-track cols-4"><article class="relation-node"><span class="relation-kind">1｜Work merges</span><h3>Standalone work</h3><p>When it can be reviewed on its own with no shared deadline or dependency, a reviewed PR may target main directly.</p></article><article class="relation-node"><span class="relation-kind">2｜Version prepared</span><h3>Version materialization</h3><p>When a new version is needed, the system opens a version PR from PR titles and syncs the version and CHANGELOG.</p></article><article class="relation-node"><span class="relation-kind">3｜Release created</span><h3>Release</h3><p>Once the version PR merges, the system verifies the artifact, checksum (a file-integrity code), and SBOM, then publishes an immutable GitHub Release.</p></article><article class="relation-node"><span class="relation-kind">4｜Not the template's job</span><h3>Deployment</h3><p>The template's job ends at Release; deploying to a real runtime is configured by each individual project.</p></article></div></div>
@@ -676,11 +709,11 @@ release. The full format contract and the reasoning behind this scope live in th
 {{< legacy >}}
       <header>
         <h2>Detect the GitHub plan first,<span class="accent"> then apply only what it can actually enforce</span></h2>
-        <p class="subtitle"><strong>Baseline｜</strong>one template adapts to Free, Team, Enterprise, and the live API's real capability; it never pretends a paid feature is already active.</p>
+        <p class="subtitle"><strong>Baseline｜</strong>writing a rule into the repo doesn't mean GitHub can actually enforce it; the template checks the platform's capability first, then decides between enforcing it or degrading explicitly.</p>
       </header>
-      <p class="context-line"><strong>Live check｜</strong>the <code>Innoguard-Cyber-Arch</code> API reports Free + private, so <code>main</code> genuinely has no enforced protection today, and a red CI check can still be bypassed by someone with permission.</p>
-      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">PR opened</span><h3>Human review</h3><p>The system auto-assigns one non-author reviewer and keeps a review record.</p></article><article class="relation-node warning"><span class="relation-kind">Your current plan: Free</span><h3>Merge protection degraded</h3><p>GitHub does not allow the API to create a forced rule on a private repository; main has no enforced protection yet, and someone with permission can still bypass a red check.</p></article><article class="relation-node"><span class="relation-kind">Upgrade path</span><h3>Team and above</h3><p>The template can apply the full branch-protection ruleset directly; merge protection stops depending on self-discipline.</p></article></div></div>
-      <p class="context-line"><strong>Next step｜</strong>after a plan change or upgrade, just reapply settings once; the full capability of the Team and Enterprise tiers is covered in Maintenance mode.</p>
+      <p class="context-line"><strong>Flow｜</strong>desired policy → check the GitHub plan and permissions → can enforce: apply and verify → cannot enforce: mark <code>DEGRADED</code> and leave the responsibility with a person.</p>
+      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">PR opened</span><h3>Human review</h3><p>The system auto-assigns one non-author reviewer and keeps a review record.</p></article><article class="relation-node"><span class="relation-kind">Check the plan and permissions</span><h3>Can it be enforced?</h3><p>The template checks the current plan, repository visibility, and permissions to judge whether it can create a Ruleset (GitHub's own enforced merge rule).</p></article><article class="relation-node"><span class="relation-kind">Two outcomes</span><h3>Apply and verify, or degrade explicitly</h3><p>When it can enforce, it applies the rule and verifies it took effect in <code>check</code>; when it cannot, it marks <code>DEGRADED</code> and falls back to human discipline, never pretending it is already enforced.</p></article></div></div>
+      <p class="context-line"><strong>Next step｜</strong>after a plan change or upgrade, just reapply settings once; which outcome this repository is actually in today, and the full capability of the Team and Enterprise tiers, are covered in Maintenance mode.</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -689,6 +722,12 @@ The template always prepares owners, reviewers, repository defaults, and the des
 - supported controls are applied and verified;
 - an unavailable paid control is reported as `DEGRADED` and replaced with an explicit human step, never described as enforced;
 - a fixable mismatch fails until corrected.
+
+{{< disclosure key="governance-live-status" title="This repository's own real status right now (checked 2026-09-07)" >}}
+The `Innoguard-Cyber-Arch` API reports this repository is on the Free plan with **public** visibility. GitHub already has an `enforcement: active` Ruleset named "CSARC protected branches" (created 2026-09-03), applied to `main` and `dev/m*`: it requires at least 1 approval, CODEOWNER review, and all three of the `title`/`promotion`/`verify` status checks to pass, and disallows force-push -- `main` genuinely does have enforced merge protection today.
+
+This maps to the "Free + public, or Pro personal + private" row in the table below, not the **private** degraded scenario the Free row describes in the "Full capability at each Free/Team/Enterprise tier" cards further down (that card describes what happens on Free + *private*, where the REST/GraphQL Ruleset-creation API refuses the request, so only the desired state can be kept while it is marked `DEGRADED`); this repository is public, so it takes the path that applies and verifies directly. If the plan or visibility changes later, rerunning `plan`/`apply`/`check` reflects the latest state -- this records the fact as of when it was checked, not a permanent guarantee, and it does not mean every repository using this template looks the same.
+{{< /disclosure >}}
 
 {{< disclosure key="governance-capability" title="Plan capability, activation, and upgrade conditions" >}}
 | GitHub state | What the template can do | Human responsibility |
@@ -750,15 +789,15 @@ Use a linked Issue to record the proposer, a different approver, expiry, evidenc
 
 {{< slide key="template-release" track="template-release" eyebrow="Step 09" title="Copier keeps repositories aligned, and the template dogfoods its rules" subtitle="A template defect affects many projects, so creation, adoption, and update all run as real tests." legacy="false"  class="candidate-slide" >}}
 {{< standard key="template-release-mode-standard" title="How template updates reach your repository safely" >}}
-Copier (the tool that creates and keeps updating the template) builds an update plan outside your repository first:
+After the template publishes a new version, your repository gets an update notice or a person triggers it manually; Copier (the tool that creates and keeps updating the template) first produces a dry-run candidate **outside** your repository, then compares files one by one:
 
 <div class="plan-grid">
-  <article class="plan-card current"><h3>No conflict</h3><p>The plan applies directly.</p></article>
-  <article class="plan-card team"><h3>Conflict</h3><p>Only the affected files are listed, your repository untouched; you adjust and rerun.</p></article>
-  <article class="plan-card enterprise"><h3>PR review</h3><p>Either way, a normal PR review is the last step.</p></article>
+  <article class="plan-card current"><h3>No conflict</h3><p>Updates the matching files in the worktree; main itself has not changed yet.</p></article>
+  <article class="plan-card team"><h3>Conflict</h3><p>Only the affected files are listed, keeping your repository unchanged; you adjust and rerun.</p></article>
+  <article class="plan-card enterprise"><h3>Human review, then merge</h3><p>Either way, a normal PR carries out full review and only merges into main once it passes -- no step ever skips review to touch main directly.</p></article>
 </div>
 
-`template/` is the single source of what gets delivered; your own code and specs are never overwritten, and any conflict is surfaced to you before anything changes.
+Three places each own something different: `template/` is the single source of what the template delivers; `.csarc/config.yml` records what this project has chosen and which version it is currently updated to; your product code and specs are entirely yours, and the template always lists a conflict for you to confirm rather than silently overwriting it.
 {{< /standard >}}
 
 {{< ops key="template-release-mode-ops" title="Single source, verification flow, and current automation boundary" >}}
@@ -800,6 +839,7 @@ Root `.csarc/config.yml` records the capabilities the template repository select
         <h2>A single file stays deliverable forever,<span class="accent"> platform features are only a bonus</span></h2>
         <p class="subtitle"><strong>Choice confirmed.</strong> The single <code>docs/index.html</code> file can be downloaded, forwarded, and opened offline; GitHub Pages or any other hosting is an extra option, never a requirement.</p>
       </header>
+      <p class="context-line"><strong>Following on from the last page｜</strong>if process and rules can only live inside config files, a team has a hard time understanding them together, so the same repository also produces a shareable write-up of how it works -- the site you're reading right now.</p>
       <p class="context-line"><strong>Problem and goal｜</strong>keep the distinctive presentation design and single-file delivery, without leaving content, styling, interaction, source choices, and word-for-word tests tangled inside one hand-maintained file.</p>
       <div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Source</h3><p>Bilingual Markdown in <code>site/content/</code>, kept apart from layout and code so nothing needs manual syncing.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>Render</h3><p>A built-in Python engine assembles the content structure -- no Node or extra templating engine needed.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Output</h3><p><code>docs/index.html</code> embeds every style, script, and image; each page fits one screen, nothing to scroll to find the point.</p></article><article class="step-flow-item"><span class="step-flow-number">4</span><h3>Reader</h3><p>Download it and open it in a browser to see the whole page; Pages or other hosting is only one more way to browse, never a requirement.</p></article></div>
       <p class="context-line"><strong>Next step｜</strong>download <code>docs/index.html</code> and it is ready to share offline; source structure, theme customization, and access-control detail are covered in Maintenance mode.</p>
@@ -811,6 +851,7 @@ Root `.csarc/config.yml` records the capabilities the template repository select
 - `site/content/` holds bilingual Markdown with matching content keys.
 - `site/static/styles.css` retains the presentation identity; `scripts/build_repo_site.py`'s shortcode-block parser produces the shared content structure.
 - `scripts/render_site.py` embeds CSS, JavaScript, fonts, and images and rejects external runtime assets.
+- `./scripts/build-repo-site` regenerates the output; `./scripts/build-repo-site --check` only verifies the source and version compatibility, without writing files.
 
 {{< disclosure key="portable-bundle" title="Markdown + the Python render engine → self-contained HTML" >}}
 `docs/adr/` preserves canonical choices. `scripts/build_repo_site.py` owns content and HTML; the unchanged `scripts/render_site.py` only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime. This single downloadable HTML file is a committed baseline feature, not a stopgap -- even once Pages or other hosting exists, this downloadable, offline-capable output stays.
@@ -844,6 +885,7 @@ Rebuild with `./scripts/build-repo-site` after editing. This is a structural add
 {{< /slide >}}
 
 {{< slide key="bridge" audience="maintainer" eyebrow="May 2026 internal presentation" title="Review the original principles against today's implementation" subtitle="Revisits the SDLC ideas shared internally in May 2026 and marks what is retained, adjusted, or deferred; click a row for the three-sentence call." class="legacy-slide bridge-slide" legacy="false" >}}
+      <p class="bridge-intro">This page explains which May 2026 ideas were kept, adjusted, or deferred; day-to-day operation still follows each Journey and the current policy documents.</p>
       <table class="bridge-table" aria-label="Page-by-page comparison of the May deck and today's design">
         <colgroup><col class="page-col"><col class="topic-col"><col class="status-col"><col class="decision-col"></colgroup>
         <thead><tr><th>Page</th><th>May deck topic</th><th>Outcome</th><th>Current decision (click)</th></tr></thead>

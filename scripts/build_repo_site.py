@@ -1149,8 +1149,15 @@ def render_testing(*, lang: str, data: SiteData) -> str:  # noqa: C901
             f"<tbody>{''.join(body_rows)}</tbody></table></div></div>"
         )
 
+    reading_map = labels.get("readingMap", "")
+    reading_map_html = (
+        f'<p class="testing-reading-map">{_esc(reading_map)}</p>'
+        if reading_map
+        else ""
+    )
     return (
         '<div class="legacy-content similar-tools-content testing-content">'
+        f"{reading_map_html}"
         '<div class="similar-tools-tabs" role="tablist" '
         f'aria-label="{_esc(labels["title"])}">{"".join(tabs)}</div>'
         '<div id="testing-panel-duration" class="similar-tools-panel" '

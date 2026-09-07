@@ -120,6 +120,7 @@
       line-height: 1.3;
       text-align: left;
     }
+    .subtitle.lead-question { color: var(--ink); font-weight: 800; font-size: 21px; }
     .accent { background: linear-gradient(transparent 58%, var(--yellow) 58%); }
     .muted { color: var(--muted); }
 
@@ -505,7 +506,10 @@
        in at whichever edge still has more content and fade back out
        once that edge is reached, so the header stays sticky (see
        `.similar-tools-matrix thead th` below) while the shadow makes
-       "there is more below/right" visible without JS. */
+       "there is more below/right" visible without JS. Issue #681/#682
+       follow-up: the testing/similar-tools matrices scroll horizontally
+       too (many Journey columns), so the same cover+shadow pairing is
+       mirrored on the left/right edges, not just top/bottom. */
     .similar-tools-table-wrap {
       flex: 1;
       min-height: 0;
@@ -514,12 +518,16 @@
       background:
         linear-gradient(white 30%, rgba(255, 255, 255, 0)) 0 0,
         linear-gradient(rgba(255, 255, 255, 0), white 70%) 0 100%,
+        linear-gradient(to right, white 30%, rgba(255, 255, 255, 0)) 0 0,
+        linear-gradient(to left, white 30%, rgba(255, 255, 255, 0)) 100% 0,
         radial-gradient(farthest-side at 50% 0, rgba(23, 23, 23, .22), rgba(23, 23, 23, 0)) 0 0,
         radial-gradient(farthest-side at 50% 100%, rgba(23, 23, 23, .22), rgba(23, 23, 23, 0)) 0 100%,
+        radial-gradient(farthest-side at 0 50%, rgba(23, 23, 23, .22), rgba(23, 23, 23, 0)) 0 0,
+        radial-gradient(farthest-side at 100% 50%, rgba(23, 23, 23, .22), rgba(23, 23, 23, 0)) 100% 0,
         white;
       background-repeat: no-repeat;
-      background-size: 100% 26px, 100% 26px, 100% 10px, 100% 10px, auto;
-      background-attachment: local, local, scroll, scroll, scroll;
+      background-size: 100% 26px, 100% 26px, 26px 100%, 26px 100%, 100% 10px, 100% 10px, 10px 100%, 10px 100%, auto;
+      background-attachment: local, local, local, local, scroll, scroll, scroll, scroll, scroll;
     }
     .similar-tools-table-wrap:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
     .similar-tools-matrix { width: 100%; min-height: 100%; table-layout: fixed; border-collapse: collapse; font-size: 18px; line-height: 1.22; }
@@ -1146,6 +1154,18 @@
       font-weight: 850;
     }
     .copy-command:hover, .copy-command:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
+    .copy-command.copy-command-failed { border-color: #b42318; background: #fff0ed; color: #8a1c12; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     /* Issue #681/#682: the full agent prompt used to live only in the
        copy button's `data-copy-text` attribute -- a reader could copy a
        prompt they were never shown, with no way to check it before
@@ -1355,6 +1375,17 @@
       font-size: 18px;
       font-weight: 850;
     }
+    .ownership-tag {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-size: 18px;
+      font-weight: 850;
+      vertical-align: middle;
+    }
+    .ownership-tag.template { background: var(--optional-soft); color: #174f8b; }
+    .ownership-tag.shared { background: #fff6d6; color: #7a5c00; }
+    .ownership-tag.project { background: var(--best-soft); color: #0b6540; }
     /* Modifier for a set of parallel (non-sequential) items that reads
        better as one row than a 2-column list -- e.g. `agents`' three
        ownership areas or `languages`' three per-language cards. */
@@ -1433,6 +1464,7 @@
     .bridge-slide { padding-top: 3%; padding-bottom: 2.7%; padding-left: 13.7%; }
     .bridge-slide header { margin-bottom: .65%; }
     .bridge-slide h2 { font-size: clamp(29px, 2.05vw, 35px); }
+    .bridge-intro { margin-bottom: 8px; color: var(--muted); font-size: 18px; line-height: 1.3; }
     .bridge-table { font-size: 18px; }
     .bridge-table .page-col { width: 7%; }
     .bridge-table .topic-col { width: 20%; }
@@ -1609,6 +1641,14 @@
     .package-badge.python { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
     .package-badge.security { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
     .package-badge.warning { border-color: #b42318; background: #fff0ed; color: #8a1c12; }
+    .package-badge.muted { border-color: #ccc; background: #f5f5f5; color: #666; font-weight: 700; }
+    .install-promise {
+      padding: 12px 15px;
+      border-left: 7px solid var(--yellow);
+      background: #fffbea;
+      font-size: 20px;
+      line-height: 1.35;
+    }
     .package-badge:hover, .package-badge:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
     .capability-lead {
       display: grid;
@@ -1647,14 +1687,15 @@
       flex: 1;
       min-height: 0;
       grid-template-columns: 38% minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
       border: 1px solid var(--line);
     }
-    .product-scope { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto repeat(4, minmax(0, 1fr)); padding: 14px 16px; border-right: 1px solid var(--line); background: #fafaf8; }
+    .product-scope { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto repeat(4, minmax(0, 1fr)); padding: 14px 16px; border-right: 1px solid var(--line); background: #fafaf8; }
     .product-scope > h3, .start-paths > h3 { margin-bottom: 8px; font-size: 21px; }
     .scope-row { display: flex; flex-direction: column; justify-content: center; padding: 8px 0; border-top: 1px solid var(--line); }
     .scope-row strong { display: block; font-size: 19px; }
     .scope-row span { display: block; margin-top: 2px; color: #333; font-size: 18px; line-height: 1.25; }
-    .start-paths { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto repeat(3, minmax(0, 1fr)); padding: 14px 16px; }
+    .start-paths { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto repeat(3, minmax(0, 1fr)); padding: 14px 16px; }
     .start-path {
       display: grid;
       grid-template-columns: 25% minmax(0, 1fr) auto;

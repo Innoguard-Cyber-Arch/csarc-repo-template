@@ -120,6 +120,11 @@
   });
   addEventListener('keydown', event => {
     if (event.target.closest('summary, button, a, input, textarea, select')) return;
+    // Issue #681/#682: an open install-command (or term) overlay is a
+    // modal dialog -- arrow keys inside it must never fall through to
+    // slide navigation, even when focus sits on non-interactive markup
+    // inside the dialog (e.g. its heading) rather than on a button.
+    if (document.querySelector('.config-overlay:not([hidden])')) return;
     if (['ArrowRight', 'PageDown', ' '].includes(event.key)) show(current + 1);
     if (['ArrowLeft', 'PageUp'].includes(event.key)) show(current - 1);
   });

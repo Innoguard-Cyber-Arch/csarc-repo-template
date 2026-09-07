@@ -22,18 +22,17 @@ fit = "符合畫面"
       <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
+        <p class="subtitle lead-question">這套公版如何讓人和 AI 的每次修改，都經過定義、驗證、審查並留下證據？</p>
         <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。<!-- csarc-readme-preamble-tagline:end --></p>
+        <p class="subtitle flow-line"><strong>結果：</strong>不論是人或 AI 提出的修改，都要先說清楚要做什麼、通過檢查、再經人工審查，才會真的合併，並留下當時的證據。</p>
         <p class="subtitle">標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；維運模式才補充設定檔、程式與技術理由。快速導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
-          <span class="package-badge beta">v0.13.0</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
-          <span class="package-badge">三種分支做法</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge security">自動驗證／安全檢查</span>
-          <span class="package-badge warning">免費私人 repo：無法強制保護 main</span>
-          <span class="package-badge">網站排版模板 v[[site_template_version]]</span>
-          <span class="package-badge">渲染引擎 v[[site_engine_version]]</span>
+          <span class="package-badge muted">v0.13.0</span><!-- x-release-please-version -->
+          <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
+          <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
       </header>
       <div class="language-contract" aria-label="程式語言與公版設定">
@@ -51,16 +50,17 @@ fit = "符合畫面"
         </section>
         <section class="start-paths" aria-label="三種導入方式">
           <h3>依你現在的 repo 狀態開始</h3>
-          <article class="start-path primary"><h3>新 repo</h3><p>選專案種類與分支做法；多張工作需要一起交付時才建立里程碑。</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">立即開始</button></article>
-          <article class="start-path"><h3>既有 repo</h3><p>先在獨立分支預覽差異，保留原有產品內容，再逐項處理衝突。</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">導入指令</button></article>
-          <article class="start-path"><h3>已使用公版</h3><p>選定已審查的公版版本，只審查這次更新帶來的差異。</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">更新指令</button></article>
+          <article class="start-path primary"><h3>建立新 repo</h3><p>選好種類與分支做法才產生檔案；完成前不會建立或推送任何 GitHub 內容。</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">立即開始</button></article>
+          <article class="start-path"><h3>導入既有 repo</h3><p>先在獨立分支預覽差異，保留原有產品內容，再逐項處理衝突。</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">導入指令</button></article>
+          <article class="start-path"><h3>更新已使用公版的 repo</h3><p>先產生可審查的差異（dry-run），確認後才合併，不會直接覆蓋 main。</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">更新指令</button></article>
         </section>
       </div>
       <div class="prerequisite-line product-prerequisites">
-        <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+、pnpm 11。純本機驗證不用 token；套用 GitHub 設定與端到端測試前才登入 <code>gh</code>。</p>
+        <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；完整清單（含 Rust／TypeScript 選用工具）請切換「維運」模式查看。</p>
         <button class="setup-trigger" type="button" data-setup="mac" aria-expanded="false">macOS 安裝</button>
         <button class="setup-trigger" type="button" data-setup="windows" aria-expanded="false">Windows 安裝</button>
       </div>
+      <p class="subtitle bridge-line"><strong>下一步：</strong>「安裝說明」頁提供一句貼給 agent 的完整指令，先預覽、才動手；維運模式另有狀態判斷的精確條件。</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -98,6 +98,10 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 {{< standard key="install-mode-standard" title="貼給 agent 的一句話" >}}
 <div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>貼上</h3><p>把下面這段完整指令貼給你的 coding agent，不用自己記指令。</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI 判斷</h3><p>Agent 執行 <code>csarc status</code>，由 CLI（不是 agent 自由判斷）自動分類這是新建、既有導入、有更新，還是只是政策變動。</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>先預覽</h3><p>不管哪一種結果，agent 都會先讓你看過計畫，確認後才真的動手。</p></article></div>
+
+結果會是以下其中一種：**建立**新專案、**導入**既有專案、套用可用**更新**、**已是最新**不用做事，或**只有政策設定**要補套用；不論哪一種，agent 都會先讓你確認才動手。
+
+<p class="install-promise"><strong>這一步的承諾：</strong>這一步只檢查目前狀態並提出計畫；在你確認前，不修改檔案、不變更 GitHub 設定，也不會建立 PR。</p>
 
 <div class="command-block"><div class="command-block-head"><span class="command-block-label">貼給 agent 的完整指令</span><button class="copy-command" type="button">複製指令</button></div><pre class="command-block-text">請使用 uv。先從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 查出目前最新的正式 GitHub Release（例如執行 `gh release view --repo Innoguard-Cyber-Arch/csarc-repo-template --json tagName,targetCommitish`，或直接看該 repository 的 Releases 頁面），記下這個 release 的 tag 與完整 commit SHA——一律使用這個已驗證的 release，不要用 main 或未經確認的分支。用這個 SHA 執行官方 csarc CLI 的 `status` 子指令，判斷目前 workspace／既有 Git repository 屬於哪一種安裝狀態；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。先執行 `csarc status --json`，不要自行判斷或假設目前狀態。依回傳的 state 與 next_command：create 或 adopt 或 update 時，改用對應的 init／adopt／update dry-run prompt 並等待確認；current 時回報不需動作；policy-only-update 時只執行 `scripts/apply-repository-settings.sh plan`、摘要差異並等待確認，確認後才 `apply`，不要重新走完整 adopt 或 update。全程不要修改全域環境、push 或開 PR。</pre></div>
 
@@ -165,17 +169,27 @@ csarc status <path> --json
 
 {{< slide key="about" track="about" eyebrow="關於" title="CSARC 是一套會持續跟著 repo 維護的治理基線" subtitle="不是產生檔案就結束的模板；建立、導入既有 repo、升級政策都先讓你看過差異，再套用。" class="dense single-column" legacy="false" >}}
 {{< standard key="about-mode-standard" title="CSARC 實際上持續在做什麼" >}}
-大部分模板做完「產生檔案」就結束了；CSARC 會繼續跟著你的 repo 一起運作：
+大部分模板做完「產生檔案」就結束了；CSARC 會繼續跟著你的 repo 一起運作，陪你走完一個完整的生命週期：
 
-<div class="capability-map"><div class="capability-node"><h3>每項工作是一張 Issue</h3><p>寫清楚要做什麼、怎樣算完成，改動在自己的分支進行，不會互相干擾。</p><span class="capability-pointer">見「工作定義」</span></div><div class="capability-node"><h3>導入前先給你看差異</h3><p>系統在旁邊建立預覽，列出哪些會新增、保留、需要你自己判斷；看過再套用。</p><span class="capability-pointer">見「模板升級」</span></div><div class="capability-node"><h3>每次改動都要通過審查</h3><p>自動檢查先跑過一輪，PR 經人審查合併，沒通過就不會進主要分支。</p><span class="capability-pointer">見「驗證／CI」「PR／合併」</span></div><div class="capability-node"><h3>公版更新也先給你看差異</h3><p>你確認後才套用，不會偷偷蓋掉你自己寫的程式。</p><span class="capability-pointer">見「模板升級」</span></div><div class="capability-node"><h3>例行安全檢查是自動的</h3><p>套件版本、已知漏洞、發版成分清單排好定期執行，只在真有衝突時才需要你判斷。</p><span class="capability-pointer">見「依賴安全」「版本／交付」</span></div><div class="capability-node"><h3>這個網站就是同一套原則</h3><p>下載 <code>docs/index.html</code> 就能離線打開，不需要另外架站。</p><span class="capability-pointer">見「repo-site」</span></div></div>
+<div class="capability-map"><div class="capability-node"><h3>1｜導入前先看差異</h3><p>不論建立新 repo 或導入既有 repo，都先在旁邊產生預覽，列出哪些會新增、保留、需要你自己判斷；看過再套用，不會直接覆寫。</p><span class="capability-pointer">見「安裝說明」「模板升級」</span></div><div class="capability-node"><h3>2｜日常修改有規範與驗證</h3><p>每項工作先寫成一張 Issue，說清楚要做什麼、怎樣算完成；改動在自己的分支進行，本機先檢查一輪，GitHub 再重新跑一次，套件與已知漏洞的例行檢查也排定自動執行。</p><span class="capability-pointer">見「工作定義」「驗證／CI」「依賴安全」</span></div><div class="capability-node"><h3>3｜合併後留下證據</h3><p>PR 經人審查通過才合併；需要時建立版本與 Release，記錄成品包含哪些套件，讓「當時到底發生了什麼」隨時可以核對。</p><span class="capability-pointer">見「PR／合併」「版本／交付」</span></div><div class="capability-node"><h3>4｜未來公版更新仍先看差異</h3><p>公版更新的做法跟導入時一樣：先產生可審查的差異，你確認後才套用。這個網站本身也是用同一套原則做出來的，下載 <code>docs/index.html</code> 就能離線打開。</p><span class="capability-pointer">見「模板升級」「repo-site」</span></div></div>
 
-適合你，如果：已經有 GitHub repository、不能冒險被模板整個蓋過去；想讓 AI coding agent 加入日常開發，但要有清楚的規則邊界；或想讓好幾個專案共用同一套流程。只想快速生出一個空白專案、不需要後續維護，更輕量的模板可能更適合。
+這樣的節奏適合你，如果：已經有 GitHub repository、不能冒險被模板整個蓋過去；想讓 AI coding agent 加入日常開發，但要有清楚的規則邊界；或想讓好幾個專案共用同一套流程。只想快速生出一個空白專案、不需要後續維護，更輕量的模板可能更適合。
 {{< /standard >}}
 
 {{< ops key="about-mode-ops" title="治理基線背後的設計理念" >}}
 CSARC 不只產生檔案：新專案建立、既有專案導入與後續政策升級，都經過可預覽、可驗證、可追溯的流程，導入的是一套可驗證的工作方式，不只是檔案。
 
 <div class="capability-map"><div class="capability-node"><h3>安全導入既有 repository</h3><p>先在隔離環境建立完整候選並驗證；正式套用前再次確認沒有漂移；衝突或驗證失敗就停止，不修改目標 repo。</p></div><div class="capability-node"><h3>持續升級治理政策</h3><p>分開保存 repo 選擇、公版版本、GitHub 期望政策與平台實際狀態；可修正的差異被指出，平台不支援的能力標示 <code>DEGRADED</code>。</p></div><div class="capability-node"><h3>保留可核對的證據鏈</h3><p>Issue → PR → 驗證 → 交付候選 → 合併 → Release → checksum／SBOM → 稽核軌跡，每段都指回上一段實際發生的版本。</p></div></div>
+
+{{< disclosure key="about-three-layers" title="三層架構：為什麼設定檔寫了，平台不一定真的執行" >}}
+CSARC 把「治理」拆成三層，各自可能不同步，因此不能只看其中一層就宣稱某項管制已生效：
+
+1. **公版來源：** `template/`、`policies/`、`profiles/catalog.yaml`——公版團隊維護的共用定義，描述「應該」提供什麼。
+2. **repo-local 契約：** 生成或導入後留在這個 repo 裡的 `.csarc/config.yml`、`policies/*.json`、`AGENTS.md`——這個 repo 從公版選了什麼、記錄了什麼期望。
+3. **GitHub 上實際生效的狀態：** 分支保護、Ruleset、Actions 權限、GitHub 方案本身的限制——平台當下真正在強制什麼。
+
+公版更新只影響第 1 層；套用到 repo 只影響第 2 層；第 2 層寫的政策要真的生效，還要看第 3 層那個 GitHub 方案與權限支不支援。`apply-repository-settings.sh` 的 `plan`／`apply`／`check` 做的正是核對第 2 層與第 3 層是否一致：一致就套用並在 `check` 驗證；平台真的不支援，就標示 `DEGRADED` 並交回人工處理，不會假裝已經強制。
+{{< /disclosure >}}
 
 {{< disclosure key="about-design-philosophy" title="為什麼這樣設計：人與 agent 分工、repo-local、適合誰" >}}
 ### 為人與 coding agent 共同設計
@@ -206,39 +220,40 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 {{< legacy >}}
       <header>
         <h2>模板會把每次變更<span class="accent">帶到正確的位置</span></h2>
-        <p class="subtitle">使用者依 Issue 與 PR 的提示工作；模板準備表單、設定與必要檢查。維運模式才需要知道實際流程名稱。</p>
+        <p class="subtitle"><strong>CI/CD 在這裡的意思是：</strong>修改送出後，由另一個乾淨環境重新檢查，再決定能否合併或發布；不代表自動部署到正式環境。</p>
+        <p class="subtitle">舉例：團隊要替產品新增「登入逾時提醒」——以下五步都用這個例子說明。</p>
       </header>
       <div class="pipeline-map">
         <div class="pipeline-track" aria-label="日常開發與交付主流程">
           <article class="pipeline-stage">
             <span class="pipeline-phase">第一步｜先說清楚</span>
             <h3>建立工作</h3>
-            <p>Issue 表單會提示問題、完成條件與必要背景。</p>
+            <p><strong>人：</strong>寫一張 Issue（工作單）——「新增登入逾時提醒」，完成條件是逾時前顯示提醒、且有測試證明。<strong>模板：</strong>表單提示必填欄位。<strong>結果：</strong>一張範圍清楚、可獨立驗收的工作。</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">第二步｜開始修改</span>
             <h3>完成變更</h3>
-            <p>人或 AI 依 repo 內指引修改，先做最相關的本機檢查。</p>
+            <p><strong>人／AI：</strong>依 repo 內的規範修改程式，先在本機跑最相關的檢查。<strong>模板：</strong>準備規範與檢查腳本。<strong>結果：</strong>一份已自我檢查過、準備送審的修改。</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">第三步｜交給團隊</span>
             <h3>提出 PR</h3>
-            <p>PR 範本會提示連回 Issue，並說明完成內容與驗證結果。</p>
+            <p><strong>人：</strong>提出 PR（變更提案），連回原本的 Issue。<strong>模板：</strong>範本提示要說明改了什麼、驗證結果如何。<strong>結果：</strong>一張審查者能快速理解的提案。</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">第四步｜系統協助</span>
             <h3>驗證與依賴安全</h3>
-            <p>依變更內容選擇必要驗證；相依變更先確認鎖定版本能正確安裝。</p>
+            <p><strong>GitHub：</strong>在另一台乾淨機器重新執行檢查（這就是 CI）；改到套件時另外比對已知漏洞。<strong>模板：</strong>依變更內容選擇必要驗證。<strong>結果：</strong>任何人重跑都會得到同一份結果，不是只有提出者電腦上「看起來沒問題」。</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">第五步｜確認結果</span>
             <h3>審查與合併</h3>
-            <p>結果與審查都清楚後再合併；強制程度依 GitHub 方案能力。</p>
+            <p><strong>人：</strong>結果與審查都清楚後才核准合併。<strong>GitHub：</strong>依方案能力決定合併保護的強制程度。<strong>結果：</strong>「登入逾時提醒」進入 main，並留下這次改動的完整紀錄。</p>
           </article>
         </div>
         <div class="pipeline-loop" aria-label="CI 回饋迴圈">
-          <strong>↶ 檢查失敗：依結果修正，再更新同一張 PR</strong>
-          <span>合併後發現的新問題，另外建立一張範圍清楚的 Issue。</span>
+          <strong>↺ 檢查失敗 → 回到同一個工作分支修正 → 更新同一張 PR → 重新取得結果</strong>
+          <span>合併後才發現的新問題，另外建立一張範圍清楚的 Issue，不回頭改已經合併的分支。</span>
         </div>
         <div class="pipeline-foundation" aria-label="支撐整體流程的平台能力">
           <div class="pipeline-foundation-label"><strong>模板先準備好</strong><span>一般使用者依提示操作；維運者才需要調整設定。</span></div>
@@ -261,6 +276,13 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 
 一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化涵蓋工作單、PR 規則與必要驗證；需人審查版本 PR 的發版流程仍是候選。
 
+**責任交接（本機 scripts → GitHub Actions → PR gate → Release）：**
+
+- **本機 scripts（`Active`）：** `scripts/verify-fast`／`scripts/verify-template.sh` 由開發者在本機先跑一次，篩掉大部分低階錯誤。
+- **GitHub Actions（`Active`）：** PR 開出後，`.github/workflows/` 在乾淨環境重新執行同一套政策，不信任本機結果。
+- **PR gate（依 GitHub 方案而定）：** 支援時由 Ruleset／branch protection 強制擋下未過檢查或未審查的合併；不支援時標示 `DEGRADED`，改由人工自律（見「規則治理」）。
+- **Release（`Active`，但需人工觸發）：** 版本與發版證據由具 admin 權限者在本機執行 `scripts/publish-release` 產生；hosted 的 Automatic／Guided 發版路徑是已知限制，不是預設路徑（見「版本／交付」）。
+
 {{< detail key="flow-foundation" title="橫跨全流程的三項基礎" >}}
 - **08 規則治理：** 先準備 repo 政策，再依 GitHub 實際方案套用能生效的管制。
 - **09 模板升級：** Copier 將新政策帶回既有 repo，差異仍經 PR。
@@ -273,16 +295,18 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 
 {{< slide key="files" track="files" eyebrow="檔案地圖" title="模板把必要設定放到正確位置" subtitle="列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。" class="dense" legacy="false" >}}
 {{< standard key="files-mode-standard" title="更新流程與已整合工具" >}}
-<div class="capability-map"><div class="capability-node"><h3>公版設定</h3><p><code>.csarc/config.yml</code>、<code>policies/</code>：語言、分支規則、負責人與審查者都記在這裡。</p></div><div class="capability-node"><h3>GitHub 工作流程</h3><p><code>.github/</code>：Issue／PR 表單與自動檢查流程。</p></div><div class="capability-node"><h3>Agent 規範</h3><p><code>AGENTS.md</code>：agent 在這個 repo 裡怎麼做事。</p></div><div class="capability-node"><h3>專案文件</h3><p><code>README.md</code>、<code>docs/</code>、<code>site/</code>：給人看的說明，以及你正在看的這個網站。</p></div><div class="capability-node"><h3>產品程式</h3><p><code>src/</code>：真正的產品程式碼、測試與規格。</p></div></div>
+檔案放在哪裡不是重點；誰能改它才是。每個檔案屬於三種歸屬之一：**公版主導**（模板更新時可能改動，通常不要在生成後直接改）、**共同維護**（你可以直接改，但下次公版更新可能要你合併差異）、**專案持有**（完全由你決定，公版永遠不會覆寫）。
+
+<div class="capability-map"><div class="capability-node"><h3>公版設定 <span class="ownership-tag shared">共同維護</span></h3><p><code>.csarc/config.yml</code>、<code>policies/</code>：語言、分支規則、負責人與審查者都記在這裡。</p></div><div class="capability-node"><h3>GitHub 工作流程 <span class="ownership-tag template">公版主導</span></h3><p><code>.github/</code>：Issue／PR 表單與自動檢查流程。</p></div><div class="capability-node"><h3>Agent 規範 <span class="ownership-tag shared">共同維護</span></h3><p><code>AGENTS.md</code>：agent 在這個 repo 裡怎麼做事。</p></div><div class="capability-node"><h3>專案文件 <span class="ownership-tag shared">共同維護</span></h3><p><code>README.md</code>、<code>docs/</code>、<code>site/</code>：給人看的說明，以及你正在看的這個網站。</p></div><div class="capability-node"><h3>產品程式 <span class="ownership-tag project">專案持有</span></h3><p><code>src/</code>：真正的產品程式碼、測試與規格。</p></div></div>
 
 完整檔案樹與每個檔案的責任歸屬，請切換「維運」模式查看。
 
-模板發現有檔案可以更新時：
+公版發現有檔案可以更新時：先在旁邊的隔離環境產生候選（不動這個 repo），再逐一比對檔案：
 
 <div class="plan-grid">
-  <article class="plan-card current"><h3>沒有衝突</h3><p>直接套用更新，不需要你動手。</p></article>
-  <article class="plan-card team"><h3>有衝突</h3><p>只列出受影響的檔案，不動你寫的內容。</p></article>
-  <article class="plan-card enterprise"><h3>開 PR 審查</h3><p>不管哪一種結果，最後都要經過人審查才合併，不會有人或程式偷偷覆寫你的內容。</p></article>
+  <article class="plan-card current"><h3>無衝突時更新工作樹</h3><p>直接套用更新，不需要你動手。</p></article>
+  <article class="plan-card team"><h3>有衝突時保持原內容</h3><p>只列出受影響的檔案，不動你寫的內容。</p></article>
+  <article class="plan-card enterprise"><h3>一律由 PR 審查後才進正式分支</h3><p>不管哪一種結果，最後都要經過人審查才合併，不會有人或程式偷偷覆寫你的內容。</p></article>
 </div>
 
 模板已經幫你接好常用工具：專案產生與更新、程式碼安全掃描、相依套件更新提醒、已知漏洞掃描、發版紀錄，還有你正在看的這個 repo-site——不用自己另外找或設定。
@@ -293,6 +317,8 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 
 {{< disclosure key="files-map-scope" title="為什麼檔案地圖只列路徑、作用與責任三欄" >}}
 側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐步驟詳列驗證入口，細節比這裡能呈現的更完整；樹狀呈現因此不重複加上「對應頁名」或「驗證入口」欄位。
+
+「責任」欄位同時是編輯建議：`公版主導` 通常不要在生成後的 repo 直接改，調整請走「模板升級」這條路徑；`共同維護` 是建議的修改入口，可以直接改，但下次公版更新可能需要你合併差異；`專案持有` 完全由你決定，公版不會觸碰。
 {{< /disclosure >}}
 
 {{< disclosure key="files-update" title="更新時怎麼保護產品內容" >}}
@@ -324,7 +350,8 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <p class="subtitle"><strong>基本導入。</strong>一張 Issue 定義一項可獨立完成的改變；多項工作需要共同目標與期限時，才使用里程碑。</p>
       </header>
       <p class="context-line"><strong>模板的作用｜</strong>統一 Issue 與里程碑的內容，讓人與 agent 在動手前知道要解決什麼、怎樣算完成。</p>
-      <div class="relation-map"><div class="relation-track"><div class="relation-col"><div class="relation-group"><span class="relation-group-label">只有需要時才建立</span><strong>里程碑</strong><span class="relation-group-note">多張 Issue 有共同目標、期限或交付批次時才建立</span></div><span class="relation-group-arrow" aria-hidden="true">↓</span><article class="relation-node"><span class="relation-kind">先寫清楚</span><h3>Issue</h3><p>問題、完成條件、驗證方式與負責人，內容足以開始實作就不加其他文件。</p></article></div><article class="relation-node"><span class="relation-kind">開始實作</span><h3>工作分支</h3><p>一張 Issue 建立一個短期分支，同一分支不混入其他工作。</p></article><article class="relation-node"><span class="relation-kind">審查後合併</span><h3>PR</h3><p>對應同一張 Issue，通過檢查與人審查才進主要分支。</p></article></div></div>
+      <p class="context-line"><strong>例如｜</strong>Issue：新增登入逾時提醒／完成條件：逾時前顯示提醒，且有測試證明；工作分支對應這張 Issue；PR 只交付這一項修改。</p>
+      <div class="relation-map"><div class="relation-track"><div class="relation-col"><div class="relation-group"><span class="relation-group-label">只有需要時才建立</span><strong>里程碑</strong><span class="relation-group-note">只有多張 Issue 需要共同期限或共同驗收時，才把它們放進同一個里程碑</span></div><span class="relation-group-arrow" aria-hidden="true">↓</span><article class="relation-node"><span class="relation-kind">先寫清楚</span><h3>Issue</h3><p>問題、完成條件、驗證方式與負責人，內容足以開始實作就不加其他文件。</p></article></div><article class="relation-node"><span class="relation-kind">開始實作</span><h3>工作分支</h3><p>一張 Issue 建立一個短期分支，同一分支不混入其他工作。</p></article><article class="relation-node"><span class="relation-kind">審查後合併</span><h3>PR</h3><p>對應同一張 Issue，通過檢查與人審查才進主要分支。</p></article></div></div>
       <p class="context-line"><strong>下一步｜</strong>建立 Issue、切好工作分支就能開始實作；命名規則、里程碑細節、Issue 拆分與例外請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
@@ -370,7 +397,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <p class="subtitle"><strong>基本導入。</strong>Issue 劃定這次工作；<code>AGENTS.md</code> 說明怎麼做；程式與測試提供證據，人保留需求方向與重大風險決策。</p>
       </header>
       <p class="context-line"><strong>模板的作用｜</strong>自動產生並檢查 agent 開始前要讀什麼、可修改到哪裡、如何隔離平行工作與怎樣留下驗證；只有客製規範、重大決策與例外需要人判斷。</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>工作與脈絡</h3><p>GitHub Issue／PR 記錄範圍、進度與證據；重大決策記在核准的 spec／ADR（規格與架構決策紀錄）。</p></div><div class="capability-node"><h3>AI 規範</h3><p>根目錄 <code>AGENTS.md</code> 是唯一來源，agent 開始前一律先讀這份。</p></div><div class="capability-node"><h3>決策與授權</h3><p>需求方向、重大取捨與不可逆操作仍由人決定；agent 負責照規範執行與留下驗證。</p></div></div>
+      <div class="capability-map cols-3"><div class="capability-node"><h3>Issue：這次要做什麼</h3><p>說明這次要完成什麼、怎樣算完成；範圍與進度都記在這裡，重大決策記在核准的 spec／ADR（規格與架構決策紀錄）。</p></div><div class="capability-node"><h3>AGENTS.md：在這個 repo 怎麼做</h3><p>跟著 repository 版本控制的工作守則；agent 開始前一律先讀這份，不必臆測慣例。</p></div><div class="capability-node"><h3>證據與決策</h3><p>scripts／tests 提供任何人都能重跑的驗證證據；需求方向、重大取捨與不可逆操作仍由人決定。</p></div></div>
       <p class="context-line"><strong>下一步｜</strong>照 <code>AGENTS.md</code> 開始讓 agent 工作；修改隔離、驗證證據與模板更新規則的細節請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
@@ -385,6 +412,11 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **決策與授權：** 人保留重大決策；審查與合併規則只由「規則治理」定義。
 - **模板建立與更新：** Copier 負責共用基線；既有 repo 更新由「模板升級」定義。
 
+{{< disclosure key="agents-priority-and-isolation" title="規則優先順序與修改隔離" >}}
+- **規則優先順序：** 根目錄 `AGENTS.md` 對整個 repository 有效；只有子目錄的指令或安全界線真的不同時，才另外放一份更近的 `AGENTS.md`，此時該子目錄內以較近的規則為準，其餘仍回到根目錄規則。`CLAUDE.md` 一律只薄匯入根目錄 `AGENTS.md`，不重複定義規則。
+- **修改隔離：** 每項可寫的工作各自使用一個 Git branch 與一個 worktree，讓平行進行的工作不互相干擾；唯讀工作（例如只是查資料）不需要建立分支或 worktree。
+{{< /disclosure >}}
+
 {{< disclosure key="agents-alternatives" title="其他常見做法" >}}
 - **Repo 內指引：**把固定命令與界線放在版本控制中，讓不同 agent 讀同一份規則。
 - **規格產物接力：**大型工作先產生 spec、plan、tasks，再逐步交給 agent 執行。
@@ -398,12 +430,12 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 
 {{< slide key="contract" track="contract" eyebrow="步驟 03" title="先驗證改動，再讓 CI 重跑同一套規則" subtitle="Issue 與 PR 依變更範圍分級；只有高風險交付邊界才跑完整驗證。" class="candidate-slide" legacy="false" >}}
 {{< standard key="contract-mode-standard" title="改動大小決定驗證輕重" >}}
-開發中只跑能證明這次修改的檢查，不用等整條流程；提出 PR 後，系統自動依變更範圍決定要跑哪一級：
+開發者先在自己的電腦快速檢查；開 PR 後，GitHub 再依同一份政策確認證據與必要條件——本機只跑能證明這次修改的檢查，不用等整條流程；PR 開出後，系統自動依變更範圍決定要跑哪一級：
 
 <div class="plan-grid">
-  <article class="plan-card current"><h3>docs</h3><p>純文件變更，檢查最輕量。</p></article>
-  <article class="plan-card team"><h3>fast</h3><p>一般變更，日常開發預設走這一級。</p></article>
-  <article class="plan-card enterprise"><h3>full</h3><p>里程碑交付、Hotfix，或抓不準風險的變更。</p></article>
+  <article class="plan-card current"><h3>docs</h3><p>純文件變更，檢查最輕量。例如：只改一份說明文件。</p></article>
+  <article class="plan-card team"><h3>fast</h3><p>一般變更，日常開發預設走這一級。例如：一般程式或設定修改。</p></article>
+  <article class="plan-card enterprise"><h3>full</h3><p>里程碑交付、Hotfix，或抓不準風險的變更。例如：里程碑／canary 交付、Hotfix、merge queue。</p></article>
 </div>
 
 本機與 CI 共用同一套判斷邏輯，不會兩邊各自維護一份規則。
@@ -450,8 +482,8 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <h2>步驟 4｜<span class="accent">每種程式語言各自管理</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>使用者只要選擇專案語言，模板就產生對應版本、鎖檔、格式、靜態檢查、測試與建置設定。</p>
       </header>
-      <p class="context-line"><strong>模板的作用｜</strong>依選擇的程式語言準備檢查；同時使用多種語言時，共通項目不重複執行。</p>
-      <p class="context-line"><strong>所有專案共通｜</strong>檢查工作規則、文件、敏感資料與套件風險，跟語言無關。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>使用者只選 repo 真正使用的語言；模板替每種語言接上原生檢查，但整體仍走同一條 PR 流程。</p>
+      <p class="context-line"><strong>共通流程｜</strong>選擇語言 → 產生對應工具與鎖檔 → 執行格式／靜態檢查／測試／打包 → 結果交給同一個驗證入口（見「驗證／CI」）。</p>
       <div class="capability-map cols-3"><div class="capability-node"><h3>Python</h3><p>檢查程式格式、型別、測試，以及能否製作安裝包。</p></div><div class="capability-node"><h3>Rust</h3><p>檢查程式格式、常見錯誤、測試，以及正式版本能否建置與打包。</p></div><div class="capability-node"><h3>TypeScript</h3><p>檢查程式格式、型別、測試，以及能否製作安裝包。</p></div></div>
       <p class="context-line"><strong>下一步｜</strong>建立或導入時勾選需要的語言即可，同時使用多種語言時共通項目只跑一次；其他做法的比較請切換「維運」模式查看。</p>
 {{< /legacy >}}
@@ -466,7 +498,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **Rust：**檢查格式、常見錯誤、測試、正式建置及安裝包。
 - **TypeScript：**檢查格式、型別、測試及安裝包。
 
-每種語言是各自獨立的元件（模組），同一項共通檢查只跑一次；語言可以同時勾選，但不另外建立或說明每一種排列組合。
+每種語言是各自獨立的元件（模組），同一項共通檢查只跑一次；語言可以同時勾選，但不另外建立或說明每一種排列組合。版本來源與鎖檔各自獨立：Python 讀 `pyproject.toml`／`uv.lock`，Rust 讀 `Cargo.toml`／`Cargo.lock`，TypeScript 讀 `package.json`／`pnpm-lock.yaml`；改動後執行下方「固定基線｜一個入口驗證與打包」列出的單一驗證入口即可。
 
 ### 其他常見做法
 
@@ -484,8 +516,9 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <h2>步驟 5｜<span class="accent">第三方套件分開更新、檢查與記錄</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>套件從哪裡更新、能否重裝、有沒有已知漏洞，以及成品包含什麼，是四件需要分開確認的事。</p>
       </header>
-      <p class="context-line"><strong>模板的作用｜</strong>依賴異動必須能重裝與驗證；一般新版保留觀察期，已公開漏洞不等待，發版時再列出實際成品內容。</p>
-      <div class="capability-map"><div class="capability-node"><h3>安裝</h3><p>依鎖定版本清單（lockfile）重裝，確保每次拿到同一批套件。</p></div><div class="capability-node"><h3>更新</h3><p>自動更新服務每週提出 PR；一般新版等三天，已知安全修補不等待。</p></div><div class="capability-node"><h3>漏洞</h3><p>已知漏洞掃描檢查依賴變更與發版候選，不等待新版觀察期。</p></div><div class="capability-node"><h3>成品清冊（SBOM）</h3><p>發版時列出成品實際包含的套件，方便事後追查。</p></div></div>
+      <p class="context-line"><strong>舉例｜</strong>開發時要新增或更新一個第三方套件，模板把「裝得回來」「有沒有更新」「有沒有已知漏洞」「發版時裝了什麼」拆成四個各自獨立、依序發生的步驟：</p>
+      <div class="capability-map"><div class="capability-node"><h3>1｜鎖定安裝內容</h3><p>依鎖定版本清單（lockfile）重裝，確保每次拿到同一批套件。<strong>你會看到：</strong>安裝／CI 直接使用鎖定版本。<strong>會阻擋合併嗎：</strong>鎖檔與宣告不一致就會。</p></div><div class="capability-node"><h3>2｜Dependabot 提出更新 PR</h3><p>自動更新服務每週提出 PR；一般新版等三天觀察期，已知安全修補不等待。<strong>你會看到：</strong>一張待審查的更新 PR。<strong>會阻擋合併嗎：</strong>不會自動阻擋，但仍要通過一般 PR 驗證。</p></div><div class="capability-node"><h3>3｜OSV 比對已知漏洞</h3><p>已知漏洞掃描檢查依賴變更與發版候選，不等待新版觀察期。<strong>你會看到：</strong>掃描結果附在 PR 或發版候選上。<strong>會阻擋合併嗎：</strong>掃到已知漏洞會。</p></div><div class="capability-node"><h3>4｜Release 時產生 SBOM</h3><p>發版時列出成品實際包含的套件（成品清冊），方便事後追查。<strong>你會看到：</strong>Release 附帶的 SBOM 檔案。<strong>會阻擋合併嗎：</strong>不會，它是清冊不是關卡。</p></div></div>
+      <p class="context-line"><strong>務必記得｜</strong>lockfile 只保證「裝得回來」，不代表沒有已知漏洞；已知安全修補不適用三天觀察期；OSV 只能認得已公開揭露的漏洞，不保證找到所有問題；SBOM 是追查用的清冊，本身不會修補或阻擋任何漏洞。</p>
       <p class="context-line"><strong>下一步｜</strong>套件更新會自動提出 PR，看到就審查合併；各項保護為何要分開的細節請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
@@ -523,10 +556,10 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< legacy >}}
       <header>
         <h2>步驟 6｜<span class="accent">讓完成的改動可審查、可交付</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>這一頁從準備開 PR 開始：工作 PR 完成一張 Issue，發版 PR 再確認整批成果。</p>
+        <p class="subtitle"><strong>基本導入。</strong>這一頁從準備開 PR 開始：工作 PR 完成一張 Issue，交付 PR 再確認整批成果——下一頁「版本／交付」才會談到版本 PR。</p>
       </header>
       <p class="context-line"><strong>模板的作用｜</strong>把完成的修改帶到正確分支，確認它連回原工作、通過驗證並在合併後結束對應工作。</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>工作 PR</h3><p>一張 PR 只完成一張可驗收 Issue；合併後連動關閉同號 Issue。</p></div><div class="capability-node"><h3>發版 PR</h3><p>里程碑工作全部完成後才整批驗證與交付。</p></div><div class="capability-node"><h3>例外：Hotfix</h3><p>可直接進 main 修正問題，但仍要 Issue、審查與驗證。</p></div></div>
+      <div class="capability-map cols-3"><div class="capability-node"><h3>獨立工作</h3><p>topic → main：一張 PR 只完成一張可驗收 Issue；合併後連動關閉同號 Issue。</p></div><div class="capability-node"><h3>Milestone 工作</h3><p>topic → <code>dev/m*</code> → 交付 PR → main：批次內每張 PR 先進 <code>dev/m*</code>，全部完成後由交付 PR 整批驗證進 main。</p></div><div class="capability-node"><h3>例外：Hotfix</h3><p>修正分支可直接進 main，但仍要 Issue、審查與完整驗證。</p></div></div>
       <p class="context-line"><strong>下一步｜</strong>完成一張 Issue 就開一張工作 PR；PR 標題格式、分支命名與其他合併模型比較請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
@@ -563,7 +596,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< legacy >}}
       <header>
         <h2>步驟 7｜<span class="accent">版本規則與成品接續</span></h2>
-        <p class="subtitle"><strong>先交付、再審查版本、最後發布：</strong>工作 PR 不直接改版本；Release Please（自動整理版本號的工具）集中更新版本與 CHANGELOG。</p>
+        <p class="subtitle"><strong>合併不等於發版，發版也不等於部署。</strong>工作 PR 不直接改版本；Release Please（自動整理版本號的工具）集中更新版本與 CHANGELOG。</p>
       </header>
       <p class="context-line"><strong>設計流程｜</strong>工作 PR 只宣告版本影響；版本 PR 經人審查合併後，系統才建立並驗證 Release。</p>
       <div class="relation-map"><div class="relation-track cols-4"><article class="relation-node"><span class="relation-kind">1｜工作完成並合併</span><h3>獨立工作</h3><p>能自己驗收且沒有共同期限或相依時，受審查 PR 可直接進 main。</p></article><article class="relation-node"><span class="relation-kind">2｜準備版本</span><h3>正式版本</h3><p>需要新版本時，系統依 PR 標題建立版本 PR，同步版本與 CHANGELOG。</p></article><article class="relation-node"><span class="relation-kind">3｜建立 Release</span><h3>Release</h3><p>版本 PR 合併後，系統驗證成品、checksum（檔案校驗碼）與 SBOM，成功才公開不可變 GitHub Release。</p></article><article class="relation-node"><span class="relation-kind">4｜模板不負責這步</span><h3>部署</h3><p>模板負責到 Release；實際部署到 runtime，由個別專案自行設定。</p></article></div></div>
@@ -667,11 +700,11 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 {{< legacy >}}
       <header>
         <h2>先辨識 GitHub 方案，<span class="accent">再套用真的能生效的管制</span></h2>
-        <p class="subtitle"><strong>基本導入｜</strong>同一份公版依 Free、Team、Enterprise 與實際 API 能力調整；不把付費功能假裝成已啟用。</p>
+        <p class="subtitle"><strong>基本導入｜</strong>把規則寫進 repo，不代表 GitHub 一定有能力強制它；模板會先檢查平台能力，再決定強制或明確降級。</p>
       </header>
-      <p class="context-line"><strong>目前實測｜</strong><code>Innoguard-Cyber-Arch</code> API 回報 Free＋private；因此 <code>main</code> 現在確實沒有強制保護，CI 紅燈仍可能被有權限者繞過。</p>
-      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">提出 PR</span><h3>人審查</h3><p>系統自動指派一位非作者的審查者，並保留審查紀錄。</p></article><article class="relation-node warning"><span class="relation-kind">你目前的方案：Free</span><h3>合併保護降級</h3><p>GitHub 不允許用 API 對 private repo 建立強制規則，main 還沒有強制保護，有權限者仍可能繞過紅燈。</p></article><article class="relation-node"><span class="relation-kind">升級路徑</span><h3>Team 以上</h3><p>公版就能直接套用完整的分支保護規則，合併保護不再只能靠自律。</p></article></div></div>
-      <p class="context-line"><strong>下一步｜</strong>方案改變或升級後，重新套用一次設定即可；Team／Enterprise 各方案的完整能力請切換「維運」模式查看。</p>
+      <p class="context-line"><strong>流程｜</strong>期望政策 → 檢查 GitHub 方案與權限 → 可以強制：套用並驗證 → 無法強制：標示 <code>DEGRADED</code>，留下人工責任。</p>
+      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">提出 PR</span><h3>人審查</h3><p>系統自動指派一位非作者的審查者，並保留審查紀錄。</p></article><article class="relation-node"><span class="relation-kind">檢查方案與權限</span><h3>能不能強制</h3><p>模板查目前方案、repo 可見性與權限，判斷能不能建立 Ruleset（GitHub 強制執行的合併規則）。</p></article><article class="relation-node"><span class="relation-kind">兩種結果</span><h3>套用驗證，或明確降級</h3><p>能強制就套用並在 <code>check</code> 驗證是否生效；不能強制就標示 <code>DEGRADED</code>，改由人工自律把關，不假裝已經強制。</p></article></div></div>
+      <p class="context-line"><strong>下一步｜</strong>方案改變或升級後，重新套用一次設定即可；這個 repo 目前實際處於哪一種結果，以及 Team／Enterprise 各方案的完整能力，請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -680,6 +713,12 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 - 支援的管制才套用並驗證。
 - 付費方案才有的功能若不可用，會標成 `DEGRADED` 並改由人工處理，不會假裝已強制。
 - 原本可以套用、但目前設定不一致的項目會停止，修正後才能繼續。
+
+{{< disclosure key="governance-live-status" title="這個 repo 本身現在的真實狀態（查詢日期：2026-09-07）" >}}
+`Innoguard-Cyber-Arch` API 回報這個 repository 是 Free 方案、**public** 可見度。GitHub 上已有一個 `enforcement: active` 的 Ruleset「CSARC protected branches」（建立於 2026-09-03），套用在 `main` 與 `dev/m*`：要求至少 1 個核准、CODEOWNER 審查、`title`／`promotion`／`verify` 三項狀態檢查全部通過，且不允許 force-push——`main` 目前確實有強制的合併保護。
+
+這對應下表「Free＋public，或 Pro 個人＋private」那一列，不是下面「Free／Team／Enterprise 各方案完整能力」卡片裡 Free 方案描述的 **private** 降級情境（那張卡片說明的是 Free＋*private* 時，REST／GraphQL 建立 Ruleset 的 API 會拒絕、只能保留期望狀態並標示 `DEGRADED`）；這個 repo 選擇公開，因此適用的是可以直接套用並驗證的那條路徑。方案或可見度之後若改變，重跑 `plan`／`apply`／`check` 就會反映最新狀態——這裡記錄的是查詢當下的事實，不是永久保證，也不代表每個使用這套公版的 repo 都跟這裡一樣。
+{{< /disclosure >}}
 
 {{< disclosure key="governance-capability" title="方案能力、啟用與升級條件" >}}
 | GitHub 狀態 | 公版能做什麼 | 需要人處理什麼 |
@@ -741,15 +780,15 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 
 {{< slide key="template-release" track="template-release" eyebrow="步驟 09" title="Copier 保持同步，公版也吃自己的規則" subtitle="模板錯誤會一次影響多個專案，因此建立、導入與更新都要實跑。" class="candidate-slide" legacy="false" >}}
 {{< standard key="template-release-mode-standard" title="公版怎麼把更新安全地帶回你的 repo" >}}
-Copier（用來建立並持續更新公版的工具）在你的 repo 之外先產生一份更新計畫：
+公版發布新版後，你的 repo 收到更新通知或由人工啟動；Copier（用來建立並持續更新公版的工具）先在 repo **之外**產生一份 dry-run 候選，逐一比對檔案：
 
 <div class="plan-grid">
-  <article class="plan-card current"><h3>沒有衝突</h3><p>直接套用。</p></article>
-  <article class="plan-card team"><h3>有衝突</h3><p>只列出受影響的檔案，不動你的 repo；你調整後重跑一次。</p></article>
-  <article class="plan-card enterprise"><h3>開 PR 審查</h3><p>不管哪一種結果，最後都由一般 PR 走完整審查。</p></article>
+  <article class="plan-card current"><h3>無衝突</h3><p>更新工作樹裡對應的檔案；main 本身還沒有任何改動。</p></article>
+  <article class="plan-card team"><h3>有衝突</h3><p>只列出受影響的檔案，保持你的 repo 不變；你調整後重跑一次。</p></article>
+  <article class="plan-card enterprise"><h3>人審查後合併</h3><p>不管哪一種結果，都由一般 PR 走完整審查，通過才進 main——沒有任何一步會跳過審查直接改到 main。</p></article>
 </div>
 
-`template/` 是下發內容的唯一來源；你的 repo 自己寫的程式與規格不會被覆寫，遇到衝突一律先讓你確認。
+三個地方各自負責不同內容：`template/` 是公版下發內容的唯一來源；`.csarc/config.yml` 記錄這個專案選了什麼、目前更新到哪個版本；你的產品程式與規格則完全由你持有，公版遇到衝突一律先列出來讓你確認，不會靜默覆寫。
 {{< /standard >}}
 
 {{< ops key="template-release-mode-ops" title="單一來源、驗證流程與目前自動化邊界" >}}
@@ -791,6 +830,7 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
         <h2>單檔永遠可交付，<span class="accent">平台能力只做加成</span></h2>
         <p class="subtitle"><strong>已確認選型。</strong>單一 <code>docs/index.html</code> 檔案即可下載、轉寄與離線開啟；GitHub Pages 或其他網站託管只是額外選項，不是必要條件。</p>
       </header>
+      <p class="context-line"><strong>承接上一頁｜</strong>流程與規則若只能藏在設定檔裡，團隊就難以共同理解；因此同一份 repo 也產生可分享的操作說明——你正在看的這個網站。</p>
       <p class="context-line"><strong>問題與目的｜</strong>保留特殊簡報設計與單檔交付，同時避免內容、樣式、互動、選型來源與逐字測試繼續綁在同一個人工維護檔案。</p>
       <div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>來源</h3><p><code>site/content/</code> 的中英文 Markdown，跟排版、程式分開存放，不用手動同步。</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>渲染</h3><p>內建 Python 引擎組出內容結構，不需要 Node 或額外的樣板引擎。</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>產出</h3><p><code>docs/index.html</code> 內嵌所有樣式、程式與圖片；每一頁固定一個畫面，桌面版不用往下捲動找重點。</p></article><article class="step-flow-item"><span class="step-flow-number">4</span><h3>使用者</h3><p>下載後用瀏覽器直接開啟就能看到完整內容；有 Pages 或其他託管只是多一個瀏覽管道，不影響離線使用。</p></article></div>
       <p class="context-line"><strong>下一步｜</strong>下載 <code>docs/index.html</code> 就能離線分享；來源結構、主題自訂與存取控制細節請切換「維運」模式查看。</p>
@@ -802,6 +842,7 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 - `site/content/` 是中英文 Markdown 來源；兩種語言必須有相同 content keys。
 - `site/static/styles.css` 保留特殊簡報視覺；`scripts/build_repo_site.py` 的 shortcode-block 解析器將內容轉成共用結構。
 - `scripts/render_site.py` 內嵌 CSS、JavaScript、font 與圖片，拒絕外部 runtime asset。
+- `./scripts/build-repo-site` 重新產生輸出；`./scripts/build-repo-site --check` 只驗證來源與版本相容性，不寫檔。
 
 {{< disclosure key="portable-bundle" title="Markdown＋Python 渲染引擎 → self-contained HTML" >}}
 `docs/adr/` 保存 canonical 選型；`scripts/build_repo_site.py` 負責內容與 HTML；未修改的 `scripts/render_site.py` 只處理資產內嵌與安全檢查。最終的 `docs/index.html` 可用 `file://` 離線開啟，不依賴 Pages、CDN 或 JavaScript package runtime。這份單一可下載 HTML 是本站的既定基準特色，不是過渡方案：即使未來加上 Pages 或其他託管，仍要保留可下載、離線可用的這份輸出。
@@ -835,6 +876,7 @@ renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc
 {{< /slide >}}
 
 {{< slide key="bridge" audience="maintainer" eyebrow="2026/05 內部分享簡報" title="回顧當時原則，對照目前實作" subtitle="回顧 2026 年 5 月內部分享的 SDLC 構想，標示目前保留、調整或延後的做法；點選每列可看三句判斷。" class="legacy-slide bridge-slide" legacy="false" >}}
+      <p class="bridge-intro">這一頁用來解釋 2026/05 構想哪些被保留、調整或延後；目前操作仍以各 Journey 與現行政策文件為準。</p>
       <table class="bridge-table" aria-label="五月版簡報與目前設計的逐頁對照">
         <colgroup><col class="page-col"><col class="topic-col"><col class="status-col"><col class="decision-col"></colgroup>
         <thead><tr><th>頁次</th><th>五月版主題</th><th>結論</th><th>目前決定（點選）</th></tr></thead>
