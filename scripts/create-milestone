@@ -1,0 +1,224 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/create-milestone --repo OWNER/REPO --title TITLE \
+  --due-on YYYY-MM-DD --proposal-file PATH
+  [--description-file PATH] [--assignee LOGIN] [--type NAME]
+
+Atomically creates a GitHub Milestone and its lifecycle tracker Issue
+together (Issue #572). Today the two are built by hand in the GitHub UI in
+two separate steps, and nothing keeps the Milestone number, its due date,
+and the tracker Issue title (`Milestone <number>: <title>`, per
+docs/milestone-description.md) consistent with each other -- Milestone 13
+shipped with a null due date because of exactly this gap, caught only when
+its first work-Issue pull request failed "Validate Milestone approval".
+
+This script builds both in one call, derives the tracker title from the
+Milestone number GitHub itself returns (never a hand-typed number), and
+finishes by running the same `sync_milestone_state.py preflight` check a
+work-Issue pull request would otherwise fail against later -- so a missing
+due date or a mismatched title is caught immediately, not after the fact.
+
+Required:
+  --repo             owner/repo
+  --title             Milestone title (used verbatim after "Milestone <N>: ")
+  --due-on            Real due date, YYYY-MM-DD -- never left empty
+  --proposal-file     Path to a file holding the tracker Issue's Proposal
+                       section content; must describe real, non-placeholder
+                       scope (an empty or comment-only file fails preflight)
+
+Optional:
+  --description-file  Path to a file holding the Milestone's own
+                       description (the Problem/Outcome/Acceptance
+                       criteria/Plan/Out of scope/Verification/References
+                       template from docs/milestone-description.md).
+                       `Lifecycle Issue: #<N>` is prepended automatically;
+                       do not include it yourself. When omitted, a minimal
+                       placeholder Acceptance criteria section is used and
+                       a reminder is printed -- fill in the rest by hand
+                       (e.g. `gh milestone edit`) before closing.
+  --assignee          Tracker Issue assignee (default: @me)
+  --type              Tracker Issue native Type (default: Feature)
+
+The tracker Issue always carries the `enhancement` label:
+scripts/sync_milestone_state.py hard-requires it, so it is not
+configurable here.
+
+On success, prints the new Milestone number, its due date, and the
+tracker Issue URL. If the tracker Issue or the final preflight check
+fails after the Milestone object was already created, the Milestone
+number is printed so it can be fixed or deleted by hand -- GitHub has no
+multi-object transaction, so this script is atomic in effect (nothing is
+reported successful until preflight re-validates the result) but not in
+underlying mechanism.
+EOF
+}
+
+repo=""
+title=""
+due_on=""
+proposal_file=""
+description_file=""
+assignee="@me"
+issue_type="Feature"
+
+while (($#)); do
+  case "$1" in
+    --repo)
+      repo="${2:?--repo requires a value}"
+      shift 2
+      ;;
+    --title)
+      title="${2:?--title requires a value}"
+      shift 2
+      ;;
+    --due-on)
+      due_on="${2:?--due-on requires a value}"
+      shift 2
+      ;;
+    --proposal-file)
+      proposal_file="${2:?--proposal-file requires a value}"
+      shift 2
+      ;;
+    --description-file)
+      description_file="${2:?--description-file requires a value}"
+      shift 2
+      ;;
+    --assignee)
+      assignee="${2:?--assignee requires a value}"
+      shift 2
+      ;;
+    --type)
+      issue_type="${2:?--type requires a value}"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$repo" || ! "$repo" =~ ^[^/[:space:]]+/[^/[:space:]]+$ ]]; then
+  echo "Provide --repo as owner/repo." >&2
+  exit 2
+fi
+if [[ -z "$title" ]]; then
+  echo "Provide --title." >&2
+  exit 2
+fi
+if [[ ! "$due_on" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+  echo "Provide --due-on as a real date, YYYY-MM-DD -- it may not be empty." >&2
+  exit 2
+fi
+if [[ -z "$proposal_file" || ! -s "$proposal_file" ]]; then
+  echo "Provide --proposal-file pointing at a non-empty file." >&2
+  exit 2
+fi
+if [[ -n "$description_file" && ! -f "$description_file" ]]; then
+  echo "--description-file does not exist: $description_file" >&2
+  exit 2
+fi
+command -v gh >/dev/null || {
+  echo "GitHub CLI (gh) is required." >&2
+  exit 1
+}
+command -v python3 >/dev/null || {
+  echo "python3 is required to run the preflight check." >&2
+  exit 1
+}
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Creating Milestone in $repo (due $due_on)..." >&2
+milestone_number="$(
+  gh api --method POST "repos/$repo/milestones" \
+    --raw-field "title=$title" \
+    --raw-field "due_on=${due_on}T00:00:00Z" \
+    --jq '.number'
+)"
+if [[ -z "$milestone_number" ]]; then
+  echo "GitHub did not return a Milestone number; nothing else was created." >&2
+  exit 1
+fi
+echo "Created Milestone #$milestone_number." >&2
+
+tracker_title="Milestone $milestone_number: $title"
+if ! "$script_dir/validate-issue-title" "$tracker_title" >&2; then
+  cat >&2 <<EOF
+The derived tracker title failed validation: $tracker_title
+Milestone #$milestone_number already exists with no tracker yet -- either
+shorten --title and rerun with the same due date, or delete the orphaned
+Milestone by hand:
+  gh api --method DELETE repos/$repo/milestones/$milestone_number
+EOF
+  exit 1
+fi
+
+proposal="$(cat "$proposal_file")"
+tracker_body="$(
+  printf '## Proposal\n\n%s\n\n## Completion evidence\n\n<!-- Fill after release. -->\n\n## Early termination\n\n<!-- Fill only when stopped early. -->\n\n## Promotion\n\n<!-- Fill when ready to promote. -->\n' \
+    "$proposal"
+)"
+
+echo "Creating tracker Issue \"$tracker_title\"..." >&2
+if ! tracker_url="$(
+  gh issue create --repo "$repo" \
+    --title "$tracker_title" \
+    --body "$tracker_body" \
+    --label enhancement \
+    --assignee "$assignee" \
+    --type "$issue_type"
+)"; then
+  cat >&2 <<EOF
+Failed to create the tracker Issue. Milestone #$milestone_number already
+exists with no tracker yet -- fix the problem above and either create the
+tracker Issue titled exactly "$tracker_title" by hand, or delete the
+orphaned Milestone:
+  gh api --method DELETE repos/$repo/milestones/$milestone_number
+EOF
+  exit 1
+fi
+tracker_number="${tracker_url##*/}"
+echo "Created tracker $tracker_url." >&2
+
+if [[ -n "$description_file" ]]; then
+  extra_description="$(cat "$description_file")"
+else
+  extra_description="$(
+    printf '## Acceptance criteria\n\n- [ ] TODO: describe acceptance criteria\n'
+  )"
+  echo "No --description-file given: wrote a placeholder Acceptance criteria section." >&2
+  echo "Fill in Problem/Outcome/Plan/Out of scope/Verification/References by hand before closing (see docs/milestone-description.md)." >&2
+fi
+milestone_description="$(
+  printf 'Lifecycle Issue: #%s\n\n%s' "$tracker_number" "$extra_description"
+)"
+gh api --method PATCH "repos/$repo/milestones/$milestone_number" \
+  --raw-field "description=$milestone_description" >/dev/null
+
+echo "Running preflight validation..." >&2
+if ! preflight_output="$(
+  python3 "$script_dir/sync_milestone_state.py" preflight \
+    --repo "$repo" --milestone "$milestone_number" 2>&1
+)"; then
+  cat >&2 <<EOF
+$preflight_output
+Milestone #$milestone_number and tracker $tracker_url were created but did not pass preflight.
+Fix the problem above by hand, then rerun to confirm:
+  python3 scripts/sync_milestone_state.py preflight --repo $repo --milestone $milestone_number
+If this was a mistake, delete both instead:
+  gh issue delete $tracker_number --repo $repo
+  gh api --method DELETE repos/$repo/milestones/$milestone_number
+EOF
+  exit 1
+fi
+
+echo "$preflight_output"
+echo "Milestone #$milestone_number (due $due_on) is ready: $tracker_url"

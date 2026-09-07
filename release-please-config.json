@@ -18,7 +18,7 @@
         {
           "type": "toml",
           "path": "uv.lock",
-          "jsonpath": "$.package[?(@.name.value==\"csarc-repo-cli\")].version"
+          "jsonpath": "$.package[?(@.name.value==\"csarc-repo-template\")].version"
         },
         {
           "type": "generic",

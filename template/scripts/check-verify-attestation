@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Hosted-side half of Issue #661's local-attestation design: this is the
+# entire body of the `verify` required check's GitHub Actions job now (see
+# .github/workflows/ci.yml and, for generated projects,
+# template/.github/workflows/ci.yml.jinja) -- it re-executes nothing, it
+# only proves the current commit already carries proof it was verified
+# locally. All three (see scripts/verify_attestation.py for the exact
+# conditions and the reasoning behind each) must hold: the commit carries
+# a well-formed `Verified-locally:` trailer; its sha256 matches the
+# commit's own tree; its timestamp is fresh. When --required-tier is
+# given, a fourth: the attested tier must be at least as strong as what
+# scripts/ci_tier.py independently classified this change as needing.
+#
+# Also runnable standalone, by a developer or agent, to self-check before
+# pushing: scripts/check-verify-attestation HEAD
+#
+# Usage: scripts/check-verify-attestation <commit-sha> [--required-tier fast|full|docs] [--max-age-hours N]
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec python3 "$repo_root/scripts/verify_attestation.py" check "$@"

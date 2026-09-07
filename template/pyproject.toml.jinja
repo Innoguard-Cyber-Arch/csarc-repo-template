@@ -43,6 +43,10 @@ convention = "google"
 known-first-party = [{{ package_name | tojson }}, "scripts"]
 
 [tool.ruff.lint.per-file-ignores]
+# Bilingual repo-site HTML strings embed full-width CJK punctuation
+# (｜／：（） etc.) throughout by design, same as the root template's own
+# scripts/build_repo_site.py (see pyproject.toml).
+"scripts/build_repo_site.py" = ["RUF001", "RUF002"]
 "tests/**" = ["D", "S101"]
 
 [tool.ty.environment]

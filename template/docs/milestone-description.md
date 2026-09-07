@@ -5,6 +5,21 @@
 story；Milestone 只保留足以理解、排程與驗收一次 delivery／release 的內容，
 完整設計細節請連回 Feature、spec 或決策紀錄。建立時必須填入真實 due date。
 
+在既有或新建的 Milestone 底下指派工作前，先執行
+`python3 scripts/sync_milestone_state.py preflight --repo <owner/repo>
+--milestone <N>`，確認 due date、追蹤 Issue 標題、`Lifecycle Issue: #N` 連結
+三者是否已經一致，不必等到第一張工作 Issue PR 卡在 `Validate Milestone
+approval` 才回頭發現——Milestone 13 就是在這裡出事：編號、due date、追蹤
+Issue 標題三者當時各自手打，沒有任何東西保證彼此一致（Issue #572）。本模板中央
+repo 另提供 `scripts/create-milestone --repo <owner/repo> --title "<title>"
+--due-on <YYYY-MM-DD> --proposal-file <path>`，取代分開在 GitHub UI 手動建立
+Milestone 物件與追蹤 Issue 兩步：一次呼叫建立兩者，追蹤 Issue 標題直接用 GitHub
+回傳的 Milestone 編號動態組成，不接受人工另外打一個序號，建立完成後自動執行上述
+`preflight` 作為自我驗證，失敗時會印出手動修正或刪除半成品 Milestone 的指令
+（GitHub 本身沒有跨物件 transaction，所以這裡的「原子」是「不驗證過關就不回報
+成功」，不是底層機制保證）。採用此模板但沒有這支腳本的下游專案，可依上述流程手動
+建立後跑 `preflight` 確認。
+
 每個 Milestone 另建一張生命週期追蹤 Issue，標題固定為
 `Milestone <編號>: <里程碑名稱>`，例如
 `Milestone 8: Interactive docs and policy alignment`。冒號後的文字必須與 GitHub

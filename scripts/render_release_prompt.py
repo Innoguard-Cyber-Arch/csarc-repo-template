@@ -32,7 +32,7 @@ def prompt(mode: str, tag: str, sha: str) -> str:
         )
     )
     review = (
-        "檢視 repo 外的 Markdown、PDF 與 machine plan，摘要新增、"
+        "檢視 repo 外的 Markdown 與 machine plan，摘要新增、"
         "自動合併、覆寫、保留、人工合併及無法判定項目"
         if mode == "adopt"
         else "摘要將新增、覆寫、保留及需要人工合併的檔案"

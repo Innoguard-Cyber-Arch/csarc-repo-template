@@ -26,8 +26,8 @@ SOURCE_FIXTURE = FIXTURES / "syft-v1.50.0-source.spdx.json"
 SOURCE_COMPONENTS_FIXTURE = (
     FIXTURES / "syft-v1.50.0-source-components.spdx.json"
 )
-ROOT_PURL = "pkg:pypi/csarc-repo-cli@0.11.0"
-SECOND_ROOT_PURL = "pkg:npm/csarc-repo-cli@0.11.0"
+ROOT_PURL = "pkg:pypi/csarc-repo-template@0.11.0"
+SECOND_ROOT_PURL = "pkg:npm/csarc-repo-template@0.11.0"
 REPOSITORY = "owner/repo"
 REPOSITORY_ID = 123456789
 SOURCE_RUN = "123456"
@@ -146,7 +146,7 @@ def release_fixture(tmp_path: Path) -> tuple[str, dict[str, Any]]:
         "source_run": SOURCE_RUN,
         "release_run": RELEASE_RUN,
         "runtime_kind": "package",
-        "root_name": "csarc-repo-cli",
+        "root_name": "csarc-repo-template",
         "root_purls": [ROOT_PURL],
         "inventory_file": inventory,
         "asset_root": assets,
@@ -280,7 +280,7 @@ def test_accepts_multiple_product_roots_and_rejects_any_orphan(
         if package["SPDXID"] == root_id(sbom)
     )
     second_root = copy.deepcopy(python_root)
-    second_root["SPDXID"] = "SPDXRef-Package-npm-csarc-repo-cli"
+    second_root["SPDXID"] = "SPDXRef-Package-npm-csarc-repo-template"
     second_root["externalRefs"] = [
         {
             "referenceCategory": "PACKAGE-MANAGER",
@@ -351,7 +351,7 @@ def test_source_runtime_rejects_fake_roots_and_uncontained_components(
     options["root_name"] = "wrong-source"
     with pytest.raises(ValueError, match="source identity"):
         build(**options)
-    options["root_name"] = "csarc-repo-cli"
+    options["root_name"] = "csarc-repo-template"
     sbom = load(options["sbom_path"])
     component = next(
         package["SPDXID"]

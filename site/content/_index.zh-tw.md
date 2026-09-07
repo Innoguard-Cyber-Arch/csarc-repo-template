@@ -30,7 +30,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.13.0</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.14.0</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -44,7 +44,7 @@ fit = "符合畫面"
         <section class="product-scope" aria-label="公版提供的能力">
           <h3>公版會替 repo 準備</h3>
           <p class="scope-row"><strong>規劃與 AI 規範</strong><span>工作先寫清楚；大型成果才拆成主要工作與可獨立完成的子工作</span></p>
-          <p class="scope-row"><strong>驗證與合併</strong><span>本機先跑相關檢查，提出變更後由 GitHub 自動重跑，再交由團隊審查</span></p>
+          <p class="scope-row"><strong>驗證與合併</strong><span>本機先跑相關檢查，GitHub 只核對這份證明，再交由團隊審查</span></p>
           <p class="scope-row"><strong>依賴與交付證據</strong><span>固定使用的套件版本、先觀察一般新版、檢查已知漏洞，並記錄成品包含哪些套件</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
         </section>
@@ -68,7 +68,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.13.0 |
+| 公版版本 | v0.14.0 |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | [[site_template_version]] |
 | repo-site 渲染引擎版本 | [[site_engine_version]] |
@@ -171,7 +171,7 @@ csarc status <path> --json
 {{< standard key="about-mode-standard" title="CSARC 實際上持續在做什麼" >}}
 大部分模板做完「產生檔案」就結束了；CSARC 會繼續跟著你的 repo 一起運作，陪你走完一個完整的生命週期：
 
-<div class="capability-map"><div class="capability-node"><h3>1｜導入前先看差異</h3><p>不論建立新 repo 或導入既有 repo，都先在旁邊產生預覽，列出哪些會新增、保留、需要你自己判斷；看過再套用，不會直接覆寫。</p><span class="capability-pointer">見「安裝說明」「模板升級」</span></div><div class="capability-node"><h3>2｜日常修改有規範與驗證</h3><p>每項工作先寫成一張 Issue，說清楚要做什麼、怎樣算完成；改動在自己的分支進行，本機先檢查一輪，GitHub 再重新跑一次，套件與已知漏洞的例行檢查也排定自動執行。</p><span class="capability-pointer">見「工作定義」「驗證／CI」「依賴安全」</span></div><div class="capability-node"><h3>3｜合併後留下證據</h3><p>PR 經人審查通過才合併；需要時建立版本與 Release，記錄成品包含哪些套件，讓「當時到底發生了什麼」隨時可以核對。</p><span class="capability-pointer">見「PR／合併」「版本／交付」</span></div><div class="capability-node"><h3>4｜未來公版更新仍先看差異</h3><p>公版更新的做法跟導入時一樣：先產生可審查的差異，你確認後才套用。這個網站本身也是用同一套原則做出來的，下載 <code>docs/index.html</code> 就能離線打開。</p><span class="capability-pointer">見「模板升級」「repo-site」</span></div></div>
+<div class="capability-map"><div class="capability-node"><h3>1｜導入前先看差異</h3><p>不論建立新 repo 或導入既有 repo，都先在旁邊產生預覽，列出哪些會新增、保留、需要你自己判斷；看過再套用，不會直接覆寫。</p><span class="capability-pointer">見「安裝說明」「模板升級」</span></div><div class="capability-node"><h3>2｜日常修改有規範與驗證</h3><p>每項工作先寫成一張 Issue，說清楚要做什麼、怎樣算完成；改動在自己的分支進行，本機先檢查一輪，GitHub 只核對這份證明，套件與已知漏洞的例行檢查也排定自動執行。</p><span class="capability-pointer">見「工作定義」「驗證／CI」「依賴安全」</span></div><div class="capability-node"><h3>3｜合併後留下證據</h3><p>PR 經人審查通過才合併；需要時建立版本與 Release，記錄成品包含哪些套件，讓「當時到底發生了什麼」隨時可以核對。</p><span class="capability-pointer">見「PR／合併」「版本／交付」</span></div><div class="capability-node"><h3>4｜未來公版更新仍先看差異</h3><p>公版更新的做法跟導入時一樣：先產生可審查的差異，你確認後才套用。這個網站本身也是用同一套原則做出來的，下載 <code>docs/index.html</code> 就能離線打開。</p><span class="capability-pointer">見「模板升級」「repo-site」</span></div></div>
 
 這樣的節奏適合你，如果：已經有 GitHub repository、不能冒險被模板整個蓋過去；想讓 AI coding agent 加入日常開發，但要有清楚的規則邊界；或想讓好幾個專案共用同一套流程。只想快速生出一個空白專案、不需要後續維護，更輕量的模板可能更適合。
 {{< /standard >}}
@@ -243,7 +243,7 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
           <article class="pipeline-stage">
             <span class="pipeline-phase">第四步｜系統協助</span>
             <h3>驗證與依賴安全</h3>
-            <p><strong>GitHub：</strong>在另一台乾淨機器重新執行檢查（這就是 CI）；改到套件時另外比對已知漏洞。<strong>模板：</strong>依變更內容選擇必要驗證。<strong>結果：</strong>任何人重跑都會得到同一份結果，不是只有提出者電腦上「看起來沒問題」。</p>
+            <p><strong>GitHub：</strong>核對本機驗證留下的證明是否新鮮、範圍是否足夠，不重新執行檢查本身；改到套件時另有 hosted 排程比對已知漏洞。<strong>模板：</strong>依變更內容選擇必要驗證。<strong>結果：</strong>判定只出自本機那套同樣的腳本，不是提出者自稱「看起來沒問題」——CI 核對的是這套腳本剛成功執行留下的證明。</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">第五步｜確認結果</span>
@@ -279,7 +279,7 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 **責任交接（本機 scripts → GitHub Actions → PR gate → Release）：**
 
 - **本機 scripts（`Active`）：** `scripts/verify-fast`／`scripts/verify-template.sh` 由開發者在本機先跑一次，篩掉大部分低階錯誤。
-- **GitHub Actions（`Active`）：** PR 開出後，`.github/workflows/` 在乾淨環境重新執行同一套政策，不信任本機結果。
+- **GitHub Actions（`Active`）：** PR 開出後，`.github/workflows/` 只核對本機執行留下的 `Verified-locally:` 證明是否新鮮、tier 是否足夠（Issue #661），不重新執行本機那套政策——證明過期或缺漏一樣會被擋下，不是照單信任。
 - **PR gate（依 GitHub 方案而定）：** 支援時由 Ruleset／branch protection 強制擋下未過檢查或未審查的合併；不支援時標示 `DEGRADED`，改由人工自律（見「規則治理」）。
 - **Release（`Active`，但需人工觸發）：** 版本與發版證據由具 admin 權限者在本機執行 `scripts/publish-release` 產生；hosted 的 Automatic／Guided 發版路徑是已知限制，不是預設路徑（見「版本／交付」）。
 
@@ -333,7 +333,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 | 工具 | 用途 | 出現／設定位置 | 適用範圍 | 授權 |
 | --- | --- | --- | --- | --- |
 | [Copier](https://github.com/copier-org/copier) | 產生、導入與更新使用此模板的 repository | `copier.yml`、`template/`、`.csarc/config.yml` | 每個由此模板建立或導入的 repository | [MIT](https://github.com/copier-org/copier/blob/master/LICENSE) |
-| [zizmor](https://github.com/zizmorcore/zizmor) | 靜態稽核 GitHub Actions workflow 的安全性 | `pyproject.toml`、`scripts/verify-stage-github-actions-audit` | 本機與 CI 驗證（`github-actions-audit` 階段） | [MIT](https://github.com/zizmorcore/zizmor/blob/main/LICENSE) |
+| [zizmor](https://github.com/zizmorcore/zizmor) | 靜態稽核 GitHub Actions workflow 的安全性 | `pyproject.toml`、`scripts/verify-stage-github-actions-audit` | 只在本機驗證（`github-actions-audit` 階段）；hosted `verify` job 改驗證本機驗證聲明的 trailer，不再重新執行 | [MIT](https://github.com/zizmorcore/zizmor/blob/main/LICENSE) |
 | [Dependabot](https://github.com/dependabot/dependabot-core) | 開立相依套件更新 PR | `.github/dependabot.yml` | Root 與 template 的套件生態圈 | [MIT](https://github.com/dependabot/dependabot-core/blob/main/LICENSE) |
 | [OSV-Scanner](https://github.com/google/osv-scanner) | 掃描 lockfile 中已公開的漏洞 | `scripts/verify-dependencies`、`scripts/install-osv-scanner`、`.github/workflows/osv.yml` | 依賴變更 PR、交付候選、每週排程 | [Apache-2.0](https://github.com/google/osv-scanner/blob/main/LICENSE) |
 | [Syft](https://github.com/anchore/syft) | 產生發版用的 SPDX SBOM | `.github/workflows/release.yml`（`anchore/sbom-action`）、`scripts/release_assets.py` | 建立發版的交付 PR | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
@@ -428,9 +428,9 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="contract" track="contract" eyebrow="步驟 03" title="先驗證改動，再讓 CI 重跑同一套規則" subtitle="Issue 與 PR 依變更範圍分級；只有高風險交付邊界才跑完整驗證。" class="candidate-slide" legacy="false" >}}
+{{< slide key="contract" track="contract" eyebrow="步驟 03" title="先在本機驗證，CI 只驗證這份驗證證明" subtitle="Issue 與 PR 依變更範圍分級；只有高風險交付邊界才跑完整驗證。" class="candidate-slide" legacy="false" >}}
 {{< standard key="contract-mode-standard" title="改動大小決定驗證輕重" >}}
-開發者先在自己的電腦快速檢查；開 PR 後，GitHub 再依同一份政策確認證據與必要條件——本機只跑能證明這次修改的檢查，不用等整條流程；PR 開出後，系統自動依變更範圍決定要跑哪一級：
+開發者先在自己的電腦跑完對應分級的驗證；成功時本機會寫下一份「已驗證」聲明。PR 開出後，GitHub 只依同一份政策核對這份聲明是否新鮮、範圍是否足夠，不重新執行檢查本身——本機只跑能證明這次修改的檢查，不用等整條流程；PR 開出後，系統自動依變更範圍決定要跑哪一級：
 
 <div class="plan-grid">
   <article class="plan-card current"><h3>docs</h3><p>純文件變更，檢查最輕量。例如：只改一份說明文件。</p></article>
@@ -445,7 +445,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **開發中：**只跑能證明本次修改的 focused check（例如 `uv run pytest <path>`、`uv run ruff check <path>`），用新鮮輸出才宣稱完成，不等待整條 pipeline。
 - **工作 PR（工作分支 → main 或 `dev/m*`）：**`scripts/ci_tier.py` 依事件、base／head、labels 與變更路徑分類為 `docs`、`fast` 或 `full`；純文件／site 內容落在 `docs`（`fast` 的 early-exit 情境），一般變更落在 `fast`；無法判斷的路徑一律 fail-closed 升級為 `full`。
 - **需要完整驗證時：**只在 Milestone／canary 交付、緊急修正、merge queue、手動執行，或系統無法安全縮小範圍的未知高風險路徑才觸發。
-- **同一套邏輯：**GitHub Actions 只有一個 `verify` job，`contents: read` 權限、最多 30 分鐘，同一 PR 新 commit 會取消舊 run；只呼叫 repo 內既有腳本——中央模板用 `scripts/verify-fast`／`scripts/verify-template.sh`，生成 repo 用 `scripts/verify`。
+- **同一套邏輯，Hosted 端不重跑（#661）：**GitHub Actions 只有一個 `verify` job，`contents: read` 權限、最多 15 分鐘，同一 PR 新 commit 會取消舊 run；它不重新執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`），只驗證這些腳本本機執行成功時寫入 commit 的 `Verified-locally:` trailer（tree hash、tier 與時間戳記）夠新鮮、tier 是否足夠。push 前沒有先跑過對應分級，hosted 這個輕量 job 就沒有東西可驗證，會直接失敗。
 - **專案範圍：**一般專案只驗證自己的改動；公版專案的完整驗證還包含標記 `large` 的 Copier 建立／既有導入／更新回歸測試，實際生成新專案元件並驗證其保存的產品內容，不只是「檔案存在」。
 
 驗證邏輯只放在 repo 內可執行的 `scripts`／`tests`；GitHub Action 只負責事件、權限與呼叫同一份程式，不重複邏輯。
@@ -647,6 +647,8 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
 
 `release_ownership: csarc-owned` 的生成 repo（含本模板 root 自己）另外取得一條不依賴 GitHub Actions 是否健康的本機發版 backup：`release.yml` 的發布階段抽成單一腳本 `scripts/publish-release`，維護者或 agent 在本機（或任何持有 admin／write 權限的環境）呼叫同一份腳本即可完成 tag、Release、成品與 SBOM，Guided 模式的啟用條件也從「組織政策擋住 Actions 建 PR」擴大為包含「判斷 Actions／webhook 目前不可信任」。這條路徑仍要求版本 PR 經過與其他 `main` PR 相同的 review。驗證（`verify`／`title`／`promotion`）仍只能、也仍建議由 hosted Actions 產生；但實際切版本／發 Release 這一步，hosted job 自己的 `GITHUB_TOKEN` 永遠無法證明 GitHub 的 Immutable Releases 設定（這是一個 GitHub Actions 任何 permission 都無法開放的 repo administration 能力）——所以這條本機路徑現在是標準發版程序，不是備援；細節見 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) 與 [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。這不是一個新的 Copier 選項——既有的 `release_ownership` 已經正確路由這個能力。
 
+`release_ownership: csarc-owned` 的生成 repo（含本模板 root 自己）另外取得一條不依賴 GitHub Actions 是否健康的本機發版 backup：`release.yml` 的發布階段抽成單一腳本 `scripts/publish-release`，維護者或 agent 在本機（或任何持有 admin／write 權限的環境）呼叫同一份腳本即可完成 tag、Release、成品與 SBOM，Guided 模式的啟用條件也從「組織政策擋住 Actions 建 PR」擴大為包含「判斷 Actions／webhook 目前不可信任」。這條路徑仍要求版本 PR 經過與其他 `main` PR 相同的 review。驗證（`verify`／`title`／`promotion`）仍只能、也仍建議由 hosted Actions 產生；但實際切版本／發 Release 這一步，hosted job 自己的 `GITHUB_TOKEN` 永遠無法證明 GitHub 的 Immutable Releases 設定（這是一個 GitHub Actions 任何 permission 都無法開放的 repo administration 能力）——所以這條本機路徑現在是標準發版程序，不是備援；細節見 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) 與 [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。這不是一個新的 Copier 選項——既有的 `release_ownership` 已經正確路由這個能力。
+
 里程碑完成時人工確認交付證據後再結案；#400、#401 尚未完成的 lifecycle gap 不在本頁複製 validator。工作分支合併後清理，里程碑 delivery branch 則等結案與未完成工作處置完成後才清理。
 {{< /disclosure >}}
 
@@ -840,7 +842,7 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 ### 我們的選擇
 
 - `site/content/` 是中英文 Markdown 來源；兩種語言必須有相同 content keys。
-- `site/static/styles.css` 保留特殊簡報視覺；`scripts/build_repo_site.py` 的 shortcode-block 解析器將內容轉成共用結構。
+- `site/static/styles.css` 保留特殊簡報視覺；`scripts/repo_site_blocks.py` 的宣告式區塊解析器將內容轉成共用結構。
 - `scripts/render_site.py` 內嵌 CSS、JavaScript、font 與圖片，拒絕外部 runtime asset。
 - `./scripts/build-repo-site` 重新產生輸出；`./scripts/build-repo-site --check` 只驗證來源與版本相容性，不寫檔。
 

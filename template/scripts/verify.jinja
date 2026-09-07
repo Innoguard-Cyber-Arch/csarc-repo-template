@@ -189,6 +189,7 @@ fi
 ./scripts/test-apply-repository-settings
 ./scripts/test-check-repo-capabilities
 ./scripts/test-check-scope-gate
+./scripts/test-verify-attestation
 ./scripts/lint-workflows-shell
 
 if $verify_python; then
@@ -419,3 +420,14 @@ PY
     exit "$hook_status"
   fi
 fi
+
+# Issue #661: this "full" mode is the single full-verification entry point
+# for a generated project (mirroring the central template's
+# scripts/verify-template.sh); the scoped python/python-compatibility/
+# typescript/rust modes above each exit earlier and never reach here, the
+# same way scripts/verify-stage-* re-runs are not attestation-worthy on
+# their own in the central template. Every check above -- including the
+# optional project verification hook -- has already passed, or
+# set -euo pipefail (and the explicit exit above) would have stopped this
+# script first.
+./scripts/write-verify-attestation full

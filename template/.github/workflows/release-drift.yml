@@ -1,0 +1,42 @@
+name: Release publish drift check
+
+# Independent, read-only, separately scheduled check for Issue #605: a
+# stuck or broken release.yml cannot reliably alert on its own breakage, so
+# this never runs as a step inside release.yml itself. See
+# scripts/check-release-drift for the detection condition and
+# docs/ci-policy.md's "Release 發版不依賴 Actions 健康度的 fallback（#589）"
+# section for the local-publish fallback this watches for.
+
+on:
+  schedule:
+    - cron: "41 6 * * *"
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: "Drift threshold in hours (default 24; see docs/ci-policy.md)"
+        required: false
+        type: string
+
+concurrency:
+  group: release-drift-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check release publish drift
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_DRIFT_HOURS: ${{ inputs.hours }}
+        run: ./scripts/check-release-drift
