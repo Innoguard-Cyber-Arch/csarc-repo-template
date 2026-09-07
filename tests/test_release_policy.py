@@ -1121,7 +1121,10 @@ def test_zh_home_version_paragraph_updates_automatically_on_bump(
     covers detection). This copies the actual production file -- not a
     synthetic fixture -- so a future regression that moves the version
     back into an unmarked plain-text table cell (the pre-#694 design
-    that needed a manual fix on both v0.14.0 and v0.15.0) fails here."""
+    that needed a manual fix on both v0.14.0 and v0.15.0) fails here.
+    The baseline version is normalized on marker lines only, not
+    hardcoded (Issue #695/#696's own lesson: a literal version string
+    goes stale on every release)."""
     zh_source = (
         Path(__file__).parents[1] / "site/content/_index.zh-tw.md"
     ).read_text(encoding="utf-8")
@@ -1142,7 +1145,13 @@ def test_zh_home_version_paragraph_updates_automatically_on_bump(
     write_release_surfaces(tmp_path, "0.1.0")
     zh_path = tmp_path / "site/content/_index.zh-tw.md"
     zh_path.parent.mkdir(parents=True)
-    zh_path.write_text(zh_source.replace("v0.14.0", "v0.1.0"), encoding="utf-8")
+    baseline_source = "\n".join(
+        re.sub(r"v\d+\.\d+\.\d+", "v0.1.0", line)
+        if "x-release-please-version" in line
+        else line
+        for line in zh_source.splitlines()
+    )
+    zh_path.write_text(baseline_source, encoding="utf-8")
     (tmp_path / "release-please-config.json").write_text(
         json.dumps(
             {

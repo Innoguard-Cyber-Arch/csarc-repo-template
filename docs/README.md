@@ -61,6 +61,7 @@
 | 網站來源 | `site/` | 分開維護雙語 Markdown、純 Python 渲染引擎、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
 | 操作契約 | `docs/agent-install.md`、`docs/milestone-description.md` | 已發布且可能由固定版本 URL 讀取的介面；路徑保持穩定 |
 | Runbook | `docs/live-integration.md`、`docs/artifact-consumption.md` | 維護者執行線上驗證或排查交付鏈時使用 |
+| Runbook | `docs/uninstall.md` | repository owner 決定不再採用 CSARC 時的自助解除安裝指南 |
 | 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據 |
 
 ## 新決策如何進來

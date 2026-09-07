@@ -78,17 +78,29 @@ _migrations:
         import re
         from pathlib import Path
 
+        # The answers file can already sit at either name by this point:
+        # `.copier-answers.yml` for a repository this migration has not
+        # touched yet, or `.csarc/config.yml` when the CLI's own legacy
+        # migration (src/csarc_cli/cli.py) already renamed it earlier in
+        # this same `copier update` call, before Copier itself ran. Check
+        # both instead of hardcoding the legacy name, and skip quietly if
+        # neither is present rather than crashing this finalize task.
         path = Path(".copier-answers.yml")
-        source = path.read_text(encoding="utf-8")
-        migrated, count = re.subn(
-            r"(?m)^(branch_strategy:\s*)(?:dev|'dev'|\"dev\")(\s*(?:#.*)?)$",
-            r"\1main\2",
-            source,
-        )
-        if count > 1:
-            raise SystemExit("Found duplicate legacy branch_strategy answers")
-        if count == 1:
-            path.write_text(migrated, encoding="utf-8")
+        if not path.is_file():
+            path = Path(".csarc/config.yml")
+        if path.is_file():
+            source = path.read_text(encoding="utf-8")
+            migrated, count = re.subn(
+                r"(?m)^(branch_strategy:\s*)(?:dev|'dev'|\"dev\")(\s*(?:#.*)?)$",
+                r"\1main\2",
+                source,
+            )
+            if count > 1:
+                raise SystemExit(
+                    "Found duplicate legacy branch_strategy answers"
+                )
+            if count == 1:
+                path.write_text(migrated, encoding="utf-8")
 
         legacy_template_tests = {
             Path("tests/test_delivery_sync.py"):
