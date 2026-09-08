@@ -26,6 +26,10 @@
         },
         {
           "type": "generic",
+          "path": "README.en.md"
+        },
+        {
+          "type": "generic",
           "path": "site/content/_index.zh-tw.md"
         },
         {

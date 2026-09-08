@@ -6,7 +6,7 @@ Cyber-Arch's updatable repository foundation: creating a new project, adopting a
 
 | Item | Current status |
 | --- | --- |
-| Template version | v0.14.0<!-- x-release-please-version --> |
+| Template version | v0.15.1<!-- x-release-please-version --> |
 | Supported languages | Python, Rust, TypeScript (independently multi-selectable; choosing none uses only the common workflow) |
 | repo-site presentation template version | 1.1.0 |
 | repo-site render engine version | 1.1.0 |
@@ -61,7 +61,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 Choose any combination of Python, Rust, and TypeScript at create or adopt time; the result, along with branching, verification, release, and other template options, is stored in `.csarc/config.yml`. This is each repo's single source of template configuration; a generated repo also stores Copier's source and version in the same file. Use an update command like `csarc update --data languages=python,rust` to adjust a generated repo -- never create a second profile file elsewhere.
 
-The CLI always verifies the canonical repository's numeric ID, an immutable stable Release, release attestation, tag pointer, and commit signature, then resolves the GitHub Release into a full commit SHA and shows the plan; any mismatch stops before Copier writes any file. Interactive mode waits for user confirmation; CI or an agent must explicitly pass both `--yes --non-interactive`. The template source is currently a private repo, so `gh auth login` is required first; the root CLI is not published to PyPI.
+The CLI always verifies the canonical repository's numeric ID, an immutable stable Release, release attestation, tag pointer, and commit signature, then resolves the GitHub Release into a full commit SHA and shows the plan; any mismatch stops before Copier writes any file. Interactive mode waits for user confirmation; CI or an agent must explicitly pass both `--yes --non-interactive`. The template source is currently public, but the CLI still verifies Release identity through the GitHub API, so complete `gh auth login` first; the root CLI is not published to PyPI.
 
 ## Prerequisites
 

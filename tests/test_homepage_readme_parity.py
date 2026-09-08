@@ -257,15 +257,19 @@ def test_zh_home_release_markers_are_each_on_their_own_raw_html_line() -> None:
 
 
 def test_readme_and_manifest_versions_match() -> None:
-    """README's repo/CLI version marker must match the release-please
-    manifest -- both are meant to describe the same released version."""
+    """Both README version markers match the release-please manifest."""
     manifest = json.loads(
         (ROOT / ".release-please-manifest.json").read_text(encoding="utf-8")
     )
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    match = re.search(r"\| 公版版本 \| (v[\d.]+)<!--", readme)
-    assert match, "README.md is missing its marked repo/CLI version cell"
-    assert match.group(1) == f"v{manifest['.']}"
+    readmes = [
+        ("README.md", r"\| 公版版本 \| (v[\d.]+)<!--"),
+        ("README.en.md", r"\| Template version \| (v[\d.]+)<!--"),
+    ]
+    for path, pattern in readmes:
+        readme = (ROOT / path).read_text(encoding="utf-8")
+        match = re.search(pattern, readme)
+        assert match, f"{path} is missing its marked repo/CLI version cell"
+        assert match.group(1) == f"v{manifest['.']}"
 
 
 def test_en_home_release_markers_are_each_on_their_own_raw_html_line() -> None:
@@ -318,11 +322,8 @@ def test_en_home_repo_version_mentions_stay_in_sync() -> None:
     )
 
 
-def test_release_please_tracks_both_language_home_files() -> None:
-    """Both `_index.zh-tw.md` and `_index.en.md` carry a repo-version
-    marker (Issue #526's "雙語皆同步" requirement), so both must be
-    registered as release-please extra-files or only one language would
-    stay current after a real release."""
+def test_release_please_tracks_bilingual_version_surfaces() -> None:
+    """Every bilingual source with a version marker is release-managed."""
     config = json.loads(
         (ROOT / "release-please-config.json").read_text(encoding="utf-8")
     )
@@ -331,5 +332,9 @@ def test_release_please_tracks_both_language_home_files() -> None:
         for entry in config["packages"]["."]["extra-files"]
         if entry.get("type") == "generic"
     }
-    assert "site/content/_index.zh-tw.md" in extra_files
-    assert "site/content/_index.en.md" in extra_files
+    assert {
+        "README.md",
+        "README.en.md",
+        "site/content/_index.zh-tw.md",
+        "site/content/_index.en.md",
+    } <= extra_files
