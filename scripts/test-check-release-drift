@@ -2,17 +2,9 @@
 set -euo pipefail
 
 # Regression test for scripts/check-release-drift (Issue #605): proves the
-# drift condition (main advanced past the last known release activity AND
-# no successful release.yml run or local publish record within the
-# threshold) using a mocked `gh` binary, so this never makes a real network
-# call. The mock applies the real `jq` binary to each `--jq` query against
-# a raw-shaped GitHub API fixture, so it exercises the exact filters
-# scripts/check-release-drift sends rather than pre-baked output. Covers:
-# a successful recent run (no drift), a stale/missing run with no local
-# record (drift, new tracking Issue), an existing open tracking Issue
-# (update instead of duplicate), a local publish record found via a commit
-# message that clears the drift condition even with no successful
-# release.yml run, and the `gh`-missing misuse guard.
+# drift condition using a mocked `gh` binary, so this never makes a real
+# network call. The mock applies the real `jq` binary to raw-shaped GitHub
+# API fixtures, including stable Release and merged release-PR evidence.
 
 script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-release-drift"
 fixture_root="$(mktemp -d)"
@@ -20,7 +12,7 @@ trap 'rm -rf "$fixture_root"' EXIT
 mkdir -p "$fixture_root/bin"
 
 mock_repo="octo/example"
-main_sha="mainsha0000000000000000000000000000000"
+main_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 cat >"$fixture_root/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
@@ -50,6 +42,14 @@ case "$1" in
       exit 0
     fi
     echo "mock gh: unexpected repo subcommand: $*" >&2
+    exit 2
+    ;;
+  pr)
+    if [[ "$2" == "list" ]]; then
+      cat "$MOCK_ROOT/release-prs.json"
+      exit 0
+    fi
+    echo "mock gh: unexpected pr subcommand: $*" >&2
     exit 2
     ;;
   issue)
@@ -83,6 +83,10 @@ case "$1" in
       fixture="$MOCK_ROOT/main-commit.json"
     elif [[ "$path" == repos/*/actions/workflows/release.yml/runs* ]]; then
       fixture="$MOCK_ROOT/last-run.json"
+    elif [[ "$path" == repos/*/releases\?per_page=100 ]]; then
+      fixture="$MOCK_ROOT/releases.json"
+    elif [[ "$path" == repos/*/compare/* ]]; then
+      fixture="$MOCK_ROOT/release-compare.json"
     elif [[ "$path" == repos/*/commits\?sha=main* ]]; then
       fixture="$MOCK_ROOT/recent-commits.json"
     elif [[ "$path" == repos/*/issues/*/comments* ]]; then
@@ -117,6 +121,9 @@ reset_fixtures() {
   printf '[]\n' >"$fixture_root/open-issues.json"
   printf '[]\n' >"$fixture_root/recent-commits.json"
   printf '[]\n' >"$fixture_root/issue-comments.json"
+  printf '[]\n' >"$fixture_root/releases.json"
+  printf '{}\n' >"$fixture_root/release-compare.json"
+  printf '[]\n' >"$fixture_root/release-prs.json"
   printf '{"workflow_runs": []}\n' >"$fixture_root/last-run.json"
   : >"$fixture_root/issue-calls.log"
   rm -f "$fixture_root/last-issue-body.md"
@@ -134,12 +141,95 @@ healthy_output="$(run_mocked)"
 grep -Fq "no drift (main not advanced past the last known release activity)" <<<"$healthy_output"
 [[ ! -s "$fixture_root/issue-calls.log" ]]
 
-# Case 2: main has advanced past the last successful run, and that run is
+# Case 2: v0.15.1-shaped evidence -- a stable Release targets current main,
+# was published after that commit, and suppresses the false alert even when
+# no hosted release run succeeded.
+reset_fixtures
+cat >"$fixture_root/releases.json" <<JSON
+[{"tag_name": "v1.2.3", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:56:00Z", "draft": false, "prerelease": false, "html_url": "https://example.invalid/releases/v1.2.3"}]
+JSON
+printf '{"status": "identical"}\n' >"$fixture_root/release-compare.json"
+release_output="$(run_mocked)"
+grep -Fq "valid release evidence" <<<"$release_output"
+grep -Fq "no drift (latest stable GitHub Release covers main)" <<<"$release_output"
+[[ ! -s "$fixture_root/issue-calls.log" ]]
+
+# Case 3: an ancestor Release is recent activity, but does not claim to
+# cover the newer main commit permanently.
+reset_fixtures
+previous_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+cat >"$fixture_root/releases.json" <<JSON
+[{"tag_name": "v1.2.3", "target_commitish": "$previous_sha", "published_at": "2026-09-04T11:56:00Z", "draft": false, "prerelease": false, "html_url": "https://example.invalid/releases/v1.2.3"}]
+JSON
+printf '{"status": "ahead"}\n' >"$fixture_root/release-compare.json"
+ancestor_release_output="$(run_mocked)"
+grep -Fq "valid recent release evidence" <<<"$ancestor_release_output"
+grep -Fq "no drift (recent release activity within the threshold)" <<<"$ancestor_release_output"
+[[ ! -s "$fixture_root/issue-calls.log" ]]
+set +e
+stale_ancestor_output="$(run_mocked --hours 0.01 2>&1)"
+stale_ancestor_status=$?
+set -e
+[[ "$stale_ancestor_status" -ne 0 ]]
+grep -Fq "DRIFT DETECTED" <<<"$stale_ancestor_output"
+
+# Case 4: #701-shaped evidence -- a trusted comment on an exact merged
+# release PR records publication of that PR's merge commit.
+reset_fixtures
+cat >"$fixture_root/release-prs.json" <<JSON
+[{"number": 42, "title": "chore(main): release 1.2.3", "mergedAt": "2026-09-04T11:55:00Z", "mergeCommit": {"oid": "$main_sha"}, "comments": [{"authorAssociation": "MEMBER", "createdAt": "2026-09-04T11:56:00Z", "body": "Release-publish-record: operator=@octocat commit=$main_sha command=\"scripts/publish-release publish --repo octo/example --tag v1.2.3\" result=published"}]}]
+JSON
+pr_record_output="$(run_mocked)"
+grep -Fq "from release PR #42 comment" <<<"$pr_record_output"
+grep -Fq "no drift (main not advanced past the last known release activity)" <<<"$pr_record_output"
+[[ ! -s "$fixture_root/issue-calls.log" ]]
+
+# Case 5: a stable Release with a non-ancestor target is not evidence.
+reset_fixtures
+other_sha="cccccccccccccccccccccccccccccccccccccccc"
+cat >"$fixture_root/releases.json" <<JSON
+[{"tag_name": "v1.2.3", "target_commitish": "$other_sha", "published_at": "2026-09-04T11:56:00Z", "draft": false, "prerelease": false, "html_url": "https://example.invalid/releases/v1.2.3"}]
+JSON
+printf '{"status": "diverged"}\n' >"$fixture_root/release-compare.json"
+set +e
+unrelated_release_output="$(run_mocked 2>&1)"
+unrelated_release_status=$?
+set -e
+[[ "$unrelated_release_status" -ne 0 ]]
+grep -Fq "ignored: target is not main or its ancestor" <<<"$unrelated_release_output"
+
+# Case 6: an ancestor Release published before current main is stale rather
+# than proof that the newer main state was deliberately covered.
+reset_fixtures
+cat >"$fixture_root/releases.json" <<JSON
+[{"tag_name": "v1.2.3", "target_commitish": "$previous_sha", "published_at": "2026-09-04T10:00:00Z", "draft": false, "prerelease": false, "html_url": "https://example.invalid/releases/v1.2.3"}]
+JSON
+printf '{"status": "ahead"}\n' >"$fixture_root/release-compare.json"
+set +e
+stale_release_output="$(run_mocked 2>&1)"
+stale_release_status=$?
+set -e
+[[ "$stale_release_status" -ne 0 ]]
+grep -Fq "ignored: published before the current main commit" <<<"$stale_release_output"
+
+# Case 7: draft and prerelease entries are filtered before evaluation.
+reset_fixtures
+cat >"$fixture_root/releases.json" <<JSON
+[{"tag_name": "v1.2.4", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:58:00Z", "draft": true, "prerelease": false}, {"tag_name": "v1.2.3", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:57:00Z", "draft": false, "prerelease": true}]
+JSON
+set +e
+unstable_release_output="$(run_mocked 2>&1)"
+unstable_release_status=$?
+set -e
+[[ "$unstable_release_status" -ne 0 ]]
+grep -Fq "Latest stable GitHub Release: none found" <<<"$unstable_release_output"
+
+# Case 8: main has advanced past the last successful run, and that run is
 # also older than the 24h threshold, with no local publish record anywhere
 # -- drift. No existing tracking Issue, so a new one is opened.
 reset_fixtures
 cat >"$fixture_root/last-run.json" <<JSON
-{"workflow_runs": [{"head_sha": "stalesha0000000000000000000000000000000", "updated_at": "2026-09-02T00:00:00Z", "html_url": "https://example.invalid/runs/2"}]}
+{"workflow_runs": [{"head_sha": "$other_sha", "updated_at": "2026-09-02T00:00:00Z", "html_url": "https://example.invalid/runs/2"}]}
 JSON
 set +e
 drift_output="$(run_mocked --repo "$mock_repo" 2>&1)"
@@ -150,11 +240,11 @@ grep -Fq "DRIFT DETECTED" <<<"$drift_output"
 grep -Fq "create" "$fixture_root/issue-calls.log"
 grep -Fq "已經前進" "$fixture_root/last-issue-body.md"
 
-# Case 3: same stale state, but a tracking Issue is already open -- update
+# Case 9: same stale state, but a tracking Issue is already open -- update
 # it instead of opening a duplicate.
 reset_fixtures
 cat >"$fixture_root/last-run.json" <<JSON
-{"workflow_runs": [{"head_sha": "stalesha0000000000000000000000000000000", "updated_at": "2026-09-02T00:00:00Z", "html_url": "https://example.invalid/runs/2"}]}
+{"workflow_runs": [{"head_sha": "$other_sha", "updated_at": "2026-09-02T00:00:00Z", "html_url": "https://example.invalid/runs/2"}]}
 JSON
 cat >"$fixture_root/open-issues.json" <<'JSON'
 [{"number": 77, "title": "Release publish drift detected"}]
@@ -168,18 +258,29 @@ grep -Fq "DRIFT DETECTED" <<<"$update_output"
 grep -Fq "edit 77" "$fixture_root/issue-calls.log"
 [[ "$(cat "$fixture_root/issue-calls.log")" != *create* ]]
 
-# Case 4: no successful release.yml run at all, and main has advanced past
+# Case 10: no successful release.yml run at all, and main has advanced past
 # the commit the local publish record names, but that record is recent --
 # no drift, since a human/agent is actively managing releases.
 reset_fixtures
-previous_sha="previoussha000000000000000000000000000"
 cat >"$fixture_root/recent-commits.json" <<JSON
-[{"sha": "recordcommit0000000000000000000000000000", "commit": {"committer": {"date": "2026-09-04T10:00:00Z"}, "message": "chore(main): release 1.2.3\n\nRelease-publish-record: operator=@octocat commit=$previous_sha command=\"scripts/publish-release publish --repo octo/example --tag v1.2.3\" result=published"}}]
+[{"sha": "dddddddddddddddddddddddddddddddddddddddd", "commit": {"committer": {"date": "2026-09-04T10:00:00Z"}, "message": "chore(main): release 1.2.3\n\nRelease-publish-record: operator=@octocat commit=$previous_sha command=\"scripts/publish-release publish --repo octo/example --tag v1.2.3\" result=published"}}]
 JSON
 record_output="$(run_mocked)"
 grep -Fq "no drift (recent release activity within the threshold)" <<<"$record_output"
 grep -Fq "Local publish record: operator=@octocat commit=$previous_sha" <<<"$record_output"
 [[ ! -s "$fixture_root/issue-calls.log" ]]
+
+# Case 11: malformed or untrusted release-PR comments cannot hide drift.
+reset_fixtures
+cat >"$fixture_root/release-prs.json" <<JSON
+[{"number": 42, "title": "chore(main): release 1.2.3", "mergedAt": "2026-09-04T11:55:00Z", "mergeCommit": {"oid": "$main_sha"}, "comments": [{"authorAssociation": "MEMBER", "createdAt": "2026-09-04T11:56:00Z", "body": "Release-publish-record: operator=@octocat commit=$main_sha result=published"}, {"authorAssociation": "NONE", "createdAt": "2026-09-04T11:57:00Z", "body": "Release-publish-record: operator=@mallory commit=$main_sha command=\"fake\" result=published"}]}]
+JSON
+set +e
+invalid_record_output="$(run_mocked 2>&1)"
+invalid_record_status=$?
+set -e
+[[ "$invalid_record_status" -ne 0 ]]
+grep -Fq "Local publish record: none found" <<<"$invalid_record_output"
 
 # Misuse guard: `gh` missing from PATH must fail clearly, not silently
 # produce a wrong or empty answer.
@@ -190,4 +291,4 @@ set -e
 [[ "$no_gh_status" -ne 0 ]]
 grep -Fiq "gh" <<<"$no_gh_output"
 
-echo "Release drift check cases passed: 5"
+echo "Release drift check cases passed: 12"

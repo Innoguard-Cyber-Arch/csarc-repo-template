@@ -1168,20 +1168,22 @@ Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 
 
 **偵測條件（兩者同時成立才判定為 drift）：**
 
-1. `main` HEAD 不是最新一次成功 `release.yml` run（`gh api repos/{repo}/actions/workflows/release.yml/runs?branch=main&status=success`）所在的 commit，也不是最新一筆本機發版紀錄所在的 commit。
-2. 過去 N 小時內，既沒有成功的 `release.yml` run，也沒有找到本機發版紀錄。
+1. `main` HEAD 未被最新 stable GitHub Release 的精確 target 涵蓋，也不是最新一次成功 `release.yml` run（`gh api repos/{repo}/actions/workflows/release.yml/runs?branch=main&status=success`）或最新一筆受信任本機發版紀錄所在的 commit。
+2. 過去 N 小時內，既沒有有效的 stable Release、成功的 `release.yml` run，也沒有找到受信任的本機發版紀錄。
+
+最新 stable Release 的 `target_commitish` 必須是精確 40 字元 SHA，且等於 `main` HEAD，或經 GitHub compare API 證明為其 ancestor；`published_at` 還必須不早於目前 `main` commit。精確 target 會持續視為涵蓋該 HEAD；ancestor target 只算 N 小時內的近期發布活動，不能永久掩蓋較新的 `main`。draft、prerelease、非 ancestor target、移動中的 branch ref 或比目前 `main` 更早發布的 Release 都不能壓掉告警。這使 immutable GitHub Release 本身成為首要發布事實，不再要求一條已知會被 #123 fail closed 的 hosted run 偽裝成成功。
 
 `release.yml` 在每次 push 到 `main` 後都會執行，即使 `release_policy.py` 判定「今天不需要發版」也會正常執行完成（conclusion 仍是 success）；因此健康狀態下，最後一次成功 run 的 commit 幾乎總是等於當下 `main` HEAD，條件 1 不成立，不會誤報。只有在 `release.yml` 真的不再執行成功、而 `main` 仍透過一般 PR 合併前進時（兩者是各自獨立的觸發：merge 不需要 `release.yml` 成功），條件 1 才會成立；再疊上條件 2（N 小時內真的沒有任何成功活動），才判定為 drift。
 
 **N 預設 24 小時**，可用 `RELEASE_DRIFT_HOURS` 環境變數或 workflow 的 `hours` workflow_dispatch input 覆寫。`release.yml` 正常在 push 後幾分鐘內就有結果；24 小時涵蓋「一整天沒有任何 release 相關 push」的正常空窗期，不誤報安靜的一天，同時仍能在同一個工作日內就被發現，不會像 #587 一樣拖過一整個週末。
 
-**本機發版紀錄的具體格式**（本節把 #589 只用文字描述的既有約定變成可被機器判讀的格式）：出現在 `main` 上一則 commit 訊息（即合併說明）、或本檢查自己開立的追蹤 Issue 留言中，符合：
+**本機發版紀錄的具體格式**（本節把 #589 只用文字描述的既有約定變成可被機器判讀的格式）：出現在 `main` 上一則 commit 訊息（即合併說明）、本檢查自己開立的追蹤 Issue 受信任留言，或已合併且標題精確符合 `chore(main): release X.Y.Z` 的版本 PR 受信任留言中，符合：
 
 ```text
 Release-publish-record: operator=<@handle> commit=<sha> command="<command>" result=<result>
 ```
 
-`scripts/check-release-drift` 同時掃描這兩個來源；找到的紀錄若在 N 小時內，即使 `main` 已經前進到紀錄所在 commit 之後，仍視為「有人正在主動處理」而不誤報。
+`operator`、40 字元 `commit`、非空 `command` 與 `result=published` 四欄缺一不可；Issue／PR 留言作者必須是 repository owner、member 或 collaborator，版本 PR 留言的 commit 還必須等於該 PR 的 merge commit，留言時間不得早於合併。`scripts/check-release-drift` 同時掃描三個來源；找到的紀錄若在 N 小時內，即使 `main` 已經前進到紀錄所在 commit 之後，仍視為「有人正在主動處理」而不誤報。
 
 **這支 workflow 只偵測與通知，不接手發版**：既不會自動觸發 `release.yml` 重跑，也不會自動執行 `scripts/publish-release`；是否接手仍由人或 agent 判斷，維持 #589 既有的「人或 agent 主動決定啟用」設計原則。
 
