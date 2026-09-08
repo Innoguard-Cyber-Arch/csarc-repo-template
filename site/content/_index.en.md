@@ -26,6 +26,7 @@ fit = "Fit"
         <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --></p>
         <p class="subtitle flow-line"><strong>Result:</strong> every change, human or AI, is scoped, checked, and reviewed before it merges -- leaving evidence behind.</p>
         <p class="subtitle">Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Maintenance mode adds configuration files, code, and technical rationale. See the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a> for quick-start commands.</p>
+        <p class="subtitle"><strong>Public status:</strong> this repository and its GitHub Pages repo-site are publicly readable; <code>noindex</code>/<code>robots.txt</code> only reduce indexing and do not restrict reading or sharing. The pending hosting/access-control decision remains in <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425" target="_blank" rel="noreferrer">Issue #425</a>.</p>
         <div class="package-badges" aria-label="Package status">
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
@@ -64,7 +65,7 @@ fit = "Fit"
 {{< /legacy >}}
 
 {{< basic >}}
-<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> and stays synchronized across both languages.
+<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> and stays synchronized across both languages. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
 <p class="template-version"><strong>Template release:</strong> v0.15.1<!-- x-release-please-version --></p>
 
@@ -752,12 +753,12 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 {{< disclosure key="governance-config" title="One configuration source and its ownership layers" >}}
 | Layer | `.csarc/config.yml` key | Default / allowed values | Generated or checked at |
 | --- | --- | --- | --- |
-| Required baseline | `branch_strategy` | `delivery` by default; `delivery` or `main` | branch guidance, `policies/rulesets.json`, and the internal site's delivery-route section |
-| Organization policy | `code_owner` | one existing `@organization/team` with repository write access | `.github/CODEOWNERS`; checked by repository-settings plan/apply/check; the internal site's primary-owner line |
+| Required baseline | `branch_strategy` | `delivery` by default; `delivery` or `main` | branch guidance, `policies/rulesets.json`, and the repo-site's delivery-route section |
+| Organization policy | `code_owner` | one existing `@organization/team` with repository write access | `.github/CODEOWNERS`; checked by repository-settings plan/apply/check; the repo-site's primary-owner line |
 | Organization policy | `reviewers` | one or more GitHub usernames | `.github/REVIEWERS`; `governance-comment.yml` assigns automatically on every non-draft pull request |
-| Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection, optional security defaults, and the internal site's visible-audience line |
-| Project choice | `project_name` | required non-empty string; defaults to `CSARC Project` | the internal site's title and heading |
-| Project choice | `project_description` | required one-sentence purpose; rejects placeholder text | the internal site's introduction paragraph |
+| Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection, optional security defaults, and the repo-site's visible-audience line |
+| Project choice | `project_name` | required non-empty string; defaults to `CSARC Project` | the repo-site's title and heading |
+| Project choice | `project_description` | required one-sentence purpose; rejects placeholder text | the repo-site's introduction paragraph |
 | Project choice | `languages` | zero or more of `python`, `rust`, `typescript` | repo-site's stated-languages line |
 | Project choice | `repository_url`, `project_slug` | derived from `code_owner`/`project_name` unless overridden | repo-site's clone instructions |
 | Project opt-in | `enable_governance_drift_check` | `false` by default; set `true` to generate the daily scheduled Action | `false` keeps only the local drift checker; `true` also generates `governance-drift.yml` |
@@ -954,19 +955,19 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="access-control" audience="archive" eyebrow="Access decision" title="Temporary protection before a hosting choice" subtitle="Current measures reduce accidental sharing; none is described as access control." class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="access-control" audience="archive" eyebrow="Access decision" title="Public today; access control remains undecided" subtitle="The repository and Pages site are publicly readable; noindex only reduces indexing and is not a security control." class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">Decision appendix</span>
-        <h2>Access control decision｜<span class="accent">Temporary protection before a hosting choice</span></h2>
-        <p class="subtitle">Weighs the cost and limits of three access-control options; until one is finalized, <code>noindex</code>/<code>robots.txt</code> only reduce accidental exposure and are never described as access control.</p>
+        <h2>Access control decision｜<span class="accent">Public today; the final option is undecided</span></h2>
+        <p class="subtitle">This repository and GitHub Pages are publicly readable; <code>noindex</code>/<code>robots.txt</code> only reduce search indexing and cannot restrict reading or sharing.</p>
       </header>
       <div class="plan-grid">
         <article class="plan-card team"><h3>Cloudflare Pages + Access <span class="plan-state">Candidate</span></h3><p><strong>Cost:</strong> the free allowance covers a small team's login wall; requires setting up a Zero Trust policy, domain, and DNS.<strong>Limitation:</strong> needs a separate Cloudflare account and organization identity integration (Google/GitHub SSO or email OTP); data and audit policy must be confirmed first.<strong>Owner:</strong> an organization owner must create and hold the Cloudflare account permissions; not created or configured by this Issue.</p></article>
         <article class="plan-card enterprise"><h3>GitHub Pages + IP restriction <span class="plan-state">Restricted</span></h3><p><strong>Cost:</strong> reuses the existing GitHub organization; no separate external account needed.<strong>Limitation:</strong> a private Pages site requires GitHub Enterprise Cloud; an IP allow list is hard to maintain for a remote/hybrid team, and the organization is currently on the Free plan, which does not have this capability.<strong>Owner:</strong> an organization owner must upgrade the plan first before Enterprise network policy can be configured.</p></article>
         <article class="plan-card current"><h3>Internal login platform (Backstage, Confluence, etc.) <span class="plan-state">Future</span></h3><p><strong>Cost:</strong> can integrate with an existing identity system (SSO) and manage several internal documents centrally, not just this one page.<strong>Limitation:</strong> requires adopting and operating a separate platform; with only one repo-site today, the adoption cost exceeds the benefit.<strong>Owner:</strong> an IT/platform team must build and operate it; a future option to evaluate once there are more services.</p></article>
       </div>
-      <aside class="selection-note"><strong>Current decision</strong><span>All three options need an external account or an organization upgrade, which is out of scope for this Issue; Cloudflare Pages + Access is the leading candidate for future evaluation. Until one is finalized, only <code>noindex</code>/<code>robots.txt</code> reduce accidental exposure. Once an option is finalized, open a separate implementation Issue and have an organization owner approve and hold the account.</span></aside>
+      <aside class="selection-note"><strong>Current decision</strong><span>The repository and Pages site remain public, and <code>noindex</code>/<code>robots.txt</code> are not described as access control. #79 preserves the interim record; #425 owns the choice among Cloudflare Pages + Access, returning to private, or upgrading the GitHub plan. Any selected option still needs a separate implementation Issue and organization-owner approval.</span></aside>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -977,10 +978,10 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 | Backstage, Confluence, or another internal portal | Can govern several internal documents together | One site does not justify an IT/platform-operated service today |
 
 {{< disclosure key="access-control-limit" title="What exists and what it cannot do" >}}
-`docs/index.html` contains `noindex,nofollow`, while `docs/robots.txt` asks crawlers to stay away. Neither authenticates a reader, and anyone with the offline file can forward it. Issue #79 recorded this interim protection and closed as completed; selecting the actual host, identity provider, data policy, and audit policy has no open Issue yet and needs a new one once that decision is ready.
+`docs/index.html` contains `noindex,nofollow`, while `docs/robots.txt` asks crawlers to stay away, but the repository and GitHub Pages remain publicly readable. Neither mechanism authenticates a reader; anyone can read, download, or forward the content. Issue #79 preserves the interim record, while Issue #425 owns the host, identity-provider, data-policy, and audit-policy planning. Before returning the repository to private, inventory the Issues, pull requests, and commits created while public; handle any sensitive-information discovery as a separate security incident rather than assuming a visibility change erases exposure.
 {{< /disclosure >}}
 
-<aside class="config-guidance"><strong>Where this is configured</strong><ul><li><strong>Interim measure:</strong> <code>&lt;meta name="robots"&gt;</code> in <code>docs/index.html</code> plus <code>docs/robots.txt</code></li><li><strong>Decision record:</strong> <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">Issue #79</a> (closed, records the interim protection; host selection has no open Issue yet, needs a new one)</li></ul></aside>
+<aside class="config-guidance"><strong>Where this is configured</strong><ul><li><strong>Current state:</strong> <code>.csarc/config.yml</code> records <code>project_visibility: public</code>; <code>policies/pages.json</code> continues publishing from <code>main:/docs</code></li><li><strong>Indexing preference:</strong> <code>&lt;meta name="robots"&gt;</code> in <code>docs/index.html</code> plus <code>docs/robots.txt</code>; neither provides access control</li><li><strong>Decision record:</strong> <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">Issue #79</a> (interim record) / <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425" target="_blank" rel="noreferrer">Issue #425</a> (current hosting/access-control planning)</li></ul></aside>
 {{< /basic >}}
 {{< /slide >}}
 
@@ -1070,12 +1071,12 @@ There is no cross-repository catalog, comprehensive hosted governance, registry 
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="fleet-inventory" audience="archive" eyebrow="Fleet governance" title="Audit the fleet locally instead of publishing it" subtitle="This organization is private; a maintainer checks current adoption on demand instead of reading a static page." class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="fleet-inventory" audience="archive" eyebrow="Fleet governance" title="Audit the fleet locally instead of publishing it" subtitle="This repository and page are public, so the static content does not list a fleet that may include private repositories." class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">Decision appendix</span>
         <h2>Fleet governance inventory｜<span class="accent">Audit locally, never published</span></h2>
-        <p class="subtitle">This organization is private, and this template repository may eventually be shared with other groups; the real repository list is never written into site content or git history. A maintainer instead uses <code>scripts/audit-fleet-adoption</code> for a live, on-demand, terminal-only query.</p>
+        <p class="subtitle">This template repository and repo-site are publicly readable; the real fleet may include private repositories, so its list is never written into site content or git history. A maintainer instead uses <code>scripts/audit-fleet-adoption</code> for a live, on-demand, terminal-only query.</p>
       </header>
       <table class="decision-register audit-register" aria-label="Fleet inventory evaluation method">
         <thead><tr><th>Evaluation input</th><th>How it is obtained</th></tr></thead>
