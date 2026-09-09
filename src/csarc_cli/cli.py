@@ -473,7 +473,7 @@ class GhReleaseClient:
 
 def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
     """Resolve an explicitly allowed development-only revision."""
-    source_path = Path(source).expanduser()
+    source_path = Path(source).expanduser().resolve()
     if not source_path.is_dir():
         raise CliError(
             "--allow-unreleased template source is unavailable; use a local "
@@ -481,7 +481,9 @@ def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
         )
     if requested is not None and FULL_SHA.fullmatch(requested):
         return Revision(
-            requested.lower(), git_commit(source_path, requested), source
+            requested.lower(),
+            git_commit(source_path, requested),
+            str(source_path),
         )
     label = requested or "latest-local-tag"
     reference = requested
@@ -493,7 +495,7 @@ def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
         if not tags:
             raise CliError("Local template repository has no release tags.")
         reference = tags[0]
-    return Revision(label, git_commit(source_path, reference), source)
+    return Revision(label, git_commit(source_path, reference), str(source_path))
 
 
 def release_identity(release: dict[str, object]) -> tuple[str, int]:
@@ -1613,6 +1615,54 @@ def read_adoption_plan(path: Path) -> dict[str, object]:
         raise CliError("Adoption plan digest does not match its contents.")
     payload["plan_sha256"] = expected
     return payload
+
+
+def require_replay_authorization(
+    args: argparse.Namespace,
+    *,
+    source: str,
+    sha: str,
+    verification: str,
+) -> bool:
+    """Require fresh authority before replaying an unreleased source."""
+    unreleased = verification in {"unverified", "development-unreleased"}
+    supplied = any((args.source, args.expected_sha, args.allow_unreleased))
+    if not unreleased:
+        if supplied:
+            raise CliError(
+                "Verified replay uses its saved immutable Release; do not "
+                "pass --source, --expected-sha, or --allow-unreleased."
+            )
+        return False
+    if not all((args.source, args.expected_sha, args.allow_unreleased)):
+        raise CliError(
+            "Unreleased replay requires this invocation to pass the saved "
+            "--source, full --expected-sha, and --allow-unreleased."
+        )
+    if FULL_SHA.fullmatch(args.expected_sha) is None:
+        raise CliError("--expected-sha must be a full 40-character commit SHA.")
+    try:
+        supplied_source = Path(args.source).expanduser().resolve()
+        saved_source = Path(source).expanduser().resolve()
+    except OSError as error:
+        raise CliError(
+            "Cannot resolve the unreleased template source."
+        ) from error
+    if (
+        supplied_source != saved_source
+        or args.expected_sha.lower() != sha.lower()
+    ):
+        raise CliError(
+            "Unreleased replay source or expected SHA does not match the "
+            "saved plan."
+        )
+    return True
+
+
+def print_saved_adoption_plan(payload: dict[str, object]) -> None:
+    """Display every saved field before repository-controlled code runs."""
+    print("Saved adoption plan:")
+    print(json.dumps(payload, indent=2, sort_keys=True))
 
 
 def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
@@ -3493,10 +3543,10 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "Run adopt --finalize --dry-run first, then apply its machine "
             "plan with --finalize --apply-plan."
         )
-    if any((args.source, args.to, args.expected_sha, args.allow_unreleased)):
+    if args.to is not None:
         raise CliError(
-            "adopt --finalize uses the source and release saved by the "
-            "pending adoption; do not pass release-selection options."
+            "adopt --finalize uses the release label saved by the pending "
+            "adoption; do not pass --to."
         )
 
     explicit_data = parse_data(args.data)
@@ -3577,21 +3627,12 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "Copier commit drifted after adoption started; restore the saved "
             "answers or restart adoption from a clean commit."
         )
-    allow_unreleased = verification == "development-unreleased"
-    revision = resolve_revision(
-        source,
-        release,
-        expected_sha=sha,
-        allow_unreleased=allow_unreleased,
+    allow_unreleased = require_replay_authorization(
+        args,
+        source=source,
+        sha=sha,
+        verification=verification,
     )
-    source_path = Path(source).expanduser()
-    if allow_unreleased:
-        if not source_path.exists():
-            raise CliError(
-                "Pending unreleased template source is unavailable; restore "
-                "the same local source, then rerun csarc adopt --finalize."
-            )
-        git_commit(source_path, sha)
 
     for item in raw_managed:
         if not isinstance(item, dict):
@@ -3643,6 +3684,42 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "restore it or restart adoption from a clean commit."
         )
 
+    milestone_plan: MilestoneDescriptionPlan | None = None
+    if saved is not None:
+        raw_saved_adoption = saved.get("adoption")
+        if not isinstance(raw_saved_adoption, dict) or not isinstance(
+            raw_saved_adoption.get("generated_at"), str
+        ):
+            raise CliError("Finalize plan has invalid target state.")
+        saved_adoption = cast(dict[str, object], raw_saved_adoption)
+        validate_target_snapshot(target, saved_adoption)
+        print_saved_adoption_plan(saved)
+        milestone_plan = milestone_description_plan(target)
+        if not confirm(args):
+            return 0
+        validate_target_snapshot(target, saved_adoption)
+        validate_repository_context(
+            target,
+            repository,
+            explicit_visibility,
+            saved_visibility=saved_visibility,
+        )
+
+    revision = resolve_revision(
+        args.source if allow_unreleased else source,
+        release,
+        expected_sha=sha,
+        allow_unreleased=allow_unreleased,
+    )
+    source_path = Path(revision.source)
+    if allow_unreleased:
+        if not source_path.exists():
+            raise CliError(
+                "Pending unreleased template source is unavailable; restore "
+                "the same local source, then rerun csarc adopt --finalize."
+            )
+        git_commit(source_path, sha)
+
     capabilities = capability_preflight(
         target / "scripts" / "release_policy.py", target, emit=False
     )
@@ -3656,7 +3733,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         temporary_root = Path(temporary)
         stage = temporary_root / "rendered"
         stage.mkdir()
-        copier_copy(source, revision, stage, answers)
+        copier_copy(revision.source, revision, stage, answers)
         baseline = temporary_root / "baseline"
         clone_target(target, baseline)
         merged = apply_adoption_policies(stage, baseline)
@@ -3668,11 +3745,6 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         if saved is None:
             generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
         else:
-            saved_adoption = saved.get("adoption")
-            if not isinstance(saved_adoption, dict) or not isinstance(
-                saved_adoption.get("generated_at"), str
-            ):
-                raise CliError("Finalize plan has invalid target state.")
             generated_at = str(saved_adoption["generated_at"])
         candidate = temporary_root / "candidate"
         clone_working_tree(target, candidate)
@@ -3751,11 +3823,14 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         else:
             print_plan(plan)
             print("Pending state: verified; ready to finalize.")
-        milestone_plan = milestone_description_plan(target, emit=not args.json)
+        if saved is None:
+            milestone_plan = milestone_description_plan(
+                target, emit=not args.json
+            )
         if args.dry_run:
             write_adoption_reports(plan, args.report_dir, emit=not args.json)
             return 0
-        if not confirm(args):
+        if saved is None and not confirm(args):
             return 0
         validate_repository_context(
             target,
@@ -3895,10 +3970,10 @@ def command_apply_adoption_plan(  # noqa: C901
         raise CliError(
             "--apply-plan cannot be combined with --dry-run or --json."
         )
-    if any((args.source, args.to, args.expected_sha, args.allow_unreleased)):
+    if args.to is not None:
         raise CliError(
-            "--apply-plan uses the source and SHA saved by dry-run; do not "
-            "pass release-selection options."
+            "--apply-plan uses the release label saved by dry-run; do not "
+            "pass --to."
         )
     if args.data:
         raise CliError("--apply-plan uses the answers saved by dry-run.")
@@ -3943,19 +4018,17 @@ def command_apply_adoption_plan(  # noqa: C901
         not isinstance(source, str)
         or not isinstance(release, str)
         or not isinstance(sha, str)
+        or FULL_SHA.fullmatch(sha) is None
         or not isinstance(generated_at, str)
         or verification not in {"verified", "unverified"}
     ):
         raise CliError("Adoption plan has invalid template identity.")
-    if raw_adoption.get("clean") is True:
-        require_clean_repository(target)
-    else:
-        validate_target_snapshot(target, raw_adoption)
-    revision = resolve_revision(
-        source,
-        release,
-        expected_sha=sha,
-        allow_unreleased=verification == "unverified",
+    verification = cast(str, verification)
+    allow_unreleased = require_replay_authorization(
+        args,
+        source=source,
+        sha=sha,
+        verification=verification,
     )
     answers = {str(key): value for key, value in raw_answers.items()}
     visibility = answers.get("project_visibility")
@@ -3965,11 +4038,29 @@ def command_apply_adoption_plan(  # noqa: C901
         visibility if raw_repository.get("source") == "explicit" else None
     )
     repository = repository_context(target, explicit_visibility)
+    if repository.as_dict() != raw_repository:
+        raise CliError(
+            "Repository context changed after the plan was created or "
+            "confirmed; create a new plan."
+        )
+    validate_target_snapshot(target, raw_adoption)
+    print_saved_adoption_plan(saved)
+    milestone_plan = milestone_description_plan(target)
+    if not confirm(args):
+        return 0
+    validate_target_snapshot(target, raw_adoption)
+    validate_repository_context(target, repository, explicit_visibility)
+    revision = resolve_revision(
+        args.source if allow_unreleased else source,
+        release,
+        expected_sha=sha,
+        allow_unreleased=allow_unreleased,
+    )
     with tempfile.TemporaryDirectory(prefix="csarc-apply-") as temporary:
         temporary_root = Path(temporary)
         stage = temporary_root / "rendered"
         stage.mkdir()
-        copier_copy(source, revision, stage, answers)
+        copier_copy(revision.source, revision, stage, answers)
         candidate = temporary_root / "candidate"
         fresh = build_adoption_plan(
             stage,
@@ -4002,9 +4093,6 @@ def command_apply_adoption_plan(  # noqa: C901
         if not isinstance(artifacts, dict):
             raise CliError("Rebuilt adoption candidate has no artifact plan.")
         print_plan(fresh)
-        milestone_plan = milestone_description_plan(target)
-        if not confirm(args):
-            return 0
         validate_repository_context(
             target,
             fresh.repository,
