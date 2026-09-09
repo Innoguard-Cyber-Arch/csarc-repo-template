@@ -427,6 +427,7 @@ def test_release_drift_check_is_independent_of_release_yml() -> None:
         "actions": "read",
         "contents": "read",
         "issues": "write",
+        "pull-requests": "read",
     }
     assert workflow["jobs"]["check"]["timeout-minutes"] == 5
     assert "run: ./scripts/check-release-drift" in source
@@ -438,25 +439,30 @@ def test_release_drift_check_is_independent_of_release_yml() -> None:
     assert workflow["concurrency"]["cancel-in-progress"] is False
 
 
-def test_release_drift_script_documents_its_threshold_and_record_format() -> (
-    None
-):
-    """The 24h default and the local-record convention must be self-documented.
+def test_release_drift_script_documents_its_authoritative_sources() -> None:
+    """The threshold and authoritative release-state sources stay explicit.
 
     Issue #605 pins N=24h (release.yml normally finishes within minutes of
     a push to main, and 24h both tolerates a release-free day and still
-    catches a same-day stall) and defines the Release-publish-record
-    marker line #589 only described in prose; both need to live in the
-    script's own header, not only in an Issue body.
+    catches a same-day stall). Issue #708 keeps audit text from becoming
+    release authority and requires immutable GitHub Release evidence.
     """
     script = (ROOT / "scripts/check-release-drift").read_text(encoding="utf-8")
 
     assert "RELEASE_DRIFT_HOURS" in script
     assert "24" in script
-    assert "Release-publish-record:" in script
-    assert "operator=" in script
-    assert "commit=" in script
+    assert "Release-publish-record" in script
+    assert 'latest_release.get("immutable") is not True' in script
     assert 'gh api "repos/$repo/actions/workflows/release.yml/runs' in script
+    assert "Local publish record (audit only)" in script
+    assert (
+        "released_shas = {sha for sha in (last_success_sha,) if sha}" in script
+    )
+    assert "recent_activity = success_recent or release_recent" in script
+    assert "record_sha" not in script
+    assert "record_recent" not in script
+    assert 'len(fields["command"]) <= 512' in script
+    assert "audit evidence is unavailable" in script
     assert "gh issue create" in script
     assert "gh issue edit" in script
     assert "exit 1" in script
