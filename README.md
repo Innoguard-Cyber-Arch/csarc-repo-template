@@ -222,11 +222,11 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 ```
 
-`adopt` 預設就是 dry-run；明確寫出 `--dry-run` 仍相容。它只產生 repo 外的純 Markdown 導入報告（不再產生 PDF）與 machine-readable plan，不修改 repo。導入報告本身有獨立版本號（目前為 `1.0.0`，即 `ADOPTION_REPORT_TEMPLATE_VERSION`，記錄在報告檔案內），內容具體包含新增／編輯／移除檔案數、衝擊分析，以及需要使用者做決策的項目清單；試導入與正式導入完成後更新的是同一份報告檔案、同一套版本控制邏輯，不會另外產生第二份檔案。若 dirty path 全部是未 staged 的 tracked modification 且由 plan 明列為 `preserve`，CLI 會用原始 bytes 建立並驗證候選，允許套用同一份 plan；其他 dirty 狀態只能審查。plan 鎖定 target HEAD、完整 working-tree 狀態、Release full SHA、answers 與輸出 digest，任何漂移都會停止。CLI 會先在暫存 clone 產生完整候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
+`adopt` 預設就是 dry-run；明確寫出 `--dry-run` 仍相容。它只產生 repo 外的純 Markdown 導入報告（不再產生 PDF）與 machine-readable plan，不修改 repo，也不執行 target-owned helper 或 product hook。導入報告本身有獨立版本號（目前為 `1.0.0`，即 `ADOPTION_REPORT_TEMPLATE_VERSION`，記錄在報告檔案內），內容具體包含新增／編輯／移除檔案數、衝擊分析，以及需要使用者做決策的項目清單；試導入與正式導入完成後更新的是同一份報告檔案、同一套版本控制邏輯，不會另外產生第二份檔案。若 dirty path 全部是未 staged 的 tracked modification 且由 plan 明列為 `preserve`，CLI 會用原始 bytes 建立候選，允許套用同一份 plan；其他 dirty 狀態只能審查。plan 鎖定 target HEAD、完整 working-tree 狀態、Release full SHA、answers 與輸出 digest，任何漂移都會停止。核准 `--apply-plan` 後，CLI 才在暫存 clone 重建候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
 
-導入時可以 `--data project_verification_hook=scripts/verify-skills` 指定產品驗證。該值必須是 repo 內存在、可執行的相對檔案，不會透過 shell 解析，也不得解析成或間接呼叫 canonical `scripts/verify`；plan 與 Markdown 報告都會列出精確路徑、結果與原因。沒有顯式設定時，只在既有 `scripts/verify-product` 可執行時使用相容 fallback；同一路徑只執行一次。`update --check` 會先驗證設定，正式 update 則在暫存 clone 通過 canonical 與產品驗證後才寫入 target。
+導入時可以 `--data project_verification_hook=scripts/verify-skills` 指定產品驗證。該值必須是 repo 內存在、可執行的相對檔案，不會透過 shell 解析，也不得解析成或間接呼叫 canonical `scripts/verify`；初始 plan 與 Markdown 報告會列出精確路徑並標示尚未執行，核准 plan 後才記錄實際結果與原因。沒有顯式設定時，只在既有 `scripts/verify-product` 可執行時使用相容 fallback；同一路徑只執行一次。`update --check` 只驗證 hook 設定、不執行 hook，正式 update 則在暫存 clone 通過 canonical 與產品驗證後才寫入 target。
 
-若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize`；它同樣預設為 dry-run，會重建並驗證完整候選，將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 套用；任何 plan 後漂移都會停止。
+若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize`；它同樣預設為 dry-run，會重建靜態候選但不執行 target-owned 驗證，並將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 觸發候選驗證與套用；任何 plan 後漂移或驗證失敗都會停止。
 
 ### 更新已導入的 repo
 
@@ -242,7 +242,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 固定版本的安裝契約是 [`docs/agent-install.md`](docs/agent-install.md)。下列四個 prompt 只選擇 lifecycle；CLI 會從 canonical immutable Release 解析並驗證 full SHA，再把它鎖進 plan 與 provenance。需要預先固定版本時，改用 Release 附件中的四個 pinned prompts。
 
-不確定目前 repo 狀態、或想讓 CLI 自動判斷時，先用「自動判斷」prompt：`csarc status` 只讀取本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，把結果分成五種狀態（`create`／`adopt`／`update`／`current`／`policy-only-update`），判斷邏輯全部在 CLI 裡、不靠 agent 自由發揮，同一個狀態多次執行結果一致；再依回傳的 `next_command` 走下方對應的新建、既有導入或更新 prompt，或（僅政策設定變動時）直接執行 `scripts/apply-repository-settings.sh plan` 再 `apply`，不必重新走一次完整 adopt／update。
+不確定目前 repo 狀態、或想讓 CLI 自動判斷時，先用「自動判斷」prompt：`csarc status` 只讀取本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，把結果分成五種狀態（`create`／`adopt`／`update`／`current`／`policy-only-update`）。政策檢查使用核准 Release 重新產生的完整 helper closure，不執行 target repo 內的 script；來源未驗證時該檢查標示 unavailable，不把未知冒充一致。判斷邏輯全部在 CLI 裡、不靠 agent 自由發揮；再依回傳的 `next_command` 走下方對應流程。
 
 自動判斷（推薦）：
 

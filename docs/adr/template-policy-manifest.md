@@ -21,7 +21,7 @@ Schema 選擇平面鍵而非巢狀 `policies:` 區塊，因為 `scripts/csarc_co
 
 ## Ownership 與驗證
 
-`csarc adopt`／`update`／`init` 透過既有 `copier` 呼叫模式（`--defaults`）讀取這四個新問題，行為與既有 `enable_*` 布林鍵一致，不需要額外的 CLI 程式碼；`csarc status` 呼叫的 `scripts/apply-repository-settings.sh check` 自動吃到同一套開關邏輯，`policy-only-update` 狀態偵測不需修改。`tests/test_apply_repository_settings_policy.py` 以假 `gh` 執行真正的 script，涵蓋全部政策關閉、全部政策開啟（Ruleset 除外）與沒有這些鍵的舊設定檔三種組合；`tests/test_root_config.py` 涵蓋新鍵的型別驗證與預設行為。
+`csarc adopt`／`update`／`init` 透過既有 `copier` 呼叫模式（`--defaults`）讀取這四個新問題，行為與既有 `enable_*` 布林鍵一致，不需要額外的 CLI 程式碼；`csarc status` 以已驗證 Release 重新產生完整 helper closure，再執行其中的 `scripts/apply-repository-settings.sh check`，因此會讀到相同開關邏輯但不執行 target-owned script。`tests/test_apply_repository_settings_policy.py` 以假 `gh` 執行真正的 script，涵蓋全部政策關閉、全部政策開啟（Ruleset 除外）與沒有這些鍵的舊設定檔三種組合；`tests/test_root_config.py` 涵蓋新鍵的型別驗證與預設行為。
 
 ## 評估過的替代方案
 

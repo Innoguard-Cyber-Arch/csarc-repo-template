@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250), [#714](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/714)
+- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250), [#714](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/714), [#715](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/715)
 - **實作 PR：**[#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231)
 
 ## 問題與限制
@@ -17,12 +17,14 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 
 既有導入採兩階段流程：
 
-1. `adopt` 在沒有 `--apply-plan` 時預設為 dry-run，只讀目標 repo，並在 repo 外原子更新純 Markdown 導入報告（獨立版本號記錄在報告內，見 [#530](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/530)）與 machine-readable plan；明確的 `--dry-run` 仍相容。只有未 staged 的 tracked modifications 且全由 plan 明列為 `preserve` 時，dirty paths 才可連同原始 bytes 建立候選、驗證並套用同一份 plan；其他 dirty tree 只產生 review-only plan。`adopt --finalize` 使用相同安全預設。
-2. `adopt --apply-plan` 重新驗證 Release、repo identity、HEAD、working tree、所有實際 render inputs（包含未寫入 Copier answers 的條件式衍生值）、檔案決策與 digest；在暫存 clone 產生完整候選，執行 `./scripts/verify` 與獨立的 `project_verification_hook`，再以通過 `git apply --check` 的同一份 patch 寫入目標。hook 只接受 repo 內存在、可執行的相對檔案，不透過 shell，且不得解析成或重新進入 canonical `scripts/verify`；未設定時才沿用 `scripts/verify-product`。路徑、來源、`passed|failed|not-run` 結果與原因都綁入 plan，失敗不寫入 target。`update --check` 會驗證 hook 設定，正式 update 也只套用已在暫存 clone 通過驗證的 patch。若 binding 不同，錯誤會列出精確 JSON path 與前後值，同時維持 fail closed。
+1. `adopt` 在沒有 `--apply-plan` 時預設為 dry-run，只讀目標 repo，並在 repo 外原子更新純 Markdown 導入報告（獨立版本號記錄在報告內，見 [#530](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/530)）與 machine-readable plan；明確的 `--dry-run` 仍相容。初始 plan 可從核准 Release 建立靜態候選，但不得執行 target-owned policy helper 或 product hook，驗證狀態明列為等待授權。只有未 staged 的 tracked modifications 且全由 plan 明列為 `preserve` 時，dirty paths 才可連同原始 bytes 建立候選並套用同一份 plan；其他 dirty tree 只產生 review-only plan。`adopt --finalize` 使用相同安全預設。
+2. `adopt --apply-plan` 先顯示保存的 plan 並取得確認，再重新驗證 Release、repo identity、HEAD、working tree、所有實際 render inputs（包含未寫入 Copier answers 的條件式衍生值）、檔案決策與 digest；在暫存 clone 產生完整候選，執行 `./scripts/verify` 與獨立的 `project_verification_hook`，再以通過 `git apply --check` 的同一份 patch 寫入目標。hook 只接受 repo 內存在、可執行的相對檔案，不透過 shell，且不得解析成或重新進入 canonical `scripts/verify`；未設定時才沿用 `scripts/verify-product`。路徑與來源綁入授權前 plan，執行結果與原因則在授權後產生；失敗不寫入 target。`update --check` 只驗證 hook 設定、不執行 hook，正式 update 也只套用已在暫存 clone 通過驗證的 patch。若靜態 binding 不同，錯誤會列出精確 JSON path 與前後值，同時維持 fail closed。
+
+`status` 與 `update --check` 的 policy／capability inspection 也不得執行 target checkout 內的 shell 或 Python。CLI 只從已驗證 Release 重新產生完整 helper closure，再把 target 當成資料與 GitHub context 檢查；unreleased 或無法驗證的來源回報 unavailable／unknown，不把 target helper 當成可信執行入口。
 
 Machine plan 與 pending checkpoint 只保存可比對資料，不承載新的程式執行權。若來源是開發用 unreleased commit，每一次 replay 都必須由當次 invocation 重新提供相同本機 source、完整 SHA 與 `--allow-unreleased`；正式 verified Release 則拒絕這些開發旗標。Replay 在執行 Copier task、target policy script 或 product hook 前，先顯示保存的完整 plan 並取得確認，確認後仍重建候選並維持原有 same-plan 比對。
 
-需要人工合併時，第一份 plan 只建立 resumable checkpoint。人工完成清單後，`adopt --finalize --dry-run` 會從已驗證 template 重新推導 managed／manual 集合，在隔離 clone 建立並驗證完成態候選，再把 checkpoint、人工結果、完整允許 working-tree state 與預期 artifacts 綁入新的 repo 外 plan。正式 finalize 只接受該 plan；直接 finalize、非預期檔案或確認前後的任何漂移都停止。
+需要人工合併時，第一份 plan 只建立 resumable checkpoint。人工完成清單後，`adopt --finalize --dry-run` 會從已驗證 template 重新推導 managed／manual 集合，在隔離 clone 建立靜態完成態候選，再把 checkpoint、人工結果、完整允許 working-tree state 與預期 artifacts 綁入新的 repo 外 plan。正式 finalize 只接受該 plan，並在核准後才執行候選驗證；直接 finalize、驗證失敗、非預期檔案或確認前後的任何漂移都停止。
 
 固定 ownership policy 如下：
 

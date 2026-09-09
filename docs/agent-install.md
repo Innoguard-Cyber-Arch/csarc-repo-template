@@ -19,7 +19,10 @@
    `uvx` invocation above). It deterministically classifies the repository
    into exactly one of five states — `create`, `adopt`, `update`, `current`,
    or `policy-only-update` — from `.csarc/config.yml`, the pinned Copier
-   revision, and `policies/` drift; the classification logic lives entirely
+   revision, and `policies/` drift. Policy inspection renders the complete
+   helper closure from the verified Release and treats the target checkout
+   only as data; it never executes the target's helper. An unverified source
+   makes policy inspection unavailable rather than trusted. The classification logic lives entirely
    in the CLI, so never infer the state from context, memory, or free-form
    judgment, and running it again against unchanged repository state always
    returns the same answer. Follow the returned `next_command`: for
@@ -47,8 +50,8 @@
    overwrite, preserve, automatic merge, manual merge, or unable to determine.
    Review the generated Markdown report (its own new/edited/removed file
    counts, impact analysis, and items requiring a decision) and machine
-   plan, including the exact project verification hook path, result, and
-   reason, then report
+   plan, including the exact project verification hook path and its initial
+   `not-run` state, then report
    the terminal's separate Milestone
    description classifications: upgrade, current, or manual review. Neither
    source guarantees the absence of semantic or runtime conflicts. Unknown
@@ -58,9 +61,11 @@
    Treat an unverified `code_owner` as unknown and call it out before accepting
    the plan; a confirmed missing team is blocking.
 6. After confirmation, apply an adoption only with the exact machine plan
-   emitted by dry-run and `--yes --non-interactive`. For init or update, reuse
-   the resolved tag and full SHA explicitly. Report the `./scripts/verify`
-   result. If adoption creates a resumable manual-merge checkpoint, complete
+   emitted by dry-run and `--yes --non-interactive`. Only after this approval
+   may the CLI run the target-owned project hook in the isolated candidate;
+   verification must pass before the target is written. For init or update,
+   reuse the resolved tag and full SHA explicitly. Report the
+   `./scripts/verify` result. If adoption creates a resumable manual-merge checkpoint, complete
    only the listed merges, run `adopt --finalize --dry-run`, review its new
    external plan, wait for confirmation again, then use `adopt --finalize
    --apply-plan PATH`. Direct finalize and any unplanned working-tree or manual
