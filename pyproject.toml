@@ -1,6 +1,6 @@
 [project]
 name = "csarc-repo-template"
-version = "0.15.2"
+version = "0.15.3"
 description = "Prompt-ready lifecycle CLI for the CSARC repository template"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
