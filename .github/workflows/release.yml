@@ -28,24 +28,30 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.14"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: "11.22.0"
-          run_install: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-          package-manager-cache: false
-      - name: Install the pinned Rust toolchain
+      - name: Plan the next version from repository history
+        id: plan
         run: |
-          rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
-          rustup default 1.98.0
+          python3 scripts/release_policy.py plan \
+            --sha "$GITHUB_SHA" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Detect the available release path
+        id: capability
+        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/release_policy.py detect \
+            --repo "$GITHUB_REPOSITORY" \
+            --sha "$GITHUB_SHA" \
+            --branch main \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Stop when GitHub publication is blocked
+        if: ${{ (steps.plan.outputs.status == 'pending' || steps.plan.outputs.status == 'candidate' || steps.plan.outputs.status == 'released') && steps.capability.outputs.mode == 'blocked' }}
+        env:
+          BLOCK_REASON: ${{ steps.capability.outputs.reason }}
+        run: |
+          echo "Release is blocked: $BLOCK_REASON" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
       # Issue #661 moved verification off the hosted runner: the `verify`
       # required check that already gated this commit's merge to main no
       # longer re-executes anything either, it only validates the
@@ -70,34 +76,35 @@ jobs:
       # was genuinely verified. Resolve to the originating PR's head
       # commit first and validate that instead.
       - name: Validate the pushed main commit's verification attestation
+        if: ${{ steps.plan.outputs.status != 'no-release' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ./scripts/check-verify-attestation "$GITHUB_SHA" \
             --resolve-merge-source --github-repo "$GITHUB_REPOSITORY"
-      - name: Plan the next version from repository history
-        id: plan
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        with:
+          enable-cache: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        with:
+          version: "11.22.0"
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install the pinned Rust toolchain
+        if: ${{ steps.plan.outputs.status != 'no-release' }}
         run: |
-          python3 scripts/release_policy.py plan \
-            --sha "$GITHUB_SHA" \
-            --github-output "$GITHUB_OUTPUT"
-      - name: Detect the available release path
-        id: capability
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 scripts/release_policy.py detect \
-            --repo "$GITHUB_REPOSITORY" \
-            --sha "$GITHUB_SHA" \
-            --branch main \
-            --github-output "$GITHUB_OUTPUT"
-      - name: Stop when GitHub publication is blocked
-        if: ${{ (steps.plan.outputs.status == 'pending' || steps.plan.outputs.status == 'candidate' || steps.plan.outputs.status == 'released') && steps.capability.outputs.mode == 'blocked' }}
-        env:
-          BLOCK_REASON: ${{ steps.capability.outputs.reason }}
-        run: |
-          echo "Release is blocked: $BLOCK_REASON" | tee -a "$GITHUB_STEP_SUMMARY"
-          exit 1
+          rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+          rustup default 1.98.0
       - name: Create or update the version pull request
         id: release
         if: ${{ steps.plan.outputs.status == 'pending' && steps.plan.outputs.materialized != 'true' && steps.capability.outputs.mode == 'automatic' }}
@@ -142,6 +149,7 @@ jobs:
             --tag "$RELEASE_TAG"
       - name: Resolve the exact release state
         id: state
+        if: ${{ steps.plan.outputs.status != 'no-release' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag_name || steps.stage.outputs.tag }}

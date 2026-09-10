@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import yaml
+from jinja2 import Environment, StrictUndefined
 
 ROOT = Path(__file__).parents[1]
 
@@ -117,6 +118,67 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     # "Keep a failed mutable release in draft" step into this same script.
     assert "revert_to_draft_on_failure" in publish
     assert "trap revert_to_draft_on_failure EXIT" in publish
+
+
+def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
+    """Issue #707: cheap gates must run before any expensive setup."""
+    root_source = (ROOT / ".github/workflows/release.yml").read_text(
+        encoding="utf-8"
+    )
+    template_source = (
+        ROOT / "template/.github/workflows/release.yml.jinja"
+    ).read_text(encoding="utf-8")
+    environment = Environment(
+        autoescape=False,  # noqa: S701 - trusted local YAML template
+        undefined=StrictUndefined,
+    )
+    rendered_template = environment.from_string(template_source).render(
+        languages=["python", "typescript", "rust"]
+    )
+    no_release_guard = "${{ steps.plan.outputs.status != 'no-release' }}"
+
+    for source in (root_source, rendered_template):
+        steps = yaml.safe_load(source)["jobs"]["release"]["steps"]
+        by_name = {
+            step["name"]: (index, step)
+            for index, step in enumerate(steps)
+            if "name" in step
+        }
+        toolchain_steps = [
+            (index, step)
+            for index, step in enumerate(steps)
+            if any(
+                str(step.get("uses", "")).startswith(action)
+                for action in (
+                    "actions/setup-python@",
+                    "astral-sh/setup-uv@",
+                    "pnpm/action-setup@",
+                    "actions/setup-node@",
+                )
+            )
+            or step.get("name") == "Install the pinned Rust toolchain"
+        ]
+
+        plan_index, _ = by_name["Plan the next version from repository history"]
+        capability_index, capability = by_name[
+            "Detect the available release path"
+        ]
+        blocked_index, _ = by_name["Stop when GitHub publication is blocked"]
+        attestation_index, attestation = by_name[
+            "Validate the pushed main commit's verification attestation"
+        ]
+        _, resolve = by_name["Resolve the exact release state"]
+
+        assert plan_index == 1
+        assert plan_index < capability_index < blocked_index
+        assert blocked_index < attestation_index
+        assert attestation_index < min(index for index, _ in toolchain_steps)
+        assert capability["if"] == no_release_guard
+        assert attestation["if"] == no_release_guard
+        assert resolve["if"] == no_release_guard
+        assert all(
+            step["if"] == no_release_guard for _, step in toolchain_steps
+        )
 
 
 def test_release_attestation_check_resolves_the_merged_pr_head() -> None:

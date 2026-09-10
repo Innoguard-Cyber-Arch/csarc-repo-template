@@ -1090,6 +1090,13 @@ capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能�
 
 hosted `release.yml` 保留在 repo 裡（`verify`／`title`／`promotion` 仍然只能由它產生，不受影響），但它的 Automatic／Guided 版本發布功能正式標註為**已知限制，非待修復項目**——除非之後方向一或方向三的取捨改變，不會投入資源讓它自己成功發布。
 
+`release.yml` 仍在每次 `main` push 上執行，但只在 checkout 後先用 runner 內建的 Python／Git
+完成 release plan；`no-release` 直接結束，不探測 capability、不驗證 attestation，也不安裝
+Python 3.14、uv、pnpm、Node 或 Rust。需要發版時才探測 capability；若 publication
+為 `blocked`，維持 #123 的 fail-closed 結果並在工具鏈 setup 前停止。只有未被擋下的實際
+release 路徑才先驗證既有 local attestation，接著安裝工具鏈並進入版本候選或發布步驟
+（#707）。這只把便宜判定移到前面，不放寬驗證、權限或供應鏈要求。
+
 ### Release 說明文字的最低格式規範（#616）
 
 M8 補發版（#587）過程中發現：`release.yml` 產生的 GitHub Release 說明文字，完全交給
