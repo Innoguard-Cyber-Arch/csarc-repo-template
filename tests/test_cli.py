@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shlex
 import shutil
@@ -6075,6 +6076,274 @@ def test_provenance_validation_and_legacy_migration(tmp_path: Path) -> None:
     )
     assert migrated.verified
     assert prior is not None and prior["verification"] == "legacy-unverified"
+
+
+def write_lifecycle_state(
+    target: Path, relative_path: Path, revision: cli.Revision
+) -> None:
+    """Exercise either lifecycle state writer with representative data."""
+    if relative_path == cli.PROVENANCE_FILE:
+        cli.write_provenance(target, revision)
+    else:
+        cli.write_pending_adoption(target, {"schema_version": 1})
+
+
+@pytest.mark.parametrize(
+    "relative_path", [cli.PROVENANCE_FILE, cli.PENDING_ADOPTION_FILE]
+)
+def test_lifecycle_state_write_ignores_predictable_temporary_symlink(
+    tmp_path: Path, relative_path: Path
+) -> None:
+    """Never open the legacy predictable temporary pathname."""
+    target = tmp_path / "project"
+    (target / ".csarc").mkdir(parents=True)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("outside\n", encoding="utf-8")
+    predictable = (target / relative_path).with_suffix(".tmp")
+    predictable.symlink_to(victim)
+    revision = cli.Revision("development", "a" * 40, str(tmp_path))
+
+    write_lifecycle_state(target, relative_path, revision)
+
+    assert victim.read_text(encoding="utf-8") == "outside\n"
+    assert predictable.is_symlink()
+    assert (target / relative_path).is_file()
+
+
+@pytest.mark.parametrize(
+    "relative_path", [cli.PROVENANCE_FILE, cli.PENDING_ADOPTION_FILE]
+)
+def test_lifecycle_state_write_rejects_destination_symlink(
+    tmp_path: Path, relative_path: Path
+) -> None:
+    """Fail closed instead of replacing a final-component symlink."""
+    target = tmp_path / "project"
+    (target / ".csarc").mkdir(parents=True)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("outside\n", encoding="utf-8")
+    destination = target / relative_path
+    destination.symlink_to(victim)
+    revision = cli.Revision("development", "a" * 40, str(tmp_path))
+
+    with pytest.raises(CliError, match="symlink or non-regular"):
+        write_lifecycle_state(target, relative_path, revision)
+
+    assert victim.read_text(encoding="utf-8") == "outside\n"
+    assert destination.is_symlink()
+
+
+@pytest.mark.parametrize(
+    "relative_path", [cli.PROVENANCE_FILE, cli.PENDING_ADOPTION_FILE]
+)
+def test_lifecycle_state_write_rejects_symlink_ancestor(
+    tmp_path: Path, relative_path: Path
+) -> None:
+    """Do not create lifecycle state through an ancestor symlink."""
+    target = tmp_path / "project"
+    target.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (target / ".csarc").symlink_to(outside, target_is_directory=True)
+    revision = cli.Revision("development", "a" * 40, str(tmp_path))
+
+    with pytest.raises(CliError, match="symlink or non-directory ancestor"):
+        write_lifecycle_state(target, relative_path, revision)
+
+    assert list(outside.iterdir()) == []
+
+
+def test_atomic_replace_text_uses_random_same_directory_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Replace regular content atomically and remove the random temporary."""
+    target = tmp_path / "project"
+    state_dir = target / ".csarc"
+    state_dir.mkdir(parents=True)
+    destination = state_dir / "state.json"
+    destination.write_text("old\n", encoding="utf-8")
+    observed: list[tuple[str, str]] = []
+    real_replace = os.replace
+
+    def inspect_replace(
+        source: str,
+        target_name: str,
+        *,
+        src_dir_fd: int | None = None,
+        dst_dir_fd: int | None = None,
+    ) -> None:
+        assert src_dir_fd is not None and src_dir_fd == dst_dir_fd
+        assert source.startswith(".state.json.")
+        assert source.endswith(".tmp")
+        assert source != "state.tmp"
+        assert target_name == "state.json"
+        assert destination.read_text(encoding="utf-8") == "old\n"
+        observed.append((source, target_name))
+        real_replace(
+            source,
+            target_name,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
+
+    monkeypatch.setattr(cli.os, "replace", inspect_replace)
+
+    cli.atomic_replace_text(target, ".csarc/state.json", "new\n")
+
+    assert observed
+    assert destination.read_text(encoding="utf-8") == "new\n"
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o600
+    assert list(state_dir.glob(".state.json.*.tmp")) == []
+
+
+def test_atomic_replace_text_failure_preserves_existing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep the prior destination and clean up if atomic replace fails."""
+    target = tmp_path / "project"
+    state_dir = target / ".csarc"
+    state_dir.mkdir(parents=True)
+    destination = state_dir / "state.json"
+    destination.write_text("old\n", encoding="utf-8")
+
+    def fail_replace(*_args: object, **_kwargs: object) -> None:
+        raise OSError("fixture replace failure")
+
+    monkeypatch.setattr(cli.os, "replace", fail_replace)
+
+    with pytest.raises(CliError, match="Cannot safely replace"):
+        cli.atomic_replace_text(target, ".csarc/state.json", "new\n")
+
+    assert destination.read_text(encoding="utf-8") == "old\n"
+    assert list(state_dir.glob(".state.json.*.tmp")) == []
+
+
+def test_adopt_dry_run_ignores_legacy_provenance_temporary_symlink(
+    tmp_path: Path,
+) -> None:
+    """Exercise the provenance writer without opening its legacy temporary."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "provenance-symlink-product"
+    (project / ".csarc").mkdir(parents=True)
+    victim = tmp_path / "provenance-victim.txt"
+    victim.write_text("outside\n", encoding="utf-8")
+    legacy_temporary = (project / cli.PROVENANCE_FILE).with_suffix(".tmp")
+    legacy_temporary.symlink_to(victim)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: provenance temporary symlink")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--data",
+                "language=ci",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+
+    assert victim.read_text(encoding="utf-8") == "outside\n"
+    assert legacy_temporary.is_symlink()
+
+
+def test_adopt_dry_run_ignores_legacy_pending_temporary_symlink(
+    tmp_path: Path,
+) -> None:
+    """Exercise the pending writer without opening its legacy temporary."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "pending-symlink-product"
+    (project / ".csarc").mkdir(parents=True)
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "pending-product"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    victim = tmp_path / "pending-victim.txt"
+    victim.write_text("outside\n", encoding="utf-8")
+    legacy_temporary = (project / cli.PENDING_ADOPTION_FILE).with_suffix(".tmp")
+    legacy_temporary.symlink_to(victim)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: pending temporary symlink")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--data",
+                "language=ci",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+
+    plan = json.loads(
+        (
+            tmp_path
+            / "pending-symlink-product-csarc-adoption-report"
+            / cli.ADOPTION_PLAN_BASENAME
+        ).read_text(encoding="utf-8")
+    )
+    assert plan["adoption"]["verification"] == "deferred-manual-merge"
+    assert victim.read_text(encoding="utf-8") == "outside\n"
+    assert legacy_temporary.is_symlink()
+
+
+def test_adopt_dry_run_rejects_report_directory_symlink_ancestor(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Do not resolve a report path through an ancestor symlink."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "report-symlink-product"
+    project.mkdir()
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: report directory symlink")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    linked_parent = tmp_path / "linked-parent"
+    linked_parent.symlink_to(outside, target_is_directory=True)
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--data",
+                "language=ci",
+                "--dry-run",
+                "--report-dir",
+                str(linked_parent / "reports"),
+            ]
+        )
+        == 2
+    )
+
+    assert "symlink or non-directory ancestor" in capsys.readouterr().err
+    assert list(outside.iterdir()) == []
 
 
 def test_update_migrates_present_but_unverified_provenance_format(
