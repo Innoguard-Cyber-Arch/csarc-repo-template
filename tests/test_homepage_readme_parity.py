@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -256,18 +257,6 @@ def test_zh_home_release_markers_are_each_on_their_own_raw_html_line() -> None:
         )
 
 
-def test_readme_and_manifest_versions_match() -> None:
-    """README's repo/CLI version marker must match the release-please
-    manifest -- both are meant to describe the same released version."""
-    manifest = json.loads(
-        (ROOT / ".release-please-manifest.json").read_text(encoding="utf-8")
-    )
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    match = re.search(r"\| 公版版本 \| (v[\d.]+)<!--", readme)
-    assert match, "README.md is missing its marked repo/CLI version cell"
-    assert match.group(1) == f"v{manifest['.']}"
-
-
 def test_en_home_release_markers_are_each_on_their_own_raw_html_line() -> None:
     """Issue #681/#682 UX review, P1: since the en home slide gained the
     same legacy (badge)/basic (paragraph) split as zh-tw, it now marks
@@ -318,11 +307,11 @@ def test_en_home_repo_version_mentions_stay_in_sync() -> None:
     )
 
 
-def test_release_please_tracks_both_language_home_files() -> None:
-    """Both `_index.zh-tw.md` and `_index.en.md` carry a repo-version
-    marker (Issue #526's "雙語皆同步" requirement), so both must be
-    registered as release-please extra-files or only one language would
-    stay current after a real release."""
+def test_release_please_tracks_every_root_version_marker() -> None:
+    """Every root release marker is managed and matches the manifest."""
+    manifest = json.loads(
+        (ROOT / ".release-please-manifest.json").read_text(encoding="utf-8")
+    )
     config = json.loads(
         (ROOT / "release-please-config.json").read_text(encoding="utf-8")
     )
@@ -331,5 +320,29 @@ def test_release_please_tracks_both_language_home_files() -> None:
         for entry in config["packages"]["."]["extra-files"]
         if entry.get("type") == "generic"
     }
-    assert "site/content/_index.zh-tw.md" in extra_files
-    assert "site/content/_index.en.md" in extra_files
+    tracked_files = subprocess.run(
+        ["git", "ls-files", "-z"],  # noqa: S607
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split("\0")
+    marker = re.compile(r"v?(\d+\.\d+\.\d+)[^\n]*x-release-please-version")
+    marker_versions = {}
+    for path in tracked_files:
+        # Generated projects own their version; tests contain marker fixtures.
+        if not path or path.startswith(("template/", "tests/")):
+            continue
+        source = ROOT / path
+        if not source.is_file():
+            continue
+        versions = marker.findall(
+            source.read_text(encoding="utf-8", errors="ignore")
+        )
+        if versions:
+            marker_versions[path] = versions
+
+    assert set(marker_versions) == extra_files
+    assert {
+        version for versions in marker_versions.values() for version in versions
+    } == {manifest["."]}
