@@ -7,6 +7,14 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.15.2] - 2026-09-10
+
+### Bug Fixes
+
+* fix: update vulnerable Vitest packages (#720) (b9ec196)
+* fix: use exact-head approval for merge authorization (#724) (060edcd)
+* fix: synchronize bilingual release metadata (#710) (68cbdd8)
+
 ## [0.15.1] - 2026-09-07
 
 ### Bug Fixes
