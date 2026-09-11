@@ -1683,6 +1683,23 @@ def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
     }
 
 
+def pre_verification_binding(payload: dict[str, object]) -> dict[str, object]:
+    """Bind every static plan field while excluding runtime evidence."""
+    binding = adoption_binding(payload)
+    adoption = binding["adoption"]
+    if not isinstance(adoption, dict):
+        raise CliError("Adoption plan has no target state.")
+    static_adoption = dict(adoption)
+    static_adoption.pop("verification", None)
+    hook = static_adoption.get("project_verification_hook")
+    if isinstance(hook, dict):
+        static_hook = dict(hook)
+        static_hook.pop("reason", None)
+        static_hook.pop("result", None)
+        static_adoption["project_verification_hook"] = static_hook
+    return {**binding, "adoption": static_adoption}
+
+
 def json_differences(
     saved: object, rebuilt: object, path: str = "$"
 ) -> tuple[str, ...]:
@@ -2381,8 +2398,10 @@ def prepare_adoption_candidate(
     generated_at: str,
     candidate: Path,
     preserved_dirty_paths: tuple[str, ...] = (),
+    *,
+    verification_authorized: bool,
 ) -> tuple[Plan, dict[str, str], str, dict[str, object]]:
-    """Build and verify the exact adoption result outside the target repo."""
+    """Build an exact candidate and verify it only after authorization."""
     if preserved_dirty_paths:
         clone_working_tree(target, candidate)
     else:
@@ -2423,20 +2442,28 @@ def prepare_adoption_candidate(
                 applied_at=generated_at,
                 answers=answers,
             )
-            try:
-                hook = verify_project(candidate)
-            except ProjectVerificationError as error:
-                verification = f"failed: {error}"
-                hook = error.hook
-            except CliError as error:
-                verification = f"failed: {error}"
+            if not verification_authorized:
+                verification = "pending-authorization"
                 hook = project_verification_evidence(
                     hook_configuration,
                     "not-run",
-                    "Candidate preparation failed before the hook ran.",
+                    "Candidate verification runs only after plan approval.",
                 )
             else:
-                verification = "passed"
+                try:
+                    hook = verify_project(candidate)
+                except ProjectVerificationError as error:
+                    verification = f"failed: {error}"
+                    hook = error.hook
+                except CliError as error:
+                    verification = f"failed: {error}"
+                    hook = project_verification_evidence(
+                        hook_configuration,
+                        "not-run",
+                        "Candidate preparation failed before the hook ran.",
+                    )
+                else:
+                    verification = "passed"
     candidate_files = project_files(candidate)
     target_files = project_files(target)
     dirty_drift = tuple(
@@ -3066,41 +3093,51 @@ def apply_milestone_description_plan(
     print(f"Milestone descriptions upgraded: {len(plan.changes)}")
 
 
+def unavailable_capabilities(reason: str) -> dict[str, object]:
+    """Return a complete fail-closed capability result."""
+    unknown = {"state": "unknown", "reason": reason}
+    token_permissions = {
+        name: dict(unknown)
+        for name in ("actions_pull_requests", "contents", "release")
+    }
+    return {
+        "mode": "blocked",
+        "reason": reason,
+        "organization_policy": dict(unknown),
+        "repository_setting": dict(unknown),
+        "token_permissions": token_permissions,
+        "effective": {"mode": "blocked", "reason": reason},
+        "capabilities": token_permissions,
+        "integrations": {
+            "renovate": {
+                "state": "fallback",
+                "reason": reason,
+                "next_step": (
+                    "Keep GitHub Dependabot via .github/dependabot.yml "
+                    "and the existing required CI/CD checks."
+                ),
+            }
+        },
+    }
+
+
 def capability_preflight(
-    script: Path, target: Path, *, emit: bool = True
+    script: Path,
+    target: Path,
+    revision: Revision,
+    *,
+    emit: bool = True,
 ) -> dict[str, object]:
-    """Inspect release-related capabilities for planning only."""
+    """Inspect capabilities with code from a verified template Release."""
     repository = target_repository(target)
-    if repository is None or not script.is_file():
-        unknown = {"state": "unknown", "reason": "runtime check required"}
-        token_permissions = {
-            name: dict(unknown)
-            for name in ("actions_pull_requests", "contents", "release")
-        }
-        payload: dict[str, object] = {
-            "mode": "blocked",
-            "reason": "GitHub origin or capability script is unavailable",
-            "organization_policy": dict(unknown),
-            "repository_setting": dict(unknown),
-            "token_permissions": token_permissions,
-            "effective": {
-                "mode": "blocked",
-                "reason": "GitHub origin or capability script is unavailable",
-            },
-            "capabilities": token_permissions,
-            "integrations": {
-                "renovate": {
-                    "state": "fallback",
-                    "reason": (
-                        "GitHub origin or capability script is unavailable"
-                    ),
-                    "next_step": (
-                        "Keep GitHub Dependabot via .github/dependabot.yml "
-                        "and the existing required CI/CD checks."
-                    ),
-                }
-            },
-        }
+    if not revision.verified:
+        payload = unavailable_capabilities(
+            "Capability helper is not from a verified template Release"
+        )
+    elif repository is None or not script.is_file():
+        payload = unavailable_capabilities(
+            "GitHub origin or trusted capability helper is unavailable"
+        )
     else:
         result = run(
             [
@@ -3720,9 +3757,6 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             )
         git_commit(source_path, sha)
 
-    capabilities = capability_preflight(
-        target / "scripts" / "release_policy.py", target, emit=False
-    )
     raw_manual = pending.get("manual_files", [])
     manual_files = (
         tuple(value for value in raw_manual if isinstance(value, str))
@@ -3734,6 +3768,12 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         stage = temporary_root / "rendered"
         stage.mkdir()
         copier_copy(revision.source, revision, stage, answers)
+        capabilities = capability_preflight(
+            stage / "scripts" / "release_policy.py",
+            target,
+            revision,
+            emit=False,
+        )
         baseline = temporary_root / "baseline"
         clone_target(target, baseline)
         merged = apply_adoption_policies(stage, baseline)
@@ -3758,13 +3798,26 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         checked_destination(
             candidate, PENDING_ADOPTION_FILE.as_posix()
         ).unlink()
-        try:
-            hook = verify_project(candidate)
-        except CliError as error:
-            raise CliError(
-                "Project verification failed; fix the reported failures, "
-                "then rerun csarc adopt --finalize."
-            ) from error
+        if saved is None:
+            hook_configuration = project_verification_configuration(
+                candidate, answers
+            )
+            validated_project_verification_hook(candidate, hook_configuration)
+            hook = project_verification_evidence(
+                hook_configuration,
+                "not-run",
+                "Candidate verification runs only after plan approval.",
+            )
+            candidate_verification = "pending-authorization"
+        else:
+            try:
+                hook = verify_project(candidate)
+            except CliError as error:
+                raise CliError(
+                    "Project verification failed; fix the reported failures, "
+                    "then rerun csarc adopt --finalize."
+                ) from error
+            candidate_verification = "passed"
         effects, artifacts = candidate_effects(
             candidate,
             target,
@@ -3794,7 +3847,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "target_files": target_files,
             "target_head": head,
             "target_status_sha256": status_sha256,
-            "verification": "passed",
+            "verification": candidate_verification,
         }
         plan = ResolvedPlan(
             mode="adopt-finalize",
@@ -3807,9 +3860,9 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             adoption=adoption,
         )
         fresh_payload = adoption_plan_payload(plan)
-        if saved is not None and adoption_binding(
+        if saved is not None and pre_verification_binding(
             fresh_payload
-        ) != adoption_binding(saved):
+        ) != pre_verification_binding(saved):
             raise CliError(
                 "Repository or manual merge results drifted after finalize "
                 "dry-run; create a new finalize plan."
@@ -3822,7 +3875,14 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             )
         else:
             print_plan(plan)
-            print("Pending state: verified; ready to finalize.")
+            print(
+                "Pending state: "
+                + (
+                    "verified; ready to finalize."
+                    if saved is not None
+                    else "verification awaits plan approval."
+                )
+            )
         if saved is None:
             milestone_plan = milestone_description_plan(
                 target, emit=not args.json
@@ -3890,6 +3950,8 @@ def build_adoption_plan(
     answers: dict[str, object],
     capabilities: dict[str, object],
     generated_at: str,
+    *,
+    verification_authorized: bool,
 ) -> ResolvedPlan:
     """Build one locked adoption plan and its isolated candidate."""
     head, changes, status_sha256 = target_state(target)
@@ -3920,6 +3982,7 @@ def build_adoption_plan(
             generated_at,
             candidate,
             preserved_dirty_paths,
+            verification_authorized=verification_authorized,
         )
     owner = code_owner_verification(repository, answers.get("code_owner"))
     if not candidate_allowed:
@@ -3932,7 +3995,8 @@ def build_adoption_plan(
         )
     adoption: dict[str, object] = {
         "applicable": candidate_allowed
-        and verification in {"passed", "deferred-manual-merge"}
+        and verification
+        in {"passed", "deferred-manual-merge", "pending-authorization"}
         and owner["state"] != "blocked",
         "artifacts": artifacts,
         "clean": not changes,
@@ -4071,10 +4135,24 @@ def command_apply_adoption_plan(  # noqa: C901
             answers,
             raw_capabilities,
             generated_at,
+            verification_authorized=True,
         )
         fresh_payload = adoption_plan_payload(fresh)
-        saved_binding = adoption_binding(saved)
-        fresh_binding = adoption_binding(fresh_payload)
+        fresh_adoption = fresh.adoption
+        if fresh_adoption is None or fresh_adoption.get("verification") not in {
+            "passed",
+            "deferred-manual-merge",
+        }:
+            detail = (
+                fresh_adoption.get("verification", "unknown")
+                if fresh_adoption is not None
+                else "unknown"
+            )
+            raise CliError(
+                f"Project verification failed after plan approval: {detail}"
+            )
+        saved_binding = pre_verification_binding(saved)
+        fresh_binding = pre_verification_binding(fresh_payload)
         if fresh_binding != saved_binding:
             differences = json_differences(saved_binding, fresh_binding)
             detail = "; ".join(differences[:10])
@@ -4084,12 +4162,9 @@ def command_apply_adoption_plan(  # noqa: C901
                 "Repository or rendered output drifted after dry-run; create "
                 f"a new adoption plan. Differing fields: {detail}"
             )
-        if (
-            fresh.adoption is None
-            or fresh.adoption.get("applicable") is not True
-        ):
+        if fresh_adoption.get("applicable") is not True:
             raise CliError("Rebuilt adoption candidate is not applicable.")
-        artifacts = fresh.adoption.get("artifacts")
+        artifacts = fresh_adoption.get("artifacts")
         if not isinstance(artifacts, dict):
             raise CliError("Rebuilt adoption candidate has no artifact plan.")
         print_plan(fresh)
@@ -4098,16 +4173,16 @@ def command_apply_adoption_plan(  # noqa: C901
             fresh.repository,
             explicit_visibility,
         )
-        validate_target_snapshot(target, fresh.adoption)
+        validate_target_snapshot(target, fresh_adoption)
         write_candidate_patch(
             candidate,
             target,
             temporary_root / "adopt.patch",
             artifacts=artifacts,
-            target_snapshot=fresh.adoption,
+            target_snapshot=fresh_adoption,
         )
 
-    phase = fresh.adoption.get("phase")
+    phase = fresh_adoption.get("phase")
     if phase == "pending":
         print(
             "Adoption pending: complete the listed manual merges, then run "
@@ -4177,7 +4252,10 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         answers: dict[str, object] = dict(data)
         answers.update(read_copier_answers(config_path(stage)))
         capabilities = capability_preflight(
-            stage / "scripts" / "release_policy.py", target, emit=False
+            stage / "scripts" / "release_policy.py",
+            target,
+            revision,
+            emit=False,
         )
         if mode == "adopt":
             generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
@@ -4190,6 +4268,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 answers,
                 capabilities,
                 generated_at,
+                verification_authorized=False,
             )
         else:
             plan = ResolvedPlan(
@@ -4359,7 +4438,7 @@ def update_status(
     accept_legacy: bool = False,
     from_release: str | None = None,
     client: ReleaseClient | None = None,
-) -> tuple[dict[str, object], Revision, dict[str, object] | None]:
+) -> tuple[dict[str, object], Revision, Revision, dict[str, object] | None]:
     """Return stable status plus verified current and target state."""
     answers = config_path(target)
     if not answers.is_file():
@@ -4401,7 +4480,7 @@ def update_status(
         ),
         "update_available": previous_revision.sha != target_revision.sha,
     }
-    return status, target_revision, previous
+    return status, previous_revision, target_revision, previous
 
 
 def repository_target_is_new(target: Path) -> bool:
@@ -4414,10 +4493,9 @@ def repository_target_is_new(target: Path) -> bool:
 
 
 def run_policy_settings_check(
-    target: Path,
+    script: Path, target: Path
 ) -> subprocess.CompletedProcess[str]:
-    """Run one target's own read-only repository policy-drift check."""
-    script = target / "scripts" / "apply-repository-settings.sh"
+    """Run a trusted policy inspector against one target repository."""
     if not script.is_file():
         return subprocess.CompletedProcess(
             [str(script), "check"],
@@ -4426,6 +4504,41 @@ def run_policy_settings_check(
             "scripts/apply-repository-settings.sh is missing.",
         )
     return run([str(script), "check"], cwd=target, capture=True, check=False)
+
+
+def trusted_policy_settings_check(
+    target: Path,
+    revision: Revision,
+    answers: Mapping[str, object],
+) -> subprocess.CompletedProcess[str]:
+    """Run only a verified Release's complete policy helper closure."""
+    command = ["trusted-release-policy", "check"]
+    if not revision.verified:
+        return subprocess.CompletedProcess(
+            command,
+            126,
+            "",
+            "Policy inspection requires a verified template Release.",
+        )
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix="csarc-policy-inspection-"
+        ) as temporary:
+            stage = Path(temporary) / "project"
+            stage.mkdir()
+            copier_copy(
+                revision.source,
+                revision,
+                stage,
+                answers,
+                skip_tasks=True,
+            )
+            return run_policy_settings_check(
+                stage / "scripts" / "apply-repository-settings.sh",
+                target,
+            )
+    except CliError as error:
+        return subprocess.CompletedProcess(command, 126, "", str(error))
 
 
 def classify_policy_check(
@@ -4497,7 +4610,7 @@ def detect_install_state(
             ),
             "state": INSTALL_STATE_ADOPT,
         }
-    status, _target_revision, _previous = update_status(
+    status, current_revision, _target_revision, _previous = update_status(
         target,
         requested,
         expected_sha=expected_sha,
@@ -4516,7 +4629,15 @@ def detect_install_state(
             "state": INSTALL_STATE_UPDATE,
             "update_status": status,
         }
-    check_result = (policy_check or run_policy_settings_check)(target)
+    check_result = (
+        policy_check(target)
+        if policy_check is not None
+        else trusted_policy_settings_check(
+            target,
+            current_revision,
+            read_copier_answers(answers_path),
+        )
+    )
     policy = classify_policy_check(check_result)
     policy_report = {
         "available": policy.available,
@@ -4683,18 +4804,13 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         saved_answers, explicit_data, repository
     )
     candidate_answers = resolve_release_answers(target, candidate_answers)
-    status, target_revision, previous = update_status(
+    status, current_revision, target_revision, previous = update_status(
         target,
         args.to,
         expected_sha=args.expected_sha,
         allow_unreleased=args.allow_unreleased,
         accept_legacy=args.accept_legacy,
         from_release=args.from_release,
-    )
-    current_capabilities = capability_preflight(
-        target / "scripts" / "release_policy.py",
-        target,
-        emit=False,
     )
     source = status.get("source")
     if not isinstance(source, str):
@@ -4714,6 +4830,22 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         preflight = capability_preflight(
             stage / "scripts" / "release_policy.py",
             target,
+            target_revision,
+            emit=False,
+        )
+        current_stage = Path(temporary) / "current"
+        current_stage.mkdir()
+        copier_copy(
+            source,
+            current_revision,
+            current_stage,
+            saved_answers,
+            skip_tasks=True,
+        )
+        current_capabilities = capability_preflight(
+            current_stage / "scripts" / "release_policy.py",
+            target,
+            current_revision,
             emit=False,
         )
     hook_configuration = project_verification_configuration(target, answers)

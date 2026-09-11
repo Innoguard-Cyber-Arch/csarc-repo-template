@@ -458,7 +458,10 @@ def test_capability_preflight_uses_readable_github_origin(
         )
 
     monkeypatch.setattr(cli, "run", fake_run)
-    assert cli.capability_preflight(script, tmp_path) == response
+    revision = cli.resolve_revision(
+        cli.CANONICAL_SOURCE, "v1.2.3", client=FakeReleaseClient()
+    )
+    assert cli.capability_preflight(script, tmp_path, revision) == response
     output = capsys.readouterr().out
     assert "organization_policy=blocked" in output
     assert "repository_setting=allowed" in output
@@ -483,12 +486,40 @@ def test_capability_preflight_without_origin_uses_integration_fallback(
         ),
     )
 
-    payload = cli.capability_preflight(script, tmp_path)
+    revision = cli.resolve_revision(
+        cli.CANONICAL_SOURCE, "v1.2.3", client=FakeReleaseClient()
+    )
+    payload = cli.capability_preflight(script, tmp_path, revision)
 
     integration = payload["integrations"]["renovate"]
     assert integration["state"] == "fallback"
     assert "Dependabot" in integration["next_step"]
     assert "Optional integration renovate: fallback" in capsys.readouterr().out
+
+
+def test_capability_preflight_rejects_unverified_helper_without_execution(
+    tmp_path: Path,
+) -> None:
+    """Fail closed before an unverified helper can run."""
+    target = tmp_path / "target"
+    target.mkdir()
+    git(target, "init", "-b", "main")
+    git(target, "remote", "add", "origin", "https://github.com/owner/repo.git")
+    sentinel = tmp_path / "capability-executed"
+    script = tmp_path / "release_policy.py"
+    write_executable(
+        script,
+        "#!/usr/bin/env python3\n"
+        "from pathlib import Path\n"
+        f"Path({str(sentinel)!r}).touch()\n",
+    )
+    revision = cli.Revision("development", "a" * 40, str(tmp_path))
+
+    payload = cli.capability_preflight(script, target, revision, emit=False)
+
+    assert payload["mode"] == "blocked"
+    assert "verified template Release" in str(payload["reason"])
+    assert not sentinel.exists()
 
 
 def test_target_repository_uses_explicit_repo_for_new_project(
@@ -1298,7 +1329,20 @@ def test_adopt_finalize_failure_keeps_actionable_pending_state(
         lambda _: (_ for _ in ()).throw(CliError("fixture failure")),
     )
 
-    assert replay_finalize(project, "--dry-run") == 2
+    assert replay_finalize(project, "--dry-run") == 0
+    plan = finalize_plan_path(project)
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["verification"] == "pending-authorization"
+    assert (
+        replay_finalize(
+            project,
+            "--apply-plan",
+            str(plan),
+            "--yes",
+            "--non-interactive",
+        )
+        == 2
+    )
     assert "rerun csarc adopt --finalize" in capsys.readouterr().err
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
@@ -1636,11 +1680,11 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert payload["adoption"]["project_verification_hook"] == {
         "configured": True,
         "path": "scripts/verify-skills",
-        "reason": "Project verification hook completed successfully.",
-        "result": "passed",
+        "reason": "Candidate verification runs only after plan approval.",
+        "result": "not-run",
         "source": "explicit",
     }
-    assert payload["adoption"]["verification"] == "passed"
+    assert payload["adoption"]["verification"] == "pending-authorization"
     assert payload["answers"]["package_name"] == "product_identity"
     markdown = plan_path.with_name(
         f"{cli.ADOPTION_REPORT_BASENAME}.md"
@@ -2303,12 +2347,12 @@ def test_adopt_applies_exact_plan_over_preserved_dirty_file(
     assert payload["adoption"]["clean"] is False
     assert payload["adoption"]["target_changes"] == [" M components.yaml"]
     assert payload["adoption"]["preserved_dirty_paths"] == ["components.yaml"]
-    assert payload["adoption"]["verification"] == "passed"
+    assert payload["adoption"]["verification"] == "pending-authorization"
     assert payload["adoption"]["project_verification_hook"]["result"] == (
-        "passed"
+        "not-run"
     )
     assert "components.yaml" in payload["files"]["preserve"]
-    assert hook_runs.read_text(encoding="utf-8").splitlines() == ["run"]
+    assert not hook_runs.exists()
     markdown = plan.with_name("csarc-adoption-dry-run.md").read_text(
         encoding="utf-8"
     )
@@ -2332,7 +2376,6 @@ def test_adopt_applies_exact_plan_over_preserved_dirty_file(
     assert before == (" M components.yaml",)
     assert " M components.yaml" in cli.git_target_state(project)[1]
     assert hook_runs.read_text(encoding="utf-8").splitlines() == [
-        "run",
         "run",
     ]
     assert (project / ".copier-answers.yml").is_file()
@@ -2440,12 +2483,24 @@ def test_adopt_blocks_hook_mutation_of_preserved_dirty_file(
         / cli.ADOPTION_PLAN_BASENAME
     )
     payload = json.loads(plan.read_text(encoding="utf-8"))
-    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["applicable"] is True
     assert payload["adoption"]["project_verification_hook"]["result"] == (
-        "passed"
+        "not-run"
     )
-    assert str(payload["adoption"]["verification"]).startswith(
-        "failed: Candidate verification changed preserved dirty files:"
+    assert payload["adoption"]["verification"] == "pending-authorization"
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                *replay_authorization(plan),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
     )
     assert components.read_text(encoding="utf-8") == "authorized: dirty\n"
 
@@ -3515,27 +3570,34 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
         / cli.ADOPTION_PLAN_BASENAME
     )
     payload = json.loads(plan_path.read_text(encoding="utf-8"))
-    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["applicable"] is True
     assert payload["adoption"]["project_verification_hook"] == {
         "configured": True,
         "path": "scripts/verify-product",
-        "reason": "Project verification hook exited non-zero: "
-        "scripts/verify-product",
-        "result": "failed",
+        "reason": "Candidate verification runs only after plan approval.",
+        "result": "not-run",
         "source": "explicit",
     }
-    assert str(payload["adoption"]["verification"]).startswith("failed:")
+    assert payload["adoption"]["verification"] == "pending-authorization"
     markdown = plan_path.with_name("csarc-adoption-dry-run.md").read_text(
         encoding="utf-8"
     )
-    assert "Decision: Not ready to adopt" in markdown
+    assert "Decision: Ready to adopt" in markdown
     assert not plan_path.with_name("csarc-adoption-dry-run.pdf").exists()
     assert (
-        "Project verification hook `scripts/verify-product` failed - "
-        "Project verification hook exited non-zero: "
-        "scripts/verify-product." in markdown
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                *replay_authorization(plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
     )
-    assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
     assert git(project, "status", "--porcelain") == before
     assert not (project / "managed.txt").exists()
 
@@ -3605,9 +3667,11 @@ def test_adoption_records_and_replays_explicit_project_hook(
     project = tmp_path / "explicit-hook-product"
     project.mkdir()
     (project / "product.txt").write_text("product\n", encoding="utf-8")
+    hook_runs = tmp_path / "explicit-hook-runs"
     write_executable(
         project / "scripts" / "verify-skills",
-        "#!/usr/bin/env bash\nset -euo pipefail\ntest -f product.txt\n",
+        "#!/usr/bin/env bash\nset -euo pipefail\ntest -f product.txt\n"
+        f"printf 'run\\n' >> {shlex.quote(str(hook_runs))}\n",
     )
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
@@ -3634,8 +3698,8 @@ def test_adoption_records_and_replays_explicit_project_hook(
     assert payload["adoption"]["project_verification_hook"] == {
         "configured": True,
         "path": "scripts/verify-skills",
-        "reason": "Project verification hook completed successfully.",
-        "result": "passed",
+        "reason": "Candidate verification runs only after plan approval.",
+        "result": "not-run",
         "source": "explicit",
     }
     markdown = (report_dir / "csarc-adoption-dry-run.md").read_text(
@@ -3643,12 +3707,13 @@ def test_adoption_records_and_replays_explicit_project_hook(
     )
     assert "Project verification hook: `scripts/verify-skills`" in markdown
     assert "Project verification hook configured: `true`" in markdown
-    assert "Project verification result: `passed`" in markdown
+    assert "Project verification result: `not-run`" in markdown
     assert (
-        "Project verification reason: `Project verification hook completed "
-        "successfully.`" in markdown
+        "Project verification reason: `Candidate verification runs only "
+        "after plan approval.`" in markdown
     )
     assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
+    assert not hook_runs.exists()
 
     assert (
         main(
@@ -3664,6 +3729,7 @@ def test_adoption_records_and_replays_explicit_project_hook(
         )
         == 0
     )
+    assert hook_runs.read_text(encoding="utf-8").splitlines() == ["run"]
     assert (project / cli.PROVENANCE_FILE).is_file()
 
     capsys.readouterr()
@@ -5163,12 +5229,12 @@ def test_update_recomputes_visibility_defaults_from_github(
 
 
 @pytest.mark.large
-def test_update_plan_resolves_target_answers_and_capabilities(
+def test_update_plan_uses_answers_without_executing_unverified_capabilities(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Build update output from the target template, not installed answers."""
+    """Read target answers but do not execute an unverified helper."""
     source, project, _ = initialize_project(tmp_path)
     capsys.readouterr()
     git(project, "init", "-b", "main")
@@ -5188,11 +5254,12 @@ def test_update_plan_resolves_target_answers_and_capabilities(
         + "new_target_answer:\n  type: str\n  default: target-default\n",
         encoding="utf-8",
     )
+    sentinel = tmp_path / "target-capability-executed"
     write_executable(
         source / "template" / "scripts" / "release_policy.py",
         "#!/usr/bin/env python3\n"
-        "import json\n"
-        "print(json.dumps({'mode': 'target', 'capabilities': {}}))\n",
+        "from pathlib import Path\n"
+        f"Path({str(sentinel)!r}).touch()\n",
     )
     second_sha = commit(source, "test: add target answer and capability")
     monkeypatch.setattr(
@@ -5224,17 +5291,18 @@ def test_update_plan_resolves_target_answers_and_capabilities(
     )
     payload = json.loads(capsys.readouterr().out)
     assert payload["answers"]["new_target_answer"] == "target-default"
-    assert payload["release_capabilities"]["mode"] == "target"
-    assert payload["capabilities_changed"] is True
+    assert payload["release_capabilities"]["mode"] == "blocked"
+    assert payload["capabilities_changed"] is False
+    assert not sentinel.exists()
 
 
 @pytest.mark.large
-def test_update_check_reports_capability_drift_at_same_revision(
+def test_update_check_does_not_execute_target_capability_helper(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Treat target-policy drift as an available update without a new SHA."""
+    """Ignore target executable content during a read-only update check."""
     _source, project, first_sha = initialize_project(tmp_path)
     capsys.readouterr()
     git(project, "init", "-b", "main")
@@ -5247,11 +5315,10 @@ def test_update_check_reports_capability_drift_at_same_revision(
         "origin",
         "https://github.com/owner/repository.git",
     )
+    sentinel = tmp_path / "installed-capability-executed"
     write_executable(
         project / "scripts" / "release_policy.py",
-        "#!/usr/bin/env python3\n"
-        "import json\n"
-        "print(json.dumps({'mode': 'installed', 'capabilities': {}}))\n",
+        f"#!/usr/bin/env bash\ntouch {shlex.quote(str(sentinel))}\n",
     )
     commit(project, "test: customize installed capability policy")
     monkeypatch.setattr(
@@ -5279,12 +5346,13 @@ def test_update_check_reports_capability_drift_at_same_revision(
                 "--json",
             ]
         )
-        == 1
+        == 0
     )
     payload = json.loads(capsys.readouterr().out)
     assert payload["answers_changed"] is False
-    assert payload["capabilities_changed"] is True
-    assert payload["update_available"] is True
+    assert payload["capabilities_changed"] is False
+    assert payload["update_available"] is False
+    assert not sentinel.exists()
 
 
 def fake_policy_check(
@@ -5556,7 +5624,9 @@ def test_classify_policy_check_reports_missing_script_as_unavailable(
     apply-repository-settings.sh is missing." matched none of the three
     hardcoded unavailable markers either.
     """
-    result = cli.run_policy_settings_check(tmp_path)
+    result = cli.run_policy_settings_check(
+        tmp_path / "scripts" / "apply-repository-settings.sh", tmp_path
+    )
     policy = cli.classify_policy_check(result)
     assert policy.available is False
     assert policy.drifted is None
@@ -5566,7 +5636,9 @@ def test_run_policy_settings_check_reports_missing_script(
     tmp_path: Path,
 ) -> None:
     """Report a missing policy script instead of raising an exception."""
-    result = cli.run_policy_settings_check(tmp_path)
+    result = cli.run_policy_settings_check(
+        tmp_path / "scripts" / "apply-repository-settings.sh", tmp_path
+    )
     assert result.returncode == 127
     assert "missing" in result.stderr
 
@@ -5632,27 +5704,21 @@ def test_status_command_reports_update_available(
     assert payload["state"] == cli.INSTALL_STATE_UPDATE
 
 
-@pytest.mark.parametrize(
-    ("mode", "expected_state"),
-    [
-        ("match", cli.INSTALL_STATE_CURRENT),
-        ("drift", cli.INSTALL_STATE_POLICY_ONLY),
-        ("transient-failure", cli.INSTALL_STATE_CURRENT),
-    ],
-)
-def test_status_command_end_to_end_policy_only_update(
+def test_status_command_does_not_execute_unverified_target_policy(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    mode: str,
-    expected_state: str,
 ) -> None:
-    """Run the real target policy script through the status subcommand."""
+    """Treat a target-owned policy helper as data during status inspection."""
     _source, project, first_sha = initialize_project(tmp_path)
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
     commit(project, "test: generated project")
-    write_policy_check_script(project, mode)
+    sentinel = tmp_path / "status-executed"
+    write_executable(
+        project / "scripts" / "apply-repository-settings.sh",
+        f"#!/usr/bin/env bash\ntouch {shlex.quote(str(sentinel))}\n",
+    )
     capsys.readouterr()
 
     assert (
@@ -5669,7 +5735,9 @@ def test_status_command_end_to_end_policy_only_update(
         == 0
     )
     payload = json.loads(capsys.readouterr().out)
-    assert payload["state"] == expected_state
+    assert payload["state"] == cli.INSTALL_STATE_CURRENT
+    assert payload["policy_check"]["available"] is False
+    assert not sentinel.exists()
 
 
 def test_non_interactive_writes_require_yes(tmp_path: Path) -> None:
@@ -5839,6 +5907,7 @@ def test_copy_uses_resolved_canonical_source(
         revision: cli.Revision,
         stage: Path,
         data: dict[str, str],
+        **_kwargs: object,
     ) -> None:
         del revision, stage, data
         nonlocal copied_source
@@ -6254,11 +6323,11 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_real_template_adoption_resumes_after_manifest_merge",
         "test_update_check_dry_run_apply_and_conflict",
         "test_update_check_rejects_invalid_hook_without_writes",
-        "test_update_check_reports_capability_drift_at_same_revision",
+        "test_update_check_does_not_execute_target_capability_helper",
         "test_update_hook_failure_leaves_target_unchanged",
         "test_update_migrates_legacy_copier_answers_to_single_config",
         "test_update_migrates_legacy_profile_json_before_finalize_tasks",
-        "test_update_plan_resolves_target_answers_and_capabilities",
+        "test_update_plan_uses_answers_without_executing_unverified_capabilities",
         "test_update_real_template_legacy_two_file_schema_end_to_end",
         "test_update_rechecks_committed_head_after_confirmation",
         "test_update_rechecks_repository_context_after_confirmation",

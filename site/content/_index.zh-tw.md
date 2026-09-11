@@ -117,7 +117,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 csarc status <path> --json
 ```
 
-指令只讀取本機檔案與（若已導入）GitHub 上的公版版本、repository 設定，不會寫入任何東西；同一個狀態重複執行永遠得到同一個結果。
+指令只讀取本機檔案與（若已導入）GitHub 上的公版版本、repository 設定，不會寫入任何東西，也不會執行 target repo 裡的 helper；同一個狀態重複執行永遠得到同一個結果。
 
 | 狀態（`state`） | 判斷依據 | 下一步 |
 | --- | --- | --- |
@@ -128,9 +128,9 @@ csarc status <path> --json
 | `policy-only-update`（已是最新，但政策設定變了） | Copier revision 已是最新，但 `policies/`（例如允不允許 workaround）與 GitHub 上實際設定不一致 | `scripts/apply-repository-settings.sh plan` 預覽，確認後 `apply`；**不必**重新走一次完整 adopt／update |
 
 {{< disclosure key="install-policy-only" title="為什麼「已最新版但政策異動」不用重新導入" >}}
-政策設定（分支保護、必要檢查、標籤、CODEOWNER 規則）記錄在 `policies/*.json`，由 `scripts/apply-repository-settings.sh` 直接讀取並套用到 GitHub，跟 Copier 範本檔案是兩件事：改政策不需要改到任何範本檔案，Copier revision 也不會變。`csarc status` 偵測到「revision 相同、但 `apply-repository-settings.sh check` 回報落差」時回傳 `policy-only-update`，直接指向 `plan`／`apply` 這個既有、單獨的流程，不會建議重跑整個 adopt 或 update。
+政策設定（分支保護、必要檢查、標籤、CODEOWNER 規則）記錄在 `policies/*.json`，由 `scripts/apply-repository-settings.sh` 直接讀取並套用到 GitHub，跟 Copier 範本檔案是兩件事：改政策不需要改到任何範本檔案，Copier revision 也不會變。`csarc status` 使用已驗證 Release 重新產生的完整 helper closure 執行 `check`，不信任或執行 target repo 內的同名腳本；偵測到 revision 相同但政策有落差時，回傳 `policy-only-update` 並直接指向 `plan`／`apply`，不會建議重跑整個 adopt 或 update。
 
-若 `apply-repository-settings.sh check` 本身跑不動（例如 `gh` 未登入、沒有網路），`csarc status` 不會冒然回報「政策已變」；會退回 `current` 並在 `policy_check.available` 標示 `false`，保留由人工再次確認。
+若受信任的 `apply-repository-settings.sh check` 跑不動（例如 Release 未驗證、`gh` 未登入或沒有網路），`csarc status` 不會冒然回報「政策已變」；會退回 `current` 並在 `policy_check.available` 標示 `false`，保留由人工再次確認。
 {{< /disclosure >}}
 
 {{< disclosure key="install-agent" title="agent 安裝契約寫在哪" >}}
@@ -799,7 +799,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 - `template/` 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理與 dogfood 設定，配對檔案由 `scripts/sync-paired-files.sh` 從 root 產生 `template/` 副本。
 - `.csarc/config.yml` 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。
 - 新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自元件（模組），不建立組合專屬流程。
-- 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan，再只套用同一份未漂移的 plan。第一張 PR 由人核對來源、plan、diff 與本機結果——舊的預設分支還沒有可信任的檢查程式，不執行 PR head 新增的 script，也不宣稱已自動驗證。
+- 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan；dry-run 不執行 target-owned helper 或 product hook。人核准同一份未漂移的 plan 後，CLI 才在隔離候選執行驗證，通過後寫入；第一張 PR 再由人核對來源、plan、diff 與本機結果。
 - 第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先用 dry-run 預覽，候選內容與衝突全部驗證完成才修改 target，若有衝突就保持 repo 不變，修正後重跑，再由一般 PR 與 trusted-base checks 審查。
 - 可選的更新通知每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。
 
@@ -818,7 +818,7 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 {{< /disclosure >}}
 
 {{< disclosure key="template-release-status" title="目前自動化邊界" >}}
-- **Active：**CLI 在 candidate 內完成建立、導入或更新與驗證，成功後才寫入 target；公版完整驗證的 Regression tests 階段會重跑三條路徑（含標記 `large` 的 Copier create／adopt／update 矩陣），Package smoke test 階段則另外確認 wheel 可建置、已發布的入口可從建置產物直接執行。
+- **Active：**CLI 的 dry-run 只建立靜態 candidate 並把 target 當資料；核准 plan 後才在 candidate 內執行 target-owned 驗證，成功後才寫入 target。公版完整驗證的 Regression tests 階段會重跑三條路徑（含標記 `large` 的 Copier create／adopt／update 矩陣），Package smoke test 階段則另外確認 wheel 可建置、已發布的入口可從建置產物直接執行。
 - **Manual：**首次導入的外部 plan、來源與第一張 PR 由人核准。
 - **Pending：**通知 workflow（`template-update.yml.jinja`）與 checker script（`check-template-update`）已恢復，Copier fixture 測試也驗證只在選用時才會產生；`tests/test_template_update_notifications.py` 已涵蓋 checker 自身的更新判斷與 Issue create/edit 邏輯，包含 check-update 發生錯誤時的 fail-closed 行為，但尚未觀察到排程的 hosted 執行，因此不宣稱排程已能自動通知。
 - **Retired：**remote governance 與 delivery orchestration 不隨本頁恢復；reviewer assignment 已恢復，改由「規則治理」頁說明。

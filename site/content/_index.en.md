@@ -117,7 +117,7 @@ Prefer to run the command yourself instead of going through an agent:
 csarc status <path> --json
 ```
 
-It only reads local files plus, once a repository is already managed, the resolved template release and live GitHub settings; it never writes anything. Running it again against unchanged repository state always returns the same answer.
+It only reads local files plus, once a repository is already managed, the resolved template release and live GitHub settings; it never writes anything or executes a helper from the target repository. Running it again against unchanged repository state always returns the same answer.
 
 | State (`state`) | How it is detected | Next step |
 | --- | --- | --- |
@@ -128,9 +128,9 @@ It only reads local files plus, once a repository is already managed, the resolv
 | `policy-only-update` (policy settings changed) | The Copier revision is current, but `policies/` (for example, whether workarounds are allowed) no longer matches the live GitHub settings | `scripts/apply-repository-settings.sh plan` to preview, then `apply`; this **skips** a full adopt or update run |
 
 {{< disclosure key="install-policy-only" title="Why a policy-only change skips a full readopt" >}}
-Policy settings (branch protection, required checks, labels, CODEOWNER rules) live in `policies/*.json` and are applied to GitHub directly by `scripts/apply-repository-settings.sh`; they are separate from the Copier template files. Changing a policy never touches a template file and never moves the pinned Copier revision. When `csarc status` detects that the revision is unchanged but `apply-repository-settings.sh check` reports drift, it returns `policy-only-update` and points straight at the existing, standalone `plan`/`apply` flow instead of suggesting a full adopt or update.
+Policy settings (branch protection, required checks, labels, CODEOWNER rules) live in `policies/*.json` and are applied to GitHub directly by `scripts/apply-repository-settings.sh`; they are separate from the Copier template files. Changing a policy never touches a template file and never moves the pinned Copier revision. `csarc status` runs `check` from a complete helper closure rendered from the verified Release; it never trusts or executes the target repository's copy. When the revision is unchanged but policy drift is detected, status returns `policy-only-update` and points straight at the existing, standalone `plan`/`apply` flow instead of suggesting a full adopt or update.
 
-If `apply-repository-settings.sh check` itself cannot run (for example, `gh` is not authenticated or there is no network), `csarc status` does not assume policy drift. It falls back to `current` and marks `policy_check.available` as `false`, leaving the confirmation to a human.
+If the trusted `apply-repository-settings.sh check` cannot run (for example, the Release is unverified, `gh` is not authenticated, or there is no network), `csarc status` does not assume policy drift. It falls back to `current` and marks `policy_check.available` as `false`, leaving the confirmation to a human.
 {{< /disclosure >}}
 
 {{< disclosure key="install-agent" title="Where the agent install contract lives" >}}
@@ -807,7 +807,7 @@ Three places each own something different: `template/` is the single source of w
 - `template/` is the only delivered source; root keeps the template repository's own GitHub governance and dogfood configuration only because that is how GitHub reads it, and `scripts/sync-paired-files.sh` generates root's paired-file copies under `template/`.
 - `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.
 - A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent components (modules); it never builds a combination-specific pipeline.
-- A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan, then applies that same undrifted plan. A person reviews the source, plan, diff, and local results in the first PR — the old default branch does not yet contain a trusted verifier, so a PR-head script is never executed and nothing claims automatic verification.
+- A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan; the dry-run never executes a target-owned helper or product hook. Once a person approves that same undrifted plan, the CLI verifies an isolated candidate before writing it, and the first PR then reviews the source, plan, diff, and local results.
 - After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a dry-run preview, and only apply to the target once the candidate content and conflicts are fully verified; a conflict leaves the repository unchanged so it can be corrected, rerun, and reviewed by a normal PR and trusted-base checks.
 - The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.
 
@@ -826,7 +826,7 @@ Root `.csarc/config.yml` records the capabilities the template repository select
 {{< /disclosure >}}
 
 {{< disclosure key="template-release-status" title="Current automation boundary" >}}
-- **Active:** the CLI creates, adopts, or updates and verifies a candidate before writing the target. Template full verification's Regression tests stage reruns all three paths, including the `large`-marked Copier create/adopt/update matrix, and its Package smoke test stage separately confirms the wheel builds and its published entry point runs from the built artifact.
+- **Active:** a CLI dry-run builds only a static candidate and treats the target as data; after plan approval, target-owned verification runs in the candidate and must pass before the target is written. Template full verification's Regression tests stage reruns all three paths, including the `large`-marked Copier create/adopt/update matrix, and its Package smoke test stage separately confirms the wheel builds and its published entry point runs from the built artifact.
 - **Manual:** a person approves the external plan, source, and first adoption PR.
 - **Pending:** the update-notice workflow (`template-update.yml.jinja`) and checker script (`check-template-update`) are restored, and a Copier fixture test verifies they are generated only when selected; `tests/test_template_update_notifications.py` covers the checker's own update-detection and Issue create/edit logic, including its fail-closed behavior on a check error, but no hosted scheduled run has been observed, so live-schedule execution is not yet claimed.
 - **Retired:** remote governance and delivery orchestration do not return with this page; reviewer assignment is restored and covered under Rules governance instead.
