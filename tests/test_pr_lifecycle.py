@@ -8,6 +8,7 @@ import re
 import runpy
 import shutil
 import subprocess
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -69,9 +70,14 @@ class FakeGitHub:
         self.inline_comment_snapshots: list[list[dict[str, Any]]] = []
         self.reviews: list[dict[str, Any]] = [
             {
-                "user": {"login": "reviewer"},
+                "user": {"login": "reviewer", "type": "User"},
+                "author_association": "MEMBER",
                 "state": "APPROVED",
-                "submitted_at": "2026-08-25T01:00:30Z",
+                "submitted_at": "2026-08-25T01:01:00Z",
+                "commit_id": self.head,
+                "html_url": (
+                    "https://github.com/owner/repo/pull/42#pullrequestreview-1"
+                ),
             }
         ]
         self.audit_comments: list[str] = []
@@ -109,6 +115,7 @@ class FakeGitHub:
             "enforcement": "active",
             "bypass_actors": [],
         }
+        self.mergeable_state = "clean"
 
     def viewer(self, explicit_actor: str = "") -> str:
         """Return the task's authenticated actor."""
@@ -132,6 +139,7 @@ class FakeGitHub:
                 else None
             ),
             "base": {"ref": self.base_ref, "sha": self.base_sha},
+            "mergeable_state": self.mergeable_state,
             "head": {
                 "ref": self.head_ref,
                 "sha": self.head,
@@ -227,10 +235,12 @@ class FakeGitHub:
             r"check-runs/[78]/annotations\?per_page=100&page=1", path
         ):
             return [{"message": promotion_gate.BILLING_GATE_ANNOTATION_MESSAGE}]
-        if path == f"collaborators/{self.authorization_actor}/permission":
+        collaborator = re.fullmatch(r"collaborators/([^/]+)/permission", path)
+        if collaborator:
+            login = urllib.parse.unquote(collaborator.group(1))
             return {
                 "permission": self.permission,
-                "user": {"login": self.authorization_actor},
+                "user": {"login": login},
             }
         if path == f"rules/branches/{self.base_ref.replace('/', '%2F')}":
             if not self.protected:
@@ -1538,28 +1548,22 @@ def test_inline_and_commented_review_blockers_are_enforced(
 def test_merge_snapshot_allows_agent_only_with_enforced_no_bypass_rules(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Only enforced no-bypass protection permits an agent merge."""
+    """An exact-head approval needs no separate authorization comment."""
     bind_remote_lease(monkeypatch)
     github = FakeGitHub("a" * 40)
-    snapshot = merge_snapshot(
-        github,
-        lease_fixture(),
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-    )
+    snapshot = merge_snapshot(github, lease_fixture())
     assert snapshot["merge_mode"] == "agent"
+    assert snapshot["authorization_source"] == "review"
+    assert snapshot["authorization_actor"] == "reviewer"
     github.protected = False
-    snapshot = merge_snapshot(
-        github,
-        lease_fixture(),
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-    )
+    snapshot = merge_snapshot(github, lease_fixture())
     assert snapshot["merge_mode"] == "human-only"
 
 
-def test_merge_snapshot_blocks_agent_when_ruleset_permits_bypass(
+def test_exact_head_review_allows_the_known_alpha_ruleset_bypass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A non-empty bypass_actors entry forces human-only, even when active."""
+    """Lifecycle may enforce the repository's exact reviewed-merge bypass."""
     bind_remote_lease(monkeypatch)
     github = FakeGitHub("a" * 40)
     github.ruleset_response = {
@@ -1572,12 +1576,51 @@ def test_merge_snapshot_blocks_agent_when_ruleset_permits_bypass(
             }
         ],
     }
-    snapshot = merge_snapshot(
-        github,
-        lease_fixture(),
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-    )
+    snapshot = merge_snapshot(github, lease_fixture())
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["authorization_source"] == "review"
+
+
+def test_reviewed_merge_rejects_an_unknown_ruleset_bypass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Any bypass beyond the pinned Alpha exception remains human-only."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 4,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+    snapshot = merge_snapshot(github, lease_fixture())
     assert snapshot["merge_mode"] == "human-only"
+
+
+def test_reviewed_bypass_requires_github_to_report_a_clean_merge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The known bypass cannot conceal conflicts or unresolved threads."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+    github.mergeable_state = "blocked"
+    snapshot = merge_snapshot(github, lease_fixture())
+    assert snapshot["merge_mode"] == "human-only"
+    assert "clean" in snapshot["protection_reason"]
 
 
 def quota_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object], str]:
@@ -1702,7 +1745,7 @@ def test_non_alpha_candidate_still_requires_an_independent_review(
     bind_remote_lease(monkeypatch)
     github, lease, note_url = quota_snapshot_fixture()
     github.reviews = []
-    with pytest.raises(RuntimeError, match="independent approving review"):
+    with pytest.raises(RuntimeError, match="exact head"):
         merge_snapshot(
             github,
             lease,
@@ -1719,7 +1762,7 @@ def test_alpha_marker_must_be_an_exact_body_line(
     github, lease, note_url = quota_snapshot_fixture()
     github.reviews = []
     github.body += f"\n\n{ALPHA_SELF_MERGE_MARKER}."
-    with pytest.raises(RuntimeError, match="independent approving review"):
+    with pytest.raises(RuntimeError, match="exact head"):
         merge_snapshot(
             github,
             lease,
@@ -2527,17 +2570,40 @@ def test_executing_actor_cannot_approve_its_own_merge(
     github = FakeGitHub("a" * 40)
     github.reviews = [
         {
-            "user": {"login": "agent"},
+            "user": {"login": "agent", "type": "User"},
+            "author_association": "OWNER",
             "state": "APPROVED",
             "submitted_at": "2026-08-25T01:00:30Z",
+            "commit_id": github.head,
+            "html_url": (
+                "https://github.com/owner/repo/pull/42#pullrequestreview-2"
+            ),
         }
     ]
-    with pytest.raises(RuntimeError, match="independent approving review"):
-        merge_snapshot(
-            github,
-            lease_fixture(),
-            "https://github.com/owner/repo/pull/42#issuecomment-99",
-        )
+    with pytest.raises(RuntimeError, match="exact head"):
+        merge_snapshot(github, lease_fixture())
+
+
+def test_new_head_invalidates_an_earlier_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An approval for a prior commit cannot authorize the current head."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.reviews[0]["commit_id"] = "9" * 40
+    with pytest.raises(RuntimeError, match="exact head"):
+        merge_snapshot(github, lease_fixture())
+
+
+def test_exact_head_approval_requires_live_maintainer_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Historical association alone cannot authorize an automated merge."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.permission = "read"
+    with pytest.raises(RuntimeError, match="exact head"):
+        merge_snapshot(github, lease_fixture())
 
 
 def test_merge_snapshot_revalidates_the_authenticated_actor(
@@ -2553,22 +2619,6 @@ def test_merge_snapshot_revalidates_the_authenticated_actor(
             lease_fixture(),
             "https://github.com/owner/repo/pull/42#issuecomment-99",
         )
-
-
-def test_executing_actor_cannot_authorize_its_own_merge(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Shared authorization and execution identity forces human-only mode."""
-    bind_remote_lease(monkeypatch)
-    github = FakeGitHub("a" * 40)
-    github.authorization_actor = "agent"
-    snapshot = merge_snapshot(
-        github,
-        lease_fixture(),
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-    )
-    assert snapshot["merge_mode"] == "human-only"
-    assert "executing GitHub actor" in snapshot["protection_reason"]
 
 
 def test_untrusted_comment_cannot_resolve_a_maintainer_blocker(
@@ -2761,8 +2811,10 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
         lambda *_: {
             "merge_mode": "agent",
             "title": "fix(ci): serialize lifecycle writes",
+            "reviewed_bypass": True,
         },
     )
+    monkeypatch.setitem(merge.__globals__, "release_phase", lambda: "alpha")
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
     released = False
 
@@ -2800,6 +2852,9 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
         ),
         github,
     )
+    assert github.audit_comments == [
+        "bypass-trace: release_phase=alpha actor=agent reason=exact-head-review"
+    ]
     assert mutations == ["lease-cas", "merge-put"]
     assert github.merged
     assert released
