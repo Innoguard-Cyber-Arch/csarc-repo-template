@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.15.3] - 2026-09-10
+
+### Bug Fixes
+
+* fix: short circuit blocked release setup (#711) (2016f7a)
+
 ## [0.15.2] - 2026-09-10
 
 ### Bug Fixes
