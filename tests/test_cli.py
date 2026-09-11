@@ -258,6 +258,7 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
                 str(project),
                 "--apply-plan",
                 str(plan),
+                *replay_authorization(plan),
                 "--yes",
                 "--non-interactive",
             ]
@@ -273,6 +274,51 @@ def finalize_plan_path(project: Path) -> Path:
         project.parent
         / f"{project.name}-csarc-adoption-report"
         / cli.ADOPTION_PLAN_BASENAME
+    )
+
+
+def replay_authorization(path: Path) -> list[str]:
+    """Return the explicit authority required by an unreleased replay."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    template = payload["template"]
+    if template["verification"] not in {
+        "unverified",
+        "development-unreleased",
+    }:
+        return []
+    return [
+        "--source",
+        str(template["source"]),
+        "--expected-sha",
+        str(template["sha"]),
+        "--allow-unreleased",
+    ]
+
+
+def replay_finalize(project: Path, *arguments: str) -> int:
+    """Finalize one pending unreleased adoption with fresh authority."""
+    pending = project / cli.PENDING_ADOPTION_FILE
+    return main(
+        [
+            "adopt",
+            str(project),
+            "--finalize",
+            *arguments,
+            *replay_authorization(pending),
+        ]
+    )
+
+
+def write_self_digested_plan(path: Path, payload: dict[str, object]) -> None:
+    """Write a syntactically valid plan whose digest is not an authority."""
+    payload.pop("plan_sha256", None)
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":")
+    ).encode()
+    payload["plan_sha256"] = hashlib.sha256(encoded).hexdigest()
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
 
 
@@ -996,6 +1042,7 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                *replay_authorization(plan_path),
                 "--yes",
                 "--non-interactive",
             ]
@@ -1010,7 +1057,18 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
     pending_status = git(project, "status", "--porcelain")
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--dry-run",
+                *replay_authorization(project / cli.PENDING_ADOPTION_FILE),
+            ]
+        )
+        == 0
+    )
     assert git(project, "status", "--porcelain") == pending_status
     assert (
         main(
@@ -1033,6 +1091,7 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
                 "--finalize",
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                *replay_authorization(finalize_plan_path(project)),
                 "--non-interactive",
                 "--yes",
             ]
@@ -1055,7 +1114,18 @@ def test_adopt_finalize_rejects_answer_drift(
         encoding="utf-8",
     )
 
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--dry-run",
+                *replay_authorization(project / cli.PENDING_ADOPTION_FILE),
+            ]
+        )
+        == 2
+    )
     assert "Copier answers changed" in capsys.readouterr().err
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
@@ -1070,14 +1140,36 @@ def test_adopt_finalize_rejects_source_and_managed_file_drift(
     unavailable_source = tmp_path / "template-source-moved"
     source.rename(unavailable_source)
 
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--dry-run",
+                *replay_authorization(project / cli.PENDING_ADOPTION_FILE),
+            ]
+        )
+        == 2
+    )
     assert "template source is unavailable" in capsys.readouterr().err
     unavailable_source.rename(source)
     (project / "managed.txt").write_text(
         "unexpected managed edit\n", encoding="utf-8"
     )
 
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--dry-run",
+                *replay_authorization(project / cli.PENDING_ADOPTION_FILE),
+            ]
+        )
+        == 2
+    )
     assert "Managed adoption file drifted" in capsys.readouterr().err
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
@@ -1094,7 +1186,18 @@ def test_adopt_finalize_rejects_preserved_managed_file_drift(
         "#!/usr/bin/env bash\nexit 0\n",
     )
 
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--dry-run",
+                *replay_authorization(project / cli.PENDING_ADOPTION_FILE),
+            ]
+        )
+        == 2
+    )
     assert "Managed adoption file drifted: scripts/verify" in (
         capsys.readouterr().err
     )
@@ -1123,7 +1226,7 @@ def test_adopt_finalize_rejects_repository_drift(
         ),
     )
 
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 2
+    assert replay_finalize(project, "--dry-run") == 2
     assert "origin or visibility changed" in capsys.readouterr().err
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
 
@@ -1136,7 +1239,7 @@ def test_adopt_finalize_rechecks_repository_context_after_confirmation(
 ) -> None:
     """Reject repository context drift while finalize waits for approval."""
     _, project = initialize_pending_adoption(tmp_path)
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    assert replay_finalize(project, "--dry-run") == 0
     stable = cli.RepositoryContext(
         None,
         None,
@@ -1171,6 +1274,7 @@ def test_adopt_finalize_rechecks_repository_context_after_confirmation(
                 "--finalize",
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                *replay_authorization(finalize_plan_path(project)),
             ]
         )
         == 2
@@ -1194,7 +1298,7 @@ def test_adopt_finalize_failure_keeps_actionable_pending_state(
         lambda _: (_ for _ in ()).throw(CliError("fixture failure")),
     )
 
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 2
+    assert replay_finalize(project, "--dry-run") == 2
     assert "rerun csarc adopt --finalize" in capsys.readouterr().err
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
@@ -1208,12 +1312,12 @@ def test_adopt_finalize_requires_matching_second_stage_plan(
 ) -> None:
     """Bind accepted manual results and recheck them after confirmation."""
     _, project = initialize_pending_adoption(tmp_path)
-    assert main(["adopt", str(project), "--finalize", "--yes"]) == 0
+    assert replay_finalize(project, "--yes") == 0
     assert finalize_plan_path(project).is_file()
     capsys.readouterr()
     manifest = project / "pyproject.toml"
     reviewed = manifest.read_bytes()
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    assert replay_finalize(project, "--dry-run") == 0
     plan_path = finalize_plan_path(project)
     payload = json.loads(plan_path.read_text(encoding="utf-8"))
     assert payload["mode"] == "adopt-finalize"
@@ -1233,6 +1337,7 @@ def test_adopt_finalize_requires_matching_second_stage_plan(
                 "--finalize",
                 "--apply-plan",
                 str(plan_path),
+                *replay_authorization(plan_path),
             ]
         )
         == 2
@@ -1251,7 +1356,7 @@ def test_adopt_finalize_rejects_unexpected_worktree_state(
 ) -> None:
     """Reject files outside the complete pending adoption allowlist."""
     _, project = initialize_pending_adoption(tmp_path)
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    assert replay_finalize(project, "--dry-run") == 0
     (project / "unexpected.txt").write_text("not reviewed\n", encoding="utf-8")
 
     assert (
@@ -1262,13 +1367,14 @@ def test_adopt_finalize_rejects_unexpected_worktree_state(
                 "--finalize",
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                *replay_authorization(finalize_plan_path(project)),
                 "--yes",
                 "--non-interactive",
             ]
         )
         == 2
     )
-    assert "unexpected working-tree changes: unexpected.txt" in (
+    assert "Repository changed after the plan was created" in (
         capsys.readouterr().err
     )
     assert not (project / cli.PROVENANCE_FILE).exists()
@@ -1292,7 +1398,7 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
         encoding="utf-8",
     )
 
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 2
+    assert replay_finalize(project, "--dry-run") == 2
     assert "differs from the verified template: managed.txt" in (
         capsys.readouterr().err
     )
@@ -1396,6 +1502,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                *replay_authorization(plan_path),
                 "--yes",
                 "--non-interactive",
             ]
@@ -1427,7 +1534,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         )
 
     before = git(project, "status", "--porcelain")
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    assert replay_finalize(project, "--dry-run") == 0
     assert git(project, "status", "--porcelain") == before
     assert not (project / lock_name).exists()
     assert (
@@ -1438,6 +1545,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
                 "--finalize",
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                *replay_authorization(finalize_plan_path(project)),
                 "--non-interactive",
                 "--yes",
             ]
@@ -1553,6 +1661,7 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                *replay_authorization(plan_path),
                 "--yes",
                 "--non-interactive",
             ]
@@ -1702,6 +1811,7 @@ def test_real_self_adoption_treats_this_repository_like_any_product(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                *replay_authorization(plan_path),
                 "--yes",
                 "--non-interactive",
             ]
@@ -2211,6 +2321,7 @@ def test_adopt_applies_exact_plan_over_preserved_dirty_file(
                 str(project),
                 "--apply-plan",
                 str(plan),
+                *replay_authorization(plan),
                 "--yes",
                 "--non-interactive",
             ]
@@ -2271,7 +2382,18 @@ def test_adopt_rejects_dirty_path_not_classified_as_preserve(
     assert "Decision: Not ready to adopt" in markdown
     assert "Do not apply this plan" in markdown
     assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
-    assert main(["adopt", str(project), "--apply-plan", str(plan)]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                *replay_authorization(plan),
+            ]
+        )
+        == 2
+    )
     assert not (project / ".copier-answers.yml").exists()
 
 
@@ -2478,7 +2600,18 @@ def test_adopt_rejects_preserved_dirty_file_drift(
     else:
         (project / "extra.txt").write_text("unexpected\n", encoding="utf-8")
 
-    assert main(["adopt", str(project), "--apply-plan", str(plan)]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                *replay_authorization(plan),
+            ]
+        )
+        == 2
+    )
     assert "changed after the plan was created" in capsys.readouterr().err
     assert not (project / ".copier-answers.yml").exists()
 
@@ -2580,6 +2713,7 @@ def test_adopt_infers_unicode_repository_and_applies_exact_plan(
                 "adopt",
                 "--apply-plan",
                 str(plan_path),
+                *replay_authorization(plan_path),
                 "--yes",
                 "--non-interactive",
             ]
@@ -2631,6 +2765,7 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                *replay_authorization(plan_path),
                 "--yes",
                 "--non-interactive",
             ]
@@ -2657,7 +2792,7 @@ def test_adopt_finalize_apply_updates_report_to_applied_state(
     report_dir = tmp_path / "pending-product-csarc-adoption-report"
     markdown_path = report_dir / "csarc-adoption-dry-run.md"
 
-    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    assert replay_finalize(project, "--dry-run") == 0
     before_markdown = markdown_path.read_text(encoding="utf-8")
     assert "Adoption applied: `false`" in before_markdown
     assert "## Adoption applied" not in before_markdown
@@ -2670,6 +2805,7 @@ def test_adopt_finalize_apply_updates_report_to_applied_state(
                 "--finalize",
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                *replay_authorization(finalize_plan_path(project)),
                 "--non-interactive",
                 "--yes",
             ]
@@ -2686,6 +2822,279 @@ def test_adopt_finalize_apply_updates_report_to_applied_state(
     )
     assert payload["adoption"]["applied"] is True
     assert isinstance(payload["adoption"]["applied_at"], str)
+
+
+def test_unreleased_replay_rejects_self_digested_authority_before_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A self-consistent plan cannot authorize an unreleased source."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "forged-plan-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: forged plan product")
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / "forged-plan-product-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    forged_source = tmp_path / "forged-source"
+    template = payload["template"]
+    assert isinstance(template, dict)
+    template["source"] = str(forged_source)
+    template["sha"] = "f" * 40
+    write_self_digested_plan(plan, payload)
+    capsys.readouterr()
+
+    executed: list[str] = []
+
+    def reject_execution(*_args: object, **_kwargs: object) -> None:
+        executed.append("called")
+        raise AssertionError("unreleased source executed before authorization")
+
+    monkeypatch.setattr(cli, "resolve_revision", reject_execution)
+    monkeypatch.setattr(cli, "copier_copy", reject_execution)
+    monkeypatch.setattr(cli, "verify_project", reject_execution)
+
+    assert main(["adopt", str(project), "--apply-plan", str(plan)]) == 2
+    assert "requires this invocation" in capsys.readouterr().err
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                "--source",
+                str(source),
+                "--expected-sha",
+                revision,
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    assert "does not match the saved plan" in capsys.readouterr().err
+    assert executed == []
+
+
+def test_unreleased_replay_decline_prevents_source_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Display the saved plan and honor rejection before source execution."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "declined-plan-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: declined plan product")
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / "declined-plan-product-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    capsys.readouterr()
+
+    events: list[str] = []
+
+    def reject_execution(*_args: object, **_kwargs: object) -> None:
+        events.append("execution")
+        raise AssertionError("source executed before confirmation")
+
+    def plan_milestones(*_args: object, **_kwargs: object) -> None:
+        events.append("milestone-plan")
+
+    def decline(_: str) -> str:
+        events.append("confirm")
+        return "no"
+
+    monkeypatch.setattr(cli, "resolve_revision", reject_execution)
+    monkeypatch.setattr(cli, "copier_copy", reject_execution)
+    monkeypatch.setattr(cli, "milestone_description_plan", plan_milestones)
+    monkeypatch.setattr(
+        cli, "apply_milestone_description_plan", reject_execution
+    )
+    monkeypatch.setattr("builtins.input", decline)
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                *replay_authorization(plan),
+            ]
+        )
+        == 0
+    )
+    assert "Saved adoption plan:" in capsys.readouterr().out
+    assert events == ["milestone-plan", "confirm"]
+    assert not (project / ".copier-answers.yml").exists()
+
+
+def test_unreleased_checkpoint_requires_fresh_authority_before_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A pending checkpoint cannot authorize later template execution."""
+    _, project = initialize_pending_adoption(tmp_path)
+    assert replay_finalize(project, "--dry-run") == 0
+    plan = finalize_plan_path(project)
+    capsys.readouterr()
+    events: list[str] = []
+
+    def reject_execution(*_args: object, **_kwargs: object) -> None:
+        events.append("execution")
+        raise AssertionError("checkpoint authorized source execution")
+
+    monkeypatch.setattr(cli, "resolve_revision", reject_execution)
+    monkeypatch.setattr(cli, "capability_preflight", reject_execution)
+    monkeypatch.setattr(cli, "copier_copy", reject_execution)
+    monkeypatch.setattr(cli, "verify_project", reject_execution)
+
+    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 2
+    assert "requires this invocation" in capsys.readouterr().err
+    assert events == []
+
+    def plan_milestones(*_args: object, **_kwargs: object) -> None:
+        events.append("milestone-plan")
+
+    def decline(_: str) -> str:
+        events.append("confirm")
+        return "no"
+
+    monkeypatch.setattr(cli, "milestone_description_plan", plan_milestones)
+    monkeypatch.setattr(
+        cli, "apply_milestone_description_plan", reject_execution
+    )
+    monkeypatch.setattr("builtins.input", decline)
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--apply-plan",
+                str(plan),
+                *replay_authorization(plan),
+            ]
+        )
+        == 0
+    )
+    assert "Saved adoption plan:" in capsys.readouterr().out
+    assert events == ["milestone-plan", "confirm"]
+
+
+def test_unreleased_revision_records_canonical_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep fresh source comparison stable across working directories."""
+    source, sha = make_template(tmp_path)
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    monkeypatch.chdir(caller)
+
+    revision = cli.resolve_unreleased_revision("../template-source", sha)
+
+    assert revision.source == str(source.resolve())
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    args = cli.parser().parse_args(
+        [
+            "adopt",
+            ".",
+            "--apply-plan",
+            "plan.json",
+            "--source",
+            str(source.resolve()),
+            "--expected-sha",
+            sha,
+            "--allow-unreleased",
+        ]
+    )
+    assert cli.require_replay_authorization(
+        args,
+        source=revision.source,
+        sha=revision.sha,
+        verification="unverified",
+    )
+
+
+def test_verified_replay_rejects_unreleased_override() -> None:
+    """A verified Release needs no and accepts no development override."""
+    args = cli.parser().parse_args(["adopt", ".", "--apply-plan", "plan.json"])
+    assert (
+        cli.require_replay_authorization(
+            args,
+            source=cli.CANONICAL_SOURCE,
+            sha="a" * 40,
+            verification="verified",
+        )
+        is False
+    )
+    overridden = cli.parser().parse_args(
+        [
+            "adopt",
+            ".",
+            "--apply-plan",
+            "plan.json",
+            "--source",
+            ".",
+            "--expected-sha",
+            "a" * 40,
+            "--allow-unreleased",
+        ]
+    )
+    with pytest.raises(CliError, match="Verified replay"):
+        cli.require_replay_authorization(
+            overridden,
+            source=cli.CANONICAL_SOURCE,
+            sha="a" * 40,
+            verification="verified",
+        )
 
 
 @pytest.mark.large
@@ -2727,17 +3136,38 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
         original.replace('"mode": "adopt"', '"mode": "init"'),
         encoding="utf-8",
     )
-    assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                *replay_authorization(plan_path),
+            ]
+        )
+        == 2
+    )
     assert "digest does not match" in capsys.readouterr().err
     assert not (project / "managed.txt").exists()
 
     plan_path.write_text(original, encoding="utf-8")
     (project / "product.txt").write_text("new product\n", encoding="utf-8")
     commit(project, "test: move target head")
-    assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                *replay_authorization(plan_path),
+            ]
+        )
+        == 2
+    )
     error = capsys.readouterr().err
-    assert "drifted after dry-run" in error
-    assert "$.adoption.target_head" in error
+    assert "Repository changed after the plan was created" in error
     assert not (project / "managed.txt").exists()
 
 
@@ -2793,6 +3223,7 @@ def test_adopt_rechecks_target_after_confirmation(
                 str(project),
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                *replay_authorization(finalize_plan_path(project)),
             ]
         )
         == 2
@@ -2865,6 +3296,7 @@ def test_adopt_rechecks_repository_context_after_confirmation(
                 str(project),
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                *replay_authorization(finalize_plan_path(project)),
             ]
         )
         == 2
@@ -3225,6 +3657,7 @@ def test_adoption_records_and_replays_explicit_project_hook(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                *replay_authorization(plan_path),
                 "--yes",
                 "--non-interactive",
             ]
@@ -3813,6 +4246,7 @@ def test_adoption_preserves_executable_and_checked_patch_symlink(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                *replay_authorization(plan_path),
                 "--yes",
                 "--non-interactive",
             ]

@@ -69,6 +69,12 @@
    provenance, plan-drift, verification, or merge-conflict failure. Do not
    stash or commit existing user work. A failed adoption must leave the target
    unchanged or in its explicit resumable pending state.
+   A development-only exception using `--allow-unreleased` must repeat the
+   same local `--source`, full `--expected-sha`, and `--allow-unreleased` on
+   every machine-plan or pending-checkpoint replay. Saved plan fields and
+   digests are data, not execution authority. Show the saved plan and obtain
+   confirmation before running Copier tasks, target policy scripts, or product
+   hooks. Never pass those development flags when replaying a verified Release.
 8. Do not apply repository settings, change global agent configuration, push,
    open a pull request, or merge unless the user separately requests it.
 9. During handoff, point out that the installed `AGENTS.md` requires a bounded
