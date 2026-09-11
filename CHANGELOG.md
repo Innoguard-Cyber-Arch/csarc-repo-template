@@ -7,6 +7,14 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.15.6] - 2026-09-11
+
+### Bug Fixes
+
+* fix: require fresh adoption replay authorization (#721) (1c04726)
+* fix(cli): gate repository execution on approval (#722) (f26303d)
+* fix(cli): reject symlinked lifecycle writes (#723) (212b047)
+
 ## [0.15.5] - 2026-09-11
 
 ### Bug Fixes
