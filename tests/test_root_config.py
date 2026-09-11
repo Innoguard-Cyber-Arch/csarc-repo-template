@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -33,6 +34,46 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["release_ownership"] == "csarc-owned"
     assert config["release_settings_owner"] == "csarc-admin"
     assert config["release_immutable_releases"] == "required"
+
+
+def test_root_public_identity_claims_are_consistent() -> None:
+    """Keep root configuration and public-facing sources aligned."""
+    config = yaml.safe_load(
+        (ROOT / ".csarc/config.yml").read_text(encoding="utf-8")
+    )
+    pages = json.loads(
+        (ROOT / "policies/pages.json").read_text(encoding="utf-8")
+    )
+    readmes = [
+        (ROOT / "README.md").read_text(encoding="utf-8"),
+        (ROOT / "README.en.md").read_text(encoding="utf-8"),
+    ]
+    site_sources = [
+        (ROOT / "site/content/_index.zh-tw.md").read_text(encoding="utf-8"),
+        (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8"),
+    ]
+    robots = (ROOT / "docs/robots.txt").read_text(encoding="utf-8")
+
+    assert config["project_visibility"] == "public"
+    assert (
+        "public repository's GitHub Issues"
+        in config["security_reporting_channel"]
+    )
+    assert pages == {
+        "enabled": True,
+        "source": {"branch": "main", "path": "/docs"},
+    }
+
+    for text in readmes + site_sources:
+        assert "issues/79" in text
+        assert "issues/425" in text
+        assert "internal audience only" not in text
+        assert "內部限閱" not in text
+        assert "This organization is private" not in text
+        assert "這個組織對外是私密的" not in text
+
+    assert "publicly readable" in robots
+    assert "does not restrict access or sharing" in robots
 
 
 @pytest.mark.parametrize(

@@ -26,6 +26,7 @@ fit = "符合畫面"
         <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。<!-- csarc-readme-preamble-tagline:end --></p>
         <p class="subtitle flow-line"><strong>結果：</strong>不論是人或 AI 提出的修改，都要先說清楚要做什麼、通過檢查、再經人工審查，才會真的合併，並留下當時的證據。</p>
         <p class="subtitle">標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；維運模式才補充設定檔、程式與技術理由。快速導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
+        <p class="subtitle"><strong>公開狀態：</strong>本 repository 與 GitHub Pages repo-site 目前均為公開可讀；<code>noindex</code>／<code>robots.txt</code> 只降低索引，不限制讀取或分享。後續 hosting／access-control 決策留在 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425" target="_blank" rel="noreferrer">Issue #425</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
@@ -64,7 +65,7 @@ fit = "符合畫面"
 {{< /legacy >}}
 
 {{< basic >}}
-Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。本頁內容與 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 對齊、雙語同步維護。
+Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。本頁內容與 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 對齊、雙語同步維護。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
 <p class="template-version"><strong>公版版本：</strong>v0.15.4<!-- x-release-please-version --></p>
 
@@ -744,12 +745,12 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 {{< disclosure key="governance-config" title="單一設定來源與責任層級" >}}
 | 層級 | `.csarc/config.yml` key | 預設／允許值 | 產生或驗證位置 |
 | --- | --- | --- | --- |
-| 必要基線 | `branch_strategy` | 預設 `delivery`；可選 `delivery`、`main` | 分支指引、`policies/rulesets.json`，以及內部網站的交付路線段落 |
-| 組織政策 | `code_owner` | 一個存在且有 repo write access 的 `@organization/team` | `.github/CODEOWNERS`；由 repository settings plan／apply／check 驗證；內部網站的主要負責人欄位 |
+| 必要基線 | `branch_strategy` | 預設 `delivery`；可選 `delivery`、`main` | 分支指引、`policies/rulesets.json`，以及 repo-site 的交付路線段落 |
+| 組織政策 | `code_owner` | 一個存在且有 repo write access 的 `@organization/team` | `.github/CODEOWNERS`；由 repository settings plan／apply／check 驗證；repo-site 的主要負責人欄位 |
 | 組織政策 | `reviewers` | 一個或多個 GitHub 使用者名稱 | `.github/REVIEWERS`；`governance-comment.yml` 在每張非 draft PR 自動輪派 |
-| 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及內部網站的可見受眾欄位 |
-| 專案選擇 | `project_name` | 必填非空字串；預設 `CSARC Project` | 內部網站的標題與頁首 |
-| 專案選擇 | `project_description` | 必填一句話用途說明，拒絕佔位文字 | 內部網站的簡介段落 |
+| 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及 repo-site 的可見受眾欄位 |
+| 專案選擇 | `project_name` | 必填非空字串；預設 `CSARC Project` | repo-site 的標題與頁首 |
+| 專案選擇 | `project_description` | 必填一句話用途說明，拒絕佔位文字 | repo-site 的簡介段落 |
 | 專案選擇 | `languages` | 零到多個 `python`、`rust`、`typescript` | repo-site 的「使用語言」欄位 |
 | 專案選擇 | `repository_url`、`project_slug` | 未覆寫時由 `code_owner`／`project_name` 推導 | repo-site 的複製（clone）指引 |
 | 專案選配 | `enable_governance_drift_check` | 預設 `false`；設為 `true` 產生每日排程 Action | `false` 只保留本機 drift checker；`true` 另生成 `governance-drift.yml` |
@@ -924,14 +925,14 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
       <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不按聲量或日期一次把功能全打開</h3><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已完成。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新；共用治理與 CI-only composition 為 beta。<br><strong>仍在試行：</strong>Python、TypeScript 與混合 composition 仍各需一個真實 consuming repo 才能升為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo-site 已完成。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新；共用治理與 CI-only composition 為 beta。<br><strong>仍在試行：</strong>Python、TypeScript 與混合 composition 仍各需一個真實 consuming repo 才能升為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
       </div>
 {{< /legacy >}}
 
 {{< basic >}}
 | 導入層級 | 目前狀態 |
 | --- | --- |
-| 基本導入 | CI/CD-only、Python-only、TypeScript-only、混合 profile；Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已完成 |
+| 基本導入 | CI/CD-only、Python-only、TypeScript-only、混合 profile；Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo-site 已完成 |
 | 已完成線上驗證 | Release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier update |
 | 仍在試行 | Python、TypeScript 與混合 composition 各需一個真實 consuming repo 才能升為 beta |
 | 未來／可選 | 中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、部署、監控、RAG、自主 Agent |
@@ -946,19 +947,19 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="access-control" audience="archive" eyebrow="存取決策" title="託管方案未定前的臨時防護" subtitle="目前只有降低誤分享的措施，沒有把提示語宣稱成安全控制。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="access-control" audience="archive" eyebrow="存取決策" title="目前公開，存取控制仍待決策" subtitle="Repository 與 Pages 公開可讀；noindex 只降低索引，不是安全控制。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
-        <h2>存取控制決策｜<span class="accent">託管方案未定前的臨時防護</span></h2>
-        <p class="subtitle">評估三種存取控制方案的成本與限制；正式方案定案前，先以 <code>noindex</code>／<code>robots.txt</code> 降低意外曝光，這不是存取控制。</p>
+        <h2>存取控制決策｜<span class="accent">目前公開，正式方案尚未定案</span></h2>
+        <p class="subtitle">本 repository 與 GitHub Pages 目前公開可讀；<code>noindex</code>／<code>robots.txt</code> 只降低搜尋引擎索引，不能限制讀取或分享。</p>
       </header>
       <div class="plan-grid">
         <article class="plan-card team"><h3>Cloudflare Pages＋Access <span class="plan-state">候選</span></h3><p><strong>成本：</strong>免費額度可覆蓋小團隊登入牆；設定 Zero Trust 政策、網域與 DNS。<strong>限制：</strong>需要另建 Cloudflare 帳號與組織身分整合（Google／GitHub SSO 或 email OTP），資料與稽核政策需先確認。<strong>持有者：</strong>需組織 owner 建立並持有 Cloudflare 帳號權限，本 Issue 不建立或設定。</p></article>
         <article class="plan-card enterprise"><h3>GitHub Pages＋IP 限制 <span class="plan-state">受限</span></h3><p><strong>成本：</strong>沿用既有 GitHub 組織，不需另一個外部帳號。<strong>限制：</strong>私有 Pages 網站限定 GitHub Enterprise Cloud；IP allow list 對遠端／混合團隊不易維護，且組織目前是 Free plan，尚未具備此能力。<strong>持有者：</strong>需組織 owner 先升級方案，才能設定 Enterprise 網路政策。</p></article>
         <article class="plan-card current"><h3>內部登入平台（Backstage／Confluence 等） <span class="plan-state">未來</span></h3><p><strong>成本：</strong>可與既有身分系統（SSO）整合，統一管理多份內部文件，不只這一頁。<strong>限制：</strong>需要另外導入與維運一套平台，目前只有一份 repo-site，導入成本大於效益。<strong>持有者：</strong>需 IT／平台團隊建立與維運，屬於未來、服務變多才評估的選項。</p></article>
       </div>
-      <aside class="selection-note"><strong>目前決定</strong><span>三個方案都需要外部帳號或組織升級，本 Issue 範圍不包含實際申請或設定；候選以 Cloudflare Pages＋Access 為優先評估對象，決定前只維持 <code>noindex</code>／<code>robots.txt</code> 以降低意外曝光。任何一個方案定案後，需另開實作用 Issue 並由組織 owner 核准與持有帳號。</span></aside>
+      <aside class="selection-note"><strong>目前決定</strong><span>本 repository 與 Pages 維持公開，不把 <code>noindex</code>／<code>robots.txt</code> 說成存取控制；#79 保留過渡紀錄，Cloudflare Pages＋Access、改回 private 或升級 GitHub 方案的取捨留在 #425。任何方案定案後，仍需另開實作用 Issue 並由組織 owner 核准。</span></aside>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -969,10 +970,10 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 | Backstage／Confluence 等登入平台 | 可統一管理多份內部文件 | 現在只有一份網站，需 IT／平台團隊導入維運，成本高於效益 |
 
 {{< disclosure key="access-control-limit" title="目前已做與仍然做不到的事" >}}
-`docs/index.html` 內有 `noindex,nofollow`，`docs/robots.txt` 也拒絕 crawler。這些都不是 authentication；擁有離線 HTML 的人仍可轉寄。Issue #79 已記錄目前的過渡防護並結案；正式 host、身分提供者、資料與稽核政策目前沒有進行中的 Issue 在追蹤，需由維護者另開新案核准。
+`docs/index.html` 內有 `noindex,nofollow`，`docs/robots.txt` 也拒絕 crawler，但 repository 與 GitHub Pages 仍公開可讀。這些都不是 authentication；任何人仍可讀取、下載或轉寄內容。Issue #79 保留過渡紀錄，正式 host、身分提供者、資料與稽核政策由 Issue #425 規劃。若未來改回 private，須先盤點公開期間的 Issue、PR 與 commit；敏感資訊另依安全事件流程處理，不能把改 visibility 當成清除外洩。
 {{< /disclosure >}}
 
-<aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>臨時措施：</strong><code>docs/index.html</code> 的 <code>&lt;meta name="robots"&gt;</code>＋<code>docs/robots.txt</code></li><li><strong>決策記錄：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">Issue #79</a>（已結案，記錄過渡防護；host 選定尚無進行中的 Issue，需另開新案）</li></ul></aside>
+<aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>目前狀態：</strong><code>.csarc/config.yml</code> 記錄 <code>project_visibility: public</code>，<code>policies/pages.json</code> 維持由 <code>main:/docs</code> 發布</li><li><strong>索引偏好：</strong><code>docs/index.html</code> 的 <code>&lt;meta name="robots"&gt;</code>＋<code>docs/robots.txt</code>，不構成存取控制</li><li><strong>決策記錄：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">Issue #79</a>（過渡紀錄）／<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425" target="_blank" rel="noreferrer">Issue #425</a>（現行 hosting／access-control 規劃）</li></ul></aside>
 {{< /basic >}}
 {{< /slide >}}
 
@@ -1062,12 +1063,12 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="fleet-inventory" audience="archive" eyebrow="Fleet 治理" title="本機查詢採用盤點，不對外公開清單" subtitle="這個組織對外是私密的，頁面不再靜態列出真實 repository 清單。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="fleet-inventory" audience="archive" eyebrow="Fleet 治理" title="本機查詢採用盤點，不對外公開清單" subtitle="這個 repository 與頁面公開可讀，因此不在靜態內容列出可能含 private repository 的 fleet 清單。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
         <h2>Fleet 治理盤點｜<span class="accent">本機查詢，不對外公開</span></h2>
-        <p class="subtitle">這個組織對外是私密的，這個模板 repo 未來可能分享給公司其他組別；真實 repository 清單不寫進網站內容或 git 歷史。維護者改用 <code>scripts/audit-fleet-adoption</code> 在本機即時查詢、即時計算、只印在終端機。</p>
+        <p class="subtitle">這個模板 repository 與 repo-site 公開可讀；真實 fleet 清單可能包含 private repository，因此不寫進網站內容或 git 歷史。維護者改用 <code>scripts/audit-fleet-adoption</code> 在本機即時查詢、即時計算、只印在終端機。</p>
       </header>
       <table class="decision-register audit-register" aria-label="Fleet 盤點評估方式">
         <thead><tr><th>評估項目</th><th>取得方式</th></tr></thead>

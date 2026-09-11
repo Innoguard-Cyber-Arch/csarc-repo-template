@@ -21,7 +21,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 | 公版設定 | 建立／導入時把選項寫入 `.csarc/config.yml`；之後由公版更新，不必到不同檔案重複設定 |
 | 共用能力 | 工作單（Issue）與變更提案（PR）表單、AI 工作規範、自動驗證、依賴安全、版本記錄與公版更新 |
 
-本節內容與 [repo-site](docs/index.html) 的「首頁」投影片對齊，雙語（中／英）由該站台同步維護；[開啟 repo-site 與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見站台內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）。
+本節內容與 [repo-site](docs/index.html) 的「首頁」投影片對齊，雙語（中／英）由該站台同步維護；本 repository 與 [GitHub Pages repo-site](docs/index.html) 目前均為公開可讀。`noindex`／`robots.txt` 只能降低搜尋引擎索引，不能限制讀取或分享；過渡紀錄見 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)，後續 hosting／access-control 決策留在 [Issue #425](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425)。
 
 > **這份文件的定位：** README 只給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 [`AGENTS.md`](AGENTS.md)（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀 [repo-site 附錄](docs/index.html)。三份文件各自負責一層，避免同一套規則重複維護。
 
@@ -178,7 +178,7 @@ GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository setti
 選配整合（Renovate）與 SAST 啟用依偵測到的平台能力與方案提供建議，不需要導入者建立 PAT 或額外 GitHub App；`csarc init`／`adopt`／`update` 會先顯示唯讀 preflight 結果。選配整合依目前權限引導，分成 `available`／`request-owner`／`fallback` 三種狀態，決定能否直接開啟 [Renovate App 安裝頁](https://github.com/apps/renovate/installations/new)。這個 preflight 不會啟用發版流程。完整能力矩陣與 Fleet 治理觸發門檻見附錄。
 Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`，不要把 token、私鑰或實際密碼寫進 repo。`./scripts/verify-template.sh` 只證明靜態與合成驗證；歷史 live-integration 與 artifact-consumption run 只證明當時的 commit，不能當成現行能力。封存證據與未來恢復條件見 [`docs/live-integration.md`](docs/live-integration.md) 及 [`docs/artifact-consumption.md`](docs/artifact-consumption.md)。
 
-`docs/index.html` 目前沒有登入或其他實際存取限制，只有 `noindex`／`docs/robots.txt` 臨時防護；候選方案見附錄「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)。
+`docs/index.html` 目前透過 GitHub Pages 公開提供，沒有登入或其他實際存取限制；`noindex`／`docs/robots.txt` 只能降低索引，不能限制讀取或分享。候選方案見附錄「存取控制決策」章節、過渡紀錄 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79) 與現行規劃 [Issue #425](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425)。若未來要改回 private，必須先盤點公開期間的 Issue、PR 與 commit；發現敏感資訊時另走安全事件流程，不能把改 visibility 當成清除外洩。
 
 ## 發布與維運
 

@@ -1,7 +1,6 @@
-# Stopgap only: this repository has no real access control on docs/ yet.
-# noindex/robots.txt keeps well-behaved crawlers from indexing the page;
-# it does not stop anyone with the URL from opening it. See the
-# "存取控制決策" appendix slide in docs/index.html and Issue #79 for the
-# actual access-control decision and rollout plan.
+# This repository and its GitHub Pages site are publicly readable.
+# noindex/robots.txt only asks well-behaved crawlers not to index the site;
+# it does not restrict access or sharing. Issue #79 records the interim
+# measure; Issue #425 owns the pending hosting and access-control decision.
 User-agent: *
 Disallow: /

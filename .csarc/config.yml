@@ -21,7 +21,7 @@ project_mode: existing
 project_name: CSARC Repository Template
 project_run_command: uv run csarc --help
 project_slug: csarc-repo-template
-project_visibility: private
+project_visibility: public
 python_support_mode: latest
 release_immutable_releases: required
 release_ownership: csarc-owned
@@ -31,4 +31,4 @@ release_settings_owner: csarc-admin
 release_workflow: .github/workflows/release.yml
 repository_url: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template
 reviewers: '@jachline28'
-security_reporting_channel: Use this private repository's GitHub Issues.
+security_reporting_channel: Use this public repository's GitHub Issues; never post secrets or sensitive details.
