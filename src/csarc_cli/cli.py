@@ -7,12 +7,14 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -923,14 +925,12 @@ def pending_adoption_data(
 
 def write_pending_adoption(target: Path, payload: dict[str, object]) -> None:
     """Atomically persist an incomplete adoption checkpoint."""
-    destination = target / PENDING_ADOPTION_FILE
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(".tmp")
-    temporary.write_text(
+    atomic_replace_text(
+        target,
+        PENDING_ADOPTION_FILE.as_posix(),
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+        mode=0o666,
     )
-    temporary.replace(destination)
 
 
 def read_pending_adoption(target: Path) -> dict[str, object]:
@@ -1017,10 +1017,9 @@ def write_provenance(
     answers: Mapping[str, object] | None = None,
 ) -> None:
     """Atomically persist verified release provenance."""
-    destination = target / PROVENANCE_FILE
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(".tmp")
-    temporary.write_text(
+    atomic_replace_text(
+        target,
+        PROVENANCE_FILE.as_posix(),
         json.dumps(
             provenance_data(
                 revision,
@@ -1032,9 +1031,8 @@ def write_provenance(
             sort_keys=True,
         )
         + "\n",
-        encoding="utf-8",
+        mode=0o666,
     )
-    temporary.replace(destination)
 
 
 def read_provenance(target: Path) -> dict[str, object] | None:
@@ -1556,7 +1554,7 @@ def adoption_report_markdown(  # noqa: C901
 def adoption_report_directory(target: Path, requested: Path | None) -> Path:
     """Resolve a report directory that cannot dirty the target repository."""
     directory = (
-        requested.expanduser().resolve()
+        Path(os.path.abspath(requested.expanduser()))
         if requested is not None
         else target.parent / f"{target.name}-csarc-adoption-report"
     )
@@ -1577,25 +1575,119 @@ def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
     return payload
 
 
-def atomic_replace_text(destination: Path, content: str) -> None:
-    """Replace text through a random regular file in the same directory."""
-    temporary: Path | None = None
+@contextmanager
+def atomic_parent_directory(
+    root: Path, relative_name: str
+) -> Iterator[tuple[int, str]]:
+    """Open a relative destination's parent without following symlinks."""
+    destination = checked_destination(root, relative_name)
+    relative = destination.relative_to(root)
+    no_follow = getattr(os, "O_NOFOLLOW", None)
+    directory_only = getattr(os, "O_DIRECTORY", None)
+    if no_follow is None or directory_only is None:
+        raise CliError("Atomic writes require no-follow directory support.")
+    directory_flags = os.O_RDONLY | directory_only | no_follow
+    descriptors: list[int] = []
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=destination.parent,
-            prefix=f".{destination.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as output:
-            temporary = Path(output.name)
-            output.write(content)
-            output.flush()
-        temporary.replace(destination)
+        directory_fd = os.open(root, directory_flags)
+        descriptors.append(directory_fd)
+        for part in relative.parts[:-1]:
+            with suppress(FileExistsError):
+                os.mkdir(part, dir_fd=directory_fd)
+            child_fd = os.open(part, directory_flags, dir_fd=directory_fd)
+            descriptors.append(child_fd)
+            directory_fd = child_fd
+        yield directory_fd, relative.name
+    except OSError as error:
+        raise CliError(
+            f"Cannot safely access {relative_name}: {error}"
+        ) from error
     finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
+def check_atomic_destination(
+    directory_fd: int, destination_name: str, relative_name: str
+) -> None:
+    """Reject a final destination that cannot be safely replaced."""
+    try:
+        destination_mode = os.stat(
+            destination_name,
+            dir_fd=directory_fd,
+            follow_symlinks=False,
+        ).st_mode
+    except FileNotFoundError:
+        return
+    if not stat.S_ISREG(destination_mode):
+        raise CliError(
+            "Atomic destination is a symlink or non-regular file: "
+            f"{relative_name}"
+        )
+
+
+def create_atomic_temporary(
+    directory_fd: int, destination_name: str, mode: int
+) -> tuple[int, str]:
+    """Create one unpredictable exclusive temporary without symlink follow."""
+    file_flags = (
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+    )
+    for _ in range(128):
+        temporary_name = f".{destination_name}.{secrets.token_hex(16)}.tmp"
+
+        try:
+            descriptor = os.open(
+                temporary_name,
+                file_flags,
+                mode,
+                dir_fd=directory_fd,
+            )
+        except FileExistsError:
+            continue
+        return descriptor, temporary_name
+    raise CliError("Cannot allocate a unique atomic temporary file.")
+
+
+def atomic_replace_text(
+    root: Path,
+    relative_name: str,
+    content: str,
+    *,
+    mode: int = 0o600,
+) -> None:
+    """Replace text through no-follow directory and temporary descriptors."""
+    temporary_name: str | None = None
+    with atomic_parent_directory(root, relative_name) as (
+        directory_fd,
+        destination_name,
+    ):
+        check_atomic_destination(directory_fd, destination_name, relative_name)
+        try:
+            descriptor, temporary_name = create_atomic_temporary(
+                directory_fd, destination_name, mode
+            )
+
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                output.write(content)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(
+                temporary_name,
+                destination_name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+            )
+            temporary_name = None
+            os.fsync(directory_fd)
+        except OSError as error:
+            raise CliError(
+                f"Cannot safely replace {relative_name}: {error}"
+            ) from error
+        finally:
+            if temporary_name is not None:
+                with suppress(FileNotFoundError):
+                    os.unlink(temporary_name, dir_fd=directory_fd)
 
 
 def read_adoption_plan(path: Path) -> dict[str, object]:
@@ -1846,10 +1938,12 @@ def write_adoption_reports(
     directory = adoption_report_directory(plan.target, requested_directory)
     markdown_path = directory / f"{ADOPTION_REPORT_BASENAME}.md"
     plan_path = directory / ADOPTION_PLAN_BASENAME
-    directory.mkdir(parents=True, exist_ok=True)
+    filesystem_root = Path(directory.anchor)
+    relative_directory = directory.relative_to(filesystem_root)
     generated_at = str(plan.adoption["generated_at"])
     atomic_replace_text(
-        markdown_path,
+        filesystem_root,
+        (relative_directory / markdown_path.name).as_posix(),
         adoption_report_markdown(
             plan.target,
             plan.revision,
@@ -1861,7 +1955,8 @@ def write_adoption_reports(
         ),
     )
     atomic_replace_text(
-        plan_path,
+        filesystem_root,
+        (relative_directory / plan_path.name).as_posix(),
         json.dumps(adoption_plan_payload(plan), indent=2, sort_keys=True)
         + "\n",
     )
