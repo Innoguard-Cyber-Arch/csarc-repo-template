@@ -16,12 +16,11 @@ set -euo pipefail
 # locally with no arguments beyond `gh` authentication.
 #
 # Detection condition (both must hold):
-#   (a) `main` HEAD is not the commit of the last successful `release.yml`
-#       run on main, nor the commit recorded by the most recent local
-#       publish record -- i.e. main has advanced past the last known
-#       release-path activity.
-#   (b) No successful `release.yml` run AND no local publish record was
-#       observed in the last N hours (wall clock from "now").
+#   (a) `main` HEAD is not covered by the latest stable GitHub Release, the
+#       last successful `release.yml` run -- i.e. main has advanced past the
+#       last authoritative release-path activity.
+#   (b) No valid stable Release or successful `release.yml` run was observed
+#       in the last N hours (wall clock from "now").
 #
 # `release.yml` triggers on every push to main and completes successfully
 # even when release_policy.py decides no release is warranted (a "no
@@ -39,18 +38,21 @@ set -euo pipefail
 # --hours, or the RELEASE_DRIFT_HOURS environment variable (the workflow
 # also exposes it as a workflow_dispatch input).
 #
-# Local publish record convention (Issue #605 makes this convention
-# concrete; #589 only described it in prose): a line anywhere in either
-# (1) a commit message on `main` (i.e. a merge/squash commit description)
-# or (2) a comment on this script's own open tracking Issue, matching:
+# The latest stable Release covers main when GitHub marks it immutable, its
+# exact target SHA is main or an ancestor, and it was published no earlier
+# than the current main commit. Mutable Releases, drafts, prereleases,
+# non-ancestor targets, and older releases are ignored.
+#
+# `Release-publish-record` text remains useful audit evidence when found in a
+# commit message, a trusted tracking-Issue comment, or a trusted merged
+# release-PR comment:
 #
 #   Release-publish-record: operator=<@handle> commit=<sha> command="<cmd>" result=<result>
 #
-# `operator`, `commit`, `command`, and `result` are free-form key=value
-# pairs (quote a value that contains spaces); only `commit` is required
-# for detection, but recording all four is the point -- see docs/ci-policy.md's
-# "Release 發版不依賴 Actions 健康度的 fallback（#589）" section for why
-# auditability of a local run needs this trail.
+# The detector reports the newest well-formed record for diagnosis, but it
+# never lets that mutable text suppress drift. Only GitHub's Release and
+# workflow state are authoritative here. Audit queries are best-effort and
+# cannot prevent the authoritative check or alert from completing.
 #
 # This script only detects and reports; it never triggers a release.yml
 # rerun or runs scripts/publish-release itself. Whether to take over
@@ -133,7 +135,24 @@ trap 'rm -rf "$work_dir"' EXIT
 
 main_commit_json="$(gh api "repos/$repo/commits/$branch" --jq '{sha: .sha, date: .commit.committer.date}')"
 
-last_run_json="$(gh api "repos/$repo/actions/workflows/release.yml/runs?branch=$branch&status=success&per_page=1" --jq '.workflow_runs[0] // {}')"
+last_run_json="$(gh api "repos/$repo/actions/workflows/release.yml/runs?branch=$branch&status=success&per_page=1" --jq 'if .workflow_runs[0] == null then {} else .workflow_runs[0] | {head_sha, updated_at, html_url} end')"
+
+latest_release_json="$(gh api "repos/$repo/releases?per_page=100" --jq '([.[] | select(.draft == false and .prerelease == false and .published_at != null)] | sort_by(.published_at) | reverse | .[0]) | if . == null then {} else {tag_name, target_commitish, published_at, draft, prerelease, immutable, html_url} end')"
+main_sha="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["sha"])' "$main_commit_json")"
+release_target="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("target_commitish", ""))' "$latest_release_json")"
+release_compare_json="{}"
+if [[ "$release_target" =~ ^[0-9a-f]{40}$ ]]; then
+  release_compare_json="$(gh api "repos/$repo/compare/$release_target...$main_sha" --jq '{status: .status}')"
+fi
+
+release_prs_file="$work_dir/release-prs.json"
+if ! gh pr list \
+  --repo "$repo" --state merged --base "$branch" \
+  --search 'in:title "chore(main): release"' --limit 20 \
+  --json number,title,mergedAt,mergeCommit,comments >"$release_prs_file"; then
+  echo "check-release-drift: release PR audit evidence is unavailable" >&2
+  printf '[]\n' >"$release_prs_file"
+fi
 
 # Resolve "now" (and the derived "since" cutoff) through python so date
 # arithmetic stays portable across the GNU/BSD `date` split (Issue #605
@@ -159,7 +178,13 @@ hours = float(sys.argv[2])
 print((now - timedelta(hours=hours)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
 ' "$now_iso" "$hours")"
 
-commits_json="$(gh api "repos/$repo/commits?sha=$branch&since=$since_iso&per_page=100" --jq '[.[] | {sha: .sha, date: .commit.committer.date, message: .commit.message}]')"
+commits_file="$work_dir/commits.json"
+if ! gh api "repos/$repo/commits?sha=$branch&since=$since_iso&per_page=100" \
+  --jq '[.[] | {sha: .sha, date: .commit.committer.date, message: .commit.message}]' \
+  >"$commits_file"; then
+  echo "check-release-drift: commit audit evidence is unavailable" >&2
+  printf '[]\n' >"$commits_file"
+fi
 
 issue_number="$(
   gh issue list --state open --limit 100 --json number,title \
@@ -167,23 +192,31 @@ issue_number="$(
     head -n 1
 )"
 
-comments_json="[]"
+comments_file="$work_dir/comments.json"
+printf '[]\n' >"$comments_file"
 if [[ -n "$issue_number" ]]; then
-  comments_json="$(gh api "repos/$repo/issues/$issue_number/comments?per_page=100" --jq '[.[] | {body: .body, date: .created_at}]')"
+  if ! gh api "repos/$repo/issues/$issue_number/comments?per_page=100" \
+    --jq '[.[] | {body: .body, date: .created_at, author_association: .author_association}]' \
+    >"$comments_file"; then
+    echo "check-release-drift: tracking Issue audit evidence is unavailable" >&2
+    printf '[]\n' >"$comments_file"
+  fi
 fi
 
 result_file="$work_dir/result.json"
 
 python3 - "$result_file" "$repo" "$branch" "$hours" "$now_iso" "$since_iso" \
-  "$marker_prefix" "$title" <<'PY' "$main_commit_json" "$last_run_json" "$commits_json" "$comments_json"
+  "$marker_prefix" "$title" "$commits_file" "$comments_file" "$release_prs_file" \
+  <<'PY' "$main_commit_json" "$last_run_json" "$latest_release_json" "$release_compare_json"
 import json
 import re
 import sys
 from datetime import datetime
 
 (result_path, repo, branch, hours_raw, now_raw, since_raw,
- marker_prefix, title) = sys.argv[1:9]
-main_commit_raw, last_run_raw, commits_raw, comments_raw = sys.argv[9:13]
+ marker_prefix, title, commits_path, comments_path, release_prs_path) = sys.argv[1:12]
+(main_commit_raw, last_run_raw, latest_release_raw,
+ release_compare_raw) = sys.argv[12:16]
 
 
 def parse_time(value: str) -> datetime:
@@ -192,8 +225,14 @@ def parse_time(value: str) -> datetime:
 
 main_commit = json.loads(main_commit_raw)
 last_run = json.loads(last_run_raw) or None
-commits = json.loads(commits_raw)
-comments = json.loads(comments_raw)
+latest_release = json.loads(latest_release_raw)
+release_compare = json.loads(release_compare_raw)
+with open(commits_path, encoding="utf-8") as source:
+    commits = json.load(source)
+with open(comments_path, encoding="utf-8") as source:
+    comments = json.load(source)
+with open(release_prs_path, encoding="utf-8") as source:
+    release_prs = json.load(source)
 now = parse_time(now_raw)
 since = parse_time(since_raw)
 hours = float(hours_raw)
@@ -208,6 +247,13 @@ last_success_url = last_run.get("html_url") if last_run else None
 
 record_pattern = re.compile(re.escape(marker_prefix) + r"\s*(?P<fields>.+)")
 field_pattern = re.compile(r'(\w+)=("[^"]*"|\S+)')
+sha_pattern = re.compile(r"[0-9a-f]{40}")
+operator_pattern = re.compile(r"@[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
+release_title_pattern = re.compile(
+    r"chore\(main\): release (?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+)
+trusted_associations = {"OWNER", "MEMBER", "COLLABORATOR"}
 
 
 def parse_record(text: str) -> dict[str, str] | None:
@@ -218,7 +264,17 @@ def parse_record(text: str) -> dict[str, str] | None:
         key: raw_value.strip('"')
         for key, raw_value in field_pattern.findall(match.group("fields"))
     }
-    return fields if "commit" in fields else None
+    if (
+        set(fields) == {"operator", "commit", "command", "result"}
+        and operator_pattern.fullmatch(fields["operator"])
+        and sha_pattern.fullmatch(fields["commit"])
+        and fields["command"]
+        and len(fields["command"]) <= 512
+        and "`" not in fields["command"]
+        and fields["result"] == "published"
+    ):
+        return fields
+    return None
 
 
 candidates = []
@@ -233,6 +289,8 @@ for commit in commits:
             }
         )
 for comment in comments:
+    if comment.get("author_association") not in trusted_associations:
+        continue
     fields = parse_record(comment.get("body", ""))
     if fields:
         candidates.append(
@@ -242,17 +300,74 @@ for comment in comments:
                 "fields": fields,
             }
         )
+for pull in release_prs:
+    merge_commit = pull.get("mergeCommit") or {}
+    merge_sha = merge_commit.get("oid")
+    merged_at = pull.get("mergedAt")
+    if (
+        not release_title_pattern.fullmatch(str(pull.get("title", "")))
+        or not sha_pattern.fullmatch(str(merge_sha or ""))
+        or not isinstance(merged_at, str)
+    ):
+        continue
+    for comment in pull.get("comments") or []:
+        if comment.get("authorAssociation") not in trusted_associations:
+            continue
+        fields = parse_record(comment.get("body", ""))
+        comment_time = comment.get("createdAt")
+        if (
+            fields
+            and fields["commit"] == merge_sha
+            and isinstance(comment_time, str)
+            and parse_time(comment_time) >= parse_time(merged_at)
+        ):
+            candidates.append(
+                {
+                    "source": f"release PR #{pull['number']} comment",
+                    "time": comment_time,
+                    "fields": fields,
+                }
+            )
 
 record = max(candidates, key=lambda item: parse_time(item["time"])) if candidates else None
-record_sha = record["fields"].get("commit") if record else None
-record_time = parse_time(record["time"]) if record else None
 
-released_shas = {sha for sha in (last_success_sha, record_sha) if sha}
-main_advanced = main_sha not in released_shas
+release_valid = False
+release_covers_main = False
+release_time = None
+release_reason = "none found"
+if latest_release:
+    release_tag = latest_release.get("tag_name")
+    release_sha = latest_release.get("target_commitish")
+    published_at = latest_release.get("published_at")
+    compare_status = release_compare.get("status")
+    if latest_release.get("draft") is not False or latest_release.get("prerelease") is not False:
+        release_reason = "ignored: draft or prerelease"
+    elif latest_release.get("immutable") is not True:
+        release_reason = "ignored: release is not immutable"
+    elif not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", str(release_tag or "")):
+        release_reason = "ignored: tag is not a stable semantic version"
+    elif not sha_pattern.fullmatch(str(release_sha or "")):
+        release_reason = "ignored: target is not an exact commit SHA"
+    elif compare_status not in {"identical", "ahead"}:
+        release_reason = "ignored: target is not main or its ancestor"
+    elif not isinstance(published_at, str) or parse_time(published_at) < parse_time(main_date):
+        release_reason = "ignored: published before the current main commit"
+    else:
+        release_valid = True
+        release_covers_main = compare_status == "identical"
+        release_time = parse_time(published_at)
+        release_reason = (
+            "valid release evidence (covers main)"
+            if release_covers_main
+            else "valid recent release evidence (target is an ancestor of main)"
+        )
+
+released_shas = {sha for sha in (last_success_sha,) if sha}
+main_advanced = main_sha not in released_shas and not release_covers_main
 
 success_recent = bool(last_success_time and last_success_time >= since)
-record_recent = bool(record_time and record_time >= since)
-recent_activity = success_recent or record_recent
+release_recent = bool(release_time and release_time >= since)
+recent_activity = success_recent or release_recent
 
 drift = main_advanced and not recent_activity
 
@@ -266,19 +381,31 @@ if last_run:
     )
 else:
     lines.append("Last successful release.yml run: none found")
+if latest_release:
+    lines.append(
+        "Latest stable GitHub Release: "
+        f"{latest_release.get('tag_name')} target "
+        f"{latest_release.get('target_commitish')} at "
+        f"{latest_release.get('published_at')} "
+        f"({latest_release.get('html_url')}; {release_reason})"
+    )
+else:
+    lines.append("Latest stable GitHub Release: none found")
 if record:
     lines.append(
-        "Local publish record: "
+        "Local publish record (audit only): "
         + " ".join(f"{key}={value}" for key, value in record["fields"].items())
         + f" (from {record['source']} at {record['time']})"
     )
 else:
-    lines.append("Local publish record: none found")
+    lines.append("Local publish record (audit only): none found")
 lines.append(
     "Result: "
     + (
         "DRIFT DETECTED"
         if drift
+        else "no drift (latest stable GitHub Release covers main)"
+        if release_covers_main
         else "no drift (main not advanced past the last known release activity)"
         if not main_advanced
         else "no drift (recent release activity within the threshold)"
@@ -293,18 +420,28 @@ if drift:
         else "- 最後一次成功的 `release.yml` run：找不到任何成功 run"
     )
     record_evidence = (
-        "- 本機發版紀錄：`{fields}`（來源：{source}，時間：{time}）".format(
+        "- 本機發版紀錄（僅供稽核，不影響判定）：`{fields}`（來源：{source}，時間：{time}）".format(
             fields=" ".join(f"{key}={value}" for key, value in record["fields"].items()),
             source=record["source"],
             time=record["time"],
         )
         if record
-        else "- 本機發版紀錄：找不到符合格式的紀錄"
+        else "- 本機發版紀錄（僅供稽核，不影響判定）：找不到符合格式的紀錄"
+    )
+    release_evidence = (
+        "- 最新 stable GitHub Release：`{tag}` target `{target}`，{published}（{reason}）".format(
+            tag=latest_release.get("tag_name"),
+            target=latest_release.get("target_commitish"),
+            published=latest_release.get("published_at"),
+            reason=release_reason,
+        )
+        if latest_release
+        else "- 最新 stable GitHub Release：找不到"
     )
     issue_body = f"""### 問題
 
 排程執行的 `scripts/check-release-drift` 偵測到 `main` 已經前進，但過去 {hours:g} 小時內
-沒有找到任何一次成功的 `release.yml` run，也沒有找到本機發版紀錄。這代表發版流程可能已經
+沒有找到有效的 stable GitHub Release 或成功的 `release.yml` run。這代表發版流程可能已經
 停擺，且過去沒有人會自動被通知——見 #587（2026-09-03，同樣的狀況拖了超過 8 小時才被人工
 發現 Releases 頁面停在舊版本）與 #605（本檢查本身的設計背景）。此通知不會自動觸發
 `release.yml` 重跑，也不會自動執行本機發版；是否接手仍由人或 agent 判斷。
@@ -313,6 +450,7 @@ if drift:
 
 - `main` HEAD：`{main_sha}`，{main_date}
 {last_success_evidence}
+{release_evidence}
 {record_evidence}
 - 判定門檻：過去 {hours:g} 小時（可用 `RELEASE_DRIFT_HOURS` 環境變數或
   `.github/workflows/release-drift.yml` 的 `hours` workflow_dispatch input 調整）
@@ -324,7 +462,7 @@ if drift:
       （`gh run list --workflow release.yml` 或 Actions 頁面），修好 hosted 路徑；或依
       `docs/ci-policy.md` 的「Release 發版不依賴 Actions 健康度的 fallback（#589）」一節，
       由具備 admin 權限的維護者本機執行 `scripts/publish-release`
-- [ ] 執行本機發版後，依約定在合併說明或本 Issue 留言記錄：
+- [ ] 執行本機發版後，依約定在合併說明或本 Issue 留言留下稽核紀錄：
       `` `Release-publish-record: operator=<@handle> commit=<sha> command="<command>" result=<result>` ``
 - [ ] 重新排程執行（或手動觸發 `.github/workflows/release-drift.yml`）確認已恢復，並手動
       關閉本 Issue
