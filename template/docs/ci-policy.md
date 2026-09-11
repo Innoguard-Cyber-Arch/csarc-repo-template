@@ -90,6 +90,21 @@ Agent 或 automation 若要變更 PR 的 ready／draft、授權或 metadata，�
 lease，並透過 `scripts/pr_lifecycle.py` 執行；`scripts/verify` 會拒絕另一套重複寫入者。
 人工在 GitHub 上審查與合併不受這個工具限制。
 
+### Exact-head review 即為合併授權（#719）
+
+一般有獨立 reviewer 的 PR，不需要再留一則重複的授權留言。`scripts/pr_lifecycle.py`
+會把獨立 maintainer 對**目前 head SHA** 的最新有效 `APPROVED` review 直接視為合併授權；
+它會即時確認 reviewer 仍有 `maintain`／`admin` 權限、不是執行 merge 的帳號，而且 review
+的 `commit_id` 正好等於目前 head。任何後續 push 都會產生新 SHA，使舊 approval 自然
+失效；`CHANGES_REQUESTED`、新的 Draft 事件、未解決的 blocking comment、未完成 checklist
+或 required check 仍會 fail closed。
+
+目前 alpha Ruleset 的已知 admin `pull_request` bypass 也只能由 lifecycle 在上述
+exact-head approval 成立、GitHub 回報 `mergeable_state=clean`、必要檢查逐項重驗成功，且
+live bypass actor 清單精確等於 repo 宣告值時使用；其他 bypass 形狀仍降級為 human-only。
+這條路徑會在最後一次 merge snapshot 前自動留下 `bypass-trace:`。沒有獨立 review 的
+Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head maintainer 授權留言。
+
 `gh pr merge --admin` 只能用來繞過文件明列的已知例外，目前有兩項：
 
 1. `pr-policy.yml` `title` job 的「Validate Milestone approval」step（要求非提案者在
@@ -201,8 +216,9 @@ fail——逼著「release_phase 已經正式進入 release，但 bypass_actors 
 狀態不可能被合併，而不是靠人記得清空。回歸測試在
 `tests/test_release_phase_rulesets.py`。
 
-**使用留痕（alpha／beta 都要）**：每次真的用這個 bypass（`gh pr merge --admin`）合併
-PR，必須在同一張 PR 上、合併之前，用 `gh pr comment` 留下一行結構化訊息：
+**使用留痕（alpha／beta 都要）**：每次真的用這個 bypass 合併 PR，必須在同一張 PR
+上、合併之前留下一行結構化訊息；#719 的 exact-head reviewed lifecycle 路徑會自動留下，
+人工 `gh pr merge --admin` 則必須先用 `gh pr comment` 留下：
 
 ```text
 bypass-trace: release_phase=<alpha|beta> actor=<github-login> reason=<簡短原因>
@@ -211,12 +227,13 @@ bypass-trace: release_phase=<alpha|beta> actor=<github-login> reason=<簡短原�
 `scripts/check-bypass-trace <PR 編號> --repo <owner/repo>`（核心比對邏輯在
 `scripts/check_bypass_trace.py`，回歸測試在 `tests/test_check_bypass_trace.py`）
 查核一張已合併 PR 是否在合併時間之前留有符合格式的留痕註解；PR 未合併時回報
-「尚無需查核」，已合併但找不到留痕則 fail closed（exit 1）。自動判斷「這張 PR
-是否真的用了 bypass」（交叉核對 review／required-check 實際狀態，
+「尚無需查核」，已合併但找不到留痕則 fail closed（exit 1）。#719 已讓 lifecycle 對
+自己執行的 exact-head reviewed merge 自動判斷並留痕；對既有或人工合併 PR 的事後掃描
+（交叉核對 review／required-check 實際狀態，
 `scripts/generate_audit_trail.py` 已在抓這些欄位）目前不在這個查核工具範圍內：
 `generate_audit_trail.py`（#535／#564）尚未併入 `main`，屬於獨立進行中的
 Milestone 13 work，本 Issue（#607）維持獨立、不依賴它；一旦它併入 `main`，可以
-再擴充 `check-bypass-trace` 交叉核對哪些 PR 疑似用了 bypass。目前的查核方式是
+再擴充 `check-bypass-trace` 交叉核對哪些 PR 疑似用了 bypass。目前人工路徑的查核方式是
 operator 在每次 bypass-merge 後主動對該 PR 執行這個工具確認留痕存在，跟
 `scripts/check-pr-policy-status` 的用法一樣是針對單一 PR 主動查核，不是排程掃描。
 

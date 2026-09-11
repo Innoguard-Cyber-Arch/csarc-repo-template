@@ -55,6 +55,13 @@ BLOCKER_RESOLVED = re.compile(
 DRAFT_EVENTS = {"convert_to_draft", "converted_to_draft"}
 SUCCESSFUL_CHECK_CONCLUSIONS = {"neutral", "skipped", "success"}
 MAINTAINER_PERMISSIONS = {"admin", "maintain"}
+REVIEWED_MERGE_BYPASS_ACTORS = [
+    {
+        "actor_type": "RepositoryRole",
+        "actor_id": 5,
+        "bypass_mode": "pull_request",
+    }
+]
 LEASE_CORE_FIELDS = (
     "schema_version",
     "repository",
@@ -1049,9 +1056,11 @@ def unresolved_blocker(comments: list[dict[str, Any]]) -> dict[str, Any] | None:
     return latest_blocker[1]
 
 
-def current_reviews(reviews: list[dict[str, Any]]) -> dict[str, str]:
-    """Return each reviewer's current decisive state."""
-    current: dict[str, str] = {}
+def current_reviews(
+    reviews: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Return each reviewer's current decisive review."""
+    current: dict[str, dict[str, Any]] = {}
     ordered = sorted(
         reviews,
         key=lambda item: (
@@ -1068,8 +1077,55 @@ def current_reviews(reviews: list[dict[str, Any]]) -> dict[str, str]:
         reviewer = login.casefold()
         state = str(review.get("state") or "")
         if state in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}:
-            current[reviewer] = state
+            current[reviewer] = review
     return current
+
+
+def exact_head_approval(
+    github: GitHub,
+    repo: str,
+    reviews: dict[str, dict[str, Any]],
+    head_sha: str,
+    actor: str,
+) -> dict[str, Any] | None:
+    """Return the newest independent maintainer approval for this head."""
+    approved: list[dict[str, Any]] = []
+    for login, review in reviews.items():
+        user = review.get("user") or {}
+        if (
+            login == actor
+            or review.get("state") != "APPROVED"
+            or review.get("commit_id") != head_sha
+            or review.get("author_association") not in MAINTAINER_ASSOCIATIONS
+            or not isinstance(user, dict)
+            or user.get("type") != "User"
+        ):
+            continue
+        permission = github.get(
+            repo,
+            "collaborators/"
+            f"{urllib.parse.quote(str(user['login']), safe='')}/permission",
+        )
+        permission_user = (
+            permission.get("user") if isinstance(permission, dict) else None
+        )
+        if (
+            not isinstance(permission, dict)
+            or permission.get("permission") not in MAINTAINER_PERMISSIONS
+            or not isinstance(permission_user, dict)
+            or str(permission_user.get("login", "")).casefold() != login
+        ):
+            continue
+        parse_time(review.get("submitted_at"), "Review approval")
+        approved.append(review)
+    if not approved:
+        return None
+    return max(
+        approved,
+        key=lambda item: parse_time(
+            item.get("submitted_at"), "Review approval"
+        ),
+    )
 
 
 def effective_protection(  # noqa: C901
@@ -1077,18 +1133,24 @@ def effective_protection(  # noqa: C901
     repo: str,
     branch: str,
     alpha_self_merge: bool = False,
-) -> tuple[str, str, set[tuple[str, int | None]]]:
-    """Prove the route's review, check, and no-bypass enforcement."""
+    reviewed_merge: bool = False,
+) -> tuple[str, str, set[tuple[str, int | None]], bool]:
+    """Prove review and check enforcement for an exact-head merge."""
     try:
         rules = github.get(
             repo, f"rules/branches/{urllib.parse.quote(branch, safe='')}"
         )
     except RuntimeError as error:
-        return "unknown", str(error), set()
+        return "unknown", str(error), set(), False
     if not isinstance(rules, list) or not all(
         isinstance(item, dict) for item in rules
     ):
-        return "unknown", "effective branch rules are unavailable", set()
+        return (
+            "unknown",
+            "effective branch rules are unavailable",
+            set(),
+            False,
+        )
     pull_rules = [item for item in rules if item.get("type") == "pull_request"]
     check_rules = [
         item for item in rules if item.get("type") == "required_status_checks"
@@ -1097,7 +1159,12 @@ def effective_protection(  # noqa: C901
         not isinstance(item.get("parameters"), dict)
         for item in pull_rules + check_rules
     ):
-        return "unknown", "effective rule parameters are malformed", set()
+        return (
+            "unknown",
+            "effective rule parameters are malformed",
+            set(),
+            False,
+        )
     pull = [item["parameters"] for item in pull_rules]
     checks = [item["parameters"] for item in check_rules]
     review_flags = (
@@ -1114,12 +1181,12 @@ def effective_protection(  # noqa: C901
         )
         for parameters in pull
     ):
-        return "unknown", "pull request rules are malformed", set()
+        return "unknown", "pull request rules are malformed", set(), False
     required_groups = [
         parameters.get("required_status_checks") for parameters in checks
     ]
     if any(not isinstance(items, list) for items in required_groups):
-        return "unknown", "required check rules are malformed", set()
+        return "unknown", "required check rules are malformed", set(), False
     required_items = [item for items in required_groups for item in items]
     if any(
         not isinstance(item, dict)
@@ -1134,7 +1201,7 @@ def effective_protection(  # noqa: C901
         )
         for item in required_items
     ):
-        return "unknown", "required check rules are malformed", set()
+        return "unknown", "required check rules are malformed", set(), False
     required_contexts = {
         (str(item["context"]), item.get("integration_id"))
         for item in required_items
@@ -1181,6 +1248,7 @@ def effective_protection(  # noqa: C901
             "blocked",
             missing_reason,
             set(),
+            False,
         )
     ruleset_id_values = [
         item.get("ruleset_id") for item in pull_rules + check_rules
@@ -1192,27 +1260,46 @@ def effective_protection(  # noqa: C901
             "unknown",
             "effective rules do not expose their Ruleset identity",
             set(),
+            False,
         )
     ruleset_ids = set(ruleset_id_values)
+    reviewed_bypass = False
     for ruleset_id in ruleset_ids:
         try:
             ruleset = github.get(repo, f"rulesets/{ruleset_id}")
         except RuntimeError as error:
-            return "unknown", str(error), set()
-        if (
-            not isinstance(ruleset, dict)
-            or ruleset.get("enforcement") != "active"
-            or ruleset.get("bypass_actors") != []
-        ):
+            return "unknown", str(error), set(), False
+        if not isinstance(ruleset, dict):
+            return "unknown", "effective Ruleset is malformed", set(), False
+        bypass_actors = ruleset.get("bypass_actors")
+        if ruleset.get("enforcement") != "active":
             return (
                 "blocked",
-                "an effective Ruleset is inactive or permits bypass",
+                "an effective Ruleset is inactive",
                 set(),
+                False,
             )
+        if bypass_actors != []:
+            if (
+                not reviewed_merge
+                or bypass_actors != REVIEWED_MERGE_BYPASS_ACTORS
+            ):
+                return (
+                    "blocked",
+                    "an effective Ruleset permits an unverified bypass",
+                    set(),
+                    False,
+                )
+            reviewed_bypass = True
     return (
         "enforced",
-        "server-side merge controls are active without bypass",
+        (
+            "exact-head review and checks are revalidated by lifecycle"
+            if reviewed_bypass
+            else "server-side merge controls are active without bypass"
+        ),
         required_contexts,
+        reviewed_bypass,
     )
 
 
@@ -1470,7 +1557,7 @@ def require_routine_quota_fallback(
 def merge_snapshot(  # noqa: C901
     github: GitHub,
     lease: dict[str, Any],
-    authorization_url: str,
+    authorization_url: str = "",
     explicit_actor: str = "",
     quota_fallback_note_url: str = "",
 ) -> dict[str, object]:
@@ -1484,22 +1571,7 @@ def merge_snapshot(  # noqa: C901
         raise RuntimeError("Pull request is Draft at merge time")
     if UNCHECKED.search(str(pull.get("body") or "")):
         raise RuntimeError("Pull request has an unchecked checklist item")
-    auth = authorization(github, repo, pr_number, head_sha, authorization_url)
-    acquired_at = parse_time(lease["acquired_at"], "Lease")
-    authorized_at = parse_time(auth.get("created_at"), "Authorization")
-    if authorized_at < acquired_at:
-        raise RuntimeError("Authorization predates the active lifecycle lease")
-
     alpha_self_merge = alpha_self_merge_opt_in(github, repo, lease, pull)
-    timeline = github.pages(repo, f"issues/{pr_number}/timeline?per_page=100")
-    if any(
-        item.get("event") in DRAFT_EVENTS
-        and parse_time(item.get("created_at"), "Draft event") >= authorized_at
-        for item in timeline
-    ):
-        raise RuntimeError(
-            "A newer Draft event invalidated merge authorization"
-        )
     comments = [
         *github.pages(repo, f"issues/{pr_number}/comments?per_page=100"),
         *github.pages(repo, f"pulls/{pr_number}/comments?per_page=100"),
@@ -1524,8 +1596,8 @@ def merge_snapshot(  # noqa: C901
     review_states = current_reviews(reviews)
     blockers = sorted(
         login
-        for login, state in review_states.items()
-        if state == "CHANGES_REQUESTED"
+        for login, review in review_states.items()
+        if review.get("state") == "CHANGES_REQUESTED"
     )
     if blockers:
         raise RuntimeError(
@@ -1536,13 +1608,43 @@ def merge_snapshot(  # noqa: C901
         raise RuntimeError(
             "Authenticated GitHub actor changed after lease acquisition"
         )
-    approvers = sorted(
-        login
-        for login, state in review_states.items()
-        if state == "APPROVED" and login != actor
-    )
-    if not approvers and not alpha_self_merge:
-        raise RuntimeError("An independent approving review is required")
+    approval = exact_head_approval(github, repo, review_states, head_sha, actor)
+    if approval is not None:
+        auth = {
+            **approval,
+            "created_at": approval.get("submitted_at"),
+        }
+        authorization_source = "review"
+        authorization_url = str(approval.get("html_url") or "")
+    elif alpha_self_merge:
+        if not authorization_url:
+            raise RuntimeError(
+                "Alpha self-merge requires an exact maintainer "
+                "authorization comment"
+            )
+        auth = authorization(
+            github, repo, pr_number, head_sha, authorization_url
+        )
+        acquired_at = parse_time(lease["acquired_at"], "Lease")
+        if parse_time(auth.get("created_at"), "Authorization") < acquired_at:
+            raise RuntimeError(
+                "Authorization predates the active lifecycle lease"
+            )
+        authorization_source = "comment"
+    else:
+        raise RuntimeError(
+            "An independent maintainer approval for the exact head is required"
+        )
+    authorized_at = parse_time(auth.get("created_at"), "Authorization")
+    timeline = github.pages(repo, f"issues/{pr_number}/timeline?per_page=100")
+    if any(
+        item.get("event") in DRAFT_EVENTS
+        and parse_time(item.get("created_at"), "Draft event") >= authorized_at
+        for item in timeline
+    ):
+        raise RuntimeError(
+            "A newer Draft event invalidated merge authorization"
+        )
     for issue_number in sorted(
         {
             int(value)
@@ -1566,18 +1668,19 @@ def merge_snapshot(  # noqa: C901
     title = pull.get("title")
     if not isinstance(title, str) or not title.strip():
         raise RuntimeError("Pull request title is unavailable")
-    protection, reason, required_contexts = effective_protection(
-        github, repo, base_ref, alpha_self_merge
+    protection, reason, required_contexts, reviewed_bypass = (
+        effective_protection(
+            github,
+            repo,
+            base_ref,
+            alpha_self_merge,
+            authorization_source == "review",
+        )
     )
     authorization_actor = str((auth.get("user") or {}).get("login", ""))
-    independently_authorized = authorization_actor.casefold() != actor
-    if (
-        protection == "enforced"
-        and not independently_authorized
-        and not alpha_self_merge
-    ):
+    if reviewed_bypass and pull.get("mergeable_state") != "clean":
         protection = "blocked"
-        reason = "merge authorization uses the executing GitHub actor"
+        reason = "GitHub does not report the reviewed pull request as clean"
     quota_run_urls = (
         require_routine_quota_fallback(
             github, lease, pull, auth, quota_fallback_note_url
@@ -1605,12 +1708,29 @@ def merge_snapshot(  # noqa: C901
         "authorization_url": authorization_url,
         "authorization_created_at": auth["created_at"],
         "authorization_actor": authorization_actor,
+        "authorization_source": authorization_source,
+        "reviewed_bypass": reviewed_bypass,
         "protection": protection,
         "merge_mode": "agent" if protection == "enforced" else "human-only",
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
         "alpha_self_merge": alpha_self_merge,
     }
+
+
+def release_phase() -> str:
+    """Return the declared phase for a reviewed Ruleset bypass."""
+    path = Path(__file__).resolve().parents[1] / "policies/project-stage.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("Project release phase is unavailable") from error
+    phase = payload.get("release_phase") if isinstance(payload, dict) else None
+    if phase not in {"alpha", "beta"}:
+        raise RuntimeError(
+            "Reviewed Ruleset bypass requires alpha or beta release phase"
+        )
+    return str(phase)
 
 
 def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
@@ -1728,7 +1848,7 @@ def check(args: argparse.Namespace, github: GitHub) -> None:
 
 
 def merge(args: argparse.Namespace, github: GitHub) -> None:
-    """Merge only when both the lease and server-side controls are enforced."""
+    """Merge only when the lease and exact-head controls are enforced."""
     lease = read_lease(args.lease)
     require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     snapshot = merge_snapshot(
@@ -1742,6 +1862,14 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
         raise RuntimeError(
             "Agent merge is blocked: server-side protection is unavailable or "
             "incomplete; a human maintainer must merge manually"
+        )
+    if snapshot.get("reviewed_bypass") is True:
+        github.comment(
+            args.repo,
+            args.pr_number,
+            "bypass-trace: "
+            f"release_phase={release_phase()} "
+            f"actor={lease['actor']} reason=exact-head-review",
         )
     snapshot = merge_snapshot(
         github,
@@ -2519,7 +2647,7 @@ def parser() -> argparse.ArgumentParser:
         if name != "release":
             command.add_argument("--head-sha", required=True)
         if name in {"check", "merge"}:
-            command.add_argument("--authorization-url", required=True)
+            command.add_argument("--authorization-url", default="")
             command.add_argument("--quota-fallback-note-url", default="")
         if name == "state":
             command.add_argument(
