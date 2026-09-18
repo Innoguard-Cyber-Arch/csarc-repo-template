@@ -363,7 +363,10 @@ command substitution，這段文字從未被執行，但掃描器分不出「描
 一張 Issue 若能獨立審查、驗證與交付，且沒有共同期限、跨 Issue 相依、整批驗收或
 soak／canary 需求，就不必加入里程碑。它從最新 `main` 建立 topic branch，PR 直接回
 `main`，接受一般 review 與風險分級驗證，並以 `Closes #N` 在合併後結案。合併只代表
-repository delivery；後續由 release workflow 判斷是否需要建立版本 PR。
+repository delivery；後續由 release workflow 判斷是否需要建立版本 PR。**這張 Issue
+本身在合併前需要通過核可**（非提案者核准或 admin 自核），見下方「Standalone／
+hotfix／release recovery Issue 核可 gate（#743）」——它與有 Milestone 的 Issue 自動
+繼承 tracker 核可形成對稱，避免拆成 standalone 變成繞過批次治理的捷徑。
 
 若工作開始需要多張互相依賴的 Issue、共同交付日期、整批驗收、獨立環境或正式發版
 決策，必須在實作前加入適當里程碑，改走 `dev/m*`；不能用 standalone 路徑繞過批次治理。
@@ -380,6 +383,10 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
    rollback 說明與是否發版的決策；#401 負責一般 GitHub native 關單契約。
 4. `fix` 預設表達 patch 意圖；破壞相容性時明列 `!`。Release Please 會據此更新版本 PR；
    版本 PR 尚未審查、合併且正式成品尚未發布前，hotfix 仍只算已交付、尚未發版。
+5. Hotfix Issue 本身在合併前需要核可（非提案者核准，或 proposer 同時是 repo `admin`
+   collaborator 時的自核例外，理由必填）——見下方「Standalone／hotfix／release
+   recovery Issue 核可 gate（#743）」。這與第 2 步的 PR review 是兩道獨立關卡：真正
+   緊急、找不到第二人核准時，admin self-approval 保證這條路徑不會因為等待核准而卡死。
 
 ### Release recovery
 
@@ -392,7 +399,68 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 任一條就擋下合併。`scripts/ci_tier.py` 讓這條路徑比照 hotfix 一律升級為 `full` 驗證分級，不
 得降級為 `fast`。這一節只回答「一次 release recovery PR 如何審查後進入 `main`」；`main` 進去
 之後如何算出版本、建 tag、發布 Release 與成品，是上方「Release 發版不依賴 Actions 健康度的
-fallback（#589）」一節的責任，兩者是各自獨立的問題，不合併成同一節。
+fallback（#589）」一節的責任，兩者是各自獨立的問題，不合併成同一節。這類 PR 連結的
+release-recovery Issue 沒有 Milestone，同樣落在下方「Standalone／hotfix／release
+recovery Issue 核可 gate（#743）」的範圍內，合併前需要核可。
+
+### Standalone／hotfix／release recovery Issue 核可 gate（#743）
+
+維護者的核准模型分兩點：(1) 有 Milestone 的 Issue，Milestone tracker 一旦核准，底下
+Issue 視為已核准，不需要逐張另外核准——這是 `approval_decision()` 一直以來的行為；
+(2) 沒有 Milestone 的 Issue（上方「不屬於里程碑的工作」「Hotfix」「Release
+recovery」三種路徑都屬此類），Issue 本身需要核可，其工作 PR 才能合併。截至
+`main@488f874` 的盤點：只有第 1 點被實作，`_pull_decision()` 在 PR 沒有 Milestone 時
+直接回傳放行，讓 standalone／hotfix 路徑變成繞過批次治理的捷徑——同一件工作，放進
+Milestone 要先經非提案者核准，拆成 standalone 或標成 hotfix 就不用。`#743` 補上第 2
+點，且不動第 1 點既有行為。
+
+**核可對象與語彙：**新增 `standalone_issue_approval_decision()`／`check_issue_approval()`
+（CLI 子指令 `check-issue-approval --repo --issue`），核可對象是「該 PR 用
+`Closes`／`Fixes`／`Resolves #N` 連結的 Issue 本身」。核可留言語彙沿用既有的
+`/milestone approve`／`/milestone admin-approve: <理由>`／`/milestone object:`／
+`/milestone resolve:`，判斷邏輯與 fingerprint-binding（#632）透過既有的
+`_approval_records()`／`_gate_decision()` 完全共用，不建第二套核可系統。這個決定
+（沿用 `/milestone` 語彙、不新增 Issue 專用詞彙）記錄在 Issue #743 的留言：`#552`
+（`scope_decision()`）已經是「非 tracker 的 Issue 也用同一套 `/milestone` 語彙」的
+既有先例，延伸到 standalone／hotfix Issue 比另造一套詞彙更一致。這裡核可的對象是
+**Issue**，不是 work PR 本身——`docs/adr/milestone-scope-and-closure-reconciliation.md`
+「work PR 不加裝 native required review、不延伸 `/milestone` 語彙到個別 work PR」的
+既有決定維持不變，PR 合併授權仍完全是 #719／`validate-pr-policy` 的責任，兩者是彼此
+獨立的關卡。
+
+**CI 接線：**不需要新增 workflow step——`pr-policy.yml` 既有的「Validate Milestone
+approval」（呼叫 `check-pr`）與 merge queue 的「Revalidate queued Milestone
+approval」（呼叫 `check-merge-group`）本來就對每個 PR／merge-group commit 執行
+`_pull_decision()`；`#743` 只改寫這個函式在「PR 沒有 Milestone」分支下的行為：從硬
+編碼的 `Decision(True, "This pull request is not part of a Milestone")`，改成新增的
+`_standalone_pull_decision()`——先從 PR body 解析 `Closes`／`Fixes`／`Resolves #<n>`
+（與 `scripts/check-scope-gate` 解析同一個 pattern，重用其既有結論：找不到連結
+Issue 就直接放行，不擋。Dependabot、release-please、`automation/*`、main-sync
+bridge 等自動化 PR 本來就沒有連結 work Issue，維持不受影響，行為與 `check-scope-gate`
+的既有 carve-out 完全一致），找到後呼叫 `check_issue_approval()`。
+
+**Milestone-scoped Issue 不受影響：**`check_issue_approval()` 先讀該 Issue 自己的
+`milestone` 欄位——有 Milestone 就轉呼叫既有的 `approval_decision()`（該 Milestone
+tracker 的核可判斷），完全不套用這個新 gate，維持「Milestone-scoped Issue 不需要逐
+張核可」不變。這個分支在 `_pull_decision()` 的正常流程裡理論上碰不到
+（`scripts/validate-pr-policy` 已經要求 PR 的 Milestone 必須與其連結 Issue 的
+Milestone 一致，PR 沒有 Milestone 時連結 Issue 也不會有），但 `check-issue-approval`
+同時是一個獨立 CLI 子指令，不能假設呼叫端已經驗證過這個不變量，所以直接從 Issue 自
+己的即時資料重新判斷，屬於防禦性設計，不是重複邏輯。
+
+**Hotfix 的緊急路徑：**與 tracker、scope-expansion 核可完全相同的 admin
+self-approval 例外在此保留——proposer 若同時是 repo `admin` collaborator，可以自己
+留言 `/milestone admin-approve: <理由>` 通過，理由必填，summary 明確標成「Issue
+admin self-approved by」，不與一般非提案者核准混淆。這是唯一避免「等待核准而無路可
+走」的路徑，適用真正緊急、沒有第二人可以核准的 hotfix 情境；`#745`（尚未實作）之後
+會依發布層級（alpha／beta 以上）調整 admin self-approval 是否允許，`#743` 先落地
+「非提案者核准或 admin 自核」這條現行規則。
+
+`tests/test_standalone_issue_approval.py`（與 `template/` 成對）涵蓋：standalone
+Issue 未核可時 fail closed、非提案者核可後放行、admin 自核放行（含理由必填、非
+admin 權限被拒）、核可後編輯 Issue 使其失效（沿用 #632 的 60 秒緩衝窗）、
+Milestone-scoped Issue 繼續繼承 tracker 核可不需要逐張核可、沒有連結 Issue 的自動化
+PR 不受影響、`check-pr`／`check-merge-group` 兩個既有 CI 接線點都正確套用新 gate。
 
 ### `promotion` 必要檢查的產生條件（#601）
 

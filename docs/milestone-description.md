@@ -60,6 +60,22 @@ agent 代為作者）撰寫每一張 work PR，GitHub 平台層級禁止「核�
 PR，且沒有對應每張 work PR 的例外機制可用。詳見
 `docs/adr/milestone-scope-and-closure-reconciliation.md`。
 
+上一段講的是「有 Milestone 的 work PR」不額外加裝核可；沒有 Milestone 的 Issue（見
+`docs/ci-policy.md`「不屬於里程碑的工作」「Hotfix」「Release recovery」三節）情況相
+反——這種 Issue 沒有任何 tracker 可以繼承核可，`#743` 之前實際上完全不需要核可就能
+合併其工作 PR，變成繞過批次治理的捷徑。`#743` 補上這個缺口：一張沒有 Milestone 的
+Issue，本身需要一次非提案者核可，或同一套 `admin` collaborator 自核例外（理由必
+填），才能讓以 `Closes`／`Fixes`／`Resolves #N` 連結它的 PR 通過「Validate Milestone
+approval」與 merge queue 的「Revalidate queued Milestone approval」
+（`standalone_issue_approval_decision()`／`check_issue_approval()`；CLI：
+`check-issue-approval --repo <repo> --issue <編號>`）。核可留言語彙與判斷邏輯與
+tracker、scope-expansion 兩個既有 gate 完全相同，只是核可對象換成這張沒有 Milestone
+的 Issue 自己的留言。這與上一段「不延伸到 work PR」的決定並不衝突：核可對象仍然是
+Issue，不是 PR 本身，PR 合併授權依舊完全是 `validate-pr-policy` 與 PR review（#719）
+的責任。屬於 Milestone 的 work Issue 不受影響，繼續只靠 tracker 核可，不需要逐張另外
+核可。細節見 `docs/ci-policy.md`「Standalone／hotfix／release recovery Issue 核可
+gate（#743）」一節。
+
 上一段的「唯一合併前置檢查」在 `#632` 之後多了一道窄範圍例外：`pr-policy.yml` 額外呼叫
 `scripts/check-scope-gate`，只在該 PR 連結的 work Issue 自己宣告了
 `Tracker scope: expanded` 時才生效，把上方 `scope_decision()` 這個既有的 Issue-level

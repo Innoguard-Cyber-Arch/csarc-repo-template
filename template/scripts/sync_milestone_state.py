@@ -607,6 +607,72 @@ def check_scope(repo: str, number: int) -> Decision:
     return scope_decision(load_issue_snapshot(repo, number))
 
 
+def standalone_issue_approval_decision(
+    snapshot: dict[str, Any], issue_number: int
+) -> Decision:
+    """Require independent approval for one Issue with no Milestone (#743).
+
+    Covers standalone, hotfix, and release-recovery Issues alike -- the
+    common trait this function gates on is simply having no Milestone of
+    its own. A Milestone-scoped Issue keeps inheriting its tracker's approval
+    unchanged (see `check_issue_approval()`, which routes there before ever
+    calling this function): this function only runs for the other half of
+    the maintainer's two-point approval model -- an Issue with no Milestone
+    needs its own approval, because nothing else ever gates it. Reuses the
+    tracker's and the scope-expansion gate's identical `/milestone approve`
+    / `/milestone admin-approve:` / `/milestone object:` / `/milestone
+    resolve:` comment vocabulary and fingerprint-binding invalidation
+    (#632) via `_approval_records()` / `_gate_decision()` -- no second
+    parallel approval system.
+    """
+    issue = snapshot.get("issue")
+    if not isinstance(issue, dict):
+        return Decision(False, "GitHub returned invalid Issue data")
+    proposer = issue.get("user", {}).get("login")
+    approvals, objections, resolved, admin_approvals, stale = _approval_records(
+        snapshot, proposer, item_updated_at=issue.get("updated_at")
+    )
+    return _gate_decision(
+        approvals,
+        objections,
+        resolved,
+        admin_approvals,
+        stale,
+        missing_message=(
+            f"Issue #{issue_number} has no Milestone: a person other than "
+            "the proposer must comment `/milestone approve` on it, or an "
+            "admin collaborator who is also the proposer may comment "
+            "`/milestone admin-approve: <reason>`, before this pull request "
+            "can merge"
+        ),
+        approved_prefix="Issue approved by",
+        admin_prefix="Issue admin self-approved by",
+    )
+
+
+def check_issue_approval(repo: str, number: int) -> Decision:
+    """Validate the standalone/hotfix/release-recovery Issue-approval gate.
+
+    A Milestone-scoped Issue defers to that Milestone's own tracker
+    approval (`approval_decision()`) -- unaffected by this Issue, exactly
+    as before #743. This is normally unreachable through `_pull_decision()`
+    itself (a pull request with a Milestone never reaches this function;
+    `scripts/validate-pr-policy` also requires a pull request's own
+    Milestone to match its closing Issue's Milestone), but `check-issue-
+    approval` is also a standalone CLI entry point, so it re-derives the
+    right answer directly from the Issue's own Milestone field rather than
+    trusting a caller's assumption.
+    """
+    snapshot = load_issue_snapshot(repo, number)
+    issue = snapshot.get("issue")
+    if not isinstance(issue, dict):
+        return Decision(False, "GitHub returned invalid Issue data")
+    milestone = issue.get("milestone")
+    if isinstance(milestone, dict) and isinstance(milestone.get("number"), int):
+        return approval_decision(load_snapshot(repo, milestone["number"]))
+    return standalone_issue_approval_decision(snapshot, number)
+
+
 def _linked_work_items(
     snapshot: dict[str, Any], tracker_number: int
 ) -> list[dict[str, Any]]:
@@ -907,13 +973,34 @@ def _pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
     """Read the lifecycle decision for one pull-request payload."""
     milestone = pull.get("milestone")
     if milestone is None:
-        return Decision(True, "This pull request is not part of a Milestone")
+        return _standalone_pull_decision(repo, pull)
     milestone_number = milestone.get("number")
     if not isinstance(milestone_number, int):
         raise RuntimeError(
             "GitHub returned invalid pull-request lifecycle data"
         )
     return approval_decision(load_snapshot(repo, milestone_number))
+
+
+def _standalone_pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
+    """Read the lifecycle decision for one pull request with no Milestone.
+
+    Mirrors `scripts/check-scope-gate`'s own signal exactly: a pull request
+    whose body carries no `Closes`/`Fixes`/`Resolves #<n>` keyword has no
+    linked work Issue to gate at all -- release automation, Dependabot, a
+    main-sync bridge, and any other automated pull request with no linked
+    Issue are unaffected by this function, identical to that existing
+    carve-out (#743's acceptance criteria requires the same). When a
+    closing Issue is found, `check_issue_approval()` decides: a Milestone-
+    scoped Issue keeps inheriting its tracker's approval unchanged, and a
+    standalone/hotfix/release-recovery Issue (no Milestone of its own) must
+    itself carry a valid approval.
+    """
+    body = pull.get("body")
+    match = _CLOSING_KEYWORD.search(body) if isinstance(body, str) else None
+    if match is None:
+        return Decision(True, "This pull request is not part of a Milestone")
+    return check_issue_approval(repo, int(match.group(1)))
 
 
 def check_merge_group(repo: str, head_sha: str) -> Decision:
@@ -1043,6 +1130,9 @@ def main() -> None:
     scope = subparsers.add_parser("check-scope")
     scope.add_argument("--repo", required=True)
     scope.add_argument("--issue", required=True, type=int)
+    issue_approval = subparsers.add_parser("check-issue-approval")
+    issue_approval.add_argument("--repo", required=True)
+    issue_approval.add_argument("--issue", required=True, type=int)
     reconciliation = subparsers.add_parser("regenerate-reconciliation")
     reconciliation.add_argument("--repo", required=True)
     reconciliation.add_argument("--milestone", required=True, type=int)
@@ -1065,6 +1155,8 @@ def main() -> None:
         )
     elif args.command == "check-scope":
         decision = check_scope(args.repo, args.issue)
+    elif args.command == "check-issue-approval":
+        decision = check_issue_approval(args.repo, args.issue)
     elif args.command == "regenerate-reconciliation":
         decision = record_reconciliation(args.repo, args.milestone)
     elif args.command == "preflight":

@@ -106,6 +106,7 @@ paired_files=(
   tests/test_milestone_approval.py
   tests/test_milestone_closure.py
   tests/test_milestone_scope.py
+  tests/test_standalone_issue_approval.py
   tests/test_release_policy.py
   tests/test_release_bundle.py
   tests/test_repo_capabilities.py
