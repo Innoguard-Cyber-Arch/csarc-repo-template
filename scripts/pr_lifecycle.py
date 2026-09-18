@@ -887,6 +887,60 @@ def authorization(
     return payload
 
 
+def find_exact_head_authorization(
+    github: GitHub, repo: str, pr_number: int, head_sha: str
+) -> dict[str, Any] | None:
+    """Return the newest exact-head maintainer authorization, if one exists.
+
+    Unlike `authorization()`, which validates one comment a caller already
+    points to (the merge attempt's own evidence), this scans every comment
+    on the pull request to answer "has a maintainer authorized this exact
+    head at all" -- used by `scripts/review_gate.py` to let the `review`
+    required check recognize an Alpha self-merge authorization the same way
+    it recognizes a native `APPROVED` review, without needing a lease or a
+    specific comment URL threaded through.
+    """
+    expected_body = authorization_statement(repo, pr_number, head_sha)
+    comments = github.pages(repo, f"issues/{pr_number}/comments?per_page=100")
+    candidates: list[dict[str, Any]] = []
+    for payload in comments:
+        if not isinstance(payload, dict):
+            continue
+        user = payload.get("user") or {}
+        if (
+            payload.get("body") != expected_body
+            or payload.get("author_association") not in MAINTAINER_ASSOCIATIONS
+            or not isinstance(user.get("login"), str)
+            or user.get("type") != "User"
+        ):
+            continue
+        permission = github.get(
+            repo,
+            "collaborators/"
+            f"{urllib.parse.quote(str(user['login']), safe='')}/permission",
+        )
+        permission_user = (
+            permission.get("user") if isinstance(permission, dict) else None
+        )
+        if (
+            not isinstance(permission, dict)
+            or permission.get("permission") not in MAINTAINER_PERMISSIONS
+            or not isinstance(permission_user, dict)
+            or str(permission_user.get("login", "")).casefold()
+            != str(user["login"]).casefold()
+        ):
+            continue
+        if not isinstance(payload.get("created_at"), str):
+            continue
+        candidates.append(payload)
+    if not candidates:
+        return None
+    return max(
+        candidates,
+        key=lambda item: parse_time(item.get("created_at"), "Authorization"),
+    )
+
+
 def authorization_statement(repo: str, pr_number: int, head_sha: str) -> str:
     """Return the exact affirmative authorization accepted by the tool."""
     binding = {

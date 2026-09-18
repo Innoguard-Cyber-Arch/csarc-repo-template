@@ -159,11 +159,29 @@ Issue #681/#682 決定 R 前是獨立的「進階安裝」附錄頁，後併入 
    權留言本來就已經被 `authorization()` 獨立驗證（maintainer 權限、精確 body、精確
    head SHA），信任基礎跟 review／copilot 對等，且 `bypass_actors` 是否精確等於已宣
    告值的檢查完全不變，只是把可以通過這項檢查的授權來源多加一種。
+3. 第三個獨立問題：即使前兩項都修好，GitHub 自己回報的 `mergeable_state` 也永遠不會
+   是 `clean`——因為 `review` 這個 required check（`scripts/review_gate.py` 的
+   `evaluate()`）只認真人 `APPROVED` review 或乾淨 Copilot review，完全不知道
+   alpha self-merge 這條路徑的存在，對任何 alpha self-merge PR 永遠回報
+   `failure`。`merge_snapshot` 自己那行 `if reviewed_bypass and
+   mergeable_state != "clean": blocked` 因此永遠擋下，不管前兩項修正對不對。
+   維護者本次決定：也讓 `evaluate()` 認得 alpha self-merge——新增
+   `pr_lifecycle.find_exact_head_authorization`（掃描全部留言找出綁定目前 head
+   SHA、通過 maintainer 權限驗證的授權留言，不像 `authorization()` 需要呼叫方先
+   指定一則特定留言的 URL），`evaluate()` 在 Copilot 未過、無真人 approval 時，
+   改用跟 `alpha_self_merge_opt_in` 相同的 marker／route 判斷（不含 release_phase
+   檢查——`alpha_self_merge_opt_in` 本身也不檢查 release_phase，兩處各自加只會讓
+   `review` check 跟 `pr_lifecycle.py merge` 對「這個 head 能不能合併」的判斷互相
+   矛盾）＋這則留言是否存在，成立就一併通過。`.github/workflows/pr-review.yml`
+   同步加上 `issue_comment: created` trigger（篩選 PR 上、開頭是 `PR lifecycle
+   merge authorization` 的留言）：貼授權留言本身不會觸發 `pull_request` 事件，
+   沒有這個 trigger 就要手動 `gh run rerun` 才會重新檢查。
 
-兩項修正都只動 `alpha_self_merge` 這條路徑本身；`require_routine_quota_fallback`
+三項修正都只動 `alpha_self_merge` 這條路徑本身；`require_routine_quota_fallback`
 （quota/billing 必要檢查 fallback）與一般 `review`／`copilot` 授權路徑的既有行為完全
-不變。root／`template/` 的 `scripts/pr_lifecycle.py`／`tests/test_pr_lifecycle.py`
-保持逐位元組同步。
+不變。root／`template/` 的 `scripts/pr_lifecycle.py`／`scripts/review_gate.py`／
+`.github/workflows/pr-review.yml`／`tests/test_pr_lifecycle.py` 保持逐位元組同步
+（`tests/test_review_gate.py` 不在配對清單內，只在 root 維護）。
 
 ## 重新評估條件
 
