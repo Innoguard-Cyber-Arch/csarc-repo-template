@@ -65,7 +65,7 @@ CLI 固定驗證 canonical repository numeric ID、immutable stable Release、re
 
 ## 前置需求
 
-CSARC 有兩種完全不同的情境，各自需要的工具不同：**使用 csarc 建立或更新專案**（一般使用者、既有 repo 導入者）與**開發／貢獻 `csarc-repo-template` 這個模板本身**（模板貢獻者）。以下分別列出兩種情境實際需要的工具，並附上 macOS（Homebrew）與 Windows（winget／Chocolatey）安裝指令；沒有官方套件管理器套件的工具改附官方安裝腳本連結。`docs/agent-install.md` 只是 agent 的自動安裝 contract，不涵蓋這裡的人類前置工具安裝步驟。
+CSARC 有兩種完全不同的情境，各自需要的工具不同：**使用 csarc 建立或更新專案**（一般使用者、既有 repo 導入者）與**開發／貢獻 `csarc-repo-template` 這個模板本身**（模板貢獻者）。以下分別列出兩種情境實際需要的工具，並附上 macOS（Homebrew）、Windows（winget／Chocolatey）與 Linux／WSL2（Ubuntu，apt）安裝指令；沒有官方套件管理器套件的工具改附官方安裝腳本連結。`docs/agent-install.md` 只是 agent 的自動安裝 contract，不涵蓋這裡的人類前置工具安裝步驟。
 
 ### 使用 csarc 建立或更新專案
 
@@ -78,9 +78,9 @@ CSARC 有兩種完全不同的情境，各自需要的工具不同：**使用 cs
 | uv | 一律需要；即使選 `ci`，生成專案的 `./scripts/verify` 仍以 `uv run --no-project python` 執行檢查腳本 | `brew install uv` | `winget install --id=astral-sh.uv -e`；沒有 winget 時用官方安裝腳本 `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"`（見 [uv 安裝文件](https://docs.astral.sh/uv/getting-started/installation/)） | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | Node.js 24+ | 只有選 `typescript` 語言模組時需要 | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` | `curl -fsSL https://deb.nodesource.com/setup_24.x \| sudo -E bash -` 後 `sudo apt install -y nodejs` |
 | pnpm 11 | 只有選 `typescript` 語言模組時需要 | `brew install pnpm` | `winget install -e --id pnpm.pnpm` | `sudo npm install -g pnpm@11` |
-| rustup／Cargo | 只有選 `rust` 語言模組時需要；**在 Linux／WSL2 上，即使是純 Rust、不呼叫任何 C 函式庫的專案，編譯階段也需要系統 C linker，另裝 `build-essential`（乾淨 WSL2 Ubuntu 24.04 只裝 `rustup` 會在 `cargo test` 報 `error: linker 'cc' not found`）** | `brew install rustup`（keg-only；該 formula 已不再提供 `rustup-init`，只需把 `$(brew --prefix rustup)/bin` 加入 `PATH` 即完成安裝）；或官方腳本 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` | `sudo apt install -y build-essential` 後 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| rustup／Cargo | 只有選 `rust` 語言模組時需要；**Linux／WSL2 上另需 `build-essential`（系統 C linker）** | `brew install rustup`（keg-only；該 formula 已不再提供 `rustup-init`，只需把 `$(brew --prefix rustup)/bin` 加入 `PATH` 即完成安裝）；或官方腳本 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` | `sudo apt install -y build-essential` 後 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 
-Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表「Windows（原生，winget／Chocolatey）」欄位供在原生 Windows 單獨安裝個別工具時使用（例如先裝 `git`／`gh` 再進 WSL2），winget 裝的 rustup 在進入 WSL2 的 Ubuntu shell 後用不上——WSL2 內請改用「Linux／WSL2（Ubuntu，apt）」欄位。完整導引腳本見 [repo-site 附錄](docs/index.html)。
+Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表「Windows（原生，winget／Chocolatey）」欄位供在原生 Windows 單獨安裝個別工具時使用（例如先裝 `git`／`gh` 再進 WSL2），winget 裝的 rustup 進入 WSL2 的 Ubuntu shell 後用不上——WSL2 內請改用「Linux／WSL2（Ubuntu，apt）」欄位。選 `rust` 時，Linux／WSL2 上除了 `rustup` 還需要 `build-essential`（系統 C linker）；即使是純 Rust、不呼叫 C 函式庫的專案也一樣，否則編譯階段的 `cargo test` 會報 `error: linker 'cc' not found`。macOS／WSL2 內的 Ubuntu 完整導引腳本見 [repo-site 附錄](docs/index.html)。
 
 ### 開發／貢獻 `csarc-repo-template` 本身
 
