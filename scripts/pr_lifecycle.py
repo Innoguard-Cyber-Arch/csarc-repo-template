@@ -1013,13 +1013,78 @@ def require_routine_route(  # noqa: C901
     return "sync"
 
 
+def require_default_branch_issue_route(
+    github: GitHub,
+    repo: str,
+    lease: dict[str, Any],
+    pull: dict[str, Any],
+) -> None:
+    """Require a same-repository, Milestone-less Issue route into default.
+
+    Deliberately separate from `require_routine_route`: that function is
+    shared with `require_routine_quota_fallback` (the unrelated Actions
+    quota/billing required-check fallback from #325), and its default-branch
+    prohibition must stay intact for that path -- quota-fallback gaining
+    reach onto `main` would bypass required status checks there, a much
+    larger and unrelated risk. This checks the same "real, open, exactly
+    one Issue" shape `require_routine_route`'s issue branch checks, but a
+    Milestone-tracked Issue must use its `dev/mN` delivery branch instead
+    (`AGENTS.md` working-loop step 8), so this route requires the opposite:
+    no Milestone at all.
+    """
+    head = pull.get("head")
+    if not isinstance(head, dict):
+        raise RuntimeError("Routine pull request head is invalid")
+    head_ref = head.get("ref")
+    head_repo_payload = head.get("repo")
+    head_repo = (
+        head_repo_payload.get("full_name")
+        if isinstance(head_repo_payload, dict)
+        else None
+    )
+    if (
+        not isinstance(head_repo, str)
+        or head_repo.casefold() != repo.casefold()
+    ):
+        raise RuntimeError(
+            "Default-branch alpha route requires a same-repository head"
+        )
+    work = ISSUE_WORK_BRANCH.fullmatch(str(head_ref)) if head_ref else None
+    if work is None:
+        raise RuntimeError(
+            "Default-branch alpha route requires an Issue work branch"
+        )
+    issue_number = int(work.group(1))
+    closing_issues = [
+        int(value)
+        for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
+    ]
+    if closing_issues != [issue_number]:
+        raise RuntimeError(
+            "Default-branch alpha route must close its matching Issue exactly"
+        )
+    issue = github.get(repo, f"issues/{issue_number}")
+    if (
+        not isinstance(issue, dict)
+        or type(issue.get("number")) is not int
+        or issue["number"] != issue_number
+        or issue.get("pull_request") is not None
+        or issue.get("state") != "open"
+    ):
+        raise RuntimeError("Default-branch alpha route Issue is not open")
+    if issue.get("milestone") is not None:
+        raise RuntimeError(
+            "Default-branch alpha route requires a Milestone-less Issue"
+        )
+
+
 def alpha_self_merge_opt_in(
     github: GitHub,
     repo: str,
     lease: dict[str, Any],
     pull: dict[str, Any],
 ) -> bool:
-    """Validate the exact Alpha marker and its non-default routine route."""
+    """Validate the exact Alpha marker and its routine route."""
     marker_count = (
         str(pull.get("body") or "").splitlines().count(ALPHA_SELF_MERGE_MARKER)
     )
@@ -1027,6 +1092,10 @@ def alpha_self_merge_opt_in(
         return False
     if marker_count != 1:
         raise RuntimeError("Alpha self-merge marker must appear exactly once")
+    base_ref = (pull.get("base") or {}).get("ref")
+    if base_ref == lease["default_branch"]:
+        require_default_branch_issue_route(github, repo, lease, pull)
+        return True
     route = require_routine_route(github, repo, lease, pull)
     if route != "issue":
         raise RuntimeError(
@@ -1739,7 +1808,17 @@ def merge_snapshot(  # noqa: C901
             repo,
             base_ref,
             alpha_self_merge,
-            authorization_source in {"review", "copilot"},
+            # "comment" only ever arises from `alpha_self_merge` (Issue
+            # #775): the exact-head authorization comment is independently
+            # verified by `authorization()` (maintainer permission, exact
+            # body, exact head SHA), the same trust basis as a native
+            # `review` approval or a clean `copilot` review. Excluding it
+            # here made every alpha self-merge -- default-branch or not --
+            # permanently fail this repo's own live `bypass_actors` (added
+            # by #580 for exactly this structural self-approval case) as an
+            # "unverified bypass", forcing every historical alpha merge back
+            # to a manual `gh pr merge --admin`.
+            authorization_source in {"review", "copilot", "comment"},
             copilot_mode and not alpha_self_merge,
         )
     )

@@ -200,6 +200,17 @@ agent）對 diff 內容做審查確認，再執行 `gh pr merge --admin`。這�
 CI／webhook 是否正常運作（#580 驗證過：同日 GitHub `pull_request` webhook 投遞異常
 期間，仍可只靠本機驗證＋這個 bypass 完成合併）。
 
+**這段手動程序現在只是 fallback，不是唯一路徑（#775）。** 一張直接合併進 `main`、
+`pr_review_mode: copilot` 但這個帳號沒有可用 Copilot 授權額度（`review` 這個
+required check 永遠 `pending`）的 routine PR，只要滿足：分支名符合
+`build|chore|ci|docs|feat|fix|refactor|revert|test/<issue>-<slug>` 格式、body 恰好
+出現一次 `Alpha 自行合併 / self-merged` 標記、精確關閉一個仍是 open 且**沒有掛
+Milestone** 的 Issue（有 Milestone 的必須走它自己的 `dev/mN` 分支，這條路不適用）——
+`scripts/pr_lifecycle.py merge` 本身現在就會在 lease＋exact-head 授權留言齊全後直接
+成功，不必再手動 `gh pr merge --admin`。不符合這個形狀的 PR（例如非 Issue-linked、
+Issue 已有 Milestone、或是 Milestone 自己 `dev/mN` 分支上的 PR 需要繞過其他限制）仍
+只能用上一段的手動程序。
+
 這是只在「repo 結構性只有一個真人帳號」這段 alpha 期間才成立的例外，不是長期設計；
 有第二個真正的 collaborator 後應重新檢視是否移除，方向由維護者決定（追蹤於 #580）。
 與 #570（`required_status_checks` Ruleset 定義修復）及 #552（Milestone 核可重新設計，
