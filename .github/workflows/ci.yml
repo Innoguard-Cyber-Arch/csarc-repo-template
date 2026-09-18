@@ -64,7 +64,27 @@ jobs:
             --github-output "$GITHUB_OUTPUT" \
             --summary "$GITHUB_STEP_SUMMARY" \
             "${args[@]}"
-      # Issue #661: the sole content of the `verify` required check now.
+      # Issue #753: a small, exact allowlist of bots (currently only
+      # Dependabot) whose commits are authored and pushed by GitHub
+      # itself, so they can never carry the local-attestation trailer
+      # below checks for. See scripts/hosted_verify_bots.py's module
+      # docstring for the full condition. Any PR that does not qualify
+      # falls through to the unchanged attestation-only path.
+      - name: Determine hosted-verification bot eligibility
+        id: bot
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          python3 scripts/hosted_verify_bots.py \
+            --author "$AUTHOR" \
+            --head-ref "$HEAD_REF" \
+            --head-repo "$HEAD_REPO" \
+            --base-repo "$BASE_REPO" \
+            --github-output "$GITHUB_OUTPUT"
+      # Issue #661: the default content of the `verify` required check.
       # scripts/ci_tier.py's classification above still runs -- it is
       # change-aware routing logic, not test execution, and its "tier"
       # output is exactly what makes this a fail-closed check rather than
@@ -76,12 +96,36 @@ jobs:
       # because for a pull_request event `github.sha` is GitHub's
       # synthetic merge commit, not the commit the contributor actually
       # verified and pushed -- only that real commit can carry the
-      # trailer scripts/write-verify-attestation amended onto it.
+      # trailer scripts/write-verify-attestation amended onto it. Skipped
+      # for an Issue #753-eligible bot PR, which the next step verifies
+      # for real instead.
       - name: Validate local verification attestation
+        if: ${{ steps.bot.outputs.eligible != 'true' }}
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
           REQUIRED_TIER: ${{ steps.plan.outputs.tier }}
         run: ./scripts/check-verify-attestation "$HEAD_SHA" --required-tier "$REQUIRED_TIER"
+      # Issue #753: the allowlisted bot's commit can never carry a local
+      # attestation trailer, so this runs the real verification here
+      # instead, tiered and scoped exactly like scripts/ci_tier.py would
+      # classify any standalone pull request's own local run. The git
+      # identity is local to this ephemeral, unpushed checkout (`git
+      # commit --amend` inside scripts/write-verify-attestation needs one
+      # to run at all); persist-credentials is already false above, so
+      # nothing here can push anywhere.
+      - name: Run hosted verification for an allowlisted bot pull request
+        if: ${{ steps.bot.outputs.eligible == 'true' }}
+        env:
+          CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
+          CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          if [[ "$CSARC_CI_TIER" == "full" ]]; then
+            ./scripts/verify-template.sh
+          else
+            ./scripts/verify-fast
+          fi
       # Everything below this point is unrelated to Issue #661 and stays
       # exactly as it worked before: scripts/verify-release-candidate still
       # needs a real Python (and, if this repository ever gains a

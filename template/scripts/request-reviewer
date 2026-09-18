@@ -11,8 +11,8 @@ if [[ ! "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
   echo "PR_NUMBER must be a positive integer." >&2
   exit 2
 fi
-if [[ ! "$author" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}$ ]]; then
-  echo "PR_AUTHOR must be a GitHub username without @." >&2
+if [[ ! "$author" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$ ]]; then
+  echo "PR_AUTHOR must be a GitHub username without @ (a bot login may end in [bot])." >&2
   exit 2
 fi
 if [[ ! -f "$reviewers_file" ]]; then
