@@ -32,12 +32,14 @@ closed and prints the exact lines that disagree.
 from __future__ import annotations
 
 import argparse
-import subprocess
+import re
+import shutil
 import sys
 import tempfile
 from pathlib import Path
 
-import yaml
+from copier import run_copy
+from copier.errors import CopierError
 
 # Answers chosen to render every conditional branch a root workflow
 # exercises unconditionally (root always sets up Python, pnpm/Node, and
@@ -47,8 +49,16 @@ import yaml
 # for the full question schema; the three overrides below match the
 # ones scripts/verify-fast already passes for its own render smoke test,
 # plus `languages` to select every module.
+#
+# Kept as its own typed constant (not just a value inside
+# REPRESENTATIVE_ANSWERS) because find_uncovered_conditionals() below
+# also needs it directly: REPRESENTATIVE_ANSWERS must keep exercising
+# every conditional branch either paired workflow template has, and that
+# check reads this list to prove it.
+REPRESENTATIVE_LANGUAGES: list[str] = ["python", "rust", "typescript"]
+
 REPRESENTATIVE_ANSWERS: dict[str, object] = {
-    "languages": ["python", "rust", "typescript"],
+    "languages": REPRESENTATIVE_LANGUAGES,
     "project_slug": "jinja-workflow-drift-check",
     "package_name": "jinja_workflow_drift_check",
     "code_owner": "@Innoguard-Cyber-Arch/template-maintainers",
@@ -56,15 +66,17 @@ REPRESENTATIVE_ANSWERS: dict[str, object] = {
 
 # Issue #739: a small, exact allowlist of permanent, intentional
 # differences between a root workflow and its rendered `template/`
-# counterpart. Keyed by the `.jinja` file's own name. Each entry pairs
-# the *stripped* root line(s) that get replaced with the *stripped*
-# rendered line(s) that replace them, exactly as
-# difflib.SequenceMatcher's opcodes report the hunk. Add an entry only
-# with a reason; do not widen this to a whole-file or whole-job
-# exclusion.
-ALLOWED_LINE_DIFFERENCES: dict[
-    str, set[tuple[tuple[str, ...], tuple[str, ...]]]
-] = {
+# counterpart. Keyed by the `.jinja` file's own name. Each entry is one
+# *stripped* root line paired with the one *stripped* rendered line that
+# legitimately replaces it. Matching happens per individual line (see
+# _subtract_allowed_pairs), not per whole difflib hunk, so an unrelated
+# change that happens to land in the same hunk (for example, on an
+# adjacent line) cannot break an already-declared, unrelated
+# substitution. Add an entry only with a reason; do not widen this to a
+# whole-file or whole-job exclusion. The diagnostic printed for an
+# undeclared difference (see find_drift) already prints stripped lines,
+# so they can be pasted straight into a new entry here.
+ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
     "ci.yml.jinja": {
         # Downstream generated projects run their own, simpler
         # scripts/verify entry point; this repository verifies itself
@@ -72,12 +84,19 @@ ALLOWED_LINE_DIFFERENCES: dict[
         # scripts/sync-paired-files.sh's module docstring: root is
         # canonical for what this repository exercises directly, but a
         # generated project is a different, simpler product).
-        (
-            ("./scripts/verify-template.sh",),
-            ("./scripts/verify",),
-        ),
+        ("./scripts/verify-template.sh", "./scripts/verify"),
     },
 }
+
+_JINJA_CONDITION_TAG = re.compile(r"{%-?\s*(?:if|elif)\s+(.+?)\s*-?%}")
+_SET_ALIAS = re.compile(r"{%-?\s*set\s+(\w+)\s*=\s*(.+?)\s*-?%}")
+_LANGUAGE_MEMBERSHIP = re.compile(r"""^["'](\w+)["']\s+in\s+languages$""")
+
+# Heuristic, not a full YAML parser: a line whose value opens a literal
+# (`|`) or folded (`>`) block scalar, optionally with a chomping/indent
+# indicator. Good enough for the workflow files this check reads today;
+# see _relevant_lines for why it matters.
+_BLOCK_SCALAR_OPEN = re.compile(r":\s*[|>][+-]?\d?\s*$")
 
 
 def paired_workflow_files(root: Path) -> list[tuple[Path, Path]]:
@@ -99,29 +118,123 @@ def paired_workflow_files(root: Path) -> list[tuple[Path, Path]]:
     return pairs
 
 
+def find_uncovered_conditionals(
+    jinja_text: str, languages: list[str]
+) -> list[str]:
+    """Return one message per `{% if/elif %}` condition not provably true.
+
+    REPRESENTATIVE_ANSWERS must keep exercising every conditional branch
+    a paired workflow template has, or a stale value inside an
+    unrendered branch would drift silently -- this check would never see
+    it. This recognizes only a bare `"lang" in languages` check, given
+    directly or through a `{% set name = "lang" in languages %}` alias
+    referenced by name -- the only shape either paired workflow uses
+    today. A condition of any other shape cannot be proven covered and
+    is reported, so a future conditional gated on something else (a
+    different copier.yml question, for example) forces
+    REPRESENTATIVE_LANGUAGES and this function to be extended
+    deliberately, instead of silently rendering incomplete forever.
+    """
+    aliases = dict(_SET_ALIAS.findall(jinja_text))
+    problems: list[str] = []
+    for raw_condition in _JINJA_CONDITION_TAG.findall(jinja_text):
+        condition = raw_condition.strip()
+        expr = aliases.get(condition, condition).strip()
+        match = _LANGUAGE_MEMBERSHIP.match(expr)
+        if match is None:
+            problems.append(
+                f"condition {condition!r} is not a recognized "
+                '"lang" in languages check (directly, or through a '
+                "{% set name = ... %} alias) -- extend "
+                "find_uncovered_conditionals in "
+                "scripts/check_jinja_workflow_drift.py (and "
+                "REPRESENTATIVE_LANGUAGES if needed) before trusting "
+                "this check for it"
+            )
+            continue
+        language = match.group(1)
+        if language not in languages:
+            problems.append(
+                f"condition {condition!r} needs {language!r} added to "
+                "REPRESENTATIVE_LANGUAGES in "
+                "scripts/check_jinja_workflow_drift.py so this branch "
+                "actually renders"
+            )
+    return problems
+
+
 def _relevant_lines(text: str) -> list[str]:
-    """Return text's lines with blank lines and whole-line comments removed."""
-    lines = []
+    """Return text's lines with blank lines and YAML-level comments removed.
+
+    A line is only ever treated as a comment when it sits outside any
+    `key: |` / `key: >` block scalar (a `run:` step's shell script, for
+    example). Inside one, a leading '#' can be meaningful content (a
+    shebang, or a shell comment whose exact wording is itself the
+    behavior difference this check exists to catch) rather than YAML
+    prose, so lines there are always kept verbatim. Not triggered by any
+    current workflow content -- both real files only ever comment at the
+    YAML level -- but a future `run: |` block could add one.
+    """
+    lines: list[str] = []
+    block_scalar_indent: int | None = None
     for line in text.splitlines():
+        indent = len(line) - len(line.lstrip(" "))
         stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+        if block_scalar_indent is not None:
+            if stripped and indent <= block_scalar_indent:
+                block_scalar_indent = None  # scalar just ended; re-evaluate
+            else:
+                if stripped:
+                    lines.append(line)
+                continue
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
             continue
         lines.append(line)
+        if _BLOCK_SCALAR_OPEN.search(line):
+            block_scalar_indent = indent
     return lines
+
+
+def _subtract_allowed_pairs(
+    removed: list[str], added: list[str], allowed: set[tuple[str, str]]
+) -> tuple[list[str], list[str]]:
+    """Remove every declared (root-line, rendered-line) pair from a hunk.
+
+    Matching happens per individual line rather than treating the whole
+    hunk as one unit: difflib.SequenceMatcher groups nearby changes into
+    a single opcode based on line similarity, so an unrelated edit next
+    to a declared substitution (for example, on an adjacent line) can
+    land in the same hunk as that substitution. Requiring the entire
+    hunk to match one allowlist entry would then fail closed on a
+    harmless, unrelated neighbor. Consuming declared pairs individually
+    instead reports only what is actually left over -- the real,
+    undeclared drift, if any -- regardless of how difflib happened to
+    group the surrounding lines.
+    """
+    remaining_removed = list(removed)
+    remaining_added = list(added)
+    for root_line, rendered_line in allowed:
+        if root_line in remaining_removed and rendered_line in remaining_added:
+            remaining_removed.remove(root_line)
+            remaining_added.remove(rendered_line)
+    return remaining_removed, remaining_added
 
 
 def find_drift(
     root_text: str,
     rendered_text: str,
-    allowed: set[tuple[tuple[str, ...], tuple[str, ...]]] | None = None,
+    allowed: set[tuple[str, str]] | None = None,
 ) -> list[str]:
     """Return one formatted message per undeclared difference.
 
     Compares root_text against rendered_text after stripping comments and
-    blank lines from both. Every changed hunk is checked against
-    `allowed` (stripped root lines, stripped rendered lines); an
-    unmatched hunk is real drift and is rendered into the returned
-    message showing both sides.
+    blank lines from both. Every changed hunk has its declared
+    (`allowed`) line pairs subtracted out first; whatever remains is real
+    drift and is rendered into the returned message, printing the exact
+    stripped lines -- the same form an ALLOWED_LINE_DIFFERENCES entry
+    expects, so they can be pasted in directly.
     """
     import difflib
 
@@ -135,21 +248,26 @@ def find_drift(
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
             continue
-        removed = tuple(line.strip() for line in root_lines[i1:i2])
-        added = tuple(line.strip() for line in rendered_lines[j1:j2])
-        if (removed, added) in allowed:
+        removed = [line.strip() for line in root_lines[i1:i2]]
+        added = [line.strip() for line in rendered_lines[j1:j2]]
+        remaining_removed, remaining_added = _subtract_allowed_pairs(
+            removed, added, allowed
+        )
+        if not remaining_removed and not remaining_added:
             continue
         removed_block = "\n".join(
-            f"      - {line}" for line in root_lines[i1:i2]
+            f'      "{line}"' for line in remaining_removed
         )
-        added_block = "\n".join(
-            f"      + {line}" for line in rendered_lines[j1:j2]
-        )
+        added_block = "\n".join(f'      "{line}"' for line in remaining_added)
         errors.append(
             "root has:\n"
             + (removed_block or "      (nothing)")
             + "\n    rendered template has:\n"
             + (added_block or "      (nothing)")
+            + "\n    (lines above are already stripped -- paste a "
+            "(root_line, rendered_line) pair straight into "
+            "ALLOWED_LINE_DIFFERENCES to declare it, if it is "
+            "legitimate)"
         )
     return errors
 
@@ -157,57 +275,57 @@ def find_drift(
 def render_template(repo_root: Path, dest: Path) -> None:
     """Render template/ into dest with REPRESENTATIVE_ANSWERS, tasks skipped.
 
-    Uses the same `copier copy --trust --defaults --vcs-ref HEAD`
-    invocation scripts/verify-fast already runs for its own render smoke
-    test (and src/csarc_cli/cli.py's copier_copy for update revisions),
-    parameterized with fixed language answers instead of reusing that
-    smoke test's answers, which default to no language module selected
-    and would not render the toolchain blocks being compared here.
-    `--skip-tasks` avoids running post-generation hooks (uv lock, pnpm
-    install, cargo generate-lockfile, the repo-site build) that this
+    Copies copier.yml and template/ into a plain, non-git staging
+    directory first and renders in-process via copier.run_copy() from
+    there -- the same pattern tests/test_language_profiles.py and
+    tests/test_render_site.py already use for the same reason (see their
+    own comments): rendering straight from repo_root, a git-tracked
+    checkout, would let Copier default to its latest release git tag
+    instead of the actual working tree, silently checking stale,
+    already-released template content instead of what is actually being
+    reviewed. `skip_tasks=True` skips post-generation hooks (uv lock,
+    pnpm install, cargo generate-lockfile, the repo-site build) that this
     check never reads and do not touch workflow files.
     """
-    data_file = dest.parent / "jinja-workflow-drift-answers.yml"
-    data_file.write_text(
-        yaml.safe_dump(REPRESENTATIVE_ANSWERS, sort_keys=True), encoding="utf-8"
-    )
-    subprocess.run(  # noqa: S603
-        [
-            sys.executable,
-            "-m",
-            "copier",
-            "copy",
-            "--trust",
-            "--defaults",
-            "--skip-tasks",
-            "--vcs-ref",
-            "HEAD",
-            "--data-file",
-            str(data_file),
-            str(repo_root),
-            str(dest),
-        ],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
+    staging_source = dest.parent / "staging-source"
+    staging_source.mkdir(parents=True)
+    shutil.copy2(repo_root / "copier.yml", staging_source / "copier.yml")
+    shutil.copytree(repo_root / "template", staging_source / "template")
+    run_copy(
+        str(staging_source),
+        dest,
+        data=REPRESENTATIVE_ANSWERS,
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+        quiet=True,
     )
 
 
 def check(root: Path) -> list[str]:
-    """Render template/ once and return one message per drifted pair."""
+    """Verify conditional coverage, then render template/ once and diff."""
     pairs = paired_workflow_files(root)
     if not pairs:
         return []
+
+    coverage_errors: list[str] = []
+    for _root_workflow, jinja_path in pairs:
+        jinja_rel = jinja_path.relative_to(root)
+        for problem in find_uncovered_conditionals(
+            jinja_path.read_text(encoding="utf-8"), REPRESENTATIVE_LANGUAGES
+        ):
+            coverage_errors.append(f"{jinja_rel}: {problem}")
+    if coverage_errors:
+        return coverage_errors
+
     with tempfile.TemporaryDirectory(prefix="jinja-workflow-drift-") as raw_tmp:
         dest = Path(raw_tmp) / "rendered"
         try:
             render_template(root, dest)
-        except subprocess.CalledProcessError as exc:
-            output = (exc.stdout or "") + (exc.stderr or "")
+        except (CopierError, OSError) as exc:
             return [
                 "failed to render template/ for the jinja workflow drift "
-                f"check:\n{output}"
+                f"check: {exc}"
             ]
         errors = []
         for root_workflow, jinja_path in pairs:
@@ -247,10 +365,11 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write(f"jinja workflow drift: {error}\n")
         sys.stderr.write(
             "Undeclared difference between a root workflow and its "
-            "rendered template/ counterpart. Fix root or the .jinja "
-            "template so they agree, or add an explicit, reasoned entry "
-            "to ALLOWED_LINE_DIFFERENCES in "
-            "scripts/check_jinja_workflow_drift.py.\n"
+            "rendered template/ counterpart (or an unproven "
+            "REPRESENTATIVE_LANGUAGES coverage gap). Fix root or the "
+            ".jinja template so they agree, or add an explicit, reasoned "
+            "(root_line, rendered_line) entry to ALLOWED_LINE_DIFFERENCES "
+            "in scripts/check_jinja_workflow_drift.py.\n"
         )
         return 1
     pairs = len(paired_workflow_files(args.root))
