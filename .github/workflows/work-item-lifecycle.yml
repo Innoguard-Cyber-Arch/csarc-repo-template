@@ -98,6 +98,26 @@ jobs:
           --repo "$GITHUB_REPOSITORY"
           --milestone "$MILESTONE_NUMBER"
 
+      # -- Milestone lifecycle: refresh a standalone/hotfix Issue's linked PR check (#743) --
+      # The no-Milestone counterpart to the step above: an Issue comment is
+      # the only event that can flip a standalone/hotfix Issue's approval
+      # state (Approve/Admin-approve:/Object:/Resolve:, #743), so this is
+      # deliberately scoped to issue_comment rather than every event type
+      # the step above reacts to.
+      - name: "Milestone lifecycle: refresh standalone Issue PR check"
+        if: >-
+          !cancelled() &&
+          github.event_name == 'issue_comment' &&
+          github.event.issue.pull_request == null &&
+          github.event.issue.milestone.number == null
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: >-
+          python3 scripts/sync_milestone_state.py refresh-issue-pr-checks
+          --repo "$GITHUB_REPOSITORY"
+          --issue "$ISSUE_NUMBER"
+
       # -- Milestone lifecycle: reconcile the Milestone an Issue moved off of --
       - name: "Milestone lifecycle: reconcile the previous Milestone"
         if: >-

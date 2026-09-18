@@ -36,6 +36,7 @@ _pull_decision = MODULE["_pull_decision"]
 _standalone_pull_decision = MODULE["_standalone_pull_decision"]
 check_pr = MODULE["check_pr"]
 check_merge_group = MODULE["check_merge_group"]
+refresh_issue_pr_checks = MODULE["refresh_issue_pr_checks"]
 
 
 @pytest.fixture(autouse=True)
@@ -273,6 +274,25 @@ def test_resolved_objection_reopens_the_gate() -> None:
     assert result.allowed
 
 
+def test_resolution_by_a_different_author_does_not_count() -> None:
+    """Only the objection's own author may withdraw it with `Resolve:` --
+    someone else resolving it on their behalf must not reopen the gate
+    (mirrors the tracker gate's identical `wrong_resolver` behavior in
+    `tests/test_milestone_approval.py::test_unresolved_objection_closes_
+    the_gate`, locked in here for the standalone vocabulary too)."""
+    objection = comment(2, "skeptic", "Object: Needs a rollback plan")
+    result = standalone_issue_approval_decision(
+        issue_snapshot(
+            comment(1, "reviewer", "Approve"),
+            objection,
+            comment(3, "worker", f"Resolve: {objection['html_url']}"),
+        ),
+        210,
+    )
+
+    assert not result.allowed
+
+
 def test_approval_becomes_stale_after_a_later_issue_edit() -> None:
     """Editing the Issue body after approval invalidates it (#632's binding)."""
     result = standalone_issue_approval_decision(
@@ -440,6 +460,98 @@ def test_standalone_pull_decision_allows_an_approved_closing_issue(
     assert result.allowed
 
 
+def test_standalone_pull_decision_rejects_multiple_closing_issues() -> None:
+    """A PR body referencing more than one distinct closing Issue fails
+    closed instead of silently evaluating only the first match (code-review
+    finding: `.search()` alone would miss every Issue after the first).
+    `scripts/validate-pr-policy` already requires exactly one closing Issue
+    for a routine work PR, so this is defense-in-depth for `check_issue_
+    approval()`'s other use as a standalone CLI entry point."""
+    pull = {"milestone": None, "body": "Fixes #210\n\nAlso closes #211"}
+
+    result = _standalone_pull_decision("acme/project", pull)
+
+    assert not result.allowed
+    assert "#210" in result.summary
+    assert "#211" in result.summary
+
+
+def test_standalone_pull_decision_allows_a_repeated_reference_to_one_issue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same Issue number referenced more than once is still just one
+    distinct closing Issue, not a multi-Issue rejection."""
+    monkeypatch.setitem(
+        _standalone_pull_decision.__globals__,
+        "load_issue_snapshot",
+        lambda repo, number: issue_snapshot(
+            comment(1, "reviewer", "Approve"), number=number
+        ),
+    )
+    pull = {
+        "milestone": None,
+        "body": "Fixes #210.\n\nSee also #210 for the original report.",
+    }
+
+    result = _standalone_pull_decision("acme/project", pull)
+
+    assert result.allowed
+
+
+@pytest.mark.parametrize(
+    "head_ref",
+    [
+        "dependabot/pip/django-5.0.1",
+        "automation/bump-lockfiles",
+        "release-please--branches--main",
+        "sync/main-to-m14-generated-project-fixes-abc1234",
+    ],
+)
+def test_standalone_pull_decision_ignores_automated_prs_with_fake_keyword(
+    head_ref: str,
+) -> None:
+    """An automated PR's own branch-prefix carve-out wins even when its body
+    happens to embed a `Fixes #<n>`-shaped string -- for example, an
+    upstream changelog Dependabot copies verbatim into its PR description.
+    Code-review finding: matching on body text alone, with no bot/automation
+    carve-out, could accidentally route such a PR into the approval gate."""
+    pull = {
+        "milestone": None,
+        "head": {"ref": head_ref},
+        "body": (
+            "Bumps foo from 1.0.0 to 1.0.1.\n\n"
+            "## Changelog\n\n### 1.0.1\n\nFixes #210 upstream.\n"
+        ),
+    }
+
+    result = _standalone_pull_decision("acme/project", pull)
+
+    assert result.allowed
+    assert "not part of a Milestone" in result.summary
+
+
+def test_standalone_pull_decision_still_gates_a_non_automated_head_ref(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pull request with an ordinary `fix/<n>-<slug>` head ref is not
+    covered by the automation carve-out and is still gated normally."""
+    monkeypatch.setitem(
+        _standalone_pull_decision.__globals__,
+        "load_issue_snapshot",
+        lambda repo, number: issue_snapshot(number=number),
+    )
+    pull = {
+        "milestone": None,
+        "head": {"ref": "fix/210-outage"},
+        "body": "Fixes #210",
+    }
+
+    result = _standalone_pull_decision("acme/project", pull)
+
+    assert not result.allowed
+    assert "#210" in result.summary
+
+
 def test_check_pr_routes_a_milestone_less_pull_request_through_issue_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -590,3 +702,187 @@ def test_merge_group_allows_automated_pull_requests_with_no_closing_issue(
     result = check_merge_group("acme/project", "queue-sha")
 
     assert result.allowed
+
+
+def test_merge_group_blocks_on_one_unapproved_pr_among_several(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A merge-group commit can represent several queued pull requests at
+    once (a batch merge); one unapproved standalone/hotfix Issue among them
+    must still block the whole merge-group check, and an automated PR with
+    no linked Issue in the same batch must not interfere either way."""
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "run_gh",
+        lambda _arguments: json.dumps(
+            [
+                {"number": 42, "milestone": None, "body": "Fixes #210"},
+                {"number": 43, "milestone": None, "body": "Fixes #211"},
+                {
+                    "number": 44,
+                    "milestone": None,
+                    "body": "Bumps foo from 1.0.0 to 1.0.1.",
+                },
+            ]
+        ),
+    )
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "load_issue_snapshot",
+        lambda repo, number: issue_snapshot(
+            *([comment(1, "reviewer", "Approve")] if number == 211 else []),
+            number=number,
+        ),
+    )
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "_record_check",
+        lambda repo, sha, decision: None,
+    )
+
+    result = check_merge_group("acme/project", "queue-sha")
+
+    assert not result.allowed
+    assert "#210" in result.summary
+    assert "#211" not in result.summary
+
+
+def test_merge_group_allows_every_pr_when_all_are_approved_or_unaffected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same multi-PR merge group passes once every standalone Issue in
+    it is approved, proving the blocking test above is not a false
+    positive from some other cause.
+    """
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "run_gh",
+        lambda _arguments: json.dumps(
+            [
+                {"number": 42, "milestone": None, "body": "Fixes #210"},
+                {"number": 43, "milestone": None, "body": "Fixes #211"},
+                {
+                    "number": 44,
+                    "milestone": None,
+                    "body": "Bumps foo from 1.0.0 to 1.0.1.",
+                },
+            ]
+        ),
+    )
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "load_issue_snapshot",
+        lambda repo, number: issue_snapshot(
+            comment(1, "reviewer", "Approve"), number=number
+        ),
+    )
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "_record_check",
+        lambda repo, sha, decision: None,
+    )
+
+    result = check_merge_group("acme/project", "queue-sha")
+
+    assert result.allowed
+
+
+def test_refresh_issue_pr_checks_recheck_only_matching_prs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The CI re-trigger wired into work-item-lifecycle.yml (#743): a fresh
+    `Approve`/`Admin-approve:`/`Object:`/`Resolve:` comment on a standalone/
+    hotfix Issue must re-run `check-pr` on the specific PR(s) that close it
+    -- not every open PR, and not one that already has a Milestone (which
+    inherits tracker approval and is unaffected by this Issue's comments).
+    """
+    checked: list[int] = []
+    monkeypatch.setitem(
+        refresh_issue_pr_checks.__globals__,
+        "run_gh",
+        lambda _arguments: json.dumps(
+            [
+                {"number": 42, "milestone": None, "body": "Fixes #210"},
+                {"number": 43, "milestone": None, "body": "Fixes #999"},
+                {
+                    "number": 44,
+                    "milestone": {"number": 14},
+                    "body": "Fixes #210",
+                },
+                {
+                    "number": 45,
+                    "milestone": None,
+                    "body": "Bumps foo from 1.0.0 to 1.0.1.",
+                },
+            ]
+        ),
+    )
+    monkeypatch.setitem(
+        refresh_issue_pr_checks.__globals__,
+        "check_pr",
+        lambda repo, number: checked.append(number),
+    )
+
+    result = refresh_issue_pr_checks("acme/project", 210)
+
+    assert result.allowed
+    assert checked == [42]
+    assert "1" in result.summary
+    assert "#210" in result.summary
+
+
+def test_refresh_issue_pr_checks_rechecks_a_pr_with_multiple_closing_issues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A PR that closes this Issue among several still gets refreshed --
+    `_standalone_pull_decision()` owns the "more than one closing Issue"
+    fail-closed decision when `check-pr` actually re-runs, so the refresh
+    step itself does not need to duplicate that judgment.
+    """
+    checked: list[int] = []
+    monkeypatch.setitem(
+        refresh_issue_pr_checks.__globals__,
+        "run_gh",
+        lambda _arguments: json.dumps(
+            [
+                {
+                    "number": 42,
+                    "milestone": None,
+                    "body": "Fixes #210\n\nAlso closes #211",
+                }
+            ]
+        ),
+    )
+    monkeypatch.setitem(
+        refresh_issue_pr_checks.__globals__,
+        "check_pr",
+        lambda repo, number: checked.append(number),
+    )
+
+    result = refresh_issue_pr_checks("acme/project", 210)
+
+    assert result.allowed
+    assert checked == [42]
+
+
+def test_refresh_issue_pr_checks_is_a_no_op_with_nothing_to_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No open PR references this Issue: the refresh is a harmless no-op,
+    never a failure."""
+    checked: list[int] = []
+    monkeypatch.setitem(
+        refresh_issue_pr_checks.__globals__,
+        "run_gh",
+        lambda _arguments: json.dumps([]),
+    )
+    monkeypatch.setitem(
+        refresh_issue_pr_checks.__globals__,
+        "check_pr",
+        lambda repo, number: checked.append(number),
+    )
+
+    result = refresh_issue_pr_checks("acme/project", 210)
+
+    assert result.allowed
+    assert checked == []

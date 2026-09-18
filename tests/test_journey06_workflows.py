@@ -40,6 +40,7 @@ EXPECTED_STEP_NAMES = [
     "Checkout",
     "Issue triage: assign author and apply issue classification",
     "Milestone lifecycle: reconcile lifecycle and refresh PR checks",
+    "Milestone lifecycle: refresh standalone Issue PR check",
     "Milestone lifecycle: reconcile the previous Milestone",
     "Milestone lifecycle: resolve the tracker Issue this promotion closes",
     "Milestone lifecycle: record the merge commit as delivery evidence",
@@ -151,6 +152,33 @@ def test_work_item_lifecycle_delegates_to_repository_scripts() -> None:
     assert " reconcile" in source
     assert "scripts/sync_milestone_state.py record-promotion-evidence" in source
     assert "scripts/pr_lifecycle.py close-work" in source
+    assert "scripts/sync_milestone_state.py refresh-issue-pr-checks" in source
+
+
+def test_work_item_lifecycle_refreshes_standalone_issue_pr_checks() -> None:
+    """#743's no-Milestone counterpart to the tracker's own refresh step
+    (see the step immediately above it) fires only on a comment landing on
+    an Issue (not a PR comment, which also raises `issue_comment`) that has
+    no Milestone -- the same event `github.event.issue.milestone.number ==
+    null` signal the tracker step's own condition already establishes the
+    convention for, just negated and narrowed to `issue_comment`."""
+    workflow = load_yaml(REPO_ROOT / ".github" / "workflows" / WORKFLOW)
+    steps = workflow["jobs"]["process"]["steps"]
+    step = next(
+        step
+        for step in steps
+        if step["name"]
+        == "Milestone lifecycle: refresh standalone Issue PR check"
+    )
+
+    condition = step["if"]
+    assert "github.event_name == 'issue_comment'" in condition
+    assert "github.event.issue.pull_request == null" in condition
+    assert "github.event.issue.milestone.number == null" in condition
+
+    run = step["run"]
+    assert "scripts/sync_milestone_state.py refresh-issue-pr-checks" in run
+    assert "--issue" in run
 
 
 def test_pr_policy_uses_the_same_milestone_validator() -> None:
