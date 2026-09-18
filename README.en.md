@@ -71,16 +71,16 @@ CSARC has two entirely different situations, each needing different tools: **usi
 
 Only `uv` is always required; `uvx --python 3.14` creates an isolated runtime per invocation, so no global Python is required. The language modules you choose need their own toolchain. Selecting none of `languages` (i.e. `language: ci`, explained below) needs no extra language toolchain at all.
 
-| Tool | When needed | macOS (Homebrew) | Windows (winget/Chocolatey) |
-| --- | --- | --- | --- |
-| Git | Always | `brew install git` | `winget install --id Git.Git -e` |
-| GitHub CLI (`gh`) | Only for GitHub-connected operations (`gh auth login`, repository settings scripts) | `brew install gh` | `winget install --id GitHub.cli --source winget` (or `choco install gh`) |
-| uv | Always; even with `ci` selected, a generated project's `./scripts/verify` still runs its check scripts with `uv run --no-project python` | `brew install uv` | `winget install --id=astral-sh.uv -e`; without winget, use the official install script `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` (see the [uv install docs](https://docs.astral.sh/uv/getting-started/installation/)) |
-| Node.js 24+ | Only with the `typescript` language module | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` |
-| pnpm 11 | Only with the `typescript` language module | `brew install pnpm` | `winget install -e --id pnpm.pnpm` |
-| rustup/Cargo | Only with the `rust` language module | `brew install rustup` (keg-only; the formula no longer ships `rustup-init`, so just add `$(brew --prefix rustup)/bin` to `PATH` to finish installing); or the official script `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` |
+| Tool | When needed | macOS (Homebrew) | Windows (native, winget/Chocolatey) | Linux/WSL2 (Ubuntu, apt) |
+| --- | --- | --- | --- | --- |
+| Git | Always | `brew install git` | `winget install --id Git.Git -e` | `sudo apt install -y git` |
+| GitHub CLI (`gh`) | Only for GitHub-connected operations (`gh auth login`, repository settings scripts) | `brew install gh` | `winget install --id GitHub.cli --source winget` (or `choco install gh`) | `sudo apt install -y gh` |
+| uv | Always; even with `ci` selected, a generated project's `./scripts/verify` still runs its check scripts with `uv run --no-project python` | `brew install uv` | `winget install --id=astral-sh.uv -e`; without winget, use the official install script `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` (see the [uv install docs](https://docs.astral.sh/uv/getting-started/installation/)) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| Node.js 24+ | Only with the `typescript` language module | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` | `curl -fsSL https://deb.nodesource.com/setup_24.x \| sudo -E bash -` then `sudo apt install -y nodejs` |
+| pnpm 11 | Only with the `typescript` language module | `brew install pnpm` | `winget install -e --id pnpm.pnpm` | `sudo npm install -g pnpm@11` |
+| rustup/Cargo | Only with the `rust` language module; **on Linux/WSL2, compiling even a pure-Rust project with no C bindings needs a system C linker at compile time -- also install `build-essential`** (a clean WSL2 Ubuntu 24.04 with only `rustup` installed fails `cargo test` with `error: linker 'cc' not found`) | `brew install rustup` (keg-only; the formula no longer ships `rustup-init`, so just add `$(brew --prefix rustup)/bin` to `PATH` to finish installing); or the official script `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` | `sudo apt install -y build-essential` then `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 
-On Windows, run the repo itself and the `csarc` CLI from inside WSL2 (Ubuntu); the table's Windows column (winget/choco) is for installing an individual tool natively on Windows (e.g. installing `git`/`gh` before entering WSL2). macOS/WSL2 Ubuntu install examples live on the [repo-site appendix](docs/index.html).
+On Windows, run the repo itself and the `csarc` CLI from inside WSL2 (Ubuntu); the table's "Windows (native, winget/Chocolatey)" column is for installing an individual tool natively on Windows (e.g. installing `git`/`gh` before entering WSL2) -- the rustup installed there is not on `PATH` once you are inside the WSL2 Ubuntu shell, so use the "Linux/WSL2 (Ubuntu, apt)" column instead. The full guided script lives on the [repo-site appendix](docs/index.html).
 
 ### Developing/contributing to `csarc-repo-template` itself
 

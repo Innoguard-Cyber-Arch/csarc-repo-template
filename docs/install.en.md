@@ -6,14 +6,16 @@ CSARC delivers a CI/CD template and governance workflow; Python only runs the th
 
 Only `uv` is always required; the language modules you choose need their own toolchain. Selecting none of `languages` (`language: ci`) needs no extra language toolchain at all.
 
-| Tool | When needed | macOS (Homebrew) | Windows (winget/Chocolatey) |
-| --- | --- | --- | --- |
-| Git | Always | `brew install git` | `winget install --id Git.Git -e` |
-| GitHub CLI (`gh`) | Only for GitHub-connected operations | `brew install gh` | `winget install --id GitHub.cli --source winget` |
-| uv | Always | `brew install uv` | `winget install --id=astral-sh.uv -e` |
-| Node.js 24+ | Only with the `typescript` module | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` |
-| pnpm 11 | Only with the `typescript` module | `brew install pnpm` | `winget install -e --id pnpm.pnpm` |
-| rustup/Cargo | Only with the `rust` module | `brew install rustup` | `winget install -e --id Rustlang.Rustup` |
+| Tool | When needed | macOS (Homebrew) | Windows (native, winget/Chocolatey) | Linux/WSL2 (Ubuntu, apt) |
+| --- | --- | --- | --- | --- |
+| Git | Always | `brew install git` | `winget install --id Git.Git -e` | `sudo apt install -y git` |
+| GitHub CLI (`gh`) | Only for GitHub-connected operations | `brew install gh` | `winget install --id GitHub.cli --source winget` | `sudo apt install -y gh` |
+| uv | Always | `brew install uv` | `winget install --id=astral-sh.uv -e` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| Node.js 24+ | Only with the `typescript` module | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` | `curl -fsSL https://deb.nodesource.com/setup_24.x \| sudo -E bash -` then `sudo apt install -y nodejs` |
+| pnpm 11 | Only with the `typescript` module | `brew install pnpm` | `winget install -e --id pnpm.pnpm` | `sudo npm install -g pnpm@11` |
+| rustup/Cargo | Only with the `rust` module; **Linux/WSL2 also needs `build-essential` (a system C linker), even for a pure-Rust project with no C bindings** -- otherwise `cargo test` fails with `error: linker 'cc' not found` | `brew install rustup` | `winget install -e --id Rustlang.Rustup` | `sudo apt install -y build-essential` then `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+
+The Windows column is for installing an individual tool natively on Windows (e.g. installing `git`/`gh` before entering WSL2); inside the WSL2 Ubuntu shell, use the Linux/WSL2 column instead -- the rustup installed via winget is not on `PATH` there.
 
 ## Create a new repo
 

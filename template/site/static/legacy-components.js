@@ -38,13 +38,18 @@ uvx --from csarc-repo-cli csarc update`
           location: 'Terminal',
           code: `brew install git gh uv node pnpm
 
+# Only if you picked Rust (the Homebrew formula is keg-only; the official
+# script is simpler and puts rustup on PATH for you).
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+
 # Only for repository settings and GitHub end-to-end tests.
 gh auth login -h github.com
 gh auth status`
         },
         windows: {
           title: 'Windows 本機需求',
-          goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 rustup。',
+          goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 rustup 與 build-essential（C linker）。',
           location: 'PowerShell（管理員）→ Ubuntu',
           code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
@@ -56,6 +61,13 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
 sudo npm install -g pnpm@11.22.0
+
+# Only if you picked Rust. build-essential provides the system C linker that
+# even a pure-Rust build needs on Linux; without it, "cargo test" fails with
+# "error: linker 'cc' not found".
+sudo apt install -y build-essential
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
 
 # Only for repository settings and GitHub end-to-end tests.
 gh auth login -h github.com
@@ -94,13 +106,18 @@ uvx --from csarc-repo-cli csarc update`
           location: 'Terminal',
           code: `brew install git gh uv node pnpm
 
+# Only if you picked Rust (the Homebrew formula is keg-only; the official
+# script is simpler and puts rustup on PATH for you).
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+
 # Only for repository settings and GitHub end-to-end tests.
 gh auth login -h github.com
 gh auth status`
         },
         windows: {
           title: 'Windows local requirements',
-          goal: 'Use WSL2 (Ubuntu) and work in the repo from inside WSL; add Node 24 and pnpm 11 for TypeScript, or rustup for Rust.',
+          goal: 'Use WSL2 (Ubuntu) and work in the repo from inside WSL; add Node 24 and pnpm 11 for TypeScript, or rustup and build-essential (a C linker) for Rust.',
           location: 'PowerShell (Administrator) -> Ubuntu',
           code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
@@ -112,6 +129,13 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
 sudo npm install -g pnpm@11.22.0
+
+# Only if you picked Rust. build-essential provides the system C linker that
+# even a pure-Rust build needs on Linux; without it, "cargo test" fails with
+# "error: linker 'cc' not found".
+sudo apt install -y build-essential
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
 
 # Only for repository settings and GitHub end-to-end tests.
 gh auth login -h github.com
