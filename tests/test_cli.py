@@ -4823,9 +4823,7 @@ def test_update_delivers_the_issue_743_approval_gate_to_an_adopted_project(
     assert "def standalone_issue_approval_decision(" in sync_state_after
     assert '"check-issue-approval"' in sync_state_after
 
-    ci_policy = (project / "docs" / "ci-policy.md").read_text(
-        encoding="utf-8"
-    )
+    ci_policy = (project / "docs" / "ci-policy.md").read_text(encoding="utf-8")
     assert "standalone_issue_approval_decision()" in ci_policy
     assert "_issue_approval_records()" in ci_policy
 
