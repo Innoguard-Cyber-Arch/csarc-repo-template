@@ -469,6 +469,16 @@ Milestone 一致，PR 沒有 Milestone 時連結 Issue 也不會有），但 `ch
 同時是一個獨立 CLI 子指令，不能假設呼叫端已經驗證過這個不變量，所以直接從 Issue 自
 己的即時資料重新判斷，屬於防禦性設計，不是重複邏輯。
 
+**核可綁定 Issue 目前的開啟狀態：**`standalone_issue_approval_decision()`（與
+`check_issue_approval()`，皆有 `require_open` 參數，預設 `True`）比照
+`approval_decision()` 對 tracker 的既有檢查——Issue 若不是 `open` 狀態就直接判定未
+核可，即使先前確實有一則有效的 `Approve` 留言。這修正了 code review 抓到的一個
+fail-open 漏洞：一張 Issue 在開啟狀態下取得非提案者核可後，若之後被獨立關閉（誤判為
+重複、改分類等），而其 `Fixes #N` 連結的 PR 仍然開著，`check-pr`／`check-merge-group`
+每次重新評估時，舊有實作仍會回傳「已核可」，等於允許在一個已經失效的核可基礎上合
+併。與 tracker 路徑一樣，這裡沒有對應「完成收尾」的情境需要 `require_open=False`（那
+是 tracker 專屬的 `closure_decision()` 收尾路徑），所以每個真實呼叫端都維持預設值。
+
 **Hotfix 的緊急路徑：**與 tracker、scope-expansion 核可相同精神的 admin
 self-approval 例外在此保留——proposer 若同時是 repo `admin` collaborator，可以自己
 留言 `Admin-approve: <理由>` 通過，理由必填，summary 明確標成「Issue admin
@@ -483,7 +493,9 @@ Issue 未核可時 fail closed、非提案者核可後放行（含大小寫與�
 60 秒緩衝窗）、反駁與解決反駁、**tracker 的 `/milestone approve` 語彙在沒有 Milestone
 的 Issue 上完全不生效**（證明兩套語彙真的互相獨立、不會誤判）、Milestone-scoped
 Issue 繼續繼承 tracker 核可不需要逐張核可、沒有連結 Issue 的自動化 PR 不受影響、
-`check-pr`／`check-merge-group` 兩個既有 CI 接線點都正確套用新 gate。
+`check-pr`／`check-merge-group` 兩個既有 CI 接線點都正確套用新 gate、**Issue 核可後
+被獨立關閉即不再算已核可**（含 `check-merge-group` 端到端重現、`require_open=True`
+時的 happy path 不受影響、`require_open=False` 的既有防禦式選項仍可用）。
 
 ### `promotion` 必要檢查的產生條件（#601）
 

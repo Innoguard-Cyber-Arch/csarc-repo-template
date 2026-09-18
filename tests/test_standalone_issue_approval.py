@@ -84,6 +84,7 @@ def issue_snapshot(
     updated_at: str | None = None,
     milestone: dict[str, Any] | None = None,
     number: int = 210,
+    state: str = "open",
 ) -> dict[str, Any]:
     """Build one work-Issue snapshot as `load_issue_snapshot()` returns it."""
     return {
@@ -95,6 +96,7 @@ def issue_snapshot(
             "user": {"login": proposer, "type": "User"},
             "updated_at": updated_at,
             "milestone": milestone,
+            "state": state,
         },
         "comments": list(comments),
     }
@@ -117,6 +119,52 @@ def test_non_proposer_approval_unblocks_a_standalone_issue() -> None:
 
     assert result.allowed
     assert result.summary == "Issue approved by reviewer"
+
+
+def test_still_open_approved_issue_keeps_passing() -> None:
+    """Happy-path regression check: an approved, still-open Issue is
+    unaffected by the `require_open` gate (companion to the closed-Issue
+    test below, proving the fix does not regress the common case)."""
+    result = standalone_issue_approval_decision(
+        issue_snapshot(comment(1, "reviewer", "Approve"), state="open"), 210
+    )
+
+    assert result.allowed
+    assert result.summary == "Issue approved by reviewer"
+
+
+def test_closed_issue_no_longer_counts_as_approved() -> None:
+    """A since-closed Issue must not keep passing on a stale `Approve`.
+
+    Regression test for the fail-open bug found in code review: an Issue
+    can be approved while open and then closed independently afterward
+    (mis-triaged, marked duplicate, closed by an unrelated PR, etc.) while
+    its own closing pull request (`Fixes #N`) is still open. Without this
+    `require_open` gate -- mirroring `approval_decision()`'s identical
+    check for the tracker path -- `check-pr`/`check-merge-group` would
+    keep treating the stale approval as valid every time they re-evaluate
+    it, exactly the fail-open hole the tracker path has never had.
+    """
+    result = standalone_issue_approval_decision(
+        issue_snapshot(comment(1, "reviewer", "Approve"), state="closed"), 210
+    )
+
+    assert not result.allowed
+    assert "#210" in result.summary
+    assert "open" in result.summary
+
+
+def test_require_open_false_allows_a_closed_issue_by_explicit_opt_out() -> None:
+    """`require_open=False` is available (mirroring `approval_decision()`'s
+    own parameter) even though no current caller passes it -- there is no
+    standalone equivalent of the tracker's completed-closure path yet."""
+    result = standalone_issue_approval_decision(
+        issue_snapshot(comment(1, "reviewer", "Approve"), state="closed"),
+        210,
+        require_open=False,
+    )
+
+    assert result.allowed
 
 
 @pytest.mark.parametrize(
@@ -478,6 +526,41 @@ def test_merge_group_revalidates_a_milestone_less_pull_request(
 
     assert not result.allowed
     assert "#210" in result.summary
+
+
+def test_merge_group_revalidation_rejects_a_since_closed_approved_issue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end regression for the fail-open bug: an Issue approved while
+    open, then closed independently while its pull request is still open
+    (mis-triaged, marked duplicate, etc.), must fail the merge queue's
+    "Revalidate queued Milestone approval" step -- not keep passing on the
+    now-stale approval."""
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "run_gh",
+        lambda _arguments: json.dumps(
+            [{"number": 42, "milestone": None, "body": "Fixes #210"}]
+        ),
+    )
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "load_issue_snapshot",
+        lambda repo, number: issue_snapshot(
+            comment(1, "reviewer", "Approve"), number=number, state="closed"
+        ),
+    )
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "_record_check",
+        lambda repo, sha, decision: None,
+    )
+
+    result = check_merge_group("acme/project", "queue-sha")
+
+    assert not result.allowed
+    assert "#210" in result.summary
+    assert "open" in result.summary
 
 
 def test_merge_group_allows_automated_pull_requests_with_no_closing_issue(

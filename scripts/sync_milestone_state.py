@@ -740,7 +740,7 @@ def _issue_approval_records(
 
 
 def standalone_issue_approval_decision(
-    snapshot: dict[str, Any], issue_number: int
+    snapshot: dict[str, Any], issue_number: int, *, require_open: bool = True
 ) -> Decision:
     """Require independent approval for one Issue with no Milestone (#743).
 
@@ -767,10 +767,26 @@ def standalone_issue_approval_decision(
     final pass/fail assembly (`_gate_decision()`) -- both vocabulary-agnostic
     -- are shared, which is what "no second parallel system" means here: one
     shared decision engine, two independent comment grammars feeding it.
+
+    `require_open` mirrors `approval_decision()`'s own gate exactly: an
+    Issue closed out from under an already-posted `Approve` comment (mis-
+    triaged, marked duplicate, closed by an unrelated PR, etc.) must not
+    keep counting as approved. Without this check, a since-closed Issue's
+    stale-but-syntactically-valid approval would still satisfy the gate the
+    next time `check-pr` or `check-merge-group` re-evaluates it -- a
+    fail-open hole the tracker path has never had, since `approval_decision()`
+    has required `item.get("state") == "open"` since #400. There is no
+    standalone equivalent of the tracker's completed-closure path (which is
+    the only caller that ever passes `require_open=False`), so every real
+    caller keeps the default.
     """
     issue = snapshot.get("issue")
     if not isinstance(issue, dict):
         return Decision(False, "GitHub returned invalid Issue data")
+    if require_open and issue.get("state") != "open":
+        return Decision(
+            False, f"Issue #{issue_number} must remain open while work runs"
+        )
     proposer = issue.get("user", {}).get("login")
     approvals, objections, resolved, admin_approvals, stale = (
         _issue_approval_records(
@@ -794,7 +810,9 @@ def standalone_issue_approval_decision(
     )
 
 
-def check_issue_approval(repo: str, number: int) -> Decision:
+def check_issue_approval(
+    repo: str, number: int, *, require_open: bool = True
+) -> Decision:
     """Validate the standalone/hotfix/release-recovery Issue-approval gate.
 
     A Milestone-scoped Issue defers to that Milestone's own tracker
@@ -806,6 +824,10 @@ def check_issue_approval(repo: str, number: int) -> Decision:
     approval` is also a standalone CLI entry point, so it re-derives the
     right answer directly from the Issue's own Milestone field rather than
     trusting a caller's assumption.
+
+    `require_open` is threaded straight through to
+    `standalone_issue_approval_decision()`; every real caller (the CLI, and
+    `_standalone_pull_decision()`) keeps the default `True`.
     """
     snapshot = load_issue_snapshot(repo, number)
     issue = snapshot.get("issue")
@@ -814,7 +836,9 @@ def check_issue_approval(repo: str, number: int) -> Decision:
     milestone = issue.get("milestone")
     if isinstance(milestone, dict) and isinstance(milestone.get("number"), int):
         return approval_decision(load_snapshot(repo, milestone["number"]))
-    return standalone_issue_approval_decision(snapshot, number)
+    return standalone_issue_approval_decision(
+        snapshot, number, require_open=require_open
+    )
 
 
 def _linked_work_items(
