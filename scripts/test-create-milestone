@@ -21,6 +21,12 @@ set -euo pipefail
 # persists state to a JSON file because a real `gh` invocation happens in
 # a fresh process each time create-milestone's own calls and the nested
 # `sync_milestone_state.py preflight` re-read what an earlier call wrote.
+# It also models `gh issue create --milestone NAME` matching by exact
+# title (erroring on zero or multiple matches, same as real gh) and
+# exposes two opt-in fault-injection toggles for Issue #741's fixes: env
+# var FAKE_GH_DUE_ON_BUG simulates GitHub storing an earlier due date than
+# requested, and FAKE_GH_WRONG_MILESTONE_ATTACH simulates a successful
+# tracker Issue create that still lands on the wrong Milestone number.
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 script_path="$script_dir/create-milestone"
@@ -42,7 +48,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import date, timedelta
 from pathlib import Path
 
 STATE_PATH = Path(os.environ["FAKE_GH_STATE"])
@@ -107,11 +112,11 @@ def api(argv: list[str]) -> int:
             # Simulate GitHub silently shifting a stored due date back one
             # day (Issue #741 bug 2), regardless of the time-of-day sent,
             # so create-milestone's readback check has something real to
-            # catch.
-            date_part = due_on.split("T", 1)[0]
-            year, month, day = (int(part) for part in date_part.split("-"))
-            shifted = date(year, month, day) - timedelta(days=1)
-            due_on = f"{shifted.isoformat()}T00:00:00Z"
+            # catch. Hardcoded to the one due date every case under this
+            # toggle exercises (2026-12-01) rather than generically
+            # parsing and shifting dates -- update this alongside any
+            # test that starts using a different --due-on under it.
+            due_on = "2026-11-30T00:00:00Z"
         state["milestones"][str(number)] = {
             "number": number,
             "title": fields.get("title", ""),
@@ -143,6 +148,16 @@ def api(argv: list[str]) -> int:
             print(milestone.get("due_on"))
         else:
             print(json.dumps(milestone))
+        return 0
+
+    if resource == "issues" and len(parts) == 5 and method == "GET":
+        issue = state["issues"][parts[4]]
+        if jq_expr == ".milestone.number // empty":
+            milestone_number = issue.get("milestone_number")
+            if milestone_number is not None:
+                print(milestone_number)
+        else:
+            print(json.dumps(issue))
         return 0
 
     if resource == "issues" and "milestone=" in endpoint:
@@ -194,6 +209,14 @@ def issue_create(argv: list[str]) -> int:
             )
             return 1
         milestone_number = matches[0]["number"]
+        if os.environ.get("FAKE_GH_WRONG_MILESTONE_ATTACH"):
+            # Simulate `gh issue create --milestone NAME` reporting
+            # success while actually attaching a different Milestone
+            # number than the one NAME uniquely matched -- not something
+            # real gh has been observed to do, but create-milestone's
+            # post-creation readback (Issue #741 review finding #2) must
+            # still catch it rather than trust the create call blindly.
+            milestone_number = 999999
     number = state["next_issue"]
     state["next_issue"] += 1
     state["issues"][str(number)] = {
@@ -393,18 +416,57 @@ if grep -Fq 'is ready:' <<<"$out"; then
 fi
 [[ "$(state_field '.issues | length')" == "0" ]]
 
-# Case 9: the readback matching the requested due date (the ordinary path
-# every other case above already exercises via the "is ready" success
-# message) is also asserted directly here, isolated from tracker/preflight
-# concerns, by checking the Milestone alone right after creation succeeds.
+# Case 9: a Milestone already exists sharing the requested --title before
+# this run starts (e.g. an orphan left over from an earlier failed run --
+# exactly the scenario the cleanup guidance added above now warns about).
+# --milestone "$title" on the tracker's `gh issue create` then matches
+# more than one Milestone, so that call itself fails, and create-milestone
+# must report it as a Milestone-attachment problem specifically (Issue
+# #741 review finding #8), not the generic tracker-creation message --
+# and must never report success or leave the run's own new Milestone
+# looking done.
 new_state
+"$stub_bin/gh" api --method POST repos/acme/project/milestones \
+  --raw-field "title=Ship the Q4 batch" --raw-field "due_on=2026-01-01T12:00:00Z" >/dev/null
+set +e
 out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
   --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" 2>&1)"
-grep -Fq 'Milestone #100 (due 2026-12-01) is ready:' <<<"$out"
-if grep -Fq 'GitHub stored a different due date than requested' <<<"$out"; then
-  echo "expected a matching due date not to trip the mismatch check" >&2
+status=$?
+set -e
+[[ "$status" -eq 1 ]]
+grep -Fq 'Failed to attach the tracker Issue to Milestone #101' <<<"$out"
+grep -Fqi 'does not match exactly one Milestone' <<<"$out"
+grep -Fq 'gh api --method DELETE repos/acme/project/milestones/101' <<<"$out"
+if grep -Fq 'is ready:' <<<"$out"; then
+  echo "expected a duplicate-title Milestone attach to fail closed, not report success" >&2
   exit 1
 fi
-[[ "$(state_field '.milestones["100"].due_on')" == "2026-12-01T12:00:00Z" ]]
+[[ "$(state_field '.issues | length')" == "0" ]]
+[[ "$(state_field '.milestones | length')" == "2" ]]
 
-echo "create-milestone cases passed: 9"
+# Case 10: `gh issue create --milestone NAME` reports success, but (via
+# FAKE_GH_WRONG_MILESTONE_ATTACH) actually attaches a different Milestone
+# number than the one NAME uniquely matched -- an edge case real gh has
+# not been observed to produce, but create-milestone's post-creation
+# readback (Issue #741 review finding #2) must still fail closed on it
+# instead of trusting the create call's own reported success, and must
+# not report the run as ready.
+new_state
+export FAKE_GH_WRONG_MILESTONE_ATTACH=1
+set +e
+out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
+  --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" 2>&1)"
+status=$?
+set -e
+unset FAKE_GH_WRONG_MILESTONE_ATTACH
+[[ "$status" -eq 1 ]]
+grep -Fq 'Tracker https://github.com/acme/project/issues/900 is not attached to Milestone #100' <<<"$out"
+grep -Fq 'got "999999" instead' <<<"$out"
+grep -Fq 'gh issue delete 900 --repo acme/project' <<<"$out"
+grep -Fq 'gh api --method DELETE repos/acme/project/milestones/100' <<<"$out"
+if grep -Fq 'is ready:' <<<"$out"; then
+  echo "expected a wrong Milestone attachment to fail closed, not report success" >&2
+  exit 1
+fi
+
+echo "create-milestone cases passed: 10"

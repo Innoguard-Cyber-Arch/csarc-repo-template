@@ -17,13 +17,17 @@ its first work-Issue pull request failed "Validate Milestone approval".
 
 This script builds both in one call, derives the tracker title from the
 Milestone number GitHub itself returns (never a hand-typed number),
-attaches the tracker to the Milestone at creation time, reads the due date
-back from GitHub to confirm it stored the requested day (GitHub silently
-shifts a midnight-UTC `due_on` to the previous day for some timezones --
-Issue #741), and finishes by running the same `sync_milestone_state.py
-preflight` check a work-Issue pull request would otherwise fail against
-later -- so a missing tracker link, a shifted due date, or a mismatched
-title is caught immediately, not after the fact.
+attaches the tracker to the Milestone at creation time and reads that
+attachment back to confirm it landed on the right Milestone number, reads
+the due date back from GitHub to confirm it stored the requested day
+(GitHub sometimes stores/returns an earlier date for a midnight-UTC
+`due_on` -- the exact trigger is not root-caused; sending noon-UTC avoids
+every case reproduced so far -- Issue #741), and finishes by running the
+same `sync_milestone_state.py preflight` check a work-Issue pull request
+would otherwise fail against later -- so a missing or wrong tracker link,
+a shifted due date, or a mismatched title is caught immediately, not
+after the fact. See docs/adr/milestone-due-date-write-workaround.md for
+the due-date workaround's rationale and alternatives considered.
 
 Required:
   --repo             owner/repo
@@ -51,9 +55,10 @@ scripts/sync_milestone_state.py hard-requires it, so it is not
 configurable here.
 
 On success, prints the new Milestone number, its due date, and the
-tracker Issue URL. If the tracker Issue or the final preflight check
-fails after the Milestone object was already created, the Milestone
-number is printed so it can be fixed or deleted by hand -- GitHub has no
+tracker Issue URL. If the due-date readback, the tracker Issue creation
+or its Milestone-attachment readback, or the final preflight check fails
+after the Milestone object was already created, the Milestone number is
+printed so it can be fixed or deleted by hand -- GitHub has no
 multi-object transaction, so this script is atomic in effect (nothing is
 reported successful until preflight re-validates the result) but not in
 underlying mechanism.
@@ -154,18 +159,41 @@ fi
 echo "Created Milestone #$milestone_number." >&2
 
 echo "Verifying due date..." >&2
-actual_due_on="$(
+# A second read here (rather than trusting the POST response above) is
+# deliberate: it proves preflight and any other later reader will see the
+# same durably-stored value this script just checked, not only what one
+# write request happened to echo back before any propagation lag settles.
+if ! actual_due_on="$(
   gh api "repos/$repo/milestones/$milestone_number" --jq '.due_on'
-)"
+)"; then
+  cat >&2 <<EOF
+Could not read the Milestone's due date back from GitHub to confirm it
+stored the requested day. Milestone #$milestone_number already exists
+with no tracker yet -- delete it first if you'd rather start over, or
+retry the read by hand once GitHub is reachable:
+  gh api repos/$repo/milestones/$milestone_number --jq '.due_on'
+  gh api --method DELETE repos/$repo/milestones/$milestone_number
+EOF
+  exit 1
+fi
+# The prefix compare below only needs the date portion before the "T", so
+# it does not need to match sync_milestone_state.py's full
+# _GITHUB_TIMESTAMP format ("%Y-%m-%dT%H:%M:%SZ") constant byte-for-byte
+# -- but if GitHub ever changes that timestamp shape, both places parsing
+# it need to change together.
 if [[ "${actual_due_on%%T*}" != "$due_on" ]]; then
   cat >&2 <<EOF
 GitHub stored a different due date than requested:
   Requested: $due_on
   Actual:    $actual_due_on
-Milestone #$milestone_number already exists with no tracker yet -- fix the
-due date by hand and rerun the same command to confirm, or delete the
-Milestone instead:
-  gh api --method PATCH repos/$repo/milestones/$milestone_number --raw-field "due_on=${due_on}T12:00:00Z"
+Sending the same due_on=${due_on}T12:00:00Z write again would reproduce
+this exact mismatch -- do not just rerun this command as-is. Either set
+the due date by hand on Milestone #$milestone_number (e.g. via the
+GitHub web UI) and confirm with preflight afterward, or delete it first
+before retrying with a fresh run -- reusing --title without deleting the
+orphan first leaves two Milestones sharing that title, and a later
+--milestone "$title" attach cannot tell them apart:
+  python3 scripts/sync_milestone_state.py preflight --repo $repo --milestone $milestone_number
   gh api --method DELETE repos/$repo/milestones/$milestone_number
 EOF
   exit 1
@@ -175,9 +203,10 @@ tracker_title="Milestone $milestone_number: $title"
 if ! "$script_dir/validate-issue-title" "$tracker_title" >&2; then
   cat >&2 <<EOF
 The derived tracker title failed validation: $tracker_title
-Milestone #$milestone_number already exists with no tracker yet -- either
-shorten --title and rerun with the same due date, or delete the orphaned
-Milestone by hand:
+Milestone #$milestone_number already exists with no tracker yet -- delete
+it first (an orphan left behind risks a future --title collision once
+--milestone name-matching is involved), then rerun with a shorter --title
+and the same --due-on:
   gh api --method DELETE repos/$repo/milestones/$milestone_number
 EOF
   exit 1
@@ -190,26 +219,78 @@ tracker_body="$(
 )"
 
 echo "Creating tracker Issue \"$tracker_title\"..." >&2
-if ! tracker_url="$(
+# Capture stderr too (not just the URL on stdout): on failure this lets us
+# tell a --milestone name-match problem (no match, or more than one
+# Milestone sharing "$title") apart from a problem with the Issue itself
+# -- the two need different fixes. On success, gh has not been observed
+# to write anything to stderr here, so the URL stays the last line.
+if ! tracker_cmd_output="$(
   gh issue create --repo "$repo" \
     --title "$tracker_title" \
     --body "$tracker_body" \
     --label enhancement \
     --assignee "$assignee" \
     --type "$issue_type" \
-    --milestone "$title"
+    --milestone "$title" 2>&1
+)"; then
+  if grep -qi "milestone" <<<"$tracker_cmd_output"; then
+    cat >&2 <<EOF
+Failed to attach the tracker Issue to Milestone #$milestone_number via
+--milestone "$title" (gh reported):
+$tracker_cmd_output
+This usually means no Milestone, or more than one, matches that name --
+not a problem with the Issue body, label, or type. Milestone
+#$milestone_number already exists with no tracker yet -- delete it first
+if you would rather start over, or create the tracker Issue by hand and
+attach it by number instead of by name to avoid the same ambiguity:
+  gh api --method DELETE repos/$repo/milestones/$milestone_number
+  gh api --method PATCH repos/$repo/issues/<new-issue-number> --field "milestone=$milestone_number"
+EOF
+  else
+    cat >&2 <<EOF
+Failed to create the tracker Issue (gh reported):
+$tracker_cmd_output
+Milestone #$milestone_number already exists with no tracker yet -- fix the
+problem above and either create the tracker Issue titled exactly
+"$tracker_title" by hand, or delete the orphaned Milestone:
+  gh api --method DELETE repos/$repo/milestones/$milestone_number
+EOF
+  fi
+  exit 1
+fi
+tracker_url="$(tail -n1 <<<"$tracker_cmd_output")"
+tracker_number="${tracker_url##*/}"
+echo "Created tracker $tracker_url." >&2
+
+echo "Verifying tracker Milestone attachment..." >&2
+if ! attached_milestone_number="$(
+  gh api "repos/$repo/issues/$tracker_number" --jq '.milestone.number // empty'
 )"; then
   cat >&2 <<EOF
-Failed to create the tracker Issue. Milestone #$milestone_number already
-exists with no tracker yet -- fix the problem above and either create the
-tracker Issue titled exactly "$tracker_title" by hand, or delete the
-orphaned Milestone:
+Could not read tracker $tracker_url back from GitHub to confirm its
+Milestone attachment. Milestone #$milestone_number and tracker
+$tracker_url already exist -- check by hand, then delete both if this
+was a mistake:
+  gh api repos/$repo/issues/$tracker_number --jq '.milestone.number'
+  gh issue delete $tracker_number --repo $repo
   gh api --method DELETE repos/$repo/milestones/$milestone_number
 EOF
   exit 1
 fi
-tracker_number="${tracker_url##*/}"
-echo "Created tracker $tracker_url." >&2
+if [[ "$attached_milestone_number" != "$milestone_number" ]]; then
+  cat >&2 <<EOF
+Tracker $tracker_url is not attached to Milestone #$milestone_number:
+got "${attached_milestone_number:-<none>}" instead. --milestone "$title"
+matches by name, so this can happen if more than one Milestone shares
+that title. Milestone #$milestone_number and tracker $tracker_url already
+exist -- reattach it by number (not by name, to avoid the same
+ambiguity), then rerun preflight to confirm, or delete both instead:
+  gh api --method PATCH repos/$repo/issues/$tracker_number --field "milestone=$milestone_number"
+  gh issue delete $tracker_number --repo $repo
+  gh api --method DELETE repos/$repo/milestones/$milestone_number
+EOF
+  exit 1
+fi
 
 if [[ -n "$description_file" ]]; then
   extra_description="$(cat "$description_file")"
