@@ -889,7 +889,7 @@ if ! issue_creation_policy_apply_error="$(
   # GraphQL variables are intentionally literal in the mutation document.
   # shellcheck disable=SC2016
   gh api graphql \
-    -f query='mutation($id: ID!, $policy: RepositoryIssueCreationPolicy!) {
+    -f query='mutation($id: ID!, $policy: IssueCreationPolicy!) {
       updateRepository(input: {repositoryId: $id, issueCreationPolicy: $policy}) {
         repository { issueCreationPolicy }
       }
