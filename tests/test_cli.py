@@ -5104,6 +5104,63 @@ def test_update_cannot_change_release_ownership() -> None:
     assert update_data["project_mode"] == "existing"
 
 
+def test_update_check_tolerates_pre_schema_existing_adoption(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Regression: legacy answers missing release_* fields must not crash.
+
+    Repositories adopted before the ``release_ownership_reason`` schema
+    (#369) have saved answers with no ``release_*`` keys at all. #760 found
+    that ``command_update`` fed those unresolved answers straight into
+    ``persist_release_answers`` while computing ``current_capabilities``,
+    which always raised even though the product-owned workflow was
+    unambiguous.
+    """
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+
+    answers_path = cli.config_path(project)
+    payload = yaml.safe_load(answers_path.read_text(encoding="utf-8"))
+    payload["project_mode"] = "existing"
+    for key in (
+        "release_ownership",
+        "release_ownership_reason",
+        "release_immutable_releases",
+        "release_required_inputs",
+        "release_settings_owner",
+        "release_workflow",
+    ):
+        payload.pop(key, None)
+    answers_path.write_text(
+        yaml.safe_dump(payload, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    write_product_release_workflow(project)
+    commit(project, "test: pre-schema existing adoption")
+
+    managed = source / "template" / "managed.txt"
+    managed.write_text("template version two\n", encoding="utf-8")
+    second_sha = commit(source, "test: template version two")
+
+    exit_code = main(
+        [
+            "update",
+            str(project),
+            "--to",
+            second_sha,
+            "--allow-unreleased",
+            "--check",
+            "--json",
+        ]
+    )
+    output = capsys.readouterr().out.strip().splitlines()[-1]
+    status = json.loads(output)
+    assert exit_code == 1
+    assert status["status"] == "outdated"
+
+
 @pytest.mark.large
 def test_update_rechecks_snapshot_after_repository_context(
     tmp_path: Path,
