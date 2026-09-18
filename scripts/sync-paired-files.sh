@@ -89,6 +89,7 @@ paired_files=(
   scripts/test-worktree-cleanup
   scripts/verify-release-candidate
   scripts/verify_attestation.py
+  scripts/verify_release_consumption.py
   scripts/validate-issue-policy
   scripts/validate-issue-title
   scripts/validate-pr-policy

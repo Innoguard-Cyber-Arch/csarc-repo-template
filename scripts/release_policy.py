@@ -31,7 +31,20 @@ else:
 
 STATES = {"allowed", "blocked", "unknown"}
 SEMVER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
-PUBLISH_CAPABILITIES = ("contents", "release", "immutable_releases")
+# Issue #770: `immutable_releases` used to be a third pre-flight, admin-scope
+# probe here (`GET repos/{repo}/immutable-releases`) that the hosted
+# `GITHUB_TOKEN` can never pass -- there is no `administration` key in the
+# Actions `permissions:` schema, so this capability was permanently `blocked`
+# or `unknown` for every hosted run and single-handedly forced
+# select_release_mode() to `blocked` regardless of `contents`/`release`
+# (see #123/#622/#623/#624/#626 and docs/ci-policy.md's "hosted 發版路徑的
+# 已知限制" section). It is deliberately not part of this gate any more.
+# The same guarantee -- a release was only published because Immutable
+# Releases was actually enabled -- is now proven post-hoc, after publish,
+# by scripts/publish-release verifying GitHub's own signed release
+# attestation (reusing scripts/verify_release_consumption.py) instead of
+# guessing about it before publication starts.
+PUBLISH_CAPABILITIES = ("contents", "release")
 INTENT_RANK = {"no-release": 0, "patch": 1, "minor": 2, "major": 3}
 RENOVATE_INSTALL_URL = "https://github.com/apps/renovate/installations/new"
 DEPENDABOT_FALLBACK = (
@@ -633,7 +646,6 @@ def unknown_capabilities(reason: str) -> dict[str, Capability]:
         for name in (
             "actions_pull_requests",
             "contents",
-            "immutable_releases",
             "release",
         )
     }
@@ -642,7 +654,17 @@ def unknown_capabilities(reason: str) -> dict[str, Capability]:
 def detect_runtime_capabilities(
     api: GitHubAPI, repo: str, sha: str, branch: str
 ) -> dict[str, Capability]:
-    """Probe current workflow-token behavior without creating resources."""
+    """Probe current workflow-token behavior without creating resources.
+
+    Issue #770 removed the `immutable_releases` pre-flight probe
+    (`GET repos/{repo}/immutable-releases`) that used to run here: it
+    requires repository Administration (read), which the Actions
+    `GITHUB_TOKEN` can never obtain, so it was permanently `blocked` or
+    `unknown` for every hosted run. Whether Immutable Releases was actually
+    enabled is now proven post-hoc, after a Release is published, by
+    scripts/publish-release verifying GitHub's own signed release
+    attestation instead of guessing about it here.
+    """
     capabilities = unknown_capabilities("probe did not run")
     status, _ = api.request(
         "POST",
@@ -675,18 +697,6 @@ def detect_runtime_capabilities(
     capabilities["release"] = classify_probe(
         status, validation_proves_access=True
     )
-
-    status, immutable = api.request("GET", f"repos/{repo}/immutable-releases")
-    if 200 <= status < 300 and isinstance(immutable, dict):
-        enabled = immutable.get("enabled")
-        capabilities["immutable_releases"] = Capability(
-            "allowed" if enabled is True else "blocked",
-            "immutable Releases are enabled"
-            if enabled is True
-            else "immutable Releases must be enabled before publication",
-        )
-    else:
-        capabilities["immutable_releases"] = classify_probe(status)
 
     return capabilities
 

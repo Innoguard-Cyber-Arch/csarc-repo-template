@@ -26,7 +26,7 @@ tracking: none
 - [x] Tagged source、版本欄位、CHANGELOG、prompt 與 provenance 指向同一版本與 commit。
 - [x] Root GitHub Release 從已驗證 tagged source 建置 wheel／sdist；沒有實際 root registry 消費者時不維護跨 registry 發布路徑。
 - [x] Release 保存 distributions／來源封存檔、SHA-256、固定 Syft 版本產生的 SPDX JSON SBOM 與 source metadata；manifest 以 digest 綁定 exact tag，不要求不同執行間的 Syft JSON byte-identical。
-- [x] Conditional consumer verifier 在使用成品前驗 repository、tag、source／artifact digest 與 signer；公版不宣稱它是自動門禁。
+- [x] Conditional consumer verifier 在使用成品前驗 repository、tag、source／artifact digest 與 signer；公版不宣稱它是自動門禁。`scripts/publish-release` 自 #770 起也重用同一份 `verify_consumption()`，在發布時對自己剛建立的 Release 做 post-hoc 驗證，取代原本 `scripts/release_policy.py` 對 `immutable_releases` 的 pre-flight admin-scope probe（`GITHUB_TOKEN` 結構性讀不到；#123／#626）——發版路徑與消費路徑用同一份驗證邏輯，不重寫第二份。
 - [x] 公版不提供 PyPI／npm／GHCR publisher 選項；需要 registry 的產品另案採 OIDC trusted publishing，不使用長效 token。
 - [x] Dependency 與 source safety 由 lockfile、Dependabot、等待政策、publisher trust、OSV、Gitleaks 與 plan-aware CodeQL 分工，不用一項工具冒充全部供應鏈控制。
 - [x] 已發布 immutable Release 不被重寫；歷史缺失證據明記為缺失，不補造 attestation。
@@ -45,7 +45,7 @@ tracking: none
 
 - `./scripts/verify-template.sh`
 - `scripts/release_policy.py` 對 proposed tag 與既有 source metadata 做 fail-closed 驗證；root release workflow 只從通過驗證的 tagged checkout 建置一次 GitHub Release artifacts。
-- `scripts/verify_release_consumption.py` 同時證明成功 consumption 與受控 digest mismatch 失敗。
+- `scripts/verify_release_consumption.py` 同時證明成功 consumption 與受控 digest mismatch 失敗；`tests/test_release_publish.py` 證明 `scripts/publish-release` 的 `publish`／`rerun-verify` 實際呼叫它並在任一失敗時 fail closed（#770）。
 - Live release evidence 連回 immutable GitHub Release 與 workflow run。
 
 ## References
@@ -59,4 +59,5 @@ tracking: none
 - [Issue #123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123)／[PR #128](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/128)
 - [Issue #142](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/142)／[PR #151](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/151)
 - Distribution correction: [#170](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/170), [#195](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/195), and [#203](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/203) are superseded by [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250).
+- [Issue #770](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/770)：`scripts/publish-release` 重用消費端驗證器對自己剛發布的 Release 做 post-hoc attestation 驗證，取代 `immutable_releases` pre-flight probe（見 [ADR](../adr/release-security-and-dependencies.md) 的同名小節）。
 - [Release, security, and dependency ADR](../adr/release-security-and-dependencies.md)
