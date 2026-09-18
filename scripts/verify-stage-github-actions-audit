@@ -17,4 +17,12 @@ fi
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 cd "$repo_root"
 
-uv run zizmor . --format plain
+# Issue #755: zizmor's auto-discovered config resolved to a stale
+# zizmor.yml outside this worktree when run without --config (observed
+# in a linked git worktree, where auto-discovery's directory walk landed
+# on the primary checkout's copy instead of this one's own edits) --
+# pass the path explicitly so the audit always validates against this
+# tree's own suppression rules, not whatever auto-discovery happens to
+# find first.
+uv run zizmor --config zizmor.yml . --format plain
+python3 scripts/check_action_pins.py

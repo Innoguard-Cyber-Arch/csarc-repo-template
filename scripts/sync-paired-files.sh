@@ -54,6 +54,7 @@ paired_files=(
   scripts/request-reviewer
   scripts/ci_tier.py
   scripts/hosted_verify_bots.py
+  scripts/check_action_pins.py
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
   scripts/promotion_gate.py
@@ -97,6 +98,7 @@ paired_files=(
   tests/test_dependabot_auto_merge.py
   tests/test_dependency_security.py
   tests/test_hosted_verify_bots.py
+  tests/test_check_action_pins.py
   tests/test_spec_to_issue.py
   tests/test_delivery_sync.py
   tests/test_pr_lifecycle.py

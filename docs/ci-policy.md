@@ -602,6 +602,65 @@ check 清單對得上。
 `required status checks` 錯誤即為通過；同一次操作後，對 `main` 或既有分支做一次不通過 `verify` 的 push 仍
 應被擋下，確認既有保護未受影響。
 
+### Dependabot 依賴更新的發版與 template 同步（#755）
+
+**`uvx --from git+...@<sha>` 不吃 `uv.lock`（實測，2026-09-18）**：本機對 `git+file://` 本地來源、當下
+`pyproject.toml` 宣告 `copier>=9.17,<10`、`uv.lock` 鎖定 `copier==9.17.2` 的狀態實測
+`uvx --from "git+file://<repo>@<sha>" python -c "import copier; print(copier.__version__)"`，實際裝出
+`9.18.2`（範圍內當下最新版），不是 lock 檔鎖定的版本。結論：`uvx --from git+URL@<sha>` 安裝時直接依
+`pyproject.toml` 的版本範圍重新解析，不讀取目標 repo 的 `uv.lock`——`uv.lock` 只服務這個 repo 自己的
+`uv sync`／`uv run` 情境。
+
+因此 root 的 `.github/dependabot.yml` 的 `uv` 區段**維持現行 `build(deps)` 前綴，不區分 runtime／dev 依賴**：
+一般（非安全性）runtime 依賴的版本 bump，只要新版本仍落在既有範圍內，`uvx` 使用者下次執行就會自動拿到最新
+版本，`build(deps)` 造成「release-please 不升版號」不影響實際交付結果，強改前綴只會製造不必要的版本噪音。
+只有當修正需要**改動 `pyproject.toml` 本身宣告的版本範圍**（例如提高下限排除某個已知有漏洞的版本區間）才會
+影響「使用者手上那個 `<approved-full-commit-sha>`」是否要更新，而那是修改 `pyproject.toml` 這個動作本身的
+事，不是 Dependabot commit 前綴能解決的問題。`template/.github/dependabot.yml.jinja` 不受此結論影響：由
+CSARC 接管發版的下游專案是被 `uv sync --locked` 消費的一般服務／應用，`uv.lock` 對它們是真的有效力的鎖定，
+runtime 依賴觸發 patch 發版的既有邏輯繼續適用——`release_ownership == 'csarc-owned'` 時，`uv`／`npm`／
+`cargo` 三個 ecosystem 區塊各自加上 `commit-message: {prefix: fix, prefix-development: build}`（Dependabot
+原生欄位，依它自己對「這個依賴是不是 development dependency」的判斷選前綴，不需要額外邏輯）；
+`product-owned`／`verification-only` 不加這段，維持 Dependabot 預設的 Conventional Commits 偵測。
+`github-actions` 區塊完全不受影響，維持不觸發發版。
+
+**root／template 的 Actions 版本同步**：比較過兩個方案——擴大 Dependabot 監看目錄到 `template/`，或在同一張
+PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護者 2026-09-18 核准）：前者會對「跟 root 逐位元組相同」
+的 paired workflow 開出**兩張獨立、不保證同時落地**的 bump PR，其中一張先合併就會讓另一張的
+`sync-paired-files.sh --check` 回報 drift、卡住合併，是持續性而非一次性成本；且不管選哪個方案，Dependabot
+都讀不懂 `.jinja` 語法，凡是模板化（非逐位元組 paired）的 workflow（如 `ci.yml.jinja`）永遠不會被它掃到，
+都需要另一套靜態一致性檢查。
+
+實作：
+
+1. `.github/workflows/dependabot-auto-merge.yml`（root 與 `template/.github/workflows/dependabot-auto-merge.yml`，
+   本身也是 paired 檔案）新增 `sync-template` job，跟既有 `auto-merge` job 同一個 `if:
+   github.event.pull_request.user.login == 'dependabot[bot]'` 閘門與 `pull_request`（非 `_target`）觸發理由
+   （Dependabot 直接推到這個 repository，從來不是 fork）：checkout PR head、跑
+   `./scripts/sync-paired-files.sh`，有 drift 就 commit 並 push 回同一個分支。只執行這支腳本既有、已測試的
+   逐位元組複製邏輯，不執行 PR 內容裡的其他任何東西；push 觸發的新 `synchronize` 事件會讓 `verify`（#753）
+   對新 head 重新驗證，也會讓這個 job 自己重新跑一次、這次因為沒有 drift 而直接結束，不會無限迴圈。
+   同步 commit 的訊息固定用 `fix(deps): ...`，不是 `chore:`——完成條件第五項要求「會改變 template/ 內容的
+   依賴更新，合併後要進入下一次發版」，`release-please`（`release-type: simple`）只認 `fix`／`feat` 升版號；
+   這裡只在 `sync-paired-files.sh` 真的找到 drift（代表這次 bump 確實改到 `copier update` 會下發的內容）時
+   才 commit，所以是精準只對「真的動到 template 分發內容」的那次 bump 觸發發版，不會連帶讓每一張跟 template
+   無關的 Dependabot commit 都被迫升版號。
+2. 新增 `scripts/check_action_pins.py`（root 與 `template/scripts/check_action_pins.py` 逐位元組同步）：掃
+   `.github/workflows/`、`template/.github/workflows/` 底下所有 `.yml`／`.yaml`／`.jinja` 檔案的
+   `uses: owner/repo@sha` pin，同一個 action 在整個 repo 裡的 pin 必須完全一致，不一致就 fail closed 並點名
+   哪個檔案落後、目前多數版本的 pin 是什麼。這是**跟 Dependabot 白名單無關**的獨立不變量檢查，專門補
+   `.jinja` 這塊 Dependabot 結構性掃不到的缺口。掛進 `scripts/verify-fast`（`workflow` scope 時執行）與
+   `scripts/verify-stage-github-actions-audit`（`verify-template.sh` 的一部分，跟 zizmor 同一階段）。
+   建置過程中這支腳本立刻抓到一個真實既有 drift：`template/.github/workflows/release.yml.jinja` 的
+   `anchore/sbom-action` 停在 `v0.24.0`，root 的 `.github/workflows/release.yml` 已經是 `v0.24.2`；已在本
+   PR 一併修正到與 root 一致。
+
+**回歸測試**：`tests/test_check_action_pins.py`（pin 一致／不一致回報／不同 action 互不干擾／檔案掃描範圍／
+CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.py` 逐位元組同步）。`sync-template`
+job 目前沒有對應的本機可重跑回歸測試——它是一段會實際 push commit 的 workflow step，沒有安全、可重複執行的
+方式在本機或 CI 對真實 GitHub repository 重放；正確性由 `scripts/sync-paired-files.sh` 自身既有的測試覆蓋
+（它是唯一被呼叫的邏輯），實際行為待合併後第一張真的改到 paired workflow 的 Dependabot PR 驗證並回填證據。
+
 ## Current automation
 
 下表逐項列出 canonical file、owner、觸發（輸入）、權限／timeout、產物（輸出）、測試與
@@ -618,7 +677,7 @@ check 清單對得上。
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併） | `issues`、`issue_comment`、`milestone` 事件；`pull_request.closed`（里程碑工作 PR 合併進 `dev/m*` 或 `promote/m*` 晉升 PR 合併進 `main`） | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新）、`tests/test_work_pr_closure.py` | 尚未落地 `main`，無新 live run；三個前身 workflow（`issue-triage.yml`、`milestone-lifecycle.yml`、`work-item-closure.yml`）已刪除，其舊 run 證據（`33524318953`／`33524281794`／`33502286588`）不再代表現行檔案 | **root：candidate**（待 main 落地並觸發首次 issues／issue_comment／milestone／pull_request 事件才能取得新 live evidence）；#574 只把三個 workflow 檔的既有邏輯打包成一個 job 內的循序 step，不改變任一 step 本身的行為、權限需求或所呼叫的 script |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
-| Dependabot | `.github/dependabot.yml` | GitHub 原生＋依賴安全 | schedule／manifest 變更 | GitHub 原生 bot 邊界，無 repo workflow 權限 | dependency PR | GitHub 原生功能，無 repo-local 測試；設定格式由 `scripts/sync-paired-files.sh --check` 涵蓋 | GitHub 註冊為 `Dependabot Updates`（`dynamic/dependabot/dependabot-updates`），state active（原生排程不透過 `gh run list` 查詢單筆 run） | active |
+| Dependabot | `.github/dependabot.yml` | GitHub 原生＋依賴安全；hosted verify 白名單（#753）；template 同步與 Actions pin 一致性（#755） | schedule／manifest 變更 | GitHub 原生 bot 邊界，無 repo workflow 權限 | dependency PR；`dependabot-auto-merge.yml` 的 `sync-template` job 在同一張 PR 內補齊 paired workflow 的 template 副本 | GitHub 原生功能，無 repo-local 測試；設定格式由 `scripts/sync-paired-files.sh --check` 涵蓋；Actions pin 一致性見 `tests/test_check_action_pins.py` | GitHub 註冊為 `Dependabot Updates`（`dynamic/dependabot/dependabot-updates`），state active（原生排程不透過 `gh run list` 查詢單筆 run） | active；`sync-template` job：candidate（待 `main` 落地並於首張真的改到 paired workflow 的 Dependabot PR 觸發後轉 active） |
 | Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598 | `main` push（post-merge）、manual rerun | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布 tag／GitHub Release／成品／checksum／SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py` | 已落地 `main` 並於 push 後實際觸發，`gh api tags`／`releases` 顯示過去確有真實 live 發版（`v0.12.2`／`v0.12.1`／`v0.12.0` 等）。`#588`（`docs/index.html` staleness）已由 `#593` 修正並於下一次 push 驗證：run [33763104406](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33763104406)（`6aa7724`，2026-09-03T13:47Z）的 `Static assets and paired files` 階段確實轉綠。但同一筆 run 在 `Regression tests` 階段仍以其他真實 pytest 失敗（`PR lifecycle blocked: Unleased PR lifecycle writer: .github/workflows/dependabot-auto-merge.yml`，導致生成專案 `scripts/verify` 失敗，牽連 `test_real_template_adoption_resumes_after_manifest_merge` 三種語言變體與 `test_real_existing_adoption_uses_fixed_ownership_policies`）——這是本輪盤點才發現、與 `#588`／`#591` 都無關的第四個獨立成因，尚未開對應 Issue。另外兩個較早的獨立成因：run [33719533651](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33719533651)（`9ed3594`）與 run [33730000169](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33730000169)（`99f52ef`）在 `Regression tests` 階段失敗於 `rm: cannot remove '.../work/.git': Directory not empty`，追蹤於 `#591`；run [33724898939](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33724898939)（`7719d2e4`）與 run [33729747815](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33729747815)（`ed7ab25`）在 `verify-template.sh` 全過後，於發版前 capability preflight 因 Actions policy HTTP 403 觸發 `#123` 既有設計的 fail-closed（`BLOCK_REASON: ... immutable_releases`），這是刻意行為、不是 bug | active for `verify`／`title`／`promotion`；`Regression tests` 階段三個獨立成因（PR-lifecycle writer 檢查 #602、`test_pr_lifecycle.py` 生成專案路徑 #617、zizmor template-injection #620）與 `#591` 均已修復並於 `verify-template.sh` 全綠驗證。但 hosted 版本發布（Automatic／Guided）確認為**已知永久限制**：`immutable_releases` capability probe 在 `GITHUB_TOKEN` 下結構性回傳 403（見 #626），`#123` 的 fail-closed 是刻意行為不會解除，也不透過本表修正——本機 `scripts/publish-release` 已升格為標準發版程序，見上方「hosted 發版路徑的已知限制」一節 |
 | Release publish drift alert | `.github/workflows/release-drift.yml` | #605（源自 #589 item 4） | daily schedule＋`workflow_dispatch`（`hours` input） | `actions: read`、`contents: read`、`issues: write`；5 分鐘 | 偵測到 drift 時開立或更新追蹤 Issue；未偵測到時只印出證據 | `scripts/test-check-release-drift` | 尚未 merge 進 `main`，故無排程或手動觸發的 live run 證據 | candidate（待 main 落地＋首次排程／手動觸發） |
 
