@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 STATE_PATH = Path(os.environ["FAKE_GH_STATE"])
@@ -101,10 +102,20 @@ def api(argv: list[str]) -> int:
         fields = _raw_fields(argv)
         number = state["next_milestone"]
         state["next_milestone"] += 1
+        due_on = fields.get("due_on")
+        if due_on and os.environ.get("FAKE_GH_DUE_ON_BUG"):
+            # Simulate GitHub silently shifting a stored due date back one
+            # day (Issue #741 bug 2), regardless of the time-of-day sent,
+            # so create-milestone's readback check has something real to
+            # catch.
+            date_part = due_on.split("T", 1)[0]
+            year, month, day = (int(part) for part in date_part.split("-"))
+            shifted = date(year, month, day) - timedelta(days=1)
+            due_on = f"{shifted.isoformat()}T00:00:00Z"
         state["milestones"][str(number)] = {
             "number": number,
             "title": fields.get("title", ""),
-            "due_on": fields.get("due_on"),
+            "due_on": due_on,
             "description": fields.get("description", ""),
         }
         _save(state)
@@ -127,7 +138,11 @@ def api(argv: list[str]) -> int:
         return 0
 
     if resource == "milestones" and len(parts) == 5 and method == "GET":
-        print(json.dumps(state["milestones"][parts[4]]))
+        milestone = state["milestones"][parts[4]]
+        if jq_expr == ".due_on":
+            print(milestone.get("due_on"))
+        else:
+            print(json.dumps(milestone))
         return 0
 
     if resource == "issues" and "milestone=" in endpoint:
@@ -155,10 +170,32 @@ def issue_create(argv: list[str]) -> int:
     label = _flag(argv, "--label")
     assignee = _flag(argv, "--assignee")
     issue_type = _flag(argv, "--type")
+    milestone_name = _flag(argv, "--milestone")
     state = _load()
+    # Real `gh issue create --milestone NAME` attaches by exact Milestone
+    # title, not number, and only when NAME matches exactly one Milestone
+    # in the repo. Model that here instead of guessing: without a matching
+    # --milestone flag, the created Issue carries no Milestone at all, the
+    # same as real `gh` -- this is what makes the fixture catch Issue
+    # #741 bug 1 (the tracker never being attached) if create-milestone
+    # ever stops passing --milestone.
+    milestone_number = None
+    if milestone_name is not None:
+        matches = [
+            milestone
+            for milestone in state["milestones"].values()
+            if milestone.get("title") == milestone_name
+        ]
+        if len(matches) != 1:
+            print(
+                f"fake gh: --milestone {milestone_name!r} does not match "
+                "exactly one Milestone",
+                file=sys.stderr,
+            )
+            return 1
+        milestone_number = matches[0]["number"]
     number = state["next_issue"]
     state["next_issue"] += 1
-    milestone_number = max((int(n) for n in state["milestones"]), default=None)
     state["issues"][str(number)] = {
         "number": number,
         "title": title,
@@ -264,20 +301,26 @@ grep -Fq -- '--description-file does not exist' <<<"$out"
 assert_no_gh_call
 
 # Case 5: a valid run with only required flags creates a Milestone with a
-# real due date, a tracker Issue titled from the number GitHub returned,
-# the required `enhancement` label and default Feature type/@me assignee,
-# a `Lifecycle Issue: #<N>` link plus a placeholder Acceptance criteria
-# section (no --description-file given), and reports preflight success.
+# real due date, a tracker Issue titled from the number GitHub returned
+# and attached to that same Milestone (Issue #741 bug 1), the required
+# `enhancement` label and default Feature type/@me assignee, a
+# `Lifecycle Issue: #<N>` link plus a placeholder Acceptance criteria
+# section (no --description-file given), and reports preflight success --
+# which is only reachable at all because the tracker carries the
+# Milestone (scripts/sync_milestone_state.py's preflight finds the
+# tracker via `issues?milestone=<N>`, so an unattached tracker fails it,
+# per the fake `gh`'s own --milestone matching above).
 new_state
 out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
   --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" 2>&1)"
 grep -Fq 'No --description-file given' <<<"$out"
 grep -Fq 'Milestone metadata is ready for work' <<<"$out"
 grep -Fq 'Milestone #100 (due 2026-12-01) is ready: https://github.com/acme/project/issues/900' <<<"$out"
-[[ "$(state_field '.milestones["100"].due_on')" == "2026-12-01T00:00:00Z" ]]
+[[ "$(state_field '.milestones["100"].due_on')" == "2026-12-01T12:00:00Z" ]]
 [[ "$(state_field '.milestones["100"].description')" == *'Lifecycle Issue: #900'* ]]
 [[ "$(state_field '.milestones["100"].description')" == *'## Acceptance criteria'* ]]
 [[ "$(state_field '.issues["900"].title')" == "Milestone 100: Ship the Q4 batch" ]]
+[[ "$(state_field '.issues["900"].milestone_number')" == "100" ]]
 [[ "$(state_field '.issues["900"].body')" == *'## Proposal'* ]]
 [[ "$(state_field '.issues["900"].body')" == *'Ship the reviewed batch of adoption fixes.'* ]]
 [[ "$(state_field '.issues["900"].body')" == *'## Completion evidence'* ]]
@@ -323,6 +366,45 @@ grep -Fq 'Proposal section' <<<"$out"
 grep -Fq 'did not pass preflight' <<<"$out"
 grep -Fq 'gh issue delete 900 --repo acme/project' <<<"$out"
 grep -Fq 'gh api --method DELETE repos/acme/project/milestones/100' <<<"$out"
-[[ "$(state_field '.milestones["100"].due_on')" == "2026-12-01T00:00:00Z" ]]
+[[ "$(state_field '.milestones["100"].due_on')" == "2026-12-01T12:00:00Z" ]]
 
-echo "create-milestone cases passed: 7"
+# Case 8: GitHub silently stores a due date one day earlier than requested
+# (Issue #741 bug 2, reproduced here by the fake `gh`'s FAKE_GH_DUE_ON_BUG
+# toggle regardless of the send-at-noon mitigation) -- create-milestone's
+# post-write readback must catch the mismatch, fail closed, print both the
+# requested and the actual value, and never create the tracker Issue or
+# report success, even though the Milestone object itself already exists.
+new_state
+export FAKE_GH_DUE_ON_BUG=1
+set +e
+out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
+  --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" 2>&1)"
+status=$?
+set -e
+unset FAKE_GH_DUE_ON_BUG
+[[ "$status" -eq 1 ]]
+grep -Fq 'GitHub stored a different due date than requested' <<<"$out"
+grep -Fq 'Requested: 2026-12-01' <<<"$out"
+grep -Fq 'Actual:    2026-11-30T00:00:00Z' <<<"$out"
+grep -Fq 'gh api --method DELETE repos/acme/project/milestones/100' <<<"$out"
+if grep -Fq 'is ready:' <<<"$out"; then
+  echo "expected a due-date mismatch to fail closed, not report success" >&2
+  exit 1
+fi
+[[ "$(state_field '.issues | length')" == "0" ]]
+
+# Case 9: the readback matching the requested due date (the ordinary path
+# every other case above already exercises via the "is ready" success
+# message) is also asserted directly here, isolated from tracker/preflight
+# concerns, by checking the Milestone alone right after creation succeeds.
+new_state
+out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
+  --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" 2>&1)"
+grep -Fq 'Milestone #100 (due 2026-12-01) is ready:' <<<"$out"
+if grep -Fq 'GitHub stored a different due date than requested' <<<"$out"; then
+  echo "expected a matching due date not to trip the mismatch check" >&2
+  exit 1
+fi
+[[ "$(state_field '.milestones["100"].due_on')" == "2026-12-01T12:00:00Z" ]]
+
+echo "create-milestone cases passed: 9"
