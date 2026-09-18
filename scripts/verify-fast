@@ -40,6 +40,9 @@ if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
   run_static_checks=true
   ./scripts/lint-workflows-shell
 fi
+if [[ "$scopes" == *,workflow,* ]]; then
+  python3 scripts/check_action_pins.py
+fi
 
 uv sync --locked --python "$UV_PYTHON"
 uv run ruff format --check src scripts tests
