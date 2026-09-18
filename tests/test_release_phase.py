@@ -262,3 +262,66 @@ def test_retention_plan_handles_only_no_suffix_versions() -> None:
     """No pre-releases at all is a legal, empty-prerelease-group input."""
     decisions = rp.retention_plan(["0.1.0", "0.2.0"])
     assert all(decision.keep for decision in decisions)
+
+
+# --- Issue #744 finding: the alpha/beta suffix regex must not drift ----
+#
+# scripts/converge-release-tag, scripts/publish-release (two sites:
+# cmd_resolve and cmd_publish), and scripts/check-release-drift (three
+# sites: release_title_pattern, release_version_pattern, and the
+# prerelease-flag consistency check) each re-derive the same
+# `-(alpha|beta).N` suffix shape in bash/Python source text rather than
+# calling into this module (there is no cheap way to share a compiled
+# regex between bash and Python), so nothing but a text-level check
+# catches one of them drifting from release_phase.py's own canonical
+# `_VERSION_RE`. Sites differ cosmetically between a capturing `(alpha|
+# beta)` and a non-capturing `(?:alpha|beta)` group, so the search
+# substring below deliberately starts *after* the group-opening
+# characters, matching either style.
+_BASH_SUFFIX_TAIL = r"alpha|beta)\.[1-9][0-9]*"
+_BASH_SUFFIX_SITES = (
+    ("scripts/converge-release-tag", 1),
+    ("scripts/publish-release", 2),
+    ("scripts/check-release-drift", 3),
+)
+# The exact shape Issue #744's review found two sites still using: `N`
+# accepts a leading zero or a literal 0, instead of requiring 1-9 first.
+_REGRESSED_SUFFIX_TAIL = r"alpha|beta)\.[0-9]+"
+
+
+def test_prerelease_suffix_regex_is_consistent_everywhere() -> None:
+    """Every bash site's suffix pattern matches the canonical one.
+
+    Also proves the *behavioral* consequence of Issue #744's review
+    finding directly: a tag like `v1.2.3-alpha.0` (N=0) must be rejected
+    by the canonical pattern -- the exact shape the regressed pattern
+    would have wrongly accepted -- so the fixed sites and
+    release_phase.py's own parser agree, not just look similar.
+    """
+    for relative_path, expected_occurrences in _BASH_SUFFIX_SITES:
+        source = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert source.count(_BASH_SUFFIX_TAIL) == expected_occurrences, (
+            f"{relative_path} does not use the canonical suffix pattern "
+            f"the expected {expected_occurrences} time(s)"
+        )
+        assert _REGRESSED_SUFFIX_TAIL not in source, (
+            f"{relative_path} still contains the pre-#744-review "
+            "regressed pattern (accepts N=0 or a leading zero)"
+        )
+
+    import re as _re
+
+    canonical = _re.compile(r"-(alpha|beta)\.[1-9][0-9]*$")
+    for tag, expected in (
+        ("v1.2.3-alpha.1", True),
+        ("v1.2.3-beta.12", True),
+        ("v1.2.3-alpha.0", False),
+        ("v1.2.3-alpha.01", False),
+        ("v1.2.3-alpha", False),
+        ("v1.2.3-rc.1", False),
+    ):
+        suffix_match = canonical.search(tag) is not None
+        assert suffix_match == expected, tag
+        # release_phase.py's own parser must agree with the same tag as a
+        # whole, not just the isolated suffix pattern.
+        assert rp.is_valid_version(tag) == expected, tag

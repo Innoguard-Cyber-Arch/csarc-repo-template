@@ -370,6 +370,34 @@ def test_guided_path_has_no_repo_local_publisher() -> None:
     assert '"/dispatches"' not in source
 
 
+def test_release_phase_module_is_synced_across_all_three_copies() -> None:
+    """scripts/release_phase.py has no single canonical source, by CI.
+
+    Its own docstring says three copies (scripts/, template/scripts/, and
+    src/csarc_cli/ -- the last only because the distributed `csarc` wheel
+    ships src/csarc_cli alone and cannot import a sibling scripts/ module)
+    are kept byte-identical, but only the first two are enforced by
+    scripts/sync-paired-files.sh (a root-to-template/ tool, not a 3-way
+    one). Without this test, an edit to one copy without the others would
+    only ever be caught by someone's word, not CI.
+    """
+    root_text = (ROOT / "scripts/release_phase.py").read_text(encoding="utf-8")
+    template_text = (ROOT / "template/scripts/release_phase.py").read_text(
+        encoding="utf-8"
+    )
+    cli_text = (ROOT / "src/csarc_cli/release_phase.py").read_text(
+        encoding="utf-8"
+    )
+    assert root_text == template_text, (
+        "scripts/release_phase.py and template/scripts/release_phase.py "
+        "have drifted; run scripts/sync-paired-files.sh"
+    )
+    assert root_text == cli_text, (
+        "scripts/release_phase.py and src/csarc_cli/release_phase.py have "
+        "drifted; copy one over the other so all three stay identical"
+    )
+
+
 def test_release_status_stays_candidate_until_default_branch_evidence() -> None:
     """Keep root, generated README, and both site languages honest."""
     root_readme = (ROOT / "README.md").read_text(encoding="utf-8")

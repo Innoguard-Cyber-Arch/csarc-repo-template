@@ -73,8 +73,10 @@ class ParsedVersion:
         """Classify this version as alpha/beta/early/formal.
 
         `early` and `formal` are both unsuffixed; the split is purely by
-        major version, per Issue #744's legality rule ("主版本號為 0 時
-        不帶後綴即視為早期版; 主版本號 >= 1 時不帶後綴即視為正式版").
+        major version, per Issue #744's legality rule: an unsuffixed
+        version with major version 0 is classified `early`, and an
+        unsuffixed version with major version >= 1 is classified
+        `formal`.
         """
         if self.phase is not None:
             return self.phase
@@ -229,7 +231,24 @@ def validate_declared_phase(version: str, declared_phase: str) -> ParsedVersion:
 def next_prerelease_n(
     existing: Iterable[str], major: int, minor: int, patch: int, phase: str
 ) -> int:
-    """Return the next `.N` for `major.minor.patch` + `phase`, starting at 1."""
+    """Return the next `.N` for `major.minor.patch` + `phase`, starting at 1.
+
+    Residual race, accepted rather than fixed here: `existing` is a
+    snapshot of local git tags taken before the caller (typically
+    `scripts/converge-release-tag`) actually pushes the new tag, so two
+    concurrent callers could compute the same "next" N. This is mitigated,
+    not eliminated: `converge-release-tag` creates the tag via `gh api
+    POST .../git/refs`, which fails outright on a name collision rather
+    than silently overwriting one, and the one caller that currently
+    passes a declared `--phase` at all is a local/guided invocation (see
+    `release_policy.py`'s `plan`/`prepare-candidate`), not the automated
+    push-triggered path -- concurrent guided publishes of the same
+    major.minor.patch+phase are an unlikely, human-driven race, not a
+    routine one. A full distributed-lock fix (e.g. re-checking the
+    remote's tag list immediately before push and retrying once on a
+    collision) would be disproportionate to that residual risk; revisit
+    if `--phase` ever gets wired into the automated path.
+    """
     highest = 0
     for raw in existing:
         try:
@@ -323,6 +342,22 @@ def retention_plan(versions: Iterable[str]) -> list[RetentionDecision]:
     major.minor group ("a string", per the Issue's own wording) -- is
     marked for deletion. Malformed version strings are ignored rather than
     raising, since a retention listing must survive one bad tag among many.
+
+    Deliberate single-active-line assumption: the maintainer decision this
+    mirrors keeps exactly the *one* latest pre-release string (singular),
+    not the latest pre-release of every major.minor group that still has
+    recent activity. If two major.minor lines are both genuinely being
+    pre-released concurrently (e.g. a maintenance line and a next line),
+    the numerically older line's pre-releases are still marked for
+    deletion here even though it may still be in active use -- this
+    function has no way to distinguish "abandoned" from "still
+    maintained" beyond the version number itself. This is a dry-run
+    lister only (see `RetentionDecision`'s own docstring): nothing is ever
+    deleted automatically, so a maintainer reviewing the listing before
+    acting is exactly the point at which a genuinely active older line
+    gets a chance to be kept anyway. See
+    docs/adr/release-security-and-dependencies.md's dated section on this
+    Issue for the decision this mirrors.
     """
     parsed: list[tuple[ParsedVersion, str]] = []
     for raw in versions:

@@ -239,6 +239,14 @@ Immutable Releases 下 tag 名稱刪除後不能重用，所以無法改名，�
 retention-plan --repo OWNER/NAME` 只列出「應保留」與「應刪除」清單（dry-run），
 不呼叫任何刪除 API；是否、何時實際刪除仍是維護者的人工決定。
 
+**刻意的單一發展線假設：** 本節「最新一串 pre-release」是單數——只保留數值最新
+一個 major.minor 分組的 pre-release，不是「每個仍有活動的分組各自的最新一個」。
+若同時有兩條 major.minor 線都在持續發 pre-release（例如維護中的舊線與下一版的新
+線並行），較舊那條線的 pre-release 一樣會被列為應刪除，即使它其實還在使用中；
+純靠版本號無法分辨「已放棄」與「仍在維護」。這正是為什麼刪除清單只是 dry-run、
+一律留給維護者人工確認才執行——多線並行的情境會在那個人工複核步驟被發現並排除，
+而不是靠工具自動判斷。
+
 **工具面變更：**
 
 - `scripts/release_phase.py`（`template/scripts/` 與 `src/csarc_cli/` 各一份

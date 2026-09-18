@@ -6582,6 +6582,62 @@ def test_gh_client_selects_latest_by_semver_precedence(
     assert result["tag_name"] == "v1.1.0-beta.1"
 
 
+def test_gh_client_latest_skips_a_self_inconsistent_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A prerelease-flag/tag-shape mismatch is skipped, not hard-selected.
+
+    The highest-precedence release here (v1.1.0-beta.1) has GitHub's
+    `prerelease` flag set to False despite its own beta suffix -- exactly
+    the inconsistency release_identity() would reject. "latest" selection
+    must fall through to the next-best, self-consistent candidate
+    (v1.0.0) instead of picking the broken one and surfacing a confusing
+    failure only once release_identity() re-checks it downstream.
+    """
+    releases = [
+        {
+            "tag_name": "v1.0.0",
+            "draft": False,
+            "prerelease": False,
+            "id": 1,
+        },
+        {
+            "tag_name": "v1.1.0-beta.1",
+            "draft": False,
+            "prerelease": False,  # inconsistent with its own "-beta.1" tag
+            "id": 2,
+        },
+    ]
+
+    def fake_gh_json_list(endpoint: str) -> list[object]:
+        return releases if "page=1" in endpoint else []
+
+    monkeypatch.setattr(cli, "gh_json_list", fake_gh_json_list)
+    result = cli.GhReleaseClient().release(None)
+    assert result["tag_name"] == "v1.0.0"
+
+
+def test_gh_client_latest_fails_closed_when_every_release_is_inconsistent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No usable fallback left means a clear failure, not a wrong pick."""
+    releases = [
+        {
+            "tag_name": "v1.1.0-beta.1",
+            "draft": False,
+            "prerelease": False,
+            "id": 1,
+        },
+    ]
+
+    def fake_gh_json_list(endpoint: str) -> list[object]:
+        return releases if "page=1" in endpoint else []
+
+    monkeypatch.setattr(cli, "gh_json_list", fake_gh_json_list)
+    with pytest.raises(CliError, match="self-consistent"):
+        cli.GhReleaseClient().release(None)
+
+
 def test_gh_client_named_lookup_raises_release_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -6589,6 +6645,77 @@ def test_gh_client_named_lookup_raises_release_not_found(
     monkeypatch.setattr(cli, "gh_json_or_missing", lambda endpoint: None)
     with pytest.raises(cli.ReleaseNotFoundError, match=re.escape("v9.9.9")):
         cli.GhReleaseClient().release("v9.9.9")
+
+
+def test_gh_json_or_missing_recognizes_a_real_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`gh`'s own "(HTTP 404)" suffix is the real signal, matched precisely."""
+
+    def not_found(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        return subprocess.CompletedProcess(
+            command, 1, "", "gh: Not Found (HTTP 404)"
+        )
+
+    monkeypatch.setattr(cli, "run", not_found)
+    assert (
+        cli.gh_json_or_missing("repos/owner/repo/releases/tags/v9.9.9") is None
+    )
+
+
+def test_gh_json_or_missing_does_not_misclassify_an_unrelated_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #744 finding: a 404 substring elsewhere in the text must not
+
+    be treated as "this release is confirmed gone". A permission failure,
+    or a 404 quoted as context inside a differently-failed request, must
+    still fail closed as an ordinary CliError, never silently routed into
+    the reinstall fallback.
+    """
+
+    def forbidden(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        return subprocess.CompletedProcess(
+            command, 1, "", "gh: Must have admin rights (HTTP 403)"
+        )
+
+    monkeypatch.setattr(cli, "run", forbidden)
+    with pytest.raises(CliError, match="HTTP 403"):
+        cli.gh_json_or_missing("repos/owner/repo/releases/tags/v9.9.9")
+
+    def nested_404_wrapped_in_a_server_error(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            "",
+            "gh: upstream lookup returned HTTP 404 for a nested resource "
+            "(HTTP 500)",
+        )
+
+    monkeypatch.setattr(cli, "run", nested_404_wrapped_in_a_server_error)
+    with pytest.raises(CliError, match="HTTP 500"):
+        cli.gh_json_or_missing("repos/owner/repo/releases/tags/v9.9.9")
 
 
 def test_gh_client_dereferences_annotated_tags(

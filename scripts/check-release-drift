@@ -254,6 +254,14 @@ operator_pattern = re.compile(r"@[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
 release_title_pattern = re.compile(
     r"chore\(main\): release (?:0|[1-9][0-9]*)\."
     r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    # Issue #744: prepare_release_candidate()'s own title
+    # (f"chore(main): release {version}", scripts/release_policy.py)
+    # carries the phase suffix verbatim for an alpha/beta candidate; this
+    # pattern must accept the same shape or a prerelease release-please
+    # PR's Release-publish-record comment is silently never found. Suffix
+    # kept byte-identical to release_version_pattern below and to
+    # scripts/release_phase.py's canonical `_VERSION_RE`.
+    r"(?:-(?:alpha|beta)\.[1-9][0-9]*)?"
 )
 trusted_associations = {"OWNER", "MEMBER", "COLLABORATOR"}
 

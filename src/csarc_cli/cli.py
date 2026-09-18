@@ -387,6 +387,9 @@ def gh_json(endpoint: str) -> dict[str, object]:
     return payload
 
 
+_NOT_FOUND_SUFFIX = re.compile(r"\(HTTP 404\)\s*$")
+
+
 def gh_json_or_missing(endpoint: str) -> dict[str, object] | None:
     """Read one GitHub API object, or None when GitHub reports HTTP 404.
 
@@ -396,6 +399,16 @@ def gh_json_or_missing(endpoint: str) -> dict[str, object] | None:
     release-tag lookup: a confirmed 404 there is the one condition Issue
     #744 allows to fall into the downstream reinstall flow instead of
     failing closed.
+
+    `gh api` has no structured (e.g. JSON) error output to key off of, so
+    this still parses stderr text -- but `_NOT_FOUND_SUFFIX` anchors on
+    the literal `(HTTP 404)` suffix `gh`'s own REST client always appends
+    to a failed request's message, rather than a bare substring search for
+    "HTTP 404" anywhere in the text, which could also match an unrelated
+    404 quoted inside a longer diagnostic (e.g. a nested-resource error
+    embedded in a verbose message). This endpoint
+    (`repos/{repo}/releases/tags/{tag}`) has no nested sub-resource of its
+    own to be confused with, which limits the residual risk further.
     """
     try:
         result = run(
@@ -409,7 +422,7 @@ def gh_json_or_missing(endpoint: str) -> dict[str, object] | None:
         ) from error
     if result.returncode != 0:
         detail = result.stderr.strip() or "GitHub API request failed"
-        if "HTTP 404" in detail:
+        if _NOT_FOUND_SUFFIX.search(detail):
             return None
         raise CliError(f"Cannot resolve an approved GitHub Release: {detail}")
     try:
@@ -481,7 +494,15 @@ class GhReleaseClient:
         return release
 
     def _latest(self) -> dict[str, object]:
-        """Return the highest-SemVer-precedence eligible release."""
+        """Return the highest-SemVer-precedence eligible, consistent release.
+
+        A release whose GitHub `prerelease` flag disagrees with its own
+        tag shape (the same check `release_identity()` applies afterward)
+        is skipped here rather than selected -- selecting it and letting
+        `release_identity()` hard-fail on it later would surface a
+        confusing error for a release that was never going to be usable,
+        when a perfectly good next-best candidate may exist.
+        """
         eligible: dict[str, dict[str, object]] = {}
         page = 1
         while True:
@@ -497,19 +518,25 @@ class GhReleaseClient:
                     continue
                 tag_name = item.get("tag_name")
                 if (
-                    isinstance(tag_name, str)
-                    and item.get("draft") is False
-                    and release_phase.is_valid_version(tag_name)
+                    not isinstance(tag_name, str)
+                    or item.get("draft") is not False
                 ):
-                    eligible[tag_name] = item
+                    continue
+                try:
+                    parsed = release_phase.parse_version(tag_name)
+                except release_phase.ReleasePhaseError:
+                    continue
+                if item.get("prerelease") is not parsed.is_prerelease:
+                    continue
+                eligible[tag_name] = item
             if len(batch) < 100:
                 break
             page += 1
         latest_tag = release_phase.select_latest(eligible)
         if latest_tag is None:
             raise CliError(
-                "No published, well-formed GitHub Release was found on the "
-                "canonical repository."
+                "No published, well-formed, self-consistent GitHub Release "
+                "was found on the canonical repository."
             )
         return eligible[latest_tag]
 

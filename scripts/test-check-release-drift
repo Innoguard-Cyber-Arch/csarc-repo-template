@@ -201,6 +201,22 @@ grep -Fq "from release PR #42 comment" <<<"$pr_record_output"
 grep -Fq "DRIFT DETECTED" <<<"$pr_record_output"
 grep -Fq "create" "$fixture_root/issue-calls.log"
 
+# Case 4b: Issue #744 -- release_title_pattern must recognize an
+# alpha/beta release-please PR title too (prepare_release_candidate's own
+# title includes the phase suffix verbatim), not silently skip the PR and
+# report "no Release-publish-record comment found".
+reset_fixtures
+cat >"$fixture_root/release-prs.json" <<JSON
+[{"number": 43, "title": "chore(main): release 0.16.0-beta.1", "mergedAt": "2026-09-04T11:55:00Z", "mergeCommit": {"oid": "$main_sha"}, "comments": [{"authorAssociation": "MEMBER", "createdAt": "2026-09-04T11:56:00Z", "body": "Release-publish-record: operator=@octocat commit=$main_sha command=\"scripts/publish-release publish --repo octo/example --tag v0.16.0-beta.1\" result=published"}]}]
+JSON
+set +e
+beta_pr_record_output="$(run_mocked 2>&1)"
+beta_pr_record_status=$?
+set -e
+[[ "$beta_pr_record_status" -ne 0 ]]
+grep -Fq "from release PR #43 comment" <<<"$beta_pr_record_output"
+grep -Fq "DRIFT DETECTED" <<<"$beta_pr_record_output"
+
 # Case 5: a stable Release with a non-ancestor target is not evidence.
 reset_fixtures
 other_sha="cccccccccccccccccccccccccccccccccccccccc"
@@ -390,4 +406,4 @@ set -e
 [[ "$no_gh_status" -ne 0 ]]
 grep -Fiq "gh" <<<"$no_gh_output"
 
-echo "Release drift check cases passed: 15"
+echo "Release drift check cases passed: 16"
