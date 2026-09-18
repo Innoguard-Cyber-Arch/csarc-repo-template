@@ -56,26 +56,59 @@ class FakeGitHub:
         self.reviews = reviews
         self.inline: list[dict[str, Any]] = []
         self.draft = False
+        self.body = ""
+        self.base_ref = "main"
+        self.default_branch = "main"
+        self.head_ref = "fix/42-lifecycle"
+        self.head_repo: str | None = "o/r"
+        self.issue_state = "open"
+        self.issue_milestone: int | None = None
+        self.issue_comments: list[dict[str, Any]] = []
 
-    def get(self, _repo: str, path: str) -> object:
+    def get(self, repo: str, path: str) -> object:
         """Return one REST fixture."""
         if path == "pulls/7":
             return {
                 "draft": self.draft,
-                "head": {"sha": HEAD},
+                "body": self.body,
+                "base": {"ref": self.base_ref},
+                "head": {
+                    "ref": self.head_ref,
+                    "sha": HEAD,
+                    "repo": (
+                        {"full_name": self.head_repo}
+                        if self.head_repo is not None
+                        else None
+                    ),
+                },
                 "user": {"login": "author"},
+            }
+        if path == "":
+            return {"default_branch": self.default_branch}
+        if path == "issues/42":
+            return {
+                "number": 42,
+                "pull_request": None,
+                "state": self.issue_state,
+                "milestone": (
+                    {"number": self.issue_milestone}
+                    if self.issue_milestone is not None
+                    else None
+                ),
             }
         match = re.fullmatch(r"collaborators/([^/]+)/permission", path)
         if match:
             return {"permission": "maintain", "user": {"login": match.group(1)}}
         raise AssertionError(path)
 
-    def pages(self, _repo: str, path: str) -> list[dict[str, Any]]:
+    def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
         """Return one collection fixture."""
         if path.startswith("pulls/7/reviews/9/comments"):
             return self.inline
         if path.startswith("pulls/7/reviews"):
             return self.reviews
+        if path.startswith("issues/7/comments"):
+            return self.issue_comments
         raise AssertionError(path)
 
 
@@ -211,6 +244,94 @@ def test_impersonating_user_is_not_copilot(copilot_config: Path) -> None:
     fake = copilot()
     fake["user"] = {"login": "copilot", "type": "User"}
     result = review_gate.evaluate(FakeGitHub([fake]), "o/r", 7, copilot_config)
+    assert not result["passed"]
+
+
+pr_lifecycle = importlib.import_module("pr_lifecycle")
+
+
+def alpha_authorization_comment(login: str = "maintainer") -> dict[str, Any]:
+    """Return one exact-head Alpha self-merge authorization comment."""
+    return {
+        "id": 99,
+        "html_url": "https://github.com/o/r/pull/7#issuecomment-99",
+        "created_at": "2026-09-18T03:00:00Z",
+        "author_association": "MEMBER",
+        "user": {"login": login, "type": "User"},
+        "body": pr_lifecycle.authorization_statement("o/r", 7, HEAD),
+    }
+
+
+def alpha_github() -> FakeGitHub:
+    """Return a Milestone-less, Issue-linked Alpha self-merge candidate."""
+    github = FakeGitHub([])
+    github.body = f"Closes #42\n\n{pr_lifecycle.ALPHA_SELF_MERGE_MARKER}"
+    return github
+
+
+def test_alpha_self_merge_authorization_passes(copilot_config: Path) -> None:
+    """Issue #775: a valid exact-head Alpha self-merge comment passes review."""
+    github = alpha_github()
+    github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["passed"]
+    assert result["source"] == "alpha-self-merge"
+
+
+def test_alpha_self_merge_without_authorization_still_fails(
+    copilot_config: Path,
+) -> None:
+    """The marker and route alone are not authorization -- a comment is."""
+    github = alpha_github()
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert not result["passed"]
+    assert "Alpha self-merge" in result["reason"]
+    assert "#775" in result["reason"]
+
+
+def test_alpha_self_merge_milestone_issue_does_not_apply(
+    copilot_config: Path,
+) -> None:
+    """A Milestone Issue must use its dev/mN branch, not this shortcut."""
+    github = alpha_github()
+    github.issue_milestone = 7
+    github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert not result["passed"]
+
+
+def test_alpha_self_merge_ignores_a_non_maintainer_comment(
+    copilot_config: Path,
+) -> None:
+    """An authorization-shaped comment still needs real maintainer perms."""
+    github = alpha_github()
+    comment = alpha_authorization_comment("outsider")
+    github.issue_comments = [comment]
+    original_get = github.get
+
+    def get_without_permission(repo: str, path: str) -> object:
+        if path == "collaborators/outsider/permission":
+            return {"permission": "read", "user": {"login": "outsider"}}
+        return original_get(repo, path)
+
+    github.get = get_without_permission  # ty: ignore[invalid-assignment]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert not result["passed"]
+
+
+def test_alpha_self_merge_does_not_apply_without_the_marker(
+    copilot_config: Path,
+) -> None:
+    """A plain Issue-linked PR body never triggers the Alpha lookup at all.
+
+    `FakeGitHub` raises `AssertionError` on any unstubbed path, so this
+    would fail loudly if the marker-absent short-circuit in
+    `_alpha_self_merge_authorization` ever regressed into making the
+    default-branch or issue-comments API calls it exists to skip.
+    """
+    github = FakeGitHub([])
+    github.body = "Closes #42"
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert not result["passed"]
 
 
