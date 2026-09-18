@@ -3411,7 +3411,13 @@ def release_contract(answers: Mapping[str, object]) -> dict[str, object]:
         or not isinstance(reason, str)
         or not reason
     ):
-        raise CliError("Release workflow ownership is incomplete.")
+        raise CliError(
+            "Release workflow ownership is incomplete. This is a "
+            "release_ownership/release_ownership_reason gap, not a "
+            "provenance problem; --accept-legacy does not resolve it. "
+            "Pass explicit --data release_ownership=<...> "
+            "release_ownership_reason=<...> to disambiguate."
+        )
     inputs = required_release_inputs(answers.get("release_required_inputs"))
     if ownership == "verification-only" and (workflow or inputs):
         raise CliError(
@@ -4932,11 +4938,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         )
         current_stage = Path(temporary) / "current"
         current_stage.mkdir()
+        current_answers = resolve_release_answers(target, saved_answers)
         copier_copy(
             source,
             current_revision,
             current_stage,
-            saved_answers,
+            current_answers,
             skip_tasks=True,
         )
         current_capabilities = capability_preflight(
