@@ -1,0 +1,295 @@
+"""Tests for the Copilot-or-maintainer `review` required check (#752)."""
+
+from __future__ import annotations
+
+import importlib
+import json
+import re
+import shutil
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+from copier import run_copy
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+review_gate = importlib.import_module("review_gate")
+
+HEAD = "a" * 40
+CLEAN = "Copilot reviewed 2 out of 2 changed files and generated no comments."
+
+
+def copilot(commit: str = HEAD, body: str = CLEAN) -> dict[str, Any]:
+    """Return one Copilot review fixture."""
+    return {
+        "id": 9,
+        "user": {"login": "copilot-pull-request-reviewer[bot]", "type": "Bot"},
+        "author_association": "NONE",
+        "state": "COMMENTED",
+        "submitted_at": "2026-09-18T01:00:00Z",
+        "commit_id": commit,
+        "body": body,
+        "html_url": "https://github.com/o/r/pull/7#pullrequestreview-9",
+    }
+
+
+def approval(login: str, commit: str = HEAD) -> dict[str, Any]:
+    """Return one maintainer approval fixture."""
+    return {
+        "id": 10,
+        "user": {"login": login, "type": "User"},
+        "author_association": "MEMBER",
+        "state": "APPROVED",
+        "submitted_at": "2026-09-18T02:00:00Z",
+        "commit_id": commit,
+        "html_url": "https://github.com/o/r/pull/7#pullrequestreview-10",
+    }
+
+
+class FakeGitHub:
+    """Serve one pull request, its reviews, and Copilot's comments."""
+
+    def __init__(self, reviews: list[dict[str, Any]]) -> None:
+        self.reviews = reviews
+        self.inline: list[dict[str, Any]] = []
+        self.draft = False
+
+    def get(self, _repo: str, path: str) -> object:
+        """Return one REST fixture."""
+        if path == "pulls/7":
+            return {
+                "draft": self.draft,
+                "head": {"sha": HEAD},
+                "user": {"login": "author"},
+            }
+        match = re.fullmatch(r"collaborators/([^/]+)/permission", path)
+        if match:
+            return {"permission": "maintain", "user": {"login": match.group(1)}}
+        raise AssertionError(path)
+
+    def pages(self, _repo: str, path: str) -> list[dict[str, Any]]:
+        """Return one collection fixture."""
+        if path.startswith("pulls/7/reviews/9/comments"):
+            return self.inline
+        if path.startswith("pulls/7/reviews"):
+            return self.reviews
+        raise AssertionError(path)
+
+
+def config(tmp_path: Path, text: str) -> Path:
+    """Write one answers file and return its path."""
+    path = tmp_path / "config.yml"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def copilot_config(tmp_path: Path) -> Path:
+    """Return a Copilot-mode answers file."""
+    return config(
+        tmp_path,
+        "pr_review_mode: copilot\ncopilot_review_max_level: unlimited\n",
+    )
+
+
+def test_missing_setting_means_human_mode(tmp_path: Path) -> None:
+    """An answers file predating #752 keeps maintainer-only review."""
+    assert review_gate.review_settings(config(tmp_path, "languages: []\n")) == (
+        "human",
+        "unlimited",
+    )
+
+
+def test_invalid_review_mode_is_rejected(tmp_path: Path) -> None:
+    """The flat config validator owns the allowed values."""
+    with pytest.raises(ValueError, match="pr_review_mode"):
+        review_gate.review_settings(config(tmp_path, "pr_review_mode: bot\n"))
+
+
+def test_human_mode_passes_without_reviews(tmp_path: Path) -> None:
+    """The Ruleset enforces human approval natively in human mode."""
+    result = review_gate.evaluate(
+        FakeGitHub([]), "o/r", 7, config(tmp_path, "pr_review_mode: human\n")
+    )
+    assert result["passed"]
+    assert result["source"] == "ruleset"
+
+
+def test_clean_copilot_review_of_head_passes(copilot_config: Path) -> None:
+    """A clean exact-head Copilot review passes the check."""
+    result = review_gate.evaluate(
+        FakeGitHub([copilot()]), "o/r", 7, copilot_config
+    )
+    assert result["passed"]
+    assert result["source"] == "copilot"
+
+
+@pytest.mark.parametrize(
+    ("reviews", "inline", "reason"),
+    [
+        ([], [], "not reviewed this pull request"),
+        ([copilot("b" * 40)], [], "not reviewed the current head"),
+        (
+            [copilot()],
+            [{"path": "x.py", "line": 1, "body": "Bug"}],
+            "1 comment",
+        ),
+        ([copilot(body="Comments suppressed (2)")], [], "suppressed"),
+        ([copilot(body="Copilot encountered an error.")], [], "does not state"),
+    ],
+)
+def test_copilot_review_that_is_not_clean_fails(
+    copilot_config: Path,
+    reviews: list[dict[str, Any]],
+    inline: list[dict[str, Any]],
+    reason: str,
+) -> None:
+    """Pending, stale, commented, or unrecognized reviews fail closed."""
+    github = FakeGitHub(reviews)
+    github.inline = inline
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert not result["passed"]
+    assert reason in result["reason"]
+    assert "maintainer approval" in result["reason"]
+
+
+def test_maintainer_approval_passes_without_copilot(
+    copilot_config: Path,
+) -> None:
+    """The human path stays available in Copilot mode."""
+    result = review_gate.evaluate(
+        FakeGitHub([approval("maintainer")]), "o/r", 7, copilot_config
+    )
+    assert result["passed"]
+    assert result["source"] == "maintainer"
+
+
+def test_author_self_approval_does_not_count(copilot_config: Path) -> None:
+    """The author cannot approve their own head."""
+    result = review_gate.evaluate(
+        FakeGitHub([approval("author")]), "o/r", 7, copilot_config
+    )
+    assert not result["passed"]
+
+
+def test_stale_maintainer_approval_does_not_count(copilot_config: Path) -> None:
+    """An approval of an older head no longer applies."""
+    result = review_gate.evaluate(
+        FakeGitHub([approval("maintainer", "c" * 40)]), "o/r", 7, copilot_config
+    )
+    assert not result["passed"]
+
+
+def test_draft_fails_even_with_clean_copilot_review(
+    copilot_config: Path,
+) -> None:
+    """Draft pull requests are not ready to merge."""
+    github = FakeGitHub([copilot()])
+    github.draft = True
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert not result["passed"]
+    assert "Draft" in result["reason"]
+
+
+def test_level_cap_fails_closed_until_release_levels_exist(
+    tmp_path: Path,
+) -> None:
+    """A cap other than unlimited cannot be evaluated before #745."""
+    capped = config(
+        tmp_path, "pr_review_mode: copilot\ncopilot_review_max_level: beta\n"
+    )
+    result = review_gate.evaluate(FakeGitHub([copilot()]), "o/r", 7, capped)
+    assert not result["passed"]
+    assert "#745" in result["reason"]
+
+
+def test_impersonating_user_is_not_copilot(copilot_config: Path) -> None:
+    """Only the Copilot App's bot account counts as Copilot."""
+    fake = copilot()
+    fake["user"] = {"login": "copilot", "type": "User"}
+    result = review_gate.evaluate(FakeGitHub([fake]), "o/r", 7, copilot_config)
+    assert not result["passed"]
+
+
+def generate(tmp_path: Path, answers: dict[str, object]) -> Path:
+    """Render the template with the given review answers."""
+    source = tmp_path / "source"
+    if not source.exists():
+        source.mkdir()
+        shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+        shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / f"project-{len(list(tmp_path.iterdir()))}"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": [],
+            "project_description": "Review mode fixture.",
+            "project_name": "Review Fixture",
+            "project_slug": "review-fixture",
+            "repository_url": "https://github.com/example/review-fixture",
+            "security_reporting_channel": "Use the private security contact.",
+            **answers,
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+    )
+    return project
+
+
+def rules(project: Path) -> dict[str, dict[str, Any]]:
+    """Return the generated Ruleset's rules by type."""
+    payload = json.loads(
+        (project / "policies/rulesets.json").read_text(encoding="utf-8")
+    )
+    return {
+        rule["type"]: rule.get("parameters", {}) for rule in payload["rules"]
+    }
+
+
+def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
+    """A new project gets the Copilot Ruleset, check, and gate script."""
+    project = generate(tmp_path, {})
+    config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
+    assert "pr_review_mode: copilot" in config
+    assert "copilot_review_max_level: unlimited" in config
+    generated = rules(project)
+    assert generated["copilot_code_review"]["review_on_push"] is True
+    assert generated["pull_request"]["required_approving_review_count"] == 0
+    assert generated["pull_request"]["required_review_thread_resolution"]
+    contexts = {
+        item["context"]
+        for item in generated["required_status_checks"][
+            "required_status_checks"
+        ]
+    }
+    assert "review" in contexts
+    assert (project / ".github/workflows/pr-review.yml").is_file()
+    assert (project / "scripts/review_gate.py").is_file()
+
+
+def test_human_review_keeps_the_maintainer_ruleset(tmp_path: Path) -> None:
+    """Choosing human review keeps the original approval Ruleset."""
+    project = generate(tmp_path, {"pr_review_mode": "human"})
+    generated = rules(project)
+    assert "copilot_code_review" not in generated
+    assert generated["pull_request"] == {
+        "dismiss_stale_reviews_on_push": True,
+        "require_code_owner_review": True,
+        "require_last_push_approval": True,
+        "required_approving_review_count": 1,
+        "required_review_thread_resolution": True,
+    }
+    contexts = {
+        item["context"]
+        for item in generated["required_status_checks"][
+            "required_status_checks"
+        ]
+    }
+    assert contexts == {"title", "promotion", "verify"}
+    config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
+    assert "copilot_review_max_level" not in config

@@ -105,6 +105,53 @@ live bypass actor 清單精確等於 repo 宣告值時使用；其他 bypass 形
 這條路徑會在最後一次 merge snapshot 前自動留下 `bypass-trace:`。沒有獨立 review 的
 Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head maintainer 授權留言。
 
+### Copilot 審核模式（#752）
+
+`.csarc/config.yml` 的 `pr_review_mode` 決定 PR 怎麼取得審核：
+
+- `human`：Ruleset 要求一位 maintainer approval、CODEOWNER review 與 last-push approval，
+  就是上一節的 exact-head review 流程。缺鍵時一律視為 `human`；`copier update` 對既有
+  專案新增這個問題時也預設 `human`，不會悄悄改變既有 repo 的審核方式。
+- `copilot`（新專案與 `csarc adopt` 的預設，本 repo 也採用）：Ruleset 要求 0 個 approval，
+  改由 `copilot_code_review` 規則在每次 push 後自動請 GitHub Copilot 審核，並把
+  `review` 列為 required check（`.github/workflows/pr-review.yml` → `scripts/review_gate.py
+  check`）。`review` 在下列任一條件成立時通過：
+  1. 獨立 maintainer 對**目前 head SHA** 的有效 `APPROVED`（沿用 #719 判斷，人工審核路徑
+     仍然有效）；或
+  2. Copilot 對**目前 head SHA** 的最新審核沒有任何 inline comment、內文沒有被隱藏的
+     低信心意見（suppressed comments），且內文明確寫出沒有產生意見。
+
+  Copilot 審核舊 head、仍在審核、留下意見、或內文格式無法辨識時一律 fail closed。
+  Copilot 只會留下 `COMMENTED`，永遠不會 `APPROVED`，所以這個模式不能靠 GitHub 原生的
+  approval 計數。未解決的 review thread 由 Ruleset 的 `required_review_thread_resolution`
+  原生擋下。Draft PR 不審核，`review` 會失敗直到 PR 標為 ready。
+
+本機修正迴圈（由本機 agent 修，不使用 Copilot coding agent）：
+
+1. `python3 scripts/review_gate.py status --repo <owner/repo> --pr <N>` 取得 Copilot 對目前
+   head 的意見與尚未解決的 thread。
+2. 修正、push；每次 push 產生新 head，Copilot 自動重新審核。回覆並 resolve 已處理的 thread。
+3. 重複直到 `status` 回報 `copilot.state = clean`，`review` check 轉綠。
+4. 依上方 single-writer 規則取得 lease，`scripts/pr_lifecycle.py merge` 以
+   `authorization_source=copilot` 合併；lifecycle 在合併前重新驗證同一個 exact-head
+   Copilot 審核、required checks、Draft、checklist 與 lease，並自動留下
+   `copilot-review-trace: review=<URL> head=<SHA> actor=<login>`（alpha bypass 另外留下
+   `bypass-trace: ... reason=exact-head-copilot-review`）。
+
+自動合併由本機 agent 經 lifecycle 執行，不用 workflow 的 `GITHUB_TOKEN` 合併：
+`GITHUB_TOKEN` 的合併不會觸發後續 `push` workflow（例如 release），也會繞過 lease；
+本 repo 所屬 organization 也封鎖原生 auto-merge（#557）。
+
+`copilot_review_max_level` 設定 Copilot 通過可以取代人工審核的最高發布層級，預設
+`unlimited`。每件工作的發布層級要到 #745 才存在，所以在那之前設成 `unlimited` 以外的值
+會讓 Copilot 路徑 fail closed、只接受 maintainer approval，不會假裝已經依層級判斷。
+
+前提與限制：repo 需要有啟用 code review 的 Copilot 授權，每次審核消耗 premium requests
+（取代 #241 的部分暫緩結論；Copilot coding agent 仍暫緩）。沒有授權或額度用盡時 Copilot
+不會審核，`review` 維持失敗，只能走 maintainer approval。Copilot 沒有意見不等於沒有缺陷，
+這是維護者 2026-09-18 接受的取捨。切回人工審核：把 `pr_review_mode` 改成 `human`，再由
+管理員執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`。
+
 `gh pr merge --admin` 只能用來繞過文件明列的已知例外，目前有兩項：
 
 1. `pr-policy.yml` `title` job 的「Validate Milestone approval」step（要求非提案者在

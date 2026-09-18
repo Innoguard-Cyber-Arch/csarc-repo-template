@@ -748,6 +748,8 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 必要基線 | `branch_strategy` | 預設 `delivery`；可選 `delivery`、`main` | 分支指引、`policies/rulesets.json`，以及 repo-site 的交付路線段落 |
 | 組織政策 | `code_owner` | 一個存在且有 repo write access 的 `@organization/team` | `.github/CODEOWNERS`；由 repository settings plan／apply／check 驗證；repo-site 的主要負責人欄位 |
 | 組織政策 | `reviewers` | 一個或多個 GitHub 使用者名稱 | `.github/REVIEWERS`；`governance-comment.yml` 在每張非 draft PR 自動輪派 |
+| 專案選擇 | `pr_review_mode` | 新專案預設 `copilot`；可選 `copilot`、`human`；`copier update` 對既有專案預設 `human` | `policies/rulesets.json`（`copilot` 改為 0 個 approval、自動請 Copilot 審核每次 push，並要求 `review` 檢查）；`pr-review.yml` 與 `scripts/review_gate.py` 接受 Copilot 對目前 head 沒有意見，或 maintainer 對目前 head 的 approval；需要 Copilot 授權 |
+| 專案選擇 | `copilot_review_max_level` | 預設 `unlimited`；可選 `alpha`、`beta`、`early`、`release` | Copilot 通過可取代人工審核的最高發布層級；每件工作的發布層級（#745）落地前，`unlimited` 以外的值會讓 Copilot 路徑 fail closed |
 | 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及 repo-site 的可見受眾欄位 |
 | 專案選擇 | `project_name` | 必填非空字串；預設 `CSARC Project` | repo-site 的標題與頁首 |
 | 專案選擇 | `project_description` | 必填一句話用途說明，拒絕佔位文字 | repo-site 的簡介段落 |

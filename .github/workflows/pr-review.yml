@@ -1,0 +1,52 @@
+name: PR review
+
+# Produces the `review` required status check for pr_review_mode=copilot
+# (Issue #752): the exact head passes when GitHub Copilot reviewed it and
+# found no issues, or an independent maintainer approved it. Copilot's own
+# review submission re-runs this check. In pr_review_mode=human the Ruleset
+# requires a maintainer approval natively and this check only reports so.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  pull_request_review:
+    types: [submitted, dismissed]
+  merge_group:
+    types: [checks_requested]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  review:
+    name: review
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Accept the queued pull request
+        if: ${{ github.event_name == 'merge_group' }}
+        run: echo "::notice::The review check passed on the pull request head before it entered the merge queue."
+      - name: Check out the trusted base commit
+        if: ${{ github.event_name != 'merge_group' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Require a clean Copilot review or a maintainer approval of the exact head
+        if: ${{ github.event_name != 'merge_group' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [[ -f scripts/review_gate.py ]]; then
+            python3 scripts/review_gate.py check \
+              --repo "$GITHUB_REPOSITORY" \
+              --pr "$PR_NUMBER"
+          else
+            echo "::notice::The review gate starts after the rollout PR reaches its base branch."
+          fi

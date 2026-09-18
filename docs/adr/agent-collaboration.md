@@ -58,3 +58,16 @@ GitHub Agents 頁籤可把 repository 工作交給 cloud coding agents，但 ses
 若 host platform 提供有 ownership、dirty-state 保護與可稽核 lifecycle 的原生 worktree 管理，可替代部分本機步驟；GitHub work item、repository memory 與合併門禁仍保留。若每個 automation 取得獨立最小權限 GitHub App identity，或 GitHub 提供可原子更新的原生 PR lease，可取代目前以 remote ref 與 audit comment 組成的互斥層。
 
 當真實 backlog 出現足量、可獨立驗收的非同步工作，且可先訂出 AI credits／Actions 成本上限，再驗證 Agents 產生的 branch 與 PR 能通過本 repo policy 時，重新評估把 Agents 頁籤列為升級執行層。
+
+## Copilot code review 作為可選審核路徑（#752，2026-09-18）
+
+維護者決定新增可選的 PR 審核模式 `pr_review_mode`（`copilot`／`human`），新專案、`csarc adopt` 與本 repo 預設 `copilot`；`copier update` 對既有專案預設 `human`，不悄悄改變既有審核方式。Copilot 模式下 Ruleset 自動請 Copilot 審核每次 push，required check `review` 接受「Copilot 對 exact head 沒有意見」或「獨立 maintainer 對 exact head 的 approval」。本機 agent 修正 Copilot 意見並 push，直到 Copilot 沒有意見，再由 `scripts/pr_lifecycle.py` 在 lease 下合併並留痕。規則細節見 `docs/ci-policy.md`「Copilot 審核模式（#752）」。
+
+與既有決策的關係：
+
+- #241：部分取代。Copilot code review 納入可選基線並消耗 premium requests；GitHub Agents 頁籤與 Copilot coding agent 仍維持暫緩，修正者仍是本機 agent。上方「重新評估條件」對 Agents 頁籤的要求不變。
+- #745：部分取代。「需要另一人」可由 Copilot 通過滿足，並以 `copilot_review_max_level` 設定上限（預設無上限）；層級判斷要等 #745 落地，在那之前設定上限會讓 Copilot 路徑 fail closed。
+- #719、#240：保留。exact-head 真人 approval 仍是合併授權；lease、live state 重驗與 fail closed 同樣適用於 Copilot 授權。
+- #557：保留。原生 auto-merge 受 organization 封鎖，也因 `GITHUB_TOKEN` 合併不觸發後續 workflow 而不採用 workflow 合併。
+
+重新評估條件：Copilot 審核品質或費用不可接受、GitHub 改變 Copilot review 的 API 形狀（例如不再以內文說明「沒有意見」），或 #745 落地需要依層級判斷時。

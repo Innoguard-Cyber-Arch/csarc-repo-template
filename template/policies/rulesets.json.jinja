@@ -11,7 +11,24 @@
   },
   "rules": [
     {"type": "non_fast_forward"},
+{% if pr_review_mode | default('human') == 'copilot' %}    {
+      "type": "pull_request",
+      "parameters": {
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_approving_review_count": 0,
+        "required_review_thread_resolution": true
+      }
+    },
     {
+      "type": "copilot_code_review",
+      "parameters": {
+        "review_draft_pull_requests": false,
+        "review_on_push": true
+      }
+    },
+{% else %}    {
       "type": "pull_request",
       "parameters": {
         "dismiss_stale_reviews_on_push": true,
@@ -21,6 +38,7 @@
         "required_review_thread_resolution": true
       }
     },
+{% endif %}
     {
       "type": "required_status_checks",
       "parameters": {
@@ -28,7 +46,8 @@
         "required_status_checks": [
           {"context": "title"},
           {"context": "promotion"},
-          {"context": "verify"}
+          {"context": "verify"}{% if pr_review_mode | default('human') == 'copilot' %},
+          {"context": "review"}{% endif %}
         ]
       }
     }

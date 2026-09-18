@@ -367,3 +367,23 @@ policy_branch_ruleset:
   type: bool
   help: Enforce this template's branch protection Ruleset (required review, non-fast-forward) from policies/rulesets.json where the GitHub plan allows it
   default: true
+
+pr_review_mode:
+  type: str
+  help: How a pull request earns merge approval. Copilot mode auto-requests GitHub Copilot code review on every push and accepts a clean Copilot review of the exact head (a maintainer approval still works); human mode keeps the required maintainer approval. Copilot mode needs a Copilot license with code review enabled.
+  choices:
+    GitHub Copilot review, maintainer approval still accepted: copilot
+    Maintainer approval only: human
+  default: "{{ 'human' if _copier_operation == 'update' else 'copilot' }}"
+
+copilot_review_max_level:
+  type: str
+  help: Highest declared release level a clean Copilot review may approve; higher levels need a maintainer approval. Levels other than unlimited fail closed until per-work release levels exist (Issue #745).
+  choices:
+    No limit: unlimited
+    alpha: alpha
+    beta: beta
+    Early release (0.y.z): early
+    Stable release (1.0.0 and later): release
+  default: unlimited
+  when: "{{ pr_review_mode == 'copilot' }}"

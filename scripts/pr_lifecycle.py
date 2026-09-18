@@ -22,8 +22,10 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     promotion_gate = importlib.import_module("promotion_gate")
+    review_gate = importlib.import_module("review_gate")
 else:
     promotion_gate = importlib.import_module(f"{__package__}.promotion_gate")
+    review_gate = importlib.import_module(f"{__package__}.review_gate")
 
 
 LEASE_SCHEMA = 2
@@ -53,6 +55,7 @@ BLOCKER_RESOLVED = re.compile(
     r"(?i)^merge blocker resolved\s*:|^\[merge-blocker-resolved\]"
 )
 DRAFT_EVENTS = {"convert_to_draft", "converted_to_draft"}
+REVIEW_CHECK_CONTEXT = "review"
 SUCCESSFUL_CHECK_CONCLUSIONS = {"neutral", "skipped", "success"}
 MAINTAINER_PERMISSIONS = {"admin", "maintain"}
 REVIEWED_MERGE_BYPASS_ACTORS = [
@@ -1134,6 +1137,7 @@ def effective_protection(  # noqa: C901
     branch: str,
     alpha_self_merge: bool = False,
     reviewed_merge: bool = False,
+    copilot_mode: bool = False,
 ) -> tuple[str, str, set[tuple[str, int | None]], bool]:
     """Prove review and check enforcement for an exact-head merge."""
     try:
@@ -1207,6 +1211,9 @@ def effective_protection(  # noqa: C901
         for item in required_items
         if isinstance(item, dict)
     }
+    copilot_rules = [
+        item for item in rules if item.get("type") == "copilot_code_review"
+    ]
     if alpha_self_merge:
         review_controls = bool(pull) and all(
             type(item.get("required_approving_review_count")) is int
@@ -1217,6 +1224,35 @@ def effective_protection(  # noqa: C901
         missing_reason = (
             "explicit zero-review Alpha policy, thread, or check rules are "
             "missing"
+        )
+    elif copilot_mode:
+        # Issue #752: zero required approvals is only safe while Copilot
+        # re-reviews every push and the `review` required check (which
+        # accepts a clean exact-head Copilot review or a maintainer
+        # approval) guards the merge.
+        review_controls = (
+            bool(pull)
+            and any(
+                item.get("dismiss_stale_reviews_on_push") is True
+                for item in pull
+            )
+            and any(
+                item.get("required_review_thread_resolution") is True
+                for item in pull
+            )
+            and any(
+                isinstance(item.get("parameters"), dict)
+                and item["parameters"].get("review_on_push") is True
+                for item in copilot_rules
+            )
+            and any(
+                context == REVIEW_CHECK_CONTEXT
+                for context, _ in required_contexts
+            )
+        )
+        missing_reason = (
+            "Copilot review-on-push, stale-review dismissal, thread, or "
+            "`review` check rules are missing"
         )
     else:
         review_controls = (
@@ -1609,6 +1645,28 @@ def merge_snapshot(  # noqa: C901
             "Authenticated GitHub actor changed after lease acquisition"
         )
     approval = exact_head_approval(github, repo, review_states, head_sha, actor)
+    review_mode, copilot_max_level = review_settings()
+    copilot_mode = review_mode == "copilot"
+    copilot_verdict = None
+    if approval is None and not alpha_self_merge and copilot_mode:
+        allowed, cap_reason = review_gate.level_allows_copilot(
+            copilot_max_level
+        )
+        if not allowed:
+            raise RuntimeError(cap_reason)
+        copilot_verdict = review_gate.copilot_verdict(
+            reviews,
+            head_sha,
+            lambda review_id: github.pages(
+                repo,
+                f"pulls/{pr_number}/reviews/{review_id}/comments?per_page=100",
+            ),
+        )
+        if copilot_verdict.state != "clean":
+            raise RuntimeError(
+                "Copilot review of the exact head is not clean: "
+                + copilot_verdict.reason
+            )
     if approval is not None:
         auth = {
             **approval,
@@ -1631,6 +1689,13 @@ def merge_snapshot(  # noqa: C901
                 "Authorization predates the active lifecycle lease"
             )
         authorization_source = "comment"
+    elif copilot_verdict is not None and copilot_verdict.review is not None:
+        auth = {
+            **copilot_verdict.review,
+            "created_at": copilot_verdict.review.get("submitted_at"),
+        }
+        authorization_source = "copilot"
+        authorization_url = str(copilot_verdict.review.get("html_url") or "")
     else:
         raise RuntimeError(
             "An independent maintainer approval for the exact head is required"
@@ -1674,7 +1739,8 @@ def merge_snapshot(  # noqa: C901
             repo,
             base_ref,
             alpha_self_merge,
-            authorization_source == "review",
+            authorization_source in {"review", "copilot"},
+            copilot_mode and not alpha_self_merge,
         )
     )
     authorization_actor = str((auth.get("user") or {}).get("login", ""))
@@ -1716,6 +1782,13 @@ def merge_snapshot(  # noqa: C901
         "required_check_evidence": check_evidence,
         "alpha_self_merge": alpha_self_merge,
     }
+
+
+def review_settings() -> tuple[str, str]:
+    """Return this checkout's ``(pr_review_mode, copilot_review_max_level)``."""
+    return review_gate.review_settings(
+        Path(__file__).resolve().parents[1] / ".csarc/config.yml"
+    )
 
 
 def release_phase() -> str:
@@ -1864,12 +1937,25 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
             "incomplete; a human maintainer must merge manually"
         )
     if snapshot.get("reviewed_bypass") is True:
+        reason = (
+            "exact-head-copilot-review"
+            if snapshot.get("authorization_source") == "copilot"
+            else "exact-head-review"
+        )
         github.comment(
             args.repo,
             args.pr_number,
             "bypass-trace: "
             f"release_phase={release_phase()} "
-            f"actor={lease['actor']} reason=exact-head-review",
+            f"actor={lease['actor']} reason={reason}",
+        )
+    if snapshot.get("authorization_source") == "copilot":
+        github.comment(
+            args.repo,
+            args.pr_number,
+            "copilot-review-trace: "
+            f"review={snapshot['authorization_url']} "
+            f"head={lease['head_sha']} actor={lease['actor']}",
         )
     snapshot = merge_snapshot(
         github,
