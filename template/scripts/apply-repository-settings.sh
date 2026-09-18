@@ -741,18 +741,30 @@ if "copilot_code_review" in desired_by_type:
         errors.append("copilot_code_review review_on_push is not enforced")
 
 if "required_status_checks" in desired_by_type:
+    desired_status_checks = desired_by_type["required_status_checks"]["parameters"]
     desired_checks = {
         check["context"]
-        for check in desired_by_type["required_status_checks"]["parameters"]["required_status_checks"]
+        for check in desired_status_checks["required_status_checks"]
     }
+    effective_status_checks_rules = effective_by_type.get("required_status_checks", [])
     effective_checks = {
         check["context"]
-        for rule in effective_by_type.get("required_status_checks", [])
+        for rule in effective_status_checks_rules
         for check in rule.get("required_status_checks", [])
     }
     missing_checks = sorted(desired_checks - effective_checks)
     if missing_checks:
         errors.append("missing required checks: " + ", ".join(missing_checks))
+    # Issue #754: without this, a brand-new ref matching the Ruleset's
+    # pattern (e.g. dev/m<N>-<slug>) can never be created at all --
+    # required checks are "expected" for a ref that has no commit or PR
+    # to have ever produced them. This only relaxes enforcement at the
+    # moment a ref is first created; every push and merge into it after
+    # that still needs the checks above, unchanged.
+    if desired_status_checks.get("do_not_enforce_on_create") and not any(
+        rule.get("do_not_enforce_on_create") for rule in effective_status_checks_rules
+    ):
+        errors.append("do_not_enforce_on_create is not enforced")
 
 if errors:
     raise SystemExit("; ".join(errors))

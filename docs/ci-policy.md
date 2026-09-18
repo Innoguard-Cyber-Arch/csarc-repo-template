@@ -569,6 +569,39 @@ Ruleset 的審核把關（Copilot 模式下是 `review` required check，見「C
 head repository 缺失五種情況，以及 CLI 寫入 `$GITHUB_OUTPUT` 的格式）；`scripts/hosted_verify_bots.py`
 隨 `scripts/sync-paired-files.sh` 逐位元組下發到 `template/`。
 
+### 建立新 `dev/m*` delivery 分支（#754）
+
+`CSARC protected branches` Ruleset 的 `conditions.ref_name.include` 涵蓋 `refs/heads/dev/m*`，讓每個
+Milestone 自己的 delivery 分支（`docs/index.html` Journey 01／`AGENTS.md` 工作迴圈第 8 步）跟 `main` 一樣
+受保護。但 `required_status_checks` 規則預設在**建立分支這個動作本身**就要求 `title`／`promotion`／
+`verify`／`review` 全部先通過——一個尚不存在的新分支在建立當下沒有任何 commit 或 PR 能觸發這些 check，
+`required_status_checks` 在這個情境下永遠無法被滿足：任何符合 `dev/m*` pattern 的全新分支都無法直接
+`git push` 建立，僅有的 `bypass_actors`（admin，`bypass_mode: "pull_request"`）又只在「透過合併 PR」時生
+效，而建立一個全新分支不可能先有一個以它為 base 的 PR，兩者互為前提、無路可通。
+
+修法是 GitHub Rulesets 原生就為這個情境準備的欄位：`required_status_checks` 規則的
+`do_not_enforce_on_create: true`（`policies/rulesets-required-checks.json`；生成 repo 對應
+`template/policies/rulesets.json.jinja` 同一個規則區塊，兩者都不分 `pr_review_mode`／`branch_strategy`，因
+為這個欄位只影響「這個 ref 第一次被建立的那個瞬間」，跟審核模式或是否啟用 `dev/m*` 無關）。這個欄位**只**
+放寬 ref 第一次出現的那一刻；建立之後對這個分支的每一次 push、每一張 PR、合併進它或它合併出去，仍然要通過
+上面列的全部 required checks，跟 `main` 完全一樣——不影響、也不繞過 `main` 既有的任何保護，因為 `main` 從
+未經歷「被建立」這個事件。
+
+`scripts/apply-repository-settings.sh` 的 drift-check 原本只比對 `required_status_checks` 的 context 清
+單，沒有比對 `do_not_enforce_on_create`；本次一併補上這個比較（desired 要求時，live 沒有同步設定就回報
+`do_not_enforce_on_create is not enforced`），讓 `check` 真的能證明「新分支建得起來」這件事，而不只是證明
+check 清單對得上。
+
+**回歸驗證**：`tests/test_apply_repository_settings.py` 的
+`test_do_not_enforce_on_create_matching_passes_cleanly`／`test_missing_do_not_enforce_on_create_is_reported`
+涵蓋 drift-check 邏輯本身；`do_not_enforce_on_create` 是否真的送進 assembled payload，見
+`scripts/release_phase_rulesets.py assemble` 的既有輸出（純函式，不需要 live API）。live 分支建立本身無法
+純單元測試（需要真的對 GitHub 送出請求），驗證步驟改為文件化的手動步驟：管理員執行
+`./scripts/apply-repository-settings.sh apply` 套用新設定後，對一個目前不存在、符合 `dev/m*` pattern 的分
+支執行 `git push origin main:refs/heads/dev/m<N>-<slug>`（或等義的 `git branch` + push），成功建立且不報
+`required status checks` 錯誤即為通過；同一次操作後，對 `main` 或既有分支做一次不通過 `verify` 的 push 仍
+應被擋下，確認既有保護未受影響。
+
 ## Current automation
 
 下表逐項列出 canonical file、owner、觸發（輸入）、權限／timeout、產物（輸出）、測試與
