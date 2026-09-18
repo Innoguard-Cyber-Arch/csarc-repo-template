@@ -640,6 +640,11 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
    `./scripts/sync-paired-files.sh`，有 drift 就 commit 並 push 回同一個分支。只執行這支腳本既有、已測試的
    逐位元組複製邏輯，不執行 PR 內容裡的其他任何東西；push 觸發的新 `synchronize` 事件會讓 `verify`（#753）
    對新 head 重新驗證，也會讓這個 job 自己重新跑一次、這次因為沒有 drift 而直接結束，不會無限迴圈。
+   同步 commit 的訊息固定用 `fix(deps): ...`，不是 `chore:`——完成條件第五項要求「會改變 template/ 內容的
+   依賴更新，合併後要進入下一次發版」，`release-please`（`release-type: simple`）只認 `fix`／`feat` 升版號；
+   這裡只在 `sync-paired-files.sh` 真的找到 drift（代表這次 bump 確實改到 `copier update` 會下發的內容）時
+   才 commit，所以是精準只對「真的動到 template 分發內容」的那次 bump 觸發發版，不會連帶讓每一張跟 template
+   無關的 Dependabot commit 都被迫升版號。
 2. 新增 `scripts/check_action_pins.py`（root 與 `template/scripts/check_action_pins.py` 逐位元組同步）：掃
    `.github/workflows/`、`template/.github/workflows/` 底下所有 `.yml`／`.yaml`／`.jinja` 檔案的
    `uses: owner/repo@sha` pin，同一個 action 在整個 repo 裡的 pin 必須完全一致，不一致就 fail closed 並點名

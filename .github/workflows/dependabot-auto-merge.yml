@@ -104,5 +104,11 @@ jobs:
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
           git add -A
-          git commit -m "chore: sync template copies of this dependency bump (#755)"
+          # Issue #755, completion condition 5: a `fix` commit here (not
+          # `chore`) is what lets this reach a release -- it only fires
+          # when scripts/sync-paired-files.sh actually found drift, i.e.
+          # exactly when this bump changed template/ content that
+          # `copier update` distributes downstream, not on every
+          # Dependabot commit regardless of what it touched.
+          git commit -m "fix(deps): sync template copies of this dependency bump (#755)"
           git push origin "HEAD:refs/heads/$HEAD_REF"

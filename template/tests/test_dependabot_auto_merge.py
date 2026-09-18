@@ -171,6 +171,25 @@ def test_sync_template_job_is_a_no_op_without_drift() -> None:
     assert "exit 0" in run
 
 
+def test_sync_template_commit_is_a_release_triggering_fix() -> None:
+    """Issue #755, condition 5: template drift must reach a release.
+
+    release-please (release-type: simple) only bumps a version for a
+    `fix`/`feat` commit, never `chore`. Using `fix(deps)` here -- and
+    only here, since this step only commits when sync-paired-files.sh
+    found real drift -- is what stops a template-affecting bump from
+    sitting on `main` unreleased forever without also release-triggering
+    every unrelated Dependabot commit that never touched template/.
+    """
+    _, workflow = _load_workflow()
+    steps = _sync_steps_by_name(workflow)
+    run = steps[
+        "Sync paired template files and push if this bump drifted them"
+    ]["run"]
+
+    assert re.search(r"git commit -m \"fix(\(deps\))?:", run) is not None
+
+
 def _render_dependabot_config(tmp_path: Path, release_ownership: str) -> str:
     """Render `template/.github/dependabot.yml.jinja` for one ownership."""
     source = tmp_path / "source"
