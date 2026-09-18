@@ -531,6 +531,44 @@ timestamp 新鮮／過期／未來、trailer 缺失、tier 是否足夠等純邏
 job 的 `name:` 決定，不是由它做什麼決定），Ruleset 只認 context 名稱，不知道、也不需要知道 job 內部從「重
 新執行測試」換成「驗證一個聲明」。
 
+### Dependabot 的 hosted 執行例外（#753）
+
+上方「本機驗證聲明」機制對 Dependabot 這類 PR 結構性地無解：Dependabot 的 commit 由 GitHub 自己直接產生
+並推送，從未經過任何人的本機，永遠不可能帶有 `Verified-locally:` trailer——`verify` 因此對每一張
+Dependabot PR 都 fail closed，包含安全性更新，`#557` 的 `dependabot-auto-merge.yml` 即使 arm 了
+auto-merge 也永遠合不進來。
+
+修法是一個正面表列的窄範圍例外（`scripts/hosted_verify_bots.py`，module docstring 有完整條件），目前只有
+一筆：`dependabot[bot]`。`.github/workflows/ci.yml` 的 `verify` job 新增一個「Determine hosted-verification
+bot eligibility」step，同時要求下列**全部**成立才視為符合例外，任一項不成立就沿用原本的 attestation 檢查：
+
+1. PR 作者（`github.event.pull_request.user.login`，不是 `github.actor`）在白名單內。
+2. head branch 符合該 bot 專屬的前綴（Dependabot 是 `dependabot/*`）。
+3. head repository 就是這個 repository 本身，不是 fork（`github.event.pull_request.head.repo.full_name`
+   對照 `github.repository`）。
+
+符合的 PR，`verify` job 略過「Validate local verification attestation」step，改用「Run hosted verification
+for an allowlisted bot pull request」step在 runner 上**真的執行**驗證：沿用同一個 job 裡
+`scripts/ci_tier.py` 已經算出的 `tier`／`scopes`（與任何 standalone PR 的本機執行分級邏輯完全相同），
+`tier=full` 時跑 `./scripts/verify-template.sh`（生成 repo：`./scripts/verify`），否則跑
+`./scripts/verify-fast`。這兩支腳本在成功結尾都會呼叫 `scripts/write-verify-attestation` 對 HEAD 執行
+`git commit --amend`，在這個一次性、不會被 push 回去的 runner checkout 裡需要一個本機 git 身分才能執行
+（`persist-credentials: false` 已確保這個 step 完全沒有推送能力），所以 step 開頭先設定一個限定在這次
+checkout 內的 `git config user.email`／`user.name`；產生出的 attestation commit 本身沒有意義，只是讓腳本
+順利跑完，不會、也不需要被讀取。
+
+白名單 bot 的 PR 仍然不需要連結 Issue（`scripts/validate-pr-policy` 現行行為不變），合併仍然要通過現行
+Ruleset 的審核把關（Copilot 模式下是 `review` required check，見「Copilot 審核模式（#752）」一節；`human`
+模式下是原生 maintainer approval）——這個例外只回答「`verify` 這一個 required check 怎麼通過」，不觸碰、
+也不放寬任何審核要求。
+
+新增一個 bot 到這份白名單，比照上方「通則（自 #602 起生效）」：要有自己的 tracking Issue 記錄理由與範圍，
+不能只在程式碼註解裡說明。
+
+**回歸測試**：`tests/test_hosted_verify_bots.py`（白名單成立／作者不符／branch 前綴不符／來自 fork／
+head repository 缺失五種情況，以及 CLI 寫入 `$GITHUB_OUTPUT` 的格式）；`scripts/hosted_verify_bots.py`
+隨 `scripts/sync-paired-files.sh` 逐位元組下發到 `template/`。
+
 ## Current automation
 
 下表逐項列出 canonical file、owner、觸發（輸入）、權限／timeout、產物（輸出）、測試與
@@ -541,7 +579,7 @@ job 的 `name:` 決定，不是由它做什麼決定），Ruleset 只認 context
 
 | 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428）；本機驗證聲明（#661） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；15 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類（仍在 runner 上執行，是變更路徑分類邏輯，不是測試）後，只用 `scripts/check-verify-attestation` 驗證這個 PR 的實際 HEAD commit（`pull_request` 事件讀 PR 自己的 head sha，不是 GitHub 產生的 merge commit）是否帶有格式正確、hash 與 tree 相符、timestamp 新鮮、tier 足夠的 `Verified-locally:` trailer；不再於 runner 上執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo：`scripts/verify`）——測試改在本機執行，成功時由這些腳本呼叫 `scripts/write-verify-attestation` 寫入 trailer；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py` 的 `test_root_ci_is_one_bounded_verification_job`／`test_generated_ci_uses_the_same_one_job_contract`；`tests/test_verify_attestation.py`（純邏輯）與 `scripts/test-verify-attestation`（對真實 git repository） | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success——此 run 早於 #661，只證明 `scripts/ci_tier.py` 分類與（當時仍在 runner 上執行的）驗證邏輯，不代表本機驗證聲明改造 | `scripts/ci_tier.py` 分類：active（邏輯未變）；本機驗證聲明改造（#661 本身）：candidate（待 `main` 落地並於首次 PR 觸發後轉 active） |
+| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428）；本機驗證聲明（#661）；Dependabot hosted 執行例外（#753） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；15 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類（仍在 runner 上執行，是變更路徑分類邏輯，不是測試）後，`scripts/hosted_verify_bots.py` 判斷這張 PR 是否符合白名單 bot 例外（見「Dependabot 的 hosted 執行例外（#753）」一節）：不符合則只用 `scripts/check-verify-attestation` 驗證這個 PR 的實際 HEAD commit（`pull_request` 事件讀 PR 自己的 head sha，不是 GitHub 產生的 merge commit）是否帶有格式正確、hash 與 tree 相符、timestamp 新鮮、tier 足夠的 `Verified-locally:` trailer；符合則改在 runner 上實際執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo：`scripts/verify`），成功時由這些腳本呼叫 `scripts/write-verify-attestation` 寫入 trailer（僅供腳本正常結束，不被讀取）；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py`；`tests/test_hosted_verify_bots.py`；`tests/test_journey03_ci.py` 的 `test_root_ci_is_one_bounded_verification_job`／`test_generated_ci_uses_the_same_one_job_contract`；`tests/test_verify_attestation.py`（純邏輯）與 `scripts/test-verify-attestation`（對真實 git repository） | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success——此 run 早於 #661／#753，只證明 `scripts/ci_tier.py` 分類與（當時仍在 runner 上執行的）驗證邏輯，不代表本機驗證聲明改造或 Dependabot 例外 | `scripts/ci_tier.py` 分類：active（邏輯未變）；本機驗證聲明改造（#661 本身）：active；Dependabot hosted 執行例外（#753 本身）：candidate（待 `main` 落地並於首張真實 Dependabot PR 觸發後轉 active） |
 | PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | 只給需要的 Issue／PR metadata 權限；固定 timeout | `title` job：Issue、route 與 review policy 判定；`promotion` job（#601）：呼叫 `scripts/promotion_gate.py check-route` 分類 route，回報 `promotion` required check（`not-applicable`／`milestone`／`isolated`／`hotfix`／`release-recovery`／`release-follow-up`／`merge-queue` 成功，`invalid-main-route` 失敗） | `scripts/test-pr-policy`；`promotion` job 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929)，2026-09-01，success；同日對 #448／#453／#457 等未完成 checklist 的候選 PR 正確擋下合併，證明門禁確實生效 | `title` job：active；`promotion` job：candidate（隨 #601 首次落地，尚無 live run，待 `main` 落地並於首次 PR 觸發後轉 active） |
 | PR review（Copilot 審核模式，#752） | `.github/workflows/pr-review.yml` | PR 審核授權（#752，銜接 #719／#745） | `pull_request`（opened／synchronize／reopened／ready_for_review／converted_to_draft）、`pull_request_review`（submitted／dismissed）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run | `review` job 呼叫 `scripts/review_gate.py check`：`pr_review_mode=copilot` 時，目前完整 head SHA 已獲 Copilot 乾淨審核或獨立 maintainer `APPROVED` 才過；`pr_review_mode=human` 時只回報，審核仍由 Ruleset 原生 required approval 把關 | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的 Copilot 授權來源見 `tests/test_pr_lifecycle.py` | 尚未落地 `main`，無 live run | candidate（待 main 落地並於首次 PR 觸發後轉 active） |
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |

@@ -84,6 +84,16 @@ def test_reviewer_assignment_rejects_invalid_configuration(
     assert not (tmp_path / "gh-arguments").exists()
 
 
+def test_reviewer_assignment_accepts_a_bot_author(tmp_path: Path) -> None:
+    """A bot login (e.g. dependabot[bot]) is a valid PR author (#753)."""
+    result = run_reviewer_assignment(
+        tmp_path, "@alice\n@bob\n", author="dependabot[bot]", number=8
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Requested review from" in result.stdout
+
+
 @pytest.mark.parametrize("enabled", [False, True])
 def test_copier_governance_drift_option_is_complete(
     tmp_path: Path, enabled: bool
