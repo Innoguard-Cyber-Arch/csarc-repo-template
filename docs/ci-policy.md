@@ -1002,6 +1002,20 @@ scope 與 `scripts/verify-stage-regression-tests`）。這次變更不重新設�
 `has_scope_sentinel()` 的偵測邏輯，也不擴大 `/milestone approve`／
 `admin-approve` 留言語彙本身——只在既有機制上補上 CI 接線與版本綁定這兩層。
 
+**留言編輯本身的過期判斷（#778）：**上面的 fingerprint-binding 只比對核可留言
+的 `created_at` 與 item 的 `updated_at`，從未讀取留言自己的 `updated_at`。缺
+口是：一則早於（或落在緩衝窗內）item `updated_at` 的舊留言，如果本來不是核
+可語彙，很久以後才被**編輯**成 `/milestone approve`，`created_at` 完全不受編
+輯影響，判斷式看到的仍是「舊留言、舊 item，兩者時間點很接近」，因而誤判為
+新鮮、允許通過——即使核可語彙實際上是編輯當下才寫入，從未針對任何特定版本
+的 body 做過核可。`_approval_is_stale()` 現在多一個獨立、以 OR 相接的判斷：
+留言自己的 `updated_at` 與 `created_at` 的差距若也超過 60 秒緩衝窗，同樣視
+為過期，不論 item 那一側看起來多新鮮。這個新判斷只會讓結果**更保守**（多抓
+出過期案例），不會讓既有的 item-vs-`created_at` 判斷結果被推翻回「新鮮」：
+一則已經因為 `created_at` 早於 item `updated_at` 而過期的留言，就算之後的編
+輯時間點晚於該次 item 更新，也維持過期，不能靠編輯「洗新」。從未編輯的留言
+（`updated_at` 等於或缺少 `created_at`）行為完全不變。
+
 ### `scripts/verify-template.sh` 階段盤點（#458）
 
 `scripts/verify-template.sh` 是一個薄聚合器：七個階段各自是 `scripts/verify-stage-*`
