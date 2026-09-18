@@ -64,3 +64,45 @@ jobs:
         run: |
           gh pr edit "$PR_URL" --add-label needs-manual-review
           gh pr comment "$PR_URL" --body "This is a major version update, which may include breaking changes. Auto-merge is intentionally skipped; please review and merge manually."
+
+  sync-template:
+    name: sync-template
+    # Issue #755: Dependabot only ever bumps root's copy of a paired file
+    # (scripts/sync-paired-files.sh) -- it does not know template/ holds a
+    # required byte-identical copy of some of them, so a bump to e.g.
+    # .github/workflows/pr-policy.yml leaves template's copy stale and
+    # fails the verify job's paired-file check. Same gate, trigger, and
+    # trust reasoning as the auto-merge job above: pull_request (not
+    # _target) because Dependabot pushes to this repository directly,
+    # never a fork.
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # contents: write pushes the sync commit onto Dependabot's own
+      # branch. This step only ever runs scripts/sync-paired-files.sh's
+      # own byte-for-byte copy logic against paths that script already
+      # declares paired -- it never executes anything else from the
+      # checked-out PR content, and a Dependabot bump changes a version
+      # string or action SHA inside a paired file, never that script
+      # itself.
+      contents: write
+    steps:
+      - name: Check out the pull request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Sync paired template files and push if this bump drifted them
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          ./scripts/sync-paired-files.sh
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "::notice::No paired-file drift from this bump; nothing to sync."
+            exit 0
+          fi
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git add -A
+          git commit -m "chore: sync template copies of this dependency bump (#755)"
+          git push origin "HEAD:refs/heads/$HEAD_REF"

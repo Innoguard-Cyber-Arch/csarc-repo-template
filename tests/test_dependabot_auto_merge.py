@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 
 import yaml
+from copier import run_copy
 
 REPO_ROOT = Path(__file__).parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/dependabot-auto-merge.yml"
@@ -20,6 +22,11 @@ def _load_workflow() -> tuple[str, dict]:
 
 def _steps_by_name(workflow: dict) -> dict[str, dict]:
     steps = workflow["jobs"]["auto-merge"]["steps"]
+    return {step["name"]: step for step in steps}
+
+
+def _sync_steps_by_name(workflow: dict) -> dict[str, dict]:
+    steps = workflow["jobs"]["sync-template"]["steps"]
     return {step["name"]: step for step in steps}
 
 
@@ -117,3 +124,123 @@ def test_dependabot_cooldown_already_covers_the_supply_chain_delay() -> None:
     config = (REPO_ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
 
     assert len(re.findall(r"^\s+default-days:\s*3\s*$", config, re.M)) >= 1
+
+
+def test_sync_template_job_only_triggers_on_dependabot_pull_requests() -> None:
+    """Issue #755: never push a sync commit for a human-authored PR."""
+    _, workflow = _load_workflow()
+    job = workflow["jobs"]["sync-template"]
+
+    assert (
+        job["if"]
+        == "${{ github.event.pull_request.user.login == 'dependabot[bot]' }}"
+    )
+    assert job["permissions"] == {"contents": "write"}
+
+
+def test_sync_template_job_checks_out_the_pull_request_head() -> None:
+    """The sync must read the bump that actually landed on this PR."""
+    _, workflow = _load_workflow()
+    steps = _sync_steps_by_name(workflow)
+    step = steps["Check out the pull request head"]
+
+    assert step["with"]["ref"] == "${{ github.event.pull_request.head.sha }}"
+
+
+def test_sync_template_job_runs_the_shared_sync_script() -> None:
+    """Reuse scripts/sync-paired-files.sh's own tested diffing logic."""
+    _, workflow = _load_workflow()
+    steps = _sync_steps_by_name(workflow)
+    run = steps[
+        "Sync paired template files and push if this bump drifted them"
+    ]["run"]
+
+    assert "./scripts/sync-paired-files.sh" in run
+    assert "git push origin" in run
+
+
+def test_sync_template_job_is_a_no_op_without_drift() -> None:
+    """A bump that never touches a paired file must not push an empty commit."""
+    _, workflow = _load_workflow()
+    steps = _sync_steps_by_name(workflow)
+    run = steps[
+        "Sync paired template files and push if this bump drifted them"
+    ]["run"]
+
+    assert "git status --porcelain" in run
+    assert "exit 0" in run
+
+
+def _render_dependabot_config(tmp_path: Path, release_ownership: str) -> str:
+    """Render `template/.github/dependabot.yml.jinja` for one ownership."""
+    source = tmp_path / "source"
+    if not source.exists():
+        source.mkdir()
+        shutil.copy2(REPO_ROOT / "copier.yml", source / "copier.yml")
+        shutil.copytree(REPO_ROOT / "template", source / "template")
+    project = tmp_path / f"project-{release_ownership}"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": ["python"],
+            "project_description": "Dependabot prefix fixture.",
+            "project_name": "Dependabot Prefix Fixture",
+            "project_slug": "dependabot-prefix-fixture",
+            "release_ownership": release_ownership,
+            "repository_url": "https://github.com/example/dependabot-prefix-fixture",
+            "security_reporting_channel": "Use the private security contact.",
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+    )
+    return (project / ".github/dependabot.yml").read_text(encoding="utf-8")
+
+
+def test_csarc_owned_projects_split_release_and_dev_dependency_prefixes(
+    tmp_path: Path,
+) -> None:
+    """Issue #755: only a project whose release CSARC owns needs this."""
+    config = _render_dependabot_config(tmp_path, "csarc-owned")
+    parsed = yaml.safe_load(config)
+    uv_update = next(
+        update
+        for update in parsed["updates"]
+        if update["package-ecosystem"] == "uv"
+    )
+
+    assert uv_update["commit-message"] == {
+        "prefix": "fix",
+        "prefix-development": "build",
+    }
+
+
+def test_non_csarc_owned_projects_keep_the_dependabot_default(
+    tmp_path: Path,
+) -> None:
+    """A product with its own release process is not forced into this."""
+    config = _render_dependabot_config(tmp_path, "verification-only")
+    parsed = yaml.safe_load(config)
+    uv_update = next(
+        update
+        for update in parsed["updates"]
+        if update["package-ecosystem"] == "uv"
+    )
+
+    assert "commit-message" not in uv_update
+
+
+def test_github_actions_ecosystem_never_gets_a_release_prefix(
+    tmp_path: Path,
+) -> None:
+    """Actions bumps only affect root CI; they must never trigger a release."""
+    config = _render_dependabot_config(tmp_path, "csarc-owned")
+    parsed = yaml.safe_load(config)
+    actions_update = next(
+        update
+        for update in parsed["updates"]
+        if update["package-ecosystem"] == "github-actions"
+    )
+
+    assert "commit-message" not in actions_update

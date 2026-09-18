@@ -3,6 +3,19 @@ rules:
     ignore:
       # Team policy deliberately uses a three-day observation window.
       - dependabot.yml
+  artipacked:
+    ignore:
+      # Issue #755: the sync-template job needs persist-credentials (the
+      # default) to push its sync commit back onto Dependabot's own
+      # branch -- that push is the job's whole purpose. This workflow
+      # never uploads an artifact, so the credential-leak-via-artifact
+      # scenario this audit warns about does not apply; the job is
+      # already gated to github.event.pull_request.user.login ==
+      # 'dependabot[bot]' (never a fork, same reasoning as the auto-merge
+      # job in this same file) and, after checkout, only ever runs
+      # scripts/sync-paired-files.sh's own byte-copy logic -- nothing
+      # from the checked-out PR content is executed.
+      - dependabot-auto-merge.yml
   dangerous-triggers:
     ignore:
       # pull_request_target is required to request a reviewer without granting

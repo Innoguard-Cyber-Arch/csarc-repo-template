@@ -25,6 +25,11 @@ updates:
       routine-updates:
         patterns: ["*"]
         update-types: [minor, patch]
+{%- if release_ownership == 'csarc-owned' %}
+    commit-message:
+      prefix: fix
+      prefix-development: build
+{%- endif %}
 {%- endif %}
 {%- if "typescript" in languages %}
   - package-ecosystem: npm
@@ -39,6 +44,11 @@ updates:
       routine-updates:
         patterns: ["*"]
         update-types: [minor, patch]
+{%- if release_ownership == 'csarc-owned' %}
+    commit-message:
+      prefix: fix
+      prefix-development: build
+{%- endif %}
 {%- endif %}
 {%- if "rust" in languages %}
   - package-ecosystem: cargo
@@ -53,4 +63,9 @@ updates:
       routine-updates:
         patterns: ["*"]
         update-types: [minor, patch]
+{%- if release_ownership == 'csarc-owned' %}
+    commit-message:
+      prefix: fix
+      prefix-development: build
+{%- endif %}
 {%- endif %}
