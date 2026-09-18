@@ -339,6 +339,60 @@ def test_missing_effective_check_is_reported_by_context(
     assert f"missing required checks: {missing_context}" in result.stdout
 
 
+def _with_do_not_enforce_on_create(
+    rules: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Return a rules list with do_not_enforce_on_create set on the
+    required_status_checks rule, leaving every other rule untouched."""
+    return [
+        rule
+        if rule["type"] != "required_status_checks"
+        else {
+            **rule,
+            "parameters": {
+                **rule["parameters"],
+                "do_not_enforce_on_create": True,
+            },
+        }
+        for rule in rules
+    ]
+
+
+def test_do_not_enforce_on_create_matching_passes_cleanly(
+    tmp_path: Path,
+) -> None:
+    """Issue #754: a live Ruleset that already allows ref creation matches."""
+    desired = {
+        "rules": _with_do_not_enforce_on_create(DESIRED_ALL_RULES["rules"])
+    }
+    effective = _with_do_not_enforce_on_create(EFFECTIVE_ALL_RULES)
+
+    result = run_drift_check(desired, effective, tmp_path)
+
+    assert result.returncode == 0, result.stdout
+    assert result.stdout == ""
+
+
+def test_missing_do_not_enforce_on_create_is_reported(tmp_path: Path) -> None:
+    """Issue #754: a brand-new dev/m* branch cannot exist without this.
+
+    A live Ruleset still requiring every check to exist at ref-creation
+    time makes `git push` to create a matching new branch fail closed
+    forever -- there is no commit or PR yet to have produced those
+    checks. The drift check must report this, not just the required
+    check names, so `apply-repository-settings.sh check` actually proves
+    branch creation works instead of only proving the check list matches.
+    """
+    desired = {
+        "rules": _with_do_not_enforce_on_create(DESIRED_ALL_RULES["rules"])
+    }
+
+    result = run_drift_check(desired, EFFECTIVE_ALL_RULES, tmp_path)
+
+    assert result.returncode != 0
+    assert "do_not_enforce_on_create is not enforced" in result.stdout
+
+
 def test_required_status_checks_desired_from_a_second_file_passes(
     tmp_path: Path,
 ) -> None:
