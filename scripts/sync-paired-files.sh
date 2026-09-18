@@ -24,6 +24,7 @@ paired_files=(
   .github/workflows/governance-comment.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
+  .github/workflows/pr-review.yml
   .github/workflows/release-drift.yml
   .github/workflows/spec-to-issue.yml
   .github/workflows/work-item-lifecycle.yml
@@ -55,6 +56,7 @@ paired_files=(
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
   scripts/promotion_gate.py
+  scripts/review_gate.py
   scripts/check-scope-gate
   scripts/check-update-conflicts
   scripts/cleanup-worktrees

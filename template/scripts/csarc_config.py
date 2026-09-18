@@ -26,6 +26,13 @@ POLICY_TOGGLES = (
     "policy_branch_ruleset",
 )
 
+# Issue #752: how a pull request earns merge approval. "copilot" accepts a
+# clean GitHub Copilot review of the exact head (or a maintainer approval);
+# "human" keeps the maintainer-approval-only Ruleset. A key absent from an
+# older answers file means "human", the behavior before this option existed.
+PR_REVIEW_MODES = {"copilot", "human"}
+COPILOT_REVIEW_MAX_LEVELS = {"unlimited", "alpha", "beta", "early", "release"}
+
 
 def _scalar(value: str) -> object:
     """Parse the scalar forms emitted by Copier's YAML serializer."""
@@ -116,10 +123,12 @@ def validate_config(
     """Validate the managed settings consumed by repository automation."""
     choices = {
         "branch_strategy": {"delivery", "main"},
+        "copilot_review_max_level": COPILOT_REVIEW_MAX_LEVELS,
         "container_mode": {"none", "verify", "ghcr"},
         "coverage_mode": {"diff", "global"},
         "project_mode": {"existing", "new"},
         "project_visibility": {"internal", "private", "public"},
+        "pr_review_mode": PR_REVIEW_MODES,
         "python_support_mode": {"latest", "minimum"},
         "release_ownership": RELEASE_OWNERSHIPS,
     }

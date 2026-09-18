@@ -1252,6 +1252,7 @@ def report_settings(data: dict[str, object]) -> str:
     allowed = {
         "branch_strategy",
         "code_owner",
+        "copilot_review_max_level",
         "coverage_mode",
         "coverage_threshold",
         "enable_codeql",
@@ -1266,6 +1267,7 @@ def report_settings(data: dict[str, object]) -> str:
         "policy_branch_ruleset",
         "policy_labels",
         "policy_repository_settings",
+        "pr_review_mode",
         "project_description",
         "project_mode",
         "project_name",

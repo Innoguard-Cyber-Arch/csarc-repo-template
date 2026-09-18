@@ -726,6 +726,20 @@ if "pull_request" in desired_by_type:
             if desired_pull_request[setting] and not any(rule.get(setting) for rule in pull_request_rules):
                 errors.append(f"{setting} is not enforced")
 
+# Issue #752: pr_review_mode=copilot replaces the required approval with
+# an automatic Copilot review on every push plus the `review` required
+# check; a live Ruleset that lost the Copilot rule would leave nothing to
+# request that review, so its absence is drift.
+if "copilot_code_review" in desired_by_type:
+    desired_copilot = desired_by_type["copilot_code_review"].get("parameters", {})
+    copilot_rules = effective_by_type.get("copilot_code_review", [])
+    if not copilot_rules:
+        errors.append("missing copilot_code_review rule")
+    elif desired_copilot.get("review_on_push") and not any(
+        rule.get("review_on_push") for rule in copilot_rules
+    ):
+        errors.append("copilot_code_review review_on_push is not enforced")
+
 if "required_status_checks" in desired_by_type:
     desired_checks = {
         check["context"]

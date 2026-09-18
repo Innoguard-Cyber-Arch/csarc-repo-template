@@ -17,7 +17,8 @@
         "required_status_checks": [
           {"context": "title"},
           {"context": "promotion"},
-          {"context": "verify"}
+          {"context": "verify"},
+          {"context": "review"}
         ]
       }
     }

@@ -105,6 +105,53 @@ live bypass actor 清單精確等於 repo 宣告值時使用；其他 bypass 形
 這條路徑會在最後一次 merge snapshot 前自動留下 `bypass-trace:`。沒有獨立 review 的
 Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head maintainer 授權留言。
 
+### Copilot 審核模式（#752）
+
+`.csarc/config.yml` 的 `pr_review_mode` 決定 PR 怎麼取得審核：
+
+- `human`：Ruleset 要求一位 maintainer approval、CODEOWNER review 與 last-push approval，
+  就是上一節的 exact-head review 流程。缺鍵時一律視為 `human`；`copier update` 對既有
+  專案新增這個問題時也預設 `human`，不會悄悄改變既有 repo 的審核方式。
+- `copilot`（新專案與 `csarc adopt` 的預設，本 repo 也採用）：Ruleset 要求 0 個 approval，
+  改由 `copilot_code_review` 規則在每次 push 後自動請 GitHub Copilot 審核，並把
+  `review` 列為 required check（`.github/workflows/pr-review.yml` → `scripts/review_gate.py
+  check`）。`review` 在下列任一條件成立時通過：
+  1. 獨立 maintainer 對**目前 head SHA** 的有效 `APPROVED`（沿用 #719 判斷，人工審核路徑
+     仍然有效）；或
+  2. Copilot 對**目前 head SHA** 的最新審核沒有任何 inline comment、內文沒有被隱藏的
+     低信心意見（suppressed comments），且內文明確寫出沒有產生意見。
+
+  Copilot 審核舊 head、仍在審核、留下意見、或內文格式無法辨識時一律 fail closed。
+  Copilot 只會留下 `COMMENTED`，永遠不會 `APPROVED`，所以這個模式不能靠 GitHub 原生的
+  approval 計數。未解決的 review thread 由 Ruleset 的 `required_review_thread_resolution`
+  原生擋下。Draft PR 不審核，`review` 會失敗直到 PR 標為 ready。
+
+本機修正迴圈（由本機 agent 修，不使用 Copilot coding agent）：
+
+1. `python3 scripts/review_gate.py status --repo <owner/repo> --pr <N>` 取得 Copilot 對目前
+   head 的意見與尚未解決的 thread。
+2. 修正、push；每次 push 產生新 head，Copilot 自動重新審核。回覆並 resolve 已處理的 thread。
+3. 重複直到 `status` 回報 `copilot.state = clean`，`review` check 轉綠。
+4. 依上方 single-writer 規則取得 lease，`scripts/pr_lifecycle.py merge` 以
+   `authorization_source=copilot` 合併；lifecycle 在合併前重新驗證同一個 exact-head
+   Copilot 審核、required checks、Draft、checklist 與 lease，並自動留下
+   `copilot-review-trace: review=<URL> head=<SHA> actor=<login>`（alpha bypass 另外留下
+   `bypass-trace: ... reason=exact-head-copilot-review`）。
+
+自動合併由本機 agent 經 lifecycle 執行，不用 workflow 的 `GITHUB_TOKEN` 合併：
+`GITHUB_TOKEN` 的合併不會觸發後續 `push` workflow（例如 release），也會繞過 lease；
+本 repo 所屬 organization 也封鎖原生 auto-merge（#557）。
+
+`copilot_review_max_level` 設定 Copilot 通過可以取代人工審核的最高發布層級，預設
+`unlimited`。每件工作的發布層級要到 #745 才存在，所以在那之前設成 `unlimited` 以外的值
+會讓 Copilot 路徑 fail closed、只接受 maintainer approval，不會假裝已經依層級判斷。
+
+前提與限制：repo 需要有啟用 code review 的 Copilot 授權，每次審核消耗 premium requests
+（取代 #241 的部分暫緩結論；Copilot coding agent 仍暫緩）。沒有授權或額度用盡時 Copilot
+不會審核，`review` 維持失敗，只能走 maintainer approval。Copilot 沒有意見不等於沒有缺陷，
+這是維護者 2026-09-18 接受的取捨。切回人工審核：把 `pr_review_mode` 改成 `human`，再由
+管理員執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`。
+
 `gh pr merge --admin` 只能用來繞過文件明列的已知例外，目前有兩項：
 
 1. `pr-policy.yml` `title` job 的「Validate Milestone approval」step（要求非提案者在
@@ -496,6 +543,7 @@ job 的 `name:` 決定，不是由它做什麼決定），Ruleset 只認 context
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428）；本機驗證聲明（#661） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；15 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類（仍在 runner 上執行，是變更路徑分類邏輯，不是測試）後，只用 `scripts/check-verify-attestation` 驗證這個 PR 的實際 HEAD commit（`pull_request` 事件讀 PR 自己的 head sha，不是 GitHub 產生的 merge commit）是否帶有格式正確、hash 與 tree 相符、timestamp 新鮮、tier 足夠的 `Verified-locally:` trailer；不再於 runner 上執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo：`scripts/verify`）——測試改在本機執行，成功時由這些腳本呼叫 `scripts/write-verify-attestation` 寫入 trailer；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py` 的 `test_root_ci_is_one_bounded_verification_job`／`test_generated_ci_uses_the_same_one_job_contract`；`tests/test_verify_attestation.py`（純邏輯）與 `scripts/test-verify-attestation`（對真實 git repository） | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success——此 run 早於 #661，只證明 `scripts/ci_tier.py` 分類與（當時仍在 runner 上執行的）驗證邏輯，不代表本機驗證聲明改造 | `scripts/ci_tier.py` 分類：active（邏輯未變）；本機驗證聲明改造（#661 本身）：candidate（待 `main` 落地並於首次 PR 觸發後轉 active） |
 | PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | 只給需要的 Issue／PR metadata 權限；固定 timeout | `title` job：Issue、route 與 review policy 判定；`promotion` job（#601）：呼叫 `scripts/promotion_gate.py check-route` 分類 route，回報 `promotion` required check（`not-applicable`／`milestone`／`isolated`／`hotfix`／`release-recovery`／`release-follow-up`／`merge-queue` 成功，`invalid-main-route` 失敗） | `scripts/test-pr-policy`；`promotion` job 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929)，2026-09-01，success；同日對 #448／#453／#457 等未完成 checklist 的候選 PR 正確擋下合併，證明門禁確實生效 | `title` job：active；`promotion` job：candidate（隨 #601 首次落地，尚無 live run，待 `main` 落地並於首次 PR 觸發後轉 active） |
+| PR review（Copilot 審核模式，#752） | `.github/workflows/pr-review.yml` | PR 審核授權（#752，銜接 #719／#745） | `pull_request`（opened／synchronize／reopened／ready_for_review／converted_to_draft）、`pull_request_review`（submitted／dismissed）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run | `review` job 呼叫 `scripts/review_gate.py check`：`pr_review_mode=copilot` 時，目前完整 head SHA 已獲 Copilot 乾淨審核或獨立 maintainer `APPROVED` 才過；`pr_review_mode=human` 時只回報，審核仍由 Ruleset 原生 required approval 把關 | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的 Copilot 授權來源見 `tests/test_pr_lifecycle.py` | 尚未落地 `main`，無 live run | candidate（待 main 落地並於首次 PR 觸發後轉 active） |
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併） | `issues`、`issue_comment`、`milestone` 事件；`pull_request.closed`（里程碑工作 PR 合併進 `dev/m*` 或 `promote/m*` 晉升 PR 合併進 `main`） | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新）、`tests/test_work_pr_closure.py` | 尚未落地 `main`，無新 live run；三個前身 workflow（`issue-triage.yml`、`milestone-lifecycle.yml`、`work-item-closure.yml`）已刪除，其舊 run 證據（`33524318953`／`33524281794`／`33502286588`）不再代表現行檔案 | **root：candidate**（待 main 落地並觸發首次 issues／issue_comment／milestone／pull_request 事件才能取得新 live evidence）；#574 只把三個 workflow 檔的既有邏輯打包成一個 job 內的循序 step，不改變任一 step 本身的行為、權限需求或所呼叫的 script |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |

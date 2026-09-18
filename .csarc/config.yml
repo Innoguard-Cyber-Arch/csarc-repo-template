@@ -2,6 +2,7 @@
 # Copier source metadata belongs only to repositories generated from this source.
 branch_strategy: delivery
 code_owner: '@Innoguard-Cyber-Arch/arch'
+copilot_review_max_level: unlimited
 coverage_mode: global
 coverage_threshold: 80
 enable_codeql: false
@@ -16,6 +17,7 @@ policy_actions_permissions: true
 policy_branch_ruleset: true
 policy_labels: true
 policy_repository_settings: true
+pr_review_mode: copilot
 project_description: Cyber-Arch cross-language repository template and governance baseline.
 project_mode: existing
 project_name: CSARC Repository Template

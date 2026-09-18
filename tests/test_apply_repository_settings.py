@@ -508,3 +508,46 @@ def test_missing_live_source_is_reported(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert "source.branch: desired 'main', live None" in result.stdout
     assert "source.path: desired '/docs', live None" in result.stdout
+
+
+COPILOT_RULE = {
+    "type": "copilot_code_review",
+    "parameters": {"review_draft_pull_requests": False, "review_on_push": True},
+}
+
+
+def test_copilot_policy_requires_live_copilot_rule(tmp_path: Path) -> None:
+    """Issue #752: a Copilot-mode policy fails when the live rule is gone."""
+    desired = {"rules": [*DESIRED_ALL_RULES["rules"], COPILOT_RULE]}
+
+    result = run_drift_check(desired, EFFECTIVE_ALL_RULES, tmp_path)
+
+    assert result.returncode != 0
+    assert "missing copilot_code_review rule" in result.stdout
+
+
+def test_copilot_policy_matches_live_copilot_rule(tmp_path: Path) -> None:
+    """Issue #752: a live Copilot rule reviewing every push is not drift."""
+    desired = {"rules": [*DESIRED_ALL_RULES["rules"], COPILOT_RULE]}
+    effective = [*EFFECTIVE_ALL_RULES, COPILOT_RULE]
+
+    result = run_drift_check(desired, effective, tmp_path)
+
+    assert result.returncode == 0, result.stdout
+
+
+def test_copilot_policy_rejects_review_without_push(tmp_path: Path) -> None:
+    """Issue #752: Copilot must re-review each push to gate the new head."""
+    desired = {"rules": [*DESIRED_ALL_RULES["rules"], COPILOT_RULE]}
+    effective = [
+        *EFFECTIVE_ALL_RULES,
+        {
+            "type": "copilot_code_review",
+            "parameters": {"review_on_push": False},
+        },
+    ]
+
+    result = run_drift_check(desired, effective, tmp_path)
+
+    assert result.returncode != 0
+    assert "review_on_push is not enforced" in result.stdout

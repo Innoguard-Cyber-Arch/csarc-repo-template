@@ -53,6 +53,16 @@ if _GIT is None:
 GIT: str = _GIT
 
 
+@pytest.fixture(autouse=True)
+def human_review_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the maintainer-approval mode unless a test opts into Copilot."""
+    monkeypatch.setitem(
+        MODULE["merge_snapshot"].__globals__,
+        "review_settings",
+        lambda: ("human", "unlimited"),
+    )
+
+
 class FakeGitHub:
     """Serve the mutable GitHub state needed by lifecycle tests."""
 
@@ -3011,3 +3021,219 @@ def test_merge_does_not_release_a_lease_for_an_unconfirmed_result(
             ),
             github,
         )
+
+
+COPILOT_REVIEW_URL = "https://github.com/owner/repo/pull/42#pullrequestreview-9"
+
+
+class CopilotGitHub(FakeGitHub):
+    """Serve a Copilot-mode Ruleset and Copilot's exact-head review."""
+
+    def __init__(self, head: str) -> None:
+        super().__init__(head)
+        self.required_review_count = 0
+        self.copilot_inline: list[dict[str, Any]] = []
+        self.copilot_body = (
+            "Copilot reviewed 3 out of 3 changed files in this pull request "
+            "and generated no comments."
+        )
+        self.reviews = [self.copilot_review(head)]
+        self.additional_pull_rules = [
+            {
+                "type": "copilot_code_review",
+                "ruleset_id": 7,
+                "parameters": {"review_on_push": True},
+            }
+        ]
+        self.additional_check_rules = [
+            {
+                "type": "required_status_checks",
+                "ruleset_id": 7,
+                "parameters": {
+                    "required_status_checks": [{"context": "review"}]
+                },
+            }
+        ]
+        self.additional_check_runs = [
+            {
+                "id": 201,
+                "name": "review",
+                "head_sha": head,
+                "status": "completed",
+                "conclusion": "success",
+                "details_url": "https://github.com/owner/repo/actions/runs/201/job/8",
+                "app": {"id": 15368},
+            }
+        ]
+
+    def copilot_review(self, commit: str) -> dict[str, Any]:
+        """Return one Copilot review of ``commit``."""
+        return {
+            "id": 9,
+            "user": {
+                "login": "copilot-pull-request-reviewer[bot]",
+                "type": "Bot",
+            },
+            "author_association": "NONE",
+            "state": "COMMENTED",
+            "submitted_at": "2026-08-25T01:01:00Z",
+            "commit_id": commit,
+            "body": self.copilot_body if hasattr(self, "copilot_body") else "",
+            "html_url": COPILOT_REVIEW_URL,
+        }
+
+    def pages(self, _repo: str, path: str) -> list[dict[str, Any]]:
+        """Serve Copilot's inline comments separately from the reviews."""
+        if path.startswith("pulls/42/reviews/9/comments"):
+            return self.copilot_inline
+        if path.startswith("pulls/42/reviews"):
+            for review in self.reviews:
+                if review.get("id") == 9:
+                    review["body"] = self.copilot_body
+        return super().pages(_repo, path)
+
+
+def copilot_mode(
+    monkeypatch: pytest.MonkeyPatch, level: str = "unlimited"
+) -> None:
+    """Switch the lifecycle to pr_review_mode=copilot."""
+    monkeypatch.setitem(
+        merge_snapshot.__globals__,
+        "review_settings",
+        lambda: ("copilot", level),
+    )
+
+
+def test_copilot_clean_exact_head_review_authorizes_agent_merge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #752: a clean Copilot review of the exact head is enough."""
+    bind_remote_lease(monkeypatch)
+    copilot_mode(monkeypatch)
+    snapshot = merge_snapshot(CopilotGitHub("a" * 40), lease_fixture())
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["authorization_source"] == "copilot"
+    assert snapshot["authorization_url"] == COPILOT_REVIEW_URL
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ("stale", "not reviewed the current head"),
+        ("inline", "left 1 comment"),
+        ("suppressed", "suppressed"),
+        ("unrecognized", "does not state"),
+    ],
+)
+def test_copilot_review_that_is_not_clean_blocks_merge(
+    monkeypatch: pytest.MonkeyPatch, change: str, message: str
+) -> None:
+    """Issue #752: stale, commented, or unrecognized reviews fail closed."""
+    bind_remote_lease(monkeypatch)
+    copilot_mode(monkeypatch)
+    github = CopilotGitHub("a" * 40)
+    if change == "stale":
+        github.reviews = [github.copilot_review("f" * 40)]
+    elif change == "inline":
+        github.copilot_inline = [{"path": "a.py", "line": 3, "body": "Bug"}]
+    elif change == "suppressed":
+        github.copilot_body = (
+            "Generated no comments. Comments suppressed due to low "
+            "confidence (1)"
+        )
+    else:
+        github.copilot_body = "Copilot wasn't able to review any files."
+    with pytest.raises(RuntimeError, match=message):
+        merge_snapshot(github, lease_fixture())
+
+
+def test_copilot_mode_still_accepts_a_maintainer_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #752: the human path stays available in Copilot mode."""
+    bind_remote_lease(monkeypatch)
+    copilot_mode(monkeypatch)
+    github = CopilotGitHub("a" * 40)
+    github.reviews = FakeGitHub("a" * 40).reviews
+    snapshot = merge_snapshot(github, lease_fixture())
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["authorization_source"] == "review"
+
+
+def test_copilot_mode_requires_copilot_rule_and_review_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #752: zero approvals are unsafe without the Copilot controls."""
+    bind_remote_lease(monkeypatch)
+    copilot_mode(monkeypatch)
+    for missing in ("rule", "check"):
+        github = CopilotGitHub("a" * 40)
+        if missing == "rule":
+            github.additional_pull_rules = []
+        else:
+            github.additional_check_rules = []
+        snapshot = merge_snapshot(github, lease_fixture())
+        assert snapshot["merge_mode"] == "human-only", missing
+        assert "Copilot review-on-push" in str(snapshot["protection_reason"])
+
+
+def test_human_mode_ignores_a_clean_copilot_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #752: pr_review_mode=human keeps requiring a maintainer."""
+    bind_remote_lease(monkeypatch)
+    github = CopilotGitHub("a" * 40)
+    with pytest.raises(RuntimeError, match="independent maintainer approval"):
+        merge_snapshot(github, lease_fixture())
+
+
+def test_copilot_level_cap_fails_closed_until_release_levels_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #752: a level cap cannot be evaluated before Issue #745."""
+    bind_remote_lease(monkeypatch)
+    copilot_mode(monkeypatch, "beta")
+    with pytest.raises(RuntimeError, match="#745"):
+        merge_snapshot(CopilotGitHub("a" * 40), lease_fixture())
+
+
+def test_copilot_merge_leaves_a_review_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #752: a Copilot-authorized merge records review and head."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    monkeypatch.setitem(
+        merge.__globals__,
+        "merge_snapshot",
+        lambda *_: {
+            "merge_mode": "agent",
+            "title": "fix(ci): serialize lifecycle writes",
+            "reviewed_bypass": True,
+            "authorization_source": "copilot",
+            "authorization_url": COPILOT_REVIEW_URL,
+        },
+    )
+    monkeypatch.setitem(merge.__globals__, "release_phase", lambda: "alpha")
+    monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
+    monkeypatch.setitem(merge.__globals__, "release_refs", lambda _lease: None)
+    monkeypatch.setitem(merge.__globals__, "confirm_refs", lambda _lease: None)
+    github = FakeGitHub("a" * 40)
+    merge(
+        SimpleNamespace(
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="a" * 40,
+            owner="task/merge",
+            lease=lease_path,
+            authorization_url="",
+        ),
+        github,
+    )
+    assert github.audit_comments == [
+        "bypass-trace: release_phase=alpha actor=agent "
+        "reason=exact-head-copilot-review",
+        f"copilot-review-trace: review={COPILOT_REVIEW_URL} "
+        f"head={'a' * 40} actor=agent",
+    ]
+    assert github.merged
