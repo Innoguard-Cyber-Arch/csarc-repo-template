@@ -1781,18 +1781,15 @@ def test_alpha_marker_must_be_an_exact_body_line(
         )
 
 
-@pytest.mark.parametrize("invalid_route", ["default", "branch", "fork"])
+@pytest.mark.parametrize("invalid_route", ["branch", "fork"])
 def test_alpha_marker_rejects_non_routine_routes(
     invalid_route: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The marker cannot weaken main, arbitrary branch, or fork controls."""
+    """The marker cannot weaken arbitrary-branch or fork controls."""
     bind_remote_lease(monkeypatch)
     github, lease, note_url = alpha_quota_snapshot_fixture()
-    if invalid_route == "default":
-        github.base_ref = "main"
-        lease = lease_fixture()
-    elif invalid_route == "branch":
+    if invalid_route == "branch":
         github.head_ref = "promote/m10-release-backed-adoption"
     else:
         github.pull = lambda number=42: {  # ty: ignore[invalid-assignment]
@@ -1809,6 +1806,170 @@ def test_alpha_marker_rejects_non_routine_routes(
             lease,
             "https://github.com/owner/repo/pull/42#issuecomment-99",
             quota_fallback_note_url=note_url,
+        )
+
+
+def test_default_branch_alpha_route_rejects_a_milestone_issue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Milestone Issue must use its own dev/mN branch, not default."""
+    bind_remote_lease(monkeypatch)
+    github, _lease, note_url = alpha_quota_snapshot_fixture()
+    github.base_ref = "main"
+    lease = lease_fixture()
+    with pytest.raises(RuntimeError, match="Milestone-less Issue"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_default_branch_alpha_route_allows_a_milestone_less_issue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #775: a routine, Milestone-less Issue PR may self-merge into main.
+
+    Uses the repository's actual live `bypass_actors` shape (RepositoryRole
+    admin, `pull_request` mode -- confirmed via `gh api
+    repos/.../rulesets/22178328` against
+    Innoguard-Cyber-Arch/csarc-repo-template), not the fixture's empty
+    default: alpha self-merge must clear the same "unverified bypass"
+    check a real reviewed merge does, not just the route/marker checks in
+    isolation.
+    """
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.reviews = []
+    github.required_review_count = 0
+    github.head_ref = "fix/42-lifecycle"
+    github.body = f"Closes #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+    lease = lease_fixture()
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["alpha_self_merge"] is True
+    assert snapshot["authorization_source"] == "comment"
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["reviewed_bypass"] is True
+
+
+def test_alpha_self_merge_clears_the_known_reviewed_bypass_ruleset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #775: the existing non-default alpha route had the same gap.
+
+    Before this fix, `effective_protection` treated any `bypass_actors`
+    other than empty as "unverified" for every authorization source except
+    `review`/`copilot` -- so a `dev/mN` alpha self-merge PR was *also*
+    permanently blocked by this repository's own live bypass (added by
+    #580 for exactly the self-approval case alpha self-merge exists for).
+    """
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.required_review_count = 0
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        quota_fallback_note_url=note_url,
+    )
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["reviewed_bypass"] is True
+
+
+def test_alpha_self_merge_still_rejects_an_unknown_ruleset_bypass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Widening reviewed_merge to "comment" must not accept any bypass shape."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.reviews = []
+    github.required_review_count = 0
+    github.head_ref = "fix/42-lifecycle"
+    github.body = f"Closes #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 4,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+    lease = lease_fixture()
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["merge_mode"] == "human-only"
+
+
+@pytest.mark.parametrize(
+    "invalid_route", ["multiple", "closed", "wrong-prefix", "fork"]
+)
+def test_default_branch_alpha_route_requires_a_live_matching_issue(
+    invalid_route: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default-branch route rechecks the same Issue shape as non-default."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.reviews = []
+    github.required_review_count = 0
+    github.head_ref = "fix/42-lifecycle"
+    github.body = f"Closes #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    lease = lease_fixture()
+    if invalid_route == "multiple":
+        github.body += "\n\nCloses #99"
+        message = "close its matching Issue exactly"
+    elif invalid_route == "closed":
+        github.issue_state = "closed"
+        message = "Issue is not open"
+    elif invalid_route == "wrong-prefix":
+        github.head_ref = "promote/42-lifecycle"
+        github.body = f"Closes #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+        message = "Issue work branch"
+    else:
+        github.pull = lambda number=42: {  # ty: ignore[invalid-assignment]
+            **FakeGitHub.pull(github, number),
+            "head": {
+                "ref": github.head_ref,
+                "sha": github.head,
+                "repo": None,
+            },
+        }
+        message = "same-repository head"
+    with pytest.raises(RuntimeError, match=message):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
         )
 
 
