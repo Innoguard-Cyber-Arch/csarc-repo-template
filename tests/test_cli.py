@@ -350,15 +350,15 @@ class FakeReleaseClient:
         }
 
     def release(self, tag: str | None) -> dict[str, object]:
-        assert tag in {None, "v1.2.3"}
+        assert tag in {None, self.release_values["tag_name"]}
         return self.release_values
 
     def resolve_tag(self, tag: str) -> cli.TagResolution:
-        assert tag == "v1.2.3"
+        assert tag == self.release_values["tag_name"]
         return self.tag_results.pop(0)
 
     def verify_release(self, tag: str) -> None:
-        assert tag == "v1.2.3"
+        assert tag == self.release_values["tag_name"]
         if self.release_error is not None:
             raise self.release_error
 
@@ -4505,6 +4505,205 @@ def test_legacy_update_conflict_leaves_target_unchanged(
     assert cli.target_file_snapshot(project) == expected_files
 
 
+class LocalGitReleaseClient:
+    """A ReleaseClient backed by real local git tags (Issue #744 tests).
+
+    Stands in for GhReleaseClient so a fully "verified" init/update
+    round-trip can be exercised against a local template repository
+    instead of the real GitHub API. `missing` marks exactly the tags that
+    must behave as a confirmed-gone GitHub Release (HTTP 404); `latest` is
+    what a `tag=None`/"latest" lookup resolves to, standing in for
+    SemVer-precedence selection (already covered directly by
+    test_gh_client_selects_latest_by_semver_precedence).
+    """
+
+    def __init__(
+        self, source: Path, latest: str, missing: frozenset[str] = frozenset()
+    ) -> None:
+        self.source = source
+        self.latest = latest
+        self.missing = missing
+
+    def repository(self) -> dict[str, object]:
+        return {
+            "id": cli.CANONICAL_REPOSITORY_ID,
+            "full_name": cli.CANONICAL_REPOSITORY,
+        }
+
+    def _release_payload(self, tag: str) -> dict[str, object]:
+        return {
+            "tag_name": tag,
+            "id": abs(hash(tag)) % 1_000_000,
+            "draft": False,
+            "prerelease": "-" in tag,
+            "published_at": "2026-09-04T00:00:00Z",
+            "immutable": True,
+        }
+
+    def release(self, tag: str | None) -> dict[str, object]:
+        resolved = self.latest if tag is None or tag == "latest" else tag
+        if resolved in self.missing:
+            raise cli.ReleaseNotFoundError(
+                f"GitHub Release {resolved!r} was not found on the "
+                "canonical repository."
+            )
+        return self._release_payload(resolved)
+
+    def resolve_tag(self, tag: str) -> cli.TagResolution:
+        commit_sha = git(self.source, "rev-parse", f"{tag}^{{commit}}")
+        return cli.TagResolution(commit_sha, commit_sha)
+
+    def verify_release(self, tag: str) -> None:
+        del tag
+
+    def verify_commit(self, sha: str) -> None:
+        del sha
+
+
+def initialize_verified_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path]:
+    """Init a project through the fully verified (non-dev) release path."""
+    source, first_sha = make_template(tmp_path)
+    git(source, "tag", "v0.1.0", first_sha)
+    monkeypatch.setattr(cli, "CANONICAL_SOURCE", str(source))
+    monkeypatch.setattr(
+        cli, "GhReleaseClient", lambda: LocalGitReleaseClient(source, "v0.1.0")
+    )
+    project = tmp_path / "verified-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--to",
+                "v0.1.0",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "language=ci",
+            ]
+        )
+        == 0
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    return source, project
+
+
+def test_update_reinstalls_when_the_recorded_tag_is_confirmed_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Issue #744: a GitHub-confirmed missing release_tag falls into reinstall.
+
+    Covers every explicit acceptance condition for the downstream flow: the
+    missing tag triggers it; --check reports without writing; declining
+    confirmation writes nothing; a clean plan applies once confirmed. The
+    new release only adds a file here (leaving managed.txt untouched) so
+    the plan is genuinely clean -- a two-way diff (see
+    command_update_reinstall's own docstring) would route any *changed*
+    existing file to manual merge regardless of whether the project ever
+    touched it, which test_update_reinstall_never_overwrites_a_diverged_file
+    covers separately.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+
+    (source / "template" / "new-feature.txt").write_text(
+        "added in the new release\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", second_sha)
+    client = LocalGitReleaseClient(
+        source, "0.2.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    # --check: reports the reinstall plan and returns 1 without writing.
+    assert main(["update", str(project), "--check"]) == 1
+    output = capsys.readouterr()
+    assert "reinstall" in output.err.lower()
+    assert not (project / "new-feature.txt").exists()
+
+    # Declining confirmation leaves the project untouched.
+    monkeypatch.setattr("builtins.input", lambda _: "no")
+    assert main(["update", str(project)]) == 0
+    assert not (project / "new-feature.txt").exists()
+
+    # A clean plan applies once confirmed.
+    assert main(["update", str(project), "--yes", "--non-interactive"]) == 0
+    assert (project / "new-feature.txt").read_text(
+        encoding="utf-8"
+    ) == "added in the new release\n"
+    assert (project / "managed.txt").read_text(
+        encoding="utf-8"
+    ) == "template version one\n"
+    answers = cli.config_path(project).read_text(encoding="utf-8")
+    assert second_sha in answers
+
+
+def test_update_reinstall_never_overwrites_a_diverged_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A project-owned/diverged file blocks automatic reinstall apply."""
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    (project / "managed.txt").write_text(
+        "project customization\n", encoding="utf-8"
+    )
+    commit(project, "test: customize managed file")
+
+    managed = source / "template" / "managed.txt"
+    managed.write_text("template version two\n", encoding="utf-8")
+    second_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", second_sha)
+    client = LocalGitReleaseClient(
+        source, "0.2.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    assert main(["update", str(project), "--yes", "--non-interactive"]) == 1
+    assert "manual" in capsys.readouterr().err.lower()
+    assert (project / "managed.txt").read_text(
+        encoding="utf-8"
+    ) == "project customization\n"
+
+
+def test_update_other_verification_failures_stay_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Only a confirmed-missing tag reinstalls; every other failure stays
+    fail-closed exactly like before Issue #744 -- a moved tag, bad
+    attestation, invalid signature, or repository identity mismatch must
+    never be silently treated as "missing" and routed into reinstall.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    capsys.readouterr()  # discard initialize_verified_project's own output
+
+    class BrokenSignatureClient(LocalGitReleaseClient):
+        def verify_commit(self, sha: str) -> None:
+            raise CliError("signature invalid")
+
+    monkeypatch.setattr(
+        cli,
+        "GhReleaseClient",
+        lambda: BrokenSignatureClient(source, "v0.1.0"),
+    )
+    assert main(["update", str(project), "--check"]) == 2
+    error = capsys.readouterr().err
+    assert "signature invalid" in error
+    assert "reinstall" not in error.lower()
+    assert (project / "managed.txt").read_text(
+        encoding="utf-8"
+    ) == "template version one\n"
+
+
 @pytest.mark.large
 def test_update_migrates_legacy_copier_answers_to_single_config(
     tmp_path: Path,
@@ -6051,19 +6250,33 @@ def test_release_resolution_and_helpers(
     ("field", "value", "message"),
     [
         ("immutable", False, "not immutable"),
-        ("draft", True, "published, stable"),
-        ("prerelease", True, "published, stable"),
+        ("draft", True, "Only published GitHub Releases"),
+        # v1.2.3 has no suffix, so a prerelease=True flag on it is now a
+        # flag/tag mismatch rather than a blanket "no prereleases" ban
+        # (Issue #744).
+        ("prerelease", True, "prerelease flag does not match"),
         ("published_at", None, "not published"),
+        ("tag_name", "v1.2.3-rc.1", "not a legal alpha/beta/early/formal"),
     ],
 )
 def test_release_metadata_fails_closed(
     field: str, value: object, message: str
 ) -> None:
-    """Reject releases that are mutable or not stable and published."""
+    """Reject releases that are mutable, malformed, or not published."""
     client = FakeReleaseClient()
     client.release_values[field] = value
     with pytest.raises(CliError, match=message):
         cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
+
+
+@pytest.mark.parametrize("tag", ["v0.16.0-alpha.1", "v0.16.0-beta.3"])
+def test_release_metadata_accepts_well_formed_prerelease(tag: str) -> None:
+    """Issue #744: an immutable, published prerelease tag is now approved."""
+    client = FakeReleaseClient()
+    client.release_values["tag_name"] = tag
+    client.release_values["prerelease"] = True
+    revision = cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
+    assert revision.label == tag
 
 
 def test_unreleased_revision_requires_a_local_git_source(
@@ -6185,6 +6398,58 @@ def test_copy_uses_resolved_canonical_source(
         == 2
     )
     assert copied_source == cli.CANONICAL_SOURCE
+
+
+def test_gh_client_selects_latest_by_semver_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #744: pick the highest SemVer precedence, not publish order.
+
+    A naive "most recently published" pick (what GitHub's own
+    `releases/latest` API effectively encodes) would choose whichever
+    release happened to publish last; a formal 1.0.0 published before an
+    in-progress 1.1.0-beta.1 must still lose to the beta once the beta is
+    the highest-precedence release, and a draft is never eligible at all.
+    """
+    releases = [
+        {
+            "tag_name": "v1.0.0",
+            "draft": False,
+            "prerelease": False,
+            "id": 1,
+        },
+        {
+            "tag_name": "v1.1.0-beta.1",
+            "draft": False,
+            "prerelease": True,
+            "id": 2,
+        },
+        {
+            "tag_name": "v1.1.0-beta.2",
+            "draft": True,
+            "prerelease": True,
+            "id": 3,
+        },
+    ]
+
+    def fake_gh_json_list(endpoint: str) -> list[object]:
+        assert "releases?per_page=100" in endpoint
+        if "page=1" in endpoint:
+            return releases
+        return []
+
+    monkeypatch.setattr(cli, "gh_json_list", fake_gh_json_list)
+    result = cli.GhReleaseClient().release(None)
+    assert result["tag_name"] == "v1.1.0-beta.1"
+
+
+def test_gh_client_named_lookup_raises_release_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A confirmed HTTP 404 on a named tag raises ReleaseNotFoundError."""
+    monkeypatch.setattr(cli, "gh_json_or_missing", lambda endpoint: None)
+    with pytest.raises(cli.ReleaseNotFoundError, match=re.escape("v9.9.9")):
+        cli.GhReleaseClient().release("v9.9.9")
 
 
 def test_gh_client_dereferences_annotated_tags(

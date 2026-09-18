@@ -95,7 +95,7 @@ if [[ "$1" == "release" ]]; then
       set -C
       echo "created" >"$state/releases/$tag"
     ) 2>/dev/null; then
-      echo "$tag" >>"$state/create-log"
+      echo "$*" >>"$state/create-log"
       exit 0
     fi
     echo "gh: release already exists" >&2
@@ -163,7 +163,9 @@ def test_a_resent_event_converges_to_one_tag_and_one_release(
     ).strip() == sha
     assert (state / "releases" / "v1.2.3").is_file()
     create_log = state / "create-log"
-    assert create_log.read_text(encoding="utf-8").splitlines() == ["v1.2.3"]
+    lines = create_log.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert lines[0].split()[:2] == ["create", "v1.2.3"]
 
 
 def test_a_tag_at_a_different_sha_fails_closed_without_a_second_release(
@@ -216,4 +218,26 @@ def test_two_genuinely_concurrent_runs_never_produce_two_releases(
     assert (state / "tags" / "v9.9.9").is_file()
     assert (state / "releases" / "v9.9.9").is_file()
     create_log = state / "create-log"
-    assert create_log.read_text(encoding="utf-8").splitlines() == ["v9.9.9"]
+    lines = create_log.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert lines[0].split()[:2] == ["create", "v9.9.9"]
+
+
+def test_alpha_and_beta_tags_are_created_as_github_prereleases(
+    tmp_path: Path,
+) -> None:
+    """Issue #744: only a phase-suffixed tag gets `--prerelease` on create."""
+    fixture, state = make_fixture(tmp_path)
+
+    stable = run_converge(fixture, state, sha="a" * 40, tag="v1.2.3")
+    assert stable.returncode == 0, stable.stderr
+    beta = run_converge(fixture, state, sha="b" * 40, tag="v1.3.0-beta.1")
+    assert beta.returncode == 0, beta.stderr
+    alpha = run_converge(fixture, state, sha="c" * 40, tag="v2.0.0-alpha.4")
+    assert alpha.returncode == 0, alpha.stderr
+
+    lines = (state / "create-log").read_text(encoding="utf-8").splitlines()
+    by_tag = {line.split()[1]: line for line in lines}
+    assert "--prerelease" not in by_tag["v1.2.3"]
+    assert "--prerelease" in by_tag["v1.3.0-beta.1"]
+    assert "--prerelease" in by_tag["v2.0.0-alpha.4"]

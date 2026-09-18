@@ -175,8 +175,10 @@ cmd_resolve() {
   local tag="$tag"
   if [[ -z "$tag" ]]; then
     local tags
+    # Issue #744: a `-alpha.N`/`-beta.N` suffix is a legal release-phase
+    # version too, not only a plain X.Y.Z tag.
     mapfile -t tags < <(git -C "$repo_root" tag --points-at "$sha" |
-      grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || true)
+      grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta)\.[1-9][0-9]*)?$' || true)
     [[ "${#tags[@]}" -le 1 ]]
     tag="${tags[0]:-}"
   fi
@@ -245,7 +247,16 @@ cmd_publish() {
   downloaded="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
   gh release download "$tag" --dir "$downloaded"
   python3 "$repo_root/scripts/release_bundle.py" verify --tag "$tag" --output "$downloaded"
-  gh release edit "$tag" --draft=false --latest
+  # Issue #744: only a stable (unsuffixed) tag should ever become GitHub's
+  # "latest" release -- marking an alpha/beta prerelease --latest would
+  # misrepresent it as the repository's most mature release, and GitHub's
+  # own `releases/latest` API already excludes any `prerelease: true`
+  # Release regardless.
+  local latest_flags=(--latest)
+  if [[ "$tag" =~ -(alpha|beta)\.[0-9]+$ ]]; then
+    latest_flags=()
+  fi
+  gh release edit "$tag" --draft=false "${latest_flags[@]}"
   poll_immutable_and_verify "$tag"
 }
 

@@ -353,12 +353,20 @@ def test_retired_archive_has_no_release_workflow_copy() -> None:
 
 
 def test_guided_path_has_no_repo_local_publisher() -> None:
-    """Only release.yml may create tags or GitHub Releases."""
+    """Only release.yml may create tags or GitHub Releases.
+
+    Issue #744's dry-run retention lister legitimately *reads* an existing
+    Release's `tag_name` (there is no other way to list what already
+    exists), so the narrower invariant this guards is "never construct a
+    create-Release request body" -- a real `gh api ... -f tag_name=...` or
+    JSON payload literal `"tag_name": ` -- not "never mention the field
+    name while reading one back."
+    """
     source = (ROOT / "scripts/release_policy.py").read_text(encoding="utf-8")
 
     assert "def direct_release" not in source
     assert 'add_parser("release")' not in source
-    assert '"tag_name"' not in source
+    assert '"tag_name": ' not in source
     assert '"/dispatches"' not in source
 
 

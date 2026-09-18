@@ -15,6 +15,7 @@ MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "release_policy.py")
 )
 Capability = MODULE["Capability"]
+GitHubAPI = MODULE["GitHubAPI"]
 aggregate_release_boundaries = MODULE["aggregate_release_boundaries"]
 bump_version = MODULE["bump_version"]
 classify_probe = MODULE["classify_probe"]
@@ -26,16 +27,19 @@ preflight_policy_observations = MODULE["preflight_policy_observations"]
 release_intent = MODULE["release_intent"]
 release_follow_up_errors = MODULE["release_follow_up_errors"]
 release_boundary_errors = MODULE["release_boundary_errors"]
+release_phase = MODULE["release_phase"]
 release_plan = MODULE["release_plan"]
 release_plan_report = MODULE["release_plan_report"]
 release_version_errors = MODULE["release_version_errors"]
 report = MODULE["report"]
+retention_report = MODULE["retention_report"]
 select_release_mode = MODULE["select_release_mode"]
 simple_release_boundary = MODULE["simple_release_boundary"]
 verify_release_version = MODULE["verify_release_version"]
 verify_candidate_version = MODULE["verify_candidate_version"]
 workflow_policy_observations = MODULE["workflow_policy_observations"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
+_write_release_version = MODULE["_write_release_version"]
 
 
 def test_root_release_config_updates_site_source_and_rendered_bundle() -> None:
@@ -1341,3 +1345,325 @@ def test_prepare_requires_tag_version_without_mutating_files(
     )
     errors = release_version_errors(tmp_path, "0.2.0")
     assert "README.md has no x-release-please-version marker" in errors
+
+
+# --- Issue #744: release-phase versioning -----------------------------
+
+
+def test_bump_version_ignores_an_existing_phase_suffix() -> None:
+    """bump_version only ever bumps the core; the suffix is applied later."""
+    assert bump_version("0.16.0-beta.1", ["fix: one"]) == "0.16.1"
+    assert bump_version("0.16.0-alpha.3", ["feat: one"]) == "0.17.0"
+    assert (
+        bump_version("0.16.0-beta.1", ["fix: one\n\nBREAKING CHANGE: x"])
+        == "1.0.0"
+    )
+
+
+def test_release_plan_applies_the_declared_phase_to_a_fresh_core_version(
+    tmp_path: Path,
+) -> None:
+    """A --phase input turns the computed core version into X.Y.Z-phase.N."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    (tmp_path / ".release-please-manifest.json").write_text(
+        '{".": "0.1.0"}\n', encoding="utf-8"
+    )
+    (tmp_path / "file").write_text("one\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: initial capability")
+    first = git(tmp_path, "rev-parse", "HEAD")
+
+    assert release_plan(tmp_path, first, phase="beta") == (
+        "v0.2.0-beta.1",
+        "0.2.0-beta.1",
+    )
+    # No tag exists yet at this commit, so a repeated call with the same
+    # phase recomputes the same first pre-release rather than advancing --
+    # advancing to .2 only happens once a .1 tag actually exists.
+    assert release_plan(tmp_path, first, phase="beta") == (
+        "v0.2.0-beta.1",
+        "0.2.0-beta.1",
+    )
+    git(tmp_path, "tag", "v0.2.0-beta.1")
+    assert release_plan(tmp_path, first, phase="beta") == (
+        "v0.2.0-beta.1",
+        "0.2.0-beta.1",
+    )
+
+    (tmp_path / "file").write_text("two\n", encoding="utf-8")
+    git(tmp_path, "commit", "-am", "fix: follow-up")
+    second = git(tmp_path, "rev-parse", "HEAD")
+    # A patch-level change since the last (pre-)release still targets the
+    # same next core version by this module's own bump arithmetic; #745
+    # owns whether that should instead stay 0.2.0-beta.2.
+    assert release_plan(tmp_path, second, phase="beta") == (
+        "v0.2.1-beta.1",
+        "0.2.1-beta.1",
+    )
+    assert release_plan(tmp_path, second, phase="early") == (
+        "v0.2.1",
+        "0.2.1",
+    )
+
+
+def test_release_plan_without_phase_still_returns_a_bare_core_version(
+    tmp_path: Path,
+) -> None:
+    """Omitting --phase keeps release_plan's legacy bare-core behavior."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    (tmp_path / ".release-please-manifest.json").write_text(
+        '{".": "0.1.0"}\n', encoding="utf-8"
+    )
+    (tmp_path / "file").write_text("one\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: initial capability")
+    first = git(tmp_path, "rev-parse", "HEAD")
+    assert release_plan(tmp_path, first) == ("v0.2.0", "0.2.0")
+
+
+def test_release_plan_reports_an_existing_phase_suffixed_tag_unchanged(
+    tmp_path: Path,
+) -> None:
+    """A tag already at this commit wins regardless of --phase."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    (tmp_path / ".release-please-manifest.json").write_text(
+        '{".": "0.1.0"}\n', encoding="utf-8"
+    )
+    (tmp_path / "file").write_text("one\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: initial capability")
+    first = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "tag", "v0.2.0-alpha.1")
+    assert release_plan(tmp_path, first, phase="beta") == (
+        "v0.2.0-alpha.1",
+        "0.2.0-alpha.1",
+    )
+
+
+def test_write_release_version_normalizes_python_surfaces_to_pep440(
+    tmp_path: Path,
+) -> None:
+    """pyproject.toml gets PEP 440; every other surface stays canonical."""
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {"release-type": "python", "packages": {".": {"component": "demo"}}}
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+    _write_release_version(tmp_path, "0.16.0-beta.1")
+    manifest = json.loads(
+        (tmp_path / ".release-please-manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["."] == "0.16.0-beta.1"
+    pyproject = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'version = "0.16.0b1"' in pyproject
+
+
+def test_write_release_version_normalizes_uv_lock_extra_file_to_pep440(
+    tmp_path: Path,
+) -> None:
+    """PEP 440 also applies to uv.lock's synced entry, not only pyproject.toml.
+
+    Matches template/release-please-config.json.jinja's actual shape:
+    uv.lock is a "$.package[...]" extra-file, handled by a different code
+    path than pyproject.toml's own primary write.
+    """
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "python",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {
+                                "type": "toml",
+                                "path": "uv.lock",
+                                "jsonpath": (
+                                    '$.package[?(@.name.value=="demo")].version'
+                                ),
+                            }
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+    (tmp_path / "uv.lock").write_text(
+        'version = 4\n\n[[package]]\nname = "demo"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    _write_release_version(tmp_path, "0.16.0-alpha.2")
+    pyproject = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    uv_lock = (tmp_path / "uv.lock").read_text(encoding="utf-8")
+    assert 'version = "0.16.0a2"' in pyproject
+    assert 'version = "0.16.0a2"' in uv_lock
+    assert "0.16.0-alpha.2" not in uv_lock
+
+
+def test_write_release_version_replaces_an_existing_phase_suffix_in_a_marker(
+    tmp_path: Path,
+) -> None:
+    """A generic marker holding an old suffix must not leave it dangling."""
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": ["README.md"],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "v0.16.0-alpha.1 <!-- x-release-please-version -->\n",
+        encoding="utf-8",
+    )
+    _write_release_version(tmp_path, "0.16.0-beta.1")
+    assert (tmp_path / "README.md").read_text(encoding="utf-8") == (
+        "v0.16.0-beta.1 <!-- x-release-please-version -->\n"
+    )
+
+
+def test_release_version_errors_compares_pep440_for_python_surfaces(
+    tmp_path: Path,
+) -> None:
+    """A pyproject.toml holding the canonical (non-PEP440) string is flagged."""
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {"release-type": "python", "packages": {".": {"component": "demo"}}}
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / ".release-please-manifest.json").write_text(
+        '{".": "0.16.0-beta.1"}\n', encoding="utf-8"
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## v0.16.0-beta.1\n", encoding="utf-8"
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.16.0b1"\n', encoding="utf-8"
+    )
+    assert release_version_errors(tmp_path, "0.16.0-beta.1") == []
+
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.16.0-beta.1"\n',
+        encoding="utf-8",
+    )
+    errors = release_version_errors(tmp_path, "0.16.0-beta.1")
+    assert "pyproject.toml is 0.16.0-beta.1, expected 0.16.0b1" in errors
+
+
+class FakeRetentionAPI:
+    """A minimal GitHubAPI stand-in that serves one page of Releases."""
+
+    def __init__(self, releases: list[dict[str, object]]) -> None:
+        self.releases = releases
+
+    def request(
+        self, method: str, path: str, payload: dict[str, object] | None = None
+    ) -> tuple[int, object]:
+        del payload
+        assert method == "GET"
+        if "page=1" in path:
+            return 200, self.releases
+        return 200, []
+
+
+def test_retention_report_lists_keep_and_delete_without_deleting_anything() -> (
+    None
+):
+    """Issue #744 decision 5: dry-run only, never calls a delete endpoint."""
+    api = FakeRetentionAPI(
+        [
+            {"tag_name": "v0.2.2", "draft": False, "id": 1},
+            {"tag_name": "v0.15.6", "draft": False, "id": 2},
+            {"tag_name": "0.16.0-alpha.1", "draft": False, "id": 3},
+            {"tag_name": "0.16.0-beta.1", "draft": False, "id": 4},
+            {"tag_name": "0.17.0-alpha.1", "draft": False, "id": 5},
+            {"tag_name": "still-drafting", "draft": True, "id": 6},
+        ]
+    )
+    payload = retention_report(api, "acme/demo")
+    assert payload["dry_run"] is True
+    keep = {entry["tag"] for entry in payload["keep"]}
+    delete = {entry["tag"] for entry in payload["delete"]}
+    assert keep == {"v0.2.2", "v0.15.6", "0.17.0-alpha.1"}
+    assert delete == {"0.16.0-alpha.1", "0.16.0-beta.1"}
+    # The draft entry never enters either list -- it is not yet a Release.
+    assert "still-drafting" not in keep | delete
+
+
+def test_main_plan_command_accepts_a_phase_argument(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The `plan` CLI subcommand threads --phase through to release_plan."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    (tmp_path / ".release-please-manifest.json").write_text(
+        '{".": "0.1.0"}\n', encoding="utf-8"
+    )
+    (tmp_path / "file").write_text("one\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: initial capability")
+    sha = git(tmp_path, "rev-parse", "HEAD")
+
+    assert (
+        main(
+            ["plan", "--root", str(tmp_path), "--sha", sha, "--phase", "alpha"]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["version"] == "0.2.0-alpha.1"
+    assert payload["tag"] == "v0.2.0-alpha.1"
+
+
+def test_main_retention_plan_command_requires_a_token_and_never_deletes(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The `retention-plan` CLI subcommand fails closed without a token."""
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    with pytest.raises(SystemExit, match="requires GH_TOKEN"):
+        main(["retention-plan", "--repo", "acme/demo"])
+
+    monkeypatch.setenv("GH_TOKEN", "test-token")
+    releases = [
+        {"tag_name": "v1.0.0", "draft": False, "id": 1},
+        {"tag_name": "1.1.0-beta.1", "draft": False, "id": 2},
+    ]
+
+    def fake_request(
+        self: object, method: str, path: str, payload: object = None
+    ) -> tuple[int, object]:
+        del self, payload
+        assert method == "GET"
+        return (200, releases) if "page=1" in path else (200, [])
+
+    monkeypatch.setattr(GitHubAPI, "request", fake_request)
+    assert main(["retention-plan", "--repo", "acme/demo"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert {entry["tag"] for entry in payload["keep"]} == {
+        "v1.0.0",
+        "1.1.0-beta.1",
+    }
+    assert payload["delete"] == []

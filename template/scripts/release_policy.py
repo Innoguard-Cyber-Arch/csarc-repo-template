@@ -24,13 +24,18 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     stale_branch_detection = importlib.import_module("stale_branch_detection")
+    release_phase = importlib.import_module("release_phase")
 else:
     stale_branch_detection = importlib.import_module(
         f"{__package__}.stale_branch_detection"
     )
+    release_phase = importlib.import_module(f"{__package__}.release_phase")
 
 STATES = {"allowed", "blocked", "unknown"}
-SEMVER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+# Version parsing/formatting/precedence all go through release_phase (Issue
+# #744: alpha/beta/early/formal phase-suffixed versions) instead of a local
+# plain-triplet pattern.
+PEP440_SURFACES = {"pyproject.toml", "uv.lock"}
 PUBLISH_CAPABILITIES = ("contents", "release", "immutable_releases")
 INTENT_RANK = {"no-release": 0, "patch": 1, "minor": 2, "major": 3}
 RENOVATE_INSTALL_URL = "https://github.com/apps/renovate/installations/new"
@@ -266,12 +271,16 @@ def release_follow_up_errors(  # noqa: C901
         return errors
 
     expected_head = f"release-please--branches--main--components--{component}"
-    guided_head = re.fullmatch(r"release/v\d+\.\d+\.\d+", head)
+    guided_version = head.removeprefix("release/v")
+    guided_head = guided_version != head and release_phase.is_valid_version(
+        guided_version
+    )
     if automation_actor and head != expected_head:
         errors.append(f"release follow-up branch must be {expected_head}")
-    elif maintainer_actor and guided_head is None:
+    elif maintainer_actor and not guided_head:
         errors.append(
-            "guided release branch must use release/v<major>.<minor>.<patch>"
+            "guided release branch must use release/v<version>, where "
+            "<version> is X.Y.Z or X.Y.Z-alpha.N / X.Y.Z-beta.N"
         )
 
     allowed = {".release-please-manifest.json", "CHANGELOG.md"}
@@ -315,10 +324,17 @@ def release_follow_up_errors(  # noqa: C901
 
 
 def bump_version(version: str, messages: list[str]) -> str | None:
-    """Calculate the next version from merged Conventional Commits."""
-    match = SEMVER.fullmatch(version)
-    if match is None:
-        raise ValueError(f"invalid semantic version: {version}")
+    """Calculate the next CORE version from merged Conventional Commits.
+
+    ``version`` may carry a phase suffix (e.g. ``0.16.0-beta.1``); only its
+    ``major.minor.patch`` core is used for the bump arithmetic, and the
+    result is always a bare core version with no suffix -- callers apply
+    the declared phase afterward via ``release_phase.phase_version``.
+    """
+    try:
+        parsed = release_phase.parse_version(version)
+    except release_phase.ReleasePhaseError as error:
+        raise ValueError(f"invalid semantic version: {version}") from error
     bump = "no-release"
     for message in messages:
         subject, _, body = message.partition("\n")
@@ -329,7 +345,7 @@ def bump_version(version: str, messages: list[str]) -> str | None:
             bump = intent
     if bump == "no-release":
         return None
-    major, minor, patch = (int(value) for value in match.groups())
+    major, minor, patch = parsed.core
     if bump == "major":
         return f"{major + 1}.0.0"
     if bump == "minor":
@@ -1063,6 +1079,88 @@ def write_plan_report(
     print(rendered, end="")  # noqa: T201
 
 
+def fetch_all_releases(api: GitHubAPI, repo: str) -> list[dict[str, object]]:
+    """Return every GitHub Release for `repo` via paginated GET (Issue #744)."""
+    releases: list[dict[str, object]] = []
+    page = 1
+    while True:
+        status, payload = api.request(
+            "GET", f"repos/{repo}/releases?per_page=100&page={page}"
+        )
+        if not (200 <= status < 300) or not isinstance(payload, list):
+            detail = status or "unavailable"
+            raise RuntimeError(
+                f"cannot list releases for {repo} (HTTP {detail})"
+            )
+        if not payload:
+            break
+        releases.extend(item for item in payload if isinstance(item, dict))
+        if len(payload) < 100:
+            break
+        page += 1
+    return releases
+
+
+def retention_report(api: GitHubAPI, repo: str) -> dict[str, object]:
+    """Build the dry-run keep/delete listing for Issue #744 decision 5.
+
+    Never deletes anything itself -- lists only. Draft Releases are not yet
+    published and are excluded from the listing entirely, not treated as
+    "delete" candidates.
+    """
+    releases = [
+        release
+        for release in fetch_all_releases(api, repo)
+        if release.get("draft") is False
+    ]
+    by_tag = {
+        str(release["tag_name"]): release
+        for release in releases
+        if isinstance(release.get("tag_name"), str)
+    }
+    decisions = release_phase.retention_plan(by_tag.keys())
+    considered = {decision.version for decision in decisions}
+    ignored = sorted(tag for tag in by_tag if tag not in considered)
+
+    def entry(decision: release_phase.RetentionDecision) -> dict[str, object]:
+        release = by_tag[decision.version]
+        return {
+            "tag": decision.version,
+            "reason": decision.reason,
+            "id": release.get("id"),
+            "html_url": release.get("html_url"),
+        }
+
+    return {
+        "schema_version": 1,
+        "repo": repo,
+        "dry_run": True,
+        "keep": [entry(decision) for decision in decisions if decision.keep],
+        "delete": [
+            entry(decision) for decision in decisions if not decision.keep
+        ],
+        "ignored": ignored,
+    }
+
+
+def write_retention_report(
+    payload: dict[str, object], output: Path | None, github_output: Path | None
+) -> None:
+    """Write the retention dry-run listing and stable workflow outputs."""
+    rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if output is not None:
+        output.write_text(rendered, encoding="utf-8")
+    if github_output is not None:
+        keep = payload["keep"]
+        delete = payload["delete"]
+        keep_count = len(keep) if isinstance(keep, list) else 0
+        delete_count = len(delete) if isinstance(delete, list) else 0
+        with github_output.open("a", encoding="utf-8") as handle:
+            handle.write(f"keep_count={keep_count}\n")
+            handle.write(f"delete_count={delete_count}\n")
+    print(rendered, end="")  # noqa: T201
+
+
 def git_output(arguments: list[str], root: Path) -> str:
     """Run a read-only Git query."""
     executable = shutil.which("git")
@@ -1078,32 +1176,28 @@ def git_output(arguments: list[str], root: Path) -> str:
     return result.stdout.strip()
 
 
-def semver_key(tag: str) -> tuple[int, int, int]:
-    """Return a sortable key for a previously validated tag."""
-    match = SEMVER.fullmatch(tag)
-    if match is None:
-        raise ValueError(f"invalid semantic version tag: {tag}")
-    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+def release_plan(
+    root: Path, sha: str, *, phase: str | None = None
+) -> tuple[str, str] | None:
+    """Return the next tag/version, or None when HEAD needs no release.
 
-
-def release_plan(root: Path, sha: str) -> tuple[str, str] | None:
-    """Return the next tag/version, or None when HEAD needs no release."""
+    ``phase`` is the maintainer/#745-declared release phase ("alpha",
+    "beta", "early", or "formal") to apply to a freshly computed core
+    version. It is never consulted when a tag already exists at ``sha`` or
+    when this commit is already a prepared version-bump candidate -- those
+    paths report the version that was already decided, unsuffixed or not.
+    """
     pointed_tags = git_output(["tag", "--points-at", sha], root).splitlines()
-    released = sorted(
-        (tag for tag in pointed_tags if SEMVER.fullmatch(tag)),
-        key=semver_key,
+    released = release_phase.sort_by_precedence(
+        tag for tag in pointed_tags if release_phase.is_valid_version(tag)
     )
     if released:
         return released[-1], released[-1].removeprefix("v")
 
     tags = git_output(["tag", "--merged", sha], root).splitlines()
-    versions = [
-        (tuple(int(value) for value in match.groups()), tag)
-        for tag in tags
-        if (match := SEMVER.fullmatch(tag)) is not None
-    ]
-    if versions:
-        _, latest_tag = max(versions)
+    valid_tags = [tag for tag in tags if release_phase.is_valid_version(tag)]
+    if valid_tags:
+        latest_tag = release_phase.sort_by_precedence(valid_tags)[-1]
         base = latest_tag.removeprefix("v")
         revision_range = f"{latest_tag}..{sha}"
     else:
@@ -1140,21 +1234,33 @@ def release_plan(root: Path, sha: str) -> tuple[str, str] | None:
                 for message in parent_log.split("\x1e")
                 if message.strip("\n")
             ]
-            if bump_version(parent_version, parent_messages) == base:
+            parent_core = release_phase.parse_version(
+                parent_version
+            ).core_string()
+            base_core = release_phase.parse_version(base).core_string()
+            if bump_version(parent_core, parent_messages) == base_core:
                 return f"v{base}", base
+    base_core = release_phase.parse_version(base).core_string()
     raw = git_output(["log", "--format=%s%x1f%b%x1e", revision_range], root)
     messages = [
         message.strip("\n").replace("\x1f", "\n")
         for message in raw.split("\x1e")
         if message.strip("\n")
     ]
-    version = bump_version(base, messages)
-    return None if version is None else (f"v{version}", version)
+    version = bump_version(base_core, messages)
+    if version is None:
+        return None
+    if phase is not None:
+        existing = git_output(["tag", "--list"], root).splitlines()
+        version = release_phase.phase_version(version, phase, existing=existing)
+    return f"v{version}", version
 
 
-def release_plan_report(root: Path, sha: str) -> dict[str, object]:
+def release_plan_report(
+    root: Path, sha: str, *, phase: str | None = None
+) -> dict[str, object]:
     """Describe the one local release decision without changing the repo."""
-    planned = release_plan(root, sha)
+    planned = release_plan(root, sha, phase=phase)
     if planned is None:
         return {
             "status": "no-release",
@@ -1251,6 +1357,33 @@ def _replace_toml_version(
     path.write_text(updated, encoding="utf-8")
 
 
+def _pep440_equivalent(version: str) -> str:
+    """Return `version`'s PEP 440-normalized form (Issue #744)."""
+    parsed = release_phase.parse_version(version)
+    return release_phase.format_pep440(
+        parsed.major, parsed.minor, parsed.patch, parsed.phase, parsed.n
+    )
+
+
+def _target_version(version: str, relative_path: str) -> str:
+    """Return the version string to write into one governed surface.
+
+    Every surface gets the canonical SemVer string except a "python"
+    package's `pyproject.toml`/`uv.lock` (Issue #744): PEP 440 has no
+    hyphenated `-alpha.N`/`-beta.N` pre-release segment, so those two get
+    the normalized form (`0.16.0a1`) regardless of whether they are the
+    primary governed surface or a synced extra-file entry (e.g. a
+    typescript+python project's `package.json` stays primary while
+    `pyproject.toml` is still an extra-file that needs the same
+    normalization).
+    """
+    return (
+        _pep440_equivalent(version)
+        if relative_path in PEP440_SURFACES
+        else version
+    )
+
+
 def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
     """Materialize only version surfaces declared by release configuration."""
     config = json.loads(
@@ -1265,7 +1398,11 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
     if release_type == "simple":
         (root / "version.txt").write_text(f"{version}\n", encoding="utf-8")
     elif release_type == "python":
-        _replace_toml_version(root / "pyproject.toml", "project", version)
+        _replace_toml_version(
+            root / "pyproject.toml",
+            "project",
+            _target_version(version, "pyproject.toml"),
+        )
     elif release_type == "node":
         path = root / "package.json"
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -1288,6 +1425,7 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
         if not isinstance(value, str):
             raise ValueError("release extra-file path is invalid")
         path = root / value
+        target_version = _target_version(version, value)
         if kind == "generic":
             source = path.read_text(encoding="utf-8")
             lines = []
@@ -1295,8 +1433,9 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
             for line in source.splitlines(keepends=True):
                 if "x-release-please-version" in line:
                     line, count = re.subn(
-                        r"(?P<prefix>v?)\d+\.\d+\.\d+",
-                        rf"\g<prefix>{version}",
+                        r"(?P<prefix>v?)\d+\.\d+\.\d+"
+                        r"(?:-(?:alpha|beta)\.\d+)?",
+                        rf"\g<prefix>{target_version}",
                         line,
                         count=1,
                     )
@@ -1306,15 +1445,15 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
                 raise ValueError(f"{value} has no release version marker")
             path.write_text("".join(lines), encoding="utf-8")
         elif kind == "toml" and jsonpath == "$.project.version":
-            _replace_toml_version(path, "project", version)
+            _replace_toml_version(path, "project", target_version)
         elif kind == "toml" and jsonpath == "$.package.version":
-            _replace_toml_version(path, "package", version)
+            _replace_toml_version(path, "package", target_version)
         elif kind == "toml" and jsonpath.startswith("$.package["):
             match = re.search(r'name\.value=="([^"]+)"', jsonpath)
             if match is None:
                 raise ValueError(f"unsupported release jsonpath: {jsonpath}")
             _replace_toml_version(
-                path, "package", version, package_name=match.group(1)
+                path, "package", target_version, package_name=match.group(1)
             )
         else:
             raise ValueError(f"unsupported release extra-file: {value}")
@@ -1339,8 +1478,10 @@ def _write_changelog(root: Path, sha: str, version: str) -> None:
     if re.search(rf"(?m)^## (?:\[)?v?{re.escape(version)}(?:\]|\s|\()", source):
         return
     tags = git_output(["tag", "--merged", sha], root).splitlines()
-    versions = [tag for tag in tags if SEMVER.fullmatch(tag)]
-    latest = max(versions, key=semver_key) if versions else ""
+    ordered = release_phase.sort_by_precedence(
+        tag for tag in tags if release_phase.is_valid_version(tag)
+    )
+    latest = ordered[-1] if ordered else ""
     revision = f"{latest}..{sha}" if latest else sha
     raw = git_output(
         ["log", "--reverse", "--format=%h%x1f%s%x1e", revision], root
@@ -1376,9 +1517,11 @@ def _write_changelog(root: Path, sha: str, version: str) -> None:
     changelog.write_text(updated, encoding="utf-8")
 
 
-def prepare_release_candidate(root: Path, sha: str) -> dict[str, object]:
+def prepare_release_candidate(
+    root: Path, sha: str, *, phase: str | None = None
+) -> dict[str, object]:
     """Write a local candidate; never create a PR, tag, or GitHub Release."""
-    planned = release_plan(root, sha)
+    planned = release_plan(root, sha, phase=phase)
     if planned is None:
         raise ValueError("no release-worthy Conventional Commits")
     tag, version = planned
@@ -1521,7 +1664,9 @@ def release_version_errors(  # noqa: C901
             if "x-release-please-version" not in line:
                 continue
             marker_found = True
-            match = re.search(r"v?(\d+\.\d+\.\d+)", line)
+            match = re.search(
+                r"v?(\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+)?)", line
+            )
             versions[str(path.relative_to(root))] = (
                 match.group(1) if match else ""
             )
@@ -1535,12 +1680,24 @@ def release_version_errors(  # noqa: C901
         errors.append("no release version source exists")
         return errors
     source_version = expected or next(iter(versions.values()))
-    if SEMVER.fullmatch(source_version) is None:
+    try:
+        parsed_source = release_phase.parse_version(source_version)
+        expected_pep440 = release_phase.format_pep440(
+            parsed_source.major,
+            parsed_source.minor,
+            parsed_source.patch,
+            parsed_source.phase,
+            parsed_source.n,
+        )
+    except release_phase.ReleasePhaseError:
         errors.append(f"invalid release version: {source_version}")
+        expected_pep440 = source_version
     errors.extend(
-        f"{path} is {version}, expected {source_version}"
+        f"{path} is {version}, expected "
+        f"{expected_pep440 if path in PEP440_SURFACES else source_version}"
         for path, version in versions.items()
-        if version != source_version
+        if version
+        != (expected_pep440 if path in PEP440_SURFACES else source_version)
     )
 
     if require_changelog:
@@ -1638,15 +1795,39 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--root", type=Path, default=Path.cwd())
     plan.add_argument("--output", type=Path)
     plan.add_argument("--github-output", type=Path)
+    plan.add_argument(
+        "--phase",
+        choices=release_phase.PHASES,
+        default=None,
+        help=(
+            "Release phase to apply to a freshly computed version "
+            "(alpha/beta/early/formal, Issue #744). Declaring which phase "
+            "a release deserves is Issue #745's job; omit this to report "
+            "the bare core version."
+        ),
+    )
     candidate = subparsers.add_parser("prepare-candidate")
     candidate.add_argument("--sha", default="HEAD")
     candidate.add_argument("--root", type=Path, default=Path.cwd())
+    candidate.add_argument(
+        "--phase", choices=release_phase.PHASES, default=None
+    )
     verify = subparsers.add_parser("verify-version")
     verify.add_argument("--tag")
     verify.add_argument("--root", type=Path, default=Path.cwd())
     verify_candidate = subparsers.add_parser("verify-candidate-version")
     verify_candidate.add_argument("--base-sha", required=True)
     verify_candidate.add_argument("--root", type=Path, default=Path.cwd())
+    retention = subparsers.add_parser(
+        "retention-plan",
+        help=(
+            "List which Releases should be kept vs. deleted under Issue "
+            "#744 decision 5 (dry-run only; never deletes anything)."
+        ),
+    )
+    retention.add_argument("--repo", required=True)
+    retention.add_argument("--output", type=Path)
+    retention.add_argument("--github-output", type=Path)
     verify_follow_up = subparsers.add_parser("verify-release-follow-up")
     verify_follow_up.add_argument("--repo", required=True)
     verify_follow_up.add_argument("--head", required=True)
@@ -1722,17 +1903,34 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         return 0
     if args.command == "plan":
         try:
-            payload = release_plan_report(args.root.resolve(), args.sha)
+            payload = release_plan_report(
+                args.root.resolve(), args.sha, phase=args.phase
+            )
         except (ValueError, json.JSONDecodeError) as error:
             raise SystemExit(str(error)) from error
         write_plan_report(payload, args.output, args.github_output)
         return 0
     if args.command == "prepare-candidate":
         try:
-            payload = prepare_release_candidate(args.root.resolve(), args.sha)
+            payload = prepare_release_candidate(
+                args.root.resolve(), args.sha, phase=args.phase
+            )
         except (ValueError, json.JSONDecodeError) as error:
             raise SystemExit(str(error)) from error
         write_plan_report(payload, None, None)
+        return 0
+    if args.command == "retention-plan":
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if not token:
+            raise SystemExit(
+                "retention-plan requires GH_TOKEN or GITHUB_TOKEN to list "
+                "Releases"
+            )
+        api = GitHubAPI(
+            token, os.environ.get("GITHUB_API_URL", "https://api.github.com")
+        )
+        payload = retention_report(api, args.repo)
+        write_retention_report(payload, args.output, args.github_output)
         return 0
     if args.command == "verify-candidate-version":
         try:
@@ -1754,10 +1952,10 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         tag = args.tag
         expected = None
         if tag is not None:
-            match = SEMVER.fullmatch(tag)
-            if match is None:
+            candidate_version = tag.removeprefix("v")
+            if not release_phase.is_valid_version(candidate_version):
                 raise SystemExit(f"invalid release tag: {tag}")
-            expected = tag.removeprefix("v")
+            expected = candidate_version
         try:
             version = verify_release_version(args.root.resolve(), expected)
         except (

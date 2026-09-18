@@ -23,6 +23,8 @@ from urllib.parse import quote
 
 import yaml  # type: ignore[import-untyped]
 
+from csarc_cli import release_phase
+
 CANONICAL_SOURCE = (
     "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git"
 )
@@ -101,6 +103,17 @@ CURRENT_MILESTONE_HEADINGS = (
 
 class CliError(RuntimeError):
     """An expected command error with an actionable message."""
+
+
+class ReleaseNotFoundError(CliError):
+    """The canonical repository confirmed a named release tag is gone.
+
+    Raised only when GitHub itself reports the tag not found (Issue #744
+    retention deleted it) -- every other verification failure (bad
+    attestation, a moved tag, an invalid signature, a repository identity
+    mismatch) stays a plain ``CliError`` and must keep failing closed, not
+    fall back to reinstall.
+    """
 
 
 class ProjectVerificationError(CliError):
@@ -374,6 +387,68 @@ def gh_json(endpoint: str) -> dict[str, object]:
     return payload
 
 
+def gh_json_or_missing(endpoint: str) -> dict[str, object] | None:
+    """Read one GitHub API object, or None when GitHub reports HTTP 404.
+
+    Distinguishes "this exact resource is confirmed gone" from every other
+    failure (auth, network, malformed JSON), which still raises through
+    the same actionable ``CliError`` as ``gh_json``. Used only for a named
+    release-tag lookup: a confirmed 404 there is the one condition Issue
+    #744 allows to fall into the downstream reinstall flow instead of
+    failing closed.
+    """
+    try:
+        result = run(
+            ["gh", "api", "--method", "GET", endpoint],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise CliError(
+            "GitHub CLI is required to resolve template releases."
+        ) from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "GitHub API request failed"
+        if "HTTP 404" in detail:
+            return None
+        raise CliError(f"Cannot resolve an approved GitHub Release: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise CliError(
+            "GitHub returned invalid JSON for the release."
+        ) from error
+    if not isinstance(payload, dict):
+        raise CliError("GitHub returned an unexpected release response.")
+    return payload
+
+
+def gh_json_list(endpoint: str) -> list[object]:
+    """Read one GitHub API array response through the authenticated gh CLI."""
+    try:
+        result = run(
+            ["gh", "api", "--method", "GET", endpoint],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise CliError(
+            "GitHub CLI is required to resolve template releases."
+        ) from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "GitHub API request failed"
+        raise CliError(f"Cannot resolve an approved GitHub Release: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise CliError(
+            "GitHub returned invalid JSON for the release."
+        ) from error
+    if not isinstance(payload, list):
+        raise CliError("GitHub returned an unexpected release response.")
+    return payload
+
+
 class GhReleaseClient:
     """GitHub CLI implementation of the release trust boundary."""
 
@@ -382,15 +457,61 @@ class GhReleaseClient:
         return gh_json(f"repos/{CANONICAL_REPOSITORY}")
 
     def release(self, tag: str | None) -> dict[str, object]:
-        """Return the latest or named canonical release."""
+        """Return the highest-precedence or named canonical release.
+
+        A named lookup raises ``ReleaseNotFoundError`` on a confirmed
+        HTTP 404 (Issue #744) so callers can distinguish "this tag is
+        gone" from every other failure. "Latest" is selected by SemVer
+        precedence across every published, non-draft release instead of
+        GitHub's own `releases/latest` API, which never returns a
+        `prerelease: true` Release and therefore cannot see an
+        alpha/beta-suffixed tag.
+        """
         if tag is None or tag == "latest":
-            endpoint = f"repos/{CANONICAL_REPOSITORY}/releases/latest"
-        else:
-            endpoint = (
-                f"repos/{CANONICAL_REPOSITORY}/releases/tags/"
-                f"{quote(tag, safe='')}"
+            return self._latest()
+        endpoint = (
+            f"repos/{CANONICAL_REPOSITORY}/releases/tags/{quote(tag, safe='')}"
+        )
+        release = gh_json_or_missing(endpoint)
+        if release is None:
+            raise ReleaseNotFoundError(
+                f"GitHub Release {tag!r} was not found on the canonical "
+                "repository."
             )
-        return gh_json(endpoint)
+        return release
+
+    def _latest(self) -> dict[str, object]:
+        """Return the highest-SemVer-precedence eligible release."""
+        eligible: dict[str, dict[str, object]] = {}
+        page = 1
+        while True:
+            endpoint = (
+                f"repos/{CANONICAL_REPOSITORY}/releases?per_page=100"
+                f"&page={page}"
+            )
+            batch = gh_json_list(endpoint)
+            if not batch:
+                break
+            for item in batch:
+                if not isinstance(item, dict):
+                    continue
+                tag_name = item.get("tag_name")
+                if (
+                    isinstance(tag_name, str)
+                    and item.get("draft") is False
+                    and release_phase.is_valid_version(tag_name)
+                ):
+                    eligible[tag_name] = item
+            if len(batch) < 100:
+                break
+            page += 1
+        latest_tag = release_phase.select_latest(eligible)
+        if latest_tag is None:
+            raise CliError(
+                "No published, well-formed GitHub Release was found on the "
+                "canonical repository."
+            )
+        return eligible[latest_tag]
 
     def resolve_tag(self, tag: str) -> TagResolution:
         """Resolve lightweight or nested annotated tags."""
@@ -501,16 +622,33 @@ def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
 
 
 def release_identity(release: dict[str, object]) -> tuple[str, int]:
-    """Validate stable immutable release metadata."""
+    """Validate immutable release metadata, prerelease or not (Issue #744).
+
+    Every existing verification (immutable, draft, published) is kept
+    unchanged; a `prerelease: true` Release is now approved as long as its
+    tag is a legal alpha/beta version and GitHub's own `prerelease` flag
+    agrees with that shape, so this stays fail-closed for a malformed or
+    self-contradictory tag rather than silently trusting either signal
+    alone.
+    """
     tag = release.get("tag_name")
     release_id = release.get("id")
     if not isinstance(tag, str) or not tag or not isinstance(release_id, int):
         raise CliError("GitHub returned incomplete release metadata.")
-    if (
-        release.get("draft") is not False
-        or release.get("prerelease") is not False
-    ):
-        raise CliError("Only published, stable GitHub Releases are approved.")
+    if release.get("draft") is not False:
+        raise CliError("Only published GitHub Releases are approved.")
+    try:
+        parsed = release_phase.parse_version(tag)
+    except release_phase.ReleasePhaseError as error:
+        raise CliError(
+            f"GitHub Release tag {tag!r} is not a legal alpha/beta/early/"
+            "formal release version (Issue #744)."
+        ) from error
+    if release.get("prerelease") is not parsed.is_prerelease:
+        raise CliError(
+            f"GitHub Release {tag!r} prerelease flag does not match its "
+            "version format."
+        )
     if not isinstance(release.get("published_at"), str):
         raise CliError("The selected GitHub Release is not published.")
     if release.get("immutable") is not True:
@@ -4882,6 +5020,131 @@ def update_plan_answers(  # noqa: C901
     return result, update_data
 
 
+def command_update_reinstall(
+    args: argparse.Namespace,
+    target: Path,
+    source: str,
+    candidate_answers: dict[str, object],
+    repository: RepositoryContext,
+    missing: ReleaseNotFoundError,
+) -> int:
+    """Fall into a from-scratch reinstall plan when the recorded tag is gone.
+
+    Triggered only by a confirmed missing release tag (Issue #744); every
+    other verification failure keeps raising through `update_status`
+    unchanged (see the `except ReleaseNotFoundError` in `command_update`).
+    Reuses `csarc adopt`'s exact transactional-plan machinery (Issue #219,
+    `build_adoption_plan`/`compare_stage`) so additions, overwrites,
+    preserved files, and manual-merge items are categorized identically,
+    and a project-owned or diverged file is never silently overwritten.
+
+    Only a fully clean plan (no manual merge needed) is applied here after
+    confirmation; a plan that needs manual merges is reported and left for
+    `csarc adopt` to resolve against this same directory, rather than
+    reimplementing adopt's separate pending/finalize replay flow a second
+    time for this narrower recovery path.
+
+    Known limitation: unlike the ordinary (non-reinstall) update path,
+    which renders both the old and new revisions to tell "the template
+    changed this file" apart from "the project customized this file",
+    `compare_stage`'s adopt-mode categorization here is a plain two-way
+    diff against the target's current content -- there is no verified old
+    revision to render a three-way baseline from (the whole point of this
+    path is that the old release is confirmed gone). Every file that
+    differs from the newest release's render is therefore routed to
+    `manual`, even one the project never touched itself. This stays safe
+    (never silently overwrites anything) but can make an ordinary
+    reinstall need more manual review than an equivalent up-to-date
+    `csarc update` would; a future revision could add a best-effort
+    three-way diff when the old commit SHA happens to still be fetchable.
+    """
+    print(
+        f"Recorded release tag is unavailable ({missing}); planning a "
+        "reinstall from the newest available release instead of failing "
+        "(Issue #744).",
+        file=sys.stderr,
+    )
+    if not args.check:
+        require_clean_repository(target)
+    generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+    with tempfile.TemporaryDirectory(prefix="csarc-reinstall-") as temporary:
+        temporary_root = Path(temporary)
+        revision = resolve_revision(source, None)
+        stage = temporary_root / "rendered"
+        stage.mkdir()
+        copier_copy(revision.source, revision, stage, candidate_answers)
+        # The freshly rendered answers file legitimately differs from the
+        # target's (new _commit/_src_path, possibly new answers) on every
+        # ordinary reinstall -- that is expected evolution, not a conflict,
+        # so it is excluded from the adopt-style diff entirely and written
+        # to target directly once the rest of the patch has applied,
+        # exactly like the normal (non-reinstall) update path leaves
+        # answer-file merging to Copier rather than compare_stage.
+        staged_answers_path = config_path(stage)
+        answers_relative = staged_answers_path.relative_to(stage)
+        fresh_answers = staged_answers_path.read_text(encoding="utf-8")
+        staged_answers_path.unlink()
+        capabilities = capability_preflight(
+            stage / "scripts" / "release_policy.py",
+            target,
+            revision,
+            emit=False,
+        )
+        candidate = temporary_root / "candidate"
+        plan = build_adoption_plan(
+            stage,
+            candidate,
+            target,
+            revision,
+            repository,
+            candidate_answers,
+            capabilities,
+            generated_at,
+            verification_authorized=False,
+        )
+        if args.json:
+            print(
+                json.dumps(
+                    plan.as_dict(), sort_keys=True, separators=(",", ":")
+                )
+            )
+        else:
+            print_plan(plan)
+        adoption = plan.adoption
+        if adoption is None:
+            raise CliError("Reinstall plan has no adoption evidence.")
+        if args.check:
+            return 1
+        if adoption.get("phase") == "pending":
+            print(
+                "Reinstall needs manual merges before it can be applied "
+                "automatically. Resolve the listed manual-merge files "
+                "against this directory with csarc adopt, then rerun "
+                "csarc update.",
+                file=sys.stderr,
+            )
+            return 1
+        if adoption.get("applicable") is not True:
+            raise CliError("Reinstall plan is not applicable.")
+        if not confirm(args):
+            return 0
+        artifacts = adoption.get("artifacts")
+        if not isinstance(artifacts, dict):
+            raise CliError("Reinstall plan has no artifact plan.")
+        write_candidate_patch(
+            candidate,
+            target,
+            temporary_root / "reinstall.patch",
+            artifacts=artifacts,
+            target_snapshot=adoption,
+        )
+        (target / answers_relative).write_text(fresh_answers, encoding="utf-8")
+    write_provenance(target, revision, answers=candidate_answers)
+    settings_plan(target)
+    print("Reinstall complete.")
+    return 0
+
+
 def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     """Check or apply a Copier smart update."""
     target = resolve_repository_target(args.path)
@@ -4907,14 +5170,29 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         saved_answers, explicit_data, repository
     )
     candidate_answers = resolve_release_answers(target, candidate_answers)
-    status, current_revision, target_revision, previous = update_status(
-        target,
-        args.to,
-        expected_sha=args.expected_sha,
-        allow_unreleased=args.allow_unreleased,
-        accept_legacy=args.accept_legacy,
-        from_release=args.from_release,
-    )
+    try:
+        status, current_revision, target_revision, previous = update_status(
+            target,
+            args.to,
+            expected_sha=args.expected_sha,
+            allow_unreleased=args.allow_unreleased,
+            accept_legacy=args.accept_legacy,
+            from_release=args.from_release,
+        )
+    except ReleaseNotFoundError as missing:
+        # Issue #744: retention deleted the recorded release_tag. Every
+        # other verification failure (bad attestation, a moved tag, an
+        # invalid signature, a repository identity mismatch) is a plain
+        # CliError and keeps failing closed above -- only a GitHub-
+        # confirmed missing tag falls into reinstall.
+        return command_update_reinstall(
+            args,
+            target,
+            read_answer(answers_path, "_src_path"),
+            candidate_answers,
+            repository,
+            missing,
+        )
     source = status.get("source")
     if not isinstance(source, str):
         raise CliError("Update source must be a string.")
