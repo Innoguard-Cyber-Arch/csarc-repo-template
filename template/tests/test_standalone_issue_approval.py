@@ -6,6 +6,14 @@ covered by `tests/test_milestone_approval.py` and
 `tests/test_milestone_scope.py`); an Issue with no Milestone of its own
 must itself carry a valid approval before the pull request that closes it
 via `Closes`/`Fixes`/`Resolves #N` can merge.
+
+The approval vocabulary here is `Approve` / `Admin-approve: <reason>` /
+`Object: <reason>` / `Resolve: <target>` -- plain text, case-insensitive --
+per the maintainer's own decision recorded on Issue #743
+(2026-09-18T02:00:35Z, before this implementation started). It is
+deliberately a *separate, parallel* vocabulary from the tracker's and
+scope-expansion gate's `/milestone approve` family, not a case-insensitive
+relaxation of it: several tests below confirm the two never cross-match.
 """
 
 from __future__ import annotations
@@ -102,19 +110,32 @@ def test_no_approval_blocks_a_standalone_issue() -> None:
 
 
 def test_non_proposer_approval_unblocks_a_standalone_issue() -> None:
-    """One non-proposer `/milestone approve` comment satisfies the gate."""
+    """One non-proposer `Approve` comment satisfies the gate."""
     result = standalone_issue_approval_decision(
-        issue_snapshot(comment(1, "reviewer", "/milestone approve")), 210
+        issue_snapshot(comment(1, "reviewer", "Approve")), 210
     )
 
     assert result.allowed
     assert result.summary == "Issue approved by reviewer"
 
 
+@pytest.mark.parametrize(
+    "word", ["approve", "APPROVE", "Approve", "  Approve  "]
+)
+def test_approval_keyword_is_case_and_whitespace_insensitive(word: str) -> None:
+    """The plain-text keyword is deliberately lenient, unlike the slash
+    command."""
+    result = standalone_issue_approval_decision(
+        issue_snapshot(comment(1, "reviewer", word)), 210
+    )
+
+    assert result.allowed
+
+
 def test_proposer_self_approval_does_not_count() -> None:
     """The proposer cannot approve their own standalone/hotfix Issue."""
     result = standalone_issue_approval_decision(
-        issue_snapshot(comment(1, "worker", "/milestone approve")), 210
+        issue_snapshot(comment(1, "worker", "Approve")), 210
     )
 
     assert not result.allowed
@@ -135,7 +156,7 @@ def test_admin_self_approval_opens_the_gate_with_reason(
             comment(
                 1,
                 "worker",
-                "/milestone admin-approve: production outage, no reviewer",
+                "Admin-approve: production outage, no reviewer",
             )
         ),
         210,
@@ -155,11 +176,21 @@ def test_admin_self_approval_rejects_non_admin_permission(
     _stub_permission(monkeypatch, "write")
     result = standalone_issue_approval_decision(
         issue_snapshot(
-            comment(
-                1, "worker", "/milestone admin-approve: outside collaborator"
-            )
+            comment(1, "worker", "Admin-approve: outside collaborator")
         ),
         210,
+    )
+
+    assert not result.allowed
+
+
+def test_admin_self_approval_rejects_empty_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reason is mandatory, not just the `Admin-approve:` prefix."""
+    _stub_permission(monkeypatch, "admin")
+    result = standalone_issue_approval_decision(
+        issue_snapshot(comment(1, "worker", "Admin-approve:")), 210
     )
 
     assert not result.allowed
@@ -169,13 +200,29 @@ def test_unresolved_objection_blocks_the_gate() -> None:
     """An outstanding objection blocks a standalone Issue like anywhere else."""
     result = standalone_issue_approval_decision(
         issue_snapshot(
-            comment(1, "reviewer", "/milestone approve"),
-            comment(2, "skeptic", "/milestone object: Needs a rollback plan"),
+            comment(1, "reviewer", "Approve"),
+            comment(2, "skeptic", "Object: Needs a rollback plan"),
         ),
         210,
     )
 
     assert not result.allowed
+
+
+def test_resolved_objection_reopens_the_gate() -> None:
+    """The objection's own author withdrawing it with `Resolve:` unblocks
+    work."""
+    objection = comment(2, "skeptic", "Object: Needs a rollback plan")
+    result = standalone_issue_approval_decision(
+        issue_snapshot(
+            comment(1, "reviewer", "Approve"),
+            objection,
+            comment(3, "skeptic", f"Resolve: {objection['html_url']}"),
+        ),
+        210,
+    )
+
+    assert result.allowed
 
 
 def test_approval_becomes_stale_after_a_later_issue_edit() -> None:
@@ -185,7 +232,7 @@ def test_approval_becomes_stale_after_a_later_issue_edit() -> None:
             comment(
                 1,
                 "reviewer",
-                "/milestone approve",
+                "Approve",
                 created_at="2026-01-01T00:00:00Z",
             ),
             updated_at="2026-01-01T01:00:00Z",
@@ -205,7 +252,7 @@ def test_approval_posted_after_the_last_edit_is_not_stale() -> None:
             comment(
                 1,
                 "reviewer",
-                "/milestone approve",
+                "Approve",
                 created_at="2026-01-02T00:00:00Z",
             ),
             updated_at="2026-01-01T00:00:00Z",
@@ -215,6 +262,21 @@ def test_approval_posted_after_the_last_edit_is_not_stale() -> None:
 
     assert result.allowed
     assert result.summary == "Issue approved by reviewer"
+
+
+def test_milestone_slash_vocabulary_does_not_count_on_a_standalone_issue() -> (
+    None
+):
+    """The tracker's `/milestone approve` family is a separate, independent
+    vocabulary: it must never satisfy the standalone Issue-approval gate."""
+    result = standalone_issue_approval_decision(
+        issue_snapshot(
+            comment(1, "reviewer", "/milestone approve"),
+        ),
+        210,
+    )
+
+    assert not result.allowed
 
 
 def test_check_issue_approval_defers_milestone_scoped_issues(
@@ -320,7 +382,7 @@ def test_standalone_pull_decision_allows_an_approved_closing_issue(
         _standalone_pull_decision.__globals__,
         "load_issue_snapshot",
         lambda repo, number: issue_snapshot(
-            comment(1, "reviewer", "/milestone approve"), number=number
+            comment(1, "reviewer", "Approve"), number=number
         ),
     )
     pull = {"milestone": None, "body": "Closes #210"}
@@ -377,7 +439,7 @@ def test_check_pr_allows_an_approved_milestone_less_pull_request(
         check_pr.__globals__,
         "load_issue_snapshot",
         lambda repo, number: issue_snapshot(
-            comment(1, "reviewer", "/milestone approve"), number=number
+            comment(1, "reviewer", "Approve"), number=number
         ),
     )
     monkeypatch.setitem(

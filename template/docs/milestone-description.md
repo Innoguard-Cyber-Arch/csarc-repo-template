@@ -68,9 +68,12 @@ Issue，本身需要一次非提案者核可，或同一套 `admin` collaborator
 填），才能讓以 `Closes`／`Fixes`／`Resolves #N` 連結它的 PR 通過「Validate Milestone
 approval」與 merge queue 的「Revalidate queued Milestone approval」
 （`standalone_issue_approval_decision()`／`check_issue_approval()`；CLI：
-`check-issue-approval --repo <repo> --issue <編號>`）。核可留言語彙與判斷邏輯與
-tracker、scope-expansion 兩個既有 gate 完全相同，只是核可對象換成這張沒有 Milestone
-的 Issue 自己的留言。這與上一段「不延伸到 work PR」的決定並不衝突：核可對象仍然是
+`check-issue-approval --repo <repo> --issue <編號>`）。核可留言語彙是純文字、不分大小
+寫的 `Approve`／`Admin-approve: <理由>`／`Object: <理由>`／`Resolve: <目標>`——刻意
+與 tracker、scope-expansion 兩個既有 gate 的 `/milestone approve` 系列語彙保持獨立、
+不互相沿用（維護者在 Issue #743 留言中的決定：沒有 Milestone 的 Issue 用不上「/milestone」
+這個斜線指令，純文字關鍵字也不必先查文件），只是判斷演算法的結構相同，核可對象換成
+這張沒有 Milestone 的 Issue 自己的留言。這與上一段「不延伸到 work PR」的決定並不衝突：核可對象仍然是
 Issue，不是 PR 本身，PR 合併授權依舊完全是 `validate-pr-policy` 與 PR review（#719）
 的責任。屬於 Milestone 的 work Issue 不受影響，繼續只靠 tracker 核可，不需要逐張另外
 核可。細節見 `docs/ci-policy.md`「Standalone／hotfix／release recovery Issue 核可

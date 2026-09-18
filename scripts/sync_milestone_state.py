@@ -607,6 +607,138 @@ def check_scope(repo: str, number: int) -> Decision:
     return scope_decision(load_issue_snapshot(repo, number))
 
 
+def _issue_admin_self_approval(
+    command: str,
+    author: str,
+    author_type: str | None,
+    permission: str | None,
+    proposer: str | None,
+) -> str | None:
+    """Return the reason for one valid Issue admin self-approval, if any.
+
+    Mirrors `_admin_self_approval()`'s algorithm exactly, but for the
+    standalone/hotfix/release-recovery Issue-approval vocabulary the
+    maintainer decided on 2026-09-18 in Issue #743's own comments: plain,
+    case-insensitive `Admin-approve: <reason>` instead of the tracker's
+    `/milestone admin-approve:`. This is a deliberately separate, parallel
+    vocabulary -- not a case-insensitive relaxation of the tracker's own
+    slash-command syntax -- so it is its own function rather than a
+    parameterized `_admin_self_approval()`.
+    """
+    prefix = "admin-approve:"
+    if not command.lower().startswith(prefix):
+        return None
+    reason = command[len(prefix) :].strip()
+    if not reason or author != proposer or author_type == "Bot":
+        return None
+    return reason if permission == "admin" else None
+
+
+def _issue_record_objection(
+    lowered: str,
+    command: str,
+    author: str,
+    url: object,
+    objections: dict[str, str],
+) -> None:
+    """Record one Issue-approval objection comment, keyed by its permalink.
+
+    Mirrors `_record_objection()` for the `Object: <reason>` vocabulary
+    (#743) instead of `/milestone object:`.
+    """
+    if not lowered.startswith("object:") or not isinstance(url, str):
+        return
+    if command[len("object:") :].strip():
+        objections[url] = author
+
+
+def _issue_record_resolution(
+    lowered: str,
+    command: str,
+    author: str,
+    objections: dict[str, str],
+    resolved: set[str],
+) -> None:
+    """Record one Issue-approval objection withdrawal by its original author.
+
+    Mirrors `_record_resolution()` for the `Resolve: <target>` vocabulary
+    (#743) instead of `/milestone resolve:`.
+    """
+    if not lowered.startswith("resolve:"):
+        return
+    target = command[len("resolve:") :].strip()
+    if objections.get(target) == author:
+        resolved.add(target)
+
+
+def _issue_approval_records(
+    snapshot: dict[str, Any],
+    proposer: str | None,
+    *,
+    item_updated_at: str | None = None,
+) -> tuple[set[str], dict[str, str], set[str], dict[str, str], set[str]]:
+    """Collect standalone/hotfix Issue approvals, objections, self-approvals.
+
+    A parallel, independent counterpart to `_approval_records()`: same
+    algorithm shape (first non-blank comment line, non-proposer
+    requirement, admin self-approval via collaborator permission,
+    objection/resolution tracking keyed by comment URL, #632's
+    fingerprint-binding staleness), but matching the plain, case-insensitive
+    `Approve` / `Admin-approve: <reason>` / `Object: <reason>` /
+    `Resolve: <target>` vocabulary Issue #743 decided on 2026-09-18 --
+    deliberately kept separate from the tracker's `/milestone approve`
+    family rather than merged into the same comparison, per that decision.
+    """
+    approvals: set[str] = set()
+    objections: dict[str, str] = {}
+    resolved: set[str] = set()
+    admin_approvals: dict[str, str] = {}
+    stale: set[str] = set()
+    repo = snapshot.get("repo")
+    for comment in snapshot.get("comments", []):
+        body = comment.get("body")
+        author = comment.get("user", {}).get("login")
+        author_type = comment.get("user", {}).get("type")
+        url = comment.get("html_url")
+        if not isinstance(body, str) or not isinstance(author, str):
+            continue
+        command = next(
+            (line.strip() for line in body.splitlines() if line.strip()), ""
+        )
+        lowered = command.lower()
+        is_stale = _approval_is_stale(
+            item_updated_at, comment.get("created_at")
+        )
+        if lowered == "approve":
+            if author != proposer and author_type != "Bot":
+                if is_stale:
+                    stale.add(author)
+                else:
+                    approvals.add(author)
+            continue
+        # Only query collaborator permission for a plausible admin-approve
+        # comment from the proposer -- avoids one API call per comment.
+        permission = (
+            _collaborator_permission(repo, author)
+            if isinstance(repo, str)
+            and author == proposer
+            and lowered.startswith("admin-approve:")
+            else None
+        )
+        reason = _issue_admin_self_approval(
+            command, author, author_type, permission, proposer
+        )
+        if reason is not None:
+            if is_stale:
+                stale.add(author)
+            else:
+                admin_approvals[author] = reason
+            continue
+        _issue_record_objection(lowered, command, author, url, objections)
+        _issue_record_resolution(lowered, command, author, objections, resolved)
+    return approvals, objections, resolved, admin_approvals, stale
+
+
 def standalone_issue_approval_decision(
     snapshot: dict[str, Any], issue_number: int
 ) -> Decision:
@@ -618,19 +750,32 @@ def standalone_issue_approval_decision(
     unchanged (see `check_issue_approval()`, which routes there before ever
     calling this function): this function only runs for the other half of
     the maintainer's two-point approval model -- an Issue with no Milestone
-    needs its own approval, because nothing else ever gates it. Reuses the
-    tracker's and the scope-expansion gate's identical `/milestone approve`
-    / `/milestone admin-approve:` / `/milestone object:` / `/milestone
-    resolve:` comment vocabulary and fingerprint-binding invalidation
-    (#632) via `_approval_records()` / `_gate_decision()` -- no second
-    parallel approval system.
+    needs its own approval, because nothing else ever gates it.
+
+    Uses the plain, case-insensitive `Approve` / `Admin-approve: <reason>` /
+    `Object: <reason>` / `Resolve: <target>` vocabulary the maintainer
+    decided on 2026-09-18 (Issue #743's own comments) -- a deliberate,
+    independent counterpart to the tracker's and scope-expansion gate's
+    `/milestone approve` family, not a reuse of it: a slash command reads
+    oddly on an Issue that has no Milestone to invoke it against, and a
+    plain keyword needs no prior familiarity with the tracker's own syntax.
+    The two vocabularies are evaluated by entirely separate functions
+    (`_issue_approval_records()` / `_issue_admin_self_approval()` here, vs.
+    `_approval_records()` / `_admin_self_approval()` for the tracker) so
+    neither can accidentally match the other's comments; only the
+    fingerprint-binding staleness helper (`_approval_is_stale()`) and the
+    final pass/fail assembly (`_gate_decision()`) -- both vocabulary-agnostic
+    -- are shared, which is what "no second parallel system" means here: one
+    shared decision engine, two independent comment grammars feeding it.
     """
     issue = snapshot.get("issue")
     if not isinstance(issue, dict):
         return Decision(False, "GitHub returned invalid Issue data")
     proposer = issue.get("user", {}).get("login")
-    approvals, objections, resolved, admin_approvals, stale = _approval_records(
-        snapshot, proposer, item_updated_at=issue.get("updated_at")
+    approvals, objections, resolved, admin_approvals, stale = (
+        _issue_approval_records(
+            snapshot, proposer, item_updated_at=issue.get("updated_at")
+        )
     )
     return _gate_decision(
         approvals,
@@ -640,10 +785,9 @@ def standalone_issue_approval_decision(
         stale,
         missing_message=(
             f"Issue #{issue_number} has no Milestone: a person other than "
-            "the proposer must comment `/milestone approve` on it, or an "
-            "admin collaborator who is also the proposer may comment "
-            "`/milestone admin-approve: <reason>`, before this pull request "
-            "can merge"
+            "the proposer must comment `Approve` on it, or an admin "
+            "collaborator who is also the proposer may comment "
+            "`Admin-approve: <reason>`, before this pull request can merge"
         ),
         approved_prefix="Issue approved by",
         admin_prefix="Issue admin self-approved by",

@@ -206,17 +206,29 @@ Issue**（standalone、hotfix、release recovery）本身需要核可，工作 P
 **決定：**新增 `standalone_issue_approval_decision()`／`check_issue_approval()`
 （CLI：`check-issue-approval --repo --issue`），要求一張沒有 Milestone 的 Issue，在其
 `Closes`／`Fixes`／`Resolves #N` 連結的工作 PR 合併前，必須先取得一次非提案者核可，
-或同一套 `admin` collaborator 自核例外（理由必填）。核可語彙與判斷邏輯——
-`/milestone approve`／`/milestone admin-approve: <理由>`／`/milestone object:`／
-`/milestone resolve:`、`_approval_records()`／`_gate_decision()`、#632 的
-fingerprint-binding staleness 判定——與 tracker 核可、`scope_decision()` 完全共用，
-不建第二套核可系統；這個沿用既有語彙、不新增 Issue 專用詞彙的選擇記錄在 Issue #743
-的留言中。CI 接線不需要新增 workflow step：`pr-policy.yml` 既有的「Validate Milestone
-approval」（`check-pr`）與 merge queue 的「Revalidate queued Milestone approval」
-（`check-merge-group`）本來就對每個 PR／merge-group commit 呼叫 `_pull_decision()`，
-`#743` 只改寫這個函式在「PR 沒有 Milestone」分支下的行為。找不到連結 Issue 的 PR（release
-自動化、Dependabot、`automation/*`、main-sync bridge）維持不受影響，與
-`check-scope-gate` 既有的相同 carve-out 一致。
+或同一套 `admin` collaborator 自核例外（理由必填）。核可語彙是維護者在 Issue #743
+留言中（2026-09-18，實作開始前）明確決定的**獨立新詞彙**：純文字、不分大小寫的
+`Approve`／`Admin-approve: <理由>`／`Object: <理由>`／`Resolve: <目標>`，刻意
+**不**沿用 tracker 的 `/milestone approve`／`/milestone admin-approve:`／
+`/milestone object:`／`/milestone resolve:`——理由是這張 Issue 根本沒有 Milestone，
+套用「/milestone」語意本身就怪，且純文字關鍵字比斜線指令更符合協作者的自然直覺、
+不必先查文件。判斷演算法（非提案者要求、admin self-approve 的 collaborator
+permission 查核、反駁／解決追蹤、#632 的 fingerprint-binding staleness）與 tracker
+核可、`scope_decision()` 結構相同，但用獨立的新函式實作
+（`_issue_approval_records()`／`_issue_admin_self_approval()`），刻意不修改也不參數
+化既有的 `_approval_records()`／`_admin_self_approval()`：兩套語彙保持並行、互不
+影響，只共用與具體語彙無關的 `_gate_decision()`（組裝最終 pass/fail）與
+`_approval_is_stale()`（staleness 判定）——「不建第二套系統」在這裡指的是一套共用的
+判斷骨架搭配兩套獨立語彙，不是把新語彙合併進既有的比對函式。CI 接線不需要新增
+workflow step：`pr-policy.yml` 既有的「Validate Milestone approval」（`check-pr`）與
+merge queue 的「Revalidate queued Milestone approval」（`check-merge-group`）本來就
+對每個 PR／merge-group commit 呼叫 `_pull_decision()`，`#743` 只改寫這個函式在「PR
+沒有 Milestone」分支下的行為。找不到連結 Issue 的 PR（release 自動化、Dependabot、
+`automation/*`、main-sync bridge）維持不受影響，與 `check-scope-gate` 既有的相同
+carve-out 一致。`.github/ISSUE_TEMPLATE/bug.yml`／`task.yml`／`feature.yml`／
+`documentation.yml`（root／`template/` 成對）補上一句提示，說明沒有 Milestone 的
+Issue 需要另一位協作者留言 `Approve`，或 admin collaborator 提案者自留言
+`Admin-approve: <理由>`。
 
 **與本 ADR 第 2 節的關係：**這是同一份決定的另一半，不是推翻。第 2 節明確保留的範圍是
 「**work PR** 不加裝 native required review，也不延伸 `/milestone` 語彙到個別 work
@@ -226,10 +238,11 @@ PR」——這裡核可的對象是**Issue**，不是 PR 本身，PR 合併授�
 經成立（例如 wayhong0928 已經在回報與核准），但這裡選擇的解法是「沒有 Milestone 的
 Issue 需要核可」，而不是重新開放「work PR 需要 native required review」；後者的
 self-lock 疑慮（單一真人帳號時代遺留、`#512`／`#518`／`#546`／`#549`／`#550`）在
-Issue-level 核可加上 admin self-approval 例外之後同樣不會重演，因為例外機制原封不動
-沿用。`#745`（後續 Issue，尚未實作）會依發布層級（alpha／beta 以上）進一步限縮 admin
-self-approval 是否允許；`#743` 落地的是現行「非提案者核准或 admin 自核」規則，不預先
-實作 `#745` 的分層邏輯。
+Issue-level 核可加上 admin self-approval 例外之後同樣不會重演，因為例外機制的判斷
+精神（非提案者要求、collaborator permission 查核、理由必填）原封不動沿用，只是換一
+套獨立語彙、獨立函式實作。`#745`（後續 Issue，尚未實作）會依發布層級（alpha／beta
+以上）進一步限縮 admin self-approval 是否允許；`#743` 落地的是現行「非提案者核准或
+admin 自核」規則，不預先實作 `#745` 的分層邏輯。
 
 完整說明見 `docs/ci-policy.md`「Standalone／hotfix／release recovery Issue 核可
 gate（#743）」一節；`docs/milestone-description.md` 同步更新對應段落；
