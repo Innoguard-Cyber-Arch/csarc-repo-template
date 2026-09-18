@@ -4704,6 +4704,145 @@ def test_update_other_verification_failures_stay_fail_closed(
     ) == "template version one\n"
 
 
+def test_update_reinstall_fails_closed_when_project_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Bug fix: reinstall must run real project verification, not skip it.
+
+    verification_authorized=False (the preview build) always reports
+    "pending-authorization", which the generic `applicable` field alone
+    cannot tell apart from a real pass. A reinstall whose candidate would
+    fail ./scripts/verify must never report "Reinstall complete." or
+    write anything to target.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    capsys.readouterr()
+
+    # A hook that always fails, wired in for this one update via --data
+    # (project_verification_hook is an ordinary, unrestricted answer).
+    write_executable(
+        source / "template" / "scripts" / "verify-failing",
+        "#!/usr/bin/env bash\nset -euo pipefail\nexit 1\n",
+    )
+    (source / "template" / "new-feature.txt").write_text(
+        "added in the new release\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", second_sha)
+    client = LocalGitReleaseClient(
+        source, "0.2.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    verify_project_calls: list[Path] = []
+    real_verify_project = cli.verify_project
+
+    def spying_verify_project(target: Path) -> dict[str, object]:
+        verify_project_calls.append(target)
+        return real_verify_project(target)
+
+    monkeypatch.setattr(cli, "verify_project", spying_verify_project)
+
+    result = main(
+        [
+            "update",
+            str(project),
+            "--yes",
+            "--non-interactive",
+            "--data",
+            "project_verification_hook=scripts/verify-failing",
+        ]
+    )
+    assert result != 0
+    error = capsys.readouterr().err
+    assert "verification" in error.lower()
+    assert "Reinstall complete." not in error
+    # Real verification actually ran (the bug: it never did) and rejected
+    # the candidate, rather than the write silently proceeding anyway.
+    assert verify_project_calls
+    assert not (project / "new-feature.txt").exists()
+
+
+def test_update_reinstall_honors_an_explicit_to_target_over_latest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Bug fix: reinstall must target an explicit --to, not silently "latest".
+
+    Two scenarios in one test: (1) the recorded tag is missing but the
+    explicit --to target is fine -- reinstall must land on that target,
+    not on whatever "latest" happens to be; (2) the explicit --to target
+    itself is the one confirmed missing -- reinstall must not silently
+    substitute "latest" instead, and the failure must name that target.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    capsys.readouterr()
+
+    (source / "template" / "new-feature.txt").write_text(
+        "beta content\n", encoding="utf-8"
+    )
+    beta_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", beta_sha)
+    (source / "template" / "new-feature.txt").write_text(
+        "latest content, not requested\n", encoding="utf-8"
+    )
+    latest_sha = commit(source, "test: template version three")
+    git(source, "tag", "0.3.0-beta.1", latest_sha)
+
+    # Scenario 1: recorded tag v0.1.0 is gone, but the requested --to is
+    # fine. "latest" is deliberately a different, newer tag so landing on
+    # it instead of the explicit --to would be observable.
+    client = LocalGitReleaseClient(
+        source, "0.3.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                "0.2.0-beta.1",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / "new-feature.txt").read_text(
+        encoding="utf-8"
+    ) == "beta content\n"
+    capsys.readouterr()
+
+    # Scenario 2: the explicit --to target itself is the one that is
+    # confirmed missing. Must not silently fall back to "latest" (or to
+    # anything else) without telling the caller.
+    client_2 = LocalGitReleaseClient(
+        source, "0.3.0-beta.1", missing=frozenset({"0.9.0-beta.1"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client_2)
+    before = (project / "new-feature.txt").read_text(encoding="utf-8")
+    result = main(
+        [
+            "update",
+            str(project),
+            "--to",
+            "0.9.0-beta.1",
+            "--yes",
+            "--non-interactive",
+        ]
+    )
+    assert result != 0
+    error = capsys.readouterr().err
+    assert "0.9.0-beta.1" in error
+    # Never silently reinstall to "latest" (0.3.0-beta.1) instead of the
+    # explicit, still-unresolved --to target.
+    assert (project / "new-feature.txt").read_text(encoding="utf-8") == before
+
+
 @pytest.mark.large
 def test_update_migrates_legacy_copier_answers_to_single_config(
     tmp_path: Path,

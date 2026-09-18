@@ -5020,7 +5020,80 @@ def update_plan_answers(  # noqa: C901
     return result, update_data
 
 
-def command_update_reinstall(
+def _render_reinstall_plan(
+    args: argparse.Namespace,
+    target: Path,
+    source: str,
+    candidate_answers: dict[str, object],
+    repository: RepositoryContext,
+    generated_at: str,
+    *,
+    label: str,
+) -> tuple[Path, ResolvedPlan, Path, str]:
+    """Render the requested revision fresh and build one adoption plan.
+
+    Never reuses a previous render: called once for the pre-confirmation
+    preview and again after confirmation, closing the plan-to-apply TOCTOU
+    window. Always `verification_authorized=False` -- the answers file is
+    excluded from the adopt-style diff below (see the comment at
+    `staged_answers_path.unlink()`), so `prepare_adoption_candidate` would
+    clone the *target's* stale answers file into candidate and run
+    `verify_project` against the wrong configuration if authorized here;
+    real verification is instead run explicitly by the caller, against
+    candidate, after overwriting its answers file with the fresh content
+    this function returns (see `command_update_reinstall`). Always
+    resolves `args.to` -- the caller's actual requested target, not a
+    hardcoded "latest" -- so an explicit `--to <tag>` is never silently
+    substituted; if that same explicit target is also unavailable,
+    resolving it here raises the same `ReleaseNotFoundError` again,
+    uncaught, with its own specific message naming that tag.
+
+    Returns `(temporary_root, plan, answers_relative, fresh_answers)`; the
+    caller owns `temporary_root` and must remove it once done (the
+    candidate lives at `temporary_root / "candidate"`).
+    """
+    revision = resolve_revision(
+        source,
+        args.to,
+        expected_sha=args.expected_sha,
+        allow_unreleased=args.allow_unreleased,
+    )
+    temporary_root = Path(tempfile.mkdtemp(prefix=f"csarc-reinstall-{label}-"))
+    stage = temporary_root / "rendered"
+    stage.mkdir()
+    copier_copy(revision.source, revision, stage, candidate_answers)
+    # The freshly rendered answers file legitimately differs from the
+    # target's (new _commit/_src_path, possibly new answers) on every
+    # ordinary reinstall -- that is expected evolution, not a conflict, so
+    # it is excluded from the adopt-style diff entirely and written to
+    # target directly once the rest of the patch has applied, exactly
+    # like the normal (non-reinstall) update path leaves answer-file
+    # merging to Copier rather than compare_stage.
+    staged_answers_path = config_path(stage)
+    answers_relative = staged_answers_path.relative_to(stage)
+    fresh_answers = staged_answers_path.read_text(encoding="utf-8")
+    staged_answers_path.unlink()
+    capabilities = capability_preflight(
+        stage / "scripts" / "release_policy.py", target, revision, emit=False
+    )
+    plan = build_adoption_plan(
+        stage,
+        temporary_root / "candidate",
+        target,
+        revision,
+        repository,
+        candidate_answers,
+        capabilities,
+        generated_at,
+        verification_authorized=False,
+    )
+    if plan.adoption is None:
+        shutil.rmtree(temporary_root, ignore_errors=True)
+        raise CliError("Reinstall plan has no adoption evidence.")
+    return temporary_root, plan, answers_relative, fresh_answers
+
+
+def command_update_reinstall(  # noqa: C901
     args: argparse.Namespace,
     target: Path,
     source: str,
@@ -5028,21 +5101,42 @@ def command_update_reinstall(
     repository: RepositoryContext,
     missing: ReleaseNotFoundError,
 ) -> int:
-    """Fall into a from-scratch reinstall plan when the recorded tag is gone.
+    """Fall into a from-scratch reinstall plan when a release tag is gone.
 
-    Triggered only by a confirmed missing release tag (Issue #744); every
-    other verification failure keeps raising through `update_status`
+    Triggered only by a confirmed missing release tag (Issue #744) --
+    either the saved provenance's `release_tag` or, if the caller passed
+    one, an explicit `--to` target; `missing` names whichever one actually
+    raised and is surfaced verbatim so the two cases are never conflated.
+    Every other verification failure keeps raising through `update_status`
     unchanged (see the `except ReleaseNotFoundError` in `command_update`).
     Reuses `csarc adopt`'s exact transactional-plan machinery (Issue #219,
     `build_adoption_plan`/`compare_stage`) so additions, overwrites,
     preserved files, and manual-merge items are categorized identically,
     and a project-owned or diverged file is never silently overwritten.
 
-    Only a fully clean plan (no manual merge needed) is applied here after
-    confirmation; a plan that needs manual merges is reported and left for
-    `csarc adopt` to resolve against this same directory, rather than
-    reimplementing adopt's separate pending/finalize replay flow a second
-    time for this narrower recovery path.
+    Mirrors `command_apply_adoption_plan`/`command_finalize_adoption`'s own
+    preview-then-reverify shape: a cheap, side-effect-free preview build is
+    shown and gates on `--check` and on needing manual merges; only after
+    the caller confirms does a second, independent render run, closing the
+    plan-to-apply TOCTOU window. That second build still uses
+    `verification_authorized=False` (the answers file is excluded from the
+    adopt-style diff below, so `prepare_adoption_candidate` would clone
+    the *target's* stale answers file into candidate and verify against
+    the wrong configuration); instead, the fresh answers file is written
+    into candidate directly and `verify_project` -- the same canonical
+    `./scripts/verify` plus validated project hook every other
+    apply-to-target path in this module runs -- is invoked explicitly
+    against it. A `ProjectVerificationError` there fails reinstall closed
+    before anything is written to target, exactly like `adopt
+    --apply-plan`/`--finalize`/`update`'s own unconditional
+    `verify_project` calls already require; the generic `applicable`
+    field is never trusted on its own here, since `verification_authorized
+    =False` always reports `pending-authorization`, which that field alone
+    cannot distinguish from a real pass. A plan that needs manual merges
+    is reported and left for `csarc adopt` to resolve against this same
+    directory, rather than reimplementing adopt's separate
+    pending/finalize replay flow a second time for this narrower recovery
+    path.
 
     Known limitation: unlike the ordinary (non-reinstall) update path,
     which renders both the old and new revisions to tell "the template
@@ -5058,88 +5152,121 @@ def command_update_reinstall(
     `csarc update` would; a future revision could add a best-effort
     three-way diff when the old commit SHA happens to still be fetchable.
     """
+    target_label = args.to if args.to else "the newest available release"
     print(
-        f"Recorded release tag is unavailable ({missing}); planning a "
-        "reinstall from the newest available release instead of failing "
-        "(Issue #744).",
+        f"{missing} Attempting a reinstall targeting {target_label} "
+        "instead of failing outright (Issue #744).",
         file=sys.stderr,
     )
     if not args.check:
         require_clean_repository(target)
     generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
-    with tempfile.TemporaryDirectory(prefix="csarc-reinstall-") as temporary:
-        temporary_root = Path(temporary)
-        revision = resolve_revision(source, None)
-        stage = temporary_root / "rendered"
-        stage.mkdir()
-        copier_copy(revision.source, revision, stage, candidate_answers)
-        # The freshly rendered answers file legitimately differs from the
-        # target's (new _commit/_src_path, possibly new answers) on every
-        # ordinary reinstall -- that is expected evolution, not a conflict,
-        # so it is excluded from the adopt-style diff entirely and written
-        # to target directly once the rest of the patch has applied,
-        # exactly like the normal (non-reinstall) update path leaves
-        # answer-file merging to Copier rather than compare_stage.
-        staged_answers_path = config_path(stage)
-        answers_relative = staged_answers_path.relative_to(stage)
-        fresh_answers = staged_answers_path.read_text(encoding="utf-8")
-        staged_answers_path.unlink()
-        capabilities = capability_preflight(
-            stage / "scripts" / "release_policy.py",
+
+    preview_root, preview, _preview_answers_relative, _preview_answers = (
+        _render_reinstall_plan(
+            args,
             target,
-            revision,
-            emit=False,
-        )
-        candidate = temporary_root / "candidate"
-        plan = build_adoption_plan(
-            stage,
-            candidate,
-            target,
-            revision,
-            repository,
+            source,
             candidate_answers,
-            capabilities,
+            repository,
             generated_at,
-            verification_authorized=False,
+            label="preview",
         )
+    )
+    try:
         if args.json:
             print(
                 json.dumps(
-                    plan.as_dict(), sort_keys=True, separators=(",", ":")
+                    preview.as_dict(), sort_keys=True, separators=(",", ":")
                 )
             )
         else:
-            print_plan(plan)
-        adoption = plan.adoption
-        if adoption is None:
+            print_plan(preview)
+        adoption = preview.adoption
+    finally:
+        shutil.rmtree(preview_root, ignore_errors=True)
+    if adoption is None:
+        raise CliError("Reinstall plan has no adoption evidence.")
+
+    if args.check:
+        return 1
+    if adoption.get("phase") == "pending":
+        print(
+            "Reinstall needs manual merges before it can be applied "
+            "automatically. Resolve the listed manual-merge files "
+            "against this directory with csarc adopt, then rerun "
+            "csarc update.",
+            file=sys.stderr,
+        )
+        return 1
+    if adoption.get("applicable") is not True:
+        raise CliError("Reinstall plan is not applicable.")
+    if not confirm(args):
+        return 0
+
+    # Re-render from scratch now that the caller has approved: this closes
+    # the plan-to-apply TOCTOU window (matching
+    # command_apply_adoption_plan/command_finalize_adoption). The fresh
+    # answers file is written into candidate below and verify_project is
+    # invoked explicitly against it, exactly like command_update's own
+    # unconditional verify_project(candidate) call for its non-reinstall
+    # path (see _render_reinstall_plan's docstring for why).
+    require_clean_repository(target)
+    apply_root, fresh, answers_relative, fresh_answers = _render_reinstall_plan(
+        args,
+        target,
+        source,
+        candidate_answers,
+        repository,
+        generated_at,
+        label="apply",
+    )
+    try:
+        fresh_adoption = fresh.adoption
+        planned = fresh.files
+        if fresh_adoption is None or planned is None:
             raise CliError("Reinstall plan has no adoption evidence.")
-        if args.check:
-            return 1
-        if adoption.get("phase") == "pending":
+        if fresh_adoption.get("phase") == "pending":
             print(
                 "Reinstall needs manual merges before it can be applied "
-                "automatically. Resolve the listed manual-merge files "
-                "against this directory with csarc adopt, then rerun "
-                "csarc update.",
+                "automatically (the target changed since the preview "
+                "plan). Resolve the listed manual-merge files against "
+                "this directory with csarc adopt, then rerun csarc "
+                "update.",
                 file=sys.stderr,
             )
             return 1
-        if adoption.get("applicable") is not True:
-            raise CliError("Reinstall plan is not applicable.")
-        if not confirm(args):
-            return 0
-        artifacts = adoption.get("artifacts")
-        if not isinstance(artifacts, dict):
-            raise CliError("Reinstall plan has no artifact plan.")
+        owner_state = fresh_adoption.get("code_owner")
+        if (
+            isinstance(owner_state, dict)
+            and owner_state.get("state") == "blocked"
+        ):
+            raise CliError(
+                "Reinstall plan is not applicable: "
+                f"{owner_state.get('reason', 'CODEOWNER is blocked')}"
+            )
+        candidate = apply_root / "candidate"
+        (candidate / answers_relative).write_text(
+            fresh_answers, encoding="utf-8"
+        )
+        try:
+            verify_project(candidate)
+        except ProjectVerificationError as error:
+            raise CliError(
+                f"Reinstall verification failed after plan approval: {error}"
+            ) from error
+        _effects, artifacts = candidate_effects(candidate, target, planned)
         write_candidate_patch(
             candidate,
             target,
-            temporary_root / "reinstall.patch",
+            apply_root / "reinstall.patch",
             artifacts=artifacts,
-            target_snapshot=adoption,
+            target_snapshot=fresh_adoption,
         )
         (target / answers_relative).write_text(fresh_answers, encoding="utf-8")
-    write_provenance(target, revision, answers=candidate_answers)
+    finally:
+        shutil.rmtree(apply_root, ignore_errors=True)
+    write_provenance(target, fresh.revision, answers=candidate_answers)
     settings_plan(target)
     print("Reinstall complete.")
     return 0
