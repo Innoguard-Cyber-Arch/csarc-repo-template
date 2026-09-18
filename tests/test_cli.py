@@ -4736,6 +4736,121 @@ def test_update_real_template_legacy_two_file_schema_end_to_end(
     assert not (project / ".csarc/profile.json").exists()
 
 
+@pytest.mark.large
+def test_update_delivers_the_issue_743_approval_gate_to_an_adopted_project(
+    tmp_path: Path,
+) -> None:
+    """Issue #743's evidence for "existing-project update impact": generate a
+    project on the commit immediately before #743 landed, simulate it as an
+    already-adopted downstream repository (git-committed, untouched), then
+    run a real `csarc update` to this checkout's current HEAD and confirm
+    the standalone/hotfix Issue-approval gate is actually delivered -- not
+    silently dropped or conflicted out -- exactly like any other paired
+    `template/` change. Drives the real root `copier.yml` end to end (the
+    same `language=ci` profile, and the same overall pattern,
+    `test_update_real_template_legacy_two_file_schema_end_to_end` already
+    established for a different regression) rather than asserting against a
+    synthetic minimal fixture template.
+
+    Uses `language=ci`, not `language=python`: copier.yml's own `_exclude`
+    list drops the whole `/tests` directory for a project with no
+    `'python' in languages` (by design -- a CI-only project has no Python
+    toolchain to run pytest with), so this deliberately does not assert
+    `tests/test_standalone_issue_approval.py` lands here. What this test
+    proves instead is that the operative gate -- `scripts/
+    sync_milestone_state.py`'s new functions and CLI subcommand, the docs,
+    and the Issue templates -- actually reaches an adopted project through a
+    real `update`, and that the delivered script still loads and parses
+    correctly (the `--help` invocation) in a freshly copied, dependency-free
+    environment, not just that its source text changed.
+    """
+    from_sha = "9c18b10582e878aa42f2543008d5dd3dd726ccac"
+    to_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "standalone-approval-adopted-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                from_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "project_mode=new",
+                "--data",
+                "language=ci",
+                "--data",
+                "project_visibility=private",
+            ]
+        )
+        == 0
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: adopt the pre-#743 baseline")
+
+    sync_state_before = (
+        project / "scripts" / "sync_milestone_state.py"
+    ).read_text(encoding="utf-8")
+    assert "check_issue_approval" not in sync_state_before
+    assert "standalone_issue_approval_decision" not in sync_state_before
+    assert not (project / "tests").exists()
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                to_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+
+    sync_state_after = (
+        project / "scripts" / "sync_milestone_state.py"
+    ).read_text(encoding="utf-8")
+    assert "def check_issue_approval(" in sync_state_after
+    assert "def standalone_issue_approval_decision(" in sync_state_after
+    assert '"check-issue-approval"' in sync_state_after
+
+    ci_policy = (project / "docs" / "ci-policy.md").read_text(
+        encoding="utf-8"
+    )
+    assert "standalone_issue_approval_decision()" in ci_policy
+    assert "_issue_approval_records()" in ci_policy
+
+    for template_name in (
+        "bug.yml",
+        "task.yml",
+        "feature.yml",
+        "documentation.yml",
+    ):
+        template_text = (
+            project / ".github" / "ISSUE_TEMPLATE" / template_name
+        ).read_text(encoding="utf-8")
+        assert "Admin-approve" in template_text
+
+    # A CI-only project still has no /tests directory after the update --
+    # confirming the language-gated exclusion is unaffected by #743, not a
+    # side effect this change accidentally introduced.
+    assert not (project / "tests").exists()
+
+    help_output = run(
+        ["python3", "scripts/sync_milestone_state.py", "--help"], project
+    ).stdout
+    assert "check-issue-approval" in help_output
+
+
 def test_update_check_validates_hook_without_running_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -6650,6 +6765,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_update_check_dry_run_apply_and_conflict",
         "test_update_check_rejects_invalid_hook_without_writes",
         "test_update_check_does_not_execute_target_capability_helper",
+        "test_update_delivers_the_issue_743_approval_gate_to_an_adopted_project",
         "test_update_hook_failure_leaves_target_unchanged",
         "test_update_migrates_legacy_copier_answers_to_single_config",
         "test_update_migrates_legacy_profile_json_before_finalize_tasks",
