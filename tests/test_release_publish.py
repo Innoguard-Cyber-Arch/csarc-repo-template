@@ -122,6 +122,13 @@ print(json.dumps({"assets": items}))
 PY
     exit 0
   fi
+  # Issue #770: `gh api repos/{repo} --jq .id` looks up the numeric
+  # repository id verify_release_attestation cross-checks against the
+  # attestation's `repositoryId` predicate field below.
+  if [[ "$method" == "GET" && "$bare_path" =~ ^repos/[^/]+/[^/]+$ ]]; then
+    echo "$FIXTURE_REPOSITORY_ID"
+    exit 0
+  fi
   echo "mock gh: unhandled api path: $method $bare_path" >&2
   exit 2
 fi
@@ -188,14 +195,16 @@ json.dump(meta, open(sys.argv[2], 'w'))
       meta="$(release_meta "$tag")"
       draft_false=false
       make_draft=false
+      saw_latest=false
       while (($#)); do
         case "$1" in
           --draft=false) draft_false=true; shift ;;
           --draft) make_draft=true; shift ;;
-          --latest) shift ;;
+          --latest) saw_latest=true; shift ;;
           *) shift ;;
         esac
       done
+      echo "$tag latest=$saw_latest" >>"$FIXTURE_STATE/edit-log"
       # A real Release does not become immutable the instant it is marked
       # non-draft (see the eventual-consistency retry loop this fixture is
       # exercising); this fake models that lag as "immediately immutable
@@ -220,10 +229,74 @@ PY
       exit 0
       ;;
     verify)
-      tag="$2"
+      tag="$2"; shift 2
       meta="$(release_meta "$tag")"
+      format=""
+      while (($#)); do
+        case "$1" in
+          --repo) shift 2 ;;
+          --format) format="$2"; shift 2 ;;
+          *) shift ;;
+        esac
+      done
       [[ -f "$FIXTURE_STATE/force-verify-fail" ]] && exit 1
       [[ -f "$meta" ]]
+      if [[ "$format" == "json" ]]; then
+        # Issue #770: emit the same JSON shape a real `gh release verify
+        # --format json` would, built from the real bytes of whatever
+        # assets are currently staged for this tag, so the real
+        # verify_release_attestation/verify_release_consumption.py code
+        # under test runs unmodified against it. force-verify-fail above
+        # already covers "no attestation at all" (a real `gh release
+        # verify` fails outright in that case, --format json or not); these
+        # two markers instead let a test simulate a *present but wrong*
+        # attestation.
+        assets_dir="$state/releases/$tag/assets"
+        commit="$(git -C "$repo_dir" rev-parse "refs/tags/$tag^{commit}")"
+        signer="https://dotcom.releases.github.com"
+        [[ -f "$FIXTURE_STATE/force-attestation-signer-mismatch" ]] &&
+          signer="https://attacker.example.com"
+        digest_mismatch=""
+        [[ -f "$FIXTURE_STATE/force-attestation-digest-mismatch" ]] &&
+          digest_mismatch=1
+        python3 - "$assets_dir" "$GITHUB_REPOSITORY" "$FIXTURE_REPOSITORY_ID" \
+          "$tag" "$commit" "$signer" "$digest_mismatch" <<'PY'
+import hashlib, json, os, sys
+
+(
+    assets_dir, repository, repository_id,
+    tag, commit, signer, digest_mismatch,
+) = sys.argv[1:8]
+purl = f"pkg:github/{repository}@{tag}"
+subjects = [{"uri": purl, "digest": {"sha1": commit}}]
+mismatched = False
+for name in sorted(os.listdir(assets_dir)):
+    path = os.path.join(assets_dir, name)
+    if not os.path.isfile(path):
+        continue
+    digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    if digest_mismatch and not mismatched:
+        digest = "0" * 64
+        mismatched = True
+    subjects.append({"name": name, "digest": {"sha256": digest}})
+payload = {
+    "verificationResult": {
+        "signature": {"certificate": {"subjectAlternativeName": signer}},
+        "verifiedTimestamps": [{"type": "TimestampAuthority"}],
+        "statement": {
+            "predicateType": "https://in-toto.io/attestation/release/v0.2",
+            "predicate": {
+                "repository": repository,
+                "repositoryId": repository_id,
+                "tag": tag,
+            },
+            "subject": subjects,
+        },
+    }
+}
+print(json.dumps(payload))
+PY
+      fi
       exit 0
       ;;
     *)
@@ -266,11 +339,16 @@ def build_repo(tmp_path: Path) -> dict[str, str]:
     for name in (
         "release_bundle.py",
         "release_policy.py",
-        # release_policy.py imports this module (Issue #667) at load time.
+        # release_policy.py imports these modules at load time (Issue #667
+        # for stale_branch_detection, Issue #744 for release_phase).
         "stale_branch_detection.py",
+        "release_phase.py",
         "converge-release-tag",
         "verify-release-candidate",
         "publish-release",
+        # Issue #770: publish-release's post-hoc attestation check reuses
+        # this module's verify_consumption() rather than reimplementing it.
+        "verify_release_consumption.py",
     ):
         source = ROOT / "scripts" / name
         destination = root / "scripts" / name
@@ -470,12 +548,17 @@ def clean_environment() -> dict[str, str]:
     }
 
 
+FIXTURE_REPOSITORY_ID = "1340899393"
+
+
 def run_publish_release(
     *arguments: str,
     repo: Path,
     bindir: Path,
     state: Path,
     force_verify_fail: bool = False,
+    force_attestation_digest_mismatch: bool = False,
+    force_attestation_signer_mismatch: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Run the real scripts/publish-release with the fake `gh` in front.
 
@@ -496,12 +579,17 @@ def run_publish_release(
     env["PATH"] = f"{bindir}:{env['PATH']}"
     env["FIXTURE_STATE"] = str(state)
     env["FIXTURE_REPO"] = str(repo)
+    env["FIXTURE_REPOSITORY_ID"] = FIXTURE_REPOSITORY_ID
     env["CSARC_PUBLISH_CANDIDATE_STATUS"] = "false"
     env["GH_TOKEN"] = "fixture-token"  # noqa: S105 -- fixture value, not a secret
     runner_temp = Path(tempfile.mkdtemp(dir=state.parent))
     env["RUNNER_TEMP"] = str(runner_temp)
     if force_verify_fail:
         (state / "force-verify-fail").touch()
+    if force_attestation_digest_mismatch:
+        (state / "force-attestation-digest-mismatch").touch()
+    if force_attestation_signer_mismatch:
+        (state / "force-attestation-signer-mismatch").touch()
     return subprocess.run(  # noqa: S603
         [str(repo / SCRIPT), *arguments],
         cwd=repo,
@@ -731,8 +819,137 @@ def test_publish_builds_uploads_and_marks_the_release_published(
     assert sbom["spdxVersion"] == "SPDX-2.3"
 
 
+def test_publish_marks_latest_only_for_an_unsuffixed_tag(
+    tmp_path: Path,
+) -> None:
+    """Issue #744: --latest is conditional on the tag having no phase suffix.
+
+    A stable v0.2.0 tag gets `--latest`; an alpha/beta tag does not. The
+    beta candidate is a second, separate commit whose governed surfaces
+    genuinely say "0.2.0-beta.1" (release_bundle.py's own `identity()`
+    independently re-verifies the tag against those files via
+    verify_release_version, so a mismatched tag would fail regardless of
+    what created the Release). Its tag/draft-Release is created directly
+    via scripts/converge-release-tag rather than `publish-release stage`,
+    because `stage`'s verify-release-candidate recomputes only a bare
+    core version with no phase input (declaring a phase for an automated
+    candidate is Issue #745's job, not this one) and would reject a
+    phase-suffixed candidate outright -- this test is only about
+    cmd_publish's --latest conditional, not about the stage step.
+    """
+    fixture = build_repo(tmp_path)
+    root = Path(fixture["root"])
+    state = tmp_path / "state"
+    state.mkdir()
+    write_pull_request_fixture(
+        state,
+        number=1,
+        repo="acme/fixture",
+        base_sha=fixture["base_sha"],
+        candidate_sha=fixture["candidate_sha"],
+    )
+    bindir = fixture_bin(tmp_path)
+    install_fake_syft_installer(root, bindir / "syft")
+
+    # Stable tag: the existing, already-proven stage -> publish path.
+    git("checkout", "--detach", fixture["candidate_sha"], cwd=root)
+    stage_result = run_publish_release(
+        "stage",
+        "--repo",
+        "acme/fixture",
+        "--sha",
+        fixture["candidate_sha"],
+        "--tag",
+        "v0.2.0",
+        repo=root,
+        bindir=bindir,
+        state=state,
+    )
+    assert stage_result.returncode == 0, stage_result.stderr
+    publish_result = run_publish_release(
+        "publish",
+        "--repo",
+        "acme/fixture",
+        "--tag",
+        "v0.2.0",
+        repo=root,
+        bindir=bindir,
+        state=state,
+    )
+    assert publish_result.returncode == 0, publish_result.stderr
+
+    # Beta tag: a second commit with self-consistent "0.2.0-beta.1"
+    # surfaces, staged directly via converge-release-tag.
+    (root / "version.txt").write_text("0.2.0-beta.1\n", encoding="utf-8")
+    (root / ".release-please-manifest.json").write_text(
+        json.dumps({".": "0.2.0-beta.1"}), encoding="utf-8"
+    )
+    changelog = root / "CHANGELOG.md"
+    changelog.write_text(
+        changelog.read_text(encoding="utf-8").replace(
+            "# Changelog\n\n",
+            "# Changelog\n\n## [0.2.0-beta.1] - 2026-01-03\n\n* beta\n\n",
+        ),
+        encoding="utf-8",
+    )
+    git("add", "-A", cwd=root)
+    git("commit", "-q", "-m", "chore(main): release 0.2.0-beta.1", cwd=root)
+    beta_sha = git("rev-parse", "HEAD", cwd=root)
+
+    env = clean_environment()
+    env["PATH"] = f"{bindir}:{env['PATH']}"
+    env["FIXTURE_STATE"] = str(state)
+    env["FIXTURE_REPO"] = str(root)
+    env["GH_TOKEN"] = "fixture-token"  # noqa: S105 -- fixture value, not a secret
+    converge_result = subprocess.run(  # noqa: S603
+        [
+            str(root / "scripts" / "converge-release-tag"),
+            "--repo",
+            "acme/fixture",
+            "--sha",
+            beta_sha,
+            "--tag",
+            "v0.2.0-beta.1",
+        ],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert converge_result.returncode == 0, converge_result.stderr
+
+    publish_beta_result = run_publish_release(
+        "publish",
+        "--repo",
+        "acme/fixture",
+        "--tag",
+        "v0.2.0-beta.1",
+        repo=root,
+        bindir=bindir,
+        state=state,
+    )
+    assert publish_beta_result.returncode == 0, publish_beta_result.stderr
+
+    edit_log = (state / "edit-log").read_text(encoding="utf-8").splitlines()
+    by_tag = dict(line.split(" ", 1) for line in edit_log)
+    assert by_tag["v0.2.0"] == "latest=true"
+    assert by_tag["v0.2.0-beta.1"] == "latest=false"
+
+
 def test_publish_reverts_a_failed_release_back_to_draft(tmp_path: Path) -> None:
-    """A failed publish never leaves a half-public, still-mutable Release."""
+    """A failed publish never leaves a half-public, still-mutable Release.
+
+    `force_verify_fail` makes the fake `gh release verify` call fail
+    outright regardless of `--format json`, which is also exactly what a
+    real `gh release verify` does when no release attestation exists at
+    all -- so this doubles as the Issue #770 "missing attestation"
+    fail-closed scenario: `verify_release_attestation` in
+    scripts/publish-release never even gets to ask
+    verify_release_consumption.py about signer/digest identity, because the
+    single shared `gh release verify --format json` call it depends on
+    already failed.
+    """
     fixture = build_repo(tmp_path)
     root = Path(fixture["root"])
     state = tmp_path / "state"
@@ -780,6 +997,116 @@ def test_publish_reverts_a_failed_release_back_to_draft(tmp_path: Path) -> None:
     assert publish_result.returncode != 0
     meta = json.loads((state / "releases/v0.2.0/meta.json").read_text())
     assert meta["isDraft"] is True
+
+
+def _stage_fixture(tmp_path: Path) -> dict[str, Path]:
+    """Build and stage a candidate, returning everything publish needs.
+
+    Shared setup for the Issue #770 attestation-verification scenarios
+    below: each one only differs in which `force_attestation_*` fixture
+    marker `run_publish_release` is asked to set before calling `publish`.
+    """
+    fixture = build_repo(tmp_path)
+    root = Path(fixture["root"])
+    state = tmp_path / "state"
+    state.mkdir()
+    write_pull_request_fixture(
+        state,
+        number=1,
+        repo="acme/fixture",
+        base_sha=fixture["base_sha"],
+        candidate_sha=fixture["candidate_sha"],
+    )
+    bindir = fixture_bin(tmp_path)
+    install_fake_syft_installer(root, bindir / "syft")
+
+    stage_result = run_publish_release(
+        "stage",
+        "--repo",
+        "acme/fixture",
+        "--sha",
+        fixture["candidate_sha"],
+        "--tag",
+        "v0.2.0",
+        repo=root,
+        bindir=bindir,
+        state=state,
+    )
+    assert stage_result.returncode == 0, stage_result.stderr
+    return {"root": root, "state": state, "bindir": bindir}
+
+
+def test_publish_fails_closed_on_an_asset_digest_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Issue #770: an asset whose bytes disagree with the attestation.
+
+    verify_release_consumption.py's verify_consumption() is reused
+    unmodified here -- this proves scripts/publish-release actually wires
+    it in, not just that the function itself rejects a mismatch (already
+    covered by tests/test_release_consumption.py). Unlike the "missing
+    attestation" scenario above, a real attestation legitimately exists by
+    this point (only its content is wrong), which in this fixture's model
+    of GitHub's eventual consistency means `isImmutable` has already
+    flipped true and cannot be walked back -- the same asymmetry the
+    pre-existing `revert_to_draft_on_failure` guard (`if isImmutable ==
+    false`) already accounts for. The check's value here is failing loudly
+    and never reporting success, not undoing GitHub's own immutability.
+    """
+    prepared = _stage_fixture(tmp_path)
+
+    publish_result = run_publish_release(
+        "publish",
+        "--repo",
+        "acme/fixture",
+        "--tag",
+        "v0.2.0",
+        repo=prepared["root"],
+        bindir=prepared["bindir"],
+        state=prepared["state"],
+        force_attestation_digest_mismatch=True,
+    )
+
+    assert publish_result.returncode != 0
+    assert "digest mismatch" in publish_result.stderr.lower()
+    meta = json.loads(
+        (prepared["state"] / "releases/v0.2.0/meta.json").read_text()
+    )
+    assert meta["isImmutable"] is True
+    assert meta["isDraft"] is False
+
+
+def test_publish_fails_closed_on_a_signer_mismatch(tmp_path: Path) -> None:
+    """Issue #770: an attestation signed by an unexpected identity.
+
+    A real `gh release verify` only accepts GitHub's own
+    `https://dotcom.releases.github.com` release-service signer; this
+    proves scripts/publish-release's reuse of
+    verify_release_consumption.py enforces that same identity check rather
+    than trusting `gh release verify`'s bare exit code alone. See the
+    digest-mismatch test above for why `isDraft` stays `False` here too.
+    """
+    prepared = _stage_fixture(tmp_path)
+
+    publish_result = run_publish_release(
+        "publish",
+        "--repo",
+        "acme/fixture",
+        "--tag",
+        "v0.2.0",
+        repo=prepared["root"],
+        bindir=prepared["bindir"],
+        state=prepared["state"],
+        force_attestation_signer_mismatch=True,
+    )
+
+    assert publish_result.returncode != 0
+    assert "signer identity" in publish_result.stderr.lower()
+    meta = json.loads(
+        (prepared["state"] / "releases/v0.2.0/meta.json").read_text()
+    )
+    assert meta["isImmutable"] is True
+    assert meta["isDraft"] is False
 
 
 def test_rerun_verify_confirms_without_rebuilding_or_reuploading(

@@ -74,6 +74,30 @@ gh api repos/{owner}/{repo}/milestones --method GET -f state=all \
   --jq '.[] | "\(.number)\t\(.title)\t\(.state)"'
 ```
 
+## 核准後 body 編輯提醒（#799）
+
+核准綁定內容的 gate 會在 Issue body 後續變動時要求重新核准，但遠端 CI 只能在變動
+已經發生後才看見。要從本機或 agent 編輯 Issue body，使用
+`scripts/gh-issue-edit` 取代直接呼叫 `gh issue edit`：
+
+```bash
+scripts/gh-issue-edit 740 --body-file tracker.md
+```
+
+wrapper 只在 `--body`、`--body-file` 或 `--attach` 真正會改動 body 時執行預測；title、
+label、assignee、Milestone 等 metadata-only 編輯原樣直通。它讀取目前 Issue 與留言，
+用既有 `_approval_is_stale()` 對「目前 `updated_at`」與「假設現在完成編輯」各判斷一
+次，並沿用 tracker／scope expansion 的 `/milestone approve` 語彙與 #743 standalone／
+hotfix／release-recovery Issue 的 `Approve` 語彙。若這次編輯會讓最後一組有效核准失
+效，訊息會列出核准留言連結、核准者與應重新留言的語彙；仍有另一則核准落在既有 60
+秒 grace window 內時不誤報。
+
+互動式終端機會詢問是否繼續；非互動 agent／CI 只印提醒，仍以完全相同的參數執行
+`gh issue edit`，並保留其 exit status。預測查詢本身失敗也只印 notice、不把 advisory
+變成新的 fail-closed gate。這是 checked-in 本機／agent 路徑的安全網，無法攔截 GitHub
+網頁 UI 或直接 REST／GraphQL API 編輯；繞過 wrapper 時仍由既有遠端 gate 事後
+fail closed。
+
 ### 新發現問題的預設歸屬（#668）
 
 在 Milestone 工作過程中發現的新問題，開新 Issue 時預設留在同一個 Milestone（掛該
@@ -378,6 +402,17 @@ command substitution，這段文字從未被執行，但掃描器分不出「描
 仍然成立。這不是本節唯一的例外——`canonical_scanner_helper` 對
 `pr_lifecycle.py` 自身的例外也適用同一條通則，往後新增例外一律比照辦理。
 
+**Issue #744／#745 部分取代（2026-09-17）：** 本節的 `policies/project-stage.json`
+`release_phase`（alpha／beta／release 三值）繼續用於上面描述的 Ruleset
+bypass 範圍收斂，本身不受影響。但本節「`release_phase` 是人工宣告、不從
+分支模式或 semver 反推」的立場，以及「進入 `release` 後這整個 bypass
+結構性消失」隱含的單向前進假設，被維護者 2026-09-17 的決定取代：版本號
+本身現在就直接表示發布層級（見下面「版本、發版、交付與部署矩陣」與
+`docs/adr/release-security-and-dependencies.md` 新增段落），alpha／beta 可以
+在任何時候發布，不再是一段只會前進的一次性期間。審核與測試如何依層級分級
+（取代本節 bypass 機制的下一步）是 #745 的範圍，尚未落地前本節機制照舊
+生效；`policies/project-stage.json` 檔案本身與其三值不因 #744 改變。
+
 ### 不屬於里程碑的工作
 
 一張 Issue 若能獨立審查、驗證與交付，且沒有共同期限、跨 Issue 相依、整批驗收或
@@ -517,11 +552,16 @@ Milestone 一致，PR 沒有 Milestone 時連結 Issue 也不會有），但 `ch
 **核可留言到達時重新觸發 CI（code review 發現，`work-item-lifecycle.yml`）：**上面
 「PR 合併前的 CI 接線」只回答「PR 事件與 merge-group 事件發生時，怎麼判斷」；但
 tracker 路徑除此之外還有另一層——`work-item-lifecycle.yml` 的「Milestone lifecycle:
-reconcile lifecycle and refresh PR checks」step，只要 Milestone 相關的 Issue 有任何
-活動（留言、編輯等，條件是 `github.event.issue.milestone.number != null`），就呼叫
-`reconcile()` 連帶呼叫 `refresh_pr_checks()`，主動把新核可（或新失效）狀態推回其下每
-張 PR 的 check-run，讓 reviewer 不必等到 PR 本身有新事件才看到最新結果。`#743` 剛落
-地時只做了「PR 合併前的 CI 接線」，沒有補上這一層對稱——沒有 Milestone 的 Issue 收到
+reconcile lifecycle and refresh PR checks」step，會把事件中的 Issue 編號與 action 傳給
+`reconcile()`；只有 tracker Issue 的事件／留言、Milestone 事件，以及 Issue 移入、移出
+或改掛 Milestone 時，才真正同步狀態並呼叫 `refresh_pr_checks()`。一般 work Issue 的編輯、
+label 或留言會成功 no-op，不寫狀態也不刷新 PR check。符合條件的事件會把新核可（或新失
+效）狀態推回其下每張 PR 的 check-run，讓 reviewer 不必等到 PR 本身有新事件才看到最新
+結果。tracker 尚未核准、核准因後續編輯失效，或仍有未解反駁時，`reconcile` 仍會把失敗
+結果寫回 PR check，但以 notice 回報治理狀態並成功結束背景 run；PR 上的 required check
+繼續 fail closed。tracker 缺漏／格式錯誤、GitHub API 錯誤或狀態寫入失敗仍讓背景 run
+失敗，不會被當成等待核准。`#743` 剛落地時只做了「PR 合併前的 CI 接線」，沒有補上這
+一層對稱——沒有 Milestone 的 Issue 收到
 `Approve` 等留言時，`pr-policy.yml` 完全不監聽 `issue_comment`，`work-item-
 lifecycle.yml` 原本的 refresh step 條件又要求 `.milestone.number != null`，所以核可
 留言送出後，其連結 PR 的「Validate Milestone approval」check-run 會停在核可前的舊狀
@@ -883,7 +923,7 @@ job 目前沒有對應的本機可重跑回歸測試——它是一段會實際 
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併） | `issues`、`issue_comment`、`milestone` 事件；`pull_request.closed`（里程碑工作 PR 合併進 `dev/m*` 或 `promote/m*` 晉升 PR 合併進 `main`） | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新）、`tests/test_work_pr_closure.py` | 尚未落地 `main`，無新 live run；三個前身 workflow（`issue-triage.yml`、`milestone-lifecycle.yml`、`work-item-closure.yml`）已刪除，其舊 run 證據（`33524318953`／`33524281794`／`33502286588`）不再代表現行檔案 | **root：candidate**（待 main 落地並觸發首次 issues／issue_comment／milestone／pull_request 事件才能取得新 live evidence）；#574 只把三個 workflow 檔的既有邏輯打包成一個 job 內的循序 step，不改變任一 step 本身的行為、權限需求或所呼叫的 script |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
 | Dependabot | `.github/dependabot.yml` | GitHub 原生＋依賴安全；hosted verify 白名單（#753）；template 同步與 Actions pin 一致性（#755） | schedule／manifest 變更 | GitHub 原生 bot 邊界，無 repo workflow 權限 | dependency PR；`dependabot-auto-merge.yml` 的 `sync-template` job 在同一張 PR 內補齊 paired workflow 的 template 副本 | GitHub 原生功能，無 repo-local 測試；設定格式由 `scripts/sync-paired-files.sh --check` 涵蓋；Actions pin 一致性見 `tests/test_check_action_pins.py` | GitHub 註冊為 `Dependabot Updates`（`dynamic/dependabot/dependabot-updates`），state active（原生排程不透過 `gh run list` 查詢單筆 run） | active；`sync-template` job：candidate（待 `main` 落地並於首張真的改到 paired workflow 的 Dependabot PR 觸發後轉 active） |
-| Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598 | `main` push（post-merge）、manual rerun | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布 tag／GitHub Release／成品／checksum／SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py` | 已落地 `main` 並於 push 後實際觸發，`gh api tags`／`releases` 顯示過去確有真實 live 發版（`v0.12.2`／`v0.12.1`／`v0.12.0` 等）。`#588`（`docs/index.html` staleness）已由 `#593` 修正並於下一次 push 驗證：run [33763104406](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33763104406)（`6aa7724`，2026-09-03T13:47Z）的 `Static assets and paired files` 階段確實轉綠。但同一筆 run 在 `Regression tests` 階段仍以其他真實 pytest 失敗（`PR lifecycle blocked: Unleased PR lifecycle writer: .github/workflows/dependabot-auto-merge.yml`，導致生成專案 `scripts/verify` 失敗，牽連 `test_real_template_adoption_resumes_after_manifest_merge` 三種語言變體與 `test_real_existing_adoption_uses_fixed_ownership_policies`）——這是本輪盤點才發現、與 `#588`／`#591` 都無關的第四個獨立成因，尚未開對應 Issue。另外兩個較早的獨立成因：run [33719533651](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33719533651)（`9ed3594`）與 run [33730000169](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33730000169)（`99f52ef`）在 `Regression tests` 階段失敗於 `rm: cannot remove '.../work/.git': Directory not empty`，追蹤於 `#591`；run [33724898939](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33724898939)（`7719d2e4`）與 run [33729747815](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33729747815)（`ed7ab25`）在 `verify-template.sh` 全過後，於發版前 capability preflight 因 Actions policy HTTP 403 觸發 `#123` 既有設計的 fail-closed（`BLOCK_REASON: ... immutable_releases`），這是刻意行為、不是 bug | active for `verify`／`title`／`promotion`；`Regression tests` 階段三個獨立成因（PR-lifecycle writer 檢查 #602、`test_pr_lifecycle.py` 生成專案路徑 #617、zizmor template-injection #620）與 `#591` 均已修復並於 `verify-template.sh` 全綠驗證。但 hosted 版本發布（Automatic／Guided）確認為**已知永久限制**：`immutable_releases` capability probe 在 `GITHUB_TOKEN` 下結構性回傳 403（見 #626），`#123` 的 fail-closed 是刻意行為不會解除，也不透過本表修正——本機 `scripts/publish-release` 已升格為標準發版程序，見上方「hosted 發版路徑的已知限制」一節 |
+| Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598 | `main` push（post-merge）、manual rerun | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布 tag／GitHub Release／成品／checksum／SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py` | 已落地 `main` 並於 push 後實際觸發，`gh api tags`／`releases` 顯示過去確有真實 live 發版（`v0.12.2`／`v0.12.1`／`v0.12.0` 等）。`#588`（`docs/index.html` staleness）已由 `#593` 修正並於下一次 push 驗證：run [33763104406](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33763104406)（`6aa7724`，2026-09-03T13:47Z）的 `Static assets and paired files` 階段確實轉綠。但同一筆 run 在 `Regression tests` 階段仍以其他真實 pytest 失敗（`PR lifecycle blocked: Unleased PR lifecycle writer: .github/workflows/dependabot-auto-merge.yml`，導致生成專案 `scripts/verify` 失敗，牽連 `test_real_template_adoption_resumes_after_manifest_merge` 三種語言變體與 `test_real_existing_adoption_uses_fixed_ownership_policies`）——這是本輪盤點才發現、與 `#588`／`#591` 都無關的第四個獨立成因，尚未開對應 Issue。另外兩個較早的獨立成因：run [33719533651](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33719533651)（`9ed3594`）與 run [33730000169](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33730000169)（`99f52ef`）在 `Regression tests` 階段失敗於 `rm: cannot remove '.../work/.git': Directory not empty`，追蹤於 `#591`；run [33724898939](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33724898939)（`7719d2e4`）與 run [33729747815](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33729747815)（`ed7ab25`）在 `verify-template.sh` 全過後，於發版前 capability preflight 因 Actions policy HTTP 403 觸發 `#123` 既有設計的 fail-closed（`BLOCK_REASON: ... immutable_releases`），這是刻意行為、不是 bug | active for `verify`／`title`／`promotion`；`Regression tests` 階段三個獨立成因（PR-lifecycle writer 檢查 #602、`test_pr_lifecycle.py` 生成專案路徑 #617、zizmor template-injection #620）與 `#591` 均已修復並於 `verify-template.sh` 全綠驗證。當時（2026-09-03）hosted 版本發布（Automatic／Guided）因 `immutable_releases` capability probe 在 `GITHUB_TOKEN` 下結構性回傳 403（見 #626）而**已知永久限制**；`#770`（2026-09-18）移除了這一項 pre-flight probe，改在 `scripts/publish-release` 內以 post-hoc 的 GitHub 簽發 release attestation 驗證取代，hosted Automatic／Guided 不再因這一項結構性卡死，見上方「hosted 發版路徑的已知限制」一節——本機 `scripts/publish-release` 仍是本節其餘 `verify`／`title`／`promotion` 等機制沿用的標準發版程序，不因此改變定位 |
 | Release publish drift alert | `.github/workflows/release-drift.yml` | #605（源自 #589 item 4） | daily schedule＋`workflow_dispatch`（`hours` input） | `actions: read`、`contents: read`、`issues: write`；5 分鐘 | 偵測到 drift 時開立或更新追蹤 Issue；未偵測到時只印出證據 | `scripts/test-check-release-drift` | 尚未 merge 進 `main`，故無排程或手動觸發的 live run 證據 | candidate（待 main 落地＋首次排程／手動觸發） |
 
 所有第三方 Actions 鎖定完整 commit SHA，旁註可讀 release tag。Workflow YAML 只負責
@@ -1348,6 +1388,47 @@ PR workflows 設為等待人工核准；Automatic 由原 release run 驗證候�
 Action 建 PR，Guided 只在本機執行 `python3 scripts/release_policy.py prepare-candidate` 並由人
 或 agent 開一般 PR；兩路共用版本計算、候選驗證與唯一 `release.yml` publisher。
 
+### 版本號表示發布層級（Issue #744，2026-09-17）
+
+版本號本身就是發布層級，不是另外一個側欄狀態：alpha 為 `X.Y.Z-alpha.N`；beta 為
+`X.Y.Z-beta.N`（0.x 或 1.x 都可以）；早期版為不帶後綴的 `0.y.z`；正式版為 `1.0.0`
+起不帶後綴。同一版本號的後續 pre-release 遞增 `.N`（tag 名稱不能重用）；alpha／beta
+任何時候都可以發布，包含在早期版或正式版之後。發版層級取自上次發版以來所含工作的
+最高宣告層級——**宣告與計算機制由 #745 提供**，本節與 `scripts/release_policy.py`／
+`scripts/publish-release`／`scripts/converge-release-tag` 只負責把一個已宣告的層級
+轉成合法版本號並正確發布：`release_policy.py plan`／`prepare-candidate` 接受
+`--phase {alpha,beta,early,formal}`。**pre-release 後綴代表發布層級，不保證之後
+會發該版本的無後綴版本**：`X.Y.Z-alpha.N`／`X.Y.Z-beta.N` 只承諾「這是目前宣告的
+成熟度」，不承諾同一個 `X.Y.Z` 之後一定會有對應的無後綴（早期版或正式版）發布——
+下一次發版可能直接跳到更高的版本號，或維持原地再發一次更高的 `.N`。版本號合法性由
+`scripts/release_phase.py`
+（`template/scripts/` 與 `src/csarc_cli/release_phase.py` 各有一份逐位元組相同的
+副本，後者是因為 `csarc` 發行的 wheel 只包含 `src/csarc_cli`，見其模組
+docstring）驗證：主版本號為 0 時不帶後綴即為早期版，主版本號 ≥ 1 時不帶後綴即為
+正式版，後綴只接受 `alpha.N`／`beta.N`，其他一律 fail closed。`gh release create`
+依 tag 是否帶後綴決定要不要傳 `--prerelease`；`gh release edit ... --draft=false`
+只在無後綴版本才加 `--latest`（pre-release 不該被標成「最新」）。
+
+CLI（`src/csarc_cli/cli.py`）的 `release_identity()` 接受 immutable、已發布的
+pre-release Release：tag 必須是合法版本號，且 GitHub 回報的 `prerelease` 旗標要與
+tag 格式一致，其餘既有驗證（immutable、attestation、tag 指向未移動、commit
+signature）全部保留。選「最新」版本改用 SemVer 優先序（`GhReleaseClient._latest()`
+分頁列出所有已發布、非 draft 的 Release 再挑最高者），不再依賴 GitHub
+`releases/latest` API（該 API 不回傳 `prerelease: true` 的 Release）。
+
+保留規則（decision 5）：保留所有不帶後綴的版本（早期版與正式版），外加依
+major.minor 分組後最新一組的最新一個 pre-release；較舊分組或同分組較舊的
+pre-release 列為應刪除。`scripts/release_policy.py retention-plan --repo OWNER/NAME`
+只列出清單（dry-run），不呼叫任何刪除 API；實際刪除是 Milestone 14 promotion 後
+由維護者人工執行的動作，記錄在 #740 的 Completion evidence，不是任何工作 PR 的
+合併條件。下游 `csarc update` 若確認記錄的 `release_tag`在 canonical repository
+已不存在（GitHub 回報 404，`ReleaseNotFoundError`），改走重新安裝流程：重用
+`csarc adopt`（#219）同一套 transactional plan 機制列出新增／覆寫／保留／人工合併
+項目，經使用者確認才套用，project-owned 檔案一律保留；只有 tag 確認不存在才觸發，
+其他驗證失敗（attestation 不符、tag 指向改變、簽章無效、repository identity 不符）
+一律維持 fail closed。詳見 `docs/adr/release-security-and-dependencies.md` 與
+`docs/adr/transactional-repository-adoption.md` 的新增段落。
+
 ## Conditional 與退役能力
 
 `scripts/verify_release_consumption.py` 與其測試保留為 conditional 的消費端安全契約。
@@ -1479,20 +1560,25 @@ capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能�
 
 `scripts/release_policy.py::detect_runtime_capabilities()` 對 `immutable_releases` 的 capability probe（`GET repos/{repo}/immutable-releases`）在 hosted release job 自己的 `GITHUB_TOKEN` 下**結構性、永久性**回傳無法判斷（HTTP 403）——這個端點屬於 repo administration 層級設定，GitHub Actions 的 `permissions:` 區塊沒有對應的合法 key 能開放給 `GITHUB_TOKEN`（曾誤加 `administration: read` 這個不存在的 key，直接讓 workflow YAML 整個 parse 失敗，見 #623／#624 的踩坑與回退記錄）。`select_release_mode()` 的 `PUBLISH_CAPABILITIES` 判定是 all-or-nothing（`contents`／`release`／`immutable_releases` 任一項 `blocked` 或 `unknown` 就整組判 `blocked`），Automatic 與 Guided 共用同一個前置關卡，兩條路徑都永遠過不了這一關——不是暫時性環境問題，也不是這次補發版才出現的新退化。
 
-`docs/ci-policy.md` 更早已經記錄過同一現象源自 #123 的既有設計：HTTP 403 時 fail-closed 是**刻意的安全姿態**（拿不到證據就不發版），不是 bug。盤點過三個修法方向後（見 [#626](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/626) 完整記錄）：
+`docs/ci-policy.md` 更早已經記錄過同一現象源自 #123 的既有設計：HTTP 403 時 fail-closed 是**刻意的安全姿態**（拿不到證據就不發版），不是 bug。當時盤點過三個修法方向後（見 [#626](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/626) 完整記錄）：
 
 1. 改成信任 `policies/releases.json` 宣告值、不再即時 probe——會推翻 #123 的立場，驗證變裝飾性，**不採用**。
 2. 給 release job 一個只有 `administration: read` 的窄範圍 PAT repo secret——技術可行、不推翻 #123，但需要新增並之後輪替一個 secret，維護者評估管理成本後**不採用**。
-3. **採用**：正式承認 hosted Automatic／Guided 對 `immutable_releases` 永遠無法自證，把本節上方的本機 `scripts/publish-release` 路徑從「fallback」升格為**標準發版程序**——不是備援，是預設做法；由 agent（Claude Code session）在維護者授權下本機執行，用維護者自己的 admin 身份，天生就能真的讀到這個設定，不需要額外 secret，也不推翻 #123。「自動化」的著力點從「push 進 main 自動觸發」改成「agent 執行、人不用碰指令」。
+3. **當時採用**：正式承認 hosted Automatic／Guided 對 `immutable_releases` 永遠無法自證，把本節上方的本機 `scripts/publish-release` 路徑從「fallback」升格為**標準發版程序**——不是備援，是預設做法；由 agent（Claude Code session）在維護者授權下本機執行，用維護者自己的 admin 身份，天生就能真的讀到這個設定，不需要額外 secret，也不推翻 #123。「自動化」的著力點從「push 進 main 自動觸發」改成「agent 執行、人不用碰指令」。
 
-hosted `release.yml` 保留在 repo 裡（`verify`／`title`／`promotion` 仍然只能由它產生，不受影響），但它的 Automatic／Guided 版本發布功能正式標註為**已知限制，非待修復項目**——除非之後方向一或方向三的取捨改變，不會投入資源讓它自己成功發布。
+**2026-09-18 追加第四個方向，取代上面「當時採用」的結論（#770）：** #626 當時只盤點了「換一種需要額外憑證的 token」的方向（方向二的 PAT），沒有評估「用另一種、這個 repo 已經信任的機制去證明同一件事」。實測證實：GitHub 只在 Immutable Releases 真的啟用時，才會為一則 Release 自動簽發一份 signed release attestation（in-toto predicate `https://in-toto.io/attestation/release/v0.2`，signer `https://dotcom.releases.github.com`，Sigstore-backed）；查詢這份 attestation（`GET /repos/{owner}/{repo}/attestations/{digest}`）對 public repo 是匿名可讀的公開 API，不需要 admin scope，`GITHUB_TOKEN` 讀得到。`gh release verify <tag> --repo <repo> --format json` 的輸出剛好就是既有 `scripts/verify_release_consumption.py::verify_consumption()` 期待的 `--verification-json` 輸入格式（注意：是 `gh release verify`，不是 `gh attestation verify`——後者的預設 cert-oidc-issuer／identity 政策是為一般 Actions workflow 簽署設計，對這個 GitHub 自己簽的 release-predicate attestation 類型會誤報「no attestations found」）。
+
+**因此，`scripts/release_policy.py` 移除了 `immutable_releases` 這一項 pre-flight probe**（`PUBLISH_CAPABILITIES` 現在只有 `contents`／`release` 兩項），不再讓它單獨造成 `select_release_mode()` 整組判 `blocked`。取而代之，`scripts/publish-release`（`publish`／`rerun-verify` 子命令）在 Release 轉為正式發布、GitHub 回報 `isImmutable` 之後，新增一道 post-hoc 驗證：呼叫 `gh release verify --format json` 取得同一份 attestation，重用（不重寫）`verify_consumption()` 對每一個上傳成品核對 signer、repository、repositoryId、tag、commit 與 SHA-256 digest。任一失敗都會讓既有的 `revert_to_draft_on_failure` 介入——若 GitHub 尚未把這次發布判定為 immutable（常見情形：Immutable Releases 從未被真的啟用），Release 會被收回 draft；若 GitHub 已經判定 immutable（理論上的攻擊或竄改情境，而非「設定沒開」的常見情形），已經無法再改回 draft——這是 Immutable Releases 這個 GitHub 功能本身的定義，不是本次變更引入的新限制，此時腳本仍會以非零結束、絕不回報假成功。
+
+**hosted Automatic／Guided 的實際狀態變化：** 移除這一項 pre-flight probe 後，hosted `release.yml` 不再因為這一項**結構性、永久性**卡死——只要 `contents`／`release` 兩項能力可用（過去實測通常可用），流程會實際跑到 `publish` 步驟，而不是像過去一樣連工具鏈安裝都到不了。是否真的成功發布，現在取決於這個 repo 的 Immutable Releases 設定是否已由 admin 用 `scripts/apply-repository-settings.sh apply` 真的開啟過（見上面「Repo 能力自我檢查與 workaround 對照」一節）——沒開啟時，發布會在 post-hoc 驗證這一步 fail closed 並收回 draft，而不是完全無法開始；已開啟時，hosted Automatic／Guided 現在可以真正端到端成功，不再是「已知限制，非待修復項目」。這不推翻 #123 的 fail-closed 立場，也沒有落入 #626 當時否決的 PAT／GitHub App 範疇——只是把同一個問題換一種這個 repo 已經信任、且 `GITHUB_TOKEN` 讀得到的機制去自證。
 
 `release.yml` 仍在每次 `main` push 上執行，但只在 checkout 後先用 runner 內建的 Python／Git
 完成 release plan；`no-release` 直接結束，不探測 capability、不驗證 attestation，也不安裝
 Python 3.14、uv、pnpm、Node 或 Rust。需要發版時才探測 capability；若 publication
-為 `blocked`，維持 #123 的 fail-closed 結果並在工具鏈 setup 前停止。只有未被擋下的實際
-release 路徑才先驗證既有 local attestation，接著安裝工具鏈並進入版本候選或發布步驟
-（#707）。這只把便宜判定移到前面，不放寬驗證、權限或供應鏈要求。
+為 `blocked`（現在只可能來自 `contents`／`release`／`actions_pull_requests`），維持 #123 的
+fail-closed 結果並在工具鏈 setup 前停止。只有未被擋下的實際 release 路徑才先驗證既有
+local attestation，接著安裝工具鏈並進入版本候選或發布步驟（#707）。這只把便宜判定移到
+前面，不放寬驗證、權限或供應鏈要求。
 
 ### Release 說明文字的最低格式規範（#616）
 
@@ -1585,7 +1671,9 @@ Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 
 1. `main` HEAD 未被最新 immutable stable GitHub Release 的精確 target 涵蓋，也不是最新一次成功 `release.yml` run（`gh api repos/{repo}/actions/workflows/release.yml/runs?branch=main&status=success`）所在的 commit。
 2. 過去 N 小時內，既沒有有效的 immutable stable Release，也沒有成功的 `release.yml` run。
 
-最新 stable Release 必須由 GitHub API 明確回報 `immutable=true`；其 `target_commitish` 必須是精確 40 字元 SHA，且等於 `main` HEAD，或經 GitHub compare API 證明為其 ancestor；`published_at` 還必須不早於目前 `main` commit。精確 target 會持續視為涵蓋該 HEAD；ancestor target 只算 N 小時內的近期發布活動，不能永久掩蓋較新的 `main`。mutable Release、draft、prerelease、非 ancestor target、移動中的 branch ref 或比目前 `main` 更早發布的 Release 都不能壓掉告警。這使 immutable GitHub Release 本身成為首要發布事實，不再要求一條已知會被 #123 fail closed 的 hosted run 偽裝成成功。
+最新 eligible Release 必須由 GitHub API 明確回報 `immutable=true`；其 `target_commitish` 必須是精確 40 字元 SHA，且等於 `main` HEAD，或經 GitHub compare API 證明為其 ancestor；`published_at` 還必須不早於目前 `main` commit。精確 target 會持續視為涵蓋該 HEAD；ancestor target 只算 N 小時內的近期發布活動，不能永久掩蓋較新的 `main`。mutable Release、draft、非 ancestor target、移動中的 branch ref 或比目前 `main` 更早發布的 Release 都不能壓掉告警。這使 immutable GitHub Release 本身成為首要發布事實，不再要求一條已知會被 #123 fail closed 的 hosted run 偽裝成成功。
+
+**Issue #744（版本號表示發布層級）之後：** `-alpha.N`／`-beta.N` 的 pre-release Release 不再被當成無效發布忽略——tag 必須是合法的 alpha/beta/early/formal 版本號，且 GitHub 回報的 `prerelease` 旗標必須與 tag 格式一致（兩者矛盾時同樣壓不下告警，`reason` 會標成 `ignored: prerelease flag does not match tag shape`），否則視為 `ignored: tag is not a legal release-phase version`。挑選「最新」時仍以 `published_at` 排序（本節要問的是「發版路徑最近是否真的動過」，不是「哪個版本號優先序最高」；CLI 選版才用 SemVer 優先序，見上面 README／`src/csarc_cli/cli.py` 的說明）。
 
 `release.yml` 在每次 push 到 `main` 後都會執行，即使 `release_policy.py` 判定「今天不需要發版」也會正常執行完成（conclusion 仍是 success）；因此健康狀態下，最後一次成功 run 的 commit 幾乎總是等於當下 `main` HEAD，條件 1 不成立，不會誤報。只有在 `release.yml` 真的不再執行成功、而 `main` 仍透過一般 PR 合併前進時（兩者是各自獨立的觸發：merge 不需要 `release.yml` 成功），條件 1 才會成立；再疊上條件 2（N 小時內真的沒有任何成功活動），才判定為 drift。
 

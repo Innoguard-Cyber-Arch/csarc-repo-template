@@ -91,12 +91,16 @@ jobs:
           !cancelled() &&
           (github.event.issue.milestone.number != null || github.event.milestone.number != null)
         env:
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_ISSUE_NUMBER: ${{ github.event.issue.number || 0 }}
           GH_TOKEN: ${{ github.token }}
           MILESTONE_NUMBER: ${{ github.event.issue.milestone.number || github.event.milestone.number }}
         run: >-
           python3 scripts/sync_milestone_state.py reconcile
           --repo "$GITHUB_REPOSITORY"
           --milestone "$MILESTONE_NUMBER"
+          --event-issue "$EVENT_ISSUE_NUMBER"
+          --event-action "$EVENT_ACTION"
 
       # -- Milestone lifecycle: refresh a standalone/hotfix Issue's linked PR check (#743) --
       # The no-Milestone counterpart to the step above: an Issue comment is
@@ -125,12 +129,16 @@ jobs:
           github.event.changes.milestone.from.number != null &&
           github.event.changes.milestone.from.number != github.event.issue.milestone.number
         env:
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_ISSUE_NUMBER: ${{ github.event.issue.number || 0 }}
           GH_TOKEN: ${{ github.token }}
           MILESTONE_NUMBER: ${{ github.event.changes.milestone.from.number }}
         run: >-
           python3 scripts/sync_milestone_state.py reconcile
           --repo "$GITHUB_REPOSITORY"
           --milestone "$MILESTONE_NUMBER"
+          --event-issue "$EVENT_ISSUE_NUMBER"
+          --event-action "$EVENT_ACTION"
 
       # -- Milestone lifecycle: record promotion evidence for a merged promote/m* PR --
       - name: "Milestone lifecycle: resolve the tracker Issue this promotion closes"

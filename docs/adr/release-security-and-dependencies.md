@@ -75,7 +75,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 - 版本 PR 只能修改 release config 允許的機械版本檔；不允許任意程式碼藏進 bot PR。
 - 發布只接受指向目前 `HEAD` 的 SemVer tag；不移動 tag，也不接受 dirty Rust package。
 - draft 重跑先清除舊 assets，避免改名或多餘檔案殘留；checksum 必須剛好涵蓋全部 bundle。
-- Release 公開後以 bounded retry 等待 GitHub immutable 狀態與 `gh release verify`，避免 eventual consistency 假失敗。
+- Release 公開後以 bounded retry 等待 GitHub immutable 狀態與 `gh release verify`，避免 eventual consistency 假失敗；確認 immutable 後另外重用 `scripts/verify_release_consumption.py` 對每個上傳成品核對簽發的 release attestation（signer、repository、repositoryId、tag、commit、SHA-256 digest），任一失敗都不視為成功（#770）。
 - 已公開且 immutable 的同 tag 重跑只下載與重驗，不重建或覆寫資產。
 
 判斷依據包括 [Semantic Versioning](https://semver.org/)、[Keep a Changelog](https://keepachangelog.com/en/1.1.0/)、[Release Please](https://github.com/googleapis/release-please)、[GitHub token trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)、[secure use](https://docs.github.com/en/actions/reference/security/secure-use) 與 [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)。
@@ -86,7 +86,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | --- | --- | --- | --- |
 | 版本意圖 | Active | PR policy／Conventional Commits | PR title regression |
 | 版本與 CHANGELOG | Candidate／Guided | `release_policy.py`＋Release Please config／manifest | 自動或本機候選共用版本決策；組織目前禁止 Actions 建 PR |
-| tag／GitHub Release | Candidate／Blocked | `.github/workflows/release.yml` | 版本 PR 合併後才建立；待 default branch live run 才能標 Active |
+| tag／GitHub Release | Candidate | `.github/workflows/release.yml` | 版本 PR 合併後才建立；待 default branch live run 才能標 Active。hosted Automatic／Guided 不再因無法自證 `immutable_releases` 而結構性 Blocked（#770，見下方「Release attestation 驗證取代 immutable_releases pre-flight probe」一節） |
 | source／語言成品 | Candidate | `scripts/release_bundle.py` | 選到的 Python、TypeScript、Rust 原生 package 加 source archive |
 | checksum／SBOM／release evidence | Candidate | `scripts/release_bundle.py`＋Syft | 缺檔、竄改、錯 tag、錯 commit 與重跑測試；待 live run |
 | registry publishing／production-side attestation | Removed | #439 | `container_mode`、`enable_release_attestations`、`enable_pypi_publishing`、`enable_npm_publishing` 已由 #439 移除設定面：零 active workflow 消費這些值，不留下承諾不了結果的選項；需要真實 registry 或 attestation 時另開 Issue 明列 owner、權限與執行者 |
@@ -99,14 +99,16 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | 檔案 | 責任 |
 | --- | --- |
 | `.github/workflows/release.yml` | 一支 GitHub event／permission wrapper；root 與新生成 repo 的發布入口；發布階段呼叫 `scripts/publish-release`，不保留自己的一份邏輯 |
-| `scripts/publish-release`（#589） | 發布階段的單一實作：`stage`／`resolve`／`publish`／`rerun-verify` 子命令，涵蓋驗證並暫存已合併候選、判定 tag／Release 狀態、build 成品與 SBOM、上傳並公開、驗證重跑，以及發布失敗時把仍可變的 Release 收回 draft；`release.yml` 與本機／agent 執行呼叫同一份腳本 |
+| `scripts/publish-release`（#589；attestation 驗證見 #770） | 發布階段的單一實作：`stage`／`resolve`／`publish`／`rerun-verify` 子命令，涵蓋驗證並暫存已合併候選、判定 tag／Release 狀態、build 成品與 SBOM、上傳並公開、驗證重跑，以及發布失敗時把仍可變的 Release 收回 draft；`publish`／`rerun-verify` 確認 GitHub 回報 immutable 後，另外重用 `scripts/verify_release_consumption.py` 對每個上傳成品核對 release attestation（#770）；`release.yml` 與本機／agent 執行呼叫同一份腳本 |
 | `scripts/install-syft`（#589） | 本機／agent 發布路徑產生 SPDX SBOM 的直接 CLI 等效：抓取與 `release.yml` 的 `anchore/sbom-action` 相同 pin 版本的 Syft 二進位並驗證 checksum |
 | `scripts/verify-release-candidate` | 驗證自動或 guided 版本 PR 的身分、變更範圍與精確 SHA，再回寫 status |
-| `scripts/release_policy.py` | 共用 Conventional Commit／版本決策；本機只產生候選檔，不寫 GitHub；`detect`／`select_release_mode` 的 Guided 觸發條件（#589）已擴充為政策阻擋或維護者／agent 明示的 `--operator-reason` 兩者之一 |
+| `scripts/release_policy.py` | 共用 Conventional Commit／版本決策；本機只產生候選檔，不寫 GitHub；`detect`／`select_release_mode` 的 Guided 觸發條件（#589）已擴充為政策阻擋或維護者／agent 明示的 `--operator-reason` 兩者之一；`PUBLISH_CAPABILITIES`／`detect_runtime_capabilities()` 不再包含 `immutable_releases` pre-flight probe（#770，見下方獨立小節） |
 | `scripts/release_bundle.py` | build、tag identity、checksum、SPDX、evidence 與重跑驗證 |
-| `tests/test_release_policy.py` | 版本與候選 trust boundary 正反例；Guided 模式 operator override 觸發條件與 fail-closed 邊界（#589） |
+| `scripts/verify_release_consumption.py`（#104，發布路徑重用見 #770） | `verify_consumption()` 核對 release attestation 的 signer、repository、repositoryId、tag、commit 與成品 SHA-256 digest；原為 conditional 消費端契約，`scripts/publish-release` 的 `publish`／`rerun-verify` 現在也直接呼叫同一份實作，不重寫 |
+| `tests/test_release_policy.py` | 版本與候選 trust boundary 正反例；Guided 模式 operator override 觸發條件與 fail-closed 邊界（#589）；`immutable_releases` probe 移除的回歸測試（#770） |
 | `tests/test_release_bundle.py` | 缺檔、竄改、錯 tag、重跑與 bundle identity |
-| `tests/test_release_publish.py`（#589） | 對 mocked `gh` 與真實 Git fixture 驅動 `scripts/publish-release` 的行為回歸：staging 成功／fail-closed、state 判定、發布成功、發布失敗回退 draft、已發布重跑不重建 |
+| `tests/test_release_consumption.py`（#104，signer-mismatch 案例見 #770） | `verify_consumption()` 的成功驗證、attestation 缺失、repository／signer 身分不符、成品 digest 不符四種情境 |
+| `tests/test_release_publish.py`（#589；attestation 驗證案例見 #770） | 對 mocked `gh` 與真實 Git fixture 驅動 `scripts/publish-release` 的行為回歸：staging 成功／fail-closed、state 判定、發布成功、發布失敗回退 draft、已發布重跑不重建、attestation 缺失／asset digest 不符／signer 不符三種 post-hoc 驗證失敗情境 |
 | `tests/test_journey07_release.py` | workflow 權限、pin、ownership 與 archive disposition；`release.yml`／`release.yml.jinja` 呼叫 `scripts/publish-release` 而非保留自己一份 bash 的來源層級驗證（#589） |
 | `.github/workflows/dependabot-auto-merge.yml` | 只鎖定 `dependabot[bot]` 開出的 PR；minor／patch 排入 GitHub 原生 auto-merge 佇列，major 加標籤／留言、不合併 |
 | `tests/test_dependabot_auto_merge.py` | 觸發條件、job 層級 actor 閘門、權限、pin 與 minor/patch／major 分流的 workflow 邏輯回歸測試 |
@@ -214,6 +216,165 @@ hosted Actions 產生——它們的價值來自 GitHub 自己信任這份報告
 （`csarc-owned`／`product-owned`／`verification-only`）已經正確路由這個能力——`release.yml`／
 `release.yml.jinja` 只下發給 `csarc-owned` 生成 repo；`scripts/publish-release` 與擴充後的 Guided
 模式一旦存在於這兩個檔案，就隨同一套機制自動下發，不需要、也不新增第二個選配旗標。
+
+## Release attestation 驗證取代 immutable_releases pre-flight probe（#770，2026-09-18）
+
+上一節與 `docs/ci-policy.md`「hosted 發版路徑的已知限制」一節，都曾把 hosted Automatic／
+Guided 版本發布標註為對 `immutable_releases` 永遠無法自證的**已知永久限制**——`GET
+repos/{repo}/immutable-releases` 需要 repository Administration（read），GitHub Actions 的
+`permissions:` 區塊沒有對應的合法 key 能開放給 `GITHUB_TOKEN`（#123／#622／#623／#624／
+#626）。#626 當時盤點過三個方向，只涵蓋「換一種需要額外憑證的 token」（PAT／GitHub App），
+沒有評估「重用這個 repo 已經信任、`GITHUB_TOKEN` 讀得到的既有機制去證明同一件事」。
+
+**新方向（第四個，取代 #626 的結論）：** 實測證實 GitHub 只在 Immutable Releases 真的啟用
+時，才會為一則 Release 自動簽發一份 signed release attestation（in-toto predicate
+`https://in-toto.io/attestation/release/v0.2`，signer `https://dotcom.releases.github.com`，
+Sigstore-backed）；查詢這份 attestation 對 public repo 是匿名可讀的公開 API，不需要 admin
+scope。`gh release verify <tag> --repo <repo> --format json` 的輸出，剛好就是既有
+`scripts/verify_release_consumption.py::verify_consumption()` 期待的 `--verification-json`
+輸入格式——這是既有 #104 的 conditional 消費端契約，本節只是讓 `scripts/publish-release`
+自己也重用（不重寫）同一份驗證邏輯，用它來自證剛剛真的完成了什麼，而不是新增一套平行實作。
+
+**決定：**
+
+1. `scripts/release_policy.py` 移除 `immutable_releases` 這一項 pre-flight probe：
+   `PUBLISH_CAPABILITIES` 從 `(contents, release, immutable_releases)` 縮成
+   `(contents, release)`，`detect_runtime_capabilities()` 不再呼叫
+   `GET repos/{repo}/immutable-releases`。不再讓一個 `GITHUB_TOKEN` 結構性讀不到的探測，
+   單獨把 `select_release_mode()` 整組判成 `blocked`。
+2. `scripts/publish-release`（`publish`／`rerun-verify` 子命令）在 GitHub 確認 Release
+   `isImmutable` 之後、既有 `revert_to_draft_on_failure` 失敗路徑仍然有效的範圍內，新增
+   post-hoc 驗證：呼叫 `gh release verify --format json`，重用 `verify_consumption()` 對每一
+   個上傳成品核對 signer、repository、repositoryId、tag、commit 與 SHA-256 digest。
+
+**與 #123 的關係：不推翻，只是把同一個 fail-closed 立場換一個可行的自證機制。** #123 的
+核心原則——拿不到證據就不發版——完全保留：舊機制在**發版前**問一個 `GITHUB_TOKEN`
+結構性答不出來的問題（「這個設定有沒有開？」），新機制在**發版後**問一個
+`GITHUB_TOKEN` 讀得到、且有 cryptographic 證據的問題（「GitHub 剛剛是否真的簽出了這份
+attestation？」）。兩者都是「沒有證據就判定失敗」，差別只在於問的時機與問題本身是否
+GITHUB_TOKEN 結構性答得出來。
+
+**與 #626 的關係：不重新討論已否決的方向，是補上當時沒評估的第四個方向。** #626 的方向
+一（信任宣告值、不 probe）與方向三（PAT／GitHub App）仍然維持否決；本節新增的方向不需要
+額外憑證，也不改變 probe-then-decide 的精神，只是把「probe 什麼」換成一個真正可行的目標。
+
+**已知、不視為新增限制的邊界：** 若 GitHub 已經把這次發布判定為 immutable（`isImmutable
+== true`），之後才發現的 attestation 內容問題（例如某個成品 digest 或 signer 不符——理論
+上的竄改情境，不是「設定沒開」的常見情形）無法再透過 `gh release edit --draft` 改回
+draft——這是 Immutable Releases 這個 GitHub 功能本身「一旦不可變就真的不可變」的定義，不
+是本節引入的新退讓。此時 `scripts/publish-release` 仍會以非零結束、不回報假成功，只是
+無法追溯撤回已經被 GitHub 自己鎖定的狀態。常見情形（Immutable Releases 從未真的被啟用）
+不受影響：`isImmutable` 會持續回報 `false`，既有 `revert_to_draft_on_failure` 仍能正常把
+Release 收回 draft。
+
+**hosted Automatic／Guided 的實際狀態：** 不再是「已知永久限制，非待修復項目」。只要
+`contents`／`release`／`actions_pull_requests` 這些 `GITHUB_TOKEN` 讀得到的能力可用，流程
+就能實際跑到 `publish` 步驟；是否真正成功發布，取決於這個 repo 的 Immutable Releases 設定
+是否已由 admin 執行過 `scripts/apply-repository-settings.sh apply`——這一步驟本身不受本節
+影響，仍然需要真人 admin 身分才能完成，只是不再需要 hosted job 自己「預先證明」這件事才
+准許它嘗試。
+
+**下發到 `template/`：** `scripts/release_policy.py`／`scripts/publish-release`／
+`policies/capability-matrix.json`／`tests/test_release_policy.py`／
+`tests/test_repo_capabilities.py`／`docs/ci-policy.md` 已在 `scripts/sync-paired-files.sh`
+的既有配對清單中，本節新增 `scripts/verify_release_consumption.py` 到同一份清單（新的必要
+執行期相依，不再只是選用的消費端契約）；`.github/workflows/release.yml.jinja` 不需要修改，
+它只呼叫 `scripts/publish-release`，不直接讀 `immutable_releases` 這個欄位。
+## 版本號表示發布層級與保留規則（#744，2026-09-17）
+
+維護者 2026-09-17 決定：版本號本身直接表示發布層級，取代側欄狀態或人工追蹤。
+alpha 為 `X.Y.Z-alpha.N`；beta 為 `X.Y.Z-beta.N`（0.x 或 1.x 都可以）；早期版為
+不帶後綴的 `0.y.z`；正式版為 `1.0.0` 起不帶後綴。同一版本號的後續 pre-release
+遞增 `.N`（SemVer 數值排序，tag 名稱不能重用）；alpha／beta 任何時候都可以發布，
+包含在早期版或正式版之後。每次發版的層級取自上次發版以來所含工作的最高宣告
+層級——**宣告與計算機制本身是 #745 的範圍**，本 Issue 只負責把一個已宣告的
+層級正確轉成版本號並發布。
+
+**歷史 Release 的一次性重新定位：** `v0.2.2`–`v0.15.5` 追溯認定為 alpha，
+`v0.15.6` 起進入 beta（既成事實，不受下面「發版層級調整」影響）。這 29 個既有
+Release 全部刪除，不以新名稱重發（GitHub Immutable Releases 下 tag 名稱刪除後
+不能重用，所以無法改名，只能整個刪除後在新基準重新開始）；新基準是 Milestone
+14 合併到 `main` 後的第一個 **alpha** 版本（2026-09-19 由原訂 beta 改回 alpha，
+見下方「發版層級調整」；規則本身允許 beta 之後任何時候再宣告 alpha，見上方
+「維護者 2026-09-17 決定」第 2 點）。實際刪除是 promotion 之後由維護者在確認
+dry-run 清單後親自執行的動作，記錄在 #740 的 Completion evidence，不是任何工作
+PR 的合併條件；必須排在新版 CLI（見下方）發布之後，確保下游能改走重新安裝流程
+而不是直接失敗。
+
+**發版層級調整（2026-09-19）：** Milestone 14 的發版層級由原訂 beta 改回
+alpha（同步調整 #740、#744）。理由：#745（依層級決定能否自核）尚未落地，目前
+仍套用 #743 的舊規則（任何階段皆允許 admin 自核）；但 #740 的非提案者核准已因
+tracker body 編輯（新增 #780）而依 #632 的核准綁定規則失效，需要重新核准。與其
+在等待重新核准期間動用「舊規則仍允許、但精神上牴觸 #745 已寫定的 beta 需他人
+審核」的 admin 自核例外，維護者選擇改回 alpha——alpha 允許自核是 #745 設計本身
+就明確承認、不牴觸精神的路徑。只有「Milestone 14 這次新基準要發哪個層級」改
+變；`v0.15.6` 仍是既成事實的 beta 發布，不受影響。
+
+**保留規則（去每次發版起持續適用）：** 保留所有不帶後綴的版本（早期版與正式版），
+外加依 major.minor（前兩個數字）分組後最新一組的最新一個 pre-release；較舊分組
+或同分組較舊的 pre-release 一律列為應刪除。`scripts/release_policy.py
+retention-plan --repo OWNER/NAME` 只列出「應保留」與「應刪除」清單（dry-run），
+不呼叫任何刪除 API；是否、何時實際刪除仍是維護者的人工決定。
+
+**刻意的單一發展線假設：** 本節「最新一串 pre-release」是單數——只保留數值最新
+一個 major.minor 分組的 pre-release，不是「每個仍有活動的分組各自的最新一個」。
+若同時有兩條 major.minor 線都在持續發 pre-release（例如維護中的舊線與下一版的新
+線並行），較舊那條線的 pre-release 一樣會被列為應刪除，即使它其實還在使用中；
+純靠版本號無法分辨「已放棄」與「仍在維護」。這正是為什麼刪除清單只是 dry-run、
+一律留給維護者人工確認才執行——多線並行的情境會在那個人工複核步驟被發現並排除，
+而不是靠工具自動判斷。
+
+**工具面變更：**
+
+- `scripts/release_phase.py`（`template/scripts/` 與 `src/csarc_cli/` 各一份
+  逐位元組相同的副本——後者是因為 `csarc` 發行的 wheel 只打包
+  `src/csarc_cli`，CLI 無法在執行期匯入外部的 `scripts/` 模組）是版本號格式的
+  唯一實作：剖析／格式化／SemVer 優先序排序／合法性檢查／保留規則分類都在這裡。
+- `scripts/release_policy.py` 的 `bump_version`／`release_plan` 改為只計算不帶
+  後綴的核心版本號，由呼叫端透過新增的 `--phase {alpha,beta,early,formal}`
+  套用宣告的層級；`prepare-candidate`／`plan` 兩個子指令都接受這個參數。
+- `scripts/converge-release-tag` 依 tag 是否帶 `-alpha.N`／`-beta.N` 後綴決定
+  `gh release create` 要不要加 `--prerelease`；`scripts/publish-release` 的
+  `gh release edit ... --draft=false` 只在無後綴版本才加 `--latest`。
+- `scripts/check-release-drift` 不再把 `prerelease` Release 當成無效發布忽略；
+  tag 格式與 `prerelease` 旗標互相矛盾時仍然壓不下告警（見本 ADR 上方「發版
+  存量漂移偵測」對應章節，或 `docs/ci-policy.md` 同名章節）。
+- CLI（`src/csarc_cli/cli.py`）的 `release_identity()` 接受 immutable、已發布的
+  pre-release Release：tag 必須是合法版本號，且 `prerelease` 旗標要與 tag 格式
+  一致，本 ADR 上方列出的既有驗證（immutable、attestation、tag 指向未移動、
+  commit signature）全部保留不變。選「最新」版本改由
+  `GhReleaseClient._latest()` 分頁列出所有已發布、非 draft 的 Release 後依
+  SemVer 優先序挑選，不再依賴 GitHub `releases/latest` API（該 API 不回傳
+  `prerelease: true` 的 Release，是 CLI 過去只能選到正式版的根本原因）。
+- 下游 `csarc update` 若確認記錄的 `release_tag` 在 canonical repository 已不
+  存在（GitHub 明確回報 404，區分成新的 `ReleaseNotFoundError`），改走重新
+  安裝流程：重用下面「Transactional 更新／adoption plan」一節（#219）同一套
+  plan 機制，列出新增／覆寫／保留／人工合併項目，經使用者確認才套用；
+  project-owned 或已產生分歧的檔案一律保留，不自動覆寫或刪除。只有「tag 確認
+  不存在」這一種情況觸發重新安裝；attestation 不符、tag 指向改變、簽章無效、
+  repository identity 不符等其他驗證失敗，一律維持 fail closed，不得改走重新
+  安裝繞過驗證。目前的實作限制是：由於舊 Release 已確認不存在，`csarc update
+  --reinstall` 的路徑無法像一般更新一樣重新渲染舊版本作三方比對基準，因此對
+  「相對於新版本內容有差異」的既有檔案一律歸類為需要人工合併，即使該檔案從未
+  被專案自行修改過——這維持安全（絕不靜默覆寫），但可能比一般 `csarc update`
+  需要更多人工確認；未來可視需要在舊 commit 仍可 fetch 到時，補上盡力而為的
+  三方比對。
+
+**取代（superseded）：** #425 Candidate 11 與 Milestone 12 Boundaries「不從
+SemVer 猜 release phase」──版本號現在直接表示發布層級。#425／Milestone 12
+「M12 完成與同事核准才構成 alpha → beta entry evidence」──`v0.15.6` 起由
+維護者決定直接視為 beta。#425／Milestone 12 Boundaries「不改寫既有 immutable
+Release」──依保留規則刪除舊 Release（immutable 本身不被修改，是整個刪除後
+不重用同名 tag，不是改寫）。CLI 只接受正式版 Release 的既有假設──改為接受
+合法的 immutable pre-release。
+
+**保留（preserved）：** #430 exact-SHA 與 capability-aware release；本 ADR 上方
+`## Ownership` 與「歷史 Action 逐項複核」章節描述的 canonical repository、
+immutable Release、attestation 與簽章驗證；`## 發版不依賴 Actions 健康度的
+本機 fallback（#589）` 一節描述的本機 `scripts/publish-release` 標準發版路徑；
+只有合併到 `main` 才發版的邊界。審核與測試依發布層級分級（取代
+`policies/project-stage.json` 的 Ruleset bypass 機制）是 #745 的範圍，本節
+不涉及、也不預先假設其設計。
 
 ## 評估過的替代方案
 

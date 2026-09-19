@@ -250,13 +250,15 @@ def test_impersonating_user_is_not_copilot(copilot_config: Path) -> None:
 pr_lifecycle = importlib.import_module("pr_lifecycle")
 
 
-def alpha_authorization_comment(login: str = "maintainer") -> dict[str, Any]:
+def alpha_authorization_comment(
+    login: str = "maintainer", association: str = "MEMBER"
+) -> dict[str, Any]:
     """Return one exact-head Alpha self-merge authorization comment."""
     return {
         "id": 99,
         "html_url": "https://github.com/o/r/pull/7#issuecomment-99",
         "created_at": "2026-09-18T03:00:00Z",
-        "author_association": "MEMBER",
+        "author_association": association,
         "user": {"login": login, "type": "User"},
         "body": pr_lifecycle.authorization_statement("o/r", 7, HEAD),
     }
@@ -278,6 +280,26 @@ def test_alpha_self_merge_authorization_passes(copilot_config: Path) -> None:
     assert result["source"] == "alpha-self-merge"
 
 
+def test_alpha_self_merge_ignores_author_association(
+    copilot_config: Path,
+) -> None:
+    """Issue #785: a downgraded association must not block self-merge.
+
+    Confirmed live on PR #782: a restricted `GITHUB_TOKEN` reports a real
+    maintainer's comment as `COLLABORATOR` instead of `MEMBER`. The
+    `collaborators/{login}/permission` lookup `FakeGitHub.get` always
+    returns `"maintain"` for any login, so this only passes once
+    `find_exact_head_authorization` stops filtering on the association.
+    """
+    github = alpha_github()
+    github.issue_comments = [
+        alpha_authorization_comment(association="COLLABORATOR")
+    ]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["passed"]
+    assert result["source"] == "alpha-self-merge"
+
+
 def test_alpha_self_merge_without_authorization_still_fails(
     copilot_config: Path,
 ) -> None:
@@ -287,17 +309,45 @@ def test_alpha_self_merge_without_authorization_still_fails(
     assert not result["passed"]
     assert "Alpha self-merge" in result["reason"]
     assert "#775" in result["reason"]
+    assert "no exact-head maintainer authorization comment" in result["reason"]
 
 
 def test_alpha_self_merge_milestone_issue_does_not_apply(
     copilot_config: Path,
 ) -> None:
-    """A Milestone Issue must use its dev/mN branch, not this shortcut."""
+    """A Milestone Issue must use its dev/mN branch, not this shortcut.
+
+    Issue #781: the final `reason` must say *why* -- not collapse into the
+    same generic Copilot message every other Alpha self-merge rejection
+    produces, which is what made PR #779's real failure undiagnosable.
+    """
     github = alpha_github()
     github.issue_milestone = 7
     github.issue_comments = [alpha_authorization_comment()]
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert not result["passed"]
+    assert "Milestone-less Issue" in result["reason"]
+
+
+def test_alpha_self_merge_closed_issue_does_not_apply(
+    copilot_config: Path,
+) -> None:
+    """Issue #781 (PR #779): a closed linked Issue fails with a specific
+    reason instead of the generic Copilot message.
+
+    This reproduces PR #779's real failure: the review job checks the Issue
+    a Default-branch Alpha self-merge PR closes, and once that Issue is no
+    longer open the route is rejected. The rejection must say so, not read
+    identically to "Copilot has not reviewed this pull request yet" -- that
+    ambiguity is what led to chasing an unrelated, disproven GITHUB_TOKEN
+    permission theory instead of the real cause.
+    """
+    github = alpha_github()
+    github.issue_state = "closed"
+    github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert not result["passed"]
+    assert "Issue is not open" in result["reason"]
 
 
 def test_alpha_self_merge_ignores_a_non_maintainer_comment(
@@ -317,6 +367,52 @@ def test_alpha_self_merge_ignores_a_non_maintainer_comment(
     github.get = get_without_permission  # ty: ignore[invalid-assignment]
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert not result["passed"]
+    assert "no exact-head maintainer authorization comment" in result["reason"]
+
+
+def test_alpha_self_merge_collaborator_permission_under_restricted_token(
+    copilot_config: Path,
+) -> None:
+    """Issue #781: the collaborators/permission call works fine in CI.
+
+    PR #779's `bypass-trace` audit comment blamed the `review` job's
+    restricted `GITHUB_TOKEN` (`contents: read, pull-requests: read`) for
+    being unable to resolve `GET .../collaborators/{user}/permission`. That
+    theory was disproven experimentally: three live GitHub Actions runs
+    under that exact permission set returned this call's real response
+    shape successfully. This locks that response shape in as a fixture so
+    nobody "fixes" this by widening `pr-review.yml`'s `permissions:` block.
+    """
+    github = alpha_github()
+    github.issue_comments = [alpha_authorization_comment()]
+    real_restricted_token_response = {
+        "permission": "admin",
+        "user": {
+            "login": "maintainer",
+            "id": 8596186,
+            "type": "User",
+            "site_admin": False,
+            "permissions": {
+                "admin": True,
+                "maintain": True,
+                "push": True,
+                "triage": True,
+                "pull": True,
+            },
+        },
+        "role_name": "admin",
+    }
+    original_get = github.get
+
+    def get_with_real_shape(repo: str, path: str) -> object:
+        if path == "collaborators/maintainer/permission":
+            return real_restricted_token_response
+        return original_get(repo, path)
+
+    github.get = get_with_real_shape  # ty: ignore[invalid-assignment]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["passed"]
+    assert result["source"] == "alpha-self-merge"
 
 
 def test_alpha_self_merge_does_not_apply_without_the_marker(

@@ -32,6 +32,7 @@ confirm_refs = MODULE["confirm_refs"]
 create_refs = MODULE["create_refs"]
 edit_metadata = MODULE["edit_metadata"]
 edit_standalone_issue = MODULE["edit_standalone_issue"]
+exact_head_approval = MODULE["exact_head_approval"]
 expired_remote_lease = MODULE["expired_remote_lease"]
 GitHub = MODULE["GitHub"]
 LEASE_CORE_FIELDS = MODULE["LEASE_CORE_FIELDS"]
@@ -97,6 +98,7 @@ class FakeGitHub:
         self.additional_check_rules: list[dict[str, object]] = []
         self.authorization_type = "User"
         self.authorization_body: str | None = None
+        self.authorization_association = "OWNER"
         self.permission = "maintain"
         self.merged = False
         self.base_ref = "main"
@@ -180,7 +182,7 @@ class FakeGitHub:
                     "https://github.com/owner/repo/pull/42#issuecomment-99"
                 ),
                 "issue_url": "https://api.github.com/repos/owner/repo/issues/42",
-                "author_association": "OWNER",
+                "author_association": self.authorization_association,
                 "user": {
                     "login": self.authorization_actor,
                     "type": self.authorization_type,
@@ -1344,6 +1346,26 @@ def test_authorization_requires_live_maintainer_permission() -> None:
             "a" * 40,
             "https://github.com/owner/repo/pull/42#issuecomment-99",
         )
+
+
+def test_authorization_ignores_author_association() -> None:
+    """Issue #785: a downgraded association must not block a real maintainer.
+
+    A restricted `GITHUB_TOKEN` reports a genuine org member's comment as
+    `COLLABORATOR` instead of `MEMBER` (confirmed live on PR #782, see also
+    #549's identical finding for `sync_milestone_state.py`). The live
+    `collaborators/{login}/permission` lookup is the only source of truth.
+    """
+    github = FakeGitHub("a" * 40)
+    github.authorization_association = "COLLABORATOR"
+    payload = authorization(
+        github,
+        "owner/repo",
+        42,
+        "a" * 40,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert payload["author_association"] == "COLLABORATOR"
 
 
 def test_keyed_github_collections_flatten_every_page(
@@ -2775,6 +2797,28 @@ def test_exact_head_approval_requires_live_maintainer_permission(
     github.permission = "read"
     with pytest.raises(RuntimeError, match="exact head"):
         merge_snapshot(github, lease_fixture())
+
+
+def test_exact_head_approval_ignores_author_association() -> None:
+    """Issue #785: a downgraded association must not hide a real approval.
+
+    Same finding as `test_authorization_ignores_author_association`: a
+    restricted `GITHUB_TOKEN` can report a genuine maintainer's review as
+    `COLLABORATOR` instead of `MEMBER`. Only the live
+    `collaborators/{login}/permission` lookup should decide this.
+    """
+    github = FakeGitHub("a" * 40)
+    review = {
+        "user": {"login": "reviewer", "type": "User"},
+        "author_association": "COLLABORATOR",
+        "state": "APPROVED",
+        "commit_id": github.head,
+        "submitted_at": "2026-08-25T01:01:00Z",
+    }
+    approval = exact_head_approval(
+        github, "owner/repo", {"reviewer": review}, github.head, "author"
+    )
+    assert approval is review
 
 
 def test_merge_snapshot_revalidates_the_authenticated_actor(

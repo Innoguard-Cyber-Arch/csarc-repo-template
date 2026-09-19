@@ -17,6 +17,19 @@ set -euo pipefail
 # (they decide *whether* and *how* to propose a version, not how to publish
 # one already merged to main) and are not duplicated here.
 #
+# Issue #770: `publish` and `rerun-verify` cross-check GitHub's own signed
+# release attestation (`gh release verify --format json`) against every
+# uploaded asset via scripts/verify_release_consumption.py's
+# verify_consumption() (imported, not reimplemented) -- signer, repository,
+# repositoryId, tag, commit, and each asset's SHA-256 digest. This replaces
+# the pre-flight `immutable_releases` admin-scope probe scripts/release_policy.py
+# used to run (structurally unprovable by GITHUB_TOKEN; see #123/#626) with a
+# post-hoc, provable check: GitHub only signs this attestation when Immutable
+# Releases was actually enabled, and any repository can read it, no admin
+# scope required. A failure here is treated exactly like any other `publish`
+# failure -- the existing revert_to_draft_on_failure trap keeps the Release
+# in draft rather than leaving a falsely-trusted mutable Release public.
+#
 # Usage:
 #   scripts/publish-release stage --repo OWNER/NAME --sha SHA --tag TAG
 #     Validate the merged version pull request at SHA and converge the tag
@@ -126,14 +139,23 @@ poll_immutable_and_verify() {
   # Release edit and `isImmutable`/`gh release verify` reflecting it. Shared
   # by `publish` (right after the Release is made non-draft) and
   # `rerun-verify` (re-checking a Release that should already be immutable).
+  # Once GitHub confirms the Release is immutable and cryptographically
+  # verifiable, also cross-check every uploaded asset against the same
+  # signed attestation (Issue #770) via verify_release_attestation below,
+  # reusing the one `--format json` response instead of calling `gh release
+  # verify` a second time.
   local release_tag="$1"
+  local assets_dir="$2"
+  local verification_json="$RUNNER_TEMP/release-verification-$release_tag.json"
   local attempt
   for attempt in $(seq 1 12); do
     local immutable
     immutable="$(gh release view "$release_tag" --json isImmutable --jq .isImmutable || true)"
     if [[ "$immutable" == true ]] &&
-      gh release verify "$release_tag" --repo "$GITHUB_REPOSITORY"; then
-      return 0
+      gh release verify "$release_tag" --repo "$GITHUB_REPOSITORY" --format json \
+        >"$verification_json"; then
+      verify_release_attestation "$release_tag" "$assets_dir" "$verification_json"
+      return
     fi
     if [[ "$attempt" == 12 ]]; then
       echo "Release did not become immutable and verifiable within 60 seconds." >&2
@@ -141,6 +163,46 @@ poll_immutable_and_verify() {
     fi
     sleep 5
   done
+}
+
+verify_release_attestation() {
+  # Issue #770: prove Immutable Releases was actually enabled for this
+  # Release by cross-checking GitHub's own signed release attestation
+  # against every uploaded asset, instead of trusting the pre-flight
+  # `immutable_releases` admin-scope probe scripts/release_policy.py used to
+  # run (structurally unprovable by GITHUB_TOKEN; see #123/#626). The
+  # `--format json` response the caller already captured from `gh release
+  # verify` is exactly the --verification-json shape
+  # scripts/verify_release_consumption.py expects, so this reuses its
+  # verify_consumption() policy (signer, repository, repositoryId, tag,
+  # commit, and each asset's own SHA-256 digest) rather than re-implementing
+  # the same cryptographic and identity checks a second time. Any failure --
+  # a wrong signer, or a digest mismatch on any asset -- exits non-zero
+  # under this script's `set -e`, which callers rely on to fail closed.
+  local release_tag="$1"
+  local assets_dir="$2"
+  local verification_json="$3"
+  local repository_id
+  repository_id="$(gh api "repos/$GITHUB_REPOSITORY" --jq .id)"
+  local commit_sha
+  commit_sha="$(git -C "$repo_root" rev-parse "${release_tag}^{commit}")"
+  local asset
+  local found=0
+  for asset in "$assets_dir"/*; do
+    [[ -f "$asset" ]] || continue
+    found=1
+    python3 "$repo_root/scripts/verify_release_consumption.py" \
+      --verification-json "$verification_json" \
+      --artifact "$asset" \
+      --repository "$GITHUB_REPOSITORY" \
+      --repository-id "$repository_id" \
+      --tag "$release_tag" \
+      --commit "$commit_sha"
+  done
+  if [[ "$found" != 1 ]]; then
+    echo "No uploaded release assets were found to verify against the attestation." >&2
+    return 1
+  fi
 }
 
 cmd_stage() {
@@ -175,8 +237,14 @@ cmd_resolve() {
   local tag="$tag"
   if [[ -z "$tag" ]]; then
     local tags
+    # Issue #744: a `-alpha.N`/`-beta.N` suffix is a legal release-phase
+    # version too, not only a plain X.Y.Z tag. This pattern's suffix must
+    # stay byte-identical to cmd_publish's below, to
+    # scripts/converge-release-tag's, and to scripts/release_phase.py's
+    # canonical `_VERSION_RE` (`N` never 0 or zero-padded); see
+    # tests/test_release_phase.py::test_prerelease_suffix_regex_is_consistent_everywhere.
     mapfile -t tags < <(git -C "$repo_root" tag --points-at "$sha" |
-      grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || true)
+      grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta)\.[1-9][0-9]*)?$' || true)
     [[ "${#tags[@]}" -le 1 ]]
     tag="${tags[0]:-}"
   fi
@@ -245,8 +313,21 @@ cmd_publish() {
   downloaded="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
   gh release download "$tag" --dir "$downloaded"
   python3 "$repo_root/scripts/release_bundle.py" verify --tag "$tag" --output "$downloaded"
-  gh release edit "$tag" --draft=false --latest
-  poll_immutable_and_verify "$tag"
+  # Issue #744: only a stable (unsuffixed) tag should ever become GitHub's
+  # "latest" release -- marking an alpha/beta prerelease --latest would
+  # misrepresent it as the repository's most mature release, and GitHub's
+  # own `releases/latest` API already excludes any `prerelease: true`
+  # Release regardless. This pattern must stay byte-identical to the one
+  # in cmd_resolve above, to scripts/converge-release-tag's, and to
+  # scripts/release_phase.py's canonical `_VERSION_RE` suffix (`N` never
+  # 0 or zero-padded); see
+  # tests/test_release_phase.py::test_prerelease_suffix_regex_is_consistent_everywhere.
+  local latest_flags=(--latest)
+  if [[ "$tag" =~ -(alpha|beta)\.[1-9][0-9]*$ ]]; then
+    latest_flags=()
+  fi
+  gh release edit "$tag" --draft=false "${latest_flags[@]}"
+  poll_immutable_and_verify "$tag" "$downloaded"
 }
 
 cmd_rerun_verify() {
@@ -255,7 +336,7 @@ cmd_rerun_verify() {
   downloaded="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
   gh release download "$tag" --dir "$downloaded"
   python3 "$repo_root/scripts/release_bundle.py" verify --tag "$tag" --output "$downloaded"
-  poll_immutable_and_verify "$tag"
+  poll_immutable_and_verify "$tag" "$downloaded"
 }
 
 case "$command" in

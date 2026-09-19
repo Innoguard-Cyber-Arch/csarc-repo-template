@@ -3064,7 +3064,7 @@ html[data-detail-level="technical"] .mode-content[data-mode="standard"] {
 <details class="package-disclosure" data-content-key="advanced-install-capabilities"><summary><span class="tech-name">Know what this specific repository can actually enable</span></summary><div class="package-health"><p>The Governance step&#x27;s plan table (Step 08) answers &quot;what does the account&#x27;s GitHub *plan* allow.&quot; That is necessary but not sufficient: organization policy, CODEOWNERS team membership, and token scope can still block a capability on a plan that would otherwise support it. Beyond that plan probing, <code>policies/capability-matrix.json</code> names every capability this template relies on, its minimum requirement, and a documented workaround; <code>scripts/check-repo-capabilities</code> evaluates it against what this repository and token actually have, live:</p>
 <pre class="command"><code>./scripts/check-repo-capabilities        # human-readable report
 ./scripts/check-repo-capabilities --json # machine-readable capabilities + summary</code></pre>
-<table><thead><tr><th>Capability</th><th>What it enables</th><th>Minimum requirement</th><th>If missing</th></tr></thead><tbody><tr><td><code>repository_admin</code></td><td>Prerequisite for every row below</td><td><code>permissions.admin == true</code> for the acting token</td><td>Ask an owner/admin to run <code>apply</code>, or request the Admin role</td></tr><tr><td><code>ruleset_enforcement</code></td><td>Branch protection Ruleset on the default branch</td><td>Public repository (any plan), or private on Pro/Team or above</td><td>DEGRADED marker; desired Ruleset stays declarative in <code>policies/rulesets.json</code></td></tr><tr><td><code>codeowners_enforcement</code></td><td>CODEOWNERS review actually blocks merge</td><td>Ruleset above, plus a <code>@org/team</code> with write access</td><td>DEGRADED marker; fix the team, or use <code>scripts/request-reviewer</code> meanwhile</td></tr><tr><td><code>actions_pr_approval</code></td><td>Actions can auto-approve pull requests (for example Dependabot auto-merge)</td><td>Organization allows <code>can_approve_pull_request_reviews</code></td><td>DEGRADED marker; fall back to manual human approval</td></tr><tr><td><code>security_and_analysis</code></td><td>Secret scanning, push protection, Dependabot security updates</td><td>Public repository, or GitHub Advanced Security if private</td><td>DEGRADED marker; rely on local <code>scripts/scan-secrets</code> instead</td></tr><tr><td><code>github_pages</code></td><td>Hosts <code>docs/index.html</code> as a live site</td><td>Public repository, or GitHub Enterprise Cloud if private</td><td>DEGRADED marker; distribute the committed HTML file instead</td></tr><tr><td><code>repository_settings_inspection</code></td><td><code>check</code> mode can compare live admin-only fields</td><td>Same as <code>repository_admin</code></td><td>DEGRADED marker; run <code>check</code> from a trusted admin checkout</td></tr><tr><td><code>immutable_releases</code></td><td>Required before hosted Automatic/Guided publish can run</td><td>A real admin identity, never the default <code>GITHUB_TOKEN</code></td><td>Known permanent limitation (#123/#626); run <code>scripts/publish-release</code> locally</td></tr></tbody></table></div></details>
+<table><thead><tr><th>Capability</th><th>What it enables</th><th>Minimum requirement</th><th>If missing</th></tr></thead><tbody><tr><td><code>repository_admin</code></td><td>Prerequisite for every row below</td><td><code>permissions.admin == true</code> for the acting token</td><td>Ask an owner/admin to run <code>apply</code>, or request the Admin role</td></tr><tr><td><code>ruleset_enforcement</code></td><td>Branch protection Ruleset on the default branch</td><td>Public repository (any plan), or private on Pro/Team or above</td><td>DEGRADED marker; desired Ruleset stays declarative in <code>policies/rulesets.json</code></td></tr><tr><td><code>codeowners_enforcement</code></td><td>CODEOWNERS review actually blocks merge</td><td>Ruleset above, plus a <code>@org/team</code> with write access</td><td>DEGRADED marker; fix the team, or use <code>scripts/request-reviewer</code> meanwhile</td></tr><tr><td><code>actions_pr_approval</code></td><td>Actions can auto-approve pull requests (for example Dependabot auto-merge)</td><td>Organization allows <code>can_approve_pull_request_reviews</code></td><td>DEGRADED marker; fall back to manual human approval</td></tr><tr><td><code>security_and_analysis</code></td><td>Secret scanning, push protection, Dependabot security updates</td><td>Public repository, or GitHub Advanced Security if private</td><td>DEGRADED marker; rely on local <code>scripts/scan-secrets</code> instead</td></tr><tr><td><code>github_pages</code></td><td>Hosts <code>docs/index.html</code> as a live site</td><td>Public repository, or GitHub Enterprise Cloud if private</td><td>DEGRADED marker; distribute the committed HTML file instead</td></tr><tr><td><code>repository_settings_inspection</code></td><td><code>check</code> mode can compare live admin-only fields</td><td>Same as <code>repository_admin</code></td><td>DEGRADED marker; run <code>check</code> from a trusted admin checkout</td></tr><tr><td><code>immutable_releases</code></td><td>Repository setting GitHub uses to sign each published Release&#x27;s attestation</td><td>An admin enables it once via <code>apply-repository-settings.sh apply</code>; <code>GITHUB_TOKEN</code> still can&#x27;t read it directly</td><td>No longer pre-flight-blocking (#770); <code>scripts/publish-release</code> verifies the signed attestation post-hoc and fails closed if it&#x27;s missing</td></tr></tbody></table></div></details>
 <details class="package-disclosure" data-content-key="advanced-install-results"><summary><span class="tech-name">How to read a check-repo-capabilities result</span></summary><div class="package-health"><p>Every row reports one of three states: <code>allowed</code> (usable now), <code>blocked</code> (a real, currently-missing requirement), or <code>unknown</code> (cannot be proven from a read-only probe alone -- for example, an Actions setting that is off might just be unset rather than organization-blocked). This is a diagnostic preflight, not a merge gate: it always exits <code>0</code> once the report is produced, and it never mutates GitHub. Whether live settings actually *match* declared policy remains <code>apply-repository-settings.sh check</code>&#x27;s job.</p>
 <p><code>--facts &lt;file&gt;</code> reads pre-built facts instead of calling <code>gh</code>, so the same matrix can be evaluated against a hypothetical permission combination without live access -- this is also how <code>scripts/test-check-repo-capabilities</code> proves the gap list for several permission/plan combinations without any network access.</p></div></details>
 <details class="package-disclosure" data-content-key="advanced-install-workarounds"><summary><span class="tech-name">Workarounds and the existing DEGRADED marker</span></summary><div class="package-health"><p>This matrix does not replace or redesign <code>apply-repository-settings.sh</code>&#x27;s DEGRADED mechanism -- it documents it. Every row whose workaround says &quot;DEGRADED marker&quot; reuses the exact same fail-safe already printed by <code>apply-repository-settings.sh check</code>/<code>plan</code>/<code>apply</code> for that limitation; the two never disagree because the underlying detection (plan, visibility, admin permission) is the same. <code>docs/ci-policy.md</code> and <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md" target="_blank" rel="noreferrer">the capability-aware governance ADR</a> record the durable decision; this page and <code>policies/capability-matrix.json</code> are what stay current as the single source both consult.</p></div></details></div></div>
@@ -5679,8 +5679,8 @@ html[data-detail-level="technical"] .mode-content[data-mode="standard"] {
           title: '建立新 repo',
           goal: 'CLI 會選取核准 release、解析完整 commit SHA、顯示計畫，確認後才以 Copier 建立與驗證。',
           location: 'Terminal',
-          code: `uvx --from csarc-repo-cli csarc init ./my-project`,
-          ciCode: `uvx --from csarc-repo-cli csarc init ./my-project \\
+          code: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project`,
+          ciCode: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project \\
   --yes --non-interactive`
         },
         existing: {
@@ -5688,21 +5688,21 @@ html[data-detail-level="technical"] .mode-content[data-mode="standard"] {
           goal: '先用 --dry-run 在 repo 外產生一份 Markdown 報告，預覽新增、覆寫、保留、人工合併與無法判定項目；必須是乾淨 Git working tree，預設保留產品內容。報告只描述已知風險，不保證沒有語意或執行期衝突。',
           location: '既有 repo 根目錄',
           code: `git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from csarc-repo-cli csarc adopt . --dry-run \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt . --dry-run \\
   --report-dir ../csarc-adoption-report
-uvx --from csarc-repo-cli csarc adopt .`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt .`
         },
         update: {
           title: '更新已使用公版的 repo',
           goal: 'CLI 讀取 .csarc/config.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
           location: '專案 repo 根目錄',
           code: `git switch -c chore/<issue-number>-update-repo-template
-uvx --from csarc-repo-cli csarc update --check --json
-uvx --from csarc-repo-cli csarc update`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update`
         },
         mac: {
           title: 'macOS 本機需求',
-          goal: '共同安裝 Git、GitHub CLI、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。只有 GitHub 連線操作需要登入。',
+          goal: '共同安裝 Git、GitHub CLI 2.93.0 以上、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。執行 CLI 前先登入 GitHub。',
           location: 'Terminal',
           code: `brew install git gh uv node pnpm
 
@@ -5711,20 +5711,34 @@ uvx --from csarc-repo-cli csarc update`
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         },
         windows: {
           title: 'Windows 本機需求',
-          goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 build-essential（C linker）與 rustup。',
+          goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；從 GitHub 官方 apt repository 安裝 GitHub CLI 2.93.0 以上；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 build-essential（C linker）與 rustup。',
           location: 'PowerShell（管理員）→ Ubuntu',
           code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
 
 # Ubuntu in WSL2
 sudo apt update
-sudo apt install -y git gh curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+sudo apt install -y git wget curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+
+# GitHub CLI 2.93.0+ from GitHub's official apt repository.
+sudo mkdir -p -m 755 /etc/apt/keyrings
+out=$(mktemp)
+wget -nv -O"$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+cat "$out" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+rm -f "$out"
+sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+sudo mkdir -p -m 755 /etc/apt/sources.list.d
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt update
+sudo apt install -y gh
+gh --version
+
 curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
@@ -5737,7 +5751,7 @@ sudo apt install -y build-essential
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         }
@@ -5747,8 +5761,8 @@ gh auth status`
           title: 'Create a new repo',
           goal: 'The CLI selects the approved release, resolves the full commit SHA, shows the plan, and only then builds and verifies with Copier.',
           location: 'Terminal',
-          code: `uvx --from csarc-repo-cli csarc init ./my-project`,
-          ciCode: `uvx --from csarc-repo-cli csarc init ./my-project \\
+          code: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project`,
+          ciCode: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project \\
   --yes --non-interactive`
         },
         existing: {
@@ -5756,21 +5770,21 @@ gh auth status`
           goal: 'A --dry-run run first produces a Markdown report outside the repo, previewing additions, overwrites, kept content, manual-merge items, and anything it cannot classify; the working tree must be clean, and product content is kept by default. The report only describes known risk -- it does not guarantee there is no semantic or runtime conflict.',
           location: 'Existing repo root',
           code: `git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from csarc-repo-cli csarc adopt . --dry-run \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt . --dry-run \\
   --report-dir ../csarc-adoption-report
-uvx --from csarc-repo-cli csarc adopt .`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt .`
         },
         update: {
           title: 'Update a repo already on the template',
           goal: 'The CLI reads .csarc/config.yml, resolves the approved release, and shows the diff with Copier smart update; a conflict keeps the difference and fails closed.',
           location: 'Project repo root',
           code: `git switch -c chore/<issue-number>-update-repo-template
-uvx --from csarc-repo-cli csarc update --check --json
-uvx --from csarc-repo-cli csarc update`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update`
         },
         mac: {
           title: 'macOS local requirements',
-          goal: 'Install Git, GitHub CLI, and uv either way; add Node and pnpm for TypeScript, or rustup and Cargo for Rust. Only GitHub-connected operations need you to sign in.',
+          goal: 'Install Git, GitHub CLI 2.93.0 or newer, and uv either way; add Node and pnpm for TypeScript, or rustup and Cargo for Rust. Sign in to GitHub before running the CLI.',
           location: 'Terminal',
           code: `brew install git gh uv node pnpm
 
@@ -5779,20 +5793,34 @@ uvx --from csarc-repo-cli csarc update`
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         },
         windows: {
           title: 'Windows local requirements',
-          goal: 'Use WSL2 (Ubuntu) and work in the repo from inside WSL; add Node 24 and pnpm 11 for TypeScript, or build-essential (a C linker) and rustup for Rust.',
+          goal: 'Use WSL2 (Ubuntu) and work in the repo from inside WSL; install GitHub CLI 2.93.0 or newer from GitHub\'s official apt repository; add Node 24 and pnpm 11 for TypeScript, or build-essential (a C linker) and rustup for Rust.',
           location: 'PowerShell (Administrator) -> Ubuntu',
           code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
 
 # Ubuntu in WSL2
 sudo apt update
-sudo apt install -y git gh curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+sudo apt install -y git wget curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+
+# GitHub CLI 2.93.0+ from GitHub's official apt repository.
+sudo mkdir -p -m 755 /etc/apt/keyrings
+out=$(mktemp)
+wget -nv -O"$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+cat "$out" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+rm -f "$out"
+sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+sudo mkdir -p -m 755 /etc/apt/sources.list.d
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt update
+sudo apt install -y gh
+gh --version
+
 curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
@@ -5805,7 +5833,7 @@ sudo apt install -y build-essential
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         }

@@ -118,3 +118,27 @@ def test_rejects_tampered_artifact(tmp_path: Path) -> None:
 
     with pytest.raises(VerificationError, match="artifact digest"):
         verify(payload, artifact)
+
+
+def test_rejects_wrong_signer_identity(tmp_path: Path) -> None:
+    """Fail closed when the certificate identity is not GitHub's own signer.
+
+    Issue #770's post-hoc publish-time check (scripts/publish-release's
+    verify_release_attestation) relies on exactly this rejection to catch a
+    release attestation that was not actually signed by GitHub's
+    `https://dotcom.releases.github.com` release service, instead of
+    trusting a bare `gh release verify` exit code alone.
+    """
+    artifact = tmp_path / "package.whl"
+    artifact.write_bytes(b"trusted artifact")
+    payload = release_verification(artifact)
+    result = payload["verificationResult"]
+    assert isinstance(result, dict)
+    signature = result["signature"]
+    assert isinstance(signature, dict)
+    certificate = signature["certificate"]
+    assert isinstance(certificate, dict)
+    certificate["subjectAlternativeName"] = "https://attacker.example.com"
+
+    with pytest.raises(VerificationError, match="signer identity"):
+        verify(payload, artifact)

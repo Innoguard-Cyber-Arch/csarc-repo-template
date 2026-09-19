@@ -53,10 +53,14 @@ def scope_for(path: str) -> str:
     if (
         name
         in {
+            "Cargo.lock",
+            "Cargo.toml",
             "package.json",
+            "package-lock.json",
             "pnpm-lock.yaml",
             "pyproject.toml",
             "uv.lock",
+            "yarn.lock",
         }
         or name in {"dependabot.yml", "pnpm-workspace.yaml"}
         or path.startswith(".github/dependency-review-config")

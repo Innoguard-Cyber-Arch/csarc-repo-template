@@ -782,6 +782,137 @@ def _issue_approval_records(
     )
 
 
+@dataclass(frozen=True)
+class ApprovalEditInvalidation:
+    """One currently valid approval that a body edit would invalidate."""
+
+    author: str
+    url: str
+    reapproval_command: str
+
+
+def _body_edit_vocabulary(
+    issue: dict[str, Any],
+) -> _ApprovalVocabulary | None:
+    """Return the approval vocabulary bound to this Issue's own body."""
+    milestone = issue.get("milestone")
+    if milestone is None:
+        return _ISSUE_VOCABULARY
+    if not isinstance(milestone, dict):
+        return None
+    expected_tracker_title = (
+        f"Milestone {milestone.get('number')}: {milestone.get('title')}"
+    )
+    if issue.get("title") == expected_tracker_title:
+        return _TRACKER_VOCABULARY
+    body = issue.get("body")
+    if isinstance(body, str) and has_scope_sentinel(body):
+        return _TRACKER_VOCABULARY
+    return None
+
+
+def approval_invalidations_for_body_edit(
+    snapshot: dict[str, Any], proposed_updated_at: str
+) -> list[ApprovalEditInvalidation]:
+    """Predict approvals the proposed body edit would make stale (#799).
+
+    Both the current and proposed states use `_approval_is_stale()`; this
+    is an early warning around the existing gate, not another approval
+    decision mechanism.
+    """
+    issue = snapshot.get("issue")
+    if not isinstance(issue, dict):
+        return []
+    vocabulary = _body_edit_vocabulary(issue)
+    if vocabulary is None:
+        return []
+    proposer = issue.get("user", {}).get("login")
+    records = _vocabulary_approval_records(
+        vocabulary,
+        snapshot,
+        proposer,
+        item_updated_at=issue.get("updated_at"),
+    )
+    approvals, _, _, admin_approvals, _ = records
+    if not approvals and not admin_approvals:
+        return []
+
+    invalidations: list[ApprovalEditInvalidation] = []
+    fresh_after_edit = False
+    for comment in snapshot.get("comments", []):
+        body = comment.get("body")
+        author = comment.get("user", {}).get("login")
+        if not isinstance(body, str) or not isinstance(author, str):
+            continue
+        command = next(
+            (line.strip() for line in body.splitlines() if line.strip()), ""
+        )
+        normalized = vocabulary.normalize(command)
+        if normalized == vocabulary.approve and author in approvals:
+            reapproval = (
+                "/milestone approve"
+                if vocabulary is _TRACKER_VOCABULARY
+                else "Approve"
+            )
+        elif (
+            normalized.startswith(vocabulary.admin_prefix)
+            and command[len(vocabulary.admin_prefix) :].strip()
+            and author in admin_approvals
+        ):
+            reapproval = (
+                "/milestone admin-approve: <reason>"
+                if vocabulary is _TRACKER_VOCABULARY
+                else "Admin-approve: <reason>"
+            )
+        else:
+            continue
+        if _approval_is_stale(
+            issue.get("updated_at"),
+            comment.get("created_at"),
+            comment.get("updated_at"),
+        ):
+            continue
+        if not _approval_is_stale(
+            proposed_updated_at,
+            comment.get("created_at"),
+            comment.get("updated_at"),
+        ):
+            fresh_after_edit = True
+            continue
+        url = comment.get("html_url")
+        invalidations.append(
+            ApprovalEditInvalidation(
+                author=author,
+                url=url if isinstance(url, str) else "(URL unavailable)",
+                reapproval_command=reapproval,
+            )
+        )
+    return [] if fresh_after_edit else invalidations
+
+
+def body_edit_warning(
+    snapshot: dict[str, Any], proposed_updated_at: str
+) -> str | None:
+    """Format a non-blocking warning for one approval-invalidating edit."""
+    invalidations = approval_invalidations_for_body_edit(
+        snapshot, proposed_updated_at
+    )
+    if not invalidations:
+        return None
+    issue = snapshot["issue"]
+    lines = [
+        f"WARNING: editing Issue #{issue.get('number')}'s body now will "
+        "invalidate these approval comments:"
+    ]
+    lines.extend(f"- @{item.author}: {item.url}" for item in invalidations)
+    lines.append("After the edit, re-approval is required:")
+    lines.extend(
+        f"- @{item.author} should comment `{item.reapproval_command}` again."
+        for item in invalidations
+    )
+    return "\n".join(lines)
+
+
 def standalone_issue_approval_decision(
     snapshot: dict[str, Any], issue_number: int, *, require_open: bool = True
 ) -> Decision:
@@ -1402,15 +1533,33 @@ def preflight(repo: str, number: int) -> Decision:
     return Decision(not errors, f"{base} | {hygiene}")
 
 
-def reconcile(repo: str, number: int) -> Decision:
-    """Synchronize one Milestone and refresh its open PR checks."""
+def reconcile(
+    repo: str,
+    number: int,
+    *,
+    event_issue: int | None = None,
+    event_action: str | None = None,
+) -> Decision:
+    """Synchronize one relevant Milestone event and refresh its PR checks."""
     snapshot = load_snapshot(repo, number)
     milestone = snapshot["milestone"]
     item = tracker(snapshot)
+    errors = tracker_errors(snapshot)
+    if (
+        event_issue not in {None, 0}
+        and event_action not in {"milestoned", "demilestoned"}
+        and not errors
+        and item is not None
+        and item.get("number") != event_issue
+    ):
+        return Decision(
+            True,
+            f"Work Issue #{event_issue} does not change Milestone lifecycle",
+        )
     if item is None:
         if milestone.get("state") == "closed":
             _set_milestone_state(repo, number, "open")
-        decision = Decision(False, "; ".join(tracker_errors(snapshot)))
+        decision = Decision(False, "; ".join(errors))
         refresh_pr_checks(snapshot)
         return decision
     if item.get("state") == "open":
@@ -1418,6 +1567,18 @@ def reconcile(repo: str, number: int) -> Decision:
             _set_milestone_state(repo, number, "open")
         decision = approval_decision(snapshot)
         refresh_pr_checks(snapshot)
+        if not decision.allowed and not errors:
+            notice = (
+                decision.summary.replace("%", "%25")
+                .replace("\r", "%0D")
+                .replace("\n", "%0A")
+            )
+            print(  # noqa: T201
+                f"::notice title=Milestone governance status::{notice}"
+            )
+            return Decision(
+                True, f"Milestone governance status: {decision.summary}"
+            )
         return decision
     decision = closure_decision(snapshot)
     if decision.allowed:
@@ -1461,6 +1622,8 @@ def main() -> None:
     sync = subparsers.add_parser("reconcile")
     sync.add_argument("--repo", required=True)
     sync.add_argument("--milestone", required=True, type=int)
+    sync.add_argument("--event-issue", type=int)
+    sync.add_argument("--event-action")
     pre = subparsers.add_parser("preflight")
     pre.add_argument("--repo", required=True)
     pre.add_argument("--milestone", required=True, type=int)
@@ -1493,7 +1656,12 @@ def _dispatch(args: argparse.Namespace) -> Decision:
         return record_reconciliation(args.repo, args.milestone)
     if args.command == "preflight":
         return preflight(args.repo, args.milestone)
-    return reconcile(args.repo, args.milestone)
+    return reconcile(
+        args.repo,
+        args.milestone,
+        event_issue=args.event_issue,
+        event_action=args.event_action,
+    )
 
 
 if __name__ == "__main__":

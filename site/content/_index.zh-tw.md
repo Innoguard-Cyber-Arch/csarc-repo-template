@@ -154,7 +154,7 @@ csarc status <path> --json
 | `security_and_analysis` | secret scanning、push protection、Dependabot security updates | public repository，或 private 且具備 GitHub Advanced Security | DEGRADED 標記；改用本機 `scripts/scan-secrets` |
 | `github_pages` | 將 `docs/index.html` 發布成 hosted 網站 | public repository，或 private 且為 GitHub Enterprise Cloud | DEGRADED 標記；改分享 commit 進 repo 的 HTML 檔案 |
 | `repository_settings_inspection` | `check` 模式能比對即時的管理員專屬欄位 | 與 `repository_admin` 相同 | DEGRADED 標記；改在具 admin 身分的可信環境執行 `check` |
-| `immutable_releases` | hosted Automatic／Guided 發版的必要條件 | 真人 admin 身分，絕非預設 `GITHUB_TOKEN` | 已知永久限制（#123／#626）；改在本機執行 `scripts/publish-release` |
+| `immutable_releases` | GitHub 用來為每個已發布 Release 簽發 attestation 的 repository 設定 | admin 透過 `apply-repository-settings.sh apply` 開啟一次；`GITHUB_TOKEN` 仍無法直接讀取 | 不再 pre-flight 卡關（#770）；`scripts/publish-release` post-hoc 驗證簽發的 attestation，缺少時 fail closed |
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="怎麼解讀 check-repo-capabilities 的結果" >}}

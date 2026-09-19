@@ -7,10 +7,21 @@
 > this template repository itself" — lives in [README.md's Prerequisites
 > section](../README.md#前置需求), not here.
 
+Before running this contract, install GitHub CLI 2.93.0 or newer from the
+[official installation instructions](https://github.com/cli/cli#installation)
+and complete `gh auth login`. The CLI requires this version for safe Release
+attestation verification.
+
 1. Resolve the current Git repository root yourself. Ask only when a new
    repository's name or location cannot be inferred unambiguously; do not put
    a guessed path into the user prompt.
 2. Use only `https://github.com/Innoguard-Cyber-Arch/csarc-repo-template`.
+   A "verified release" throughout this file means any published,
+   immutable, attested, signature-verified GitHub Release the CLI
+   accepts — an unsuffixed early (`0.y.z`) or formal (`1.0.0`+) version,
+   or an `-alpha.N`/`-beta.N` pre-release (Issue #744); a pre-release
+   suffix says nothing about whether that exact version will ever ship
+   without one.
 3. Run the CLI from the verified release commit:
    `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>'`.
    `uv` obtains an isolated Python when needed; never require a global Python

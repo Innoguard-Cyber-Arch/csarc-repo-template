@@ -54,6 +54,7 @@ paired_files=(
   scripts/request-reviewer
   scripts/ci_tier.py
   scripts/hosted_verify_bots.py
+  scripts/gh-issue-edit
   scripts/check_action_pins.py
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
@@ -73,6 +74,7 @@ paired_files=(
   scripts/lint-workflows-shell
   scripts/publish-release
   scripts/release_bundle.py
+  scripts/release_phase.py
   scripts/release_policy.py
   scripts/resolve-cache-root
   scripts/scan-secrets
@@ -89,6 +91,7 @@ paired_files=(
   scripts/test-worktree-cleanup
   scripts/verify-release-candidate
   scripts/verify_attestation.py
+  scripts/verify_release_consumption.py
   scripts/validate-issue-policy
   scripts/validate-issue-title
   scripts/validate-pr-policy
@@ -98,6 +101,7 @@ paired_files=(
   tests/test_dependabot_auto_merge.py
   tests/test_dependency_security.py
   tests/test_hosted_verify_bots.py
+  tests/test_issue_edit_warning.py
   tests/test_check_action_pins.py
   tests/test_spec_to_issue.py
   tests/test_delivery_sync.py
@@ -106,6 +110,7 @@ paired_files=(
   tests/test_milestone_approval.py
   tests/test_milestone_closure.py
   tests/test_milestone_scope.py
+  tests/test_release_phase.py
   tests/test_standalone_issue_approval.py
   tests/test_release_policy.py
   tests/test_release_bundle.py
