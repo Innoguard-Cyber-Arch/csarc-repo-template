@@ -1163,6 +1163,14 @@ PR workflows 設為等待人工核准；Automatic 由原 release run 驗證候�
 Action 建 PR，Guided 只在本機執行 `python3 scripts/release_policy.py prepare-candidate` 並由人
 或 agent 開一般 PR；兩路共用版本計算、候選驗證與唯一 `release.yml` publisher。
 
+版本 PR 的成功檢查只對當時的 `main` 有效。正式 `scripts/pr_lifecycle.py merge` 會在 remote
+lease 綁定的 current `main` 上重跑同一支 `scripts/verify-release-candidate`，並以同一個
+`Release / candidate` status 留下 candidate SHA、來源 merge-base 與 current base 的證據；
+`scripts/publish-release stage` 在發布前再走同一驗證作為人工作業的 fail-closed 後盾。若
+candidate 建立後的 `main` 只新增 `docs`／`chore` 等 `no-release` commits，原 PR 可直接重新驗證；
+只要新增範圍含 `feat`／`fix`／`revert` 或 breaking change，就必須更新同一張版本 PR 後再驗證，
+不能沿用舊 base 上的成功結果（#817）。
+
 ## Conditional 與退役能力
 
 `scripts/verify_release_consumption.py` 與其測試保留為 conditional 的消費端安全契約。

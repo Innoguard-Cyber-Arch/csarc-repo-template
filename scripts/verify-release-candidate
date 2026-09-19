@@ -10,8 +10,10 @@ pr_number="$(jq -r '.number' "$candidate_json")"
 candidate_sha="$(jq -r '.sha' "$candidate_json")"
 head_ref="$(jq -r '.headBranchName' "$candidate_json")"
 base_ref="$(jq -r '.baseBranchName' "$candidate_json")"
+expected_base_sha="$(jq -r '.baseSha // empty' "$candidate_json")"
 [[ "$pr_number" =~ ^[0-9]+$ && "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]
 test "$base_ref" = main
+[[ -z "$expected_base_sha" || "$expected_base_sha" =~ ^[0-9a-f]{40}$ ]]
 
 publish_status() {
   if [[ "$publish_candidate_status" != true ]]; then
@@ -24,12 +26,19 @@ publish_status() {
 }
 
 publish_status pending 'Validating the generated version commit'
+status_file="$(mktemp "$RUNNER_TEMP/release-candidate-status.XXXXXX")"
+status_description="candidate ${candidate_sha:0:12}: failure"
 status=failure
 if (
   set -euo pipefail
   pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number")"
   base_sha="$(jq -r '.base.sha' <<<"$pr")"
   [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]
+  if [[ -n "$expected_base_sha" && "$base_sha" != "$expected_base_sha" ]]; then
+    echo "Release candidate $candidate_sha expected current base $expected_base_sha but observed $base_sha for target $base_ref." >&2
+    exit 1
+  fi
+  echo "Release candidate boundary: candidate=$candidate_sha current_base=$base_sha target=$base_ref"
   actor="$(jq -r '.user.login' <<<"$pr")"
   actor_permission=''
   if [[ "$actor" != 'github-actions[bot]' ]]; then
@@ -45,7 +54,21 @@ if (
   gh api --paginate --slurp \
     "repos/$GITHUB_REPOSITORY/pulls/$pr_number/commits?per_page=100" \
     >"$commits"
-  python3 "$repo_root/scripts/release_policy.py" verify-release-follow-up \
+  git -C "$repo_root" fetch --no-tags origin "$base_sha" "$candidate_sha"
+  candidate_parent="$(mktemp -d "$RUNNER_TEMP/release-candidate.XXXXXX")"
+  candidate_worktree="$candidate_parent/worktree"
+  cleanup_candidate_worktree() {
+    git -C "$repo_root" worktree remove --force "$candidate_worktree" >/dev/null 2>&1 || true
+    rmdir "$candidate_parent" >/dev/null 2>&1 || true
+  }
+  trap cleanup_candidate_worktree EXIT
+  git -C "$repo_root" worktree add --detach --force "$candidate_worktree" "$candidate_sha"
+  source_sha="$(git -C "$candidate_worktree" merge-base "$candidate_sha" "$base_sha")"
+  printf 'candidate %.12s source %.12s base %.12s' \
+    "$candidate_sha" "$source_sha" "$base_sha" \
+    >"$status_file"
+
+  python3 "$candidate_worktree/scripts/release_policy.py" verify-release-follow-up \
     --repo "$GITHUB_REPOSITORY" \
     --head "$head_ref" \
     --head-repo "$(jq -r '.head.repo.full_name' <<<"$pr")" \
@@ -54,11 +77,9 @@ if (
     --actor-permission "$actor_permission" \
     --changed-files "$files" \
     --commits "$commits" \
-    --root "$repo_root"
+    --root "$candidate_worktree"
 
-  git -C "$repo_root" fetch --no-tags origin "$base_sha" "$candidate_sha"
-  git -C "$repo_root" checkout --detach "$candidate_sha"
-  cd "$repo_root"
+  cd "$candidate_worktree"
   python3 scripts/release_policy.py verify-candidate-version \
     --base-sha "$base_sha"
   version="$(jq -r '.["."]' .release-please-manifest.json)"
@@ -71,5 +92,8 @@ if (
 ); then
   status=success
 fi
-publish_status "$status" "Generated version commit: $status"
+if [[ -s "$status_file" ]]; then
+  status_description="$(<"$status_file"): $status"
+fi
+publish_status "$status" "$status_description"
 test "$status" = success
