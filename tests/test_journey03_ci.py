@@ -194,28 +194,32 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
 
 
 def test_hosted_bot_verification_reuses_toolchain_setup_first() -> None:
-    """Install Python and uv before either hosted verification command."""
+    """Install every selected language tool before hosted verification."""
     root_source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
         encoding="utf-8"
     )
     template_source = (
         REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
     ).read_text(encoding="utf-8")
-    rendered_template = (
-        Environment(
-            autoescape=False,  # noqa: S701 - trusted local YAML template
-            undefined=StrictUndefined,
-        )
-        .from_string(template_source)
-        .render(
+    template = Environment(
+        autoescape=False,  # noqa: S701 - trusted local YAML template
+        undefined=StrictUndefined,
+    ).from_string(template_source)
+    rendered_templates = (
+        template.render(
             languages=["python", "typescript", "rust"],
             python_support_mode="latest",
             python_min_version="3.12",
-        )
+        ),
+        template.render(
+            languages=["typescript", "rust"],
+            python_support_mode="latest",
+            python_min_version="3.12",
+        ),
     )
 
-    contracts: list[tuple[str, str, str]] = []
-    for source in (root_source, rendered_template):
+    contracts: list[list[tuple[str, str]]] = []
+    for source in (root_source, *rendered_templates):
         steps = ci_steps(source)
         hosted_index = next(
             index
@@ -238,12 +242,18 @@ def test_hosted_bot_verification_reuses_toolchain_setup_first() -> None:
             (index, step)
             for index, step in enumerate(steps)
             if str(step.get("uses", "")).startswith(
-                ("actions/setup-python@", "astral-sh/setup-uv@")
+                (
+                    "actions/setup-python@",
+                    "astral-sh/setup-uv@",
+                    "pnpm/action-setup@",
+                    "actions/setup-node@",
+                )
             )
+            or "rustup toolchain install" in str(step.get("run", ""))
         ]
 
-        assert len(toolchain) == 2
         assert all(index < hosted_index for index, _ in toolchain)
+        source_contracts = []
         for _, step in toolchain:
             condition = step.get("if", "")
             assert "steps.bot.outputs.eligible == 'true'" in condition
@@ -251,11 +261,20 @@ def test_hosted_bot_verification_reuses_toolchain_setup_first() -> None:
                 "startsWith(github.event.pull_request.head.ref, 'release/v')"
                 in condition
             )
-            contracts.append(
-                (step["uses"], condition, str(step.get("with", {})))
+            source_contracts.append(
+                (
+                    str(step.get("uses", "rustup")),
+                    condition,
+                )
             )
+        contracts.append(source_contracts)
 
-    assert contracts[:2] == contracts[2:]
+    assert contracts[0] == contracts[1]
+    assert [item[0] for item in contracts[2]] == [
+        item[0]
+        for item in contracts[0]
+        if not item[0].startswith("actions/setup-python@")
+    ]
 
 
 def test_documentation_tier_validates_the_generated_site() -> None:
