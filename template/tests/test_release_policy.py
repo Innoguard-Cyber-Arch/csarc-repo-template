@@ -1272,6 +1272,64 @@ def test_candidate_version_is_recomputed_from_base(tmp_path: Path) -> None:
         verify_candidate_version(tmp_path, base_sha)
 
 
+@pytest.mark.parametrize(
+    ("main_commit", "passes"),
+    [(None, True), ("docs: clarify usage", True), ("fix: repair bug", False)],
+)
+def test_candidate_freshness_follows_current_base_release_intent(
+    tmp_path: Path, main_commit: str | None, passes: bool
+) -> None:
+    """Only release-worthy commits added to main stale a candidate."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {".": {"component": "demo"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: expected minor")
+    source_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "switch", "-c", "release/v0.2.0")
+    write_release_surfaces(tmp_path, "0.2.0")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(main): release 0.2.0")
+    candidate_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "switch", "main")
+    if main_commit:
+        (tmp_path / "later").write_text(f"{main_commit}\n", encoding="utf-8")
+        git(tmp_path, "add", ".")
+        git(tmp_path, "commit", "-m", main_commit)
+    current_base_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "switch", "release/v0.2.0")
+
+    if passes:
+        assert verify_candidate_version(tmp_path, current_base_sha) == (
+            "0.2.0",
+            candidate_sha,
+            source_sha,
+        )
+    else:
+        with pytest.raises(
+            ValueError,
+            match=(
+                rf"candidate {candidate_sha} was built from {source_sha}, "
+                rf"but current base {current_base_sha} adds release-worthy"
+            ),
+        ):
+            verify_candidate_version(tmp_path, current_base_sha)
+
+
 def test_guided_rust_candidate_updates_and_checks_cargo_lock(
     tmp_path: Path,
 ) -> None:
