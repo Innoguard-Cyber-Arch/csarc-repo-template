@@ -16,6 +16,7 @@ CHANGELOG 的 tag。
 ### Bug Fixes
 
 * fix(governance): reject incomplete Milestone closure (057b83e)
+* fix(release): revalidate candidates when main advances (b91fc40)
 
 ## [0.16.0] - 2026-09-20
 
