@@ -100,7 +100,11 @@ def test_publish_release_never_overwrites_generated_notes() -> None:
     source = (ROOT / "scripts/publish-release").read_text(encoding="utf-8")
 
     assert 'gh release edit "$tag" --draft' in source
-    assert 'gh release edit "$tag" --draft=false --latest' in source
+    # Issue #744: --latest is now conditional on the tag having no
+    # alpha/beta suffix (an in-progress pre-release must never be marked
+    # the repository's most mature Release), but the edit call itself
+    # still only ever flips draft/latest state, never notes.
+    assert 'gh release edit "$tag" --draft=false "${latest_flags[@]}"' in source
     assert "--notes" not in source
     assert "--notes-file" not in source
 

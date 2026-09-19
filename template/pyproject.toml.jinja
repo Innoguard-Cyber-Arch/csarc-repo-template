@@ -1,7 +1,7 @@
 {% set python_target = "3.14" if python_support_mode == "latest" else python_min_version -%}
 [project]
 name = {{ project_slug | tojson }}
-version = "0.1.0"
+version = "0.1.0a1"
 description = {{ project_description | tojson }}
 readme = "README.md"
 requires-python = "{% if python_support_mode == 'latest' %}>=3.14,<3.15{% else %}>={{ python_min_version }}{% endif %}"

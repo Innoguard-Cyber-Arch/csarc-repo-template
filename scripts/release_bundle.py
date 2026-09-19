@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -16,9 +15,8 @@ from pathlib import Path
 if __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scripts.release_phase import is_valid_version
 from scripts.release_policy import verify_release_version
-
-SEMVER_TAG = re.compile(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)")
 
 
 def run(*arguments: str, cwd: Path) -> str:
@@ -45,8 +43,14 @@ def digest(path: Path) -> str:
 
 
 def identity(root: Path, tag: str) -> tuple[str, str]:
-    """Validate the release tag and return its version and commit."""
-    if SEMVER_TAG.fullmatch(tag) is None:
+    """Validate the release tag and return its version and commit.
+
+    Issue #744: a tag may carry a legal `-alpha.N`/`-beta.N` phase suffix;
+    `is_valid_version` (scripts/release_phase.py) is the one canonical
+    parser for that shape, reused here instead of a second hand-rolled
+    regex that could drift from it.
+    """
+    if not tag.startswith("v") or not is_valid_version(tag):
         raise ValueError(f"invalid release tag: {tag}")
     version = verify_release_version(root, tag.removeprefix("v"))
     commit = run("git", "rev-parse", "HEAD", cwd=root)

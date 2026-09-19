@@ -378,6 +378,17 @@ command substitution，這段文字從未被執行，但掃描器分不出「描
 仍然成立。這不是本節唯一的例外——`canonical_scanner_helper` 對
 `pr_lifecycle.py` 自身的例外也適用同一條通則，往後新增例外一律比照辦理。
 
+**Issue #744／#745 部分取代（2026-09-17）：** 本節的 `policies/project-stage.json`
+`release_phase`（alpha／beta／release 三值）繼續用於上面描述的 Ruleset
+bypass 範圍收斂，本身不受影響。但本節「`release_phase` 是人工宣告、不從
+分支模式或 semver 反推」的立場，以及「進入 `release` 後這整個 bypass
+結構性消失」隱含的單向前進假設，被維護者 2026-09-17 的決定取代：版本號
+本身現在就直接表示發布層級（見下面「版本、發版、交付與部署矩陣」與
+`docs/adr/release-security-and-dependencies.md` 新增段落），alpha／beta 可以
+在任何時候發布，不再是一段只會前進的一次性期間。審核與測試如何依層級分級
+（取代本節 bypass 機制的下一步）是 #745 的範圍，尚未落地前本節機制照舊
+生效；`policies/project-stage.json` 檔案本身與其三值不因 #744 改變。
+
 ### 不屬於里程碑的工作
 
 一張 Issue 若能獨立審查、驗證與交付，且沒有共同期限、跨 Issue 相依、整批驗收或
@@ -1353,6 +1364,47 @@ PR workflows 設為等待人工核准；Automatic 由原 release run 驗證候�
 Action 建 PR，Guided 只在本機執行 `python3 scripts/release_policy.py prepare-candidate` 並由人
 或 agent 開一般 PR；兩路共用版本計算、候選驗證與唯一 `release.yml` publisher。
 
+### 版本號表示發布層級（Issue #744，2026-09-17）
+
+版本號本身就是發布層級，不是另外一個側欄狀態：alpha 為 `X.Y.Z-alpha.N`；beta 為
+`X.Y.Z-beta.N`（0.x 或 1.x 都可以）；早期版為不帶後綴的 `0.y.z`；正式版為 `1.0.0`
+起不帶後綴。同一版本號的後續 pre-release 遞增 `.N`（tag 名稱不能重用）；alpha／beta
+任何時候都可以發布，包含在早期版或正式版之後。發版層級取自上次發版以來所含工作的
+最高宣告層級——**宣告與計算機制由 #745 提供**，本節與 `scripts/release_policy.py`／
+`scripts/publish-release`／`scripts/converge-release-tag` 只負責把一個已宣告的層級
+轉成合法版本號並正確發布：`release_policy.py plan`／`prepare-candidate` 接受
+`--phase {alpha,beta,early,formal}`。**pre-release 後綴代表發布層級，不保證之後
+會發該版本的無後綴版本**：`X.Y.Z-alpha.N`／`X.Y.Z-beta.N` 只承諾「這是目前宣告的
+成熟度」，不承諾同一個 `X.Y.Z` 之後一定會有對應的無後綴（早期版或正式版）發布——
+下一次發版可能直接跳到更高的版本號，或維持原地再發一次更高的 `.N`。版本號合法性由
+`scripts/release_phase.py`
+（`template/scripts/` 與 `src/csarc_cli/release_phase.py` 各有一份逐位元組相同的
+副本，後者是因為 `csarc` 發行的 wheel 只包含 `src/csarc_cli`，見其模組
+docstring）驗證：主版本號為 0 時不帶後綴即為早期版，主版本號 ≥ 1 時不帶後綴即為
+正式版，後綴只接受 `alpha.N`／`beta.N`，其他一律 fail closed。`gh release create`
+依 tag 是否帶後綴決定要不要傳 `--prerelease`；`gh release edit ... --draft=false`
+只在無後綴版本才加 `--latest`（pre-release 不該被標成「最新」）。
+
+CLI（`src/csarc_cli/cli.py`）的 `release_identity()` 接受 immutable、已發布的
+pre-release Release：tag 必須是合法版本號，且 GitHub 回報的 `prerelease` 旗標要與
+tag 格式一致，其餘既有驗證（immutable、attestation、tag 指向未移動、commit
+signature）全部保留。選「最新」版本改用 SemVer 優先序（`GhReleaseClient._latest()`
+分頁列出所有已發布、非 draft 的 Release 再挑最高者），不再依賴 GitHub
+`releases/latest` API（該 API 不回傳 `prerelease: true` 的 Release）。
+
+保留規則（decision 5）：保留所有不帶後綴的版本（早期版與正式版），外加依
+major.minor 分組後最新一組的最新一個 pre-release；較舊分組或同分組較舊的
+pre-release 列為應刪除。`scripts/release_policy.py retention-plan --repo OWNER/NAME`
+只列出清單（dry-run），不呼叫任何刪除 API；實際刪除是 Milestone 14 promotion 後
+由維護者人工執行的動作，記錄在 #740 的 Completion evidence，不是任何工作 PR 的
+合併條件。下游 `csarc update` 若確認記錄的 `release_tag`在 canonical repository
+已不存在（GitHub 回報 404，`ReleaseNotFoundError`），改走重新安裝流程：重用
+`csarc adopt`（#219）同一套 transactional plan 機制列出新增／覆寫／保留／人工合併
+項目，經使用者確認才套用，project-owned 檔案一律保留；只有 tag 確認不存在才觸發，
+其他驗證失敗（attestation 不符、tag 指向改變、簽章無效、repository identity 不符）
+一律維持 fail closed。詳見 `docs/adr/release-security-and-dependencies.md` 與
+`docs/adr/transactional-repository-adoption.md` 的新增段落。
+
 ## Conditional 與退役能力
 
 `scripts/verify_release_consumption.py` 與其測試保留為 conditional 的消費端安全契約。
@@ -1590,7 +1642,9 @@ Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 
 1. `main` HEAD 未被最新 immutable stable GitHub Release 的精確 target 涵蓋，也不是最新一次成功 `release.yml` run（`gh api repos/{repo}/actions/workflows/release.yml/runs?branch=main&status=success`）所在的 commit。
 2. 過去 N 小時內，既沒有有效的 immutable stable Release，也沒有成功的 `release.yml` run。
 
-最新 stable Release 必須由 GitHub API 明確回報 `immutable=true`；其 `target_commitish` 必須是精確 40 字元 SHA，且等於 `main` HEAD，或經 GitHub compare API 證明為其 ancestor；`published_at` 還必須不早於目前 `main` commit。精確 target 會持續視為涵蓋該 HEAD；ancestor target 只算 N 小時內的近期發布活動，不能永久掩蓋較新的 `main`。mutable Release、draft、prerelease、非 ancestor target、移動中的 branch ref 或比目前 `main` 更早發布的 Release 都不能壓掉告警。這使 immutable GitHub Release 本身成為首要發布事實，不再要求一條已知會被 #123 fail closed 的 hosted run 偽裝成成功。
+最新 eligible Release 必須由 GitHub API 明確回報 `immutable=true`；其 `target_commitish` 必須是精確 40 字元 SHA，且等於 `main` HEAD，或經 GitHub compare API 證明為其 ancestor；`published_at` 還必須不早於目前 `main` commit。精確 target 會持續視為涵蓋該 HEAD；ancestor target 只算 N 小時內的近期發布活動，不能永久掩蓋較新的 `main`。mutable Release、draft、非 ancestor target、移動中的 branch ref 或比目前 `main` 更早發布的 Release 都不能壓掉告警。這使 immutable GitHub Release 本身成為首要發布事實，不再要求一條已知會被 #123 fail closed 的 hosted run 偽裝成成功。
+
+**Issue #744（版本號表示發布層級）之後：** `-alpha.N`／`-beta.N` 的 pre-release Release 不再被當成無效發布忽略——tag 必須是合法的 alpha/beta/early/formal 版本號，且 GitHub 回報的 `prerelease` 旗標必須與 tag 格式一致（兩者矛盾時同樣壓不下告警，`reason` 會標成 `ignored: prerelease flag does not match tag shape`），否則視為 `ignored: tag is not a legal release-phase version`。挑選「最新」時仍以 `published_at` 排序（本節要問的是「發版路徑最近是否真的動過」，不是「哪個版本號優先序最高」；CLI 選版才用 SemVer 優先序，見上面 README／`src/csarc_cli/cli.py` 的說明）。
 
 `release.yml` 在每次 push 到 `main` 後都會執行，即使 `release_policy.py` 判定「今天不需要發版」也會正常執行完成（conclusion 仍是 success）；因此健康狀態下，最後一次成功 run 的 commit 幾乎總是等於當下 `main` HEAD，條件 1 不成立，不會誤報。只有在 `release.yml` 真的不再執行成功、而 `main` 仍透過一般 PR 合併前進時（兩者是各自獨立的觸發：merge 不需要 `release.yml` 成功），條件 1 才會成立；再疊上條件 2（N 小時內真的沒有任何成功活動），才判定為 drift。
 

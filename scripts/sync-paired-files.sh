@@ -73,6 +73,7 @@ paired_files=(
   scripts/lint-workflows-shell
   scripts/publish-release
   scripts/release_bundle.py
+  scripts/release_phase.py
   scripts/release_policy.py
   scripts/resolve-cache-root
   scripts/scan-secrets
@@ -106,6 +107,7 @@ paired_files=(
   tests/test_milestone_approval.py
   tests/test_milestone_closure.py
   tests/test_milestone_scope.py
+  tests/test_release_phase.py
   tests/test_standalone_issue_approval.py
   tests/test_release_policy.py
   tests/test_release_bundle.py

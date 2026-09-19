@@ -353,13 +353,49 @@ def test_retired_archive_has_no_release_workflow_copy() -> None:
 
 
 def test_guided_path_has_no_repo_local_publisher() -> None:
-    """Only release.yml may create tags or GitHub Releases."""
+    """Only release.yml may create tags or GitHub Releases.
+
+    Issue #744's dry-run retention lister legitimately *reads* an existing
+    Release's `tag_name` (there is no other way to list what already
+    exists), so the narrower invariant this guards is "never construct a
+    create-Release request body" -- a real `gh api ... -f tag_name=...` or
+    JSON payload literal `"tag_name": ` -- not "never mention the field
+    name while reading one back."
+    """
     source = (ROOT / "scripts/release_policy.py").read_text(encoding="utf-8")
 
     assert "def direct_release" not in source
     assert 'add_parser("release")' not in source
-    assert '"tag_name"' not in source
+    assert '"tag_name": ' not in source
     assert '"/dispatches"' not in source
+
+
+def test_release_phase_module_is_synced_across_all_three_copies() -> None:
+    """scripts/release_phase.py has no single canonical source, by CI.
+
+    Its own docstring says three copies (scripts/, template/scripts/, and
+    src/csarc_cli/ -- the last only because the distributed `csarc` wheel
+    ships src/csarc_cli alone and cannot import a sibling scripts/ module)
+    are kept byte-identical, but only the first two are enforced by
+    scripts/sync-paired-files.sh (a root-to-template/ tool, not a 3-way
+    one). Without this test, an edit to one copy without the others would
+    only ever be caught by someone's word, not CI.
+    """
+    root_text = (ROOT / "scripts/release_phase.py").read_text(encoding="utf-8")
+    template_text = (ROOT / "template/scripts/release_phase.py").read_text(
+        encoding="utf-8"
+    )
+    cli_text = (ROOT / "src/csarc_cli/release_phase.py").read_text(
+        encoding="utf-8"
+    )
+    assert root_text == template_text, (
+        "scripts/release_phase.py and template/scripts/release_phase.py "
+        "have drifted; run scripts/sync-paired-files.sh"
+    )
+    assert root_text == cli_text, (
+        "scripts/release_phase.py and src/csarc_cli/release_phase.py have "
+        "drifted; copy one over the other so all three stay identical"
+    )
 
 
 def test_release_status_stays_candidate_until_default_branch_evidence() -> None:
