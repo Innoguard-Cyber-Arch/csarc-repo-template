@@ -7,6 +7,11 @@
 > this template repository itself" — lives in [README.md's Prerequisites
 > section](../README.md#前置需求), not here.
 
+Before running this contract, install GitHub CLI 2.93.0 or newer from the
+[official installation instructions](https://github.com/cli/cli#installation)
+and complete `gh auth login`. The CLI requires this version for safe Release
+attestation verification.
+
 1. Resolve the current Git repository root yourself. Ask only when a new
    repository's name or location cannot be inferred unambiguously; do not put
    a guessed path into the user prompt.

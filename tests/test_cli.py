@@ -39,6 +39,8 @@ def test_copier_migration_only_removes_known_root_test_copies(
     project_owned_symlink.symlink_to(target)
     retired_generated_test = tests / "test_delivery_sync.py"
     retired_generated_test.write_text("generated\n", encoding="utf-8")
+    retired_upstream_test = tests / "test_issue_edit_warning.py"
+    retired_upstream_test.write_text("new upstream\n", encoding="utf-8")
     fixtures = tests / "fixtures"
     fixtures.mkdir()
     retired_generated_fixture = fixtures / "syft-v1.50.0-runtime.spdx.json"
@@ -64,6 +66,11 @@ def test_copier_migration_only_removes_known_root_test_copies(
                     "fda96bc7c659542f481b0845d3319ac607162d85"
                     "b908a479740f314b82bc10b6"
                 )
+            if self.content == b"new upstream\n":
+                return (
+                    "ec205ac957dd588f04a59c47bcd8fb43b999237"
+                    "c4a59235d00f4020ca0bcdd0b"
+                )
             return "0" * 64
 
     monkeypatch.setattr(hashlib, "sha256", TestDigest)
@@ -75,6 +82,7 @@ def test_copier_migration_only_removes_known_root_test_copies(
         project_owned_symlink.read_text(encoding="utf-8") == "project owned\n"
     )
     assert not retired_generated_test.exists()
+    assert not retired_upstream_test.exists()
     assert not retired_generated_fixture.exists()
     assert project_owned_test.read_text(encoding="utf-8") == "customized\n"
     assert "branch_strategy: main" in (

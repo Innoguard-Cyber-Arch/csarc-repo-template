@@ -54,6 +54,7 @@ paired_files=(
   scripts/request-reviewer
   scripts/ci_tier.py
   scripts/hosted_verify_bots.py
+  scripts/gh-issue-edit
   scripts/check_action_pins.py
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
@@ -91,6 +92,7 @@ paired_files=(
   scripts/test-worktree-cleanup
   scripts/verify-release-candidate
   scripts/verify_attestation.py
+  scripts/verify_release_consumption.py
   scripts/validate-issue-policy
   scripts/validate-issue-title
   scripts/validate-pr-policy

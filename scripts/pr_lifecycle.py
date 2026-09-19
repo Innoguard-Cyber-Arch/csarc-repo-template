@@ -842,7 +842,15 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
 def authorization(
     github: GitHub, repo: str, pr_number: int, head_sha: str, url: str
 ) -> dict[str, Any]:
-    """Require a maintainer authorization bound to the exact PR head."""
+    """Require a maintainer authorization bound to the exact PR head.
+
+    The `collaborators/{login}/permission` lookup below, not the comment's
+    `author_association`, is what proves the author is a maintainer (Issue
+    #785): `author_association` is computed relative to what the querying
+    credential can resolve, and a restricted `GITHUB_TOKEN` reports a real
+    org member as `COLLABORATOR` rather than `MEMBER` -- see #549 for the
+    identical problem, fixed the same way, in `sync_milestone_state.py`.
+    """
     parsed = urllib.parse.urlparse(url)
     expected_path = f"/{repo}/pull/{pr_number}"
     if (
@@ -866,7 +874,6 @@ def authorization(
         or not str(payload.get("issue_url", "")).endswith(
             f"/issues/{pr_number}"
         )
-        or payload.get("author_association") not in MAINTAINER_ASSOCIATIONS
         or not isinstance(user.get("login"), str)
         or user.get("type") != "User"
         or body != expected_body
@@ -899,6 +906,16 @@ def find_exact_head_authorization(
     required check recognize an Alpha self-merge authorization the same way
     it recognizes a native `APPROVED` review, without needing a lease or a
     specific comment URL threaded through.
+
+    Deliberately does not check the comment's `author_association` (Issue
+    #785): that field is computed relative to what the *querying*
+    credential can resolve, not an absolute fact about the commenter, and
+    the restricted `GITHUB_TOKEN` the `review` job runs under reports a
+    genuine org member as `COLLABORATOR` instead of `MEMBER` -- #549 hit
+    and fixed the identical problem in `sync_milestone_state.py`. The
+    `collaborators/{login}/permission` lookup below is the authoritative,
+    token-scope-independent check; requiring `admin`/`maintain` permission
+    there is what actually enforces "a real maintainer wrote this."
     """
     expected_body = authorization_statement(repo, pr_number, head_sha)
     comments = github.pages(repo, f"issues/{pr_number}/comments?per_page=100")
@@ -909,7 +926,6 @@ def find_exact_head_authorization(
         user = payload.get("user") or {}
         if (
             payload.get("body") != expected_body
-            or payload.get("author_association") not in MAINTAINER_ASSOCIATIONS
             or not isinstance(user.get("login"), str)
             or user.get("type") != "User"
         ):
@@ -1214,7 +1230,12 @@ def exact_head_approval(
     head_sha: str,
     actor: str,
 ) -> dict[str, Any] | None:
-    """Return the newest independent maintainer approval for this head."""
+    """Return the newest independent maintainer approval for this head.
+
+    Ignores `author_association` for the same reason `authorization()`
+    does (Issue #785): the `collaborators/{login}/permission` lookup below
+    is the token-scope-independent source of truth.
+    """
     approved: list[dict[str, Any]] = []
     for login, review in reviews.items():
         user = review.get("user") or {}
@@ -1222,7 +1243,6 @@ def exact_head_approval(
             login == actor
             or review.get("state") != "APPROVED"
             or review.get("commit_id") != head_sha
-            or review.get("author_association") not in MAINTAINER_ASSOCIATIONS
             or not isinstance(user, dict)
             or user.get("type") != "User"
         ):

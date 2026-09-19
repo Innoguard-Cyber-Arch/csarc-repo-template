@@ -34,7 +34,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
         },
         mac: {
           title: 'macOS 本機需求',
-          goal: '共同安裝 Git、GitHub CLI、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。只有 GitHub 連線操作需要登入。',
+          goal: '共同安裝 Git、GitHub CLI 2.93.0 以上、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。執行 CLI 前先登入 GitHub。',
           location: 'Terminal',
           code: `brew install git gh uv node pnpm
 
@@ -43,20 +43,34 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         },
         windows: {
           title: 'Windows 本機需求',
-          goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 build-essential（C linker）與 rustup。',
+          goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；從 GitHub 官方 apt repository 安裝 GitHub CLI 2.93.0 以上；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 build-essential（C linker）與 rustup。',
           location: 'PowerShell（管理員）→ Ubuntu',
           code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
 
 # Ubuntu in WSL2
 sudo apt update
-sudo apt install -y git gh curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+sudo apt install -y git wget curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+
+# GitHub CLI 2.93.0+ from GitHub's official apt repository.
+sudo mkdir -p -m 755 /etc/apt/keyrings
+out=$(mktemp)
+wget -nv -O"$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+cat "$out" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+rm -f "$out"
+sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+sudo mkdir -p -m 755 /etc/apt/sources.list.d
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt update
+sudo apt install -y gh
+gh --version
+
 curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
@@ -69,7 +83,7 @@ sudo apt install -y build-essential
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         }
@@ -102,7 +116,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
         },
         mac: {
           title: 'macOS local requirements',
-          goal: 'Install Git, GitHub CLI, and uv either way; add Node and pnpm for TypeScript, or rustup and Cargo for Rust. Only GitHub-connected operations need you to sign in.',
+          goal: 'Install Git, GitHub CLI 2.93.0 or newer, and uv either way; add Node and pnpm for TypeScript, or rustup and Cargo for Rust. Sign in to GitHub before running the CLI.',
           location: 'Terminal',
           code: `brew install git gh uv node pnpm
 
@@ -111,20 +125,34 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         },
         windows: {
           title: 'Windows local requirements',
-          goal: 'Use WSL2 (Ubuntu) and work in the repo from inside WSL; add Node 24 and pnpm 11 for TypeScript, or build-essential (a C linker) and rustup for Rust.',
+          goal: 'Use WSL2 (Ubuntu) and work in the repo from inside WSL; install GitHub CLI 2.93.0 or newer from GitHub\'s official apt repository; add Node 24 and pnpm 11 for TypeScript, or build-essential (a C linker) and rustup for Rust.',
           location: 'PowerShell (Administrator) -> Ubuntu',
           code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
 
 # Ubuntu in WSL2
 sudo apt update
-sudo apt install -y git gh curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+sudo apt install -y git wget curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+
+# GitHub CLI 2.93.0+ from GitHub's official apt repository.
+sudo mkdir -p -m 755 /etc/apt/keyrings
+out=$(mktemp)
+wget -nv -O"$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+cat "$out" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+rm -f "$out"
+sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+sudo mkdir -p -m 755 /etc/apt/sources.list.d
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt update
+sudo apt install -y gh
+gh --version
+
 curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
@@ -137,7 +165,7 @@ sudo apt install -y build-essential
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         }
