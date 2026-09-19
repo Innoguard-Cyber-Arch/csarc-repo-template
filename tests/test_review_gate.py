@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from copier import run_copy
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -603,6 +604,20 @@ def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
     assert "review" in contexts
     assert (project / ".github/workflows/pr-review.yml").is_file()
     assert (project / "scripts/review_gate.py").is_file()
+
+
+def test_issue_comment_review_gate_can_read_release_level_issues() -> None:
+    """Issue #814: the default-branch trigger can run a newer base gate."""
+    for path in (
+        ROOT / ".github/workflows/pr-review.yml",
+        ROOT / "template/.github/workflows/pr-review.yml",
+    ):
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert workflow["jobs"]["review"]["permissions"] == {
+            "contents": "read",
+            "issues": "read",
+            "pull-requests": "read",
+        }
 
 
 def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
