@@ -4,7 +4,7 @@
 - **日期：**2026-09-03
 - **來源 Issues：**[#552](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/552)（沿用並延伸 [#512](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/512)／[#518](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/518)／[#546](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/546)／[#549](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/549)／[#550](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/550) 已完成的機制；不推翻重來），另參考 [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580) 記錄的 Ruleset bypass 成本
 - **實作 PR：**[PR #609](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/609)
-- **後續補完 Issue：**[#632](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/632)——把本 ADR「刻意不做的部分」明確保留給後續 Issue 的兩件事（CI 接線、核可 fingerprint-binding）補齊；不推翻本 ADR 任何決定，見下方對應段落與「歷史 disposition」表
+- **後續補完 Issues：**[#632](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/632)——把本 ADR「刻意不做的部分」明確保留給後續 Issue 的兩件事（CI 接線、核可 fingerprint-binding）補齊；[#816](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/816)——讓 `Delivered` 同時要求 leaf acceptance checklist 完成，並讓 completed closure 拒絕任何非 `Delivered` work Issue。兩者都不推翻本 ADR 的資料來源或 lifecycle 分工，見下方對應段落與「歷史 disposition」表
 
 ## 問題與限制
 
@@ -87,10 +87,13 @@ work PR 上，會把同一個 self-lock 複製到每一張 work PR，而且沒�
   料，不另外解析 Milestone body 的 `Plan` 條列文字），列出它目前是否關閉、宣告
   `Closes #N` 的 PR 是否已合併（`_closing_pull_requests()`／`_merged_at()`，直接讀
   GitHub REST `issues` 端點回傳的 `pull_request.merged_at` 欄位，不需要額外呼叫），並
-  標成 `Delivered`／`Closed without a merged PR`／`Pending` 三種狀態之一。
-- 這是一張給人核對用的結構化清單，不是自動判定「完全等於通過」的語意驗證——`#552`
-  自己的開放問題已經確認「完全自動化比對 acceptance criteria 文字語意與交付內容」目前
-  不現實；折衷是收尾前強制產生逐條對照，交給人核對簽核，而不是像現在這樣完全隱性。
+  標成 `Delivered`／`Closed without a merged PR`／`Pending`／`Acceptance incomplete or
+  missing` 四種狀態之一。`#816` 起，只有 Issue 已關閉、closing PR 已合併，且 Issue body
+  既有 checklist 存在並全部完成時才是 `Delivered`。
+- 這是一張給人核對用的結構化清單，不嘗試自動比對 Milestone acceptance criteria 文字與
+  交付內容的語意——`#552` 已確認那種語意分類目前不現實。客觀 delivery 狀態則由同一個
+  shared decision 同時提供表格與 completed closure 使用；`#816` 起，只要任一 leaf Issue
+  不是 `Delivered`，completed closure 就列出 Issue 編號與狀態並 fail closed。
 - **Staleness 偵測：**段落開頭嵌入 `<!-- reconciliation-fingerprint: <hash> -->`，
   `<hash>` 是「tracker body 扣掉 Reconciliation 段落本身」內容的 SHA-256
   短雜湊（`_fingerprint()`／`_remove_section()`）。`regenerate_reconciliation()` 只改寫
@@ -98,20 +101,22 @@ work PR 上，會把同一個 self-lock 複製到每一張 work PR，而且沒�
   Proposal／Completion evidence／Early termination／Promotion 任何一段，這個雜湊就會
   對不上，`reconciliation_status()` 回報 `Reconciliation: stale, regenerate before
   closing`（逐字沿用 `#552` 提案的 marker 文字）。
-- `closure_decision()` 的 completed 收尾路徑（`_completed_closure()`）在既有的
-  acceptance／promotion checkbox 掃描與 approval 判斷之後，新增最後一道門檻：
-  Reconciliation 段落必須存在且新鮮（`reconciliation_status(body).allowed`），否則收尾
-  失敗，不能只靠 checkbox 打勾就關閉 Milestone。`not_planned`（提前終止）路徑不受影響
-  ——那條路徑本來就不宣稱交付完成，不適用「核對交付內容」這件事。
+- `closure_decision()` 的 completed 收尾路徑（`_completed_closure()`）要求所有 leaf Issue
+  都通過上述 shared delivery decision，並保留既有的 acceptance／promotion checkbox、
+  approval、evidence 與 Reconciliation freshness 門檻；表格新鮮但有非 `Delivered` 列仍
+  必須失敗。`not_planned`（提前終止）路徑不受影響——那條路徑本來就不宣稱交付完成，不
+  適用「核對交付內容」這件事。
 
 **刻意不做的部分：**Reconciliation 不是 `TRACKER_SECTIONS` 的必要段落，不在建立 tracker
 時要求存在——它必須先有一次 `regenerate-reconciliation` 執行才會出現，若列為建立時必要
 段落會讓 tracker 永遠無法通過 `tracker_errors()`。Staleness 偵測只綁「tracker Issue body
 自己的編輯」，刻意不綁「Milestone description（Acceptance criteria／Plan）被編輯」或
 「某張 linked work Issue 的即時狀態改變」：後兩者屬於不同的 GitHub 物件，而
-`regenerate_reconciliation()` 每次執行本來就會重新抓即時資料，不會回傳快取內容；唯一需
-要攔截的，是「maintainer 在最近一次 regenerate 之後、關閉之前，又動了 tracker body
-本身」這個時間窗口，而這正是 `#552` 原文描述的 staleness 情境。這個新機制當時只加進
+`regenerate_reconciliation()` 每次執行本來就會重新抓即時資料，不會回傳快取內容；
+`#816` 起，completed closure 也會用同一個 delivery decision 直接重算 live Issue／PR／
+checklist 狀態，所以 linked work Issue 在 regenerate 後又變動時仍會 fail closed，而不是
+把表格 freshness 當成 delivery 通過。tracker fingerprint 仍只負責攔截「maintainer 在最近
+一次 regenerate 之後、關閉之前，又動了 tracker body 本身」這個時間窗口。這個新機制當時只加進
 `sync_milestone_state.py` 本身（純函式＋新增的 `check-scope`／
 `regenerate-reconciliation` CLI 子指令），刻意不修改
 `.github/workflows/milestone-lifecycle.yml` 的觸發條件——要不要讓某個 GitHub 事件自動
@@ -150,6 +155,7 @@ fingerprint-binding（#632）」一節；`docs/milestone-description.md` 同步�
 | Rejected | 為 work PR 加裝 GitHub 原生 required review | [#512](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/512)／[#518](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/518)／[#546](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/546)／[#549](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/549)／[#550](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/550) 的 self-lock 事件鏈與 [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580) 的 bypass 成本 → 本 ADR：明確不加，`validate-pr-policy` 結構檢查維持唯一 gate |
 | Superseded | 收尾盤點只掃描 checkbox 是否打勾 | 現況（`acceptance_complete()`／`promotion_complete()`）→ 本 ADR：加入 `reconciliation_status()` 作為額外的必要條件，不取代既有 checkbox 掃描 |
 | Completed | `check-scope` 接進 `pr-policy.yml`；`approval_decision()`／`scope_decision()` 核可綁定 body fingerprint | 本 ADR「刻意不做的部分」留給後續 Issue → [#632](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/632) 補完，不重新設計 sentinel 偵測或 `/milestone` 留言語彙 |
+| Superseded | fresh Reconciliation table 即足以通過 completed closure | [#816](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/816)：保留既有資料來源與 fingerprint，改由 shared delivery decision 同時產生狀態並拒絕任何非 `Delivered` leaf Issue |
 
 ## Ownership 與驗證
 
