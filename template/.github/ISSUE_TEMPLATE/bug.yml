@@ -13,14 +13,22 @@ body:
         取代或駁回的既有決策。Feature 內發現的 Bug 必須設定該 Feature 為 parent；
         獨立 Bug 則說明為何沒有 parent。UI 建立者請把自己設為 Assignee；
         agent／CLI 建立時明確使用 `--assignee @me`。若這張 Issue 沒有掛 Milestone
-        （standalone 或 hotfix），對應 PR 合併前需要另一位協作者在本 Issue 留言
-        `Approve`；結構性只有一人可核准時，改留 `Admin-approve: <理由>` 自核（理由
-        必填）。有掛 Milestone 則不需要，直接沿用該 Milestone tracker 的核准。
+        （standalone 或 hotfix），核准方式依發布層級決定：alpha 可由 admin 留
+        `Admin-approve: <理由>` 自核，beta 以上須由另一位協作者留言 `Approve`；有掛
+        Milestone 則沿用 tracker 的層級與核准，不得另選衝突值。
   - type: textarea
     id: problem
     attributes:
       label: 問題
       description: 說明預期行為、實際行為與可重現步驟。
+    validations:
+      required: true
+  - type: dropdown
+    id: release_level
+    attributes:
+      label: Release level / 發布層級
+      description: Milestone 內工作須與 tracker 相同；沒有權限的建立者所選值會改用 repository 預設。
+      options: [alpha, beta, early, formal]
     validations:
       required: true
   - type: textarea

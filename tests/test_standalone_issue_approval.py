@@ -86,6 +86,7 @@ def issue_snapshot(
     milestone: dict[str, Any] | None = None,
     number: int = 210,
     state: str = "open",
+    labels: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Build one work-Issue snapshot as `load_issue_snapshot()` returns it."""
     return {
@@ -98,6 +99,7 @@ def issue_snapshot(
             "updated_at": updated_at,
             "milestone": milestone,
             "state": state,
+            "labels": [{"name": label} for label in labels],
         },
         "comments": list(comments),
     }
@@ -209,6 +211,7 @@ def test_admin_self_approval_opens_the_gate_with_reason(
             )
         ),
         210,
+        allow_admin_self_approval=True,
     )
 
     assert result.allowed
@@ -216,6 +219,37 @@ def test_admin_self_approval_opens_the_gate_with_reason(
         "Issue admin self-approved by worker "
         "(reason: production outage, no reviewer)"
     )
+
+
+def test_beta_hotfix_keeps_emergency_admin_self_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A labeled standalone hotfix keeps the audited beta+ exception."""
+    _stub_permission(monkeypatch, "admin")
+    result = standalone_issue_approval_decision(
+        issue_snapshot(
+            comment(1, "worker", "Admin-approve: production outage"),
+            labels=("bug", "hotfix"),
+        ),
+        210,
+    )
+
+    assert result.allowed
+    assert "production outage" in result.summary
+
+
+def test_beta_non_hotfix_rejects_admin_self_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The emergency exception cannot be used by an ordinary beta Issue."""
+    _stub_permission(monkeypatch, "admin")
+    result = standalone_issue_approval_decision(
+        issue_snapshot(comment(1, "worker", "Admin-approve: no reviewer")),
+        210,
+    )
+
+    assert not result.allowed
+    assert "requires approval from another person" in result.summary
 
 
 def test_admin_self_approval_rejects_non_admin_permission(

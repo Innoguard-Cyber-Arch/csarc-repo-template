@@ -42,13 +42,21 @@ def test_forms_set_native_type_and_one_classification(
     fields = [item for item in root_form["body"] if item["type"] != "markdown"]
     assert [field["id"] for field in fields] == [
         "problem",
+        "release_level",
         "acceptance",
         "supplement",
     ]
     assert [field["validations"]["required"] for field in fields] == [
         True,
         True,
+        True,
         False,
+    ]
+    assert fields[1]["attributes"]["options"] == [
+        "alpha",
+        "beta",
+        "early",
+        "formal",
     ]
     assert "--assignee @me" in root_form["body"][0]["attributes"]["value"]
 
@@ -99,6 +107,7 @@ def test_milestone_tracker_form_matches_the_lifecycle_contract() -> None:
     fields = [item for item in root_form["body"] if item["type"] != "markdown"]
     assert [field["id"] for field in fields] == [
         "proposal",
+        "release_level",
         "completion_evidence",
         "early_termination",
         "promotion",
@@ -107,11 +116,28 @@ def test_milestone_tracker_form_matches_the_lifecycle_contract() -> None:
     # The first four field labels are the literal H2 headings tracker_errors()
     # searches for; they must match TRACKER_SECTIONS verbatim, in order.
     assert (
-        tuple(field["attributes"]["label"] for field in fields[:4])
+        tuple(
+            field["attributes"]["label"]
+            for field in fields
+            if field["id"]
+            in {
+                "proposal",
+                "completion_evidence",
+                "early_termination",
+                "promotion",
+            }
+        )
         == tracker_sections
     )
-    assert fields[4]["attributes"]["label"] == "References"
+    assert fields[1]["attributes"]["options"] == [
+        "alpha",
+        "beta",
+        "early",
+        "formal",
+    ]
+    assert fields[5]["attributes"]["label"] == "References"
     assert [field["validations"]["required"] for field in fields] == [
+        True,
         True,
         True,
         True,

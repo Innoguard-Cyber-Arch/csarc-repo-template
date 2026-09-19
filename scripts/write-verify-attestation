@@ -36,11 +36,11 @@ set -Eeuo pipefail
 # and expected for a PR's own topic branch, which the author already owns
 # and is not the same as force-pushing a shared integration branch.
 #
-# Usage: scripts/write-verify-attestation <fast|full>
+# Usage: scripts/write-verify-attestation <baseline|fast|docs|full>
 
-tier="${1:?Usage: scripts/write-verify-attestation <fast|full>}"
-if [[ "$tier" != "fast" && "$tier" != "full" ]]; then
-  echo "scripts/write-verify-attestation: tier must be 'fast' or 'full', got '$tier'" >&2
+tier="${1:?Usage: scripts/write-verify-attestation <baseline|fast|docs|full>}"
+if [[ "$tier" != "baseline" && "$tier" != "fast" && "$tier" != "docs" && "$tier" != "full" ]]; then
+  echo "scripts/write-verify-attestation: invalid suite '$tier'" >&2
   exit 2
 fi
 

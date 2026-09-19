@@ -376,6 +376,17 @@ immutable Release、attestation 與簽章驗證；`## 發版不依賴 Actions �
 `policies/project-stage.json` 的 Ruleset bypass 機制）是 #745 的範圍，本節
 不涉及、也不預先假設其設計。
 
+## 2026-09-19 發布批次採最高工作層級（#745）
+
+**狀態：Accepted。** 每次版本候選不再只看觸發 release workflow 的單一 PR。系統從上一個
+已發布版本 tag 到本次候選 commit 找出實際合併的 PR，解析其 closing Issue；遇到 Milestone
+tracker 則展開該 Milestone 的 work Issues，列出每件工作的編號、標題與層級，並以其中最高
+層級作為本次版本層級。沒有新 work item 時沿用目前版本 tag 的合法層級。
+
+同一份批次摘要以 marker 做冪等更新，寫入版本 PR 留言與尚未發布、可修改的 draft Release
+notes，保留人工作品；發布後的 Release 不再修改。這份結構化清單也是 #744 版本決策的輸入，
+讓版本後綴、PR 證據與 Release notes 使用同一個層級結論。
+
 ## 評估過的替代方案
 
 - **繼續維護多支專用 workflow**（獨立 artifact handoff、promotion、delivery-maintenance、live-integration smoke）：否決。這是本 ADR 要取代的既有設計，見上方「歷史 Action 逐項複核」；多支 workflow 各自維護規則、各自可能與 repo-local script 邏輯漂移，且權限面各自獨立，稽核與維護成本都高於單一 `release.yml`＋repo-local scripts 的組合。

@@ -446,6 +446,75 @@ policy_branch_ruleset:
   help: Enforce this template's branch protection Ruleset (required review, non-fast-forward) from policies/rulesets.json where the GitHub plan allows it
   default: true
 
+release_levels_enabled:
+  type: bool
+  help: Resolve each pull request's release level from its trusted Issue or Milestone declaration; when disabled, every pull request uses default_release_level
+  default: true
+
+default_release_level:
+  type: str
+  help: Release level used when no trusted declaration is available
+  choices:
+    alpha: alpha
+    beta: beta
+    Early release (0.y.z): early
+    Formal release (1.0.0 and later): formal
+  default: "{{ 'beta' if _copier_operation == 'update' or project_mode == 'existing' else 'alpha' }}"
+
+release_level_alpha_review:
+  type: str
+  help: Review requirement for alpha work
+  choices: &release_level_review_choices
+    Self-review permitted: self
+    Independent peer required: peer
+  default: self
+
+release_level_alpha_verification:
+  type: str
+  help: Minimum verification suite for alpha work
+  choices: &release_level_verification_choices
+    Baseline checks: baseline
+    Baseline and fast tests: fast
+    Baseline, fast tests, documentation and site: docs
+    Full verification: full
+  default: baseline
+
+release_level_beta_review:
+  type: str
+  help: Review requirement for beta work
+  choices: *release_level_review_choices
+  default: peer
+
+release_level_beta_verification:
+  type: str
+  help: Minimum verification suite for beta work
+  choices: *release_level_verification_choices
+  default: fast
+
+release_level_early_review:
+  type: str
+  help: Review requirement for early-release work
+  choices: *release_level_review_choices
+  default: peer
+
+release_level_early_verification:
+  type: str
+  help: Minimum verification suite for early-release work
+  choices: *release_level_verification_choices
+  default: docs
+
+release_level_formal_review:
+  type: str
+  help: Review requirement for formal-release work
+  choices: *release_level_review_choices
+  default: peer
+
+release_level_formal_verification:
+  type: str
+  help: Minimum verification suite for formal-release work
+  choices: *release_level_verification_choices
+  default: full
+
 pr_review_mode:
   type: str
   help: How a pull request earns merge approval. Copilot mode auto-requests GitHub Copilot code review on every push and accepts a clean Copilot review of the exact head (a maintainer approval still works); human mode keeps the required maintainer approval. Copilot mode needs a Copilot license with code review enabled.
@@ -456,7 +525,7 @@ pr_review_mode:
 
 copilot_review_max_level:
   type: str
-  help: Highest declared release level a clean Copilot review may approve; higher levels need a maintainer approval. Levels other than unlimited fail closed until per-work release levels exist (Issue #745).
+  help: Highest declared release level a clean Copilot review may approve; higher levels need a maintainer approval. The release value is the formal-level alias retained for compatibility.
   choices:
     No limit: unlimited
     alpha: alpha

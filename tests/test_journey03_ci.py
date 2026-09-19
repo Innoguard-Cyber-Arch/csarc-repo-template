@@ -139,7 +139,11 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
         "merge_group",
         "workflow_dispatch",
     }
-    assert set(workflow["permissions"]) == {"contents"}
+    assert workflow["permissions"] == {
+        "contents": "read",
+        "issues": "read",
+        "pull-requests": "read",
+    }
     assert set(workflow["jobs"]) == {"verify"}
     assert workflow["jobs"]["verify"]["timeout-minutes"] == 15
 
@@ -212,9 +216,9 @@ def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
         (root_fast, "./scripts/build-repo-site --check"),
         (template_fast, "./scripts/build-repo-site --check"),
     ):
-        docs_tier_start = source.index('if [[ "$tier" == "docs" ]]; then')
-        docs_tier_exit = source.index("exit 0", docs_tier_start)
-        gate_start = source.index('"$scopes" == *,docs,*', docs_tier_exit)
+        gate_start = source.index(
+            'if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then'
+        )
         gate_end = source.index("\nfi", gate_start)
         gate = source[gate_start:gate_end]
 
