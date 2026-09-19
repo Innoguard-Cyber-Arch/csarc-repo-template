@@ -250,13 +250,15 @@ def test_impersonating_user_is_not_copilot(copilot_config: Path) -> None:
 pr_lifecycle = importlib.import_module("pr_lifecycle")
 
 
-def alpha_authorization_comment(login: str = "maintainer") -> dict[str, Any]:
+def alpha_authorization_comment(
+    login: str = "maintainer", association: str = "MEMBER"
+) -> dict[str, Any]:
     """Return one exact-head Alpha self-merge authorization comment."""
     return {
         "id": 99,
         "html_url": "https://github.com/o/r/pull/7#issuecomment-99",
         "created_at": "2026-09-18T03:00:00Z",
-        "author_association": "MEMBER",
+        "author_association": association,
         "user": {"login": login, "type": "User"},
         "body": pr_lifecycle.authorization_statement("o/r", 7, HEAD),
     }
@@ -273,6 +275,26 @@ def test_alpha_self_merge_authorization_passes(copilot_config: Path) -> None:
     """Issue #775: a valid exact-head Alpha self-merge comment passes review."""
     github = alpha_github()
     github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["passed"]
+    assert result["source"] == "alpha-self-merge"
+
+
+def test_alpha_self_merge_ignores_author_association(
+    copilot_config: Path,
+) -> None:
+    """Issue #785: a downgraded association must not block self-merge.
+
+    Confirmed live on PR #782: a restricted `GITHUB_TOKEN` reports a real
+    maintainer's comment as `COLLABORATOR` instead of `MEMBER`. The
+    `collaborators/{login}/permission` lookup `FakeGitHub.get` always
+    returns `"maintain"` for any login, so this only passes once
+    `find_exact_head_authorization` stops filtering on the association.
+    """
+    github = alpha_github()
+    github.issue_comments = [
+        alpha_authorization_comment(association="COLLABORATOR")
+    ]
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert result["passed"]
     assert result["source"] == "alpha-self-merge"
