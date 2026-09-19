@@ -445,7 +445,8 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
     Issue #605 pins N=24h (release.yml normally finishes within minutes of
     a push to main, and 24h both tolerates a release-free day and still
     catches a same-day stall). Issue #708 keeps audit text from becoming
-    release authority and requires immutable GitHub Release evidence.
+    release authority and requires immutable GitHub Release evidence. Issue
+    #802 limits successful workflow evidence to an explicit no-release plan.
     """
     script = (ROOT / "scripts/check-release-drift").read_text(encoding="utf-8")
 
@@ -454,10 +455,11 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
     assert "Release-publish-record" in script
     assert 'latest_release.get("immutable") is not True' in script
     assert 'gh api "repos/$repo/actions/workflows/release.yml/runs' in script
+    assert 'gh api "repos/$repo/actions/runs/$last_run_id/jobs' in script
     assert "Local publish record (audit only)" in script
-    assert (
-        "released_shas = {sha for sha in (last_success_sha,) if sha}" in script
-    )
+    assert "last_success_no_release = bool(" in script
+    assert "if last_success_no_release and last_success_sha" in script
+    assert "guided instructions only (not publication evidence)" in script
     assert "recent_activity = success_recent or release_recent" in script
     assert "record_sha" not in script
     assert "record_recent" not in script
