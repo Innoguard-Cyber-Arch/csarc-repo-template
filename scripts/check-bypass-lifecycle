@@ -1,22 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fail closed when policies/project-stage.json declares release_phase
-# "release" but policies/rulesets.json or
-# policies/rulesets-required-checks.json still declares a non-empty
-# bypass_actors (Issue #607 acceptance criterion 3).
-#
-# release_phase reaching "release" must retire the Alpha self-approval
-# Ruleset bypass (#580) structurally, not by an operator remembering to
-# clear bypass_actors by hand -- this check makes that combination
-# unmergeable and is wired into ./scripts/verify-fast so it runs on every
-# PR, not only when someone remembers to run it.
-#
-# The actual comparison lives in scripts/release_phase_rulesets.py (its
-# `check` command and check_release_phase_bypass function), which is unit
-# tested directly in tests/test_release_phase_rulesets.py; this script is
-# a thin, documented entry point over that module -- see its docstring
-# for the release_phase/governance_stage/profiles-stage naming distinction.
+# Fail closed if required checks share a bypassable Ruleset, or if the review
+# Ruleset contains an unrecognized bypass actor. Per-work release levels now
+# decide whether the known review bypass can be used; required checks never
+# inherit it.
 #
 # Usage: scripts/check-bypass-lifecycle
 

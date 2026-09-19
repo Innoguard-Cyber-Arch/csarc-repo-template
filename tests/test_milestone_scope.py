@@ -169,7 +169,8 @@ def test_admin_self_approval_opens_the_scope_gate_with_reason(
                 "worker",
                 "/milestone admin-approve: no reviewer before the deadline",
             ),
-        )
+        ),
+        allow_admin_self_approval=True,
     )
 
     assert result.allowed

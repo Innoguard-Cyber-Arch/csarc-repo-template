@@ -248,3 +248,21 @@ admin 自核」規則，不預先實作 `#745` 的分層邏輯。
 gate（#743）」一節；`docs/milestone-description.md` 同步更新對應段落；
 `tests/test_standalone_issue_approval.py`（與 `template/` 成對）是這個機制的回歸測試
 來源。
+
+## `#745`：發布層級決定 Issue 與 PR 核准強度
+
+- **狀態：**Accepted
+- **日期：**2026-09-19
+- **來源 Issue：**[#745](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/745)
+
+#745 取代本 ADR 早期「所有 work PR 都不加 review gate」與 #743「所有 standalone Issue
+皆可 admin 自核」兩項過寬結論，但保留 scope sentinel、核准 fingerprint、不同留言語彙與
+Milestone inheritance。Issue／tracker 的發布層級現在決定兩個 gate：alpha 可由 admin
+提案者自核，且 PR 可使用 exact-head self authorization；beta／early／formal 的 Issue
+與 PR 都要求非提案者／非作者核准，後續 push 使舊 PR 核准失效。
+
+Milestone work Issue 一律繼承 tracker 層級；子 Issue 若自行宣告不同值即 fail closed。
+只有 repository collaborator 建立的宣告可信，否則用設定預設值。beta 以上唯一自核例外
+是 hotfix 緊急路徑：必須是 standalone hotfix Issue，由同一位即時具 admin 權限的提案者
+對 exact head 留理由並執行 merge，合併後自動建立待同儕複核 Issue。必要 status checks
+在任何層級與任何例外下都不能 bypass。

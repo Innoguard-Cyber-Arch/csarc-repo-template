@@ -256,7 +256,55 @@ Issue 已有 Milestone、或是 Milestone 自己 `dev/mN` 分支上的 PR 需要
 同一個「結構性只有一個真人帳號」問題的下游 repo，才需要自行在自己的
 `policies/rulesets.json` 加上等效項目。
 
-### Release phase 與 bypass 範圍收斂（#607）
+### 每件工作的發布層級與 Ruleset（#745）
+
+發布成熟度由 Issue 的 `Release level / 發布層級` 宣告，不再是整個
+repository 共用的階段開關。Milestone 工作一律繼承 tracker 的層級；子 Issue
+宣告不同值時 fail closed。只有 repository collaborator 建立的 Issue 宣告
+會被採信，其餘回到 `.csarc/config.yml` 的預設值。
+
+| 發布層級 | 版本 | PR 與 Issue／Milestone 核可 | 最低驗證組合 |
+| --- | --- | --- | --- |
+| alpha | `X.Y.Z-alpha.N` | 可使用綁定 exact head 的自審授權 | `baseline` |
+| beta | `X.Y.Z-beta.N` | 需非作者同行核准 | `fast` |
+| early | `0.y.z` | 需非作者同行核准 | `docs` |
+| formal | `1.0.0` 起 | 需非作者同行核准 | `full` |
+
+`.csarc/config.yml` 可開關此模組、設預設層級，也可調整各層的 review
+與 verification 要求；公版本身預設 `beta`，新生成專案預設 `alpha`，
+既有專案 adopt 時可選擇。Dependabot 固定當作 `beta`。發版批次由
+`scripts/release_level.py release-batch` 列出上次版本以來的工作，取最高
+層級交給版本規則，並寫入版本 PR 與 GitHub Release 說明。
+
+Ruleset 拆成兩個單一責任檔案：
+
+* `policies/rulesets-required-checks.json` 只放 required checks，
+  `bypass_actors` 永遠是 `[]`。
+* `policies/rulesets.json` 放 `non_fast_forward` 與 `pull_request`；admin
+  review bypass 只能由 lifecycle 工具在 alpha 自審或 beta 以上 hotfix
+  緊急合併時使用。
+
+`review` required check 讀取同一份層級決定：beta／early／formal 需 exact-head
+非作者 approval；alpha 可使用既有 lease 與 exact-head authorization 自審。
+`verify` required check 要求的 attestation 是「層級下限」與「路徑風險」取較強者，
+不會因宣告 alpha 而略過高風險路徑所需檢查。
+
+每次實際使用 review bypass 都由 lifecycle 留下結構化記錄：
+
+```text
+bypass-trace: release_level=<alpha|beta|early|formal> route=<alpha|hotfix> actor=<github-login> reason=<原因>
+```
+
+beta 以上只有 standalone `hotfix` 可用緊急路徑：Issue 提案者必須是
+repo admin，先在 Issue 留 `Admin-approve: <理由>`，再用同一帳號為當前
+PR head 留 exact-head 授權並執行合併。工具會再查即時權限、授權者與
+merge actor，合併後自動建立 `needs-manual-review` 事後補審 Issue。一般
+beta 以上 PR 沒有這個例外。
+
+### 已取代的全專案 release phase（#607）
+
+> 本節以下僅保留歷史設計脈絡。#745 已刪除 `policies/project-stage.json`
+> 與所有讀取點；現行行為以上方每件工作的四層決定為準。
 
 如上一節所述，#580 記錄並落地了目前 live 已套用的 Ruleset self-approval bypass
 （`RepositoryRole` admin、`bypass_mode: "pull_request"`），同時發現它的實際涵蓋範圍
@@ -401,17 +449,6 @@ command substitution，這段文字從未被執行，但掃描器分不出「描
 重新審核一次，確認當時的安全假設（例如「排隊等 required check」這類語意）
 仍然成立。這不是本節唯一的例外——`canonical_scanner_helper` 對
 `pr_lifecycle.py` 自身的例外也適用同一條通則，往後新增例外一律比照辦理。
-
-**Issue #744／#745 部分取代（2026-09-17）：** 本節的 `policies/project-stage.json`
-`release_phase`（alpha／beta／release 三值）繼續用於上面描述的 Ruleset
-bypass 範圍收斂，本身不受影響。但本節「`release_phase` 是人工宣告、不從
-分支模式或 semver 反推」的立場，以及「進入 `release` 後這整個 bypass
-結構性消失」隱含的單向前進假設，被維護者 2026-09-17 的決定取代：版本號
-本身現在就直接表示發布層級（見下面「版本、發版、交付與部署矩陣」與
-`docs/adr/release-security-and-dependencies.md` 新增段落），alpha／beta 可以
-在任何時候發布，不再是一段只會前進的一次性期間。審核與測試如何依層級分級
-（取代本節 bypass 機制的下一步）是 #745 的範圍，尚未落地前本節機制照舊
-生效；`policies/project-stage.json` 檔案本身與其三值不因 #744 改變。
 
 ### 不屬於里程碑的工作
 
@@ -595,13 +632,13 @@ fail-open 漏洞：一張 Issue 在開啟狀態下取得非提案者核可後，
 併。與 tracker 路徑一樣，這裡沒有對應「完成收尾」的情境需要 `require_open=False`（那
 是 tracker 專屬的 `closure_decision()` 收尾路徑），所以每個真實呼叫端都維持預設值。
 
-**Hotfix 的緊急路徑：**與 tracker、scope-expansion 核可相同精神的 admin
-self-approval 例外在此保留——proposer 若同時是 repo `admin` collaborator，可以自己
-留言 `Admin-approve: <理由>` 通過，理由必填，summary 明確標成「Issue admin
-self-approved by」，不與一般非提案者核准混淆。這是唯一避免「等待核准而無路可
-走」的路徑，適用真正緊急、沒有第二人可以核准的 hotfix 情境；`#745`（尚未實作）之後
-會依發布層級（alpha／beta 以上）調整 admin self-approval 是否允許，`#743` 先落地
-「非提案者核准或 admin 自核」這條現行規則。
+**Hotfix 的緊急路徑：**alpha 依其層級規則可自核；beta／early／
+formal 原則上都需同行核准，只有真正緊急的 standalone `hotfix` 保留
+admin 例外。提案者先在 Issue 留 `Admin-approve: <理由>`，再在作用中的
+lifecycle lease 內對 exact PR head 授權；`review` check 與合併當下都重讀 admin
+權限、Issue／PR 的 `hotfix` 路徑、授權者與 merge actor。成功合併後，
+`pr_lifecycle.py` 自動建立一張 `needs-manual-review` 事後補審 Issue，其內綁定
+原始 Issue 理由、PR、head SHA、授權與實際合併者。非 hotfix 不得使用。
 
 `tests/test_standalone_issue_approval.py`（與 `template/` 成對，42 案例）涵蓋：
 standalone Issue 未核可時 fail closed、非提案者核可後放行（含大小寫與前後空白不敏
@@ -982,20 +1019,20 @@ Milestone 本身是否就緒的判定）。
 
 ## 驗證分級與實測成本
 
-驗證契約只有兩個成本邊界，粒度由粗到細另有一種本機專用、不屬於 CI 政策的第零層：
+驗證契約有四種累加組合，另有一種本機專用、不屬於 CI 政策的
+focused check。最後要求是發布層級下限與 `scripts/ci_tier.py` 路徑分類取較強者：
 
 1. **開發中 focused check（本機專用，不是 CI 的第三種政策）**——直接執行單一命令，例如
    `uv run pytest <path>`、`uv run ruff check <path>`，或針對
    `scripts/verify-template.sh` 其中一階段單獨重跑對應的
    `scripts/verify-stage-<name>`；不需要等待整條 pipeline，也不會被當成合併證據。
-2. **日常 PR gate（`docs`／`fast`，同一個成本邊界）**——`scripts/ci_tier.py` 依事件、
-   base／head、labels 與 changed paths 做 fail-closed 分類；未知或高風險內容升級為
-   full。純文件／site 變更落在 `docs`，是 `fast` 的 early-exit 實作細節，不是獨立的第
-   四套政策；其餘一般變更落在 `fast`。兩者入口都是 `scripts/verify-fast`，且自 #661 起
-   **一律本機執行**：hosted `verify` job 不再自己跑這個入口，只驗證它成功時留下的
-   attestation（見上方「`verify` 必要檢查改為本機驗證聲明（#661）」一節），所以即使是
-   `fast`／`docs` 這種輕量分級，push 前仍必須先在本機跑過一次。
-3. **完整交付驗證（`full`）**——只在 Milestone／canary 交付、hotfix、merge queue、手動
+2. **層級 gate（`baseline`／`fast`／`docs`）**——alpha 至少跑機密、衝突與
+   空白、治理設定、格式／lint／型別、workflow／shell／Actions 安全與鎖檔一致性；
+   beta 再累加 OSV、非 `large` 回歸、腳本自我測試與專案／套件 smoke；early
+   再累加官網、文件、翻譯、導覽與 root／template 同步。入口都是
+   `scripts/verify-fast`，並寫下實際組合的 attestation。
+3. **完整交付驗證（`full`）**——formal 或路徑風險要求 Milestone／canary
+   交付、hotfix、merge queue、手動
    執行或未知高風險路徑觸發；中央模板入口是 `scripts/verify-template.sh`，生成 repo
    入口是 `scripts/verify`（不帶參數即預設 full）。PR owner／integrator 只在自己的 PR
    本身就落在這個邊界時，才需要在本機另外執行一次；一般 `fast`／`docs` PR 不需要在本機
@@ -1005,11 +1042,12 @@ Milestone 本身是否就緒的判定）。
 `full` 一列已由 #458 在 2026-09-02 於同一本機環境重新量測（見下方階段盤點與 PR 內文的
 before／after 紀錄）。
 
-| 分級 | 適用範圍 | 入口與測試集合 | 實測 |
+| 組合 | 最低層級 | 入口與累加測試集合 | 實測 |
 | --- | --- | --- | --- |
-| docs | 純文件與 site 內容 | `scripts/verify-fast`；來源檢查、render、雙語／glossary／llms 契約 | 與 fast 共用 bounded path |
-| fast | 一般工作 PR；依 scope 加 policy／template 檢查 | `scripts/verify-fast`；source fast 約 59 秒，policy／template scope 約 99 秒 | 約 1–4 分鐘的 PR feedback window（#428） |
-| full | Milestone／canary 交付、hotfix、merge queue、manual、未知高風險路徑 | 中央模板用 `scripts/verify-template.sh`；生成 repo 用 `scripts/verify full`（不帶參數時的預設行為） | 中央模板 verification 502 秒（8 分 22 秒，獨占環境全綠）；同機器有其他 worktree 並行執行時量到 810 秒，差異來自並行負載，不是本次變更（#458，2026-09-02） |
+| baseline | alpha | 基本安全、治理、格式、靜態分析與鎖檔 | bounded local path |
+| fast | beta | baseline ＋ OSV／快速回歸／smoke／原生測試 | 約 1–4 分鐘 PR feedback window（#428） |
+| docs | early | fast ＋ site／文件／翻譯／導覽／配對同步 | 與 fast 共用 bounded path |
+| full | formal | docs ＋ `large` create／adopt／update／coverage | 中央模板 502 秒基準（#458） |
 
 相依 manifest／lockfile 變更加跑 `scripts/verify-dependencies`。CI 不建立 release asset，
 也不把測試 artifact 當成正式成品。#408 已把更細的 stage timing 輸出納入現行入口。

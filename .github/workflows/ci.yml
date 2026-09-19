@@ -13,6 +13,8 @@ concurrency:
 
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
 
 jobs:
   verify:
@@ -64,6 +66,22 @@ jobs:
             --github-output "$GITHUB_OUTPUT" \
             --summary "$GITHUB_STEP_SUMMARY" \
             "${args[@]}"
+      - name: Resolve release-level verification suite
+        id: level
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PATH_TIER: ${{ steps.plan.outputs.tier }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+        run: |
+          if [[ -n "$PR_NUMBER" ]]; then
+            python3 scripts/release_level.py resolve-pr \
+              --repo "$GITHUB_REPOSITORY" \
+              --pr "$PR_NUMBER" \
+              --path-tier "$PATH_TIER" \
+              --github-output "$GITHUB_OUTPUT"
+          else
+            echo "suite=$PATH_TIER" >> "$GITHUB_OUTPUT"
+          fi
       # Issue #753: a small, exact allowlist of bots (currently only
       # Dependabot) whose commits are authored and pushed by GitHub
       # itself, so they can never carry the local-attestation trailer
@@ -103,7 +121,7 @@ jobs:
         if: ${{ steps.bot.outputs.eligible != 'true' }}
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
-          REQUIRED_TIER: ${{ steps.plan.outputs.tier }}
+          REQUIRED_TIER: ${{ steps.level.outputs.suite }}
         run: ./scripts/check-verify-attestation "$HEAD_SHA" --required-tier "$REQUIRED_TIER"
       # Issue #753: the allowlisted bot's commit can never carry a local
       # attestation trailer, so this runs the real verification here
@@ -118,10 +136,11 @@ jobs:
         env:
           CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
           CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
+          CSARC_VERIFICATION_SUITE: ${{ steps.level.outputs.suite }}
         run: |
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
-          if [[ "$CSARC_CI_TIER" == "full" ]]; then
+          if [[ "$CSARC_VERIFICATION_SUITE" == "full" ]]; then
             ./scripts/verify-template.sh
           else
             ./scripts/verify-fast

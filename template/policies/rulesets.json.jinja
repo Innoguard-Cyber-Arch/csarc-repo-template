@@ -11,7 +11,7 @@
   },
   "rules": [
     {"type": "non_fast_forward"},
-{% if pr_review_mode | default('human') == 'copilot' %}    {
+    {
       "type": "pull_request",
       "parameters": {
         "dismiss_stale_reviews_on_push": true,
@@ -20,37 +20,13 @@
         "required_approving_review_count": 0,
         "required_review_thread_resolution": true
       }
-    },
+    }{% if pr_review_mode | default('human') == 'copilot' %},
     {
       "type": "copilot_code_review",
       "parameters": {
         "review_draft_pull_requests": false,
         "review_on_push": true
       }
-    },
-{% else %}    {
-      "type": "pull_request",
-      "parameters": {
-        "dismiss_stale_reviews_on_push": true,
-        "require_code_owner_review": true,
-        "require_last_push_approval": true,
-        "required_approving_review_count": 1,
-        "required_review_thread_resolution": true
-      }
-    },
-{% endif %}
-    {
-      "type": "required_status_checks",
-      "parameters": {
-        "do_not_enforce_on_create": true,
-        "strict_required_status_checks_policy": false,
-        "required_status_checks": [
-          {"context": "title"},
-          {"context": "promotion"},
-          {"context": "verify"}{% if pr_review_mode | default('human') == 'copilot' %},
-          {"context": "review"}{% endif %}
-        ]
-      }
-    }
+    }{% endif %}
   ]
 }

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 review_gate = importlib.import_module("review_gate")
+pr_lifecycle = importlib.import_module("pr_lifecycle")
 
 HEAD = "a" * 40
 CLEAN = "Copilot reviewed 2 out of 2 changed files and generated no comments."
@@ -64,6 +65,9 @@ class FakeGitHub:
         self.issue_state = "open"
         self.issue_milestone: int | None = None
         self.issue_comments: list[dict[str, Any]] = []
+        self.hotfix_comments: list[dict[str, Any]] = []
+        self.labels: set[str] = set()
+        self.permission = "maintain"
 
     def get(self, repo: str, path: str) -> object:
         """Return one REST fixture."""
@@ -82,6 +86,7 @@ class FakeGitHub:
                     ),
                 },
                 "user": {"login": "author"},
+                "labels": [{"name": label} for label in sorted(self.labels)],
             }
         if path == "":
             return {"default_branch": self.default_branch}
@@ -95,10 +100,17 @@ class FakeGitHub:
                     if self.issue_milestone is not None
                     else None
                 ),
+                "labels": [{"name": label} for label in sorted(self.labels)],
+                "user": {"login": "author", "type": "User"},
             }
+        if path == "milestones/7":
+            return {"number": 7, "title": "Delivery"}
         match = re.fullmatch(r"collaborators/([^/]+)/permission", path)
         if match:
-            return {"permission": "maintain", "user": {"login": match.group(1)}}
+            return {
+                "permission": self.permission,
+                "user": {"login": match.group(1)},
+            }
         raise AssertionError(path)
 
     def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
@@ -109,6 +121,17 @@ class FakeGitHub:
             return self.reviews
         if path.startswith("issues/7/comments"):
             return self.issue_comments
+        if path.startswith("issues/42/comments"):
+            return self.hotfix_comments
+        if path.startswith("issues?milestone=7"):
+            return [
+                {
+                    "number": 70,
+                    "title": "Milestone 7: Delivery",
+                    "body": "",
+                    "user": {"login": "author", "type": "User"},
+                }
+            ]
         raise AssertionError(path)
 
 
@@ -124,7 +147,9 @@ def copilot_config(tmp_path: Path) -> Path:
     """Return a Copilot-mode answers file."""
     return config(
         tmp_path,
-        "pr_review_mode: copilot\ncopilot_review_max_level: unlimited\n",
+        "pr_review_mode: copilot\n"
+        "copilot_review_max_level: unlimited\n"
+        "default_release_level: alpha\n",
     )
 
 
@@ -142,13 +167,84 @@ def test_invalid_review_mode_is_rejected(tmp_path: Path) -> None:
         review_gate.review_settings(config(tmp_path, "pr_review_mode: bot\n"))
 
 
-def test_human_mode_passes_without_reviews(tmp_path: Path) -> None:
-    """The Ruleset enforces human approval natively in human mode."""
+def test_human_mode_requires_exact_head_approval(tmp_path: Path) -> None:
+    """The level-aware check enforces peer review in human mode too."""
     result = review_gate.evaluate(
         FakeGitHub([]), "o/r", 7, config(tmp_path, "pr_review_mode: human\n")
     )
+    assert not result["passed"]
+    assert result["release_level"] == "beta"
+    assert "independent maintainer" in result["reason"]
+
+    approved = review_gate.evaluate(
+        FakeGitHub([approval("maintainer")]),
+        "o/r",
+        7,
+        config(tmp_path, "pr_review_mode: human\n"),
+    )
+    assert approved["passed"]
+    assert approved["source"] == "maintainer"
+
+
+def test_beta_hotfix_admin_authorization_passes_for_exact_head(
+    tmp_path: Path,
+) -> None:
+    """The peer-review gate recognizes only the audited hotfix exception."""
+    github = FakeGitHub([])
+    github.body = "Fixes #42"
+    github.labels = {"bug", "hotfix"}
+    github.permission = "admin"
+    github.issue_comments = [
+        {
+            "body": pr_lifecycle.authorization_statement("o/r", 7, HEAD),
+            "user": {"login": "author", "type": "User"},
+            "author_association": "OWNER",
+            "created_at": "2026-09-18T03:00:00Z",
+            "html_url": "https://github.com/o/r/pull/7#issuecomment-7",
+        }
+    ]
+    github.hotfix_comments = [
+        {
+            "body": "Admin-approve: production outage",
+            "user": {"login": "author", "type": "User"},
+            "created_at": "2026-09-18T02:00:00Z",
+            "html_url": "https://github.com/o/r/issues/42#issuecomment-8",
+        }
+    ]
+
+    result = review_gate.evaluate(
+        github,
+        "o/r",
+        7,
+        config(
+            tmp_path, "pr_review_mode: human\ndefault_release_level: beta\n"
+        ),
+    )
+
     assert result["passed"]
-    assert result["source"] == "ruleset"
+    assert result["source"] == "hotfix-emergency"
+    assert "production outage" in result["reason"]
+
+
+def test_beta_non_hotfix_cannot_use_admin_authorization(tmp_path: Path) -> None:
+    """An exact-head admin comment is not a peer-review bypass by itself."""
+    github = FakeGitHub([])
+    github.issue_comments = [
+        {
+            "body": pr_lifecycle.authorization_statement("o/r", 7, HEAD),
+            "user": {"login": "author", "type": "User"},
+            "author_association": "OWNER",
+            "created_at": "2026-09-18T03:00:00Z",
+            "html_url": "https://github.com/o/r/pull/7#issuecomment-7",
+        }
+    ]
+
+    result = review_gate.evaluate(
+        github, "o/r", 7, config(tmp_path, "default_release_level: beta\n")
+    )
+
+    assert not result["passed"]
+    assert "independent maintainer" in result["reason"]
 
 
 def test_clean_copilot_review_of_head_passes(copilot_config: Path) -> None:
@@ -227,16 +323,35 @@ def test_draft_fails_even_with_clean_copilot_review(
     assert "Draft" in result["reason"]
 
 
-def test_level_cap_fails_closed_until_release_levels_exist(
+def test_level_cap_requires_a_maintainer_above_the_configured_level(
     tmp_path: Path,
 ) -> None:
-    """A cap other than unlimited cannot be evaluated before #745."""
+    """Copilot cannot satisfy a self-review level above its configured cap."""
     capped = config(
-        tmp_path, "pr_review_mode: copilot\ncopilot_review_max_level: beta\n"
+        tmp_path,
+        "pr_review_mode: copilot\n"
+        "copilot_review_max_level: beta\n"
+        "default_release_level: formal\n"
+        "release_level_formal_review: self\n",
     )
     result = review_gate.evaluate(FakeGitHub([copilot()]), "o/r", 7, capped)
     assert not result["passed"]
-    assert "#745" in result["reason"]
+    assert "does not allow Copilot" in result["reason"]
+
+
+def test_beta_level_requires_peer_even_with_clean_copilot(
+    tmp_path: Path,
+) -> None:
+    """The default Beta policy cannot be weakened by Copilot mode."""
+    beta = config(
+        tmp_path,
+        "pr_review_mode: copilot\n"
+        "copilot_review_max_level: unlimited\n"
+        "default_release_level: beta\n",
+    )
+    result = review_gate.evaluate(FakeGitHub([copilot()]), "o/r", 7, beta)
+    assert not result["passed"]
+    assert result["required_review"] == "peer"
 
 
 def test_impersonating_user_is_not_copilot(copilot_config: Path) -> None:
@@ -458,10 +573,12 @@ def generate(tmp_path: Path, answers: dict[str, object]) -> Path:
     return project
 
 
-def rules(project: Path) -> dict[str, dict[str, Any]]:
-    """Return the generated Ruleset's rules by type."""
+def rules(
+    project: Path, filename: str = "rulesets.json"
+) -> dict[str, dict[str, Any]]:
+    """Return one generated Ruleset's rules by type."""
     payload = json.loads(
-        (project / "policies/rulesets.json").read_text(encoding="utf-8")
+        (project / f"policies/{filename}").read_text(encoding="utf-8")
     )
     return {
         rule["type"]: rule.get("parameters", {}) for rule in payload["rules"]
@@ -478,35 +595,33 @@ def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
     assert generated["copilot_code_review"]["review_on_push"] is True
     assert generated["pull_request"]["required_approving_review_count"] == 0
     assert generated["pull_request"]["required_review_thread_resolution"]
+    required = rules(project, "rulesets-required-checks.json")
     contexts = {
         item["context"]
-        for item in generated["required_status_checks"][
-            "required_status_checks"
-        ]
+        for item in required["required_status_checks"]["required_status_checks"]
     }
     assert "review" in contexts
     assert (project / ".github/workflows/pr-review.yml").is_file()
     assert (project / "scripts/review_gate.py").is_file()
 
 
-def test_human_review_keeps_the_maintainer_ruleset(tmp_path: Path) -> None:
-    """Choosing human review keeps the original approval Ruleset."""
+def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
+    """Human mode also delegates the variable approval count to the check."""
     project = generate(tmp_path, {"pr_review_mode": "human"})
     generated = rules(project)
     assert "copilot_code_review" not in generated
     assert generated["pull_request"] == {
         "dismiss_stale_reviews_on_push": True,
-        "require_code_owner_review": True,
-        "require_last_push_approval": True,
-        "required_approving_review_count": 1,
+        "require_code_owner_review": False,
+        "require_last_push_approval": False,
+        "required_approving_review_count": 0,
         "required_review_thread_resolution": True,
     }
+    required = rules(project, "rulesets-required-checks.json")
     contexts = {
         item["context"]
-        for item in generated["required_status_checks"][
-            "required_status_checks"
-        ]
+        for item in required["required_status_checks"]["required_status_checks"]
     }
-    assert contexts == {"title", "promotion", "verify"}
+    assert contexts == {"title", "promotion", "verify", "review"}
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
     assert "copilot_review_max_level" not in config

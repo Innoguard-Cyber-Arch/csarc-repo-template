@@ -211,16 +211,16 @@
             "en": ".github/workflows/ci.yml"
           },
           "title": {
-            "zh-tw": "固定基線｜CI 依風險執行 fast 或 full",
-            "en": "Fixed baseline | CI runs fast or full by risk"
+            "zh-tw": "固定基線｜發布層級與路徑風險共同決定驗證",
+            "en": "Fixed baseline | Release level and path risk resolve verification"
           },
           "goal": {
             "zh-tw": "預設路徑不依賴中央 workflow；穩定 aggregate context 兼顧成本與 required checks。",
             "en": "The default path does not depend on a central workflow; a stable aggregate context balances cost against required checks."
           },
           "code": {
-            "zh-tw": "on:\n  pull_request:\n  merge_group:\n    types: [checks_requested]\n  workflow_dispatch:\npermissions:\n  actions: read\n  contents: read\njobs:\n  fast: # docs／fast routing\n  full: # promotion／hotfix／merge queue／manual\n  verify: # always-present aggregate context",
-            "en": "on:\n  pull_request:\n  merge_group:\n    types: [checks_requested]\n  workflow_dispatch:\npermissions:\n  actions: read\n  contents: read\njobs:\n  fast: # docs/fast routing\n  full: # promotion/hotfix/merge queue/manual\n  verify: # always-present aggregate context"
+            "zh-tw": "release level -> baseline／fast／docs／full\nchanged paths -> can only raise the floor\nverified-locally -> exact tree, suite, freshness\nrequired checks -> never bypassed",
+            "en": "release level -> baseline/fast/docs/full\nchanged paths -> can only raise the floor\nverified-locally -> exact tree, suite, freshness\nrequired checks -> never bypassed"
           }
         },
         {
@@ -318,20 +318,20 @@
             "en": "scripts/verify-fast＋scripts/verify＋.github/workflows/ci.yml"
           },
           "title": {
-            "zh-tw": "固定基線｜一個入口驗證與打包",
-            "en": "Fixed baseline | One entry point verifies and packages"
+            "zh-tw": "固定基線｜四種累加驗證組合",
+            "en": "Fixed baseline | Four cumulative verification suites"
           },
           "goal": {
             "zh-tw": "本機、AI 與 GitHub 執行同一入口；各語言只持有自己的檢查。",
             "en": "Local runs, AI, and GitHub all execute the same entry point; each language owns only its own checks."
           },
           "code": {
-            "zh-tw": "./scripts/verify-fast\n./scripts/verify",
-            "en": "./scripts/verify-fast\n./scripts/verify"
+            "zh-tw": "CSARC_VERIFICATION_SUITE=baseline ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=fast ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=docs ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=full ./scripts/verify-fast",
+            "en": "CSARC_VERIFICATION_SUITE=baseline ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=fast ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=docs ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=full ./scripts/verify-fast"
           },
           "summary": {
-            "zh-tw": "fast 選必要子集，full 是其超集合，不為不同 PR 階段複製測試。",
-            "en": "`fast` selects the required subset and `full` is its superset; no test is duplicated for a different PR stage."
+            "zh-tw": "baseline、fast、docs、full 逐層累加；發布層級設下限，路徑風險只能提高，不能降低。",
+            "en": "baseline, fast, docs, and full are cumulative; release level sets the floor and path risk can only raise it."
           }
         }
       ]

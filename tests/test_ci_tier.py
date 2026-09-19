@@ -44,6 +44,7 @@ def run_git(repo: Path, *args: str) -> bytes:
         ("scripts/apply-repository-settings.sh", "governance"),
         ("scripts/check-governance-drift", "governance"),
         ("scripts/request-reviewer", "governance"),
+        (".csarc/config.yml", "governance"),
         ("template/scripts/verify.jinja", "shell"),
         ("Cargo.lock", "dependency"),
         ("Cargo.toml", "dependency"),

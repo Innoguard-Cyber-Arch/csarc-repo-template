@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Shared release-phase version format: alpha/beta/early/formal (Issue #744).
+"""Shared release-version format: alpha/beta/early/formal (Issue #744).
 
 Maintainer decision (2026-09-17): the version number itself encodes release
-maturity instead of a side channel like `policies/project-stage.json`'s
-`release_phase` (that file governs a *different* axis -- Ruleset/review
-bypass scope -- and is untouched by this module; see
-`scripts/release_phase_rulesets.py`).
+maturity. Per-work governance uses the same four canonical names through
+``scripts/release_level.py``.
 
     alpha   X.Y.Z-alpha.N   (any major; a later pre-release of the same
     beta    X.Y.Z-beta.N     X.Y.Z increments N -- tag names are never

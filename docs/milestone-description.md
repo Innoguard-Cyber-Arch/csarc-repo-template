@@ -25,11 +25,12 @@ Milestone 物件與追蹤 Issue 兩步：一次呼叫建立兩者，追蹤 Issue
 `Milestone 8: Interactive docs and policy alignment`。冒號後的文字必須與 GitHub
 Milestone 名稱完全相同；本文依序掛 `Proposal`／`Completion evidence`／
 `Early termination`／`Promotion` 四個 H2 段落，核准、反駁與提前終止等狀態只寫在
-Issue 內文與留言。核准一律要求非提案者留言 `/milestone approve`；只有當 GitHub
-organization 結構性沒有第二個真人帳號可以核准時，對該 repo 有 `admin` collaborator
-權限的提案者才能對自己提出的 tracker 留言 `/milestone admin-approve: <理由>` 自核，
-理由必填，且會在 approval 紀錄與 summary 上明確標成「Admin self-approved」，不得與
-一般非提案者核准混淆。此判斷查 `GET /repos/{repo}/collaborators/{username}/permission`
+Issue 內文與留言。Tracker 表單同時宣告這批工作的發布層級；底下 work Issue 繼承該值，
+不得另填相衝突的層級。預設 alpha 可由對該 repo 有 `admin` collaborator 權限的提案者
+留言 `/milestone admin-approve: <理由>` 自核；beta／early／formal 一律要求非提案者
+留言 `/milestone approve`。自核理由必填，且會在 approval 紀錄與 summary 上明確標成
+「Admin self-approved」，不得與一般非提案者核准混淆。此判斷查
+`GET /repos/{repo}/collaborators/{username}/permission`
 而非留言的 `author_association` 欄位——後者的值會受該帳號的 organization membership
 公開／私密設定影響，若成員關係設為私密，workflow 自己的 `GITHUB_TOKEN` 可能看不到正確
 關係，導致這項檢查不穩定；repo collaborator 權限不受此影響。
@@ -39,33 +40,33 @@ organization 結構性沒有第二個真人帳號可以核准時，對該 repo �
 與說明文字，減少人工照抄漏段落的機率；`scripts/sync_milestone_state.py` 的 `tracker_errors()`
 仍在建立後把關格式是否正確——表單降低出錯機率，不取代驗證。這份表單只建立追蹤 Issue 本身，
 不是下方 GitHub Milestone 物件 `description` 使用的七段式格式，兩者不要混用同一份骨架。
+只有 repository collaborator 建立的 tracker 層級宣告會被信任；不受信任的宣告改用
+`.csarc/config.yml` 的預設層級。
 
 底下每一張 work Issue 預設直接繼承 tracker 的核可狀態，不需要額外核可——維持「範圍內
 工作零額外成本」的現況特性。只有當一張 work Issue 的 body 包含逐字獨立一行的
 `Tracker scope: expanded`（`has_scope_sentinel()`，只認這個逐字 marker、不判斷語意），
 才代表提案者自己宣告這張 Issue 已超出 tracker 最初的 Proposal／Acceptance criteria
-範圍；此時這張 Issue 本身需要一次獨立的非提案者核可，或同一套 `admin` collaborator
-權限自核例外（`scope_decision()`；CLI：`check-scope --repo <repo> --issue <編號>`）。
+範圍；此時這張 Issue 本身需要一次獨立核可：alpha 可用同一套 `admin` collaborator
+權限自核例外，beta 以上則必須由非提案者核可（`scope_decision()`；CLI：
+`check-scope --repo <repo> --issue <編號>`）。
 核可留言語彙（`/milestone approve`／`/milestone admin-approve: <理由>`／
 `/milestone object:`／`/milestone resolve:`）與判斷邏輯與 tracker 完全相同，只是核可
 對象換成這張 work Issue 自己的留言，而不是 tracker 的留言。
 
-個別 work PR 目前只跑 `scripts/validate-pr-policy` 的結構檢查（acceptance criteria
-checkbox 全打勾、`Closes #N` 存在且對應正確），刻意**不**加裝 GitHub 原生 required
-review（branch protection／Ruleset review gate），也不延伸 `/milestone` 留言語彙到
-個別 work PR。這是盤點後的明確決定，不是遺漏：這個 repo 實質上是單一真人帳號（或由
-agent 代為作者）撰寫每一張 work PR，GitHub 平台層級禁止「核准自己開的 PR」；在 tracker
-層級要求非提案者核可正是 `#512`／`#518`／`#546`／`#549`／`#550` 一連串 self-lock 事件的
-根因，若把同一機制套用在數量遠多於 tracker 的 work PR 上，會把同一個死結複製到每一張
-PR，且沒有對應每張 work PR 的例外機制可用。詳見
-`docs/adr/milestone-scope-and-closure-reconciliation.md`。
+個別 work PR 除了 `scripts/validate-pr-policy` 的結構檢查，還會依繼承的發布層級通過
+`review` required check。alpha 允許 exact-head 自我授權；beta／early／formal 必須是
+非 PR 作者的 exact-head 核准，後續 push 會使舊核准失效。GitHub Ruleset 永遠保留必要
+status checks 且不設 bypass；只把 PR review 規則的 bypass 限在 alpha 或下述 hotfix
+緊急路徑，並由 lifecycle 留下稽核證據。這是 #745 對早期「work PR 不加 review gate」
+決定的明確取代；留言仍不沿用 `/milestone` 語彙。
 
 上一段講的是「有 Milestone 的 work PR」不額外加裝核可；沒有 Milestone 的 Issue（見
 `docs/ci-policy.md`「不屬於里程碑的工作」「Hotfix」「Release recovery」三節）情況相
 反——這種 Issue 沒有任何 tracker 可以繼承核可，`#743` 之前實際上完全不需要核可就能
-合併其工作 PR，變成繞過批次治理的捷徑。`#743` 補上這個缺口：一張沒有 Milestone 的
-Issue，本身需要一次非提案者核可，或同一套 `admin` collaborator 自核例外（理由必
-填），才能讓以 `Closes`／`Fixes`／`Resolves #N` 連結它的 PR 通過「Validate Milestone
+合併其工作 PR，變成繞過批次治理的捷徑。`#743` 補上這個缺口，#745 再依層級限縮：一張
+沒有 Milestone 的 Issue，alpha 可由 `admin` collaborator 自核（理由必填），beta 以上
+必須由非提案者核可，才能讓以 `Closes`／`Fixes`／`Resolves #N` 連結它的 PR 通過「Validate Milestone
 approval」與 merge queue 的「Revalidate queued Milestone approval」
 （`standalone_issue_approval_decision()`／`check_issue_approval()`；CLI：
 `check-issue-approval --repo <repo> --issue <編號>`）。核可留言語彙是純文字、不分大小
@@ -74,16 +75,18 @@ approval」與 merge queue 的「Revalidate queued Milestone approval」
 不互相沿用（維護者在 Issue #743 留言中的決定：沒有 Milestone 的 Issue 用不上「/milestone」
 這個斜線指令，純文字關鍵字也不必先查文件），只是判斷演算法的結構相同，核可對象換成
 這張沒有 Milestone 的 Issue 自己的留言。這與上一段「不延伸到 work PR」的決定並不衝突：核可對象仍然是
-Issue，不是 PR 本身，PR 合併授權依舊完全是 `validate-pr-policy` 與 PR review（#719）
-的責任。屬於 Milestone 的 work Issue 不受影響，繼續只靠 tracker 核可，不需要逐張另外
-核可。細節見 `docs/ci-policy.md`「Standalone／hotfix／release recovery Issue 核可
-gate（#743）」一節。
+Issue，不是 PR 本身，PR 合併授權依舊由 `validate-pr-policy` 與 release-level-aware
+review 共同負責。屬於 Milestone 的 work Issue 不受影響，繼續只靠 tracker 核可，不需要
+逐張另外核可。唯一例外是 beta 以上 hotfix：admin 必須以自己的身分對 exact head 留理由，
+系統驗證 Issue 提案者、授權者與 merge actor 相同，並在合併後自動建立待同儕複核 Issue。
+細節見 `docs/ci-policy.md`「Standalone／hotfix／release recovery Issue 核可 gate（#743）」
+一節。
 
-上一段的「唯一合併前置檢查」在 `#632` 之後多了一道窄範圍例外：`pr-policy.yml` 額外呼叫
+Issue 核可之外，`#632` 另有一道窄範圍 gate：`pr-policy.yml` 額外呼叫
 `scripts/check-scope-gate`，只在該 PR 連結的 work Issue 自己宣告了
 `Tracker scope: expanded` 時才生效，把上方 `scope_decision()` 這個既有的 Issue-level
 gate 實際接上合併流程；沒有宣告的 work PR（現況的絕大多數）完全不受影響，行為與之前一
-致。這不是替 work PR 本身加裝 review gate，也沒有新增任何 `/milestone` 留言語彙——核可
+致。這項 gate 沒有新增任何 `/milestone` 留言語彙——核可
 對象仍是 work Issue 自己的留言，`check-scope-gate` 只是把既有判斷結果實際擋在合併之
 前，而不是像 `#552` 落地時那樣只能靠人手動跑 `check-scope` CLI 才會被看見。核可另外綁定
 了 body 內容的 fingerprint：核可留言之後 Issue 又被編輯（`updated_at` 晚於核可留言

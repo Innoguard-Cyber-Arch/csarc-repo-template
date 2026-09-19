@@ -5,6 +5,7 @@ code_owner: '@Innoguard-Cyber-Arch/arch'
 copilot_review_max_level: unlimited
 coverage_mode: global
 coverage_threshold: 80
+default_release_level: beta
 enable_codeql: false
 enable_docker: false
 enable_governance_drift_check: false
@@ -26,6 +27,15 @@ project_slug: csarc-repo-template
 project_visibility: public
 python_support_mode: latest
 release_immutable_releases: required
+release_level_alpha_review: self
+release_level_alpha_verification: baseline
+release_level_beta_review: peer
+release_level_beta_verification: fast
+release_level_early_review: peer
+release_level_early_verification: docs
+release_level_formal_review: peer
+release_level_formal_verification: full
+release_levels_enabled: true
 release_ownership: csarc-owned
 release_ownership_reason: CSARC owns the only version and GitHub Release workflow.
 release_required_inputs: []

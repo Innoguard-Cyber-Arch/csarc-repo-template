@@ -34,6 +34,10 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["release_ownership"] == "csarc-owned"
     assert config["release_settings_owner"] == "csarc-admin"
     assert config["release_immutable_releases"] == "required"
+    assert config["release_levels_enabled"] is True
+    assert config["default_release_level"] == "beta"
+    assert config["release_level_alpha_review"] == "self"
+    assert config["release_level_formal_verification"] == "full"
 
 
 def test_root_public_identity_claims_are_consistent() -> None:
@@ -105,6 +109,22 @@ def test_root_public_identity_claims_are_consistent() -> None:
         (
             "policy_branch_ruleset: 1\n",
             "Invalid policy_branch_ruleset",
+        ),
+        (
+            "release_levels_enabled: maybe\n",
+            "Invalid release_levels_enabled",
+        ),
+        (
+            "default_release_level: stable\n",
+            "Invalid default_release_level",
+        ),
+        (
+            "release_level_alpha_review: optional\n",
+            "Invalid release_level_alpha_review",
+        ),
+        (
+            "release_level_formal_verification: smoke\n",
+            "Invalid release_level_formal_verification",
         ),
     ],
 )

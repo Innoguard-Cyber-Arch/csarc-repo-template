@@ -195,6 +195,26 @@ Issue #681/#682 決定 R 前是獨立的「進階安裝」附錄頁，後併入 
 `.github/workflows/pr-review.yml`／`tests/test_pr_lifecycle.py` 保持逐位元組同步
 （`tests/test_review_gate.py` 不在配對清單內，只在 root 維護）。
 
+## 2026-09-19 以每件工作的發布層級取代全專案 phase（#745）
+
+**狀態：Accepted。** #607 的 `policies/project-stage.json`、全專案 `release_phase` 與
+「把 required checks 搬到可 bypass 的 Ruleset」做法由本節取代。發布層級改由每張 Issue
+表單宣告 alpha／beta／early／formal；Milestone work Issue 繼承 tracker，衝突即失敗。
+只有 repository collaborator 的宣告可信，否則回到 `.csarc/config.yml` 的預設值。
+
+四層預設分別是 self＋baseline、peer＋fast、peer＋docs、peer＋full；設定可調整是否啟用、
+預設層級與逐層 review／verification mapping。這個 template repo 預設 beta，新生成 repo
+預設 alpha，adopt 既有 repo 預設 beta。Dependabot 固定 beta，版本 PR 依版本後綴取得層級。
+
+Ruleset 拆成兩個獨立責任：required status checks 永遠無 bypass；review 規則才可在 alpha
+或已驗證的 hotfix 緊急路徑由 admin 使用。beta 以上仍要求非作者對 exact head 的核准；
+alpha 可使用既有 exact-head lifecycle 授權完成 self-merge。每次實際 bypass 都寫入
+release level、actor、head 與授權來源，避免平台例外吞掉政策證據。
+
+beta 以上 hotfix 的窄例外要求 standalone hotfix Issue、同一位 admin 同時是 Issue
+提案者／exact-head 授權者／merge actor、理由必填且權限即時驗證；合併後自動建立
+`needs-manual-review` 追蹤 Issue。其他 PR 不得使用這條路徑。
+
 ## 重新評估條件
 
 Repository 方案、organization policy、fleet 規模或實測 drift 頻率改變時，重新執行 capability preflight 與 fleet threshold review；不要把安裝時快照當永久真相。

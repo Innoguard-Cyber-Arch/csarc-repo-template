@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.parse
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,10 +20,12 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     stale_branch_detection = importlib.import_module("stale_branch_detection")
+    release_level = importlib.import_module("release_level")
 else:
     stale_branch_detection = importlib.import_module(
         f"{__package__}.stale_branch_detection"
     )
+    release_level = importlib.import_module(f"{__package__}.release_level")
 
 CHECK_NAME = "Milestone approval"
 TRACKER_SECTIONS = (
@@ -68,6 +71,70 @@ def run_gh(arguments: list[str]) -> str:
         text=True,
     )
     return result.stdout.strip()
+
+
+class _SnapshotGitHub:
+    """Expose an already-loaded Milestone snapshot to the level resolver."""
+
+    def __init__(self, snapshot: dict[str, Any]) -> None:
+        self.snapshot = snapshot
+
+    def get(self, repo: str, path: str) -> object:
+        """Read snapshot data or delegate collaborator permission lookup."""
+        if path.startswith("collaborators/") and path.endswith("/permission"):
+            login = urllib.parse.unquote(path.split("/", 2)[1])
+            permission = _collaborator_permission(repo, login)
+            if permission is None:
+                raise RuntimeError("collaborator permission is unavailable")
+            return {"permission": permission}
+        if path.startswith("milestones/"):
+            number = int(path.split("/", 1)[1])
+            milestone = self.snapshot.get("milestone")
+            if (
+                isinstance(milestone, dict)
+                and milestone.get("number") == number
+            ):
+                return milestone
+            return load_snapshot(repo, number)["milestone"]
+        if path.startswith("issues/"):
+            number = int(path.split("/", 1)[1])
+            issue = self.snapshot.get("issue")
+            if isinstance(issue, dict) and issue.get("number") == number:
+                return issue
+            for issue in self.snapshot.get("issues", []):
+                if issue.get("number") == number:
+                    return issue
+        raise RuntimeError(f"snapshot has no {path}")
+
+    def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
+        """Return the snapshot's Milestone Issue collection."""
+        if path.startswith("issues?milestone="):
+            issues = self.snapshot.get("issues")
+            if isinstance(issues, list):
+                return list(issues)
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(path).query)
+            milestone_number = int(query["milestone"][0])
+            return list(load_snapshot(repo, milestone_number)["issues"])
+        raise RuntimeError(f"snapshot has no {path}")
+
+
+def _admin_self_approval_allowed(
+    github: release_level.GitHubReader,
+    repo: str,
+    issue: dict[str, Any],
+) -> bool:
+    """Return whether this work's configured review policy permits self-use."""
+    labels = {
+        str(label.get("name") or "").casefold()
+        for label in issue.get("labels", [])
+        if isinstance(label, dict)
+    }
+    if issue.get("milestone") is None and "hotfix" in labels:
+        return True
+    decision = release_level.resolve_issue(
+        github, repo, issue, release_level.load_settings()
+    )
+    return decision.review == "self"
 
 
 def _pages(raw: str) -> list[dict[str, Any]]:
@@ -635,6 +702,7 @@ def _gate_decision(
     missing_message: str,
     approved_prefix: str = "Approved by",
     admin_prefix: str = "Admin self-approved by",
+    allow_admin_self_approval: bool = True,
 ) -> Decision:
     """Turn one collected approval-record set into a pass/fail Decision.
 
@@ -647,6 +715,12 @@ def _gate_decision(
     it is the only reason no approval currently counts, the message says
     so explicitly instead of reading identically to "never approved".
     """
+    if not approvals and admin_approvals and not allow_admin_self_approval:
+        return Decision(
+            False,
+            "This release level requires approval from another person; "
+            "admin self-approval is only valid when self-review is configured",
+        )
     if not approvals and not admin_approvals:
         if stale:
             return Decision(
@@ -673,7 +747,10 @@ def _gate_decision(
 
 
 def approval_decision(
-    snapshot: dict[str, Any], *, require_open: bool = True
+    snapshot: dict[str, Any],
+    *,
+    require_open: bool = True,
+    allow_admin_self_approval: bool | None = None,
 ) -> Decision:
     """Require one non-proposer approval, or an owner self-approval.
 
@@ -693,6 +770,12 @@ def approval_decision(
     approvals, objections, resolved, admin_approvals, stale = _approval_records(
         snapshot, proposer, item_updated_at=item.get("updated_at")
     )
+    if allow_admin_self_approval is None and admin_approvals and not approvals:
+        allow_admin_self_approval = _admin_self_approval_allowed(
+            _SnapshotGitHub(snapshot), str(snapshot.get("repo") or ""), item
+        )
+    if allow_admin_self_approval is None:
+        allow_admin_self_approval = False
     return _gate_decision(
         approvals,
         objections,
@@ -700,6 +783,7 @@ def approval_decision(
         admin_approvals,
         stale,
         missing_message="A person other than the proposer must approve",
+        allow_admin_self_approval=allow_admin_self_approval,
     )
 
 
@@ -719,7 +803,9 @@ def load_issue_snapshot(repo: str, number: int) -> dict[str, Any]:
     return {"repo": repo, "issue": issue, "comments": comments}
 
 
-def scope_decision(snapshot: dict[str, Any]) -> Decision:
+def scope_decision(
+    snapshot: dict[str, Any], *, allow_admin_self_approval: bool | None = None
+) -> Decision:
     """Require independent approval only for a self-declared scope expansion.
 
     A work Issue inherits its tracker's approval by default -- no sentinel
@@ -742,6 +828,12 @@ def scope_decision(snapshot: dict[str, Any]) -> Decision:
     approvals, objections, resolved, admin_approvals, stale = _approval_records(
         snapshot, proposer, item_updated_at=issue.get("updated_at")
     )
+    if allow_admin_self_approval is None and admin_approvals and not approvals:
+        allow_admin_self_approval = _admin_self_approval_allowed(
+            _SnapshotGitHub(snapshot), str(snapshot.get("repo") or ""), issue
+        )
+    if allow_admin_self_approval is None:
+        allow_admin_self_approval = False
     return _gate_decision(
         approvals,
         objections,
@@ -754,12 +846,14 @@ def scope_decision(snapshot: dict[str, Any]) -> Decision:
         ),
         approved_prefix="Scope expansion approved by",
         admin_prefix="Scope expansion admin self-approved by",
+        allow_admin_self_approval=allow_admin_self_approval,
     )
 
 
 def check_scope(repo: str, number: int) -> Decision:
     """Validate the scope-expansion gate for one work Issue."""
-    return scope_decision(load_issue_snapshot(repo, number))
+    snapshot = load_issue_snapshot(repo, number)
+    return scope_decision(snapshot)
 
 
 def _issue_approval_records(
@@ -914,7 +1008,11 @@ def body_edit_warning(
 
 
 def standalone_issue_approval_decision(
-    snapshot: dict[str, Any], issue_number: int, *, require_open: bool = True
+    snapshot: dict[str, Any],
+    issue_number: int,
+    *,
+    require_open: bool = True,
+    allow_admin_self_approval: bool | None = None,
 ) -> Decision:
     """Require independent approval for one Issue with no Milestone (#743).
 
@@ -969,6 +1067,12 @@ def standalone_issue_approval_decision(
             snapshot, proposer, item_updated_at=issue.get("updated_at")
         )
     )
+    if allow_admin_self_approval is None and admin_approvals and not approvals:
+        allow_admin_self_approval = _admin_self_approval_allowed(
+            _SnapshotGitHub(snapshot), str(snapshot.get("repo") or ""), issue
+        )
+    if allow_admin_self_approval is None:
+        allow_admin_self_approval = False
     return _gate_decision(
         approvals,
         objections,
@@ -983,6 +1087,7 @@ def standalone_issue_approval_decision(
         ),
         approved_prefix="Issue approved by",
         admin_prefix="Issue admin self-approved by",
+        allow_admin_self_approval=allow_admin_self_approval,
     )
 
 
@@ -1013,7 +1118,9 @@ def check_issue_approval(
     if isinstance(milestone, dict) and isinstance(milestone.get("number"), int):
         return approval_decision(load_snapshot(repo, milestone["number"]))
     return standalone_issue_approval_decision(
-        snapshot, number, require_open=require_open
+        snapshot,
+        number,
+        require_open=require_open,
     )
 
 

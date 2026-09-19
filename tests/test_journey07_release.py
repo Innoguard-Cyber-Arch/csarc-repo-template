@@ -36,6 +36,10 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert workflow["jobs"]["release"]["timeout-minutes"] == 30
     assert "googleapis/release-please-action@45996ed1" in source
     assert "release_policy.py plan" in source
+    assert "release_level.py release-batch" in source
+    assert '--phase "${{ steps.level.outputs.level }}"' in source
+    assert "release_level.py annotate-pr" in source
+    assert "release_level.py annotate-release" in source
     assert "release_policy.py detect" in source
     assert "mode == 'automatic'" in source
     assert "mode == 'guided'" in source
@@ -72,6 +76,15 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "release_policy.py release" not in source
     assert "/actions/workflows/" not in source
     assert "source_run_id" not in source
+
+    steps = workflow["jobs"]["release"]["steps"]
+    names = [step.get("name") for step in steps]
+    assert names.index("Resolve included work and release level") < names.index(
+        "Plan the next version from repository history"
+    )
+    assert names.index(
+        "Record included work in the draft Release"
+    ) < names.index("Bind, upload, and publish the release")
 
     settings = (ROOT / "scripts/apply-repository-settings.sh").read_text(
         encoding="utf-8"
@@ -169,7 +182,9 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         ]
         _, resolve = by_name["Resolve the exact release state"]
 
-        assert plan_index == 1
+        level_index, _ = by_name["Resolve included work and release level"]
+        assert level_index == 1
+        assert plan_index == level_index + 1
         assert plan_index < capability_index < blocked_index
         assert blocked_index < attestation_index
         assert attestation_index < min(index for index, _ in toolchain_steps)
@@ -436,7 +451,7 @@ def test_shared_ci_policy_names_the_generated_verifier() -> None:
     policy = (ROOT / "docs/ci-policy.md").read_text(encoding="utf-8")
 
     assert "（生成 repo：`scripts/verify`）" in policy  # noqa: RUF001
-    assert "生成 repo 用 `scripts/verify full`" in policy
+    assert "入口是 `scripts/verify`（不帶參數即預設 full）" in policy  # noqa: RUF001
 
 
 def test_release_drift_check_is_independent_of_release_yml() -> None:
