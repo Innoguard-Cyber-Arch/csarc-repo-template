@@ -1921,6 +1921,7 @@ def merge_snapshot(  # noqa: C901
         "repository": repo,
         "pull_request": pr_number,
         "head_sha": head_sha,
+        "head_ref": (pull.get("head") or {}).get("ref"),
         "base_ref": lease["base_ref"],
         "base_sha": lease["base_sha"],
         "title": title,
@@ -2073,6 +2074,55 @@ def check(args: argparse.Namespace, github: GitHub) -> None:
     sys.stdout.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
 
 
+def revalidate_release_candidate(
+    github: GitHub, lease: dict[str, Any], head_ref: str
+) -> str:
+    """Refresh the candidate status against the lease-bound current base."""
+    if not (
+        re.fullmatch(r"release/v\d+\.\d+\.\d+", head_ref)
+        or head_ref.startswith("release-please--branches--main--components--")
+    ):
+        return ""
+    repo = str(lease["repository"])
+    pr_number = int(lease["pull_request"])
+    head_sha = str(lease["head_sha"])
+    require_lease(github, lease, repo, pr_number, head_sha)
+    root = Path(__file__).resolve().parents[1]
+    with tempfile.TemporaryDirectory(
+        prefix="csarc-release-candidate-"
+    ) as directory:
+        candidate = Path(directory) / "pull-request.json"
+        candidate.write_text(
+            json.dumps(
+                {
+                    "number": pr_number,
+                    "sha": head_sha,
+                    "headBranchName": head_ref,
+                    "baseBranchName": lease["base_ref"],
+                    "baseSha": lease["base_sha"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        env = os.environ.copy()
+        env.update(
+            {
+                "GITHUB_REPOSITORY": repo,
+                "GITHUB_SERVER_URL": "https://github.com",
+                "GITHUB_RUN_ID": "pr-lifecycle",
+                "RUNNER_TEMP": directory,
+                "STATUS_URL": f"https://github.com/{repo}/pull/{pr_number}",
+            }
+        )
+        return run(
+            [
+                str(root / "scripts" / "verify-release-candidate"),
+                str(candidate),
+            ],
+            env=env,
+        )
+
+
 def merge(args: argparse.Namespace, github: GitHub) -> None:
     """Merge only when the lease and exact-head controls are enforced."""
     lease = read_lease(args.lease)
@@ -2110,6 +2160,11 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
             f"review={snapshot['authorization_url']} "
             f"head={lease['head_sha']} actor={lease['actor']}",
         )
+    candidate_evidence = revalidate_release_candidate(
+        github, lease, str(snapshot.get("head_ref") or "")
+    )
+    if candidate_evidence:
+        sys.stdout.write(candidate_evidence.rstrip() + "\n")
     snapshot = merge_snapshot(
         github,
         lease,

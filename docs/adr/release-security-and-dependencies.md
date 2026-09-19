@@ -28,7 +28,8 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 4. **Guided：**上層政策禁止 Action 建立 PR 時，維護者或 agent 在本機執行 `python3 scripts/release_policy.py prepare-candidate`，再以輸出的 branch／title 開一般 PR；命令只改版本檔與 CHANGELOG，不建立 PR、tag 或 Release。
 5. **Blocked：**若 tag 或 GitHub Release 的必要權限不可用，流程留下失敗證據並停止，不改走另一個發布器。
 6. 兩種候選都使用同一組可信 actor／commit、允許檔案、版本、CHANGELOG 與可打包性檢查；`GITHUB_TOKEN` 建立的 PR 若等待人工核准，原 release run 會直接驗證精確 SHA 並回寫 `Release / candidate` status。
-7. 人審查並合併任一版本 PR 後，唯一的 `release.yml` 建立 tag、draft GitHub Release、成品、checksum、SPDX SBOM 與 release evidence；下載重驗成功後才公開且確認 immutable。
+7. 候選驗證也記錄 candidate SHA、來源 merge-base 與 current `main` SHA；正式 lifecycle merge 會在 lease 綁定的 current base 重跑同一支 verifier，發布 stage 再以同一驗證作後盾。base 只新增 `no-release` commits 時可沿用同一張 PR；新增範圍只要包含 release-worthy commit，就必須更新原 PR，舊 base 的成功 status 不得滿足最終邊界（#817）。
+8. 人審查並合併任一版本 PR 後，唯一的 `release.yml` 建立 tag、draft GitHub Release、成品、checksum、SPDX SBOM 與 release evidence；下載重驗成功後才公開且確認 immutable。
 
 流程只使用短效 `GITHUB_TOKEN`，不要求 PAT、GitHub App、自架 runner 或付費 GitHub 方案。Organization 不允許 Actions 建立 PR 時只切換候選的建立方式；workflow 不可自行核准版本 PR，也沒有第二個 tag／Release writer。
 
