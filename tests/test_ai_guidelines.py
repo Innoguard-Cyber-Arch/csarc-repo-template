@@ -42,11 +42,14 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert "never store raw chat transcripts" in rendered
     assert "`AGENTS.md` is the single source" in rendered
     assert "`CLAUDE.md` only imports it" in rendered
-    assert "docs/index.html#method" in rendered
+    assert "docs/csarc.md#工作流程" in rendered
+    assert "docs/ci-policy.md#審查與合併資格" in rendered
+    assert "docs/ci-policy.md#驗證分級與實測成本" in rendered
+    assert "docs/index.html#" not in rendered
     assert "docs/index.html#work" not in rendered
-    assert "Journey 08" in rendered
+    assert "review requirements, merge eligibility" in rendered
     assert "Alpha self-merge" in rendered
-    assert "Journey 09" in rendered
+    assert "docs/csarc.md#公版更新" in rendered
     assert "automation are suspended" not in rendered
     assert ("Python setup:" in rendered) is python_command
     assert ("TypeScript setup:" in rendered) is typescript_command
@@ -86,4 +89,4 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     )
     readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
     assert "一般情況下不能自行合併" not in readme
-    assert "08 規則治理" in readme
+    assert "docs/ci-policy.md#審查與合併資格" in readme
