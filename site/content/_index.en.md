@@ -154,7 +154,7 @@ The Governance step's plan table (Step 08) answers "what does the account's GitH
 | `security_and_analysis` | Secret scanning, push protection, Dependabot security updates | Public repository, or GitHub Advanced Security if private | DEGRADED marker; rely on local `scripts/scan-secrets` instead |
 | `github_pages` | Hosts `docs/index.html` as a live site | Public repository, or GitHub Enterprise Cloud if private | DEGRADED marker; distribute the committed HTML file instead |
 | `repository_settings_inspection` | `check` mode can compare live admin-only fields | Same as `repository_admin` | DEGRADED marker; run `check` from a trusted admin checkout |
-| `immutable_releases` | Required before hosted Automatic/Guided publish can run | A real admin identity, never the default `GITHUB_TOKEN` | Known permanent limitation (#123/#626); run `scripts/publish-release` locally |
+| `immutable_releases` | Repository setting GitHub uses to sign each published Release's attestation | An admin enables it once via `apply-repository-settings.sh apply`; `GITHUB_TOKEN` still can't read it directly | No longer pre-flight-blocking (#770); `scripts/publish-release` verifies the signed attestation post-hoc and fails closed if it's missing |
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="How to read a check-repo-capabilities result" >}}

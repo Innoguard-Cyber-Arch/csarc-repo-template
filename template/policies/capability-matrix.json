@@ -173,24 +173,24 @@
     {
       "id": "immutable_releases",
       "title": {
-        "en": "Immutable Releases (required for hosted publishing)",
-        "zh-tw": "Immutable Releases（hosted 發版必要條件）"
+        "en": "Immutable Releases (repository setting; no longer pre-flight-probed)",
+        "zh-tw": "Immutable Releases（repository 設定；不再 pre-flight 探測）"
       },
       "behavior": {
-        "en": "Required before `release.yml`'s Automatic or Guided mode can publish a GitHub Release.",
-        "zh-tw": "`release.yml` 的 Automatic 或 Guided 模式要能發布 GitHub Release 前的必要條件。"
+        "en": "Repository setting GitHub uses to sign a release attestation for each published GitHub Release. `release.yml`'s Automatic/Guided modes no longer probe or block on this before starting (Issue #770); `scripts/publish-release` instead proves it post-hoc, after each publish, by verifying that signed attestation.",
+        "zh-tw": "GitHub 用來為每個已發布 GitHub Release 簽發 release attestation 的 repository 設定。`release.yml` 的 Automatic／Guided 模式不再於開始前 pre-flight 探測或卡在這一項（Issue #770）；`scripts/publish-release` 改在每次發布後，以驗證這份簽發的 attestation 來 post-hoc 自證。"
       },
       "requirement": {
-        "en": "A real user account or PAT with repository Admin; the default hosted `GITHUB_TOKEN` cannot prove this setting -- a structural, permanent GitHub Actions limitation (Issue #123/#626), not something this repository's configuration can change.",
-        "zh-tw": "需要具備 repository Admin 的真人帳號或 PAT；hosted 預設的 `GITHUB_TOKEN` 無法證明此設定——這是 GitHub Actions 結構性、永久性的限制（Issue #123／#626），並非這個 repository 的設定能改變。"
+        "en": "A repository admin enables the setting once via `scripts/apply-repository-settings.sh apply`; the default hosted `GITHUB_TOKEN` still cannot read or prove this admin-scope setting directly -- a structural GitHub Actions limitation (Issue #123/#626) -- which is why detection below stays `unknown`.",
+        "zh-tw": "由 repository admin 透過 `scripts/apply-repository-settings.sh apply` 開啟一次；hosted 預設的 `GITHUB_TOKEN` 仍然無法直接讀取或證明這個 admin 範疇的設定——這是 GitHub Actions 結構性的限制（Issue #123／#626），也是下面偵測結果維持 `unknown` 的原因。"
       },
       "detection": {
         "en": "Not reliably detectable from a repository-permission probe; `scripts/check-repo-capabilities` always reports this row as `unknown` with a fixed explanatory note instead of guessing.",
         "zh-tw": "無法單靠 repository 權限探測可靠判斷；`scripts/check-repo-capabilities` 對這一列一律回報 `unknown`，並附固定說明，而非用猜測代替。"
       },
       "workaround": {
-        "en": "Documented permanent limitation, not a bug to chase: run `scripts/publish-release` locally under the maintainer's own admin identity, per `docs/ci-policy.md`'s \"hosted 發版路徑的已知限制\" section.",
-        "zh-tw": "已記錄的永久限制，非待修復事項：依 `docs/ci-policy.md`「hosted 發版路徑的已知限制」一節，改在本機以維護者自己的 admin 身分執行 `scripts/publish-release`。"
+        "en": "Post-hoc, not pre-flight: `scripts/publish-release`'s `publish`/`rerun-verify` verify GitHub's signed release attestation (`gh release verify --format json`, reused via `scripts/verify_release_consumption.py`) after each publish and revert a failed Release to draft when still possible (Issue #770). If the setting was never enabled, publication now fails closed at that later step instead of being blocked before it starts; see `docs/ci-policy.md`'s \"hosted 發版路徑的已知限制\" section.",
+        "zh-tw": "Post-hoc，不是 pre-flight：`scripts/publish-release` 的 `publish`／`rerun-verify` 在每次發布後驗證 GitHub 簽發的 release attestation（`gh release verify --format json`，透過 `scripts/verify_release_consumption.py` 重用），仍可能時把失敗的 Release 收回 draft（Issue #770）。若這個設定從未被真的開啟，發布現在會在這個較晚的步驟 fail closed，而不是一開始就被完全擋下；詳見 `docs/ci-policy.md`「hosted 發版路徑的已知限制」一節。"
       },
       "related_degraded_marker": null
     }

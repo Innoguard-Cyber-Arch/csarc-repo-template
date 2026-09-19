@@ -13,7 +13,7 @@ policy 驗證 repository、tag、digest 與 signer，並在不符時停止，才
 | --- | --- | --- |
 | 公版 GitHub Release | Candidate／Blocked | `release.yml` 預計在受審查版本 PR 合併後發布 verified immutable Release；待 default branch live run |
 | checksum 與 SPDX SBOM | Candidate | `scripts/release_bundle.py` 預計建立、下載並重驗 exact-tag 成品；待同一 live run |
-| attestation consumption | Conditional | `scripts/verify_release_consumption.py` 及測試保留 fail-closed policy |
+| attestation consumption | Conditional／Active（發版路徑自用） | `scripts/verify_release_consumption.py` 及測試保留 fail-closed policy 給下游消費者選用；`scripts/publish-release`（#770）也重用同一份邏輯對自己剛發布的 Release 做 post-hoc 驗證，取代原本 `immutable_releases` pre-flight probe |
 | PyPI／npm／GHCR | Product-owned | 模板不提供 publisher 選項或 job；需要 registry 時由產品另案設定 OIDC 與 environment |
 | production deployment | Not applicable | 由產品自行定義環境、健康檢查、核准與復原 |
 

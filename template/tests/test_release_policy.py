@@ -15,6 +15,7 @@ MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "release_policy.py")
 )
 Capability = MODULE["Capability"]
+PUBLISH_CAPABILITIES = MODULE["PUBLISH_CAPABILITIES"]
 aggregate_release_boundaries = MODULE["aggregate_release_boundaries"]
 bump_version = MODULE["bump_version"]
 classify_probe = MODULE["classify_probe"]
@@ -315,12 +316,10 @@ def capabilities(
     contents: str,
     release: str,
     dispatch: str,
-    immutable_releases: str = "allowed",
 ) -> dict[str, object]:
     return {
         "actions_pull_requests": Capability(pull_requests, "test"),
         "contents": Capability(contents, "test"),
-        "immutable_releases": Capability(immutable_releases, "test"),
         "release": Capability(release, "test"),
         "dispatch": Capability(dispatch, "test"),
     }
@@ -526,8 +525,6 @@ def test_pr_policy_block_uses_guided_mode_without_publishing(
             self.calls.append((method, path, payload))
             if path.endswith("/pulls"):
                 return status, {}
-            if path.endswith("/immutable-releases"):
-                return 200, {"enabled": True}
             return 422, {}
 
     api = ProbeAPI()
@@ -560,8 +557,6 @@ def test_unproven_publication_capability_is_blocked(
             del method, payload
             if path.endswith("/pulls"):
                 return 403, {}
-            if path.endswith("/immutable-releases"):
-                return 200, {"enabled": True}
             if endpoint in path:
                 return status, {}
             return 422, {}
@@ -573,29 +568,53 @@ def test_unproven_publication_capability_is_blocked(
     assert report(observed, "test")["mode"] == "blocked"
 
 
-def test_disabled_immutable_releases_block_publication() -> None:
-    """Do not publish into a repository that cannot preserve a release."""
+def test_immutable_releases_is_no_longer_pre_flight_probed() -> None:
+    """Issue #770: publication no longer hinges on an unprovable probe.
+
+    `GET repos/{repo}/immutable-releases` requires repository
+    Administration (read), which the Actions `GITHUB_TOKEN` can never
+    obtain -- there is no `administration` key in the Actions
+    `permissions:` schema (#123/#622/#623/#624/#626). Removing this probe
+    is what lets Automatic/Guided stop being permanently `blocked` on it;
+    whether Immutable Releases was actually enabled is now proven post-hoc
+    by scripts/publish-release verifying GitHub's own signed release
+    attestation after publish (see scripts/verify_release_consumption.py),
+    not guessed about here beforehand.
+    """
 
     class ProbeAPI:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, dict[str, object] | None]] = []
+
         def request(
             self,
             method: str,
             path: str,
             payload: dict[str, object] | None = None,
         ) -> tuple[int, object]:
-            del method, payload
+            self.calls.append((method, path, payload))
             if path.endswith("/pulls"):
-                return 422, {}
+                return 201, {}
+            if path.endswith("/git/refs"):
+                return 201, {}
+            if path.endswith("/releases"):
+                return 201, {}
             if path.endswith("/immutable-releases"):
-                return 200, {"enabled": False, "enforced_by_owner": False}
+                raise AssertionError(
+                    "detect_runtime_capabilities must not probe "
+                    "immutable-releases any more (Issue #770)"
+                )
             return 422, {}
 
     observed = detect_runtime_capabilities(
         ProbeAPI(), "owner/repo", "a" * 40, "main"
     )
 
-    assert observed["immutable_releases"].state == "blocked"
-    assert report(observed, "test")["mode"] == "blocked"
+    assert "immutable_releases" not in observed
+    assert PUBLISH_CAPABILITIES == ("contents", "release")
+    payload = report(observed, "test")
+    assert payload["mode"] == "automatic"
+    assert "immutable_releases" not in payload["token_permissions"]
 
 
 def test_capability_report_separates_policy_token_and_effective_state() -> None:
