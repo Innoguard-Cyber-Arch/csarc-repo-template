@@ -4736,6 +4736,90 @@ def test_update_real_template_legacy_two_file_schema_end_to_end(
     assert not (project / ".csarc/profile.json").exists()
 
 
+@pytest.mark.large
+def test_update_delivers_the_issue_739_workflow_fix_to_an_adopted_project(
+    tmp_path: Path,
+) -> None:
+    """Prove an existing adopted project actually receives the #739 fix.
+
+    #739's own drift check (scripts/check_jinja_workflow_drift.py) only
+    proves that a *fresh* render of template/ matches root -- it never
+    exercises `csarc update`'s three-way merge onto an already-generated
+    project's own files, which is a materially different code path (it
+    can produce a `.rej` conflict instead of a clean delivery, even for a
+    change that renders cleanly from scratch). Reproduce that path for
+    real: generate a `languages=typescript` project against the real
+    root copier.yml at this Milestone's own base commit (9c18b10, the
+    last commit where `template/.github/workflows/ci.yml.jinja` still
+    set the stray `cache: pnpm` -- see #739), commit it as if adopted,
+    then run a real `csarc update` to this branch's current tip and
+    confirm the fix actually lands with no conflict markers, instead of
+    only ever being proven against a fresh copy.
+    """
+    from_sha = "9c18b10582e878aa42f2543008d5dd3dd726ccac"
+    to_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "issue-739-adopted-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                from_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "project_mode=new",
+                "--data",
+                "languages=typescript",
+                "--data",
+                "project_visibility=private",
+            ]
+        )
+        == 0
+    )
+    ci_workflow = project / ".github" / "workflows" / "ci.yml"
+    before = ci_workflow.read_text(encoding="utf-8")
+    assert "cache: pnpm" in before, (
+        "fixture assumption broken: 9c18b10582e878aa42f2543008d5dd3dd726ccac "
+        "no longer renders the pre-#739 cache: pnpm drift -- pick a new "
+        "from_sha that still reproduces it"
+    )
+    assert 'node-version: "24"' in before
+
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: initial adopted project (pre-#739 fix)")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                to_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+
+    after = ci_workflow.read_text(encoding="utf-8")
+    assert "cache: pnpm" not in after
+    assert 'node-version: "24"' in after
+    assert "<<<<<<<" not in after
+    assert not list(project.rglob("*.rej"))
+    assert f"_commit: {to_sha}" in (
+        project / ".csarc" / "config.yml"
+    ).read_text(encoding="utf-8")
+
+
 def test_update_check_validates_hook_without_running_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -6650,6 +6734,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_update_check_dry_run_apply_and_conflict",
         "test_update_check_rejects_invalid_hook_without_writes",
         "test_update_check_does_not_execute_target_capability_helper",
+        "test_update_delivers_the_issue_739_workflow_fix_to_an_adopted_project",
         "test_update_hook_failure_leaves_target_unchanged",
         "test_update_migrates_legacy_copier_answers_to_single_config",
         "test_update_migrates_legacy_profile_json_before_finalize_tasks",
