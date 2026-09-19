@@ -119,12 +119,21 @@ Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head ma
   1. 獨立 maintainer 對**目前 head SHA** 的有效 `APPROVED`（沿用 #719 判斷，人工審核路徑
      仍然有效）；或
   2. Copilot 對**目前 head SHA** 的最新審核沒有任何 inline comment、內文沒有被隱藏的
-     低信心意見（suppressed comments），且內文明確寫出沒有產生意見。
+     低信心意見（suppressed comments），且內文明確寫出沒有產生意見；或
+  3.（#775）這是一張符合 `alpha_self_merge_opt_in` 條件（PR body 恰好一次
+     `Alpha 自行合併 / self-merged` 標記、Milestone-less Issue 的 direct-to-main
+     路由，或既有 `dev/mN` Issue 路由）的 Alpha self-merge PR，且已經有一則
+     `pr_lifecycle.find_exact_head_authorization` 能找到的、綁定**目前 head SHA**
+     的真人 maintainer 授權留言（跟 `pr_lifecycle.py merge` 要求的是同一則留言，
+     不必另貼兩次）。
 
   Copilot 審核舊 head、仍在審核、留下意見、或內文格式無法辨識時一律 fail closed。
   Copilot 只會留下 `COMMENTED`，永遠不會 `APPROVED`，所以這個模式不能靠 GitHub 原生的
   approval 計數。未解決的 review thread 由 Ruleset 的 `required_review_thread_resolution`
-  原生擋下。Draft PR 不審核，`review` 會失敗直到 PR 標為 ready。
+  原生擋下。Draft PR 不審核，`review` 會失敗直到 PR 標為 ready。`.github/workflows/
+  pr-review.yml` 額外監聽 `issue_comment: [created]`（篩選成 PR 上、內文開頭是
+  `PR lifecycle merge authorization` 的留言）：貼授權留言本身不會觸發 `pull_request`
+  事件，沒有這個 trigger，第 3 條路徑就要手動 `gh run rerun` 才會重新檢查。
 
 本機修正迴圈（由本機 agent 修，不使用 Copilot coding agent）：
 
@@ -199,6 +208,17 @@ phase 與 bypass 範圍收斂」。
 agent）對 diff 內容做審查確認，再執行 `gh pr merge --admin`。這條路徑不依賴 hosted
 CI／webhook 是否正常運作（#580 驗證過：同日 GitHub `pull_request` webhook 投遞異常
 期間，仍可只靠本機驗證＋這個 bypass 完成合併）。
+
+**這段手動程序現在只是 fallback，不是唯一路徑（#775）。** 一張直接合併進 `main`、
+`pr_review_mode: copilot` 但這個帳號沒有可用 Copilot 授權額度（`review` 這個
+required check 永遠 `pending`）的 routine PR，只要滿足：分支名符合
+`build|chore|ci|docs|feat|fix|refactor|revert|test/<issue>-<slug>` 格式、body 恰好
+出現一次 `Alpha 自行合併 / self-merged` 標記、精確關閉一個仍是 open 且**沒有掛
+Milestone** 的 Issue（有 Milestone 的必須走它自己的 `dev/mN` 分支，這條路不適用）——
+`scripts/pr_lifecycle.py merge` 本身現在就會在 lease＋exact-head 授權留言齊全後直接
+成功，不必再手動 `gh pr merge --admin`。不符合這個形狀的 PR（例如非 Issue-linked、
+Issue 已有 Milestone、或是 Milestone 自己 `dev/mN` 分支上的 PR 需要繞過其他限制）仍
+只能用上一段的手動程序。
 
 這是只在「repo 結構性只有一個真人帳號」這段 alpha 期間才成立的例外，不是長期設計；
 有第二個真正的 collaborator 後應重新檢視是否移除，方向由維護者決定（追蹤於 #580）。
@@ -673,7 +693,7 @@ job 目前沒有對應的本機可重跑回歸測試——它是一段會實際 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428）；本機驗證聲明（#661）；Dependabot hosted 執行例外（#753） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；15 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類（仍在 runner 上執行，是變更路徑分類邏輯，不是測試）後，`scripts/hosted_verify_bots.py` 判斷這張 PR 是否符合白名單 bot 例外（見「Dependabot 的 hosted 執行例外（#753）」一節）：不符合則只用 `scripts/check-verify-attestation` 驗證這個 PR 的實際 HEAD commit（`pull_request` 事件讀 PR 自己的 head sha，不是 GitHub 產生的 merge commit）是否帶有格式正確、hash 與 tree 相符、timestamp 新鮮、tier 足夠的 `Verified-locally:` trailer；符合則改在 runner 上實際執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo：`scripts/verify`），成功時由這些腳本呼叫 `scripts/write-verify-attestation` 寫入 trailer（僅供腳本正常結束，不被讀取）；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py`；`tests/test_hosted_verify_bots.py`；`tests/test_journey03_ci.py` 的 `test_root_ci_is_one_bounded_verification_job`／`test_generated_ci_uses_the_same_one_job_contract`；`tests/test_verify_attestation.py`（純邏輯）與 `scripts/test-verify-attestation`（對真實 git repository） | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success——此 run 早於 #661／#753，只證明 `scripts/ci_tier.py` 分類與（當時仍在 runner 上執行的）驗證邏輯，不代表本機驗證聲明改造或 Dependabot 例外 | `scripts/ci_tier.py` 分類：active（邏輯未變）；本機驗證聲明改造（#661 本身）：active；Dependabot hosted 執行例外（#753 本身）：candidate（待 `main` 落地並於首張真實 Dependabot PR 觸發後轉 active） |
 | PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | 只給需要的 Issue／PR metadata 權限；固定 timeout | `title` job：Issue、route 與 review policy 判定；`promotion` job（#601）：呼叫 `scripts/promotion_gate.py check-route` 分類 route，回報 `promotion` required check（`not-applicable`／`milestone`／`isolated`／`hotfix`／`release-recovery`／`release-follow-up`／`merge-queue` 成功，`invalid-main-route` 失敗） | `scripts/test-pr-policy`；`promotion` job 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929)，2026-09-01，success；同日對 #448／#453／#457 等未完成 checklist 的候選 PR 正確擋下合併，證明門禁確實生效 | `title` job：active；`promotion` job：candidate（隨 #601 首次落地，尚無 live run，待 `main` 落地並於首次 PR 觸發後轉 active） |
-| PR review（Copilot 審核模式，#752） | `.github/workflows/pr-review.yml` | PR 審核授權（#752，銜接 #719／#745） | `pull_request`（opened／synchronize／reopened／ready_for_review／converted_to_draft）、`pull_request_review`（submitted／dismissed）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run | `review` job 呼叫 `scripts/review_gate.py check`：`pr_review_mode=copilot` 時，目前完整 head SHA 已獲 Copilot 乾淨審核或獨立 maintainer `APPROVED` 才過；`pr_review_mode=human` 時只回報，審核仍由 Ruleset 原生 required approval 把關 | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的 Copilot 授權來源見 `tests/test_pr_lifecycle.py` | 尚未落地 `main`，無 live run | candidate（待 main 落地並於首次 PR 觸發後轉 active） |
+| PR review（Copilot 審核模式，#752／#775） | `.github/workflows/pr-review.yml` | PR 審核授權（#752，銜接 #719／#745／#775） | `pull_request`（opened／synchronize／reopened／ready_for_review／converted_to_draft）、`pull_request_review`（submitted／dismissed）、`issue_comment`（created，篩選 PR 上以 `PR lifecycle merge authorization` 開頭的留言）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run | `review` job 呼叫 `scripts/review_gate.py check`：`pr_review_mode=copilot` 時，目前完整 head SHA 已獲 Copilot 乾淨審核、獨立 maintainer `APPROVED`、或符合條件的 Alpha self-merge 授權留言（#775）才過；`pr_review_mode=human` 時只回報，審核仍由 Ruleset 原生 required approval 把關 | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的 Copilot／Alpha self-merge 授權來源見 `tests/test_pr_lifecycle.py` | 尚未落地 `main`，無 live run | candidate（待 main 落地並於首次 PR 觸發後轉 active） |
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併） | `issues`、`issue_comment`、`milestone` 事件；`pull_request.closed`（里程碑工作 PR 合併進 `dev/m*` 或 `promote/m*` 晉升 PR 合併進 `main`） | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新）、`tests/test_work_pr_closure.py` | 尚未落地 `main`，無新 live run；三個前身 workflow（`issue-triage.yml`、`milestone-lifecycle.yml`、`work-item-closure.yml`）已刪除，其舊 run 證據（`33524318953`／`33524281794`／`33502286588`）不再代表現行檔案 | **root：candidate**（待 main 落地並觸發首次 issues／issue_comment／milestone／pull_request 事件才能取得新 live evidence）；#574 只把三個 workflow 檔的既有邏輯打包成一個 job 內的循序 step，不改變任一 step 本身的行為、權限需求或所呼叫的 script |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
@@ -981,6 +1001,20 @@ staleness 邊界（含 60 秒緩衝窗、跨過緩衝窗即過期、過期後重
 scope 與 `scripts/verify-stage-regression-tests`）。這次變更不重新設計
 `has_scope_sentinel()` 的偵測邏輯，也不擴大 `/milestone approve`／
 `admin-approve` 留言語彙本身——只在既有機制上補上 CI 接線與版本綁定這兩層。
+
+**留言編輯本身的過期判斷（#778）：**上面的 fingerprint-binding 只比對核可留言
+的 `created_at` 與 item 的 `updated_at`，從未讀取留言自己的 `updated_at`。缺
+口是：一則早於（或落在緩衝窗內）item `updated_at` 的舊留言，如果本來不是核
+可語彙，很久以後才被**編輯**成 `/milestone approve`，`created_at` 完全不受編
+輯影響，判斷式看到的仍是「舊留言、舊 item，兩者時間點很接近」，因而誤判為
+新鮮、允許通過——即使核可語彙實際上是編輯當下才寫入，從未針對任何特定版本
+的 body 做過核可。`_approval_is_stale()` 現在多一個獨立、以 OR 相接的判斷：
+留言自己的 `updated_at` 與 `created_at` 的差距若也超過 60 秒緩衝窗，同樣視
+為過期，不論 item 那一側看起來多新鮮。這個新判斷只會讓結果**更保守**（多抓
+出過期案例），不會讓既有的 item-vs-`created_at` 判斷結果被推翻回「新鮮」：
+一則已經因為 `created_at` 早於 item `updated_at` 而過期的留言，就算之後的編
+輯時間點晚於該次 item 更新，也維持過期，不能靠編輯「洗新」。從未編輯的留言
+（`updated_at` 等於或缺少 `created_at`）行為完全不變。
 
 ### `scripts/verify-template.sh` 階段盤點（#458）
 

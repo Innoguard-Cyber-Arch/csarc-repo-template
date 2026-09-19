@@ -283,13 +283,83 @@ def evaluate(
             + str((verdict.review or {}).get("html_url") or ""),
         )
         return result
+    alpha_authorization = _alpha_self_merge_authorization(
+        github, repo, pr_number, head_sha, pull
+    )
+    if alpha_authorization is not None:
+        result.update(
+            passed=True,
+            source="alpha-self-merge",
+            reason="Alpha self-merge exact-head authorization: "
+            + str(alpha_authorization.get("html_url") or ""),
+        )
+        return result
     result["reason"] = (
         f"{verdict.reason}. Fix the findings and push so Copilot re-reviews "
         "the new head, or get an independent maintainer approval. If "
         "Copilot is unavailable (no license or no remaining premium "
-        "requests), only a maintainer approval can pass this check."
+        "requests), only a maintainer approval can pass this check, unless "
+        "this is a routine, Milestone-less Alpha self-merge PR (Issue "
+        "#775) with its own exact-head authorization comment."
     )
     return result
+
+
+def _alpha_self_merge_authorization(
+    github: GitHubReader,
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+    pull: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Return the Alpha self-merge authorization for this head, if valid.
+
+    Mirrors `pr_lifecycle.merge_snapshot`'s alpha self-merge path (marker,
+    route, exact-head authorization) without needing a lease: this gate
+    runs on every push, well before any lease is acquired. Any rejection
+    inside `alpha_self_merge_opt_in` (malformed marker, wrong route, a
+    Milestone Issue, ...) means this path simply does not apply here, not
+    that the check should error.
+    """
+    lifecycle = importlib.import_module(
+        "pr_lifecycle"
+        if __package__ in {None, ""}
+        else f"{__package__}.pr_lifecycle"
+    )
+    marker_count = (
+        str(pull.get("body") or "")
+        .splitlines()
+        .count(lifecycle.ALPHA_SELF_MERGE_MARKER)
+    )
+    if marker_count == 0:
+        # Cheap check first: skip every further API call (default branch,
+        # route validation) for the overwhelming majority of pull requests,
+        # which never opt into Alpha self-merge at all. No separate
+        # release_phase gate here: `alpha_self_merge_opt_in` itself does not
+        # check release_phase either (its safety comes from the marker,
+        # route, and live Ruleset shape), so adding one only here would let
+        # this check and `pr_lifecycle.py merge` disagree about which heads
+        # are actually mergeable.
+        return None
+    try:
+        repository = github.get(repo, "")
+        default_branch = (
+            repository.get("default_branch")
+            if isinstance(repository, dict)
+            else None
+        )
+        if not isinstance(default_branch, str):
+            return None
+        opted_in = lifecycle.alpha_self_merge_opt_in(
+            github, repo, {"default_branch": default_branch}, pull
+        )
+    except RuntimeError:
+        return None
+    if not opted_in:
+        return None
+    return lifecycle.find_exact_head_authorization(
+        github, repo, pr_number, head_sha
+    )
 
 
 def unresolved_threads(repo: str, pr_number: int) -> list[dict[str, Any]]:
