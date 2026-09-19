@@ -17,6 +17,7 @@ CHANGELOG 的 tag。
 
 * fix(governance): reject incomplete Milestone closure (057b83e)
 * fix(release): revalidate candidates when main advances (b91fc40)
+* fix(release): silence cleanup trap shellcheck warning (48e7ffb)
 
 ## [0.16.0] - 2026-09-20
 
