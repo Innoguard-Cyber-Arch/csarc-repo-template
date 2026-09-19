@@ -136,13 +136,17 @@ checkpoint promotion 的彈性，因為重複樣板成本已判斷高於保留�
 --repo <repo> --milestone <編號>` 會在 tracker body 額外維護第五個 H2 段落
 `Reconciliation`。這個段落不在建立 tracker 時要求存在——它只能在第一次執行
 regenerate-reconciliation 之後才會出現——而是自動重新產生：逐列列出這個 Milestone
-底下每一張非 tracker Issue 目前是否已關閉、其宣告 `Closes #N` 的 PR 是否已合併，標成
-`Delivered`／`Closed without a merged PR`／`Pending` 三種狀態之一，是給人核對用的真實
-交付清單，不只是「Milestone acceptance criteria checkbox 是否打勾」的形式檢查。段落
+底下每一張非 tracker Issue 目前是否已關閉、其宣告 `Closes #N` 的 PR 是否已合併，以及
+Issue acceptance checklist 是否存在且全部完成。只有三者都成立才標成 `Delivered`；其餘
+依序標成 `Pending`、`Closed without a merged PR` 或 `Acceptance incomplete or missing`。
+這是給人核對用的真實交付清單，不只是「Milestone acceptance criteria checkbox 是否
+打勾」的形式檢查。段落
 開頭嵌入一個內容雜湊 marker；只要 tracker body 其他部分（`Proposal`／`Completion
 evidence`／`Early termination`／`Promotion` 任何一段）事後被編輯過，這個雜湊就會對不
 上，`closure_decision()` 會回報 `Reconciliation: stale, regenerate before closing`
-並拒絕把 Milestone 收尾為 completed，直到重新執行 regenerate-reconciliation 為止；
+並拒絕把 Milestone 收尾為 completed，直到重新執行 regenerate-reconciliation 為止。
+即使表格新鮮，`closure_decision()` 仍以同一份 live delivery decision 重新檢查所有 leaf
+Issue；只要任一列不是 `Delivered`，就列出 Issue 編號與狀態並拒絕 completed 收尾；
 `not_planned`（提前終止）收尾路徑不受影響，因為那條路徑本來就不宣稱交付完成。
 
 建立前須閱讀相關 open／closed Issues 的內文、comments 與 linked pull requests；
