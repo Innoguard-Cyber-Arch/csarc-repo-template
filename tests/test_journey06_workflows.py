@@ -155,6 +155,22 @@ def test_work_item_lifecycle_delegates_to_repository_scripts() -> None:
     assert "scripts/sync_milestone_state.py refresh-issue-pr-checks" in source
 
 
+def test_milestone_reconcile_steps_receive_issue_event_context() -> None:
+    """Let the shared script skip ordinary work-Issue activity safely."""
+    workflow = load_yaml(REPO_ROOT / ".github" / "workflows" / WORKFLOW)
+    steps = workflow["jobs"]["process"]["steps"]
+
+    for name in (
+        "Milestone lifecycle: reconcile lifecycle and refresh PR checks",
+        "Milestone lifecycle: reconcile the previous Milestone",
+    ):
+        step = next(step for step in steps if step["name"] == name)
+        assert "github.event.action" in step["env"]["EVENT_ACTION"]
+        assert "github.event.issue.number" in step["env"]["EVENT_ISSUE_NUMBER"]
+        assert "--event-action" in step["run"]
+        assert "--event-issue" in step["run"]
+
+
 def test_work_item_lifecycle_refreshes_standalone_issue_pr_checks() -> None:
     """#743's no-Milestone counterpart to the tracker's own refresh step
     (see the step immediately above it) fires only on a comment landing on

@@ -517,11 +517,16 @@ Milestone 一致，PR 沒有 Milestone 時連結 Issue 也不會有），但 `ch
 **核可留言到達時重新觸發 CI（code review 發現，`work-item-lifecycle.yml`）：**上面
 「PR 合併前的 CI 接線」只回答「PR 事件與 merge-group 事件發生時，怎麼判斷」；但
 tracker 路徑除此之外還有另一層——`work-item-lifecycle.yml` 的「Milestone lifecycle:
-reconcile lifecycle and refresh PR checks」step，只要 Milestone 相關的 Issue 有任何
-活動（留言、編輯等，條件是 `github.event.issue.milestone.number != null`），就呼叫
-`reconcile()` 連帶呼叫 `refresh_pr_checks()`，主動把新核可（或新失效）狀態推回其下每
-張 PR 的 check-run，讓 reviewer 不必等到 PR 本身有新事件才看到最新結果。`#743` 剛落
-地時只做了「PR 合併前的 CI 接線」，沒有補上這一層對稱——沒有 Milestone 的 Issue 收到
+reconcile lifecycle and refresh PR checks」step，會把事件中的 Issue 編號與 action 傳給
+`reconcile()`；只有 tracker Issue 的事件／留言、Milestone 事件，以及 Issue 移入、移出
+或改掛 Milestone 時，才真正同步狀態並呼叫 `refresh_pr_checks()`。一般 work Issue 的編輯、
+label 或留言會成功 no-op，不寫狀態也不刷新 PR check。符合條件的事件會把新核可（或新失
+效）狀態推回其下每張 PR 的 check-run，讓 reviewer 不必等到 PR 本身有新事件才看到最新
+結果。tracker 尚未核准、核准因後續編輯失效，或仍有未解反駁時，`reconcile` 仍會把失敗
+結果寫回 PR check，但以 notice 回報治理狀態並成功結束背景 run；PR 上的 required check
+繼續 fail closed。tracker 缺漏／格式錯誤、GitHub API 錯誤或狀態寫入失敗仍讓背景 run
+失敗，不會被當成等待核准。`#743` 剛落地時只做了「PR 合併前的 CI 接線」，沒有補上這
+一層對稱——沒有 Milestone 的 Issue 收到
 `Approve` 等留言時，`pr-policy.yml` 完全不監聽 `issue_comment`，`work-item-
 lifecycle.yml` 原本的 refresh step 條件又要求 `.milestone.number != null`，所以核可
 留言送出後，其連結 PR 的「Validate Milestone approval」check-run 會停在核可前的舊狀
