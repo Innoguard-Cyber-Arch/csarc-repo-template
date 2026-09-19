@@ -1402,15 +1402,33 @@ def preflight(repo: str, number: int) -> Decision:
     return Decision(not errors, f"{base} | {hygiene}")
 
 
-def reconcile(repo: str, number: int) -> Decision:
-    """Synchronize one Milestone and refresh its open PR checks."""
+def reconcile(
+    repo: str,
+    number: int,
+    *,
+    event_issue: int | None = None,
+    event_action: str | None = None,
+) -> Decision:
+    """Synchronize one relevant Milestone event and refresh its PR checks."""
     snapshot = load_snapshot(repo, number)
     milestone = snapshot["milestone"]
     item = tracker(snapshot)
+    errors = tracker_errors(snapshot)
+    if (
+        event_issue not in {None, 0}
+        and event_action not in {"milestoned", "demilestoned"}
+        and not errors
+        and item is not None
+        and item.get("number") != event_issue
+    ):
+        return Decision(
+            True,
+            f"Work Issue #{event_issue} does not change Milestone lifecycle",
+        )
     if item is None:
         if milestone.get("state") == "closed":
             _set_milestone_state(repo, number, "open")
-        decision = Decision(False, "; ".join(tracker_errors(snapshot)))
+        decision = Decision(False, "; ".join(errors))
         refresh_pr_checks(snapshot)
         return decision
     if item.get("state") == "open":
@@ -1418,6 +1436,18 @@ def reconcile(repo: str, number: int) -> Decision:
             _set_milestone_state(repo, number, "open")
         decision = approval_decision(snapshot)
         refresh_pr_checks(snapshot)
+        if not decision.allowed and not errors:
+            notice = (
+                decision.summary.replace("%", "%25")
+                .replace("\r", "%0D")
+                .replace("\n", "%0A")
+            )
+            print(  # noqa: T201
+                f"::notice title=Milestone governance status::{notice}"
+            )
+            return Decision(
+                True, f"Milestone governance status: {decision.summary}"
+            )
         return decision
     decision = closure_decision(snapshot)
     if decision.allowed:
@@ -1461,6 +1491,8 @@ def main() -> None:
     sync = subparsers.add_parser("reconcile")
     sync.add_argument("--repo", required=True)
     sync.add_argument("--milestone", required=True, type=int)
+    sync.add_argument("--event-issue", type=int)
+    sync.add_argument("--event-action")
     pre = subparsers.add_parser("preflight")
     pre.add_argument("--repo", required=True)
     pre.add_argument("--milestone", required=True, type=int)
@@ -1493,7 +1525,12 @@ def _dispatch(args: argparse.Namespace) -> Decision:
         return record_reconciliation(args.repo, args.milestone)
     if args.command == "preflight":
         return preflight(args.repo, args.milestone)
-    return reconcile(args.repo, args.milestone)
+    return reconcile(
+        args.repo,
+        args.milestone,
+        event_issue=args.event_issue,
+        event_action=args.event_action,
+    )
 
 
 if __name__ == "__main__":

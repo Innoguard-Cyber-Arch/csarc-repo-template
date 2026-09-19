@@ -141,6 +141,11 @@ parent。退而求其次只掛「未被 Feature 收編」的頂層 leaf Issue，
 又不完整的關聯機制。
 關閉最後一張 Issue 前，須勾選所有已驗證的 acceptance items；否則 lifecycle
 workflow 會讓未完成的 story 保持開啟。
+背景 lifecycle reconcile 只在 tracker Issue 的事件／留言、Milestone 事件，以及 Issue
+移入、移出或改掛 Milestone 時同步狀態與刷新 PR check；一般 work Issue 的編輯、label 或
+留言會成功 no-op。tracker 尚未核准、核准失效或有未解反駁屬於正常治理狀態：背景 run 以
+notice 呈現並成功結束，但 PR 上的核准 check 仍維持失敗。tracker 缺漏／格式錯誤、API 或
+狀態寫入錯誤才讓背景 run 失敗。
 tracker 的 `Promotion` 段落只能描述合併前可驗證的條件（例如：其餘 Milestone Issue
 皆已關閉、review ledger 已 resolved 且經 maintainer 確認、雙語／accessibility／
 bundle／完整驗證通過、promotion evidence 已綁定 base／head／candidate tree）；由
