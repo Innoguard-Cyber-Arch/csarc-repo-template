@@ -53,15 +53,19 @@ issue_number="$(
     head -n 1
 )"
 if [[ -n "$issue_number" ]]; then
-  gh issue edit "$issue_number" --body-file "$body_file" >/dev/null
-  echo "Updated governance drift tracking Issue #$issue_number."
+  existing_body="$(gh issue view "$issue_number" --json body --jq .body)"
+  if [[ "$existing_body" == "$(<"$body_file")" ]]; then
+    echo "Governance drift is unchanged; tracking Issue #$issue_number was not updated."
+  else
+    gh issue edit "$issue_number" --body-file "$body_file" >/dev/null
+    echo "Updated governance drift tracking Issue #$issue_number."
+  fi
 else
-  gh issue create \
-    --title "$title" \
-    --label bug \
-    --type Bug \
-    --assignee @me \
-    --body-file "$body_file" >/dev/null
+  create_args=(--title "$title" --label bug --body-file "$body_file")
+  if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
+    create_args+=(--type Bug --assignee @me)
+  fi
+  gh issue create "${create_args[@]}" >/dev/null
   echo "Opened a governance drift tracking Issue."
 fi
 
