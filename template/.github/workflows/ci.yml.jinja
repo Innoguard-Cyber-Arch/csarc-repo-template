@@ -130,6 +130,34 @@ jobs:
           REQUIRED_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
           REQUIRED_TIER: {% raw %}${{ steps.level.outputs.suite }}{% endraw %}
         run: ./scripts/check-verify-attestation "$HEAD_SHA" --required-tier "$REQUIRED_TIER" --required-scopes "$REQUIRED_SCOPES"
+      # Issue #797: reuse the existing guided-release toolchain setup for
+      # allowlisted bots before they run the real verification below.
+{% if has_python %}
+      - if: {% raw %}${{ steps.bot.outputs.eligible == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned') }}{% endraw %}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "{{ python_target }}"
+{% endif %}
+      - if: {% raw %}${{ steps.bot.outputs.eligible == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned') }}{% endraw %}
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+{% if has_typescript %}
+      - if: {% raw %}${{ steps.bot.outputs.eligible == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned') }}{% endraw %}
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: "11.22.0"
+          run_install: false
+      - if: {% raw %}${{ steps.bot.outputs.eligible == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned') }}{% endraw %}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
+{% endif %}
+{% if has_rust %}
+      - if: {% raw %}${{ steps.bot.outputs.eligible == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned') }}{% endraw %}
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+          rustup default 1.98.0
+{% endif %}
       # Issue #753: the allowlisted bot's commit can never carry a local
       # attestation trailer, so this runs the real verification here
       # instead, tiered and scoped exactly like scripts/ci_tier.py would
@@ -153,40 +181,6 @@ jobs:
           else
             ./scripts/verify-fast
           fi
-      # Everything below this point is unrelated to Issue #661 and stays
-      # exactly as it worked before: scripts/verify-release-candidate still
-      # needs this generated project's real language toolchain(s) to build
-      # the candidate's packages via scripts/release_bundle.py, so these
-      # toolchain-setup steps stay -- only their gating condition changes,
-      # from "which tier was selected" (now meaningless here, nothing
-      # downstream consumes a toolchain) to "is this actually a guided
-      # release-candidate PR", matching the one remaining step that uses
-      # them.
-{% if has_python %}
-      - if: {% raw %}${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "{{ python_target }}"
-{% endif %}
-      - if: {% raw %}${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-{% if has_typescript %}
-      - if: {% raw %}${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: "11.22.0"
-          run_install: false
-      - if: {% raw %}${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-{% endif %}
-{% if has_rust %}
-      - if: {% raw %}${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
-        run: |
-          rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
-          rustup default 1.98.0
-{% endif %}
       - name: Validate the guided release candidate
         if: {% raw %}${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
         env:

@@ -16,20 +16,20 @@ set -euo pipefail
 # locally with no arguments beyond `gh` authentication.
 #
 # Detection condition (both must hold):
-#   (a) `main` HEAD is not covered by the latest eligible GitHub Release, the
-#       last successful `release.yml` run -- i.e. main has advanced past the
-#       last authoritative release-path activity.
-#   (b) No valid stable Release or successful `release.yml` run was observed
-#       in the last N hours (wall clock from "now").
+#   (a) `main` HEAD is not covered by the latest stable GitHub Release or an
+#       explicit `no-release` result from the last successful `release.yml`
+#       run -- i.e. main has advanced past the last authoritative
+#       release-path activity.
+#   (b) No valid stable Release or explicit `no-release` run was observed in
+#       the last N hours (wall clock from "now").
 #
-# `release.yml` triggers on every push to main and completes successfully
-# even when release_policy.py decides no release is warranted (a "no
-# release needed today" push is not a failure); so in the healthy case,
-# the last successful run's commit tracks main directly and condition (a)
-# never fires. Drift only surfaces once release.yml stops completing
-# altogether while main keeps moving through ordinary merged pull requests
-# (which do not require release.yml to succeed -- it is a separate
-# push-triggered workflow, not a merge gate).
+# `release.yml` triggers on every push to main and completes successfully for
+# both an explicit `no-release` plan and a Guided run that only prints manual
+# instructions. The latter publishes nothing, so a green conclusion alone is
+# not health evidence. The Actions jobs API exposes the plan branch through
+# the next step: "Detect the available release path" is skipped only for
+# `no-release`. Any other successful run still needs an immutable stable
+# Release to prove publication.
 #
 # N defaults to 24 hours: release.yml normally finishes within minutes of
 # any push to main, and 24h covers a normal day with no release-relevant
@@ -137,7 +137,16 @@ trap 'rm -rf "$work_dir"' EXIT
 
 main_commit_json="$(gh api "repos/$repo/commits/$branch" --jq '{sha: .sha, date: .commit.committer.date}')"
 
-last_run_json="$(gh api "repos/$repo/actions/workflows/release.yml/runs?branch=$branch&status=success&per_page=1" --jq 'if .workflow_runs[0] == null then {} else .workflow_runs[0] | {head_sha, updated_at, html_url} end')"
+last_run_json="$(gh api "repos/$repo/actions/workflows/release.yml/runs?branch=$branch&status=success&per_page=1" --jq 'if .workflow_runs[0] == null then {} else .workflow_runs[0] | {id, head_sha, updated_at, html_url} end')"
+
+last_run_steps_file="$work_dir/last-run-steps.json"
+printf '[]\n' >"$last_run_steps_file"
+last_run_id="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("id", ""))' "$last_run_json")"
+if [[ -n "$last_run_id" ]] && ! gh api "repos/$repo/actions/runs/$last_run_id/jobs?per_page=100" \
+  --jq '[.jobs[] | .steps[]? | {name, conclusion}]' >"$last_run_steps_file"; then
+  echo "check-release-drift: successful release run outcome is unavailable" >&2
+  printf '[]\n' >"$last_run_steps_file"
+fi
 
 latest_release_json="$(gh api "repos/$repo/releases?per_page=100" --jq '([.[] | select(.draft == false and .published_at != null)] | sort_by(.published_at) | reverse | .[0]) | if . == null then {} else {tag_name, target_commitish, published_at, draft, prerelease, immutable, html_url} end')"
 main_sha="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["sha"])' "$main_commit_json")"
@@ -209,6 +218,7 @@ result_file="$work_dir/result.json"
 
 python3 - "$result_file" "$repo" "$branch" "$hours" "$now_iso" "$since_iso" \
   "$marker_prefix" "$title" "$commits_file" "$comments_file" "$release_prs_file" \
+  "$last_run_steps_file" \
   <<'PY' "$main_commit_json" "$last_run_json" "$latest_release_json" "$release_compare_json"
 import json
 import re
@@ -216,9 +226,10 @@ import sys
 from datetime import datetime
 
 (result_path, repo, branch, hours_raw, now_raw, since_raw,
- marker_prefix, title, commits_path, comments_path, release_prs_path) = sys.argv[1:12]
+ marker_prefix, title, commits_path, comments_path, release_prs_path,
+ last_run_steps_path) = sys.argv[1:13]
 (main_commit_raw, last_run_raw, latest_release_raw,
- release_compare_raw) = sys.argv[12:16]
+ release_compare_raw) = sys.argv[13:17]
 
 
 def parse_time(value: str) -> datetime:
@@ -235,7 +246,8 @@ with open(comments_path, encoding="utf-8") as source:
     comments = json.load(source)
 with open(release_prs_path, encoding="utf-8") as source:
     release_prs = json.load(source)
-now = parse_time(now_raw)
+with open(last_run_steps_path, encoding="utf-8") as source:
+    last_run_steps = json.load(source)
 since = parse_time(since_raw)
 hours = float(hours_raw)
 
@@ -246,6 +258,29 @@ last_success_sha = last_run.get("head_sha") if last_run else None
 last_success_time_raw = last_run.get("updated_at") if last_run else None
 last_success_time = parse_time(last_success_time_raw) if last_success_time_raw else None
 last_success_url = last_run.get("html_url") if last_run else None
+plan_succeeded = any(
+    step.get("name") == "Plan the next version from repository history"
+    and step.get("conclusion") == "success"
+    for step in last_run_steps
+)
+capability_skipped = any(
+    step.get("name") == "Detect the available release path"
+    and step.get("conclusion") == "skipped"
+    for step in last_run_steps
+)
+guided_only = any(
+    step.get("name") == "Explain the guided version path"
+    and step.get("conclusion") == "success"
+    for step in last_run_steps
+)
+last_success_no_release = bool(last_run and plan_succeeded and capability_skipped)
+last_success_reason = (
+    "explicit no-release (valid health evidence)"
+    if last_success_no_release
+    else "guided instructions only (not publication evidence)"
+    if guided_only
+    else "not explicit no-release (publication requires immutable Release evidence)"
+)
 
 record_pattern = re.compile(re.escape(marker_prefix) + r"\s*(?P<fields>.+)")
 field_pattern = re.compile(r'(\w+)=("[^"]*"|\S+)')
@@ -341,7 +376,6 @@ for pull in release_prs:
 
 record = max(candidates, key=lambda item: parse_time(item["time"])) if candidates else None
 
-release_valid = False
 release_covers_main = False
 release_time = None
 release_reason = "none found"
@@ -373,7 +407,6 @@ if latest_release:
     elif not isinstance(published_at, str) or parse_time(published_at) < parse_time(main_date):
         release_reason = "ignored: published before the current main commit"
     else:
-        release_valid = True
         release_covers_main = compare_status == "identical"
         release_time = parse_time(published_at)
         release_reason = (
@@ -382,10 +415,16 @@ if latest_release:
             else "valid recent release evidence (target is an ancestor of main)"
         )
 
-released_shas = {sha for sha in (last_success_sha,) if sha}
+released_shas = (
+    {last_success_sha}
+    if last_success_no_release and last_success_sha
+    else set()
+)
 main_advanced = main_sha not in released_shas and not release_covers_main
 
-success_recent = bool(last_success_time and last_success_time >= since)
+success_recent = bool(
+    last_success_no_release and last_success_time and last_success_time >= since
+)
 release_recent = bool(release_time and release_time >= since)
 recent_activity = success_recent or release_recent
 
@@ -397,7 +436,8 @@ lines = [
 ]
 if last_run:
     lines.append(
-        f"Last successful release.yml run: {last_success_sha} at {last_success_time_raw} ({last_success_url})"
+        f"Last successful release.yml run: {last_success_sha} at {last_success_time_raw} "
+        f"({last_success_url}; {last_success_reason})"
     )
 else:
     lines.append("Last successful release.yml run: none found")
@@ -426,7 +466,7 @@ lines.append(
         if drift
         else "no drift (latest eligible GitHub Release covers main)"
         if release_covers_main
-        else "no drift (main not advanced past the last known release activity)"
+        else "no drift (current main explicitly requires no release)"
         if not main_advanced
         else "no drift (recent release activity within the threshold)"
     )
@@ -435,7 +475,8 @@ summary = "\n".join(lines)
 
 if drift:
     last_success_evidence = (
-        f"- 最後一次成功的 `release.yml` run：`{last_success_sha}`，{last_success_time_raw}（{last_success_url}）"
+        f"- 最後一次成功的 `release.yml` run：`{last_success_sha}`，{last_success_time_raw}"
+        f"（{last_success_url}；{last_success_reason}）"
         if last_run
         else "- 最後一次成功的 `release.yml` run：找不到任何成功 run"
     )
@@ -461,7 +502,7 @@ if drift:
     issue_body = f"""### 問題
 
 排程執行的 `scripts/check-release-drift` 偵測到 `main` 已經前進，但過去 {hours:g} 小時內
-沒有找到有效的 eligible GitHub Release 或成功的 `release.yml` run。這代表發版流程可能已經
+沒有找到有效的 stable GitHub Release 或明確的 `no-release` run。這代表發版流程可能已經
 停擺，且過去沒有人會自動被通知——見 #587（2026-09-03，同樣的狀況拖了超過 8 小時才被人工
 發現 Releases 頁面停在舊版本）與 #605（本檢查本身的設計背景）。此通知不會自動觸發
 `release.yml` 重跑，也不會自動執行本機發版；是否接手仍由人或 agent 判斷。

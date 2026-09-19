@@ -78,7 +78,11 @@ case "$1" in
         echo "[]"
         ;;
       */immutable-releases)
-        if [[ "$method" == "PUT" ]]; then
+        if [[ "$method" != "PUT" &&
+          "${FAKE_GH_IMMUTABLE_UNREADABLE:-false}" == "true" ]]; then
+          echo 'gh: Resource not accessible by integration (HTTP 403)' >&2
+          exit 1
+        elif [[ "$method" == "PUT" ]]; then
           echo "{}"
         else
           echo '{"enabled": true}'
@@ -98,7 +102,8 @@ case "$1" in
         if [[ "$method" == "PATCH" ]]; then
           echo "{}"
         elif [[ "$jq_filter" == *"@tsv"* ]]; then
-          printf 'acme\tOrganization\tprivate\ttrue\tmain\n'
+          printf 'acme\tOrganization\tprivate\t%s\tmain\n' \
+            "${FAKE_GH_REPO_ADMIN:-true}"
         else
           cat "$FAKE_GH_REPOSITORY_STATE"
         fi
@@ -219,6 +224,8 @@ def _run(
     mode: str,
     *,
     log_path: Path,
+    immutable_unreadable: bool = False,
+    repo_admin: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Invoke the fixture's own copy of apply-repository-settings.sh."""
     bin_dir = _make_fake_gh(tmp_path)
@@ -229,6 +236,8 @@ def _run(
     env["FAKE_GH_REPOSITORY_STATE"] = str(ROOT / "policies" / "repository.json")
     env["FAKE_GH_ACTIONS_STATE"] = str(ROOT / "policies" / "actions.json")
     env["FAKE_GH_LABELS_STATE"] = str(ROOT / "policies" / "labels.json")
+    env["FAKE_GH_IMMUTABLE_UNREADABLE"] = str(immutable_unreadable).lower()
+    env["FAKE_GH_REPO_ADMIN"] = str(repo_admin).lower()
     label_names = tmp_path / "label-names.txt"
     labels = json.loads(
         (ROOT / "policies" / "labels.json").read_text(encoding="utf-8")
@@ -246,6 +255,24 @@ def _run(
         text=True,
         timeout=60,
     )
+
+
+def test_immutable_releases_permission_gap_is_degraded(tmp_path: Path) -> None:
+    """Treat the hosted token's observed 403 as unreadable, not drift."""
+    repo = _make_repo(tmp_path, CONFIG_CSARC_OWNED)
+    result = _run(
+        repo,
+        tmp_path,
+        "check",
+        log_path=tmp_path / "gh-check.log",
+        immutable_unreadable=True,
+        repo_admin=False,
+    )
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    assert "DEGRADED immutable Releases inspection" in output
+    assert "Cannot inspect the required immutable Releases" not in output
 
 
 def test_disabled_policies_are_skipped_in_check_and_apply(

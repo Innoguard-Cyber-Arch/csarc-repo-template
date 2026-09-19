@@ -3412,6 +3412,54 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     assert released
 
 
+def test_merge_revalidates_a_release_candidate_before_the_final_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An earlier successful status cannot satisfy the final merge boundary."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    monkeypatch.setitem(
+        merge.__globals__,
+        "merge_snapshot",
+        lambda *_: {
+            "merge_mode": "agent",
+            "title": "chore(main): release 0.2.0",
+            "reviewed_bypass": False,
+            "head_ref": "release/v0.2.0",
+        },
+    )
+    monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
+    monkeypatch.setitem(merge.__globals__, "release_refs", lambda _lease: None)
+    monkeypatch.setitem(merge.__globals__, "confirm_refs", lambda _lease: None)
+    github = FakeGitHub("a" * 40)
+    github.head_ref = "release/v0.2.0"
+
+    def stale_candidate(_github: object, _lease: object, head_ref: str) -> str:
+        assert head_ref == "release/v0.2.0"
+        raise RuntimeError("current base adds release-worthy commits")
+
+    monkeypatch.setitem(
+        merge.__globals__,
+        "revalidate_release_candidate",
+        stale_candidate,
+    )
+    with pytest.raises(RuntimeError, match="release-worthy commits"):
+        merge(
+            SimpleNamespace(
+                repo="owner/repo",
+                pr_number=42,
+                head_sha="a" * 40,
+                owner="task/merge",
+                lease=lease_path,
+                authorization_url=(
+                    "https://github.com/owner/repo/pull/42#issuecomment-99"
+                ),
+            ),
+            github,
+        )
+    assert not github.merged
+
+
 def test_final_merge_snapshot_rejects_a_new_p1_blocker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

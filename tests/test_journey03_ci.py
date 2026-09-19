@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from jinja2 import Environment, StrictUndefined
 
 REPO_ROOT = Path(__file__).parents[1]
 
@@ -23,6 +24,15 @@ def load_yaml(path: Path) -> dict[str, Any]:
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert isinstance(document, dict)
     return document
+
+
+def ci_steps(source: str) -> list[dict[str, Any]]:
+    """Return the one CI job's ordered steps from rendered YAML."""
+    document = yaml.safe_load(source)
+    assert isinstance(document, dict)
+    steps = document["jobs"]["verify"]["steps"]
+    assert isinstance(steps, list)
+    return steps
 
 
 def test_shared_cache_root_is_explicit_and_worktree_independent(
@@ -186,6 +196,90 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
         name not in source
         for name in ("zizmor", "matrix:", "schedule:", "push:")
     )
+
+
+def test_hosted_bot_verification_reuses_toolchain_setup_first() -> None:
+    """Install every selected language tool before hosted verification."""
+    root_source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
+        encoding="utf-8"
+    )
+    template_source = (
+        REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
+    ).read_text(encoding="utf-8")
+    template = Environment(
+        autoescape=False,  # noqa: S701 - trusted local YAML template
+        undefined=StrictUndefined,
+    ).from_string(template_source)
+    rendered_templates = (
+        template.render(
+            languages=["python", "typescript", "rust"],
+            python_support_mode="latest",
+            python_min_version="3.12",
+        ),
+        template.render(
+            languages=["typescript", "rust"],
+            python_support_mode="latest",
+            python_min_version="3.12",
+        ),
+    )
+
+    contracts: list[list[tuple[str, str]]] = []
+    for source in (root_source, *rendered_templates):
+        steps = ci_steps(source)
+        hosted_index = next(
+            index
+            for index, step in enumerate(steps)
+            if step.get("name")
+            == "Run hosted verification for an allowlisted bot pull request"
+        )
+        assert steps[hosted_index]["if"] == (
+            "${{ steps.bot.outputs.eligible == 'true' }}"
+        )
+        attestation = next(
+            step
+            for step in steps
+            if step.get("name") == "Validate local verification attestation"
+        )
+        assert attestation["if"] == (
+            "${{ steps.bot.outputs.eligible != 'true' }}"
+        )
+        toolchain = [
+            (index, step)
+            for index, step in enumerate(steps)
+            if str(step.get("uses", "")).startswith(
+                (
+                    "actions/setup-python@",
+                    "astral-sh/setup-uv@",
+                    "pnpm/action-setup@",
+                    "actions/setup-node@",
+                )
+            )
+            or "rustup toolchain install" in str(step.get("run", ""))
+        ]
+
+        assert all(index < hosted_index for index, _ in toolchain)
+        source_contracts = []
+        for _, step in toolchain:
+            condition = step.get("if", "")
+            assert "steps.bot.outputs.eligible == 'true'" in condition
+            assert (
+                "startsWith(github.event.pull_request.head.ref, 'release/v')"
+                in condition
+            )
+            source_contracts.append(
+                (
+                    str(step.get("uses", "rustup")),
+                    condition,
+                )
+            )
+        contracts.append(source_contracts)
+
+    assert contracts[0] == contracts[1]
+    assert [item[0] for item in contracts[2]] == [
+        item[0]
+        for item in contracts[0]
+        if not item[0].startswith("actions/setup-python@")
+    ]
 
 
 def test_documentation_tier_validates_the_generated_site() -> None:

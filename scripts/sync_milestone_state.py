@@ -282,7 +282,12 @@ def acceptance_complete(description: str) -> bool:
     section = _section(description, "Acceptance criteria")
     if section is None:
         return False
-    checkboxes = re.findall(r"(?m)^- \[([ xX])\] ", section)
+    return checklist_complete(section)
+
+
+def checklist_complete(body: str) -> bool:
+    """Return whether a body contains checkboxes and all are checked."""
+    checkboxes = re.findall(r"(?m)^- \[([ xX])\] ", body)
     return bool(checkboxes) and all(mark.lower() == "x" for mark in checkboxes)
 
 
@@ -1227,17 +1232,24 @@ def _delivery_row(
     chosen = merged_pulls[0] if merged_pulls else (pulls[0] if pulls else None)
     pr_cell = f"#{chosen['number']}" if chosen else "(none found)"
     merged = chosen is not None and _merged_at(chosen) is not None
-    if state == "closed" and merged:
-        status = "Delivered"
-    elif state == "closed":
-        status = "Closed without a merged PR"
-    else:
-        status = "Pending"
+    status = _delivery_status(issue, pulls)
     row = (
         f"| #{number} {title} | {state} | {pr_cell} | "
         f"{'yes' if merged else 'no'} | {status} |"
     )
     return row, status
+
+
+def _delivery_status(issue: dict[str, Any], pulls: list[dict[str, Any]]) -> str:
+    """Return the shared delivery decision for one Milestone work Issue."""
+    if issue.get("state") != "closed":
+        return "Pending"
+    if not any(_merged_at(pull) for pull in pulls):
+        return "Closed without a merged PR"
+    body = issue.get("body")
+    if not isinstance(body, str) or not checklist_complete(body):
+        return "Acceptance incomplete or missing"
+    return "Delivered"
 
 
 def reconciliation_status(body: str) -> Decision:
@@ -1270,10 +1282,10 @@ def regenerate_reconciliation(snapshot: dict[str, Any]) -> str:
 
     Walks every Issue actually attached to this Milestone (the same set
     `closure_decision()` already treats as authoritative) against its real
-    GitHub state: closed or not, and whether a pull request that declares
-    closing it has actually merged. This is a genuine per-line delivery
-    table for a human to sign off against the Milestone's own Acceptance
-    criteria, not a second checkbox scan.
+    GitHub state: closed or not, whether a pull request that declares closing
+    it has actually merged, and whether its checklist is complete. This is a
+    genuine per-line delivery table for a human to sign off against the
+    Milestone's own Acceptance criteria, not a second evidence database.
     """
     item = tracker(snapshot)
     if item is None:
@@ -1338,8 +1350,20 @@ def record_reconciliation(repo: str, milestone_number: int) -> Decision:
     return Decision(True, f"Recorded reconciliation on #{item['number']}")
 
 
-def _completed_closure(snapshot: dict[str, Any], body: str) -> Decision:
+def _completed_closure(
+    snapshot: dict[str, Any], tracker_number: int, body: str
+) -> Decision:
     """Validate the completed-closure evidence chain for one tracker."""
+    closing = _closing_pull_requests(snapshot)
+    undelivered = []
+    for issue in _linked_work_items(snapshot, tracker_number):
+        status = _delivery_status(issue, closing.get(issue.get("number"), []))
+        if status != "Delivered":
+            undelivered.append(f"#{issue['number']} ({status})")
+    if undelivered:
+        return Decision(
+            False, f"Non-delivered work Issues: {', '.join(undelivered)}"
+        )
     description = snapshot["milestone"].get("description", "")
     if not acceptance_complete(description):
         return Decision(False, "Complete every Milestone acceptance criterion")
@@ -1371,22 +1395,22 @@ def closure_decision(snapshot: dict[str, Any]) -> Decision:
         return Decision(False, "; ".join(errors))
     if item.get("state") != "closed":
         return Decision(False, "The lifecycle Issue is still open")
-    open_items = [
-        issue
-        for issue in snapshot["issues"]
-        if issue.get("number") != item.get("number")
-        and issue.get("state") == "open"
-    ]
-    if open_items:
-        numbers = ", ".join(f"#{issue['number']}" for issue in open_items)
-        return Decision(
-            False, f"Move or close unfinished items first: {numbers}"
-        )
     body = item.get("body", "")
     reason = item.get("state_reason")
     if reason == "completed":
-        return _completed_closure(snapshot, body)
+        return _completed_closure(snapshot, item["number"], body)
     if reason == "not_planned":
+        open_items = [
+            issue
+            for issue in snapshot["issues"]
+            if issue.get("number") != item.get("number")
+            and issue.get("state") == "open"
+        ]
+        if open_items:
+            numbers = ", ".join(f"#{issue['number']}" for issue in open_items)
+            return Decision(
+                False, f"Move or close unfinished items first: {numbers}"
+            )
         if not _meaningful(_section(body, "Early termination")):
             return Decision(False, "Not-planned closure needs an explanation")
         return Decision(True, "Stopped early with all unfinished work disposed")

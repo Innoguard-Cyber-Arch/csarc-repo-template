@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 from copier import run_copy
 
+from csarc_cli import cli
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -49,6 +51,79 @@ def run_reviewer_assignment(
         capture_output=True,
         check=False,
     )
+
+
+def run_governance_drift_check(
+    tmp_path: Path,
+    check_output: str,
+    check_exit: int,
+    *,
+    issue_number: str = "",
+    body_store: Path | None = None,
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    """Run the drift wrapper with deterministic checker and GitHub responses."""
+    fixture = tmp_path / "drift-fixture"
+    scripts = fixture / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    drift_script = scripts / "check-governance-drift"
+    shutil.copy2(ROOT / "scripts/check-governance-drift", drift_script)
+    settings_script = scripts / "apply-repository-settings.sh"
+    settings_script.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$CHECK_OUTPUT"\n'
+        'exit "$CHECK_EXIT"\n',
+        encoding="utf-8",
+    )
+    settings_script.chmod(0o755)
+
+    fake_bin = tmp_path / "drift-bin"
+    fake_bin.mkdir(exist_ok=True)
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        r"""#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$GH_CAPTURE"
+case "$1 $2" in
+  "issue list") printf '%s\n' "$GH_ISSUE_NUMBER" ;;
+  "issue view") cat "$GH_BODY_STORE" ;;
+  "issue create"|"issue edit")
+    action="$2"
+    shift 2
+    while [[ $# -gt 0 ]]; do
+      if [[ "$1" == "--body-file" ]]; then
+        cp "$2" "$GH_BODY_STORE"
+        break
+      fi
+      shift
+    done
+    [[ "$action" == "edit" ]] && : >"$GH_EDIT_MARKER"
+    ;;
+  *) exit 1 ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    capture = tmp_path / f"gh-{len(list(tmp_path.glob('gh-*')))}.log"
+    stored_body = body_store or (tmp_path / "issue-body")
+    env = os.environ | {
+        "CHECK_EXIT": str(check_exit),
+        "CHECK_OUTPUT": check_output,
+        "GH_BODY_STORE": str(stored_body),
+        "GH_CAPTURE": str(capture),
+        "GH_EDIT_MARKER": str(tmp_path / "issue-edited"),
+        "GH_ISSUE_NUMBER": issue_number,
+        "GITHUB_ACTIONS": "true",
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+    }
+    result = subprocess.run(  # noqa: S603
+        [drift_script],
+        cwd=fixture,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result, capture
 
 
 def test_reviewer_assignment_excludes_author(tmp_path: Path) -> None:
@@ -94,11 +169,14 @@ def test_reviewer_assignment_accepts_a_bot_author(tmp_path: Path) -> None:
     assert "Requested review from" in result.stdout
 
 
-@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize(
+    ("option", "enabled"),
+    [({}, True), ({"enable_governance_drift_check": False}, False)],
+)
 def test_copier_governance_drift_option_is_complete(
-    tmp_path: Path, enabled: bool
+    tmp_path: Path, option: dict[str, bool], enabled: bool
 ) -> None:
-    """Generate both sides of the optional drift-automation contract."""
+    """Generate the default-on workflow while preserving an explicit opt-out."""
     source = tmp_path / "source"
     source.mkdir()
     shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
@@ -109,7 +187,6 @@ def test_copier_governance_drift_option_is_complete(
         str(source),
         project,
         data={
-            "enable_governance_drift_check": enabled,
             "languages": [],
             "project_description": "Governance automation fixture.",
             "project_name": "Governance Fixture",
@@ -117,7 +194,8 @@ def test_copier_governance_drift_option_is_complete(
             "repository_url": "https://github.com/example/governance-fixture",
             "reviewers": "@alice,@bob",
             "security_reporting_channel": "Use the private security contact.",
-        },
+        }
+        | option,
         defaults=True,
         unsafe=True,
         skip_tasks=True,
@@ -134,6 +212,109 @@ def test_copier_governance_drift_option_is_complete(
         project / ".github/workflows/governance-drift.yml"
     ).exists() is enabled
     assert (project / "scripts/check-governance-drift").exists() is enabled
+
+
+def test_degraded_drift_check_does_not_create_an_issue(tmp_path: Path) -> None:
+    """Keep an unreadable setting distinct from actionable drift."""
+    result, capture = run_governance_drift_check(
+        tmp_path,
+        "DEGRADED immutable Releases inspection: token cannot read setting.",
+        0,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "degraded capability differences" in result.stdout
+    assert not capture.exists()
+
+
+def test_governance_drift_issue_is_created_once_and_only_updated_on_change(
+    tmp_path: Path,
+) -> None:
+    """Avoid duplicate Issues and unchanged edit notifications."""
+    body_store = tmp_path / "issue-body"
+    first, first_capture = run_governance_drift_check(
+        tmp_path, "Repository settings drift: first", 1, body_store=body_store
+    )
+    assert first.returncode == 1
+    first_calls = first_capture.read_text(encoding="utf-8")
+    assert "issue create" in first_calls
+    assert "--assignee" not in first_calls
+    assert "--type" not in first_calls
+
+    second, second_capture = run_governance_drift_check(
+        tmp_path,
+        "Repository settings drift: first",
+        1,
+        issue_number="6",
+        body_store=body_store,
+    )
+    assert second.returncode == 1
+    assert "Governance drift is unchanged" in second.stdout
+    assert "issue edit" not in second_capture.read_text(encoding="utf-8")
+
+    third, third_capture = run_governance_drift_check(
+        tmp_path,
+        "Repository settings drift: changed",
+        1,
+        issue_number="6",
+        body_store=body_store,
+    )
+    assert third.returncode == 1
+    third_calls = third_capture.read_text(encoding="utf-8")
+    assert "issue edit" in third_calls
+    assert "issue create" not in third_calls
+
+
+def test_update_preserves_governance_drift_opt_out_and_recommends_once(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Keep a saved false value while explaining the new-project default."""
+    saved: dict[str, object] = {
+        "enable_governance_drift_check": False,
+        "project_mode": "new",
+        "project_visibility": "private",
+    }
+    repository = cli.RepositoryContext(
+        "example/project", "example", "organization", "private", "github", True
+    )
+    answers, update_data = cli.update_plan_answers(saved, {}, repository)
+    recommendation = cli.governance_drift_update_recommendation(saved, {})
+
+    assert answers["enable_governance_drift_check"] is False
+    assert "enable_governance_drift_check" not in update_data
+    assert recommendation is not None
+    plan = cli.ResolvedPlan(
+        mode="update",
+        target=tmp_path / "example",
+        revision=cli.Revision("v1", "a" * 40, "https://example.invalid"),
+        repository=repository,
+        answers={
+            **answers,
+            "release_immutable_releases": "required",
+            "release_ownership": "csarc-owned",
+            "release_ownership_reason": "CSARC owns the release workflow.",
+            "release_required_inputs": [],
+            "release_settings_owner": "csarc-admin",
+            "release_workflow": ".github/workflows/release.yml",
+        },
+        capabilities={},
+        update={
+            "current_version": "v1",
+            "current_sha": "a" * 40,
+            "target_version": "v2",
+            "target_sha": "b" * 40,
+            "governance_drift_recommendation": recommendation,
+        },
+    )
+    cli.print_plan(plan)
+    assert capsys.readouterr().out.count("Recommendation:") == 1
+    assert (
+        cli.governance_drift_update_recommendation(
+            saved, {"enable_governance_drift_check": "false"}
+        )
+        is None
+    )
 
 
 def test_governance_workflows_are_thin_and_least_privilege() -> None:
