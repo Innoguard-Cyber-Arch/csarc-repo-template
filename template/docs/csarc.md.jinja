@@ -5,7 +5,9 @@
 ## 工作流程
 
 - 修改前先讀取 root `AGENTS.md` 的專案規則與 CSARC managed block。
-- 建立 Issue、使用編號分支、執行 `./scripts/verify`，再依專案分支策略建立 PR。
+- 每項可寫入工作先建立一張 Issue，設定單一 Type、相符 label、負責人，以及需要共同交付時的 Milestone；用 GitHub Development 連結建立 `type/<Issue>-<slug>` 分支，PR 以 `Closes #<Issue>` 形成可追溯鏈。
+- 能獨立交付的 Issue 從 `main` 建分支並以 PR 回到 `main`；Milestone 工作則以自己的分支與 PR 進入同一條 `dev/m<Milestone>-<slug>` 交付分支。完整分支與例外規則見 [`docs/ci-policy.md`](ci-policy.md#現行交付路徑)。
+- 實作範圍若超出原 Issue，另開 Issue，不把未核准工作靜默塞進原分支。完成驗收條件與 PR checklist、執行適用的本機驗證並留下證據後，才把 PR 轉為 ready。
 - repository settings 只先執行 `./scripts/apply-repository-settings.sh plan`；沒有管理員明確授權不得 apply。
 - 不自動 stash、commit、push、開 PR 或合併使用者既有工作。
 
@@ -18,4 +20,6 @@
 
 ## 公版更新
 
-使用 `csarc update --check --json` 先驗證既有 provenance 並查看候選 Release；確認顯示的完整 SHA 與 plan 後，才套用更新。若有衝突，CLI 只列出檔案，不會修改 repo；請調整衝突內容後重跑。
+使用 `csarc update --check --json` 先驗證既有 provenance 並查看候選 Release；確認顯示的完整 SHA 與 plan 後，才執行 `csarc update` 套用同一候選版本。若有衝突，CLI 只列出檔案，不會修改 repo；請調整衝突內容後重跑。
+
+更新成功後，檢查 diff、執行 `./scripts/verify-fast`（只有 full-tier 交付邊界才執行完整 `./scripts/verify`），再用一般編號分支與 PR 交付。更新不會自行套用 repository settings、push 或合併；`site/content/`、`docs/site-theme.css` 與其他 project-owned 內容遇到衝突時保留給維護者決定。

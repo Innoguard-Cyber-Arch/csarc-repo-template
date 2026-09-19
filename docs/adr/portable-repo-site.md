@@ -160,6 +160,12 @@ Issue #681 使用者要求：Standard／Ops 分層、雙語鉤稽、簡報式構
 
 **驗證**：新增 `_substitute_config_tokens`／`_load_downstream_config`／`load_site_data` 容忍缺少非必要資料檔（`glossary.toml` 以外，`similar_tools.json`／`config_examples.json`／`file_map.json`／`audit_trail.json` 對精簡下游網站皆為選用）的單元測試（`tests/test_build_repo_site.py`）；`tests/test_render_site.py::test_copier_generated_project_builds_its_own_bilingual_repo_site` 實際呼叫 `copier.run_copy()`（真正跑過 Copier 樣板引擎本身，不是手動組出的等價 fixture）產生一個全新專案，確認 `_tasks` 的 `bash scripts/build-repo-site` 有實際執行、舊系統檔案完全不存在、雙語 `docs/index.html`／`docs/index.en.html` 正確產生且 `.csarc/config.yml` 各欄位（`project_name`／`project_description`／`code_owner`／`reviewers`／`repository_url`）都正確代入、無殘留 `{{< slide key=`／`[[project_name]]` 等未解析標記、無外部 runtime asset、Standard／Ops 兩個 `data-mode` 面板皆存在；`tests/test_render_site.py`／`tests/test_journey03_ci.py` 更新為驗證新路徑與 `./scripts/build-repo-site --check`（取代舊有 `render_site.py --check` 斷言）。既有 7 個 `audience="archive"` 封存投影片（`rollout`／`access-control`／`principles`／`benchmark`／`fleet-inventory`／`fleet-governance-thresholds`／`spec-format`）中英文結構不對稱的落差已在 Issue #681 決定 P 補齊（英文版翻譯並補上原本缺少的富結構面板）。
 
+## 2026-09-19 下游文件連結必須自足（Issue #735）
+
+**決定**：延續 Issue #681 決定 N，下游 repo-site 仍只包含首頁、安裝與關於三頁；root Journey 不搬到生成專案。所有會發到下游的 Markdown 文件（包含 `AGENTS.md`、README 與 `docs/`）若使用 repo 內相對連結，目的檔案與錨點都必須由同一個生成專案實際產生，不得把中央模板網站或 GitHub blob 頁面當成下游規範來源。
+
+下游 work-item 與 Copier 更新契約由 `docs/csarc.md` 承載；驗證分級、審查、合併資格、Alpha self-merge 與 quota fallback 由 `docs/ci-policy.md` 承載。`AGENTS.md` 與雙語 README 只連到這兩份下游既有文件。生成專案回歸測試會解析這些文件的相對連結，並驗證 Markdown 標題與 HTML `id`／`name` 錨點實際存在。
+
 ## 2026-09-06 12pt 字級下限與 Ops 模式內容瘦身（Issue #681 決定 Q）
 
 使用者依實測螢幕（1512×982，deck 依 `min(innerWidth/1600, innerHeight/900)` 縮放，換算比例約 0.945）要求：桌面版任何顯示文字（除引用／註腳外）渲染後不得小於 12pt，並授權「該精簡的流暢精簡，該放在懸浮說明文字中的放在懸浮中」。12pt＝16px 實際尺寸；換算縮放後 CSS 原始字級下限抓 **18px**（18×0.945≈17px≈12.7pt，有安全餘裕，也是站上最常用的內文字級）。

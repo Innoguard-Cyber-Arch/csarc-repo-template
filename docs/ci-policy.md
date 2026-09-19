@@ -6,6 +6,15 @@ workflow 已刪除，歷史由 Git／Issue／PR 保存。舊 Issue 完成或舊 
 active。版本、發版與成品責任的完整盤點見中央模板的
 [版本／交付 ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。
 
+## 審查與合併資格
+
+本文件在每個 repository 內都是審查、required checks、合併資格、Alpha self-merge 與
+quota fallback 的唯一規範來源；`AGENTS.md` 與 README 只連到這裡，不另寫第二套例外。任何 PR 都必須符合
+下方對應交付路徑、目前 head 的審查或明確授權，以及該風險層級的本機驗證聲明與 hosted
+checks；草稿不具合併資格。有 Milestone 的工作繼承 tracker 核准，standalone、hotfix 與
+release recovery 則依本文件各自的 Issue 核可 gate。所有 fallback 都必須使用本文件明列
+的條件與留痕，不得把 runner、方案或權限限制當成略過檢查的理由。
+
 ## 現行交付路徑
 
 `main` 是唯一永久整合 branch。一般獨立 Issue 從最新 `main` 建立短分支，經 PR 直接回

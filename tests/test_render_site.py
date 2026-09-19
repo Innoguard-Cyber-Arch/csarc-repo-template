@@ -3,6 +3,7 @@ import re
 import runpy
 import shutil
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import pytest
 from copier import run_copy
@@ -26,6 +27,62 @@ render_testing = BUILD_MODULE["render_testing"]
 render_journey_rail = BUILD_MODULE["render_journey_rail"]
 render_config_guidance = BUILD_MODULE["render_config_guidance"]
 render_page = BUILD_MODULE["render_page"]
+
+
+def _markdown_anchors(text: str) -> set[str]:
+    """Return GitHub-style heading anchors used by generated project docs."""
+    anchors: set[str] = set()
+    counts: dict[str, int] = {}
+    for heading in re.findall(r"^#{1,6}\s+(.+?)\s*#*\s*$", text, re.MULTILINE):
+        heading = re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", heading)
+        heading = re.sub(r"<[^>]+>|[`*_~]", "", heading)
+        base = re.sub(r"[^\w -]", "", heading.lower()).strip().replace(" ", "-")
+        count = counts.get(base, 0)
+        anchors.add(base if count == 0 else f"{base}-{count}")
+        counts[base] = count + 1
+    return anchors
+
+
+def _assert_internal_markdown_links_resolve(project: Path) -> None:
+    """Require delivered Markdown links to resolve inside the same project."""
+    documents = [
+        project / "AGENTS.md",
+        *sorted(project.glob("README*.md")),
+        *sorted((project / "docs").glob("*.md")),
+    ]
+    for source in documents:
+        text = re.sub(
+            r"^```.*?^```\s*$",
+            "",
+            source.read_text(encoding="utf-8"),
+            flags=re.M | re.S,
+        )
+        for raw_target in re.findall(r"(?<!!)\[[^]]+\]\(([^)]+)\)", text):
+            target = raw_target.strip().strip("<>")
+            parsed = urlsplit(target)
+            if parsed.scheme or parsed.netloc:
+                continue
+            destination = (
+                source
+                if not parsed.path
+                else source.parent / unquote(parsed.path)
+            )
+            assert destination.exists(), (
+                f"{source}: missing link target {target}"
+            )
+            if not parsed.fragment:
+                continue
+            fragment = unquote(parsed.fragment)
+            destination_text = destination.read_text(encoding="utf-8")
+            if destination.suffix == ".html":
+                assert re.search(
+                    rf"""(?:id|name)=["']{re.escape(fragment)}["']""",
+                    destination_text,
+                ), f"{source}: missing HTML anchor {target}"
+            elif destination.suffix == ".md":
+                assert fragment in _markdown_anchors(destination_text), (
+                    f"{source}: missing Markdown anchor {target}"
+                )
 
 
 def _write_markdown_site(
@@ -1468,3 +1525,7 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
         assert "<script src=" not in html
         assert 'data-mode="standard"' in html
         assert 'data-mode="ops"' in html
+
+    # Issue #735: every delivered relative link and fragment must resolve
+    # inside the generated repository, never only in the template's site.
+    _assert_internal_markdown_links_resolve(project)
