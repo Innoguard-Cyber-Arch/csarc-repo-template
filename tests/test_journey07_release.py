@@ -91,6 +91,10 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "./scripts/verify-template.sh" not in candidate
     assert "status=failure\nif (" in candidate
     assert 'publish_status "$status"' in candidate
+    assert (
+        "# shellcheck disable=SC2329 # Invoked indirectly by the EXIT trap.\n"
+        "  cleanup_candidate_worktree() {"
+    ) in candidate
 
     # The publish stage (Issue #589) is a single implementation: release.yml
     # calls scripts/publish-release for staging, state resolution,
