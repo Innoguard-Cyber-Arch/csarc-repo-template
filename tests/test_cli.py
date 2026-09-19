@@ -5385,8 +5385,11 @@ def test_update_delivers_the_issue_739_workflow_fix_to_an_adopted_project(
     last commit where `template/.github/workflows/ci.yml.jinja` still
     set the stray `cache: pnpm` -- see #739), commit it as if adopted,
     then run a real `csarc update` to this branch's current tip and
-    confirm the fix actually lands with no conflict markers, instead of
-    only ever being proven against a fresh copy.
+    confirm the obsolete duplicate setup is replaced by the single unified
+    bot/release setup with no conflict markers, instead of only ever being
+    proven against a fresh copy. Issue #797 intentionally restored pnpm's
+    cache on that unified setup, so the regression is now its uniqueness and
+    shared condition rather than the complete absence of `cache: pnpm`.
     """
     from_sha = "9c18b10582e878aa42f2543008d5dd3dd726ccac"
     to_sha = git(ROOT, "rev-parse", "HEAD")
@@ -5443,7 +5446,13 @@ def test_update_delivers_the_issue_739_workflow_fix_to_an_adopted_project(
     )
 
     after = ci_workflow.read_text(encoding="utf-8")
-    assert "cache: pnpm" not in after
+    shared_tool_condition = (
+        "steps.bot.outputs.eligible == 'true' || "
+        "(github.event_name == 'pull_request'"
+    )
+    assert after.count("uses: actions/setup-node@") == 1
+    assert after.count("cache: pnpm") == 1
+    assert shared_tool_condition in after
     assert 'node-version: "24"' in after
     assert "<<<<<<<" not in after
     assert not list(project.rglob("*.rej"))

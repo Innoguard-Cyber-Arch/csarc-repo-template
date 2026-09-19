@@ -57,8 +57,7 @@ if (
   git -C "$repo_root" fetch --no-tags origin "$base_sha" "$candidate_sha"
   candidate_parent="$(mktemp -d "$RUNNER_TEMP/release-candidate.XXXXXX")"
   candidate_worktree="$candidate_parent/worktree"
-  # Invoked indirectly by the EXIT trap below.
-  # shellcheck disable=SC2329
+  # shellcheck disable=SC2329 # Invoked indirectly by the EXIT trap.
   cleanup_candidate_worktree() {
     git -C "$repo_root" worktree remove --force "$candidate_worktree" >/dev/null 2>&1 || true
     rmdir "$candidate_parent" >/dev/null 2>&1 || true
