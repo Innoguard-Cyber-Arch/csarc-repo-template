@@ -3,15 +3,27 @@
 from __future__ import annotations
 
 import runpy
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
-MODULE = runpy.run_path(
-    str(Path(__file__).parents[1] / "scripts" / "ci_tier.py")
-)
+REPO_ROOT = Path(__file__).parents[1]
+MODULE = runpy.run_path(str(REPO_ROOT / "scripts" / "ci_tier.py"))
 classify = MODULE["classify"]
 scope_for = MODULE["scope_for"]
+
+
+def run_git(repo: Path, *args: str) -> bytes:
+    """Run Git in one test repository and return stdout."""
+    executable = shutil.which("git")
+    assert executable is not None
+    return subprocess.run(  # noqa: S603 - fixed executable and test inputs
+        [executable, "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+    ).stdout
 
 
 @pytest.mark.parametrize(
@@ -127,6 +139,71 @@ def test_risk_scopes_enable_only_their_expensive_check(
     plan = classify("pull_request", "main", "chore/9-change", set(), [path])
     assert plan.tier == "fast"
     assert getattr(plan, flag)
+
+
+def test_workflow_rename_keeps_old_and_new_paths(tmp_path: Path) -> None:
+    """A workflow moved into docs must retain its workflow scope."""
+    command = 'git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA"'
+    workflow = REPO_ROOT / ".github/workflows/ci.yml"
+    if not workflow.exists():
+        workflow = workflow.with_name("ci.yml.jinja")
+    assert command in workflow.read_text(encoding="utf-8")
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    run_git(repo, "init")
+    workflow = repo / ".github/workflows/ci.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("name: CI\n" + "# padding\n" * 20, encoding="utf-8")
+    run_git(repo, "add", ".")
+    run_git(
+        repo,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "base",
+    )
+    base = run_git(repo, "rev-parse", "HEAD").decode().strip()
+    destination = repo / "docs/ci.md"
+    destination.parent.mkdir()
+    workflow.rename(destination)
+    run_git(repo, "add", "-A")
+    run_git(
+        repo,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "rename",
+    )
+
+    output = run_git(
+        repo,
+        "diff",
+        "--no-renames",
+        "--name-only",
+        "-z",
+        base,
+        "HEAD",
+    )
+    changed_files = [path.decode() for path in output.split(b"\0") if path]
+    plan = classify(
+        "pull_request",
+        "dev/m14-generated-project-fixes",
+        "fix/747-renamed-paths",
+        set(),
+        changed_files,
+    )
+
+    assert set(changed_files) == {".github/workflows/ci.yml", "docs/ci.md"}
+    assert plan.scopes == ("docs", "workflow")
+    assert plan.tier == "fast"
+    assert plan.run_zizmor
 
 
 @pytest.mark.parametrize(
