@@ -74,6 +74,30 @@ gh api repos/{owner}/{repo}/milestones --method GET -f state=all \
   --jq '.[] | "\(.number)\t\(.title)\t\(.state)"'
 ```
 
+## 核准後 body 編輯提醒（#799）
+
+核准綁定內容的 gate 會在 Issue body 後續變動時要求重新核准，但遠端 CI 只能在變動
+已經發生後才看見。要從本機或 agent 編輯 Issue body，使用
+`scripts/gh-issue-edit` 取代直接呼叫 `gh issue edit`：
+
+```bash
+scripts/gh-issue-edit 740 --body-file tracker.md
+```
+
+wrapper 只在 `--body`、`--body-file` 或 `--attach` 真正會改動 body 時執行預測；title、
+label、assignee、Milestone 等 metadata-only 編輯原樣直通。它讀取目前 Issue 與留言，
+用既有 `_approval_is_stale()` 對「目前 `updated_at`」與「假設現在完成編輯」各判斷一
+次，並沿用 tracker／scope expansion 的 `/milestone approve` 語彙與 #743 standalone／
+hotfix／release-recovery Issue 的 `Approve` 語彙。若這次編輯會讓最後一組有效核准失
+效，訊息會列出核准留言連結、核准者與應重新留言的語彙；仍有另一則核准落在既有 60
+秒 grace window 內時不誤報。
+
+互動式終端機會詢問是否繼續；非互動 agent／CI 只印提醒，仍以完全相同的參數執行
+`gh issue edit`，並保留其 exit status。預測查詢本身失敗也只印 notice、不把 advisory
+變成新的 fail-closed gate。這是 checked-in 本機／agent 路徑的安全網，無法攔截 GitHub
+網頁 UI 或直接 REST／GraphQL API 編輯；繞過 wrapper 時仍由既有遠端 gate 事後
+fail closed。
+
 ### 新發現問題的預設歸屬（#668）
 
 在 Milestone 工作過程中發現的新問題，開新 Issue 時預設留在同一個 Milestone（掛該

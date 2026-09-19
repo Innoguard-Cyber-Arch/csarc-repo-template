@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Edit GitHub Issues with a non-blocking approval-staleness warning."""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+from datetime import UTC, datetime
+from urllib.parse import urlparse
+
+from sync_milestone_state import body_edit_warning, load_issue_snapshot, run_gh
+
+_BODY_FLAGS = {"--body", "-b", "--body-file", "-F", "--attach"}
+_VALUE_FLAGS = {
+    "--add-assignee",
+    "--add-blocked-by",
+    "--add-blocking",
+    "--add-label",
+    "--add-project",
+    "--add-sub-issue",
+    "--milestone",
+    "-m",
+    "--parent",
+    "--remove-assignee",
+    "--remove-blocked-by",
+    "--remove-blocking",
+    "--remove-label",
+    "--remove-project",
+    "--remove-sub-issue",
+    "--repo",
+    "-R",
+    "--title",
+    "-t",
+    "--type",
+}
+
+
+def _edit_context(arguments: list[str]) -> tuple[bool, str | None, list[str]]:
+    """Return whether the body changes, the repo, and Issue targets."""
+    body_edit = False
+    repo: str | None = None
+    targets: list[str] = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in _BODY_FLAGS:
+            body_edit = True
+            index += 2
+            continue
+        if argument in _VALUE_FLAGS:
+            if argument in {"--repo", "-R"} and index + 1 < len(arguments):
+                repo = arguments[index + 1]
+            index += 2
+            continue
+        if argument.startswith(("--body=", "--body-file=", "--attach=")) or (
+            argument.startswith(("-b", "-F")) and len(argument) > 2
+        ):
+            body_edit = True
+        elif argument.startswith("--repo="):
+            repo = argument.removeprefix("--repo=")
+        elif argument.startswith("-R") and len(argument) > 2:
+            repo = argument[2:]
+        elif not argument.startswith("-"):
+            targets.append(argument)
+        index += 1
+    return body_edit, repo, targets
+
+
+def _target(target: str, repo: str | None) -> tuple[str, int]:
+    """Resolve a numeric Issue target or full GitHub Issue URL."""
+    if target.isdigit():
+        resolved_repo = repo or run_gh(
+            [
+                "repo",
+                "view",
+                "--json",
+                "nameWithOwner",
+                "--jq",
+                ".nameWithOwner",
+            ]
+        )
+        return resolved_repo, int(target)
+    parts = [part for part in urlparse(target).path.split("/") if part]
+    if len(parts) >= 4 and parts[2] == "issues" and parts[3].isdigit():
+        return f"{parts[0]}/{parts[1]}", int(parts[3])
+    raise ValueError(f"Unsupported Issue target: {target}")
+
+
+def _warning_for_target(target: str, repo: str | None) -> str | None:
+    """Return the warning for one target, if its approval becomes stale."""
+    resolved_repo, issue_number = _target(target, repo)
+    proposed_updated_at = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return body_edit_warning(
+        load_issue_snapshot(resolved_repo, issue_number), proposed_updated_at
+    )
+
+
+def main(arguments: list[str] | None = None) -> int:
+    """Warn when needed, then run `gh issue edit` unchanged."""
+    arguments = list(sys.argv[1:] if arguments is None else arguments)
+    body_edit, repo, targets = _edit_context(arguments)
+    warnings: list[str] = []
+    if body_edit:
+        for target in targets:
+            try:
+                warning = _warning_for_target(target, repo)
+            except (
+                RuntimeError,
+                ValueError,
+                subprocess.CalledProcessError,
+            ) as error:
+                sys.stderr.write(
+                    f"NOTICE: could not check approval for {target}: {error}; "
+                    "continuing.\n"
+                )
+                continue
+            if warning:
+                warnings.append(warning)
+    if warnings:
+        sys.stderr.write("\n".join(warnings) + "\n")
+        if sys.stdin.isatty():
+            reply = input("Continue with the Issue body edit? [y/N] ")
+            if reply.lower() != "y":
+                raise SystemExit(1)
+        else:
+            sys.stderr.write(
+                "Non-interactive session: continuing; re-approval will be "
+                "required.\n"
+            )
+    executable = shutil.which("gh")
+    if executable is None:
+        raise RuntimeError("GitHub CLI (gh) is required")
+    result = subprocess.run(  # noqa: S603
+        [executable, "issue", "edit", *arguments], check=False
+    )
+    return result.returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
