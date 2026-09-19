@@ -453,6 +453,8 @@ def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:
         encoding="utf-8"
     )
 
-    assert 'uv run pytest -m "not large"' in issue_entry
-    assert "uv run pytest --cov=csarc_cli" in release_entry
+    assert "uv run pytest -vv --durations=20" in issue_entry
+    assert '-m "not large"' in issue_entry
+    assert "uv run pytest -vv --durations=20" in release_entry
+    assert "--cov=csarc_cli" in release_entry
     assert "pytest.mark.large" not in ai_contract

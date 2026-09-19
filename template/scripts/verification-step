@@ -32,9 +32,13 @@ verification_step() {
   printf '[verify-step] COMMAND %s\n' "$command"
 
   (
-    while sleep "$heartbeat_seconds"; do
-      printf '[verify-step] HEARTBEAT %s (%ss); log=stdout\n' \
-        "$label" "$((SECONDS - started))"
+    local last_heartbeat=$started
+    while sleep 1; do
+      if ((SECONDS - last_heartbeat >= heartbeat_seconds)); then
+        printf '[verify-step] HEARTBEAT %s (%ss); log=stdout\n' \
+          "$label" "$((SECONDS - started))"
+        last_heartbeat=$SECONDS
+      fi
     done
   ) &
   heartbeat_pid=$!
