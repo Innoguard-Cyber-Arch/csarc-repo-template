@@ -582,14 +582,22 @@ merge-group 內有多張 PR，其中一張未核可即整體擋下、其餘不�
 時的 no-op）。`tests/test_journey06_workflows.py` 額外鎖定 `work-item-lifecycle.yml`
 新增 step 的觸發條件與呼叫的 CLI 指令。
 
-**已知、刻意不在這裡修的既有缺口：**code review 也指出 `_approval_is_stale()`
-（#632，tracker 與 #743 兩條路徑共用）只比對核可留言的 `created_at` 與 Issue／
-tracker 的 `updated_at`，從未讀取核可留言自己的 `updated_at`——如果有人事後**編輯**
-一則已存在的留言（例如把一則不相干的留言改成 `Approve`），staleness 判定看不出這則
-留言本身被動過。這不是 `#743` 新增的問題，是 `#632` 落地時就有的既有行為，只是
-`#743` 讓沒有 Milestone 的 Issue 也開始依賴這個機制，風險面因此變大。這個缺口牽動
-tracker、scope-expansion、standalone 三條路徑共用的核心機制，範圍超出 `#743` 這張
-leaf Issue，刻意不在這個 PR 修，留給獨立的後續 Issue 處理。
+**核可留言事後被編輯的既有缺口，已由 #778 修正：**`#743` 開發期間的 code review 曾
+指出 `_approval_is_stale()`（#632，tracker、scope-expansion、standalone 三條路徑共
+用）只比對核可留言的 `created_at` 與 Issue／tracker 的 `updated_at`，從未讀取核可
+留言自己的 `updated_at`——如果有人事後**編輯**一則已存在的留言（例如把一則不相干
+的留言改成 `Approve`），staleness 判定看不出這則留言本身被動過。這不是 `#743` 新增
+的問題，是 `#632` 落地時就有的既有行為，只是 `#743` 讓沒有 Milestone 的 Issue 也開
+始依賴這個機制，風險面因此變大。這個缺口牽動三條路徑共用的核心機制，範圍超出
+`#743` 這張 leaf Issue，當時決定不在 `#743` 分支上修，留給獨立的後續 Issue 處理。
+`#778`（PR #779，standalone、無 Milestone、Alpha self-merge，已合併到 `main`）獨立
+完成了這項修正：`_approval_is_stale()` 新增 `comment_updated_at` 參數，額外以 OR
+判斷留言自己的編輯間隔，細節見上方「Scope-drift gate enforcement 與核可
+fingerprint-binding（#632）」一節的「留言編輯本身的過期判斷（#778）」段落。`#743`
+分支之後合併 `main`（經 `dev/m14-generated-project-fixes` 的 main-sync）時，直接沿
+用了 `#778` 修正過的 `_approval_is_stale()`／`_approval_records()`，`#743` 自己重
+構出的共用 `_vocabulary_approval_records()` 也已經正確帶入這個新參數（呼叫時傳入
+`comment.get("updated_at")`），不需要在 `#743` 這張分支上重複實作。
 
 ### `promotion` 必要檢查的產生條件（#601）
 
