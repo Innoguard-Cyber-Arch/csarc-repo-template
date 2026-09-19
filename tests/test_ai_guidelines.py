@@ -51,6 +51,10 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert ("Python setup:" in rendered) is python_command
     assert ("TypeScript setup:" in rendered) is typescript_command
     assert ("Rust setup:" in rendered) is rust_command
+    # Issue #737: a generated project's own Rust setup step must warn about
+    # the Linux/WSL2 system C linker prerequisite (build-essential), not
+    # just this template repo's own README/docs/install.md.
+    assert ("build-essential" in rendered) is rust_command
 
 
 def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:

@@ -41,12 +41,28 @@ caught here without mocking the full `gh` CLI surface that
       `policies/rulesets.json`) that compares `policies/pages.json`'s
       `source` object against the live `GET /repos/{owner}/{repo}/pages`
       response body.
+
+3. The `apply` mode's `issueCreationPolicy` GraphQL mutation (Issue #757).
+   GitHub's schema declares this field's input type as `IssueCreationPolicy`
+   (confirmed live via `gh api graphql` introspection against
+   `UpdateRepositoryInput` on 2026-09-18); the script previously declared
+   the mutation variable as the stale `RepositoryIssueCreationPolicy`, which
+   GitHub's schema had since renamed. `check` mode's read-only query never
+   declares a variable type at all, so it kept passing while every `apply`
+   run failed closed on this step and aborted before reaching any later
+   step (release policy, Pages, Actions, labels, Rulesets). The tests below
+   run the mutation block verbatim (extracted from the shipped script, not
+   reimplemented) against a stub `gh` that enforces the real schema's type
+   name, so a future schema rename is caught here instead of only surfacing
+   the first time someone runs `apply` against a live repository.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import stat
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -91,6 +107,22 @@ PAGES_DRIFT_SOURCE = _extract(
     "2>&1 <<'PY'\n",
     "\nPY\n",
 )
+
+# `_extract` excludes both markers from its result, but this block needs its
+# own start line (`repository_node_id=...`) and closing `fi` kept, since the
+# mutation depends on the former and is a dangling `if` without the latter.
+_ISSUE_CREATION_POLICY_APPLY_START = (
+    'repository_node_id="$(gh api "repos/$repo" --jq .node_id)"\n'
+)
+_issue_creation_policy_apply_start = SCRIPT_SOURCE.index(
+    _ISSUE_CREATION_POLICY_APPLY_START
+)
+_issue_creation_policy_apply_end = SCRIPT_SOURCE.index(
+    "\nfi\n", _issue_creation_policy_apply_start
+) + len("\nfi\n")
+ISSUE_CREATION_POLICY_APPLY_SOURCE = SCRIPT_SOURCE[
+    _issue_creation_policy_apply_start:_issue_creation_policy_apply_end
+]
 
 
 def run_drift_check(
@@ -186,6 +218,77 @@ def run_pages_drift(
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        check=False,
+    )
+
+
+# `gh` stub for the issue-creation-policy `apply` mutation (Issue #757). It
+# encodes the real GitHub schema as confirmed by live introspection against
+# `UpdateRepositoryInput` on 2026-09-18 (`updateRepository`'s
+# `issueCreationPolicy` argument is typed `IssueCreationPolicy`): it accepts
+# only that exact variable type, and otherwise fails the way GitHub itself
+# failed for the stale `RepositoryIssueCreationPolicy` name, so a future
+# schema rename is caught here the same way the live API caught this one.
+# The response bodies below only need to signal success/failure: the real
+# script never parses the mutation's JSON on the success path, and only
+# echoes the failure path's raw text verbatim.
+_ISSUE_CREATION_POLICY_GH_STUB = """#!/usr/bin/env bash
+set -euo pipefail
+args="$*"
+case "$args" in
+  *"--jq .node_id"*)
+    echo "R_test"
+    ;;
+  *"api graphql"*)
+    if [[ "$args" == *'$policy: IssueCreationPolicy!'* ]]; then
+      exit 0
+    fi
+    bad_type="$(grep -oE '\\$policy: [A-Za-z]+' <<<"$args" \\
+      | head -1 | cut -d' ' -f2)"
+    echo "variableRequiresValidType: $bad_type" \\
+      "isn't a defined input type (on \\$policy)" >&2
+    exit 1
+    ;;
+  *)
+    echo "unstubbed gh invocation: $args" >&2
+    exit 99
+    ;;
+esac
+"""
+
+
+def run_issue_creation_policy_apply(
+    source: str,
+    tmp_path: Path,
+    repo: str = "Test-Org/test-repo",
+    desired_policy: str = "COLLABORATORS_ONLY",
+) -> subprocess.CompletedProcess[str]:
+    """Execute an issue-creation-policy apply block against a stub `gh`.
+
+    `source` is normally `ISSUE_CREATION_POLICY_APPLY_SOURCE` (the literal
+    block shipped in apply-repository-settings.sh), but a test may pass a
+    mutated copy to prove the stub actually rejects a stale type name.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    gh_stub = bin_dir / "gh"
+    gh_stub.write_text(_ISSUE_CREATION_POLICY_GH_STUB, encoding="utf-8")
+    executable_bits = stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
+    gh_stub.chmod(gh_stub.stat().st_mode | executable_bits)
+
+    script = (
+        f'repo="{repo}"\n'
+        f'desired_issue_creation_policy="{desired_policy}"\n'
+        f"{source}"
+    )
+    env = dict(os.environ)
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    return subprocess.run(  # noqa: S603
+        [BASH, "-c", script],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=env,
         check=False,
     )
 
@@ -605,3 +708,43 @@ def test_copilot_policy_rejects_review_without_push(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "review_on_push is not enforced" in result.stdout
+
+
+def test_issue_creation_policy_apply_uses_current_graphql_type(
+    tmp_path: Path,
+) -> None:
+    """Issue #757: the shipped mutation matches GitHub's current schema.
+
+    `check` mode's read-only query never declares a variable type, so it
+    kept passing while every `apply` run failed closed on this exact step
+    (before this fix, the shipped script declared the mutation variable as
+    the stale `RepositoryIssueCreationPolicy`, which GitHub's schema had
+    renamed to `IssueCreationPolicy`).
+    """
+    result = run_issue_creation_policy_apply(
+        ISSUE_CREATION_POLICY_APPLY_SOURCE, tmp_path
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert "Cannot apply issue creation policy" not in result.stdout
+
+
+def test_issue_creation_policy_apply_rejects_stale_type_name(
+    tmp_path: Path,
+) -> None:
+    """Issue #757: a regression to the stale type name fails closed again.
+
+    Mutates the shipped block back to the historical bug
+    (`RepositoryIssueCreationPolicy`) to prove the stub above would have
+    caught it, rather than only ever exercising the already-fixed path.
+    """
+    stale_source = ISSUE_CREATION_POLICY_APPLY_SOURCE.replace(
+        "IssueCreationPolicy!", "RepositoryIssueCreationPolicy!"
+    )
+    assert stale_source != ISSUE_CREATION_POLICY_APPLY_SOURCE
+
+    result = run_issue_creation_policy_apply(stale_source, tmp_path)
+
+    assert result.returncode != 0
+    assert "Cannot apply issue creation policy for" in result.stdout
+    assert "variableRequiresValidType" in result.stdout

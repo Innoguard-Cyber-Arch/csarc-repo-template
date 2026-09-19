@@ -148,7 +148,9 @@ def _parse_github_timestamp(value: object) -> float | None:
 
 
 def _approval_is_stale(
-    item_updated_at: object, comment_created_at: object
+    item_updated_at: object,
+    comment_created_at: object,
+    comment_updated_at: object = None,
 ) -> bool:
     """Return whether one approval no longer binds to the current body.
 
@@ -169,12 +171,43 @@ def _approval_is_stale(
     Missing data on either side reads as "cannot tell", not "definitely
     stale": a caller that never supplies `item_updated_at` keeps today's
     behavior unchanged.
+
+    `comment_updated_at` closes a gap in the item-vs-`created_at` check
+    above (#778): GitHub does not expose a comment's own body-edit history
+    any more than it does an Issue's, so a comment last edited long after
+    it was first posted could have had the approval vocabulary this script
+    currently reads back written in at any point up to that edit --
+    including well after whatever it originally said. `created_at` alone
+    cannot see that: an old, unrelated comment edited into
+    `/milestone approve` today still carries its original, untouched
+    `created_at`, so if the item itself has not been touched since around
+    then, the item-vs-`created_at` gap alone looks small and the edit goes
+    undetected. This is therefore a second, independent staleness check --
+    the comment's own edit gap -- OR'd with the first: an approval is
+    stale if either the item was updated long after the comment was
+    created, OR the comment was itself edited long after it was created.
+    Only the first check uses `item_updated_at`, so a comment edited
+    *after* a later item update does not get to look fresh purely because
+    the edit is recent -- the first check already caught that case from
+    the item side and this addition never overrides it back to fresh.
+    A comment that was never edited reports `comment_updated_at` equal to
+    `comment_created_at` (or omits it), so the second check is always
+    false there and behavior for that -- the common -- case is unchanged.
     """
     updated = _parse_github_timestamp(item_updated_at)
     created = _parse_github_timestamp(comment_created_at)
-    if updated is None or created is None:
-        return False
-    return updated - created > _STALE_GRACE_SECONDS
+    item_side_stale = (
+        updated is not None
+        and created is not None
+        and updated - created > _STALE_GRACE_SECONDS
+    )
+    edited = _parse_github_timestamp(comment_updated_at)
+    edit_gap_stale = (
+        edited is not None
+        and created is not None
+        and edited - created > _STALE_GRACE_SECONDS
+    )
+    return item_side_stale or edit_gap_stale
 
 
 def acceptance_complete(description: str) -> bool:
@@ -505,7 +538,9 @@ def _vocabulary_approval_records(
         )
         normalized = vocabulary.normalize(command)
         is_stale = _approval_is_stale(
-            item_updated_at, comment.get("created_at")
+            item_updated_at,
+            comment.get("created_at"),
+            comment.get("updated_at"),
         )
         if normalized == vocabulary.approve:
             if author != proposer and author_type != "Bot":

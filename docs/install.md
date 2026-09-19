@@ -6,14 +6,16 @@ CSARC 交付的是 CI/CD 範本與治理流程，Python 只用來執行 init／a
 
 一律只需要 `uv`；選擇的語言模組另需對應工具鏈；`languages` 全部不勾選（`language: ci`）時不需要任何額外語言工具鏈。
 
-| 工具 | 何時需要 | macOS（Homebrew） | Windows（winget／Chocolatey） |
-| --- | --- | --- | --- |
-| Git | 一律需要 | `brew install git` | `winget install --id Git.Git -e` |
-| GitHub CLI（`gh`） | 只有 GitHub 連線操作需要 | `brew install gh` | `winget install --id GitHub.cli --source winget` |
-| uv | 一律需要 | `brew install uv` | `winget install --id=astral-sh.uv -e` |
-| Node.js 24+ | 只有選 `typescript` 時需要 | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` |
-| pnpm 11 | 只有選 `typescript` 時需要 | `brew install pnpm` | `winget install -e --id pnpm.pnpm` |
-| rustup／Cargo | 只有選 `rust` 時需要 | `brew install rustup` | `winget install -e --id Rustlang.Rustup` |
+| 工具 | 何時需要 | macOS（Homebrew） | Windows（原生，winget／Chocolatey） | Linux／WSL2（Ubuntu，apt） |
+| --- | --- | --- | --- | --- |
+| Git | 一律需要 | `brew install git` | `winget install --id Git.Git -e` | `sudo apt install -y git` |
+| GitHub CLI（`gh`） | 只有 GitHub 連線操作需要 | `brew install gh` | `winget install --id GitHub.cli --source winget` | `sudo apt install -y gh` |
+| uv | 一律需要 | `brew install uv` | `winget install --id=astral-sh.uv -e` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| Node.js 24+ | 只有選 `typescript` 時需要 | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` | `curl -fsSL https://deb.nodesource.com/setup_24.x \| sudo -E bash -` 後 `sudo apt install -y nodejs` |
+| pnpm 11 | 只有選 `typescript` 時需要 | `brew install pnpm` | `winget install -e --id pnpm.pnpm` | `sudo npm install -g pnpm@11` |
+| rustup／Cargo | 只有選 `rust` 時需要；**Linux／WSL2 上另需 `build-essential`（系統 C linker）** | `brew install rustup` | `winget install -e --id Rustlang.Rustup` | `sudo apt install -y build-essential` 後 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+
+Windows 欄位是在原生 Windows 單獨安裝個別工具用（例如先裝 `git`／`gh` 再進 WSL2）；WSL2 的 Ubuntu shell 裡請改用 Linux／WSL2 欄位，winget 裝的 rustup 進 WSL2 後用不上。選 `rust` 時，Linux／WSL2 上除了 `rustup` 還需要 `build-essential`（系統 C linker）；即使是純 Rust、不呼叫 C 函式庫的專案也一樣，否則編譯階段的 `cargo test` 會報 `error: linker 'cc' not found`。
 
 ## 建立新 repo
 

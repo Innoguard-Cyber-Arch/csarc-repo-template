@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-25
-- **來源 Issues：**[#18](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/18), [#28](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/28), [#62](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/62), [#65](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/65), [#87](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/146), [#163](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/163), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301), [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576), [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580), [#607](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/607), [#719](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/719), [#531](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/531)
+- **來源 Issues：**[#18](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/18), [#28](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/28), [#62](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/62), [#65](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/65), [#87](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/146), [#163](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/163), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301), [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576), [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580), [#607](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/607), [#719](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/719), [#531](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/531), [#325](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/325), [#775](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/775)
 - **實作 PRs：**[#25](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/25), [#59](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/59), [#63](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/63), [#66](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/66), [#90](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/90), [#128](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/128), [#154](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/154), [#165](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/165), [#306](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/306), [#579](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/579), [#663](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/663)
 
 ## 問題與限制
@@ -33,6 +33,7 @@ Public 轉換後 Ruleset 的 `require_code_owner_review`／`required_approving_r
 | Preserved | `security_and_analysis` 獨立 PATCH，避免 GHAS 受限時拖累同一請求的基本設定；REST 沒有的 `issue_creation_policy` 改走專屬 GraphQL 區塊，而不是塞進會靜默忽略未知欄位的扁平 PATCH | [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576)／[#579](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/579) |
 | Preserved（alpha 限定） | 單一真人帳號 org 撞上 GitHub 平台自我核准限制時，用 Ruleset `bypass_actors`（`RepositoryRole` admin、`bypass_mode: pull_request`）解除，寫回 root `policies/rulesets.json`；`template/` 保留空白，不預設下發 | [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580) |
 | Superseded | 一般 PR 已有 exact-head 獨立 maintainer approval 時仍要求第二則授權留言；review 本身即為該 SHA 的授權，後續 push 自動失效 | [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240) → [#719](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/719) |
+| Superseded（narrowed） | Alpha self-merge 排除 default-branch 的邊界縮小為僅放寬審核（Milestone-less Issue 才適用，quota-fallback 不變）；`effective_protection` 信任的授權來源擴大納入 alpha self-merge 自己的 exact-head comment，修正它此前從未能讓 `pr_lifecycle.py merge` 真正成功的既有缺口 | [#325](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/325)／[#719](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/719) → [#775](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/775) |
 
 ## Ownership 與驗證
 
@@ -123,6 +124,64 @@ Issue #681/#682 決定 R 前是獨立的「進階安裝」附錄頁，後併入 
 明確保留的邊界：這套機制不重新設計 `apply-repository-settings.sh` 既有的 `DEGRADED`
 標記——矩陣裡對應既有限制的每一列，workaround 直接引用同一段既有訊息，不是另建一套
 平行說法；`apply-repository-settings.sh` 本身在這個 Issue 沒有任何邏輯變動。
+
+## 2026-09-18 修正 alpha self-merge 對 main 與既有 bypass_actors 的排除（#775）
+
+修復 #757（GraphQL schema drift）合併 PR #765 時發現：`scripts/pr_lifecycle.py merge`
+對任何直接合併進 `main` 的 alpha PR 一律失敗，導致 #758／#759／#762／#763／#765 全部
+繞過 `merge()` 本身、只借用其 `acquire`／`authorization-template`／`release` 子指令
+留痕，實際合併改用手動 `gh pr merge --admin --squash` 加人工現場打字的
+`bypass-trace:` 留言——這已經悄悄違反 `AGENTS.md` 工作迴圈第 12 步「合併寫入一律要
+透過 `scripts/pr_lifecycle.py`」。查證找到兩個各自獨立、都需要修正才能讓這條路徑真
+的可用的原因：
+
+1. `alpha_self_merge_opt_in` 依賴的 `require_routine_route`（與 #325 的 Actions
+   quota/billing 必要檢查 fallback 共用）在 `base_ref == default_branch` 時直接
+   raise。#325 完成條件明寫「default-branch promotion、hotfix 與 Release
+   eligibility 不得因這個 fallback 放寬」，但這是 2026-09-03 就存在的既有邊界，早於
+   2026-09-18 才確認的「這個 repo 的 Copilot code review 永久不可用」這個事實。維護
+   者本次決定：narrow 這個邊界，只放寬審核繞過（不動 `require_routine_route` 本體，
+   新增平行的 `require_default_branch_issue_route`，額外要求該 Issue **不得**掛
+   Milestone——有 Milestone 的仍須走自己的 `dev/mN` 分支）；`require_routine_route`
+   ／quota-fallback 對 default-branch 的禁止完全不變。
+2. 更深層的問題：`effective_protection`（#719 導入）只在 `authorization_source in
+   {"review", "copilot"}` 時，才把 live Ruleset 的非空 `bypass_actors` 當作「已驗
+   證」；alpha self-merge 的 `authorization_source` 是 `"comment"`，不在這個集合
+   裡。本 repo 正式 Ruleset（`rulesets/22178328`）目前同時具備：`pull_request` 規則
+   直接宣告 `required_approving_review_count: 0`（`pr_review_mode: copilot` 的既
+   有設定）**與** #580 的 admin `pull_request` bypass_actors——兩者原本各自為了不同
+   目的加入，#719 制定「只信任 review／copilot」的規則時沒有預料到會同時出現在同一個
+   repo。結果是 alpha self-merge（不分 main 或既有 `dev/mN` 路由）在這個 repo 從未
+   真的能讓 `pr_lifecycle.py merge` 跑出 `merge_mode == "agent"`——每次都在
+   `effective_protection` 這步被「an effective Ruleset permits an unverified
+   bypass」擋下，只能退回手動合併。維護者本次決定：把 `"comment"` 併入這個信任集合
+   （`authorization_source in {"review", "copilot", "comment"}`）——exact-head 授
+   權留言本來就已經被 `authorization()` 獨立驗證（maintainer 權限、精確 body、精確
+   head SHA），信任基礎跟 review／copilot 對等，且 `bypass_actors` 是否精確等於已宣
+   告值的檢查完全不變，只是把可以通過這項檢查的授權來源多加一種。
+3. 第三個獨立問題：即使前兩項都修好，GitHub 自己回報的 `mergeable_state` 也永遠不會
+   是 `clean`——因為 `review` 這個 required check（`scripts/review_gate.py` 的
+   `evaluate()`）只認真人 `APPROVED` review 或乾淨 Copilot review，完全不知道
+   alpha self-merge 這條路徑的存在，對任何 alpha self-merge PR 永遠回報
+   `failure`。`merge_snapshot` 自己那行 `if reviewed_bypass and
+   mergeable_state != "clean": blocked` 因此永遠擋下，不管前兩項修正對不對。
+   維護者本次決定：也讓 `evaluate()` 認得 alpha self-merge——新增
+   `pr_lifecycle.find_exact_head_authorization`（掃描全部留言找出綁定目前 head
+   SHA、通過 maintainer 權限驗證的授權留言，不像 `authorization()` 需要呼叫方先
+   指定一則特定留言的 URL），`evaluate()` 在 Copilot 未過、無真人 approval 時，
+   改用跟 `alpha_self_merge_opt_in` 相同的 marker／route 判斷（不含 release_phase
+   檢查——`alpha_self_merge_opt_in` 本身也不檢查 release_phase，兩處各自加只會讓
+   `review` check 跟 `pr_lifecycle.py merge` 對「這個 head 能不能合併」的判斷互相
+   矛盾）＋這則留言是否存在，成立就一併通過。`.github/workflows/pr-review.yml`
+   同步加上 `issue_comment: created` trigger（篩選 PR 上、開頭是 `PR lifecycle
+   merge authorization` 的留言）：貼授權留言本身不會觸發 `pull_request` 事件，
+   沒有這個 trigger 就要手動 `gh run rerun` 才會重新檢查。
+
+三項修正都只動 `alpha_self_merge` 這條路徑本身；`require_routine_quota_fallback`
+（quota/billing 必要檢查 fallback）與一般 `review`／`copilot` 授權路徑的既有行為完全
+不變。root／`template/` 的 `scripts/pr_lifecycle.py`／`scripts/review_gate.py`／
+`.github/workflows/pr-review.yml`／`tests/test_pr_lifecycle.py` 保持逐位元組同步
+（`tests/test_review_gate.py` 不在配對清單內，只在 root 維護）。
 
 ## 重新評估條件
 

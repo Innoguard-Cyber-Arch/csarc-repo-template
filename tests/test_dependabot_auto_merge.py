@@ -2,16 +2,43 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import shutil
 from pathlib import Path
 
+import pytest
 import yaml
-from copier import run_copy
 
 REPO_ROOT = Path(__file__).parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/dependabot-auto-merge.yml"
+
+
+def test_copier_is_never_imported_at_module_level() -> None:
+    """Issue #771: keep the `copier` import lazy, not a regression waiting.
+
+    This file is a paired file (`scripts/sync-paired-files.sh`) that ships
+    byte-for-byte to every downstream generated project, but `copier` is a
+    template-authoring-only dependency (root `pyproject.toml`) that a
+    generated project never installs. A top-level `import copier` /
+    `from copier import ...` here previously broke a generated project's own
+    `ty check` (static "unresolved-import" -- `ty` has no way to know the
+    import is conditional at runtime) and, without `copier` installed,
+    pytest's collection of the whole module. Walk this file's own top-level
+    statements (deliberately not `ast.walk`, which would also match the
+    intentional, guarded import inside `_render_dependabot_config`) to prove
+    the import stays confined to that lazy `pytest.importorskip("copier")`
+    guard instead of trusting a future edit to notice by re-running
+    `ty check` in a copier-less environment.
+    """
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            top_level_names = {alias.name.split(".")[0] for alias in node.names}
+            assert "copier" not in top_level_names
+        elif isinstance(node, ast.ImportFrom):
+            assert node.module != "copier"
 
 
 def _load_workflow() -> tuple[str, dict]:
@@ -191,14 +218,36 @@ def test_sync_template_commit_is_a_release_triggering_fix() -> None:
 
 
 def _render_dependabot_config(tmp_path: Path, release_ownership: str) -> str:
-    """Render `template/.github/dependabot.yml.jinja` for one ownership."""
+    """Render `template/.github/dependabot.yml.jinja` for one ownership.
+
+    This only makes sense in the template-authoring repository itself:
+    `copier.yml` and `template/` exist only here, never in a downstream
+    generated project (`_subdirectory: template` in copier.yml deliberately
+    excludes both from the rendered output), and `copier` is likewise only a
+    template-authoring dependency (root `pyproject.toml`), never a generated
+    project's own runtime/test dependency. This test file is nonetheless a
+    paired file that `scripts/sync-paired-files.sh` ships to every generated
+    project (so the file's *other*, non-Copier tests can keep validating its
+    own copy of `.github/workflows/dependabot-auto-merge.yml`); skip these
+    Copier-driven cases gracefully there instead of hard-failing import,
+    `ty check`, or pytest collection when `copier` is absent (Issue #771).
+    """
+    copier = pytest.importorskip("copier")
+    if (
+        not (REPO_ROOT / "copier.yml").is_file()
+        or not (REPO_ROOT / "template").is_dir()
+    ):
+        pytest.skip(
+            "requires the template-authoring repository's own copier.yml "
+            "and template/ tree, absent in a generated project (Issue #771)"
+        )
     source = tmp_path / "source"
     if not source.exists():
         source.mkdir()
         shutil.copy2(REPO_ROOT / "copier.yml", source / "copier.yml")
         shutil.copytree(REPO_ROOT / "template", source / "template")
     project = tmp_path / f"project-{release_ownership}"
-    run_copy(
+    copier.run_copy(
         str(source),
         project,
         data={

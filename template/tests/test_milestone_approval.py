@@ -110,6 +110,7 @@ def comment(
     *,
     author_type: str = "User",
     created_at: str | None = None,
+    updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Build one auditable lifecycle comment."""
     return {
@@ -117,6 +118,7 @@ def comment(
         "html_url": f"https://github.com/acme/project/issues/80#issuecomment-{number}",
         "user": {"login": author, "type": author_type},
         "created_at": created_at,
+        "updated_at": updated_at,
     }
 
 
@@ -397,6 +399,105 @@ def test_approval_is_stale_uses_a_grace_window_around_recording_lag(
     without weakening detection of a genuine later edit or comment.
     """
     assert _approval_is_stale(item_updated_at, comment_created_at) is expected
+
+
+@pytest.mark.parametrize(
+    (
+        "item_updated_at",
+        "comment_created_at",
+        "comment_updated_at",
+        "expected",
+    ),
+    [
+        # Never edited (`updated_at` equal to `created_at`): identical to
+        # the created_at-only formula -- must not regress.
+        (
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:00:00Z",
+            False,
+        ),
+        # Edited moments after posting (e.g. a typo fix): still fresh.
+        (
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:00:30Z",
+            False,
+        ),
+        # Edited long after posting, even though the item itself was never
+        # touched again: the edit could have written the approval
+        # vocabulary in at any point up to `updated_at`, so this must be
+        # stale even though `created_at` alone looks fresh (#778).
+        (
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:00:00Z",
+            "2026-06-01T00:00:00Z",
+            True,
+        ),
+        # Already stale from the item side (created_at predates the
+        # item's own last update by more than the grace window); a later
+        # self-edit -- even one that itself postdates that update -- must
+        # not resurrect it into "fresh".
+        (
+            "2026-01-01T01:00:00Z",
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T02:00:00Z",
+            True,
+        ),
+    ],
+)
+def test_approval_is_stale_also_catches_a_long_delayed_edit(
+    item_updated_at: str,
+    comment_created_at: str,
+    comment_updated_at: str,
+    expected: bool,
+) -> None:
+    """A comment edited long after it was created is its own staleness signal.
+
+    GitHub exposes no more per-revision history for a comment's body than
+    it does for an Issue's (see `_approval_is_stale`'s own docstring), so
+    once a comment's `updated_at` drifts more than the grace window past
+    its own `created_at`, the approval vocabulary read back today could
+    have been written in anywhere up to that edit -- including well after
+    whatever the comment originally said. This is an independent check
+    from the existing item-vs-`created_at` comparison, not a replacement
+    for it: the last case confirms a comment already stale from the item
+    side does not get to look fresh again just because its own edit
+    happened to land after that item update.
+    """
+    assert (
+        _approval_is_stale(
+            item_updated_at, comment_created_at, comment_updated_at
+        )
+        is expected
+    )
+
+
+def test_editing_a_stale_comment_into_an_approval_fails_closed() -> None:
+    """Repurposing a stale, untouched comment into `/milestone approve`
+    long after the fact must not silently pass (#778).
+
+    The comment's `created_at` looks fresh relative to the tracker's own
+    `updated_at` (both are old; the tracker was never touched again), so
+    the item-vs-`created_at` check alone would accept it. Only the
+    comment's own edit gap catches this.
+    """
+    result = approval_decision(
+        snapshot(
+            comment(
+                1,
+                "reviewer",
+                "/milestone approve",
+                created_at="2026-01-01T00:00:05Z",
+                updated_at="2026-06-01T00:00:00Z",
+            ),
+            tracker_updated_at="2026-01-01T00:00:00Z",
+        )
+    )
+
+    assert not result.allowed
+    assert "invalidated" in result.summary
+    assert "reviewer" in result.summary
 
 
 def test_stale_approval_no_longer_opens_the_gate() -> None:
