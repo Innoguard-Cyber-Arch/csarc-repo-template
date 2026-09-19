@@ -86,6 +86,18 @@ review／required-check 實際狀態）維持未實作：`scripts/generate_audit
 檔；`scripts/apply-repository-settings.sh` 對這兩個新政策檔案的存在與否是條件式
 判斷，檔案不存在時（所有既有下游 repo）行為與 #607 之前完全一致。
 
+**部分取代（Issue #744，2026-09-17）：** 上面「`release_phase` 是人工宣告的單一
+權威來源」本身不變，`policies/project-stage.json` 與這裡描述的兩個 Ruleset
+bypass 機制也繼續照原樣運作，不受 #744 影響。但 #744 的維護者決定改變了這件事
+背後的假設：版本號現在直接表示發布層級，alpha／beta 可以在任何時候發布（包含
+在早期版或正式版之後），不再是「一段只會往前走、走到 release 就結構性消失」的
+一次性期間；本節第一段暗示的單向前進假設因此不再普遍成立於版本號本身（本節
+`release_phase` 三值與其 Ruleset bypass 範圍仍是獨立、不受影響的另一條軸線）。
+審核與測試依發布層級分級、是否需要調整或取代本節的 bypass 機制本身，是 #745
+的範圍，本節在 #745 落地前維持現狀。詳見
+`docs/adr/release-security-and-dependencies.md`「版本號表示發布層級與保留規則
+（#744）」一節。
+
 ## 2026-09-09 exact-head review 直接授權 lifecycle merge（#719）
 
 #240 建立的 remote lease、CAS 與 merge 前 live revalidation 保留，但一般 PR 不再要求

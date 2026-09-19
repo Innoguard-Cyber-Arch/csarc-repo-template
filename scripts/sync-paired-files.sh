@@ -74,6 +74,7 @@ paired_files=(
   scripts/lint-workflows-shell
   scripts/publish-release
   scripts/release_bundle.py
+  scripts/release_phase.py
   scripts/release_policy.py
   scripts/resolve-cache-root
   scripts/scan-secrets

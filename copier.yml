@@ -143,10 +143,15 @@ _migrations:
             },
             Path("tests/test_release_bundle.py"): {
                 "afb4565f2d1e6a12325d39b6c953c75d942028bc4561a5fa9d2ed1e854a958cf",
+                "8362ec8c19e2a4c8f9ceebe76d76d41c5160ff3fe8f1d82438d66799cd2db951",
+            },
+            Path("tests/test_release_phase.py"): {
+                "3ee82ff8861d76f7b63e71c17eecc044b666f7ec7bc7edfd8a3fd64a4acd92dc",
             },
             Path("tests/test_release_policy.py"): {
                 "89d35a7eafdf5ec17f607e59ea192b2676989bf2e0ec94dd76961baacdd41bf5",
                 "0cecaadbbc558806e3513dd1d3d0fc08869d6ab643919f73612c2c7a631558ec",
+                "d0f1aba730810965d788f13c88519fa108cb39d9c804519cff2263b625c91ff1",
             },
             Path("tests/test_repo_capabilities.py"): {
                 "807eade2ce855543ac38d5f09119672384d77f2f637133b8cb134f3ffbe1402b",

@@ -275,8 +275,17 @@ done
 verification_step "Release version consistency" \
   "${platform_python[@]}" - <<'PY'
 import json
+import runpy
 import tomllib
 from pathlib import Path
+
+# scripts/release_phase.py's `normalize()` (Issue #744) so a Python
+# packaging surface's PEP 440-normalized value (e.g. pyproject.toml's
+# "0.16.0a1") compares equal to every other surface's canonical value
+# (e.g. the release manifest's "0.16.0-alpha.1") -- they are the same
+# version, just written differently, not a real mismatch.
+release_phase = runpy.run_path("scripts/release_phase.py")
+normalize = release_phase["normalize"]
 
 versions = {
     "release manifest": json.loads(
@@ -297,9 +306,10 @@ if Path("Cargo.toml").exists():
     )["package"]["version"]
 if Path("version.txt").exists():
     versions["version.txt"] = Path("version.txt").read_text(encoding="utf-8").strip()
-if len(set(versions.values())) != 1:
+normalized = {source: normalize(value) for source, value in versions.items()}
+if len(set(normalized.values())) != 1:
     raise SystemExit(f"Release versions do not match: {versions}")
-print(f"release version: {next(iter(versions.values()))}")
+print(f"release version: {next(iter(normalized.values()))}")
 PY
 test -x scripts/apply-repository-settings.sh
 test -x scripts/detect-language-profile
