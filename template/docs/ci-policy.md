@@ -861,7 +861,7 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
    PR 一併修正到與 root 一致。
 
 **回歸測試**：`tests/test_check_action_pins.py`（pin 一致／不一致回報／不同 action 互不干擾／檔案掃描範圍／
-CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.py` 逐位元組同步）。`sync-template`
+CLI fail closed 五個案例，只在 root 執行；#780 已停止把 root 治理測試複製進生成專案）。`sync-template`
 job 目前沒有對應的本機可重跑回歸測試——它是一段會實際 push commit 的 workflow step，沒有安全、可重複執行的
 方式在本機或 CI 對真實 GitHub repository 重放；正確性由 `scripts/sync-paired-files.sh` 自身既有的測試覆蓋
 （它是唯一被呼叫的邏輯），實際行為待合併後第一張真的改到 paired workflow 的 Dependabot PR 驗證並回填證據。
@@ -1225,6 +1225,36 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 | Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／release-drift／audit-fleet-adoption／create-milestone／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate（`scripts/test-check-scope-gate`，見上方 Scope-drift gate enforcement 一節）四個 shell 自我測試；base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status、`scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）與 `scripts/create-milestone`（原子建立 Milestone 與其 tracker Issue，見 `docs/milestone-description.md`；#572）六支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`scripts/test-check-release-drift`（mock `gh`，驗證上方「發版存量漂移偵測（`release-drift.yml`，#605）」一節的 drift 判定邏輯）也只掛在這個 full 專屬階段——`scripts/check-release-drift` 本身像 `release.yml` 一樣逐位元組下發到 `template/`，但比照 `release.yml`／`ci.yml` 沒有生成 repo 端本機再測試的既有慣例（下發前的 root 測試已足夠證明這份靜態、無 Jinja 條件式的實作正確），不隨腳本一起下發、也不掛進生成 repo 的 `scripts/verify`；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
 | Package smoke test | `scripts/verify-stage-package-smoke` | wheel 可建置、已發布入口可從建置產物執行 | fast 不跑這個階段；改用範圍較窄的 Copier smoke copy（見下方 Journey 03 的 PR 級別 render/smoke） |
 | GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | workflow 權限與注入稽核（zizmor） | fast 不跑；workflow scope 的一般 PR 由 full 邊界（promotion／hotfix／merge queue／manual）覆蓋，不會被跳過 |
+
+#### 驗證拓撲與可觀測性（#780）
+
+驗證分成三種責任，不再把同一批 Python 測試複製到不同 repo 後重跑：
+
+- **Root-only governance tests：**`tests/` 驗證本模板的 Milestone、PR、release、安全與
+  Copier lifecycle；只由 root 的 fast／full 入口執行。`template/tests/` 只下發生成產品本身
+  的 smoke test 與共用 marker policy hook，不再帶 21 個 root 治理模組及其 SBOM fixtures。
+- **Generated-project contract checks：**每種語言組合仍實際經 Copier render，檢查 config、
+  manifest 與語言專屬檔案；Python 相容性入口只跑 `runtime and not large` 的最小 smoke、
+  建置 wheel 並從隔離環境 import。
+- **One representative end-to-end profile：**full regression 只挑一個 Python＋TypeScript 組合
+  執行生成專案的完整 `scripts/verify full`；Rust 只跑專屬 `scripts/verify rust`，不再重跑
+  repository-wide checks。三種語言都有真實原生工具鏈證據；create／adopt／update 的保存契約
+  則繼續由 root 的 `large` regression 提供，不用每種單語言 profile 再跑一次完整 verifier。
+
+pytest marker 契約延續 #317／PR #364：`runtime` 表示每個受支援 Python runtime 都必須執行
+的最小行為；`quarantine` 不會 skip、xfail 或 retry 測試，只附加追蹤資料。每個 quarantine
+必須使用具名的 `owner`、完整 GitHub Issue URL `issue`、非空白 `reason`、ISO 日期
+`expires` 與非空白 `remove_when`；欄位缺漏、格式錯誤或到期時，collection 直接 fail
+closed。這個 marker 不得
+用來讓 required gate 忽略失敗。
+
+所有本機驗證入口共用 `scripts/verification-step`：每一步在開始與結束時印出名稱與 wall
+time；執行超過 60 秒時每 60 秒輸出 heartbeat；失敗時先指出第一個失敗步驟、exit status、
+`log=stdout`，再印出 shell-quoted 的單步 `RERUN` 指令。`scripts/verify-template.sh` 仍維持
+七階段摘要，並在 stage failure 另列可獨立重跑的 `scripts/verify-stage-*` 指令。可用
+`CSARC_VERIFICATION_HEARTBEAT_SECONDS` 將 heartbeat 間隔改為其他正整數秒數；這只改變
+顯示頻率，不改變命令、重試或 pass/fail 語意。Root 的 fast／full pytest 另用 verbose
+node ID 顯示目前案例，結束時列出最慢 20 個案例；沒有自動 retry。
 
 #### 逐階段耗時量測（#465）
 

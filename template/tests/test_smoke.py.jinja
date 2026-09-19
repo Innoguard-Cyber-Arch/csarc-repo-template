@@ -1,6 +1,10 @@
 from importlib.metadata import version
 
+import pytest
+
 from {{ package_name }} import __version__
+
+pytestmark = pytest.mark.runtime
 
 
 def test_version_matches_installed_distribution() -> None:

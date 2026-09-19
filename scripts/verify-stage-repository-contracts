@@ -9,8 +9,9 @@ set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+source "$repo_root/scripts/verification-step"
 
-git diff --check
-./scripts/check-update-conflicts
-./scripts/scan-secrets
-./scripts/verify-dependencies
+verification_step "Changed-tree hygiene" git diff --check
+verification_step "Conflict-marker check" ./scripts/check-update-conflicts
+verification_step "Secret scan" ./scripts/scan-secrets
+verification_step "Dependency scan" ./scripts/verify-dependencies
