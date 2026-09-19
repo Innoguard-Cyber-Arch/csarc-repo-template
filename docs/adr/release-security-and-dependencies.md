@@ -280,6 +280,101 @@ Release 收回 draft。
 的既有配對清單中，本節新增 `scripts/verify_release_consumption.py` 到同一份清單（新的必要
 執行期相依，不再只是選用的消費端契約）；`.github/workflows/release.yml.jinja` 不需要修改，
 它只呼叫 `scripts/publish-release`，不直接讀 `immutable_releases` 這個欄位。
+## 版本號表示發布層級與保留規則（#744，2026-09-17）
+
+維護者 2026-09-17 決定：版本號本身直接表示發布層級，取代側欄狀態或人工追蹤。
+alpha 為 `X.Y.Z-alpha.N`；beta 為 `X.Y.Z-beta.N`（0.x 或 1.x 都可以）；早期版為
+不帶後綴的 `0.y.z`；正式版為 `1.0.0` 起不帶後綴。同一版本號的後續 pre-release
+遞增 `.N`（SemVer 數值排序，tag 名稱不能重用）；alpha／beta 任何時候都可以發布，
+包含在早期版或正式版之後。每次發版的層級取自上次發版以來所含工作的最高宣告
+層級——**宣告與計算機制本身是 #745 的範圍**，本 Issue 只負責把一個已宣告的
+層級正確轉成版本號並發布。
+
+**歷史 Release 的一次性重新定位：** `v0.2.2`–`v0.15.5` 追溯認定為 alpha，
+`v0.15.6` 起進入 beta（既成事實，不受下面「發版層級調整」影響）。這 29 個既有
+Release 全部刪除，不以新名稱重發（GitHub Immutable Releases 下 tag 名稱刪除後
+不能重用，所以無法改名，只能整個刪除後在新基準重新開始）；新基準是 Milestone
+14 合併到 `main` 後的第一個 **alpha** 版本（2026-09-19 由原訂 beta 改回 alpha，
+見下方「發版層級調整」；規則本身允許 beta 之後任何時候再宣告 alpha，見上方
+「維護者 2026-09-17 決定」第 2 點）。實際刪除是 promotion 之後由維護者在確認
+dry-run 清單後親自執行的動作，記錄在 #740 的 Completion evidence，不是任何工作
+PR 的合併條件；必須排在新版 CLI（見下方）發布之後，確保下游能改走重新安裝流程
+而不是直接失敗。
+
+**發版層級調整（2026-09-19）：** Milestone 14 的發版層級由原訂 beta 改回
+alpha（同步調整 #740、#744）。理由：#745（依層級決定能否自核）尚未落地，目前
+仍套用 #743 的舊規則（任何階段皆允許 admin 自核）；但 #740 的非提案者核准已因
+tracker body 編輯（新增 #780）而依 #632 的核准綁定規則失效，需要重新核准。與其
+在等待重新核准期間動用「舊規則仍允許、但精神上牴觸 #745 已寫定的 beta 需他人
+審核」的 admin 自核例外，維護者選擇改回 alpha——alpha 允許自核是 #745 設計本身
+就明確承認、不牴觸精神的路徑。只有「Milestone 14 這次新基準要發哪個層級」改
+變；`v0.15.6` 仍是既成事實的 beta 發布，不受影響。
+
+**保留規則（去每次發版起持續適用）：** 保留所有不帶後綴的版本（早期版與正式版），
+外加依 major.minor（前兩個數字）分組後最新一組的最新一個 pre-release；較舊分組
+或同分組較舊的 pre-release 一律列為應刪除。`scripts/release_policy.py
+retention-plan --repo OWNER/NAME` 只列出「應保留」與「應刪除」清單（dry-run），
+不呼叫任何刪除 API；是否、何時實際刪除仍是維護者的人工決定。
+
+**刻意的單一發展線假設：** 本節「最新一串 pre-release」是單數——只保留數值最新
+一個 major.minor 分組的 pre-release，不是「每個仍有活動的分組各自的最新一個」。
+若同時有兩條 major.minor 線都在持續發 pre-release（例如維護中的舊線與下一版的新
+線並行），較舊那條線的 pre-release 一樣會被列為應刪除，即使它其實還在使用中；
+純靠版本號無法分辨「已放棄」與「仍在維護」。這正是為什麼刪除清單只是 dry-run、
+一律留給維護者人工確認才執行——多線並行的情境會在那個人工複核步驟被發現並排除，
+而不是靠工具自動判斷。
+
+**工具面變更：**
+
+- `scripts/release_phase.py`（`template/scripts/` 與 `src/csarc_cli/` 各一份
+  逐位元組相同的副本——後者是因為 `csarc` 發行的 wheel 只打包
+  `src/csarc_cli`，CLI 無法在執行期匯入外部的 `scripts/` 模組）是版本號格式的
+  唯一實作：剖析／格式化／SemVer 優先序排序／合法性檢查／保留規則分類都在這裡。
+- `scripts/release_policy.py` 的 `bump_version`／`release_plan` 改為只計算不帶
+  後綴的核心版本號，由呼叫端透過新增的 `--phase {alpha,beta,early,formal}`
+  套用宣告的層級；`prepare-candidate`／`plan` 兩個子指令都接受這個參數。
+- `scripts/converge-release-tag` 依 tag 是否帶 `-alpha.N`／`-beta.N` 後綴決定
+  `gh release create` 要不要加 `--prerelease`；`scripts/publish-release` 的
+  `gh release edit ... --draft=false` 只在無後綴版本才加 `--latest`。
+- `scripts/check-release-drift` 不再把 `prerelease` Release 當成無效發布忽略；
+  tag 格式與 `prerelease` 旗標互相矛盾時仍然壓不下告警（見本 ADR 上方「發版
+  存量漂移偵測」對應章節，或 `docs/ci-policy.md` 同名章節）。
+- CLI（`src/csarc_cli/cli.py`）的 `release_identity()` 接受 immutable、已發布的
+  pre-release Release：tag 必須是合法版本號，且 `prerelease` 旗標要與 tag 格式
+  一致，本 ADR 上方列出的既有驗證（immutable、attestation、tag 指向未移動、
+  commit signature）全部保留不變。選「最新」版本改由
+  `GhReleaseClient._latest()` 分頁列出所有已發布、非 draft 的 Release 後依
+  SemVer 優先序挑選，不再依賴 GitHub `releases/latest` API（該 API 不回傳
+  `prerelease: true` 的 Release，是 CLI 過去只能選到正式版的根本原因）。
+- 下游 `csarc update` 若確認記錄的 `release_tag` 在 canonical repository 已不
+  存在（GitHub 明確回報 404，區分成新的 `ReleaseNotFoundError`），改走重新
+  安裝流程：重用下面「Transactional 更新／adoption plan」一節（#219）同一套
+  plan 機制，列出新增／覆寫／保留／人工合併項目，經使用者確認才套用；
+  project-owned 或已產生分歧的檔案一律保留，不自動覆寫或刪除。只有「tag 確認
+  不存在」這一種情況觸發重新安裝；attestation 不符、tag 指向改變、簽章無效、
+  repository identity 不符等其他驗證失敗，一律維持 fail closed，不得改走重新
+  安裝繞過驗證。目前的實作限制是：由於舊 Release 已確認不存在，`csarc update
+  --reinstall` 的路徑無法像一般更新一樣重新渲染舊版本作三方比對基準，因此對
+  「相對於新版本內容有差異」的既有檔案一律歸類為需要人工合併，即使該檔案從未
+  被專案自行修改過——這維持安全（絕不靜默覆寫），但可能比一般 `csarc update`
+  需要更多人工確認；未來可視需要在舊 commit 仍可 fetch 到時，補上盡力而為的
+  三方比對。
+
+**取代（superseded）：** #425 Candidate 11 與 Milestone 12 Boundaries「不從
+SemVer 猜 release phase」──版本號現在直接表示發布層級。#425／Milestone 12
+「M12 完成與同事核准才構成 alpha → beta entry evidence」──`v0.15.6` 起由
+維護者決定直接視為 beta。#425／Milestone 12 Boundaries「不改寫既有 immutable
+Release」──依保留規則刪除舊 Release（immutable 本身不被修改，是整個刪除後
+不重用同名 tag，不是改寫）。CLI 只接受正式版 Release 的既有假設──改為接受
+合法的 immutable pre-release。
+
+**保留（preserved）：** #430 exact-SHA 與 capability-aware release；本 ADR 上方
+`## Ownership` 與「歷史 Action 逐項複核」章節描述的 canonical repository、
+immutable Release、attestation 與簽章驗證；`## 發版不依賴 Actions 健康度的
+本機 fallback（#589）` 一節描述的本機 `scripts/publish-release` 標準發版路徑；
+只有合併到 `main` 才發版的邊界。審核與測試依發布層級分級（取代
+`policies/project-stage.json` 的 Ruleset bypass 機制）是 #745 的範圍，本節
+不涉及、也不預先假設其設計。
 
 ## 評估過的替代方案
 

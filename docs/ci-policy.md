@@ -378,12 +378,26 @@ command substitution，這段文字從未被執行，但掃描器分不出「描
 仍然成立。這不是本節唯一的例外——`canonical_scanner_helper` 對
 `pr_lifecycle.py` 自身的例外也適用同一條通則，往後新增例外一律比照辦理。
 
+**Issue #744／#745 部分取代（2026-09-17）：** 本節的 `policies/project-stage.json`
+`release_phase`（alpha／beta／release 三值）繼續用於上面描述的 Ruleset
+bypass 範圍收斂，本身不受影響。但本節「`release_phase` 是人工宣告、不從
+分支模式或 semver 反推」的立場，以及「進入 `release` 後這整個 bypass
+結構性消失」隱含的單向前進假設，被維護者 2026-09-17 的決定取代：版本號
+本身現在就直接表示發布層級（見下面「版本、發版、交付與部署矩陣」與
+`docs/adr/release-security-and-dependencies.md` 新增段落），alpha／beta 可以
+在任何時候發布，不再是一段只會前進的一次性期間。審核與測試如何依層級分級
+（取代本節 bypass 機制的下一步）是 #745 的範圍，尚未落地前本節機制照舊
+生效；`policies/project-stage.json` 檔案本身與其三值不因 #744 改變。
+
 ### 不屬於里程碑的工作
 
 一張 Issue 若能獨立審查、驗證與交付，且沒有共同期限、跨 Issue 相依、整批驗收或
 soak／canary 需求，就不必加入里程碑。它從最新 `main` 建立 topic branch，PR 直接回
 `main`，接受一般 review 與風險分級驗證，並以 `Closes #N` 在合併後結案。合併只代表
-repository delivery；後續由 release workflow 判斷是否需要建立版本 PR。
+repository delivery；後續由 release workflow 判斷是否需要建立版本 PR。**這張 Issue
+本身在合併前需要通過核可**（非提案者核准或 admin 自核），見下方「Standalone／
+hotfix／release recovery Issue 核可 gate（#743）」——它與有 Milestone 的 Issue 自動
+繼承 tracker 核可形成對稱，避免拆成 standalone 變成繞過批次治理的捷徑。
 
 若工作開始需要多張互相依賴的 Issue、共同交付日期、整批驗收、獨立環境或正式發版
 決策，必須在實作前加入適當里程碑，改走 `dev/m*`；不能用 standalone 路徑繞過批次治理。
@@ -400,6 +414,10 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
    rollback 說明與是否發版的決策；#401 負責一般 GitHub native 關單契約。
 4. `fix` 預設表達 patch 意圖；破壞相容性時明列 `!`。Release Please 會據此更新版本 PR；
    版本 PR 尚未審查、合併且正式成品尚未發布前，hotfix 仍只算已交付、尚未發版。
+5. Hotfix Issue 本身在合併前需要核可（非提案者核准，或 proposer 同時是 repo `admin`
+   collaborator 時的自核例外，理由必填）——見下方「Standalone／hotfix／release
+   recovery Issue 核可 gate（#743）」。這與第 2 步的 PR review 是兩道獨立關卡：真正
+   緊急、找不到第二人核准時，admin self-approval 保證這條路徑不會因為等待核准而卡死。
 
 ### Release recovery
 
@@ -412,7 +430,190 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 任一條就擋下合併。`scripts/ci_tier.py` 讓這條路徑比照 hotfix 一律升級為 `full` 驗證分級，不
 得降級為 `fast`。這一節只回答「一次 release recovery PR 如何審查後進入 `main`」；`main` 進去
 之後如何算出版本、建 tag、發布 Release 與成品，是上方「Release 發版不依賴 Actions 健康度的
-fallback（#589）」一節的責任，兩者是各自獨立的問題，不合併成同一節。
+fallback（#589）」一節的責任，兩者是各自獨立的問題，不合併成同一節。這類 PR 連結的
+release-recovery Issue 沒有 Milestone，同樣落在下方「Standalone／hotfix／release
+recovery Issue 核可 gate（#743）」的範圍內，合併前需要核可。
+
+### Standalone／hotfix／release recovery Issue 核可 gate（#743）
+
+維護者的核准模型分兩點：(1) 有 Milestone 的 Issue，Milestone tracker 一旦核准，底下
+Issue 視為已核准，不需要逐張另外核准——這是 `approval_decision()` 一直以來的行為；
+(2) 沒有 Milestone 的 Issue（上方「不屬於里程碑的工作」「Hotfix」「Release
+recovery」三種路徑都屬此類），Issue 本身需要核可，其工作 PR 才能合併。截至
+`main@488f874` 的盤點：只有第 1 點被實作，`_pull_decision()` 在 PR 沒有 Milestone 時
+直接回傳放行，讓 standalone／hotfix 路徑變成繞過批次治理的捷徑——同一件工作，放進
+Milestone 要先經非提案者核准，拆成 standalone 或標成 hotfix 就不用。`#743` 補上第 2
+點，且不動第 1 點既有行為。
+
+**核可對象與語彙：**新增 `standalone_issue_approval_decision()`／`check_issue_approval()`
+（CLI 子指令 `check-issue-approval --repo --issue`），核可對象是「該 PR 用
+`Closes`／`Fixes`／`Resolves #N` 連結的 Issue 本身」。核可留言語彙是維護者在 Issue
+#743 留言中（2026-09-18，本次實作開始前）明確決定的**獨立新詞彙**，刻意**不**沿用
+tracker 的 `/milestone approve` 系列——純文字、不分大小寫、取留言第一行非空白內容：
+
+| 用途 | 留言內容（不分大小寫） |
+| --- | --- |
+| 非提案者核准 | `Approve` |
+| admin collaborator 自核（理由必填） | `Admin-approve: <理由>` |
+| 反駁 | `Object: <理由>` |
+| 解決反駁 | `Resolve: <目標留言連結或摘要>` |
+
+理由（詳見 Issue #743 留言）：`/` 開頭的斜線指令留給 tracker 專用，這張 Issue 根本沒有
+Milestone 可以「/milestone」；純文字關鍵字讓任何協作者不用先查文件就知道怎麼核准。
+判斷演算法——非提案者要求、admin self-approve 的 collaborator permission 查核、反駁
+／解決追蹤、#632 的 fingerprint-binding staleness——與 tracker／scope-expansion 兩個
+既有 gate 結構相同。這套演算法本身抽成一個共用的 `_ApprovalVocabulary`（純資料：
+`approve`／`admin_prefix`／`object_prefix`／`resolve_prefix`／`case_sensitive` 五個
+欄位）與唯一一份 `_vocabulary_approval_records()` 實作（code review 發現重複實作是
+維護風險後的重構）；`_approval_records()`（tracker）與 `_issue_approval_records()`
+（#743）都只是傳入各自 `_TRACKER_VOCABULARY`／`_ISSUE_VOCABULARY` 的薄封裝，不重新
+實作演算法本身。兩套語彙仍然刻意保持並行、互不影響——`_ApprovalVocabulary.normalize()`
+確保每套語彙只跟自己的比對規則相符，兩者從不會互相誤判（`tests/test_standalone_issue_
+approval.py` 的 `test_milestone_slash_vocabulary_does_not_count_on_a_standalone_issue`
+鎖定這個邊界）；「不建第二套系統」在這裡指的是一套共用的判斷骨架與唯一一份演算法
+實作，搭配兩份資料形式的獨立語彙定義，不是「兩套完全獨立、各自維護的程式碼」。這裡
+核可的對象是**Issue**，不是 work PR 本身——
+`docs/adr/milestone-scope-and-closure-reconciliation.md`「work PR 不加裝 native
+required review、不延伸 `/milestone` 語彙到個別 work PR」的既有決定維持不變，PR 合併
+授權仍完全是 #719／`validate-pr-policy` 的責任，兩者是彼此獨立的關卡。
+
+`.github/ISSUE_TEMPLATE/bug.yml`／`task.yml`／`feature.yml`／`documentation.yml`
+（會產生 standalone／hotfix Issue 的四個表單；`milestone-tracker.yml`／`config.yml`
+不受影響，root／`template/` 兩份同步）各自補上一句提示，說明沒有掛 Milestone 的
+Issue 需要另一位協作者留言 `Approve`，或提案者以 `admin` collaborator 身分留言
+`Admin-approve: <理由>` 自核；有掛 Milestone 則不需要，直接沿用該 Milestone tracker
+的核准。
+
+**PR 合併前的 CI 接線：**不需要新增 workflow step——`pr-policy.yml` 既有的「Validate
+Milestone approval」（呼叫 `check-pr`）與 merge queue 的「Revalidate queued
+Milestone approval」（呼叫 `check-merge-group`）本來就對每個 PR／merge-group commit
+執行 `_pull_decision()`；`#743` 只改寫這個函式在「PR 沒有 Milestone」分支下的行為：
+從硬編碼的 `Decision(True, "This pull request is not part of a Milestone")`，改成
+新增的 `_standalone_pull_decision()`。
+
+這個函式對 PR body 的解析行為比初版更嚴謹（皆為 code review 發現後修正）：
+
+- 先比對 PR 的 head branch 是否落在 `_AUTOMATED_PULL_REQUEST_HEAD_PREFIXES`
+  （`dependabot/`、`automation/`、`release-please--`、`sync/main-to-`，與
+  `scripts/validate-pr-policy` 既有的四種自動化路徑一致），符合就直接放行，不看 body
+  內容。這是防禦自動化 PR body 內文「意外像」`Fixes #N` 的假陽性——例如 Dependabot
+  把上游 changelog 逐字帶進 PR 說明，剛好包含這個字串。這不是「只要是 bot 帳號就跳
+  過」的寬鬆規則（見 `scripts/hosted_verify_bots.py` 自己「不是只要 `[bot]` 就跳過」
+  的既有先例），而是與既有四種自動化路徑完全對應的精確 allowlist。
+- 再用 `_CLOSING_KEYWORD.finditer()`（不是 `.search()`）收集 body 裡**所有**相異的
+  Issue 編號：找不到就放行（沒有連結 work Issue，Dependabot、release-please、
+  `automation/*`、main-sync bridge 等本來就沒有連結 Issue，維持不受影響）；剛好一個
+  就照常呼叫 `check_issue_approval()`；超過一個相異編號則直接 fail closed，訊息列出
+  每個編號，不會像只用 `.search()` 那樣悄悄只看第一個、漏掉其餘。`scripts/
+  validate-pr-policy` 已經對一般工作 PR 要求「剛好一個連結 Issue」，所以這裡的檢查
+  對走完整流程的 PR 是防禦性重複；但 `check_issue_approval()` 同時也是一個獨立 CLI
+  子指令，不會經過 `validate-pr-policy`，所以 `_standalone_pull_decision()` 自己也要
+  正確處理這個情況，不能只靠上游的既有檢查。
+- 這裡的 pattern 在形狀上接近、但不是逐字等於 `scripts/check-scope-gate` 自己的
+  inline pattern：`_CLOSING_KEYWORD`（這裡用的）不分大小寫，`check-scope-gate` 的
+  inline pattern 區分大小寫。目前沒有已知理由需要兩者行為不同，這裡刻意不去改動
+  `check-scope-gate`（已經上線、有自己獨立測試的既有 script），留給後續視需要再統一。
+
+找到剛好一個相異 Issue 編號後，呼叫 `check_issue_approval()`。
+
+**Milestone-scoped Issue 不受影響：**`check_issue_approval()` 先讀該 Issue 自己的
+`milestone` 欄位——有 Milestone 就轉呼叫既有的 `approval_decision()`（該 Milestone
+tracker 的核可判斷），完全不套用這個新 gate，維持「Milestone-scoped Issue 不需要逐
+張核可」不變。這個分支在 `_pull_decision()` 的正常流程裡理論上碰不到
+（`scripts/validate-pr-policy` 已經要求 PR 的 Milestone 必須與其連結 Issue 的
+Milestone 一致，PR 沒有 Milestone 時連結 Issue 也不會有），但 `check-issue-approval`
+同時是一個獨立 CLI 子指令，不能假設呼叫端已經驗證過這個不變量，所以直接從 Issue 自
+己的即時資料重新判斷，屬於防禦性設計，不是重複邏輯。
+
+**核可留言到達時重新觸發 CI（code review 發現，`work-item-lifecycle.yml`）：**上面
+「PR 合併前的 CI 接線」只回答「PR 事件與 merge-group 事件發生時，怎麼判斷」；但
+tracker 路徑除此之外還有另一層——`work-item-lifecycle.yml` 的「Milestone lifecycle:
+reconcile lifecycle and refresh PR checks」step，會把事件中的 Issue 編號與 action 傳給
+`reconcile()`；只有 tracker Issue 的事件／留言、Milestone 事件，以及 Issue 移入、移出
+或改掛 Milestone 時，才真正同步狀態並呼叫 `refresh_pr_checks()`。一般 work Issue 的編輯、
+label 或留言會成功 no-op，不寫狀態也不刷新 PR check。符合條件的事件會把新核可（或新失
+效）狀態推回其下每張 PR 的 check-run，讓 reviewer 不必等到 PR 本身有新事件才看到最新
+結果。tracker 尚未核准、核准因後續編輯失效，或仍有未解反駁時，`reconcile` 仍會把失敗
+結果寫回 PR check，但以 notice 回報治理狀態並成功結束背景 run；PR 上的 required check
+繼續 fail closed。tracker 缺漏／格式錯誤、GitHub API 錯誤或狀態寫入失敗仍讓背景 run
+失敗，不會被當成等待核准。`#743` 剛落地時只做了「PR 合併前的 CI 接線」，沒有補上這
+一層對稱——沒有 Milestone 的 Issue 收到
+`Approve` 等留言時，`pr-policy.yml` 完全不監聽 `issue_comment`，`work-item-
+lifecycle.yml` 原本的 refresh step 條件又要求 `.milestone.number != null`，所以核可
+留言送出後，其連結 PR 的「Validate Milestone approval」check-run 會停在核可前的舊狀
+態，直到 PR 自己發生下一次事件（push、reopen 等）才會重新算過——結果是 fail **closed
+但卡住**（不會誤判成已核可，但 reviewer 看不到已經核可的事實），不是 fail open，但
+違反 ADR 宣稱「與 tracker 路徑對稱」的說法。
+
+修正：`work-item-lifecycle.yml` 新增一個步驟「Milestone lifecycle: refresh
+standalone Issue PR check」，條件是 `github.event_name == 'issue_comment' &&
+github.event.issue.pull_request == null && github.event.issue.milestone.number ==
+null`（只在留言事件、留言對象是 Issue 不是 PR、且這張 Issue 沒有 Milestone 時觸
+發——對稱於既有 step 用 `!= null` 涵蓋 Milestone 情境，這裡用 `== null` 涵蓋沒有
+Milestone 的情境），呼叫新增的 `scripts/sync_milestone_state.py
+refresh-issue-pr-checks --repo --issue`。新函式 `refresh_issue_pr_checks()` 掃描
+repo 內所有開啟中的 PR，找出 body 的 closing keyword 涵蓋這個 Issue 編號、且自己沒有
+Milestone 的 PR，對每一個呼叫既有的 `check_pr()` 重新算過並回寫 check-run；找不到符
+合的 PR 就是無害的 no-op。刻意不在這裡重複「剛好一個相異 Issue」的判斷——`_standalone_
+pull_decision()` 在 `check_pr()` 實際執行時已經會做這個判斷，refresh 這一層只負責觸
+發重新評估，不重複下判斷的邏輯。`tests/test_journey06_workflows.py` 鎖定這個 step 的
+觸發條件與呼叫指令；`tests/test_standalone_issue_approval.py` 對 `refresh_issue_pr_
+checks()` 本身做單元測試（只重新整理真正符合的 PR、涵蓋一個 PR 同時連結多個 Issue、
+找不到符合 PR 時的 no-op 三種情況）。
+
+**核可綁定 Issue 目前的開啟狀態：**`standalone_issue_approval_decision()`（與
+`check_issue_approval()`，皆有 `require_open` 參數，預設 `True`）比照
+`approval_decision()` 對 tracker 的既有檢查——Issue 若不是 `open` 狀態就直接判定未
+核可，即使先前確實有一則有效的 `Approve` 留言。這修正了 code review 抓到的一個
+fail-open 漏洞：一張 Issue 在開啟狀態下取得非提案者核可後，若之後被獨立關閉（誤判為
+重複、改分類等），而其 `Fixes #N` 連結的 PR 仍然開著，`check-pr`／`check-merge-group`
+每次重新評估時，舊有實作仍會回傳「已核可」，等於允許在一個已經失效的核可基礎上合
+併。與 tracker 路徑一樣，這裡沒有對應「完成收尾」的情境需要 `require_open=False`（那
+是 tracker 專屬的 `closure_decision()` 收尾路徑），所以每個真實呼叫端都維持預設值。
+
+**Hotfix 的緊急路徑：**與 tracker、scope-expansion 核可相同精神的 admin
+self-approval 例外在此保留——proposer 若同時是 repo `admin` collaborator，可以自己
+留言 `Admin-approve: <理由>` 通過，理由必填，summary 明確標成「Issue admin
+self-approved by」，不與一般非提案者核准混淆。這是唯一避免「等待核准而無路可
+走」的路徑，適用真正緊急、沒有第二人可以核准的 hotfix 情境；`#745`（尚未實作）之後
+會依發布層級（alpha／beta 以上）調整 admin self-approval 是否允許，`#743` 先落地
+「非提案者核准或 admin 自核」這條現行規則。
+
+`tests/test_standalone_issue_approval.py`（與 `template/` 成對，42 案例）涵蓋：
+standalone Issue 未核可時 fail closed、非提案者核可後放行（含大小寫與前後空白不敏
+感）、admin 自核放行（含理由必填、非 admin 權限被拒）、反駁與解決反駁（含**反駁只能
+由原作者本人用 `Resolve:` 解除，其他人代為解除不算數**）、核可後編輯 Issue 使其失效
+（沿用 #632 的 60 秒緩衝窗）、**tracker 的 `/milestone approve` 語彙在沒有 Milestone
+的 Issue 上完全不生效**（證明兩套語彙真的互相獨立、不會誤判）、Milestone-scoped
+Issue 繼續繼承 tracker 核可不需要逐張核可、沒有連結 Issue 的自動化 PR 不受影響、
+`check-pr`／`check-merge-group` 兩個既有 CI 接線點都正確套用新 gate（含**同一個
+merge-group 內有多張 PR，其中一張未核可即整體擋下、其餘不受影響**的多 PR 情境）、
+**Issue 核可後被獨立關閉即不再算已核可**（含 `check-merge-group` 端到端重現、
+`require_open=True` 時的 happy path 不受影響、`require_open=False` 的既有防禦式選項
+仍可用）、**PR body 連結多個相異 Issue 時 fail closed**（含同一個 Issue 編號重複出現
+不算多個）、**自動化 PR 的 head branch carve-out**（四種既有自動化路徑各自搭配一段
+「內文剛好長得像 Fixes #N」的假陽性 body，確認不受影響；一般 `fix/<n>-<slug>` head
+不受這個 carve-out 影響，仍正常受檢）、`refresh_issue_pr_checks()` 本身（只重新整理
+真正連結這個 Issue 的 PR、一個 PR 同時連結多個 Issue 時仍會重新整理、找不到符合 PR
+時的 no-op）。`tests/test_journey06_workflows.py` 額外鎖定 `work-item-lifecycle.yml`
+新增 step 的觸發條件與呼叫的 CLI 指令。
+
+**核可留言事後被編輯的既有缺口，已由 #778 修正：**`#743` 開發期間的 code review 曾
+指出 `_approval_is_stale()`（#632，tracker、scope-expansion、standalone 三條路徑共
+用）只比對核可留言的 `created_at` 與 Issue／tracker 的 `updated_at`，從未讀取核可
+留言自己的 `updated_at`——如果有人事後**編輯**一則已存在的留言（例如把一則不相干
+的留言改成 `Approve`），staleness 判定看不出這則留言本身被動過。這不是 `#743` 新增
+的問題，是 `#632` 落地時就有的既有行為，只是 `#743` 讓沒有 Milestone 的 Issue 也開
+始依賴這個機制，風險面因此變大。這個缺口牽動三條路徑共用的核心機制，範圍超出
+`#743` 這張 leaf Issue，當時決定不在 `#743` 分支上修，留給獨立的後續 Issue 處理。
+`#778`（PR #779，standalone、無 Milestone、Alpha self-merge，已合併到 `main`）獨立
+完成了這項修正：`_approval_is_stale()` 新增 `comment_updated_at` 參數，額外以 OR
+判斷留言自己的編輯間隔，細節見上方「Scope-drift gate enforcement 與核可
+fingerprint-binding（#632）」一節的「留言編輯本身的過期判斷（#778）」段落。`#743`
+分支之後合併 `main`（經 `dev/m14-generated-project-fixes` 的 main-sync）時，直接沿
+用了 `#778` 修正過的 `_approval_is_stale()`／`_approval_records()`，`#743` 自己重
+構出的共用 `_vocabulary_approval_records()` 也已經正確帶入這個新參數（呼叫時傳入
+`comment.get("updated_at")`），不需要在 `#743` 這張分支上重複實作。
 
 ### `promotion` 必要檢查的產生條件（#601）
 
@@ -1163,6 +1364,47 @@ PR workflows 設為等待人工核准；Automatic 由原 release run 驗證候�
 Action 建 PR，Guided 只在本機執行 `python3 scripts/release_policy.py prepare-candidate` 並由人
 或 agent 開一般 PR；兩路共用版本計算、候選驗證與唯一 `release.yml` publisher。
 
+### 版本號表示發布層級（Issue #744，2026-09-17）
+
+版本號本身就是發布層級，不是另外一個側欄狀態：alpha 為 `X.Y.Z-alpha.N`；beta 為
+`X.Y.Z-beta.N`（0.x 或 1.x 都可以）；早期版為不帶後綴的 `0.y.z`；正式版為 `1.0.0`
+起不帶後綴。同一版本號的後續 pre-release 遞增 `.N`（tag 名稱不能重用）；alpha／beta
+任何時候都可以發布，包含在早期版或正式版之後。發版層級取自上次發版以來所含工作的
+最高宣告層級——**宣告與計算機制由 #745 提供**，本節與 `scripts/release_policy.py`／
+`scripts/publish-release`／`scripts/converge-release-tag` 只負責把一個已宣告的層級
+轉成合法版本號並正確發布：`release_policy.py plan`／`prepare-candidate` 接受
+`--phase {alpha,beta,early,formal}`。**pre-release 後綴代表發布層級，不保證之後
+會發該版本的無後綴版本**：`X.Y.Z-alpha.N`／`X.Y.Z-beta.N` 只承諾「這是目前宣告的
+成熟度」，不承諾同一個 `X.Y.Z` 之後一定會有對應的無後綴（早期版或正式版）發布——
+下一次發版可能直接跳到更高的版本號，或維持原地再發一次更高的 `.N`。版本號合法性由
+`scripts/release_phase.py`
+（`template/scripts/` 與 `src/csarc_cli/release_phase.py` 各有一份逐位元組相同的
+副本，後者是因為 `csarc` 發行的 wheel 只包含 `src/csarc_cli`，見其模組
+docstring）驗證：主版本號為 0 時不帶後綴即為早期版，主版本號 ≥ 1 時不帶後綴即為
+正式版，後綴只接受 `alpha.N`／`beta.N`，其他一律 fail closed。`gh release create`
+依 tag 是否帶後綴決定要不要傳 `--prerelease`；`gh release edit ... --draft=false`
+只在無後綴版本才加 `--latest`（pre-release 不該被標成「最新」）。
+
+CLI（`src/csarc_cli/cli.py`）的 `release_identity()` 接受 immutable、已發布的
+pre-release Release：tag 必須是合法版本號，且 GitHub 回報的 `prerelease` 旗標要與
+tag 格式一致，其餘既有驗證（immutable、attestation、tag 指向未移動、commit
+signature）全部保留。選「最新」版本改用 SemVer 優先序（`GhReleaseClient._latest()`
+分頁列出所有已發布、非 draft 的 Release 再挑最高者），不再依賴 GitHub
+`releases/latest` API（該 API 不回傳 `prerelease: true` 的 Release）。
+
+保留規則（decision 5）：保留所有不帶後綴的版本（早期版與正式版），外加依
+major.minor 分組後最新一組的最新一個 pre-release；較舊分組或同分組較舊的
+pre-release 列為應刪除。`scripts/release_policy.py retention-plan --repo OWNER/NAME`
+只列出清單（dry-run），不呼叫任何刪除 API；實際刪除是 Milestone 14 promotion 後
+由維護者人工執行的動作，記錄在 #740 的 Completion evidence，不是任何工作 PR 的
+合併條件。下游 `csarc update` 若確認記錄的 `release_tag`在 canonical repository
+已不存在（GitHub 回報 404，`ReleaseNotFoundError`），改走重新安裝流程：重用
+`csarc adopt`（#219）同一套 transactional plan 機制列出新增／覆寫／保留／人工合併
+項目，經使用者確認才套用，project-owned 檔案一律保留；只有 tag 確認不存在才觸發，
+其他驗證失敗（attestation 不符、tag 指向改變、簽章無效、repository identity 不符）
+一律維持 fail closed。詳見 `docs/adr/release-security-and-dependencies.md` 與
+`docs/adr/transactional-repository-adoption.md` 的新增段落。
+
 ## Conditional 與退役能力
 
 `scripts/verify_release_consumption.py` 與其測試保留為 conditional 的消費端安全契約。
@@ -1405,7 +1647,9 @@ Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 
 1. `main` HEAD 未被最新 immutable stable GitHub Release 的精確 target 涵蓋，也不是最新一次成功 `release.yml` run（`gh api repos/{repo}/actions/workflows/release.yml/runs?branch=main&status=success`）所在的 commit。
 2. 過去 N 小時內，既沒有有效的 immutable stable Release，也沒有成功的 `release.yml` run。
 
-最新 stable Release 必須由 GitHub API 明確回報 `immutable=true`；其 `target_commitish` 必須是精確 40 字元 SHA，且等於 `main` HEAD，或經 GitHub compare API 證明為其 ancestor；`published_at` 還必須不早於目前 `main` commit。精確 target 會持續視為涵蓋該 HEAD；ancestor target 只算 N 小時內的近期發布活動，不能永久掩蓋較新的 `main`。mutable Release、draft、prerelease、非 ancestor target、移動中的 branch ref 或比目前 `main` 更早發布的 Release 都不能壓掉告警。這使 immutable GitHub Release 本身成為首要發布事實，不再要求一條已知會被 #123 fail closed 的 hosted run 偽裝成成功。
+最新 eligible Release 必須由 GitHub API 明確回報 `immutable=true`；其 `target_commitish` 必須是精確 40 字元 SHA，且等於 `main` HEAD，或經 GitHub compare API 證明為其 ancestor；`published_at` 還必須不早於目前 `main` commit。精確 target 會持續視為涵蓋該 HEAD；ancestor target 只算 N 小時內的近期發布活動，不能永久掩蓋較新的 `main`。mutable Release、draft、非 ancestor target、移動中的 branch ref 或比目前 `main` 更早發布的 Release 都不能壓掉告警。這使 immutable GitHub Release 本身成為首要發布事實，不再要求一條已知會被 #123 fail closed 的 hosted run 偽裝成成功。
+
+**Issue #744（版本號表示發布層級）之後：** `-alpha.N`／`-beta.N` 的 pre-release Release 不再被當成無效發布忽略——tag 必須是合法的 alpha/beta/early/formal 版本號，且 GitHub 回報的 `prerelease` 旗標必須與 tag 格式一致（兩者矛盾時同樣壓不下告警，`reason` 會標成 `ignored: prerelease flag does not match tag shape`），否則視為 `ignored: tag is not a legal release-phase version`。挑選「最新」時仍以 `published_at` 排序（本節要問的是「發版路徑最近是否真的動過」，不是「哪個版本號優先序最高」；CLI 選版才用 SemVer 優先序，見上面 README／`src/csarc_cli/cli.py` 的說明）。
 
 `release.yml` 在每次 push 到 `main` 後都會執行，即使 `release_policy.py` 判定「今天不需要發版」也會正常執行完成（conclusion 仍是 success）；因此健康狀態下，最後一次成功 run 的 commit 幾乎總是等於當下 `main` HEAD，條件 1 不成立，不會誤報。只有在 `release.yml` 真的不再執行成功、而 `main` 仍透過一般 PR 合併前進時（兩者是各自獨立的觸發：merge 不需要 `release.yml` 成功），條件 1 才會成立；再疊上條件 2（N 小時內真的沒有任何成功活動），才判定為 drift。
 

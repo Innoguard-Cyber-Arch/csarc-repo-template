@@ -45,6 +45,21 @@ else
 fi
 
 if ! gh release view "$tag" >/dev/null 2>&1; then
+  # Issue #744: a `-alpha.N`/`-beta.N` tag must be created as a GitHub
+  # prerelease so release_identity()'s prerelease-flag/tag-shape
+  # consistency check (src/csarc_cli/cli.py) and the CLI's SemVer-
+  # precedence "latest" selection both see a self-consistent Release.
+  # This pattern must stay byte-identical to scripts/release_phase.py's
+  # canonical `_VERSION_RE` suffix (`N` never 0 or zero-padded) and to
+  # the matching checks in scripts/publish-release and
+  # scripts/check-release-drift -- there is no shared regex source
+  # between bash and Python here, so all four copies are kept in sync by
+  # hand and by
+  # tests/test_release_phase.py::test_prerelease_suffix_regex_is_consistent_everywhere.
+  prerelease_flags=()
+  if [[ "$tag" =~ -(alpha|beta)\.[1-9][0-9]*$ ]]; then
+    prerelease_flags=(--prerelease)
+  fi
   gh release create "$tag" --target "$sha" \
-    --title "$tag" --draft --generate-notes
+    --title "$tag" --draft --generate-notes "${prerelease_flags[@]}"
 fi

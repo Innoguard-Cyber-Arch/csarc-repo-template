@@ -350,15 +350,15 @@ class FakeReleaseClient:
         }
 
     def release(self, tag: str | None) -> dict[str, object]:
-        assert tag in {None, "v1.2.3"}
+        assert tag in {None, self.release_values["tag_name"]}
         return self.release_values
 
     def resolve_tag(self, tag: str) -> cli.TagResolution:
-        assert tag == "v1.2.3"
+        assert tag == self.release_values["tag_name"]
         return self.tag_results.pop(0)
 
     def verify_release(self, tag: str) -> None:
-        assert tag == "v1.2.3"
+        assert tag == self.release_values["tag_name"]
         if self.release_error is not None:
             raise self.release_error
 
@@ -4505,6 +4505,494 @@ def test_legacy_update_conflict_leaves_target_unchanged(
     assert cli.target_file_snapshot(project) == expected_files
 
 
+class LocalGitReleaseClient:
+    """A ReleaseClient backed by real local git tags (Issue #744 tests).
+
+    Stands in for GhReleaseClient so a fully "verified" init/update
+    round-trip can be exercised against a local template repository
+    instead of the real GitHub API. `missing` marks exactly the tags that
+    must behave as a confirmed-gone GitHub Release (HTTP 404); `latest` is
+    what a `tag=None`/"latest" lookup resolves to, standing in for
+    SemVer-precedence selection (already covered directly by
+    test_gh_client_selects_latest_by_semver_precedence).
+    """
+
+    def __init__(
+        self, source: Path, latest: str, missing: frozenset[str] = frozenset()
+    ) -> None:
+        self.source = source
+        self.latest = latest
+        self.missing = missing
+
+    def repository(self) -> dict[str, object]:
+        return {
+            "id": cli.CANONICAL_REPOSITORY_ID,
+            "full_name": cli.CANONICAL_REPOSITORY,
+        }
+
+    def _release_payload(self, tag: str) -> dict[str, object]:
+        return {
+            "tag_name": tag,
+            "id": abs(hash(tag)) % 1_000_000,
+            "draft": False,
+            "prerelease": "-" in tag,
+            "published_at": "2026-09-04T00:00:00Z",
+            "immutable": True,
+        }
+
+    def release(self, tag: str | None) -> dict[str, object]:
+        resolved = self.latest if tag is None or tag == "latest" else tag
+        if resolved in self.missing:
+            raise cli.ReleaseNotFoundError(
+                f"GitHub Release {resolved!r} was not found on the "
+                "canonical repository."
+            )
+        return self._release_payload(resolved)
+
+    def resolve_tag(self, tag: str) -> cli.TagResolution:
+        commit_sha = git(self.source, "rev-parse", f"{tag}^{{commit}}")
+        return cli.TagResolution(commit_sha, commit_sha)
+
+    def verify_release(self, tag: str) -> None:
+        del tag
+
+    def verify_commit(self, sha: str) -> None:
+        del sha
+
+
+def initialize_verified_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path]:
+    """Init a project through the fully verified (non-dev) release path."""
+    source, first_sha = make_template(tmp_path)
+    git(source, "tag", "v0.1.0", first_sha)
+    monkeypatch.setattr(cli, "CANONICAL_SOURCE", str(source))
+    monkeypatch.setattr(
+        cli, "GhReleaseClient", lambda: LocalGitReleaseClient(source, "v0.1.0")
+    )
+    project = tmp_path / "verified-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--to",
+                "v0.1.0",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "language=ci",
+            ]
+        )
+        == 0
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    return source, project
+
+
+def test_update_reinstalls_when_the_recorded_tag_is_confirmed_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Issue #744: a GitHub-confirmed missing release_tag falls into reinstall.
+
+    Covers every explicit acceptance condition for the downstream flow: the
+    missing tag triggers it; --check reports without writing; declining
+    confirmation writes nothing; a clean plan applies once confirmed. The
+    new release only adds a file here (leaving managed.txt untouched) so
+    the plan is genuinely clean -- a two-way diff (see
+    command_update_reinstall's own docstring) would route any *changed*
+    existing file to manual merge regardless of whether the project ever
+    touched it, which test_update_reinstall_never_overwrites_a_diverged_file
+    covers separately.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+
+    (source / "template" / "new-feature.txt").write_text(
+        "added in the new release\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", second_sha)
+    client = LocalGitReleaseClient(
+        source, "0.2.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    # --check: reports the reinstall plan and returns 1 without writing.
+    assert main(["update", str(project), "--check"]) == 1
+    output = capsys.readouterr()
+    assert "reinstall" in output.err.lower()
+    assert not (project / "new-feature.txt").exists()
+
+    # Declining confirmation leaves the project untouched.
+    monkeypatch.setattr("builtins.input", lambda _: "no")
+    assert main(["update", str(project)]) == 0
+    assert not (project / "new-feature.txt").exists()
+
+    # A clean plan applies once confirmed.
+    assert main(["update", str(project), "--yes", "--non-interactive"]) == 0
+    assert (project / "new-feature.txt").read_text(
+        encoding="utf-8"
+    ) == "added in the new release\n"
+    assert (project / "managed.txt").read_text(
+        encoding="utf-8"
+    ) == "template version one\n"
+    answers = cli.config_path(project).read_text(encoding="utf-8")
+    assert second_sha in answers
+
+
+def test_update_reinstall_never_overwrites_a_diverged_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A project-owned/diverged file blocks automatic reinstall apply."""
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    (project / "managed.txt").write_text(
+        "project customization\n", encoding="utf-8"
+    )
+    commit(project, "test: customize managed file")
+
+    managed = source / "template" / "managed.txt"
+    managed.write_text("template version two\n", encoding="utf-8")
+    second_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", second_sha)
+    client = LocalGitReleaseClient(
+        source, "0.2.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    assert main(["update", str(project), "--yes", "--non-interactive"]) == 1
+    assert "manual" in capsys.readouterr().err.lower()
+    assert (project / "managed.txt").read_text(
+        encoding="utf-8"
+    ) == "project customization\n"
+
+
+def test_update_other_verification_failures_stay_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Only a confirmed-missing tag reinstalls; every other failure stays
+    fail-closed exactly like before Issue #744 -- a moved tag, bad
+    attestation, invalid signature, or repository identity mismatch must
+    never be silently treated as "missing" and routed into reinstall.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    capsys.readouterr()  # discard initialize_verified_project's own output
+
+    class BrokenSignatureClient(LocalGitReleaseClient):
+        def verify_commit(self, sha: str) -> None:
+            raise CliError("signature invalid")
+
+    monkeypatch.setattr(
+        cli,
+        "GhReleaseClient",
+        lambda: BrokenSignatureClient(source, "v0.1.0"),
+    )
+    assert main(["update", str(project), "--check"]) == 2
+    error = capsys.readouterr().err
+    assert "signature invalid" in error
+    assert "reinstall" not in error.lower()
+    assert (project / "managed.txt").read_text(
+        encoding="utf-8"
+    ) == "template version one\n"
+
+
+def test_update_reinstall_fails_closed_when_project_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Bug fix: reinstall must run real project verification, not skip it.
+
+    verification_authorized=False (the preview build) always reports
+    "pending-authorization", which the generic `applicable` field alone
+    cannot tell apart from a real pass. A reinstall whose candidate would
+    fail ./scripts/verify must never report "Reinstall complete." or
+    write anything to target.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    capsys.readouterr()
+
+    # A hook that always fails, wired in for this one update via --data
+    # (project_verification_hook is an ordinary, unrestricted answer).
+    write_executable(
+        source / "template" / "scripts" / "verify-failing",
+        "#!/usr/bin/env bash\nset -euo pipefail\nexit 1\n",
+    )
+    (source / "template" / "new-feature.txt").write_text(
+        "added in the new release\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", second_sha)
+    client = LocalGitReleaseClient(
+        source, "0.2.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    verify_project_calls: list[Path] = []
+    real_verify_project = cli.verify_project
+
+    def spying_verify_project(target: Path) -> dict[str, object]:
+        verify_project_calls.append(target)
+        return real_verify_project(target)
+
+    monkeypatch.setattr(cli, "verify_project", spying_verify_project)
+
+    result = main(
+        [
+            "update",
+            str(project),
+            "--yes",
+            "--non-interactive",
+            "--data",
+            "project_verification_hook=scripts/verify-failing",
+        ]
+    )
+    assert result != 0
+    error = capsys.readouterr().err
+    assert "verification" in error.lower()
+    assert "Reinstall complete." not in error
+    # Real verification actually ran (the bug: it never did) and rejected
+    # the candidate, rather than the write silently proceeding anyway.
+    assert verify_project_calls
+    assert not (project / "new-feature.txt").exists()
+
+
+@pytest.mark.large
+def test_update_delivers_the_issue_744_release_phase_tooling(
+    tmp_path: Path,
+) -> None:
+    """Issue #744's evidence for "existing-project update impact": generate a
+    project on the commit immediately before #744 landed, simulate it as an
+    already-adopted downstream repository (git-committed, untouched), then
+    run a real `csarc update` to this checkout's current HEAD and confirm
+    the release-phase versioning tooling is actually delivered -- not
+    silently dropped or conflicted out -- exactly like any other paired
+    `template/` change. Drives the real root `copier.yml` end to end (the
+    same `language=ci` profile and overall pattern
+    `test_update_delivers_the_issue_743_approval_gate_to_an_adopted_project`
+    established) rather than asserting against a synthetic minimal fixture
+    template.
+
+    Uses `language=ci`, not `language=python`/`rust`/`typescript`: a CI-only
+    project's release-please config stays `release-type: simple`, so
+    `template/pyproject.toml.jinja`/`package.json.jinja`/`Cargo.toml.jinja`
+    (and their `0.1.0-alpha.1`/`0.1.0a1` bootstrap literals) are excluded by
+    `copier.yml` for this profile and are not exercised here -- those were
+    validated directly, via a real `copier copy` smoke render per language
+    combination, while implementing this Issue, not via this update-impact
+    test. What this test proves instead is that the operative tooling --
+    the new `scripts/release_phase.py` module, `release_policy.py`'s
+    `--phase` support, the prerelease-aware `publish-release`/
+    `converge-release-tag`/`check-release-drift`, the `0.1.0-alpha.1`
+    `version.txt`/`.release-please-manifest.json` bootstrap, and the docs --
+    actually reach an adopted project through a real `update`, and that the
+    delivered script still loads and parses correctly (the `--help`
+    invocation) in a freshly copied, dependency-free environment, not just
+    that its source text changed.
+    """
+    from_sha = "9c18b10582e878aa42f2543008d5dd3dd726ccac"
+    to_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "release-phase-adopted-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                from_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "project_mode=new",
+                "--data",
+                "language=ci",
+                "--data",
+                "project_visibility=private",
+            ]
+        )
+        == 0
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: adopt the pre-#744 baseline")
+
+    # Before: the pre-#744 baseline has none of this Issue's tooling.
+    assert not (project / "scripts" / "release_phase.py").exists()
+    release_policy_before = (
+        project / "scripts" / "release_policy.py"
+    ).read_text(encoding="utf-8")
+    assert "--phase" not in release_policy_before
+    assert "release_phase" not in release_policy_before
+    assert (project / "version.txt").read_text(encoding="utf-8").strip() == (
+        "0.1.0"
+    )
+    manifest_before = json.loads(
+        (project / ".release-please-manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest_before["."] == "0.1.0"
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                to_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+
+    # After: the new module actually landed, not just referenced.
+    release_phase_after = (project / "scripts" / "release_phase.py").read_text(
+        encoding="utf-8"
+    )
+    assert "def retention_plan(" in release_phase_after
+    assert "def validate_declared_phase(" in release_phase_after
+
+    release_policy_after = (
+        project / "scripts" / "release_policy.py"
+    ).read_text(encoding="utf-8")
+    assert '"--phase"' in release_policy_after
+    assert "retention-plan" in release_policy_after
+
+    publish_release_after = (project / "scripts" / "publish-release").read_text(
+        encoding="utf-8"
+    )
+    assert "latest_flags" in publish_release_after
+
+    converge_after = (project / "scripts" / "converge-release-tag").read_text(
+        encoding="utf-8"
+    )
+    assert "--prerelease" in converge_after
+
+    drift_after = (project / "scripts" / "check-release-drift").read_text(
+        encoding="utf-8"
+    )
+    assert "eligible GitHub Release" in drift_after
+
+    ci_policy = (project / "docs" / "ci-policy.md").read_text(encoding="utf-8")
+    assert "release_phase.py" in ci_policy
+    assert "retention-plan" in ci_policy
+
+    # The new-project bootstrap literal reached this *already-adopted*
+    # project's untouched version.txt/manifest too, since nothing in this
+    # fixture ever diverged from what the template would render.
+    assert (project / "version.txt").read_text(encoding="utf-8").strip() == (
+        "0.1.0-alpha.1"
+    )
+    manifest_after = json.loads(
+        (project / ".release-please-manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest_after["."] == "0.1.0-alpha.1"
+
+    # A CI-only project still has no pyproject.toml/package.json/Cargo.toml
+    # after the update -- confirming the language-gated exclusion of the
+    # other bootstrap literals is unaffected, not a side effect this change
+    # accidentally introduced.
+    assert not (project / "pyproject.toml").exists()
+    assert not (project / "package.json").exists()
+    assert not (project / "Cargo.toml").exists()
+
+    help_output = run(
+        ["python3", "scripts/release_policy.py", "--help"], project
+    ).stdout
+    assert "retention-plan" in help_output
+
+
+def test_update_reinstall_honors_an_explicit_to_target_over_latest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Bug fix: reinstall must target an explicit --to, not silently "latest".
+
+    Two scenarios in one test: (1) the recorded tag is missing but the
+    explicit --to target is fine -- reinstall must land on that target,
+    not on whatever "latest" happens to be; (2) the explicit --to target
+    itself is the one confirmed missing -- reinstall must not silently
+    substitute "latest" instead, and the failure must name that target.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    capsys.readouterr()
+
+    (source / "template" / "new-feature.txt").write_text(
+        "beta content\n", encoding="utf-8"
+    )
+    beta_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", beta_sha)
+    (source / "template" / "new-feature.txt").write_text(
+        "latest content, not requested\n", encoding="utf-8"
+    )
+    latest_sha = commit(source, "test: template version three")
+    git(source, "tag", "0.3.0-beta.1", latest_sha)
+
+    # Scenario 1: recorded tag v0.1.0 is gone, but the requested --to is
+    # fine. "latest" is deliberately a different, newer tag so landing on
+    # it instead of the explicit --to would be observable.
+    client = LocalGitReleaseClient(
+        source, "0.3.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                "0.2.0-beta.1",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / "new-feature.txt").read_text(
+        encoding="utf-8"
+    ) == "beta content\n"
+    capsys.readouterr()
+
+    # Scenario 2: the explicit --to target itself is the one that is
+    # confirmed missing. Must not silently fall back to "latest" (or to
+    # anything else) without telling the caller.
+    client_2 = LocalGitReleaseClient(
+        source, "0.3.0-beta.1", missing=frozenset({"0.9.0-beta.1"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client_2)
+    before = (project / "new-feature.txt").read_text(encoding="utf-8")
+    result = main(
+        [
+            "update",
+            str(project),
+            "--to",
+            "0.9.0-beta.1",
+            "--yes",
+            "--non-interactive",
+        ]
+    )
+    assert result != 0
+    error = capsys.readouterr().err
+    assert "0.9.0-beta.1" in error
+    # Never silently reinstall to "latest" (0.3.0-beta.1) instead of the
+    # explicit, still-unresolved --to target.
+    assert (project / "new-feature.txt").read_text(encoding="utf-8") == before
+
+
 @pytest.mark.large
 def test_update_migrates_legacy_copier_answers_to_single_config(
     tmp_path: Path,
@@ -4734,6 +5222,203 @@ def test_update_real_template_legacy_two_file_schema_end_to_end(
     assert f"_commit: {to_sha}" in config_path.read_text(encoding="utf-8")
     assert not (project / ".copier-answers.yml").exists()
     assert not (project / ".csarc/profile.json").exists()
+
+
+@pytest.mark.large
+def test_update_delivers_the_issue_743_approval_gate_to_an_adopted_project(
+    tmp_path: Path,
+) -> None:
+    """Issue #743's evidence for "existing-project update impact": generate a
+    project on the commit immediately before #743 landed, simulate it as an
+    already-adopted downstream repository (git-committed, untouched), then
+    run a real `csarc update` to this checkout's current HEAD and confirm
+    the standalone/hotfix Issue-approval gate is actually delivered -- not
+    silently dropped or conflicted out -- exactly like any other paired
+    `template/` change. Drives the real root `copier.yml` end to end (the
+    same `language=ci` profile, and the same overall pattern,
+    `test_update_real_template_legacy_two_file_schema_end_to_end` already
+    established for a different regression) rather than asserting against a
+    synthetic minimal fixture template.
+
+    Uses `language=ci`, not `language=python`: copier.yml's own `_exclude`
+    list drops the whole `/tests` directory for a project with no
+    `'python' in languages` (by design -- a CI-only project has no Python
+    toolchain to run pytest with), so this deliberately does not assert
+    `tests/test_standalone_issue_approval.py` lands here. What this test
+    proves instead is that the operative gate -- `scripts/
+    sync_milestone_state.py`'s new functions and CLI subcommand, the docs,
+    and the Issue templates -- actually reaches an adopted project through a
+    real `update`, and that the delivered script still loads and parses
+    correctly (the `--help` invocation) in a freshly copied, dependency-free
+    environment, not just that its source text changed.
+    """
+    from_sha = "9c18b10582e878aa42f2543008d5dd3dd726ccac"
+    to_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "standalone-approval-adopted-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                from_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "project_mode=new",
+                "--data",
+                "language=ci",
+                "--data",
+                "project_visibility=private",
+            ]
+        )
+        == 0
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: adopt the pre-#743 baseline")
+
+    sync_state_before = (
+        project / "scripts" / "sync_milestone_state.py"
+    ).read_text(encoding="utf-8")
+    assert "check_issue_approval" not in sync_state_before
+    assert "standalone_issue_approval_decision" not in sync_state_before
+    assert not (project / "tests").exists()
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                to_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+
+    sync_state_after = (
+        project / "scripts" / "sync_milestone_state.py"
+    ).read_text(encoding="utf-8")
+    assert "def check_issue_approval(" in sync_state_after
+    assert "def standalone_issue_approval_decision(" in sync_state_after
+    assert '"check-issue-approval"' in sync_state_after
+
+    ci_policy = (project / "docs" / "ci-policy.md").read_text(encoding="utf-8")
+    assert "standalone_issue_approval_decision()" in ci_policy
+    assert "_issue_approval_records()" in ci_policy
+
+    for template_name in (
+        "bug.yml",
+        "task.yml",
+        "feature.yml",
+        "documentation.yml",
+    ):
+        template_text = (
+            project / ".github" / "ISSUE_TEMPLATE" / template_name
+        ).read_text(encoding="utf-8")
+        assert "Admin-approve" in template_text
+
+    # A CI-only project still has no /tests directory after the update --
+    # confirming the language-gated exclusion is unaffected by #743, not a
+    # side effect this change accidentally introduced.
+    assert not (project / "tests").exists()
+
+    help_output = run(
+        ["python3", "scripts/sync_milestone_state.py", "--help"], project
+    ).stdout
+    assert "check-issue-approval" in help_output
+
+
+@pytest.mark.large
+def test_update_delivers_the_issue_739_workflow_fix_to_an_adopted_project(
+    tmp_path: Path,
+) -> None:
+    """Prove an existing adopted project actually receives the #739 fix.
+
+    #739's own drift check (scripts/check_jinja_workflow_drift.py) only
+    proves that a *fresh* render of template/ matches root -- it never
+    exercises `csarc update`'s three-way merge onto an already-generated
+    project's own files, which is a materially different code path (it
+    can produce a `.rej` conflict instead of a clean delivery, even for a
+    change that renders cleanly from scratch). Reproduce that path for
+    real: generate a `languages=typescript` project against the real
+    root copier.yml at this Milestone's own base commit (9c18b10, the
+    last commit where `template/.github/workflows/ci.yml.jinja` still
+    set the stray `cache: pnpm` -- see #739), commit it as if adopted,
+    then run a real `csarc update` to this branch's current tip and
+    confirm the fix actually lands with no conflict markers, instead of
+    only ever being proven against a fresh copy.
+    """
+    from_sha = "9c18b10582e878aa42f2543008d5dd3dd726ccac"
+    to_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "issue-739-adopted-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                from_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "project_mode=new",
+                "--data",
+                "languages=typescript",
+                "--data",
+                "project_visibility=private",
+            ]
+        )
+        == 0
+    )
+    ci_workflow = project / ".github" / "workflows" / "ci.yml"
+    before = ci_workflow.read_text(encoding="utf-8")
+    assert "cache: pnpm" in before, (
+        "fixture assumption broken: 9c18b10582e878aa42f2543008d5dd3dd726ccac "
+        "no longer renders the pre-#739 cache: pnpm drift -- pick a new "
+        "from_sha that still reproduces it"
+    )
+    assert 'node-version: "24"' in before
+
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: initial adopted project (pre-#739 fix)")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                to_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+
+    after = ci_workflow.read_text(encoding="utf-8")
+    assert "cache: pnpm" not in after
+    assert 'node-version: "24"' in after
+    assert "<<<<<<<" not in after
+    assert not list(project.rglob("*.rej"))
+    assert f"_commit: {to_sha}" in (
+        project / ".csarc" / "config.yml"
+    ).read_text(encoding="utf-8")
 
 
 def test_update_check_validates_hook_without_running_it(
@@ -5854,19 +6539,33 @@ def test_release_resolution_and_helpers(
     ("field", "value", "message"),
     [
         ("immutable", False, "not immutable"),
-        ("draft", True, "published, stable"),
-        ("prerelease", True, "published, stable"),
+        ("draft", True, "Only published GitHub Releases"),
+        # v1.2.3 has no suffix, so a prerelease=True flag on it is now a
+        # flag/tag mismatch rather than a blanket "no prereleases" ban
+        # (Issue #744).
+        ("prerelease", True, "prerelease flag does not match"),
         ("published_at", None, "not published"),
+        ("tag_name", "v1.2.3-rc.1", "not a legal alpha/beta/early/formal"),
     ],
 )
 def test_release_metadata_fails_closed(
     field: str, value: object, message: str
 ) -> None:
-    """Reject releases that are mutable or not stable and published."""
+    """Reject releases that are mutable, malformed, or not published."""
     client = FakeReleaseClient()
     client.release_values[field] = value
     with pytest.raises(CliError, match=message):
         cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
+
+
+@pytest.mark.parametrize("tag", ["v0.16.0-alpha.1", "v0.16.0-beta.3"])
+def test_release_metadata_accepts_well_formed_prerelease(tag: str) -> None:
+    """Issue #744: an immutable, published prerelease tag is now approved."""
+    client = FakeReleaseClient()
+    client.release_values["tag_name"] = tag
+    client.release_values["prerelease"] = True
+    revision = cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
+    assert revision.label == tag
 
 
 def test_unreleased_revision_requires_a_local_git_source(
@@ -5988,6 +6687,185 @@ def test_copy_uses_resolved_canonical_source(
         == 2
     )
     assert copied_source == cli.CANONICAL_SOURCE
+
+
+def test_gh_client_selects_latest_by_semver_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #744: pick the highest SemVer precedence, not publish order.
+
+    A naive "most recently published" pick (what GitHub's own
+    `releases/latest` API effectively encodes) would choose whichever
+    release happened to publish last; a formal 1.0.0 published before an
+    in-progress 1.1.0-beta.1 must still lose to the beta once the beta is
+    the highest-precedence release, and a draft is never eligible at all.
+    """
+    releases = [
+        {
+            "tag_name": "v1.0.0",
+            "draft": False,
+            "prerelease": False,
+            "id": 1,
+        },
+        {
+            "tag_name": "v1.1.0-beta.1",
+            "draft": False,
+            "prerelease": True,
+            "id": 2,
+        },
+        {
+            "tag_name": "v1.1.0-beta.2",
+            "draft": True,
+            "prerelease": True,
+            "id": 3,
+        },
+    ]
+
+    def fake_gh_json_list(endpoint: str) -> list[object]:
+        assert "releases?per_page=100" in endpoint
+        if "page=1" in endpoint:
+            return releases
+        return []
+
+    monkeypatch.setattr(cli, "gh_json_list", fake_gh_json_list)
+    result = cli.GhReleaseClient().release(None)
+    assert result["tag_name"] == "v1.1.0-beta.1"
+
+
+def test_gh_client_latest_skips_a_self_inconsistent_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A prerelease-flag/tag-shape mismatch is skipped, not hard-selected.
+
+    The highest-precedence release here (v1.1.0-beta.1) has GitHub's
+    `prerelease` flag set to False despite its own beta suffix -- exactly
+    the inconsistency release_identity() would reject. "latest" selection
+    must fall through to the next-best, self-consistent candidate
+    (v1.0.0) instead of picking the broken one and surfacing a confusing
+    failure only once release_identity() re-checks it downstream.
+    """
+    releases = [
+        {
+            "tag_name": "v1.0.0",
+            "draft": False,
+            "prerelease": False,
+            "id": 1,
+        },
+        {
+            "tag_name": "v1.1.0-beta.1",
+            "draft": False,
+            "prerelease": False,  # inconsistent with its own "-beta.1" tag
+            "id": 2,
+        },
+    ]
+
+    def fake_gh_json_list(endpoint: str) -> list[object]:
+        return releases if "page=1" in endpoint else []
+
+    monkeypatch.setattr(cli, "gh_json_list", fake_gh_json_list)
+    result = cli.GhReleaseClient().release(None)
+    assert result["tag_name"] == "v1.0.0"
+
+
+def test_gh_client_latest_fails_closed_when_every_release_is_inconsistent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No usable fallback left means a clear failure, not a wrong pick."""
+    releases = [
+        {
+            "tag_name": "v1.1.0-beta.1",
+            "draft": False,
+            "prerelease": False,
+            "id": 1,
+        },
+    ]
+
+    def fake_gh_json_list(endpoint: str) -> list[object]:
+        return releases if "page=1" in endpoint else []
+
+    monkeypatch.setattr(cli, "gh_json_list", fake_gh_json_list)
+    with pytest.raises(CliError, match="self-consistent"):
+        cli.GhReleaseClient().release(None)
+
+
+def test_gh_client_named_lookup_raises_release_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A confirmed HTTP 404 on a named tag raises ReleaseNotFoundError."""
+    monkeypatch.setattr(cli, "gh_json_or_missing", lambda endpoint: None)
+    with pytest.raises(cli.ReleaseNotFoundError, match=re.escape("v9.9.9")):
+        cli.GhReleaseClient().release("v9.9.9")
+
+
+def test_gh_json_or_missing_recognizes_a_real_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`gh`'s own "(HTTP 404)" suffix is the real signal, matched precisely."""
+
+    def not_found(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        return subprocess.CompletedProcess(
+            command, 1, "", "gh: Not Found (HTTP 404)"
+        )
+
+    monkeypatch.setattr(cli, "run", not_found)
+    assert (
+        cli.gh_json_or_missing("repos/owner/repo/releases/tags/v9.9.9") is None
+    )
+
+
+def test_gh_json_or_missing_does_not_misclassify_an_unrelated_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #744 finding: a 404 substring elsewhere in the text must not
+
+    be treated as "this release is confirmed gone". A permission failure,
+    or a 404 quoted as context inside a differently-failed request, must
+    still fail closed as an ordinary CliError, never silently routed into
+    the reinstall fallback.
+    """
+
+    def forbidden(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        return subprocess.CompletedProcess(
+            command, 1, "", "gh: Must have admin rights (HTTP 403)"
+        )
+
+    monkeypatch.setattr(cli, "run", forbidden)
+    with pytest.raises(CliError, match="HTTP 403"):
+        cli.gh_json_or_missing("repos/owner/repo/releases/tags/v9.9.9")
+
+    def nested_404_wrapped_in_a_server_error(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            "",
+            "gh: upstream lookup returned HTTP 404 for a nested resource "
+            "(HTTP 500)",
+        )
+
+    monkeypatch.setattr(cli, "run", nested_404_wrapped_in_a_server_error)
+    with pytest.raises(CliError, match="HTTP 500"):
+        cli.gh_json_or_missing("repos/owner/repo/releases/tags/v9.9.9")
 
 
 def test_gh_client_dereferences_annotated_tags(
@@ -6650,6 +7528,9 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_update_check_dry_run_apply_and_conflict",
         "test_update_check_rejects_invalid_hook_without_writes",
         "test_update_check_does_not_execute_target_capability_helper",
+        "test_update_delivers_the_issue_739_workflow_fix_to_an_adopted_project",
+        "test_update_delivers_the_issue_743_approval_gate_to_an_adopted_project",
+        "test_update_delivers_the_issue_744_release_phase_tooling",
         "test_update_hook_failure_leaves_target_unchanged",
         "test_update_migrates_legacy_copier_answers_to_single_config",
         "test_update_migrates_legacy_profile_json_before_finalize_tasks",

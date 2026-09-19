@@ -505,3 +505,167 @@ def test_reopened_tracker_reopens_the_milestone(
 
     assert result.allowed
     assert writes == [(8, "open")]
+
+
+@pytest.mark.parametrize(
+    ("governance_state", "expected_summary"),
+    [
+        ("unapproved", "must approve"),
+        ("stale", "invalidated"),
+        ("objected", "Resolve 1 objection"),
+    ],
+)
+def test_pending_governance_is_a_notice_while_pr_checks_stay_failed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    governance_state: str,
+    expected_summary: str,
+) -> None:
+    """Pending governance is visible without making reconciliation fail."""
+    state = _base_snapshot()
+    tracker_issue = state["issues"][1]
+    tracker_issue["state"] = "open"
+    tracker_issue["state_reason"] = None
+    if governance_state == "unapproved":
+        state["comments"] = []
+    elif governance_state == "stale":
+        tracker_issue["updated_at"] = "2026-09-02T00:00:00Z"
+        state["comments"][0].update(
+            {
+                "created_at": "2026-09-01T00:00:00Z",
+                "updated_at": "2026-09-01T00:00:00Z",
+            }
+        )
+    else:
+        state["comments"].append(
+            {
+                "body": "/milestone object: unresolved risk",
+                "html_url": (
+                    "https://github.com/acme/project/issues/80#issuecomment-2"
+                ),
+                "user": {"login": "critic", "type": "User"},
+            }
+        )
+    _with_pull_request(state, number=99, closes=42, merged=False)
+    recorded: list[bool] = []
+
+    monkeypatch.setitem(
+        reconcile.__globals__, "load_snapshot", lambda *_: state
+    )
+    monkeypatch.setitem(
+        reconcile.__globals__,
+        "run_gh",
+        lambda _arguments: json.dumps({"head": {"sha": "pr-head"}}),
+    )
+    monkeypatch.setitem(
+        reconcile.__globals__,
+        "_record_check",
+        lambda _repo, _sha, decision: recorded.append(decision.allowed),
+    )
+
+    result = reconcile(
+        "acme/project", 8, event_issue=80, event_action="created"
+    )
+
+    assert result.allowed
+    assert expected_summary in result.summary
+    assert recorded == [False]
+    output = capsys.readouterr().out
+    assert "::notice title=Milestone governance status::" in output
+
+
+@pytest.mark.parametrize(
+    ("event_issue", "event_action", "should_refresh"),
+    [(42, "edited", False), (42, "milestoned", True), (0, "edited", True)],
+)
+def test_only_relevant_milestone_events_reconcile(
+    monkeypatch: pytest.MonkeyPatch,
+    event_issue: int,
+    event_action: str,
+    should_refresh: bool,
+) -> None:
+    """Skip work activity, but run Milestone and membership changes."""
+    state = _base_snapshot()
+    state["issues"][1]["state"] = "open"
+    if not should_refresh:
+        state["milestone"]["state"] = "closed"
+    refreshed: list[dict[str, Any]] = []
+    writes: list[tuple[int, str]] = []
+
+    monkeypatch.setitem(
+        reconcile.__globals__, "load_snapshot", lambda *_: state
+    )
+    monkeypatch.setitem(
+        reconcile.__globals__,
+        "refresh_pr_checks",
+        lambda current: refreshed.append(current),
+    )
+    monkeypatch.setitem(
+        reconcile.__globals__,
+        "_set_milestone_state",
+        lambda _repo, number, value: writes.append((number, value)),
+    )
+
+    result = reconcile(
+        "acme/project",
+        8,
+        event_issue=event_issue,
+        event_action=event_action,
+    )
+
+    assert result.allowed
+    assert refreshed == ([state] if should_refresh else [])
+    assert writes == []
+    if not should_refresh:
+        assert "does not change Milestone lifecycle" in result.summary
+
+
+def test_invalid_tracker_is_not_hidden_by_a_work_issue_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configuration errors stay red even when a work Issue caused the run."""
+    state = _base_snapshot()
+    state["issues"][1]["state"] = "open"
+    state["issues"][1]["labels"] = []
+
+    monkeypatch.setitem(
+        reconcile.__globals__, "load_snapshot", lambda *_: state
+    )
+    monkeypatch.setitem(reconcile.__globals__, "refresh_pr_checks", lambda _: 0)
+
+    result = reconcile("acme/project", 8, event_issue=42, event_action="edited")
+
+    assert not result.allowed
+    assert "enhancement label" in result.summary
+
+
+def test_reconcile_api_and_write_errors_remain_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GitHub API and state-write failures are not governance status."""
+
+    def fail_load(*_args: object) -> dict[str, Any]:
+        raise RuntimeError("GitHub API failed")
+
+    monkeypatch.setitem(reconcile.__globals__, "load_snapshot", fail_load)
+
+    with pytest.raises(RuntimeError, match="GitHub API failed"):
+        reconcile("acme/project", 8, event_issue=80, event_action="edited")
+
+    state = _base_snapshot()
+    state["issues"][1]["state"] = "open"
+    state["milestone"]["state"] = "closed"
+
+    monkeypatch.setitem(
+        reconcile.__globals__, "load_snapshot", lambda *_: state
+    )
+
+    def fail_write(*_args: object) -> None:
+        raise RuntimeError("state write failed")
+
+    monkeypatch.setitem(
+        reconcile.__globals__, "_set_milestone_state", fail_write
+    )
+
+    with pytest.raises(RuntimeError, match="state write failed"):
+        reconcile("acme/project", 8, event_issue=80, event_action="edited")

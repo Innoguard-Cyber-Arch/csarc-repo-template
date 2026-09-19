@@ -48,7 +48,7 @@ Existing-repository history changes start read-only: propose semantic story grou
 
 {% if "python" in languages %}- Python setup: `uv sync --locked`.
 {% endif %}{% if "typescript" in languages %}- TypeScript setup: `corepack enable && pnpm install --frozen-lockfile`.
-{% endif %}{% if "rust" in languages %}- Rust setup: `rustup show && cargo fetch --locked`.
+{% endif %}{% if "rust" in languages %}- Rust setup: `rustup show && cargo fetch --locked`. On Linux/WSL2, compiling this project also needs a system C linker -- install `build-essential` (or the equivalent toolchain) first; a machine with only `rustup` fails with `error: linker 'cc' not found`.
 {% endif %}{% if not languages %}- Environment setup: no language toolchain install is required.
 {% endif %}- Site source check: `./scripts/build-repo-site --check`.
 {% if "python" in languages %}- Python iteration: `uv run ruff check <paths>`, `uv run ty check`, and `uv run pytest <test-path>`.

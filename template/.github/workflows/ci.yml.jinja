@@ -50,7 +50,7 @@ jobs:
         run: |
           files="$RUNNER_TEMP/changed-files"
           if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
-            git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
+            git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
           else
             git ls-files -z > "$files"
           fi
@@ -157,7 +157,6 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
-          cache: pnpm
 {% endif %}
 {% if has_rust %}
       - if: {% raw %}${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}

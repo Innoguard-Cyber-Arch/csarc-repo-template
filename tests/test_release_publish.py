@@ -195,14 +195,16 @@ json.dump(meta, open(sys.argv[2], 'w'))
       meta="$(release_meta "$tag")"
       draft_false=false
       make_draft=false
+      saw_latest=false
       while (($#)); do
         case "$1" in
           --draft=false) draft_false=true; shift ;;
           --draft) make_draft=true; shift ;;
-          --latest) shift ;;
+          --latest) saw_latest=true; shift ;;
           *) shift ;;
         esac
       done
+      echo "$tag latest=$saw_latest" >>"$FIXTURE_STATE/edit-log"
       # A real Release does not become immutable the instant it is marked
       # non-draft (see the eventual-consistency retry loop this fixture is
       # exercising); this fake models that lag as "immediately immutable
@@ -337,8 +339,10 @@ def build_repo(tmp_path: Path) -> dict[str, str]:
     for name in (
         "release_bundle.py",
         "release_policy.py",
-        # release_policy.py imports this module (Issue #667) at load time.
+        # release_policy.py imports these modules at load time (Issue #667
+        # for stale_branch_detection, Issue #744 for release_phase).
         "stale_branch_detection.py",
+        "release_phase.py",
         "converge-release-tag",
         "verify-release-candidate",
         "publish-release",
@@ -813,6 +817,124 @@ def test_publish_builds_uploads_and_marks_the_release_published(
         (state / "releases/v0.2.0/assets/sbom.spdx.json").read_text()
     )
     assert sbom["spdxVersion"] == "SPDX-2.3"
+
+
+def test_publish_marks_latest_only_for_an_unsuffixed_tag(
+    tmp_path: Path,
+) -> None:
+    """Issue #744: --latest is conditional on the tag having no phase suffix.
+
+    A stable v0.2.0 tag gets `--latest`; an alpha/beta tag does not. The
+    beta candidate is a second, separate commit whose governed surfaces
+    genuinely say "0.2.0-beta.1" (release_bundle.py's own `identity()`
+    independently re-verifies the tag against those files via
+    verify_release_version, so a mismatched tag would fail regardless of
+    what created the Release). Its tag/draft-Release is created directly
+    via scripts/converge-release-tag rather than `publish-release stage`,
+    because `stage`'s verify-release-candidate recomputes only a bare
+    core version with no phase input (declaring a phase for an automated
+    candidate is Issue #745's job, not this one) and would reject a
+    phase-suffixed candidate outright -- this test is only about
+    cmd_publish's --latest conditional, not about the stage step.
+    """
+    fixture = build_repo(tmp_path)
+    root = Path(fixture["root"])
+    state = tmp_path / "state"
+    state.mkdir()
+    write_pull_request_fixture(
+        state,
+        number=1,
+        repo="acme/fixture",
+        base_sha=fixture["base_sha"],
+        candidate_sha=fixture["candidate_sha"],
+    )
+    bindir = fixture_bin(tmp_path)
+    install_fake_syft_installer(root, bindir / "syft")
+
+    # Stable tag: the existing, already-proven stage -> publish path.
+    git("checkout", "--detach", fixture["candidate_sha"], cwd=root)
+    stage_result = run_publish_release(
+        "stage",
+        "--repo",
+        "acme/fixture",
+        "--sha",
+        fixture["candidate_sha"],
+        "--tag",
+        "v0.2.0",
+        repo=root,
+        bindir=bindir,
+        state=state,
+    )
+    assert stage_result.returncode == 0, stage_result.stderr
+    publish_result = run_publish_release(
+        "publish",
+        "--repo",
+        "acme/fixture",
+        "--tag",
+        "v0.2.0",
+        repo=root,
+        bindir=bindir,
+        state=state,
+    )
+    assert publish_result.returncode == 0, publish_result.stderr
+
+    # Beta tag: a second commit with self-consistent "0.2.0-beta.1"
+    # surfaces, staged directly via converge-release-tag.
+    (root / "version.txt").write_text("0.2.0-beta.1\n", encoding="utf-8")
+    (root / ".release-please-manifest.json").write_text(
+        json.dumps({".": "0.2.0-beta.1"}), encoding="utf-8"
+    )
+    changelog = root / "CHANGELOG.md"
+    changelog.write_text(
+        changelog.read_text(encoding="utf-8").replace(
+            "# Changelog\n\n",
+            "# Changelog\n\n## [0.2.0-beta.1] - 2026-01-03\n\n* beta\n\n",
+        ),
+        encoding="utf-8",
+    )
+    git("add", "-A", cwd=root)
+    git("commit", "-q", "-m", "chore(main): release 0.2.0-beta.1", cwd=root)
+    beta_sha = git("rev-parse", "HEAD", cwd=root)
+
+    env = clean_environment()
+    env["PATH"] = f"{bindir}:{env['PATH']}"
+    env["FIXTURE_STATE"] = str(state)
+    env["FIXTURE_REPO"] = str(root)
+    env["GH_TOKEN"] = "fixture-token"  # noqa: S105 -- fixture value, not a secret
+    converge_result = subprocess.run(  # noqa: S603
+        [
+            str(root / "scripts" / "converge-release-tag"),
+            "--repo",
+            "acme/fixture",
+            "--sha",
+            beta_sha,
+            "--tag",
+            "v0.2.0-beta.1",
+        ],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert converge_result.returncode == 0, converge_result.stderr
+
+    publish_beta_result = run_publish_release(
+        "publish",
+        "--repo",
+        "acme/fixture",
+        "--tag",
+        "v0.2.0-beta.1",
+        repo=root,
+        bindir=bindir,
+        state=state,
+    )
+    assert publish_beta_result.returncode == 0, publish_beta_result.stderr
+
+    edit_log = (state / "edit-log").read_text(encoding="utf-8").splitlines()
+    by_tag = dict(line.split(" ", 1) for line in edit_log)
+    assert by_tag["v0.2.0"] == "latest=true"
+    assert by_tag["v0.2.0-beta.1"] == "latest=false"
 
 
 def test_publish_reverts_a_failed_release_back_to_draft(tmp_path: Path) -> None:

@@ -60,6 +60,25 @@ agent 代為作者）撰寫每一張 work PR，GitHub 平台層級禁止「核�
 PR，且沒有對應每張 work PR 的例外機制可用。詳見
 `docs/adr/milestone-scope-and-closure-reconciliation.md`。
 
+上一段講的是「有 Milestone 的 work PR」不額外加裝核可；沒有 Milestone 的 Issue（見
+`docs/ci-policy.md`「不屬於里程碑的工作」「Hotfix」「Release recovery」三節）情況相
+反——這種 Issue 沒有任何 tracker 可以繼承核可，`#743` 之前實際上完全不需要核可就能
+合併其工作 PR，變成繞過批次治理的捷徑。`#743` 補上這個缺口：一張沒有 Milestone 的
+Issue，本身需要一次非提案者核可，或同一套 `admin` collaborator 自核例外（理由必
+填），才能讓以 `Closes`／`Fixes`／`Resolves #N` 連結它的 PR 通過「Validate Milestone
+approval」與 merge queue 的「Revalidate queued Milestone approval」
+（`standalone_issue_approval_decision()`／`check_issue_approval()`；CLI：
+`check-issue-approval --repo <repo> --issue <編號>`）。核可留言語彙是純文字、不分大小
+寫的 `Approve`／`Admin-approve: <理由>`／`Object: <理由>`／`Resolve: <目標>`——刻意
+與 tracker、scope-expansion 兩個既有 gate 的 `/milestone approve` 系列語彙保持獨立、
+不互相沿用（維護者在 Issue #743 留言中的決定：沒有 Milestone 的 Issue 用不上「/milestone」
+這個斜線指令，純文字關鍵字也不必先查文件），只是判斷演算法的結構相同，核可對象換成
+這張沒有 Milestone 的 Issue 自己的留言。這與上一段「不延伸到 work PR」的決定並不衝突：核可對象仍然是
+Issue，不是 PR 本身，PR 合併授權依舊完全是 `validate-pr-policy` 與 PR review（#719）
+的責任。屬於 Milestone 的 work Issue 不受影響，繼續只靠 tracker 核可，不需要逐張另外
+核可。細節見 `docs/ci-policy.md`「Standalone／hotfix／release recovery Issue 核可
+gate（#743）」一節。
+
 上一段的「唯一合併前置檢查」在 `#632` 之後多了一道窄範圍例外：`pr-policy.yml` 額外呼叫
 `scripts/check-scope-gate`，只在該 PR 連結的 work Issue 自己宣告了
 `Tracker scope: expanded` 時才生效，把上方 `scope_decision()` 這個既有的 Issue-level
@@ -122,6 +141,11 @@ parent。退而求其次只掛「未被 Feature 收編」的頂層 leaf Issue，
 又不完整的關聯機制。
 關閉最後一張 Issue 前，須勾選所有已驗證的 acceptance items；否則 lifecycle
 workflow 會讓未完成的 story 保持開啟。
+背景 lifecycle reconcile 只在 tracker Issue 的事件／留言、Milestone 事件，以及 Issue
+移入、移出或改掛 Milestone 時同步狀態與刷新 PR check；一般 work Issue 的編輯、label 或
+留言會成功 no-op。tracker 尚未核准、核准失效或有未解反駁屬於正常治理狀態：背景 run 以
+notice 呈現並成功結束，但 PR 上的核准 check 仍維持失敗。tracker 缺漏／格式錯誤、API 或
+狀態寫入錯誤才讓背景 run 失敗。
 tracker 的 `Promotion` 段落只能描述合併前可驗證的條件（例如：其餘 Milestone Issue
 皆已關閉、review ledger 已 resolved 且經 maintainer 確認、雙語／accessibility／
 bundle／完整驗證通過、promotion evidence 已綁定 base／head／candidate tree）；由
