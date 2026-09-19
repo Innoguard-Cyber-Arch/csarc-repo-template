@@ -188,6 +188,64 @@ def format_pep440(
     return f"{major}.{minor}.{patch}{letter}{n}"
 
 
+# The mirror image of `_VERSION_RE`'s hyphenated `-alpha.N`/`-beta.N` shape:
+# the compact form `format_pep440` produces (`0.16.0a1` / `0.16.0b1`).
+_PEP440_COMPACT_RE = re.compile(
+    r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
+    r"(?:(?P<letter>a|b)(?P<n>[1-9]\d*))?$"
+)
+_PEP440_LETTER_TO_PHASE = {"a": "alpha", "b": "beta"}
+
+
+def parse_pep440(text: str) -> ParsedVersion:
+    """Parse a PEP 440-normalized version string (Issue #744).
+
+    `parse_version` only accepts the canonical hyphenated form; this is
+    its mirror image for the compact form `format_pep440` produces.
+    Needed wherever a Python packaging surface's on-disk value
+    (`pyproject.toml`, `uv.lock`, `src/<package>/__init__.py`) must be
+    compared against a canonical-form surface (see `normalize` below).
+    """
+    stripped = text[1:] if text[:1] in {"v", "V"} else text
+    match = _PEP440_COMPACT_RE.fullmatch(stripped)
+    if match is None:
+        raise ReleasePhaseError(
+            f"invalid PEP 440 version {text!r}; expected X.Y.Z or "
+            "X.Y.Za1 / X.Y.Zb1"
+        )
+    letter = match.group("letter")
+    n = match.group("n")
+    return ParsedVersion(
+        major=int(match.group("major")),
+        minor=int(match.group("minor")),
+        patch=int(match.group("patch")),
+        phase=_PEP440_LETTER_TO_PHASE[letter] if letter else None,
+        n=int(n) if n is not None else None,
+    )
+
+
+def normalize(text: str) -> str:
+    """Return `text`'s canonical SemVer form, accepting either shape.
+
+    Every release surface must ultimately agree on one version regardless
+    of whether it is written in the canonical form (`0.16.0-alpha.1`,
+    used everywhere) or the PEP 440-normalized form (`0.16.0a1`, used only
+    by a Python packaging surface per `format_pep440`). This tries
+    `parse_version` first and falls back to `parse_pep440`, so a caller
+    that needs to compare surfaces written in either shape (e.g. a
+    generated project's own release-consistency check across
+    `.release-please-manifest.json`, `pyproject.toml`, `package.json`,
+    and `Cargo.toml`) has one common key to compare.
+    """
+    try:
+        parsed = parse_version(text)
+    except ReleasePhaseError:
+        parsed = parse_pep440(text)
+    return format_version(
+        parsed.major, parsed.minor, parsed.patch, parsed.phase, parsed.n
+    )
+
+
 def validate_declared_phase(version: str, declared_phase: str) -> ParsedVersion:
     """Fail closed unless `version` legally represents `declared_phase`.
 

@@ -121,6 +121,58 @@ def test_format_pep440_matches_python_normalized_form(
 
 
 @pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("0.16.0", rp.ParsedVersion(0, 16, 0, None, None)),
+        ("1.0.0", rp.ParsedVersion(1, 0, 0, None, None)),
+        ("v0.16.0a1", rp.ParsedVersion(0, 16, 0, "alpha", 1)),
+        ("0.16.0b12", rp.ParsedVersion(0, 16, 0, "beta", 12)),
+    ],
+)
+def test_parse_pep440_accepts_the_compact_form(
+    text: str, expected: rp.ParsedVersion
+) -> None:
+    """parse_pep440 is parse_version's mirror image for the compact form."""
+    assert rp.parse_pep440(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["0.16.0-alpha.1", "0.16.0c1", "0.16.0a0", "0.16.0a01", "not-a-version"],
+)
+def test_parse_pep440_rejects_the_canonical_form_and_other_junk(
+    text: str,
+) -> None:
+    """parse_pep440 does not also accept the canonical hyphenated shape."""
+    with pytest.raises(rp.ReleasePhaseError):
+        rp.parse_pep440(text)
+
+
+@pytest.mark.parametrize(
+    ("canonical", "pep440"),
+    [
+        ("0.16.0", "0.16.0"),
+        ("1.0.0", "1.0.0"),
+        ("0.16.0-alpha.1", "0.16.0a1"),
+        ("1.4.0-beta.3", "1.4.0b3"),
+    ],
+)
+def test_normalize_agrees_across_canonical_and_pep440_forms(
+    canonical: str, pep440: str
+) -> None:
+    """The one comparison key a mixed-surface consistency check needs.
+
+    Issue #744: a generated project's own release-consistency check
+    compares surfaces written in either shape (a Python packaging
+    surface's PEP 440 form vs. every other surface's canonical form) --
+    `normalize` must map both spellings of the same version to one key.
+    """
+    assert rp.normalize(canonical) == rp.normalize(pep440)
+    assert rp.normalize(canonical) == canonical
+    assert rp.normalize(pep440) == canonical
+
+
+@pytest.mark.parametrize(
     ("version", "phase"),
     [
         ("0.16.0-alpha.1", "alpha"),
