@@ -287,6 +287,7 @@ def test_alpha_self_merge_without_authorization_still_fails(
     assert not result["passed"]
     assert "Alpha self-merge" in result["reason"]
     assert "#775" in result["reason"]
+    assert "no exact-head maintainer authorization comment" in result["reason"]
 
 
 def test_alpha_self_merge_milestone_issue_does_not_apply(
