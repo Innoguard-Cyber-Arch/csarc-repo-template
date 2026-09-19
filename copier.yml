@@ -345,8 +345,8 @@ enable_docker:
 
 enable_governance_drift_check:
   type: bool
-  help: Reserve the optional scheduled governance drift check; keep disabled until its GitHub Action is active
-  default: false
+  help: Run the scheduled governance drift check; disable it only when another approved control owns drift monitoring
+  default: true
 
 policy_repository_settings:
   type: bool
