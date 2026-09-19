@@ -88,6 +88,8 @@ case "$1" in
       fixture="$MOCK_ROOT/main-commit.json"
     elif [[ "$path" == repos/*/actions/workflows/release.yml/runs* ]]; then
       fixture="$MOCK_ROOT/last-run.json"
+    elif [[ "$path" == repos/*/actions/runs/*/jobs* ]]; then
+      fixture="$MOCK_ROOT/last-run-jobs.json"
     elif [[ "$path" == repos/*/releases\?per_page=100 ]]; then
       fixture="$MOCK_ROOT/releases.json"
     elif [[ "$path" == repos/*/compare/* ]]; then
@@ -138,20 +140,26 @@ reset_fixtures() {
   printf '{}\n' >"$fixture_root/release-compare.json"
   printf '[]\n' >"$fixture_root/release-prs.json"
   printf '{"workflow_runs": []}\n' >"$fixture_root/last-run.json"
+  printf '{"jobs": []}\n' >"$fixture_root/last-run-jobs.json"
   : >"$fixture_root/issue-calls.log"
   rm -f "$fixture_root/last-issue-body.md"
   printf '{"sha": "%s", "commit": {"committer": {"date": "2026-09-04T11:55:00Z"}}}\n' \
     "$main_sha" >"$fixture_root/main-commit.json"
 }
 
-# Case 1: release.yml succeeded recently at the current main HEAD. No
-# drift regardless of the 24h threshold -- the common, healthy case.
+# Case 1: release.yml explicitly planned no release at the current main
+# HEAD. The skipped capability step proves that result, so it remains valid
+# health evidence and does not raise drift.
 reset_fixtures
 cat >"$fixture_root/last-run.json" <<JSON
-{"workflow_runs": [{"head_sha": "$main_sha", "updated_at": "2026-09-04T11:56:00Z", "html_url": "https://example.invalid/runs/1"}]}
+{"workflow_runs": [{"id": 1, "head_sha": "$main_sha", "updated_at": "2026-09-04T11:56:00Z", "html_url": "https://example.invalid/runs/1"}]}
+JSON
+cat >"$fixture_root/last-run-jobs.json" <<'JSON'
+{"jobs": [{"steps": [{"name": "Plan the next version from repository history", "conclusion": "success"}, {"name": "Detect the available release path", "conclusion": "skipped"}]}]}
 JSON
 healthy_output="$(run_mocked)"
-grep -Fq "no drift (main not advanced past the last known release activity)" <<<"$healthy_output"
+grep -Fq "explicit no-release (valid health evidence)" <<<"$healthy_output"
+grep -Fq "no drift (current main explicitly requires no release)" <<<"$healthy_output"
 [[ ! -s "$fixture_root/issue-calls.log" ]]
 
 # Case 2: v0.15.1-shaped evidence -- a stable Release targets current main,
@@ -322,15 +330,23 @@ set -e
 [[ "$missing_immutable_status" -ne 0 ]]
 grep -Fq "ignored: release is not immutable" <<<"$missing_immutable_output"
 
-# Case 13: a recent successful release.yml run remains legitimate activity
-# even when main has advanced since that run.
+# Case 13: a recent successful Guided run at current main only printed
+# instructions. It cannot reset the threshold or masquerade as publication.
 reset_fixtures
 cat >"$fixture_root/last-run.json" <<JSON
-{"workflow_runs": [{"head_sha": "$previous_sha", "updated_at": "2026-09-04T11:56:00Z", "html_url": "https://example.invalid/runs/3"}]}
+{"workflow_runs": [{"id": 3, "head_sha": "$main_sha", "updated_at": "2026-09-04T11:56:00Z", "html_url": "https://example.invalid/runs/3"}]}
 JSON
-recent_run_output="$(run_mocked)"
-grep -Fq "no drift (recent release activity within the threshold)" <<<"$recent_run_output"
-[[ ! -s "$fixture_root/issue-calls.log" ]]
+cat >"$fixture_root/last-run-jobs.json" <<'JSON'
+{"jobs": [{"steps": [{"name": "Plan the next version from repository history", "conclusion": "success"}, {"name": "Detect the available release path", "conclusion": "success"}, {"name": "Explain the guided version path", "conclusion": "success"}]}]}
+JSON
+set +e
+guided_output="$(run_mocked 2>&1)"
+guided_status=$?
+set -e
+[[ "$guided_status" -ne 0 ]]
+grep -Fq "guided instructions only (not publication evidence)" <<<"$guided_output"
+grep -Fq "DRIFT DETECTED" <<<"$guided_output"
+grep -Fq "create" "$fixture_root/issue-calls.log"
 
 # Case 14: audit-only API failures are reported but cannot prevent the
 # authoritative drift decision or the tracking-Issue update.
