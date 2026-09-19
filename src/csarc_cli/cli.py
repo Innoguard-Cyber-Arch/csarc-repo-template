@@ -2102,6 +2102,9 @@ def print_plan(plan: ResolvedPlan) -> None:
             "Conflict risk: Copier smart diff; conflicts fail closed and "
             "remain in place."
         )
+        recommendation = plan.update.get("governance_drift_recommendation")
+        if isinstance(recommendation, str):
+            print(f"Recommendation: {recommendation}")
 
 
 def confirm(args: argparse.Namespace) -> bool:
@@ -4809,6 +4812,23 @@ def command_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def governance_drift_update_recommendation(
+    saved_answers: Mapping[str, object], explicit_data: Mapping[str, str]
+) -> str | None:
+    """Explain the new default without changing an existing saved choice."""
+    if (
+        saved_answers.get("enable_governance_drift_check") is False
+        and "enable_governance_drift_check" not in explicit_data
+    ):
+        return (
+            "new projects now enable the daily governance drift check by "
+            "default; this update preserves the saved false value. Set "
+            "--data enable_governance_drift_check=true to add the scheduled "
+            "workflow and its read-only checker."
+        )
+    return None
+
+
 def update_plan_answers(  # noqa: C901
     answers: dict[str, object],
     explicit_data: dict[str, str],
@@ -4977,6 +4997,13 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             "project_verification_hook": hook,
         }
     )
+    governance_drift_recommendation = governance_drift_update_recommendation(
+        saved_answers, explicit_data
+    )
+    if governance_drift_recommendation is not None:
+        status["governance_drift_recommendation"] = (
+            governance_drift_recommendation
+        )
     target_snapshot: dict[str, object] = {}
     if not args.check:
         require_clean_repository(target)

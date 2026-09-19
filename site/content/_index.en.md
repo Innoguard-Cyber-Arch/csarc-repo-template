@@ -763,7 +763,7 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Project choice | `project_description` | required one-sentence purpose; rejects placeholder text | the repo-site's introduction paragraph |
 | Project choice | `languages` | zero or more of `python`, `rust`, `typescript` | repo-site's stated-languages line |
 | Project choice | `repository_url`, `project_slug` | derived from `code_owner`/`project_name` unless overridden | repo-site's clone instructions |
-| Project opt-in | `enable_governance_drift_check` | `false` by default; set `true` to generate the daily scheduled Action | `false` keeps only the local drift checker; `true` also generates `governance-drift.yml` |
+| Project choice | `enable_governance_drift_check` | `true` by default, generating the daily scheduled Action; set `false` to disable it | `true` generates `governance-drift.yml` and the drift checker; `false` generates neither |
 
 The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Derived templates may add namespaced keys to this same YAML; they do not create another profile. Low-frequency GitHub details stay in native repository settings or `policies/` instead of expanding the CSARC schema.
 

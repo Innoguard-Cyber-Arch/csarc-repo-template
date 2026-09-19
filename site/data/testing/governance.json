@@ -5,12 +5,12 @@
     "zh-tw": {
       "title": "規則治理",
       "heading": "步驟 08／審查與設定漂移",
-      "scope": "每張 PR 只自動請一位非作者 reviewer；選配排程重用本機檢查，不能把通知誤稱為合併門禁。"
+      "scope": "每張 PR 只自動請一位非作者 reviewer；預設啟用、可關閉的排程重用本機檢查，不能把通知誤稱為合併門禁。"
     },
     "en": {
       "title": "Rules governance",
       "heading": "Step 08 / Review and settings drift",
-      "scope": "Each PR requests one non-author reviewer. The optional schedule reuses the local check and is never described as a merge gate."
+      "scope": "Each PR requests one non-author reviewer. The default-on, optional-to-disable schedule reuses the local check and is never described as a merge gate."
     }
   },
   "stageLabels": {
@@ -80,8 +80,8 @@
               "path": ".github/workflows/governance-drift.yml",
               "job": "check",
               "trigger": {
-                "zh-tw": "enable_governance_drift_check 開啟後，每日或手動",
-                "en": "Daily or manual when enable_governance_drift_check is on"
+                "zh-tw": "enable_governance_drift_check 預設開啟；每日或手動",
+                "en": "Daily or manual; enable_governance_drift_check defaults on"
               },
               "timeout": "5 min"
             }
