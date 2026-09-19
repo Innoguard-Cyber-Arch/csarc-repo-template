@@ -4765,6 +4765,156 @@ def test_update_reinstall_fails_closed_when_project_verification_fails(
     assert not (project / "new-feature.txt").exists()
 
 
+@pytest.mark.large
+def test_update_delivers_the_issue_744_release_phase_tooling(
+    tmp_path: Path,
+) -> None:
+    """Issue #744's evidence for "existing-project update impact": generate a
+    project on the commit immediately before #744 landed, simulate it as an
+    already-adopted downstream repository (git-committed, untouched), then
+    run a real `csarc update` to this checkout's current HEAD and confirm
+    the release-phase versioning tooling is actually delivered -- not
+    silently dropped or conflicted out -- exactly like any other paired
+    `template/` change. Drives the real root `copier.yml` end to end (the
+    same `language=ci` profile and overall pattern
+    `test_update_delivers_the_issue_743_approval_gate_to_an_adopted_project`
+    established) rather than asserting against a synthetic minimal fixture
+    template.
+
+    Uses `language=ci`, not `language=python`/`rust`/`typescript`: a CI-only
+    project's release-please config stays `release-type: simple`, so
+    `template/pyproject.toml.jinja`/`package.json.jinja`/`Cargo.toml.jinja`
+    (and their `0.1.0-alpha.1`/`0.1.0a1` bootstrap literals) are excluded by
+    `copier.yml` for this profile and are not exercised here -- those were
+    validated directly, via a real `copier copy` smoke render per language
+    combination, while implementing this Issue, not via this update-impact
+    test. What this test proves instead is that the operative tooling --
+    the new `scripts/release_phase.py` module, `release_policy.py`'s
+    `--phase` support, the prerelease-aware `publish-release`/
+    `converge-release-tag`/`check-release-drift`, the `0.1.0-alpha.1`
+    `version.txt`/`.release-please-manifest.json` bootstrap, and the docs --
+    actually reach an adopted project through a real `update`, and that the
+    delivered script still loads and parses correctly (the `--help`
+    invocation) in a freshly copied, dependency-free environment, not just
+    that its source text changed.
+    """
+    from_sha = "9c18b10582e878aa42f2543008d5dd3dd726ccac"
+    to_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "release-phase-adopted-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                from_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "project_mode=new",
+                "--data",
+                "language=ci",
+                "--data",
+                "project_visibility=private",
+            ]
+        )
+        == 0
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: adopt the pre-#744 baseline")
+
+    # Before: the pre-#744 baseline has none of this Issue's tooling.
+    assert not (project / "scripts" / "release_phase.py").exists()
+    release_policy_before = (
+        project / "scripts" / "release_policy.py"
+    ).read_text(encoding="utf-8")
+    assert "--phase" not in release_policy_before
+    assert "release_phase" not in release_policy_before
+    assert (project / "version.txt").read_text(encoding="utf-8").strip() == (
+        "0.1.0"
+    )
+    manifest_before = json.loads(
+        (project / ".release-please-manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest_before["."] == "0.1.0"
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                to_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+
+    # After: the new module actually landed, not just referenced.
+    release_phase_after = (project / "scripts" / "release_phase.py").read_text(
+        encoding="utf-8"
+    )
+    assert "def retention_plan(" in release_phase_after
+    assert "def validate_declared_phase(" in release_phase_after
+
+    release_policy_after = (
+        project / "scripts" / "release_policy.py"
+    ).read_text(encoding="utf-8")
+    assert '"--phase"' in release_policy_after
+    assert "retention-plan" in release_policy_after
+
+    publish_release_after = (project / "scripts" / "publish-release").read_text(
+        encoding="utf-8"
+    )
+    assert "latest_flags" in publish_release_after
+
+    converge_after = (project / "scripts" / "converge-release-tag").read_text(
+        encoding="utf-8"
+    )
+    assert "--prerelease" in converge_after
+
+    drift_after = (project / "scripts" / "check-release-drift").read_text(
+        encoding="utf-8"
+    )
+    assert "eligible GitHub Release" in drift_after
+
+    ci_policy = (project / "docs" / "ci-policy.md").read_text(encoding="utf-8")
+    assert "release_phase.py" in ci_policy
+    assert "retention-plan" in ci_policy
+
+    # The new-project bootstrap literal reached this *already-adopted*
+    # project's untouched version.txt/manifest too, since nothing in this
+    # fixture ever diverged from what the template would render.
+    assert (project / "version.txt").read_text(encoding="utf-8").strip() == (
+        "0.1.0-alpha.1"
+    )
+    manifest_after = json.loads(
+        (project / ".release-please-manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest_after["."] == "0.1.0-alpha.1"
+
+    # A CI-only project still has no pyproject.toml/package.json/Cargo.toml
+    # after the update -- confirming the language-gated exclusion of the
+    # other bootstrap literals is unaffected, not a side effect this change
+    # accidentally introduced.
+    assert not (project / "pyproject.toml").exists()
+    assert not (project / "package.json").exists()
+    assert not (project / "Cargo.toml").exists()
+
+    help_output = run(
+        ["python3", "scripts/release_policy.py", "--help"], project
+    ).stdout
+    assert "retention-plan" in help_output
+
+
 def test_update_reinstall_honors_an_explicit_to_target_over_latest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

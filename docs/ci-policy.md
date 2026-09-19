@@ -1368,7 +1368,11 @@ Action 建 PR，Guided 只在本機執行 `python3 scripts/release_policy.py pre
 最高宣告層級——**宣告與計算機制由 #745 提供**，本節與 `scripts/release_policy.py`／
 `scripts/publish-release`／`scripts/converge-release-tag` 只負責把一個已宣告的層級
 轉成合法版本號並正確發布：`release_policy.py plan`／`prepare-candidate` 接受
-`--phase {alpha,beta,early,formal}`；版本號合法性由 `scripts/release_phase.py`
+`--phase {alpha,beta,early,formal}`。**pre-release 後綴代表發布層級，不保證之後
+會發該版本的無後綴版本**：`X.Y.Z-alpha.N`／`X.Y.Z-beta.N` 只承諾「這是目前宣告的
+成熟度」，不承諾同一個 `X.Y.Z` 之後一定會有對應的無後綴（早期版或正式版）發布——
+下一次發版可能直接跳到更高的版本號，或維持原地再發一次更高的 `.N`。版本號合法性由
+`scripts/release_phase.py`
 （`template/scripts/` 與 `src/csarc_cli/release_phase.py` 各有一份逐位元組相同的
 副本，後者是因為 `csarc` 發行的 wheel 只包含 `src/csarc_cli`，見其模組
 docstring）驗證：主版本號為 0 時不帶後綴即為早期版，主版本號 ≥ 1 時不帶後綴即為
