@@ -68,6 +68,10 @@ def test_detect_languages_composes_selected_modules(
     assert cli.detect_languages(tmp_path) == ["python", "rust"]
     assert cli.detect_language(tmp_path) == "python-rust"
 
+    (tmp_path / "package.json").touch()
+    assert cli.detect_languages(tmp_path) == ["python", "rust", "typescript"]
+    assert cli.detect_language(tmp_path) == "python-rust-typescript"
+
 
 def test_copier_uses_one_yaml_config_for_language_modules(
     tmp_path: Path,
@@ -193,6 +197,29 @@ def test_config_supports_ci_only_and_extension_settings(tmp_path: Path) -> None:
 
     assert detected == "language modules: ci"
     assert extension == "strict"
+
+
+def test_generated_detector_uses_copier_language_order(tmp_path: Path) -> None:
+    """Compare generated language profiles in the Copier choice order."""
+    config_dir = tmp_path / ".csarc"
+    scripts_dir = tmp_path / "scripts"
+    config_dir.mkdir()
+    scripts_dir.mkdir()
+    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts_dir)
+    detector = scripts_dir / "detect-language-profile"
+    shutil.copy2(ROOT / "template/scripts/detect-language-profile", detector)
+    detector.chmod(detector.stat().st_mode | 0o100)
+    (config_dir / "config.yml").write_text(
+        "languages:\n- rust\n- typescript\n", encoding="utf-8"
+    )
+    (tmp_path / "Cargo.toml").touch()
+    (tmp_path / "package.json").touch()
+
+    detected = subprocess.run(  # noqa: S603
+        [detector], cwd=tmp_path, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+    assert detected == "language modules: rust,typescript"
 
 
 @pytest.mark.parametrize(
