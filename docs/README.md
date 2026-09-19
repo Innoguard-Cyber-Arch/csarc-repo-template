@@ -49,6 +49,7 @@
 - [`agent-collaboration.md`](adr/agent-collaboration.md)
 - [`portable-repo-site.md`](adr/portable-repo-site.md)
 - [`template-policy-manifest.md`](adr/template-policy-manifest.md)
+- [`milestone-due-date-write-workaround.md`](adr/milestone-due-date-write-workaround.md)
 
 2026-08-24 的完整 GitHub 盤點、2026-08-25 的 work-item metadata normalization 與每條決策線對照，見 [`history-audit-2026-08.md`](history-audit-2026-08.md)。
 
