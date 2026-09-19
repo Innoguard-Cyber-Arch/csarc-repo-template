@@ -13,68 +13,87 @@ else
   export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
 fi
 cd "$repo_root"
+source "$repo_root/scripts/verification-step"
 
-tier="${CSARC_CI_TIER:-fast}"
+suite="${CSARC_VERIFICATION_SUITE:-${CSARC_CI_TIER:-fast}}"
 scopes=",${CSARC_CI_SCOPES:-source},"
 {% if has_python %}export UV_PYTHON="${CSARC_PYTHON_VERSION:-{{ python_target }}}"
 {% endif -%}
-git diff --check
-./scripts/check-update-conflicts
-./scripts/scan-secrets
+verification_step "Changed-tree hygiene" git diff --check
+verification_step "Conflict-marker check" ./scripts/check-update-conflicts
+verification_step "Secret scan" ./scripts/scan-secrets
 
-if [[ "$tier" == "docs" ]]; then
-  python3 scripts/spec_to_issue.py validate
-  ./scripts/build-repo-site --check
-  ./scripts/write-verify-attestation fast
-  exit 0
-fi
+case "$suite" in
+  baseline|fast|docs) ;;
+  full) exec ./scripts/verify ;;
+  *)
+    echo "Unknown verification suite: $suite" >&2
+    exit 2
+    ;;
+esac
 
-if [[ "$scopes" == *,docs,* ]]; then
-  python3 scripts/spec_to_issue.py validate
-  ./scripts/build-repo-site --check
-fi
+verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
 
-if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
-  ./scripts/verify-dependencies
-fi
-
-if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
-  ./scripts/lint-workflows-shell
-fi
-
-if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
-  "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
-  ./scripts/test-issue-triage
-  ./scripts/test-worktree-cleanup
-  ./scripts/test-pr-policy
-  ./scripts/test-apply-repository-settings
-  ./scripts/test-check-repo-capabilities
-  ./scripts/test-check-scope-gate
-fi
 {% if has_python -%}
 python_version="$UV_PYTHON"
-uv sync --locked --python "$python_version"
-uv run ruff format --check .
-uv run ruff check .
-uv run ty check
-uv run pytest -m "not large"
+verification_step "Locked Python environment" \
+  uv sync --locked --python "$python_version"
+verification_step "Python formatting" uv run ruff format --check .
+verification_step "Python lint" uv run ruff check .
+verification_step "Python type check" uv run ty check
 {% endif -%}
 {% if has_typescript -%}
 pnpm_store_dir="$cache_root/pnpm/store"
-pnpm install --store-dir "$pnpm_store_dir" --frozen-lockfile --ignore-scripts
-pnpm exec biome ci .
-pnpm exec tsc --noEmit
-pnpm exec vitest run
+verification_step "TypeScript locked install" \
+  pnpm install --store-dir "$pnpm_store_dir" --frozen-lockfile --ignore-scripts
+verification_step "TypeScript lint" pnpm exec biome ci .
+verification_step "TypeScript type check" pnpm exec tsc --noEmit
 {% endif -%}
 {% if has_rust -%}
-cargo fmt --all -- --check
-cargo clippy --locked --all-targets --all-features -- -D warnings
-cargo test --locked --all-features
+verification_step "Rust formatting" cargo fmt --all -- --check
+verification_step "Rust lint" \
+  cargo clippy --locked --all-targets --all-features -- -D warnings
 {% endif -%}
+
+if [[ "$suite" == "baseline" ]]; then
+  ./scripts/write-verify-attestation baseline
+  exit 0
+fi
+
+if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
+  verification_step "Dependency scan" ./scripts/verify-dependencies
+fi
+{% if has_python -%}
+verification_step "Bounded Python regression suite" \
+  uv run pytest -m "not large"
+{% endif -%}
+{% if has_typescript -%}
+verification_step "TypeScript tests" pnpm exec vitest run
+{% endif -%}
+{% if has_rust -%}
+verification_step "Rust tests" cargo test --locked --all-features
+{% endif -%}
+
+if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
+  "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
+  verification_step "Issue-triage self-test" ./scripts/test-issue-triage
+  verification_step "Worktree-cleanup self-test" ./scripts/test-worktree-cleanup
+  verification_step "PR-policy self-test" ./scripts/test-pr-policy
+  verification_step "Repository-settings self-test" \
+    ./scripts/test-apply-repository-settings
+  verification_step "Repository-capabilities self-test" \
+    ./scripts/test-check-repo-capabilities
+  verification_step "Scope-drift-gate self-test" ./scripts/test-check-scope-gate
+fi
+
+if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then
+  verification_step "Specification validation" \
+    python3 scripts/spec_to_issue.py validate
+  verification_step "Repository site render" ./scripts/build-repo-site --check
+fi
 
 # Issue #661: every check above passed (set -euo pipefail would already
 # have exited otherwise) -- record the local-attestation trailer that lets
 # the hosted `verify` check pass without re-running anything. This is the
-# only other place this tier ("fast", covering both the "fast" and, above,
-# the early-exit "docs" sub-case) exits successfully.
-./scripts/write-verify-attestation fast
+# selected cumulative suite exits successfully.
+./scripts/write-verify-attestation "$suite"

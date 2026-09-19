@@ -28,11 +28,23 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Resolve included work and release level
+        id: level
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/release_level.py release-batch \
+            --repo "$GITHUB_REPOSITORY" \
+            --sha "$GITHUB_SHA" \
+            --markdown-output "$RUNNER_TEMP/release-levels.md" \
+            --github-output "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/release-levels.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Plan the next version from repository history
         id: plan
         run: |
           python3 scripts/release_policy.py plan \
             --sha "$GITHUB_SHA" \
+            --phase "${{ steps.level.outputs.level }}" \
             --github-output "$GITHUB_OUTPUT"
       - name: Detect the available release path
         id: capability
@@ -123,6 +135,18 @@ jobs:
         run: |
           printf '%s\n' "$RELEASE_PR" >"$RUNNER_TEMP/release-pr.json"
           ./scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
+      - name: Record included work on the version pull request
+        if: ${{ steps.release.outputs.pr != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+        run: |
+          pr_number="$(jq -r '.number' <<<"$RELEASE_PR")"
+          python3 scripts/release_level.py annotate-pr \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr "$pr_number" \
+            --actor "$GITHUB_ACTOR" \
+            --body-file "$RUNNER_TEMP/release-levels.md"
       - name: Explain the guided version path
         if: ${{ steps.plan.outputs.status == 'pending' && steps.plan.outputs.materialized != 'true' && steps.capability.outputs.mode == 'guided' }}
         env:
@@ -164,6 +188,16 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.state.outputs.tag }}
         run: python3 scripts/release_bundle.py prepare --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-assets"
+      - name: Record included work in the draft Release
+        if: ${{ steps.state.outputs.state == 'draft' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.state.outputs.tag }}
+        run: |
+          python3 scripts/release_level.py annotate-release \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --body-file "$RUNNER_TEMP/release-levels.md"
       - name: Generate the SPDX SBOM
         if: ${{ steps.state.outputs.state == 'draft' }}
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2

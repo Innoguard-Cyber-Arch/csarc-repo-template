@@ -39,7 +39,12 @@ def scope_for(path: str) -> str:
         or name in {"action.yml", "action.yaml", "zizmor.yml"}
     ):
         return "workflow"
-    if path in {".github/CODEOWNERS", ".github/REVIEWERS", "AGENTS.md"} or (
+    if path in {
+        ".csarc/config.yml",
+        ".github/CODEOWNERS",
+        ".github/REVIEWERS",
+        "AGENTS.md",
+    } or (
         path.startswith(("policies/", "template/policies/"))
         or path.startswith("scripts/apply-repository-settings")
         or path.startswith("scripts/check-governance-drift")
@@ -53,10 +58,14 @@ def scope_for(path: str) -> str:
     if (
         name
         in {
+            "Cargo.lock",
+            "Cargo.toml",
             "package.json",
+            "package-lock.json",
             "pnpm-lock.yaml",
             "pyproject.toml",
             "uv.lock",
+            "yarn.lock",
         }
         or name in {"dependabot.yml", "pnpm-workspace.yaml"}
         or path.startswith(".github/dependency-review-config")

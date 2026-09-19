@@ -1,0 +1,27 @@
+{
+  "name": "CSARC required checks",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"{% if branch_strategy == "delivery" %}, "refs/heads/dev/m*"{% endif %}],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "do_not_enforce_on_create": true,
+        "strict_required_status_checks_policy": false,
+        "required_status_checks": [
+          {"context": "title"},
+          {"context": "promotion"},
+          {"context": "verify"},
+          {"context": "review"}
+        ]
+      }
+    }
+  ]
+}

@@ -32,6 +32,9 @@ POLICY_TOGGLES = (
 # older answers file means "human", the behavior before this option existed.
 PR_REVIEW_MODES = {"copilot", "human"}
 COPILOT_REVIEW_MAX_LEVELS = {"unlimited", "alpha", "beta", "early", "release"}
+RELEASE_LEVELS = {"alpha", "beta", "early", "formal"}
+RELEASE_LEVEL_REVIEWS = {"self", "peer"}
+RELEASE_LEVEL_VERIFICATION = {"baseline", "fast", "docs", "full"}
 
 
 def _scalar(value: str) -> object:
@@ -126,11 +129,20 @@ def validate_config(
         "copilot_review_max_level": COPILOT_REVIEW_MAX_LEVELS,
         "container_mode": {"none", "verify", "ghcr"},
         "coverage_mode": {"diff", "global"},
+        "default_release_level": RELEASE_LEVELS,
         "project_mode": {"existing", "new"},
         "project_visibility": {"internal", "private", "public"},
         "pr_review_mode": PR_REVIEW_MODES,
         "python_support_mode": {"latest", "minimum"},
         "release_ownership": RELEASE_OWNERSHIPS,
+        **{
+            f"release_level_{level}_review": RELEASE_LEVEL_REVIEWS
+            for level in RELEASE_LEVELS
+        },
+        **{
+            f"release_level_{level}_verification": RELEASE_LEVEL_VERIFICATION
+            for level in RELEASE_LEVELS
+        },
     }
     for key, allowed in choices.items():
         value = config.get(key)
@@ -162,6 +174,15 @@ def validate_config(
             raise ValueError(
                 f"Invalid {toggle} in {path}: {value!r}; expected true or false"
             )
+
+    release_levels_enabled = config.get("release_levels_enabled")
+    if release_levels_enabled is not None and not isinstance(
+        release_levels_enabled, bool
+    ):
+        raise ValueError(
+            f"Invalid release_levels_enabled in {path}: "
+            f"{release_levels_enabled!r}; expected true or false"
+        )
 
     threshold = config.get("coverage_threshold")
     if threshold is not None and (

@@ -1,6 +1,7 @@
 """Regression tests for the minimal Journey 03 verification workflow."""
 
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -14,11 +15,7 @@ REPO_ROOT = Path(__file__).parents[1]
 def direct_regression_commands(path: str) -> set[str]:
     """Return standalone regressions invoked by one stage entry point."""
     source = (REPO_ROOT / path).read_text(encoding="utf-8")
-    return {
-        line.strip()
-        for line in source.splitlines()
-        if line.strip().startswith("./scripts/test-")
-    }
+    return set(re.findall(r"\./scripts/test-[A-Za-z0-9-]+", source))
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -142,7 +139,11 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
         "merge_group",
         "workflow_dispatch",
     }
-    assert set(workflow["permissions"]) == {"contents"}
+    assert workflow["permissions"] == {
+        "contents": "read",
+        "issues": "read",
+        "pull-requests": "read",
+    }
     assert set(workflow["jobs"]) == {"verify"}
     assert workflow["jobs"]["verify"]["timeout-minutes"] == 15
 
@@ -215,9 +216,9 @@ def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
         (root_fast, "./scripts/build-repo-site --check"),
         (template_fast, "./scripts/build-repo-site --check"),
     ):
-        docs_tier_start = source.index('if [[ "$tier" == "docs" ]]; then')
-        docs_tier_exit = source.index("exit 0", docs_tier_start)
-        gate_start = source.index('"$scopes" == *,docs,*', docs_tier_exit)
+        gate_start = source.index(
+            'if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then'
+        )
         gate_end = source.index("\nfi", gate_start)
         gate = source[gate_start:gate_end]
 
@@ -229,10 +230,62 @@ def test_template_smoke_reads_config_from_the_generated_repository() -> None:
     """Resolve the generated config relative to the generated repository."""
     source = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
 
-    assert (
-        '(cd "$smoke_root/project" '
-        "&& python3 scripts/csarc_config.py languages >/dev/null)" in source
+    assert "python3 scripts/csarc_config.py languages" in source
+    assert 'read_generated_languages "$smoke_root/project"' in source
+
+
+def test_verification_steps_report_progress_heartbeat_and_rerun() -> None:
+    """Make a silent or failing step actionable from the same log."""
+    helper = shlex.quote(str(REPO_ROOT / "scripts/verification-step"))
+    success = subprocess.run(  # noqa: S603 - sources this repository's script
+        [
+            "/bin/bash",
+            "-c",
+            (
+                f"source {helper}; "
+                "CSARC_VERIFICATION_HEARTBEAT_SECONDS=1 "
+                'verification_step "Silent step" sleep 1.1'
+            ),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
+    assert "[verify-step] START Silent step; log=stdout" in success.stdout
+    assert "[verify-step] COMMAND sleep 1.1" in success.stdout
+    assert "[verify-step] HEARTBEAT Silent step" in success.stdout
+    assert "[verify-step] PASSED Silent step" in success.stdout
+
+    failure = subprocess.run(  # noqa: S603 - sources this repository's script
+        [
+            "/bin/bash",
+            "-c",
+            (
+                f"source {helper}; "
+                'verification_step "Broken step" bash -c "exit 7"'
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert failure.returncode == 7
+    assert "[verify-step] FAILED Broken step" in failure.stderr
+    assert "[verify-step] RERUN bash -c exit\\ 7" in failure.stderr
+
+
+def test_verification_entry_points_use_shared_step_reporting() -> None:
+    """Keep every long local verification path observable."""
+    entries = (
+        REPO_ROOT / "scripts/verify-fast",
+        REPO_ROOT / "template/scripts/verify-fast.jinja",
+        REPO_ROOT / "template/scripts/verify.jinja",
+        *sorted((REPO_ROOT / "scripts").glob("verify-stage-*")),
+    )
+    for entry in entries:
+        source = entry.read_text(encoding="utf-8")
+        assert "scripts/verification-step" in source
+        assert "verification_step " in source
 
 
 def test_template_verification_reports_stage_timings() -> None:
@@ -291,6 +344,7 @@ run_stage "Broken stage" sample_failure
 
     assert failure.returncode == 7
     assert "[verify-template] FAILED Broken stage (" in failure.stderr
+    assert "[verify-template] RERUN sample_failure" in failure.stderr
     assert "FAILED" in failure.stderr
     assert "TOTAL" in failure.stderr
 
@@ -370,16 +424,16 @@ def test_issue_pr_policy_regressions_run_only_for_relevant_scopes() -> None:
         "scripts/verify-fast",
         "template/scripts/verify-fast.jinja",
     ):
-        source = (REPO_ROOT / path).read_text(encoding="utf-8")
+        source = (
+            (REPO_ROOT / path).read_text(encoding="utf-8").replace("\\\n", " ")
+        )
         gate_start = source.index('if [[ "$scopes" == *,governance,*')
         gate_end = source.index("\nfi", gate_start)
         gate = source[gate_start:gate_end]
 
-        assert expected <= {
-            line.strip()
-            for line in gate.splitlines()
-            if line.strip().startswith("./scripts/test-")
-        }
+        assert expected <= set(
+            re.findall(r"\./scripts/test-[A-Za-z0-9-]+", gate)
+        )
         assert all(
             scope in gate
             for scope in ("governance", "template", "workflow", "shell")
@@ -403,6 +457,8 @@ def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:
         encoding="utf-8"
     )
 
-    assert 'uv run pytest -m "not large"' in issue_entry
-    assert "uv run pytest --cov=csarc_cli" in release_entry
+    assert "uv run pytest -vv --durations=20" in issue_entry
+    assert '-m "not large"' in issue_entry
+    assert "uv run pytest -vv --durations=20" in release_entry
+    assert "--cov=csarc_cli" in release_entry
     assert "pytest.mark.large" not in ai_contract

@@ -86,7 +86,7 @@ grep -Fq 'stale' <<<"$stale_out"
 
 # Case 5: tier insufficiency -- a fresh, hash-correct tier=fast attestation
 # must still fail when the caller demands tier=full, and a fresh tier=full
-# attestation must satisfy a tier=fast (or docs) requirement.
+# attestation must satisfy every weaker suite requirement.
 write fast >/dev/null
 set +e
 weak_out="$(check "$(git -C "$repo" rev-parse HEAD)" --required-tier full 2>&1)"
@@ -96,6 +96,7 @@ set -e
 grep -Fq "needs 'full' verification" <<<"$weak_out"
 
 write full >/dev/null
+check "$(git -C "$repo" rev-parse HEAD)" --required-tier baseline >/dev/null
 check "$(git -C "$repo" rev-parse HEAD)" --required-tier fast >/dev/null
 check "$(git -C "$repo" rev-parse HEAD)" --required-tier docs >/dev/null
 check "$(git -C "$repo" rev-parse HEAD)" --required-tier full >/dev/null

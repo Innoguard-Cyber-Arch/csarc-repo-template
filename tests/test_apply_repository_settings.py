@@ -499,11 +499,10 @@ def test_missing_do_not_enforce_on_create_is_reported(tmp_path: Path) -> None:
 def test_required_status_checks_desired_from_a_second_file_passes(
     tmp_path: Path,
 ) -> None:
-    """Issue #607: required_status_checks may live in its own Ruleset file.
+    """Issue #745: required_status_checks live in their own Ruleset file.
 
-    From release_phase "beta" onward, policies/rulesets.json no longer
-    carries a required_status_checks rule -- it moves to
-    policies/rulesets-required-checks.json so it can keep its own,
+    policies/rulesets.json carries only review and non-fast-forward rules;
+    policies/rulesets-required-checks.json keeps required checks behind
     always-empty bypass_actors. The drift check must still treat the
     branch as compliant when the union of both files covers all three
     rule types, even though `desired` (the first file) alone does not.

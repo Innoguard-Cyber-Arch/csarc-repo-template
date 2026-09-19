@@ -154,7 +154,7 @@ The Governance step's plan table (Step 08) answers "what does the account's GitH
 | `security_and_analysis` | Secret scanning, push protection, Dependabot security updates | Public repository, or GitHub Advanced Security if private | DEGRADED marker; rely on local `scripts/scan-secrets` instead |
 | `github_pages` | Hosts `docs/index.html` as a live site | Public repository, or GitHub Enterprise Cloud if private | DEGRADED marker; distribute the committed HTML file instead |
 | `repository_settings_inspection` | `check` mode can compare live admin-only fields | Same as `repository_admin` | DEGRADED marker; run `check` from a trusted admin checkout |
-| `immutable_releases` | Required before hosted Automatic/Guided publish can run | A real admin identity, never the default `GITHUB_TOKEN` | Known permanent limitation (#123/#626); run `scripts/publish-release` locally |
+| `immutable_releases` | Repository setting GitHub uses to sign each published Release's attestation | An admin enables it once via `apply-repository-settings.sh apply`; `GITHUB_TOKEN` still can't read it directly | No longer pre-flight-blocking (#770); `scripts/publish-release` verifies the signed attestation post-hoc and fails closed if it's missing |
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="How to read a check-repo-capabilities result" >}}
@@ -432,22 +432,23 @@ Only tools this template directly integrates, executes, or produces into the rep
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="contract" track="contract" eyebrow="Step 03" title="Verify locally first; CI only checks the proof" subtitle="Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries." legacy="false"  class="candidate-slide" >}}
-{{< standard key="contract-mode-standard" title="Change size decides how heavy verification gets" >}}
-Developers first run the tier-appropriate verification on their own machine; a successful run writes a "verified" attestation locally. Once a PR opens, GitHub only checks that this attestation is fresh and covers a sufficient tier against the same policy -- it never re-executes the checks themselves. Locally you only run the check that proves this change, no need to wait for the full pipeline. Once the PR is open, the system automatically decides which tier applies based on the change's scope:
+{{< slide key="contract" track="contract" eyebrow="Step 03" title="Verify locally first; CI only checks the proof" subtitle="Release level sets the minimum; changed-path risk can only raise it." legacy="false"  class="candidate-slide" >}}
+{{< standard key="contract-mode-standard" title="Each work item's level sets its minimum gate" >}}
+Developers first run the resolved suite locally. A successful run writes a verified attestation; GitHub checks its freshness, commit tree, and suite strength without re-executing the tests:
 
-<div class="plan-grid">
-  <article class="plan-card current"><h3>docs</h3><p>Docs-only changes get the lightest check. Example: editing a single explainer document.</p></article>
-  <article class="plan-card team"><h3>fast</h3><p>Ordinary changes default to this tier. Example: a routine code or config change.</p></article>
-  <article class="plan-card enterprise"><h3>full</h3><p>Milestone delivery, a hotfix, or unpinnable risk. Example: Milestone/canary delivery, a hotfix, a merge queue.</p></article>
-</div>
+| Release level | Review | Minimum suite |
+| --- | --- | --- |
+| alpha | exact-head self authorization allowed | baseline |
+| beta | exact-head approval from a non-author | fast |
+| early | exact-head approval from a non-author | docs |
+| formal | exact-head approval from a non-author | full |
 
-The same logic runs locally and in CI, so there is never a second, drifting copy of the rule.
+The Issue declares the level, and a Milestone work Issue inherits its tracker. Changed-path classification may raise this floor but never lower it. Local and hosted checks use the same resolved result.
 {{< /standard >}}
 
 {{< ops key="contract-mode-ops" title="The tiering rule and today's automation status" >}}
 - **During development:** run only the focused check that proves the current change (for example `uv run pytest <path>` or `uv run ruff check <path>`), using fresh output before claiming completion, without waiting on the full pipeline.
-- **Work PR (topic branch → main or `dev/m*`):** `scripts/ci_tier.py` classifies the change as `docs`, `fast`, or `full` from the event, base/head, labels, and changed paths. A pure documentation or site change lands on `docs` (an early-exit case of `fast`); an ordinary change lands on `fast`; any path the classifier cannot confidently place escalates, fail-closed, to `full`.
+- **Work PR (topic branch → main or `dev/m*`):** `scripts/release_level.py` resolves alpha, beta, early, or formal from a trusted Issue or Milestone declaration; `scripts/ci_tier.py` then raises the minimum suite from the event, labels, and changed paths. Conflicting declarations and unknown high-risk paths fail closed.
 - **When full verification is needed:** only for a Milestone or canary delivery, an urgent fix, a merge queue, a manual dispatch, or an unknown high-risk path the system cannot safely narrow.
 - **One implementation, nothing reruns on the hosted side (#661):** GitHub Actions has exactly one `verify` job with `contents: read` permission and a 15-minute timeout; a new commit on the same PR cancels the previous run. It never re-executes `scripts/verify-fast` / `scripts/verify-template.sh` (`scripts/verify` in a generated repository) -- it only validates the `Verified-locally:` trailer those scripts write onto the commit on a successful local run (tree hash, tier, and timestamp) for freshness and tier sufficiency. Skip the tier-appropriate local run before pushing, and this lightweight hosted job has nothing to validate -- it fails closed.
 - **Repository scope:** an ordinary project verifies only its own change. The template repository's full verification also runs the `large`-marked Copier create / adopt / update regression tests, which actually generate a project and verify the components it preserves — not just check that files exist.
@@ -468,11 +469,12 @@ The states below are checked line by line against `docs/ci-policy.md`'s "Current
 - **Not active:** dedicated promotion, release-handoff, registry-publisher, consumption, live-integration, and deployment workflows do not exist, and are not conditional options waiting to be wired in.
 {{< /disclosure >}}
 
-{{< disclosure key="contract-cost" title="What the three verification tiers actually cost" >}}
+{{< disclosure key="contract-cost" title="What the four cumulative verification suites cost" >}}
 These numbers come from `docs/ci-policy.md`'s most recent measurement. They set cost expectations, not a permanent SLA — a rerun will report different numbers.
 
-- `docs` and `fast` share one bounded path; `docs` is just `fast`'s early-exit case for a pure documentation or site change.
+- `baseline`: core security, governance, formatting, lint, type, workflow, and lockfile checks.
 - `fast`: on 2026-09-01, with a warm cache on the same machine, a source-only scope took about 59 seconds and a scope also touching policy/template files took about 99 seconds; the full PR feedback window runs about 1-4 minutes (#428).
+- `docs`: adds site, documentation, translation, navigation, and root/template synchronization to fast.
 - `full`: 502 seconds (8m22s) with all seven stages PASSED on an exclusive machine; up to 810 seconds when another worktree's process runs concurrently — the difference is contention, not heavier verification content (#458, 2026-09-02). Of the seven stages, Regression tests (the full pytest run plus the `large`-marked Copier create/adopt/update matrix) is usually by far the longest; the other six stages together usually add up to well under a minute.
 {{< /disclosure >}}
 
@@ -615,7 +617,7 @@ Routine updates and security checks run automatically. People step in only for u
 - **Release:** after that PR merges and full verification passes, the system creates the immutable tag, GitHub Release, explicit artifacts, checksums, and SBOM.
 - **Delivery:** merging to `main` is repository delivery and may happen without a new version. A work PR completes one item; a Milestone delivery PR carries the batch.
 - **Standalone work:** when one Issue can be reviewed and verified independently and has no shared deadline or cross-Issue dependency, it needs no Milestone and may target `main` directly.
-- **Hotfix:** only an urgent defect in `main` uses this route. It still needs a Bug Issue, another reviewer, and full verification; a reviewed version PR then materializes the patch release.
+- **Hotfix:** only an urgent defect in `main` uses this route. It still needs a Bug Issue and full verification. At beta or above, an admin may merge without an immediate peer only through an exact-head, reason-bound emergency path that automatically opens a post-merge peer-review item.
 - **Deployment:** operating the product in a real runtime with health checks and recovery belongs to the consuming product, not this template.
 
 {{< disclosure key="deploy-capability-status" title="Every capability's current status, side by side" >}}
@@ -641,7 +643,7 @@ GitHub Release is the portable baseline for every profile. Registry publishing a
 {{< /disclosure >}}
 
 {{< disclosure key="hotfix-delivery" title="Hotfix review, verification, and evidence" >}}
-A hotfix uses a Bug Issue without a Milestone, the `bug` and `hotfix` labels, `fix/<Issue>-*`, and a `fix(scope): summary` PR directly to `main`. Normal review and full verification still apply. Undisclosed security defects use a GitHub Security Advisory instead. After merge, retain the PR, commit SHA, full run, and rollback note. `fix` normally declares patch intent; the exact version is still reviewed in the Release Please version PR.
+A hotfix uses a Bug Issue without a Milestone, the `bug` and `hotfix` labels, `fix/<Issue>-*`, and a `fix(scope): summary` PR directly to `main`; full verification still applies. At beta or above, the emergency path requires one live admin to be the Issue proposer, exact-head authorizer, and merge actor, with a recorded reason; it then opens a `needs-manual-review` Issue automatically. No other PR may use this exception. Undisclosed security defects use a GitHub Security Advisory instead.
 {{< /disclosure >}}
 
 {{< disclosure key="manual-release-boundary" title="Automatic-release ownership" >}}
@@ -660,13 +662,14 @@ Milestone closure remains manual until #400 completes its lifecycle contract, an
 To learn what actually changed in a version, why it shipped, and how it differs from the
 prior one, go straight to GitHub's
 [Releases page](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases): one
-Release per version, always carrying three fields — the **version number** (the Release
+Release per version, always carrying four fields — the **version number** (the Release
 title, equal to the `vMAJOR.MINOR.PATCH` tag), the **release date** (GitHub's own publish
 timestamp, shown automatically), and a **change summary** (GitHub's auto-generated "What's
 Changed" list built from the PR titles merged since the prior version, plus a full-compare
-link back to it).
+link back to it), plus a **work-level list** that names each included work item and release
+level and uses the highest level for this version.
 
-None of the three is hand-typed, and none varies by who runs the release: whether GitHub
+None of the four is hand-typed, and none varies by who runs the release: whether GitHub
 Actions triggers it automatically or a maintainer runs `scripts/publish-release` locally
 because Actions looks unhealthy, both paths call the exact same `scripts/converge-release-tag`
 script and the same `gh release create ... --generate-notes` command to produce the Release
@@ -756,8 +759,9 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Required baseline | `branch_strategy` | `delivery` by default; `delivery` or `main` | branch guidance, `policies/rulesets.json`, and the repo-site's delivery-route section |
 | Organization policy | `code_owner` | one existing `@organization/team` with repository write access | `.github/CODEOWNERS`; checked by repository-settings plan/apply/check; the repo-site's primary-owner line |
 | Organization policy | `reviewers` | one or more GitHub usernames | `.github/REVIEWERS`; `governance-comment.yml` assigns automatically on every non-draft pull request |
+| Project choice | `release_levels_enabled`, `default_release_level`, `release_level_*_{review,verification}` | new repositories default to alpha; adoption and this template root default to beta; each level maps to self/peer and baseline/fast/docs/full | Issue/Milestone resolution, the `review` gate, verification attestations, and release notes |
 | Project choice | `pr_review_mode` | `copilot` by default for new projects; `copilot` or `human`; `copier update` defaults existing projects to `human` | `policies/rulesets.json` (`copilot` requires zero approvals, auto-requests Copilot review on every push, and requires the `review` check); `pr-review.yml` and `scripts/review_gate.py` accept a clean Copilot review or a maintainer approval of the current head; needs a Copilot license |
-| Project choice | `copilot_review_max_level` | `unlimited` by default; `alpha`, `beta`, `early`, or `release` | highest release level a clean Copilot review may approve; until per-work release levels (#745) exist, any value other than `unlimited` makes the Copilot path fail closed |
+| Project choice | `copilot_review_max_level` | `unlimited` by default; `alpha`, `beta`, `early`, or `release` (formal) | highest release level a clean Copilot review may approve; higher levels require maintainer approval |
 | Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection, optional security defaults, and the repo-site's visible-audience line |
 | Project choice | `project_name` | required non-empty string; defaults to `CSARC Project` | the repo-site's title and heading |
 | Project choice | `project_description` | required one-sentence purpose; rejects placeholder text | the repo-site's introduction paragraph |

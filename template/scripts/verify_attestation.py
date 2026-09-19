@@ -8,7 +8,7 @@ of a hosted runner re-executing `scripts/verify-fast` /
 locally, and on success the script appends a single-line trailer to the
 current HEAD commit:
 
-    Verified-locally: sha256=<tree hash> tier=fast|full at=<UTC ISO 8601>
+    Verified-locally: sha256=<tree hash> tier=<suite> at=<UTC ISO 8601>
 
 The hosted `verify` job then does NOT re-run anything -- it only checks
 that trailer against three independent conditions, all implemented here so
@@ -25,13 +25,13 @@ A fourth, optional condition -- tier sufficiency -- exists because Issue
 #661 explicitly asked for adversarial review of this design: without it, a
 contributor could always run the cheap `scripts/verify-fast` locally (which
 unconditionally writes `tier=fast`) even on a change that
-`scripts/ci_tier.py` classifies as needing `full` verification (for example
+`scripts/ci_tier.py` classifies as needing stronger verification (for example
 one that edits `.github/workflows/`), and the hosted job -- which no longer
 executes anything itself -- would have no way to tell the difference. When
 `check_attestation()` is given `required_tier` (the tier `ci_tier.py`
-already, independently, computed for this exact PR), `tier=fast` only
-satisfies a `docs` or `fast` requirement; only `tier=full` satisfies a
-`full` requirement. This function does not re-implement `ci_tier.py`'s
+already, independently, computed for this exact PR), the declared suite must
+meet or exceed that requirement. This function does not re-implement
+`ci_tier.py`'s
 routing logic, only compares against its answer, matching this
 repository's existing principle of reusing one classifier rather than
 maintaining two (see `promotion_gate.py`'s `check-route` and
@@ -130,24 +130,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 TRAILER_TOKEN = "Verified-locally"  # noqa: S105 - a git trailer name, not a secret
-VALID_TIERS = ("fast", "full")
-# "docs" is a real scripts/ci_tier.py classification but never an attested
-# tier -- scripts/verify-fast always attests tier=fast for both its "docs"
-# and "fast" internal branches (see its own trailer-write call sites), so
-# "docs" only ever appears on the *required* side of a tier-sufficiency
-# check, never on the *attested* side.
-VALID_REQUIRED_TIERS = (*VALID_TIERS, "docs")
-_TIER_RANK = {"docs": 0, "fast": 1, "full": 2}
+VALID_TIERS = ("baseline", "fast", "docs", "full")
+VALID_REQUIRED_TIERS = VALID_TIERS
+_TIER_RANK = {tier: rank for rank, tier in enumerate(VALID_TIERS)}
 
 # One line, anywhere in the commit message:
-#   Verified-locally: sha256=<hex> tier=(fast|full) at=<UTC ISO 8601>
+#   Verified-locally: sha256=<hex> tier=<suite> at=<UTC ISO 8601>
 # The hash length is intentionally unconstrained beyond "plausible hex" --
 # see the module docstring for why 40 (SHA-1) and 64 (SHA-256) are both
 # legitimate, and the real check is an exact-string comparison, not a
 # length check.
 TRAILER_PATTERN = re.compile(
     r"^Verified-locally:\s*sha256=(?P<sha256>[0-9a-fA-F]{32,64})\s+"
-    r"tier=(?P<tier>fast|full)\s+"
+    r"tier=(?P<tier>baseline|fast|docs|full)\s+"
     r"at=(?P<at>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\s*$",
     re.MULTILINE,
 )
@@ -307,9 +302,8 @@ def check_attestation(
                 False,
                 f"this change needs '{required_tier}' verification "
                 f"(scripts/ci_tier.py) but the attestation only claims "
-                f"tier={attestation.tier!r} -- run "
-                "./scripts/verify-template.sh (in a generated project, "
-                "./scripts/verify) locally, not the fast entry point",
+                f"tier={attestation.tier!r} -- run the required local "
+                "verification suite and attest again",
             )
 
     return CheckResult(

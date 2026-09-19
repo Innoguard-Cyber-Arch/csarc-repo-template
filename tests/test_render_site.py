@@ -1425,6 +1425,35 @@ def test_standard_and_maintenance_mode_page_counts() -> None:
         )
 
 
+def test_setup_examples_use_release_source_and_stay_root_only() -> None:
+    """Keep root setup commands valid and omit them from generated sites."""
+    root_components = (ROOT / "site/static/legacy-components.js").read_text(
+        encoding="utf-8"
+    )
+    template_components = (
+        ROOT / "template/site/static/legacy-components.js"
+    ).read_text(encoding="utf-8")
+    command_prefix = (
+        "uvx --python 3.14 --from "
+        "'git+https://github.com/Innoguard-Cyber-Arch/"
+        "csarc-repo-template.git@<approved-full-commit-sha>' csarc "
+    )
+
+    assert "--from csarc-repo-cli" not in root_components
+    assert "--from csarc-repo-cli" not in template_components
+    commands = re.findall(r"uvx [^\n`]+", root_components)
+    assert len(commands) == 12
+    assert all(command.startswith(command_prefix) for command in commands)
+
+    template_content = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "template/site/content").glob("*.md")
+    )
+    assert "data-setup=" not in template_content
+    assert "setupExamplesByLang" not in template_components
+    assert "copyCommandText" in template_components
+
+
 def test_install_prompt_is_visible_and_matches_what_gets_copied() -> None:
     """Issue #681/#682: the install page's full agent prompt used to live
     only in the copy button's `data-copy-text` attribute -- a reader could

@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.parse
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,10 +20,12 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     stale_branch_detection = importlib.import_module("stale_branch_detection")
+    release_level = importlib.import_module("release_level")
 else:
     stale_branch_detection = importlib.import_module(
         f"{__package__}.stale_branch_detection"
     )
+    release_level = importlib.import_module(f"{__package__}.release_level")
 
 CHECK_NAME = "Milestone approval"
 TRACKER_SECTIONS = (
@@ -68,6 +71,70 @@ def run_gh(arguments: list[str]) -> str:
         text=True,
     )
     return result.stdout.strip()
+
+
+class _SnapshotGitHub:
+    """Expose an already-loaded Milestone snapshot to the level resolver."""
+
+    def __init__(self, snapshot: dict[str, Any]) -> None:
+        self.snapshot = snapshot
+
+    def get(self, repo: str, path: str) -> object:
+        """Read snapshot data or delegate collaborator permission lookup."""
+        if path.startswith("collaborators/") and path.endswith("/permission"):
+            login = urllib.parse.unquote(path.split("/", 2)[1])
+            permission = _collaborator_permission(repo, login)
+            if permission is None:
+                raise RuntimeError("collaborator permission is unavailable")
+            return {"permission": permission}
+        if path.startswith("milestones/"):
+            number = int(path.split("/", 1)[1])
+            milestone = self.snapshot.get("milestone")
+            if (
+                isinstance(milestone, dict)
+                and milestone.get("number") == number
+            ):
+                return milestone
+            return load_snapshot(repo, number)["milestone"]
+        if path.startswith("issues/"):
+            number = int(path.split("/", 1)[1])
+            issue = self.snapshot.get("issue")
+            if isinstance(issue, dict) and issue.get("number") == number:
+                return issue
+            for issue in self.snapshot.get("issues", []):
+                if issue.get("number") == number:
+                    return issue
+        raise RuntimeError(f"snapshot has no {path}")
+
+    def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
+        """Return the snapshot's Milestone Issue collection."""
+        if path.startswith("issues?milestone="):
+            issues = self.snapshot.get("issues")
+            if isinstance(issues, list):
+                return list(issues)
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(path).query)
+            milestone_number = int(query["milestone"][0])
+            return list(load_snapshot(repo, milestone_number)["issues"])
+        raise RuntimeError(f"snapshot has no {path}")
+
+
+def _admin_self_approval_allowed(
+    github: release_level.GitHubReader,
+    repo: str,
+    issue: dict[str, Any],
+) -> bool:
+    """Return whether this work's configured review policy permits self-use."""
+    labels = {
+        str(label.get("name") or "").casefold()
+        for label in issue.get("labels", [])
+        if isinstance(label, dict)
+    }
+    if issue.get("milestone") is None and "hotfix" in labels:
+        return True
+    decision = release_level.resolve_issue(
+        github, repo, issue, release_level.load_settings()
+    )
+    return decision.review == "self"
 
 
 def _pages(raw: str) -> list[dict[str, Any]]:
@@ -635,6 +702,7 @@ def _gate_decision(
     missing_message: str,
     approved_prefix: str = "Approved by",
     admin_prefix: str = "Admin self-approved by",
+    allow_admin_self_approval: bool = True,
 ) -> Decision:
     """Turn one collected approval-record set into a pass/fail Decision.
 
@@ -647,6 +715,12 @@ def _gate_decision(
     it is the only reason no approval currently counts, the message says
     so explicitly instead of reading identically to "never approved".
     """
+    if not approvals and admin_approvals and not allow_admin_self_approval:
+        return Decision(
+            False,
+            "This release level requires approval from another person; "
+            "admin self-approval is only valid when self-review is configured",
+        )
     if not approvals and not admin_approvals:
         if stale:
             return Decision(
@@ -673,7 +747,10 @@ def _gate_decision(
 
 
 def approval_decision(
-    snapshot: dict[str, Any], *, require_open: bool = True
+    snapshot: dict[str, Any],
+    *,
+    require_open: bool = True,
+    allow_admin_self_approval: bool | None = None,
 ) -> Decision:
     """Require one non-proposer approval, or an owner self-approval.
 
@@ -693,6 +770,12 @@ def approval_decision(
     approvals, objections, resolved, admin_approvals, stale = _approval_records(
         snapshot, proposer, item_updated_at=item.get("updated_at")
     )
+    if allow_admin_self_approval is None and admin_approvals and not approvals:
+        allow_admin_self_approval = _admin_self_approval_allowed(
+            _SnapshotGitHub(snapshot), str(snapshot.get("repo") or ""), item
+        )
+    if allow_admin_self_approval is None:
+        allow_admin_self_approval = False
     return _gate_decision(
         approvals,
         objections,
@@ -700,6 +783,7 @@ def approval_decision(
         admin_approvals,
         stale,
         missing_message="A person other than the proposer must approve",
+        allow_admin_self_approval=allow_admin_self_approval,
     )
 
 
@@ -719,7 +803,9 @@ def load_issue_snapshot(repo: str, number: int) -> dict[str, Any]:
     return {"repo": repo, "issue": issue, "comments": comments}
 
 
-def scope_decision(snapshot: dict[str, Any]) -> Decision:
+def scope_decision(
+    snapshot: dict[str, Any], *, allow_admin_self_approval: bool | None = None
+) -> Decision:
     """Require independent approval only for a self-declared scope expansion.
 
     A work Issue inherits its tracker's approval by default -- no sentinel
@@ -742,6 +828,12 @@ def scope_decision(snapshot: dict[str, Any]) -> Decision:
     approvals, objections, resolved, admin_approvals, stale = _approval_records(
         snapshot, proposer, item_updated_at=issue.get("updated_at")
     )
+    if allow_admin_self_approval is None and admin_approvals and not approvals:
+        allow_admin_self_approval = _admin_self_approval_allowed(
+            _SnapshotGitHub(snapshot), str(snapshot.get("repo") or ""), issue
+        )
+    if allow_admin_self_approval is None:
+        allow_admin_self_approval = False
     return _gate_decision(
         approvals,
         objections,
@@ -754,12 +846,14 @@ def scope_decision(snapshot: dict[str, Any]) -> Decision:
         ),
         approved_prefix="Scope expansion approved by",
         admin_prefix="Scope expansion admin self-approved by",
+        allow_admin_self_approval=allow_admin_self_approval,
     )
 
 
 def check_scope(repo: str, number: int) -> Decision:
     """Validate the scope-expansion gate for one work Issue."""
-    return scope_decision(load_issue_snapshot(repo, number))
+    snapshot = load_issue_snapshot(repo, number)
+    return scope_decision(snapshot)
 
 
 def _issue_approval_records(
@@ -782,8 +876,143 @@ def _issue_approval_records(
     )
 
 
+@dataclass(frozen=True)
+class ApprovalEditInvalidation:
+    """One currently valid approval that a body edit would invalidate."""
+
+    author: str
+    url: str
+    reapproval_command: str
+
+
+def _body_edit_vocabulary(
+    issue: dict[str, Any],
+) -> _ApprovalVocabulary | None:
+    """Return the approval vocabulary bound to this Issue's own body."""
+    milestone = issue.get("milestone")
+    if milestone is None:
+        return _ISSUE_VOCABULARY
+    if not isinstance(milestone, dict):
+        return None
+    expected_tracker_title = (
+        f"Milestone {milestone.get('number')}: {milestone.get('title')}"
+    )
+    if issue.get("title") == expected_tracker_title:
+        return _TRACKER_VOCABULARY
+    body = issue.get("body")
+    if isinstance(body, str) and has_scope_sentinel(body):
+        return _TRACKER_VOCABULARY
+    return None
+
+
+def approval_invalidations_for_body_edit(
+    snapshot: dict[str, Any], proposed_updated_at: str
+) -> list[ApprovalEditInvalidation]:
+    """Predict approvals the proposed body edit would make stale (#799).
+
+    Both the current and proposed states use `_approval_is_stale()`; this
+    is an early warning around the existing gate, not another approval
+    decision mechanism.
+    """
+    issue = snapshot.get("issue")
+    if not isinstance(issue, dict):
+        return []
+    vocabulary = _body_edit_vocabulary(issue)
+    if vocabulary is None:
+        return []
+    proposer = issue.get("user", {}).get("login")
+    records = _vocabulary_approval_records(
+        vocabulary,
+        snapshot,
+        proposer,
+        item_updated_at=issue.get("updated_at"),
+    )
+    approvals, _, _, admin_approvals, _ = records
+    if not approvals and not admin_approvals:
+        return []
+
+    invalidations: list[ApprovalEditInvalidation] = []
+    fresh_after_edit = False
+    for comment in snapshot.get("comments", []):
+        body = comment.get("body")
+        author = comment.get("user", {}).get("login")
+        if not isinstance(body, str) or not isinstance(author, str):
+            continue
+        command = next(
+            (line.strip() for line in body.splitlines() if line.strip()), ""
+        )
+        normalized = vocabulary.normalize(command)
+        if normalized == vocabulary.approve and author in approvals:
+            reapproval = (
+                "/milestone approve"
+                if vocabulary is _TRACKER_VOCABULARY
+                else "Approve"
+            )
+        elif (
+            normalized.startswith(vocabulary.admin_prefix)
+            and command[len(vocabulary.admin_prefix) :].strip()
+            and author in admin_approvals
+        ):
+            reapproval = (
+                "/milestone admin-approve: <reason>"
+                if vocabulary is _TRACKER_VOCABULARY
+                else "Admin-approve: <reason>"
+            )
+        else:
+            continue
+        if _approval_is_stale(
+            issue.get("updated_at"),
+            comment.get("created_at"),
+            comment.get("updated_at"),
+        ):
+            continue
+        if not _approval_is_stale(
+            proposed_updated_at,
+            comment.get("created_at"),
+            comment.get("updated_at"),
+        ):
+            fresh_after_edit = True
+            continue
+        url = comment.get("html_url")
+        invalidations.append(
+            ApprovalEditInvalidation(
+                author=author,
+                url=url if isinstance(url, str) else "(URL unavailable)",
+                reapproval_command=reapproval,
+            )
+        )
+    return [] if fresh_after_edit else invalidations
+
+
+def body_edit_warning(
+    snapshot: dict[str, Any], proposed_updated_at: str
+) -> str | None:
+    """Format a non-blocking warning for one approval-invalidating edit."""
+    invalidations = approval_invalidations_for_body_edit(
+        snapshot, proposed_updated_at
+    )
+    if not invalidations:
+        return None
+    issue = snapshot["issue"]
+    lines = [
+        f"WARNING: editing Issue #{issue.get('number')}'s body now will "
+        "invalidate these approval comments:"
+    ]
+    lines.extend(f"- @{item.author}: {item.url}" for item in invalidations)
+    lines.append("After the edit, re-approval is required:")
+    lines.extend(
+        f"- @{item.author} should comment `{item.reapproval_command}` again."
+        for item in invalidations
+    )
+    return "\n".join(lines)
+
+
 def standalone_issue_approval_decision(
-    snapshot: dict[str, Any], issue_number: int, *, require_open: bool = True
+    snapshot: dict[str, Any],
+    issue_number: int,
+    *,
+    require_open: bool = True,
+    allow_admin_self_approval: bool | None = None,
 ) -> Decision:
     """Require independent approval for one Issue with no Milestone (#743).
 
@@ -838,6 +1067,12 @@ def standalone_issue_approval_decision(
             snapshot, proposer, item_updated_at=issue.get("updated_at")
         )
     )
+    if allow_admin_self_approval is None and admin_approvals and not approvals:
+        allow_admin_self_approval = _admin_self_approval_allowed(
+            _SnapshotGitHub(snapshot), str(snapshot.get("repo") or ""), issue
+        )
+    if allow_admin_self_approval is None:
+        allow_admin_self_approval = False
     return _gate_decision(
         approvals,
         objections,
@@ -852,6 +1087,7 @@ def standalone_issue_approval_decision(
         ),
         approved_prefix="Issue approved by",
         admin_prefix="Issue admin self-approved by",
+        allow_admin_self_approval=allow_admin_self_approval,
     )
 
 
@@ -882,7 +1118,9 @@ def check_issue_approval(
     if isinstance(milestone, dict) and isinstance(milestone.get("number"), int):
         return approval_decision(load_snapshot(repo, milestone["number"]))
     return standalone_issue_approval_decision(
-        snapshot, number, require_open=require_open
+        snapshot,
+        number,
+        require_open=require_open,
     )
 
 
@@ -1402,15 +1640,33 @@ def preflight(repo: str, number: int) -> Decision:
     return Decision(not errors, f"{base} | {hygiene}")
 
 
-def reconcile(repo: str, number: int) -> Decision:
-    """Synchronize one Milestone and refresh its open PR checks."""
+def reconcile(
+    repo: str,
+    number: int,
+    *,
+    event_issue: int | None = None,
+    event_action: str | None = None,
+) -> Decision:
+    """Synchronize one relevant Milestone event and refresh its PR checks."""
     snapshot = load_snapshot(repo, number)
     milestone = snapshot["milestone"]
     item = tracker(snapshot)
+    errors = tracker_errors(snapshot)
+    if (
+        event_issue not in {None, 0}
+        and event_action not in {"milestoned", "demilestoned"}
+        and not errors
+        and item is not None
+        and item.get("number") != event_issue
+    ):
+        return Decision(
+            True,
+            f"Work Issue #{event_issue} does not change Milestone lifecycle",
+        )
     if item is None:
         if milestone.get("state") == "closed":
             _set_milestone_state(repo, number, "open")
-        decision = Decision(False, "; ".join(tracker_errors(snapshot)))
+        decision = Decision(False, "; ".join(errors))
         refresh_pr_checks(snapshot)
         return decision
     if item.get("state") == "open":
@@ -1418,6 +1674,18 @@ def reconcile(repo: str, number: int) -> Decision:
             _set_milestone_state(repo, number, "open")
         decision = approval_decision(snapshot)
         refresh_pr_checks(snapshot)
+        if not decision.allowed and not errors:
+            notice = (
+                decision.summary.replace("%", "%25")
+                .replace("\r", "%0D")
+                .replace("\n", "%0A")
+            )
+            print(  # noqa: T201
+                f"::notice title=Milestone governance status::{notice}"
+            )
+            return Decision(
+                True, f"Milestone governance status: {decision.summary}"
+            )
         return decision
     decision = closure_decision(snapshot)
     if decision.allowed:
@@ -1461,6 +1729,8 @@ def main() -> None:
     sync = subparsers.add_parser("reconcile")
     sync.add_argument("--repo", required=True)
     sync.add_argument("--milestone", required=True, type=int)
+    sync.add_argument("--event-issue", type=int)
+    sync.add_argument("--event-action")
     pre = subparsers.add_parser("preflight")
     pre.add_argument("--repo", required=True)
     pre.add_argument("--milestone", required=True, type=int)
@@ -1493,7 +1763,12 @@ def _dispatch(args: argparse.Namespace) -> Decision:
         return record_reconciliation(args.repo, args.milestone)
     if args.command == "preflight":
         return preflight(args.repo, args.milestone)
-    return reconcile(args.repo, args.milestone)
+    return reconcile(
+        args.repo,
+        args.milestone,
+        event_issue=args.event_issue,
+        event_action=args.event_action,
+    )
 
 
 if __name__ == "__main__":

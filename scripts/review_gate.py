@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""Decide whether a pull request's exact head has earned review (Issue #752).
+"""Decide whether a pull request's exact head has earned review.
 
-`.csarc/config.yml` selects one of two review modes:
-
-* ``human``: the Ruleset requires a maintainer approval natively, so this
-  gate has nothing to add and always passes.
-* ``copilot``: the Ruleset requires zero approvals, asks GitHub Copilot to
-  review every push, and makes the ``review`` status check (this gate)
-  required instead. The head passes when either an independent maintainer
-  approved the exact head (the #719 rule, unchanged) or Copilot finished
-  reviewing the exact head and produced no findings.
+The resolved work level decides whether self-review is allowed. Peer-review
+levels always require an independent maintainer's exact-head approval.
+Self-review levels may instead use a clean Copilot review when configured, or
+the audited Alpha self-merge authorization path. The Ruleset therefore keeps
+native approval count at zero and makes this level-aware ``review`` check
+required for every pull request.
 
 Copilot never submits ``APPROVED``; a clean review is a ``COMMENTED``
 review whose body states that it generated no comments. The gate fails
@@ -43,8 +40,10 @@ from typing import Any, Protocol
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     csarc_config = importlib.import_module("csarc_config")
+    release_level = importlib.import_module("release_level")
 else:
     csarc_config = importlib.import_module(f"{__package__}.csarc_config")
+    release_level = importlib.import_module(f"{__package__}.release_level")
 
 COPILOT_LOGINS = {"copilot-pull-request-reviewer[bot]", "copilot"}
 CLEAN_BODY = re.compile(r"(?i)\bgenerated (?:no|0) (?:new )?comments\b")
@@ -174,19 +173,14 @@ def copilot_verdict(
     return CopilotReview("clean", "Copilot found no issues", review)
 
 
-def level_allows_copilot(max_level: str) -> tuple[bool, str]:
-    """Return whether the configured cap lets Copilot approve this PR.
-
-    Per-work release levels do not exist until Issue #745; any cap other
-    than ``unlimited`` therefore cannot be evaluated and fails closed.
-    """
-    if max_level == UNLIMITED:
+def level_allows_copilot(max_level: str, level: str) -> tuple[bool, str]:
+    """Return whether the configured cap lets Copilot approve this level."""
+    if release_level.level_allows_copilot(max_level, level):
         return True, ""
     return (
         False,
-        f"copilot_review_max_level={max_level} needs per-work release "
-        "levels (Issue #745), which this repository does not declare yet; "
-        "a maintainer approval is required",
+        f"copilot_review_max_level={max_level} does not allow Copilot to "
+        f"approve a {level} pull request; a maintainer approval is required",
     )
 
 
@@ -210,7 +204,7 @@ def _comments_for(
     return load
 
 
-def evaluate(
+def evaluate(  # noqa: C901
     github: GitHubReader,
     repo: str,
     pr_number: int,
@@ -224,23 +218,20 @@ def evaluate(
     )
     mode, max_level = review_settings(config)
     pull = _pr_context(github, repo, pr_number)
+    level_decision = release_level.resolve_pull(
+        github, repo, pull, release_level.load_settings(config)
+    )
     head_sha = str((pull.get("head") or {}).get("sha") or "")
     author = str((pull.get("user") or {}).get("login") or "").casefold()
     result: dict[str, Any] = {
         "mode": mode,
+        "release_level": level_decision.level,
+        "required_review": level_decision.review,
         "head_sha": head_sha,
         "passed": False,
         "source": None,
         "reason": "",
     }
-    if mode != "copilot":
-        result.update(
-            passed=True,
-            source="ruleset",
-            reason="pr_review_mode=human: the Ruleset requires a maintainer "
-            "approval natively",
-        )
-        return result
     reviews = github.pages(repo, f"pulls/{pr_number}/reviews?per_page=100")
     approval = lifecycle.exact_head_approval(
         github,
@@ -249,15 +240,6 @@ def evaluate(
         head_sha,
         author,
     )
-    verdict = copilot_verdict(
-        reviews, head_sha, _comments_for(github, repo, pr_number)
-    )
-    result["copilot"] = {
-        "state": verdict.state,
-        "reason": verdict.reason,
-        "review_url": (verdict.review or {}).get("html_url"),
-        "findings": verdict.findings,
-    }
     if approval is not None:
         result.update(
             passed=True,
@@ -271,20 +253,68 @@ def evaluate(
             "Draft pull requests are not reviewed; mark it ready for review"
         )
         return result
-    allowed, cap_reason = level_allows_copilot(max_level)
-    if not allowed:
-        result["reason"] = cap_reason
-        return result
-    if verdict.state == "clean":
-        result.update(
-            passed=True,
-            source="copilot",
-            reason="Copilot reviewed the exact head and found no issues: "
-            + str((verdict.review or {}).get("html_url") or ""),
+    if level_decision.review == "peer":
+        labels = {
+            str(label.get("name") or "").casefold()
+            for label in pull.get("labels", [])
+            if isinstance(label, dict)
+        }
+        if "hotfix" in labels:
+            authorization = lifecycle.find_exact_head_authorization(
+                github, repo, pr_number, head_sha
+            )
+            if authorization is not None:
+                try:
+                    evidence = lifecycle.hotfix_emergency_evidence(
+                        github, repo, pull, authorization
+                    )
+                except RuntimeError as error:
+                    result["reason"] = str(error)
+                else:
+                    result.update(
+                        passed=True,
+                        source="hotfix-emergency",
+                        reason=(
+                            "Admin emergency authorization covers the exact "
+                            "head; post-review is required: "
+                            f"{evidence['reason']}"
+                        ),
+                    )
+                    return result
+        result["reason"] = (
+            result["reason"]
+            or f"The {level_decision.level} release level requires an "
+            "independent maintainer approval of the exact head"
         )
         return result
-    alpha_authorization = _alpha_self_merge_authorization(
-        github, repo, pr_number, head_sha, pull
+    verdict = None
+    if mode == "copilot":
+        verdict = copilot_verdict(
+            reviews, head_sha, _comments_for(github, repo, pr_number)
+        )
+        result["copilot"] = {
+            "state": verdict.state,
+            "reason": verdict.reason,
+            "review_url": (verdict.review or {}).get("html_url"),
+            "findings": verdict.findings,
+        }
+        allowed, cap_reason = level_allows_copilot(
+            max_level, level_decision.level
+        )
+        if allowed and verdict.state == "clean":
+            result.update(
+                passed=True,
+                source="copilot",
+                reason="Copilot reviewed the exact head and found no issues: "
+                + str((verdict.review or {}).get("html_url") or ""),
+            )
+            return result
+        if not allowed:
+            result["reason"] = cap_reason
+    alpha_authorization, alpha_reason = (
+        _alpha_self_merge_authorization(github, repo, pr_number, head_sha, pull)
+        if level_decision.level == "alpha"
+        else (None, "")
     )
     if alpha_authorization is not None:
         result.update(
@@ -294,14 +324,17 @@ def evaluate(
             + str(alpha_authorization.get("html_url") or ""),
         )
         return result
-    result["reason"] = (
-        f"{verdict.reason}. Fix the findings and push so Copilot re-reviews "
-        "the new head, or get an independent maintainer approval. If "
-        "Copilot is unavailable (no license or no remaining premium "
-        "requests), only a maintainer approval can pass this check, unless "
-        "this is a routine, Milestone-less Alpha self-merge PR (Issue "
-        "#775) with its own exact-head authorization comment."
-    )
+    if not result["reason"]:
+        reason = (
+            verdict.reason
+            if verdict is not None
+            else "No self-review authorization exists for the exact head"
+        )
+        result["reason"] = (
+            f"{reason}. Get an independent maintainer approval, or use the "
+            "audited Alpha self-merge authorization path (Issue #775) when "
+            "it applies." + (f" {alpha_reason}" if alpha_reason else "")
+        )
     return result
 
 
@@ -311,7 +344,7 @@ def _alpha_self_merge_authorization(
     pr_number: int,
     head_sha: str,
     pull: dict[str, Any],
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str]:
     """Return the Alpha self-merge authorization for this head, if valid.
 
     Mirrors `pr_lifecycle.merge_snapshot`'s alpha self-merge path (marker,
@@ -320,6 +353,16 @@ def _alpha_self_merge_authorization(
     inside `alpha_self_merge_opt_in` (malformed marker, wrong route, a
     Milestone Issue, ...) means this path simply does not apply here, not
     that the check should error.
+
+    The second return value explains *why* there is no authorization, so
+    `evaluate()` can surface it instead of always falling back to the same
+    Copilot-shaped message (Issue #781): a PR that never opted in (no
+    marker) gets an empty reason, since the generic message already fits;
+    a PR that opted in but was rejected -- a closed or Milestoned Issue, a
+    malformed marker, an unauthorized comment author, or simply no
+    matching exact-head comment at all -- gets the specific reason instead
+    of looking identical to "Copilot has not reviewed this pull request
+    yet."
     """
     lifecycle = importlib.import_module(
         "pr_lifecycle"
@@ -334,13 +377,9 @@ def _alpha_self_merge_authorization(
     if marker_count == 0:
         # Cheap check first: skip every further API call (default branch,
         # route validation) for the overwhelming majority of pull requests,
-        # which never opt into Alpha self-merge at all. No separate
-        # release_phase gate here: `alpha_self_merge_opt_in` itself does not
-        # check release_phase either (its safety comes from the marker,
-        # route, and live Ruleset shape), so adding one only here would let
-        # this check and `pr_lifecycle.py merge` disagree about which heads
-        # are actually mergeable.
-        return None
+        # which never opt into Alpha self-merge at all. Release-level
+        # eligibility is resolved by the caller before this route check.
+        return None, ""
     try:
         repository = github.get(repo, "")
         default_branch = (
@@ -349,17 +388,23 @@ def _alpha_self_merge_authorization(
             else None
         )
         if not isinstance(default_branch, str):
-            return None
+            return None, "The repository default branch is unavailable"
         opted_in = lifecycle.alpha_self_merge_opt_in(
             github, repo, {"default_branch": default_branch}, pull
         )
-    except RuntimeError:
-        return None
+    except RuntimeError as error:
+        return None, f"Alpha self-merge does not apply here: {error}"
     if not opted_in:
-        return None
-    return lifecycle.find_exact_head_authorization(
+        return None, ""
+    authorization = lifecycle.find_exact_head_authorization(
         github, repo, pr_number, head_sha
     )
+    if authorization is None:
+        return None, (
+            "Alpha self-merge applies but no exact-head maintainer "
+            "authorization comment was found"
+        )
+    return authorization, ""
 
 
 def unresolved_threads(repo: str, pr_number: int) -> list[dict[str, Any]]:

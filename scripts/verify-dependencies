@@ -13,7 +13,7 @@ fi
 
 cd "$repo_root"
 lockfiles=()
-for candidate in uv.lock pnpm-lock.yaml package-lock.json yarn.lock; do
+for candidate in uv.lock pnpm-lock.yaml package-lock.json yarn.lock Cargo.lock; do
   [[ -f "$candidate" ]] && lockfiles+=(--lockfile "$candidate")
 done
 if [[ "${#lockfiles[@]}" -eq 0 ]]; then

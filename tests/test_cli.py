@@ -22,10 +22,10 @@ from csarc_cli.cli import CliError, main
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_copier_migration_preserves_project_owned_symlink(
+def test_copier_migration_only_removes_known_root_test_copies(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Do not replace a project-owned test symlink during migration."""
+    """Retire known copies without deleting project-owned test content."""
     migration = yaml.safe_load((ROOT / "copier.yml").read_text())[
         "_migrations"
     ][0]["command"]
@@ -35,25 +35,56 @@ def test_copier_migration_preserves_project_owned_symlink(
     tests.mkdir()
     target = tmp_path / "project-owned.py"
     target.write_text("project owned\n", encoding="utf-8")
-    legacy_test = tests / "test_delivery_sync.py"
-    legacy_test.symlink_to(target)
+    project_owned_symlink = tests / "test_promotion_gate.py"
+    project_owned_symlink.symlink_to(target)
+    retired_generated_test = tests / "test_delivery_sync.py"
+    retired_generated_test.write_text("generated\n", encoding="utf-8")
+    retired_upstream_test = tests / "test_issue_edit_warning.py"
+    retired_upstream_test.write_text("new upstream\n", encoding="utf-8")
+    fixtures = tests / "fixtures"
+    fixtures.mkdir()
+    retired_generated_fixture = fixtures / "syft-v1.50.0-runtime.spdx.json"
+    retired_generated_fixture.write_text("fixture\n", encoding="utf-8")
+    project_owned_test = tests / "test_ci_tier.py"
+    project_owned_test.write_text("customized\n", encoding="utf-8")
     (tmp_path / ".copier-answers.yml").write_text(
         "branch_strategy: dev\n", encoding="utf-8"
     )
 
-    class LegacyDigest:
-        def hexdigest(self) -> str:
-            return (
-                "50fc918666723264272a9268ebaf5c0b120341e58"
-                "8e1e1f5841686f8448abc99"
-            )
+    class TestDigest:
+        def __init__(self, content: bytes) -> None:
+            self.content = content
 
-    monkeypatch.setattr(hashlib, "sha256", lambda _content: LegacyDigest())
+        def hexdigest(self) -> str:
+            if self.content == b"generated\n":
+                return (
+                    "50fc918666723264272a9268ebaf5c0b120341e58"
+                    "8e1e1f5841686f8448abc99"
+                )
+            if self.content == b"fixture\n":
+                return (
+                    "fda96bc7c659542f481b0845d3319ac607162d85"
+                    "b908a479740f314b82bc10b6"
+                )
+            if self.content == b"new upstream\n":
+                return (
+                    "ec205ac957dd588f04a59c47bcd8fb43b999237"
+                    "c4a59235d00f4020ca0bcdd0b"
+                )
+            return "0" * 64
+
+    monkeypatch.setattr(hashlib, "sha256", TestDigest)
     monkeypatch.chdir(tmp_path)
     exec(compile(migration[2], "copier.yml migration", "exec"), {})  # noqa: S102
 
-    assert legacy_test.is_symlink()
-    assert legacy_test.read_text(encoding="utf-8") == "project owned\n"
+    assert project_owned_symlink.is_symlink()
+    assert (
+        project_owned_symlink.read_text(encoding="utf-8") == "project owned\n"
+    )
+    assert not retired_generated_test.exists()
+    assert not retired_upstream_test.exists()
+    assert not retired_generated_fixture.exists()
+    assert project_owned_test.read_text(encoding="utf-8") == "customized\n"
     assert "branch_strategy: main" in (
         tmp_path / ".copier-answers.yml"
     ).read_text(encoding="utf-8")
@@ -6886,16 +6917,119 @@ def test_gh_client_dereferences_annotated_tags(
         raise AssertionError(endpoint)
 
     monkeypatch.setattr(cli, "gh_json", fake_gh_json)
+    monkeypatch.setattr(cli, "require_supported_gh", lambda: None)
     assert cli.GhReleaseClient().resolve_tag("v1.2.3") == cli.TagResolution(
         first_tag, commit_sha
     )
+
+
+def write_gh_stub(path: Path, version_output: str, log: Path) -> None:
+    """Write a gh stub that records whether release verification continues."""
+    write_executable(
+        path,
+        "#!/bin/sh\n"
+        f"printf '%s\\n' \"$*\" >> {shlex.quote(str(log))}\n"
+        'if [ "$1" = "--version" ]; then\n'
+        f"  printf '%s\\n' {shlex.quote(version_output)}\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf '{\"verified\": true}\\n'\n",
+    )
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "README.md",
+        "README.en.md",
+        "docs/agent-install.md",
+        "docs/install.md",
+        "docs/install.en.md",
+        "site/static/legacy-components.js",
+    ],
+)
+def test_documented_minimum_gh_version_matches_cli(
+    relative_path: str,
+) -> None:
+    """Keep every user-facing gh minimum aligned with the CLI constant."""
+    lines = [
+        line
+        for line in (ROOT / relative_path)
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if "GitHub CLI" in line or "gh --version" in line
+    ]
+    versions = {
+        version
+        for line in lines
+        for version in re.findall(r"\b\d+\.\d+\.\d+\b", line)
+    }
+    assert versions == {cli.MINIMUM_GH_VERSION}
+
+
+@pytest.mark.parametrize(
+    ("version_output", "message"),
+    [
+        ("gh version 2.45.0 (2024-02-21)", "2.45.0 is too old"),
+        ("GitHub CLI version unknown", "Cannot determine"),
+    ],
+)
+def test_gh_client_rejects_unsupported_version_before_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    version_output: str,
+    message: str,
+) -> None:
+    """Reject old or unparseable gh versions before attestation runs."""
+    log = tmp_path / "gh.log"
+    write_gh_stub(tmp_path / "gh", version_output, log)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    with pytest.raises(CliError, match=message) as error:
+        cli.GhReleaseClient()
+
+    assert cli.MINIMUM_GH_VERSION in str(error.value)
+    assert cli.GH_INSTALL_URL in str(error.value)
+    assert log.read_text(encoding="utf-8").splitlines() == ["--version"]
+
+
+def test_gh_client_rejects_missing_gh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explain how to install gh when the executable is unavailable."""
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    with pytest.raises(CliError, match="GitHub CLI was not found") as error:
+        cli.GhReleaseClient()
+
+    assert cli.MINIMUM_GH_VERSION in str(error.value)
+    assert cli.GH_INSTALL_URL in str(error.value)
+
+
+def test_gh_client_accepts_minimum_version_and_verifies_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Continue to attestation when gh meets the minimum version."""
+    log = tmp_path / "gh.log"
+    write_gh_stub(
+        tmp_path / "gh",
+        f"gh version {cli.MINIMUM_GH_VERSION} (2026-09-16)",
+        log,
+    )
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    cli.GhReleaseClient().verify_release("v1.2.3")
+
+    assert log.read_text(encoding="utf-8").splitlines() == [
+        "--version",
+        f"release verify v1.2.3 -R {cli.CANONICAL_REPOSITORY} --format json",
+    ]
 
 
 def test_gh_client_verifies_attestation_and_signature(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Validate concrete GitHub boundary successes and malformed responses."""
-    client = cli.GhReleaseClient()
 
     def successful_run(
         command: list[str],
@@ -6905,9 +7039,17 @@ def test_gh_client_verifies_attestation_and_signature(
         check: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         del cwd, capture, check
+        if command == ["gh", "--version"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                f"gh version {cli.MINIMUM_GH_VERSION} (2026-09-16)\n",
+                "",
+            )
         return subprocess.CompletedProcess(command, 0, '{"verified":true}', "")
 
     monkeypatch.setattr(cli, "run", successful_run)
+    client = cli.GhReleaseClient()
     client.verify_release("v1.2.3")
 
     def signature(endpoint: str) -> dict[str, object]:
@@ -7445,15 +7587,21 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
 
     def pytest_commands(path: Path) -> list[list[str]]:
         source = path.read_text(encoding="utf-8").replace("\\\n", " ")
-        return [
-            shlex.split(line.strip())
-            for line in source.splitlines()
-            if line.strip().startswith("uv run pytest")
-        ]
+        commands = []
+        for line in source.splitlines():
+            try:
+                words = shlex.split(line.strip())
+            except ValueError:
+                continue
+            for index in range(len(words) - 2):
+                if words[index : index + 3] == ["uv", "run", "pytest"]:
+                    commands.append(words[index:])
+                    break
+        return commands
 
     def excludes_large(command: list[str]) -> bool:
         return any(
-            command[index : index + 2] == ["-m", "not large"]
+            command[index] == "-m" and "not large" in command[index + 1]
             for index in range(len(command) - 1)
         )
 
@@ -7466,10 +7614,12 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
             .split("[tool.pytest.ini_options]", 1)[1]
             .split("\n[", 1)[0]
         )
-        assert any(
-            line.strip().startswith('"large:')
+        declared_markers = {
+            line.strip().split(":", 1)[0].strip('"')
             for line in pytest_section.splitlines()
-        )
+            if line.strip().startswith('"') and ":" in line
+        }
+        assert {"large", "runtime", "quarantine"} <= declared_markers
 
     for bounded_gate in (
         ROOT / "scripts/verify-fast",
@@ -7490,6 +7640,11 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
     template_commands = pytest_commands(ROOT / "template/scripts/verify.jinja")
     assert len(template_commands) > 1
     assert any(excludes_large(command) for command in template_commands)
+    assert any(
+        command[index : index + 2] == ["-m", "runtime and not large"]
+        for command in template_commands
+        for index in range(len(command) - 1)
+    )
     assert any(not excludes_large(command) for command in template_commands)
 
     marked_large = {
@@ -7543,24 +7698,20 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
     }
 
 
-def test_generated_python_project_declares_pyyaml_for_its_paired_test() -> None:
-    """Keep ty check able to resolve the paired dependabot test's import.
-
-    template/tests/test_dependabot_auto_merge.py is copied byte-for-byte
-    into every generated project and does `import yaml` at module level.
-    [tool.ty.src] include in template/pyproject.toml.jinja covers "tests",
-    so a generated project's own `ty check` fails with unresolved-import
-    unless pyyaml is declared as a dependency.
-    """
-    paired_test = (
-        ROOT / "template/tests/test_dependabot_auto_merge.py"
-    ).read_text(encoding="utf-8")
-    assert "import yaml" in paired_test
+def test_generated_project_only_ships_product_tests() -> None:
+    """Keep root governance regression modules out of generated projects."""
+    template_tests = ROOT / "template/tests"
+    assert sorted(
+        path.relative_to(template_tests).as_posix()
+        for path in template_tests.rglob("*")
+        if path.is_file()
+    ) == ["conftest.py", "test_smoke.py.jinja"]
+    smoke_test = (template_tests / "test_smoke.py.jinja").read_text(
+        encoding="utf-8"
+    )
+    assert "pytest.mark.runtime" in smoke_test
 
     pyproject = (ROOT / "template/pyproject.toml.jinja").read_text(
         encoding="utf-8"
     )
-    dependency_groups = pyproject.split("[dependency-groups]", 1)[1].split(
-        "\n[", 1
-    )[0]
-    assert "pyyaml" in dependency_groups
+    assert "pyyaml" not in pyproject.lower()

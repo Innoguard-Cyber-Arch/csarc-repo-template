@@ -54,10 +54,12 @@ paired_files=(
   scripts/request-reviewer
   scripts/ci_tier.py
   scripts/hosted_verify_bots.py
+  scripts/gh-issue-edit
   scripts/check_action_pins.py
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
   scripts/promotion_gate.py
+  scripts/pytest_policy.py
   scripts/review_gate.py
   scripts/check-scope-gate
   scripts/check-update-conflicts
@@ -73,7 +75,9 @@ paired_files=(
   scripts/lint-workflows-shell
   scripts/publish-release
   scripts/release_bundle.py
+  scripts/release_level.py
   scripts/release_phase.py
+  scripts/release_phase_rulesets.py
   scripts/release_policy.py
   scripts/resolve-cache-root
   scripts/scan-secrets
@@ -90,32 +94,14 @@ paired_files=(
   scripts/test-worktree-cleanup
   scripts/verify-release-candidate
   scripts/verify_attestation.py
+  scripts/verify_release_consumption.py
   scripts/validate-issue-policy
   scripts/validate-issue-title
   scripts/validate-pr-policy
   scripts/verify-dependencies
+  scripts/verification-step
   scripts/write-verify-attestation
-  tests/test_ci_tier.py
-  tests/test_dependabot_auto_merge.py
-  tests/test_dependency_security.py
-  tests/test_hosted_verify_bots.py
-  tests/test_check_action_pins.py
-  tests/test_spec_to_issue.py
-  tests/test_delivery_sync.py
-  tests/test_pr_lifecycle.py
-  tests/test_promotion_gate.py
-  tests/test_milestone_approval.py
-  tests/test_milestone_closure.py
-  tests/test_milestone_scope.py
-  tests/test_release_phase.py
-  tests/test_standalone_issue_approval.py
-  tests/test_release_policy.py
-  tests/test_release_bundle.py
-  tests/test_repo_capabilities.py
-  tests/test_stale_branch_detection.py
-  tests/test_verify_attestation.py
-  tests/test_work_item_metadata.py
-  tests/test_work_pr_closure.py
+  tests/conftest.py
   zizmor.yml
 )
 

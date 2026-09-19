@@ -11,8 +11,8 @@
           title: '建立新 repo',
           goal: 'CLI 會選取核准 release、解析完整 commit SHA、顯示計畫，確認後才以 Copier 建立與驗證。',
           location: 'Terminal',
-          code: `uvx --from csarc-repo-cli csarc init ./my-project`,
-          ciCode: `uvx --from csarc-repo-cli csarc init ./my-project \\
+          code: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project`,
+          ciCode: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project \\
   --yes --non-interactive`
         },
         existing: {
@@ -20,21 +20,21 @@
           goal: '先用 --dry-run 在 repo 外產生一份 Markdown 報告，預覽新增、覆寫、保留、人工合併與無法判定項目；必須是乾淨 Git working tree，預設保留產品內容。報告只描述已知風險，不保證沒有語意或執行期衝突。',
           location: '既有 repo 根目錄',
           code: `git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from csarc-repo-cli csarc adopt . --dry-run \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt . --dry-run \\
   --report-dir ../csarc-adoption-report
-uvx --from csarc-repo-cli csarc adopt .`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt .`
         },
         update: {
           title: '更新已使用公版的 repo',
           goal: 'CLI 讀取 .csarc/config.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
           location: '專案 repo 根目錄',
           code: `git switch -c chore/<issue-number>-update-repo-template
-uvx --from csarc-repo-cli csarc update --check --json
-uvx --from csarc-repo-cli csarc update`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update`
         },
         mac: {
           title: 'macOS 本機需求',
-          goal: '共同安裝 Git、GitHub CLI、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。只有 GitHub 連線操作需要登入。',
+          goal: '共同安裝 Git、GitHub CLI 2.93.0 以上、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。執行 CLI 前先登入 GitHub。',
           location: 'Terminal',
           code: `brew install git gh uv node pnpm
 
@@ -43,20 +43,34 @@ uvx --from csarc-repo-cli csarc update`
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         },
         windows: {
           title: 'Windows 本機需求',
-          goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 build-essential（C linker）與 rustup。',
+          goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；從 GitHub 官方 apt repository 安裝 GitHub CLI 2.93.0 以上；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 build-essential（C linker）與 rustup。',
           location: 'PowerShell（管理員）→ Ubuntu',
           code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
 
 # Ubuntu in WSL2
 sudo apt update
-sudo apt install -y git gh curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+sudo apt install -y git wget curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+
+# GitHub CLI 2.93.0+ from GitHub's official apt repository.
+sudo mkdir -p -m 755 /etc/apt/keyrings
+out=$(mktemp)
+wget -nv -O"$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+cat "$out" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+rm -f "$out"
+sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+sudo mkdir -p -m 755 /etc/apt/sources.list.d
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt update
+sudo apt install -y gh
+gh --version
+
 curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
@@ -69,7 +83,7 @@ sudo apt install -y build-essential
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         }
@@ -79,8 +93,8 @@ gh auth status`
           title: 'Create a new repo',
           goal: 'The CLI selects the approved release, resolves the full commit SHA, shows the plan, and only then builds and verifies with Copier.',
           location: 'Terminal',
-          code: `uvx --from csarc-repo-cli csarc init ./my-project`,
-          ciCode: `uvx --from csarc-repo-cli csarc init ./my-project \\
+          code: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project`,
+          ciCode: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project \\
   --yes --non-interactive`
         },
         existing: {
@@ -88,21 +102,21 @@ gh auth status`
           goal: 'A --dry-run run first produces a Markdown report outside the repo, previewing additions, overwrites, kept content, manual-merge items, and anything it cannot classify; the working tree must be clean, and product content is kept by default. The report only describes known risk -- it does not guarantee there is no semantic or runtime conflict.',
           location: 'Existing repo root',
           code: `git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from csarc-repo-cli csarc adopt . --dry-run \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt . --dry-run \\
   --report-dir ../csarc-adoption-report
-uvx --from csarc-repo-cli csarc adopt .`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt .`
         },
         update: {
           title: 'Update a repo already on the template',
           goal: 'The CLI reads .csarc/config.yml, resolves the approved release, and shows the diff with Copier smart update; a conflict keeps the difference and fails closed.',
           location: 'Project repo root',
           code: `git switch -c chore/<issue-number>-update-repo-template
-uvx --from csarc-repo-cli csarc update --check --json
-uvx --from csarc-repo-cli csarc update`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update`
         },
         mac: {
           title: 'macOS local requirements',
-          goal: 'Install Git, GitHub CLI, and uv either way; add Node and pnpm for TypeScript, or rustup and Cargo for Rust. Only GitHub-connected operations need you to sign in.',
+          goal: 'Install Git, GitHub CLI 2.93.0 or newer, and uv either way; add Node and pnpm for TypeScript, or rustup and Cargo for Rust. Sign in to GitHub before running the CLI.',
           location: 'Terminal',
           code: `brew install git gh uv node pnpm
 
@@ -111,20 +125,34 @@ uvx --from csarc-repo-cli csarc update`
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         },
         windows: {
           title: 'Windows local requirements',
-          goal: 'Use WSL2 (Ubuntu) and work in the repo from inside WSL; add Node 24 and pnpm 11 for TypeScript, or build-essential (a C linker) and rustup for Rust.',
+          goal: 'Use WSL2 (Ubuntu) and work in the repo from inside WSL; install GitHub CLI 2.93.0 or newer from GitHub\'s official apt repository; add Node 24 and pnpm 11 for TypeScript, or build-essential (a C linker) and rustup for Rust.',
           location: 'PowerShell (Administrator) -> Ubuntu',
           code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
 
 # Ubuntu in WSL2
 sudo apt update
-sudo apt install -y git gh curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+sudo apt install -y git wget curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+
+# GitHub CLI 2.93.0+ from GitHub's official apt repository.
+sudo mkdir -p -m 755 /etc/apt/keyrings
+out=$(mktemp)
+wget -nv -O"$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+cat "$out" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+rm -f "$out"
+sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+sudo mkdir -p -m 755 /etc/apt/sources.list.d
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt update
+sudo apt install -y gh
+gh --version
+
 curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
@@ -137,7 +165,7 @@ sudo apt install -y build-essential
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-# Only for repository settings and GitHub end-to-end tests.
+# Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         }

@@ -9,46 +9,57 @@ else
   export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
 fi
 cd "$repo_root"
+source "$repo_root/scripts/verification-step"
 
-tier="${CSARC_CI_TIER:-fast}"
+suite="${CSARC_VERIFICATION_SUITE:-${CSARC_CI_TIER:-fast}}"
 scopes=",${CSARC_CI_SCOPES:-source},"
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 
-git diff --check
-./scripts/check-update-conflicts
-./scripts/scan-secrets
-./scripts/check-bypass-lifecycle
+read_generated_languages() (
+  cd "$1"
+  python3 scripts/csarc_config.py languages >/dev/null
+)
 
-if [[ "$tier" == "docs" ]]; then
-  python3 scripts/spec_to_issue.py validate
-  ./scripts/build-repo-site --check
-  ./scripts/write-verify-attestation fast
-  exit 0
-fi
+case "$suite" in
+  baseline|fast|docs) ;;
+  full) exec ./scripts/verify-template.sh ;;
+  *)
+    echo "Unknown verification suite: $suite" >&2
+    exit 2
+    ;;
+esac
 
-if [[ "$scopes" == *,docs,* ]]; then
-  python3 scripts/spec_to_issue.py validate
-  ./scripts/build-repo-site --check
-fi
-
-if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
-  ./scripts/verify-dependencies
-fi
+verification_step "Changed-tree hygiene" git diff --check
+verification_step "Conflict-marker check" ./scripts/check-update-conflicts
+verification_step "Secret scan" ./scripts/scan-secrets
+verification_step "Lifecycle-bypass check" ./scripts/check-bypass-lifecycle
+verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
+verification_step "GitHub Actions pin check" \
+  python3 scripts/check_action_pins.py
+verification_step "Locked dependency graph" uv lock --check
 
 run_static_checks=false
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
   run_static_checks=true
-  ./scripts/lint-workflows-shell
-fi
-if [[ "$scopes" == *,workflow,* ]]; then
-  python3 scripts/check_action_pins.py
 fi
 
-uv sync --locked --python "$UV_PYTHON"
-uv run ruff format --check src scripts tests
-uv run ruff check src scripts tests
-uv run ty check
-uv run pytest -m "not large"
+verification_step "Locked Python environment" \
+  uv sync --locked --python "$UV_PYTHON"
+verification_step "Python formatting" uv run ruff format --check src scripts tests
+verification_step "Python lint" uv run ruff check src scripts tests
+verification_step "Python type check" uv run ty check
+
+if [[ "$suite" == "baseline" ]]; then
+  ./scripts/write-verify-attestation baseline
+  exit 0
+fi
+
+if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
+  verification_step "Dependency scan" ./scripts/verify-dependencies
+fi
+
+verification_step "Bounded Python regression suite" \
+  uv run pytest -vv --durations=20 -m "not large"
 
 # Issue #739: check_action_pins.py above only compares literal pins across
 # files; it cannot tell whether a rendered template/ workflow otherwise
@@ -56,17 +67,20 @@ uv run pytest -m "not large"
 # non-pin value). This needs `copier` from the synced venv, so it runs
 # here rather than alongside check_action_pins.py above.
 if [[ "$scopes" == *,workflow,* ]]; then
-  uv run python3 scripts/check_jinja_workflow_drift.py
+  verification_step "Rendered workflow drift" \
+    uv run python3 scripts/check_jinja_workflow_drift.py
 fi
 
 if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
   "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
-  ./scripts/test-issue-triage
-  ./scripts/test-worktree-cleanup
-  ./scripts/test-pr-policy
-  ./scripts/test-apply-repository-settings
-  ./scripts/test-check-scope-gate
-  ./scripts/test-check-repo-capabilities
+  verification_step "Issue-triage self-test" ./scripts/test-issue-triage
+  verification_step "Worktree-cleanup self-test" ./scripts/test-worktree-cleanup
+  verification_step "PR-policy self-test" ./scripts/test-pr-policy
+  verification_step "Repository-settings self-test" \
+    ./scripts/test-apply-repository-settings
+  verification_step "Scope-drift-gate self-test" ./scripts/test-check-scope-gate
+  verification_step "Repository-capabilities self-test" \
+    ./scripts/test-check-repo-capabilities
 fi
 
 if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
@@ -74,23 +88,34 @@ if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
   "$scopes" == *,dependency,* || "$scopes" == *,governance,* ]]; then
   smoke_root="$(mktemp -d)"
   trap 'rm -rf "$smoke_root"' EXIT
-  uv run copier copy --trust --defaults --vcs-ref HEAD \
+  verification_step "Generated-project smoke render" \
+    uv run copier copy --trust --defaults --vcs-ref HEAD \
     --data project_slug=fast-template-smoke \
     --data package_name=fast_template_smoke \
     --data code_owner=@Innoguard-Cyber-Arch/template-maintainers \
-    "$repo_root" "$smoke_root/project" >/dev/null
+    "$repo_root" "$smoke_root/project"
   if $run_static_checks; then
-    CSARC_CACHE_ROOT="$cache_root" \
+    verification_step "Generated-project workflow and shell lint" \
+      env CSARC_CACHE_ROOT="$cache_root" \
       "$smoke_root/project/scripts/lint-workflows-shell"
   fi
-  "$smoke_root/project/scripts/test-pr-policy"
-  "$smoke_root/project/scripts/test-check-scope-gate"
-  (cd "$smoke_root/project" && python3 scripts/csarc_config.py languages >/dev/null)
+  verification_step "Generated-project PR-policy self-test" \
+    "$smoke_root/project/scripts/test-pr-policy"
+  verification_step "Generated-project scope-gate self-test" \
+    "$smoke_root/project/scripts/test-check-scope-gate"
+  verification_step "Generated-project configuration read" \
+    read_generated_languages "$smoke_root/project"
+fi
+
+if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then
+  verification_step "Specification validation" \
+    python3 scripts/spec_to_issue.py validate
+  verification_step "Repository site render" ./scripts/build-repo-site --check
+  verification_step "Paired-file drift" ./scripts/sync-paired-files.sh --check
 fi
 
 # Issue #661: every check above passed (set -euo pipefail would already
 # have exited otherwise) -- record the local-attestation trailer that lets
 # the hosted `verify` check pass without re-running anything. This is the
-# only other place this tier ("fast", covering both the "fast" and, above,
-# the early-exit "docs" sub-case) exits successfully.
-./scripts/write-verify-attestation fast
+# selected cumulative suite exits successfully.
+./scripts/write-verify-attestation "$suite"

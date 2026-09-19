@@ -126,7 +126,7 @@ def test_render_trailer_round_trips_through_parse_trailer() -> None:
 
 def test_render_trailer_rejects_an_invalid_tier() -> None:
     with pytest.raises(ValueError, match="tier must be one of"):
-        va.render_trailer(TREE, "docs")
+        va.render_trailer(TREE, "medium")
 
 
 def test_render_trailer_rejects_a_non_hex_hash() -> None:
@@ -232,9 +232,19 @@ def test_far_future_timestamp_is_rejected_as_future_not_stale() -> None:
 @pytest.mark.parametrize(
     ("attested_tier", "required_tier", "expected_ok"),
     [
-        ("fast", "docs", True),
+        ("baseline", "baseline", True),
+        ("baseline", "fast", False),
+        ("baseline", "docs", False),
+        ("baseline", "full", False),
+        ("fast", "baseline", True),
         ("fast", "fast", True),
+        ("fast", "docs", False),
         ("fast", "full", False),
+        ("docs", "baseline", True),
+        ("docs", "fast", True),
+        ("docs", "docs", True),
+        ("docs", "full", False),
+        ("full", "baseline", True),
         ("full", "docs", True),
         ("full", "fast", True),
         ("full", "full", True),
@@ -243,13 +253,11 @@ def test_far_future_timestamp_is_rejected_as_future_not_stale() -> None:
 def test_check_attestation_tier_sufficiency_matrix(
     attested_tier: str, required_tier: str, expected_ok: bool
 ) -> None:
-    """A cheap tier=fast attestation must never satisfy a full requirement.
+    """Each cumulative suite satisfies only equal or weaker requirements.
 
     Adversarial case from Issue #661's own review request: scripts/ci_tier.py
-    independently decides a PR needs "full" verification (e.g. it touches
-    .github/workflows/); without this check, running the far cheaper
-    scripts/verify-fast locally -- which always attests tier=fast -- would
-    still make the hosted, no-longer-test-executing job pass.
+    The work level and path classifier independently decide the floor; a
+    weaker local run must not make the hosted attestation check pass.
     """
     at = utc(2026, 9, 1)
     result = va.check_attestation(

@@ -1,14 +1,12 @@
 name: PR review
 
-# Produces the `review` required status check for pr_review_mode=copilot
-# (Issue #752): the exact head passes when GitHub Copilot reviewed it and
-# found no issues, an independent maintainer approved it, or (Issue #775) a
-# Milestone-less Alpha self-merge PR has its own exact-head authorization
-# comment. Copilot's own review submission re-runs this check; the
+# Produces the level-aware `review` required status check. Peer-review levels
+# require an independent maintainer's exact-head approval; self-review levels
+# may use a clean Copilot review or the audited Alpha authorization path.
+# Copilot's own review submission re-runs this check; the
 # `issue_comment` trigger re-runs it when that authorization comment is
 # posted, since posting a comment does not itself fire `pull_request`. In
-# pr_review_mode=human the Ruleset requires a maintainer approval natively
-# and this check only reports so.
+# pr_review_mode setting only controls whether Copilot is an available path.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
@@ -31,6 +29,7 @@ jobs:
     if: ${{ github.event_name != 'issue_comment' || (github.event.issue.pull_request != null && startsWith(github.event.comment.body, 'PR lifecycle merge authorization')) }}
     permissions:
       contents: read
+      issues: read
       pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -59,7 +58,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ steps.pr.outputs.base_sha }}
-      - name: Require a clean Copilot review or a maintainer approval of the exact head
+      - name: Require the release level's exact-head review
         if: ${{ github.event_name != 'merge_group' }}
         env:
           GH_TOKEN: ${{ github.token }}
