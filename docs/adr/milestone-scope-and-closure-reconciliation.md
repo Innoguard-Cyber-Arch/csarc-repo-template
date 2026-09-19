@@ -185,3 +185,66 @@ Reconciliation 段落反映關閉當下的即時狀態；`closure_decision()` �
 description 被編輯後、tracker body 沒有對應更新」的情境，重新評估是否要把 Milestone
 description 一併納入雜湊來源。若決定要自動觸發 scope-gate 或 reconciliation
 重新產生，屆時再擴充 `.github/workflows/milestone-lifecycle.yml`。
+
+## `#743`：沒有 Milestone 的 Issue 本身需要核可
+
+- **狀態：**Accepted
+- **日期：**2026-09-18
+- **來源 Issue：**[#743](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/743)（Milestone 14 的一條 critical-path 起點；不推翻本 ADR 任何既有決定，只補上第 2 節從未涵蓋的另一半情境）
+
+**問題：**上方「決定」第 2 節（`work PR 核可：明確決定「不加」native required
+review`）與維護者的完整核准模型之間，一直存在一個未落地的落差。維護者實際期待的模型
+分兩點：(1) 有 Milestone 的 Issue，tracker 核准後底下 Issue 視為已核准，這正是本 ADR
+第 2 節與 `approval_decision()` 描述、且已經實作的行為；(2) **沒有 Milestone 的
+Issue**（standalone、hotfix、release recovery）本身需要核可，工作 PR 才能合併——這一
+點在 `#552`／`#632` 落地時從未實作：`_pull_decision()` 在 PR 沒有 Milestone 時直接放
+行，`check-scope-gate` 對沒有 `Tracker scope: expanded` 的 Issue 也直接放行。結果是
+同一件工作，留在 Milestone 裡要先經非提案者核准，拆成 standalone 或標成 hotfix 反而
+完全不需要核可，讓 standalone／hotfix 路徑變成繞過批次治理的捷徑，與
+`docs/ci-policy.md`「不能用 standalone 路徑繞過批次治理」的既有原則矛盾。
+
+**決定：**新增 `standalone_issue_approval_decision()`／`check_issue_approval()`
+（CLI：`check-issue-approval --repo --issue`），要求一張沒有 Milestone 的 Issue，在其
+`Closes`／`Fixes`／`Resolves #N` 連結的工作 PR 合併前，必須先取得一次非提案者核可，
+或同一套 `admin` collaborator 自核例外（理由必填）。核可語彙是維護者在 Issue #743
+留言中（2026-09-18，實作開始前）明確決定的**獨立新詞彙**：純文字、不分大小寫的
+`Approve`／`Admin-approve: <理由>`／`Object: <理由>`／`Resolve: <目標>`，刻意
+**不**沿用 tracker 的 `/milestone approve`／`/milestone admin-approve:`／
+`/milestone object:`／`/milestone resolve:`——理由是這張 Issue 根本沒有 Milestone，
+套用「/milestone」語意本身就怪，且純文字關鍵字比斜線指令更符合協作者的自然直覺、
+不必先查文件。判斷演算法（非提案者要求、admin self-approve 的 collaborator
+permission 查核、反駁／解決追蹤、#632 的 fingerprint-binding staleness）與 tracker
+核可、`scope_decision()` 結構相同，但用獨立的新函式實作
+（`_issue_approval_records()`／`_issue_admin_self_approval()`），刻意不修改也不參數
+化既有的 `_approval_records()`／`_admin_self_approval()`：兩套語彙保持並行、互不
+影響，只共用與具體語彙無關的 `_gate_decision()`（組裝最終 pass/fail）與
+`_approval_is_stale()`（staleness 判定）——「不建第二套系統」在這裡指的是一套共用的
+判斷骨架搭配兩套獨立語彙，不是把新語彙合併進既有的比對函式。CI 接線不需要新增
+workflow step：`pr-policy.yml` 既有的「Validate Milestone approval」（`check-pr`）與
+merge queue 的「Revalidate queued Milestone approval」（`check-merge-group`）本來就
+對每個 PR／merge-group commit 呼叫 `_pull_decision()`，`#743` 只改寫這個函式在「PR
+沒有 Milestone」分支下的行為。找不到連結 Issue 的 PR（release 自動化、Dependabot、
+`automation/*`、main-sync bridge）維持不受影響，與 `check-scope-gate` 既有的相同
+carve-out 一致。`.github/ISSUE_TEMPLATE/bug.yml`／`task.yml`／`feature.yml`／
+`documentation.yml`（root／`template/` 成對）補上一句提示，說明沒有 Milestone 的
+Issue 需要另一位協作者留言 `Approve`，或 admin collaborator 提案者自留言
+`Admin-approve: <理由>`。
+
+**與本 ADR 第 2 節的關係：**這是同一份決定的另一半，不是推翻。第 2 節明確保留的範圍是
+「**work PR** 不加裝 native required review，也不延伸 `/milestone` 語彙到個別 work
+PR」——這裡核可的對象是**Issue**，不是 PR 本身，PR 合併授權依舊完全交給
+`validate-pr-policy` 的結構檢查與 #719 的 exact-head review 機制，兩者是彼此獨立、互不
+覆蓋的關卡。第 2 節「重新評估條件」寫明的觸發條件（organization 出現第二個真人帳號）已
+經成立（例如 wayhong0928 已經在回報與核准），但這裡選擇的解法是「沒有 Milestone 的
+Issue 需要核可」，而不是重新開放「work PR 需要 native required review」；後者的
+self-lock 疑慮（單一真人帳號時代遺留、`#512`／`#518`／`#546`／`#549`／`#550`）在
+Issue-level 核可加上 admin self-approval 例外之後同樣不會重演，因為例外機制的判斷
+精神（非提案者要求、collaborator permission 查核、理由必填）原封不動沿用，只是換一
+套獨立語彙、獨立函式實作。`#745`（後續 Issue，尚未實作）會依發布層級（alpha／beta
+以上）進一步限縮 admin self-approval 是否允許；`#743` 落地的是現行「非提案者核准或
+admin 自核」規則，不預先實作 `#745` 的分層邏輯。
+
+完整說明見 `docs/ci-policy.md`「Standalone／hotfix／release recovery Issue 核可
+gate（#743）」一節；`docs/milestone-description.md` 同步更新對應段落；
+`tests/test_standalone_issue_approval.py`（與 `template/` 成對）是這個機制的回歸測試
+來源。
