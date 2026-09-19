@@ -769,8 +769,8 @@ def detect_languages(target: Path) -> list[str]:
     """Return enabled language modules in their canonical order."""
     manifests = (
         ("python", "pyproject.toml"),
-        ("typescript", "package.json"),
         ("rust", "Cargo.toml"),
+        ("typescript", "package.json"),
     )
     return [
         name for name, manifest in manifests if (target / manifest).is_file()

@@ -6,8 +6,8 @@ config_file="$repo_root/.csarc/config.yml"
 
 detected_languages=()
 [[ -f "$repo_root/pyproject.toml" ]] && detected_languages+=(python)
-[[ -f "$repo_root/package.json" ]] && detected_languages+=(typescript)
 [[ -f "$repo_root/Cargo.toml" ]] && detected_languages+=(rust)
+[[ -f "$repo_root/package.json" ]] && detected_languages+=(typescript)
 detected=""
 if ((${#detected_languages[@]} > 0)); then
   detected="$(IFS=,; printf '%s' "${detected_languages[*]}")"
