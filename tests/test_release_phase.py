@@ -311,7 +311,18 @@ def test_prerelease_suffix_regex_is_consistent_everywhere() -> None:
     release_phase.py's own parser agree, not just look similar.
     """
     for relative_path, expected_occurrences in _BASH_SUFFIX_SITES:
-        source = (ROOT / relative_path).read_text(encoding="utf-8")
+        path = ROOT / relative_path
+        if not path.is_file():
+            # A downstream project that does not own its own release
+            # process never gets scripts/check-release-drift at all --
+            # copier.yml's `_exclude` drops it whenever `project_mode` is
+            # not "new". This same test file ships into that project's own
+            # tests/ directory (Issue #744's paired-file mechanism), where
+            # the site legitimately does not exist and there is nothing to
+            # check; only this repository's own run (where every site is
+            # always present) exercises the assertions below.
+            continue
+        source = path.read_text(encoding="utf-8")
         assert source.count(_BASH_SUFFIX_TAIL) == expected_occurrences, (
             f"{relative_path} does not use the canonical suffix pattern "
             f"the expected {expected_occurrences} time(s)"
