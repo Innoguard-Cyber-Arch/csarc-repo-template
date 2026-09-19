@@ -11,8 +11,88 @@ fi
 cd "$repo_root"
 source "$repo_root/scripts/verification-step"
 
-suite="${CSARC_VERIFICATION_SUITE:-${CSARC_CI_TIER:-fast}}"
-scopes=",${CSARC_CI_SCOPES:-source},"
+plan_root="$(mktemp -d)"
+trap 'rm -rf "$plan_root"' EXIT
+
+branch="$(git symbolic-ref --quiet --short HEAD || true)"
+base="${CSARC_CI_BASE:-}"
+if [[ -z "$base" && -n "$branch" ]]; then
+  base="$(git config --get "branch.$branch.gh-merge-base" || true)"
+fi
+if [[ -z "$base" ]]; then
+  remote_head="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD || true)"
+  base="${remote_head#origin/}"
+fi
+if [[ -z "$base" ]] && git rev-parse --verify --quiet "main^{commit}" >/dev/null; then
+  base=main
+fi
+if [[ -z "$base" ]]; then
+  echo "Cannot determine the pull request base; set CSARC_CI_BASE explicitly." >&2
+  exit 2
+fi
+base="${base#refs/heads/}"
+base="${base#refs/remotes/origin/}"
+base="${base#origin/}"
+
+base_ref=""
+for candidate in "refs/remotes/origin/$base" "refs/heads/$base" "$base"; do
+  if git rev-parse --verify --quiet "$candidate^{commit}" >/dev/null; then
+    base_ref="$candidate"
+    break
+  fi
+done
+if [[ -z "$base_ref" ]]; then
+  echo "Cannot resolve verification base '$base'; fetch it or set CSARC_CI_BASE." >&2
+  exit 2
+fi
+if ! merge_base="$(git merge-base "$base_ref" HEAD)"; then
+  echo "Cannot find a merge base between '$base_ref' and HEAD." >&2
+  exit 2
+fi
+
+changed_files="$plan_root/changed-files"
+plan_json="$plan_root/ci-plan.json"
+git diff --no-renames --name-only -z "$merge_base" HEAD >"$changed_files"
+extra_scopes="${CSARC_CI_SCOPES:-}"
+if [[ "${CSARC_RUN_OSV:-false}" == "true" ]]; then
+  extra_scopes="${extra_scopes:+$extra_scopes,}dependency"
+fi
+python3 scripts/ci_tier.py \
+  --event pull_request \
+  --base "$base" \
+  --head "${branch:-HEAD}" \
+  --labels "${CSARC_CI_LABELS:-}" \
+  --files-from "$changed_files" \
+  --output-json "$plan_json" \
+  --extra-scopes "$extra_scopes"
+
+plan_tier="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
+scope_csv="$(python3 -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))["scopes"]))' "$plan_json")"
+scopes=",$scope_csv,"
+
+suite_rank() {
+  case "$1" in
+    baseline) echo 0 ;;
+    fast) echo 1 ;;
+    docs) echo 2 ;;
+    full) echo 3 ;;
+    *) return 1 ;;
+  esac
+}
+
+suite="$plan_tier"
+for requested in "${CSARC_VERIFICATION_SUITE:-fast}" "${CSARC_CI_TIER:-}"; do
+  [[ -z "$requested" ]] && continue
+  if ! requested_rank="$(suite_rank "$requested")"; then
+    echo "Unknown verification suite: $requested" >&2
+    exit 2
+  fi
+  current_rank="$(suite_rank "$suite")"
+  if ((requested_rank > current_rank)); then
+    suite="$requested"
+  fi
+done
+echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite scopes=${scope_csv:-none}"
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 
 read_generated_languages() (
@@ -22,7 +102,10 @@ read_generated_languages() (
 
 case "$suite" in
   baseline|fast|docs) ;;
-  full) exec ./scripts/verify-template.sh ;;
+  full)
+    ./scripts/verify-template.sh
+    exit 0
+    ;;
   *)
     echo "Unknown verification suite: $suite" >&2
     exit 2
@@ -49,8 +132,13 @@ verification_step "Python formatting" uv run ruff format --check src scripts tes
 verification_step "Python lint" uv run ruff check src scripts tests
 verification_step "Python type check" uv run ty check
 
+if [[ "$scopes" == *,workflow,* ]]; then
+  verification_step "GitHub Actions audit" \
+    ./scripts/verify-stage-github-actions-audit
+fi
+
 if [[ "$suite" == "baseline" ]]; then
-  ./scripts/write-verify-attestation baseline
+  ./scripts/write-verify-attestation baseline "$scope_csv"
   exit 0
 fi
 
@@ -86,8 +174,8 @@ fi
 if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
   "$scopes" == *,shell,* ||
   "$scopes" == *,dependency,* || "$scopes" == *,governance,* ]]; then
-  smoke_root="$(mktemp -d)"
-  trap 'rm -rf "$smoke_root"' EXIT
+  smoke_root="$plan_root/smoke"
+  mkdir -p "$smoke_root"
   verification_step "Generated-project smoke render" \
     uv run copier copy --trust --defaults --vcs-ref HEAD \
     --data project_slug=fast-template-smoke \
@@ -118,4 +206,4 @@ fi
 # have exited otherwise) -- record the local-attestation trailer that lets
 # the hosted `verify` check pass without re-running anything. This is the
 # selected cumulative suite exits successfully.
-./scripts/write-verify-attestation "$suite"
+./scripts/write-verify-attestation "$suite" "$scope_csv"

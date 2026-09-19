@@ -52,7 +52,8 @@ jobs:
         run: |
           files="$RUNNER_TEMP/changed-files"
           if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
-            git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
+            merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+            git diff --no-renames --name-only -z "$merge_base" "$HEAD_SHA" > "$files"
           else
             git ls-files -z > "$files"
           fi
@@ -113,7 +114,8 @@ jobs:
       # a rubber stamp: it independently reruns the same classification the
       # PR author's own local run used, so a fast-tier attestation cannot
       # satisfy a change scripts/ci_tier.py itself classifies as needing
-      # full verification (e.g. a .github/workflows/ edit). HEAD_SHA
+      # stronger verification. Its scopes output also prevents a local run
+      # from omitting path-selected checks such as OSV or workflow lint. HEAD_SHA
       # reuses the exact expression above rather than plain `github.sha`,
       # because for a pull_request event `github.sha` is GitHub's
       # synthetic merge commit, not the commit the contributor actually
@@ -125,8 +127,9 @@ jobs:
         if: {% raw %}${{ steps.bot.outputs.eligible != 'true' }}{% endraw %}
         env:
           HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}{% endraw %}
+          REQUIRED_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
           REQUIRED_TIER: {% raw %}${{ steps.level.outputs.suite }}{% endraw %}
-        run: ./scripts/check-verify-attestation "$HEAD_SHA" --required-tier "$REQUIRED_TIER"
+        run: ./scripts/check-verify-attestation "$HEAD_SHA" --required-tier "$REQUIRED_TIER" --required-scopes "$REQUIRED_SCOPES"
       # Issue #753: the allowlisted bot's commit can never carry a local
       # attestation trailer, so this runs the real verification here
       # instead, tiered and scoped exactly like scripts/ci_tier.py would
@@ -140,6 +143,7 @@ jobs:
         env:
           CSARC_CI_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
           CSARC_CI_TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
+          CSARC_CI_BASE: {% raw %}${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}{% endraw %}
           CSARC_VERIFICATION_SUITE: {% raw %}${{ steps.level.outputs.suite }}{% endraw %}
         run: |
           git config user.email "actions@github.com"

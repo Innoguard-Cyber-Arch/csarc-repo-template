@@ -68,6 +68,20 @@ def test_parse_trailer_extracts_a_well_formed_line() -> None:
     )
 
 
+def test_parse_trailer_extracts_scope_coverage() -> None:
+    message = (
+        f"subject\n\nVerified-locally: sha256={TREE} tier=fast "
+        "scopes=dependency,source at=2026-09-01T00:00:00Z\n"
+    )
+    result = va.parse_trailer(message)
+    assert result == va.Attestation(
+        sha256=TREE,
+        tier="fast",
+        at=utc(2026, 9, 1),
+        scopes=("dependency", "source"),
+    )
+
+
 def test_parse_trailer_is_case_insensitive_on_the_hash() -> None:
     message = (
         f"x\n\nVerified-locally: sha256={TREE.upper()} "
@@ -124,6 +138,17 @@ def test_render_trailer_round_trips_through_parse_trailer() -> None:
     assert parsed == va.Attestation(sha256=TREE, tier="full", at=at)
 
 
+def test_render_trailer_writes_canonical_scope_coverage() -> None:
+    at = utc(2026, 9, 1, 12, 30, 45)
+    line = va.render_trailer(
+        TREE, "fast", at, scopes=("source", "dependency", "source")
+    )
+    assert line == (
+        f"Verified-locally: sha256={TREE} tier=fast "
+        "scopes=dependency,source at=2026-09-01T12:30:45Z"
+    )
+
+
 def test_render_trailer_rejects_an_invalid_tier() -> None:
     with pytest.raises(ValueError, match="tier must be one of"):
         va.render_trailer(TREE, "medium")
@@ -134,11 +159,24 @@ def test_render_trailer_rejects_a_non_hex_hash() -> None:
         va.render_trailer("not-hex!", "fast")
 
 
+def test_render_trailer_rejects_invalid_scope_claims() -> None:
+    with pytest.raises(ValueError, match="known values"):
+        va.render_trailer(TREE, "fast", scopes=("invented",))
+    with pytest.raises(ValueError, match="tier=full"):
+        va.render_trailer(TREE, "fast", scopes=("all",))
+
+
 # --- check_attestation ---------------------------------------------------
 
 
 def _message(sha256: str, tier: str, at: dt.datetime) -> str:
     return f"subject\n\n{va.render_trailer(sha256, tier, at)}\n"
+
+
+def _message_with_scopes(
+    tier: str, scopes: tuple[str, ...], at: dt.datetime
+) -> str:
+    return f"subject\n\n{va.render_trailer(TREE, tier, at, scopes=scopes)}\n"
 
 
 def test_check_attestation_passes_for_a_fresh_matching_trailer() -> None:
@@ -277,6 +315,59 @@ def test_check_attestation_rejects_an_unknown_required_tier() -> None:
         va.check_attestation(
             _message(TREE, "fast", at), TREE, now=at, required_tier="post-merge"
         )
+
+
+def test_check_attestation_rejects_missing_scope_coverage() -> None:
+    at = utc(2026, 9, 1)
+    message = _message_with_scopes("fast", ("source",), at)
+    result = va.check_attestation(
+        message,
+        TREE,
+        now=at,
+        required_scopes=("dependency", "source"),
+    )
+    assert not result.ok
+    assert "missing required scope coverage: dependency" in result.reason
+
+
+def test_check_attestation_accepts_superset_scope_coverage() -> None:
+    at = utc(2026, 9, 1)
+    message = _message_with_scopes("fast", ("dependency", "source"), at)
+    result = va.check_attestation(
+        message, TREE, now=at, required_scopes=("dependency",)
+    )
+    assert result.ok
+
+
+def test_legacy_scope_compatibility_is_fail_closed_except_for_full() -> None:
+    at = utc(2026, 9, 1)
+    old_fast = va.check_attestation(
+        _message(TREE, "fast", at),
+        TREE,
+        now=at,
+        required_scopes=("source",),
+    )
+    old_full = va.check_attestation(
+        _message(TREE, "full", at),
+        TREE,
+        now=at,
+        required_scopes=("workflow",),
+    )
+    assert not old_fast.ok
+    assert "predates scope coverage" in old_fast.reason
+    assert old_full.ok
+
+
+def test_full_scope_claim_covers_every_required_scope() -> None:
+    at = utc(2026, 9, 1)
+    message = _message_with_scopes("full", ("all",), at)
+    result = va.check_attestation(
+        message,
+        TREE,
+        now=at,
+        required_scopes=("dependency", "workflow"),
+    )
+    assert result.ok
 
 
 # --- resolve_merge_source / fetch_commit_via_api (Issue #699) ------------

@@ -10,9 +10,9 @@ set -euo pipefail
 # on their own. Covers, in order: a clean-tree write that a check then
 # accepts; a dirty tree causing the write to skip rather than lie; a
 # tampered hash being rejected; a stale timestamp being rejected; tier
-# insufficiency (fast attested, full required) being rejected; and a
-# second write on unchanged content replacing rather than stacking the
-# trailer.
+# insufficiency (fast attested, full required) and missing scope coverage
+# being rejected; and a second write on unchanged content replacing rather
+# than stacking the trailer.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd .. && pwd)"
 fixture_root="$(mktemp -d)"
@@ -35,12 +35,14 @@ write() { (cd "$repo" && ./scripts/write-verify-attestation "$@"); }
 check() { (cd "$repo" && ./scripts/check-verify-attestation "$@"); }
 
 # Case 1: clean tree -- write succeeds, exactly one trailer, check accepts it.
-write fast >/dev/null
+write fast source >/dev/null
 message="$(git -C "$repo" log -1 --pretty=%B)"
 trailer_count="$(grep -c '^Verified-locally:' <<<"$message")"
 [[ "$trailer_count" -eq 1 ]]
 grep -Fq 'tier=fast' <<<"$message"
-check "$(git -C "$repo" rev-parse HEAD)" --required-tier fast >/dev/null
+grep -Fq 'scopes=source' <<<"$message"
+check "$(git -C "$repo" rev-parse HEAD)" \
+  --required-tier fast --required-scopes source >/dev/null
 
 # Case 2: dirty tree -- write must skip (exit 0), leaving the message and
 # tree hash it already carries untouched; it must not fabricate a trailer
@@ -48,7 +50,7 @@ check "$(git -C "$repo" rev-parse HEAD)" --required-tier fast >/dev/null
 echo "uncommitted" >>"$repo/a.txt"
 sha_before="$(git -C "$repo" rev-parse HEAD)"
 set +e
-dirty_out="$(write fast 2>&1)"
+dirty_out="$(write fast source 2>&1)"
 dirty_status=$?
 set -e
 [[ "$dirty_status" -eq 0 ]]
@@ -87,7 +89,7 @@ grep -Fq 'stale' <<<"$stale_out"
 # Case 5: tier insufficiency -- a fresh, hash-correct tier=fast attestation
 # must still fail when the caller demands tier=full, and a fresh tier=full
 # attestation must satisfy every weaker suite requirement.
-write fast >/dev/null
+write fast source >/dev/null
 set +e
 weak_out="$(check "$(git -C "$repo" rev-parse HEAD)" --required-tier full 2>&1)"
 weak_status=$?
@@ -95,8 +97,17 @@ set -e
 [[ "$weak_status" -ne 0 ]]
 grep -Fq "needs 'full' verification" <<<"$weak_out"
 
+set +e
+scope_out="$(check "$(git -C "$repo" rev-parse HEAD)" \
+  --required-scopes dependency 2>&1)"
+scope_status=$?
+set -e
+[[ "$scope_status" -ne 0 ]]
+grep -Fq 'missing required scope coverage: dependency' <<<"$scope_out"
+
 write full >/dev/null
-check "$(git -C "$repo" rev-parse HEAD)" --required-tier baseline >/dev/null
+check "$(git -C "$repo" rev-parse HEAD)" \
+  --required-tier baseline --required-scopes workflow >/dev/null
 check "$(git -C "$repo" rev-parse HEAD)" --required-tier fast >/dev/null
 check "$(git -C "$repo" rev-parse HEAD)" --required-tier docs >/dev/null
 check "$(git -C "$repo" rev-parse HEAD)" --required-tier full >/dev/null
@@ -104,11 +115,12 @@ check "$(git -C "$repo" rev-parse HEAD)" --required-tier full >/dev/null
 # Case 6: rerun on unchanged content replaces, never stacks, the trailer.
 sha_after_first="$(git -C "$repo" rev-parse HEAD)"
 sleep 1
-write fast >/dev/null
+write fast dependency,source >/dev/null
 sha_after_second="$(git -C "$repo" rev-parse HEAD)"
 final_message="$(git -C "$repo" log -1 --pretty=%B)"
 [[ "$(grep -c '^Verified-locally:' <<<"$final_message")" -eq 1 ]]
 grep -Fq 'tier=fast' <<<"$final_message"
+grep -Fq 'scopes=dependency,source' <<<"$final_message"
 # The amend changes the commit SHA (fresh timestamp) even though the tree
 # is unchanged -- proves this is a real replace-in-place, not a no-op.
 [[ "$sha_after_first" != "$sha_after_second" ]]

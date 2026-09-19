@@ -6,8 +6,21 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+
+VALID_SCOPES = frozenset(
+    {
+        "dependency",
+        "docs",
+        "governance",
+        "shell",
+        "source",
+        "template",
+        "unknown",
+        "workflow",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -106,6 +119,50 @@ def affects_repo_site(path: str) -> bool:
     }
 
 
+def requires_full_on_main(path: str) -> bool:
+    """Return whether a standalone change needs the full local suite."""
+    name = Path(path).name.removesuffix(".jinja")
+    if path == "copier.yml" or path.startswith(("profiles/", "src/csarc_cli/")):
+        return True
+    if path.startswith("template/") and not path.startswith(
+        (
+            "template/.github/workflows/",
+            "template/.github/actions/",
+            "template/scripts/",
+        )
+    ):
+        return True
+    return path.startswith(("scripts/", "template/scripts/")) and (
+        name
+        in {
+            "check-verify-attestation",
+            "ci_tier.py",
+            "verify",
+            "verify-fast",
+            "verify-template.sh",
+            "verify_attestation.py",
+            "write-verify-attestation",
+        }
+        or name.startswith("verify-stage-")
+    )
+
+
+def add_scopes(plan: Plan, extra_scopes: set[str]) -> Plan:
+    """Add explicitly requested checks without weakening the computed plan."""
+    unknown = extra_scopes - VALID_SCOPES
+    if unknown:
+        raise ValueError(f"unknown CI scope(s): {', '.join(sorted(unknown))}")
+    scopes = tuple(sorted(set(plan.scopes) | extra_scopes))
+    full = plan.tier == "full"
+    return replace(
+        plan,
+        scopes=scopes,
+        run_governance=plan.run_governance or full or "governance" in scopes,
+        run_osv=plan.run_osv or full or "dependency" in scopes,
+        run_zizmor=plan.run_zizmor or full or "workflow" in scopes,
+    )
+
+
 def classify(
     event: str,
     base: str,
@@ -147,6 +204,12 @@ def classify(
         tier, reason = "full", "changed paths unavailable"
     elif "unknown" in scopes:
         tier, reason = "full", "unknown high-risk path"
+    elif (
+        event == "pull_request"
+        and base == "main"
+        and any(map(requires_full_on_main, changed_files))
+    ):
+        tier, reason = "full", "standalone generator or verifier change"
     elif scopes == ("docs",):
         tier, reason = "docs", "documentation-only change"
     else:
@@ -227,15 +290,22 @@ def main() -> None:
     parser.add_argument("--github-output", type=Path)
     parser.add_argument("--summary", type=Path)
     parser.add_argument("--force-full", action="store_true")
+    parser.add_argument("--extra-scopes", default="")
     args = parser.parse_args()
-    plan = classify(
-        args.event,
-        args.base,
-        args.head,
-        {label for label in args.labels.split(",") if label},
-        read_paths(args.files_from),
-        force_full=args.force_full,
-    )
+    try:
+        plan = add_scopes(
+            classify(
+                args.event,
+                args.base,
+                args.head,
+                {label for label in args.labels.split(",") if label},
+                read_paths(args.files_from),
+                force_full=args.force_full,
+            ),
+            {scope for scope in args.extra_scopes.split(",") if scope},
+        )
+    except ValueError as error:
+        parser.error(str(error))
     args.output_json.write_text(
         json.dumps(asdict(plan), indent=2) + "\n", encoding="utf-8"
     )

@@ -41,10 +41,12 @@ jobs:
           cat "$RUNNER_TEMP/release-levels.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Plan the next version from repository history
         id: plan
+        env:
+          RELEASE_LEVEL: ${{ steps.level.outputs.level }}
         run: |
           python3 scripts/release_policy.py plan \
             --sha "$GITHUB_SHA" \
-            --phase "${{ steps.level.outputs.level }}" \
+            --phase "$RELEASE_LEVEL" \
             --github-output "$GITHUB_OUTPUT"
       - name: Detect the available release path
         id: capability
