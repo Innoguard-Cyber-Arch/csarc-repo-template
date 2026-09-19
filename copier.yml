@@ -103,11 +103,21 @@ _migrations:
                 path.write_text(migrated, encoding="utf-8")
 
         legacy_template_tests = {
+            Path("tests/fixtures/syft-v1.50.0-runtime.spdx.json"): {
+                "fda96bc7c659542f481b0845d3319ac607162d85b908a479740f314b82bc10b6",
+            },
+            Path("tests/fixtures/syft-v1.50.0-source-components.spdx.json"): {
+                "bdfa663cd86709c1c3664ca99ea38082b29b15276eef1cb6edd10e30fbc9d1d2",
+            },
+            Path("tests/fixtures/syft-v1.50.0-source.spdx.json"): {
+                "ffe5a3ff5abdf19e6a4b219ce214f82d07d1b0e4577258ec6a33ad258326389a",
+            },
             Path("tests/test_check_action_pins.py"): {
                 "350f2319482c38bf8e80a3f537b3ba4a29fd72aa3e688f47fda3d9c9359d03ae",
             },
             Path("tests/test_ci_tier.py"): {
                 "52149a96946f78fed46894eaa61200ce8c1ae8872d45076cd9ce26ce79e9da53",
+                "f46a06f744e71f4e33a77599310b90fb3aba98f4f6428d4b33f9d804c5ecbc21",
             },
             Path("tests/test_delivery_sync.py"): {
                 "50fc918666723264272a9268ebaf5c0b120341e588e1e1f5841686f8448abc99",
@@ -127,6 +137,7 @@ _migrations:
             },
             Path("tests/test_milestone_closure.py"): {
                 "539c859b8313f64dd16cc0fabedf2a7a6a6809e1c355530a43173be7a989b510",
+                "34f8e653cf9df503c9a0fcbdd7bc7cf5c261dcd05a9c41c367102065b4373352",
             },
             Path("tests/test_milestone_scope.py"): {
                 "7f175942a785eca1e2beba61781d5faab9bb96f4ccea2f336bae6f860a61ce7c",
