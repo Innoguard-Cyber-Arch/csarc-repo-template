@@ -50,6 +50,15 @@ uv run ruff check src scripts tests
 uv run ty check
 uv run pytest -m "not large"
 
+# Issue #739: check_action_pins.py above only compares literal pins across
+# files; it cannot tell whether a rendered template/ workflow otherwise
+# agrees with its root counterpart (a stray config knob, a stale
+# non-pin value). This needs `copier` from the synced venv, so it runs
+# here rather than alongside check_action_pins.py above.
+if [[ "$scopes" == *,workflow,* ]]; then
+  uv run python3 scripts/check_jinja_workflow_drift.py
+fi
+
 if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
   "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
   ./scripts/test-issue-triage
