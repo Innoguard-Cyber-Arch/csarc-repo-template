@@ -45,7 +45,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 ## 快速開始
 
-共同需求是 Git、GitHub CLI、uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11；三個語言模組都不選（`language: ci`）則不需要額外語言工具鏈。CSARC 交付的是 CI/CD 範本與治理流程，Python 只用來執行 init／adopt／update 的薄 CLI；`uvx --python 3.14` 會按次取得隔離 runtime，不要求使用者預先安裝或維護全域 Python。Windows 請在 WSL2 執行。逐項 macOS／Windows 安裝指令，以及「使用者安裝專案」與「模板貢獻者」兩種情境的完整工具清單，見下方[前置需求](#前置需求)。
+共同需求是 Git、GitHub CLI 2.93.0 以上與 uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11；三個語言模組都不選（`language: ci`）則不需要額外語言工具鏈。CSARC 交付的是 CI/CD 範本與治理流程，Python 只用來執行 init／adopt／update 的薄 CLI；`uvx --python 3.14` 會按次取得隔離 runtime，不要求使用者預先安裝或維護全域 Python。Windows 請在 WSL2 執行。逐項 macOS／Windows 安裝指令，以及「使用者安裝專案」與「模板貢獻者」兩種情境的完整工具清單，見下方[前置需求](#前置需求)。
 
 `scripts/resolve-cache-root` 預設就會指向使用者層級、跨 worktree 共用的快取位置（macOS 為 `~/Library/Caches/csarc`；Linux／WSL2 依 XDG Base Directory 慣例，優先讀 `$XDG_CACHE_HOME`，沒設定則用 `~/.cache/csarc`），讓 `uv`、`pnpm`，以及透過 `scripts/resolve-cache-root` 取得快取位置的固定版本工具安裝腳本（`scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner`／`install-hugo`）不需要額外設定，就能跨 worktree、跨 `csarc adopt --finalize` 產生的臨時候選目錄共用已驗證的下載內容。這個共用位置找不到或無法寫入時會 fail-safe 退回 repo-local 的 `.cache/`；這純粹是本機效能最佳化，不論退回與否，驗證正確性與結果都完全不受影響，只是不共用快取時需要各自重新下載，速度較慢。想改用團隊約定的其他持久路徑，仍可在自己 shell 的 profile 檔（例如 `~/.zshrc`、`~/.bashrc`、`~/.config/fish/config.fish`，依實際使用的 shell 而定）加入 `export CSARC_CACHE_ROOT="<路徑>"` 明確覆寫。
 
@@ -61,7 +61,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 建立或導入時選擇 Python、Rust、TypeScript 的任意組合；結果與分支、驗證、發布等公版選項都保存在 `.csarc/config.yml`。這是每個 repo 唯一的公版設定來源；生成 repo 也在同一檔案保存 Copier 的來源與版本。請用 `csarc update --data languages=python,rust` 等更新命令調整生成 repo，不要再建立另一份 profile 設定。
 
-CLI 固定驗證 canonical repository numeric ID、immutable stable Release、release attestation、tag 指向與 commit signature，再把 GitHub Release 解析成完整 commit SHA 並顯示計畫；任何不一致都會在 Copier 寫檔前停止。互動模式等使用者確認，CI 或 agent 則要同時明確給 `--yes --non-interactive`。範本來源目前是 public repo，但 CLI 仍透過 GitHub API 驗證 Release 身分，因此執行前需先完成 `gh auth login`；root CLI 不發布到 PyPI。
+CLI 固定驗證 canonical repository numeric ID、immutable stable Release、release attestation、tag 指向與 commit signature，再把 GitHub Release 解析成完整 commit SHA 並顯示計畫；任何不一致都會在 Copier 寫檔前停止。互動模式等使用者確認，CI 或 agent 則要同時明確給 `--yes --non-interactive`。範本來源目前是 public repo，但 CLI 仍透過 GitHub API 驗證 Release 身分，因此執行前需安裝 GitHub CLI 2.93.0 以上並完成 `gh auth login`；root CLI 不發布到 PyPI。
 
 ## 前置需求
 
@@ -69,18 +69,18 @@ CSARC 有兩種完全不同的情境，各自需要的工具不同：**使用 cs
 
 ### 使用 csarc 建立或更新專案
 
-一律只需要 `uv`；`uvx --python 3.14` 會按次建立隔離 runtime，不要求全域 Python。選擇的語言模組另需對應工具鏈；`languages` 全部不勾選（即下方說明的 `language: ci`）時，不需要任何額外語言工具鏈。
+一律需要 Git、GitHub CLI 2.93.0 以上與 `uv`；`uvx --python 3.14` 會按次建立隔離 runtime，不要求全域 Python。選擇的語言模組另需對應工具鏈；`languages` 全部不勾選（即下方說明的 `language: ci`）時，不需要任何額外語言工具鏈。
 
 | 工具 | 何時需要 | macOS（Homebrew） | Windows（原生，winget／Chocolatey） | Linux／WSL2（Ubuntu，apt） |
 | --- | --- | --- | --- | --- |
 | Git | 一律需要 | `brew install git` | `winget install --id Git.Git -e` | `sudo apt install -y git` |
-| GitHub CLI（`gh`） | 只有 GitHub 連線操作（`gh auth login`、repository settings 腳本）需要 | `brew install gh` | `winget install --id GitHub.cli --source winget`（或 `choco install gh`） | `sudo apt install -y gh` |
+| GitHub CLI（`gh`）2.93.0+ | 使用 csarc CLI 一律需要；安裝後執行 `gh auth login` | `brew install gh` | `winget install --id GitHub.cli --source winget`（或 `choco install gh`） | 使用 [GitHub 官方 apt repository](https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian)，不要使用 Ubuntu 內建套件 |
 | uv | 一律需要；即使選 `ci`，生成專案的 `./scripts/verify` 仍以 `uv run --no-project python` 執行檢查腳本 | `brew install uv` | `winget install --id=astral-sh.uv -e`；沒有 winget 時用官方安裝腳本 `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"`（見 [uv 安裝文件](https://docs.astral.sh/uv/getting-started/installation/)） | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | Node.js 24+ | 只有選 `typescript` 語言模組時需要 | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` | `curl -fsSL https://deb.nodesource.com/setup_24.x \| sudo -E bash -` 後 `sudo apt install -y nodejs` |
 | pnpm 11 | 只有選 `typescript` 語言模組時需要 | `brew install pnpm` | `winget install -e --id pnpm.pnpm` | `sudo npm install -g pnpm@11` |
 | rustup／Cargo | 只有選 `rust` 語言模組時需要；**Linux／WSL2 上另需 `build-essential`（系統 C linker）** | `brew install rustup`（keg-only；該 formula 已不再提供 `rustup-init`，只需把 `$(brew --prefix rustup)/bin` 加入 `PATH` 即完成安裝）；或官方腳本 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` | `sudo apt install -y build-essential` 後 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 
-Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表「Windows（原生，winget／Chocolatey）」欄位供在原生 Windows 單獨安裝個別工具時使用（例如先裝 `git`／`gh` 再進 WSL2），winget 裝的 rustup 進入 WSL2 的 Ubuntu shell 後用不上——WSL2 內請改用「Linux／WSL2（Ubuntu，apt）」欄位。選 `rust` 時，Linux／WSL2 上除了 `rustup` 還需要 `build-essential`（系統 C linker）；即使是純 Rust、不呼叫 C 函式庫的專案也一樣，否則編譯階段的 `cargo test` 會報 `error: linker 'cc' not found`。macOS／WSL2 內的 Ubuntu 完整導引腳本見 [repo-site 附錄](docs/index.html)。
+Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表「Windows（原生，winget／Chocolatey）」欄位供在原生 Windows 單獨安裝個別工具時使用（例如先裝 `git`／`gh` 再進 WSL2），winget 裝的 rustup 進入 WSL2 的 Ubuntu shell 後用不上——WSL2 內請改用「Linux／WSL2（Ubuntu，apt）」欄位。WSL2 內的 `gh` 必須從 GitHub 官方 apt repository 安裝，並以 `gh --version` 確認至少為 2.93.0；Ubuntu 內建套件版本過舊，不支援必要的 Release 驗證。選 `rust` 時，Linux／WSL2 上除了 `rustup` 還需要 `build-essential`（系統 C linker）；即使是純 Rust、不呼叫 C 函式庫的專案也一樣，否則編譯階段的 `cargo test` 會報 `error: linker 'cc' not found`。macOS／WSL2 內的 Ubuntu 完整導引腳本見 [repo-site 附錄](docs/index.html)。
 
 ### 開發／貢獻 `csarc-repo-template` 本身
 
