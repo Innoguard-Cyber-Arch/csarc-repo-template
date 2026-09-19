@@ -1449,7 +1449,7 @@ def test_release_plan_reports_an_existing_phase_suffixed_tag_unchanged(
 def test_write_release_version_normalizes_python_surfaces_to_pep440(
     tmp_path: Path,
 ) -> None:
-    """pyproject.toml gets PEP 440; every other surface stays canonical."""
+    """pyproject.toml gets PEP 440; a non-Python surface stays canonical."""
     (tmp_path / "release-please-config.json").write_text(
         json.dumps(
             {"release-type": "python", "packages": {".": {"component": "demo"}}}
@@ -1466,6 +1466,97 @@ def test_write_release_version_normalizes_python_surfaces_to_pep440(
     assert manifest["."] == "0.16.0-beta.1"
     pyproject = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
     assert 'version = "0.16.0b1"' in pyproject
+
+
+def test_write_release_version_normalizes_init_py_marker_to_pep440(
+    tmp_path: Path,
+) -> None:
+    """The package's own src/<name>/__init__.py marker also needs PEP 440.
+
+    A generated project's own `scripts/verify` compares `__version__`
+    against `importlib.metadata.version(...)`, which always reports the
+    PEP 440-normalized form -- so this marker must match `pyproject.toml`
+    and `uv.lock` (Issue #744), not the canonical SemVer string every
+    other extra-file marker (e.g. README.md, docs/index.html) keeps.
+    """
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "python",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [{"path": "src/demo/__init__.py"}],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+    init_py = tmp_path / "src" / "demo" / "__init__.py"
+    init_py.parent.mkdir(parents=True)
+    init_py.write_text(
+        '"""Demo package."""\n\n'
+        '__version__ = "0.1.0"  # x-release-please-version\n',
+        encoding="utf-8",
+    )
+    _write_release_version(tmp_path, "0.16.0-alpha.1")
+    content = init_py.read_text(encoding="utf-8")
+    assert '__version__ = "0.16.0a1"  # x-release-please-version' in content
+    assert "0.16.0-alpha.1" not in content
+
+
+def test_release_version_errors_compares_pep440_for_init_py_marker(
+    tmp_path: Path,
+) -> None:
+    """release_version_errors extracts the compact PEP 440 form correctly.
+
+    Regression for the marker-scan regex, which used to only recognize the
+    canonical `-alpha.N`/`-beta.N` shape and silently dropped a compact
+    `a1`/`b1` suffix, always reporting the bare core version instead.
+    """
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "python",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [{"path": "src/demo/__init__.py"}],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / ".release-please-manifest.json").write_text(
+        '{".": "0.16.0-beta.1"}\n', encoding="utf-8"
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## v0.16.0-beta.1\n", encoding="utf-8"
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.16.0b1"\n', encoding="utf-8"
+    )
+    init_py = tmp_path / "src" / "demo" / "__init__.py"
+    init_py.parent.mkdir(parents=True)
+    init_py.write_text(
+        '"""Demo package."""\n\n'
+        '__version__ = "0.16.0b1"  # x-release-please-version\n',
+        encoding="utf-8",
+    )
+    assert release_version_errors(tmp_path, "0.16.0-beta.1") == []
+
+    init_py.write_text(
+        '"""Demo package."""\n\n'
+        '__version__ = "0.15.0b1"  # x-release-please-version\n',
+        encoding="utf-8",
+    )
+    errors = release_version_errors(tmp_path, "0.16.0-beta.1")
+    assert "src/demo/__init__.py is 0.15.0b1, expected 0.16.0b1" in errors
 
 
 def test_write_release_version_normalizes_uv_lock_extra_file_to_pep440(

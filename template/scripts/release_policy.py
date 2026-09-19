@@ -36,6 +36,27 @@ STATES = {"allowed", "blocked", "unknown"}
 # #744: alpha/beta/early/formal phase-suffixed versions) instead of a local
 # plain-triplet pattern.
 PEP440_SURFACES = {"pyproject.toml", "uv.lock"}
+
+
+def _is_pep440_surface(relative_path: str) -> bool:
+    """Whether `relative_path` must carry the PEP 440-normalized version.
+
+    `pyproject.toml`/`uv.lock` always do (Issue #744: PEP 440 has no
+    hyphenated `-alpha.N`/`-beta.N` segment). So does a Python package's own
+    `src/<package_name>/__init__.py` marker: the generated project's own
+    `scripts/verify` compares its `__version__` against
+    `importlib.metadata.version(...)`, which always reports the installed
+    package's PEP 440-normalized form, so `__version__` must be written the
+    same way or that comparison never matches for any pre-release phase.
+    `<package_name>` varies per generated project, so this matches by shape
+    rather than by a literal path in `PEP440_SURFACES`.
+    """
+    return relative_path in PEP440_SURFACES or (
+        relative_path.startswith("src/")
+        and relative_path.endswith("/__init__.py")
+    )
+
+
 PUBLISH_CAPABILITIES = ("contents", "release", "immutable_releases")
 INTENT_RANK = {"no-release": 0, "patch": 1, "minor": 2, "major": 3}
 RENOVATE_INSTALL_URL = "https://github.com/apps/renovate/installations/new"
@@ -1368,18 +1389,20 @@ def _pep440_equivalent(version: str) -> str:
 def _target_version(version: str, relative_path: str) -> str:
     """Return the version string to write into one governed surface.
 
-    Every surface gets the canonical SemVer string except a "python"
-    package's `pyproject.toml`/`uv.lock` (Issue #744): PEP 440 has no
-    hyphenated `-alpha.N`/`-beta.N` pre-release segment, so those two get
-    the normalized form (`0.16.0a1`) regardless of whether they are the
-    primary governed surface or a synced extra-file entry (e.g. a
+    Every surface gets the canonical SemVer string except a Python
+    packaging surface (Issue #744): `pyproject.toml`, `uv.lock`, and the
+    package's own `src/<package_name>/__init__.py` marker. PEP 440 has no
+    hyphenated `-alpha.N`/`-beta.N` pre-release segment, so those get the
+    normalized form (`0.16.0a1`) regardless of whether they are the primary
+    governed surface or a synced extra-file entry (e.g. a
     typescript+python project's `package.json` stays primary while
     `pyproject.toml` is still an extra-file that needs the same
-    normalization).
+    normalization). See `_is_pep440_surface` for why `__init__.py` needs it
+    too.
     """
     return (
         _pep440_equivalent(version)
-        if relative_path in PEP440_SURFACES
+        if _is_pep440_surface(relative_path)
         else version
     )
 
@@ -1664,8 +1687,13 @@ def release_version_errors(  # noqa: C901
             if "x-release-please-version" not in line:
                 continue
             marker_found = True
+            # A PEP 440 surface's marker (Issue #744's `_is_pep440_surface`,
+            # e.g. `src/<package>/__init__.py`) holds the compact
+            # `a1`/`b1` form instead of the canonical `-alpha.1`/`-beta.1`
+            # segment; match either so its phase suffix is not silently
+            # dropped from `versions` below.
             match = re.search(
-                r"v?(\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+)?)", line
+                r"v?(\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+|[ab]\d+)?)", line
             )
             versions[str(path.relative_to(root))] = (
                 match.group(1) if match else ""
@@ -1694,10 +1722,10 @@ def release_version_errors(  # noqa: C901
         expected_pep440 = source_version
     errors.extend(
         f"{path} is {version}, expected "
-        f"{expected_pep440 if path in PEP440_SURFACES else source_version}"
+        f"{expected_pep440 if _is_pep440_surface(path) else source_version}"
         for path, version in versions.items()
         if version
-        != (expected_pep440 if path in PEP440_SURFACES else source_version)
+        != (expected_pep440 if _is_pep440_surface(path) else source_version)
     )
 
     if require_changelog:
