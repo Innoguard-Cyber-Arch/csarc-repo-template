@@ -283,7 +283,7 @@ def evaluate(
             + str((verdict.review or {}).get("html_url") or ""),
         )
         return result
-    alpha_authorization = _alpha_self_merge_authorization(
+    alpha_authorization, alpha_reason = _alpha_self_merge_authorization(
         github, repo, pr_number, head_sha, pull
     )
     if alpha_authorization is not None:
@@ -301,6 +301,7 @@ def evaluate(
         "requests), only a maintainer approval can pass this check, unless "
         "this is a routine, Milestone-less Alpha self-merge PR (Issue "
         "#775) with its own exact-head authorization comment."
+        + (f" {alpha_reason}" if alpha_reason else "")
     )
     return result
 
@@ -311,7 +312,7 @@ def _alpha_self_merge_authorization(
     pr_number: int,
     head_sha: str,
     pull: dict[str, Any],
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str]:
     """Return the Alpha self-merge authorization for this head, if valid.
 
     Mirrors `pr_lifecycle.merge_snapshot`'s alpha self-merge path (marker,
@@ -320,6 +321,16 @@ def _alpha_self_merge_authorization(
     inside `alpha_self_merge_opt_in` (malformed marker, wrong route, a
     Milestone Issue, ...) means this path simply does not apply here, not
     that the check should error.
+
+    The second return value explains *why* there is no authorization, so
+    `evaluate()` can surface it instead of always falling back to the same
+    Copilot-shaped message (Issue #781): a PR that never opted in (no
+    marker) gets an empty reason, since the generic message already fits;
+    a PR that opted in but was rejected -- a closed or Milestoned Issue, a
+    malformed marker, an unauthorized comment author, or simply no
+    matching exact-head comment at all -- gets the specific reason instead
+    of looking identical to "Copilot has not reviewed this pull request
+    yet."
     """
     lifecycle = importlib.import_module(
         "pr_lifecycle"
@@ -340,7 +351,7 @@ def _alpha_self_merge_authorization(
         # route, and live Ruleset shape), so adding one only here would let
         # this check and `pr_lifecycle.py merge` disagree about which heads
         # are actually mergeable.
-        return None
+        return None, ""
     try:
         repository = github.get(repo, "")
         default_branch = (
@@ -349,17 +360,23 @@ def _alpha_self_merge_authorization(
             else None
         )
         if not isinstance(default_branch, str):
-            return None
+            return None, "The repository default branch is unavailable"
         opted_in = lifecycle.alpha_self_merge_opt_in(
             github, repo, {"default_branch": default_branch}, pull
         )
-    except RuntimeError:
-        return None
+    except RuntimeError as error:
+        return None, f"Alpha self-merge does not apply here: {error}"
     if not opted_in:
-        return None
-    return lifecycle.find_exact_head_authorization(
+        return None, ""
+    authorization = lifecycle.find_exact_head_authorization(
         github, repo, pr_number, head_sha
     )
+    if authorization is None:
+        return None, (
+            "Alpha self-merge applies but no exact-head maintainer "
+            "authorization comment was found"
+        )
+    return authorization, ""
 
 
 def unresolved_threads(repo: str, pr_number: int) -> list[dict[str, Any]]:
