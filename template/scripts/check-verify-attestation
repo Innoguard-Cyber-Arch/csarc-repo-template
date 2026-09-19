@@ -9,14 +9,15 @@ set -euo pipefail
 # locally. All three (see scripts/verify_attestation.py for the exact
 # conditions and the reasoning behind each) must hold: the commit carries
 # a well-formed `Verified-locally:` trailer; its sha256 matches the
-# commit's own tree; its timestamp is fresh. When --required-tier is
-# given, a fourth: the attested tier must be at least as strong as what
-# scripts/ci_tier.py independently classified this change as needing.
+# commit's own tree; its timestamp is fresh; and, when --required-scopes
+# is given, its scope set covers the hosted plan. When --required-tier is
+# given, the attested tier must also be at least as strong as what
+# scripts/ci_tier.py and the release level require.
 #
 # Also runnable standalone, by a developer or agent, to self-check before
 # pushing: scripts/check-verify-attestation HEAD
 #
-# Usage: scripts/check-verify-attestation <commit-sha> [--required-tier fast|full|docs] [--max-age-hours N]
+# Usage: scripts/check-verify-attestation <commit-sha> [--required-tier baseline|fast|docs|full] [--required-scopes csv] [--max-age-hours N]
 #
 # --resolve-merge-source --github-repo OWNER/NAME (Issue #699): for a
 # commit that was pushed to main by a squash-merge, not a PR branch tip --

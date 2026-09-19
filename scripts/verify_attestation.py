@@ -8,20 +8,23 @@ of a hosted runner re-executing `scripts/verify-fast` /
 locally, and on success the script appends a single-line trailer to the
 current HEAD commit:
 
-    Verified-locally: sha256=<tree hash> tier=<suite> at=<UTC ISO 8601>
+    Verified-locally: sha256=<tree hash> tier=<suite>
+      scopes=<csv> at=<UTC ISO 8601>
 
 The hosted `verify` job then does NOT re-run anything -- it only checks
-that trailer against three independent conditions, all implemented here so
+that trailer against four independent conditions, all implemented here so
 they are unit-testable without a GitHub-hosted runner:
 
 1. presence  -- the commit actually carries a well-formed trailer.
 2. hash      -- the trailer's `sha256=` value matches the commit's own
                 `git rev-parse <sha>^{tree}` exactly.
-3. freshness -- the trailer's `at=` timestamp is neither in the future
+3. scope     -- the trailer covers every scope selected independently by
+                the hosted invocation of `scripts/ci_tier.py`.
+4. freshness -- the trailer's `at=` timestamp is neither in the future
                 (beyond a small clock-skew allowance) nor older than a
                 bounded window.
 
-A fourth, optional condition -- tier sufficiency -- exists because Issue
+A fifth, optional condition -- tier sufficiency -- exists because Issue
 #661 explicitly asked for adversarial review of this design: without it, a
 contributor could always run the cheap `scripts/verify-fast` locally (which
 unconditionally writes `tier=fast`) even on a change that
@@ -133,9 +136,22 @@ TRAILER_TOKEN = "Verified-locally"  # noqa: S105 - a git trailer name, not a sec
 VALID_TIERS = ("baseline", "fast", "docs", "full")
 VALID_REQUIRED_TIERS = VALID_TIERS
 _TIER_RANK = {tier: rank for rank, tier in enumerate(VALID_TIERS)}
+VALID_SCOPES = frozenset(
+    {
+        "all",
+        "dependency",
+        "docs",
+        "governance",
+        "shell",
+        "source",
+        "template",
+        "unknown",
+        "workflow",
+    }
+)
 
 # One line, anywhere in the commit message:
-#   Verified-locally: sha256=<hex> tier=<suite> at=<UTC ISO 8601>
+#   Verified-locally: sha256=<hex> tier=<suite> scopes=<csv> at=<UTC ISO 8601>
 # The hash length is intentionally unconstrained beyond "plausible hex" --
 # see the module docstring for why 40 (SHA-1) and 64 (SHA-256) are both
 # legitimate, and the real check is an exact-string comparison, not a
@@ -143,6 +159,7 @@ _TIER_RANK = {tier: rank for rank, tier in enumerate(VALID_TIERS)}
 TRAILER_PATTERN = re.compile(
     r"^Verified-locally:\s*sha256=(?P<sha256>[0-9a-fA-F]{32,64})\s+"
     r"tier=(?P<tier>baseline|fast|docs|full)\s+"
+    r"(?:scopes=(?P<scopes>[a-z][a-z0-9-]*(?:,[a-z][a-z0-9-]*)*)\s+)?"
     r"at=(?P<at>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\s*$",
     re.MULTILINE,
 )
@@ -155,6 +172,7 @@ class Attestation:
     sha256: str
     tier: str
     at: dt.datetime
+    scopes: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -186,13 +204,32 @@ def parse_trailer(message: str) -> Attestation | None:
         ).replace(tzinfo=dt.UTC)
     except ValueError:
         return None
+    scope_text = match.group("scopes")
+    scopes = tuple(scope_text.split(",")) if scope_text else None
+    if scopes is not None and (
+        len(scopes) != len(set(scopes)) or not set(scopes) <= VALID_SCOPES
+    ):
+        return None
+    if (
+        scopes is not None
+        and "all" in scopes
+        and (len(scopes) != 1 or match.group("tier") != "full")
+    ):
+        return None
     return Attestation(
-        sha256=match.group("sha256").lower(), tier=match.group("tier"), at=at
+        sha256=match.group("sha256").lower(),
+        tier=match.group("tier"),
+        at=at,
+        scopes=scopes,
     )
 
 
 def render_trailer(
-    sha256: str, tier: str, at: dt.datetime | None = None
+    sha256: str,
+    tier: str,
+    at: dt.datetime | None = None,
+    *,
+    scopes: tuple[str, ...] | None = None,
 ) -> str:
     """Build the single-line trailer text for one successful verification."""
     if tier not in VALID_TIERS:
@@ -201,9 +238,67 @@ def render_trailer(
         raise ValueError(
             f"sha256 does not look like a git tree hash: {sha256!r}"
         )
+    if scopes is not None:
+        scopes = tuple(sorted(set(scopes)))
+        if not scopes or not set(scopes) <= VALID_SCOPES:
+            raise ValueError(f"scopes must use known values, got {scopes!r}")
+        if "all" in scopes and (len(scopes) != 1 or tier != "full"):
+            raise ValueError("scope 'all' is valid only by itself at tier=full")
     at = (at or dt.datetime.now(dt.UTC)).astimezone(dt.UTC)
     at_text = at.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return f"{TRAILER_TOKEN}: sha256={sha256.lower()} tier={tier} at={at_text}"
+    scope_text = f" scopes={','.join(scopes)}" if scopes else ""
+    return (
+        f"{TRAILER_TOKEN}: sha256={sha256.lower()} tier={tier}"
+        f"{scope_text} at={at_text}"
+    )
+
+
+def check_scope_coverage(
+    attestation: Attestation, required_scopes: tuple[str, ...]
+) -> CheckResult | None:
+    """Return a failure when a trailer omits path-selected checks."""
+    unknown = set(required_scopes) - VALID_SCOPES
+    if unknown:
+        raise ValueError(
+            f"unexpected required scope(s): {', '.join(sorted(unknown))}"
+        )
+    if attestation.scopes is None:
+        if attestation.tier == "full":
+            return None
+        return CheckResult(
+            False,
+            "this attestation predates scope coverage and cannot prove "
+            f"the required scope(s): {', '.join(required_scopes)} -- "
+            "rerun verification locally and attest again",
+        )
+    if "all" in attestation.scopes:
+        return None
+    missing = set(required_scopes) - set(attestation.scopes)
+    if missing:
+        return CheckResult(
+            False,
+            "attestation is missing required scope coverage: "
+            f"{', '.join(sorted(missing))} -- rerun verification locally "
+            "and attest again",
+        )
+    return None
+
+
+def check_tier_sufficiency(
+    attestation: Attestation, required_tier: str
+) -> CheckResult | None:
+    """Return a failure when the claimed suite is weaker than required."""
+    if required_tier not in VALID_REQUIRED_TIERS:
+        raise ValueError(f"unexpected required_tier: {required_tier!r}")
+    if _TIER_RANK[attestation.tier] >= _TIER_RANK[required_tier]:
+        return None
+    return CheckResult(
+        False,
+        f"this change needs '{required_tier}' verification "
+        f"(scripts/ci_tier.py) but the attestation only claims "
+        f"tier={attestation.tier!r} -- run the required local "
+        "verification suite and attest again",
+    )
 
 
 def check_attestation(
@@ -214,6 +309,7 @@ def check_attestation(
     max_age_hours: float = 24.0,
     max_clock_skew_minutes: float = 5.0,
     required_tier: str | None = None,
+    required_scopes: tuple[str, ...] | None = None,
 ) -> CheckResult:
     """Validate one commit's trailer against its real tree hash and the clock.
 
@@ -295,20 +391,20 @@ def check_attestation(
         )
 
     if required_tier is not None:
-        if required_tier not in VALID_REQUIRED_TIERS:
-            raise ValueError(f"unexpected required_tier: {required_tier!r}")
-        if _TIER_RANK[attestation.tier] < _TIER_RANK[required_tier]:
-            return CheckResult(
-                False,
-                f"this change needs '{required_tier}' verification "
-                f"(scripts/ci_tier.py) but the attestation only claims "
-                f"tier={attestation.tier!r} -- run the required local "
-                "verification suite and attest again",
-            )
+        tier_failure = check_tier_sufficiency(attestation, required_tier)
+        if tier_failure is not None:
+            return tier_failure
+
+    if required_scopes:
+        scope_failure = check_scope_coverage(attestation, required_scopes)
+        if scope_failure is not None:
+            return scope_failure
 
     return CheckResult(
         True,
-        f"verified: tier={attestation.tier} at={attestation.at.isoformat()}",
+        f"verified: tier={attestation.tier} "
+        f"scopes={','.join(attestation.scopes or ()) or 'legacy'} "
+        f"at={attestation.at.isoformat()}",
     )
 
 
@@ -395,6 +491,7 @@ def _main(argv: list[str]) -> int:
     )
     render_parser.add_argument("--sha256", required=True)
     render_parser.add_argument("--tier", required=True, choices=VALID_TIERS)
+    render_parser.add_argument("--scopes", default=None)
     render_parser.add_argument(
         "--at", default=None, help="UTC ISO 8601 timestamp; defaults to now"
     )
@@ -412,6 +509,7 @@ def _main(argv: list[str]) -> int:
     check_parser.add_argument(
         "--required-tier", default=None, choices=VALID_REQUIRED_TIERS
     )
+    check_parser.add_argument("--required-scopes", default=None)
     check_parser.add_argument(
         "--now", default=None, help="Override 'now' for testing, UTC ISO 8601"
     )
@@ -439,7 +537,12 @@ def _main(argv: list[str]) -> int:
 
     if args.command == "render":
         at = _parse_utc(args.at) if args.at else None
-        print(render_trailer(args.sha256, args.tier, at))  # noqa: T201
+        scopes = tuple(args.scopes.split(",")) if args.scopes else None
+        try:
+            trailer = render_trailer(args.sha256, args.tier, at, scopes=scopes)
+        except ValueError as error:
+            parser.error(str(error))
+        print(trailer)  # noqa: T201
         return 0
 
     if args.resolve_merge_source:
@@ -478,6 +581,11 @@ def _main(argv: list[str]) -> int:
         max_age_hours=args.max_age_hours,
         max_clock_skew_minutes=args.max_clock_skew_minutes,
         required_tier=args.required_tier,
+        required_scopes=(
+            tuple(args.required_scopes.split(","))
+            if args.required_scopes
+            else None
+        ),
     )
     stream = sys.stdout if result.ok else sys.stderr
     print(result.reason, file=stream)

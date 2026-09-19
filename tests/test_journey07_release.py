@@ -37,7 +37,8 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "googleapis/release-please-action@45996ed1" in source
     assert "release_policy.py plan" in source
     assert "release_level.py release-batch" in source
-    assert '--phase "${{ steps.level.outputs.level }}"' in source
+    assert "RELEASE_LEVEL: ${{ steps.level.outputs.level }}" in source
+    assert '--phase "$RELEASE_LEVEL"' in source
     assert "release_level.py annotate-pr" in source
     assert "release_level.py annotate-release" in source
     assert "release_policy.py detect" in source

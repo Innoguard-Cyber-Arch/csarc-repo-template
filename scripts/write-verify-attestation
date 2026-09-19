@@ -36,12 +36,16 @@ set -Eeuo pipefail
 # and expected for a PR's own topic branch, which the author already owns
 # and is not the same as force-pushing a shared integration branch.
 #
-# Usage: scripts/write-verify-attestation <baseline|fast|docs|full>
+# Usage: scripts/write-verify-attestation <baseline|fast|docs|full> [scopes]
 
-tier="${1:?Usage: scripts/write-verify-attestation <baseline|fast|docs|full>}"
+tier="${1:?Usage: scripts/write-verify-attestation <baseline|fast|docs|full> [scopes]}"
 if [[ "$tier" != "baseline" && "$tier" != "fast" && "$tier" != "docs" && "$tier" != "full" ]]; then
   echo "scripts/write-verify-attestation: invalid suite '$tier'" >&2
   exit 2
+fi
+scopes="${2:-}"
+if [[ -z "$scopes" && "$tier" == "full" ]]; then
+  scopes=all
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -81,8 +85,12 @@ fi
 # shellcheck disable=SC1083
 tree_hash="$(git rev-parse HEAD^{tree})"
 at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+render_args=(--sha256 "$tree_hash" --tier "$tier" --at "$at")
+if [[ -n "$scopes" ]]; then
+  render_args+=(--scopes "$scopes")
+fi
 trailer_line="$(python3 "$repo_root/scripts/verify_attestation.py" render \
-  --sha256 "$tree_hash" --tier "$tier" --at "$at")"
+  "${render_args[@]}")"
 
 # --if-exists replace keeps exactly one Verified-locally trailer per
 # commit across reruns (e.g. verify-fast run twice with nothing else

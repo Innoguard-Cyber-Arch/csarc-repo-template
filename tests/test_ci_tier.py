@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import runpy
 import shutil
 import subprocess
@@ -146,9 +147,151 @@ def test_risk_scopes_enable_only_their_expensive_check(
     assert getattr(plan, flag)
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "copier.yml",
+        "profiles/catalog.yaml",
+        "src/csarc_cli/cli.py",
+        "template/README.md.jinja",
+        "scripts/ci_tier.py",
+        "scripts/verify-fast",
+        "scripts/verify-stage-regression-tests",
+        "scripts/verify_attestation.py",
+        "template/scripts/verify-fast.jinja",
+    ],
+)
+def test_standalone_generator_and_verifier_changes_require_full(
+    path: str,
+) -> None:
+    """A direct-to-main change has no later promotion boundary."""
+    plan = classify("pull_request", "main", "feat/9-change", set(), [path])
+    assert plan.tier == "full"
+    assert plan.reason == "standalone generator or verifier change"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".github/workflows/ci.yml",
+        "template/.github/workflows/ci.yml.jinja",
+        "scripts/pr_lifecycle.py",
+        "template/scripts/pr_lifecycle.py",
+    ],
+)
+def test_standalone_workflows_and_other_scripts_stay_fast(path: str) -> None:
+    """Scope-selected checks cover ordinary workflow and script changes."""
+    assert (
+        classify("pull_request", "main", "chore/9-change", set(), [path]).tier
+        == "fast"
+    )
+
+
+def _run_stubbed_verify_fast(
+    tmp_path: Path, changed_path: str
+) -> tuple[str, str]:
+    """Run the real local planner while replacing expensive check bodies."""
+    repo = tmp_path / "repo"
+    scripts = repo / "scripts"
+    scripts.mkdir(parents=True)
+    for name in ("ci_tier.py", "verify-fast"):
+        shutil.copy2(REPO_ROOT / "scripts" / name, scripts / name)
+    (scripts / "resolve-cache-root").write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$PWD/.cache"\n',
+        encoding="utf-8",
+    )
+    (scripts / "verification-step").write_text(
+        'verification_step() { printf "%s\\n" "$*" >> "$CSARC_TEST_LOG"; }\n',
+        encoding="utf-8",
+    )
+    (scripts / "write-verify-attestation").write_text(
+        "#!/usr/bin/env bash\n"
+        'printf "attest %s\\n" "$*" >> "$CSARC_TEST_LOG"\n',
+        encoding="utf-8",
+    )
+    for name in (
+        "resolve-cache-root",
+        "verify-fast",
+        "write-verify-attestation",
+    ):
+        (scripts / name).chmod(0o755)
+
+    run_git(repo, "init", "-q", "-b", "main")
+    run_git(repo, "add", ".")
+    run_git(
+        repo,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "base",
+    )
+    run_git(repo, "switch", "-q", "-c", "feat/test-plan")
+    run_git(repo, "config", "branch.feat/test-plan.gh-merge-base", "main")
+    changed = repo / changed_path
+    changed.parent.mkdir(parents=True, exist_ok=True)
+    changed.write_text("changed\n", encoding="utf-8")
+    run_git(repo, "add", changed_path)
+    run_git(
+        repo,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "change",
+    )
+
+    log = tmp_path / "verification.log"
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "CSARC_CI_SCOPES": "source",
+            "CSARC_CI_TIER": "baseline",
+            "CSARC_TEST_LOG": str(log),
+            "CSARC_VERIFICATION_SUITE": "baseline",
+        }
+    )
+    result = subprocess.run(  # noqa: S603 - repository-owned entry point
+        [scripts / "verify-fast"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    return result.stdout, log.read_text(encoding="utf-8")
+
+
+def test_local_verify_fast_computes_workflow_scope(tmp_path: Path) -> None:
+    """A weaker explicit scope cannot suppress workflow-specific checks."""
+    output, log = _run_stubbed_verify_fast(tmp_path, ".github/workflows/ci.yml")
+    assert "suite=fast scopes=source,workflow" in output
+    assert "Workflow and shell lint ./scripts/lint-workflows-shell" in log
+    assert (
+        "GitHub Actions audit ./scripts/verify-stage-github-actions-audit"
+        in log
+    )
+    assert "attest fast source,workflow" in log
+
+
+@pytest.mark.parametrize("lockfile", ["uv.lock", "Cargo.lock"])
+def test_local_verify_fast_computes_dependency_scope(
+    tmp_path: Path, lockfile: str
+) -> None:
+    """A dependency lockfile change cannot silently skip the scan."""
+    output, log = _run_stubbed_verify_fast(tmp_path, lockfile)
+    assert "suite=fast scopes=dependency,source" in output
+    assert "Dependency scan ./scripts/verify-dependencies" in log
+    assert "attest fast dependency,source" in log
+
+
 def test_workflow_rename_keeps_old_and_new_paths(tmp_path: Path) -> None:
     """A workflow moved into docs must retain its workflow scope."""
-    command = 'git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA"'
+    command = 'git diff --no-renames --name-only -z "$merge_base" "$HEAD_SHA"'
     workflow = REPO_ROOT / ".github/workflows/ci.yml"
     if not workflow.exists():
         workflow = workflow.with_name("ci.yml.jinja")

@@ -281,7 +281,7 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 **責任交接（本機 scripts → GitHub Actions → PR gate → Release）：**
 
 - **本機 scripts（`Active`）：** `scripts/verify-fast`／`scripts/verify-template.sh` 由開發者在本機先跑一次，篩掉大部分低階錯誤。
-- **GitHub Actions（`Active`）：** PR 開出後，`.github/workflows/` 只核對本機執行留下的 `Verified-locally:` 證明是否新鮮、tier 是否足夠（Issue #661），不重新執行本機那套政策——證明過期或缺漏一樣會被擋下，不是照單信任。
+- **GitHub Actions（`Active`）：** PR 開出後，`.github/workflows/` 只核對本機執行留下的 `Verified-locally:` 證明是否新鮮、suite 與 scope 涵蓋是否足夠（Issue #661／#748），不重新執行本機那套政策——證明過期或缺漏一樣會被擋下，不是照單信任。
 - **PR gate（依 GitHub 方案而定）：** 支援時由 Ruleset／branch protection 強制擋下未過檢查或未審查的合併；不支援時標示 `DEGRADED`，改由人工自律（見「規則治理」）。
 - **Release（`Active`，但需人工觸發）：** 版本與發版證據由具 admin 權限者在本機執行 `scripts/publish-release` 產生；hosted 的 Automatic／Guided 發版路徑是已知限制，不是預設路徑（見「版本／交付」）。
 
@@ -448,7 +448,7 @@ Issue 宣告層級；Milestone work Issue 繼承 tracker。路徑分類若判定
 - **開發中：**只跑能證明本次修改的 focused check（例如 `uv run pytest <path>`、`uv run ruff check <path>`），用新鮮輸出才宣稱完成，不等待整條 pipeline。
 - **工作 PR（工作分支 → main 或 `dev/m*`）：**`scripts/release_level.py` 從可信任的 Issue／Milestone 宣告解析 alpha／beta／early／formal；`scripts/ci_tier.py` 再依事件、labels 與變更路徑提高最低組合。宣告衝突或未知高風險路徑一律 fail closed。
 - **需要完整驗證時：**只在 Milestone／canary 交付、緊急修正、merge queue、手動執行，或系統無法安全縮小範圍的未知高風險路徑才觸發。
-- **同一套邏輯，Hosted 端不重跑（#661）：**GitHub Actions 只有一個 `verify` job，`contents: read` 權限、最多 15 分鐘，同一 PR 新 commit 會取消舊 run；它不重新執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`），只驗證這些腳本本機執行成功時寫入 commit 的 `Verified-locally:` trailer（tree hash、tier 與時間戳記）夠新鮮、tier 是否足夠。push 前沒有先跑過對應分級，hosted 這個輕量 job 就沒有東西可驗證，會直接失敗。
+- **同一套邏輯，Hosted 端不重跑（#661／#748）：**GitHub Actions 只有一個 `verify` job，`contents: read` 權限、最多 15 分鐘，同一 PR 新 commit 會取消舊 run；它不重新執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`），只驗證這些腳本本機執行成功時寫入 commit 的 `Verified-locally:` trailer（tree hash、suite、scope 與時間戳記）是否符合 hosted 端重算的同一份 plan。push 前沒有先跑過對應分級與 scope，hosted 這個輕量 job 就會直接失敗。
 - **專案範圍：**一般專案只驗證自己的改動；公版專案的完整驗證還包含標記 `large` 的 Copier 建立／既有導入／更新回歸測試，實際生成新專案元件並驗證其保存的產品內容，不只是「檔案存在」。
 
 驗證邏輯只放在 repo 內可執行的 `scripts`／`tests`；GitHub Action 只負責事件、權限與呼叫同一份程式，不重複邏輯。

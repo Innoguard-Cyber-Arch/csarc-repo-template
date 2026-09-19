@@ -151,6 +151,8 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     assert "python3 scripts/ci_tier.py" in source
     assert "run: ./scripts/check-verify-attestation" in source
     assert "--required-tier" in source
+    assert "--required-scopes" in source
+    assert 'git merge-base "$BASE_SHA" "$HEAD_SHA"' in source
     assert "run: ./scripts/verify-fast" not in source
     assert "run: ./scripts/verify-template.sh" not in source
     assert "CSARC_RUN_OSV" not in source
@@ -175,6 +177,8 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
     assert "python3 scripts/ci_tier.py" in source
     assert "run: ./scripts/check-verify-attestation" in source
     assert "--required-tier" in source
+    assert "--required-scopes" in source
+    assert 'git merge-base "$BASE_SHA" "$HEAD_SHA"' in source
     assert "run: ./scripts/verify-fast" not in source
     assert "run: ./scripts/verify" not in source
     assert "CSARC_RUN_OSV" not in source
@@ -193,6 +197,29 @@ def test_documentation_tier_validates_the_generated_site() -> None:
 
     assert "./scripts/build-repo-site --check" in root_fast
     assert "./scripts/build-repo-site --check" in template_fast
+
+
+def test_local_verification_reuses_the_hosted_path_planner() -> None:
+    """Both local entry points derive scopes from the PR merge base."""
+    for path in (
+        "scripts/verify-fast",
+        "template/scripts/verify-fast.jinja",
+    ):
+        source = (REPO_ROOT / path).read_text(encoding="utf-8")
+        assert "python3 scripts/ci_tier.py" in source
+        assert 'git merge-base "$base_ref" HEAD' in source
+        assert "git diff --no-renames --name-only" in source
+        assert '--extra-scopes "$extra_scopes"' in source
+        assert (
+            './scripts/write-verify-attestation "$suite" "$scope_csv"' in source
+        )
+
+
+def test_workflow_scope_runs_the_actions_security_audit() -> None:
+    """A fast workflow change must not wait for a later full boundary."""
+    source = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
+    assert 'if [[ "$scopes" == *,workflow,* ]]; then' in source
+    assert "./scripts/verify-stage-github-actions-audit" in source
 
 
 def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
