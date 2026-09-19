@@ -65,6 +65,13 @@ def _base_snapshot(*, reason: str = "completed") -> dict[str, Any]:
                 "labels": [{"name": "enhancement"}],
                 "user": {"login": "proposer", "type": "User"},
             },
+            {
+                "number": 99,
+                "title": "Deliver #42",
+                "state": "closed",
+                "body": "Closes #42\n",
+                "pull_request": {"merged_at": "2026-09-01T00:00:00Z"},
+            },
         ],
         "comments": [
             {
@@ -168,59 +175,51 @@ def test_unchecked_promotion_box_blocks_an_otherwise_ready_closure() -> None:
     assert "Promotion" in result.summary
 
 
-def _with_pull_request(
-    state: dict[str, Any],
-    *,
-    number: int,
-    closes: int,
-    merged: bool,
-) -> dict[str, Any]:
-    """Add one pull-request Issue entry declaring it closes another Issue."""
-    state["issues"].append(
-        {
-            "number": number,
-            "title": f"Deliver #{closes}",
-            "state": "closed" if merged else "open",
-            "body": f"Closes #{closes}\n",
-            "pull_request": {
-                "merged_at": "2026-09-01T00:00:00Z" if merged else None,
-            },
-        }
-    )
-    return state
-
-
 def test_reconciliation_marks_delivered_when_pr_merged() -> None:
-    """A closed work Issue with a merged closing PR reconciles as delivered."""
+    """Closed work with merged PR and complete acceptance is delivered."""
     state = _base_snapshot()
-    _with_pull_request(state, number=99, closes=42, merged=True)
-
     body = regenerate_reconciliation(state)
+    state["issues"][1]["body"] = body
 
     assert "#42" in body
     assert "Delivered" in body
     assert "1 linked work Issue(s); 1 delivered." in body
     assert reconciliation_status(body).allowed
+    assert closure_decision(state).allowed
 
 
-def test_reconciliation_flags_a_closed_issue_without_a_merged_pr() -> None:
-    """A closed work Issue with no merged closing PR is flagged, not hidden."""
+@pytest.mark.parametrize(
+    ("gap", "status"),
+    [
+        ("unchecked", "Acceptance incomplete or missing"),
+        ("missing", "Acceptance incomplete or missing"),
+        ("unmerged", "Closed without a merged PR"),
+        ("open", "Pending"),
+    ],
+)
+def test_reconciliation_and_completed_closure_reject_undelivered_work(
+    gap: str, status: str
+) -> None:
+    """Every non-delivered reconciliation state blocks completed closure."""
     state = _base_snapshot()
+    work_issue = state["issues"][0]
+    if gap == "unchecked":
+        work_issue["body"] = "## Acceptance criteria\n\n- [ ] Done\n"
+    elif gap == "missing":
+        work_issue["body"] = "No acceptance checklist\n"
+    elif gap == "unmerged":
+        state["issues"][2]["pull_request"]["merged_at"] = None
+    else:
+        work_issue["state"] = "open"
 
     body = regenerate_reconciliation(state)
+    state["issues"][1]["body"] = body
+    result = closure_decision(state)
 
-    assert "Closed without a merged PR" in body
+    assert status in body
     assert "0 delivered" in body
-
-
-def test_reconciliation_reports_an_open_issue_as_pending() -> None:
-    """A still-open linked work Issue reconciles as pending, not delivered."""
-    state = _base_snapshot()
-    state["issues"][0]["state"] = "open"
-
-    body = regenerate_reconciliation(state)
-
-    assert "Pending" in body
+    assert not result.allowed
+    assert f"#42 ({status})" in result.summary
 
 
 def test_reconciliation_is_fresh_immediately_after_regeneration() -> None:
