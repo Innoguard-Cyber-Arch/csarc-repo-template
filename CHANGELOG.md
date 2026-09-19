@@ -7,6 +7,16 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.17.0] - 2026-09-20
+
+### Features
+
+* feat(governance): enable drift checks by default (5b7f525)
+
+### Bug Fixes
+
+* fix(governance): reject incomplete Milestone closure (057b83e)
+
 ## [0.16.0] - 2026-09-20
 
 ### Features
