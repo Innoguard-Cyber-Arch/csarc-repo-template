@@ -6917,16 +6917,119 @@ def test_gh_client_dereferences_annotated_tags(
         raise AssertionError(endpoint)
 
     monkeypatch.setattr(cli, "gh_json", fake_gh_json)
+    monkeypatch.setattr(cli, "require_supported_gh", lambda: None)
     assert cli.GhReleaseClient().resolve_tag("v1.2.3") == cli.TagResolution(
         first_tag, commit_sha
     )
+
+
+def write_gh_stub(path: Path, version_output: str, log: Path) -> None:
+    """Write a gh stub that records whether release verification continues."""
+    write_executable(
+        path,
+        "#!/bin/sh\n"
+        f"printf '%s\\n' \"$*\" >> {shlex.quote(str(log))}\n"
+        'if [ "$1" = "--version" ]; then\n'
+        f"  printf '%s\\n' {shlex.quote(version_output)}\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf '{\"verified\": true}\\n'\n",
+    )
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "README.md",
+        "README.en.md",
+        "docs/agent-install.md",
+        "docs/install.md",
+        "docs/install.en.md",
+        "site/static/legacy-components.js",
+    ],
+)
+def test_documented_minimum_gh_version_matches_cli(
+    relative_path: str,
+) -> None:
+    """Keep every user-facing gh minimum aligned with the CLI constant."""
+    lines = [
+        line
+        for line in (ROOT / relative_path)
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if "GitHub CLI" in line or "gh --version" in line
+    ]
+    versions = {
+        version
+        for line in lines
+        for version in re.findall(r"\b\d+\.\d+\.\d+\b", line)
+    }
+    assert versions == {cli.MINIMUM_GH_VERSION}
+
+
+@pytest.mark.parametrize(
+    ("version_output", "message"),
+    [
+        ("gh version 2.45.0 (2024-02-21)", "2.45.0 is too old"),
+        ("GitHub CLI version unknown", "Cannot determine"),
+    ],
+)
+def test_gh_client_rejects_unsupported_version_before_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    version_output: str,
+    message: str,
+) -> None:
+    """Reject old or unparseable gh versions before attestation runs."""
+    log = tmp_path / "gh.log"
+    write_gh_stub(tmp_path / "gh", version_output, log)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    with pytest.raises(CliError, match=message) as error:
+        cli.GhReleaseClient()
+
+    assert cli.MINIMUM_GH_VERSION in str(error.value)
+    assert cli.GH_INSTALL_URL in str(error.value)
+    assert log.read_text(encoding="utf-8").splitlines() == ["--version"]
+
+
+def test_gh_client_rejects_missing_gh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explain how to install gh when the executable is unavailable."""
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    with pytest.raises(CliError, match="GitHub CLI was not found") as error:
+        cli.GhReleaseClient()
+
+    assert cli.MINIMUM_GH_VERSION in str(error.value)
+    assert cli.GH_INSTALL_URL in str(error.value)
+
+
+def test_gh_client_accepts_minimum_version_and_verifies_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Continue to attestation when gh meets the minimum version."""
+    log = tmp_path / "gh.log"
+    write_gh_stub(
+        tmp_path / "gh",
+        f"gh version {cli.MINIMUM_GH_VERSION} (2026-09-16)",
+        log,
+    )
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    cli.GhReleaseClient().verify_release("v1.2.3")
+
+    assert log.read_text(encoding="utf-8").splitlines() == [
+        "--version",
+        f"release verify v1.2.3 -R {cli.CANONICAL_REPOSITORY} --format json",
+    ]
 
 
 def test_gh_client_verifies_attestation_and_signature(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Validate concrete GitHub boundary successes and malformed responses."""
-    client = cli.GhReleaseClient()
 
     def successful_run(
         command: list[str],
@@ -6936,9 +7039,17 @@ def test_gh_client_verifies_attestation_and_signature(
         check: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         del cwd, capture, check
+        if command == ["gh", "--version"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                f"gh version {cli.MINIMUM_GH_VERSION} (2026-09-16)\n",
+                "",
+            )
         return subprocess.CompletedProcess(command, 0, '{"verified":true}', "")
 
     monkeypatch.setattr(cli, "run", successful_run)
+    client = cli.GhReleaseClient()
     client.verify_release("v1.2.3")
 
     def signature(endpoint: str) -> dict[str, object]:

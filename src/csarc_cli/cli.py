@@ -30,6 +30,8 @@ CANONICAL_SOURCE = (
 )
 CANONICAL_REPOSITORY = "Innoguard-Cyber-Arch/csarc-repo-template"
 CANONICAL_REPOSITORY_ID = 1_340_899_393
+MINIMUM_GH_VERSION = "2.93.0"
+GH_INSTALL_URL = "https://github.com/cli/cli#installation"
 DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
 CONFIG_FILE = Path(".csarc/config.yml")
 LEGACY_ANSWERS_FILE = Path(".copier-answers.yml")
@@ -387,6 +389,32 @@ def gh_json(endpoint: str) -> dict[str, object]:
     return payload
 
 
+def require_supported_gh() -> None:
+    """Fail closed unless GitHub CLI supports safe release verification."""
+    requirement = (
+        f"Release verification requires gh {MINIMUM_GH_VERSION} or newer. "
+        f"Install or upgrade it using {GH_INSTALL_URL}."
+    )
+    try:
+        result = run(["gh", "--version"], capture=True, check=False)
+    except FileNotFoundError as error:
+        raise CliError(f"GitHub CLI was not found. {requirement}") from error
+
+    match = re.match(r"^gh version (\d+)\.(\d+)\.(\d+)(?:\s|$)", result.stdout)
+    if result.returncode != 0 or match is None:
+        output = result.stdout.strip() or result.stderr.strip() or "no output"
+        raise CliError(
+            f"Cannot determine the GitHub CLI version from {output!r}. "
+            f"{requirement}"
+        )
+    current = tuple(int(part) for part in match.groups())
+    minimum = tuple(int(part) for part in MINIMUM_GH_VERSION.split("."))
+    if current < minimum:
+        raise CliError(
+            f"GitHub CLI {'.'.join(match.groups())} is too old. {requirement}"
+        )
+
+
 _NOT_FOUND_SUFFIX = re.compile(r"\(HTTP 404\)\s*$")
 
 
@@ -464,6 +492,10 @@ def gh_json_list(endpoint: str) -> list[object]:
 
 class GhReleaseClient:
     """GitHub CLI implementation of the release trust boundary."""
+
+    def __init__(self) -> None:
+        """Check the GitHub CLI before making any release-related call."""
+        require_supported_gh()
 
     def repository(self) -> dict[str, object]:
         """Return canonical repository metadata."""
