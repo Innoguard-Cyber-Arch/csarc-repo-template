@@ -7,14 +7,26 @@ increment, SemVer-precedence selection, and the dry-run retention rule.
 
 from __future__ import annotations
 
-import sys
+import runpy
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-import release_phase as rp  # noqa: E402
+# Load scripts/release_phase.py by path (like tests/test_release_policy.py and
+# tests/test_ci_tier.py do for their own scripts/ modules) rather than a static
+# `import release_phase`. scripts/*.py are not an installed, importable
+# package: they only exist on disk. A real `import` statement is something
+# `ty check` tries to statically resolve against the project's own search
+# paths -- and this same test file is shipped into every generated/adopted
+# downstream project's tests/ directory (Issue #744's paired-file mechanism),
+# where scripts/ is never on that path, so a static import fails project
+# verification there even though it works fine under pytest's sys.path
+# handling in this repository.
+rp = SimpleNamespace(
+    **runpy.run_path(str(ROOT / "scripts" / "release_phase.py"))
+)
 
 
 @pytest.mark.parametrize(

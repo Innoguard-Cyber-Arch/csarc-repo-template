@@ -7530,6 +7530,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_update_check_does_not_execute_target_capability_helper",
         "test_update_delivers_the_issue_739_workflow_fix_to_an_adopted_project",
         "test_update_delivers_the_issue_743_approval_gate_to_an_adopted_project",
+        "test_update_delivers_the_issue_744_release_phase_tooling",
         "test_update_hook_failure_leaves_target_unchanged",
         "test_update_migrates_legacy_copier_answers_to_single_config",
         "test_update_migrates_legacy_profile_json_before_finalize_tasks",
