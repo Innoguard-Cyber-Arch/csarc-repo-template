@@ -1470,14 +1470,14 @@ def effective_protection(  # noqa: C901
     alpha_self_merge: bool = False,
     reviewed_merge: bool = False,
     copilot_mode: bool = False,
-) -> tuple[str, str, set[tuple[str, int | None]], bool]:
+) -> tuple[str, str, set[tuple[str, int | None]], bool, bool]:
     """Prove review and check enforcement for an exact-head merge."""
     try:
         rules = github.get(
             repo, f"rules/branches/{urllib.parse.quote(branch, safe='')}"
         )
     except RuntimeError as error:
-        return "unknown", str(error), set(), False
+        return "unknown", str(error), set(), False, False
     if not isinstance(rules, list) or not all(
         isinstance(item, dict) for item in rules
     ):
@@ -1485,6 +1485,7 @@ def effective_protection(  # noqa: C901
             "unknown",
             "effective branch rules are unavailable",
             set(),
+            False,
             False,
         )
     pull_rules = [item for item in rules if item.get("type") == "pull_request"]
@@ -1499,6 +1500,7 @@ def effective_protection(  # noqa: C901
             "unknown",
             "effective rule parameters are malformed",
             set(),
+            False,
             False,
         )
     pull = [item["parameters"] for item in pull_rules]
@@ -1517,12 +1519,24 @@ def effective_protection(  # noqa: C901
         )
         for parameters in pull
     ):
-        return "unknown", "pull request rules are malformed", set(), False
+        return (
+            "unknown",
+            "pull request rules are malformed",
+            set(),
+            False,
+            False,
+        )
     required_groups = [
         parameters.get("required_status_checks") for parameters in checks
     ]
     if any(not isinstance(items, list) for items in required_groups):
-        return "unknown", "required check rules are malformed", set(), False
+        return (
+            "unknown",
+            "required check rules are malformed",
+            set(),
+            False,
+            False,
+        )
     required_items = [item for items in required_groups for item in items]
     if any(
         not isinstance(item, dict)
@@ -1537,7 +1551,13 @@ def effective_protection(  # noqa: C901
         )
         for item in required_items
     ):
-        return "unknown", "required check rules are malformed", set(), False
+        return (
+            "unknown",
+            "required check rules are malformed",
+            set(),
+            False,
+            False,
+        )
     required_contexts = {
         (str(item["context"]), item.get("integration_id"))
         for item in required_items
@@ -1621,6 +1641,7 @@ def effective_protection(  # noqa: C901
             missing_reason,
             set(),
             False,
+            False,
         )
     ruleset_id_values = [
         item.get("ruleset_id") for item in pull_rules + check_rules
@@ -1633,6 +1654,7 @@ def effective_protection(  # noqa: C901
             "effective rules do not expose their Ruleset identity",
             set(),
             False,
+            False,
         )
     ruleset_ids = set(ruleset_id_values)
     reviewed_bypass = False
@@ -1640,15 +1662,22 @@ def effective_protection(  # noqa: C901
         try:
             ruleset = github.get(repo, f"rulesets/{ruleset_id}")
         except RuntimeError as error:
-            return "unknown", str(error), set(), False
+            return "unknown", str(error), set(), False, False
         if not isinstance(ruleset, dict):
-            return "unknown", "effective Ruleset is malformed", set(), False
+            return (
+                "unknown",
+                "effective Ruleset is malformed",
+                set(),
+                False,
+                False,
+            )
         bypass_actors = ruleset.get("bypass_actors")
         if ruleset.get("enforcement") != "active":
             return (
                 "blocked",
                 "an effective Ruleset is inactive",
                 set(),
+                False,
                 False,
             )
         if bypass_actors != []:
@@ -1661,8 +1690,24 @@ def effective_protection(  # noqa: C901
                     "an effective Ruleset permits an unverified bypass",
                     set(),
                     False,
+                    False,
                 )
             reviewed_bypass = True
+    copilot_only_block_possible = all(
+        item.get("type")
+        in {
+            "copilot_code_review",
+            "non_fast_forward",
+            "pull_request",
+            "required_status_checks",
+        }
+        for item in rules
+    ) and any(
+        item.get("ruleset_id") in ruleset_ids
+        and isinstance(item.get("parameters"), dict)
+        and item["parameters"].get("review_on_push") is True
+        for item in copilot_rules
+    )
     return (
         "enforced",
         (
@@ -1672,6 +1717,7 @@ def effective_protection(  # noqa: C901
         ),
         required_contexts,
         reviewed_bypass,
+        copilot_only_block_possible,
     )
 
 
@@ -2114,34 +2160,72 @@ def merge_snapshot(  # noqa: C901
     title = pull.get("title")
     if not isinstance(title, str) or not title.strip():
         raise RuntimeError("Pull request title is unavailable")
-    protection, reason, required_contexts, reviewed_bypass = (
-        effective_protection(
-            github,
-            repo,
-            base_ref,
-            alpha_self_merge,
-            # "comment" only ever arises from `alpha_self_merge` (Issue
-            # #775): the exact-head authorization comment is independently
-            # verified by `authorization()` (maintainer permission, exact
-            # body, exact head SHA), the same trust basis as a native
-            # `review` approval or a clean `copilot` review. Excluding it
-            # here made every alpha self-merge -- default-branch or not --
-            # permanently fail this repo's own live `bypass_actors` (added
-            # by #580 for exactly this structural self-approval case) as an
-            # "unverified bypass", forcing every historical alpha merge back
-            # to a manual `gh pr merge --admin`.
-            bypass_route is not None
-            and authorization_source
-            in {"review", "copilot", "comment", "hotfix-emergency"},
-            copilot_mode
-            and level_decision.review == "self"
-            and not alpha_self_merge,
-        )
+    (
+        protection,
+        reason,
+        required_contexts,
+        reviewed_bypass,
+        copilot_only_block_possible,
+    ) = effective_protection(
+        github,
+        repo,
+        base_ref,
+        alpha_self_merge,
+        # "comment" only ever arises from `alpha_self_merge` (Issue
+        # #775): the exact-head authorization comment is independently
+        # verified by `authorization()` (maintainer permission, exact
+        # body, exact head SHA), the same trust basis as a native
+        # `review` approval or a clean `copilot` review. Excluding it
+        # here made every alpha self-merge -- default-branch or not --
+        # permanently fail this repo's own live `bypass_actors` (added
+        # by #580 for exactly this structural self-approval case) as an
+        # "unverified bypass", forcing every historical alpha merge back
+        # to a manual `gh pr merge --admin`.
+        bypass_route is not None
+        and authorization_source
+        in {"review", "copilot", "comment", "hotfix-emergency"},
+        copilot_mode
+        and level_decision.review == "self"
+        and not alpha_self_merge,
     )
     authorization_actor = str((auth.get("user") or {}).get("login", ""))
-    if reviewed_bypass and pull.get("mergeable_state") != "clean":
-        protection = "blocked"
-        reason = "GitHub does not report the reviewed pull request as clean"
+    mergeable_state = pull.get("mergeable_state")
+    if reviewed_bypass and mergeable_state != "clean":
+        alpha_copilot_block = (
+            alpha_self_merge
+            and authorization_source == "comment"
+            and mergeable_state == "blocked"
+            and copilot_mode
+            and copilot_only_block_possible
+        )
+        if alpha_copilot_block:
+            permission = github.get(
+                repo,
+                "collaborators/"
+                f"{urllib.parse.quote(actor, safe='')}/permission",
+            )
+            permission_user = (
+                permission.get("user") if isinstance(permission, dict) else None
+            )
+            if (
+                not isinstance(permission, dict)
+                or permission.get("permission") != "admin"
+                or not isinstance(permission_user, dict)
+                or str(permission_user.get("login", "")).casefold() != actor
+            ):
+                protection = "blocked"
+                reason = "The merge actor is not the live admin bypass actor"
+            elif review_gate.unresolved_threads(repo, pr_number):
+                protection = "blocked"
+                reason = "Unresolved review threads prevent Alpha self-merge"
+            else:
+                reason = (
+                    "exact-head Alpha authorization, checks, and review "
+                    "threads are revalidated despite the native Copilot rule"
+                )
+        else:
+            protection = "blocked"
+            reason = "GitHub does not report the reviewed pull request as clean"
     quota_run_urls = (
         require_routine_quota_fallback(
             github, lease, pull, auth, quota_fallback_note_url

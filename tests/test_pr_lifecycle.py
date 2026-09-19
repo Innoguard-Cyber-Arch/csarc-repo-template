@@ -1787,16 +1787,16 @@ def test_reviewed_merge_rejects_an_unknown_ruleset_bypass(
     assert snapshot["merge_mode"] == "human-only"
 
 
-def test_reviewed_bypass_requires_github_to_report_a_clean_merge(
+def test_beta_reviewed_bypass_rejects_the_alpha_bypass_actor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The known bypass cannot conceal conflicts or unresolved threads."""
+    """The native Copilot rule never relaxes a peer-review level."""
     bind_remote_lease(monkeypatch)
     monkeypatch.setitem(
         merge_snapshot.__globals__,
         "resolve_release_level",
         lambda github, repo, pull: MODULE["release_level"].Decision(
-            "alpha", "peer", "baseline", "test"
+            "beta", "peer", "fast", "test"
         ),
     )
     github = FakeGitHub("a" * 40)
@@ -1811,9 +1811,16 @@ def test_reviewed_bypass_requires_github_to_report_a_clean_merge(
         ],
     }
     github.mergeable_state = "blocked"
+    github.additional_pull_rules = [
+        {
+            "type": "copilot_code_review",
+            "ruleset_id": 7,
+            "parameters": {"review_on_push": True},
+        }
+    ]
     snapshot = merge_snapshot(github, lease_fixture())
     assert snapshot["merge_mode"] == "human-only"
-    assert "clean" in snapshot["protection_reason"]
+    assert "unverified bypass" in snapshot["protection_reason"]
 
 
 def quota_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object], str]:
@@ -1888,6 +1895,137 @@ def alpha_quota_snapshot_fixture(
             base_lane_ref(base_ref),
         ]
     return github, lease, note_url
+
+
+def alpha_copilot_blocked_snapshot_fixture(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    threads: list[dict[str, object]] | None = None,
+) -> tuple[FakeGitHub, dict[str, object]]:
+    """Reproduce PR #813's rollout boundary with every local gate green."""
+    bind_remote_lease(monkeypatch)
+    copilot_mode(monkeypatch)
+    monkeypatch.setattr(
+        MODULE["review_gate"],
+        "unresolved_threads",
+        lambda *_: list(threads or []),
+    )
+    github, lease, _note_url = alpha_quota_snapshot_fixture()
+    github.check_conclusion = "success"
+    github.required_review_count = 0
+    github.mergeable_state = "blocked"
+    github.permission = "admin"
+    github.additional_pull_rules = [
+        {
+            "type": "copilot_code_review",
+            "ruleset_id": 7,
+            "parameters": {"review_on_push": True},
+        }
+    ]
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+    return github, lease
+
+
+def test_alpha_self_merge_accepts_only_the_native_copilot_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #814: PR #813's exact-head Alpha path remains usable."""
+    github, lease = alpha_copilot_blocked_snapshot_fixture(monkeypatch)
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["authorization_source"] == "comment"
+    assert snapshot["required_check_evidence"] == "success"
+
+
+def test_alpha_self_merge_rechecks_threads_before_copilot_bypass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unresolved thread remains blocking when GitHub reports blocked."""
+    github, lease = alpha_copilot_blocked_snapshot_fixture(
+        monkeypatch,
+        threads=[{"id": "PRRT_1"}],
+    )
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["merge_mode"] == "human-only"
+    assert "Unresolved review threads" in snapshot["protection_reason"]
+
+
+@pytest.mark.parametrize(
+    ("mergeable_state", "permission", "reason"),
+    [
+        ("dirty", "admin", "clean"),
+        ("blocked", "maintain", "live admin bypass actor"),
+    ],
+)
+def test_alpha_copilot_bypass_rejects_dirty_head_or_wrong_actor(
+    mergeable_state: str,
+    permission: str,
+    reason: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Conflicts and actors outside the live bypass role still fail closed."""
+    github, lease = alpha_copilot_blocked_snapshot_fixture(monkeypatch)
+    github.mergeable_state = mergeable_state
+    github.permission = permission
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["merge_mode"] == "human-only"
+    assert reason in snapshot["protection_reason"]
+
+
+def test_alpha_copilot_bypass_still_requires_every_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The native Copilot exception never skips exact-head required checks."""
+    github, lease = alpha_copilot_blocked_snapshot_fixture(monkeypatch)
+    github.check_conclusion = "failure"
+    with pytest.raises(RuntimeError, match=r"Required checks.*verify"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
+
+
+def test_alpha_copilot_bypass_rejects_another_effective_rule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not attribute blocked state to Copilot with another live rule."""
+    github, lease = alpha_copilot_blocked_snapshot_fixture(monkeypatch)
+    github.additional_pull_rules.append(
+        {
+            "type": "required_deployments",
+            "ruleset_id": 7,
+            "parameters": {"required_deployment_environments": ["prod"]},
+        }
+    )
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["merge_mode"] == "human-only"
+    assert "does not report" in snapshot["protection_reason"]
 
 
 def test_alpha_sync_never_uses_the_no_review_exception(
