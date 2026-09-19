@@ -223,41 +223,19 @@ def test_generated_detector_uses_copier_language_order(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("language", "required_tools", "verify_mode", "manifest", "lockfile"),
+    ("language", "manifest"),
     [
-        ("python", ("uv",), "python", "pyproject.toml", "uv.lock"),
-        (
-            "typescript",
-            ("node", "pnpm"),
-            "typescript",
-            "package.json",
-            "pnpm-lock.yaml",
-        ),
-        (
-            "rust",
-            ("cargo", "rustc"),
-            "rust",
-            "Cargo.toml",
-            "Cargo.lock",
-        ),
+        ("python", "pyproject.toml"),
+        ("typescript", "package.json"),
+        ("rust", "Cargo.toml"),
     ],
 )
-@pytest.mark.large
-def test_generated_language_module_runs_its_own_verifier(
+def test_generated_language_module_renders_its_native_contract(
     tmp_path: Path,
     language: str,
-    required_tools: tuple[str, ...],
-    verify_mode: str,
     manifest: str,
-    lockfile: str,
 ) -> None:
-    """Render and execute each standalone language module."""
-    missing = [tool for tool in required_tools if shutil.which(tool) is None]
-    if missing:
-        pytest.skip(
-            f"Required language tools are unavailable: {', '.join(missing)}"
-        )
-
+    """Render each standalone module without repeating full verification."""
     source = tmp_path / "source"
     source.mkdir()
     shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
@@ -276,6 +254,7 @@ def test_generated_language_module_runs_its_own_verifier(
         },
         defaults=True,
         unsafe=True,
+        skip_tasks=True,
     )
 
     profile = yaml.safe_load(
@@ -285,9 +264,102 @@ def test_generated_language_module_runs_its_own_verifier(
     assert not (project / ".copier-answers.yml").exists()
     assert not (project / ".csarc/profile.json").exists()
     assert (project / manifest).is_file()
-    assert (project / lockfile).is_file()
     subprocess.run(  # noqa: S603
-        [project / "scripts/verify", verify_mode], cwd=project, check=True
+        [
+            "/bin/bash",
+            "-n",
+            project / "scripts/verify",
+            project / "scripts/verify-fast",
+            project / "scripts/verification-step",
+        ],
+        cwd=project,
+        check=True,
+    )
+
+
+@pytest.mark.large
+def test_representative_generated_project_runs_full_verifier(
+    tmp_path: Path,
+) -> None:
+    """Run one mixed generated project through the complete verifier."""
+    required_tools = ("uv", "node", "pnpm")
+    missing = [tool for tool in required_tools if shutil.which(tool) is None]
+    if missing:
+        pytest.skip(
+            f"Required language tools are unavailable: {', '.join(missing)}"
+        )
+
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "representative-project"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": ["python", "typescript"],
+            "project_name": "Representative Fixture",
+            "project_slug": "representative-fixture",
+            "project_description": "Exercises the representative toolchains.",
+            "repository_url": (
+                "https://github.com/example/representative-fixture"
+            ),
+            "security_reporting_channel": "Use the private security contact.",
+        },
+        defaults=True,
+        unsafe=True,
+    )
+    cli.run(["git", "init", "-b", "main"], cwd=project)
+    cli.run(["git", "config", "user.name", "Verification Test"], cwd=project)
+    cli.run(
+        ["git", "config", "user.email", "verification@example.invalid"],
+        cwd=project,
+    )
+    cli.run(["git", "add", "."], cwd=project)
+    cli.run(
+        ["git", "commit", "-m", "test: generated project"],
+        cwd=project,
+        capture=True,
+    )
+
+    subprocess.run(  # noqa: S603
+        [project / "scripts/verify", "full"], cwd=project, check=True
+    )
+
+
+@pytest.mark.large
+def test_generated_rust_module_runs_native_verifier(tmp_path: Path) -> None:
+    """Keep real Rust toolchain evidence without another full repo suite."""
+    required_tools = ("cargo", "rustc")
+    missing = [tool for tool in required_tools if shutil.which(tool) is None]
+    if missing:
+        pytest.skip(
+            f"Required language tools are unavailable: {', '.join(missing)}"
+        )
+
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "rust-project"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": ["rust"],
+            "project_name": "Rust Fixture",
+            "project_slug": "rust-fixture",
+            "project_description": "Exercises the Rust toolchain.",
+            "repository_url": "https://github.com/example/rust-fixture",
+            "security_reporting_channel": "Use the private security contact.",
+        },
+        defaults=True,
+        unsafe=True,
+    )
+
+    subprocess.run(  # noqa: S603
+        [project / "scripts/verify", "rust"], cwd=project, check=True
     )
 
 

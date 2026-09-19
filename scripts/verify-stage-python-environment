@@ -19,7 +19,8 @@ else
 fi
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 cd "$repo_root"
+source "$repo_root/scripts/verification-step"
 
 unset VIRTUAL_ENV
-uv sync --locked --python "$UV_PYTHON"
-uv lock --check
+verification_step "Locked Python environment" uv sync --locked --python "$UV_PYTHON"
+verification_step "Python lockfile consistency" uv lock --check

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+# Shared step-level progress output for local verification entry points.
+# Source this file, then call verification_step "Label" command args...
+
+verification_command_string() {
+  local argument
+  local rendered=""
+
+  for argument in "$@"; do
+    printf -v rendered '%s %q' "$rendered" "$argument"
+  done
+  printf '%s' "${rendered# }"
+}
+
+verification_step() {
+  local label=$1
+  shift
+  local heartbeat_seconds="${CSARC_VERIFICATION_HEARTBEAT_SECONDS:-60}"
+  local started=$SECONDS
+  local heartbeat_pid
+  local status
+  local command
+
+  if [[ ! "$heartbeat_seconds" =~ ^[1-9][0-9]*$ ]]; then
+    echo "CSARC_VERIFICATION_HEARTBEAT_SECONDS must be a positive integer." >&2
+    return 2
+  fi
+
+  command="$(verification_command_string "$@")"
+  printf '[verify-step] START %s; log=stdout\n' "$label"
+  printf '[verify-step] COMMAND %s\n' "$command"
+
+  (
+    local last_heartbeat=$started
+    while sleep 1; do
+      if ((SECONDS - last_heartbeat >= heartbeat_seconds)); then
+        printf '[verify-step] HEARTBEAT %s (%ss); log=stdout\n' \
+          "$label" "$((SECONDS - started))"
+        last_heartbeat=$SECONDS
+      fi
+    done
+  ) &
+  heartbeat_pid=$!
+
+  if "$@"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  kill "$heartbeat_pid" 2>/dev/null || true
+  wait "$heartbeat_pid" 2>/dev/null || true
+
+  if [[ "$status" -eq 0 ]]; then
+    printf '[verify-step] PASSED %s (%ss)\n' \
+      "$label" "$((SECONDS - started))"
+    return 0
+  fi
+
+  printf '[verify-step] FAILED %s (%ss); status=%s; log=stdout\n' \
+    "$label" "$((SECONDS - started))" "$status" >&2
+  printf '[verify-step] RERUN %s\n' "$command" >&2
+  return "$status"
+}

@@ -16,7 +16,8 @@ else
 fi
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 cd "$repo_root"
+source "$repo_root/scripts/verification-step"
 
-uv run ruff format --check src scripts tests
-uv run ruff check src scripts tests
-uv run ty check
+verification_step "Python formatting" uv run ruff format --check src scripts tests
+verification_step "Python lint" uv run ruff check src scripts tests
+verification_step "Python type check" uv run ty check

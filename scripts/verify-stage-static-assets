@@ -10,8 +10,9 @@ set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+source "$repo_root/scripts/verification-step"
 
-./scripts/build-repo-site --check
-./scripts/lint-workflows-shell
-./scripts/test-static-validation
-./scripts/sync-paired-files.sh --check
+verification_step "Repository site render" ./scripts/build-repo-site --check
+verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
+verification_step "Static-validation fixtures" ./scripts/test-static-validation
+verification_step "Paired-file drift" ./scripts/sync-paired-files.sh --check
