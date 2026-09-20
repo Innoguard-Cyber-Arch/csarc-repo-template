@@ -1265,7 +1265,7 @@ def require_zero_step_run(  # noqa: C901
         or run["id"] != int(run_id)
         or run.get("head_sha") != head_sha
         or run.get("head_branch") != head_ref
-        or run.get("event") not in {"pull_request", "pull_request_target"}
+        or run.get("event") != "pull_request_target"
         or run.get("status") != "completed"
         or run.get("conclusion") != "failure"
         or not isinstance(run.get("repository"), dict)

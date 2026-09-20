@@ -42,6 +42,7 @@ merge_snapshot = MODULE["merge_snapshot"]
 read_lease = MODULE["read_lease"]
 require_lease = MODULE["require_lease"]
 require_successful_checks = MODULE["require_successful_checks"]
+trusted_check_run_matches_context = MODULE["trusted_check_run_matches_context"]
 promotion_gate = MODULE["promotion_gate"]
 release_refs = MODULE["release_refs"]
 remote_repository = MODULE["remote_repository"]
@@ -119,6 +120,17 @@ class FakeGitHub:
         self.check_details_url = (
             "https://github.com/owner/repo/actions/runs/200/job/7"
         )
+        self.run_paths = {
+            199: ".github/workflows/ci.yml",
+            200: ".github/workflows/ci.yml",
+            201: ".github/workflows/ci.yml",
+        }
+        self.run_events = {
+            199: "pull_request_target",
+            200: "pull_request_target",
+            201: "pull_request_target",
+        }
+        self.run_suite_ids = {199: 9199, 200: 9200, 201: 9201}
         self.quota_note_body: str | None = None
         self.quota_runner_id = 0
         self.quota_steps: list[dict[str, Any]] = []
@@ -212,20 +224,21 @@ class FakeGitHub:
                 ),
                 "body": "- [x] Acceptance verified",
             }
-        run_match = re.fullmatch(r"actions/runs/(199|200)", path)
+        run_match = re.fullmatch(r"actions/runs/(199|200|201)", path)
         if run_match:
             run_id = int(run_match.group(1))
             return {
                 "id": run_id,
+                "check_suite_id": self.run_suite_ids[run_id],
                 "head_sha": self.head,
                 "head_branch": self.head_ref,
-                "event": "pull_request",
+                "event": self.run_events[run_id],
                 "status": "completed",
                 "conclusion": "failure",
                 "repository": {"full_name": "owner/repo"},
                 "head_repository": {"full_name": "owner/repo"},
                 "pull_requests": [{"number": 42}],
-                "path": ".github/workflows/ci.yml",
+                "path": self.run_paths[run_id],
             }
         jobs_match = re.fullmatch(
             r"actions/runs/(199|200)/jobs\?per_page=100&page=1", path
@@ -276,7 +289,9 @@ class FakeGitHub:
                     "type": "required_status_checks",
                     "ruleset_id": 7,
                     "parameters": {
-                        "required_status_checks": [{"context": "verify"}]
+                        "required_status_checks": [
+                            {"context": "verify", "integration_id": 15368}
+                        ]
                     },
                 },
                 *self.additional_check_rules,
@@ -331,6 +346,7 @@ class FakeGitHub:
                     "conclusion": self.check_conclusion,
                     "details_url": self.check_details_url,
                     "app": {"id": 15368},
+                    "check_suite": {"id": self.run_suite_ids[200]},
                 },
                 *self.additional_check_runs,
             ]
@@ -1417,8 +1433,62 @@ def test_required_check_must_succeed_on_the_exact_head() -> None:
     github.collection = stale_collection  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="exact head: verify"):
         require_successful_checks(
-            github, "owner/repo", "a" * 40, {("verify", None)}
+            github, "owner/repo", "a" * 40, {("verify", 15368)}
         )
+
+
+def test_required_check_accepts_the_exact_github_app() -> None:
+    """The expected App may satisfy its exact-name check on the exact head."""
+    github = FakeGitHub("a" * 40)
+
+    assert (
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+        == "success"
+    )
+
+
+@pytest.mark.parametrize(
+    ("context", "path", "event"),
+    [
+        ("title", ".github/workflows/pr-policy.yml", "pull_request_target"),
+        (
+            "promotion",
+            ".github/workflows/pr-policy.yml",
+            "merge_group",
+        ),
+        ("verify", ".github/workflows/ci.yml", "pull_request_target"),
+        (
+            "review",
+            ".github/workflows/pr-review.yml",
+            "pull_request_review",
+        ),
+    ],
+)
+def test_required_contexts_pin_their_trusted_workflow(
+    context: str, path: str, event: str
+) -> None:
+    """Each template-owned context has one exact trusted producer route."""
+    github = FakeGitHub("a" * 40)
+    github.run_paths[200] = path
+    github.run_events[200] = event
+    item = github.collection(
+        "owner/repo",
+        f"commits/{github.head}/check-runs?filter=latest&per_page=100",
+        "check_runs",
+    )[0]
+    item["name"] = context
+
+    assert trusted_check_run_matches_context(
+        github,
+        "owner/repo",
+        github.head,
+        item,
+        context,
+        15368,
+        {},
+    )
 
 
 def test_required_check_must_match_its_pinned_github_app() -> None:
@@ -1427,6 +1497,100 @@ def test_required_check_must_match_its_pinned_github_app() -> None:
     with pytest.raises(RuntimeError, match="exact head: verify"):
         require_successful_checks(
             github, "owner/repo", "a" * 40, {("verify", 1234)}
+        )
+
+
+def test_pr_controlled_actions_workflow_cannot_satisfy_required_check() -> None:
+    """The shared Actions App does not make a PR-controlled run trusted."""
+    github = FakeGitHub("a" * 40)
+    github.check_conclusion = "failure"
+    github.run_paths[201] = ".github/workflows/attacker.yml"
+    github.run_events[201] = "pull_request"
+    github.additional_check_runs = [
+        {
+            "id": 201,
+            "name": "verify",
+            "head_sha": github.head,
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/201/job/8"
+            ),
+            "app": {"id": 15368},
+            "check_suite": {"id": github.run_suite_ids[201]},
+        }
+    ]
+
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "event"),
+    [
+        (".github/workflows/attacker.yml", "pull_request_target"),
+        (".github/workflows/ci.yml", "pull_request"),
+    ],
+)
+def test_required_check_rejects_wrong_workflow_provenance(
+    path: str, event: str
+) -> None:
+    """Both workflow path and base-trusted event must match the policy."""
+    github = FakeGitHub("a" * 40)
+    github.run_paths[200] = path
+    github.run_events[200] = event
+
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+def test_required_check_rejects_borrowed_trusted_run_url() -> None:
+    """A check cannot splice its result onto another run's provenance."""
+    github = FakeGitHub("a" * 40)
+    github.check_conclusion = "failure"
+    github.additional_check_runs = [
+        {
+            "id": 201,
+            "name": "verify",
+            "head_sha": github.head,
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": github.check_details_url,
+            "app": {"id": 15368},
+            "check_suite": {"id": github.run_suite_ids[201]},
+        }
+    ]
+
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+def test_classic_status_cannot_satisfy_a_required_check() -> None:
+    """A same-name classic success status is not trusted check evidence."""
+    github = FakeGitHub("a" * 40)
+
+    def classic_status_only(
+        _repo: str,
+        _path: str,
+        key: str,
+        _response_sha: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if key == "check_runs":
+            return []
+        if key == "statuses":
+            return [{"context": "verify", "state": "success"}]
+        raise AssertionError(key)
+
+    github.collection = classic_status_only  # ty: ignore[invalid-assignment]
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
         )
 
 
@@ -2264,6 +2428,12 @@ def test_non_alpha_malformed_review_count_fails_closed(
     [
         "malformed",
         {"required_status_checks": "verify"},
+        {"required_status_checks": [{"context": "verify"}]},
+        {
+            "required_status_checks": [
+                {"context": "verify", "integration_id": None}
+            ]
+        },
         {
             "required_status_checks": [
                 {"context": "verify", "integration_id": True}
@@ -3287,6 +3457,7 @@ class CopilotGitHub(FakeGitHub):
     def __init__(self, head: str) -> None:
         super().__init__(head)
         self.required_review_count = 0
+        self.run_paths[201] = ".github/workflows/pr-review.yml"
         self.copilot_inline: list[dict[str, Any]] = []
         self.copilot_body = (
             "Copilot reviewed 3 out of 3 changed files in this pull request "
@@ -3305,7 +3476,9 @@ class CopilotGitHub(FakeGitHub):
                 "type": "required_status_checks",
                 "ruleset_id": 7,
                 "parameters": {
-                    "required_status_checks": [{"context": "review"}]
+                    "required_status_checks": [
+                        {"context": "review", "integration_id": 15368}
+                    ]
                 },
             }
         ]
@@ -3318,6 +3491,7 @@ class CopilotGitHub(FakeGitHub):
                 "conclusion": "success",
                 "details_url": "https://github.com/owner/repo/actions/runs/201/job/8",
                 "app": {"id": 15368},
+                "check_suite": {"id": self.run_suite_ids[201]},
             }
         ]
 

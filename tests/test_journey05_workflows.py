@@ -26,11 +26,7 @@ def test_pr_policy_is_paired_and_bounded() -> None:
 
     workflow = load_yaml(root_path)
     triggers = workflow.get("on", workflow.get(True))
-    assert set(triggers) == {
-        "pull_request",
-        "pull_request_target",
-        "merge_group",
-    }
+    assert set(triggers) == {"pull_request_target", "merge_group"}
     assert "schedule" not in triggers
     for job in workflow["jobs"].values():
         assert job["timeout-minutes"] == 10
@@ -49,6 +45,39 @@ def test_pr_policy_delegates_to_repository_scripts() -> None:
     assert "scripts/sync_work_item_metadata.py" not in source
     assert source.count("--read-only") == 4
     assert 'PR_POLICY_READ_ONLY: "true"' in source
+
+
+def test_required_check_names_only_run_from_trusted_workflows() -> None:
+    """A PR-controlled workflow cannot impersonate a required check name."""
+    producers = {
+        "pr-policy.yml": {"title", "promotion"},
+        "ci.yml": {"verify"},
+        "pr-review.yml": {"review"},
+    }
+    required_names = set().union(*producers.values())
+
+    for name, expected_names in producers.items():
+        workflow = load_yaml(REPO_ROOT / ".github" / "workflows" / name)
+        triggers = workflow.get("on", workflow.get(True))
+        assert "pull_request_target" in triggers
+        assert "pull_request" not in triggers
+        assert {
+            job.get("name") for job in workflow["jobs"].values()
+        } >= expected_names
+
+    for path in (REPO_ROOT / ".github" / "workflows").glob("*.yml"):
+        workflow = load_yaml(path)
+        triggers = workflow.get("on", workflow.get(True))
+        if "pull_request" not in triggers:
+            continue
+        names = {job.get("name") for job in workflow["jobs"].values()}
+        assert names.isdisjoint(required_names), path
+
+    generated_ci = (
+        REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
+    ).read_text(encoding="utf-8")
+    assert "  pull_request_target:\n" in generated_ci
+    assert "  pull_request:\n" not in generated_ci
 
 
 def test_pr_policy_writes_run_only_from_the_trusted_revision() -> None:

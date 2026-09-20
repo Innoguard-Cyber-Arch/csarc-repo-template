@@ -6,12 +6,10 @@ name: PR review
 # Milestone-less Alpha self-merge PR has its own exact-head authorization
 # comment. Copilot's own review submission re-runs this check; the
 # `issue_comment` trigger re-runs it when that authorization comment is
-# posted, since posting a comment does not itself fire `pull_request`. In
+# posted, since posting a comment does not itself fire `pull_request_target`. In
 # pr_review_mode=human the Ruleset requires a maintainer approval natively
 # and this check only reports so.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   pull_request_review:

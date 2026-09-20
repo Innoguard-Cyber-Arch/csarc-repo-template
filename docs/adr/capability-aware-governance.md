@@ -232,6 +232,25 @@ open PR 才能繼續；零筆或多筆都 fail closed。同一完整 head identi
 規則；#742 後續將 workflow 縮成薄層或搬移 scripts 時，仍必須維持同一個 read-only／
 trusted-writer 邊界，不能以路徑搬移取代隔離。
 
+## 2026-09-20 將 required checks 綁定可信 producer（#835）
+
+Ruleset 的 required status check 不再只保存顯示名稱；`title`、`promotion`、`verify`、
+`review` 都綁定 GitHub Actions App integration ID `15368`。policy 缺少、無法解析或取得
+非正整數 ID 時，設定 readback 與 merge lifecycle 一律 fail closed；classic commit
+status 即使同名且成功，也不能滿足 required context。
+
+GitHub Actions App 是所有 workflow 共用的 producer，單獨綁 App 仍不足以區分可信與
+PR-controlled workflow。因此上述四個 required-name job 改由 base-trusted
+`pull_request_target`（以及既有的 default-branch review／merge queue 事件）載入 workflow
+定義；`pr_lifecycle.py` 除 exact head、name、App 外，也核對 Actions run 的 repository、
+workflow path 與事件。PR 新增或修改的 `pull_request` workflow 即使使用相同 job name 與
+共用 Actions App，也不能成為 lifecycle 的 required evidence。#829 的 privileged
+`workflow_run` writer 邊界保留，並改為接收新的 `pull_request_target` policy run。
+
+這項決定保留 #745 的 required context 集合與 no-bypass 原則、#826 的 Alpha delivery
+sync self-review 路線，以及 #829 的唯讀 gate／trusted writer 分離；驗證證據本身的
+不可偽造性仍由 #834 負責，不在本決定中以名稱或 App 綁定取代。
+
 ## 重新評估條件
 
 Repository 方案、organization policy、fleet 規模或實測 drift 頻率改變時，重新執行 capability preflight 與 fleet threshold review；不要把安裝時快照當永久真相。

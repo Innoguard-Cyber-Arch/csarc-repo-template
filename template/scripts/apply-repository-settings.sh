@@ -749,19 +749,46 @@ if "copilot_code_review" in desired_by_type:
 
 if "required_status_checks" in desired_by_type:
     desired_status_checks = desired_by_type["required_status_checks"]["parameters"]
-    desired_checks = {
-        check["context"]
-        for check in desired_status_checks["required_status_checks"]
-    }
     effective_status_checks_rules = effective_by_type.get("required_status_checks", [])
-    effective_checks = {
-        check["context"]
-        for rule in effective_status_checks_rules
-        for check in rule.get("required_status_checks", [])
-    }
+
+    def check_bindings(checks, source):
+        bindings = set()
+        for check in checks:
+            context = check.get("context") if isinstance(check, dict) else None
+            integration_id = (
+                check.get("integration_id") if isinstance(check, dict) else None
+            )
+            if (
+                not isinstance(context, str)
+                or not context
+                or type(integration_id) is not int
+                or integration_id <= 0
+            ):
+                errors.append(f"{source} required check binding is malformed")
+                continue
+            bindings.add((context, integration_id))
+        return bindings
+
+    desired_checks = check_bindings(
+        desired_status_checks["required_status_checks"], "policy"
+    )
+    effective_checks = check_bindings(
+        [
+            check
+            for rule in effective_status_checks_rules
+            for check in rule.get("required_status_checks", [])
+        ],
+        "effective Ruleset",
+    )
     missing_checks = sorted(desired_checks - effective_checks)
     if missing_checks:
-        errors.append("missing required checks: " + ", ".join(missing_checks))
+        errors.append(
+            "missing required checks: "
+            + ", ".join(
+                f"{context} (App {integration_id})"
+                for context, integration_id in missing_checks
+            )
+        )
     # Issue #754: without this, a brand-new ref matching the Ruleset's
     # pattern (e.g. dev/m<N>-<slug>) can never be created at all --
     # required checks are "expected" for a ref that has no commit or PR
