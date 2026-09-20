@@ -2028,20 +2028,22 @@ def test_alpha_copilot_bypass_rejects_another_effective_rule(
     assert "does not report" in snapshot["protection_reason"]
 
 
-def test_alpha_sync_never_uses_the_no_review_exception(
+def test_alpha_sync_uses_the_exact_head_self_review_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A deterministic sync name cannot replace independent review."""
+    """Issue #826: a validated delivery sync may use Alpha self-review."""
     bind_remote_lease(monkeypatch)
-    github, lease, note_url = alpha_quota_snapshot_fixture(sync=True)
-    github.protected = False
-    with pytest.raises(RuntimeError, match="only available for routine Issue"):
-        merge_snapshot(
-            github,
-            lease,
-            "https://github.com/owner/repo/pull/42#issuecomment-99",
-            quota_fallback_note_url=note_url,
-        )
+    github, lease, _note_url = alpha_quota_snapshot_fixture(sync=True)
+    github.required_review_count = 0
+    github.check_conclusion = "success"
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["alpha_self_merge"] is True
+    assert snapshot["authorization_source"] == "comment"
+    assert snapshot["merge_mode"] == "agent"
 
 
 @pytest.mark.parametrize("invalid_sync", ["missing-main", "wrong-parents"])
@@ -3410,6 +3412,54 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     assert mutations == ["lease-cas", "merge-put"]
     assert github.merged
     assert released
+
+
+def test_merge_revalidates_a_release_candidate_before_the_final_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An earlier successful status cannot satisfy the final merge boundary."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    monkeypatch.setitem(
+        merge.__globals__,
+        "merge_snapshot",
+        lambda *_: {
+            "merge_mode": "agent",
+            "title": "chore(main): release 0.2.0",
+            "reviewed_bypass": False,
+            "head_ref": "release/v0.2.0",
+        },
+    )
+    monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
+    monkeypatch.setitem(merge.__globals__, "release_refs", lambda _lease: None)
+    monkeypatch.setitem(merge.__globals__, "confirm_refs", lambda _lease: None)
+    github = FakeGitHub("a" * 40)
+    github.head_ref = "release/v0.2.0"
+
+    def stale_candidate(_github: object, _lease: object, head_ref: str) -> str:
+        assert head_ref == "release/v0.2.0"
+        raise RuntimeError("current base adds release-worthy commits")
+
+    monkeypatch.setitem(
+        merge.__globals__,
+        "revalidate_release_candidate",
+        stale_candidate,
+    )
+    with pytest.raises(RuntimeError, match="release-worthy commits"):
+        merge(
+            SimpleNamespace(
+                repo="owner/repo",
+                pr_number=42,
+                head_sha="a" * 40,
+                owner="task/merge",
+                lease=lease_path,
+                authorization_url=(
+                    "https://github.com/owner/repo/pull/42#issuecomment-99"
+                ),
+            ),
+            github,
+        )
+    assert not github.merged
 
 
 def test_final_merge_snapshot_rejects_a_new_p1_blocker(

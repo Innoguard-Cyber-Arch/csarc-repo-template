@@ -632,12 +632,12 @@
             "en": "The root, generated repositories, and derived templates share one public configuration; there is no separate profile or site-only settings file to maintain."
           },
           "code": {
-            "zh-tw": "branch_strategy: delivery  # delivery | main\ncode_owner: \"@organization/team\"\nreviewers: \"@alice,@bob\"\nproject_visibility: private  # public | private | internal\nenable_governance_drift_check: false",
-            "en": "branch_strategy: delivery  # delivery | main\ncode_owner: \"@organization/team\"\nreviewers: \"@alice,@bob\"\nproject_visibility: private  # public | private | internal\nenable_governance_drift_check: false"
+            "zh-tw": "branch_strategy: delivery  # delivery | main\ncode_owner: \"@organization/team\"\nreviewers: \"@alice,@bob\"\nproject_visibility: private  # public | private | internal\nenable_governance_drift_check: true  # default; set false to disable",
+            "en": "branch_strategy: delivery  # delivery | main\ncode_owner: \"@organization/team\"\nreviewers: \"@alice,@bob\"\nproject_visibility: private  # public | private | internal\nenable_governance_drift_check: true  # default; set false to disable"
           },
           "summary": {
-            "zh-tw": "分支、owner、reviewer、可見性與治理漂移選配存在 `.csarc/config.yml`；低頻 GitHub 原生細節仍留在 `policies/`。生成 repo 才另含 Copier 來源 metadata。",
-            "en": "Branch model, owner, reviewers, visibility, and the optional governance-drift check live in `.csarc/config.yml`; low-frequency native GitHub detail stays in `policies/`. Only a generated repository also carries Copier source metadata."
+            "zh-tw": "分支、owner、reviewer、可見性與治理漂移設定存在 `.csarc/config.yml`；治理漂移預設開啟、可明確關閉，低頻 GitHub 原生細節仍留在 `policies/`。生成 repo 才另含 Copier 來源 metadata。",
+            "en": "Branch model, owner, reviewers, visibility, and the governance-drift setting live in `.csarc/config.yml`; drift monitoring defaults on and can be explicitly disabled, while low-frequency native GitHub detail stays in `policies/`. Only a generated repository also carries Copier source metadata."
           }
         },
         {
@@ -712,20 +712,20 @@
             "en": "scripts/check-governance-drift＋template/.github/workflows/governance-drift.yml"
           },
           "title": {
-            "zh-tw": "治理漂移排程隨生成 repo 選配開啟，本模板 source 不自跑",
-            "en": "The drift schedule is opt-in per generated repository; this template's own source repo does not self-run it"
+            "zh-tw": "生成 repo 預設開啟治理漂移排程，本模板 source 不自跑",
+            "en": "Generated repositories default the drift schedule on; this template's own source repo does not self-run it"
           },
           "goal": {
-            "zh-tw": "本機與生成 repo 都重複使用同一支腳本；需要持續監測時，Copier 選項開啟每日排程、least-privilege 權限、timeout 與 Issue 通知，不必個別重建。",
-            "en": "Both the local checkout and a generated repository reuse the same script; when continuous monitoring is needed, a Copier option turns on the daily schedule, least-privilege permissions, a timeout, and Issue notification, with nothing to rebuild by hand."
+            "zh-tw": "本機與生成 repo 都重複使用同一支腳本；生成 repo 預設取得每日排程、least-privilege 權限、timeout 與去重 Issue 通知，明確選擇時仍可關閉。",
+            "en": "Both the local checkout and a generated repository reuse the same script; generated repositories default to the daily schedule, least-privilege permissions, a timeout, and deduplicated Issue notification, while retaining an explicit opt-out."
           },
           "code": {
             "zh-tw": "./scripts/check-governance-drift\n\n# enable_governance_drift_check=true generates the daily workflow and\n# script together; false generates neither. This template's own source\n# repo keeps the script for local verification but does not schedule it.",
             "en": "./scripts/check-governance-drift\n\n# enable_governance_drift_check=true generates the daily workflow and\n# script together; false generates neither. This template's own source\n# repo keeps the script for local verification but does not schedule it."
           },
           "summary": {
-            "zh-tw": "`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。生成 repo 開啟 enable_governance_drift_check 時，薄 Action 每日呼叫同一支程式並開立或更新一張追蹤 Issue；本模板 source repo 不排程。",
-            "en": "`scripts/check-governance-drift` calls `apply-repository-settings.sh check` and can run from a trusted local checkout. When a generated repository turns on `enable_governance_drift_check`, a thin Action calls the same program daily and opens or updates one tracking Issue; this template's own source repository keeps the script for local use but never schedules it."
+            "zh-tw": "`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。生成 repo 預設由薄 Action 每日呼叫同一支程式，只在可修正偏離出現或內容改變時開立或更新唯一追蹤 Issue；本模板 source repo 不排程。",
+            "en": "`scripts/check-governance-drift` calls `apply-repository-settings.sh check` and can run from a trusted local checkout. A thin Action runs it daily by default in generated repositories and opens one tracking Issue only for fixable drift, updating it only when the body changes; this template's own source repository never schedules it."
           }
         },
         {

@@ -7,6 +7,46 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.17.1] - 2026-09-20
+
+### Bug Fixes
+
+* fix(governance): allow alpha delivery sync self-review (7970057)
+
+## [0.17.0] - 2026-09-20
+
+### Features
+
+* feat(governance): enable drift checks by default (5b7f525)
+
+### Bug Fixes
+
+* fix(governance): reject incomplete Milestone closure (057b83e)
+* fix(release): revalidate candidates when main advances (b91fc40)
+* fix(release): silence cleanup trap shellcheck warning (48e7ffb)
+
+## [0.16.0] - 2026-09-20
+
+### Features
+
+* feat: add optional Copilot review path with automatic merge (#756) (a4f3f50)
+* feat(ci): allow routine Milestone-less alpha PRs to self-merge into main (#776) (caf750a)
+* feat(release): verify release attestation instead of immutable_releases probe (#773) (2eae2fc)
+
+### Bug Fixes
+
+* fix(ci): run hosted verification for allowlisted dependency bot pull requests (#758) (a60ad24)
+* fix(ci): allow creating new dev/m* delivery branches under the Ruleset (#759) (9f63652)
+* fix(ci): release dependency security updates and sync template action pins (#762) (2ac5b75)
+* fix(cli): resolve release ownership before persisting current-stage capabilities (#763) (9c18b10)
+* fix(ci): use current GraphQL type for issue creation policy mutation (#765) (6f371b9)
+* fix(tests): make copier import lazy in paired dependabot auto-merge test (#774) (75be40a)
+* fix(ci): detect approval comments edited long after posting (#779) (8ebbc70)
+* fix(ci): stop trusting author_association for maintainer checks (#787) (8c1ed8b)
+* fix(ci): surface why alpha self-merge authorization did not apply (030bda0)
+* fix(release): distinguish guided no-op drift runs (bec6c76)
+* fix(ci): install tools before hosted bot verification (e0828ef)
+
 ## [0.15.6] - 2026-09-11
 
 ### Bug Fixes

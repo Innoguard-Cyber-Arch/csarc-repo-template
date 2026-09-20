@@ -468,9 +468,16 @@ PY
   if [[ "$apply_release_policy" != "true" ]]; then
     echo "SKIPPED policies/releases.json (release_immutable_releases=$release_immutable_releases; not required by this release ownership)."
   elif ! release_state="$(gh api "repos/$repo/immutable-releases" 2>&1)"; then
-    echo "Cannot inspect the required immutable Releases setting for $repo." >&2
-    echo "$release_state" >&2
-    check_errors=$((check_errors + 1))
+    if [[ "$repo_admin" != "true" && "$release_state" == *"Resource not accessible by integration"* ]]; then
+      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+        echo "::warning title=Immutable Releases inspection degraded::The token cannot read the administrator-only immutable Releases setting."
+      echo "DEGRADED immutable Releases inspection: token cannot read the administrator-only setting."
+      check_degraded=$((check_degraded + 1))
+    else
+      echo "Cannot inspect the required immutable Releases setting for $repo." >&2
+      echo "$release_state" >&2
+      check_errors=$((check_errors + 1))
+    fi
   elif ! release_drift="$(python3 - "$release_policy" "$release_state" 2>&1 <<'PY'
 import json
 import sys

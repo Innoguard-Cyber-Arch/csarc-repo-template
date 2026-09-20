@@ -1321,11 +1321,38 @@ def release_plan_report(
     }
 
 
-def verify_candidate_version(root: Path, base_sha: str) -> str:
-    """Recompute the candidate version from its base commit."""
+def verify_candidate_version(root: Path, base_sha: str) -> tuple[str, str, str]:
+    """Recompute the candidate version from its current base commit."""
     executable = shutil.which("git")
     if executable is None:
         raise RuntimeError("Git is required for release planning")
+    candidate_sha = git_output(["rev-parse", "HEAD"], root)
+    source_sha = git_output(["merge-base", candidate_sha, base_sha], root)
+    new_base_log = git_output(
+        ["log", "--format=%H%x1f%s%x1f%b%x1e", f"{source_sha}..{base_sha}"],
+        root,
+    )
+    new_base_commits = []
+    for entry in new_base_log.split("\x1e"):
+        fields = entry.strip("\n").split("\x1f", 2)
+        if len(fields) == 2:
+            fields.append("")
+        if len(fields) == 3:
+            new_base_commits.append(fields)
+    release_worthy = [
+        (sha, subject)
+        for sha, subject, body in new_base_commits
+        if bump_version("0.0.0", [f"{subject}\n{body}"]) is not None
+    ]
+    if release_worthy:
+        commits = ", ".join(
+            f"{sha[:12]} {subject}" for sha, subject in release_worthy
+        )
+        raise ValueError(
+            f"release candidate {candidate_sha} was built from {source_sha}, "
+            f"but current base {base_sha} adds release-worthy commits: "
+            f"{commits}; update the same Release PR and revalidate"
+        )
     with tempfile.TemporaryDirectory(prefix="csarc-release-base-") as path:
         worktree = Path(path) / "worktree"
         subprocess.run(  # noqa: S603
@@ -1363,7 +1390,7 @@ def verify_candidate_version(root: Path, base_sha: str) -> str:
         raise ValueError("candidate base has no release-worthy commits")
     _, expected = planned
     verify_release_version(root, expected)
-    return expected
+    return expected, candidate_sha, source_sha
 
 
 def _replace_toml_version(
@@ -1972,7 +1999,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         return 0
     if args.command == "verify-candidate-version":
         try:
-            version = verify_candidate_version(
+            version, candidate_sha, source_sha = verify_candidate_version(
                 args.root.resolve(), args.base_sha
             )
         except (
@@ -1983,7 +2010,8 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         ) as error:
             raise SystemExit(str(error)) from error
         print(  # noqa: T201
-            f"Release candidate matches base decision {version}."
+            f"Release candidate {candidate_sha} from source {source_sha} "
+            f"matches current base {args.base_sha} decision {version}."
         )
         return 0
     if args.command in {"prepare", "verify-version"}:
