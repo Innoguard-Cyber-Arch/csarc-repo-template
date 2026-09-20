@@ -26,7 +26,11 @@ def test_pr_policy_is_paired_and_bounded() -> None:
 
     workflow = load_yaml(root_path)
     triggers = workflow.get("on", workflow.get(True))
-    assert set(triggers) == {"pull_request", "merge_group"}
+    assert set(triggers) == {
+        "pull_request",
+        "pull_request_target",
+        "merge_group",
+    }
     assert "schedule" not in triggers
     for job in workflow["jobs"].values():
         assert job["timeout-minutes"] == 10
@@ -96,6 +100,7 @@ def test_pr_policy_writes_run_only_from_the_trusted_revision() -> None:
     assert "--resolve-head-sha" in source
     assert "github.event.workflow_run.head_repository.full_name" in source
     assert "github.event.workflow_run.head_branch" in source
+    assert "github.event.workflow_run.event == 'pull_request_target'" in source
     assert "scripts/sync_work_item_metadata.py" in source
     assert "scripts/sync_milestone_state.py check-pr" in source
     assert "scripts/sync_milestone_state.py check-merge-group" in source

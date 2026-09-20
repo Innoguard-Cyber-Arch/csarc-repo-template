@@ -17,7 +17,7 @@ concurrency:
 jobs:
   resolve-pr:
     name: resolve pull request
-    if: ${{ github.event.workflow_run.event == 'pull_request' }}
+    if: ${{ github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'pull_request_target' }}
     permissions:
       contents: read
       pull-requests: read
@@ -79,7 +79,8 @@ jobs:
     if: >-
       always() &&
       (github.event.workflow_run.event == 'merge_group' ||
-      (github.event.workflow_run.event == 'pull_request' &&
+      ((github.event.workflow_run.event == 'pull_request' ||
+      github.event.workflow_run.event == 'pull_request_target') &&
       needs.resolve-pr.result == 'success'))
     permissions:
       checks: write
@@ -95,7 +96,7 @@ jobs:
           persist-credentials: false
           ref: ${{ github.sha }}
       - name: Publish the pull request approval decision
-        if: ${{ github.event.workflow_run.event == 'pull_request' }}
+        if: ${{ github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'pull_request_target' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}

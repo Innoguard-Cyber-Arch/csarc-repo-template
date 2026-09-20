@@ -178,6 +178,7 @@ def test_ci_and_reviewer_assignment_stay_out_of_the_merge() -> None:
     ci_triggers = ci_workflow.get("on", ci_workflow.get(True))
     assert set(ci_triggers) == {
         "pull_request",
+        "pull_request_target",
         "merge_group",
         "workflow_dispatch",
     }
