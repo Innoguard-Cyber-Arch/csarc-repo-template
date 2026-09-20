@@ -111,8 +111,8 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | `tests/test_release_consumption.py`（#104，signer-mismatch 案例見 #770） | `verify_consumption()` 的成功驗證、attestation 缺失、repository／signer 身分不符、成品 digest 不符四種情境 |
 | `tests/test_release_publish.py`（#589；attestation 驗證案例見 #770） | 對 mocked `gh` 與真實 Git fixture 驅動 `scripts/publish-release` 的行為回歸：staging 成功／fail-closed、state 判定、發布成功、發布失敗回退 draft、已發布重跑不重建、attestation 缺失／asset digest 不符／signer 不符三種 post-hoc 驗證失敗情境 |
 | `tests/test_journey07_release.py` | workflow 權限、pin、ownership 與 archive disposition；`release.yml`／`release.yml.jinja` 呼叫 `scripts/publish-release` 而非保留自己一份 bash 的來源層級驗證（#589） |
-| `.github/workflows/dependabot-auto-merge.yml` | 只鎖定 `dependabot[bot]` 開出的 PR；minor／patch 排入 GitHub 原生 auto-merge 佇列，major 加標籤／留言、不合併 |
-| `tests/test_dependabot_auto_merge.py` | 觸發條件、job 層級 actor 閘門、權限、pin 與 minor/patch／major 分流的 workflow 邏輯回歸測試 |
+| `.github/workflows/dependabot-auto-merge.yml` | 由可信任 base revision 的 `pull_request_target` workflow 驗證目前 head 是 GitHub 簽章的 Dependabot commit；minor／patch 排入 GitHub 原生 auto-merge 佇列，major 加標籤／留言、不合併；Actions bump 只以 base synchronizer 同步精確 allowlist 內的 template 副本 |
+| `tests/test_dependabot_auto_merge.py` | 觸發條件、head 驗證、權限、pin、base-code synchronizer、exact-ref push 與 minor/patch／major 分流的 workflow 邏輯回歸測試 |
 
 ## Archive disposition
 
@@ -165,6 +165,26 @@ required checks 全部通過後才執行；本決定沒有調整、放寬或繞�
 半部——`.github/dependabot.yml` 的 `cooldown.default-days: 3` 維持原樣，不因本節新增而重新設定或延長。同步下發 `template/`
 （新 workflow 與 `policies/labels.json` 的 `needs-manual-review` 標籤定義），下游生成專案取得同一份政策；`docs/ci-policy.md`
 沿用既有「Current automation」表的 candidate／active 判斷慣例，待落地 `main` 並有 live run 證據後再登錄，不在本節預先宣告 active。
+
+### Dependabot privileged sync 的 current-head trust boundary（#830，2026-09-20）
+
+#557／#755 原本只驗證固定不變的 PR opener，且 `pull_request` 會讓 head revision 決定具寫入權限的 workflow；
+checkout head 後直接執行其中的 synchronizer，無法證明目前執行內容仍由 Dependabot 產生。#830 supersede 這個
+opener-only trust assumption，但保留 auto-merge 分流、cooldown、人工 review 與 root／template 同步目標。
+
+新的邊界以 base revision 的 `pull_request_target` workflow 執行。唯讀 authentication job 重新查詢目前 PR，
+要求 live base SHA 與觸發事件的可信 base SHA 完全相同、同 repository 的
+`dependabot/github_actions/main/*` ref，且 GitHub API 對 current head 回報
+`dependabot[bot]` author、`web-flow` committer、有效 GitHub 簽章、單一 commit，以及未達 API 截斷上限且全為
+root `.github/workflows/*.yml|*.yaml` 的 modified path。若 current head 是這條流程已產生的 sync child（例如
+PR 關閉後重開），則先驗證其 parent 符合同一套 Dependabot 條件，再以 parent 原始 base revision 的 trusted
+synchronizer 重建完整 Git tree；只有 tree hash 完全相同才視為可信任衍生內容。
+
+具寫入權限的 job 只執行 base SHA 的 `scripts/sync-paired-files.sh`；產物只能是已驗證 source 對應的 template
+workflow，push 以已驗證 bot ref 與 exact head SHA 的 lease 綁定，auto-merge 也綁定同步完成後的 exact head。
+每張 PR 的 head 事件會串行處理：先對經驗證的 live snapshot 撤銷既有 auto-merge，撤銷成功後再只為通過
+current-head authentication 的 exact SHA 重新啟用，避免後續 human commit 沿用舊 head 的 auto-merge 授權。
+任何 metadata 缺漏、路徑超界、tree 重建不一致、git 比對錯誤或驗證後 ref 移動都 fail closed。
 
 ## 發版不依賴 Actions 健康度的本機 fallback（#589，2026-09-03）
 

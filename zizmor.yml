@@ -5,19 +5,17 @@ rules:
       - dependabot.yml
   artipacked:
     ignore:
-      # Issue #755: the sync-template job needs persist-credentials (the
-      # default) to push its sync commit back onto Dependabot's own
-      # branch -- that push is the job's whole purpose. This workflow
-      # never uploads an artifact, so the credential-leak-via-artifact
-      # scenario this audit warns about does not apply; the job is
-      # already gated to github.event.pull_request.user.login ==
-      # 'dependabot[bot]' (never a fork, same reasoning as the auto-merge
-      # job in this same file) and, after checkout, only ever runs
-      # scripts/sync-paired-files.sh's own byte-copy logic -- nothing
-      # from the checked-out PR content is executed.
+      # Issues #755/#830: the authenticated head checkout retains credentials
+      # only to push the deterministic sync commit back with an exact-SHA
+      # lease. The workflow never uploads artifacts or executes head code.
       - dependabot-auto-merge.yml
   dangerous-triggers:
     ignore:
+      # Issue #830: this target trigger is the security boundary. A read-only
+      # job authenticates the current GitHub-signed Dependabot head and exact
+      # workflow-only diff before either writer starts. The sync job executes
+      # only the base SHA's synchronizer and its push uses an exact-SHA lease.
+      - dependabot-auto-merge.yml
       # pull_request_target is required to request a reviewer without granting
       # a fork PR write access to secrets. The job only checks out
       # `pull_request.base.sha` (never the untrusted head), sets

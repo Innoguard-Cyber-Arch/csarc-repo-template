@@ -805,7 +805,8 @@ def test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows(
             # assert on.
             continue
         source = candidate.read_text(encoding="utf-8")
-        assert 'gh pr merge --auto --squash "$PR_URL"' in source
+        assert "gh pr merge --auto --squash" in source
+        assert '--match-head-commit "$HEAD_SHA" "$PR_URL"' in source
         assert 'gh pr edit "$PR_URL" --add-label needs-manual-review' in source
         destination = tmp_path / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -817,6 +818,10 @@ def test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows(
     "workflow_body",
     [
         'run: gh pr merge --auto --squash "$PR_URL"\n',
+        (
+            "run: gh pr merge --auto --squash "
+            '--match-head-commit "$HEAD_SHA" "$PR_URL"\n'
+        ),
         'run: gh pr edit "$PR_URL" --add-label needs-manual-review\n',
     ],
 )

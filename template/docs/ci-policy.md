@@ -590,12 +590,26 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
 實作：
 
 1. `.github/workflows/dependabot-auto-merge.yml`（root 與 `template/.github/workflows/dependabot-auto-merge.yml`，
-   本身也是 paired 檔案）新增 `sync-template` job，跟既有 `auto-merge` job 同一個 `if:
-   github.event.pull_request.user.login == 'dependabot[bot]'` 閘門與 `pull_request`（非 `_target`）觸發理由
-   （Dependabot 直接推到這個 repository，從來不是 fork）：checkout PR head、跑
-   `./scripts/sync-paired-files.sh`，有 drift 就 commit 並 push 回同一個分支。只執行這支腳本既有、已測試的
-   逐位元組複製邏輯，不執行 PR 內容裡的其他任何東西；push 觸發的新 `synchronize` 事件會讓 `verify`（#753）
-   對新 head 重新驗證，也會讓這個 job 自己重新跑一次、這次因為沒有 drift 而直接結束，不會無限迴圈。
+   本身也是 paired 檔案）新增 `sync-template` job。#830 將這條具寫入權限的路徑改為
+   `pull_request_target`，所以 workflow 與 synchronizer 都固定取自可信任的 base SHA；PR head 只作為資料，
+   不提供可執行程式碼。唯讀的 `authenticate-dependabot-head` job 會重新讀取目前 PR head，先要求 live base SHA
+   與觸發事件的可信 base SHA 完全相同，再驗證 opener、同 repo branch 前綴、GitHub API 對 commit 的
+   `dependabot[bot]` author、`web-flow` committer、有效 GitHub 簽章、
+   單一 head commit 全部成立，並只允許 `main` 上 `dependabot/github_actions/main/*` 分支修改 root
+   `.github/workflows/` 內既有 YAML。同步後 PR 若關閉再重開，current head 會是 unsigned
+   `github-actions[bot]` child；這個例外不靠顯示名稱放行，而是先驗證其 parent 為上述 Dependabot commit，再
+   用 parent 原始 base 的 trusted synchronizer 重建完整 Git tree，tree hash 完全相同才通過。任一條件不符就
+   不啟動寫入 job。
+
+   寫入 job 只執行 base checkout 內的 `scripts/sync-paired-files.sh`，同步結果只能是本次已驗證 root workflow
+   對應的 `template/.github/workflows/` 檔；其他 staged 或 untracked path 一律失敗。push 使用已驗證的 bot ref 與
+   exact-SHA `--force-with-lease`，若遠端 head 在驗證後移動就失敗，不會改寫新 head。有 drift 才 commit 並 push
+   回同一個分支；push 觸發的新 `synchronize` 事件會讓 `verify`（#834）在可信 runner 對新 head 重新驗證。workflow 的
+   concurrency 以 PR 編號串行且不取消進行中的 run，所以同步 producer 能完成，而下一個 head 事件一定在前一個
+   run 後處理。每個 head 事件都先以經驗證的 live snapshot 撤銷既有 auto-merge，撤銷 job 不 checkout 程式碼且
+   只有 `pull-requests: write`；撤銷成功後，才由通過 current-head authentication 的 exact SHA 重新啟用。因此
+   後續 human commit 不會沿用舊 head 的 auto-merge 狀態，重新啟用仍以 `--match-head-commit` fail closed。
+
    同步 commit 的訊息固定用 `fix(deps): ...`，不是 `chore:`——完成條件第五項要求「會改變 template/ 內容的
    依賴更新，合併後要進入下一次發版」，`release-please`（`release-type: simple`）只認 `fix`／`feat` 升版號；
    這裡只在 `sync-paired-files.sh` 真的找到 drift（代表這次 bump 確實改到 `copier update` 會下發的內容）時
@@ -613,9 +627,9 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
 
 **回歸測試**：`tests/test_check_action_pins.py`（pin 一致／不一致回報／不同 action 互不干擾／檔案掃描範圍／
 CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.py` 逐位元組同步）。`sync-template`
-job 目前沒有對應的本機可重跑回歸測試——它是一段會實際 push commit 的 workflow step，沒有安全、可重複執行的
-方式在本機或 CI 對真實 GitHub repository 重放；正確性由 `scripts/sync-paired-files.sh` 自身既有的測試覆蓋
-（它是唯一被呼叫的邏輯），實際行為待合併後第一張真的改到 paired workflow 的 Dependabot PR 驗證並回填證據。
+的 trust boundary 由 `tests/test_authenticate_dependabot_head.py` 驗證 head 身分、簽章與 changed-path allowlist，並由
+`tests/test_dependabot_auto_merge.py` 驗證 base-code checkout、authenticated head checkout 與 exact-ref push。
+實際 GitHub push 行為仍待合併後第一張真的改到 paired workflow 的 Dependabot PR 驗證並回填證據。
 
 ## Current automation
 

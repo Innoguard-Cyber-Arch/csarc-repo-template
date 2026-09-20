@@ -52,29 +52,45 @@ def _steps_by_name(workflow: dict) -> dict[str, dict]:
     return {step["name"]: step for step in steps}
 
 
+def _auth_steps_by_name(workflow: dict) -> dict[str, dict]:
+    steps = workflow["jobs"]["authenticate"]["steps"]
+    return {step["name"]: step for step in steps}
+
+
 def _sync_steps_by_name(workflow: dict) -> dict[str, dict]:
     steps = workflow["jobs"]["sync-template"]["steps"]
     return {step["name"]: step for step in steps}
 
 
 def test_workflow_only_triggers_on_dependabot_pull_requests() -> None:
-    """Never run for a human-authored pull request, even on the right event."""
+    """Use the trusted base workflow and skip non-Dependabot pull requests."""
     _, workflow = _load_workflow()
     triggers = workflow.get("on", workflow.get(True))
 
     assert triggers == {
-        "pull_request": {"types": ["opened", "synchronize", "reopened"]}
+        "pull_request_target": {
+            "branches": ["main"],
+            "types": ["opened", "synchronize", "reopened"],
+        }
     }
-    job = workflow["jobs"]["auto-merge"]
-    # The actor gate lives on the job itself, not on individual steps, so a
-    # pull_request run from any other actor skips the entire job -- fetching
-    # metadata, enabling auto-merge, and labeling all stay unreachable. It
-    # reads pull_request.user.login rather than the spoofable github.actor
-    # context (zizmor bot-conditions audit).
+    job = workflow["jobs"]["authenticate"]
     assert (
-        job["if"]
-        == "${{ github.event.pull_request.user.login == 'dependabot[bot]' }}"
+        " ".join(job["if"].split())
+        == "${{ github.event.pull_request.user.login == 'dependabot[bot]' && "
+        "github.event.pull_request.base.ref == 'main' }}"
     )
+
+
+def test_concurrency_serializes_head_state_without_cancelling_sync() -> None:
+    """Each PR resets inherited auto-merge state in event order."""
+    _, workflow = _load_workflow()
+
+    assert workflow["concurrency"] == {
+        "group": (
+            "${{ github.workflow }}-${{ github.event.pull_request.number }}"
+        ),
+        "cancel-in-progress": False,
+    }
 
 
 def test_workflow_permissions_are_minimal() -> None:
@@ -82,11 +98,84 @@ def test_workflow_permissions_are_minimal() -> None:
     _, workflow = _load_workflow()
 
     assert workflow["permissions"] == {}
+    assert workflow["jobs"]["reset-auto-merge"]["permissions"] == {
+        "pull-requests": "write"
+    }
+    assert workflow["jobs"]["authenticate"]["permissions"] == {
+        "contents": "read",
+        "pull-requests": "read",
+    }
     assert workflow["jobs"]["auto-merge"]["permissions"] == {
         "contents": "write",
         "pull-requests": "write",
     }
     assert workflow["jobs"]["auto-merge"]["timeout-minutes"] == 10
+
+
+def test_each_head_change_disables_stale_auto_merge_before_reenabling() -> None:
+    """A later unauthenticated head must not inherit an earlier auto-merge."""
+    _, workflow = _load_workflow()
+    reset = workflow["jobs"]["reset-auto-merge"]
+    authenticate = workflow["jobs"]["authenticate"]
+
+    assert reset["needs"] == "authenticate"
+    assert "always()" in reset["if"]
+    assert "needs.authenticate.result" not in reset["if"]
+    assert "needs.authenticate.outputs.snapshot_valid == 'true'" in reset["if"]
+    assert authenticate["outputs"]["snapshot_valid"] == (
+        "${{ steps.authenticate.outputs.snapshot_valid }}"
+    )
+    assert len(reset["steps"]) == 1
+    step = reset["steps"][0]
+    assert "uses" not in step
+    for predicate in (
+        '.state == "open"',
+        '.base.ref == "main"',
+        ".base.repo.full_name == $repo",
+        ".base.sha == $base_sha",
+        ".head.ref == $head_ref",
+        ".head.repo.full_name == $repo",
+        ".head.sha == $head_sha",
+    ):
+        assert predicate in step["run"]
+    assert ".auto_merge != null" in step["run"]
+    assert (
+        "--disable-auto" in step["run"]
+        and '--repo "$BASE_REPO"' in step["run"]
+        and '"$PR_NUMBER"' in step["run"]
+    )
+
+
+def test_writer_jobs_revalidate_the_exact_live_pull_request() -> None:
+    """Close, retarget, repo, ref, base, or head races all fail closed."""
+    _, workflow = _load_workflow()
+    auto_steps = _steps_by_name(workflow)
+    sync_steps = _sync_steps_by_name(workflow)
+
+    for step in (
+        auto_steps["Enable auto-merge for minor and patch updates"],
+        auto_steps["Flag major updates for manual review"],
+        sync_steps[
+            "Sync paired template files and push if this bump drifted them"
+        ],
+    ):
+        assert step["env"]["BASE_SHA"] == (
+            "${{ needs.authenticate.outputs.base_sha }}"
+        )
+        assert step["env"]["HEAD_REF"] == (
+            "${{ needs.authenticate.outputs.head_ref }}"
+        )
+        run = step["run"]
+        for predicate in (
+            '.state == "open"',
+            '.base.ref == "main"',
+            ".base.repo.full_name == $repo",
+            ".base.sha == $base_sha",
+            ".head.ref == $head_ref",
+            ".head.repo.full_name == $repo",
+            ".head.sha == $head_sha",
+        ):
+            assert predicate in run
 
 
 def test_fetch_metadata_action_is_pinned_to_a_full_commit_sha() -> None:
@@ -112,7 +201,10 @@ def test_minor_and_patch_updates_enable_auto_merge() -> None:
     assert "version-update:semver-patch" in condition
     assert "version-update:semver-minor" in condition
     assert "version-update:semver-major" not in condition
-    assert step["run"].strip() == 'gh pr merge --auto --squash "$PR_URL"'
+    assert (
+        'gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" "$PR_URL"'
+        in step["run"]
+    )
 
 
 def test_major_updates_are_flagged_instead_of_merged() -> None:
@@ -154,36 +246,150 @@ def test_dependabot_cooldown_already_covers_the_supply_chain_delay() -> None:
 
 
 def test_sync_template_job_only_triggers_on_dependabot_pull_requests() -> None:
-    """Issue #755: never push a sync commit for a human-authored PR."""
+    """Issue #830: writes require an authenticated Actions update head."""
     _, workflow = _load_workflow()
     job = workflow["jobs"]["sync-template"]
 
     assert (
-        job["if"]
-        == "${{ github.event.pull_request.user.login == 'dependabot[bot]' }}"
+        job["if"] == "${{ needs.authenticate.outputs.sync_eligible == 'true' }}"
     )
-    assert job["permissions"] == {"contents": "write"}
+    assert job["permissions"] == {
+        "contents": "write",
+        "pull-requests": "read",
+    }
 
 
-def test_sync_template_job_checks_out_the_pull_request_head() -> None:
-    """The sync must read the bump that actually landed on this PR."""
+def test_authentication_uses_only_the_trusted_base_revision() -> None:
+    """Issue #830: authentication code comes from the immutable base SHA."""
+    _, workflow = _load_workflow()
+    steps = _auth_steps_by_name(workflow)
+    checkout = steps["Check out the trusted base revision"]
+    authenticate = steps["Classify the current Dependabot head"]
+
+    assert checkout["with"] == {
+        "ref": "${{ github.event.pull_request.base.sha }}",
+        "persist-credentials": False,
+    }
+    assert "scripts/authenticate_dependabot_head.py" in authenticate["run"]
+    assert authenticate["env"]["EXPECTED_BASE_SHA"] == (
+        "${{ github.event.pull_request.base.sha }}"
+    )
+    assert '--expected-base-sha "$EXPECTED_BASE_SHA"' in authenticate["run"]
+    assert "pull-request.json" in authenticate["run"]
+    assert "head-commit.json" in authenticate["run"]
+    assert "comparison.json" in authenticate["run"]
+
+
+def test_authentication_reconstructs_a_trusted_sync_child() -> None:
+    """A reopened generated head is accepted only after exact tree replay."""
+    _, workflow = _load_workflow()
+    job = workflow["jobs"]["authenticate"]
+    steps = _auth_steps_by_name(workflow)
+    reconstruct = steps["Reconstruct the candidate sync child"]["run"]
+
+    assert job["outputs"]["sync_complete"] == (
+        "${{ steps.authenticate.outputs.sync_complete }}"
+    )
+    assert (
+        steps["Check out the trusted synchronizer for a sync child"]["with"][
+            "ref"
+        ]
+        == "${{ steps.classify.outputs.source_base_sha }}"
+    )
+    assert (
+        steps["Check out the authenticated Dependabot parent"]["with"]["ref"]
+        == "${{ steps.classify.outputs.parent_sha }}"
+    )
+    assert steps["Check out the candidate sync child"]["with"]["ref"] == (
+        "${{ steps.classify.outputs.head_sha }}"
+    )
+    assert "auth-sync-base/scripts/sync-paired-files.sh" in reconstruct
+    assert "git write-tree" in reconstruct
+    assert '[[ "$expected_tree" == "$child_tree" ]]' in reconstruct
+    publish = steps["Publish authenticated head"]["run"]
+    assert "sync_complete=true" in publish
+
+
+def test_sync_template_checks_out_only_the_authenticated_head() -> None:
+    """The writable checkout is pinned to the authenticated immutable SHA."""
     _, workflow = _load_workflow()
     steps = _sync_steps_by_name(workflow)
-    step = steps["Check out the pull request head"]
+    step = steps["Check out the authenticated pull request head"]
 
-    assert step["with"]["ref"] == "${{ github.event.pull_request.head.sha }}"
+    assert step["with"]["ref"] == "${{ needs.authenticate.outputs.head_sha }}"
+    assert step["with"]["path"] == "pull-request"
+    assert step["with"]["fetch-depth"] == 0
 
 
-def test_sync_template_job_runs_the_shared_sync_script() -> None:
-    """Reuse scripts/sync-paired-files.sh's own tested diffing logic."""
+def test_sync_template_job_runs_only_the_base_synchronizer() -> None:
+    """Never execute the synchronizer selected by the pull request head."""
     _, workflow = _load_workflow()
     steps = _sync_steps_by_name(workflow)
     run = steps[
         "Sync paired template files and push if this bump drifted them"
     ]["run"]
 
-    assert "./scripts/sync-paired-files.sh" in run
-    assert "git push origin" in run
+    assert (
+        'cp "$GITHUB_WORKSPACE/trusted-base/scripts/sync-paired-files.sh"'
+        in run
+    )
+    assert r"^template/\.github/workflows/[^/]+\.ya?ml$" in run
+    assert 'git cat-file -e "$BASE_SHA^{commit}"' in run
+    assert "if [[ $diff_status -ne 1 ]]" in run
+    assert 'git add -- "${synced_paths[@]}"' in run
+
+
+def test_sync_template_push_is_bound_to_the_authenticated_bot_ref() -> None:
+    """The write fails if the authenticated head moved before the push."""
+    _, workflow = _load_workflow()
+    steps = _sync_steps_by_name(workflow)
+    run = steps[
+        "Sync paired template files and push if this bump drifted them"
+    ]["run"]
+
+    assert '--force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA"' in run
+    assert 'origin "HEAD:refs/heads/$HEAD_REF"' in run
+
+
+def test_auto_merge_waits_for_the_final_authenticated_sync_head() -> None:
+    """A paired-file sync cannot race auto-merge on the original head."""
+    _, workflow = _load_workflow()
+    auto_merge = workflow["jobs"]["auto-merge"]
+    sync_template = workflow["jobs"]["sync-template"]
+    sync = _sync_steps_by_name(workflow)[
+        "Sync paired template files and push if this bump drifted them"
+    ]
+
+    assert auto_merge["needs"] == [
+        "authenticate",
+        "reset-auto-merge",
+        "sync-template",
+    ]
+    assert sync_template["needs"] == ["authenticate", "reset-auto-merge"]
+    assert "always()" in auto_merge["if"]
+    assert "needs.authenticate.result == 'success'" in auto_merge["if"]
+    assert "needs.reset-auto-merge.result == 'success'" in auto_merge["if"]
+    assert "needs.sync-template.result == 'success'" in auto_merge["if"]
+    assert "needs.sync-template.result == 'skipped'" in auto_merge["if"]
+    assert "dependabot/github_actions/main/" in auto_merge["if"]
+    assert (
+        "needs.authenticate.outputs.sync_complete == 'true'"
+        in (auto_merge["if"])
+    )
+    assert sync_template["outputs"]["head_sha"] == (
+        "${{ steps.sync.outputs.head_sha }}"
+    )
+    assert sync["id"] == "sync"
+    assert 'echo "head_sha=$HEAD_SHA"' in sync["run"]
+    assert 'echo "head_sha=$synced_head_sha"' in sync["run"]
+    enable = _steps_by_name(workflow)[
+        "Enable auto-merge for minor and patch updates"
+    ]
+    assert enable["env"]["HEAD_SHA"] == (
+        "${{ needs.sync-template.outputs.head_sha || "
+        "needs.authenticate.outputs.head_sha }}"
+    )
+    assert '--match-head-commit "$HEAD_SHA"' in enable["run"]
 
 
 def test_sync_template_job_is_a_no_op_without_drift() -> None:
