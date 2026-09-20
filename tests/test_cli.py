@@ -191,6 +191,55 @@ enable_codeql:
     return source, commit(source, "test: template version one")
 
 
+def add_marker_task(
+    source: Path,
+    marker: Path,
+    *,
+    fail: bool = False,
+    move_config: bool = False,
+    rewrite_managed: bool = False,
+    symlink_config_to: Path | None = None,
+    tamper_config: bool = False,
+    task_output: bool = False,
+) -> str:
+    """Add one observable Copier task and commit the fixture revision."""
+    config_path = source / "copier.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    script = (
+        "from pathlib import Path; "
+        f"Path({str(marker)!r}).write_text('executed\\n')"
+    )
+    if tamper_config:
+        script += (
+            "; config = Path('.copier-answers.yml'); "
+            "config.write_text('\\n'.join("
+            "line for line in config.read_text().splitlines() "
+            "if not line.startswith('project_slug:')) + '\\n')"
+        )
+    if move_config:
+        script += (
+            "; config = Path('.copier-answers.yml'); "
+            "destination = Path('.csarc/config.yml'); "
+            "destination.parent.mkdir(); config.replace(destination)"
+        )
+    if rewrite_managed:
+        script += "; Path('managed.txt').write_text('task rendered\\n')"
+    if symlink_config_to is not None:
+        script += (
+            "; config = Path('.copier-answers.yml'); config.unlink(); "
+            f"config.symlink_to(Path({str(symlink_config_to)!r}))"
+        )
+    if task_output:
+        script += "; Path('task-output.txt').write_text('generated\\n')"
+    if fail:
+        script += "; raise SystemExit(17)"
+    config["_tasks"] = [{"command": shlex.join(["python3", "-c", script])}]
+    config_path.write_text(
+        yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+    )
+    return commit(source, "test: add observable Copier task")
+
+
 def initialize_project(tmp_path: Path) -> tuple[Path, Path, str]:
     """Create a generated project pinned to the first template commit."""
     source, first_sha = make_template(tmp_path)
@@ -396,6 +445,277 @@ def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     )
     assert provenance["commit_sha"] == first_sha
     assert provenance["verification"] == "development-unreleased"
+
+
+@pytest.mark.large
+def test_init_copier_tasks_wait_for_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run template tasks only after init approval, never while previewing."""
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "init-task-marker"
+    revision = add_marker_task(source, marker)
+    project = tmp_path / "new-project"
+    arguments = [
+        "init",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--data",
+        "language=ci",
+    ]
+
+    assert main([*arguments, "--dry-run"]) == 0
+    assert not marker.exists()
+    monkeypatch.setattr("builtins.input", lambda _: "no")
+    assert main(arguments) == 0
+    assert not marker.exists()
+    assert main([*arguments, "--yes", "--non-interactive"]) == 0
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+
+
+def test_init_revalidates_revision_after_confirmation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reject a moving source revision before approved tasks can execute."""
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "init-task-marker"
+    approved_sha = add_marker_task(source, marker)
+    project = tmp_path / "new-project"
+
+    def move_revision(_: str) -> str:
+        (source / "template" / "managed.txt").write_text(
+            "template version two\n", encoding="utf-8"
+        )
+        commit(source, "test: move approved revision")
+        return "yes"
+
+    monkeypatch.setattr("builtins.input", move_revision)
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                "main",
+                "--allow-unreleased",
+                "--data",
+                "language=ci",
+            ]
+        )
+        == 2
+    )
+    assert approved_sha != git(source, "rev-parse", "main")
+    assert "Expected commit SHA does not match" in capsys.readouterr().err
+    assert not marker.exists()
+    assert not project.exists()
+
+
+@pytest.mark.large
+def test_adoption_copier_tasks_wait_for_each_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep adopt and finalize tasks behind their respective approvals."""
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "adoption-task-marker"
+    revision = add_marker_task(
+        source, marker, rewrite_managed=True, task_output=True
+    )
+    project = tmp_path / "pending-product"
+    project.mkdir()
+    write_executable(
+        project / "scripts" / "verify",
+        (source / "template" / "scripts" / "verify").read_text(
+            encoding="utf-8"
+        ),
+    )
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "pending-product"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: pending product")
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--data",
+        "language=ci",
+    ]
+
+    assert main(arguments) == 0
+    plan = finalize_plan_path(project)
+    assert not marker.exists()
+    monkeypatch.setattr("builtins.input", lambda _: "no")
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                *replay_authorization(plan),
+            ]
+        )
+        == 0
+    )
+    assert not marker.exists()
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                *replay_authorization(plan),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 1
+    )
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+    assert (project / "task-output.txt").read_text(encoding="utf-8") == (
+        "generated\n"
+    )
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "task rendered\n"
+    )
+    marker.unlink()
+
+    assert replay_finalize(project, "--dry-run") == 0
+    finalize_plan = finalize_plan_path(project)
+    assert not marker.exists()
+    assert replay_finalize(project, "--apply-plan", str(finalize_plan)) == 0
+    assert not marker.exists()
+    assert (
+        replay_finalize(
+            project,
+            "--apply-plan",
+            str(finalize_plan),
+            "--yes",
+            "--non-interactive",
+        )
+        == 0
+    )
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+
+
+def test_failed_copier_task_does_not_create_init_target(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keep task failure inside the approved isolated render."""
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "failed-task-marker"
+    revision = add_marker_task(source, marker, fail=True)
+    project = tmp_path / "new-project"
+
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--data",
+                "language=ci",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+    assert "Copier task-bearing render failed" in capsys.readouterr().err
+    assert not project.exists()
+
+
+@pytest.mark.parametrize(
+    ("tamper_config", "move_config"),
+    [(True, False), (False, True)],
+    ids=("answer-removed", "path-moved"),
+)
+def test_copier_task_cannot_rewrite_bound_configuration(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    tamper_config: bool,
+    move_config: bool,
+) -> None:
+    """Reject task changes to persisted answers or Copier metadata."""
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "tampered-config-marker"
+    revision = add_marker_task(
+        source,
+        marker,
+        tamper_config=tamper_config,
+        move_config=move_config,
+    )
+    project = tmp_path / "new-project"
+
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--data",
+                "language=ci",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+    assert "Copier configuration changed" in capsys.readouterr().err
+    assert not project.exists()
+
+
+def test_copier_task_cannot_route_config_writes_outside_candidate(
+    tmp_path: Path,
+) -> None:
+    """Reject a task-created config symlink before CLI normalization."""
+    external = tmp_path / "external.yml"
+    external.write_text("_commit: unchanged\n", encoding="utf-8")
+    original = external.read_bytes()
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "symlink-task-marker"
+    revision = add_marker_task(source, marker, symlink_config_to=external)
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    answers = cli.base_data(stage, "init", {"language": "ci"})
+
+    with pytest.raises(CliError, match="Copier task-bearing render failed"):
+        cli.copier_copy(
+            str(source),
+            cli.Revision(revision, revision, str(source)),
+            stage,
+            answers,
+            skip_tasks=False,
+        )
+
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+    assert external.read_bytes() == original
 
 
 def test_capability_preflight_uses_readable_github_origin(
@@ -1443,7 +1763,19 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
         encoding="utf-8",
     )
 
-    assert replay_finalize(project, "--dry-run") == 2
+    assert replay_finalize(project, "--dry-run") == 0
+    capsys.readouterr()
+    plan = finalize_plan_path(project)
+    assert (
+        replay_finalize(
+            project,
+            "--apply-plan",
+            str(plan),
+            "--yes",
+            "--non-interactive",
+        )
+        == 2
+    )
     assert "differs from the verified template: managed.txt" in (
         capsys.readouterr().err
     )
@@ -1486,6 +1818,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         cli.Revision(revision_sha, revision_sha, str(ROOT)),
         reference,
         data,
+        skip_tasks=False,
     )
     project.mkdir()
     if language == "python":
@@ -6626,6 +6959,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
     assert marked_large == {
         "test_adopt_applies_exact_plan_over_preserved_dirty_file",
         "test_adopt_defaults_to_dry_run_and_preserves_product_files",
+        "test_adoption_copier_tasks_wait_for_each_approval",
         "test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints",
         "test_adopt_finalize_failure_keeps_actionable_pending_state",
         "test_adopt_finalize_rechecks_repository_context_after_confirmation",
@@ -6641,6 +6975,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_adoption_preserves_executable_and_checked_patch_symlink",
         "test_adoption_records_and_replays_explicit_project_hook",
         "test_init_dry_run_and_apply_pin_full_sha",
+        "test_init_copier_tasks_wait_for_approval",
         "test_invalid_project_hook_blocks_pending_adoption_without_writes",
         "test_legacy_update_conflict_leaves_target_unchanged",
         "test_project_hook_rejects_unsafe_or_unusable_paths",

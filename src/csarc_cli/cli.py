@@ -684,7 +684,7 @@ def copier_copy(
     stage: Path,
     data: Mapping[str, object],
     *,
-    skip_tasks: bool = False,
+    skip_tasks: bool,
 ) -> None:
     """Render one immutable template revision into a staging directory."""
     command = [
@@ -710,19 +710,26 @@ def copier_copy(
         result = run(command, capture=True, check=False)
     finally:
         data_file.unlink(missing_ok=True)
+    phase = "preview render" if skip_tasks else "task-bearing render"
     if result.returncode != 0:
         raise CliError(
-            result.stderr.strip() or result.stdout.strip() or "Copier failed."
+            f"Copier {phase} failed: "
+            + (
+                result.stderr.strip()
+                or result.stdout.strip()
+                or "unknown Copier error"
+            )
         )
-    pin_answer_commit(stage, revision.sha)
-    persist_release_answers(stage, data)
+    try:
+        pin_answer_commit(stage, revision.sha)
+        persist_release_answers(stage, data)
+    except CliError as error:
+        raise CliError(f"Copier {phase} failed: {error}") from error
 
 
 def pin_answer_commit(target: Path, commit: str) -> None:
     """Replace Copier's abbreviated revision with the reviewed full SHA."""
-    answers = config_path(target)
-    if not answers.is_file():
-        raise CliError(f"Template did not create {CONFIG_FILE}.")
+    answers = safe_copier_config_path(target)
     lines = answers.read_text(encoding="utf-8").splitlines()
     matches = sum(line.startswith("_commit:") for line in lines)
     if matches != 1:
@@ -731,7 +738,12 @@ def pin_answer_commit(target: Path, commit: str) -> None:
         f"_commit: {commit}" if line.startswith("_commit:") else line
         for line in lines
     ]
-    answers.write_text("\n".join(pinned) + "\n", encoding="utf-8")
+    atomic_replace_text(
+        target,
+        answers.relative_to(target).as_posix(),
+        "\n".join(pinned) + "\n",
+        mode=stat.S_IMODE(answers.lstat().st_mode),
+    )
 
 
 def config_path(target: Path) -> Path:
@@ -740,6 +752,26 @@ def config_path(target: Path) -> Path:
     if current.is_file():
         return current
     return target / LEGACY_ANSWERS_FILE
+
+
+def safe_copier_config_path(target: Path) -> Path:
+    """Reject a missing or link-routed Copier configuration."""
+    path = config_path(target)
+    relative = path.relative_to(target).as_posix()
+    path = checked_destination(target, relative)
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError as error:
+        raise CliError(f"Template did not create {CONFIG_FILE}.") from error
+    if not stat.S_ISREG(mode):
+        raise CliError("Copier configuration must be a regular file.")
+    return path
+
+
+def copier_config_binding(target: Path) -> tuple[str, str]:
+    """Bind both the persisted Copier configuration path and its bytes."""
+    path = safe_copier_config_path(target)
+    return path.relative_to(target).as_posix(), file_fingerprint(path)
 
 
 def read_copier_answers(path: Path) -> dict[str, object]:
@@ -761,7 +793,7 @@ def persist_release_answers(
     target: Path, answers: Mapping[str, object]
 ) -> None:
     """Persist the CLI-resolved release contract in Copier's answer file."""
-    path = config_path(target)
+    path = safe_copier_config_path(target)
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
@@ -777,9 +809,11 @@ def persist_release_answers(
         release_settings_owner=contract["settings_owner"],
         release_workflow=contract["selected_workflow"] or "",
     )
-    path.write_text(
+    atomic_replace_text(
+        target,
+        path.relative_to(target).as_posix(),
         yaml.safe_dump(payload, allow_unicode=True, sort_keys=False),
-        encoding="utf-8",
+        mode=stat.S_IMODE(path.lstat().st_mode),
     )
 
 
@@ -2272,6 +2306,8 @@ def validate_pending_file_sets(
     pending: Mapping[str, object],
     stage: Path,
     planned: Plan,
+    *,
+    task_outputs_available: bool,
 ) -> None:
     """Derive pending paths from the template and reject unrelated changes."""
     expected_managed = set(pending_managed_paths(stage, planned)) - {
@@ -2295,22 +2331,25 @@ def validate_pending_file_sets(
         if isinstance(raw_manual, list)
         else set()
     )
-    if managed != expected_managed or manual != expected_manual:
+    if task_outputs_available and (
+        managed != expected_managed or manual != expected_manual
+    ):
         raise CliError(
             "Pending file classifications do not match the verified template; "
             "restart adoption from a clean commit."
         )
-    rendered = project_files(stage)
-    for name in sorted(expected_managed):
-        current = checked_destination(target, name)
-        expected = rendered.get(name)
-        if expected is None or file_fingerprint(current) != file_fingerprint(
-            expected
-        ):
-            raise CliError(
-                f"Managed adoption file differs from the verified template: "
-                f"{name}. Restart adoption from a clean commit."
-            )
+    if task_outputs_available:
+        rendered = project_files(stage)
+        for name in sorted(expected_managed):
+            current = checked_destination(target, name)
+            expected = rendered.get(name)
+            if expected is None or file_fingerprint(
+                current
+            ) != file_fingerprint(expected):
+                raise CliError(
+                    "Managed adoption file differs from the verified "
+                    f"template: {name}. Restart adoption from a clean commit."
+                )
     allowed = (
         managed
         | manual
@@ -3873,7 +3912,14 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         temporary_root = Path(temporary)
         stage = temporary_root / "rendered"
         stage.mkdir()
-        copier_copy(revision.source, revision, stage, answers)
+        copier_copy(
+            revision.source,
+            revision,
+            stage,
+            answers,
+            skip_tasks=True,
+        )
+        preview_config_binding = copier_config_binding(stage)
         capabilities = capability_preflight(
             stage / "scripts" / "release_policy.py",
             target,
@@ -3886,7 +3932,13 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         planned = compare_stage(
             stage, baseline, adopt=True, merged_paths=merged
         )
-        validate_pending_file_sets(target, pending, stage, planned)
+        validate_pending_file_sets(
+            target,
+            pending,
+            stage,
+            planned,
+            task_outputs_available=False,
+        )
 
         if saved is None:
             generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
@@ -4005,6 +4057,31 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             saved_visibility=saved_visibility,
         )
         validate_target_snapshot(target, adoption)
+        shutil.rmtree(stage)
+        stage.mkdir()
+        copier_copy(
+            revision.source,
+            revision,
+            stage,
+            answers,
+            skip_tasks=False,
+        )
+        if copier_config_binding(stage) != preview_config_binding:
+            raise CliError(
+                "Copier configuration changed during the approved "
+                "task-bearing render."
+            )
+        task_merged = apply_adoption_policies(stage, baseline)
+        task_planned = compare_stage(
+            stage, baseline, adopt=True, merged_paths=task_merged
+        )
+        validate_pending_file_sets(
+            target,
+            pending,
+            stage,
+            task_planned,
+            task_outputs_available=True,
+        )
         write_candidate_patch(
             candidate,
             target,
@@ -4228,9 +4305,57 @@ def command_apply_adoption_plan(  # noqa: C901
     )
     with tempfile.TemporaryDirectory(prefix="csarc-apply-") as temporary:
         temporary_root = Path(temporary)
-        stage = temporary_root / "rendered"
-        stage.mkdir()
-        copier_copy(revision.source, revision, stage, answers)
+        preview_stage = temporary_root / "preview"
+        preview_stage.mkdir()
+        copier_copy(
+            revision.source,
+            revision,
+            preview_stage,
+            answers,
+            skip_tasks=True,
+        )
+        preview_config_binding = copier_config_binding(preview_stage)
+        preview_candidate = temporary_root / "preview-candidate"
+        rebuilt_preview = build_adoption_plan(
+            preview_stage,
+            preview_candidate,
+            target,
+            revision,
+            repository,
+            answers,
+            raw_capabilities,
+            generated_at,
+            verification_authorized=False,
+        )
+        saved_binding = pre_verification_binding(saved)
+        preview_binding = pre_verification_binding(
+            adoption_plan_payload(rebuilt_preview)
+        )
+        if preview_binding != saved_binding:
+            differences = json_differences(saved_binding, preview_binding)
+            detail = "; ".join(differences[:10])
+            if len(differences) > 10:
+                detail += f"; ... and {len(differences) - 10} more"
+            raise CliError(
+                "Repository or rendered output drifted after dry-run; create "
+                f"a new adoption plan. Differing fields: {detail}"
+            )
+        shutil.rmtree(preview_stage)
+        preview_stage.mkdir()
+        stage = preview_stage
+        copier_copy(
+            revision.source,
+            revision,
+            stage,
+            answers,
+            skip_tasks=False,
+        )
+        if copier_config_binding(stage) != preview_config_binding:
+            raise CliError(
+                "Copier configuration changed during the approved "
+                "task-bearing render."
+            )
+        validate_target_snapshot(target, raw_adoption)
         candidate = temporary_root / "candidate"
         fresh = build_adoption_plan(
             stage,
@@ -4243,7 +4368,6 @@ def command_apply_adoption_plan(  # noqa: C901
             generated_at,
             verification_authorized=True,
         )
-        fresh_payload = adoption_plan_payload(fresh)
         fresh_adoption = fresh.adoption
         if fresh_adoption is None or fresh_adoption.get("verification") not in {
             "passed",
@@ -4256,17 +4380,6 @@ def command_apply_adoption_plan(  # noqa: C901
             )
             raise CliError(
                 f"Project verification failed after plan approval: {detail}"
-            )
-        saved_binding = pre_verification_binding(saved)
-        fresh_binding = pre_verification_binding(fresh_payload)
-        if fresh_binding != saved_binding:
-            differences = json_differences(saved_binding, fresh_binding)
-            detail = "; ".join(differences[:10])
-            if len(differences) > 10:
-                detail += f"; ... and {len(differences) - 10} more"
-            raise CliError(
-                "Repository or rendered output drifted after dry-run; create "
-                f"a new adoption plan. Differing fields: {detail}"
             )
         if fresh_adoption.get("applicable") is not True:
             raise CliError("Rebuilt adoption candidate is not applicable.")
@@ -4352,9 +4465,20 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     if repository.repository is not None:
         data["repository_url"] = f"https://github.com/{repository.repository}"
     with tempfile.TemporaryDirectory(prefix="csarc-plan-") as temporary:
-        stage = Path(temporary) / "project"
+        temporary_root = Path(temporary)
+        stage = temporary_root / "preview"
         stage.mkdir()
-        copier_copy(revision.source, revision, stage, data)
+        copier_copy(
+            revision.source,
+            revision,
+            stage,
+            data,
+            skip_tasks=True,
+        )
+        preview_files = {
+            name: file_fingerprint(path)
+            for name, path in project_files(stage).items()
+        }
         answers: dict[str, object] = dict(data)
         answers.update(read_copier_answers(config_path(stage)))
         capabilities = capability_preflight(
@@ -4401,6 +4525,66 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         if args.dry_run or not confirm(args):
             return 0
         if mode == "init":
+            approved_revision = resolve_revision(
+                source,
+                args.to,
+                expected_sha=revision.sha,
+                allow_unreleased=args.allow_unreleased,
+            )
+            if approved_revision != revision:
+                raise CliError(
+                    "Template revision changed after approval; review a new "
+                    "plan."
+                )
+            validate_copy_target(target, mode, require_clean=True)
+            shutil.rmtree(stage)
+            stage.mkdir()
+            copier_copy(
+                approved_revision.source,
+                approved_revision,
+                stage,
+                data,
+                skip_tasks=True,
+            )
+            rebound_answers: dict[str, object] = dict(data)
+            rebound_answers.update(read_copier_answers(config_path(stage)))
+            rebound_plan = ResolvedPlan(
+                mode=mode,
+                target=target,
+                revision=approved_revision,
+                repository=repository,
+                answers=rebound_answers,
+                capabilities=capabilities,
+                files=compare_stage(stage, target, adopt=False),
+            )
+            rebound_files = {
+                name: file_fingerprint(path)
+                for name, path in project_files(stage).items()
+            }
+            if (
+                rebound_plan.as_dict() != plan.as_dict()
+                or rebound_files != preview_files
+            ):
+                raise CliError(
+                    "Repository or preview render drifted after approval; "
+                    "review a new plan."
+                )
+            preview_config_binding = copier_config_binding(stage)
+            shutil.rmtree(stage)
+            stage.mkdir()
+            copier_copy(
+                approved_revision.source,
+                approved_revision,
+                stage,
+                data,
+                skip_tasks=False,
+            )
+            if copier_config_binding(stage) != preview_config_binding:
+                raise CliError(
+                    "Copier configuration changed during the approved "
+                    "task-bearing render."
+                )
+            validate_copy_target(target, mode, require_clean=True)
             if target.exists():
                 target.rmdir()
             shutil.copytree(stage, target, symlinks=True)
