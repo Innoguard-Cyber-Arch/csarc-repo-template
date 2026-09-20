@@ -107,10 +107,6 @@ jobs:
           CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
           CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
         run: |
-          # Issue #846: bootstrap compatibility for the legacy verifier,
-          # which still amends the ephemeral checkout with a local trailer.
-          git config user.email "actions@github.com"
-          git config user.name "github-actions[bot]"
           if [[ "$CSARC_CI_TIER" == "full" ]]; then
             ./scripts/verify-template.sh
           else

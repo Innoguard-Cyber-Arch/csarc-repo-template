@@ -481,134 +481,49 @@ path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成�
 可信 base 並維持唯讀權限；CI 沒有 secret 或寫入權限，雖會讀取 proposed head 來驗證聲明，但驗證證據本身
 的不可偽造性仍由 #834 負責。
 
-### `verify` 必要檢查改為本機驗證聲明（#661）
+### `verify` 的可信 hosted execution evidence（#834）
 
-維護者決定：`verify` required check 的測試驗證本身要離開 GitHub Actions，改成固定在開發者本機執行
-——不是 Actions 壞掉時的備援，是刻意選擇的常態架構。`.github/workflows/ci.yml`（與
-`template/.github/workflows/ci.yml.jinja`）的 `verify` job 不再實際呼叫 `scripts/verify-fast`／
-`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`），只驗證這個 commit 是否已經帶有本機驗證
-通過的證據。
+#834 supersede #661 將 unsigned commit trailer 當作 required evidence 的設計；#661 希望保留低成本本機回饋
+的目標不變。`scripts/verify-fast`、`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`）仍是本機與
+hosted 共用的驗證入口，但本機執行只提供開發回饋，不改寫 commit，也不能單獨滿足 merge 或 release gate。
 
-**與 #171（已關閉）的區別**：`#171` 建立的「本機驗證聲明」機制範圍刻意收得很窄，只在 GitHub Actions 免費
-額度確認耗盡時啟用，且每次都要 human maintainer 親自確認耗盡原因、逐 commit 重新授權——本質是授權例外
-（Actions 壞掉時要不要放行這次合併的人為判斷）。本節機制本質不同：要驗證的是一個事實陳述（「這個 commit
-的內容，本機真的跑過測試且通過」），不是要不要放行的判斷，因此不需要人在每個 PR 上點頭確認，只要能自動、
-可靠地驗證這個事實陳述為真即可。兩者信任模型不同，`#171` 的 quota-only、human 每次確認流程不受本節影響，
-也不合併成同一套機制。
+`.github/workflows/ci.yml` 的單一 `verify` job 由 base-trusted `pull_request_target` 或 `merge_group` workflow
+定義執行。它先保存 base 版本的 `scripts/ci_tier.py`，再 checkout exact candidate；因此 PR 不能靠修改自己的
+router 降低 tier。接著在 GitHub-hosted `ubuntu-latest` runner 安裝固定工具鏈，依可信 plan 實際執行
+`scripts/verify-fast` 或 full verifier。Dependabot 與一般 contributor 共用同一路徑，不再有 bot 白名單。
 
-**機制**：`scripts/verify-fast`／`scripts/verify-template.sh`（與生成 repo 對應的
-`scripts/verify-fast`／`scripts/verify`）驗證成功（exit 0）時，在結尾呼叫
-`scripts/write-verify-attestation <fast|full>`，於當下 HEAD commit 的訊息附加一行 trailer：
+`scripts/check-trusted-verification` 與 `scripts/verification_evidence.py` 消費 GitHub Check Runs、Actions run 與
+Jobs API，並重用 `scripts/pr_lifecycle.py` 的 required-check producer selector。有效證據必須同時符合：
 
-```text
-Verified-locally: sha256=<tree hash> tier=fast|full at=<UTC ISO 8601>
-```
+1. required check 名稱與 Ruleset GitHub Actions App integration ID 完全相同；
+2. check、check suite、Actions run 與 job 綁定同一 repository、exact head SHA、可信 workflow path/event 與
+   run attempt；
+3. job 由 GitHub-hosted `ubuntu-latest` runner 執行，routing 與選用工具鏈步驟成功；
+4. 唯一 execution step 內的 tier、scopes、tree 與 command 相互一致，且 tree 等於 exact head 的 Git tree；
+5. check、run、job 與 execution step 都真正 `success`；`neutral`、`skipped`、zero-step 或同名 classic status
+   均不能滿足 `verify`；
+6. 完成時間不超過 24 小時，且不能超前目前時間超過 5 分鐘。
 
-- **`sha256=` 的值是 git 自己的 tree hash**（`git rev-parse HEAD^{tree}`），不是自製的檔案內容 hash——
-  這個值本來就已經是 deterministic、collision-resistant、且免費可算，另外發明一種 hash 只會多一個兩者
-  可能悄悄不同步的地方。欄位名稱固定寫 `sha256`，但實際演算法是這個 repository 設定的 git object format
-  （幾乎所有 repository，包含本 repo，都是 SHA-1；只有明確以 `--object-format=sha256` 初始化的 repository
-  才是 SHA-256）——欄位名稱是內容識別語意，不是演算法保證；驗證邏輯用完整字串比對，不靠固定長度判斷，見
-  `scripts/verify_attestation.py` 的 module docstring。
-- **寫入方式是 amend 現有 commit 的訊息，不是另開一個空 follow-up commit，也不是寫入本機檔案再轉成
-  commit**：只改訊息、不動 index 的 amend 不會改變 tree（`scripts/write-verify-attestation` 的註解有完整
-  推導），所以 amend 前算出的 tree hash，在 amend 後仍然正確描述同一個 commit；另外兩個方案都會讓「被驗證
-  的東西」跟「帶著證據的東西」變成兩個物件，一旦 HEAD 後續被 amend、rebase 或 force-push，沒有機制能保證
-  兩者不會悄悄分岔。代價是 HEAD 的 SHA 會變：如果這個 commit 已經 push 過，下一次 push 需要
-  `--force-with-lease`——這對 PR 自己的 topic branch 是正常、預期的操作，不是對共享整合分支的
-  force-push。
-- **寫入前要求工作目錄乾淨**（`git status --porcelain` 必須全空）：attestation 的核心主張是「這個確切的
-  tree 被測試過」，工作目錄若有未提交的變更，剛跑完的測試實際涵蓋的內容就不等於 `HEAD^{tree}`，繼續寫入
-  會是一句不實聲明。`scripts/write-verify-attestation` 在這種情況下略過（exit 0，因為測試真的通過了，不
-  是失敗），讓 hosted `verify` job 之後因為找不到 trailer 而 fail closed——這是刻意、安全的結果，逼著
-  「先 commit、再驗證、再 push」這個順序，而不是安靜地寫一句可能不實的聲明。
+quota fallback 永遠不能替代缺少或失敗的 `verify`；只有 exact head 已有上述可信成功證據時，其他確認為
+GitHub billing zero-step 的 required check 才可沿用 quota fallback。release 先解析唯一 merged-main source
+PR，且只有 main tree 與 source head tree 完全相同時才重用證據；來源不唯一、tree 漂移、證據過期或任何欄位
+無法驗證時，release workflow 對 exact main tree 重新執行 hosted full verification，而不是退回 unsigned
+trailer。
 
-**hosted `verify` job 現在只驗證三件事**（`scripts/check-verify-attestation`，核心邏輯在
-`scripts/verify_attestation.py`、可獨立單元測試）：
+workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 script／tests 則屬 exact candidate tree，
+與一般 CI 相同，仍由 review、CODEOWNERS 與 required checks 防止惡意弱化。這個邊界不宣稱 candidate 自己的
+測試內容不可修改，只證明可信 runner 確實對該 exact tree 執行 workflow 指定的 command/toolchain 並成功。
 
-1. **trailer 存在**——commit 訊息裡有格式正確的 `Verified-locally:` 一行。
-2. **hash 相符**——trailer 的 `sha256=` 與這個 commit 實際的 `^{tree}` 完全一致，擋「複製舊 commit 的
-   trailer、忘記重新驗證」這類非蓄意疏漏（新內容加進同一個 commit 卻沒重跑驗證，tree 會變、hash 就對不
-   上）。
-3. **timestamp 新鮮**——`at=` 距離現在不超過 24 小時（`--max-age-hours`，可覆寫），且不能是未來時間
-   （超過 5 分鐘 clock skew 就視為異常，`--max-clock-skew-minutes`）。24 小時沿用本文件 `release-drift.yml`
-   的 `RELEASE_DRIFT_HOURS` 同一個判斷慣例：長到不逼一般「本機驗證完、隔一段時間才 push」的正常工作節奏
-   重跑，短到「拿很久以前的驗證結果冒充」（Issue #661 原文用語）不會是一條直線通過的路。這裡的 staleness
-   本質不是防偽造——hash 已經把 trailer 綁死在確切內容上，同一段內容重放舊 trailer 只是在陳述一個依然為
-   真的歷史事實——而是防環境漂移：同一個 tree 現在重跑，可能因為依賴版本、lint 規則等外部因素改變而不再
-   通過，即使幾小時前確實通過過。**沒有「未來時間」檢查的話，staleness 判斷可以被一個刻意設在遙遠未來的
-   `at=` 完全繞過**（未來時間永遠不會被判定為「太舊」）——這是設計本節時特別要擋的一種讓 freshness 檢查
-   形同虛設的方式，不只是把日期往前搬那麼簡單的疏漏。
+回歸測試集中在 `tests/test_verification_evidence.py`、`tests/test_pr_lifecycle.py`、
+`tests/test_journey03_ci.py`、`tests/test_journey07_release.py` 與 `tests/test_promotion_gate.py`；涵蓋偽造 trailer
+不構成輸入、錯誤 repo/head/tree/tier/command、過期證據、不可信 runner、quota 與 release reuse。
 
-**額外的第四項：tier 是否足夠**（`--required-tier`，來自同一個 job 已經算出的
-`scripts/ci_tier.py` 分類結果）。沒有這一項，任何人都可以永遠只跑便宜的 `scripts/verify-fast`（固定
-attest `tier=fast`），即使這個 PR 改到 `.github/workflows/` 之類、`ci_tier.py` 會判定需要 `full` 的路徑
-——hosted job 既然已經不重新執行任何東西，就完全沒有能力分辨兩者。`tier=full` 滿足任何要求；`tier=fast`
-只滿足 `docs`／`fast` 要求，不滿足 `full`。這個比對不重新實作 `ci_tier.py` 的分類邏輯，只是拿它已經算出
-的答案來比對，與 `promotion` job 重用 `route_for()` 是同一個原則。
+### 歷史決策：unsigned 本機聲明與 bot 例外（#661／#753，已由 #834 supersede）
 
-**已知、記錄在案、不視為本節缺陷的殘餘風險**：這個機制無法阻止「蓄意造假」——本機真的沒跑測試，卻手算出
-正確的 tree hash、手寫一行格式正確、timestamp 新鮮的 trailer。這在技術上完全可行（tree hash 不需要跑測試
-就能算出來），且與現在「直接在 PR 描述裡寫假話」風險同一等級。本節機制解決的是「忘記跑」「跑錯版本」這類
-非蓄意疏漏，不解決蓄意造假——這點與 #171 無關，`#171` 的 human 每次確認流程本來就不是為了解決同一個問題。
-
-**這個變更牽動既有的「push 並信任 hosted `verify` check」語句**：下方「Base-only re-merge 例外
-（#468）」原本容許已經本機全綠一次的 full-tier PR，之後因為重新合併 base 而直接 push、不用再本機重跑，
-理由是「hosted CI 對這次合併結果仍會重新執行完整驗證」。本節生效後這個前提不成立了——hosted `verify` job
-不再執行任何東西，重新合併產生的新 tip commit 沒有自己的 trailer，會被 hosted job 當成任何其他未經驗證
-的 push 一樣 fail closed。這不是本 Issue 範圍內要解決的問題（#661 的邊界明確排除治理類與其他既有機制的
-重新設計），下方 Base-only re-merge 一節已經加註這個交互作用；是否、以及如何讓 `#468` 的例外在新架構下
-繼續有意義，留給後續 Issue 決定。
-
-**回歸測試**：trailer 產生（成功時正確寫入、失敗時不寫入、工作目錄不乾淨時略過、重跑時取代而非疊加既有
-trailer）見 `scripts/test-verify-attestation`（對真實、拋棄式的 git repository 操作）；hash 相符／不符、
-timestamp 新鮮／過期／未來、trailer 缺失、tier 是否足夠等純邏輯見 `tests/test_verify_attestation.py`
-（不需要 git，直接測 `scripts/verify_attestation.py` 的純函式與 CLI）。兩者都掛在
-`scripts/verify-stage-regression-tests`（生成 repo 掛在 `scripts/verify` 的自我測試清單），並隨
-`scripts/verify_attestation.py`／`scripts/write-verify-attestation`／`scripts/check-verify-attestation`
-一起透過 `scripts/sync-paired-files.sh` 逐位元組下發到 `template/`。
-
-**`policies/rulesets-required-checks.json` 不需要改動**：required check 仍然叫 `verify`（context 名稱由
-job 的 `name:` 決定，不是由它做什麼決定），Ruleset 只認 context 名稱，不知道、也不需要知道 job 內部從「重
-新執行測試」換成「驗證一個聲明」。
-
-### Dependabot 的 hosted 執行例外（#753）
-
-上方「本機驗證聲明」機制對 Dependabot 這類 PR 結構性地無解：Dependabot 的 commit 由 GitHub 自己直接產生
-並推送，從未經過任何人的本機，永遠不可能帶有 `Verified-locally:` trailer——`verify` 因此對每一張
-Dependabot PR 都 fail closed，包含安全性更新，`#557` 的 `dependabot-auto-merge.yml` 即使 arm 了
-auto-merge 也永遠合不進來。
-
-修法是一個正面表列的窄範圍例外（`scripts/hosted_verify_bots.py`，module docstring 有完整條件），目前只有
-一筆：`dependabot[bot]`。`.github/workflows/ci.yml` 的 `verify` job 新增一個「Determine hosted-verification
-bot eligibility」step，同時要求下列**全部**成立才視為符合例外，任一項不成立就沿用原本的 attestation 檢查：
-
-1. PR 作者（`github.event.pull_request.user.login`，不是 `github.actor`）在白名單內。
-2. head branch 符合該 bot 專屬的前綴（Dependabot 是 `dependabot/*`）。
-3. head repository 就是這個 repository 本身，不是 fork（`github.event.pull_request.head.repo.full_name`
-   對照 `github.repository`）。
-
-符合的 PR，`verify` job 略過「Validate local verification attestation」step，改用「Run hosted verification
-for an allowlisted bot pull request」step在 runner 上**真的執行**驗證：沿用同一個 job 裡
-`scripts/ci_tier.py` 已經算出的 `tier`／`scopes`（與任何 standalone PR 的本機執行分級邏輯完全相同），
-`tier=full` 時跑 `./scripts/verify-template.sh`（生成 repo：`./scripts/verify`），否則跑
-`./scripts/verify-fast`。這兩支腳本在成功結尾都會呼叫 `scripts/write-verify-attestation` 對 HEAD 執行
-`git commit --amend`，在這個一次性、不會被 push 回去的 runner checkout 裡需要一個本機 git 身分才能執行
-（`persist-credentials: false` 已確保這個 step 完全沒有推送能力），所以 step 開頭先設定一個限定在這次
-checkout 內的 `git config user.email`／`user.name`；產生出的 attestation commit 本身沒有意義，只是讓腳本
-順利跑完，不會、也不需要被讀取。
-
-白名單 bot 的 PR 仍然不需要連結 Issue（`scripts/validate-pr-policy` 現行行為不變），合併仍然要通過現行
-Ruleset 的審核把關（Copilot 模式下是 `review` required check，見「Copilot 審核模式（#752）」一節；`human`
-模式下是原生 maintainer approval）——這個例外只回答「`verify` 這一個 required check 怎麼通過」，不觸碰、
-也不放寬任何審核要求。
-
-新增一個 bot 到這份白名單，比照上方「通則（自 #602 起生效）」：要有自己的 tracking Issue 記錄理由與範圍，
-不能只在程式碼註解裡說明。
-
-**回歸測試**：`tests/test_hosted_verify_bots.py`（白名單成立／作者不符／branch 前綴不符／來自 fork／
-head repository 缺失五種情況，以及 CLI 寫入 `$GITHUB_OUTPUT` 的格式）；`scripts/hosted_verify_bots.py`
-隨 `scripts/sync-paired-files.sh` 逐位元組下發到 `template/`。
+#661 曾為降低 hosted 成本，讓本機驗證成功後把 tree、tier 與時間寫入 unsigned commit trailer；#753
+再為無法產生該 trailer 的 Dependabot 加入 hosted 白名單。#834 證實 contributor 可自行計算並偽造整份
+聲明，因此移除 trailer consumer、writer 與 bot 特例。保留的決策只有分級入口與本機快速回饋；required
+merge／release evidence 一律改用上節的可信 hosted execution。
 
 ### 建立新 `dev/m*` delivery 分支（#754）
 
@@ -712,15 +627,15 @@ job 目前沒有對應的本機可重跑回歸測試——它是一段會實際 
 
 | 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428）；本機驗證聲明（#661）；Dependabot hosted 執行例外（#753） | `pull_request_target`、`merge_group`、`workflow_dispatch` | `contents: read`；15 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類（仍在 runner 上執行，是變更路徑分類邏輯，不是測試）後，`scripts/hosted_verify_bots.py` 判斷這張 PR 是否符合白名單 bot 例外（見「Dependabot 的 hosted 執行例外（#753）」一節）：不符合則只用 `scripts/check-verify-attestation` 驗證這個 PR 的實際 HEAD commit（`pull_request_target` 事件讀 PR 自己的 head sha，不是 GitHub 產生的 merge commit）是否帶有格式正確、hash 與 tree 相符、timestamp 新鮮、tier 足夠的 `Verified-locally:` trailer；符合則改在 runner 上實際執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo：`scripts/verify`），成功時由這些腳本呼叫 `scripts/write-verify-attestation` 寫入 trailer（僅供腳本正常結束，不被讀取）；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py`；`tests/test_hosted_verify_bots.py`；`tests/test_journey03_ci.py` 的 `test_root_ci_is_one_bounded_verification_job`／`test_generated_ci_uses_the_same_one_job_contract`；`tests/test_verify_attestation.py`（純邏輯）與 `scripts/test-verify-attestation`（對真實 git repository） | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success——此 run 早於 #661／#753，只證明 `scripts/ci_tier.py` 分類與（當時仍在 runner 上執行的）驗證邏輯，不代表本機驗證聲明改造或 Dependabot 例外 | `scripts/ci_tier.py` 分類：active（邏輯未變）；本機驗證聲明改造（#661 本身）：active；Dependabot hosted 執行例外（#753 本身）：candidate（待 `main` 落地並於首張真實 Dependabot PR 觸發後轉 active） |
+| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428）；可信 hosted execution（#834） | `pull_request_target`、`merge_group`、`workflow_dispatch` | `contents: read`；30 分鐘；同一 PR 新 commit 取消舊 run | base-trusted `scripts/ci_tier.py` 分類後，在 GitHub-hosted `ubuntu-latest` 對 exact candidate 執行 `scripts/verify-fast`／full verifier；Check Run、Actions run 與 Jobs API 證據綁定 repository、head/tree、tier/scopes、command、toolchain、runner、result 與 24 小時 freshness；Dependabot 共用相同路徑 | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py`；`tests/test_verification_evidence.py`；`tests/test_pr_lifecycle.py` | candidate（待 #834 workflow bootstrap 落地並取得首次 live evidence 後轉 active） |
 | PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | `pull_request_target` PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | `contents`／Issues／pull requests 只讀；固定 timeout | `title` job：Issue、route、review policy 與 Milestone approval 唯讀判定；`promotion` job（#601）：呼叫 `scripts/promotion_gate.py check-route` 分類 route，兩者只以原生 job conclusion 回報結果 | `scripts/test-pr-policy`；`tests/test_journey05_workflows.py`；`promotion` job 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | 歷史 run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929) 證明既有 policy 判定；#829 唯讀邊界待合併後首張 PR 取得 live evidence | 既有 policy：active；#829 唯讀邊界：candidate |
 | PR policy writes | `.github/workflows/pr-policy-writes.yml` | PR metadata 與 Milestone check-run 寫入（#829） | default branch 的 `workflow_run`，只接續完成的 `PR policy` run | top-level 無權限；resolver 只讀；metadata job 僅 `issues`／`pull-requests: write`；Milestone job 僅 `checks: write`；10 分鐘 | 以完整 head identity 跨頁解析唯一 open PR 後同步 metadata／#551 提醒；另以可信任 script 發布 `Milestone approval` custom check；零筆或多筆都 fail closed，不執行 PR source 或 artifact | `tests/test_work_item_metadata.py`；`tests/test_milestone_approval.py`；`tests/test_journey05_workflows.py` | 新 workflow，待落地 default branch 後由下一張 PR 觸發 | candidate |
 | PR review（Copilot 審核模式，#752／#775／#826） | `.github/workflows/pr-review.yml` | PR 審核授權（#752，銜接 #719／#745／#775／#826） | `pull_request_target`（opened／synchronize／reopened／ready_for_review／converted_to_draft）、`pull_request_review`（submitted／dismissed）、`issue_comment`（created，篩選 PR 上以 `PR lifecycle merge authorization` 開頭的留言）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run | `review` job 呼叫 `scripts/review_gate.py check`：`pr_review_mode=copilot` 時，目前完整 head SHA 已獲 Copilot 乾淨審核、獨立 maintainer `APPROVED`、或符合條件的 Alpha self-merge 授權留言（#775／#826，包括驗證完成的 delivery sync）才過；`pr_review_mode=human` 時只回報，審核仍由 Ruleset 原生 required approval 把關 | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的 Copilot／Alpha self-merge 授權來源見 `tests/test_pr_lifecycle.py` | 尚未落地 `main`，無 live run | candidate（待 main 落地並於首次 PR 觸發後轉 active） |
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併） | `issues`、`issue_comment`、`milestone` 事件；`pull_request.closed`（里程碑工作 PR 合併進 `dev/m*` 或 `promote/m*` 晉升 PR 合併進 `main`） | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新）、`tests/test_work_pr_closure.py` | 尚未落地 `main`，無新 live run；三個前身 workflow（`issue-triage.yml`、`milestone-lifecycle.yml`、`work-item-closure.yml`）已刪除，其舊 run 證據（`33524318953`／`33524281794`／`33502286588`）不再代表現行檔案 | **root：candidate**（待 main 落地並觸發首次 issues／issue_comment／milestone／pull_request 事件才能取得新 live evidence）；#574 只把三個 workflow 檔的既有邏輯打包成一個 job 內的循序 step，不改變任一 step 本身的行為、權限需求或所呼叫的 script |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
-| Dependabot | `.github/dependabot.yml` | GitHub 原生＋依賴安全；hosted verify 白名單（#753）；template 同步與 Actions pin 一致性（#755） | schedule／manifest 變更 | GitHub 原生 bot 邊界，無 repo workflow 權限 | dependency PR；`dependabot-auto-merge.yml` 的 `sync-template` job 在同一張 PR 內補齊 paired workflow 的 template 副本 | GitHub 原生功能，無 repo-local 測試；設定格式由 `scripts/sync-paired-files.sh --check` 涵蓋；Actions pin 一致性見 `tests/test_check_action_pins.py` | GitHub 註冊為 `Dependabot Updates`（`dynamic/dependabot/dependabot-updates`），state active（原生排程不透過 `gh run list` 查詢單筆 run） | active；`sync-template` job：candidate（待 `main` 落地並於首張真的改到 paired workflow 的 Dependabot PR 觸發後轉 active） |
-| Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598 | `main` push（post-merge）、manual rerun | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布 tag／GitHub Release／成品／checksum／SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py` | 已落地 `main` 並於 push 後實際觸發，`gh api tags`／`releases` 顯示過去確有真實 live 發版（`v0.12.2`／`v0.12.1`／`v0.12.0` 等）。`#588`（`docs/index.html` staleness）已由 `#593` 修正並於下一次 push 驗證：run [33763104406](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33763104406)（`6aa7724`，2026-09-03T13:47Z）的 `Static assets and paired files` 階段確實轉綠。但同一筆 run 在 `Regression tests` 階段仍以其他真實 pytest 失敗（`PR lifecycle blocked: Unleased PR lifecycle writer: .github/workflows/dependabot-auto-merge.yml`，導致生成專案 `scripts/verify` 失敗，牽連 `test_real_template_adoption_resumes_after_manifest_merge` 三種語言變體與 `test_real_existing_adoption_uses_fixed_ownership_policies`）——這是本輪盤點才發現、與 `#588`／`#591` 都無關的第四個獨立成因，尚未開對應 Issue。另外兩個較早的獨立成因：run [33719533651](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33719533651)（`9ed3594`）與 run [33730000169](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33730000169)（`99f52ef`）在 `Regression tests` 階段失敗於 `rm: cannot remove '.../work/.git': Directory not empty`，追蹤於 `#591`；run [33724898939](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33724898939)（`7719d2e4`）與 run [33729747815](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33729747815)（`ed7ab25`）在 `verify-template.sh` 全過後，於發版前 capability preflight 因 Actions policy HTTP 403 觸發 `#123` 既有設計的 fail-closed（`BLOCK_REASON: ... immutable_releases`），這是刻意行為、不是 bug | active for `verify`／`title`／`promotion`；`Regression tests` 階段三個獨立成因（PR-lifecycle writer 檢查 #602、`test_pr_lifecycle.py` 生成專案路徑 #617、zizmor template-injection #620）與 `#591` 均已修復並於 `verify-template.sh` 全綠驗證。當時（2026-09-03）hosted 版本發布（Automatic／Guided）因 `immutable_releases` capability probe 在 `GITHUB_TOKEN` 下結構性回傳 403（見 #626）而**已知永久限制**；`#770`（2026-09-18）移除了這一項 pre-flight probe，改在 `scripts/publish-release` 內以 post-hoc 的 GitHub 簽發 release attestation 驗證取代，hosted Automatic／Guided 不再因這一項結構性卡死，見上方「hosted 發版路徑的已知限制」一節——本機 `scripts/publish-release` 仍是本節其餘 `verify`／`title`／`promotion` 等機制沿用的標準發版程序，不因此改變定位 |
+| Dependabot | `.github/dependabot.yml` | GitHub 原生＋依賴安全；與一般 PR 共用可信 hosted verification（#834）；template 同步與 Actions pin 一致性（#755） | schedule／manifest 變更 | GitHub 原生 bot 邊界，無 repo workflow 權限 | dependency PR；`dependabot-auto-merge.yml` 的 `sync-template` job 在同一張 PR 內補齊 paired workflow 的 template 副本 | GitHub 原生功能，無 repo-local 測試；設定格式由 `scripts/sync-paired-files.sh --check` 涵蓋；Actions pin 一致性見 `tests/test_check_action_pins.py` | GitHub 註冊為 `Dependabot Updates`（`dynamic/dependabot/dependabot-updates`），state active（原生排程不透過 `gh run list` 查詢單筆 run） | active；`sync-template` job：candidate（待 `main` 落地並於首張真的改到 paired workflow 的 Dependabot PR 觸發後轉 active） |
+| Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598／#699／#834 | `main` push（post-merge）、manual rerun | top-level read；release job 另有 `actions: read`、`checks: read`、`contents`／PR／Issue／status write；60 分鐘 | 先規劃版本並探測能力；可證明 main tree 與來源 PR head tree 相同時重用 24 小時內的可信 `verify` evidence，否則對 exact main tree hosted full 重跑，再建立／發布 GitHub Release、checksum 與 SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py`、`tests/test_verification_evidence.py` | trusted verification reuse/fallback 為 candidate，待 #834 bootstrap 與首次 live run 後轉 active；發版的 Immutable Release post-hoc 驗證沿用 #770 |
 | Release publish drift alert | `.github/workflows/release-drift.yml` | #605（源自 #589 item 4） | daily schedule＋`workflow_dispatch`（`hours` input） | `actions: read`、`contents: read`、`issues: write`；5 分鐘 | 偵測到 drift 時開立或更新追蹤 Issue；未偵測到時只印出證據 | `scripts/test-check-release-drift` | 尚未 merge 進 `main`，故無排程或手動觸發的 live run 證據 | candidate（待 main 落地＋首次排程／手動觸發） |
 
 所有第三方 Actions 鎖定完整 commit SHA，旁註可讀 release tag。Workflow YAML 只負責
@@ -788,10 +703,9 @@ Milestone 本身是否就緒的判定）。
 2. **日常 PR gate（`docs`／`fast`，同一個成本邊界）**——`scripts/ci_tier.py` 依事件、
    base／head、labels 與 changed paths 做 fail-closed 分類；未知或高風險內容升級為
    full。純文件／site 變更落在 `docs`，是 `fast` 的 early-exit 實作細節，不是獨立的第
-   四套政策；其餘一般變更落在 `fast`。兩者入口都是 `scripts/verify-fast`，且自 #661 起
-   **一律本機執行**：hosted `verify` job 不再自己跑這個入口，只驗證它成功時留下的
-   attestation（見上方「`verify` 必要檢查改為本機驗證聲明（#661）」一節），所以即使是
-   `fast`／`docs` 這種輕量分級，push 前仍必須先在本機跑過一次。
+   四套政策；其餘一般變更落在 `fast`。兩者入口都是 `scripts/verify-fast`。本機執行提供
+   push 前的快速回饋；hosted `verify` 另在可信 runner 對 exact candidate 執行同一入口，
+   並產生上方 #834 定義的 required merge evidence。
 3. **完整交付驗證（`full`）**——只在 Milestone／canary 交付、hotfix、merge queue、手動
    執行或未知高風險路徑觸發；中央模板入口是 `scripts/verify-template.sh`，生成 repo
    入口是 `scripts/verify`（不帶參數即預設 full）。PR owner／integrator 只在自己的 PR
@@ -813,18 +727,10 @@ before／after 紀錄）。
 
 ### Base-only re-merge 例外（#468）
 
-**#661 之後的現況（讀本節其餘部分前先看這段）**：本節原本的結論——四個條件同時成立時可以
-「直接 push 並信任 hosted `verify` check，不必再本機重跑」——所依賴的前提是「hosted CI 對這次
-合併結果仍會重新執行一次完整驗證」。`#661` 把 hosted `verify` job 改成只驗證本機留下的
-attestation、不再重新執行任何東西之後，這個前提不成立了：重新合併產生的新 tip commit 沒有自己
-的 trailer，會被 hosted job 當成任何其他未經驗證的 push 一樣 fail closed，不會因為它符合下列四
-個條件就自動放行。這不是 `#661` 範圍內要解決的問題（`#661` 的邊界明確只處理 attestation 機制本
-身，不重新設計本節），因此下列四個條件描述的判斷仍然正確、`scripts/check-base-only-remerge` 仍
-然如實回答「這次重新合併乾不乾淨、有沒有動到驗證基礎設施」——只有最後一步「所以可以直接 push、不
-用本機重跑」目前不成立：符合四個條件只證明重新合併本身沒有引入新風險，不能讓 hosted job 平白生出
-一個它本來就不會再產生的驗證結果。在後續 Issue 重新調和這兩個機制之前，即使四個條件都成立，仍要在
-本機對新的 tip 重跑一次 `./scripts/verify-template.sh`（生成 repo：`./scripts/verify`），取得它
-自己的 attestation。
+**#834 之後的現況**：hosted `verify` 已恢復在 exact candidate 上實際執行所選 tier，因此本節原本
+「四個條件同時成立時可直接 push，讓 hosted full 驗證新 tip」的前提重新成立。#661 期間因 unsigned
+trailer 造成的暫時限制已由 #834 supersede；`scripts/check-base-only-remerge` 的四項判斷與下方流程恢復
+完整效力。
 
 上表「full」列與 #458 規則只回答「這張 PR 要不要跑 full」：只有 PR 本身落在 full 邊界
 時，owner／integrator 才需要在最終候選樹本機執行一次 `./scripts/verify-template.sh`
@@ -1130,16 +1036,14 @@ Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本
 **先判斷要不要在本機跑，依序四步：**
 
 1. 這張 PR 本身是不是 full-tier 邊界？不是的話，不必為了保險另外在本機跑一次 full；本機
-   義務仍是對應分級的 `./scripts/verify-fast`（tier 由變更範圍決定），成功後留下的
-   attestation 就是 hosted `verify` job 唯一驗證的東西（#661），不是「不必本機跑，直接信
-   任 hosted」。
+   義務仍是對應分級的 `./scripts/verify-fast`（tier 由變更範圍決定），用來取得送出前的
+   快速回饋；required merge evidence 由 hosted `verify` 自行產生。
 2. 是 full-tier 邊界：這個 branch 自己這一輪內容有沒有本機全綠跑過一次
    `./scripts/verify-template.sh`（生成 repo 是 `./scripts/verify`）？沒有的話，這正是
    #458 規則要求的那一次，不能省略。
 3. 已經全綠過、現在只是因為 base 前進被迫重新合併：套用上方「Base-only re-merge 例外
-   （#468）」四項條件，只回答「這次重新合併本身乾不乾淨、有沒有引入新風險」；但 #661 之
-   後，即使四項條件全部成立，新的 tip commit 仍沒有自己的 attestation，仍要在本機對它重
-   跑一次才能 push——見上方「#661 之後的現況」，這條例外目前省不下本機重跑本身。
+   （#468）」四項條件；全部成立時可省略第二次本機 full，新的 exact tip 仍由 hosted `verify`
+   重新執行 full。任一條件不成立就必須本機重跑。
 4. 以上都不成立，才真的執行一次本機 full；開始前先確認沒有其他 worktree／`pytest`／
    `verify`／`copier` 程序同時佔用本機資源——上方「逐階段耗時量測（#465）」記錄的 4002
    秒即混入另一個 worktree 的背景負載，不是乾淨基準，容易把負載噪音誤判成回歸。
@@ -1340,9 +1244,10 @@ capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能�
 完成 release plan；`no-release` 直接結束，不探測 capability、不驗證 attestation，也不安裝
 Python 3.14、uv、pnpm、Node 或 Rust。需要發版時才探測 capability；若 publication
 為 `blocked`（現在只可能來自 `contents`／`release`／`actions_pull_requests`），維持 #123 的
-fail-closed 結果並在工具鏈 setup 前停止。只有未被擋下的實際 release 路徑才先驗證既有
-local attestation，接著安裝工具鏈並進入版本候選或發布步驟（#707）。這只把便宜判定移到
-前面，不放寬驗證、權限或供應鏈要求。
+fail-closed 結果並在工具鏈 setup 前停止。只有未被擋下的實際 release 路徑才先嘗試重用來源 PR
+的可信 hosted verification；來源與 main tree 不同、證據過期或查證失敗時，改在 release workflow
+對 exact main tree 重跑 full，接著才進入版本候選或發布步驟（#707）。這只把便宜判定移到前面，
+不放寬驗證、權限或供應鏈要求。
 
 ### Release 說明文字的最低格式規範（#616）
 

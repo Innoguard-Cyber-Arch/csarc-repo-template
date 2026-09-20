@@ -23,9 +23,13 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     promotion_gate = importlib.import_module("promotion_gate")
     review_gate = importlib.import_module("review_gate")
+    verification_evidence = importlib.import_module("verification_evidence")
 else:
     promotion_gate = importlib.import_module(f"{__package__}.promotion_gate")
     review_gate = importlib.import_module(f"{__package__}.review_gate")
+    verification_evidence = importlib.import_module(
+        f"{__package__}.verification_evidence"
+    )
 
 
 LEASE_SCHEMA = 2
@@ -56,6 +60,7 @@ BLOCKER_RESOLVED = re.compile(
 )
 DRAFT_EVENTS = {"convert_to_draft", "converted_to_draft"}
 REVIEW_CHECK_CONTEXT = "review"
+GITHUB_ACTIONS_APP_ID = 15368
 SUCCESSFUL_CHECK_CONCLUSIONS = {"neutral", "skipped", "success"}
 TRUSTED_CHECK_PRODUCERS: dict[str, tuple[str, frozenset[str]]] = {
     "title": (
@@ -1565,6 +1570,116 @@ def trusted_check_run_matches_context(
     )
 
 
+def trusted_required_check_runs(
+    github: GitHub,
+    repo: str,
+    head_sha: str,
+    contexts: set[tuple[str, int]],
+    check_runs: list[dict[str, Any]],
+) -> tuple[dict[tuple[str, int], dict[str, Any]], dict[int, dict[str, Any]]]:
+    """Select each newest check once after validating trusted provenance."""
+    run_cache: dict[int, dict[str, Any]] = {}
+    required_runs: dict[tuple[str, int], dict[str, Any]] = {}
+    for context, integration_id in contexts:
+        candidates = [
+            item
+            for item in check_runs
+            if trusted_check_run_matches_context(
+                github,
+                repo,
+                head_sha,
+                item,
+                context,
+                integration_id,
+                run_cache,
+            )
+        ]
+        if candidates:
+            required_runs[(context, integration_id)] = max(
+                candidates, key=lambda item: int(item["id"])
+            )
+    return required_runs, run_cache
+
+
+def require_trusted_verification(
+    github: GitHub,
+    repo: str,
+    head_sha: str,
+    integration_id: int,
+    *,
+    max_age_hours: float = 24.0,
+    required_tier: str | None = None,
+    now: datetime | None = None,
+    check_runs: list[dict[str, Any]] | None = None,
+) -> dict[str, object]:
+    """Require fresh hosted execution evidence for one exact commit."""
+    available = (
+        check_runs
+        if check_runs is not None
+        else github.collection(
+            repo,
+            f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
+            "check_runs",
+        )
+    )
+    identity = ("verify", integration_id)
+    selected, run_cache = trusted_required_check_runs(
+        github, repo, head_sha, {identity}, available
+    )
+    check_run = selected.get(identity)
+    if check_run is None:
+        raise RuntimeError(
+            "Required verify check has no trusted producer on the exact head"
+        )
+    run_url = actions_run_url(str(check_run.get("details_url") or ""), repo)
+    run_id = int(run_url.rsplit("/", 1)[1])
+    workflow_run = run_cache[run_id]
+    commit = github.get(repo, f"git/commits/{head_sha}")
+    tree = commit.get("tree") if isinstance(commit, dict) else None
+    tree_sha = tree.get("sha") if isinstance(tree, dict) else None
+    if not isinstance(tree_sha, str):
+        raise RuntimeError("Exact-head Git tree identity is unavailable")
+    jobs = github.collection(
+        repo,
+        f"actions/runs/{run_id}/jobs?filter=latest&per_page=100",
+        "jobs",
+    )
+    matching_jobs = [
+        job
+        for job in jobs
+        if job.get("html_url") == check_run.get("details_url")
+    ]
+    if len(matching_jobs) != 1:
+        raise RuntimeError("Trusted verify check has no unique Actions job")
+    return verification_evidence.validate_verification_job(
+        check_run,
+        workflow_run,
+        matching_jobs[0],
+        repo=repo,
+        head_sha=head_sha,
+        tree_sha=tree_sha,
+        now=now,
+        max_age_hours=max_age_hours,
+        required_tier=required_tier,
+        full_command=(
+            "./scripts/verify-template.sh"
+            if Path("scripts/verify-template.sh").is_file()
+            else "./scripts/verify"
+        ),
+        expected_toolchain=(
+            {
+                "python-3.14",
+                "uv-0.12.15",
+                "pnpm-11.22.0",
+                "node-24",
+                "rust-1.98.0",
+            }
+            if Path("scripts/verify-template.sh").is_file()
+            else None
+        ),
+    )
+
+
 def authoritative_check_runs(
     check_runs: list[dict[str, Any]], head_sha: str
 ) -> list[dict[str, Any]]:
@@ -1614,26 +1729,9 @@ def require_successful_checks(  # noqa: C901
         "check_runs",
     )
     authoritative_runs = authoritative_check_runs(check_runs, head_sha)
-    run_cache: dict[int, dict[str, Any]] = {}
-    required_runs: dict[tuple[str, int], dict[str, Any]] = {}
-    for context, integration_id in contexts:
-        candidates = [
-            item
-            for item in check_runs
-            if trusted_check_run_matches_context(
-                github,
-                repo,
-                head_sha,
-                item,
-                context,
-                integration_id,
-                run_cache,
-            )
-        ]
-        if candidates:
-            required_runs[(context, integration_id)] = max(
-                candidates, key=lambda item: int(item["id"])
-            )
+    required_runs, _run_cache = trusted_required_check_runs(
+        github, repo, head_sha, contexts, check_runs
+    )
     statuses = github.collection(
         repo,
         f"commits/{head_sha}/status?per_page=100",
@@ -1645,9 +1743,28 @@ def require_successful_checks(  # noqa: C901
         for context, integration_id in contexts
         if (item := required_runs.get((context, integration_id))) is None
         or item.get("status") != "completed"
-        or item.get("conclusion") not in SUCCESSFUL_CHECK_CONCLUSIONS
+        or (
+            item.get("conclusion") != "success"
+            if context == "verify"
+            else item.get("conclusion") not in SUCCESSFUL_CHECK_CONCLUSIONS
+        )
     ]
     missing.sort()
+    for context, integration_id in contexts:
+        item = required_runs.get((context, integration_id))
+        if (
+            context == "verify"
+            and item is not None
+            and item.get("status") == "completed"
+            and item.get("conclusion") == "success"
+        ):
+            require_trusted_verification(
+                github,
+                repo,
+                head_sha,
+                integration_id,
+                check_runs=check_runs,
+            )
     if quota_run_urls:
         non_quota_failures: set[str] = set()
         for item in authoritative_runs:
@@ -1682,6 +1799,11 @@ def require_successful_checks(  # noqa: C901
     if not missing:
         return "quota-fallback" if quota_run_urls else "success"
     if quota_run_urls:
+        if any(context == "verify" for context, _integration_id in missing):
+            raise RuntimeError(
+                "Quota fallback cannot replace trusted verify "
+                "execution evidence"
+            )
         for context, integration_id in missing:
             failed_run = required_runs.get((context, integration_id))
             if (

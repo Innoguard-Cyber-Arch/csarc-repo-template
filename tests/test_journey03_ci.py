@@ -255,36 +255,17 @@ def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
     ]
 
 
-def test_bootstrap_keeps_legacy_attestation_compatibility() -> None:
-    """Keep the old verifier usable until the consumers migrate in #834."""
-    root_workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
-        encoding="utf-8"
+def test_verifiers_do_not_call_removed_attestation_helpers() -> None:
+    """Keep generated-project verification free of removed legacy scripts."""
+    sources = (
+        REPO_ROOT / "scripts/verify-stage-regression-tests",
+        REPO_ROOT / "template/scripts/verify.jinja",
     )
-    generated_workflow = (
-        REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
-    ).read_text(encoding="utf-8")
 
-    for path in (
-        "scripts/check-verify-attestation",
-        "scripts/verify_attestation.py",
-        "scripts/write-verify-attestation",
-        "scripts/hosted_verify_bots.py",
-        "template/scripts/check-verify-attestation",
-        "template/scripts/verify_attestation.py",
-        "template/scripts/write-verify-attestation",
-        "template/scripts/hosted_verify_bots.py",
-    ):
-        assert (REPO_ROOT / path).is_file()
-
-    assert "./scripts/write-verify-attestation full" in (
-        REPO_ROOT / "scripts/verify-template.sh"
-    ).read_text(encoding="utf-8")
-    assert "./scripts/write-verify-attestation full" in (
-        REPO_ROOT / "template/scripts/verify.jinja"
-    ).read_text(encoding="utf-8")
-    for source in (root_workflow, generated_workflow):
-        assert 'git config user.email "actions@github.com"' in source
-        assert 'git config user.name "github-actions[bot]"' in source
+    for path in sources:
+        source = path.read_text(encoding="utf-8")
+        assert "test-verify-attestation" not in source
+        assert "write-verify-attestation" not in source
 
 
 def test_documentation_tier_validates_the_generated_site() -> None:

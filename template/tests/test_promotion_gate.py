@@ -29,7 +29,7 @@ highest_release_intent = MODULE["highest_release_intent"]
 check_promotion_intent = MODULE["check_promotion_intent"]
 included_pull_requests = MODULE["included_pull_requests"]
 issue_number = MODULE["issue_number"]
-local_verification_command = MODULE["local_verification_command"]
+trusted_verification_command = MODULE["trusted_verification_command"]
 main_is_current = MODULE["main_is_current"]
 milestone_included_issues = MODULE["milestone_included_issues"]
 note_quota_fallback = MODULE["note_quota_fallback"]
@@ -2005,9 +2005,9 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
     assert evidence["release_eligible"] is False
     assert evidence["full_check"] == {
         "context": "verify",
-        "status": "local-quota-attested",
+        "status": "trusted-hosted",
         "commands": [
-            local_verification_command()[0],
+            " ".join(trusted_verification_command("owner/repo", "head")),
             "promotion preflight live refetch",
         ],
     }
@@ -2224,10 +2224,10 @@ def test_verify_main_rejects_a_different_tree(
         )
 
 
-def test_verify_main_requires_successful_full_check(
+def test_verify_main_requires_trusted_execution_evidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Promotion evidence cannot substitute for the full CI result."""
+    """Promotion evidence cannot substitute for trusted hosted execution."""
     evidence = tmp_path / "evidence.json"
     checks = tmp_path / "checks.json"
     evidence.write_text(
@@ -2246,7 +2246,14 @@ def test_verify_main_requires_successful_full_check(
     monkeypatch.setitem(
         verify_main.__globals__, "git_output", lambda *_: "same"
     )
-    with pytest.raises(RuntimeError, match="successful verify"):
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            subprocess.CalledProcessError(1, "trusted verification")
+        ),
+    )
+    with pytest.raises(RuntimeError, match="trusted verification evidence"):
         verify_main(
             SimpleNamespace(
                 evidence=evidence,
@@ -2286,7 +2293,7 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                     "state": "blocked",
                     "result": "artifact-only",
                 },
-                "full_check": {"status": "local-quota-attested"},
+                "full_check": {"status": "trusted-hosted"},
                 "quota_fallback": {
                     "attestation_url": (
                         "https://github.com/owner/repo/pull/42#issuecomment-100"
@@ -2377,7 +2384,7 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
     verify_quota_main(arguments)
     evidence = json.loads(target.read_text(encoding="utf-8"))
     assert evidence["post_merge"]["tree_identity"] == (
-        "verified-local-quota-fallback"
+        "verified-trusted-quota-fallback"
     )
     assert evidence["release_eligible"] is False
     scenario["value"] = "ambiguous"
@@ -2526,7 +2533,7 @@ def test_quota_main_refetches_the_unique_squash_source(
                     "state": "blocked",
                     "result": "artifact-only",
                 },
-                "full_check": {"status": "local-quota-attested"},
+                "full_check": {"status": "trusted-hosted"},
             }
         ),
         encoding="utf-8",
@@ -2780,12 +2787,21 @@ def test_repository_variables_reads_every_page(
 def test_generated_repository_uses_its_verifier(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Generated repositories run scripts/verify, not a root-only command."""
+    """Generated repositories use the shared trusted evidence checker."""
     scripts = tmp_path / "scripts"
     scripts.mkdir()
-    (scripts / "verify").write_text("#!/bin/sh\n", encoding="utf-8")
+    (scripts / "check-trusted-verification").write_text(
+        "#!/usr/bin/env python3\n", encoding="utf-8"
+    )
     monkeypatch.chdir(tmp_path)
-    assert local_verification_command() == ["./scripts/verify"]
+    assert trusted_verification_command("owner/repo", "a" * 40) == [
+        "./scripts/check-trusted-verification",
+        "a" * 40,
+        "--github-repo",
+        "owner/repo",
+        "--required-tier",
+        "full",
+    ]
 
 
 def test_token_request_rejects_cross_origin_redirect(

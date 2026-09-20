@@ -115,7 +115,7 @@ scripts/apply-repository-settings.sh
 scripts/check-project-metadata
 scripts/check-release-drift
 scripts/check-update-conflicts
-scripts/check-verify-attestation
+scripts/check-trusted-verification
 scripts/ci_tier.py
 scripts/cleanup-worktrees
 scripts/converge-release-tag
@@ -142,15 +142,14 @@ scripts/spec_to_issue.py
 scripts/sync_milestone_state.py
 scripts/sync_work_item_metadata.py
 scripts/test-*（test-apply-repository-settings、test-issue-triage、test-pr-policy、
-  test-verify-attestation、test-worktree-cleanup）
+  test-worktree-cleanup）
 scripts/validate-issue-policy
 scripts/validate-issue-title
 scripts/verify
 scripts/verify-dependencies
 scripts/verify-fast
 scripts/verify-release-candidate
-scripts/verify_attestation.py
-scripts/write-verify-attestation
+scripts/verification_evidence.py
 ```
 
 ### 只在你開了對應功能時才存在，才需要一併刪
