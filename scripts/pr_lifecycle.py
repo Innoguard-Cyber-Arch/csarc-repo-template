@@ -1356,9 +1356,10 @@ def alpha_self_merge_opt_in(
         require_default_branch_issue_route(github, repo, lease, pull)
         return True
     route = require_routine_route(github, repo, lease, pull)
-    if route != "issue":
+    if route not in {"issue", "sync"}:
         raise RuntimeError(
-            "Alpha self-merge is only available for routine Issue routes"
+            "Alpha self-merge is only available for routine Issue or sync "
+            "routes"
         )
     return True
 
