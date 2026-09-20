@@ -13,6 +13,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/dependabot-auto-merge.yml"
+MERGE_WORKFLOW_PATH = REPO_ROOT / ".github/workflows/dependabot-merge.yml"
 
 
 def test_copier_is_never_imported_at_module_level() -> None:
@@ -48,8 +49,14 @@ def _load_workflow() -> tuple[str, dict]:
 
 
 def _steps_by_name(workflow: dict) -> dict[str, dict]:
-    steps = workflow["jobs"]["auto-merge"]["steps"]
+    steps = workflow["jobs"]["classify-update"]["steps"]
     return {step["name"]: step for step in steps}
+
+
+def _load_merge_workflow() -> tuple[str, dict]:
+    source = MERGE_WORKFLOW_PATH.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(source)
+    return source, workflow
 
 
 def _auth_steps_by_name(workflow: dict) -> dict[str, dict]:
@@ -82,7 +89,7 @@ def test_workflow_only_triggers_on_dependabot_pull_requests() -> None:
 
 
 def test_concurrency_serializes_head_state_without_cancelling_sync() -> None:
-    """Each PR resets inherited auto-merge state in event order."""
+    """Each PR authenticates head changes in event order."""
     _, workflow = _load_workflow()
 
     assert workflow["concurrency"] == {
@@ -94,67 +101,40 @@ def test_concurrency_serializes_head_state_without_cancelling_sync() -> None:
 
 
 def test_workflow_permissions_are_minimal() -> None:
-    """Grant only what gh pr merge --auto and labeling actually need."""
+    """Grant only what authentication, syncing, and labeling need."""
     _, workflow = _load_workflow()
 
     assert workflow["permissions"] == {}
-    assert workflow["jobs"]["reset-auto-merge"]["permissions"] == {
-        "pull-requests": "write"
-    }
     assert workflow["jobs"]["authenticate"]["permissions"] == {
         "contents": "read",
         "pull-requests": "read",
     }
-    assert workflow["jobs"]["auto-merge"]["permissions"] == {
-        "contents": "write",
+    assert workflow["jobs"]["classify-update"]["permissions"] == {
+        "contents": "read",
         "pull-requests": "write",
     }
-    assert workflow["jobs"]["auto-merge"]["timeout-minutes"] == 10
+    assert workflow["jobs"]["merge-eligible"]["permissions"] == {}
+    assert workflow["jobs"]["classify-update"]["timeout-minutes"] == 10
 
 
-def test_each_head_change_disables_stale_auto_merge_before_reenabling() -> None:
-    """A later unauthenticated head must not inherit an earlier auto-merge."""
-    _, workflow = _load_workflow()
-    reset = workflow["jobs"]["reset-auto-merge"]
-    authenticate = workflow["jobs"]["authenticate"]
+def test_workflow_never_leaves_persistent_native_auto_merge_state() -> None:
+    """Every merge decision is exact-head and lifecycle-owned."""
+    source, workflow = _load_workflow()
 
-    assert reset["needs"] == "authenticate"
-    assert "always()" in reset["if"]
-    assert "needs.authenticate.result" not in reset["if"]
-    assert "needs.authenticate.outputs.snapshot_valid == 'true'" in reset["if"]
-    assert authenticate["outputs"]["snapshot_valid"] == (
-        "${{ steps.authenticate.outputs.snapshot_valid }}"
-    )
-    assert len(reset["steps"]) == 1
-    step = reset["steps"][0]
-    assert "uses" not in step
-    for predicate in (
-        '.state == "open"',
-        '.base.ref == "main"',
-        ".base.repo.full_name == $repo",
-        ".base.sha == $base_sha",
-        ".head.ref == $head_ref",
-        ".head.repo.full_name == $repo",
-        ".head.sha == $head_sha",
-    ):
-        assert predicate in step["run"]
-    assert ".auto_merge != null" in step["run"]
-    assert (
-        "--disable-auto" in step["run"]
-        and '--repo "$BASE_REPO"' in step["run"]
-        and '"$PR_NUMBER"' in step["run"]
-    )
+    assert "reset-auto-merge" not in workflow["jobs"]
+    assert "auto-merge" not in workflow["jobs"]
+    assert "gh pr merge --auto" not in source
+    assert "--disable-auto" not in source
 
 
 def test_writer_jobs_revalidate_the_exact_live_pull_request() -> None:
     """Close, retarget, repo, ref, base, or head races all fail closed."""
     _, workflow = _load_workflow()
-    auto_steps = _steps_by_name(workflow)
+    classify_steps = _steps_by_name(workflow)
     sync_steps = _sync_steps_by_name(workflow)
 
     for step in (
-        auto_steps["Enable auto-merge for minor and patch updates"],
-        auto_steps["Flag major updates for manual review"],
+        classify_steps["Flag major updates for manual review"],
         sync_steps[
             "Sync paired template files and push if this bump drifted them"
         ],
@@ -191,20 +171,17 @@ def test_fetch_metadata_action_is_pinned_to_a_full_commit_sha() -> None:
     assert match.group(2).startswith("v")
 
 
-def test_minor_and_patch_updates_enable_auto_merge() -> None:
-    """Queue GitHub's native auto-merge instead of merging directly."""
+def test_minor_and_patch_updates_publish_exact_head_eligibility() -> None:
+    """Only authenticated minor and patch heads get merge eligibility."""
     _, workflow = _load_workflow()
-    steps = _steps_by_name(workflow)
-    step = steps["Enable auto-merge for minor and patch updates"]
+    job = workflow["jobs"]["merge-eligible"]
 
-    condition = step["if"]
+    assert job["name"] == "dependabot-merge-eligible"
+    condition = job["if"]
     assert "version-update:semver-patch" in condition
     assert "version-update:semver-minor" in condition
     assert "version-update:semver-major" not in condition
-    assert (
-        'gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" "$PR_URL"'
-        in step["run"]
-    )
+    assert job["needs"] == "classify-update"
 
 
 def test_major_updates_are_flagged_instead_of_merged() -> None:
@@ -351,45 +328,31 @@ def test_sync_template_push_is_bound_to_the_authenticated_bot_ref() -> None:
     assert 'origin "HEAD:refs/heads/$HEAD_REF"' in run
 
 
-def test_auto_merge_waits_for_the_final_authenticated_sync_head() -> None:
-    """A paired-file sync cannot race auto-merge on the original head."""
+def test_eligibility_waits_for_the_final_authenticated_sync_head() -> None:
+    """A paired-file sync cannot authorize the superseded parent head."""
     _, workflow = _load_workflow()
-    auto_merge = workflow["jobs"]["auto-merge"]
+    classify = workflow["jobs"]["classify-update"]
     sync_template = workflow["jobs"]["sync-template"]
     sync = _sync_steps_by_name(workflow)[
         "Sync paired template files and push if this bump drifted them"
     ]
 
-    assert auto_merge["needs"] == [
-        "authenticate",
-        "reset-auto-merge",
-        "sync-template",
-    ]
-    assert sync_template["needs"] == ["authenticate", "reset-auto-merge"]
-    assert "always()" in auto_merge["if"]
-    assert "needs.authenticate.result == 'success'" in auto_merge["if"]
-    assert "needs.reset-auto-merge.result == 'success'" in auto_merge["if"]
-    assert "needs.sync-template.result == 'success'" in auto_merge["if"]
-    assert "needs.sync-template.result == 'skipped'" in auto_merge["if"]
-    assert "dependabot/github_actions/main/" in auto_merge["if"]
+    assert classify["needs"] == ["authenticate", "sync-template"]
+    assert sync_template["needs"] == "authenticate"
+    assert "always()" in classify["if"]
+    assert "needs.authenticate.result == 'success'" in classify["if"]
+    assert "needs.sync-template.result == 'success'" in classify["if"]
+    assert "needs.sync-template.result == 'skipped'" in classify["if"]
     assert (
-        "needs.authenticate.outputs.sync_complete == 'true'"
-        in (auto_merge["if"])
-    )
+        "needs.sync-template.outputs.head_sha == "
+        "needs.authenticate.outputs.head_sha"
+    ) in " ".join(classify["if"].split())
     assert sync_template["outputs"]["head_sha"] == (
         "${{ steps.sync.outputs.head_sha }}"
     )
     assert sync["id"] == "sync"
     assert 'echo "head_sha=$HEAD_SHA"' in sync["run"]
     assert 'echo "head_sha=$synced_head_sha"' in sync["run"]
-    enable = _steps_by_name(workflow)[
-        "Enable auto-merge for minor and patch updates"
-    ]
-    assert enable["env"]["HEAD_SHA"] == (
-        "${{ needs.sync-template.outputs.head_sha || "
-        "needs.authenticate.outputs.head_sha }}"
-    )
-    assert '--match-head-commit "$HEAD_SHA"' in enable["run"]
 
 
 def test_sync_template_job_is_a_no_op_without_drift() -> None:
@@ -421,6 +384,114 @@ def test_sync_template_commit_is_a_release_triggering_fix() -> None:
     ]["run"]
 
     assert re.search(r"git commit -m \"fix(\(deps\))?:", run) is not None
+
+
+def test_exact_merge_wakes_only_from_trusted_completed_workflows() -> None:
+    """A default-branch workflow_run resolves one exact open PR."""
+    source, workflow = _load_merge_workflow()
+    triggers = workflow.get("on", workflow.get(True))
+
+    assert triggers == {
+        "workflow_run": {
+            "workflows": [
+                "CI",
+                "PR policy",
+                "PR review",
+                "Dependabot auto-merge",
+            ],
+            "types": ["completed"],
+        }
+    }
+    assert workflow["permissions"] == {}
+    resolve = workflow["jobs"]["resolve-pr"]
+    assert "pull_request_target" in resolve["if"]
+    assert "pull_request_review" in resolve["if"]
+    assert "--resolve-head-sha" in source
+    assert "ref: ${{ github.sha }}" in source
+    assert "ref: ${{ github.event.workflow_run.head_sha }}" not in source
+
+
+def test_exact_merge_rechecks_live_bot_coordinates_before_readiness() -> None:
+    """A completed old run cannot select a moved, forked, or human PR head."""
+    _, workflow = _load_merge_workflow()
+    step = next(
+        step
+        for step in workflow["jobs"]["resolve-pr"]["steps"]
+        if step["name"] == "Bind the exact live Dependabot identity"
+    )
+
+    for predicate in (
+        '.state == "open"',
+        '.user.login == "dependabot[bot]"',
+        '.user.type == "Bot"',
+        '.base.ref == "main"',
+        ".base.repo.full_name == $repo",
+        ".head.ref == $head_ref",
+        ".head.repo.full_name == $head_repo",
+        ".head.repo.full_name == $repo",
+        ".head.sha == $head_sha",
+    ):
+        assert predicate in step["run"]
+
+
+def test_exact_merge_uses_readiness_only_before_lifecycle_proof() -> None:
+    """Read-only hints avoid lease churn; lifecycle proves every invariant."""
+    source, workflow = _load_merge_workflow()
+    merge = workflow["jobs"]["merge"]
+    steps = {step["name"]: step for step in merge["steps"]}
+
+    assert merge["permissions"] == {
+        "actions": "write",
+        "checks": "read",
+        "contents": "write",
+        "issues": "write",
+        "pull-requests": "write",
+        "statuses": "read",
+    }
+    assert "gh pr checks" in steps["Check read-only merge readiness"]["run"]
+    assert "--required" in steps["Check read-only merge readiness"]["run"]
+    assert (
+        "dependabot-merge-eligible"
+        in steps["Check read-only merge readiness"]["run"]
+    )
+    assert source.index("Check read-only merge readiness") < source.index(
+        "Acquire the PR and destination lease"
+    )
+    for name in (
+        "Revalidate lifecycle merge eligibility",
+        "Merge the exact authenticated head",
+    ):
+        run = steps[name]["run"]
+        assert "scripts/pr_lifecycle.py" in run
+        assert "--require-dependabot-head" in run
+        assert "--actor 'github-actions[bot]'" in run
+    assert (
+        "scripts/pr_lifecycle.py acquire"
+        in steps["Acquire the PR and destination lease"]["run"]
+    )
+    assert (
+        "--ttl-seconds 900"
+        in steps["Acquire the PR and destination lease"]["run"]
+    )
+    assert "--auto" not in source
+    assert "expectedHeadOid" not in source
+
+
+def test_exact_merge_preserves_ambiguous_failures_and_dispatches_release() -> (
+    None
+):
+    """Rejected preflights release; successful CSARC merges wake release."""
+    _, workflow = _load_merge_workflow()
+    steps = {step["name"]: step for step in workflow["jobs"]["merge"]["steps"]}
+    release = steps["Release a pre-merge rejected lease"]
+    dispatch = steps["Dispatch the repository-owned release flow"]
+
+    assert "steps.check.outcome == 'failure'" in release["if"]
+    assert "steps.merge.outcome" not in release["if"]
+    assert "scripts/pr_lifecycle.py release" in release["run"]
+    assert "steps.merge.outcome == 'success'" in dispatch["if"]
+    assert "release_ownership" in dispatch["run"]
+    assert "gh workflow run release.yml" in dispatch["run"]
 
 
 def _render_dependabot_config(tmp_path: Path, release_ownership: str) -> str:

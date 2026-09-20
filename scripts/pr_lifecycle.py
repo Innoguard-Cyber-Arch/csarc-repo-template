@@ -21,10 +21,14 @@ from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    dependabot_auth = importlib.import_module("authenticate_dependabot_head")
     promotion_gate = importlib.import_module("promotion_gate")
     review_gate = importlib.import_module("review_gate")
     verification_evidence = importlib.import_module("verification_evidence")
 else:
+    dependabot_auth = importlib.import_module(
+        f"{__package__}.authenticate_dependabot_head"
+    )
     promotion_gate = importlib.import_module(f"{__package__}.promotion_gate")
     review_gate = importlib.import_module(f"{__package__}.review_gate")
     verification_evidence = importlib.import_module(
@@ -60,9 +64,14 @@ BLOCKER_RESOLVED = re.compile(
 )
 DRAFT_EVENTS = {"convert_to_draft", "converted_to_draft"}
 REVIEW_CHECK_CONTEXT = "review"
+DEPENDABOT_ELIGIBILITY_CONTEXT = "dependabot-merge-eligible"
 GITHUB_ACTIONS_APP_ID = 15368
 SUCCESSFUL_CHECK_CONCLUSIONS = {"neutral", "skipped", "success"}
 TRUSTED_CHECK_PRODUCERS: dict[str, tuple[str, frozenset[str]]] = {
+    DEPENDABOT_ELIGIBILITY_CONTEXT: (
+        ".github/workflows/dependabot-auto-merge.yml",
+        frozenset({"pull_request_target"}),
+    ),
     "title": (
         ".github/workflows/pr-policy.yml",
         frozenset({"merge_group", "pull_request_target"}),
@@ -1601,6 +1610,85 @@ def trusted_required_check_runs(
     return required_runs, run_cache
 
 
+def require_trusted_dependabot_head(
+    github: GitHub,
+    repo: str,
+    pull: dict[str, Any],
+    head_sha: str,
+    base_sha: str,
+) -> str:
+    """Reauthenticate one exact Dependabot head and its trusted eligibility."""
+    eligible, reason, live_base_sha, _, live_head_sha = (
+        dependabot_auth.validated_dependabot_snapshot(pull, repo)
+    )
+    if not eligible or live_base_sha != base_sha or live_head_sha != head_sha:
+        raise RuntimeError(f"Dependabot merge identity is invalid: {reason}")
+
+    commit = github.get(repo, f"commits/{head_sha}")
+    comparison = github.get(repo, f"compare/{base_sha}...{head_sha}")
+    if not isinstance(commit, dict) or not isinstance(comparison, dict):
+        raise RuntimeError("Dependabot head metadata is unavailable")
+    direct, direct_reason = dependabot_auth.authenticated_dependabot_head(
+        pull, commit, repo, base_sha
+    )
+    kind = "direct"
+    if not direct:
+        parents = commit.get("parents")
+        parent_sha = (
+            (parents[0] or {}).get("sha")
+            if isinstance(parents, list) and len(parents) == 1
+            else ""
+        )
+        if not isinstance(parent_sha, str) or SHA.fullmatch(parent_sha) is None:
+            raise RuntimeError(
+                "Dependabot head is not authenticated: " + direct_reason
+            )
+        parent_commit = github.get(repo, f"commits/{parent_sha}")
+        parent_comparison = github.get(
+            repo, f"compare/{base_sha}...{parent_sha}"
+        )
+        child, child_reason, _, _ = (
+            dependabot_auth.trusted_sync_child_candidate(
+                pull,
+                commit,
+                parent_commit if isinstance(parent_commit, dict) else {},
+                (
+                    parent_comparison
+                    if isinstance(parent_comparison, dict)
+                    else {}
+                ),
+                repo,
+                base_sha,
+            )
+        )
+        if not child:
+            raise RuntimeError(
+                "Dependabot head is not authenticated: "
+                f"{direct_reason}; {child_reason}"
+            )
+        kind = "sync-child"
+
+    check_runs = github.collection(
+        repo,
+        f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
+        "check_runs",
+    )
+    identity = (DEPENDABOT_ELIGIBILITY_CONTEXT, GITHUB_ACTIONS_APP_ID)
+    selected, _ = trusted_required_check_runs(
+        github, repo, head_sha, {identity}, check_runs
+    )
+    check = selected.get(identity)
+    if (
+        check is None
+        or check.get("status") != "completed"
+        or check.get("conclusion") != "success"
+    ):
+        raise RuntimeError(
+            "Dependabot head has no trusted merge eligibility on the exact head"
+        )
+    return kind
+
+
 def require_trusted_verification(
     github: GitHub,
     repo: str,
@@ -1929,6 +2017,7 @@ def merge_snapshot(  # noqa: C901
     authorization_url: str = "",
     explicit_actor: str = "",
     quota_fallback_note_url: str = "",
+    require_dependabot_head: bool = False,
 ) -> dict[str, object]:
     """Re-read every mutable merge input while the lease is held."""
     repo = lease["repository"]
@@ -1936,6 +2025,13 @@ def merge_snapshot(  # noqa: C901
     head_sha = lease["head_sha"]
     require_lease(github, lease, repo, pr_number, head_sha)
     pull = live_pull(github, repo, pr_number, head_sha)
+    dependabot_head = (
+        require_trusted_dependabot_head(
+            github, repo, pull, str(head_sha), str(lease["base_sha"])
+        )
+        if require_dependabot_head
+        else ""
+    )
     if pull.get("draft") is not False:
         raise RuntimeError("Pull request is Draft at merge time")
     if UNCHECKED.search(str(pull.get("body") or "")):
@@ -2125,6 +2221,7 @@ def merge_snapshot(  # noqa: C901
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
         "alpha_self_merge": alpha_self_merge,
+        "dependabot_head": dependabot_head,
     }
 
 
@@ -2260,6 +2357,7 @@ def check(args: argparse.Namespace, github: GitHub) -> None:
         args.authorization_url,
         getattr(args, "actor", ""),
         getattr(args, "quota_fallback_note_url", ""),
+        getattr(args, "require_dependabot_head", False),
     )
     sys.stdout.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
 
@@ -2323,6 +2421,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
         args.authorization_url,
         getattr(args, "actor", ""),
         getattr(args, "quota_fallback_note_url", ""),
+        getattr(args, "require_dependabot_head", False),
     )
     if snapshot["merge_mode"] != "agent":
         raise RuntimeError(
@@ -2361,6 +2460,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
         args.authorization_url,
         getattr(args, "actor", ""),
         getattr(args, "quota_fallback_note_url", ""),
+        getattr(args, "require_dependabot_head", False),
     )
     title = str(snapshot["title"])
     confirm_refs(lease)
@@ -2976,24 +3076,15 @@ def canonical_scanner_helper(root: Path, path: Path) -> bool:
 def dependabot_auto_merge_exemption(root: Path, path: Path) -> bool:
     """Trust the two exact dependabot-auto-merge.yml paths (see #602).
 
-    `gh pr merge --auto` only enqueues the pull request in GitHub's native
-    auto-merge queue; unlike the writes this scanner otherwise fails closed
-    on, it is not itself an immediate state mutation. The actual merge only
-    happens later, and only once GitHub confirms the required
-    `title`/`promotion`/`verify` checks and the branch protection review
-    requirement in policies/rulesets.json are satisfied — the same
-    reasoning already documented next to `contents: write` in the workflow
-    file itself. `gh pr edit --add-label needs-manual-review` in the same
-    workflow only ever fires on major-version updates that are explicitly
-    routed to human review rather than merged, so it carries no lifecycle
-    race either. That means neither write is the immediate-write race the
-    lease mechanism exists to prevent, so a narrow, exact-path exemption is
-    safe here without routing these writes through the lease.
+    The only unleased write left in this workflow is the major-update
+    `needs-manual-review` label/comment. It never authorizes or performs a
+    merge; minor and patch updates use the separate exact-head workflow and
+    `pr_lifecycle.py` lease. Keeping this narrow exemption avoids taking the
+    shared main-lane lease for a non-merge classification notice.
 
     This is a positive list, not a pattern relaxation: only these two exact
     paths are trusted. A different file reusing the same unleased
-    `gh pr merge`/`gh pr edit --add-label` command text is still caught by
-    scan_writers.
+    `gh pr edit --add-label` command text is still caught by scan_writers.
 
     Every scanner exemption must have its own tracking Issue (#602 is this
     one's), and all exemptions are re-reviewed once the project leaves
@@ -3133,6 +3224,9 @@ def parser() -> argparse.ArgumentParser:
         if name in {"check", "merge"}:
             command.add_argument("--authorization-url", default="")
             command.add_argument("--quota-fallback-note-url", default="")
+            command.add_argument(
+                "--require-dependabot-head", action="store_true"
+            )
         if name == "state":
             command.add_argument(
                 "--state", choices=("ready", "draft"), required=True

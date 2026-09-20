@@ -8,8 +8,7 @@ on:
     types: [opened, synchronize, reopened]
 
 concurrency:
-  # Serialize every head transition for one PR. A later run first revokes any
-  # auto-merge state left by the preceding head, without cancelling a sync run.
+  # Serialize every head transition for one PR without cancelling a sync run.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
@@ -158,121 +157,33 @@ jobs:
             echo "head_sha=$HEAD_SHA"
           } >> "$GITHUB_OUTPUT"
 
-  reset-auto-merge:
-    name: reset-auto-merge
-    needs: authenticate
-    # A rejected sync child can fail reconstruction after publishing its live
-    # snapshot. Revocation must still run; only later writers require success.
-    if: >-
-      ${{
-        always() &&
-        needs.authenticate.outputs.snapshot_valid == 'true'
-      }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      pull-requests: write
-    steps:
-      - name: Disable stale auto-merge for the exact current head
-        env:
-          BASE_REPO: ${{ github.repository }}
-          BASE_SHA: ${{ needs.authenticate.outputs.base_sha }}
-          GH_TOKEN: ${{ github.token }}
-          HEAD_REF: ${{ needs.authenticate.outputs.head_ref }}
-          HEAD_SHA: ${{ needs.authenticate.outputs.head_sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          gh api "repos/$BASE_REPO/pulls/$PR_NUMBER" > "$RUNNER_TEMP/current-pr.json"
-          jq -e \
-            --arg repo "$BASE_REPO" \
-            --arg base_sha "$BASE_SHA" \
-            --arg head_ref "$HEAD_REF" \
-            --arg head_sha "$HEAD_SHA" \
-            '.state == "open" and
-             .base.ref == "main" and
-             .base.repo.full_name == $repo and
-             .base.sha == $base_sha and
-             .head.ref == $head_ref and
-             .head.repo.full_name == $repo and
-             .head.sha == $head_sha' \
-            "$RUNNER_TEMP/current-pr.json" > /dev/null
-          if jq -e '.auto_merge != null' \
-            "$RUNNER_TEMP/current-pr.json" > /dev/null; then
-            gh pr merge \
-              --disable-auto \
-              --repo "$BASE_REPO" \
-              "$PR_NUMBER"
-          fi
-
-  auto-merge:
-    name: auto-merge
-    needs: [authenticate, reset-auto-merge, sync-template]
+  classify-update:
+    name: classify Dependabot update
+    needs: [authenticate, sync-template]
     if: >-
       ${{
         always() &&
         needs.authenticate.result == 'success' &&
-        needs.reset-auto-merge.result == 'success' &&
         needs.authenticate.outputs.eligible == 'true' &&
         (
-          needs.sync-template.result == 'success' ||
-          (
-            needs.sync-template.result == 'skipped' &&
-            (
-              needs.authenticate.outputs.sync_complete == 'true' ||
-              !startsWith(
-                needs.authenticate.outputs.head_ref,
-                'dependabot/github_actions/main/'
-              )
-            )
-          )
+          needs.sync-template.result == 'skipped' ||
+          (needs.sync-template.result == 'success' &&
+           needs.sync-template.outputs.head_sha == needs.authenticate.outputs.head_sha)
         )
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # contents: write is required by `gh pr merge --auto`, which enables
-      # GitHub's native auto-merge queue; it does not perform an immediate
-      # merge. The actual merge still only happens later, and only once the
-      # required `title`/`promotion`/`verify` checks and the branch
-      # protection review requirement in policies/rulesets.json are
-      # satisfied, at which point GitHub performs the merge itself.
-      contents: write
+      contents: read
       pull-requests: write
+    outputs:
+      update_type: ${{ steps.metadata.outputs.update-type }}
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ github.token }}
-      - name: Enable auto-merge for minor and patch updates
-        if: >-
-          ${{ steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor' }}
-        env:
-          BASE_REPO: ${{ github.repository }}
-          BASE_SHA: ${{ needs.authenticate.outputs.base_sha }}
-          GH_TOKEN: ${{ github.token }}
-          HEAD_REF: ${{ needs.authenticate.outputs.head_ref }}
-          HEAD_SHA: ${{ needs.sync-template.outputs.head_sha || needs.authenticate.outputs.head_sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        # This repository is squash-merge-only; --squash matches that policy.
-        run: |
-          gh api "repos/$BASE_REPO/pulls/$PR_NUMBER" > "$RUNNER_TEMP/current-pr.json"
-          jq -e \
-            --arg repo "$BASE_REPO" \
-            --arg base_sha "$BASE_SHA" \
-            --arg head_ref "$HEAD_REF" \
-            --arg head_sha "$HEAD_SHA" \
-            '.state == "open" and
-             .base.ref == "main" and
-             .base.repo.full_name == $repo and
-             .base.sha == $base_sha and
-             .head.ref == $head_ref and
-             .head.repo.full_name == $repo and
-             .head.sha == $head_sha' \
-            "$RUNNER_TEMP/current-pr.json" > /dev/null
-          gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" "$PR_URL"
       - name: Flag major updates for manual review
         if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-major' }}
         env:
@@ -301,6 +212,21 @@ jobs:
           gh pr edit "$PR_URL" --add-label needs-manual-review
           gh pr comment "$PR_URL" --body "This is a major version update, which may include breaking changes. Auto-merge is intentionally skipped; please review and merge manually."
 
+  merge-eligible:
+    name: dependabot-merge-eligible
+    needs: classify-update
+    if: >-
+      ${{
+        needs.classify-update.outputs.update_type == 'version-update:semver-patch' ||
+        needs.classify-update.outputs.update_type == 'version-update:semver-minor'
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Publish exact-head merge eligibility
+        run: echo "This exact authenticated head is eligible for lifecycle merge."
+
   sync-template:
     name: sync-template
     # Issue #755: Dependabot only ever bumps root's copy of a paired file
@@ -311,7 +237,7 @@ jobs:
     # Issue #830: only the trusted base workflow authenticates the current
     # signed Dependabot head and its exact changed-path set. The write job
     # never executes a script selected by the pull request.
-    needs: [authenticate, reset-auto-merge]
+    needs: authenticate
     if: ${{ needs.authenticate.outputs.sync_eligible == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10

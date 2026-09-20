@@ -29,6 +29,12 @@ rules:
       # never checkout the triggering head or download its artifacts, and use
       # only GitHub-supplied PR numbers and head SHAs as data.
       - pr-policy-writes.yml
+      # Issue #830: workflow_run only wakes a default-branch checkout. The
+      # resolver binds one live same-repo Dependabot PR to the completed run;
+      # no triggering artifact or code is consumed. Before writing, lifecycle
+      # reauthenticates the exact head, trusted eligibility producer, required
+      # checks, authorization, Rulesets, and remote lease.
+      - dependabot-merge.yml
       # Issue #835: required check names must be produced by workflow
       # definitions loaded from the trusted base. PR policy and review only
       # checkout that base with read-only permissions. CI has contents:read,

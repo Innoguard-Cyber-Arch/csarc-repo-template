@@ -111,7 +111,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | `tests/test_release_consumption.py`（#104，signer-mismatch 案例見 #770） | `verify_consumption()` 的成功驗證、attestation 缺失、repository／signer 身分不符、成品 digest 不符四種情境 |
 | `tests/test_release_publish.py`（#589；attestation 驗證案例見 #770） | 對 mocked `gh` 與真實 Git fixture 驅動 `scripts/publish-release` 的行為回歸：staging 成功／fail-closed、state 判定、發布成功、發布失敗回退 draft、已發布重跑不重建、attestation 缺失／asset digest 不符／signer 不符三種 post-hoc 驗證失敗情境 |
 | `tests/test_journey07_release.py` | workflow 權限、pin、ownership 與 archive disposition；`release.yml`／`release.yml.jinja` 呼叫 `scripts/publish-release` 而非保留自己一份 bash 的來源層級驗證（#589） |
-| `.github/workflows/dependabot-auto-merge.yml` | 由可信任 base revision 的 `pull_request_target` workflow 驗證目前 head 是 GitHub 簽章的 Dependabot commit；minor／patch 排入 GitHub 原生 auto-merge 佇列，major 加標籤／留言、不合併；Actions bump 只以 base synchronizer 同步精確 allowlist 內的 template 副本 |
+| `.github/workflows/dependabot-auto-merge.yml`、`.github/workflows/dependabot-merge.yml` | 由可信任 base revision 驗證 current head 與 update type；minor／patch 只產生 exact-head eligibility，再由 default-branch workflow 透過 lifecycle lease 與 expected-head merge 合併，major 加標籤／留言、不合併；Actions bump 只以 base synchronizer 同步精確 allowlist 內的 template 副本 |
 | `tests/test_dependabot_auto_merge.py` | 觸發條件、head 驗證、權限、pin、base-code synchronizer、exact-ref push 與 minor/patch／major 分流的 workflow 邏輯回歸測試 |
 
 ## Archive disposition
@@ -153,13 +153,12 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 明確 owner（維護者 matheme-justyn，同時是 Issue assignee）與明確事故（#543／#544／#545 三張 Dependabot PR 開出 2 小時仍無人處理的真實 backlog，
 不是推測性需求）。
 
-決定：新增 `.github/workflows/dependabot-auto-merge.yml`，只在 `github.event.pull_request.user.login == 'dependabot[bot]'`
-時執行（不是可被偽造的 `github.actor`，見 zizmor `bot-conditions` audit），於 `pull_request`
-（opened／synchronize／reopened）用 `dependabot/fetch-metadata` 讀 update-type；minor／patch 呼叫
-`gh pr merge --auto --squash` 排入 GitHub 原生 auto-merge 佇列（不是自建輪詢腳本），major 只加 `needs-manual-review`
-標籤並留言，不合併。這只是**排入**佇列，不是立即合併或繞過任何既有把關——實際合併仍完全由 GitHub 依
-`policies/rulesets.json` 的 branch protection（1 個 code owner approving review）與既有 `title`／`promotion`／`verify`
-required checks 全部通過後才執行；本決定沒有調整、放寬或繞過上述任何規則。
+決定：新增 `.github/workflows/dependabot-auto-merge.yml`，以 `dependabot/fetch-metadata` 將 minor／patch 標成
+exact-head merge eligible，major 只加 `needs-manual-review` 標籤並留言、不合併。#557 原先使用 GitHub 原生
+auto-merge；#830 發現這項 PR-wide 狀態不會持續綁定啟用時的 head SHA，因此改由 default-branch
+`dependabot-merge.yml` 在 required checks 完成後喚醒，透過 repository-native `pr_lifecycle.py` 取得 remote lease、
+重新驗證 current head 與 trusted check producer，並以 expected-head REST merge 原子合併。既有 review 與
+`title`／`promotion`／`verify` required checks 全數保留，沒有新增 Ruleset context 或 bypass。
 
 範圍邊界：本節只取代「PR 開出後如何自動合併」這一段判斷，不重新開放整個 #322，也不影響已經 preserved 的 cooldown／SBOM
 半部——`.github/dependabot.yml` 的 `cooldown.default-days: 3` 維持原樣，不因本節新增而重新設定或延長。同步下發 `template/`
@@ -180,11 +179,13 @@ root `.github/workflows/*.yml|*.yaml` 的 modified path。若 current head 是�
 PR 關閉後重開），則先驗證其 parent 符合同一套 Dependabot 條件，再以 parent 原始 base revision 的 trusted
 synchronizer 重建完整 Git tree；只有 tree hash 完全相同才視為可信任衍生內容。
 
-具寫入權限的 job 只執行 base SHA 的 `scripts/sync-paired-files.sh`；產物只能是已驗證 source 對應的 template
-workflow，push 以已驗證 bot ref 與 exact head SHA 的 lease 綁定，auto-merge 也綁定同步完成後的 exact head。
-每張 PR 的 head 事件會串行處理：先對經驗證的 live snapshot 撤銷既有 auto-merge，撤銷成功後再只為通過
-current-head authentication 的 exact SHA 重新啟用，避免後續 human commit 沿用舊 head 的 auto-merge 授權。
-任何 metadata 缺漏、路徑超界、tree 重建不一致、git 比對錯誤或驗證後 ref 移動都 fail closed。
+具寫入權限的 sync job 只執行 base SHA 的 `scripts/sync-paired-files.sh`；產物只能是已驗證 source 對應的 template
+workflow，push 以已驗證 bot ref 與 exact head SHA 的 lease 綁定。minor／patch 的 eligibility check 只會附著在
+通過驗證且沒有被同一 run 的 sync push 取代的 exact head。required workflows 完成時，default-branch merge
+workflow 先以唯讀提示避免過早取得 lease；真正的安全判定由 `pr_lifecycle.py check`／`merge` 各自重新查詢 PR、
+驗證 Bot account type、同 repo ref、GitHub 簽章或已重建 sync child、eligibility check 的 GitHub Actions App／
+workflow／event，以及全部 required checks，最後用 lease 與 REST `sha` expected head 合併。任何 head／author／
+source／check／lease drift 都 fail closed；不再留下 persistent native auto-merge 狀態。
 
 ## 發版不依賴 Actions 健康度的本機 fallback（#589，2026-09-03）
 

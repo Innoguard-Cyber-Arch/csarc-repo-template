@@ -21,6 +21,7 @@ paired_files=(
   .github/ISSUE_TEMPLATE/milestone-tracker.yml
   .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/dependabot-auto-merge.yml
+  .github/workflows/dependabot-merge.yml
   .github/workflows/governance-comment.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml

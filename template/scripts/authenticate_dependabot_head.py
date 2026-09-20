@@ -66,6 +66,7 @@ def validated_dependabot_snapshot(
     try:
         state = pull_request["state"]
         author = pull_request["user"]["login"]
+        author_type = pull_request["user"]["type"]
         base_ref = pull_request["base"]["ref"]
         base_name = pull_request["base"]["repo"]["full_name"]
         base_sha = pull_request["base"]["sha"]
@@ -80,6 +81,8 @@ def validated_dependabot_snapshot(
     )
     if not eligible:
         return False, reason, "", "", ""
+    if author_type != "Bot":
+        return False, "pull request author is not a GitHub Bot", "", "", ""
     if state != "open":
         return False, "pull request is not open", "", "", ""
     if base_ref != DEPENDABOT_SYNC_BASE or base_name != base_repo:
@@ -125,7 +128,11 @@ def authenticated_dependabot_head(
             False,
             "commit metadata does not match the current pull request head",
         )
-    if (commit.get("author") or {}).get("login") != DEPENDABOT_LOGIN:
+    commit_author = commit.get("author") or {}
+    if (
+        commit_author.get("login") != DEPENDABOT_LOGIN
+        or commit_author.get("type") != "Bot"
+    ):
         return (
             False,
             "current head author is not the allowlisted pull request bot",

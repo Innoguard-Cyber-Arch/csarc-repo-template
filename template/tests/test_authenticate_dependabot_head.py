@@ -21,7 +21,7 @@ SYNC_SHA = "c" * 40
 def _pull_request() -> dict:
     return {
         "state": "open",
-        "user": {"login": "dependabot[bot]"},
+        "user": {"login": "dependabot[bot]", "type": "Bot"},
         "base": {
             "ref": "main",
             "repo": {"full_name": REPO},
@@ -38,7 +38,10 @@ def _pull_request() -> dict:
 def _commit(author: str = "dependabot[bot]") -> dict:
     return {
         "sha": HEAD_SHA,
-        "author": {"login": author},
+        "author": {
+            "login": author,
+            "type": "Bot" if author == "dependabot[bot]" else "User",
+        },
         "committer": {"login": "web-flow"},
         "commit": {"verification": {"verified": True, "reason": "valid"}},
         "parents": [{"sha": BASE_SHA}],
@@ -123,6 +126,29 @@ def test_authenticated_dependabot_head_requires_current_bot_commit() -> None:
     """Issue #830: a human commit on a bot-opened PR fails closed."""
     eligible, reason = dependabot_auth.authenticated_dependabot_head(
         _pull_request(), _commit(author="some-contributor"), REPO, BASE_SHA
+    )
+
+    assert not eligible
+    assert "current head author" in reason
+
+
+def test_authenticated_dependabot_head_requires_bot_account_types() -> None:
+    """Matching login text cannot impersonate GitHub's Bot account type."""
+    pull_request = _pull_request()
+    pull_request["user"]["type"] = "User"
+
+    eligible, reason = dependabot_auth.authenticated_dependabot_head(
+        pull_request, _commit(), REPO, BASE_SHA
+    )
+
+    assert not eligible
+    assert "GitHub Bot" in reason
+
+    pull_request["user"]["type"] = "Bot"
+    commit = _commit()
+    commit["author"]["type"] = "User"
+    eligible, reason = dependabot_auth.authenticated_dependabot_head(
+        pull_request, commit, REPO, BASE_SHA
     )
 
     assert not eligible
