@@ -7,6 +7,14 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.17.2] - 2026-09-20
+
+### Bug Fixes
+
+* fix(cli): defer Copier tasks until approval (dc2e7a4)
+* fix(ci): isolate pull request policy writes (048b447)
+* fix(cli): defer dependency tooling until approval (30b8b36)
+
 ## [0.17.1] - 2026-09-20
 
 ### Bug Fixes
