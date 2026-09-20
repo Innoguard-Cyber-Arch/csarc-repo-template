@@ -18,7 +18,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NoReturn, Protocol, cast
+from typing import Literal, NoReturn, Protocol, cast, overload
 from urllib.parse import quote
 
 import yaml  # type: ignore[import-untyped]
@@ -325,6 +325,172 @@ def run(
     )
 
 
+GIT_FILTER_CONFIG = re.compile(
+    r"^filter\.(?P<driver>.+)\.(?:clean|smudge|process|required)$",
+    re.IGNORECASE,
+)
+
+
+def git_environment(
+    extra_config: tuple[tuple[str, str], ...] = (),
+) -> dict[str, str]:
+    """Build a Git environment without caller-injected execution config."""
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if not name.startswith("GIT_")
+    }
+    environment.update(
+        {
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_SYSTEM": os.devnull,
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_PAGER": "cat",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
+    config = (
+        ("core.fsmonitor", "false"),
+        ("core.hooksPath", os.devnull),
+        *extra_config,
+    )
+    environment["GIT_CONFIG_COUNT"] = str(len(config))
+    for index, (key, value) in enumerate(config):
+        environment[f"GIT_CONFIG_KEY_{index}"] = key
+        environment[f"GIT_CONFIG_VALUE_{index}"] = value
+    return environment
+
+
+def git_filter_config(repository: Path) -> tuple[tuple[str, str], ...]:
+    """Return inert overrides for configured filters, including submodules."""
+    if not repository.is_dir():
+        return ()
+    root = repository.resolve()
+    pending = [root]
+    visited: set[Path] = set()
+    drivers: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        config = subprocess.run(  # noqa: S603
+            [  # noqa: S607
+                "git",
+                "-C",
+                str(current),
+                "config",
+                "--includes",
+                "--name-only",
+                "--null",
+                "--get-regexp",
+                r"^filter\..*\.(clean|smudge|process|required)$",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=git_environment(),
+        )
+        if config.returncode not in {0, 1}:
+            detail = (
+                config.stderr.strip() or "Cannot inspect Git filter config."
+            )
+            raise CliError(detail)
+        drivers.update(
+            match.group("driver")
+            for key in config.stdout.split("\0")
+            if (match := GIT_FILTER_CONFIG.fullmatch(key)) is not None
+        )
+        index = subprocess.run(  # noqa: S603
+            ["git", "-C", str(current), "ls-files", "--stage", "-z"],  # noqa: S607
+            check=False,
+            capture_output=True,
+            text=True,
+            env=git_environment(),
+        )
+        if index.returncode != 0:
+            detail = index.stderr.strip() or "Cannot inspect Git submodules."
+            raise CliError(detail)
+        for entry in index.stdout.split("\0"):
+            metadata, separator, relative_name = entry.partition("\t")
+            if not separator or not metadata.startswith("160000 "):
+                continue
+            candidate = (current / relative_name).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError as error:
+                raise CliError(
+                    "Git submodule path escapes the repository."
+                ) from error
+            if candidate.is_dir():
+                pending.append(candidate)
+    return tuple(
+        (f"filter.{driver}.{setting}", value)
+        for driver in sorted(drivers)
+        for setting, value in (
+            ("clean", ""),
+            ("smudge", ""),
+            ("process", ""),
+            ("required", "false"),
+        )
+    )
+
+
+@overload
+def run_git(
+    command: list[str],
+    *,
+    repository: Path | None = None,
+    cwd: Path | None = None,
+    capture: bool = False,
+    check: bool = True,
+    text: Literal[True] = True,
+    neutralize_filters: bool = False,
+) -> subprocess.CompletedProcess[str]: ...
+
+
+@overload
+def run_git(
+    command: list[str],
+    *,
+    repository: Path | None = None,
+    cwd: Path | None = None,
+    capture: bool = False,
+    check: bool = True,
+    text: Literal[False],
+    neutralize_filters: bool = False,
+) -> subprocess.CompletedProcess[bytes]: ...
+
+
+def run_git(
+    command: list[str],
+    *,
+    repository: Path | None = None,
+    cwd: Path | None = None,
+    capture: bool = False,
+    check: bool = True,
+    text: bool = True,
+    neutralize_filters: bool = False,
+) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
+    """Run Git without repository-local or ambient executable helpers."""
+    if not command or command[0] != "git":
+        raise ValueError("run_git requires a Git command")
+    filter_config = (
+        git_filter_config(repository)
+        if repository is not None and neutralize_filters
+        else ()
+    )
+    return subprocess.run(  # noqa: S603
+        command,
+        cwd=cwd,
+        check=check,
+        text=text,
+        capture_output=capture,
+        env=git_environment(filter_config),
+    )
+
+
 def github_repository(source: str) -> str | None:
     """Extract owner/repository from a GitHub template source."""
     match = re.search(
@@ -339,8 +505,9 @@ def github_repository(source: str) -> str | None:
 
 def git_commit(source: Path, reference: str) -> str:
     """Resolve a local Git reference to a full commit SHA."""
-    result = run(
+    result = run_git(
         ["git", "-C", str(source), "rev-parse", f"{reference}^{{commit}}"],
+        repository=source,
         capture=True,
         check=False,
     )
@@ -492,8 +659,9 @@ def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
     label = requested or "latest-local-tag"
     reference = requested
     if reference is None:
-        tags = run(
+        tags = run_git(
             ["git", "-C", str(source_path), "tag", "--sort=-version:refname"],
+            repository=source_path,
             capture=True,
         ).stdout.splitlines()
         if not tags:
@@ -2254,10 +2422,12 @@ def copy_candidate_files(
 
 def git_target_state(target: Path) -> tuple[str, tuple[str, ...]]:
     """Return the exact committed base and reviewable working-tree state."""
-    head = run(
-        ["git", "-C", str(target), "rev-parse", "HEAD"], capture=True
+    head = run_git(
+        ["git", "-C", str(target), "rev-parse", "HEAD"],
+        repository=target,
+        capture=True,
     ).stdout.strip()
-    status = run(
+    status = run_git(
         [
             "git",
             "-C",
@@ -2265,8 +2435,11 @@ def git_target_state(target: Path) -> tuple[str, tuple[str, ...]]:
             "status",
             "--porcelain=v1",
             "--untracked-files=all",
+            "--no-renames",
         ],
+        repository=target,
         capture=True,
+        neutralize_filters=True,
     ).stdout.splitlines()
     return head, tuple(status)
 
@@ -2281,21 +2454,25 @@ def target_file_snapshot(target: Path) -> dict[str, str]:
 
 def git_changed_paths(target: Path) -> set[str]:
     """Return tracked and untracked paths without parsing display quoting."""
-    tracked = run(
+    tracked = run_git(
         [
             "git",
             "-C",
             str(target),
             "diff",
+            "--no-ext-diff",
+            "--no-textconv",
             "--name-only",
             "--no-renames",
             "-z",
             "HEAD",
             "--",
         ],
+        repository=target,
         capture=True,
+        neutralize_filters=True,
     ).stdout.split("\0")
-    untracked = run(
+    untracked = run_git(
         [
             "git",
             "-C",
@@ -2305,6 +2482,7 @@ def git_changed_paths(target: Path) -> set[str]:
             "--exclude-standard",
             "-z",
         ],
+        repository=target,
         capture=True,
     ).stdout.split("\0")
     return {name for name in (*tracked, *untracked) if name}
@@ -2486,7 +2664,7 @@ def candidate_patch_effects(
 
 def clone_target(target: Path, candidate: Path) -> None:
     """Clone the committed target without mutating its Git metadata."""
-    result = run(
+    result = run_git(
         [
             "git",
             "clone",
@@ -2495,6 +2673,7 @@ def clone_target(target: Path, candidate: Path) -> None:
             str(target),
             str(candidate),
         ],
+        repository=target,
         capture=True,
         check=False,
     )
@@ -2508,8 +2687,8 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
     """Clone HEAD and overlay the current tracked and untracked worktree."""
     clone_target(target, candidate)
     patch = candidate.parent / "working-tree.patch"
-    difference = subprocess.run(  # noqa: S603
-        [  # noqa: S607
+    difference = run_git(
+        [
             "git",
             "-C",
             str(target),
@@ -2522,24 +2701,29 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
             "HEAD",
             "--",
         ],
-        capture_output=True,
+        repository=target,
+        capture=True,
         check=False,
+        text=False,
+        neutralize_filters=True,
     )
     if difference.returncode != 0:
         detail = difference.stderr.decode(errors="replace").strip()
         raise CliError(detail or "Cannot stage tracked adoption work.")
     patch.write_bytes(difference.stdout)
     if difference.stdout:
-        result = run(
+        result = run_git(
             ["git", "-C", str(candidate), "apply", str(patch)],
+            repository=candidate,
             capture=True,
             check=False,
+            neutralize_filters=True,
         )
         if result.returncode != 0:
             raise CliError(
                 result.stderr.strip() or "Cannot stage tracked adoption work."
             )
-    untracked = run(
+    untracked = run_git(
         [
             "git",
             "-C",
@@ -2549,13 +2733,18 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
             "--exclude-standard",
             "-z",
         ],
+        repository=target,
         capture=True,
     ).stdout.split("\0")
     copy_candidate_files(
         target, candidate, tuple(path for path in untracked if path)
     )
-    run(["git", "-C", str(candidate), "add", "--all"])
-    run(
+    run_git(
+        ["git", "-C", str(candidate), "add", "--all"],
+        repository=candidate,
+        neutralize_filters=True,
+    )
+    run_git(
         [
             "git",
             "-C",
@@ -2569,7 +2758,9 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
             "--no-gpg-sign",
             "-m",
             "chore: stage pending adoption",
-        ]
+        ],
+        repository=candidate,
+        neutralize_filters=True,
     )
 
 
@@ -2699,20 +2890,23 @@ def write_candidate_patch(
         before,
         tuple(name for name in canonical_deletions if name in target_files),
     )
-    patch_result = subprocess.run(  # noqa: S603
-        [  # noqa: S607
+    patch_result = run_git(
+        [
             "git",
             "diff",
             "--no-index",
             "--binary",
+            "--no-ext-diff",
+            "--no-textconv",
             "--no-renames",
             "--",
             before.name,
             after.name,
         ],
         cwd=patch.parent,
-        capture_output=True,
+        capture=True,
         check=False,
+        text=False,
     )
     if patch_result.returncode not in {0, 1}:
         detail = patch_result.stderr.decode(errors="replace").strip()
@@ -2724,7 +2918,13 @@ def write_candidate_patch(
         if check_only:
             command.append("--check")
         command.append(str(patch))
-        apply_result = run(command, capture=True, check=False)
+        apply_result = run_git(
+            command,
+            repository=target,
+            capture=True,
+            check=False,
+            neutralize_filters=True,
+        )
         if apply_result.returncode != 0:
             detail = (
                 apply_result.stderr.strip()
@@ -3122,8 +3322,9 @@ def settings_plan(target: Path) -> None:
 
 def target_repository(target: Path) -> str | None:
     """Return the GitHub origin of an existing target, when discoverable."""
-    root = run(
+    root = run_git(
         ["git", "-C", str(target), "rev-parse", "--show-toplevel"],
+        repository=target,
         capture=True,
         check=False,
     )
@@ -3132,8 +3333,9 @@ def target_repository(target: Path) -> str | None:
         and Path(root.stdout.strip()).resolve() == target.resolve()
     )
     if is_repository_root:
-        result = run(
+        result = run_git(
             ["git", "-C", str(target), "remote", "get-url", "origin"],
+            repository=target,
             capture=True,
             check=False,
         )
@@ -3893,15 +4095,27 @@ def default_security_reporting_channel(repository_url: str) -> str:
 
 def require_clean_repository(target: Path) -> None:
     """Require an existing repository with no tracked or untracked changes."""
-    inside = run(
+    inside = run_git(
         ["git", "-C", str(target), "rev-parse", "--is-inside-work-tree"],
+        repository=target,
         capture=True,
         check=False,
     )
     if inside.returncode != 0:
         raise CliError(f"{target} must be an existing Git repository.")
-    status = run(
-        ["git", "-C", str(target), "status", "--porcelain"], capture=True
+    status = run_git(
+        [
+            "git",
+            "-C",
+            str(target),
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--no-renames",
+        ],
+        repository=target,
+        capture=True,
+        neutralize_filters=True,
     )
     if status.stdout.strip():
         raise CliError("Git working tree must be clean before adopt or update.")
@@ -3910,8 +4124,9 @@ def require_clean_repository(target: Path) -> None:
 def resolve_repository_target(path: Path) -> Path:
     """Resolve any path inside one Git worktree to its root."""
     candidate = path.expanduser().resolve()
-    result = run(
+    result = run_git(
         ["git", "-C", str(candidate), "rev-parse", "--show-toplevel"],
+        repository=candidate,
         capture=True,
         check=False,
     )
@@ -5510,8 +5725,10 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         temporary_root = Path(temporary).resolve()
         candidate = temporary_root / "candidate"
         clone_target(target, candidate)
-        baseline_head = run(
-            ["git", "-C", str(candidate), "rev-parse", "HEAD"], capture=True
+        baseline_head = run_git(
+            ["git", "-C", str(candidate), "rev-parse", "HEAD"],
+            repository=candidate,
+            capture=True,
         ).stdout.strip()
         candidate_config_path = config_path(candidate)
         migrating_legacy_config = (
@@ -5546,8 +5763,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             # candidate_patch_effects() computes against baseline_head,
             # alongside whatever Copier itself changes, and reaches the
             # real target in one patch.
-            run(["git", "-C", str(candidate), "add", "-A"])
-            run(
+            run_git(
+                ["git", "-C", str(candidate), "add", "-A"],
+                repository=candidate,
+                neutralize_filters=True,
+            )
+            run_git(
                 [
                     "git",
                     "-C",
@@ -5561,7 +5782,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                     "--no-gpg-sign",
                     "-m",
                     "chore: migrate legacy repository configuration",
-                ]
+                ],
+                repository=candidate,
+                neutralize_filters=True,
             )
         data_file = temporary_root / "data.yml"
         data_file.write_text(
@@ -5602,7 +5825,17 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             # the working tree or index (see above): the migration and
             # whatever Copier changed on top of it now both show up as one
             # uncommitted diff against the repository's real prior state.
-            run(["git", "-C", str(candidate), "reset", "--soft", baseline_head])
+            run_git(
+                [
+                    "git",
+                    "-C",
+                    str(candidate),
+                    "reset",
+                    "--soft",
+                    baseline_head,
+                ],
+                repository=candidate,
+            )
         pin_answer_commit(candidate, str(status["target_sha"]))
         persist_release_answers(candidate, answers)
         verify_project(candidate)

@@ -778,6 +778,7 @@ def test_capability_preflight_uses_readable_github_origin(
             command, 0, stdout=json.dumps(response), stderr=""
         )
 
+    monkeypatch.setattr(cli, "target_repository", lambda _: "owner/repo")
     monkeypatch.setattr(cli, "run", fake_run)
     revision = cli.resolve_revision(
         cli.CANONICAL_SOURCE, "v1.2.3", client=FakeReleaseClient()
@@ -849,7 +850,7 @@ def test_target_repository_uses_explicit_repo_for_new_project(
     monkeypatch.setenv("GH_REPO", "owner/new-repository")
     monkeypatch.setattr(
         cli,
-        "run",
+        "run_git",
         lambda *args, **kwargs: subprocess.CompletedProcess(
             args[0], 1, stdout="", stderr=""
         ),
@@ -2776,6 +2777,164 @@ def test_adopt_help_describes_report_directory(
     assert "--finalize" in help_text
     assert "--report-dir PATH" in help_text
     assert "plan without writing (the default for adopt)" in help_text
+
+
+@pytest.mark.parametrize("config_source", ["local", "environment"])
+def test_git_planning_ignores_configured_fsmonitor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    config_source: str,
+) -> None:
+    """Detect normal dirty state without invoking configured fsmonitor."""
+    project = tmp_path / f"fsmonitor-{config_source}"
+    project.mkdir()
+    tracked = project / "tracked.txt"
+    tracked.write_text("baseline\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    marker = tmp_path / f"{config_source}-fsmonitor-ran"
+    helper = tmp_path / f"{config_source}-fsmonitor"
+    write_executable(
+        helper,
+        f"#!/usr/bin/env bash\nprintf 'run\\n' >> {shlex.quote(str(marker))}\n",
+    )
+    if config_source == "local":
+        git(project, "config", "core.fsmonitor", str(helper))
+    else:
+        monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+        monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.fsmonitor")
+        monkeypatch.setenv("GIT_CONFIG_VALUE_0", str(helper))
+    tracked.write_text("changed\n", encoding="utf-8")
+    (project / "untracked.txt").write_text("new\n", encoding="utf-8")
+
+    _, changes = cli.git_target_state(project)
+
+    assert changes == (" M tracked.txt", "?? untracked.txt")
+    assert not marker.exists()
+
+
+def test_git_changed_paths_disables_diff_and_filter_helpers(
+    tmp_path: Path,
+) -> None:
+    """Inspect tracked paths without invoking repository-configured helpers."""
+    project = tmp_path / "git-helpers"
+    project.mkdir()
+    tracked = project / "tracked.txt"
+    tracked.write_text("baseline\n", encoding="utf-8")
+    (project / ".gitattributes").write_text(
+        "tracked.txt filter=hostile diff=hostile\n", encoding="utf-8"
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    marker = tmp_path / "git-helper-ran"
+    helper = tmp_path / "git-helper"
+    write_executable(
+        helper,
+        "#!/usr/bin/env bash\n"
+        f"printf 'run\\n' >> {shlex.quote(str(marker))}\n"
+        "cat\n",
+    )
+    git(project, "config", "diff.hostile.command", str(helper))
+    git(project, "config", "diff.hostile.textconv", str(helper))
+    git(project, "config", "filter.hostile.clean", str(helper))
+    git(project, "config", "filter.hostile.smudge", str(helper))
+    git(project, "config", "filter.hostile.process", str(helper))
+    git(project, "config", "filter.hostile.required", "true")
+    tracked.write_text("changed\n", encoding="utf-8")
+    (project / "untracked.txt").write_text("new\n", encoding="utf-8")
+
+    changed = cli.git_changed_paths(project)
+
+    assert changed == {"tracked.txt", "untracked.txt"}
+    assert not marker.exists()
+
+
+def test_git_status_disables_submodule_filter_helpers(tmp_path: Path) -> None:
+    """Keep recursive status from executing a submodule-local filter."""
+    source = tmp_path / "submodule-source"
+    source.mkdir()
+    tracked = source / "tracked.txt"
+    tracked.write_text("baseline\n", encoding="utf-8")
+    (source / ".gitattributes").write_text(
+        "tracked.txt filter=hostile\n", encoding="utf-8"
+    )
+    git(source, "init", "-b", "main")
+    git(source, "config", "user.name", "CLI Test")
+    git(source, "config", "user.email", "cli-test@example.invalid")
+    commit(source, "test: submodule baseline")
+
+    project = tmp_path / "project-with-submodule"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    git(
+        project,
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        str(source),
+        "nested",
+    )
+    commit(project, "test: add submodule")
+    nested = project / "nested"
+    marker = tmp_path / "submodule-filter-ran"
+    helper = tmp_path / "submodule-filter"
+    write_executable(
+        helper,
+        "#!/usr/bin/env bash\n"
+        f"printf 'run\\n' >> {shlex.quote(str(marker))}\n"
+        "cat\n",
+    )
+    git(nested, "config", "filter.hostile.clean", str(helper))
+    git(nested, "config", "filter.hostile.required", "true")
+    tracked = nested / "tracked.txt"
+    tracked.write_text("changed\n", encoding="utf-8")
+
+    _, changes = cli.git_target_state(project)
+
+    assert changes == (" M nested",)
+    assert not marker.exists()
+
+
+def test_git_candidate_staging_ignores_caller_hooks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Clone and commit a candidate without caller-configured Git hooks."""
+    project = tmp_path / "hooked-project"
+    project.mkdir()
+    tracked = project / "tracked.txt"
+    tracked.write_text("baseline\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    tracked.write_text("changed\n", encoding="utf-8")
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    marker = tmp_path / "git-hook-ran"
+    for name in ("post-checkout", "post-commit"):
+        write_executable(
+            hooks / name,
+            "#!/usr/bin/env bash\n"
+            f"printf 'run\\n' >> {shlex.quote(str(marker))}\n",
+        )
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.hooksPath")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", str(hooks))
+
+    candidate = tmp_path / "candidate"
+    cli.clone_working_tree(project, candidate)
+
+    assert (candidate / "tracked.txt").read_text(encoding="utf-8") == (
+        "changed\n"
+    )
+    assert not marker.exists()
 
 
 @pytest.mark.large
