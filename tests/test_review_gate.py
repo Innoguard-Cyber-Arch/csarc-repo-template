@@ -58,7 +58,9 @@ class FakeGitHub:
         self.draft = False
         self.body = ""
         self.base_ref = "main"
+        self.base_sha = "b" * 40
         self.default_branch = "main"
+        self.destination_sha = "f" * 40
         self.head_ref = "fix/42-lifecycle"
         self.head_repo: str | None = "o/r"
         self.issue_state = "open"
@@ -71,7 +73,7 @@ class FakeGitHub:
             return {
                 "draft": self.draft,
                 "body": self.body,
-                "base": {"ref": self.base_ref},
+                "base": {"ref": self.base_ref, "sha": self.base_sha},
                 "head": {
                     "ref": self.head_ref,
                     "sha": HEAD,
@@ -85,6 +87,17 @@ class FakeGitHub:
             }
         if path == "":
             return {"default_branch": self.default_branch}
+        if path == "git/ref/heads/main":
+            return {"object": {"sha": self.destination_sha}}
+        if path == f"compare/{self.destination_sha}...{HEAD}":
+            return {"status": "ahead"}
+        if path == f"git/commits/{HEAD}":
+            return {
+                "parents": [
+                    {"sha": self.base_sha},
+                    {"sha": self.destination_sha},
+                ]
+            }
         if path == "issues/42":
             return {
                 "number": 42,
@@ -271,6 +284,18 @@ def alpha_github() -> FakeGitHub:
     return github
 
 
+def alpha_sync_github() -> FakeGitHub:
+    """Return an exact current-main delivery sync candidate."""
+    github = FakeGitHub([])
+    github.base_ref = "dev/m10-release-backed-adoption"
+    sync_branch_name = (
+        pr_lifecycle.promotion_gate.delivery_sync.sync_branch_name
+    )
+    github.head_ref = sync_branch_name(github.base_ref, github.destination_sha)
+    github.body = pr_lifecycle.ALPHA_SELF_MERGE_MARKER
+    return github
+
+
 def test_alpha_self_merge_authorization_passes(copilot_config: Path) -> None:
     """Issue #775: a valid exact-head Alpha self-merge comment passes review."""
     github = alpha_github()
@@ -278,6 +303,30 @@ def test_alpha_self_merge_authorization_passes(copilot_config: Path) -> None:
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert result["passed"]
     assert result["source"] == "alpha-self-merge"
+
+
+def test_alpha_sync_self_merge_authorization_passes(
+    copilot_config: Path,
+) -> None:
+    """Issue #826: review and lifecycle share the validated sync route."""
+    github = alpha_sync_github()
+    github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["passed"]
+    assert result["source"] == "alpha-self-merge"
+
+
+def test_alpha_sync_requires_exact_head_authorization(
+    copilot_config: Path,
+) -> None:
+    """A valid sync route cannot use an authorization for another head."""
+    github = alpha_sync_github()
+    comment = alpha_authorization_comment()
+    comment["body"] = pr_lifecycle.authorization_statement("o/r", 7, "c" * 40)
+    github.issue_comments = [comment]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert not result["passed"]
+    assert "no exact-head maintainer authorization comment" in result["reason"]
 
 
 def test_alpha_self_merge_ignores_author_association(
