@@ -3,6 +3,8 @@ name: PR policy
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened, ready_for_review, assigned, unassigned, labeled, unlabeled, milestoned, demilestoned]
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review, assigned, unassigned, labeled, unlabeled, milestoned, demilestoned]
   merge_group:
     types: [checks_requested]
 
@@ -43,14 +45,14 @@ jobs:
           --base-sha "$QUEUE_BASE_SHA"
           --queue-ref "$QUEUE_HEAD_REF"
           --queue-sha "$QUEUE_HEAD_SHA"
-      - if: ${{ github.event_name == 'pull_request' }}
+      - if: ${{ github.event_name != 'merge_group' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}
       - name: Validate pull request policy
         id: policy
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ github.event_name != 'merge_group' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
@@ -68,7 +70,7 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: ./scripts/validate-pr-policy
       - name: Validate Milestone approval
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ github.event_name != 'merge_group' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -82,7 +84,7 @@ jobs:
             echo "::notice::Read-only Milestone approval starts after this pull request reaches its base branch."
           fi
       - name: Validate the scope-drift gate
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ github.event_name != 'merge_group' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -107,7 +109,7 @@ jobs:
             echo "::notice::Read-only Milestone approval starts after this pull request reaches its base branch."
           fi
       - name: Require the proposed head to contain current main
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ github.event_name != 'merge_group' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
@@ -148,13 +150,14 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.merge_group.base_sha }}
       - name: Check out the trusted base commit
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ github.event_name != 'merge_group' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}
       - name: Classify the delivery-promotion route
         env:
+          EVENT_NAME: ${{ github.event_name == 'pull_request_target' && 'pull_request' || github.event_name }}
           PR_BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
         run: |
           branch_strategy="$PR_BRANCH_STRATEGY"
@@ -166,7 +169,7 @@ jobs:
           fi
           if python3 scripts/promotion_gate.py --help | grep -q check-route; then
             python3 scripts/promotion_gate.py check-route \
-              --event "$GITHUB_EVENT_NAME" \
+              --event "$EVENT_NAME" \
               --event-path "$GITHUB_EVENT_PATH" \
               --branch-strategy "$branch_strategy" \
               --github-output "$GITHUB_OUTPUT" \
