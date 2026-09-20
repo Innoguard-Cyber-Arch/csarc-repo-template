@@ -1783,6 +1783,137 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
 
 
 @pytest.mark.parametrize(
+    ("language", "lock_name", "expected_flags"),
+    [
+        ("python", "uv.lock", {"--no-python-downloads"}),
+        ("typescript", "pnpm-lock.yaml", {"--prefer-offline"}),
+        ("rust", "Cargo.lock", set()),
+    ],
+)
+def test_adoption_lock_generation_uses_isolated_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    language: str,
+    lock_name: str,
+    expected_flags: set[str],
+) -> None:
+    """Generate approved locks without forwarding ambient credentials."""
+    target = tmp_path / language
+    target.mkdir()
+    (target / ".python-version").write_text("3.14\n", encoding="utf-8")
+    secrets = {
+        "CARGO_REGISTRIES_CRATES_IO_TOKEN": "cargo-secret",
+        "GITHUB_TOKEN": "github-secret",
+        "HTTPS_PROXY": "https://proxy-secret@example.invalid",
+        "NPM_TOKEN": "npm-secret",
+        "SSH_AUTH_SOCK": str(tmp_path / "credential-agent"),
+        "UV_INDEX_URL": "https://uv-secret@example.invalid/simple",
+    }
+    for name, value in secrets.items():
+        monkeypatch.setenv(name, value)
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        assert cwd == target
+        assert capture is True
+        assert check is False
+        assert env is not None
+        assert Path(env["NPM_CONFIG_USERCONFIG"]).is_file()
+        calls.append((command, env))
+        (target / lock_name).write_text("generated\n", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    cli.create_adoption_lockfiles(target, {"language": language})
+
+    assert (target / lock_name).read_text(encoding="utf-8") == "generated\n"
+    assert len(calls) == 1
+    command, environment = calls[0]
+    assert expected_flags.issubset(command)
+    assert secrets.keys().isdisjoint(environment)
+    assert Path(environment["HOME"]) != Path(os.environ["HOME"])
+
+
+@pytest.mark.parametrize(
+    ("language", "lock_name", "expected_flags"),
+    [
+        ("python", "uv.lock", {"--check", "--offline"}),
+        (
+            "typescript",
+            "pnpm-lock.yaml",
+            {"--frozen-lockfile", "--offline"},
+        ),
+        ("rust", "Cargo.lock", {"--locked", "--offline"}),
+    ],
+)
+def test_existing_adoption_lock_is_checked_offline_first(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    language: str,
+    lock_name: str,
+    expected_flags: set[str],
+) -> None:
+    """Accept an unchanged lock without contacting a registry."""
+    target = tmp_path / language
+    target.mkdir()
+    (target / ".python-version").write_text("3.14\n", encoding="utf-8")
+    (target / lock_name).write_text("existing\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    cli.create_adoption_lockfiles(target, {"language": language})
+
+    assert len(calls) == 1
+    assert expected_flags.issubset(calls[0])
+
+
+def test_authorized_dependency_tooling_cannot_widen_the_plan() -> None:
+    """Apply only forecast lock effects after a resolver is authorized."""
+    planned = cli.Plan(
+        (".csarc/provenance.json", "uv.lock"),
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+    )
+    widened = cli.Plan(
+        (".csarc/provenance.json", "pyproject.toml", "uv.lock"),
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+    )
+
+    with pytest.raises(CliError, match="outside the approved lockfile"):
+        cli.validate_authorized_candidate_effects(
+            planned, widened, {"language": "python"}
+        )
+
+    cli.validate_authorized_candidate_effects(
+        planned, planned, {"language": "python"}
+    )
+
+
+@pytest.mark.parametrize(
     ("language", "manifest_name", "lock_name"),
     [
         ("python", "pyproject.toml", "uv.lock"),
@@ -1793,11 +1924,24 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
 @pytest.mark.large
 def test_real_template_adoption_resumes_after_manifest_merge(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     language: str,
     manifest_name: str,
     lock_name: str,
 ) -> None:
     """Finalize each language adoption without a pre-existing lockfile."""
+    lockfile_calls: list[Path] = []
+    original_create_lockfiles = cli.create_adoption_lockfiles
+
+    def track_lockfile_creation(
+        target: Path, answers: dict[str, object]
+    ) -> None:
+        lockfile_calls.append(target)
+        original_create_lockfiles(target, answers)
+
+    monkeypatch.setattr(
+        cli, "create_adoption_lockfiles", track_lockfile_creation
+    )
     revision_sha = git(ROOT, "rev-parse", "HEAD")
     project = tmp_path / f"existing-{language}"
     reference = tmp_path / f"reference-{language}"
@@ -1868,6 +2012,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         "private reporting channel.",
     ]
     assert main([*arguments, "--dry-run"]) == 0
+    assert lockfile_calls == []
     plan_path = (
         tmp_path
         / f"existing-{language}-csarc-adoption-report"
@@ -1887,6 +2032,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         )
         == 1
     )
+    assert lockfile_calls == []
     assert not (project / lock_name).exists()
     assert not (project / cli.PROVENANCE_FILE).exists()
     manifest = project / manifest_name
@@ -1913,6 +2059,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
 
     before = git(project, "status", "--porcelain")
     assert replay_finalize(project, "--dry-run") == 0
+    assert lockfile_calls == []
     assert git(project, "status", "--porcelain") == before
     assert not (project / lock_name).exists()
     assert (
@@ -1930,6 +2077,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         )
         == 0
     )
+    assert len(lockfile_calls) == 1
     assert (project / lock_name).is_file()
     assert (project / cli.PROVENANCE_FILE).is_file()
     assert not (project / cli.PENDING_ADOPTION_FILE).exists()
@@ -3114,6 +3262,7 @@ def test_adopt_infers_unicode_repository_and_applies_exact_plan(
 
 def test_adopt_apply_plan_updates_report_to_applied_state(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Update the same dry-run report in place once adoption is applied."""
     source, revision = make_template(tmp_path)
@@ -3124,6 +3273,13 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     git(project, "config", "user.email", "cli-test@example.invalid")
     (project / "product.txt").write_text("product\n", encoding="utf-8")
     commit(project, "test: applied product")
+    lockfile_calls: list[Path] = []
+
+    def create_lockfile(target: Path, _answers: dict[str, object]) -> None:
+        lockfile_calls.append(target)
+        (target / "uv.lock").write_text("approved\n", encoding="utf-8")
+
+    monkeypatch.setattr(cli, "create_adoption_lockfiles", create_lockfile)
 
     arguments = [
         "adopt",
@@ -3133,9 +3289,12 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
         "--to",
         revision,
         "--allow-unreleased",
+        "--data",
+        "language=python",
         "--dry-run",
     ]
     assert main(arguments) == 0
+    assert lockfile_calls == []
     report_dir = tmp_path / "applied-product-csarc-adoption-report"
     markdown_path = report_dir / "csarc-adoption-dry-run.md"
     plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
@@ -3146,6 +3305,7 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     assert "## Adoption applied" not in before_markdown
     before_payload = json.loads(plan_path.read_text(encoding="utf-8"))
     assert "applied" not in before_payload["adoption"]
+    assert "uv.lock" in before_payload["files"]["add"]
 
     assert (
         main(
@@ -3161,6 +3321,8 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
         )
         == 0
     )
+    assert len(lockfile_calls) == 1
+    assert (project / "uv.lock").read_text(encoding="utf-8") == "approved\n"
 
     after_markdown = markdown_path.read_text(encoding="utf-8")
     assert "Decision: Adopted" in after_markdown
@@ -3302,6 +3464,12 @@ def test_unreleased_replay_decline_prevents_source_execution(
     git(project, "config", "user.email", "cli-test@example.invalid")
     (project / "product.txt").write_text("product\n", encoding="utf-8")
     commit(project, "test: declined plan product")
+    lockfile_calls: list[str] = []
+    monkeypatch.setattr(
+        cli,
+        "create_adoption_lockfiles",
+        lambda *_args: lockfile_calls.append("called"),
+    )
     assert (
         main(
             [
@@ -3312,11 +3480,14 @@ def test_unreleased_replay_decline_prevents_source_execution(
                 "--to",
                 revision,
                 "--allow-unreleased",
+                "--data",
+                "language=python",
                 "--dry-run",
             ]
         )
         == 0
     )
+    assert lockfile_calls == []
     plan = (
         tmp_path
         / "declined-plan-product-csarc-adoption-report"
@@ -3339,6 +3510,7 @@ def test_unreleased_replay_decline_prevents_source_execution(
 
     monkeypatch.setattr(cli, "resolve_revision", reject_execution)
     monkeypatch.setattr(cli, "copier_copy", reject_execution)
+    monkeypatch.setattr(cli, "create_adoption_lockfiles", reject_execution)
     monkeypatch.setattr(cli, "milestone_description_plan", plan_milestones)
     monkeypatch.setattr(
         cli, "apply_milestone_description_plan", reject_execution

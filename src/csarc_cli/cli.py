@@ -312,6 +312,7 @@ def run(
     cwd: Path | None = None,
     capture: bool = False,
     check: bool = True,
+    env: Mapping[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a subprocess without invoking a shell."""
     return subprocess.run(  # noqa: S603
@@ -320,6 +321,7 @@ def run(
         check=check,
         text=True,
         capture_output=capture,
+        env=dict(env) if env is not None else None,
     )
 
 
@@ -626,6 +628,50 @@ def selected_languages(answers: dict[str, object]) -> set[str]:
     if isinstance(legacy, str) and legacy != "ci":
         return set(legacy.split("-"))
     return set()
+
+
+def adoption_lockfiles(answers: dict[str, object]) -> tuple[str, ...]:
+    """Return lockfiles produced by the selected language tooling."""
+    languages = selected_languages(answers)
+    names = {
+        "python": "uv.lock",
+        "rust": "Cargo.lock",
+        "typescript": "pnpm-lock.yaml",
+    }
+    return tuple(names[name] for name in sorted(languages & names.keys()))
+
+
+def predicted_lockfile_effects(
+    target: Path, planned: Plan, answers: dict[str, object]
+) -> Plan:
+    """Represent deferred lock generation without running package tooling."""
+    additions = set(planned.add)
+    overwrites = set(planned.overwrite)
+    preserved = set(planned.preserve)
+    fixed = (
+        additions
+        | overwrites
+        | {
+            *planned.merge,
+            *planned.manual,
+            *planned.unknown,
+        }
+    )
+    existing = project_files(target)
+    for name in adoption_lockfiles(answers):
+        if name in fixed:
+            continue
+        preserved.discard(name)
+        (overwrites if name in existing else additions).add(name)
+    return Plan(
+        tuple(sorted(additions)),
+        tuple(sorted(overwrites)),
+        planned.remove,
+        tuple(sorted(preserved)),
+        planned.merge,
+        planned.manual,
+        planned.unknown,
+    )
 
 
 def is_text(content: bytes) -> bool:
@@ -2537,10 +2583,8 @@ def prepare_adoption_candidate(
     generated_at: str,
     candidate: Path,
     preserved_dirty_paths: tuple[str, ...] = (),
-    *,
-    verification_authorized: bool,
 ) -> tuple[Plan, dict[str, str], str, dict[str, object]]:
-    """Build an exact candidate and verify it only after authorization."""
+    """Build an exact preview candidate without executing package tooling."""
     if preserved_dirty_paths:
         clone_working_tree(target, candidate)
     else:
@@ -2574,35 +2618,18 @@ def prepare_adoption_candidate(
                 "Manual file decisions must be completed first.",
             )
         else:
-            create_adoption_lockfiles(candidate, answers)
             write_provenance(
                 candidate,
                 revision,
                 applied_at=generated_at,
                 answers=answers,
             )
-            if not verification_authorized:
-                verification = "pending-authorization"
-                hook = project_verification_evidence(
-                    hook_configuration,
-                    "not-run",
-                    "Candidate verification runs only after plan approval.",
-                )
-            else:
-                try:
-                    hook = verify_project(candidate)
-                except ProjectVerificationError as error:
-                    verification = f"failed: {error}"
-                    hook = error.hook
-                except CliError as error:
-                    verification = f"failed: {error}"
-                    hook = project_verification_evidence(
-                        hook_configuration,
-                        "not-run",
-                        "Candidate preparation failed before the hook ran.",
-                    )
-                else:
-                    verification = "passed"
+            verification = "pending-authorization"
+            hook = project_verification_evidence(
+                hook_configuration,
+                "not-run",
+                "Candidate verification runs only after plan approval.",
+            )
     candidate_files = project_files(candidate)
     target_files = project_files(target)
     dirty_drift = tuple(
@@ -2619,6 +2646,8 @@ def prepare_adoption_candidate(
             + ", ".join(dirty_drift)
         )
     effects, artifacts = candidate_effects(candidate, target, planned)
+    if not (planned.manual or planned.unknown):
+        effects = predicted_lockfile_effects(target, effects, answers)
     return effects, artifacts, verification, hook
 
 
@@ -2704,79 +2733,288 @@ def write_candidate_patch(
             raise CliError(detail)
 
 
+def dependency_tool_environment(root: Path) -> dict[str, str]:
+    """Build an isolated resolver environment without ambient credentials."""
+    inherited = (
+        "COMSPEC",
+        "LANG",
+        "LC_ALL",
+        "PATH",
+        "PATHEXT",
+        "RUSTUP_HOME",
+        "RUSTUP_TOOLCHAIN",
+        "SSL_CERT_DIR",
+        "SSL_CERT_FILE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "WINDIR",
+    )
+    environment = {
+        name: os.environ[name] for name in inherited if name in os.environ
+    }
+    directories = {
+        "CARGO_HOME": root / "cargo",
+        "COREPACK_HOME": root / "corepack",
+        "HOME": root / "home",
+        "PNPM_HOME": root / "pnpm",
+        "UV_CACHE_DIR": root / "uv-cache",
+        "XDG_CACHE_HOME": root / "xdg-cache",
+        "XDG_CONFIG_HOME": root / "xdg-config",
+        "XDG_DATA_HOME": root / "xdg-data",
+        "XDG_STATE_HOME": root / "xdg-state",
+    }
+    for path in directories.values():
+        path.mkdir(parents=True)
+    npm_config = root / "npmrc"
+    npm_config.touch()
+    environment.update({name: str(path) for name, path in directories.items()})
+    rustup_home = Path(
+        os.environ.get("RUSTUP_HOME", str(Path.home() / ".rustup"))
+    )
+    if rustup_home.is_dir():
+        environment["RUSTUP_HOME"] = str(rustup_home)
+    environment.update(
+        {
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_TERMINAL_PROMPT": "0",
+            "NPM_CONFIG_USERCONFIG": str(npm_config),
+        }
+    )
+    return environment
+
+
+def validate_authorized_candidate_effects(
+    planned: Plan, actual: Plan, answers: dict[str, object]
+) -> None:
+    """Reject resolver effects beyond the symbolic lockfile forecast."""
+    lockfiles = set(adoption_lockfiles(answers))
+    fields = (
+        "add",
+        "overwrite",
+        "remove",
+        "preserve",
+        "merge",
+        "manual",
+        "unknown",
+    )
+    for field in fields:
+        expected = set(getattr(planned, field)) - lockfiles
+        observed = set(getattr(actual, field)) - lockfiles
+        if observed != expected:
+            raise CliError(
+                "Authorized dependency tooling changed files outside the "
+                "approved lockfile forecast; create a new adoption plan."
+            )
+    for name in lockfiles:
+        expected = next(
+            (field for field in fields if name in getattr(planned, field)),
+            None,
+        )
+        observed = next(
+            (field for field in fields if name in getattr(actual, field)),
+            None,
+        )
+        if observed != expected and not (
+            expected == "overwrite" and observed is None
+        ):
+            raise CliError(
+                "Authorized dependency tooling did not match the approved "
+                f"lockfile forecast for {name}; create a new adoption plan."
+            )
+
+
 def create_adoption_lockfiles(  # noqa: C901
     target: Path, answers: dict[str, object]
 ) -> None:
-    """Create language lockfiles after an adoption is ready to finalize."""
+    """Create language lockfiles only after adoption is authorized."""
     languages = selected_languages(answers)
-    if "python" in languages:
-        python_version = target / ".python-version"
-        if not python_version.is_file():
-            raise CliError(
-                "Cannot create uv.lock because .python-version is missing; "
-                "restore the managed file, then rerun csarc adopt --finalize."
-            )
-        try:
-            result = run(
-                [
-                    "uv",
-                    "lock",
-                    "--python",
-                    python_version.read_text(encoding="utf-8").strip(),
-                ],
-                cwd=target,
-                capture=True,
-                check=False,
-            )
-        except FileNotFoundError as error:
-            raise CliError(
-                "uv is required to create uv.lock; install uv, then rerun "
-                "csarc adopt --finalize."
-            ) from error
-        if result.returncode != 0:
-            detail = result.stderr.strip() or result.stdout.strip()
-            raise CliError(
-                "Cannot create uv.lock after the manifest merge; fix "
-                f"pyproject.toml, then rerun csarc adopt --finalize. {detail}"
-            )
-    if "typescript" in languages:
-        try:
-            result = run(
-                ["pnpm", "install", "--lockfile-only", "--ignore-scripts"],
-                cwd=target,
-                capture=True,
-                check=False,
-            )
-        except FileNotFoundError as error:
-            raise CliError(
-                "pnpm is required to create pnpm-lock.yaml; install pnpm, "
-                "then rerun csarc adopt --finalize."
-            ) from error
-        if result.returncode != 0:
-            detail = result.stderr.strip() or result.stdout.strip()
-            raise CliError(
-                "Cannot create pnpm-lock.yaml after the manifest merge; fix "
-                f"package.json, then rerun csarc adopt --finalize. {detail}"
-            )
-    if "rust" in languages:
-        try:
-            result = run(
-                ["cargo", "generate-lockfile"],
-                cwd=target,
-                capture=True,
-                check=False,
-            )
-        except FileNotFoundError as error:
-            raise CliError(
-                "Cargo is required to create Cargo.lock; install the Rust "
-                "toolchain, then rerun csarc adopt --finalize."
-            ) from error
-        if result.returncode != 0:
-            detail = result.stderr.strip() or result.stdout.strip()
-            raise CliError(
-                "Cannot create Cargo.lock after the manifest merge; fix "
-                f"Cargo.toml, then rerun csarc adopt --finalize. {detail}"
-            )
+    with tempfile.TemporaryDirectory(
+        prefix="csarc-dependency-tools-"
+    ) as temporary:
+        environment = dependency_tool_environment(Path(temporary))
+        if "python" in languages:
+            python_version = target / ".python-version"
+            if not python_version.is_file():
+                raise CliError(
+                    "Cannot create uv.lock because .python-version is "
+                    "missing; restore the managed file, then rerun csarc "
+                    "adopt --finalize."
+                )
+            base_command = [
+                "uv",
+                "lock",
+                "--python",
+                python_version.read_text(encoding="utf-8").strip(),
+                "--no-python-downloads",
+            ]
+            try:
+                result = None
+                if (target / "uv.lock").is_file():
+                    result = run(
+                        [*base_command, "--check", "--offline"],
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+                if result is None or result.returncode != 0:
+                    result = run(
+                        base_command,
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+            except FileNotFoundError as error:
+                raise CliError(
+                    "uv is required to create uv.lock; install uv, then "
+                    "rerun csarc adopt --finalize."
+                ) from error
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip()
+                raise CliError(
+                    "Cannot create uv.lock after the manifest merge; fix "
+                    "pyproject.toml, then rerun csarc adopt --finalize. "
+                    f"{detail}"
+                )
+        if "typescript" in languages:
+            base_command = [
+                "pnpm",
+                "install",
+                "--lockfile-only",
+                "--ignore-scripts",
+            ]
+            try:
+                result = None
+                if (target / "pnpm-lock.yaml").is_file():
+                    result = run(
+                        [*base_command, "--frozen-lockfile", "--offline"],
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+                if result is None or result.returncode != 0:
+                    result = run(
+                        [*base_command, "--prefer-offline"],
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+            except FileNotFoundError as error:
+                raise CliError(
+                    "pnpm is required to create pnpm-lock.yaml; install "
+                    "pnpm, then rerun csarc adopt --finalize."
+                ) from error
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip()
+                raise CliError(
+                    "Cannot create pnpm-lock.yaml after the manifest merge; "
+                    "fix package.json, then rerun csarc adopt --finalize. "
+                    f"{detail}"
+                )
+        if "rust" in languages:
+            base_command = ["cargo", "generate-lockfile"]
+            try:
+                result = None
+                if (target / "Cargo.lock").is_file():
+                    result = run(
+                        [*base_command, "--locked", "--offline"],
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+                if result is None or result.returncode != 0:
+                    result = run(
+                        base_command,
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+            except FileNotFoundError as error:
+                raise CliError(
+                    "Cargo is required to create Cargo.lock; install the Rust "
+                    "toolchain, then rerun csarc adopt --finalize."
+                ) from error
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip()
+                raise CliError(
+                    "Cannot create Cargo.lock after the manifest merge; fix "
+                    "Cargo.toml, then rerun csarc adopt --finalize. "
+                    f"{detail}"
+                )
+
+
+def authorize_adoption_candidate(
+    plan: ResolvedPlan, candidate: Path
+) -> ResolvedPlan:
+    """Generate dependencies and verify one already-approved candidate."""
+    adoption = plan.adoption
+    planned = plan.files
+    if adoption is None or planned is None:
+        raise CliError("Adoption candidate is incomplete.")
+    if adoption.get("phase") != "complete":
+        return plan
+    create_adoption_lockfiles(candidate, plan.answers)
+    hook_configuration = project_verification_configuration(
+        candidate, plan.answers
+    )
+    try:
+        hook = verify_project(candidate)
+    except ProjectVerificationError as error:
+        verification = f"failed: {error}"
+        hook = error.hook
+    except CliError as error:
+        verification = f"failed: {error}"
+        hook = project_verification_evidence(
+            hook_configuration,
+            "not-run",
+            "Candidate preparation failed before the hook ran.",
+        )
+    else:
+        verification = "passed"
+    raw_preserved_dirty_paths = adoption.get("preserved_dirty_paths")
+    preserved_dirty_paths = tuple(
+        value
+        for value in (
+            raw_preserved_dirty_paths
+            if isinstance(raw_preserved_dirty_paths, list)
+            else []
+        )
+        if isinstance(value, str)
+    )
+    candidate_files = project_files(candidate)
+    target_files = project_files(plan.target)
+    dirty_drift = tuple(
+        name
+        for name in preserved_dirty_paths
+        if name not in candidate_files
+        or name not in target_files
+        or file_fingerprint(candidate_files[name])
+        != file_fingerprint(target_files[name])
+    )
+    if dirty_drift:
+        verification = (
+            "failed: Candidate verification changed preserved dirty files: "
+            + ", ".join(dirty_drift)
+        )
+    effects, artifacts = candidate_effects(candidate, plan.target, planned)
+    validate_authorized_candidate_effects(planned, effects, plan.answers)
+    owner = adoption.get("code_owner")
+    owner_blocked = isinstance(owner, dict) and owner.get("state") == "blocked"
+    updated = {
+        **adoption,
+        "applicable": verification == "passed" and not owner_blocked,
+        "artifacts": artifacts,
+        "project_verification_hook": hook,
+        "verification": verification,
+    }
+    return replace(plan, files=effects, adoption=updated)
 
 
 def verify_project(target: Path) -> dict[str, object]:
@@ -3946,7 +4184,6 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             generated_at = str(saved_adoption["generated_at"])
         candidate = temporary_root / "candidate"
         clone_working_tree(target, candidate)
-        create_adoption_lockfiles(candidate, answers)
         write_provenance(
             candidate,
             revision,
@@ -3956,31 +4193,22 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         checked_destination(
             candidate, PENDING_ADOPTION_FILE.as_posix()
         ).unlink()
-        if saved is None:
-            hook_configuration = project_verification_configuration(
-                candidate, answers
-            )
-            validated_project_verification_hook(candidate, hook_configuration)
-            hook = project_verification_evidence(
-                hook_configuration,
-                "not-run",
-                "Candidate verification runs only after plan approval.",
-            )
-            candidate_verification = "pending-authorization"
-        else:
-            try:
-                hook = verify_project(candidate)
-            except CliError as error:
-                raise CliError(
-                    "Project verification failed; fix the reported failures, "
-                    "then rerun csarc adopt --finalize."
-                ) from error
-            candidate_verification = "passed"
+        hook_configuration = project_verification_configuration(
+            candidate, answers
+        )
+        validated_project_verification_hook(candidate, hook_configuration)
+        hook = project_verification_evidence(
+            hook_configuration,
+            "not-run",
+            "Candidate verification runs only after plan approval.",
+        )
+        candidate_verification = "pending-authorization"
         effects, artifacts = candidate_effects(
             candidate,
             target,
             Plan((), (), (), (), (), (), ()),
         )
+        effects = predicted_lockfile_effects(target, effects, answers)
         head, changes, status_sha256 = target_state(target)
         target_files = target_file_snapshot(target)
         manual_results = {
@@ -4025,6 +4253,22 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
                 "Repository or manual merge results drifted after finalize "
                 "dry-run; create a new finalize plan."
             )
+        if saved is not None:
+            plan = authorize_adoption_candidate(plan, candidate)
+            adoption = cast(dict[str, object], plan.adoption)
+            candidate_verification = str(adoption.get("verification"))
+            if candidate_verification != "passed":
+                raise CliError(
+                    "Project verification failed; fix the reported failures, "
+                    "then rerun csarc adopt --finalize."
+                )
+            effects = cast(Plan, plan.files)
+            raw_artifacts = adoption.get("artifacts")
+            if not isinstance(raw_artifacts, dict):
+                raise CliError(
+                    "Verified finalize candidate has no artifact plan."
+                )
+            artifacts = raw_artifacts
         if args.json:
             print(
                 json.dumps(
@@ -4133,8 +4377,6 @@ def build_adoption_plan(
     answers: dict[str, object],
     capabilities: dict[str, object],
     generated_at: str,
-    *,
-    verification_authorized: bool,
 ) -> ResolvedPlan:
     """Build one locked adoption plan and its isolated candidate."""
     head, changes, status_sha256 = target_state(target)
@@ -4165,7 +4407,6 @@ def build_adoption_plan(
             generated_at,
             candidate,
             preserved_dirty_paths,
-            verification_authorized=verification_authorized,
         )
     owner = code_owner_verification(repository, answers.get("code_owner"))
     if not candidate_allowed:
@@ -4325,7 +4566,6 @@ def command_apply_adoption_plan(  # noqa: C901
             answers,
             raw_capabilities,
             generated_at,
-            verification_authorized=False,
         )
         saved_binding = pre_verification_binding(saved)
         preview_binding = pre_verification_binding(
@@ -4366,8 +4606,9 @@ def command_apply_adoption_plan(  # noqa: C901
             answers,
             raw_capabilities,
             generated_at,
-            verification_authorized=True,
         )
+        fresh_adoption = fresh.adoption
+        fresh = authorize_adoption_candidate(fresh, candidate)
         fresh_adoption = fresh.adoption
         if fresh_adoption is None or fresh_adoption.get("verification") not in {
             "passed",
@@ -4498,7 +4739,6 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 answers,
                 capabilities,
                 generated_at,
-                verification_authorized=False,
             )
         else:
             plan = ResolvedPlan(
