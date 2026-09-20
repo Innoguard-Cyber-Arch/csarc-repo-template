@@ -215,6 +215,23 @@ token 無法讀取的管理員設定標成 `DEGRADED`，不得宣稱 drift 或 a
 只使用單一 tracking Issue；輸出未改變時不得 edit 該 Issue，避免每天重複通知。無法辨識
 的 API 錯誤仍依本 ADR 既有決定 fail closed。
 
+## 2026-09-20 隔離 PR policy 的治理寫入權限（#829）
+
+`pull_request`／`merge_group` 會執行候選 revision 的 workflow 定義；即使後續 checkout
+base SHA，也不能改變 job 已取得的 token 權限。PR policy 的 required `title`／
+`promotion` jobs 因此只能持有唯讀權限，並以原生 job conclusion 表達 policy 決策；
+metadata 同步與 `Milestone approval` check-run 改由 default branch 上的
+`workflow_run` 執行，固定 checkout 該次 trusted workflow 的 `github.sha`，不得 checkout
+PR head、執行 PR source 或下載並執行 PR artifact。寫入 job 依 metadata 與 check-run
+職責分開授權，避免任一 job 同時取得不需要的治理能力。PR 寫入目標必須由
+`workflow_run` 的 head SHA、repository 與 branch 重新查詢所有分頁，只有唯一相符的
+open PR 才能繼續；零筆或多筆都 fail closed。同一完整 head identity 的 writer 必須序列化，
+不能讓重複事件並行留下重複治理寫入。
+
+這項決定保留 #745 的發布層級、exact-head review、Alpha self-merge 與 required checks
+規則；#742 後續將 workflow 縮成薄層或搬移 scripts 時，仍必須維持同一個 read-only／
+trusted-writer 邊界，不能以路徑搬移取代隔離。
+
 ## 重新評估條件
 
 Repository 方案、organization policy、fleet 規模或實測 drift 頻率改變時，重新執行 capability preflight 與 fleet threshold review；不要把安裝時快照當永久真相。

@@ -579,6 +579,16 @@ env "${milestone_safeguard_fixture[@]}" \
 grep -Fq 'csarc-milestone-safeguard:551' "$PR_COMMENT_CALLS_LOG"
 grep -Fq 'Milestone 9: Decision site and adoption experience overhaul' "$PR_COMMENT_CALLS_LOG"
 
+# The PR-controlled workflow evaluates the same policy without attempting
+# the write. The trusted workflow owns the reminder side effect.
+case_count=$((case_count + 1))
+: > "$PR_COMMENT_CALLS_LOG"
+env "${milestone_safeguard_fixture[@]}" \
+  PR_POLICY_READ_ONLY="true" \
+  PR_OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9"}]' \
+  "$validator" >/dev/null
+[[ ! -s "$PR_COMMENT_CALLS_LOG" ]]
+
 # Idempotency: the same scenario, but a prior reminder comment (carrying
 # the marker) already exists -- no second comment is posted.
 case_count=$((case_count + 1))

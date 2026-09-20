@@ -26,3 +26,8 @@ rules:
       # in a `gh api` call, so untrusted PR content is never executed or
       # interpolated unsanitized.
       - governance-comment.yml
+      # workflow_run keeps governance writes in a default-branch workflow
+      # after the PR-controlled policy run. The jobs checkout only github.sha,
+      # never checkout the triggering head or download its artifacts, and use
+      # only GitHub-supplied PR numbers and head SHAs as data.
+      - pr-policy-writes.yml
