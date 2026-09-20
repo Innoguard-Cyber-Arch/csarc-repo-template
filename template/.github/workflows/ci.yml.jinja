@@ -6,7 +6,7 @@ name: CI
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -22,16 +22,18 @@ jobs:
   verify:
     name: verify
     runs-on: ubuntu-latest
-    # Issue #661: this job no longer re-executes any test -- it only checks
-    # that the commit already carries proof it was verified locally (see
-    # scripts/verify_attestation.py and scripts/check-verify-attestation).
-    # 30 minutes was sized for running the full test suite on the runner;
-    # 15 stays generous for the one thing here that still does real work,
-    # the guided-release-candidate packaging step below, while catching a
-    # hang in the now-lightweight common path far sooner than before.
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the trusted verification policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: {% raw %}${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}{% endraw %}
+      - name: Preserve the trusted verification router
+        run: cp scripts/ci_tier.py "$RUNNER_TEMP/ci_tier.py"
+      - name: Check out the exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -39,7 +41,7 @@ jobs:
       - name: Read release ownership
         id: release
         run: echo "ownership=$(python3 scripts/csarc_config.py release_ownership)" >> "$GITHUB_OUTPUT"
-      - name: Select verification tier
+      - name: Select trusted verification plan
         id: plan
         env:
           BASE_SHA: {% raw %}${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}{% endraw %}
@@ -59,7 +61,7 @@ jobs:
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             args+=(--force-full)
           fi
-          python3 scripts/ci_tier.py \
+          python3 "$RUNNER_TEMP/ci_tier.py" \
             --event "$EVENT_NAME" \
             --base "${PR_BASE#refs/heads/}" \
             --head "${PR_HEAD#refs/heads/}" \
@@ -69,89 +71,54 @@ jobs:
             --github-output "$GITHUB_OUTPUT" \
             --summary "$GITHUB_STEP_SUMMARY" \
             "${args[@]}"
-      # Issue #753: a small, exact allowlist of bots (currently only
-      # Dependabot) whose commits are authored and pushed by GitHub
-      # itself, so they can never carry the local-attestation trailer
-      # below checks for. See scripts/hosted_verify_bots.py's module
-      # docstring for the full condition. Any PR that does not qualify
-      # falls through to the unchanged attestation-only path.
-      - name: Determine hosted-verification bot eligibility
-        id: bot
-        env:
-          AUTHOR: {% raw %}${{ github.event.pull_request.user.login }}{% endraw %}
-          HEAD_REF: {% raw %}${{ github.event.pull_request.head.ref }}{% endraw %}
-          HEAD_REPO: {% raw %}${{ github.event.pull_request.head.repo.full_name }}{% endraw %}
-          BASE_REPO: {% raw %}${{ github.repository }}{% endraw %}
-        run: |
-          python3 scripts/hosted_verify_bots.py \
-            --author "$AUTHOR" \
-            --head-ref "$HEAD_REF" \
-            --head-repo "$HEAD_REPO" \
-            --base-repo "$BASE_REPO" \
-            --github-output "$GITHUB_OUTPUT"
-      # Issue #661: the default content of the `verify` required check.
-      # scripts/ci_tier.py's classification above still runs -- it is
-      # change-aware routing logic, not test execution, and its "tier"
-      # output is exactly what makes this a fail-closed check rather than
-      # a rubber stamp: it independently reruns the same classification the
-      # PR author's own local run used, so a fast-tier attestation cannot
-      # satisfy a change scripts/ci_tier.py itself classifies as needing
-      # full verification (e.g. a .github/workflows/ edit). HEAD_SHA
-      # reuses the exact expression above rather than plain `github.sha`,
-      # because for a pull_request event `github.sha` is GitHub's
-      # synthetic merge commit, not the commit the contributor actually
-      # verified and pushed -- only that real commit can carry the
-      # trailer scripts/write-verify-attestation amended onto it. Skipped
-      # for an Issue #753-eligible bot PR, which the next step verifies
-      # for real instead.
-      - name: Validate local verification attestation
-        if: {% raw %}${{ steps.bot.outputs.eligible != 'true' }}{% endraw %}
+      - name: Bind trusted verification identity
+        id: identity
         env:
           HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}{% endraw %}
-          REQUIRED_TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
-        run: ./scripts/check-verify-attestation "$HEAD_SHA" --required-tier "$REQUIRED_TIER"
-      # Issue #797: reuse the existing guided-release toolchain setup for
-      # allowlisted bots before they run the real verification below.
+          TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
+        run: |
+          tree="$(git rev-parse "$HEAD_SHA^{tree}")"
+          if [[ "$TIER" == "full" ]]; then
+            command="./scripts/verify"
+          else
+            command="./scripts/verify-fast"
+          fi
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "command=$command" >> "$GITHUB_OUTPUT"
 {% if has_python %}
-      - if: {% raw %}${{ steps.bot.outputs.eligible == 'true' || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned') }}{% endraw %}
+      - name: Set up Python {{ python_target }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "{{ python_target }}"
 {% endif %}
-      - if: {% raw %}${{ steps.bot.outputs.eligible == 'true' || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned') }}{% endraw %}
+      - name: Set up uv 0.12.15
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.15"
 {% if has_typescript %}
-      - if: {% raw %}${{ steps.bot.outputs.eligible == 'true' || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned') }}{% endraw %}
+      - name: Set up pnpm 11.22.0
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: "11.22.0"
           run_install: false
-      - if: {% raw %}${{ steps.bot.outputs.eligible == 'true' || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned') }}{% endraw %}
+      - name: Set up Node.js 24
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
-          cache: pnpm
 {% endif %}
 {% if has_rust %}
-      - if: {% raw %}${{ steps.bot.outputs.eligible == 'true' || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned') }}{% endraw %}
+      - name: Set up Rust 1.98.0
         run: |
           rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
           rustup default 1.98.0
 {% endif %}
-      # Issue #753: the allowlisted bot's commit can never carry a local
-      # attestation trailer, so this runs the real verification here
-      # instead, tiered and scoped exactly like scripts/ci_tier.py would
-      # classify any standalone pull request's own local run. The git
-      # identity is local to this ephemeral, unpushed checkout (`git
-      # commit --amend` inside scripts/write-verify-attestation needs one
-      # to run at all); persist-credentials is already false above, so
-      # nothing here can push anywhere.
-      - name: Run hosted verification for an allowlisted bot pull request
-        if: {% raw %}${{ steps.bot.outputs.eligible == 'true' }}{% endraw %}
+      - name: Execute trusted verification tier={% raw %}${{ steps.plan.outputs.tier }}{% endraw %} scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} tree={% raw %}${{ steps.identity.outputs.tree }}{% endraw %} command={% raw %}${{ steps.identity.outputs.command }}{% endraw %}
         env:
           CSARC_CI_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
           CSARC_CI_TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
         run: |
+          # Issue #846: bootstrap compatibility for the legacy verifier,
+          # which still amends the ephemeral checkout with a local trailer.
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
           if [[ "$CSARC_CI_TIER" == "full" ]]; then
