@@ -431,7 +431,7 @@ check 因此對這類 PR 永遠卡在 pending。`.github/workflows/pr-policy.yml
 `title` job同檔、同觸發條件，`template/` 同步一份）補上這個缺口，呼叫新增的 `scripts/promotion_gate.py
 check-route` 子指令。
 
-跟 `title` job 一樣，`promotion` job 對 `pull_request` 事件 checkout 的是 PR 的 base（trusted）commit，
+跟 `title` job 一樣，`promotion` job 對 `pull_request_target` 事件 checkout 的是 PR 的 base（trusted）commit，
 不是 PR 自己的 head／merge commit——避免一個惡意 PR 改寫 `route_for()` 自我核准。這代表 `check-route`
 子指令要等這個子指令本身合併進 `main` 之後，後續 PR 的 `promotion` job 才會真的執行到它；`promotion`
 job 沿用 `title` job「Validate Milestone approval」step 已經在用的同一種 bootstrap 寫法——先用
@@ -454,12 +454,12 @@ workflow 檔名無關，所以 `promotion` context 一樣被正確產生。
 `check-route` 只重用既有的 `route_for()` 分類器（`prepare()` 產生完整交付證據時用的同一份函式），不重新實作
 分支／標籤判斷邏輯，避免兩者對同一個 PR 的路由判斷不一致：
 
-- `pull_request` 事件：直接從 webhook payload 讀 base／head／labels（不需要額外 `GH_TOKEN` 呼叫），呼叫
+- `pull_request_target` 事件：直接從 webhook payload 讀 base／head／labels（不需要額外 `GH_TOKEN` 呼叫），呼叫
   `route_for()`。任何 `not-applicable`（一般 topic branch、`dependabot/*`、`automation/*`）或已知的合法路由
   （`milestone`／`isolated`／`hotfix`／`release-recovery`／`release-follow-up`）都回報成功；只有 target
   `main` 卻不符合任何已知路由的分支（`invalid-main-route`）才 fail closed。
 - `merge_group` 事件：直接視為 `Route("merge-queue", False)`——來源 PR 開啟當下已經分類過，佇列重跑不必
-  重新讀 event payload（與 `prepare()` 對非 `pull_request` 事件的既有 fallback 一致）。
+  重新讀 event payload（與 `prepare()` 對非 `pull_request_target` 事件的既有 fallback 一致）。
 
 這個 job **不**取代既有的 Milestone 交付驗證：`title` job（`scripts/validate-pr-policy`）仍然負責 tracker
 Issue、Promotion 區塊 checklist 與 promotion 標籤的完整驗證；`.github/workflows/milestone-lifecycle.yml` 的
@@ -467,6 +467,19 @@ Issue、Promotion 區塊 checklist 與 promotion 標籤的完整驗證；`.githu
 `promotion` 這個 required check 的責任範圍只到「這個 PR 是否走一條被承認的路由」，不到「這條路由的證據是否
 齊全」——後者仍由 `scripts/promotion_gate.py` 的 `prepare()`／`finalize()` 在正式的 Milestone 交付流程中
 處理，範圍不變。
+
+### Required check producer 綁定（#835）
+
+Ruleset 對 `title`、`promotion`、`verify`、`review` 不只比對 context 名稱，也逐項綁定 GitHub Actions
+App integration ID `15368`。設定缺少 ID、ID 格式錯誤或 live readback 不完全相同時，repository settings
+檢查與 PR lifecycle 都 fail closed；同名 classic commit status 不再能滿足 required context。
+
+App 身分本身仍不足以區分同一 repository 內由 PR 控制的 workflow。四個 required-name job 因此只由
+base-trusted `pull_request_target`、既有的 default-branch review 事件或 `merge_group` 載入 workflow
+定義。lifecycle 對每個 exact-head check run 再核對名稱、App、check suite、Actions run repository、workflow
+path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成有效證據。PR policy 與 review 只 checkout
+可信 base 並維持唯讀權限；CI 沒有 secret 或寫入權限，雖會讀取 proposed head 來驗證聲明，但驗證證據本身
+的不可偽造性仍由 #834 負責。
 
 ### `verify` 必要檢查改為本機驗證聲明（#661）
 
@@ -699,10 +712,10 @@ job 目前沒有對應的本機可重跑回歸測試——它是一段會實際 
 
 | 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428）；本機驗證聲明（#661）；Dependabot hosted 執行例外（#753） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；15 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類（仍在 runner 上執行，是變更路徑分類邏輯，不是測試）後，`scripts/hosted_verify_bots.py` 判斷這張 PR 是否符合白名單 bot 例外（見「Dependabot 的 hosted 執行例外（#753）」一節）：不符合則只用 `scripts/check-verify-attestation` 驗證這個 PR 的實際 HEAD commit（`pull_request` 事件讀 PR 自己的 head sha，不是 GitHub 產生的 merge commit）是否帶有格式正確、hash 與 tree 相符、timestamp 新鮮、tier 足夠的 `Verified-locally:` trailer；符合則改在 runner 上實際執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo：`scripts/verify`），成功時由這些腳本呼叫 `scripts/write-verify-attestation` 寫入 trailer（僅供腳本正常結束，不被讀取）；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py`；`tests/test_hosted_verify_bots.py`；`tests/test_journey03_ci.py` 的 `test_root_ci_is_one_bounded_verification_job`／`test_generated_ci_uses_the_same_one_job_contract`；`tests/test_verify_attestation.py`（純邏輯）與 `scripts/test-verify-attestation`（對真實 git repository） | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success——此 run 早於 #661／#753，只證明 `scripts/ci_tier.py` 分類與（當時仍在 runner 上執行的）驗證邏輯，不代表本機驗證聲明改造或 Dependabot 例外 | `scripts/ci_tier.py` 分類：active（邏輯未變）；本機驗證聲明改造（#661 本身）：active；Dependabot hosted 執行例外（#753 本身）：candidate（待 `main` 落地並於首張真實 Dependabot PR 觸發後轉 active） |
-| PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | `contents`／Issues／pull requests 只讀；固定 timeout | `title` job：Issue、route、review policy 與 Milestone approval 唯讀判定；`promotion` job（#601）：呼叫 `scripts/promotion_gate.py check-route` 分類 route，兩者只以原生 job conclusion 回報結果 | `scripts/test-pr-policy`；`tests/test_journey05_workflows.py`；`promotion` job 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | 歷史 run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929) 證明既有 policy 判定；#829 唯讀邊界待合併後首張 PR 取得 live evidence | 既有 policy：active；#829 唯讀邊界：candidate |
+| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428）；本機驗證聲明（#661）；Dependabot hosted 執行例外（#753） | `pull_request_target`、`merge_group`、`workflow_dispatch` | `contents: read`；15 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類（仍在 runner 上執行，是變更路徑分類邏輯，不是測試）後，`scripts/hosted_verify_bots.py` 判斷這張 PR 是否符合白名單 bot 例外（見「Dependabot 的 hosted 執行例外（#753）」一節）：不符合則只用 `scripts/check-verify-attestation` 驗證這個 PR 的實際 HEAD commit（`pull_request_target` 事件讀 PR 自己的 head sha，不是 GitHub 產生的 merge commit）是否帶有格式正確、hash 與 tree 相符、timestamp 新鮮、tier 足夠的 `Verified-locally:` trailer；符合則改在 runner 上實際執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo：`scripts/verify`），成功時由這些腳本呼叫 `scripts/write-verify-attestation` 寫入 trailer（僅供腳本正常結束，不被讀取）；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py`；`tests/test_hosted_verify_bots.py`；`tests/test_journey03_ci.py` 的 `test_root_ci_is_one_bounded_verification_job`／`test_generated_ci_uses_the_same_one_job_contract`；`tests/test_verify_attestation.py`（純邏輯）與 `scripts/test-verify-attestation`（對真實 git repository） | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success——此 run 早於 #661／#753，只證明 `scripts/ci_tier.py` 分類與（當時仍在 runner 上執行的）驗證邏輯，不代表本機驗證聲明改造或 Dependabot 例外 | `scripts/ci_tier.py` 分類：active（邏輯未變）；本機驗證聲明改造（#661 本身）：active；Dependabot hosted 執行例外（#753 本身）：candidate（待 `main` 落地並於首張真實 Dependabot PR 觸發後轉 active） |
+| PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | `pull_request_target` PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | `contents`／Issues／pull requests 只讀；固定 timeout | `title` job：Issue、route、review policy 與 Milestone approval 唯讀判定；`promotion` job（#601）：呼叫 `scripts/promotion_gate.py check-route` 分類 route，兩者只以原生 job conclusion 回報結果 | `scripts/test-pr-policy`；`tests/test_journey05_workflows.py`；`promotion` job 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | 歷史 run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929) 證明既有 policy 判定；#829 唯讀邊界待合併後首張 PR 取得 live evidence | 既有 policy：active；#829 唯讀邊界：candidate |
 | PR policy writes | `.github/workflows/pr-policy-writes.yml` | PR metadata 與 Milestone check-run 寫入（#829） | default branch 的 `workflow_run`，只接續完成的 `PR policy` run | top-level 無權限；resolver 只讀；metadata job 僅 `issues`／`pull-requests: write`；Milestone job 僅 `checks: write`；10 分鐘 | 以完整 head identity 跨頁解析唯一 open PR 後同步 metadata／#551 提醒；另以可信任 script 發布 `Milestone approval` custom check；零筆或多筆都 fail closed，不執行 PR source 或 artifact | `tests/test_work_item_metadata.py`；`tests/test_milestone_approval.py`；`tests/test_journey05_workflows.py` | 新 workflow，待落地 default branch 後由下一張 PR 觸發 | candidate |
-| PR review（Copilot 審核模式，#752／#775／#826） | `.github/workflows/pr-review.yml` | PR 審核授權（#752，銜接 #719／#745／#775／#826） | `pull_request`（opened／synchronize／reopened／ready_for_review／converted_to_draft）、`pull_request_review`（submitted／dismissed）、`issue_comment`（created，篩選 PR 上以 `PR lifecycle merge authorization` 開頭的留言）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run | `review` job 呼叫 `scripts/review_gate.py check`：`pr_review_mode=copilot` 時，目前完整 head SHA 已獲 Copilot 乾淨審核、獨立 maintainer `APPROVED`、或符合條件的 Alpha self-merge 授權留言（#775／#826，包括驗證完成的 delivery sync）才過；`pr_review_mode=human` 時只回報，審核仍由 Ruleset 原生 required approval 把關 | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的 Copilot／Alpha self-merge 授權來源見 `tests/test_pr_lifecycle.py` | 尚未落地 `main`，無 live run | candidate（待 main 落地並於首次 PR 觸發後轉 active） |
+| PR review（Copilot 審核模式，#752／#775／#826） | `.github/workflows/pr-review.yml` | PR 審核授權（#752，銜接 #719／#745／#775／#826） | `pull_request_target`（opened／synchronize／reopened／ready_for_review／converted_to_draft）、`pull_request_review`（submitted／dismissed）、`issue_comment`（created，篩選 PR 上以 `PR lifecycle merge authorization` 開頭的留言）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run | `review` job 呼叫 `scripts/review_gate.py check`：`pr_review_mode=copilot` 時，目前完整 head SHA 已獲 Copilot 乾淨審核、獨立 maintainer `APPROVED`、或符合條件的 Alpha self-merge 授權留言（#775／#826，包括驗證完成的 delivery sync）才過；`pr_review_mode=human` 時只回報，審核仍由 Ruleset 原生 required approval 把關 | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的 Copilot／Alpha self-merge 授權來源見 `tests/test_pr_lifecycle.py` | 尚未落地 `main`，無 live run | candidate（待 main 落地並於首次 PR 觸發後轉 active） |
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併） | `issues`、`issue_comment`、`milestone` 事件；`pull_request.closed`（里程碑工作 PR 合併進 `dev/m*` 或 `promote/m*` 晉升 PR 合併進 `main`） | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新）、`tests/test_work_pr_closure.py` | 尚未落地 `main`，無新 live run；三個前身 workflow（`issue-triage.yml`、`milestone-lifecycle.yml`、`work-item-closure.yml`）已刪除，其舊 run 證據（`33524318953`／`33524281794`／`33502286588`）不再代表現行檔案 | **root：candidate**（待 main 落地並觸發首次 issues／issue_comment／milestone／pull_request 事件才能取得新 live evidence）；#574 只把三個 workflow 檔的既有邏輯打包成一個 job 內的循序 step，不改變任一 step 本身的行為、權限需求或所呼叫的 script |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |

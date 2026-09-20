@@ -148,7 +148,6 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     triggers = workflow.get("on", workflow.get(True))
 
     assert set(triggers) == {
-        "pull_request",
         "pull_request_target",
         "merge_group",
         "workflow_dispatch",

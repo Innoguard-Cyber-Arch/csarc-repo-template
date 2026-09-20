@@ -45,10 +45,10 @@
         "do_not_enforce_on_create": true,
         "strict_required_status_checks_policy": false,
         "required_status_checks": [
-          {"context": "title"},
-          {"context": "promotion"},
-          {"context": "verify"}{% if pr_review_mode | default('human') == 'copilot' %},
-          {"context": "review"}{% endif %}
+          {"context": "title", "integration_id": 15368},
+          {"context": "promotion", "integration_id": 15368},
+          {"context": "verify", "integration_id": 15368}{% if pr_review_mode | default('human') == 'copilot' %},
+          {"context": "review", "integration_id": 15368}{% endif %}
         ]
       }
     }

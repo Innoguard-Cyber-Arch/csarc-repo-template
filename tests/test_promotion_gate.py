@@ -1281,9 +1281,8 @@ def test_github_get_uses_authenticated_cli_without_environment_token(
     ]
 
 
-@pytest.mark.parametrize("run_event", ["pull_request", "pull_request_target"])
 def test_blocked_run_must_match_head_and_have_no_started_steps(
-    monkeypatch: pytest.MonkeyPatch, run_event: str
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A real hosted test failure cannot be relabeled as quota exhaustion."""
 
@@ -1306,7 +1305,7 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
             "id": 200,
             "head_sha": "head",
             "head_branch": "dev/m7-staged-ci",
-            "event": run_event,
+            "event": "pull_request_target",
             "status": "completed",
             "conclusion": "failure",
             "path": ".github/workflows/ci.yml",
@@ -1410,7 +1409,7 @@ def test_blocked_run_rejects_malformed_zero_step_schema(
         "id": 200,
         "head_sha": "head",
         "head_branch": "dev/m7-staged-ci",
-        "event": "pull_request",
+        "event": "pull_request_target",
         "status": "completed",
         "conclusion": "failure",
         "path": ".github/workflows/ci.yml",
@@ -1492,7 +1491,7 @@ def _routine_pr_get(
             "id": 200,
             "head_sha": "head",
             "head_branch": "enhancement/42-change",
-            "event": "pull_request",
+            "event": "pull_request_target",
             "status": "completed",
             "conclusion": "failure",
             "path": ".github/workflows/ci.yml",
@@ -2576,7 +2575,7 @@ def test_zero_step_run_reads_all_jobs_and_rejects_changed_billing_marker(
                 "id": 200,
                 "head_sha": "head",
                 "head_branch": "dev/m7-staged-ci",
-                "event": "pull_request",
+                "event": "pull_request_target",
                 "status": "completed",
                 "conclusion": "failure",
                 "path": ".github/workflows/ci.yml",
@@ -2656,7 +2655,7 @@ def test_zero_step_run_requires_exact_run_and_pull_request(
                 **run_identity,
                 "head_sha": "head",
                 "head_branch": "dev/m7-staged-ci",
-                "event": "pull_request",
+                "event": "pull_request_target",
                 "status": "completed",
                 "conclusion": "failure",
                 "path": ".github/workflows/ci.yml",

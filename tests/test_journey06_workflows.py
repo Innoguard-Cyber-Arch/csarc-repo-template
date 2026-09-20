@@ -168,16 +168,16 @@ def test_ci_and_reviewer_assignment_stay_out_of_the_merge() -> None:
     """#574 forbids folding CI or Reviewer assignment into this workflow.
 
     CI (ci.yml) grows independently with rust/node/python toolchain checks
-    at a different pace than these lightweight governance checks. Reviewer
-    assignment (governance-comment.yml) runs on pull_request_target with the
-    base repo's write-privileged token; mixing that with a workflow that can
-    also run PR-branch-influenced steps would be a privilege-escalation
-    anti-pattern. Both must stay separate files with their own triggers.
+    at a different pace than these lightweight governance checks. It loads
+    its workflow from the trusted base and uses read-only permissions while
+    checking the proposed head. Reviewer assignment (governance-comment.yml)
+    runs with the base repo's write-privileged token; mixing those trust and
+    permission boundaries would be a privilege-escalation anti-pattern. Both
+    must stay separate files with their own triggers.
     """
     ci_workflow = load_yaml(REPO_ROOT / ".github/workflows/ci.yml")
     ci_triggers = ci_workflow.get("on", ci_workflow.get(True))
     assert set(ci_triggers) == {
-        "pull_request",
         "pull_request_target",
         "merge_group",
         "workflow_dispatch",

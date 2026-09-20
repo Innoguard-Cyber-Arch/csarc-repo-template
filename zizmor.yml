@@ -31,8 +31,11 @@ rules:
       # never checkout the triggering head or download its artifacts, and use
       # only GitHub-supplied PR numbers and head SHAs as data.
       - pr-policy-writes.yml
-      # Issue #835 bootstrap: add base-trusted triggers before removing the
-      # PR-controlled transition path. These jobs have read-only permissions.
+      # Issue #835: required check names must be produced by workflow
+      # definitions loaded from the trusted base. PR policy and review only
+      # checkout that base with read-only permissions. CI has contents:read,
+      # no secrets or write permissions, and checks the proposed commit;
+      # trusted execution evidence is separately owned by Issue #834.
       - ci.yml
       - pr-policy.yml
       - pr-review.yml

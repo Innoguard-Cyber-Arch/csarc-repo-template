@@ -57,6 +57,31 @@ BLOCKER_RESOLVED = re.compile(
 DRAFT_EVENTS = {"convert_to_draft", "converted_to_draft"}
 REVIEW_CHECK_CONTEXT = "review"
 SUCCESSFUL_CHECK_CONCLUSIONS = {"neutral", "skipped", "success"}
+TRUSTED_CHECK_PRODUCERS: dict[str, tuple[str, frozenset[str]]] = {
+    "title": (
+        ".github/workflows/pr-policy.yml",
+        frozenset({"merge_group", "pull_request_target"}),
+    ),
+    "promotion": (
+        ".github/workflows/pr-policy.yml",
+        frozenset({"merge_group", "pull_request_target"}),
+    ),
+    "verify": (
+        ".github/workflows/ci.yml",
+        frozenset({"merge_group", "pull_request_target"}),
+    ),
+    "review": (
+        ".github/workflows/pr-review.yml",
+        frozenset(
+            {
+                "issue_comment",
+                "merge_group",
+                "pull_request_review",
+                "pull_request_target",
+            }
+        ),
+    ),
+}
 MAINTAINER_PERMISSIONS = {"admin", "maintain"}
 REVIEWED_MERGE_BYPASS_ACTORS = [
     {
@@ -1282,7 +1307,7 @@ def effective_protection(  # noqa: C901
     alpha_self_merge: bool = False,
     reviewed_merge: bool = False,
     copilot_mode: bool = False,
-) -> tuple[str, str, set[tuple[str, int | None]], bool]:
+) -> tuple[str, str, set[tuple[str, int]], bool]:
     """Prove review and check enforcement for an exact-head merge."""
     try:
         rules = github.get(
@@ -1340,18 +1365,13 @@ def effective_protection(  # noqa: C901
         not isinstance(item, dict)
         or not isinstance(item.get("context"), str)
         or not item["context"]
-        or (
-            item.get("integration_id") is not None
-            and (
-                type(item.get("integration_id")) is not int
-                or item["integration_id"] <= 0
-            )
-        )
+        or type(item.get("integration_id")) is not int
+        or item["integration_id"] <= 0
         for item in required_items
     ):
         return "unknown", "required check rules are malformed", set(), False
     required_contexts = {
-        (str(item["context"]), item.get("integration_id"))
+        (str(item["context"]), int(item["integration_id"]))
         for item in required_items
         if isinstance(item, dict)
     }
@@ -1484,19 +1504,64 @@ def effective_protection(  # noqa: C901
 
 
 def check_run_matches_context(
-    item: dict[str, Any], context: str, integration_id: int | None
+    item: dict[str, Any], context: str, integration_id: int
 ) -> bool:
     """Match a check only when its pinned GitHub App identity is exact."""
     if item.get("name") != context:
         return False
-    if integration_id is None:
-        return True
     app = item.get("app")
     return (
         isinstance(app, dict)
         and type(app.get("id")) is int
         and app["id"] > 0
         and app["id"] == integration_id
+    )
+
+
+def trusted_check_run_matches_context(
+    github: GitHub,
+    repo: str,
+    head_sha: str,
+    item: dict[str, Any],
+    context: str,
+    integration_id: int,
+    run_cache: dict[int, dict[str, Any]],
+) -> bool:
+    """Match a required check to its trusted workflow and event."""
+    if item.get("head_sha") != head_sha or not check_run_matches_context(
+        item, context, integration_id
+    ):
+        return False
+    producer = TRUSTED_CHECK_PRODUCERS.get(context)
+    if producer is None:
+        return False
+    try:
+        run_url = actions_run_url(str(item.get("details_url") or ""), repo)
+    except RuntimeError:
+        return False
+    run_id = int(run_url.rsplit("/", 1)[1])
+    if run_id not in run_cache:
+        payload = github.get(repo, f"actions/runs/{run_id}")
+        if not isinstance(payload, dict):
+            raise RuntimeError("Required check Actions run is malformed")
+        run_cache[run_id] = payload
+    run = run_cache[run_id]
+    repository = run.get("repository")
+    check_suite = item.get("check_suite")
+    workflow_path, trusted_events = producer
+    return (
+        type(run.get("id")) is int
+        and run["id"] == run_id
+        and isinstance(check_suite, dict)
+        and type(check_suite.get("id")) is int
+        and check_suite["id"] > 0
+        and type(run.get("check_suite_id")) is int
+        and run["check_suite_id"] == check_suite["id"]
+        and run.get("head_sha") == head_sha
+        and isinstance(repository, dict)
+        and repository.get("full_name") == repo
+        and run.get("path") == workflow_path
+        and run.get("event") in trusted_events
     )
 
 
@@ -1539,7 +1604,7 @@ def require_successful_checks(  # noqa: C901
     github: GitHub,
     repo: str,
     head_sha: str,
-    contexts: set[tuple[str, int | None]],
+    contexts: set[tuple[str, int]],
     quota_run_urls: set[str] | None = None,
 ) -> str:
     """Require protected contexts to pass or have exact quota evidence."""
@@ -1549,34 +1614,40 @@ def require_successful_checks(  # noqa: C901
         "check_runs",
     )
     authoritative_runs = authoritative_check_runs(check_runs, head_sha)
+    run_cache: dict[int, dict[str, Any]] = {}
+    required_runs: dict[tuple[str, int], dict[str, Any]] = {}
+    for context, integration_id in contexts:
+        candidates = [
+            item
+            for item in check_runs
+            if trusted_check_run_matches_context(
+                github,
+                repo,
+                head_sha,
+                item,
+                context,
+                integration_id,
+                run_cache,
+            )
+        ]
+        if candidates:
+            required_runs[(context, integration_id)] = max(
+                candidates, key=lambda item: int(item["id"])
+            )
     statuses = github.collection(
         repo,
         f"commits/{head_sha}/status?per_page=100",
         "statuses",
         head_sha,
     )
-    passing_runs = [
-        item
-        for item in authoritative_runs
-        if item.get("head_sha") == head_sha
-        and item.get("status") == "completed"
-        and item.get("conclusion") in SUCCESSFUL_CHECK_CONCLUSIONS
-    ]
-    passing_statuses = {
-        item.get("context")
-        for item in statuses
-        if item.get("state") == "success"
-    }
     missing = [
         (context, integration_id)
         for context, integration_id in contexts
-        if not any(
-            check_run_matches_context(item, context, integration_id)
-            for item in passing_runs
-        )
-        and not (integration_id is None and context in passing_statuses)
+        if (item := required_runs.get((context, integration_id))) is None
+        or item.get("status") != "completed"
+        or item.get("conclusion") not in SUCCESSFUL_CHECK_CONCLUSIONS
     ]
-    missing.sort(key=lambda item: (item[0], -1 if item[1] is None else item[1]))
+    missing.sort()
     if quota_run_urls:
         non_quota_failures: set[str] = set()
         for item in authoritative_runs:
@@ -1612,19 +1683,15 @@ def require_successful_checks(  # noqa: C901
         return "quota-fallback" if quota_run_urls else "success"
     if quota_run_urls:
         for context, integration_id in missing:
-            failed_runs = [
-                item
-                for item in authoritative_runs
-                if item.get("name") == context
-                and item.get("head_sha") == head_sha
-                and item.get("status") == "completed"
-                and item.get("conclusion") == "failure"
-                and check_run_matches_context(item, context, integration_id)
-            ]
-            if len(failed_runs) != 1:
+            failed_run = required_runs.get((context, integration_id))
+            if (
+                failed_run is None
+                or failed_run.get("status") != "completed"
+                or failed_run.get("conclusion") != "failure"
+            ):
                 break
             run_url = actions_run_url(
-                str(failed_runs[0].get("details_url") or ""), repo
+                str(failed_run.get("details_url") or ""), repo
             )
             if run_url not in quota_run_urls:
                 break
