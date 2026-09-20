@@ -1281,8 +1281,9 @@ def test_github_get_uses_authenticated_cli_without_environment_token(
     ]
 
 
+@pytest.mark.parametrize("run_event", ["pull_request", "pull_request_target"])
 def test_blocked_run_must_match_head_and_have_no_started_steps(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, run_event: str
 ) -> None:
     """A real hosted test failure cannot be relabeled as quota exhaustion."""
 
@@ -1305,7 +1306,7 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
             "id": 200,
             "head_sha": "head",
             "head_branch": "dev/m7-staged-ci",
-            "event": "pull_request",
+            "event": run_event,
             "status": "completed",
             "conclusion": "failure",
             "path": ".github/workflows/ci.yml",
