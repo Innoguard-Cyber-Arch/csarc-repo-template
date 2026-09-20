@@ -346,6 +346,27 @@ def test_pull_request_records_the_live_decision(
     assert recorded == [("acme/project", "abc", result)]
 
 
+def test_pull_request_read_only_decision_does_not_publish(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The PR-controlled gate evaluates approval without a write token."""
+    state = snapshot(comment(1, "reviewer", "/milestone approve"))
+
+    monkeypatch.setitem(
+        check_pr.__globals__,
+        "run_gh",
+        lambda _arguments: '{"milestone":{"number":8},"head":{"sha":"abc"}}',
+    )
+    monkeypatch.setitem(check_pr.__globals__, "load_snapshot", lambda *_: state)
+    monkeypatch.setitem(
+        check_pr.__globals__,
+        "_record_check",
+        lambda *_: pytest.fail("read-only decision published a check"),
+    )
+
+    assert check_pr("acme/project", 42, record_check=False).allowed
+
+
 def test_merge_group_rechecks_every_associated_pull_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -371,6 +392,31 @@ def test_merge_group_rechecks_every_associated_pull_request(
 
     assert result.allowed
     assert recorded == [("acme/project", "queue-sha", result)]
+
+
+def test_merge_group_read_only_decision_does_not_publish(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The merge-group gate evaluates approval without a write token."""
+    state = snapshot(comment(1, "reviewer", "/milestone approve"))
+
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "run_gh",
+        lambda _arguments: '[{"number":42,"milestone":{"number":8}}]',
+    )
+    monkeypatch.setitem(
+        check_merge_group.__globals__, "load_snapshot", lambda *_: state
+    )
+    monkeypatch.setitem(
+        check_merge_group.__globals__,
+        "_record_check",
+        lambda *_: pytest.fail("read-only decision published a check"),
+    )
+
+    assert check_merge_group(
+        "acme/project", "queue-sha", record_check=False
+    ).allowed
 
 
 @pytest.mark.parametrize(

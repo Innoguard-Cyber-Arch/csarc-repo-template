@@ -24,6 +24,7 @@ paired_files=(
   .github/workflows/governance-comment.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
+  .github/workflows/pr-policy-writes.yml
   .github/workflows/pr-review.yml
   .github/workflows/release-drift.yml
   .github/workflows/spec-to-issue.yml

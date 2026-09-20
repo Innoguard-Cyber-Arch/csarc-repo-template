@@ -951,14 +951,15 @@ def refresh_pr_checks(snapshot: dict[str, Any]) -> int:
     return count
 
 
-def check_pr(repo: str, number: int) -> Decision:
-    """Validate and record lifecycle approval for one current pull request."""
+def check_pr(repo: str, number: int, *, record_check: bool = True) -> Decision:
+    """Validate lifecycle approval and optionally record its check."""
     pull = json.loads(run_gh(["api", f"repos/{repo}/pulls/{number}"]))
     head_sha = pull.get("head", {}).get("sha")
     if not isinstance(head_sha, str) or not head_sha:
         raise RuntimeError("GitHub returned an invalid pull-request head")
     decision = _pull_decision(repo, pull)
-    _record_check(repo, head_sha, decision)
+    if record_check:
+        _record_check(repo, head_sha, decision)
     return decision
 
 
@@ -975,7 +976,9 @@ def _pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
     return approval_decision(load_snapshot(repo, milestone_number))
 
 
-def check_merge_group(repo: str, head_sha: str) -> Decision:
+def check_merge_group(
+    repo: str, head_sha: str, *, record_check: bool = True
+) -> Decision:
     """Recheck every pull request represented by one merge-group commit."""
     pulls = _pages(run_gh(["api", f"repos/{repo}/commits/{head_sha}/pulls"]))
     if not pulls:
@@ -993,7 +996,8 @@ def check_merge_group(repo: str, head_sha: str) -> Decision:
             if blocked
             else "Every queued Milestone is approved",
         )
-    _record_check(repo, head_sha, decision)
+    if record_check:
+        _record_check(repo, head_sha, decision)
     return decision
 
 
@@ -1091,9 +1095,11 @@ def main() -> None:
     check = subparsers.add_parser("check-pr")
     check.add_argument("--repo", required=True)
     check.add_argument("--pr", required=True, type=int)
+    check.add_argument("--read-only", action="store_true")
     queue = subparsers.add_parser("check-merge-group")
     queue.add_argument("--repo", required=True)
     queue.add_argument("--head-sha", required=True)
+    queue.add_argument("--read-only", action="store_true")
     subparsers.add_parser("check-promotion")
     record = subparsers.add_parser("record-promotion-evidence")
     record.add_argument("--repo", required=True)
@@ -1113,9 +1119,11 @@ def main() -> None:
     pre.add_argument("--milestone", required=True, type=int)
     args = parser.parse_args()
     if args.command == "check-pr":
-        decision = check_pr(args.repo, args.pr)
+        decision = check_pr(args.repo, args.pr, record_check=not args.read_only)
     elif args.command == "check-merge-group":
-        decision = check_merge_group(args.repo, args.head_sha)
+        decision = check_merge_group(
+            args.repo, args.head_sha, record_check=not args.read_only
+        )
     elif args.command == "check-promotion":
         decision = promotion_decision(sys.stdin.read())
     elif args.command == "record-promotion-evidence":
