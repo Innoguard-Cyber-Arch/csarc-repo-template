@@ -42,6 +42,7 @@ merge_snapshot = MODULE["merge_snapshot"]
 read_lease = MODULE["read_lease"]
 require_lease = MODULE["require_lease"]
 require_successful_checks = MODULE["require_successful_checks"]
+require_trusted_dependabot_head = MODULE["require_trusted_dependabot_head"]
 trusted_check_run_matches_context = MODULE["trusted_check_run_matches_context"]
 promotion_gate = MODULE["promotion_gate"]
 release_refs = MODULE["release_refs"]
@@ -786,10 +787,8 @@ def test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows(
 ) -> None:
     """The two exact dependabot-auto-merge.yml paths pass scan_writers.
 
-    Regression test for #602: this copies the actual committed root and
-    template workflow files, unleased `gh pr merge --auto` / `gh pr edit
-    --add-label` writes included, into a scratch repository root and
-    proves scan_writers no longer fails closed on them.
+    Regression test for #602: this copies the exact workflow allowlist with
+    its major-update label write into a scratch root and proves it still scans.
     """
     for relative in (
         ".github/workflows/dependabot-auto-merge.yml",
@@ -805,7 +804,8 @@ def test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows(
             # assert on.
             continue
         source = candidate.read_text(encoding="utf-8")
-        assert 'gh pr merge --auto --squash "$PR_URL"' in source
+        assert "gh pr merge --auto" not in source
+        assert "--disable-auto" not in source
         assert 'gh pr edit "$PR_URL" --add-label needs-manual-review' in source
         destination = tmp_path / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -816,7 +816,6 @@ def test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows(
 @pytest.mark.parametrize(
     "workflow_body",
     [
-        'run: gh pr merge --auto --squash "$PR_URL"\n',
         'run: gh pr edit "$PR_URL" --add-label needs-manual-review\n',
     ],
 )
@@ -833,7 +832,7 @@ def test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist(
     """The exemption trusts two exact paths only, not the write pattern.
 
     Regression test for #602: a different workflow file reusing the same
-    unleased `gh pr merge` / `gh pr edit --add-label` command text must
+    unleased `gh pr edit --add-label` command text must
     still be caught by scan_writers, proving the #602 exemption is a
     positive list of exact paths rather than a relaxation of the pattern
     those two commands trip.
@@ -1612,6 +1611,183 @@ def test_required_contexts_pin_their_trusted_workflow(
         15368,
         {},
     )
+
+
+class DependabotGitHub(FakeGitHub):
+    """Serve exact Dependabot provenance plus one trusted eligibility run."""
+
+    def __init__(self) -> None:
+        super().__init__("a" * 40)
+        self.head_ref = "dependabot/uv/copier-9.18.2"
+        self.run_paths[201] = ".github/workflows/dependabot-auto-merge.yml"
+        self.run_events[201] = "pull_request_target"
+        self.additional_check_runs = [
+            {
+                "id": 8,
+                "name": "dependabot-merge-eligible",
+                "head_sha": self.head,
+                "status": "completed",
+                "conclusion": "success",
+                "details_url": (
+                    "https://github.com/owner/repo/actions/runs/201/job/8"
+                ),
+                "app": {"id": 15368},
+                "check_suite": {"id": self.run_suite_ids[201]},
+            }
+        ]
+        self.dependabot_author = "dependabot[bot]"
+
+    def pull(self, number: int = 42) -> dict[str, Any]:
+        pull = super().pull(number)
+        pull["user"] = {"login": "dependabot[bot]", "type": "Bot"}
+        pull["base"]["repo"] = {"full_name": "owner/repo"}
+        return pull
+
+    def get(self, _repo: str, path: str) -> object:
+        if path == f"commits/{self.head}":
+            return {
+                "sha": self.head,
+                "author": {
+                    "login": self.dependabot_author,
+                    "type": (
+                        "Bot"
+                        if self.dependabot_author == "dependabot[bot]"
+                        else "User"
+                    ),
+                },
+                "committer": {"login": "web-flow"},
+                "commit": {
+                    "verification": {"verified": True, "reason": "valid"}
+                },
+                "parents": [{"sha": self.base_sha}],
+            }
+        if path == f"compare/{self.base_sha}...{self.head}":
+            return {
+                "ahead_by": 1,
+                "files": [{"filename": "uv.lock", "status": "modified"}],
+            }
+        if path == f"commits/{self.base_sha}":
+            return {}
+        if path == f"compare/{self.base_sha}...{self.base_sha}":
+            return {}
+        return super().get(_repo, path)
+
+
+class DependabotSyncChildGitHub(DependabotGitHub):
+    """Serve the deterministic unsigned child of one signed Actions bump."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.head = "c" * 40
+        self.head_ref = "dependabot/github_actions/main/actions-checkout-7"
+        self.additional_check_runs[0]["head_sha"] = self.head
+
+    def get(self, _repo: str, path: str) -> object:
+        if path == f"commits/{self.head}":
+            identity = {
+                "name": "github-actions[bot]",
+                "email": "actions@github.com",
+            }
+            return {
+                "sha": self.head,
+                "author": {"login": "github-actions[bot]", "type": "Bot"},
+                "committer": {
+                    "login": "github-actions[bot]",
+                    "type": "Bot",
+                },
+                "commit": {
+                    "message": (
+                        "fix(deps): sync template copies of this dependency "
+                        "bump (#755)"
+                    ),
+                    "author": identity,
+                    "committer": identity,
+                    "verification": {"verified": False, "reason": "unsigned"},
+                },
+                "parents": [{"sha": "a" * 40}],
+            }
+        if path == f"commits/{'a' * 40}":
+            return {
+                "sha": "a" * 40,
+                "author": {"login": "dependabot[bot]", "type": "Bot"},
+                "committer": {"login": "web-flow"},
+                "commit": {
+                    "verification": {"verified": True, "reason": "valid"}
+                },
+                "parents": [{"sha": self.base_sha}],
+            }
+        if path == f"compare/{self.base_sha}...{'a' * 40}":
+            return {
+                "ahead_by": 1,
+                "files": [
+                    {
+                        "filename": ".github/workflows/ci.yml",
+                        "status": "modified",
+                    }
+                ],
+            }
+        if path == f"compare/{self.base_sha}...{self.head}":
+            return {"ahead_by": 2, "files": []}
+        return super().get(_repo, path)
+
+
+def test_dependabot_merge_reauthenticates_head_and_trusted_eligibility() -> (
+    None
+):
+    """The merge boundary accepts only an exact trusted eligibility run."""
+    github = DependabotGitHub()
+
+    assert (
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
+        )
+        == "direct"
+    )
+
+
+def test_dependabot_merge_accepts_a_reconstructed_sync_child() -> None:
+    """The unsigned child is bound to its signed parent and trusted check."""
+    github = DependabotSyncChildGitHub()
+
+    assert (
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
+        )
+        == "sync-child"
+    )
+
+
+def test_dependabot_merge_rejects_a_human_replacement_head() -> None:
+    """A bot-opened PR cannot carry a human-authored current head to merge."""
+    github = DependabotGitHub()
+    github.dependabot_author = "contributor"
+
+    with pytest.raises(RuntimeError, match="not authenticated"):
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
+        )
+
+
+def test_dependabot_merge_rejects_a_same_name_untrusted_check() -> None:
+    """The shared Actions App cannot move eligibility to another workflow."""
+    github = DependabotGitHub()
+    github.run_paths[201] = ".github/workflows/attacker.yml"
+
+    with pytest.raises(RuntimeError, match="no trusted merge eligibility"):
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
+        )
+
+
+def test_dependabot_merge_rejects_the_wrong_github_app() -> None:
+    """A same-name eligibility check from another App is not authorization."""
+    github = DependabotGitHub()
+    github.additional_check_runs[0]["app"] = {"id": 1234}
+
+    with pytest.raises(RuntimeError, match="no trusted merge eligibility"):
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
+        )
 
 
 def test_required_check_must_match_its_pinned_github_app() -> None:

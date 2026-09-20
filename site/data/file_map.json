@@ -29,8 +29,8 @@
       "paths": [".github/workflows/"],
       "responsibility": "template",
       "purpose": {
-        "zh-tw": "11 條共用流程：工作單生命週期（整合工作單整理、里程碑同步與工作關單）、規格開單、唯讀 PR 規則、PR 治理寫入、PR 審核、必要驗證、漏洞排程、reviewer 指派、Dependabot 自動合併、候選發版與發版漂移偵測，加上選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描；其中治理漂移預設開啟、可關閉",
-        "en": "Eleven shared flows: work item lifecycle (folding in Issue triage, Milestone sync, and work item closure), spec sync, read-only PR rules, PR governance writes, PR review, verification, scheduled vulnerability scanning, reviewer assignment, Dependabot auto-merge, a candidate release flow, and a release-publish drift check, plus governance drift enabled by default with an opt-out, and optional template-update notices, CodeQL SAST, and container build-and-scan automation"
+        "zh-tw": "12 條共用流程：工作單生命週期（整合工作單整理、里程碑同步與工作關單）、規格開單、唯讀 PR 規則、PR 治理寫入、PR 審核、必要驗證、漏洞排程、reviewer 指派、Dependabot 更新資格判定、Dependabot 精確合併、候選發版與發版漂移偵測，加上選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描；其中治理漂移預設開啟、可關閉",
+        "en": "Twelve shared flows: work item lifecycle (folding in Issue triage, Milestone sync, and work item closure), spec sync, read-only PR rules, PR governance writes, PR review, verification, scheduled vulnerability scanning, reviewer assignment, Dependabot update eligibility, exact Dependabot merge, a candidate release flow, and a release-publish drift check, plus governance drift enabled by default with an opt-out, and optional template-update notices, CodeQL SAST, and container build-and-scan automation"
       }
     },
     {

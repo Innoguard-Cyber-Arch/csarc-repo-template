@@ -21,6 +21,7 @@ paired_files=(
   .github/ISSUE_TEMPLATE/milestone-tracker.yml
   .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/dependabot-auto-merge.yml
+  .github/workflows/dependabot-merge.yml
   .github/workflows/governance-comment.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
@@ -47,6 +48,7 @@ paired_files=(
   scripts/check-repo-site-translations
   scripts/check-repo-site-versions
   scripts/apply-repository-settings.sh
+  scripts/authenticate_dependabot_head.py
   scripts/check-governance-drift
   scripts/check-repo-capabilities
   scripts/repo_capabilities.py
@@ -94,6 +96,7 @@ paired_files=(
   scripts/validate-pr-policy
   scripts/verify-dependencies
   tests/test_ci_tier.py
+  tests/test_authenticate_dependabot_head.py
   tests/test_dependabot_auto_merge.py
   tests/test_dependency_security.py
   tests/test_check_action_pins.py

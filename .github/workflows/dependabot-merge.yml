@@ -1,0 +1,212 @@
+name: Dependabot exact merge
+
+# Runs from the trusted default branch after a candidate producer completes.
+# Read-only readiness checks avoid taking a lease until every required check
+# appears ready; pr_lifecycle.py remains the security boundary and revalidates
+# the exact head, trusted producer identities, authorization, and Rulesets.
+on:
+  workflow_run:
+    workflows: ["CI", "PR policy", "PR review", "Dependabot auto-merge"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: >-
+    dependabot-exact-merge-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-pr:
+    name: resolve Dependabot pull request
+    if: >-
+      ${{
+        github.event.workflow_run.event == 'pull_request_target' ||
+        github.event.workflow_run.event == 'pull_request_review'
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      number: ${{ steps.resolve.outputs.number }}
+      head_sha: ${{ steps.identity.outputs.head_sha }}
+    steps:
+      - name: Check out the trusted default-branch revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Resolve the unique triggering pull request
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr_number="$(
+            python3 scripts/sync_work_item_metadata.py \
+              --repo "$GITHUB_REPOSITORY" \
+              --resolve-head-sha "$HEAD_SHA" \
+              --head-repository "$HEAD_REPOSITORY" \
+              --head-branch "$HEAD_BRANCH"
+          )"
+          echo "number=$pr_number" >> "$GITHUB_OUTPUT"
+      - name: Bind the exact live Dependabot identity
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$RUNNER_TEMP/pull.json"
+          jq -e \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg head_ref "$HEAD_BRANCH" \
+            --arg head_repo "$HEAD_REPOSITORY" \
+            --arg head_sha "$HEAD_SHA" \
+            '.state == "open" and
+             .user.login == "dependabot[bot]" and
+             .user.type == "Bot" and
+             .base.ref == "main" and
+             .base.repo.full_name == $repo and
+             .head.ref == $head_ref and
+             .head.repo.full_name == $head_repo and
+             .head.repo.full_name == $repo and
+             .head.sha == $head_sha' \
+            "$RUNNER_TEMP/pull.json" > /dev/null
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+  merge:
+    name: lifecycle exact-head merge
+    needs: resolve-pr
+    if: ${{ needs.resolve-pr.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      checks: read
+      contents: write
+      issues: write
+      pull-requests: write
+      statuses: read
+    steps:
+      - name: Check out the trusted default-branch revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Check read-only merge readiness
+        id: ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
+        run: |
+          checks="$(
+            gh pr checks "$PR_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --required \
+              --json name,state 2>/dev/null || true
+          )"
+          if [[ -z "$checks" ]]; then
+            checks='[]'
+          fi
+          eligibility="$(
+            gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?filter=latest&per_page=100" \
+              --jq '[.check_runs[] | select(.name == "dependabot-merge-eligible" and .status == "completed" and .conclusion == "success")] | length'
+          )"
+          if jq -e \
+            'type == "array" and length > 0 and
+             all(.[]; .state == "SUCCESS" or .state == "SKIPPED" or .state == "NEUTRAL")' \
+            <<<"$checks" > /dev/null && [[ "$eligibility" -gt 0 ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Exact-head required checks or Dependabot eligibility are not ready."
+          fi
+      - name: Fetch the exact candidate for lease creation
+        if: ${{ steps.ready.outputs.ready == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+        run: |
+          gh auth setup-git
+          git fetch --no-tags origin "$HEAD_SHA"
+      - name: Acquire the PR and destination lease
+        id: acquire
+        if: ${{ steps.ready.outputs.ready == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+          OWNER: dependabot-exact-merge-${{ github.run_id }}-${{ github.run_attempt }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
+        run: |
+          python3 scripts/pr_lifecycle.py acquire \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$PR_NUMBER" \
+            --head-sha "$HEAD_SHA" \
+            --owner "$OWNER" \
+            --actor 'github-actions[bot]' \
+            --ttl-seconds 900 \
+            --output "$RUNNER_TEMP/dependabot-lease.json"
+      - name: Revalidate lifecycle merge eligibility
+        id: check
+        if: ${{ steps.acquire.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+          OWNER: dependabot-exact-merge-${{ github.run_id }}-${{ github.run_attempt }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
+        run: |
+          python3 scripts/pr_lifecycle.py check \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$PR_NUMBER" \
+            --head-sha "$HEAD_SHA" \
+            --owner "$OWNER" \
+            --actor 'github-actions[bot]' \
+            --lease "$RUNNER_TEMP/dependabot-lease.json" \
+            --require-dependabot-head
+      - name: Release a pre-merge rejected lease
+        if: ${{ failure() && steps.acquire.outcome == 'success' && steps.check.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: dependabot-exact-merge-${{ github.run_id }}-${{ github.run_attempt }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
+        run: |
+          python3 scripts/pr_lifecycle.py release \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$PR_NUMBER" \
+            --owner "$OWNER" \
+            --actor 'github-actions[bot]' \
+            --lease "$RUNNER_TEMP/dependabot-lease.json"
+      - name: Merge the exact authenticated head
+        id: merge
+        if: ${{ steps.check.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+          OWNER: dependabot-exact-merge-${{ github.run_id }}-${{ github.run_attempt }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
+        run: |
+          python3 scripts/pr_lifecycle.py merge \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$PR_NUMBER" \
+            --head-sha "$HEAD_SHA" \
+            --owner "$OWNER" \
+            --actor 'github-actions[bot]' \
+            --lease "$RUNNER_TEMP/dependabot-lease.json" \
+            --require-dependabot-head
+      - name: Dispatch the repository-owned release flow
+        if: ${{ steps.merge.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$(python3 scripts/csarc_config.py release_ownership)" == "csarc-owned" ]]; then
+            gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+          fi

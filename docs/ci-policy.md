@@ -332,20 +332,15 @@ operator 在每次 bypass-merge 後主動對該 PR 執行這個工具確認留�
 GraphQL／REST 呼叫 fail closed；`canonical_scanner_helper` 只白名單
 `pr_lifecycle.py` 自己這一支腳本（root 與 `template/` 兩份精確路徑，且逐段
 拒絕 symlink）。`.github/workflows/dependabot-auto-merge.yml`（root 與
-`template/.github/workflows/dependabot-auto-merge.yml`，#569 新增）裡的
+`template/.github/workflows/dependabot-auto-merge.yml`，#569 新增）曾有
 `gh pr merge --auto --squash` 與 `gh pr edit --add-label
-needs-manual-review` 兩處寫入向來未經過 lease，因此曾被 `scan_writers` 判定
-為「Unleased PR lifecycle writer」而 fail closed，連帶讓三種語言生成專案的
-`scripts/verify` 全部失敗（根因分析見 #597；例外本身見 #602）。維護者已確認
-方向：不強行把這兩行改走 lease——`gh pr merge --auto` 語意是排進 GitHub
-原生佇列，實際合併仍卡在 `title`／`promotion`／`verify` 必要檢查與
-`policies/rulesets.json` 的 branch protection review requirement，不是
-lease 機制原本要防的「立即搶寫」；`gh pr edit --add-label` 那行只在 major
-版本更新、本就要人工複核而非自動合併時才觸發，同樣不構成即時寫入競態。因此
-`scripts/pr_lifecycle.py` 新增一個與 `canonical_scanner_helper` 同風格、
-共用同一段 symlink 安全檢查的姊妹函式 `dependabot_auto_merge_exemption`，
-只正面表列這兩個精確路徑，不是放寬 pattern 本身——換一個檔名重現同樣的
-`gh pr merge`／`gh pr edit --add-label` 寫法仍會被 `scan_writers` 抓到
+needs-manual-review` 兩處未經 lease 的寫入，因此 #602 以精確路徑暫時豁免。
+#830 已移除 native auto-merge，minor／patch 改由
+`.github/workflows/dependabot-merge.yml` 呼叫 `pr_lifecycle.py`；豁免只剩 major
+版本更新的人工複核標籤／留言，不會授權或執行合併，也不占用共同 main lane 的
+lease。`dependabot_auto_merge_exemption` 仍只正面表列兩個精確 workflow 路徑，
+不是放寬 pattern 本身——換一個檔名重現同樣的 `gh pr edit --add-label` 寫法仍
+會被 `scan_writers` 抓到
 （回歸測試見 `tests/test_pr_lifecycle.py` 的
 `test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist`）。
 
@@ -590,12 +585,34 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
 實作：
 
 1. `.github/workflows/dependabot-auto-merge.yml`（root 與 `template/.github/workflows/dependabot-auto-merge.yml`，
-   本身也是 paired 檔案）新增 `sync-template` job，跟既有 `auto-merge` job 同一個 `if:
-   github.event.pull_request.user.login == 'dependabot[bot]'` 閘門與 `pull_request`（非 `_target`）觸發理由
-   （Dependabot 直接推到這個 repository，從來不是 fork）：checkout PR head、跑
-   `./scripts/sync-paired-files.sh`，有 drift 就 commit 並 push 回同一個分支。只執行這支腳本既有、已測試的
-   逐位元組複製邏輯，不執行 PR 內容裡的其他任何東西；push 觸發的新 `synchronize` 事件會讓 `verify`（#753）
-   對新 head 重新驗證，也會讓這個 job 自己重新跑一次、這次因為沒有 drift 而直接結束，不會無限迴圈。
+   本身也是 paired 檔案）新增 `sync-template` job。#830 將這條具寫入權限的路徑改為
+   `pull_request_target`，所以 workflow 與 synchronizer 都固定取自可信任的 base SHA；PR head 只作為資料，
+   不提供可執行程式碼。唯讀的 `authenticate-dependabot-head` job 會重新讀取目前 PR head，先要求 live base SHA
+   與觸發事件的可信 base SHA 完全相同，再驗證 opener、同 repo branch 前綴、GitHub API 對 commit 的
+   `dependabot[bot]` author、`web-flow` committer、有效 GitHub 簽章、
+   單一 head commit 全部成立，並只允許 `main` 上 `dependabot/github_actions/main/*` 分支修改 root
+   `.github/workflows/` 內既有 YAML。同步後 PR 若關閉再重開，current head 會是 unsigned
+   `github-actions[bot]` child；這個例外不靠顯示名稱放行，而是先驗證其 parent 為上述 Dependabot commit，再
+   用 parent 原始 base 的 trusted synchronizer 重建完整 Git tree，tree hash 完全相同才通過。任一條件不符就
+   不啟動寫入 job。
+
+   寫入 job 只執行 base checkout 內的 `scripts/sync-paired-files.sh`，同步結果只能是本次已驗證 root workflow
+   對應的 `template/.github/workflows/` 檔；其他 staged 或 untracked path 一律失敗。push 使用已驗證的 bot ref 與
+   exact-SHA `--force-with-lease`，若遠端 head 在驗證後移動就失敗，不會改寫新 head。有 drift 才 commit 並 push
+   回同一個分支；push 觸發的新 `synchronize` 事件會讓 `verify`（#834）在可信 runner 對新 head 重新驗證。workflow 的
+   concurrency 以 PR 編號串行且不取消進行中的 run，所以同步 producer 能完成，而下一個 head 事件一定在前一個
+   run 後處理。minor／patch 只為沒有被 sync push 取代、且已完成上述驗證的 exact head 產生
+   `dependabot-merge-eligible` check；它不是 Ruleset required context，也不能單獨授權合併。
+
+   `.github/workflows/dependabot-merge.yml` 從 default branch 接續 `CI`／`PR policy`／`PR review`／上述 eligibility
+   workflow 的 completed event。它先以唯讀 required-check 狀態避免提早取得 lease，再由
+   `scripts/pr_lifecycle.py acquire → check → merge` 重新驗證 live PR、Bot account type、同 repo ref、current commit
+   簽章（或 exact sync-child parent）、eligibility check 的 GitHub Actions App／workflow／event、review、Ruleset 與
+   required checks；`check` 與 `merge` 都重新讀取同一份 mutable state，REST merge 另帶 exact `sha`。任何漂移都
+   fail closed，且不建立 GitHub 原生 auto-merge 的 persistent PR state。Actions token 的 merge 不會產生新的
+   `push` workflow，因此 `release_ownership: csarc-owned` 成功合併後明確 dispatch repository-owned `release.yml`；
+   不猜測或 dispatch product-owned workflow。
+
    同步 commit 的訊息固定用 `fix(deps): ...`，不是 `chore:`——完成條件第五項要求「會改變 template/ 內容的
    依賴更新，合併後要進入下一次發版」，`release-please`（`release-type: simple`）只認 `fix`／`feat` 升版號；
    這裡只在 `sync-paired-files.sh` 真的找到 drift（代表這次 bump 確實改到 `copier update` 會下發的內容）時
@@ -613,9 +630,9 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
 
 **回歸測試**：`tests/test_check_action_pins.py`（pin 一致／不一致回報／不同 action 互不干擾／檔案掃描範圍／
 CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.py` 逐位元組同步）。`sync-template`
-job 目前沒有對應的本機可重跑回歸測試——它是一段會實際 push commit 的 workflow step，沒有安全、可重複執行的
-方式在本機或 CI 對真實 GitHub repository 重放；正確性由 `scripts/sync-paired-files.sh` 自身既有的測試覆蓋
-（它是唯一被呼叫的邏輯），實際行為待合併後第一張真的改到 paired workflow 的 Dependabot PR 驗證並回填證據。
+的 trust boundary 由 `tests/test_authenticate_dependabot_head.py` 驗證 head 身分、簽章與 changed-path allowlist，並由
+`tests/test_dependabot_auto_merge.py` 驗證 base-code checkout、authenticated head checkout 與 exact-ref push。
+實際 GitHub push 行為仍待合併後第一張真的改到 paired workflow 的 Dependabot PR 驗證並回填證據。
 
 ## Current automation
 
@@ -634,7 +651,7 @@ job 目前沒有對應的本機可重跑回歸測試——它是一段會實際 
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併） | `issues`、`issue_comment`、`milestone` 事件；`pull_request.closed`（里程碑工作 PR 合併進 `dev/m*` 或 `promote/m*` 晉升 PR 合併進 `main`） | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新）、`tests/test_work_pr_closure.py` | 尚未落地 `main`，無新 live run；三個前身 workflow（`issue-triage.yml`、`milestone-lifecycle.yml`、`work-item-closure.yml`）已刪除，其舊 run 證據（`33524318953`／`33524281794`／`33502286588`）不再代表現行檔案 | **root：candidate**（待 main 落地並觸發首次 issues／issue_comment／milestone／pull_request 事件才能取得新 live evidence）；#574 只把三個 workflow 檔的既有邏輯打包成一個 job 內的循序 step，不改變任一 step 本身的行為、權限需求或所呼叫的 script |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
-| Dependabot | `.github/dependabot.yml` | GitHub 原生＋依賴安全；與一般 PR 共用可信 hosted verification（#834）；template 同步與 Actions pin 一致性（#755） | schedule／manifest 變更 | GitHub 原生 bot 邊界，無 repo workflow 權限 | dependency PR；`dependabot-auto-merge.yml` 的 `sync-template` job 在同一張 PR 內補齊 paired workflow 的 template 副本 | GitHub 原生功能，無 repo-local 測試；設定格式由 `scripts/sync-paired-files.sh --check` 涵蓋；Actions pin 一致性見 `tests/test_check_action_pins.py` | GitHub 註冊為 `Dependabot Updates`（`dynamic/dependabot/dependabot-updates`），state active（原生排程不透過 `gh run list` 查詢單筆 run） | active；`sync-template` job：candidate（待 `main` 落地並於首張真的改到 paired workflow 的 Dependabot PR 觸發後轉 active） |
+| Dependabot | `.github/dependabot.yml`、`.github/workflows/dependabot-auto-merge.yml`、`.github/workflows/dependabot-merge.yml` | GitHub 原生＋依賴安全；與一般 PR 共用可信 hosted verification（#834）；template 同步、Actions pin 一致性（#755）與 exact-head merge（#830） | schedule／manifest 變更；`pull_request_target`；trusted workflows completed | authentication 只讀；sync 精確 branch write；merge 透過 lifecycle lease 使用必要 PR／contents write | dependency PR；同張 PR 補齊 paired template 副本；minor／patch 在 required checks 後重新驗證並 atomic merge，major 保留人工審核 | `tests/test_authenticate_dependabot_head.py`；`tests/test_dependabot_auto_merge.py`；`tests/test_pr_lifecycle.py`；`scripts/sync-paired-files.sh --check` | GitHub 原生 Dependabot active；新 trust／merge path 待首張實際 PR | active；#830 路徑：candidate |
 | Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598／#699／#834 | `main` push（post-merge）、manual rerun | top-level read；release job 另有 `actions: read`、`checks: read`、`contents`／PR／Issue／status write；60 分鐘 | 先規劃版本並探測能力；可證明 main tree 與來源 PR head tree 相同時重用 24 小時內的可信 `verify` evidence，否則對 exact main tree hosted full 重跑，再建立／發布 GitHub Release、checksum 與 SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py`、`tests/test_verification_evidence.py` | trusted verification reuse/fallback 為 candidate，待 #834 bootstrap 與首次 live run 後轉 active；發版的 Immutable Release post-hoc 驗證沿用 #770 |
 | Release publish drift alert | `.github/workflows/release-drift.yml` | #605（源自 #589 item 4） | daily schedule＋`workflow_dispatch`（`hours` input） | `actions: read`、`contents: read`、`issues: write`；5 分鐘 | 偵測到 drift 時開立或更新追蹤 Issue；未偵測到時只印出證據 | `scripts/test-check-release-drift` | 尚未 merge 進 `main`，故無排程或手動觸發的 live run 證據 | candidate（待 main 落地＋首次排程／手動觸發） |
 
