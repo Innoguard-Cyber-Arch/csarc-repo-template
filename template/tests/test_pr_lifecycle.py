@@ -97,6 +97,9 @@ class FakeGitHub:
         self.required_review_count: object = 1
         self.additional_pull_rules: list[dict[str, object]] = []
         self.additional_check_rules: list[dict[str, object]] = []
+        self.required_status_checks: list[dict[str, object]] = [
+            {"context": "verify", "integration_id": 15368}
+        ]
         self.authorization_type = "User"
         self.authorization_body: str | None = None
         self.authorization_association = "OWNER"
@@ -120,6 +123,7 @@ class FakeGitHub:
         self.check_details_url = (
             "https://github.com/owner/repo/actions/runs/200/job/7"
         )
+        self.verification_completed_at = datetime.now(UTC).isoformat()
         self.run_paths = {
             199: ".github/workflows/ci.yml",
             200: ".github/workflows/ci.yml",
@@ -229,12 +233,15 @@ class FakeGitHub:
             run_id = int(run_match.group(1))
             return {
                 "id": run_id,
+                "run_attempt": 1,
                 "check_suite_id": self.run_suite_ids[run_id],
                 "head_sha": self.head,
                 "head_branch": self.head_ref,
                 "event": self.run_events[run_id],
                 "status": "completed",
-                "conclusion": "failure",
+                "conclusion": (
+                    self.check_conclusion if run_id == 200 else "failure"
+                ),
                 "repository": {"full_name": "owner/repo"},
                 "head_repository": {"full_name": "owner/repo"},
                 "pull_requests": [{"number": 42}],
@@ -289,9 +296,7 @@ class FakeGitHub:
                     "type": "required_status_checks",
                     "ruleset_id": 7,
                     "parameters": {
-                        "required_status_checks": [
-                            {"context": "verify", "integration_id": 15368}
-                        ]
+                        "required_status_checks": self.required_status_checks
                     },
                 },
                 *self.additional_check_rules,
@@ -339,7 +344,7 @@ class FakeGitHub:
         if key == "check_runs" and path.startswith(f"commits/{self.head}/"):
             return [
                 {
-                    "id": 200,
+                    "id": 7,
                     "name": "verify",
                     "head_sha": self.head,
                     "status": "completed",
@@ -349,6 +354,46 @@ class FakeGitHub:
                     "check_suite": {"id": self.run_suite_ids[200]},
                 },
                 *self.additional_check_runs,
+            ]
+        if key == "jobs" and path == (
+            "actions/runs/200/jobs?filter=latest&per_page=100"
+        ):
+            names = [
+                "Select trusted verification plan",
+                "Bind trusted verification identity",
+                "Set up Python 3.14",
+                "Set up uv 0.12.15",
+                "Set up pnpm 11.22.0",
+                "Set up Node.js 24",
+                "Set up Rust 1.98.0",
+                (
+                    "Execute trusted verification tier=fast scopes=source "
+                    f"tree={'e' * 40} command=./scripts/verify-fast"
+                ),
+            ]
+            return [
+                {
+                    "id": 7,
+                    "run_id": 200,
+                    "run_attempt": 1,
+                    "name": "verify",
+                    "head_sha": self.head,
+                    "html_url": self.check_details_url,
+                    "status": "completed",
+                    "conclusion": self.check_conclusion,
+                    "labels": ["ubuntu-latest"],
+                    "runner_id": 9,
+                    "runner_group_name": "GitHub Actions",
+                    "completed_at": self.verification_completed_at,
+                    "steps": [
+                        {
+                            "name": name,
+                            "status": "completed",
+                            "conclusion": "success",
+                        }
+                        for name in names
+                    ],
+                }
             ]
         if key == "statuses" and path.startswith(f"commits/{self.head}/"):
             return self.statuses
@@ -1449,6 +1494,84 @@ def test_required_check_accepts_the_exact_github_app() -> None:
     )
 
 
+def test_forged_commit_trailer_cannot_replace_hosted_execution() -> None:
+    """Contributor-written commit text is not trusted verification input."""
+    github = FakeGitHub("a" * 40)
+    github.commit_payloads[f"git/commits/{github.head}"] = {
+        "sha": github.head,
+        "tree": {"sha": "e" * 40},
+        "message": (
+            "change\n\nVerified-locally: sha256="
+            f"{'e' * 40} tier=full at=2099-01-01T00:00:00Z"
+        ),
+    }
+
+    def no_checks(
+        _repo: str,
+        path: str,
+        key: str,
+        response_sha: str | None = None,
+    ) -> list[dict[str, Any]]:
+        assert response_sha in {None, github.head}
+        if key in {"check_runs", "statuses"}:
+            return []
+        raise AssertionError((path, key))
+
+    github.collection = no_checks  # ty: ignore[invalid-assignment]
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+@pytest.mark.parametrize("conclusion", ["neutral", "skipped"])
+def test_verify_requires_an_actual_success(conclusion: str) -> None:
+    """A trusted verify run must execute and succeed, not merely terminate."""
+    github = FakeGitHub("a" * 40)
+    github.check_conclusion = conclusion
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+def test_newer_pending_verify_blocks_stale_success_on_same_head() -> None:
+    """A base-edit rerun must supersede earlier lower-tier evidence."""
+    github = FakeGitHub("a" * 40)
+    github.additional_check_runs = [
+        {
+            "id": 8,
+            "name": "verify",
+            "head_sha": github.head,
+            "status": "queued",
+            "conclusion": None,
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/201/job/8"
+            ),
+            "app": {"id": 15368},
+            "check_suite": {"id": github.run_suite_ids[201]},
+        }
+    ]
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+def test_quota_cannot_replace_trusted_verify_execution() -> None:
+    """Zero-step billing evidence cannot substitute for test execution."""
+    github = FakeGitHub("a" * 40)
+    github.check_conclusion = "failure"
+    with pytest.raises(RuntimeError, match="cannot replace trusted verify"):
+        require_successful_checks(
+            github,
+            "owner/repo",
+            github.head,
+            {("verify", 15368)},
+            {"https://github.com/owner/repo/actions/runs/200"},
+        )
+
+
 @pytest.mark.parametrize(
     ("context", "path", "event"),
     [
@@ -1826,14 +1949,31 @@ def quota_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object], str]:
     github.head_ref = "fix/42-quota-fallback"
     github.issue_milestone_number = 7
     github.body += "\n\nCloses #42"
-    github.check_conclusion = "failure"
+    github.required_status_checks.append(
+        {"context": "title", "integration_id": 15368}
+    )
+    github.run_paths[199] = ".github/workflows/pr-policy.yml"
+    github.additional_check_runs = [
+        {
+            "id": 8,
+            "name": "title",
+            "head_sha": github.head,
+            "status": "completed",
+            "conclusion": "failure",
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/199/job/8"
+            ),
+            "app": {"id": 15368},
+            "check_suite": {"id": github.run_suite_ids[199]},
+        }
+    ]
     lease = lease_fixture()
     lease["base_ref"] = github.base_ref
     lease["refs"] = [
         "refs/heads/csarc/leases/pr-42",
         base_lane_ref(github.base_ref),
     ]
-    run_url = "https://github.com/owner/repo/actions/runs/200"
+    run_url = "https://github.com/owner/repo/actions/runs/199"
     github.quota_note_body = promotion_gate.quota_fallback_note(
         "owner/repo", 42, "a" * 40, [run_url]
     )
@@ -1883,6 +2023,10 @@ def test_alpha_sync_uses_the_exact_head_self_review_path(
     github, lease, _note_url = alpha_quota_snapshot_fixture(sync=True)
     github.required_review_count = 0
     github.check_conclusion = "success"
+    github.required_status_checks = [
+        {"context": "verify", "integration_id": 15368}
+    ]
+    github.additional_check_runs = []
     snapshot = merge_snapshot(
         github,
         lease,
@@ -2559,10 +2703,10 @@ def test_routine_quota_note_rejects_an_arbitrary_non_default_branch(
         )
 
 
-def test_routine_quota_note_accepts_earlier_same_head_run(
+def test_routine_quota_note_rejects_a_successful_same_head_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Latest check filtering does not erase older canonical run evidence."""
+    """Quota evidence may only name exact failed zero-step runs."""
     bind_remote_lease(monkeypatch)
     github, lease, note_url = quota_snapshot_fixture()
     github.quota_note_body = promotion_gate.quota_fallback_note(
@@ -2574,13 +2718,13 @@ def test_routine_quota_note_accepts_earlier_same_head_run(
             "https://github.com/owner/repo/actions/runs/200",
         ],
     )
-    snapshot = merge_snapshot(
-        github,
-        lease,
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-        quota_fallback_note_url=note_url,
-    )
-    assert snapshot["required_check_evidence"] == "quota-fallback"
+    with pytest.raises(RuntimeError, match="failed PR head"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
 
 
 def test_routine_quota_uses_newest_strict_check_identity(
@@ -2589,41 +2733,43 @@ def test_routine_quota_uses_newest_strict_check_identity(
     """Superseded workflow generations do not block the latest result."""
     bind_remote_lease(monkeypatch)
     github, lease, note_url = quota_snapshot_fixture()
-    github.additional_check_runs = [
-        {
-            "id": 198,
-            "name": "verify",
-            "head_sha": "a" * 40,
-            "status": "completed",
-            "conclusion": "failure",
-            "details_url": (
-                "https://github.com/owner/repo/actions/runs/199/job/8"
-            ),
-            "app": {"id": 15368},
-        },
-        {
-            "id": 197,
-            "name": "workflow audit",
-            "head_sha": "a" * 40,
-            "status": "completed",
-            "conclusion": "cancelled",
-            "details_url": (
-                "https://github.com/owner/repo/actions/runs/199/job/9"
-            ),
-            "app": {"id": 15368},
-        },
-        {
-            "id": 201,
-            "name": "workflow audit",
-            "head_sha": "a" * 40,
-            "status": "completed",
-            "conclusion": "skipped",
-            "details_url": (
-                "https://github.com/owner/repo/actions/runs/200/job/10"
-            ),
-            "app": {"id": 15368},
-        },
-    ]
+    github.additional_check_runs.extend(
+        [
+            {
+                "id": 198,
+                "name": "verify",
+                "head_sha": "a" * 40,
+                "status": "completed",
+                "conclusion": "failure",
+                "details_url": (
+                    "https://github.com/owner/repo/actions/runs/199/job/8"
+                ),
+                "app": {"id": 15368},
+            },
+            {
+                "id": 197,
+                "name": "workflow audit",
+                "head_sha": "a" * 40,
+                "status": "completed",
+                "conclusion": "cancelled",
+                "details_url": (
+                    "https://github.com/owner/repo/actions/runs/199/job/9"
+                ),
+                "app": {"id": 15368},
+            },
+            {
+                "id": 201,
+                "name": "workflow audit",
+                "head_sha": "a" * 40,
+                "status": "completed",
+                "conclusion": "skipped",
+                "details_url": (
+                    "https://github.com/owner/repo/actions/runs/200/job/10"
+                ),
+                "app": {"id": 15368},
+            },
+        ]
+    )
     snapshot = merge_snapshot(
         github,
         lease,

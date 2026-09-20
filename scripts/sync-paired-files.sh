@@ -51,15 +51,15 @@ paired_files=(
   scripts/check-repo-capabilities
   scripts/repo_capabilities.py
   scripts/check-release-drift
-  scripts/check-verify-attestation
+  scripts/check-trusted-verification
   scripts/request-reviewer
   scripts/ci_tier.py
-  scripts/hosted_verify_bots.py
   scripts/check_action_pins.py
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
   scripts/promotion_gate.py
   scripts/review_gate.py
+  scripts/verification_evidence.py
   scripts/check-scope-gate
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
@@ -86,20 +86,16 @@ paired_files=(
   scripts/test-check-scope-gate
   scripts/test-issue-triage
   scripts/test-pr-policy
-  scripts/test-verify-attestation
   scripts/test-worktree-cleanup
   scripts/verify-release-candidate
-  scripts/verify_attestation.py
   scripts/verify_release_consumption.py
   scripts/validate-issue-policy
   scripts/validate-issue-title
   scripts/validate-pr-policy
   scripts/verify-dependencies
-  scripts/write-verify-attestation
   tests/test_ci_tier.py
   tests/test_dependabot_auto_merge.py
   tests/test_dependency_security.py
-  tests/test_hosted_verify_bots.py
   tests/test_check_action_pins.py
   tests/test_spec_to_issue.py
   tests/test_delivery_sync.py
@@ -112,7 +108,7 @@ paired_files=(
   tests/test_release_bundle.py
   tests/test_repo_capabilities.py
   tests/test_stale_branch_detection.py
-  tests/test_verify_attestation.py
+  tests/test_verification_evidence.py
   tests/test_work_item_metadata.py
   tests/test_work_pr_closure.py
   zizmor.yml
