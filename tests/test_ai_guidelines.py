@@ -7,6 +7,7 @@ from jinja2 import Environment, StrictUndefined
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "template" / "AGENTS.md.jinja"
+WORKFLOW_TEMPLATE = ROOT / "template/.csarc/docs/agent-workflow.md.jinja"
 
 
 @pytest.mark.parametrize(
@@ -27,29 +28,38 @@ def test_generated_guidance_has_one_source_and_real_commands(
 ) -> None:
     """Keep governance references stable and commands profile-specific."""
     environment = Environment(autoescape=True, undefined=StrictUndefined)
-    template = environment.from_string(TEMPLATE.read_text(encoding="utf-8"))
-    rendered = template.render(
-        branch_strategy="delivery",
-        language=language,
-        languages=[] if language == "ci" else language.split("-"),
-        package_name="guidance_fixture",
-        project_name="Guidance fixture",
+    context = {
+        "branch_strategy": "delivery",
+        "language": language,
+        "languages": [] if language == "ci" else language.split("-"),
+        "package_name": "guidance_fixture",
+        "project_name": "Guidance fixture",
+    }
+    entry = environment.from_string(TEMPLATE.read_text(encoding="utf-8"))
+    workflow = environment.from_string(
+        WORKFLOW_TEMPLATE.read_text(encoding="utf-8")
+    )
+    rendered_entry = entry.render(**context)
+    rendered = workflow.render(
+        **context,
     )
 
+    assert ".csarc/docs/agent-workflow.md" in rendered_entry
+    assert "## Responsibility map" not in rendered_entry
     assert "## Responsibility map" in rendered
     assert "Approved specs and ADRs preserve durable context" in rendered
     assert "cross-session, high-risk, or hard-to-recover work" in rendered
     assert "never store raw chat transcripts" in rendered
-    assert "`AGENTS.md` is the single source" in rendered
-    assert "`CLAUDE.md` only imports it" in rendered
-    assert "docs/csarc.md#工作流程" in rendered
-    assert "docs/ci-policy.md#審查與合併資格" in rendered
-    assert "docs/ci-policy.md#驗證分級與實測成本" in rendered
+    assert "single detailed CSARC workflow" in rendered
+    assert "`.claude/CLAUDE.md` only imports the root entry point" in rendered
+    assert ".csarc/docs/csarc.md#工作流程" in rendered
+    assert ".csarc/docs/ci-policy.md#審查與合併資格" in rendered
+    assert ".csarc/docs/ci-policy.md#驗證分級與實測成本" in rendered
     assert "docs/index.html#" not in rendered
     assert "docs/index.html#work" not in rendered
     assert "review requirements, merge eligibility" in rendered
     assert "Alpha self-merge" in rendered
-    assert "docs/csarc.md#公版更新" in rendered
+    assert ".csarc/docs/csarc.md#公版更新" in rendered
     assert "automation are suspended" not in rendered
     assert ("Python setup:" in rendered) is python_command
     assert ("TypeScript setup:" in rendered) is typescript_command
@@ -63,9 +73,9 @@ def test_generated_guidance_has_one_source_and_real_commands(
 def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     """Keep imports thin and leave merge authorization to Journey 07."""
     assert (ROOT / "CLAUDE.md").read_text(encoding="utf-8") == "@AGENTS.md\n"
-    assert (ROOT / "template" / "CLAUDE.md").read_text(
+    assert (ROOT / "template/.claude/CLAUDE.md").read_text(
         encoding="utf-8"
-    ) == "@AGENTS.md\n"
+    ) == "@../AGENTS.md\n"
 
     root_guidance = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "## Responsibility map" in root_guidance
@@ -76,6 +86,11 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     template_guidance = TEMPLATE.read_text(encoding="utf-8")
     assert template_guidance.count("BEGIN CSARC MANAGED BLOCK") == 1
     assert template_guidance.count("END CSARC MANAGED BLOCK") == 1
+    assert ".csarc/docs/agent-workflow.md" in template_guidance
+    assert "## Responsibility map" not in template_guidance
+    assert "## Responsibility map" in WORKFLOW_TEMPLATE.read_text(
+        encoding="utf-8"
+    )
 
     # Issue #681: template/README.md.jinja's destination name now depends on
     # the readme_primary_language answer, so its source filename is a Jinja
@@ -89,4 +104,4 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     )
     readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
     assert "一般情況下不能自行合併" not in readme
-    assert "docs/ci-policy.md#審查與合併資格" in readme
+    assert ".csarc/docs/ci-policy.md#審查與合併資格" in readme

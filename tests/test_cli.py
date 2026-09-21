@@ -89,6 +89,90 @@ def test_copier_migration_only_removes_known_root_test_copies(
     ).read_text(encoding="utf-8")
 
 
+def test_update_moves_legacy_generated_layout_without_overwriting(
+    tmp_path: Path,
+) -> None:
+    """Plan known moves, preserve product files, and reject collisions."""
+    stage = tmp_path / "stage"
+    target = tmp_path / "target"
+    for relative in (
+        ".csarc/config.yml",
+        ".csarc/scripts/verify",
+        ".github/SECURITY.md",
+        "docs/site/content/_index.en.md",
+    ):
+        path = stage / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"new {relative}\n", encoding="utf-8")
+    legacy = {
+        ".copier-answers.yml": "project_name: Legacy\n",
+        ".csarc/profile.json": "{}\n",
+        ".gitleaks.toml": "[extend]\nuseDefault = true\n",
+        ".pre-commit-config.yaml": "repos: []\n",
+        "scripts/verify": "legacy verifier\n",
+        "SECURITY.md": "legacy security policy\n",
+        "site/content/_index.en.md": "project website\n",
+        "scripts/product-tool": "project owned\n",
+    }
+    for relative, content in legacy.items():
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    moves = cli.legacy_layout_pairs(stage, target, project_mode="new")
+    plan = cli.update_file_plan(
+        cli.compare_stage(stage, target, adopt=False),
+        moves,
+        (
+            ".csarc/profile.json",
+            ".gitleaks.toml",
+            ".pre-commit-config.yaml",
+        ),
+    )
+
+    assert ".copier-answers.yml -> .csarc/config.yml" in plan.move
+    assert "scripts/verify -> .csarc/scripts/verify" in plan.move
+    assert "SECURITY.md -> .github/SECURITY.md" in plan.move
+    assert (
+        "site/content/_index.en.md -> docs/site/content/_index.en.md"
+        in plan.move
+    )
+    assert ".csarc/scripts/verify" not in plan.add
+    assert "scripts/verify" not in plan.preserve
+    assert plan.remove == (
+        ".csarc/profile.json",
+        ".gitleaks.toml",
+        ".pre-commit-config.yaml",
+    )
+
+    cli.apply_layout_moves(target, moves)
+    assert (target / ".csarc/scripts/verify").read_text(encoding="utf-8") == (
+        "legacy verifier\n"
+    )
+    assert (target / "docs/site/content/_index.en.md").read_text(
+        encoding="utf-8"
+    ) == "project website\n"
+    assert (target / "scripts/product-tool").read_text(encoding="utf-8") == (
+        "project owned\n"
+    )
+    assert (target / ".csarc/config.yml").read_text(encoding="utf-8") == (
+        "project_name: Legacy\n"
+    )
+
+    collision = tmp_path / "collision"
+    for relative, content in (
+        ("scripts/verify", "old\n"),
+        (".csarc/scripts/verify", "different\n"),
+    ):
+        path = collision / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    with pytest.raises(CliError, match="layout migration collision"):
+        cli.apply_layout_moves(
+            collision, (("scripts/verify", ".csarc/scripts/verify"),)
+        )
+
+
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     """Run a successful fixture command."""
     return subprocess.run(  # noqa: S603
@@ -4404,7 +4488,7 @@ def test_project_hook_cannot_reenter_canonical_verify(tmp_path: Path) -> None:
 
 def test_generated_verifier_has_private_hook_handoff() -> None:
     """Keep generated hook status separate from execution control."""
-    verifier = (ROOT / "template/scripts/verify.jinja").read_text(
+    verifier = (ROOT / "template/.csarc/scripts/verify.jinja").read_text(
         encoding="utf-8"
     )
     assert "CSARC_SKIP_PROJECT_VERIFICATION_HOOK" not in verifier
@@ -4425,7 +4509,7 @@ def test_generated_verifier_status_descriptor_cannot_open_caller_path(
     monkeypatch.setenv(
         "_CSARC_PROJECT_VERIFICATION_STATUS_FILE", str(preserved)
     )
-    verifier = ROOT / "template/scripts/verify.jinja"
+    verifier = ROOT / "template/.csarc/scripts/verify.jinja"
 
     old_path = subprocess.run(  # noqa: S603
         ["/bin/bash", str(verifier), "invalid"],
@@ -5319,6 +5403,53 @@ def test_update_migrates_legacy_copier_answers_to_single_config(
     assert config.is_file()
     assert f"_commit: {second_sha}" in config.read_text(encoding="utf-8")
     assert not (project / ".copier-answers.yml").exists()
+
+
+@pytest.mark.large
+def test_update_migrates_legacy_generated_scripts_in_one_patch(
+    tmp_path: Path,
+) -> None:
+    """Move legacy managed scripts while preserving product tools."""
+    source, project, _ = initialize_project(tmp_path)
+    product_tool = project / "scripts/product-tool"
+    product_tool.write_text("project owned\n", encoding="utf-8")
+    for name in (".gitleaks.toml", ".pre-commit-config.yaml", "zizmor.yml"):
+        (project / name).write_text(
+            "legacy generated config\n", encoding="utf-8"
+        )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: legacy generated project")
+
+    generated_scripts = source / "template/.csarc/scripts"
+    generated_scripts.mkdir(parents=True)
+    for name in ("verify", "apply-repository-settings.sh"):
+        legacy = source / "template/scripts" / name
+        legacy.replace(generated_scripts / name)
+    second_sha = commit(source, "test: consolidate generated scripts")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                second_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / ".csarc/scripts/verify").is_file()
+    assert (project / ".csarc/scripts/apply-repository-settings.sh").is_file()
+    assert not (project / "scripts/verify").exists()
+    assert not (project / ".gitleaks.toml").exists()
+    assert not (project / ".pre-commit-config.yaml").exists()
+    assert not (project / "zizmor.yml").exists()
+    assert product_tool.read_text(encoding="utf-8") == "project owned\n"
 
 
 @pytest.mark.large
@@ -7590,7 +7721,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
 
     for bounded_gate in (
         ROOT / "scripts/verify-fast",
-        ROOT / "template/scripts/verify-fast.jinja",
+        ROOT / "template/.csarc/scripts/verify-fast.jinja",
     ):
         commands = pytest_commands(bounded_gate)
         assert commands
@@ -7604,7 +7735,9 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
     assert root_full_commands
     assert not any(excludes_large(command) for command in root_full_commands)
 
-    template_commands = pytest_commands(ROOT / "template/scripts/verify.jinja")
+    template_commands = pytest_commands(
+        ROOT / "template/.csarc/scripts/verify.jinja"
+    )
     assert len(template_commands) > 1
     assert any(excludes_large(command) for command in template_commands)
     assert any(
@@ -7622,9 +7755,14 @@ def test_generated_project_only_ships_product_tests() -> None:
         path.relative_to(template_tests).as_posix()
         for path in template_tests.rglob("*")
         if path.is_file()
+    ) == ["test_smoke.py.jinja"]
+    csarc_tests = ROOT / "template/.csarc/tests"
+    assert sorted(
+        path.relative_to(csarc_tests).as_posix()
+        for path in csarc_tests.rglob("*")
+        if path.is_file()
     ) == [
         "test_authenticate_dependabot_head.py",
-        "test_smoke.py.jinja",
         "test_verification_evidence.py",
     ]
     smoke_test = (template_tests / "test_smoke.py.jinja").read_text(

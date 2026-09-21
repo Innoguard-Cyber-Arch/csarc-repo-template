@@ -412,8 +412,8 @@
       "items": [
         {
           "file": {
-            "zh-tw": "template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml",
-            "en": "template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml"
+            "zh-tw": "template/.csarc/scripts/verify-fast.jinja＋template/.csarc/scripts/verify.jinja＋template/pnpm-workspace.yaml",
+            "en": "template/.csarc/scripts/verify-fast.jinja＋template/.csarc/scripts/verify.jinja＋template/pnpm-workspace.yaml"
           },
           "title": {
             "zh-tw": "固定基線｜依鎖檔重裝，TypeScript 另等三天",

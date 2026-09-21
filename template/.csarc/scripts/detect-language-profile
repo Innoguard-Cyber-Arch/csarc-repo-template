@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+config_file="$repo_root/.csarc/config.yml"
+
+detected_languages=()
+[[ -f "$repo_root/pyproject.toml" ]] && detected_languages+=(python)
+[[ -f "$repo_root/Cargo.toml" ]] && detected_languages+=(rust)
+[[ -f "$repo_root/package.json" ]] && detected_languages+=(typescript)
+detected=""
+if ((${#detected_languages[@]} > 0)); then
+  detected="$(IFS=,; printf '%s' "${detected_languages[*]}")"
+fi
+
+if [[ "${1:-}" == "--suggest" ]]; then
+  printf '%s\n' "${detected:-ci}"
+  exit 0
+fi
+
+if [[ ! -f "$config_file" ]]; then
+  echo "Missing .csarc/config.yml; detected languages: $detected"
+  exit 1
+fi
+
+declared="$(python3 "$repo_root/.csarc/scripts/csarc_config.py" languages)"
+if [[ "$declared" != "$detected" ]]; then
+  echo "Declared languages '$declared' do not match detected languages '$detected'."
+  exit 1
+fi
+
+printf 'language modules: %s\n' "${declared:-ci}"

@@ -14,14 +14,14 @@ _exclude:
   - "{% if project_mode == 'existing' %}/README.md{% else %}__keep_project_readme__{% endif %}"
   - "{% if project_mode == 'existing' %}/README.{{ 'en' if readme_primary_language == 'zh-tw' else 'zh-tw' }}.md{% else %}__keep_project_readme_secondary__{% endif %}"
   - "{% if project_mode == 'existing' %}/CHANGELOG.md{% else %}__keep_project_changelog__{% endif %}"
-  - "{% if enable_precommit %}__keep_precommit__{% else %}.pre-commit-config.yaml{% endif %}"
+  - "{% if enable_precommit %}__keep_precommit__{% else %}.csarc/scripts/pre-commit{% endif %}"
   - "{% if enable_template_update_notifications %}__keep_template_update_workflow__{% else %}.github/workflows/template-update.yml{% endif %}"
-  - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}scripts/check-template-update{% endif %}"
+  - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}.csarc/scripts/check-template-update{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_workflow__{% else %}.github/workflows/governance-drift.yml{% endif %}"
-  - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}scripts/check-governance-drift{% endif %}"
+  - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}.csarc/scripts/check-governance-drift{% endif %}"
   - "{% if project_mode == 'new' %}__keep_release_workflow__{% else %}.github/workflows/release.yml{% endif %}"
   - "{% if project_mode == 'new' %}__keep_release_drift_workflow__{% else %}.github/workflows/release-drift.yml{% endif %}"
-  - "{% if project_mode == 'new' %}__keep_release_drift_script__{% else %}scripts/check-release-drift{% endif %}"
+  - "{% if project_mode == 'new' %}__keep_release_drift_script__{% else %}.csarc/scripts/check-release-drift{% endif %}"
   - "{% if enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
   - "{% if enable_docker | default(false) %}__keep_dockerfile__{% else %}Dockerfile{% endif %}"
   - "{% if enable_docker | default(false) %}__keep_docker_compose__{% else %}docker-compose.yml{% endif %}"
@@ -41,7 +41,7 @@ _exclude:
   - "{% if 'rust' in languages %}__keep_rust_toolchain__{% else %}rust-toolchain.toml{% endif %}"
   - "{% if 'rust' in languages %}__keep_rust_manifest__{% else %}Cargo.toml{% endif %}"
   - "{% if 'rust' in languages %}__keep_rust_source__{% else %}/src/lib.rs{% endif %}"
-  - "{% if not languages %}__keep_ci_version__{% else %}version.txt{% endif %}"
+  - "{% if not languages %}__keep_ci_version__{% else %}.csarc/version.txt{% endif %}"
 _skip_if_exists:
   - "src/**/*.py"
   - "tests/**/*.py"
@@ -50,12 +50,12 @@ _skip_if_exists:
   - "docs/specs/**/*.md"
   - "docs/adr/**/*.md"
   - "docs/site-content.md"
-  - "docs/site-theme.css"
-  - "site/content/_index.zh-tw.md"
-  - "site/content/_index.en.md"
-  - "site/data/navigation.json"
+  - "docs/site/theme.css"
+  - "docs/site/content/_index.zh-tw.md"
+  - "docs/site/content/_index.en.md"
+  - "docs/site/data/navigation.json"
   - "{% if project_mode == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
-  - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
+  - "{% if project_mode == 'existing' %}/.github/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}Cargo.toml{% else %}__overwrite_rust_manifest__{% endif %}"
@@ -68,7 +68,7 @@ _tasks:
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'typescript' in languages }}"
   - command: "cargo generate-lockfile"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'rust' in languages }}"
-  - command: "bash scripts/build-repo-site"
+  - command: "bash .csarc/scripts/build-repo-site"
 _migrations:
   - command:
       - python3
@@ -203,10 +203,10 @@ _migrations:
             ):
                 legacy_test.unlink()
     when: "{{ _stage == 'before' }}"
-  - command: "bash scripts/build-repo-site"
+  - command: "bash .csarc/scripts/build-repo-site"
     when: "{{ _stage == 'after' }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% else %}Project created with the CSARC release workflow. Confirm .csarc/config.yml, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
+  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./.csarc/scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% else %}Project created with the CSARC release workflow. Confirm .csarc/config.yml, run ./.csarc/scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./.csarc/scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
 
 project_mode:
   type: str
@@ -330,7 +330,7 @@ code_owner:
 project_run_command:
   type: str
   help: Shortest command that successfully starts or invokes the product
-  default: "{% if languages %}{% if 'python' in languages %}uv run python -c 'import {{ package_name }}'{% endif %}{% if 'python' in languages and ('typescript' in languages or 'rust' in languages) %} && {% endif %}{% if 'typescript' in languages %}pnpm run build{% endif %}{% if 'typescript' in languages and 'rust' in languages %} && {% endif %}{% if 'rust' in languages %}cargo test --locked{% endif %}{% else %}./scripts/verify{% endif %}"
+  default: "{% if languages %}{% if 'python' in languages %}uv run python -c 'import {{ package_name }}'{% endif %}{% if 'python' in languages and ('typescript' in languages or 'rust' in languages) %} && {% endif %}{% if 'typescript' in languages %}pnpm run build{% endif %}{% if 'typescript' in languages and 'rust' in languages %} && {% endif %}{% if 'rust' in languages %}cargo test --locked{% endif %}{% else %}./.csarc/scripts/verify{% endif %}"
   validator: "{% if not project_run_command | default('', true) | trim or project_run_command | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
 
 project_verification_hook:
@@ -393,7 +393,7 @@ coverage_threshold:
 
 enable_precommit:
   type: bool
-  help: Add optional local pre-commit hooks; CI remains authoritative
+  help: Add optional local hooks run through .csarc/scripts/pre-commit; CI remains authoritative
   default: false
 
 enable_template_update_notifications:
@@ -428,22 +428,22 @@ enable_governance_drift_check:
 
 policy_repository_settings:
   type: bool
-  help: Apply this template's repository settings policy (merge strategies, wiki, projects, issues, delete-branch-on-merge) from policies/repository.json
+  help: Apply this template's repository settings policy (merge strategies, wiki, projects, issues, delete-branch-on-merge) from .csarc/policies/repository.json
   default: true
 
 policy_actions_permissions:
   type: bool
-  help: Apply this template's Actions workflow permissions policy (default token permissions and PR-approval capability) from policies/actions.json
+  help: Apply this template's Actions workflow permissions policy (default token permissions and PR-approval capability) from .csarc/policies/actions.json
   default: true
 
 policy_labels:
   type: bool
-  help: Create and maintain this template's governance labels (bug, enhancement, hotfix, and the rest) from policies/labels.json
+  help: Create and maintain this template's governance labels (bug, enhancement, hotfix, and the rest) from .csarc/policies/labels.json
   default: true
 
 policy_branch_ruleset:
   type: bool
-  help: Enforce this template's branch protection Ruleset (required review, non-fast-forward) from policies/rulesets.json where the GitHub plan allows it
+  help: Enforce this template's branch protection Ruleset (required review, non-fast-forward) from .csarc/policies/rulesets.json where the GitHub plan allows it
   default: true
 
 release_levels_enabled:

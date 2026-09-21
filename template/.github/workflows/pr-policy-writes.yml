@@ -40,7 +40,7 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           pr_number="$(
-            python3 scripts/sync_work_item_metadata.py \
+            python3 .csarc/scripts/sync_work_item_metadata.py \
               --repo "$GITHUB_REPOSITORY" \
               --resolve-head-sha "$HEAD_SHA" \
               --head-repository "$HEAD_REPOSITORY" \
@@ -69,7 +69,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
         run: >-
-          python3 scripts/sync_work_item_metadata.py
+          python3 .csarc/scripts/sync_work_item_metadata.py
           --repo "$GITHUB_REPOSITORY"
           --pr "$PR_NUMBER"
 
@@ -100,7 +100,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
         run: >-
-          python3 scripts/sync_milestone_state.py check-pr
+          python3 .csarc/scripts/sync_milestone_state.py check-pr
           --repo "$GITHUB_REPOSITORY"
           --pr "$PR_NUMBER"
       - name: Publish the merge queue approval decision
@@ -109,6 +109,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MERGE_GROUP_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: >-
-          python3 scripts/sync_milestone_state.py check-merge-group
+          python3 .csarc/scripts/sync_milestone_state.py check-merge-group
           --repo "$GITHUB_REPOSITORY"
           --head-sha "$MERGE_GROUP_HEAD_SHA"

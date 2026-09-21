@@ -735,7 +735,7 @@ def test_legacy_persistent_delivery_assets_are_removed() -> None:
     root = Path(__file__).parents[1]
     for relative in (
         "policies/dev-next-ruleset.json",
-        "template/policies/dev-next-ruleset.json",
+        "template/.csarc/policies/dev-next-ruleset.json",
     ):
         assert not (root / relative).exists()
     for relative in (

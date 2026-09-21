@@ -83,7 +83,7 @@ jobs:
           ISSUE_STATE_REASON: ${{ github.event.issue.state_reason }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_TYPE: ${{ github.event.issue.type.name }}
-        run: ./scripts/validate-issue-policy
+        run: ./.csarc/scripts/validate-issue-policy
 
       # -- Milestone lifecycle: reconcile the current Milestone --
       - name: "Milestone lifecycle: reconcile lifecycle and refresh PR checks"
@@ -96,7 +96,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MILESTONE_NUMBER: ${{ github.event.issue.milestone.number || github.event.milestone.number }}
         run: >-
-          python3 scripts/sync_milestone_state.py reconcile
+          python3 .csarc/scripts/sync_milestone_state.py reconcile
           --repo "$GITHUB_REPOSITORY"
           --milestone "$MILESTONE_NUMBER"
           --event-issue "$EVENT_ISSUE_NUMBER"
@@ -118,7 +118,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: >-
-          python3 scripts/sync_milestone_state.py refresh-issue-pr-checks
+          python3 .csarc/scripts/sync_milestone_state.py refresh-issue-pr-checks
           --repo "$GITHUB_REPOSITORY"
           --issue "$ISSUE_NUMBER"
 
@@ -134,7 +134,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MILESTONE_NUMBER: ${{ github.event.changes.milestone.from.number }}
         run: >-
-          python3 scripts/sync_milestone_state.py reconcile
+          python3 .csarc/scripts/sync_milestone_state.py reconcile
           --repo "$GITHUB_REPOSITORY"
           --milestone "$MILESTONE_NUMBER"
           --event-issue "$EVENT_ISSUE_NUMBER"
@@ -176,7 +176,7 @@ jobs:
           TRACKER_NUMBER: ${{ steps.tracker.outputs.number }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: >-
-          python3 scripts/sync_milestone_state.py record-promotion-evidence
+          python3 .csarc/scripts/sync_milestone_state.py record-promotion-evidence
           --repo "$GITHUB_REPOSITORY"
           --tracker "$TRACKER_NUMBER"
           --evidence-url "https://github.com/$GITHUB_REPOSITORY/commit/$MERGE_SHA"
@@ -203,7 +203,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: >-
-          python3 scripts/pr_lifecycle.py close-work
+          python3 .csarc/scripts/pr_lifecycle.py close-work
           --repo "$GITHUB_REPOSITORY"
           --pr-number "$PR_NUMBER"
           --head-sha "$PR_HEAD_SHA"

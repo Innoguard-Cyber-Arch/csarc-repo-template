@@ -35,7 +35,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python3 scripts/release_level.py release-batch \
+          python3 .csarc/scripts/release_level.py release-batch \
             --repo "$GITHUB_REPOSITORY" \
             --sha "$GITHUB_SHA" \
             --markdown-output "$RUNNER_TEMP/release-levels.md" \
@@ -46,7 +46,7 @@ jobs:
         env:
           RELEASE_LEVEL: ${{ steps.level.outputs.level }}
         run: |
-          python3 scripts/release_policy.py plan \
+          python3 .csarc/scripts/release_policy.py plan \
             --sha "$GITHUB_SHA" \
             --phase "$RELEASE_LEVEL" \
             --github-output "$GITHUB_OUTPUT"
@@ -56,7 +56,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python3 scripts/release_policy.py detect \
+          python3 .csarc/scripts/release_policy.py detect \
             --repo "$GITHUB_REPOSITORY" \
             --sha "$GITHUB_SHA" \
             --branch main \
@@ -74,7 +74,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ./scripts/check-trusted-verification "$GITHUB_SHA" \
+          if ./.csarc/scripts/check-trusted-verification "$GITHUB_SHA" \
             --resolve-merge-source --github-repo "$GITHUB_REPOSITORY" \
             --required-tier full; then
             echo "reused=true" >> "$GITHUB_OUTPUT"
@@ -117,15 +117,15 @@ jobs:
         env:
           CSARC_CI_SCOPES: dependency,docs,governance,shell,source,template,workflow
           CSARC_CI_TIER: full
-        run: ./scripts/verify
+        run: ./.csarc/scripts/verify
       - name: Create or update the version pull request
         id: release
         if: ${{ steps.plan.outputs.status == 'pending' && steps.plan.outputs.materialized != 'true' && steps.capability.outputs.mode == 'automatic' }}
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+          config-file: .csarc/release-please-config.json
+          manifest-file: .csarc/release-please-manifest.json
           release-as: ${{ steps.plan.outputs.version }}
       - name: Validate the exact version pull request commit
         if: ${{ steps.release.outputs.prs_created == 'true' }}
@@ -135,7 +135,7 @@ jobs:
           STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           printf '%s\n' "$RELEASE_PR" >"$RUNNER_TEMP/release-pr.json"
-          ./scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
+          ./.csarc/scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
       - name: Record included work on the version pull request
         if: ${{ steps.release.outputs.pr != '' }}
         env:
@@ -143,7 +143,7 @@ jobs:
           RELEASE_PR: ${{ steps.release.outputs.pr }}
         run: |
           pr_number="$(jq -r '.number' <<<"$RELEASE_PR")"
-          python3 scripts/release_level.py annotate-pr \
+          python3 .csarc/scripts/release_level.py annotate-pr \
             --repo "$GITHUB_REPOSITORY" \
             --pr "$pr_number" \
             --actor "$GITHUB_ACTOR" \
@@ -158,7 +158,7 @@ jobs:
             echo "## Guided release candidate"
             echo
             echo "GitHub policy blocked the automatic version PR. No tag or Release was created."
-            echo "Run \`python3 scripts/release_policy.py prepare-candidate\`, review the files,"
+            echo "Run \`python3 .csarc/scripts/release_policy.py prepare-candidate\`, review the files,"
             echo "then open \`release/v$RELEASE_VERSION\` as \`chore(main): release $RELEASE_VERSION\`."
           } >>"$GITHUB_STEP_SUMMARY"
       - name: Validate and stage the merged version candidate
@@ -169,7 +169,7 @@ jobs:
           STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           RELEASE_TAG: ${{ steps.plan.outputs.tag }}
         run: |
-          ./scripts/publish-release stage \
+          ./.csarc/scripts/publish-release stage \
             --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" \
             --tag "$RELEASE_TAG"
       - name: Resolve the exact release state
@@ -180,7 +180,7 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag_name || steps.stage.outputs.tag }}
           RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
         run: |
-          ./scripts/publish-release resolve \
+          ./.csarc/scripts/publish-release resolve \
             --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" \
             --tag "$RELEASE_TAG" \
             --created "$RELEASE_CREATED"
@@ -188,14 +188,14 @@ jobs:
         if: ${{ steps.state.outputs.state == 'draft' }}
         env:
           RELEASE_TAG: ${{ steps.state.outputs.tag }}
-        run: python3 scripts/release_bundle.py prepare --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-assets"
+        run: python3 .csarc/scripts/release_bundle.py prepare --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-assets"
       - name: Record included work in the draft Release
         if: ${{ steps.state.outputs.state == 'draft' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.state.outputs.tag }}
         run: |
-          python3 scripts/release_level.py annotate-release \
+          python3 .csarc/scripts/release_level.py annotate-release \
             --repo "$GITHUB_REPOSITORY" \
             --tag "$RELEASE_TAG" \
             --body-file "$RUNNER_TEMP/release-levels.md"
@@ -216,7 +216,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.state.outputs.tag }}
         run: |
-          ./scripts/publish-release publish \
+          ./.csarc/scripts/publish-release publish \
             --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
       - name: Verify an already-published rerun
         if: ${{ steps.state.outputs.state == 'published' }}
@@ -224,6 +224,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.state.outputs.tag }}
         run: |
-          ./scripts/publish-release rerun-verify \
+          ./.csarc/scripts/publish-release rerun-verify \
             --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
 {% endraw %}

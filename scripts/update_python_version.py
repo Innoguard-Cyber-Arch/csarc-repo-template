@@ -199,7 +199,7 @@ def update_files(
             "{% if project_mode == 'existing' %}csarc-release"
             "{% else %}release{% endif %}.yml.jinja"
         ),
-        "template/scripts/verify.jinja",
+        "template/.csarc/scripts/verify.jinja",
     ):
         replace_all(repo_root / relative_path, old, new)
 

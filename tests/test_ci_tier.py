@@ -32,7 +32,7 @@ def run_git(repo: Path, *args: str) -> bytes:
     [
         ("docs/guide.md", "docs"),
         ("site/app.js", "docs"),
-        ("template/site/static/styles.css", "docs"),
+        ("template/.csarc/site/static/styles.css", "docs"),
         (".github/ISSUE_TEMPLATE/feature.yml", "docs"),
         (".gitignore", "source"),
         ("README.md", "docs"),
@@ -46,7 +46,7 @@ def run_git(repo: Path, *args: str) -> bytes:
         ("scripts/check-governance-drift", "governance"),
         ("scripts/request-reviewer", "governance"),
         (".csarc/config.yml", "governance"),
-        ("template/scripts/verify.jinja", "shell"),
+        ("template/.csarc/scripts/verify.jinja", "shell"),
         ("Cargo.lock", "dependency"),
         ("Cargo.toml", "dependency"),
         ("package-lock.json", "dependency"),
@@ -57,7 +57,7 @@ def run_git(repo: Path, *args: str) -> bytes:
         ("template/pnpm-workspace.yaml", "dependency"),
         ("policies/rulesets.json", "governance"),
         ("policies/releases.json", "governance"),
-        ("template/policies/rulesets.json.jinja", "governance"),
+        ("template/.csarc/policies/rulesets.json.jinja", "governance"),
         ("unexpected.bin", "unknown"),
     ],
 )
@@ -83,8 +83,8 @@ def test_docs_only_uses_docs_tier() -> None:
         "docs/site-content.js",
         "docs/site-content.md",
         "scripts/render_site.py",
-        "template/site/content/_index.zh-tw.md",
-        "template/docs/site-theme.css.jinja",
+        "template/docs/site/content/_index.zh-tw.md",
+        "template/docs/site/theme.css.jinja",
     ],
 )
 def test_site_changes_publish_the_decision_artifact(path: str) -> None:
@@ -158,7 +158,7 @@ def test_risk_scopes_enable_only_their_expensive_check(
         "scripts/verify-fast",
         "scripts/verify-stage-regression-tests",
         "scripts/verify_attestation.py",
-        "template/scripts/verify-fast.jinja",
+        "template/.csarc/scripts/verify-fast.jinja",
     ],
 )
 def test_standalone_generator_and_verifier_changes_require_full(
@@ -176,7 +176,7 @@ def test_standalone_generator_and_verifier_changes_require_full(
         ".github/workflows/ci.yml",
         "template/.github/workflows/ci.yml.jinja",
         "scripts/pr_lifecycle.py",
-        "template/scripts/pr_lifecycle.py",
+        "template/.csarc/scripts/pr_lifecycle.py",
     ],
 )
 def test_standalone_workflows_and_other_scripts_stay_fast(path: str) -> None:
@@ -503,9 +503,9 @@ def test_unknown_and_missing_paths_fail_safe_to_full() -> None:
         ".release-please-manifest.json",
         "release-please-config.json",
         "version.txt",
-        "template/.release-please-manifest.json",
-        "template/release-please-config.json.jinja",
-        "template/version.txt",
+        "template/.csarc/release-please-manifest.json",
+        "template/.csarc/release-please-config.json.jinja",
+        "template/.csarc/version.txt",
     ],
 )
 def test_release_version_metadata_stays_fail_closed(path: str) -> None:

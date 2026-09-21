@@ -57,7 +57,7 @@ def _run_checker(
     project = tmp_path / "project"
     project.mkdir()
     script = project / "check-template-update"
-    shutil.copy2(ROOT / "template/scripts/check-template-update", script)
+    shutil.copy2(ROOT / "template/.csarc/scripts/check-template-update", script)
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
     bin_dir = tmp_path / "bin"
@@ -154,7 +154,7 @@ def test_template_update_notification_is_opt_in(
     )
 
     workflow_path = project / ".github/workflows/template-update.yml"
-    checker_path = project / "scripts/check-template-update"
+    checker_path = project / ".csarc/scripts/check-template-update"
     assert workflow_path.exists() is enabled
     assert checker_path.exists() is enabled
     assert (
@@ -176,7 +176,7 @@ def test_template_update_notification_is_opt_in(
     assert set(workflow["jobs"]) == {"check"}
     assert workflow["jobs"]["check"]["timeout-minutes"] == 10
     source = workflow_path.read_text(encoding="utf-8")
-    assert "run: ./scripts/check-template-update" in source
+    assert "run: ./.csarc/scripts/check-template-update" in source
     assert "CSARC_TEMPLATE_READ_TOKEN" in source
     assert "pull_request" not in source
 

@@ -66,8 +66,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
-          if [[ -f scripts/review_gate.py ]]; then
-            python3 scripts/review_gate.py check \
+          if [[ -f .csarc/scripts/review_gate.py ]]; then
+            python3 .csarc/scripts/review_gate.py check \
               --repo "$GITHUB_REPOSITORY" \
               --pr "$PR_NUMBER"
           else

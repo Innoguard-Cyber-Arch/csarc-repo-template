@@ -1,0 +1,479 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cache_root="$("$repo_root/.csarc/scripts/resolve-cache-root")"
+if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
+  export UV_CACHE_DIR="$cache_root/uv"
+else
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
+fi
+pnpm_store_dir="$cache_root/pnpm/store"
+cd "$repo_root"
+source "$repo_root/.csarc/scripts/verification-step"
+
+if [[ -n "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}" ]]; then
+  echo "Project verification hook must not invoke canonical .csarc/scripts/verify." >&2
+  exit 1
+fi
+
+record_project_verification_status() {
+  local status_fd="${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"
+  if [[ -n "$status_fd" ]]; then
+    if [[ ! "$status_fd" =~ ^[0-9]+$ ]] ||
+      ! printf '%s\n' "$1" >&"$status_fd"; then
+      echo "Internal project verification status descriptor is invalid." >&2
+      exit 1
+    fi
+  fi
+}
+record_project_verification_status not-run
+
+mode="${1:-full}"
+if [[ "$mode" != "full" && "$mode" != "python" &&
+  "$mode" != "python-compatibility" &&
+  "$mode" != "typescript" && "$mode" != "rust" ]]; then
+  echo "Usage: $0 [full|python|python-compatibility|typescript|rust]" >&2
+  exit 2
+fi
+
+for workflow in .github/workflows/{pr-policy,ci}.yml; do
+  if grep -Eq 'secrets\.(CSARC_SYNC_TOKEN|CSARC_ADMIN_TOKEN|GH_ADMIN_TOKEN|ADMIN_TOKEN)' \
+    "$workflow"; then
+    echo "$workflow exposes an administration token to an untrusted event."
+    exit 1
+  fi
+done
+
+verify_python={{ "true" if "python" in languages else "false" }}
+verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if "typescript" in languages else "false" }}}"
+verify_rust={{ "true" if "rust" in languages else "false" }}
+temporary_paths=()
+cleanup() {
+  local path
+  for path in "${temporary_paths[@]:-}"; do
+    [[ -n "$path" ]] && rm -rf "$path"
+  done
+  return 0
+}
+trap cleanup EXIT
+
+verify_typescript_package_import() (
+  cd "$1"
+  node --input-type=module -e "import('{{ project_slug }}')"
+)
+
+verify_typescript_module() {
+  verification_step "Node.js availability" command -v node
+  verification_step "pnpm availability" command -v pnpm
+  verification_step "Node.js version" \
+    test "$(node -p 'Number(process.versions.node.split(".")[0]) >= 24')" = "true"
+  verification_step "pnpm version" test "$(pnpm --version | cut -d. -f1)" = "11"
+  verification_step "TypeScript locked install" \
+    pnpm install --store-dir "$pnpm_store_dir" --frozen-lockfile --ignore-scripts
+  verification_step "TypeScript lint" \
+    pnpm exec biome ci typescript vitest.config.ts package.json
+  verification_step "TypeScript type check" pnpm exec tsc --noEmit
+  verification_step "TypeScript coverage" pnpm exec vitest run --coverage
+  verification_step "TypeScript build" pnpm run build
+  mkdir -p dist
+  find dist -maxdepth 1 -type f -name '.gitignore' -delete
+  find dist -maxdepth 1 -type f -name '*.tgz' -delete
+  verification_step "TypeScript package" pnpm pack --pack-destination dist
+  typescript_tarball="$(find dist -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+  test -n "$typescript_tarball"
+  typescript_install_root="$(mktemp -d)"
+  temporary_paths+=("$typescript_install_root")
+  verification_step "TypeScript isolated install" \
+    pnpm --dir "$typescript_install_root" add \
+    "$repo_root/$typescript_tarball" --store-dir "$pnpm_store_dir" \
+    --ignore-scripts --silent
+  verification_step "TypeScript package import" \
+    verify_typescript_package_import "$typescript_install_root"
+}
+
+verify_rust_module() {
+  verification_step "Cargo availability" command -v cargo
+  verification_step "Rust compiler availability" command -v rustc
+  verification_step "Rust compiler version" \
+    test "$(rustc --version | cut -d' ' -f2)" = "1.98.0"
+  verification_step "Rust formatting" cargo fmt --all -- --check
+  verification_step "Rust lint" \
+    cargo clippy --locked --all-targets --all-features -- -D warnings
+  verification_step "Rust tests" cargo test --locked --all-features
+  verification_step "Rust release build" cargo build --release --locked
+  verification_step "Rust package" cargo package --locked --allow-dirty
+}
+
+verify_python_module() {
+  python_version="${CSARC_PYTHON_VERSION:-3.14}"
+  export UV_PYTHON="$python_version"
+  verification_step "Locked Python environment" \
+    uv sync --locked --python "$python_version"
+  verification_step "Python formatting" uv run ruff format --check .
+  verification_step "Python lint" uv run ruff check .
+  verification_step "Python type check" uv run ty check
+  verification_step "Python version contract" uv run python - <<'PY'
+from importlib import import_module
+from importlib.metadata import version
+
+package_version = getattr(import_module("{{ package_name }}"), "__version__", None)
+installed_version = version("{{ project_slug }}")
+if package_version != installed_version:
+    raise SystemExit(
+        "Python package __version__ does not match pyproject.toml: "
+        f"{package_version} != {installed_version}"
+    )
+PY
+{% if coverage_mode == "global" %}
+  verification_step "Python coverage" \
+    uv run pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under={{ coverage_threshold }}
+{% else %}
+  verification_step "Python coverage" \
+    uv run pytest --cov --cov-report=term-missing --cov-report=xml
+  compare_branch="${DIFF_COVER_COMPARE_BRANCH:-origin/main}"
+  if ! git rev-parse --verify --quiet "$compare_branch" >/dev/null; then
+    echo "Set DIFF_COVER_COMPARE_BRANCH to an existing ref (current: $compare_branch)." >&2
+    exit 1
+  fi
+  verification_step "Python diff coverage" \
+    uv run diff-cover coverage.xml --compare-branch="$compare_branch" --fail-under={{ coverage_threshold }}
+{% endif %}
+  verification_step "Python package build" uv build --clear
+  python_sdist="$(find dist -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+  test -n "$python_sdist"
+  python_sdist_entries="$(tar -tzf "$python_sdist")"
+  grep -q '/src/{{ package_name }}/' <<<"$python_sdist_entries"
+  if grep -Eq '/(\.github|policies|scripts|tests|typescript)/' <<<"$python_sdist_entries"; then
+    echo "Python sdist contains repository infrastructure or test files." >&2
+    exit 1
+  fi
+  verification_step "Python package import" \
+    uv run --isolated --no-project --with ./dist/*.whl \
+    python -c "import {{ package_name }}"
+  verification_step "Python package metadata" \
+    uv run --isolated --no-project --with twine twine check dist/*
+}
+
+if [[ "$mode" == "python" ]]; then
+  if ! $verify_python; then
+    echo "Python verification is unavailable for this language profile." >&2
+    exit 2
+  fi
+  verify_python_module
+  exit 0
+fi
+
+if [[ "$mode" == "python-compatibility" ]]; then
+  if ! $verify_python; then
+    echo "Python compatibility is unavailable for this language profile." >&2
+    exit 2
+  fi
+  python_version="${CSARC_PYTHON_VERSION:-3.14}"
+  export UV_PYTHON="$python_version"
+  verification_step "Locked Python compatibility environment" \
+    uv sync --locked --python "$python_version"
+  verification_step "Python runtime contract" \
+    uv run pytest -m "runtime and not large"
+  verification_step "Python compatibility package build" uv build --clear
+  verification_step "Python compatibility package import" \
+    uv run --isolated --no-project --with ./dist/*.whl \
+    python -c "import {{ package_name }}"
+  verification_step "Python compatibility package metadata" \
+    uv run --isolated --no-project --with twine twine check dist/*
+  exit 0
+fi
+
+if [[ "$mode" == "typescript" ]]; then
+  if [[ "$verify_typescript" != "true" ]]; then
+    echo "TypeScript verification is unavailable for this language profile." >&2
+    exit 2
+  fi
+  verify_typescript_module
+  exit 0
+fi
+
+if [[ "$mode" == "rust" ]]; then
+  if ! $verify_rust; then
+    echo "Rust verification is unavailable for this language profile." >&2
+    exit 2
+  fi
+  verify_rust_module
+  exit 0
+fi
+
+./.csarc/scripts/check-update-conflicts
+./.csarc/scripts/verify-dependencies
+./.csarc/scripts/check-project-metadata
+./.csarc/scripts/build-repo-site --check
+./.csarc/scripts/detect-language-profile
+./.csarc/scripts/test-issue-triage
+./.csarc/scripts/test-worktree-cleanup
+./.csarc/scripts/test-pr-policy
+./.csarc/scripts/test-apply-repository-settings
+./.csarc/scripts/test-check-repo-capabilities
+./.csarc/scripts/test-check-scope-gate
+./.csarc/scripts/lint-workflows-shell
+
+if $verify_python; then
+  verify_python_module
+fi
+
+if [[ "$verify_typescript" == "true" ]]; then
+  verify_typescript_module
+fi
+
+if $verify_rust; then
+  verify_rust_module
+fi
+
+if $verify_python; then
+  platform_python=(uv run python)
+else
+  platform_python=(uv run --no-project python)
+fi
+verification_step "Specification validation" \
+  "${platform_python[@]}" .csarc/scripts/spec_to_issue.py validate
+test -f docs/README.md
+test -f docs/adr/README.md
+grep -q 'Durable Project Memory' docs/README.md
+grep -q 'Spec-Driven Development' docs/README.md
+grep -q 'Architecture Decision Records' docs/README.md
+grep -q 'Test-Driven Development' docs/README.md
+grep -q 'Behavior-Driven Development' docs/README.md
+grep -q 'docs/decisions/' docs/README.md
+verification_step "Generated configuration contract" \
+  "${platform_python[@]}" - <<'PY'
+import runpy
+
+load_config = runpy.run_path(".csarc/scripts/csarc_config.py")["load_config"]
+
+config = load_config()
+expected_languages = set({{ languages | tojson }})
+if set(config.get("languages", [])) != expected_languages:
+    raise SystemExit("Configured languages do not match the rendered template")
+if config.get("project_mode") not in {"new", "existing"}:
+    raise SystemExit("project_mode must be new or existing")
+if config.get("branch_strategy") not in {"main", "delivery"}:
+    raise SystemExit("branch_strategy must be main or delivery")
+PY
+for json_file in \
+  .csarc/policies/repository.json \
+  .csarc/policies/issue-creation.json \
+  .csarc/policies/security-scanning.json \
+  .csarc/policies/actions.json \
+  .csarc/policies/labels.json \
+  .csarc/policies/rulesets.json \
+  .csarc/policies/rulesets-required-checks.json \
+  .csarc/release-please-config.json \
+  .csarc/release-please-manifest.json; do
+  verification_step "JSON syntax: $json_file" \
+    "${platform_python[@]}" -m json.tool "$json_file"
+done
+verification_step "Release version consistency" \
+  "${platform_python[@]}" - <<'PY'
+import json
+import runpy
+import tomllib
+from pathlib import Path
+
+# .csarc/scripts/release_phase.py's `normalize()` (Issue #744) so a Python
+# packaging surface's PEP 440-normalized value (e.g. pyproject.toml's
+# "0.16.0a1") compares equal to every other surface's canonical value
+# (e.g. the release manifest's "0.16.0-alpha.1") -- they are the same
+# version, just written differently, not a real mismatch.
+release_phase = runpy.run_path(".csarc/scripts/release_phase.py")
+normalize = release_phase["normalize"]
+
+versions = {
+    "release manifest": json.loads(
+        Path(".csarc/release-please-manifest.json").read_text(encoding="utf-8")
+    )["."]
+}
+if Path("pyproject.toml").exists():
+    versions["pyproject.toml"] = tomllib.loads(
+        Path("pyproject.toml").read_text(encoding="utf-8")
+    )["project"]["version"]
+if Path("package.json").exists():
+    versions["package.json"] = json.loads(
+        Path("package.json").read_text(encoding="utf-8")
+    )["version"]
+if Path("Cargo.toml").exists():
+    versions["Cargo.toml"] = tomllib.loads(
+        Path("Cargo.toml").read_text(encoding="utf-8")
+    )["package"]["version"]
+if Path(".csarc/version.txt").exists():
+    versions[".csarc/version.txt"] = Path(".csarc/version.txt").read_text(
+        encoding="utf-8"
+    ).strip()
+normalized = {source: normalize(value) for source, value in versions.items()}
+if len(set(normalized.values())) != 1:
+    raise SystemExit(f"Release versions do not match: {versions}")
+print(f"release version: {next(iter(normalized.values()))}")
+PY
+test -x .csarc/scripts/apply-repository-settings.sh
+test -x .csarc/scripts/detect-language-profile
+test -x .csarc/scripts/pr_lifecycle.py
+grep -q '.csarc/scripts/pr_lifecycle.py' .csarc/docs/agent-workflow.md
+grep -q '^## PR lifecycle single-writer$' .csarc/docs/ci-policy.md
+grep -q '^## 版本、發版、交付與部署矩陣$' .csarc/docs/ci-policy.md
+verification_step "PR writer ownership" \
+  "${platform_python[@]}" .csarc/scripts/pr_lifecycle.py scan-writers --root .
+
+test -f AGENTS.md
+test "$(cat .claude/CLAUDE.md)" = "@../AGENTS.md"
+template_mode="$("${platform_python[@]}" .csarc/scripts/csarc_config.py project_mode)"
+if [[ "$template_mode" == "new" ]]; then
+  test "$(wc -l < AGENTS.md)" -le 200
+  required_readme_headings=(
+    "專案概述"
+    "快速開始"
+    "技術與目錄"
+    "開發與驗證"
+    "設定與密鑰"
+    "發布與維運"
+    "負責人與支援"
+    "公版更新"
+  )
+  for heading in "${required_readme_headings[@]}"; do
+    if ! grep -qFx "## $heading" README.md; then
+      echo "README.md is missing required section: $heading"
+      exit 1
+    fi
+  done
+fi
+unsupported_instruction_paths=(
+  .cursorrules
+  .windsurfrules
+  .clinerules
+  GEMINI.md
+  .github/copilot-instructions.md
+  .cursor/rules
+  .claude/rules
+)
+for unsupported_path in "${unsupported_instruction_paths[@]}"; do
+  test ! -e "$unsupported_path"
+done
+
+verification_step "Final secret scan" ./.csarc/scripts/scan-secrets
+
+if $verify_python; then
+  lower_bounds_root="$(mktemp -d)"
+  temporary_paths+=("$lower_bounds_root")
+  if ! verification_step "Resolve Python dependency lower bounds" \
+    uv pip compile \
+    pyproject.toml \
+    --group dev \
+    --resolution lowest-direct \
+    --python-version "$python_version" \
+    --output-file "$lower_bounds_root/requirements-min.txt"; then
+    echo "Dev dependency lower bounds cannot be resolved on Python $python_version."
+    exit 1
+  fi
+  uv venv --python "$python_version" "$lower_bounds_root/.venv"
+  if ! verification_step "Install Python dependency lower bounds" \
+    uv pip install \
+    --python "$lower_bounds_root/.venv/bin/python" \
+    --requirements "$lower_bounds_root/requirements-min.txt"; then
+    echo "Dev dependency lower bounds cannot be installed on Python $python_version."
+    exit 1
+  fi
+  verification_step "Install project at Python lower bounds" \
+    uv pip install \
+    --python "$lower_bounds_root/.venv/bin/python" \
+    --no-deps \
+    --editable .
+  verification_step "Check Python lower-bound environment" \
+    uv pip check --python "$lower_bounds_root/.venv/bin/python"
+  # Keep the lower-bound run independent from the primary coverage database.
+  rm -f .coverage .coverage.* coverage.xml
+{% if coverage_mode == "global" %}
+  if ! verification_step "Test Python dependency lower bounds" \
+    "$lower_bounds_root/.venv/bin/python" -m pytest \
+    --cov \
+    --cov-report=term-missing \
+    --cov-fail-under={{ coverage_threshold }}; then
+    echo "Tests fail with direct dependency lower bounds on Python $python_version."
+    exit 1
+  fi
+{% else %}
+  if ! verification_step "Test Python dependency lower bounds" \
+    "$lower_bounds_root/.venv/bin/python" -m pytest \
+    --cov \
+    --cov-report=term-missing \
+    --cov-report=xml; then
+    echo "Tests fail with direct dependency lower bounds on Python $python_version."
+    exit 1
+  fi
+  verification_step "Python lower-bound diff coverage" \
+    "$lower_bounds_root/.venv/bin/diff-cover" coverage.xml \
+    --compare-branch="$compare_branch" \
+    --fail-under={{ coverage_threshold }}
+{% endif %}
+fi
+
+project_verification_hook='{{ project_verification_hook | default("", true) }}'
+if [[ -z "$project_verification_hook" && -x scripts/verify-product ]]; then
+  project_verification_hook="scripts/verify-product"
+fi
+if [[ -n "$project_verification_hook" ]]; then
+  verified_hook="$("${platform_python[@]}" - "$project_verification_hook" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+
+raw = sys.argv[1]
+relative = Path(raw)
+if (
+    not raw
+    or raw != raw.strip()
+    or relative.is_absolute()
+    or ".." in relative.parts
+    or re.fullmatch(r"[A-Za-z0-9._/-]+", raw) is None
+):
+    raise SystemExit("Project verification hook is not a safe relative path")
+root = Path.cwd().resolve(strict=True)
+try:
+    hook = (root / relative).resolve(strict=True)
+except OSError as error:
+    raise SystemExit(f"Project verification hook does not exist: {raw}") from error
+if hook != root and root not in hook.parents:
+    raise SystemExit(f"Project verification hook escapes the repository: {raw}")
+if not hook.is_file() or not os.access(hook, os.X_OK):
+    raise SystemExit(f"Project verification hook is not executable: {raw}")
+canonical = root / ".csarc" / "scripts" / "verify"
+try:
+    if canonical.exists() and os.path.samefile(hook, canonical):
+        raise SystemExit(
+            "Project verification hook must not resolve to canonical .csarc/scripts/verify"
+        )
+except OSError as error:
+    raise SystemExit(f"Cannot compare project verification hook: {raw}") from error
+print(hook)
+PY
+)"
+  record_project_verification_status started
+  status_fd="${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"
+  run_project_verification_hook() (
+    if [[ -n "$status_fd" ]]; then
+      [[ "$status_fd" =~ ^[0-9]+$ ]]
+      eval "exec ${status_fd}>&-"
+    fi
+    unset _CSARC_PROJECT_VERIFICATION_STATUS_FD
+    export _CSARC_PROJECT_VERIFICATION_ACTIVE=1
+    exec "$verified_hook"
+  )
+  if verification_step "Project verification hook" \
+    run_project_verification_hook; then
+    record_project_verification_status passed
+  else
+    hook_status=$?
+    record_project_verification_status failed
+    exit "$hook_status"
+  fi
+fi
+
+# This is the generated project's full-verification path. Scoped modes exit
+# earlier; reaching this point means every selected check and any optional
+# project verification hook passed.

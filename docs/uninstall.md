@@ -38,19 +38,19 @@ grep '^languages:' -A3 .csarc/config.yml
   **Settings → Rules → Rulesets** 刪除這兩條，或用
   `gh api repos/<owner>/<repo>/rulesets --jq '.[] | select(.name | startswith("CSARC")) | .id'`
   找到 id 後 `gh api -X DELETE repos/<owner>/<repo>/rulesets/<id>`。
-- **Actions 權限**：`policies/actions.json` 曾把
+- **Actions 權限**：`.csarc/policies/actions.json` 曾把
   `default_workflow_permissions` 設成 `read`、開放 `can_approve_pull_request_reviews`；
   不需要維持這個限制的話，到 **Settings → Actions → General** 依需求調整回組織預設值。
   這一步只影響權限寬鬆度，不影響能否移除公版，不確定就先保留。
   Runner 是否還在使用其中任何一支 `.github/workflows/*.yml`，以第 3 節的清單為準，不要
   只看這個政策檔案本身有沒有刪。
-- **Issue 建立政策 / repository 選項**：`policies/issue-creation.json`
-  （`issue_creation_policy: COLLABORATORS_ONLY`）與 `policies/repository.json`
+- **Issue 建立政策 / repository 選項**：`.csarc/policies/issue-creation.json`
+  （`issue_creation_policy: COLLABORATORS_ONLY`）與 `.csarc/policies/repository.json`
   （merge 策略、`delete_branch_on_merge`、Issues/Projects/Wiki 開關）都是套用到
   repository 設定頁的一般選項，不是 CSARC 專屬的鎖，通常不需要因為移除 CSARC 而改回去；
   除非你確定要恢復到套用前的行為，否則跳過。
-- **Pages / Security scanning**：`policies/pages.json`、
-  `policies/security-scanning.json` 同理——這些是一般 repository 設定，不是 CSARC 留下
+- **Pages / Security scanning**：`.csarc/policies/pages.json`、
+  `.csarc/policies/security-scanning.json` 同理——這些是一般 repository 設定，不是 CSARC 留下
   的殘留物，只有你自己知道套用前的值時才需要手動改回去。
 
 以上都是 **GitHub 平台設定**，`git rm` 不會動到；判斷「要不要改回去」看你自己需不需要那個
@@ -69,8 +69,8 @@ grep '^languages:' -A3 .csarc/config.yml
 
 ## 3. CSARC 自動化與 workflow（依 `project_mode`／`languages`／已啟用功能決定是否存在）
 
-以下是 `csarc init`（`project_mode: new`、無額外語言模組）會建立的完整檔案清單，來自對本
-模板實際跑一次 `init` 的輸出，不是手動整理、憑印象列的：
+以下是 `csarc init`（`project_mode: new`、無額外語言模組）的 ownership 清單；精確 root
+allowlist 由生成測試驗證：
 
 ```
 .github/CODEOWNERS
@@ -79,7 +79,7 @@ grep '^languages:' -A3 .csarc/config.yml
 .github/ISSUE_TEMPLATE/documentation.yml
 .github/ISSUE_TEMPLATE/feature.yml
 .github/ISSUE_TEMPLATE/task.yml
-.github/REVIEWERS
+.github/SECURITY.md
 .github/dependabot.yml
 .github/pull_request_template.md
 .github/workflows/ci.yml
@@ -91,79 +91,68 @@ grep '^languages:' -A3 .csarc/config.yml
 .github/workflows/release.yml
 .github/workflows/spec-to-issue.yml
 .github/workflows/work-item-lifecycle.yml
+.claude/CLAUDE.md
+.csarc/REVIEWERS
+.csarc/config.yml（唯一由使用者維護的 CSARC 設定）
+.csarc/docs/*（CSARC 操作文件）
+.csarc/policies/*.json（公版管理的唯讀政策）
+.csarc/release-please-config.json（公版衍生資料）
+.csarc/release-please-manifest.json（工具維護的版本狀態）
+.csarc/scripts/*（CSARC adapter，見下方清單）
+.csarc/site/*（網站引擎與共用資產）
+.csarc/tests/*（公版自測）
+.csarc/version.txt（無語言模組時的版本面）
 .gitignore
-.gitleaks.toml
-.release-please-manifest.json
-docs/ci-policy.md
-docs/csarc.md
-docs/milestone-description.md
+AGENTS.md（自動探索入口）
 docs/README.md（CSARC 專案記憶地圖那一份；跟產品自己的頂層 README.md 是不同檔案）
 docs/index.html、docs/index.en.html
-docs/site-content.md、docs/site-theme.css
-policies/*.json
-release-please-config.json
-scripts/*（除下面列出的例外全部都是 CSARC 的，見清單）
-site/README.md、site/index.html、site/styles.css
-zizmor.yml
+docs/site/content/*、docs/site/data/navigation.json、docs/site/theme.css
 ```
 
-`scripts/` 底下屬於 CSARC 的檔案（跟產品自己放在 `scripts/` 的東西分開判斷）：
+`.csarc/scripts/` 底下都是 CSARC 的 adapter；產品自己的 `scripts/` 不屬於移除範圍：
 
 ```
-scripts/__init__.py
-scripts/apply-repository-settings.sh
-scripts/check-project-metadata
-scripts/check-release-drift
-scripts/check-update-conflicts
-scripts/check-trusted-verification
-scripts/ci_tier.py
-scripts/cleanup-worktrees
-scripts/converge-release-tag
-scripts/csarc_config.py
-scripts/delivery_sync.py
-scripts/detect-language-profile
-scripts/install-actionlint
-scripts/install-gitleaks
-scripts/install-osv-scanner
-scripts/install-shellcheck
-scripts/install-syft
-scripts/lint-workflows-shell
-scripts/pr_lifecycle.py
-scripts/promotion_gate.py
-scripts/publish-release
-scripts/release_bundle.py
-scripts/release_policy.py
-scripts/render_site.py
-scripts/request-reviewer
-scripts/resolve-cache-root
-scripts/scan-secrets
-scripts/spec_to_issue.py
-scripts/sync_milestone_state.py
-scripts/sync_work_item_metadata.py
-scripts/test-*（test-apply-repository-settings、test-issue-triage、test-pr-policy、
+.csarc/scripts/__init__.py
+.csarc/scripts/apply-repository-settings.sh
+.csarc/scripts/check-*
+.csarc/scripts/ci_tier.py
+.csarc/scripts/cleanup-worktrees
+.csarc/scripts/converge-release-tag
+.csarc/scripts/csarc_config.py
+.csarc/scripts/delivery_sync.py
+.csarc/scripts/detect-*
+.csarc/scripts/install-*
+.csarc/scripts/lint-workflows-shell
+.csarc/scripts/pr_lifecycle.py
+.csarc/scripts/pre-commit（只在啟用時存在，執行期間才產生工具設定）
+.csarc/scripts/promotion_gate.py
+.csarc/scripts/publish-release
+.csarc/scripts/release_*.py
+.csarc/scripts/render_site.py
+.csarc/scripts/request-reviewer
+.csarc/scripts/resolve-cache-root
+.csarc/scripts/scan-secrets（執行期間才產生 Gitleaks 設定）
+.csarc/scripts/spec_to_issue.py
+.csarc/scripts/sync_*.py
+.csarc/scripts/test-*（test-apply-repository-settings、test-issue-triage、test-pr-policy、
   test-worktree-cleanup）
-scripts/validate-issue-policy
-scripts/validate-issue-title
-scripts/verify
-scripts/verify-dependencies
-scripts/verify-fast
-scripts/verify-release-candidate
-scripts/verification_evidence.py
+.csarc/scripts/validate-*
+.csarc/scripts/verify*
 ```
 
 ### 只在你開了對應功能時才存在，才需要一併刪
 
-- `.pre-commit-config.yaml` — 只在 `.csarc/config.yml` 的 `enable_precommit: true` 時存在。
-- `.github/workflows/template-update.yml`、`scripts/check-template-update` — 只在
+- `.csarc/scripts/pre-commit` — 只在 `.csarc/config.yml` 的 `enable_precommit: true` 時存在；不持久保存 `.pre-commit-config.yaml`。
+- `.github/workflows/template-update.yml`、`.csarc/scripts/check-template-update` — 只在
   `enable_template_update_notifications: true` 時存在。
-- `.github/workflows/governance-drift.yml`、`scripts/check-governance-drift` — 只在
+- `.github/workflows/governance-drift.yml`、`.csarc/scripts/check-governance-drift` — 只在
   `enable_governance_drift_check: true` 時存在。
 - `.github/workflows/codeql.yml` — 只在 `enable_codeql: true` 時存在。
 
 ### 只在 `project_mode: existing`（`csarc adopt` 到既有 repo）時，這幾個反而不存在
 
 `.github/workflows/release.yml`、`.github/workflows/release-drift.yml`、
-`scripts/check-release-drift` 只在 `project_mode: new` 才由 CSARC 建立；`adopt` 到既有
+`.csarc/scripts/check-release-drift` 只在 `project_mode: new` 才由 CSARC 建立；`adopt` 到既有
 repository 時，CSARC 會保留產品原有的 release workflow，不會建立這三個檔案。如果你的
 repository 是用 `adopt` 導入、且這三個檔案存在，代表它們是產品原本就有的，不要刪。
 
@@ -176,7 +165,7 @@ repository 是用 `adopt` 導入、且這三個檔案存在，代表它們是產
   `project_mode: new` 時另外建立 `package.json`、`pnpm-lock.yaml`。
 - **rust**：`rust-toolchain.toml`、`src/lib.rs`；`project_mode: new` 時另外建立
   `Cargo.toml`、`Cargo.lock`。
-- 完全沒有語言模組（`language=ci`）：`version.txt` 是 CSARC 建立的，可以刪。
+- 完全沒有語言模組（`language=ci`）：`.csarc/version.txt` 是 CSARC 建立的，可以刪。
 
 `project_mode: existing` 時，`pyproject.toml`／`package.json`／`Cargo.toml` 是產品自己
 的檔案，CSARC 只合併必要欄位進去，見下一節。
@@ -188,7 +177,7 @@ CSARC 建立的，直接刪沒問題。
 
 - `README.md`、`SECURITY.md`、`CHANGELOG.md` — 產品原本就有的檔案，CSARC 從不覆寫；不需要
   移除，頂多手動刪掉你自己當初加進去、引用 CSARC 流程的段落（例如指到
-  `docs/csarc.md`、`./scripts/verify` 的說明文字）。
+  `.csarc/docs/csarc.md`、`./.csarc/scripts/verify` 的說明文字）。
 - `pyproject.toml`／`package.json`／`Cargo.toml` — CSARC 只合併了它需要的欄位／依賴／
   script（例如 lint、type-check 相關的 dev dependency）。整檔刪除會連產品自己的設定一起
   刪掉；改成手動比對、只移除明顯是 CSARC 加入的區塊或依賴。

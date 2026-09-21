@@ -203,16 +203,18 @@ def test_copier_governance_drift_option_is_complete(
     )
 
     assert (project / ".github/workflows/governance-comment.yml").is_file()
-    assert (project / "scripts/request-reviewer").is_file()
+    assert (project / ".csarc/scripts/request-reviewer").is_file()
     assert (
-        (project / ".github/REVIEWERS")
+        (project / ".csarc/REVIEWERS")
         .read_text(encoding="utf-8")
         .endswith("@alice\n@bob\n")
     )
     assert (
         project / ".github/workflows/governance-drift.yml"
     ).exists() is enabled
-    assert (project / "scripts/check-governance-drift").exists() is enabled
+    assert (
+        project / ".csarc/scripts/check-governance-drift"
+    ).exists() is enabled
 
 
 def test_degraded_drift_check_does_not_create_an_issue(tmp_path: Path) -> None:
@@ -330,10 +332,16 @@ def test_governance_workflows_are_thin_and_least_privilege() -> None:
         ROOT / "template/.github/workflows/governance-drift.yml"
     ).read_text(encoding="utf-8")
 
-    assert reviewer == generated_reviewer
-    assert (ROOT / "scripts/request-reviewer").read_bytes() == (
-        ROOT / "template/scripts/request-reviewer"
-    ).read_bytes()
+    assert reviewer == generated_reviewer.replace(".csarc/scripts/", "scripts/")
+    root_script = (ROOT / "scripts/request-reviewer").read_text(
+        encoding="utf-8"
+    )
+    generated_script = (
+        ROOT / "template/.csarc/scripts/request-reviewer"
+    ).read_text(encoding="utf-8")
+    assert root_script == generated_script.replace(
+        '${BASH_SOURCE[0]}")/../..', '${BASH_SOURCE[0]}")/..'
+    ).replace("$repo_root/.csarc/REVIEWERS", "$repo_root/.github/REVIEWERS")
     assert not (ROOT / ".github/workflows/governance-drift.yml").exists()
     assert "pull_request_target:" in reviewer
     assert "ref: ${{ github.event.pull_request.base.sha }}" in reviewer
@@ -345,7 +353,7 @@ def test_governance_workflows_are_thin_and_least_privilege() -> None:
     assert "schedule:" in drift and "workflow_dispatch:" in drift
     assert "issues: write" in drift
     assert "pull-requests: write" not in drift
-    assert "run: ./scripts/check-governance-drift" in drift
+    assert "run: ./.csarc/scripts/check-governance-drift" in drift
     assert "timeout-minutes: 5" in drift
 
 

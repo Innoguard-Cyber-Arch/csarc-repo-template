@@ -26,4 +26,4 @@ jobs:
       - name: Check repository governance
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./scripts/check-governance-drift
+        run: ./.csarc/scripts/check-governance-drift

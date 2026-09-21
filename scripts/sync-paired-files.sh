@@ -1,107 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Single source of truth for the root files that template/ ships byte-for-byte
-# unchanged to downstream repositories. Root is canonical: these files are the
-# ones this repository exercises directly (its own workflows, scripts, and
-# tests), so edits belong there and template/ receives an exact copy.
+# Keep only truly byte-identical root/template assets paired. Generated
+# scripts and workflows intentionally use .csarc paths, so path-sensitive
+# files are maintained and tested as separate adapters instead of being
+# rewritten by an implicit transform.
 #
 # Usage:
-#   scripts/sync-paired-files.sh          Regenerate every template/ copy.
-#   scripts/sync-paired-files.sh --check  Verify copies without writing files;
-#                                         exits non-zero and prints details for
-#                                         each pair that has drifted.
+#   scripts/sync-paired-files.sh          Regenerate every paired copy.
+#   scripts/sync-paired-files.sh --check  Verify copies without writing.
 paired_files=(
-  CLAUDE.md
-  .gitleaks.toml
-  .github/ISSUE_TEMPLATE/config.yml
-  .github/ISSUE_TEMPLATE/bug.yml
-  .github/ISSUE_TEMPLATE/documentation.yml
-  .github/ISSUE_TEMPLATE/feature.yml
-  .github/ISSUE_TEMPLATE/milestone-tracker.yml
-  .github/ISSUE_TEMPLATE/task.yml
-  .github/workflows/dependabot-auto-merge.yml
-  .github/workflows/dependabot-merge.yml
-  .github/workflows/governance-comment.yml
-  .github/workflows/osv.yml
-  .github/workflows/pr-policy.yml
-  .github/workflows/pr-policy-writes.yml
-  .github/workflows/pr-review.yml
-  .github/workflows/release-drift.yml
-  .github/workflows/spec-to-issue.yml
-  .github/workflows/work-item-lifecycle.yml
-  policies/actions.json
-  policies/capability-matrix.json
-  policies/issue-creation.json
-  policies/labels.json
-  policies/pages.json
-  policies/releases.json
-  policies/repository.json
-  policies/security-scanning.json
-  docs/ci-policy.md
-  docs/milestone-description.md
-  docs/adr/README.md
-  scripts/render_site.py
-  scripts/build_repo_site.py
-  scripts/repo_site_blocks.py
-  scripts/check-repo-site-navigation
-  scripts/check-repo-site-translations
-  scripts/check-repo-site-versions
-  scripts/apply-repository-settings.sh
-  scripts/authenticate_dependabot_head.py
-  scripts/check-governance-drift
-  scripts/check-repo-capabilities
-  scripts/repo_capabilities.py
-  scripts/check-release-drift
-  scripts/check-trusted-verification
-  scripts/request-reviewer
-  scripts/ci_tier.py
-  scripts/gh-issue-edit
-  scripts/check_action_pins.py
-  scripts/delivery_sync.py
-  scripts/pr_lifecycle.py
-  scripts/promotion_gate.py
-  scripts/review_gate.py
-  scripts/verification_evidence.py
-  scripts/check-scope-gate
-  scripts/check-update-conflicts
-  scripts/cleanup-worktrees
-  scripts/converge-release-tag
-  scripts/csarc_config.py
-  scripts/detect-open-milestone
-  scripts/install-actionlint
-  scripts/install-gitleaks
-  scripts/install-osv-scanner
-  scripts/install-shellcheck
-  scripts/install-syft
-  scripts/lint-workflows-shell
-  scripts/publish-release
-  scripts/release_bundle.py
-  scripts/release_level.py
-  scripts/release_phase.py
-  scripts/release_phase_rulesets.py
-  scripts/release_policy.py
-  scripts/resolve-cache-root
-  scripts/scan-secrets
-  scripts/spec_to_issue.py
-  scripts/stale_branch_detection.py
-  scripts/sync_milestone_state.py
-  scripts/sync_work_item_metadata.py
-  scripts/test-apply-repository-settings
-  scripts/test-check-repo-capabilities
-  scripts/test-check-scope-gate
-  scripts/test-issue-triage
-  scripts/test-pr-policy
-  scripts/test-worktree-cleanup
-  scripts/verify-release-candidate
-  scripts/verify_release_consumption.py
-  scripts/validate-issue-policy
-  scripts/validate-issue-title
-  scripts/validate-pr-policy
-  scripts/verify-dependencies
-  scripts/verification-step
-  tests/test_verification_evidence.py
-  zizmor.yml
+  "scripts/authenticate_dependabot_head.py|template/.csarc/scripts/authenticate_dependabot_head.py"
+  "scripts/check-trusted-verification|template/.csarc/scripts/check-trusted-verification"
+  "scripts/delivery_sync.py|template/.csarc/scripts/delivery_sync.py"
+  "scripts/gh-issue-edit|template/.csarc/scripts/gh-issue-edit"
+  "scripts/release_level.py|template/.csarc/scripts/release_level.py"
+  "scripts/release_phase.py|template/.csarc/scripts/release_phase.py"
+  "scripts/review_gate.py|template/.csarc/scripts/review_gate.py"
+  "scripts/test-worktree-cleanup|template/.csarc/scripts/test-worktree-cleanup"
+  "scripts/validate-issue-title|template/.csarc/scripts/validate-issue-title"
+  "scripts/verification-step|template/.csarc/scripts/verification-step"
+  "scripts/verify_release_consumption.py|template/.csarc/scripts/verify_release_consumption.py"
+  "policies/actions.json|template/.csarc/policies/actions.json"
+  "policies/issue-creation.json|template/.csarc/policies/issue-creation.json"
+  "policies/labels.json|template/.csarc/policies/labels.json"
+  "policies/pages.json|template/.csarc/policies/pages.json"
+  "policies/releases.json|template/.csarc/policies/releases.json"
+  "policies/repository.json|template/.csarc/policies/repository.json"
+  "policies/security-scanning.json|template/.csarc/policies/security-scanning.json"
+  ".github/ISSUE_TEMPLATE/bug.yml|template/.github/ISSUE_TEMPLATE/bug.yml"
+  ".github/ISSUE_TEMPLATE/config.yml|template/.github/ISSUE_TEMPLATE/config.yml"
+  ".github/ISSUE_TEMPLATE/documentation.yml|template/.github/ISSUE_TEMPLATE/documentation.yml"
+  ".github/ISSUE_TEMPLATE/feature.yml|template/.github/ISSUE_TEMPLATE/feature.yml"
+  ".github/ISSUE_TEMPLATE/task.yml|template/.github/ISSUE_TEMPLATE/task.yml"
+  "docs/adr/README.md|template/docs/adr/README.md"
 )
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -116,29 +48,31 @@ elif [[ "${1:-}" != "" ]]; then
 fi
 
 drifted=0
-for relative_file in "${paired_files[@]}"; do
-  source_file="$repo_root/$relative_file"
-  target_file="$repo_root/template/$relative_file"
+for pair in "${paired_files[@]}"; do
+  source_name="${pair%%|*}"
+  target_name="${pair#*|}"
+  source_file="$repo_root/$source_name"
+  target_file="$repo_root/$target_name"
 
   if [[ ! -f "$source_file" ]]; then
-    echo "Missing paired source file: $relative_file" >&2
+    echo "Missing paired source file: $source_name" >&2
     exit 1
   fi
 
   if [[ "$mode" == "check" ]]; then
     if [[ ! -f "$target_file" ]]; then
-      echo "template/$relative_file is missing; run scripts/sync-paired-files.sh" >&2
+      echo "$target_name is missing; run scripts/sync-paired-files.sh" >&2
       drifted=1
       continue
     fi
     if ! cmp -s "$source_file" "$target_file"; then
-      echo "template/$relative_file does not match the sync-paired-files.sh output:" >&2
+      echo "$target_name does not match $source_name:" >&2
       diff -u "$target_file" "$source_file" >&2 || true
       drifted=1
     fi
     if { [[ -x "$source_file" ]] && [[ ! -x "$target_file" ]]; } ||
       { [[ ! -x "$source_file" ]] && [[ -x "$target_file" ]]; }; then
-      echo "template/$relative_file has a different executable bit than $relative_file" >&2
+      echo "$target_name has a different executable bit than $source_name" >&2
       drifted=1
     fi
   else
@@ -153,6 +87,6 @@ for relative_file in "${paired_files[@]}"; do
 done
 
 if [[ "$mode" == "check" && "$drifted" -ne 0 ]]; then
-  echo "Run ./scripts/sync-paired-files.sh to regenerate template/ copies." >&2
+  echo "Run ./scripts/sync-paired-files.sh to regenerate paired copies." >&2
   exit 1
 fi

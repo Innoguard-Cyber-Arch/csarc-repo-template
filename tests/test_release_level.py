@@ -467,5 +467,5 @@ def test_release_annotation_preserves_notes_and_replaces_evidence() -> None:
 
 def test_root_and_template_release_level_modules_match() -> None:
     assert (ROOT / "scripts/release_level.py").read_bytes() == (
-        ROOT / "template/scripts/release_level.py"
+        ROOT / "template/.csarc/scripts/release_level.py"
     ).read_bytes()

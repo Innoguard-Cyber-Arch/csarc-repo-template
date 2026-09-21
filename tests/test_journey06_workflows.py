@@ -61,7 +61,9 @@ def test_work_item_lifecycle_is_paired_and_bounded() -> None:
     root_path = REPO_ROOT / ".github" / "workflows" / WORKFLOW
     template_path = REPO_ROOT / "template" / root_path.relative_to(REPO_ROOT)
 
-    assert root_path.read_bytes() == template_path.read_bytes()
+    root_source = root_path.read_text(encoding="utf-8")
+    template_source = template_path.read_text(encoding="utf-8")
+    assert root_source == template_source.replace(".csarc/scripts/", "scripts/")
 
     workflow = load_yaml(root_path)
     triggers = workflow.get("on", workflow.get(True))

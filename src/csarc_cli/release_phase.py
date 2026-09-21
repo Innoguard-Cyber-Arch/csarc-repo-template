@@ -3,7 +3,7 @@
 
 Maintainer decision (2026-09-17): the version number itself encodes release
 maturity. Per-work governance uses the same four canonical names through
-``scripts/release_level.py``.
+the sibling ``release_level.py`` adapter.
 
     alpha   X.Y.Z-alpha.N   (any major; a later pre-release of the same
     beta    X.Y.Z-beta.N     X.Y.Z increments N -- tag names are never
@@ -17,12 +17,12 @@ maps a *given* declared phase to a version string and validates the
 result; deciding which phase a release deserves (the declaration/
 computation mechanism) is Issue #745's job.
 
-Shared verbatim between the root repository, `template/scripts/` (see
+Shared verbatim between the root repository, `template/.csarc/scripts/` (see
 AGENTS.md's "Keep shared policy changes synchronized between root and
 template/" rule), and `src/csarc_cli/release_phase.py`. The third copy
 exists only because the distributed `csarc` wheel ships `src/csarc_cli`
 alone (see `[tool.hatch.build.targets.wheel]` in pyproject.toml) -- the
-CLI cannot import a sibling `scripts/` module that will not be present
+CLI cannot import a sibling repository adapter module that will not be present
 once installed. Keep all three copies byte-identical.
 """
 
@@ -232,7 +232,7 @@ def normalize(text: str) -> str:
     `parse_version` first and falls back to `parse_pep440`, so a caller
     that needs to compare surfaces written in either shape (e.g. a
     generated project's own release-consistency check across
-    `.release-please-manifest.json`, `pyproject.toml`, `package.json`,
+    the release-please manifest, `pyproject.toml`, `package.json`,
     and `Cargo.toml`) has one common key to compare.
     """
     try:
@@ -291,7 +291,8 @@ def next_prerelease_n(
 
     Residual race, accepted rather than fixed here: `existing` is a
     snapshot of local git tags taken before the caller (typically
-    `scripts/converge-release-tag`) actually pushes the new tag, so two
+    the sibling `converge-release-tag` adapter) actually pushes the new tag,
+    so two
     concurrent callers could compute the same "next" N. This is mitigated,
     not eliminated: `converge-release-tag` creates the tag via `gh api
     POST .../git/refs`, which fails outright on a name collision rather

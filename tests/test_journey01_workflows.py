@@ -33,7 +33,11 @@ def test_journey01_workflows_are_paired() -> None:
         template_path = (
             REPO_ROOT / "template" / root_path.relative_to(REPO_ROOT)
         )
-        assert root_path.read_bytes() == template_path.read_bytes()
+        root_source = root_path.read_text(encoding="utf-8")
+        template_source = template_path.read_text(encoding="utf-8")
+        assert root_source == template_source.replace(
+            ".csarc/scripts/", "scripts/"
+        )
 
 
 def test_workflows_have_bounded_jobs_without_schedules_or_matrices() -> None:

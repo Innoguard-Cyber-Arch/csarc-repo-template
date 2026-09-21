@@ -37,7 +37,7 @@ jobs:
           QUEUE_HEAD_REF: ${{ github.event.merge_group.head_ref }}
           QUEUE_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: >-
-          python3 scripts/delivery_sync.py merge-group-gate
+          python3 .csarc/scripts/delivery_sync.py merge-group-gate
           --repo "$GITHUB_REPOSITORY"
           --base "$QUEUE_BASE_REF"
           --base-sha "$QUEUE_BASE_SHA"
@@ -66,15 +66,15 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_POLICY_READ_ONLY: "true"
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: ./scripts/validate-pr-policy
+        run: ./.csarc/scripts/validate-pr-policy
       - name: Validate Milestone approval
         if: ${{ github.event_name == 'pull_request_target' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if python3 scripts/sync_milestone_state.py check-pr --help | grep -q -- --read-only; then
-            python3 scripts/sync_milestone_state.py check-pr \
+          if python3 .csarc/scripts/sync_milestone_state.py check-pr --help | grep -q -- --read-only; then
+            python3 .csarc/scripts/sync_milestone_state.py check-pr \
               --repo "$GITHUB_REPOSITORY" \
               --pr "$PR_NUMBER" \
               --read-only
@@ -87,8 +87,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          if [[ -x ./scripts/check-scope-gate ]]; then
-            ./scripts/check-scope-gate
+          if [[ -x ./.csarc/scripts/check-scope-gate ]]; then
+            ./.csarc/scripts/check-scope-gate
           else
             echo "::notice::Scope-drift gate starts after the rollout PR reaches its base branch."
           fi
@@ -98,8 +98,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MERGE_GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: |
-          if python3 scripts/sync_milestone_state.py check-merge-group --help | grep -q -- --read-only; then
-            python3 scripts/sync_milestone_state.py check-merge-group \
+          if python3 .csarc/scripts/sync_milestone_state.py check-merge-group --help | grep -q -- --read-only; then
+            python3 .csarc/scripts/sync_milestone_state.py check-merge-group \
               --repo "$GITHUB_REPOSITORY" \
               --head-sha "$MERGE_GROUP_HEAD_SHA" \
               --read-only
@@ -115,7 +115,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: >-
-          python3 scripts/delivery_sync.py gate
+          python3 .csarc/scripts/delivery_sync.py gate
           --repo "$GITHUB_REPOSITORY"
           --base "$PR_BASE"
           --head-ref "$PR_HEAD"
@@ -124,16 +124,16 @@ jobs:
   promotion:
     name: promotion
     # Produces the `promotion` required status check
-    # (policies/rulesets-required-checks.json) for every pull request into
+    # (.csarc/policies/rulesets-required-checks.json) for every pull request into
     # `main`, including an ordinary non-Milestone-delivery pull request.
     # Before this job existed, no workflow ever reported a `promotion`
     # check-run for those pull requests, so the required check stayed
     # permanently pending (#601). It only classifies the delivery-promotion
-    # route via `scripts/promotion_gate.py check-route` (the same
+    # route via `.csarc/scripts/promotion_gate.py check-route` (the same
     # `route_for()` classifier the heavier promotion evidence pipeline in
-    # `scripts/promotion_gate.py::prepare()` uses); it does not duplicate
+    # `.csarc/scripts/promotion_gate.py::prepare()` uses); it does not duplicate
     # the Milestone tracker or evidence validation already owned by the
-    # `title` job above (`scripts/validate-pr-policy`) and
+    # `title` job above (`.csarc/scripts/validate-pr-policy`) and
     # `.github/workflows/milestone-lifecycle.yml`'s `Milestone approval`
     # check.
     permissions:
@@ -162,11 +162,11 @@ jobs:
           if [[ -z "$branch_strategy" ]]; then
             branch_strategy="main"
             if [[ -f .csarc/config.yml ]]; then
-              branch_strategy="$(python3 scripts/csarc_config.py branch_strategy)"
+              branch_strategy="$(python3 .csarc/scripts/csarc_config.py branch_strategy)"
             fi
           fi
-          if python3 scripts/promotion_gate.py --help | grep -q check-route; then
-            python3 scripts/promotion_gate.py check-route \
+          if python3 .csarc/scripts/promotion_gate.py --help | grep -q check-route; then
+            python3 .csarc/scripts/promotion_gate.py check-route \
               --event "$EVENT_NAME" \
               --event-path "$GITHUB_EVENT_PATH" \
               --branch-strategy "$branch_strategy" \

@@ -3,8 +3,8 @@ name: Release publish drift check
 # Independent, read-only, separately scheduled check for Issue #605: a
 # stuck or broken release.yml cannot reliably alert on its own breakage, so
 # this never runs as a step inside release.yml itself. See
-# scripts/check-release-drift for the detection condition and
-# docs/ci-policy.md's "Release 發版不依賴 Actions 健康度的 fallback（#589）"
+# .csarc/scripts/check-release-drift for the detection condition and
+# .csarc/docs/ci-policy.md's "Release 發版不依賴 Actions 健康度的 fallback（#589）"
 # section for the local-publish fallback this watches for.
 
 on:
@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       hours:
-        description: "Drift threshold in hours (default 24; see docs/ci-policy.md)"
+        description: "Drift threshold in hours (default 24; see .csarc/docs/ci-policy.md)"
         required: false
         type: string
 
@@ -40,4 +40,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_DRIFT_HOURS: ${{ inputs.hours }}
-        run: ./scripts/check-release-drift
+        run: ./.csarc/scripts/check-release-drift

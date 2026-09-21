@@ -35,7 +35,7 @@ jobs:
       - name: Preserve the trusted verification policy
         run: |
           mkdir -p "$RUNNER_TEMP/trusted-verification"
-          cp scripts/*.py scripts/check-trusted-verification \
+          cp .csarc/scripts/*.py .csarc/scripts/check-trusted-verification \
             "$RUNNER_TEMP/trusted-verification/"
       - name: Check out the exact candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -174,9 +174,9 @@ jobs:
           labels="$(jq -c '[.pull_request.labels[].name] | sort' "$GITHUB_EVENT_PATH" 2>/dev/null || printf '[]')"
           labels_sha="$(printf '%s' "$labels" | sha256sum | cut -d' ' -f1)"
           if [[ "$TIER" == "full" ]]; then
-            command="./scripts/verify"
+            command="./.csarc/scripts/verify"
           else
-            command="./scripts/verify-fast"
+            command="./.csarc/scripts/verify-fast"
           fi
           {
             echo "tree=$tree"
@@ -221,7 +221,7 @@ jobs:
             --release-level "$RELEASE_LEVEL" \
             --exclude-run-id "$GITHUB_RUN_ID" \
             --github-output "$GITHUB_OUTPUT"
-      - name: Validate trusted clean sync tier=fast scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} tree={% raw %}${{ steps.identity.outputs.tree }}{% endraw %} command=./scripts/verify-fast base={% raw %}${{ steps.identity.outputs.base }}{% endraw %} base-sha={% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %} labels={% raw %}${{ steps.identity.outputs.labels }}{% endraw %} release={% raw %}${{ steps.identity.outputs.release }}{% endraw %} main={% raw %}${{ steps.sync.outputs.main_sha }}{% endraw %} source-run={% raw %}${{ steps.sync.outputs.source_run }}{% endraw %} source-job={% raw %}${{ steps.sync.outputs.source_job }}{% endraw %} source-check={% raw %}${{ steps.sync.outputs.source_check }}{% endraw %}
+      - name: Validate trusted clean sync tier=fast scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} tree={% raw %}${{ steps.identity.outputs.tree }}{% endraw %} command=./.csarc/scripts/verify-fast base={% raw %}${{ steps.identity.outputs.base }}{% endraw %} base-sha={% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %} labels={% raw %}${{ steps.identity.outputs.labels }}{% endraw %} release={% raw %}${{ steps.identity.outputs.release }}{% endraw %} main={% raw %}${{ steps.sync.outputs.main_sha }}{% endraw %} source-run={% raw %}${{ steps.sync.outputs.source_run }}{% endraw %} source-job={% raw %}${{ steps.sync.outputs.source_job }}{% endraw %} source-check={% raw %}${{ steps.sync.outputs.source_check }}{% endraw %}
         if: {% raw %}${{ steps.sync.outputs.clean == 'true' }}{% endraw %}
         run: "true"
       - name: Reuse trusted verification tier={% raw %}${{ steps.effective.outputs.suite }}{% endraw %} scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} tree={% raw %}${{ steps.identity.outputs.tree }}{% endraw %} command={% raw %}${{ steps.identity.outputs.command }}{% endraw %} base={% raw %}${{ steps.identity.outputs.base }}{% endraw %} base-sha={% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %} labels={% raw %}${{ steps.identity.outputs.labels }}{% endraw %} release={% raw %}${{ steps.identity.outputs.release }}{% endraw %} source-run={% raw %}${{ steps.reuse.outputs.source_run }}{% endraw %} source-job={% raw %}${{ steps.reuse.outputs.source_job }}{% endraw %} source-check={% raw %}${{ steps.reuse.outputs.source_check }}{% endraw %}
@@ -269,9 +269,9 @@ jobs:
           CSARC_VERIFICATION_SUITE: {% raw %}${{ steps.effective.outputs.suite }}{% endraw %}
         run: |
           if [[ "$CSARC_CI_TIER" == "full" ]]; then
-            ./scripts/verify
+            ./.csarc/scripts/verify
           else
-            ./scripts/verify-fast
+            ./.csarc/scripts/verify-fast
           fi
       - name: Validate the guided release candidate
         if: {% raw %}${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
@@ -290,7 +290,7 @@ jobs:
             --arg base "$PR_BASE" \
             '{number: $number, sha: $sha, headBranchName: $head, baseBranchName: $base}' \
             >"$RUNNER_TEMP/release-pr.json"
-          ./scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
+          ./.csarc/scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
       - name: Record result
         if: {% raw %}${{ always() }}{% endraw %}
         env:

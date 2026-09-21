@@ -628,7 +628,7 @@ def rules(
 ) -> dict[str, dict[str, Any]]:
     """Return one generated Ruleset's rules by type."""
     payload = json.loads(
-        (project / f"policies/{filename}").read_text(encoding="utf-8")
+        (project / f".csarc/policies/{filename}").read_text(encoding="utf-8")
     )
     return {
         rule["type"]: rule.get("parameters", {}) for rule in payload["rules"]
@@ -658,7 +658,7 @@ def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
         ("review", 15368),
     }
     assert (project / ".github/workflows/pr-review.yml").is_file()
-    assert (project / "scripts/review_gate.py").is_file()
+    assert (project / ".csarc/scripts/review_gate.py").is_file()
 
 
 def test_issue_comment_review_gate_can_read_release_level_issues() -> None:
