@@ -28,6 +28,8 @@ import tempfile
 import textwrap
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).parents[1]
 SCRIPT = "scripts/publish-release"
 
@@ -600,6 +602,7 @@ def run_publish_release(
     )
 
 
+@pytest.mark.large
 def test_stage_validates_and_converges_a_merged_candidate(
     tmp_path: Path,
 ) -> None:
@@ -672,6 +675,7 @@ def test_stage_fails_closed_without_exactly_one_merged_pull_request(
     assert "v0.2.0" not in tags
 
 
+@pytest.mark.large
 def test_resolve_reports_none_draft_and_published_states(
     tmp_path: Path,
 ) -> None:
@@ -764,6 +768,7 @@ def test_resolve_reports_none_draft_and_published_states(
     assert "state=published" in published_result.stdout
 
 
+@pytest.mark.large
 def test_publish_builds_uploads_and_marks_the_release_published(
     tmp_path: Path,
 ) -> None:
@@ -819,6 +824,7 @@ def test_publish_builds_uploads_and_marks_the_release_published(
     assert sbom["spdxVersion"] == "SPDX-2.3"
 
 
+@pytest.mark.large
 def test_publish_marks_latest_only_for_an_unsuffixed_tag(
     tmp_path: Path,
 ) -> None:
@@ -937,6 +943,7 @@ def test_publish_marks_latest_only_for_an_unsuffixed_tag(
     assert by_tag["v0.2.0-beta.1"] == "latest=false"
 
 
+@pytest.mark.large
 def test_publish_reverts_a_failed_release_back_to_draft(tmp_path: Path) -> None:
     """A failed publish never leaves a half-public, still-mutable Release.
 
@@ -1036,6 +1043,7 @@ def _stage_fixture(tmp_path: Path) -> dict[str, Path]:
     return {"root": root, "state": state, "bindir": bindir}
 
 
+@pytest.mark.large
 def test_publish_fails_closed_on_an_asset_digest_mismatch(
     tmp_path: Path,
 ) -> None:
@@ -1076,6 +1084,7 @@ def test_publish_fails_closed_on_an_asset_digest_mismatch(
     assert meta["isDraft"] is False
 
 
+@pytest.mark.large
 def test_publish_fails_closed_on_a_signer_mismatch(tmp_path: Path) -> None:
     """Issue #770: an attestation signed by an unexpected identity.
 
@@ -1109,6 +1118,7 @@ def test_publish_fails_closed_on_a_signer_mismatch(tmp_path: Path) -> None:
     assert meta["isDraft"] is False
 
 
+@pytest.mark.large
 def test_rerun_verify_confirms_without_rebuilding_or_reuploading(
     tmp_path: Path,
 ) -> None:

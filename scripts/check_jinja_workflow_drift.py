@@ -33,22 +33,19 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
 import sys
 import tempfile
 from pathlib import Path
 
-from copier import run_copy
-from copier.errors import CopierError
+from jinja2 import Environment, StrictUndefined, TemplateError
 
 # Answers chosen to render every conditional branch a root workflow
 # exercises unconditionally (root always sets up Python, pnpm/Node, and
 # Rust toolchains for its own release-candidate validation), so the
 # rendered template can be compared to root line-for-line instead of
 # comparing against a project that skipped whole blocks. See copier.yml
-# for the full question schema; the three overrides below match the
-# ones scripts/verify-fast already passes for its own render smoke test,
-# plus `languages` to select every module.
+# for the full question schema. These are the only answers referenced by
+# the paired workflow templates, and `languages` selects every module.
 #
 # Kept as its own typed constant (not just a value inside
 # REPRESENTATIVE_ANSWERS) because find_uncovered_conditionals() below
@@ -59,6 +56,8 @@ REPRESENTATIVE_LANGUAGES: list[str] = ["python", "rust", "typescript"]
 
 REPRESENTATIVE_ANSWERS: dict[str, object] = {
     "languages": REPRESENTATIVE_LANGUAGES,
+    "python_support_mode": "latest",
+    "python_min_version": "3.12",
     "project_slug": "jinja-workflow-drift-check",
     "package_name": "jinja_workflow_drift_check",
     "code_owner": "@Innoguard-Cyber-Arch/template-maintainers",
@@ -91,9 +90,12 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
         ),
     },
     "release.yml.jinja": {
-        # Release verification uses the same repository-specific full
-        # entry point distinction as CI.
-        ("run: ./scripts/verify-template.sh", "run: ./scripts/verify"),
+        # Generated repositories expose scripts/verify; this template
+        # repository keeps the full release aggregator under its longer name.
+        (
+            "run: ./scripts/verify-template.sh",
+            "run: ./scripts/verify",
+        ),
     },
 }
 
@@ -284,33 +286,19 @@ def find_drift(
 
 
 def render_template(repo_root: Path, dest: Path) -> None:
-    """Render template/ into dest with REPRESENTATIVE_ANSWERS, tasks skipped.
-
-    Copies copier.yml and template/ into a plain, non-git staging
-    directory first and renders in-process via copier.run_copy() from
-    there -- the same pattern tests/test_language_profiles.py and
-    tests/test_render_site.py already use for the same reason (see their
-    own comments): rendering straight from repo_root, a git-tracked
-    checkout, would let Copier default to its latest release git tag
-    instead of the actual working tree, silently checking stale,
-    already-released template content instead of what is actually being
-    reviewed. `skip_tasks=True` skips post-generation hooks (uv lock,
-    pnpm install, cargo generate-lockfile, the repo-site build) that this
-    check never reads and do not touch workflow files.
-    """
-    staging_source = dest.parent / "staging-source"
-    staging_source.mkdir(parents=True)
-    shutil.copy2(repo_root / "copier.yml", staging_source / "copier.yml")
-    shutil.copytree(repo_root / "template", staging_source / "template")
-    run_copy(
-        str(staging_source),
-        dest,
-        data=REPRESENTATIVE_ANSWERS,
-        defaults=True,
-        unsafe=True,
-        skip_tasks=True,
-        quiet=True,
+    """Render only paired workflow templates without invoking Copier."""
+    workflows = dest / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    environment = Environment(
+        autoescape=False,  # noqa: S701 - renders trusted local YAML
+        keep_trailing_newline=True,
+        undefined=StrictUndefined,
     )
+    for root_workflow, jinja_path in paired_workflow_files(repo_root):
+        rendered = environment.from_string(
+            jinja_path.read_text(encoding="utf-8")
+        ).render(**REPRESENTATIVE_ANSWERS)
+        (workflows / root_workflow.name).write_text(rendered, encoding="utf-8")
 
 
 def check(root: Path) -> list[str]:
@@ -333,11 +321,8 @@ def check(root: Path) -> list[str]:
         dest = Path(raw_tmp) / "rendered"
         try:
             render_template(root, dest)
-        except (CopierError, OSError) as exc:
-            return [
-                "failed to render template/ for the jinja workflow drift "
-                f"check: {exc}"
-            ]
+        except (TemplateError, OSError) as exc:
+            return [f"failed to render the paired jinja workflows check: {exc}"]
         errors = []
         for root_workflow, jinja_path in pairs:
             rendered_path = dest / ".github" / "workflows" / root_workflow.name

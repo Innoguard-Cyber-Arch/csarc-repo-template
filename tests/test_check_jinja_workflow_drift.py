@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from copier.errors import UserMessageError
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -332,14 +331,7 @@ def test_comment_after_a_block_scalar_closes_is_still_ignored() -> None:
 def test_check_reports_a_render_failure_without_raising(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A CopierError (or OSError) from rendering is caught and formatted.
-
-    Regression for the code-review finding that only
-    subprocess.CalledProcessError was caught around the old
-    subprocess-based renderer; switching to copier.run_copy() means the
-    expected failure types changed too, and they must still fail closed
-    with a normal, formatted message instead of an unhandled traceback.
-    """
+    """A template render failure is caught and formatted."""
     (tmp_path / ".github" / "workflows").mkdir(parents=True)
     (tmp_path / "template" / ".github" / "workflows").mkdir(parents=True)
     (tmp_path / ".github" / "workflows" / "ci.yml").write_text("name: CI\n")
@@ -349,7 +341,7 @@ def test_check_reports_a_render_failure_without_raising(
     (tmp_path / "copier.yml").write_text("{}\n")
 
     def broken_render(_repo_root: Path, _dest: Path) -> None:
-        raise UserMessageError("simulated render failure")
+        raise OSError("simulated render failure")
 
     monkeypatch.setattr(
         check_jinja_workflow_drift, "render_template", broken_render

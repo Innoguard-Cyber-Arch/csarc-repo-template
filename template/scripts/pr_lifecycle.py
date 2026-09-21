@@ -1978,6 +1978,76 @@ def require_trusted_verification(
     ]
     if len(matching_jobs) != 1:
         raise RuntimeError("Trusted verify check has no unique Actions job")
+    source_evidence = None
+    source_ids = verification_evidence.evidence_source_ids(matching_jobs[0])
+    if source_ids is not None:
+        source_kind, source_run_id, source_job_id, source_check_id = source_ids
+        source_check = github.get(repo, f"check-runs/{source_check_id}")
+        source_run = github.get(repo, f"actions/runs/{source_run_id}")
+        if not isinstance(source_check, dict) or not isinstance(
+            source_run, dict
+        ):
+            raise RuntimeError(
+                "Trusted verification reuse source is unavailable"
+            )
+        source_head = source_check.get("head_sha")
+        if not isinstance(source_head, str) or (
+            source_kind == "reuse" and source_head != head_sha
+        ):
+            raise RuntimeError(
+                "Trusted verification reuse source head is invalid"
+            )
+        source_cache = {source_run_id: source_run}
+        if not trusted_check_run_matches_context(
+            github,
+            repo,
+            source_head,
+            source_check,
+            "verify",
+            integration_id,
+            source_cache,
+        ):
+            raise RuntimeError(
+                "Trusted verification reuse source producer is invalid"
+            )
+        source_jobs = github.collection(
+            repo,
+            f"actions/runs/{source_run_id}/jobs?filter=latest&per_page=100",
+            "jobs",
+        )
+        matching_sources = [
+            source_job
+            for source_job in source_jobs
+            if source_job.get("id") == source_job_id
+            and source_job.get("html_url") == source_check.get("details_url")
+        ]
+        if len(matching_sources) != 1:
+            raise RuntimeError(
+                "Trusted verification reuse source has no unique Actions job"
+            )
+        source_commit = (
+            commit
+            if source_head == head_sha
+            else github.get(repo, f"git/commits/{source_head}")
+        )
+        source_tree = (
+            source_commit.get("tree")
+            if isinstance(source_commit, dict)
+            else None
+        )
+        source_tree_sha = (
+            source_tree.get("sha") if isinstance(source_tree, dict) else None
+        )
+        if not isinstance(source_tree_sha, str):
+            raise RuntimeError(
+                "Trusted verification reuse source tree is unavailable"
+            )
+        source_evidence = (
+            source_check,
+            source_run,
+            matching_sources[0],
+            source_tree_sha,
+        )
     return verification_evidence.validate_verification_job(
         check_run,
         workflow_run,
@@ -1988,6 +2058,7 @@ def require_trusted_verification(
         now=now,
         max_age_hours=max_age_hours,
         required_tier=required_tier,
+        source_evidence=source_evidence,
         full_command=(
             "./scripts/verify-template.sh"
             if Path("scripts/verify-template.sh").is_file()

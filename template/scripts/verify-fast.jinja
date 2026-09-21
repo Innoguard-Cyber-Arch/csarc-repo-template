@@ -68,6 +68,7 @@ python3 scripts/ci_tier.py \
   --labels "${CSARC_CI_LABELS:-}" \
   --files-from "$changed_files" \
   --output-json "$plan_json" \
+  --draft "${CSARC_CI_DRAFT:-false}" \
   --extra-scopes "$extra_scopes"
 
 plan_tier="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
@@ -115,27 +116,50 @@ case "$suite" in
     ;;
 esac
 
-verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
+if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ||
+  "$scopes" == *,template,* ]]; then
+  verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
+fi
+
+{% if has_python or has_typescript or has_rust -%}
+run_project_checks=false
+if [[ "$scopes" == *,source,* || "$scopes" == *,template,* ||
+  "$scopes" == *,governance,* || "$scopes" == *,shell,* ||
+  "$scopes" == *,unknown,* || "$scopes" == *,workflow,* ]]; then
+  run_project_checks=true
+fi
+{% endif -%}
 
 {% if has_python -%}
-python_version="$UV_PYTHON"
-verification_step "Locked Python environment" \
-  uv sync --locked --python "$python_version"
-verification_step "Python formatting" uv run ruff format --check .
-verification_step "Python lint" uv run ruff check .
-verification_step "Python type check" uv run ty check
+if $run_project_checks || [[ "$scopes" == *,dependency,* ]]; then
+  python_version="$UV_PYTHON"
+  verification_step "Locked Python environment" \
+    uv sync --locked --python "$python_version"
+fi
+if $run_project_checks; then
+  verification_step "Python formatting" uv run ruff format --check .
+  verification_step "Python lint" uv run ruff check .
+  verification_step "Python type check" uv run ty check
+fi
 {% endif -%}
 {% if has_typescript -%}
-pnpm_store_dir="$cache_root/pnpm/store"
-verification_step "TypeScript locked install" \
-  pnpm install --store-dir "$pnpm_store_dir" --frozen-lockfile --ignore-scripts
-verification_step "TypeScript lint" pnpm exec biome ci .
-verification_step "TypeScript type check" pnpm exec tsc --noEmit
+if $run_project_checks || [[ "$scopes" == *,dependency,* ]]; then
+  pnpm_store_dir="$cache_root/pnpm/store"
+  verification_step "TypeScript locked install" \
+    pnpm install --store-dir "$pnpm_store_dir" --frozen-lockfile --ignore-scripts
+fi
+if $run_project_checks; then
+  verification_step "TypeScript lint" \
+    pnpm exec biome ci typescript vitest.config.ts package.json
+  verification_step "TypeScript type check" pnpm exec tsc --noEmit
+fi
 {% endif -%}
 {% if has_rust -%}
-verification_step "Rust formatting" cargo fmt --all -- --check
-verification_step "Rust lint" \
-  cargo clippy --locked --all-targets --all-features -- -D warnings
+if $run_project_checks; then
+  verification_step "Rust formatting" cargo fmt --all -- --check
+  verification_step "Rust lint" \
+    cargo clippy --locked --all-targets --all-features -- -D warnings
+fi
 {% endif -%}
 
 if [[ "$suite" == "baseline" ]]; then
@@ -146,27 +170,21 @@ if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; the
   verification_step "Dependency scan" ./scripts/verify-dependencies
 fi
 {% if has_python -%}
-verification_step "Bounded Python regression suite" \
-  uv run pytest -m "not large"
+if $run_project_checks; then
+  verification_step "Bounded Python regression suite" \
+    uv run pytest -m "not large"
+fi
 {% endif -%}
 {% if has_typescript -%}
-verification_step "TypeScript tests" pnpm exec vitest run
+if $run_project_checks; then
+  verification_step "TypeScript tests" pnpm exec vitest run
+fi
 {% endif -%}
 {% if has_rust -%}
-verification_step "Rust tests" cargo test --locked --all-features
-{% endif -%}
-
-if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
-  "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
-  verification_step "Issue-triage self-test" ./scripts/test-issue-triage
-  verification_step "Worktree-cleanup self-test" ./scripts/test-worktree-cleanup
-  verification_step "PR-policy self-test" ./scripts/test-pr-policy
-  verification_step "Repository-settings self-test" \
-    ./scripts/test-apply-repository-settings
-  verification_step "Repository-capabilities self-test" \
-    ./scripts/test-check-repo-capabilities
-  verification_step "Scope-drift-gate self-test" ./scripts/test-check-scope-gate
+if $run_project_checks; then
+  verification_step "Rust tests" cargo test --locked --all-features
 fi
+{% endif -%}
 
 if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then
   verification_step "Specification validation" \

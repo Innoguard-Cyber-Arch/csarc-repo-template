@@ -163,7 +163,7 @@ def add_scopes(plan: Plan, extra_scopes: set[str]) -> Plan:
     )
 
 
-def classify(
+def classify(  # noqa: C901
     event: str,
     base: str,
     head: str,
@@ -171,6 +171,8 @@ def classify(
     changed_files: list[str],
     *,
     force_full: bool = False,
+    draft: bool = False,
+    verified_sync: bool = False,
 ) -> Plan:
     """Select a safe tier from the event, delivery stage, and changed paths."""
     scopes = tuple(sorted({scope_for(path) for path in changed_files}))
@@ -191,6 +193,10 @@ def classify(
     )
     if force_full:
         tier, reason = "full", "manual full verification"
+    elif draft and scopes == ("docs",):
+        tier, reason = "docs", "draft documentation change"
+    elif draft:
+        tier, reason = "fast", "draft risk-owner verification"
     elif promotion:
         tier, reason = "full", "delivery promotion"
     elif hotfix or recovery:
@@ -200,6 +206,8 @@ def classify(
         tier, reason = "full", "merge queue candidate"
     elif event == "push":
         tier, reason = "post-merge", "pull request result already verified"
+    elif verified_sync:
+        tier, reason = "fast", "verified clean delivery synchronization"
     elif not changed_files:
         tier, reason = "full", "changed paths unavailable"
     elif "unknown" in scopes:
@@ -290,6 +298,8 @@ def main() -> None:
     parser.add_argument("--github-output", type=Path)
     parser.add_argument("--summary", type=Path)
     parser.add_argument("--force-full", action="store_true")
+    parser.add_argument("--draft", choices=("true", "false"), default="false")
+    parser.add_argument("--verified-sync", action="store_true")
     parser.add_argument("--extra-scopes", default="")
     args = parser.parse_args()
     try:
@@ -301,6 +311,8 @@ def main() -> None:
                 {label for label in args.labels.split(",") if label},
                 read_paths(args.files_from),
                 force_full=args.force_full,
+                draft=args.draft == "true",
+                verified_sync=args.verified_sync,
             ),
             {scope for scope in args.extra_scopes.split(",") if scope},
         )

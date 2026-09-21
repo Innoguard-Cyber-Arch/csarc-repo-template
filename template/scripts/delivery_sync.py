@@ -280,6 +280,154 @@ def sync_branch_name(delivery_branch: str, main_sha: str) -> str:
     return f"sync/main-to-{key}-{main_sha[:12]}"
 
 
+def validate_sync_identity(
+    base_ref: str,
+    head_ref: str,
+    base_sha: str,
+    head_sha: str,
+    main_sha: str,
+    parents: list[str],
+    head_tree: str,
+    merge_tree: str | None,
+) -> bool:
+    """Validate exact sync topology and report whether its merge was clean."""
+    if (
+        DELIVERY_BRANCH.fullmatch(base_ref) is None
+        or head_ref != sync_branch_name(base_ref, main_sha)
+        or any(
+            FULL_SHA.fullmatch(value) is None
+            for value in (base_sha, head_sha, main_sha, head_tree)
+        )
+        or parents != [base_sha, main_sha]
+    ):
+        raise RuntimeError(
+            "Sync candidate is not an exact main-to-delivery merge"
+        )
+    return merge_tree is not None and head_tree == merge_tree
+
+
+def git_output(arguments: list[str]) -> str:
+    """Read one local Git value or fail closed."""
+    result = subprocess.run(  # noqa: S603
+        ["git", *arguments],  # noqa: S607
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip())
+    return result.stdout.strip()
+
+
+def validate_sync_route(
+    api: API,
+    repo: str,
+    pr_number: int,
+    base_ref: str,
+    base_sha: str,
+    head_ref: str,
+    head_sha: str,
+) -> None:
+    """Validate the current PR and its recorded authorized sync request."""
+    pull = pull_request(api, repo, pr_number)
+    base = pull.get("base")
+    head = pull.get("head")
+    head_repo = head.get("repo") if isinstance(head, dict) else None
+    request = re.search(
+        r"Requested from PR #([1-9][0-9]*) for "
+        r"`(promotion|explicit-dependency)`\. Created by the "
+        r"delivery sync workflow;",
+        str(pull.get("body") or ""),
+    )
+    if (
+        pull.get("state") != "open"
+        or pull.get("merged") is not False
+        or pull.get("title") != f"chore(sync): merge main into {base_ref}"
+        or "enhancement" not in issue_labels(pull)
+        or not isinstance(base, dict)
+        or base.get("ref") != base_ref
+        or base.get("sha") != base_sha
+        or not isinstance(head, dict)
+        or head.get("ref") != head_ref
+        or head.get("sha") != head_sha
+        or not isinstance(head_repo, dict)
+        or head_repo.get("full_name") != repo
+        or request is None
+    ):
+        raise RuntimeError("Sync pull request route is not authorized")
+    request_number = int(request.group(1))
+    requesting_pull = pull_request(api, repo, request_number)
+    requester = requesting_pull.get("user")
+    requester_login = (
+        requester.get("login") if isinstance(requester, dict) else None
+    )
+    if not isinstance(requester_login, str) or not requester_login:
+        raise RuntimeError("Sync requesting pull request owner is unavailable")
+    require_sync_request(
+        api,
+        repo,
+        base_ref,
+        request.group(2),
+        request_number,
+        requester_login,
+    )
+
+
+def verify_sync(args: argparse.Namespace) -> None:
+    """Validate the authorized route and exact sync topology before tests."""
+    token = os.environ.get("GH_TOKEN", "")
+    if not token:
+        raise RuntimeError("Sync verification requires GH_TOKEN")
+    api = GitHubAPI(token)
+    validate_sync_route(
+        api,
+        args.repo,
+        args.pr_number,
+        args.base,
+        args.base_sha,
+        args.head_ref,
+        args.head_sha,
+    )
+    if ref_sha(api, args.repo, args.base) != args.base_sha:
+        raise RuntimeError("Delivery base moved after the sync event")
+    if ref_sha(api, args.repo, "main") != args.main_sha:
+        raise RuntimeError("Main moved after the sync event")
+    if ref_sha(api, args.repo, args.head_ref) != args.head_sha:
+        raise RuntimeError("Sync head moved after the sync event")
+    commit = git_output(["rev-list", "--parents", "-n", "1", args.head_sha])
+    fields = commit.split()
+    if not fields or fields[0] != args.head_sha:
+        raise RuntimeError("Sync commit identity is unavailable")
+    head_tree = git_output(["rev-parse", f"{args.head_sha}^{{tree}}"])
+    merge = subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "git",
+            "merge-tree",
+            "--write-tree",
+            args.base_sha,
+            args.main_sha,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    merge_tree = merge.stdout.splitlines()[0] if merge.returncode == 0 else None
+    clean = validate_sync_identity(
+        args.base,
+        args.head_ref,
+        args.base_sha,
+        args.head_sha,
+        args.main_sha,
+        fields[1:],
+        head_tree,
+        merge_tree,
+    )
+    if args.github_output is not None:
+        with args.github_output.open("a", encoding="utf-8") as output:
+            output.write(f"clean={str(clean).lower()}\n")
+    sys.stdout.write("clean\n" if clean else "manual-conflict-resolution\n")
+
+
 def ref_sha(api: API, repo: str, branch: str) -> str:
     """Read one exact branch ref without accepting a missing branch."""
     encoded = urllib.parse.quote(branch, safe="")
@@ -730,6 +878,7 @@ def main() -> None:
             "gate",
             "merge-group-gate",
             "reconcile",
+            "verify-sync",
         ),
     )
     parser.add_argument("--repo", required=True)
@@ -758,12 +907,16 @@ def main() -> None:
         choices=("github-token", "external"),
         default="github-token",
     )
+    parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
-    token = os.environ.get("GH_TOKEN", "")
-    if not token:
-        raise SystemExit("GH_TOKEN is required")
-    api = GitHubAPI(token)
     try:
+        if args.command == "verify-sync":
+            verify_sync(args)
+            return
+        token = os.environ.get("GH_TOKEN", "")
+        if not token:
+            raise RuntimeError("GH_TOKEN is required")
+        api = GitHubAPI(token)
         if args.command == "gate":
             if not args.base or not args.head_sha:
                 raise RuntimeError("gate requires --base and --head-sha")

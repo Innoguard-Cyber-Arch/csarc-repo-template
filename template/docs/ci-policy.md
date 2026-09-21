@@ -753,9 +753,10 @@ path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成�
 hosted 共用的驗證入口，但本機執行只提供開發回饋，不改寫 commit，也不能單獨滿足 merge 或 release gate。
 
 `.github/workflows/ci.yml` 的單一 `verify` job 由 base-trusted `pull_request_target` 或 `merge_group` workflow
-定義執行。它先保存 base 版本的 `scripts/ci_tier.py`，再 checkout exact candidate；因此 PR 不能靠修改自己的
-router 降低 tier。接著在 GitHub-hosted `ubuntu-latest` runner 安裝固定工具鏈，依可信 plan 實際執行
-`scripts/verify-fast` 或 full verifier。Dependabot 與一般 contributor 共用同一路徑，不再有 bot 白名單。
+定義執行。它先保存 base 版本的 verification policy scripts，再 checkout exact candidate；因此 PR 不能靠修改
+自己的 router 或 evidence validator 降低 tier。一般新 head 接著在 GitHub-hosted `ubuntu-latest` runner 安裝固定
+工具鏈，依可信 plan 實際執行 `scripts/verify-fast` 或 full verifier。Dependabot 與一般 contributor 共用同一路徑，
+不再有 bot 白名單。
 
 `scripts/check-trusted-verification` 與 `scripts/verification_evidence.py` 消費 GitHub Check Runs、Actions run 與
 Jobs API，並重用 `scripts/pr_lifecycle.py` 的 required-check producer selector。有效證據必須同時符合：
@@ -764,7 +765,8 @@ Jobs API，並重用 `scripts/pr_lifecycle.py` 的 required-check producer selec
 2. check、check suite、Actions run 與 job 綁定同一 repository、exact head SHA、可信 workflow path/event 與
    run attempt；
 3. job 由 GitHub-hosted `ubuntu-latest` runner 執行，routing 與選用工具鏈步驟成功；
-4. 唯一 execution step 內的 tier、scopes、tree 與 command 相互一致，且 tree 等於 exact head 的 Git tree；
+4. 唯一 execution／same-head reuse／clean-sync step 內的 tier、scopes、tree、command、base SHA、label set 與
+   release level 相互一致，且 tree 等於 exact head 的 Git tree；
 5. check、run、job 與 execution step 都真正 `success`；`neutral`、`skipped`、zero-step 或同名 classic status
    均不能滿足 `verify`；
 6. 完成時間不超過 24 小時，且不能超前目前時間超過 5 分鐘。
@@ -778,6 +780,49 @@ trailer。
 workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 script／tests 則屬 exact candidate tree，
 與一般 CI 相同，仍由 review、CODEOWNERS 與 required checks 防止惡意弱化。這個邊界不宣稱 candidate 自己的
 測試內容不可修改，只證明可信 runner 確實對該 exact tree 執行 workflow 指定的 command/toolchain 並成功。
+
+### Risk-owned execution 與有限證據沿用（#812）
+
+單一 `verify` required context 保持不變，不新增 path-filtered workflow、matrix runner、stage registry 或跨 commit
+evidence DAG。路由只使用既有 `ci_tier.py` scopes：docs-only 不啟動 Python environment／regression；dependency-only
+只跑鎖檔與 OSV owner；workflow／shell／template 直接跑 workflow 與 shell lint，workflow／template 另驗 action
+pins；source、template、governance、shell、workflow 與 unknown 維持 Python safety floor。所有真正的 Copier
+create／adopt／update subprocess 與代表性 Rust native 驗證只在 full suite 執行；fast 保留不需真 render 的
+安全、狀態與資料保全回歸。
+
+root `verify-fast` 直接重用 plan 已算出的 scopes，不另判斷 tier。它一定納入本次直接修改的 `tests/test_*.py`
+與存在的同名 `scripts/foo.py → tests/test_foo.py`；再依 source、template、governance、workflow、shell 加上固定的
+核心 owner 檔案。多個 scope 取聯集並去重，unknown 則回到完整 `tests/` fail closed。docs-only 與
+dependency-only 不啟動 pytest；生成 repo 測試量本來就小，仍對自己的 product tests 執行 `not large`。
+
+| 事件／邊界 | `verify` 行為 |
+| --- | --- |
+| Draft push | 先跑共同安全檢查與 risk-owned fast；即使 release level／路徑要求 full，也暫時上限為 fast |
+| `ready_for_review`（同一 head） | 重新解析 release level、tier、scopes；若需要 full 就在該 exact head 執行 full |
+| 新 head（opened／reopened／synchronize） | 不跨 commit 沿用結果；按新 diff 的 scopes 執行 |
+| Metadata-only（edited／labeled／unlabeled／ready／draft） | 先重算完整 route；只有 repo、head、tree、base SHA、tier、scopes、command、toolchain、labels、release level 與 freshness 全相同時，才一跳引用原始 hosted Execute |
+| 無衝突 `main → dev/m*` sync | 先以可信 base script 驗 authorization route、live refs、雙親順序與自動 merge tree，再直接引用 current main 對應來源 PR 的 fresh full Execute |
+| 衝突／人工整合 sync | 同樣先驗 route、live refs 與雙親；不沿用 main tree，改跑 affected owners 與 fast |
+| Promotion／hotfix／merge queue／manual dispatch | 對 exact final head 執行 full |
+| Release | 只消費 exact-tree full evidence、artifact、SBOM 與 immutable-release 驗證，不重跑測試 |
+| 協調器輪詢、cleanup、archive | 只讀狀態或做生命週期清理，不執行測試 |
+
+沿用只允許一次：reuse step 必須直接指向原始 Execute 的 run／job／check，不能再指向另一個 reuse。來源證據
+的 24 小時 freshness 以原始 Execute 完成時間計算；任何欄位不符、來源缺漏、來源本身是 reuse，或新 commit
+即使碰巧有相同 tree，都回到正常執行或 fail closed。工具與相依套件可用既有 cache，但 cache 不是 required
+test result。現階段只實作完全相同的 effective tier／scopes 沿用；較高 tier 或 scope 超集合覆蓋留待有實測需求
+時再做，避免在 #812 引入另一套依賴圖。
+
+同步結構預檢位於工具鏈安裝與 verifier 之前。分支名稱只決定「需要檢查」而不構成授權；可信 script 仍核對
+PR route、requesting PR、base/head SHA、`[base, main]` 雙親與 tree。這可讓錯誤拓撲在秒級失敗，避免先跑 full
+才由 merge lifecycle 發現。clean sync 的 required check 仍綁定自身 exact repo/head/tree/run/job/App 與來源
+main full Execute；manual/conflict 路徑則不借用 tree 證據。
+
+#852 run `35556649274` 是本次刪減前的固定 full 成本證據：full regression 652 秒、其中 pytest 631 秒；其他
+stages 合計約 14 秒。重複 real-template 工作主要來自 #739 update 66.27 秒、#744 update 55.43 秒、legacy
+two-file update 55.10 秒、#743 update 53.57 秒、Python／TypeScript／Rust adoption 42.66／40.76／30.69 秒、
+representative generated full 31.99 秒與 fixed-ownership adopt 23.42 秒。#812 以 generic previous-release update、
+代表 create（含 Rust）與代表 adopt 收斂成功 lifecycle canary；不為 #742 增加語言 × lifecycle 矩陣。
 
 回歸測試集中在 `tests/test_verification_evidence.py`、`tests/test_pr_lifecycle.py`、
 `tests/test_journey03_ci.py`、`tests/test_journey07_release.py` 與 `tests/test_promotion_gate.py`；涵蓋偽造 trailer
@@ -914,7 +959,7 @@ CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.p
 
 | 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428）；可信 hosted execution（#834） | `pull_request_target`、`merge_group`、`workflow_dispatch` | `contents: read`；30 分鐘；同一 PR 新 commit 取消舊 run | base-trusted `scripts/ci_tier.py` 分類後，在 GitHub-hosted `ubuntu-latest` 對 exact candidate 執行 `scripts/verify-fast`／full verifier；Check Run、Actions run 與 Jobs API 證據綁定 repository、head/tree、tier/scopes、command、toolchain、runner、result 與 24 小時 freshness；Dependabot 共用相同路徑 | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py`；`tests/test_verification_evidence.py`；`tests/test_pr_lifecycle.py` | candidate（待 #834 workflow bootstrap 落地並取得首次 live evidence 後轉 active） |
+| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428／#812）；可信 hosted execution（#834） | `pull_request_target`（含 ready／draft 與 metadata-only 事件）、`merge_group`、`workflow_dispatch` | `contents: read`、Issues／PR read；30 分鐘；同一 PR 新 commit 取消舊 run | base-trusted `scripts/ci_tier.py` 分類後，在 GitHub-hosted `ubuntu-latest` 對 exact candidate 執行 risk-owned `scripts/verify-fast`／full verifier；同 head 的 metadata-only run 可單跳引用相同 route 的原始 Execute；clean main-to-delivery sync 先做結構預檢再引用 current main 的 fresh full Execute；所有證據綁定 repository、head/tree、base、tier/scopes、command、toolchain、labels、release level、runner、result 與 24 小時 freshness | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py`；`tests/test_verification_evidence.py`；`tests/test_pr_lifecycle.py`；`tests/test_delivery_sync.py` | #834 hosted execution active；#812 risk-owned/reuse/sync route 為 candidate |
 | PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | `pull_request_target` PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | `contents`／Issues／pull requests 只讀；固定 timeout | `title` job：Issue、route、review policy 與 Milestone approval 唯讀判定；`promotion` job（#601）：呼叫 `scripts/promotion_gate.py check-route` 分類 route，兩者只以原生 job conclusion 回報結果 | `scripts/test-pr-policy`；`tests/test_journey05_workflows.py`；`promotion` job 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | 歷史 run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929) 證明既有 policy 判定；#829 唯讀邊界待合併後首張 PR 取得 live evidence | 既有 policy：active；#829 唯讀邊界：candidate |
 | PR policy writes | `.github/workflows/pr-policy-writes.yml` | PR metadata 與 Milestone check-run 寫入（#829） | default branch 的 `workflow_run`，只接續完成的 `PR policy` run | top-level 無權限；resolver 只讀；metadata job 僅 `issues`／`pull-requests: write`；Milestone job 僅 `checks: write`；10 分鐘 | 以完整 head identity 跨頁解析唯一 open PR 後同步 metadata／#551 提醒；另以可信任 script 發布 `Milestone approval` custom check；零筆或多筆都 fail closed，不執行 PR source 或 artifact | `tests/test_work_item_metadata.py`；`tests/test_milestone_approval.py`；`tests/test_journey05_workflows.py` | 新 workflow，待落地 default branch 後由下一張 PR 觸發 | candidate |
 | PR review（Copilot 審核模式，#752／#775／#826） | `.github/workflows/pr-review.yml` | PR 審核授權（#752，銜接 #719／#745／#775／#826） | `pull_request_target`（opened／synchronize／reopened／ready_for_review／converted_to_draft）、`pull_request_review`（submitted／dismissed）、`issue_comment`（created，篩選 PR 上以 `PR lifecycle merge authorization` 開頭的留言）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run | `review` job 呼叫 `scripts/review_gate.py check`：`pr_review_mode=copilot` 時，目前完整 head SHA 已獲 Copilot 乾淨審核、獨立 maintainer `APPROVED`、或符合條件的 Alpha self-merge 授權留言（#775／#826，包括驗證完成的 delivery sync）才過；`pr_review_mode=human` 時只回報，審核仍由 Ruleset 原生 required approval 把關 | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的 Copilot／Alpha self-merge 授權來源見 `tests/test_pr_lifecycle.py` | 尚未落地 `main`，無 live run | candidate（待 main 落地並於首次 PR 觸發後轉 active） |
@@ -988,21 +1033,22 @@ focused check。最後要求是發布層級下限與 `scripts/ci_tier.py` 路徑
 直接 fail closed。舊有 `CSARC_CI_TIER`／`CSARC_CI_SCOPES`／`CSARC_RUN_OSV` 只能增加 suite 或 scope，
 不能移除自動算出的要求：
 
-1. **開發中 focused check（本機專用，不是 CI 的第三種政策）**——直接執行單一命令，例如
+1. **開發中 focused check（本機專用，不是 CI 的第三種政策）**——實作中與一般 push 前直接執行
+   變更 owner 的單一命令，例如
    `uv run pytest <path>`、`uv run ruff check <path>`，或針對
    `scripts/verify-template.sh` 其中一階段單獨重跑對應的
    `scripts/verify-stage-<name>`；不需要等待整條 pipeline，也不會被當成合併證據。
 2. **日常 PR gate（`docs`／`fast`，同一個成本邊界）**——`scripts/ci_tier.py` 依事件、
    base／head、labels 與 changed paths 做 fail-closed 分類；未知或高風險內容升級為
    full。純文件／site 變更落在 `docs`，是 `fast` 的 early-exit 實作細節，不是獨立的第
-   四套政策；其餘一般變更落在 `fast`。兩者入口都是 `scripts/verify-fast`。本機執行提供
-   push 前的快速回饋；hosted `verify` 另在可信 runner 對 exact candidate 執行同一入口，
-   並產生上方 #834 定義的 required merge evidence。
+   四套政策；其餘一般變更落在 `fast`。兩者入口都是 `scripts/verify-fast`。本機可在需要廣泛
+   診斷時選擇執行這個入口，但一般 push 不再先重跑整套；hosted `verify` 在可信 runner 對
+   exact candidate 執行一次 risk-owned suite，並產生上方 #834 定義的 required merge evidence。
 3. **完整交付驗證（`full`）**——只在 Milestone／canary 交付、hotfix、merge queue、手動
    執行或未知高風險路徑觸發；中央模板入口是 `scripts/verify-template.sh`，生成 repo
    入口是 `scripts/verify`（不帶參數即預設 full）。PR owner／integrator 只在自己的 PR
-   本身就落在這個邊界時，才需要在本機另外執行一次；一般 `fast`／`docs` PR 不需要在本機
-   重跑 full（但仍需要跑一次 `fast`，見上一點）。
+   本身就落在這個邊界時，才需要在本機另外執行一次；一般 `fast`／`docs` PR 只跑變更 owner 的
+   focused checks，不需要先在本機重跑 hosted 將執行的整套 fast 或 full。
 
 數據來自 #428／PR #431 在 2026-09-01 的最新 hosted run，目的是設定成本預期，不是永久 SLA；
 `full` 一列已由 #458 在 2026-09-02 於同一本機環境重新量測（見下方階段盤點與 PR 內文的
@@ -1010,10 +1056,19 @@ before／after 紀錄）。
 
 | 組合 | 最低層級 | 入口與累加測試集合 | 實測 |
 | --- | --- | --- | --- |
-| baseline | alpha | 基本安全、治理、格式、靜態分析與鎖檔 | bounded local path |
-| fast | beta | baseline ＋ OSV／快速回歸／smoke／原生測試 | 約 1–4 分鐘 PR feedback window（#428） |
-| docs | early | fast ＋ site／文件／翻譯／導覽／配對同步 | 與 fast 共用 bounded path |
-| full | formal | docs ＋ `large` create／adopt／update／coverage | 中央模板 502 秒基準（#458） |
+| baseline | alpha | 共同 hygiene／secret／lifecycle-bypass 加上變更 scope 的 owner checks | bounded local path |
+| fast | beta | source／template／governance／shell／workflow 的 Python safety floor；dependency 只做鎖檔與 OSV | 目標三次 warm-cache 中位數不超過 75 秒（#812） |
+| docs | early | 共同安全檢查＋site／文件／翻譯／導覽／配對同步，不啟動 Python regression | fast entry 的窄路徑 |
+| full | formal | fast owners ＋ `large` 的代表 create／adopt／previous-release update（create 含 Rust native）與 coverage | 目標不超過 15 分鐘（#812） |
+
+#812 的固定 clean-tree 基準是 #815 合併後 PR #853 的 exact tree：hosted `verify-fast`
+收集 1,530 個 pytest cases、排除 49 個 `large`、執行 1,481 個，pytest／regression stage／
+整個 job 分別為 112.05 秒／113 秒／3 分 13 秒；同一 tree 的本機 full 基準為 4 分 24 秒。
+套用 #812 的刪減與 owner routing 後，在同一部 macOS 開發機與 warm cache 執行 1,143 個 cases，
+三次 `verify-fast` 為 69.91、65.77、64.45 秒，中位數 65.77 秒；對應 pytest 為 55.56、
+52.32、50.90 秒，中位數 52.32 秒。較長的 shell lifecycle integration 仍由 full regression
+執行，沒有刪除其驗證責任；hosted 與本機總時間因環境不同，只用各自的 stage 證據比對，不把
+兩者混成單一速度倍率。
 
 相依 manifest／lockfile 變更加跑 `scripts/verify-dependencies`。CI 不建立 release asset，
 也不把測試 artifact 當成正式成品。#408 已把更細的 stage timing 輸出納入現行入口。
@@ -1225,8 +1280,8 @@ collaborator 自核例外）才算通過，判斷邏輯與 tracker 層級的 `/m
 staleness 邊界（含 60 秒緩衝窗、跨過緩衝窗即過期、過期後重新核可即恢復通過）；
 `scripts/test-check-scope-gate` 對 `check-scope-gate` 本身做端到端回歸測試
 （無連結 Issue、無 sentinel、有 sentinel 未核可、有 sentinel 已核可、核可過期
-四種結果，掛在 `scripts/verify-fast` 的 governance／template／workflow／shell
-scope 與 `scripts/verify-stage-regression-tests`）。這次變更不重新設計
+四種結果，掛在 `scripts/verify-stage-regression-tests`）。routine fast 由同一 Python suite
+裡的窄版 policy 測試負責，避免再串行重跑完整 shell fixture。這次變更不重新設計
 `has_scope_sentinel()` 的偵測邏輯，也不擴大 `/milestone approve`／
 `admin-approve` 留言語彙本身——只在既有機制上補上 CI 接線與版本綁定這兩層。
 
@@ -1265,8 +1320,8 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 | Static assets and paired files | `scripts/verify-stage-static-assets` | repo-site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` tier 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
 | Python environment | `scripts/verify-stage-python-environment` | `uv.lock` 與 `pyproject.toml` 一致、環境可從鎖定版本安裝 | fast 的 `uv sync --locked` 是同一份鎖定契約；`uv lock --check` 只在 full 額外執行 |
 | Python quality | `scripts/verify-stage-python-quality` | 格式、lint、靜態型別 | fast 對相同原始碼跑相同三個命令，兩者呼叫同一份工具鏈設定，無額外邏輯 |
-| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／release-drift／audit-fleet-adoption／create-milestone／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate（`scripts/test-check-scope-gate`，見上方 Scope-drift gate enforcement 一節）四個 shell 自我測試；base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status、`scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）與 `scripts/create-milestone`（原子建立 Milestone 與其 tracker Issue，見 `docs/milestone-description.md`；#572）六支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`scripts/test-check-release-drift`（mock `gh`，驗證上方「發版存量漂移偵測（`release-drift.yml`，#605）」一節的 drift 判定邏輯）也只掛在這個 full 專屬階段——`scripts/check-release-drift` 本身像 `release.yml` 一樣逐位元組下發到 `template/`，但比照 `release.yml`／`ci.yml` 沒有生成 repo 端本機再測試的既有慣例（下發前的 root 測試已足夠證明這份靜態、無 Jinja 條件式的實作正確），不隨腳本一起下發、也不掛進生成 repo 的 `scripts/verify`；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
-| Package smoke test | `scripts/verify-stage-package-smoke` | wheel 可建置、已發布入口可從建置產物執行 | fast 不跑這個階段；改用範圍較窄的 Copier smoke copy（見下方 Journey 03 的 PR 級別 render/smoke） |
+| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／release-drift／audit-fleet-adoption／create-milestone／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`）；較長的 shell lifecycle fixtures 留在 full，routine fast 由同一 Python suite 的窄版 policy 測試涵蓋。base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status、`scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）與 `scripts/create-milestone`（原子建立 Milestone 與其 tracker Issue，見 `docs/milestone-description.md`；#572）六支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`scripts/test-check-release-drift`（mock `gh`，驗證上方「發版存量漂移偵測（`release-drift.yml`，#605）」一節的 drift 判定邏輯）也只掛在這個 full 專屬階段——`scripts/check-release-drift` 本身像 `release.yml` 一樣逐位元組下發到 `template/`，但比照 `release.yml`／`ci.yml` 沒有生成 repo 端本機再測試的既有慣例（下發前的 root 測試已足夠證明這份靜態、無 Jinja 條件式的實作正確），不隨腳本一起下發、也不掛進生成 repo 的 `scripts/verify`；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
+| Package smoke test | `scripts/verify-stage-package-smoke` | wheel 可建置、已發布入口可從建置產物執行 | fast 不跑這個階段，也不執行真實 Copier；由 full 的代表 create canary 與本階段證明 |
 | GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | workflow 權限與注入稽核（zizmor） | root `verify-fast` 在 workflow scope 直接執行；full 仍執行同一支 stage，不依賴未啟用的 merge queue 或後續 promotion 補跑 |
 
 #### 驗證拓撲與可觀測性（#780）
@@ -1275,21 +1330,20 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 
 - **Root-only governance tests：**`tests/` 驗證本模板的 Milestone、PR、release、安全與
   Copier lifecycle；只由 root 的 fast／full 入口執行。`template/tests/` 只下發生成產品本身
-  的 smoke test 與共用 marker policy hook，不再帶 21 個 root 治理模組及其 SBOM fixtures。
-- **Generated-project contract checks：**每種語言組合仍實際經 Copier render，檢查 config、
-  manifest 與語言專屬檔案；Python 相容性入口只跑 `runtime and not large` 的最小 smoke、
+  的 smoke test，不再帶 root 治理模組、marker policy hook 或其 SBOM fixtures。
+- **Generated-project contract checks：**代表組合實際經 Copier render，檢查 config、
+  manifest 與三種語言專屬檔案；Python 相容性入口只跑 `runtime and not large` 的最小 smoke、
   建置 wheel 並從隔離環境 import。
-- **One representative end-to-end profile：**full regression 只挑一個 Python＋TypeScript 組合；
-  生成 repo 用 `scripts/verify full`，Rust 只跑專屬 `scripts/verify rust`，不再重跑
-  repository-wide checks。三種語言都有真實原生工具鏈證據；create／adopt／update 的保存契約
+- **One representative end-to-end profile：**full regression 只挑一個 Python＋TypeScript＋Rust 組合；
+  生成 repo 用 `scripts/verify full` 一次涵蓋三種真實原生工具鏈，不再按語言重跑
+  repository-wide checks。create／adopt／update 的保存契約
   則繼續由 root 的 `large` regression 提供，不用每種單語言 profile 再跑一次完整 verifier。
 
-pytest marker 契約延續 #317／PR #364：`runtime` 表示每個受支援 Python runtime 都必須執行
-的最小行為；`quarantine` 不會 skip、xfail 或 retry 測試，只附加追蹤資料。每個 quarantine
-必須使用具名的 `owner`、完整 GitHub Issue URL `issue`、非空白 `reason`、ISO 日期
-`expires` 與非空白 `remove_when`；欄位缺漏、格式錯誤或到期時，collection 直接 fail
-closed。這個 marker 不得
-用來讓 required gate 忽略失敗。
+pytest marker 契約只保留有執行責任的兩種標記：`runtime` 表示每個受支援 Python runtime 都必須執行
+的最小行為，`large` 表示只由 full regression 執行的真實 Copier lifecycle、release publication
+transaction 或原生工具鏈案例。
+#812 確認 `quarantine` 沒有現役使用者後，刪除其 collection hook、專用 policy script 與測試，避免維護
+不會影響執行結果的空框架。
 
 所有本機驗證入口共用 `scripts/verification-step`：每一步在開始與結束時印出名稱與 wall
 time；執行超過 60 秒時每 60 秒輸出 heartbeat；失敗時先指出第一個失敗步驟、exit status、
@@ -1336,8 +1390,8 @@ TOTAL（4002 秒／66 分 42 秒，尤其是 Regression tests 一階段的 3971 
 七個階段秒數總和（10+10+2+2+3971+6+1）等於同次執行回報的 TOTAL 4002 秒。
 
 `scripts/ci_tier.py` 另外輸出 `run_governance`／`run_osv`／`run_zizmor`／`upload_site`
-四個欄位，供 plan 摘要與相容呼叫端使用；本機 `verify-fast` 直接以同一份 plan 的 `scopes` 調度子集，
-hosted `verify` 則用同一組 scopes 驗證 trailer 涵蓋，不維護第二套分類邏輯。
+四個欄位，供 plan 摘要與相容呼叫端使用；本機與 hosted `verify-fast` 直接以同一份 plan 的 `scopes`
+調度子集，不維護第二套分類邏輯。
 
 `scripts/resolve-cache-root` 預設已經是使用者層級、跨 worktree 共用的位置（macOS 為
 `~/Library/Caches/csarc`；Linux／WSL2 依 XDG Base Directory 慣例，優先讀
@@ -1363,8 +1417,8 @@ Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本
 **先判斷要不要在本機跑，依序四步：**
 
 1. 這張 PR 本身是不是 full-tier 邊界？不是的話，不必為了保險另外在本機跑一次 full；本機
-   義務仍是對應分級的 `./scripts/verify-fast`（tier 由變更範圍決定），用來取得送出前的
-   快速回饋；required merge evidence 由 hosted `verify` 自行產生。
+   只需執行變更 owner 的 focused checks，`./scripts/verify-fast` 留作需要廣泛診斷時的選項；
+   required merge evidence 由 hosted `verify` 對 exact candidate 執行一次 risk-owned suite 產生。
 2. 是 full-tier 邊界：這個 branch 自己這一輪內容有沒有本機全綠跑過一次
    `./scripts/verify-template.sh`（生成 repo 是 `./scripts/verify`）？沒有的話，這正是
    #458 規則要求的那一次，不能省略。

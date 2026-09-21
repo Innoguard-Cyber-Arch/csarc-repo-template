@@ -124,6 +124,7 @@ def test_check_template_update_fails_closed_on_check_error(
 
 
 @pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.large
 def test_template_update_notification_is_opt_in(
     tmp_path: Path, enabled: bool
 ) -> None:

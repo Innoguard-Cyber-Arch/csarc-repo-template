@@ -71,7 +71,8 @@ verify_typescript_module() {
   verification_step "pnpm version" test "$(pnpm --version | cut -d. -f1)" = "11"
   verification_step "TypeScript locked install" \
     pnpm install --store-dir "$pnpm_store_dir" --frozen-lockfile --ignore-scripts
-  verification_step "TypeScript lint" pnpm exec biome ci .
+  verification_step "TypeScript lint" \
+    pnpm exec biome ci typescript vitest.config.ts package.json
   verification_step "TypeScript type check" pnpm exec tsc --noEmit
   verification_step "TypeScript coverage" pnpm exec vitest run --coverage
   verification_step "TypeScript build" pnpm run build

@@ -152,10 +152,12 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     assert workflow["jobs"]["verify"]["timeout-minutes"] == 30
 
     source = path.read_text(encoding="utf-8")
-    assert 'cp scripts/ci_tier.py "$RUNNER_TEMP/ci_tier.py"' in source
-    assert 'python3 "$RUNNER_TEMP/ci_tier.py"' in source
+    assert "Preserve the trusted verification policy" in source
+    assert 'python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py"' in source
     assert "Check out the exact candidate" in source
     assert "Execute trusted verification tier=" in source
+    assert "Reuse trusted verification tier=" in source
+    assert "Validate trusted clean sync tier=fast" in source
     assert "./scripts/verify-fast" in source
     assert "./scripts/verify-template.sh" in source
     assert "check-verify-attestation" not in source
@@ -174,12 +176,12 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
 
     assert "jobs:\n  verify:" in source
     assert (
-        "types: [opened, reopened, synchronize, edited, labeled, unlabeled]"
-        in source
+        "types: [opened, reopened, synchronize, edited, labeled, unlabeled, "
+        "ready_for_review, converted_to_draft]" in source
     )
     assert "timeout-minutes: 30" in source
-    assert 'cp scripts/ci_tier.py "$RUNNER_TEMP/ci_tier.py"' in source
-    assert 'python3 "$RUNNER_TEMP/ci_tier.py"' in source
+    assert "Preserve the trusted verification policy" in source
+    assert 'python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py"' in source
     assert "Execute trusted verification tier=" in source
     assert "./scripts/verify-fast" in source
     assert "./scripts/verify" in source
@@ -244,7 +246,8 @@ def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
         assert all(index < hosted_index for index, _ in toolchain)
         source_contracts = []
         for _, step in toolchain:
-            assert "if" not in step
+            assert "steps.reuse.outputs.reuse != 'true'" in step["if"]
+            assert "steps.sync.outputs.clean != 'true'" in step["if"]
             source_contracts.append(str(step.get("uses", "rustup")))
         contracts.append(source_contracts)
 
@@ -254,6 +257,24 @@ def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
         for item in contracts[0]
         if not item.startswith("actions/setup-python@")
     ]
+
+
+def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
+    """Keep metadata reuse and clean-sync proof ahead of heavy setup."""
+    source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
+        encoding="utf-8"
+    )
+
+    preflight = source.index("Validate synchronization structure")
+    setup = source.index("Set up Python 3.14")
+    execute = source.index("Execute trusted verification tier=")
+    assert preflight < setup < execute
+    assert "--find-reusable" in source
+    assert '--exclude-run-id "$GITHUB_RUN_ID"' in source
+    assert "base-sha=${{ steps.identity.outputs.base_sha }}" in source
+    assert "source-run=${{ steps.reuse.outputs.source_run }}" in source
+    assert "steps.reuse.outputs.reuse != 'true'" in source
+    assert "steps.sync.outputs.clean != 'true'" in source
 
 
 def test_verifiers_do_not_call_removed_attestation_helpers() -> None:
@@ -332,12 +353,12 @@ def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
         assert staleness_check in gate
 
 
-def test_template_smoke_reads_config_from_the_generated_repository() -> None:
-    """Resolve the generated config relative to the generated repository."""
+def test_routine_verification_does_not_render_a_generated_project() -> None:
+    """Keep real Copier create, adopt, and update work in the full suite."""
     source = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
 
-    assert "python3 scripts/csarc_config.py languages" in source
-    assert 'read_generated_languages "$smoke_root/project"' in source
+    assert "copier copy" not in source
+    assert "read_generated_languages" not in source
 
 
 def test_verification_steps_report_progress_heartbeat_and_rerun() -> None:
@@ -519,8 +540,8 @@ def test_release_verification_contains_issue_pr_regressions() -> None:
     assert generated_issue <= generated_release
 
 
-def test_issue_pr_policy_regressions_run_only_for_relevant_scopes() -> None:
-    """Avoid rerunning policy fixtures for unrelated source changes."""
+def test_long_policy_regressions_run_only_in_full() -> None:
+    """Keep shell lifecycle integration out of the bounded fast path."""
     expected = {
         "./scripts/test-issue-triage",
         "./scripts/test-pr-policy",
@@ -530,22 +551,17 @@ def test_issue_pr_policy_regressions_run_only_for_relevant_scopes() -> None:
         "scripts/verify-fast",
         "template/scripts/verify-fast.jinja",
     ):
-        source = (
-            (REPO_ROOT / path).read_text(encoding="utf-8").replace("\\\n", " ")
+        source = (REPO_ROOT / path).read_text(encoding="utf-8")
+        assert expected.isdisjoint(
+            re.findall(r"\./scripts/test-[A-Za-z0-9-]+", source)
         )
-        gate_start = source.index('if [[ "$scopes" == *,governance,*')
-        gate_end = source.index("\nfi", gate_start)
-        gate = source[gate_start:gate_end]
 
-        assert expected <= set(
-            re.findall(r"\./scripts/test-[A-Za-z0-9-]+", gate)
-        )
-        assert all(
-            scope in gate
-            for scope in ("governance", "template", "workflow", "shell")
-        )
-        assert "source" not in gate
-        assert "dependency" not in gate
+    assert expected <= direct_regression_commands(
+        "scripts/verify-stage-regression-tests"
+    )
+    assert expected <= direct_regression_commands(
+        "template/scripts/verify.jinja"
+    )
 
 
 def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:

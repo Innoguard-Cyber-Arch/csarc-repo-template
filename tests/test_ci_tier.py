@@ -188,7 +188,7 @@ def test_standalone_workflows_and_other_scripts_stay_fast(path: str) -> None:
 
 
 def _run_stubbed_verify_fast(
-    tmp_path: Path, changed_path: str
+    tmp_path: Path, changed_path: str, *, extra_scopes: str = "source"
 ) -> tuple[str, str]:
     """Run the real local planner while replacing expensive check bodies."""
     repo = tmp_path / "repo"
@@ -252,7 +252,7 @@ def _run_stubbed_verify_fast(
         environment.pop(name, None)
     environment.update(
         {
-            "CSARC_CI_SCOPES": "source",
+            "CSARC_CI_SCOPES": extra_scopes,
             "CSARC_CI_TIER": "baseline",
             "CSARC_TEST_LOG": str(log),
             "CSARC_VERIFICATION_SUITE": "baseline",
@@ -288,6 +288,79 @@ def test_local_verify_fast_computes_dependency_scope(
     output, log = _run_stubbed_verify_fast(tmp_path, lockfile)
     assert "suite=fast scopes=dependency,source" in output
     assert "Dependency scan ./scripts/verify-dependencies" in log
+
+
+@pytest.mark.parametrize(
+    ("path", "runs_python"),
+    [
+        ("README.md", False),
+        ("uv.lock", False),
+        (".github/workflows/ci.yml", True),
+        ("src/pkg/core.py", True),
+    ],
+)
+def test_fast_gate_runs_python_only_for_its_risk_owners(
+    tmp_path: Path, path: str, runs_python: bool
+) -> None:
+    """Docs and dependencies skip unrelated Python regression work."""
+    _output, log = _run_stubbed_verify_fast(tmp_path, path, extra_scopes="")
+    assert ("Bounded Python regression suite" in log) is runs_python
+
+
+@pytest.mark.parametrize(
+    ("path", "extra_scopes", "included", "excluded"),
+    [
+        (
+            ".github/workflows/ci.yml",
+            "",
+            "tests/test_ci_tier.py",
+            "tests/test_cli.py",
+        ),
+        (
+            "scripts/apply-repository-settings.sh",
+            "",
+            "tests/test_apply_repository_settings.py",
+            "tests/test_cli.py",
+        ),
+        (
+            "src/pkg/core.py",
+            "",
+            "tests/test_cli.py",
+            "tests/test_ci_tier.py",
+        ),
+        (
+            "tests/test_pr_lifecycle.py",
+            "",
+            "tests/test_pr_lifecycle.py",
+            "tests/test_ci_tier.py",
+        ),
+        (
+            "README.md",
+            "template",
+            "tests/test_language_profiles.py",
+            "tests/test_release_publish.py",
+        ),
+    ],
+)
+def test_fast_gate_selects_only_scope_owner_tests(
+    tmp_path: Path,
+    path: str,
+    extra_scopes: str,
+    included: str,
+    excluded: str,
+) -> None:
+    """Execute owner files without falling back to the whole test tree."""
+    _output, log = _run_stubbed_verify_fast(
+        tmp_path, path, extra_scopes=extra_scopes
+    )
+    command = next(
+        line
+        for line in log.splitlines()
+        if line.startswith("Bounded Python regression suite ")
+    )
+    assert included in command
+    assert excluded not in command
+    assert not command.endswith(" tests")
 
 
 def test_workflow_rename_keeps_old_and_new_paths(tmp_path: Path) -> None:
@@ -456,3 +529,45 @@ def test_manual_and_merge_queue_runs_are_full() -> None:
     queued = classify("merge_group", "main", "queue", set(), ["README.md"])
     assert manual.tier == queued.tier == "full"
     assert manual.upload_site
+
+
+def test_draft_caps_full_work_until_ready() -> None:
+    """Draft pushes stay fast and the same ready head returns to full."""
+    draft = classify(
+        "pull_request",
+        "main",
+        "dev/m14-ci",
+        set(),
+        ["src/pkg/core.py"],
+        draft=True,
+    )
+    ready = classify(
+        "pull_request",
+        "main",
+        "dev/m14-ci",
+        set(),
+        ["src/pkg/core.py"],
+    )
+    assert draft.tier == "fast"
+    assert ready.tier == "full"
+
+
+def test_clean_sync_requires_explicit_structural_proof() -> None:
+    """A sync-like branch name cannot select the cheap route by itself."""
+    ordinary = classify(
+        "pull_request",
+        "dev/m14-ci",
+        "sync/main-to-m14-ci-aaaaaaaaaaaa",
+        set(),
+        [],
+    )
+    verified = classify(
+        "pull_request",
+        "dev/m14-ci",
+        "sync/main-to-m14-ci-aaaaaaaaaaaa",
+        set(),
+        [],
+        verified_sync=True,
+    )
+    assert ordinary.tier == "full"
+    assert verified.tier == "fast"

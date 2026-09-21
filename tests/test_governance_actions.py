@@ -173,6 +173,7 @@ def test_reviewer_assignment_accepts_a_bot_author(tmp_path: Path) -> None:
     ("option", "enabled"),
     [({}, True), ({"enable_governance_drift_check": False}, False)],
 )
+@pytest.mark.large
 def test_copier_governance_drift_option_is_complete(
     tmp_path: Path, option: dict[str, bool], enabled: bool
 ) -> None:
