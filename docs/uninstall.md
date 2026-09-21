@@ -131,7 +131,6 @@ scripts/lint-workflows-shell
 scripts/pr_lifecycle.py
 scripts/promotion_gate.py
 scripts/publish-release
-scripts/release_assets.py
 scripts/release_bundle.py
 scripts/release_policy.py
 scripts/render_site.py

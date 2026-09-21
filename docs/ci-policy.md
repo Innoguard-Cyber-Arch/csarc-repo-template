@@ -1,8 +1,7 @@
 # CI/CD 設定與交付邊界
 
-本頁只描述 2026-09-01 在 repository 內可執行、可由 live run 證明的設定。尚待其他 owner
-處理的歷史設計位於 `archive/ci-cd/2026-08-27/` 且不下發；已決定不恢復的版本／交付
-workflow 已刪除，歷史由 Git／Issue／PR 保存。舊 Issue 完成或舊 run 成功，都不等於目前
+本頁只描述 2026-09-01 在 repository 內可執行、可由 live run 證明的設定。已決定不恢復的
+版本／交付 workflow 已刪除，歷史只由 Git／Issue／PR 保存，不在目前 tree 保留副本。舊 Issue 完成或舊 run 成功，都不等於目前
 active。版本、發版與成品責任的完整盤點見中央模板的
 [版本／交付 ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。
 

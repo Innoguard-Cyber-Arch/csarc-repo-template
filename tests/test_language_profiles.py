@@ -62,15 +62,12 @@ def test_detect_languages_composes_selected_modules(
     """Detect modules without defining combination-specific branches."""
     (tmp_path / "Cargo.toml").touch()
     assert cli.detect_languages(tmp_path) == ["rust"]
-    assert cli.detect_language(tmp_path) == "rust"
 
     (tmp_path / "pyproject.toml").touch()
     assert cli.detect_languages(tmp_path) == ["python", "rust"]
-    assert cli.detect_language(tmp_path) == "python-rust"
 
     (tmp_path / "package.json").touch()
     assert cli.detect_languages(tmp_path) == ["python", "rust", "typescript"]
-    assert cli.detect_language(tmp_path) == "python-rust-typescript"
 
 
 def test_copier_uses_one_yaml_config_for_language_modules(

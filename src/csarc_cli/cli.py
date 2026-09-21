@@ -979,11 +979,6 @@ def detect_languages(target: Path) -> list[str]:
     ]
 
 
-def detect_language(target: Path) -> str:
-    """Return the legacy profile label for compatibility."""
-    return "-".join(detect_languages(target)) or "ci"
-
-
 def selected_languages(answers: dict[str, object]) -> set[str]:
     """Read new module answers with a legacy profile fallback."""
     selected = answers.get("languages")
@@ -2597,16 +2592,6 @@ def checked_destination(root: Path, relative_name: str) -> Path:
                 f"{relative_name}"
             )
     return root / relative
-
-
-def copy_additions(stage: Path, target: Path, paths: tuple[str, ...]) -> None:
-    """Copy only files that the plan classified as additions."""
-    target.mkdir(parents=True, exist_ok=True)
-    for relative_name in paths:
-        source = stage / relative_name
-        destination = target / relative_name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination, follow_symlinks=False)
 
 
 def copy_candidate_files(

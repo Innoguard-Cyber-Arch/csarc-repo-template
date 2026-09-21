@@ -334,9 +334,6 @@ def test_governance_workflows_are_thin_and_least_privilege() -> None:
         ROOT / "template/scripts/request-reviewer"
     ).read_bytes()
     assert not (ROOT / ".github/workflows/governance-drift.yml").exists()
-    assert not list(
-        (ROOT / "archive/ci-cd/2026-08-27").rglob("*governance*.yml")
-    )
     assert "pull_request_target:" in reviewer
     assert "ref: ${{ github.event.pull_request.base.sha }}" in reviewer
     assert "pull-requests: write" in reviewer
