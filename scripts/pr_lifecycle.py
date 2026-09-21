@@ -21,13 +21,21 @@ from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    dependabot_auth = importlib.import_module("authenticate_dependabot_head")
     promotion_gate = importlib.import_module("promotion_gate")
     release_level = importlib.import_module("release_level")
     review_gate = importlib.import_module("review_gate")
+    verification_evidence = importlib.import_module("verification_evidence")
 else:
+    dependabot_auth = importlib.import_module(
+        f"{__package__}.authenticate_dependabot_head"
+    )
     promotion_gate = importlib.import_module(f"{__package__}.promotion_gate")
     release_level = importlib.import_module(f"{__package__}.release_level")
     review_gate = importlib.import_module(f"{__package__}.review_gate")
+    verification_evidence = importlib.import_module(
+        f"{__package__}.verification_evidence"
+    )
 
 
 LEASE_SCHEMA = 2
@@ -59,7 +67,38 @@ BLOCKER_RESOLVED = re.compile(
 )
 DRAFT_EVENTS = {"convert_to_draft", "converted_to_draft"}
 REVIEW_CHECK_CONTEXT = "review"
+DEPENDABOT_ELIGIBILITY_CONTEXT = "dependabot-merge-eligible"
+GITHUB_ACTIONS_APP_ID = 15368
 SUCCESSFUL_CHECK_CONCLUSIONS = {"neutral", "skipped", "success"}
+TRUSTED_CHECK_PRODUCERS: dict[str, tuple[str, frozenset[str]]] = {
+    DEPENDABOT_ELIGIBILITY_CONTEXT: (
+        ".github/workflows/dependabot-auto-merge.yml",
+        frozenset({"pull_request_target"}),
+    ),
+    "title": (
+        ".github/workflows/pr-policy.yml",
+        frozenset({"merge_group", "pull_request_target"}),
+    ),
+    "promotion": (
+        ".github/workflows/pr-policy.yml",
+        frozenset({"merge_group", "pull_request_target"}),
+    ),
+    "verify": (
+        ".github/workflows/ci.yml",
+        frozenset({"merge_group", "pull_request_target"}),
+    ),
+    "review": (
+        ".github/workflows/pr-review.yml",
+        frozenset(
+            {
+                "issue_comment",
+                "merge_group",
+                "pull_request_review",
+                "pull_request_target",
+            }
+        ),
+    ),
+}
 MAINTAINER_PERMISSIONS = {"admin", "maintain"}
 REVIEWED_MERGE_BYPASS_ACTORS = [
     {
@@ -1471,7 +1510,7 @@ def effective_protection(  # noqa: C901
     alpha_self_merge: bool = False,
     reviewed_merge: bool = False,
     copilot_mode: bool = False,
-) -> tuple[str, str, set[tuple[str, int | None]], bool, bool]:
+) -> tuple[str, str, set[tuple[str, int]], bool, bool]:
     """Prove review and check enforcement for an exact-head merge."""
     try:
         rules = github.get(
@@ -1543,13 +1582,8 @@ def effective_protection(  # noqa: C901
         not isinstance(item, dict)
         or not isinstance(item.get("context"), str)
         or not item["context"]
-        or (
-            item.get("integration_id") is not None
-            and (
-                type(item.get("integration_id")) is not int
-                or item["integration_id"] <= 0
-            )
-        )
+        or type(item.get("integration_id")) is not int
+        or item["integration_id"] <= 0
         for item in required_items
     ):
         return (
@@ -1560,7 +1594,7 @@ def effective_protection(  # noqa: C901
             False,
         )
     required_contexts = {
-        (str(item["context"]), item.get("integration_id"))
+        (str(item["context"]), int(item["integration_id"]))
         for item in required_items
         if isinstance(item, dict)
     }
@@ -1723,19 +1757,253 @@ def effective_protection(  # noqa: C901
 
 
 def check_run_matches_context(
-    item: dict[str, Any], context: str, integration_id: int | None
+    item: dict[str, Any], context: str, integration_id: int
 ) -> bool:
     """Match a check only when its pinned GitHub App identity is exact."""
     if item.get("name") != context:
         return False
-    if integration_id is None:
-        return True
     app = item.get("app")
     return (
         isinstance(app, dict)
         and type(app.get("id")) is int
         and app["id"] > 0
         and app["id"] == integration_id
+    )
+
+
+def trusted_check_run_matches_context(
+    github: GitHub,
+    repo: str,
+    head_sha: str,
+    item: dict[str, Any],
+    context: str,
+    integration_id: int,
+    run_cache: dict[int, dict[str, Any]],
+) -> bool:
+    """Match a required check to its trusted workflow and event."""
+    if item.get("head_sha") != head_sha or not check_run_matches_context(
+        item, context, integration_id
+    ):
+        return False
+    producer = TRUSTED_CHECK_PRODUCERS.get(context)
+    if producer is None:
+        return False
+    try:
+        run_url = actions_run_url(str(item.get("details_url") or ""), repo)
+    except RuntimeError:
+        return False
+    run_id = int(run_url.rsplit("/", 1)[1])
+    if run_id not in run_cache:
+        payload = github.get(repo, f"actions/runs/{run_id}")
+        if not isinstance(payload, dict):
+            raise RuntimeError("Required check Actions run is malformed")
+        run_cache[run_id] = payload
+    run = run_cache[run_id]
+    repository = run.get("repository")
+    check_suite = item.get("check_suite")
+    workflow_path, trusted_events = producer
+    return (
+        type(run.get("id")) is int
+        and run["id"] == run_id
+        and isinstance(check_suite, dict)
+        and type(check_suite.get("id")) is int
+        and check_suite["id"] > 0
+        and type(run.get("check_suite_id")) is int
+        and run["check_suite_id"] == check_suite["id"]
+        and run.get("head_sha") == head_sha
+        and isinstance(repository, dict)
+        and repository.get("full_name") == repo
+        and run.get("path") == workflow_path
+        and run.get("event") in trusted_events
+    )
+
+
+def trusted_required_check_runs(
+    github: GitHub,
+    repo: str,
+    head_sha: str,
+    contexts: set[tuple[str, int]],
+    check_runs: list[dict[str, Any]],
+) -> tuple[dict[tuple[str, int], dict[str, Any]], dict[int, dict[str, Any]]]:
+    """Select each newest check once after validating trusted provenance."""
+    run_cache: dict[int, dict[str, Any]] = {}
+    required_runs: dict[tuple[str, int], dict[str, Any]] = {}
+    for context, integration_id in contexts:
+        candidates = [
+            item
+            for item in check_runs
+            if trusted_check_run_matches_context(
+                github,
+                repo,
+                head_sha,
+                item,
+                context,
+                integration_id,
+                run_cache,
+            )
+        ]
+        if candidates:
+            required_runs[(context, integration_id)] = max(
+                candidates, key=lambda item: int(item["id"])
+            )
+    return required_runs, run_cache
+
+
+def require_trusted_dependabot_head(
+    github: GitHub,
+    repo: str,
+    pull: dict[str, Any],
+    head_sha: str,
+    base_sha: str,
+) -> str:
+    """Reauthenticate one exact Dependabot head and its trusted eligibility."""
+    eligible, reason, live_base_sha, _, live_head_sha = (
+        dependabot_auth.validated_dependabot_snapshot(pull, repo)
+    )
+    if not eligible or live_base_sha != base_sha or live_head_sha != head_sha:
+        raise RuntimeError(f"Dependabot merge identity is invalid: {reason}")
+
+    commit = github.get(repo, f"commits/{head_sha}")
+    comparison = github.get(repo, f"compare/{base_sha}...{head_sha}")
+    if not isinstance(commit, dict) or not isinstance(comparison, dict):
+        raise RuntimeError("Dependabot head metadata is unavailable")
+    direct, direct_reason = dependabot_auth.authenticated_dependabot_head(
+        pull, commit, repo, base_sha
+    )
+    kind = "direct"
+    if not direct:
+        parents = commit.get("parents")
+        parent_sha = (
+            (parents[0] or {}).get("sha")
+            if isinstance(parents, list) and len(parents) == 1
+            else ""
+        )
+        if not isinstance(parent_sha, str) or SHA.fullmatch(parent_sha) is None:
+            raise RuntimeError(
+                "Dependabot head is not authenticated: " + direct_reason
+            )
+        parent_commit = github.get(repo, f"commits/{parent_sha}")
+        parent_comparison = github.get(
+            repo, f"compare/{base_sha}...{parent_sha}"
+        )
+        child, child_reason, _, _ = (
+            dependabot_auth.trusted_sync_child_candidate(
+                pull,
+                commit,
+                parent_commit if isinstance(parent_commit, dict) else {},
+                (
+                    parent_comparison
+                    if isinstance(parent_comparison, dict)
+                    else {}
+                ),
+                repo,
+                base_sha,
+            )
+        )
+        if not child:
+            raise RuntimeError(
+                "Dependabot head is not authenticated: "
+                f"{direct_reason}; {child_reason}"
+            )
+        kind = "sync-child"
+
+    check_runs = github.collection(
+        repo,
+        f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
+        "check_runs",
+    )
+    identity = (DEPENDABOT_ELIGIBILITY_CONTEXT, GITHUB_ACTIONS_APP_ID)
+    selected, _ = trusted_required_check_runs(
+        github, repo, head_sha, {identity}, check_runs
+    )
+    check = selected.get(identity)
+    if (
+        check is None
+        or check.get("status") != "completed"
+        or check.get("conclusion") != "success"
+    ):
+        raise RuntimeError(
+            "Dependabot head has no trusted merge eligibility on the exact head"
+        )
+    return kind
+
+
+def require_trusted_verification(
+    github: GitHub,
+    repo: str,
+    head_sha: str,
+    integration_id: int,
+    *,
+    max_age_hours: float = 24.0,
+    required_tier: str | None = None,
+    now: datetime | None = None,
+    check_runs: list[dict[str, Any]] | None = None,
+) -> dict[str, object]:
+    """Require fresh hosted execution evidence for one exact commit."""
+    available = (
+        check_runs
+        if check_runs is not None
+        else github.collection(
+            repo,
+            f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
+            "check_runs",
+        )
+    )
+    identity = ("verify", integration_id)
+    selected, run_cache = trusted_required_check_runs(
+        github, repo, head_sha, {identity}, available
+    )
+    check_run = selected.get(identity)
+    if check_run is None:
+        raise RuntimeError(
+            "Required verify check has no trusted producer on the exact head"
+        )
+    run_url = actions_run_url(str(check_run.get("details_url") or ""), repo)
+    run_id = int(run_url.rsplit("/", 1)[1])
+    workflow_run = run_cache[run_id]
+    commit = github.get(repo, f"git/commits/{head_sha}")
+    tree = commit.get("tree") if isinstance(commit, dict) else None
+    tree_sha = tree.get("sha") if isinstance(tree, dict) else None
+    if not isinstance(tree_sha, str):
+        raise RuntimeError("Exact-head Git tree identity is unavailable")
+    jobs = github.collection(
+        repo,
+        f"actions/runs/{run_id}/jobs?filter=latest&per_page=100",
+        "jobs",
+    )
+    matching_jobs = [
+        job
+        for job in jobs
+        if job.get("html_url") == check_run.get("details_url")
+    ]
+    if len(matching_jobs) != 1:
+        raise RuntimeError("Trusted verify check has no unique Actions job")
+    return verification_evidence.validate_verification_job(
+        check_run,
+        workflow_run,
+        matching_jobs[0],
+        repo=repo,
+        head_sha=head_sha,
+        tree_sha=tree_sha,
+        now=now,
+        max_age_hours=max_age_hours,
+        required_tier=required_tier,
+        full_command=(
+            "./scripts/verify-template.sh"
+            if Path("scripts/verify-template.sh").is_file()
+            else "./scripts/verify"
+        ),
+        expected_toolchain=(
+            {
+                "python-3.14",
+                "uv-0.12.15",
+                "pnpm-11.22.0",
+                "node-24",
+                "rust-1.98.0",
+            }
+            if Path("scripts/verify-template.sh").is_file()
+            else None
+        ),
     )
 
 
@@ -1778,7 +2046,7 @@ def require_successful_checks(  # noqa: C901
     github: GitHub,
     repo: str,
     head_sha: str,
-    contexts: set[tuple[str, int | None]],
+    contexts: set[tuple[str, int]],
     quota_run_urls: set[str] | None = None,
 ) -> str:
     """Require protected contexts to pass or have exact quota evidence."""
@@ -1788,34 +2056,42 @@ def require_successful_checks(  # noqa: C901
         "check_runs",
     )
     authoritative_runs = authoritative_check_runs(check_runs, head_sha)
+    required_runs, _run_cache = trusted_required_check_runs(
+        github, repo, head_sha, contexts, check_runs
+    )
     statuses = github.collection(
         repo,
         f"commits/{head_sha}/status?per_page=100",
         "statuses",
         head_sha,
     )
-    passing_runs = [
-        item
-        for item in authoritative_runs
-        if item.get("head_sha") == head_sha
-        and item.get("status") == "completed"
-        and item.get("conclusion") in SUCCESSFUL_CHECK_CONCLUSIONS
-    ]
-    passing_statuses = {
-        item.get("context")
-        for item in statuses
-        if item.get("state") == "success"
-    }
     missing = [
         (context, integration_id)
         for context, integration_id in contexts
-        if not any(
-            check_run_matches_context(item, context, integration_id)
-            for item in passing_runs
+        if (item := required_runs.get((context, integration_id))) is None
+        or item.get("status") != "completed"
+        or (
+            item.get("conclusion") != "success"
+            if context == "verify"
+            else item.get("conclusion") not in SUCCESSFUL_CHECK_CONCLUSIONS
         )
-        and not (integration_id is None and context in passing_statuses)
     ]
-    missing.sort(key=lambda item: (item[0], -1 if item[1] is None else item[1]))
+    missing.sort()
+    for context, integration_id in contexts:
+        item = required_runs.get((context, integration_id))
+        if (
+            context == "verify"
+            and item is not None
+            and item.get("status") == "completed"
+            and item.get("conclusion") == "success"
+        ):
+            require_trusted_verification(
+                github,
+                repo,
+                head_sha,
+                integration_id,
+                check_runs=check_runs,
+            )
     if quota_run_urls:
         non_quota_failures: set[str] = set()
         for item in authoritative_runs:
@@ -1850,20 +2126,21 @@ def require_successful_checks(  # noqa: C901
     if not missing:
         return "quota-fallback" if quota_run_urls else "success"
     if quota_run_urls:
+        if any(context == "verify" for context, _integration_id in missing):
+            raise RuntimeError(
+                "Quota fallback cannot replace trusted verify "
+                "execution evidence"
+            )
         for context, integration_id in missing:
-            failed_runs = [
-                item
-                for item in authoritative_runs
-                if item.get("name") == context
-                and item.get("head_sha") == head_sha
-                and item.get("status") == "completed"
-                and item.get("conclusion") == "failure"
-                and check_run_matches_context(item, context, integration_id)
-            ]
-            if len(failed_runs) != 1:
+            failed_run = required_runs.get((context, integration_id))
+            if (
+                failed_run is None
+                or failed_run.get("status") != "completed"
+                or failed_run.get("conclusion") != "failure"
+            ):
                 break
             run_url = actions_run_url(
-                str(failed_runs[0].get("details_url") or ""), repo
+                str(failed_run.get("details_url") or ""), repo
             )
             if run_url not in quota_run_urls:
                 break
@@ -1979,6 +2256,7 @@ def merge_snapshot(  # noqa: C901
     authorization_url: str = "",
     explicit_actor: str = "",
     quota_fallback_note_url: str = "",
+    require_dependabot_head: bool = False,
 ) -> dict[str, object]:
     """Re-read every mutable merge input while the lease is held."""
     repo = lease["repository"]
@@ -1986,6 +2264,13 @@ def merge_snapshot(  # noqa: C901
     head_sha = lease["head_sha"]
     require_lease(github, lease, repo, pr_number, head_sha)
     pull = live_pull(github, repo, pr_number, head_sha)
+    dependabot_head = (
+        require_trusted_dependabot_head(
+            github, repo, pull, str(head_sha), str(lease["base_sha"])
+        )
+        if require_dependabot_head
+        else ""
+    )
     if pull.get("draft") is not False:
         raise RuntimeError("Pull request is Draft at merge time")
     if UNCHECKED.search(str(pull.get("body") or "")):
@@ -2172,16 +2457,8 @@ def merge_snapshot(  # noqa: C901
         repo,
         base_ref,
         alpha_self_merge,
-        # "comment" only ever arises from `alpha_self_merge` (Issue
-        # #775): the exact-head authorization comment is independently
-        # verified by `authorization()` (maintainer permission, exact
-        # body, exact head SHA), the same trust basis as a native
-        # `review` approval or a clean `copilot` review. Excluding it
-        # here made every alpha self-merge -- default-branch or not --
-        # permanently fail this repo's own live `bypass_actors` (added
-        # by #580 for exactly this structural self-approval case) as an
-        # "unverified bypass", forcing every historical alpha merge back
-        # to a manual `gh pr merge --admin`.
+        # A reviewed bypass is limited to an explicitly selected bypass
+        # route whose exact-head authorization was independently verified.
         bypass_route is not None
         and authorization_source
         in {"review", "copilot", "comment", "hotfix-emergency"},
@@ -2265,6 +2542,7 @@ def merge_snapshot(  # noqa: C901
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
         "alpha_self_merge": alpha_self_merge,
+        "dependabot_head": dependabot_head,
         "hotfix_evidence": hotfix_evidence,
     }
 
@@ -2396,6 +2674,7 @@ def check(args: argparse.Namespace, github: GitHub) -> None:
         args.authorization_url,
         getattr(args, "actor", ""),
         getattr(args, "quota_fallback_note_url", ""),
+        getattr(args, "require_dependabot_head", False),
     )
     sys.stdout.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
 
@@ -2459,6 +2738,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
         args.authorization_url,
         getattr(args, "actor", ""),
         getattr(args, "quota_fallback_note_url", ""),
+        getattr(args, "require_dependabot_head", False),
     )
     if snapshot["merge_mode"] != "agent":
         raise RuntimeError(
@@ -2500,6 +2780,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
         args.authorization_url,
         getattr(args, "actor", ""),
         getattr(args, "quota_fallback_note_url", ""),
+        getattr(args, "require_dependabot_head", False),
     )
     title = str(snapshot["title"])
     confirm_refs(lease)
@@ -3131,24 +3412,15 @@ def canonical_scanner_helper(root: Path, path: Path) -> bool:
 def dependabot_auto_merge_exemption(root: Path, path: Path) -> bool:
     """Trust the two exact dependabot-auto-merge.yml paths (see #602).
 
-    `gh pr merge --auto` only enqueues the pull request in GitHub's native
-    auto-merge queue; unlike the writes this scanner otherwise fails closed
-    on, it is not itself an immediate state mutation. The actual merge only
-    happens later, and only once GitHub confirms the required
-    `title`/`promotion`/`verify` checks and the branch protection review
-    requirement in policies/rulesets.json are satisfied — the same
-    reasoning already documented next to `contents: write` in the workflow
-    file itself. `gh pr edit --add-label needs-manual-review` in the same
-    workflow only ever fires on major-version updates that are explicitly
-    routed to human review rather than merged, so it carries no lifecycle
-    race either. That means neither write is the immediate-write race the
-    lease mechanism exists to prevent, so a narrow, exact-path exemption is
-    safe here without routing these writes through the lease.
+    The only unleased write left in this workflow is the major-update
+    `needs-manual-review` label/comment. It never authorizes or performs a
+    merge; minor and patch updates use the separate exact-head workflow and
+    `pr_lifecycle.py` lease. Keeping this narrow exemption avoids taking the
+    shared main-lane lease for a non-merge classification notice.
 
     This is a positive list, not a pattern relaxation: only these two exact
     paths are trusted. A different file reusing the same unleased
-    `gh pr merge`/`gh pr edit --add-label` command text is still caught by
-    scan_writers.
+    `gh pr edit --add-label` command text is still caught by scan_writers.
 
     Every scanner exemption must have its own tracking Issue (#602 is this
     one's), and all exemptions are re-reviewed once the project leaves
@@ -3288,6 +3560,9 @@ def parser() -> argparse.ArgumentParser:
         if name in {"check", "merge"}:
             command.add_argument("--authorization-url", default="")
             command.add_argument("--quota-fallback-note-url", default="")
+            command.add_argument(
+                "--require-dependabot-head", action="store_true"
+            )
         if name == "state":
             command.add_argument(
                 "--state", choices=("ready", "draft"), required=True

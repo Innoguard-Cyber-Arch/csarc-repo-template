@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250), [#714](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/714), [#715](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/715), [#716](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/716)
+- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250), [#714](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/714), [#715](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/715), [#716](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/716), [#831](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/831)
 - **實作 PR：**[#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231)
 
 ## 問題與限制
@@ -25,6 +25,8 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 Candidate 內的 provenance、pending checkpoint 與 repo 外報告共用 hardened same-directory atomic writer：從可信 root 的 directory descriptor 逐層以 no-follow 語意開啟 ancestor，拒絕 destination symlink／special file，再用隨機且 exclusive 的同目錄暫存檔寫入、同步並 replace。可預測 `.tmp` symlink、ancestor symlink 或 destination symlink 都不得把資料寫到 root 外，也不得被靜默取代。
 
 Machine plan 與 pending checkpoint 只保存可比對資料，不承載新的程式執行權。若來源是開發用 unreleased commit，每一次 replay 都必須由當次 invocation 重新提供相同本機 source、完整 SHA 與 `--allow-unreleased`；正式 verified Release 則拒絕這些開發旗標。Replay 在執行 Copier task、target policy script 或 product hook 前，先顯示保存的完整 plan 並取得確認，確認後仍重建候選並維持原有 same-plan 比對。
+
+`init`、`adopt` 與 `adopt --finalize` 的所有 preview render 一律傳入 Copier `--skip-tasks`。明確核准後，CLI 重新解析同一個 immutable revision，以相同 answers 重建並比對 static preview，才在隔離 candidate 執行 task-bearing render；task 失敗或改寫已核准的 Copier answers 時停止，target 維持不變。
 
 需要人工合併時，第一份 plan 只建立 resumable checkpoint。人工完成清單後，`adopt --finalize --dry-run` 會從已驗證 template 重新推導 managed／manual 集合，在隔離 clone 建立靜態完成態候選，再把 checkpoint、人工結果、完整允許 working-tree state 與預期 artifacts 綁入新的 repo 外 plan。正式 finalize 只接受該 plan，並在核准後才執行候選驗證；直接 finalize、驗證失敗、非預期檔案或確認前後的任何漂移都停止。
 

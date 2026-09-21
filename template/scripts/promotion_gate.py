@@ -1003,17 +1003,37 @@ def require_distinct_paths(*paths: Path) -> None:
                 )
 
 
-def local_verification_command() -> list[str]:
-    """Select the checked-in verifier for root or generated repositories."""
-    for candidate in ("scripts/verify-template.sh", "scripts/verify"):
-        path = Path(candidate)
-        try:
-            mode = os.lstat(path).st_mode
-        except FileNotFoundError:
-            continue
-        if stat.S_ISREG(mode):
-            return [f"./{candidate}"]
-    raise RuntimeError("No repository verification command is available")
+def trusted_verification_command(repo: str, head_sha: str) -> list[str]:
+    """Return the fixed checker for trusted hosted execution evidence."""
+    candidate = Path("scripts/check-trusted-verification")
+    try:
+        mode = os.lstat(candidate).st_mode
+    except FileNotFoundError as error:
+        raise RuntimeError(
+            "Trusted verification evidence checker is unavailable"
+        ) from error
+    if not stat.S_ISREG(mode):
+        raise RuntimeError("Trusted verification evidence checker is unsafe")
+    return [
+        "./scripts/check-trusted-verification",
+        head_sha,
+        "--github-repo",
+        repo,
+        "--required-tier",
+        "full",
+    ]
+
+
+def require_trusted_verification(repo: str, head_sha: str) -> list[str]:
+    """Run the fixed checker and fail closed when evidence is unavailable."""
+    command = trusted_verification_command(repo, head_sha)
+    try:
+        subprocess.run(command, check=True)  # noqa: S603
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            "Candidate has no valid trusted verification evidence"
+        ) from error
+    return command
 
 
 def write_outputs(path: Path | None, values: dict[str, object]) -> None:
@@ -1265,7 +1285,7 @@ def require_zero_step_run(  # noqa: C901
         or run["id"] != int(run_id)
         or run.get("head_sha") != head_sha
         or run.get("head_branch") != head_ref
-        or run.get("event") != "pull_request"
+        or run.get("event") != "pull_request_target"
         or run.get("status") != "completed"
         or run.get("conclusion") != "failure"
         or not isinstance(run.get("repository"), dict)
@@ -2093,15 +2113,16 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
     token = os.environ.get("GH_TOKEN", "")
     validate_quota_preflight(evidence, args, token, validate_comments=False)
     attestation, authorization = validate_quota_preflight(evidence, args, token)
-    verification_command = local_verification_command()
-    subprocess.run(verification_command, check=True)  # noqa: S603
+    verification_command = require_trusted_verification(
+        repo, str(evidence["head_sha"])
+    )
     validate_quota_preflight(evidence, args, token)
 
     evidence["canary"]["result"] = "artifact-only"
     evidence["full_check"] = {
         "context": "verify",
-        "status": "local-quota-attested",
-        "commands": [verification_command[0], PREFLIGHT_REFETCH],
+        "status": "trusted-hosted",
+        "commands": [" ".join(verification_command), PREFLIGHT_REFETCH],
     }
     evidence["quota_fallback"] = {
         "attestation_url": args.attestation_url,
@@ -2119,7 +2140,6 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
 def verify_main(args: argparse.Namespace) -> None:
     """Prove the merged main tree is the candidate that passed both gates."""
     evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
-    checks = json.loads(args.checks.read_text(encoding="utf-8"))
     if evidence.get("gate") != "passed":
         raise RuntimeError("Promotion gate evidence is incomplete")
     expected = {
@@ -2137,15 +2157,7 @@ def verify_main(args: argparse.Namespace) -> None:
         raise RuntimeError(
             "Merged main tree differs from the verified candidate tree"
         )
-    check_runs = (
-        checks.get("check_runs", []) if isinstance(checks, dict) else []
-    )
-    if not any(
-        item.get("name") == "verify" and item.get("conclusion") == "success"
-        for item in check_runs
-        if isinstance(item, dict)
-    ):
-        raise RuntimeError("Candidate has no successful verify check")
+    require_trusted_verification(args.repo, args.head_sha)
     evidence["post_merge"] = {
         "main_sha": args.main_sha,
         "main_tree": current_tree,
@@ -2161,8 +2173,7 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     if (
         evidence.get("gate") != "quota-fallback"
         or evidence.get("release_eligible") is not False
-        or (evidence.get("full_check") or {}).get("status")
-        != "local-quota-attested"
+        or (evidence.get("full_check") or {}).get("status") != "trusted-hosted"
     ):
         raise RuntimeError("Promotion quota fallback evidence is incomplete")
     canary = evidence.get("canary")
@@ -2297,10 +2308,11 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
         raise RuntimeError(
             "Merged main tree differs from the verified candidate tree"
         )
+    require_trusted_verification(args.repo, args.head_sha)
     evidence["post_merge"] = {
         "main_sha": main_sha,
         "main_tree": current_tree,
-        "tree_identity": "verified-local-quota-fallback",
+        "tree_identity": "verified-trusted-quota-fallback",
         "verified_at": datetime.now(UTC).isoformat(),
     }
     write_evidence(args.output, evidence)

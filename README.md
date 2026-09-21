@@ -6,7 +6,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.17.1<!-- x-release-please-version --> |
+| 公版版本 | v0.17.3<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
@@ -155,13 +155,13 @@ flowchart LR
 
 `main` 前進不會讓無關的里程碑工作失效，也不會自動同步所有分支。各里程碑只在最終交付前以受審查的 `sync/main-to-m*` PR 納入當時最新 `main`；只有 owner 記錄真實 dependency 時才提前同步自己的分支。
 
-公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。兩者都在本機執行，依變更選擇 docs／fast／full：現行 `.github/workflows/ci.yml` 只有一個 `verify` job，不再自己重跑這些腳本，只驗證它們成功時留下的本機驗證聲明（一行 commit trailer，含 tree hash、tier 與 timestamp）——一般 PR 不會為 fast、full、安全與 aggregate 各啟動一個 runner，且 push 前務必先在本機跑過一次，否則 hosted 這個輕量 job 沒有東西可驗證。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 15 分鐘。開發中可直接跑最窄的 focused check（例如 `uv run pytest <path>`，或針對 `verify-template.sh` 其中一階段單獨重跑 `scripts/verify-stage-<name>`）；日常 PR 的 gate 是本機跑的 docs／fast；只有 PR 本身就落在 full 邊界時，owner／integrator 才需要在本機另外執行一次 `./scripts/verify-template.sh`。詳細分級、本機驗證聲明機制與目前封存邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。本機依變更選擇 docs／fast／full，提供快速回饋；現行 `.github/workflows/ci.yml` 另以單一 `verify` job 從受信任的 base policy 選擇分級，並在 GitHub-hosted runner 對 exact candidate 執行同一入口。merge 與 release 只接受綁定 repository、commit/tree、tier、scopes、command、toolchain、runner、result 與 freshness 的 hosted evidence，不接受手寫 commit trailer。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。開發中可直接跑最窄的 focused check；只有 PR 本身落在 full 邊界時，owner／integrator 才需在本機另外執行一次 `./scripts/verify-template.sh`。詳細分級與可信執行證據見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 release workflow 已設定為候選，待預設分支實跑後才算啟用。專用 promotion、release handoff、registry publisher 與 deployment workflows 不恢復，歷史由 Git／Issue／PR 保存；Zizmor、remote governance 與其他仍待各自 owner 決定的 workflow 才保留在 `archive/ci-cd/2026-08-27/`。Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成 repo 啟用；生成 repo 預設產生每日治理漂移排程（`governance-drift.yml`），可用 `enable_governance_drift_check: false` 關閉，本模板 source repo 則只保留同一支 `scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
 
 ### Actions 額度耗盡的一次性驗證
 
-只有 GitHub Actions 的 zero-step billing block 被機械式確認、且本機驗證通過時，才可能使用本機 fallback；runner 註記本身不構成證據。一般 Issue PR 留一則說明留言即可合併，不需要即時人工確認；Promotion 到 `main` 仍維持 human attestation/authorization 雙方確認，另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#failure-與-fallback)。
+只有 GitHub Actions 的 zero-step billing block 被機械式確認，且同一 exact head 已有成功的可信 hosted `verify` 時，quota fallback 才能涵蓋其他 required checks；它永遠不能替代 `verify`。一般 Issue PR 留一則說明留言即可合併，不需要即時人工確認；Promotion 到 `main` 仍維持 human attestation/authorization 雙方確認，另須綁定 candidate tree、合併後核對 tree identity，且本機結果不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#failure-與-fallback)。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹，因此已刪除與尚未提交的機密都不會靜默略過；尚未 `git init` 的新專案仍可安全掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 

@@ -647,10 +647,15 @@ def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
     assert generated["pull_request"]["required_review_thread_resolution"]
     required = rules(project, "rulesets-required-checks.json")
     contexts = {
-        item["context"]
+        (item["context"], item["integration_id"])
         for item in required["required_status_checks"]["required_status_checks"]
     }
-    assert "review" in contexts
+    assert contexts == {
+        ("title", 15368),
+        ("promotion", 15368),
+        ("verify", 15368),
+        ("review", 15368),
+    }
     assert (project / ".github/workflows/pr-review.yml").is_file()
     assert (project / "scripts/review_gate.py").is_file()
 
@@ -683,9 +688,14 @@ def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
     }
     required = rules(project, "rulesets-required-checks.json")
     contexts = {
-        item["context"]
+        (item["context"], item["integration_id"])
         for item in required["required_status_checks"]["required_status_checks"]
     }
-    assert contexts == {"title", "promotion", "verify", "review"}
+    assert contexts == {
+        ("title", 15368),
+        ("promotion", 15368),
+        ("verify", 15368),
+        ("review", 15368),
+    }
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
     assert "copilot_review_max_level" not in config

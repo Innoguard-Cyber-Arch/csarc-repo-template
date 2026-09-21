@@ -29,7 +29,20 @@ REVIEW_RULESET = {
 REQUIRED_CHECKS_RULESET = {
     "name": "CSARC required checks",
     "bypass_actors": [],
-    "rules": [{"type": "required_status_checks"}],
+    "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+    "rules": [
+        {
+            "type": "required_status_checks",
+            "parameters": {
+                "strict_required_status_checks_policy": False,
+                "required_status_checks": [
+                    {"context": "title", "integration_id": 15368},
+                    {"context": "promotion", "integration_id": 15368},
+                    {"context": "verify", "integration_id": 15368},
+                ],
+            },
+        }
+    ],
 }
 
 

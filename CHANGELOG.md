@@ -7,6 +7,25 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.17.3] - 2026-09-21
+
+### Bug Fixes
+
+* fix(ci): bootstrap trusted pull request triggers (8ce8ae4)
+* fix: bind required checks to trusted producers (ddd81cc)
+* fix: bootstrap trusted hosted verification (412f127)
+* fix(security): replace forgeable verification evidence (1f77c12)
+* fix(cli): harden repository Git inspection (6beebd7)
+* fix(ci): authenticate Dependabot heads before atomic merge (dc00567)
+
+## [0.17.2] - 2026-09-20
+
+### Bug Fixes
+
+* fix(cli): defer Copier tasks until approval (dc2e7a4)
+* fix(ci): isolate pull request policy writes (048b447)
+* fix(cli): defer dependency tooling until approval (30b8b36)
+
 ## [0.17.1] - 2026-09-20
 
 ### Bug Fixes

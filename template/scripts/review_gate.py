@@ -377,8 +377,12 @@ def _alpha_self_merge_authorization(
     if marker_count == 0:
         # Cheap check first: skip every further API call (default branch,
         # route validation) for the overwhelming majority of pull requests,
-        # which never opt into Alpha self-merge at all. Release-level
-        # eligibility is resolved by the caller before this route check.
+        # which never opt into Alpha self-merge at all. No separate
+        # release_phase gate here: `alpha_self_merge_opt_in` itself does not
+        # check release_phase either (its safety comes from the marker,
+        # route, and live Ruleset shape), so adding one only here would let
+        # this check and `pr_lifecycle.py merge` disagree about which heads
+        # are actually mergeable.
         return None, ""
     try:
         repository = github.get(repo, "")

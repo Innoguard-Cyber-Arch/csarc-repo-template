@@ -26,14 +26,23 @@ def test_policy_validators_are_shipped_without_forks() -> None:
 
 
 def test_workflows_are_thin_trusted_wrappers() -> None:
-    """Actions call shared validators checked out from trusted branches."""
+    """Actions keep decisions read-only and isolate trusted writes."""
     issue_workflow = (
         ROOT / ".github/workflows/work-item-lifecycle.yml"
     ).read_text()
     pr_workflow = (ROOT / ".github/workflows/pr-policy.yml").read_text()
+    write_workflow = (
+        ROOT / ".github/workflows/pr-policy-writes.yml"
+    ).read_text()
 
     assert "run: ./scripts/validate-issue-policy" in issue_workflow
     assert "issue_class=" not in issue_workflow
     assert "ref: ${{ github.event.pull_request.base.sha }}" in pr_workflow
     assert "run: ./scripts/validate-pr-policy" in pr_workflow
     assert "branch_pattern=" not in pr_workflow
+    assert "checks: write" not in pr_workflow
+    assert "issues: write" not in pr_workflow
+    assert "pull-requests: write" not in pr_workflow
+    assert "ref: ${{ github.sha }}" in write_workflow
+    assert "github.event.workflow_run.pull_requests[0]" not in write_workflow
+    assert "--resolve-head-sha" in write_workflow

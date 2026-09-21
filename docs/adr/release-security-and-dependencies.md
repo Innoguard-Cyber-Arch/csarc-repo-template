@@ -111,8 +111,8 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | `tests/test_release_consumption.py`（#104，signer-mismatch 案例見 #770） | `verify_consumption()` 的成功驗證、attestation 缺失、repository／signer 身分不符、成品 digest 不符四種情境 |
 | `tests/test_release_publish.py`（#589；attestation 驗證案例見 #770） | 對 mocked `gh` 與真實 Git fixture 驅動 `scripts/publish-release` 的行為回歸：staging 成功／fail-closed、state 判定、發布成功、發布失敗回退 draft、已發布重跑不重建、attestation 缺失／asset digest 不符／signer 不符三種 post-hoc 驗證失敗情境 |
 | `tests/test_journey07_release.py` | workflow 權限、pin、ownership 與 archive disposition；`release.yml`／`release.yml.jinja` 呼叫 `scripts/publish-release` 而非保留自己一份 bash 的來源層級驗證（#589） |
-| `.github/workflows/dependabot-auto-merge.yml` | 只鎖定 `dependabot[bot]` 開出的 PR；minor／patch 排入 GitHub 原生 auto-merge 佇列，major 加標籤／留言、不合併 |
-| `tests/test_dependabot_auto_merge.py` | 觸發條件、job 層級 actor 閘門、權限、pin 與 minor/patch／major 分流的 workflow 邏輯回歸測試 |
+| `.github/workflows/dependabot-auto-merge.yml`、`.github/workflows/dependabot-merge.yml` | 由可信任 base revision 驗證 current head 與 update type；minor／patch 只產生 exact-head eligibility，再由 default-branch workflow 透過 lifecycle lease 與 expected-head merge 合併，major 加標籤／留言、不合併；Actions bump 只以 base synchronizer 同步精確 allowlist 內的 template 副本 |
+| `tests/test_dependabot_auto_merge.py` | 觸發條件、head 驗證、權限、pin、base-code synchronizer、exact-ref push 與 minor/patch／major 分流的 workflow 邏輯回歸測試 |
 
 ## Archive disposition
 
@@ -153,18 +153,39 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 明確 owner（維護者 matheme-justyn，同時是 Issue assignee）與明確事故（#543／#544／#545 三張 Dependabot PR 開出 2 小時仍無人處理的真實 backlog，
 不是推測性需求）。
 
-決定：新增 `.github/workflows/dependabot-auto-merge.yml`，只在 `github.event.pull_request.user.login == 'dependabot[bot]'`
-時執行（不是可被偽造的 `github.actor`，見 zizmor `bot-conditions` audit），於 `pull_request`
-（opened／synchronize／reopened）用 `dependabot/fetch-metadata` 讀 update-type；minor／patch 呼叫
-`gh pr merge --auto --squash` 排入 GitHub 原生 auto-merge 佇列（不是自建輪詢腳本），major 只加 `needs-manual-review`
-標籤並留言，不合併。這只是**排入**佇列，不是立即合併或繞過任何既有把關——實際合併仍完全由 GitHub 依
-`policies/rulesets.json` 的 branch protection（1 個 code owner approving review）與既有 `title`／`promotion`／`verify`
-required checks 全部通過後才執行；本決定沒有調整、放寬或繞過上述任何規則。
+決定：新增 `.github/workflows/dependabot-auto-merge.yml`，以 `dependabot/fetch-metadata` 將 minor／patch 標成
+exact-head merge eligible，major 只加 `needs-manual-review` 標籤並留言、不合併。#557 原先使用 GitHub 原生
+auto-merge；#830 發現這項 PR-wide 狀態不會持續綁定啟用時的 head SHA，因此改由 default-branch
+`dependabot-merge.yml` 在 required checks 完成後喚醒，透過 repository-native `pr_lifecycle.py` 取得 remote lease、
+重新驗證 current head 與 trusted check producer，並以 expected-head REST merge 原子合併。既有 review 與
+`title`／`promotion`／`verify` required checks 全數保留，沒有新增 Ruleset context 或 bypass。
 
 範圍邊界：本節只取代「PR 開出後如何自動合併」這一段判斷，不重新開放整個 #322，也不影響已經 preserved 的 cooldown／SBOM
 半部——`.github/dependabot.yml` 的 `cooldown.default-days: 3` 維持原樣，不因本節新增而重新設定或延長。同步下發 `template/`
 （新 workflow 與 `policies/labels.json` 的 `needs-manual-review` 標籤定義），下游生成專案取得同一份政策；`docs/ci-policy.md`
 沿用既有「Current automation」表的 candidate／active 判斷慣例，待落地 `main` 並有 live run 證據後再登錄，不在本節預先宣告 active。
+
+### Dependabot privileged sync 的 current-head trust boundary（#830，2026-09-20）
+
+#557／#755 原本只驗證固定不變的 PR opener，且 `pull_request` 會讓 head revision 決定具寫入權限的 workflow；
+checkout head 後直接執行其中的 synchronizer，無法證明目前執行內容仍由 Dependabot 產生。#830 supersede 這個
+opener-only trust assumption，但保留 auto-merge 分流、cooldown、人工 review 與 root／template 同步目標。
+
+新的邊界以 base revision 的 `pull_request_target` workflow 執行。唯讀 authentication job 重新查詢目前 PR，
+要求 live base SHA 與觸發事件的可信 base SHA 完全相同、同 repository 的
+`dependabot/github_actions/main/*` ref，且 GitHub API 對 current head 回報
+`dependabot[bot]` author、`web-flow` committer、有效 GitHub 簽章、單一 commit，以及未達 API 截斷上限且全為
+root `.github/workflows/*.yml|*.yaml` 的 modified path。若 current head 是這條流程已產生的 sync child（例如
+PR 關閉後重開），則先驗證其 parent 符合同一套 Dependabot 條件，再以 parent 原始 base revision 的 trusted
+synchronizer 重建完整 Git tree；只有 tree hash 完全相同才視為可信任衍生內容。
+
+具寫入權限的 sync job 只執行 base SHA 的 `scripts/sync-paired-files.sh`；產物只能是已驗證 source 對應的 template
+workflow，push 以已驗證 bot ref 與 exact head SHA 的 lease 綁定。minor／patch 的 eligibility check 只會附著在
+通過驗證且沒有被同一 run 的 sync push 取代的 exact head。required workflows 完成時，default-branch merge
+workflow 先以唯讀提示避免過早取得 lease；真正的安全判定由 `pr_lifecycle.py check`／`merge` 各自重新查詢 PR、
+驗證 Bot account type、同 repo ref、GitHub 簽章或已重建 sync child、eligibility check 的 GitHub Actions App／
+workflow／event，以及全部 required checks，最後用 lease 與 REST `sha` expected head 合併。任何 head／author／
+source／check／lease drift 都 fail closed；不再留下 persistent native auto-merge 狀態。
 
 ## 發版不依賴 Actions 健康度的本機 fallback（#589，2026-09-03）
 
@@ -281,112 +302,6 @@ Release 收回 draft。
 的既有配對清單中，本節新增 `scripts/verify_release_consumption.py` 到同一份清單（新的必要
 執行期相依，不再只是選用的消費端契約）；`.github/workflows/release.yml.jinja` 不需要修改，
 它只呼叫 `scripts/publish-release`，不直接讀 `immutable_releases` 這個欄位。
-## 版本號表示發布層級與保留規則（#744，2026-09-17）
-
-維護者 2026-09-17 決定：版本號本身直接表示發布層級，取代側欄狀態或人工追蹤。
-alpha 為 `X.Y.Z-alpha.N`；beta 為 `X.Y.Z-beta.N`（0.x 或 1.x 都可以）；早期版為
-不帶後綴的 `0.y.z`；正式版為 `1.0.0` 起不帶後綴。同一版本號的後續 pre-release
-遞增 `.N`（SemVer 數值排序，tag 名稱不能重用）；alpha／beta 任何時候都可以發布，
-包含在早期版或正式版之後。每次發版的層級取自上次發版以來所含工作的最高宣告
-層級——**宣告與計算機制本身是 #745 的範圍**，本 Issue 只負責把一個已宣告的
-層級正確轉成版本號並發布。
-
-**歷史 Release 的一次性重新定位：** `v0.2.2`–`v0.15.5` 追溯認定為 alpha，
-`v0.15.6` 起進入 beta（既成事實，不受下面「發版層級調整」影響）。這 29 個既有
-Release 全部刪除，不以新名稱重發（GitHub Immutable Releases 下 tag 名稱刪除後
-不能重用，所以無法改名，只能整個刪除後在新基準重新開始）；新基準是 Milestone
-14 合併到 `main` 後的第一個 **alpha** 版本（2026-09-19 由原訂 beta 改回 alpha，
-見下方「發版層級調整」；規則本身允許 beta 之後任何時候再宣告 alpha，見上方
-「維護者 2026-09-17 決定」第 2 點）。實際刪除是 promotion 之後由維護者在確認
-dry-run 清單後親自執行的動作，記錄在 #740 的 Completion evidence，不是任何工作
-PR 的合併條件；必須排在新版 CLI（見下方）發布之後，確保下游能改走重新安裝流程
-而不是直接失敗。
-
-**發版層級調整（2026-09-19）：** Milestone 14 的發版層級由原訂 beta 改回
-alpha（同步調整 #740、#744）。理由：#745（依層級決定能否自核）尚未落地，目前
-仍套用 #743 的舊規則（任何階段皆允許 admin 自核）；但 #740 的非提案者核准已因
-tracker body 編輯（新增 #780）而依 #632 的核准綁定規則失效，需要重新核准。與其
-在等待重新核准期間動用「舊規則仍允許、但精神上牴觸 #745 已寫定的 beta 需他人
-審核」的 admin 自核例外，維護者選擇改回 alpha——alpha 允許自核是 #745 設計本身
-就明確承認、不牴觸精神的路徑。只有「Milestone 14 這次新基準要發哪個層級」改
-變；`v0.15.6` 仍是既成事實的 beta 發布，不受影響。
-
-**保留規則（去每次發版起持續適用）：** 保留所有不帶後綴的版本（早期版與正式版），
-外加依 major.minor（前兩個數字）分組後最新一組的最新一個 pre-release；較舊分組
-或同分組較舊的 pre-release 一律列為應刪除。`scripts/release_policy.py
-retention-plan --repo OWNER/NAME` 只列出「應保留」與「應刪除」清單（dry-run），
-不呼叫任何刪除 API；是否、何時實際刪除仍是維護者的人工決定。
-
-**刻意的單一發展線假設：** 本節「最新一串 pre-release」是單數——只保留數值最新
-一個 major.minor 分組的 pre-release，不是「每個仍有活動的分組各自的最新一個」。
-若同時有兩條 major.minor 線都在持續發 pre-release（例如維護中的舊線與下一版的新
-線並行），較舊那條線的 pre-release 一樣會被列為應刪除，即使它其實還在使用中；
-純靠版本號無法分辨「已放棄」與「仍在維護」。這正是為什麼刪除清單只是 dry-run、
-一律留給維護者人工確認才執行——多線並行的情境會在那個人工複核步驟被發現並排除，
-而不是靠工具自動判斷。
-
-**工具面變更：**
-
-- `scripts/release_phase.py`（`template/scripts/` 與 `src/csarc_cli/` 各一份
-  逐位元組相同的副本——後者是因為 `csarc` 發行的 wheel 只打包
-  `src/csarc_cli`，CLI 無法在執行期匯入外部的 `scripts/` 模組）是版本號格式的
-  唯一實作：剖析／格式化／SemVer 優先序排序／合法性檢查／保留規則分類都在這裡。
-- `scripts/release_policy.py` 的 `bump_version`／`release_plan` 改為只計算不帶
-  後綴的核心版本號，由呼叫端透過新增的 `--phase {alpha,beta,early,formal}`
-  套用宣告的層級；`prepare-candidate`／`plan` 兩個子指令都接受這個參數。
-- `scripts/converge-release-tag` 依 tag 是否帶 `-alpha.N`／`-beta.N` 後綴決定
-  `gh release create` 要不要加 `--prerelease`；`scripts/publish-release` 的
-  `gh release edit ... --draft=false` 只在無後綴版本才加 `--latest`。
-- `scripts/check-release-drift` 不再把 `prerelease` Release 當成無效發布忽略；
-  tag 格式與 `prerelease` 旗標互相矛盾時仍然壓不下告警（見本 ADR 上方「發版
-  存量漂移偵測」對應章節，或 `docs/ci-policy.md` 同名章節）。
-- CLI（`src/csarc_cli/cli.py`）的 `release_identity()` 接受 immutable、已發布的
-  pre-release Release：tag 必須是合法版本號，且 `prerelease` 旗標要與 tag 格式
-  一致，本 ADR 上方列出的既有驗證（immutable、attestation、tag 指向未移動、
-  commit signature）全部保留不變。選「最新」版本改由
-  `GhReleaseClient._latest()` 分頁列出所有已發布、非 draft 的 Release 後依
-  SemVer 優先序挑選，不再依賴 GitHub `releases/latest` API（該 API 不回傳
-  `prerelease: true` 的 Release，是 CLI 過去只能選到正式版的根本原因）。
-- 下游 `csarc update` 若確認記錄的 `release_tag` 在 canonical repository 已不
-  存在（GitHub 明確回報 404，區分成新的 `ReleaseNotFoundError`），改走重新
-  安裝流程：重用下面「Transactional 更新／adoption plan」一節（#219）同一套
-  plan 機制，列出新增／覆寫／保留／人工合併項目，經使用者確認才套用；
-  project-owned 或已產生分歧的檔案一律保留，不自動覆寫或刪除。只有「tag 確認
-  不存在」這一種情況觸發重新安裝；attestation 不符、tag 指向改變、簽章無效、
-  repository identity 不符等其他驗證失敗，一律維持 fail closed，不得改走重新
-  安裝繞過驗證。目前的實作限制是：由於舊 Release 已確認不存在，`csarc update
-  --reinstall` 的路徑無法像一般更新一樣重新渲染舊版本作三方比對基準，因此對
-  「相對於新版本內容有差異」的既有檔案一律歸類為需要人工合併，即使該檔案從未
-  被專案自行修改過——這維持安全（絕不靜默覆寫），但可能比一般 `csarc update`
-  需要更多人工確認；未來可視需要在舊 commit 仍可 fetch 到時，補上盡力而為的
-  三方比對。
-
-**取代（superseded）：** #425 Candidate 11 與 Milestone 12 Boundaries「不從
-SemVer 猜 release phase」──版本號現在直接表示發布層級。#425／Milestone 12
-「M12 完成與同事核准才構成 alpha → beta entry evidence」──`v0.15.6` 起由
-維護者決定直接視為 beta。#425／Milestone 12 Boundaries「不改寫既有 immutable
-Release」──依保留規則刪除舊 Release（immutable 本身不被修改，是整個刪除後
-不重用同名 tag，不是改寫）。CLI 只接受正式版 Release 的既有假設──改為接受
-合法的 immutable pre-release。
-
-**保留（preserved）：** #430 exact-SHA 與 capability-aware release；本 ADR 上方
-`## Ownership` 與「歷史 Action 逐項複核」章節描述的 canonical repository、
-immutable Release、attestation 與簽章驗證；`## 發版不依賴 Actions 健康度的
-本機 fallback（#589）` 一節描述的本機 `scripts/publish-release` 標準發版路徑；
-只有合併到 `main` 才發版的邊界。審核與測試依發布層級分級（取代
-`policies/project-stage.json` 的 Ruleset bypass 機制）是 #745 的範圍，本節
-不涉及、也不預先假設其設計。
-
-## 2026-09-19 發布批次採最高工作層級（#745）
-
-**狀態：Accepted。** 每次版本候選不再只看觸發 release workflow 的單一 PR。系統從上一個
-已發布版本 tag 到本次候選 commit 找出實際合併的 PR，解析其 closing Issue；遇到 Milestone
-tracker 則展開該 Milestone 的 work Issues，列出每件工作的編號、標題與層級，並以其中最高
-層級作為本次版本層級。沒有新 work item 時沿用目前版本 tag 的合法層級。
-
-同一份批次摘要以 marker 做冪等更新，寫入版本 PR 留言與尚未發布、可修改的 draft Release
-notes，保留人工作品；發布後的 Release 不再修改。這份結構化清單也是 #744 版本決策的輸入，
-讓版本後綴、PR 證據與 Release notes 使用同一個層級結論。
 
 ## 評估過的替代方案
 

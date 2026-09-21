@@ -52,7 +52,7 @@ git clone [[repository_url]]
 ./scripts/verify-fast
 ```
 
-`scripts/verify-fast` 是這個 repo 日常 PR 走的驗證分層入口；它會從 PR merge-base 自行計算變更 scope 並執行對應檢查。push 前務必先跑過，因為 hosted CI 不重跑，只核對它成功時留下的 `Verified-locally:` 聲明是否涵蓋同一份 suite 與 scopes。只有 Milestone／canary 交付、hotfix 或 merge queue 才需要跑完整的 `scripts/verify-template.sh`。本機需求（語言工具鏈、`gh` 登入等）與這個 repo 選用的語言（[[languages]]）有關，詳見 README。
+`scripts/verify-fast` 是這個 repo 日常 PR 的本機快速回饋入口；push 前先跑過，可以提早發現問題。PR 開出後，受信任的 base workflow 會在 GitHub-hosted runner 對精確候選 commit 重新執行所需 tier，合併與發版只接受該 hosted 執行的可信證據。只有 Milestone／canary 交付、hotfix 或 merge queue 才需要在本機跑完整的 `scripts/verify-template.sh`。本機需求（語言工具鏈、`gh` 登入等）與這個 repo 選用的語言（[[languages]]）有關，詳見 README。
 {{< /ops >}}
 {{< /slide >}}
 

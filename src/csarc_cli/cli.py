@@ -18,7 +18,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NoReturn, Protocol, cast
+from typing import Literal, NoReturn, Protocol, cast, overload
 from urllib.parse import quote
 
 import yaml  # type: ignore[import-untyped]
@@ -327,6 +327,7 @@ def run(
     cwd: Path | None = None,
     capture: bool = False,
     check: bool = True,
+    env: Mapping[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a subprocess without invoking a shell."""
     return subprocess.run(  # noqa: S603
@@ -335,6 +336,173 @@ def run(
         check=check,
         text=True,
         capture_output=capture,
+        env=dict(env) if env is not None else None,
+    )
+
+
+GIT_FILTER_CONFIG = re.compile(
+    r"^filter\.(?P<driver>.+)\.(?:clean|smudge|process|required)$",
+    re.IGNORECASE,
+)
+
+
+def git_environment(
+    extra_config: tuple[tuple[str, str], ...] = (),
+) -> dict[str, str]:
+    """Build a Git environment without caller-injected execution config."""
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if not name.startswith("GIT_")
+    }
+    environment.update(
+        {
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_SYSTEM": os.devnull,
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_PAGER": "cat",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
+    config = (
+        ("core.fsmonitor", "false"),
+        ("core.hooksPath", os.devnull),
+        *extra_config,
+    )
+    environment["GIT_CONFIG_COUNT"] = str(len(config))
+    for index, (key, value) in enumerate(config):
+        environment[f"GIT_CONFIG_KEY_{index}"] = key
+        environment[f"GIT_CONFIG_VALUE_{index}"] = value
+    return environment
+
+
+def git_filter_config(repository: Path) -> tuple[tuple[str, str], ...]:
+    """Return inert overrides for configured filters, including submodules."""
+    if not repository.is_dir():
+        return ()
+    root = repository.resolve()
+    pending = [root]
+    visited: set[Path] = set()
+    drivers: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        config = subprocess.run(  # noqa: S603
+            [  # noqa: S607
+                "git",
+                "-C",
+                str(current),
+                "config",
+                "--includes",
+                "--name-only",
+                "--null",
+                "--get-regexp",
+                r"^filter\..*\.(clean|smudge|process|required)$",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=git_environment(),
+        )
+        if config.returncode not in {0, 1}:
+            detail = (
+                config.stderr.strip() or "Cannot inspect Git filter config."
+            )
+            raise CliError(detail)
+        drivers.update(
+            match.group("driver")
+            for key in config.stdout.split("\0")
+            if (match := GIT_FILTER_CONFIG.fullmatch(key)) is not None
+        )
+        index = subprocess.run(  # noqa: S603
+            ["git", "-C", str(current), "ls-files", "--stage", "-z"],  # noqa: S607
+            check=False,
+            capture_output=True,
+            text=True,
+            env=git_environment(),
+        )
+        if index.returncode != 0:
+            detail = index.stderr.strip() or "Cannot inspect Git submodules."
+            raise CliError(detail)
+        for entry in index.stdout.split("\0"):
+            metadata, separator, relative_name = entry.partition("\t")
+            if not separator or not metadata.startswith("160000 "):
+                continue
+            candidate = (current / relative_name).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError as error:
+                raise CliError(
+                    "Git submodule path escapes the repository."
+                ) from error
+            if candidate.is_dir():
+                pending.append(candidate)
+    return tuple(
+        (f"filter.{driver}.{setting}", value)
+        for driver in sorted(drivers)
+        for setting, value in (
+            ("clean", ""),
+            ("smudge", ""),
+            ("process", ""),
+            ("required", "false"),
+        )
+    )
+
+
+@overload
+def run_git(
+    command: list[str],
+    *,
+    repository: Path | None = None,
+    cwd: Path | None = None,
+    capture: bool = False,
+    check: bool = True,
+    text: Literal[True] = True,
+    neutralize_filters: bool = False,
+) -> subprocess.CompletedProcess[str]: ...
+
+
+@overload
+def run_git(
+    command: list[str],
+    *,
+    repository: Path | None = None,
+    cwd: Path | None = None,
+    capture: bool = False,
+    check: bool = True,
+    text: Literal[False],
+    neutralize_filters: bool = False,
+) -> subprocess.CompletedProcess[bytes]: ...
+
+
+def run_git(
+    command: list[str],
+    *,
+    repository: Path | None = None,
+    cwd: Path | None = None,
+    capture: bool = False,
+    check: bool = True,
+    text: bool = True,
+    neutralize_filters: bool = False,
+) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
+    """Run Git without repository-local or ambient executable helpers."""
+    if not command or command[0] != "git":
+        raise ValueError("run_git requires a Git command")
+    filter_config = (
+        git_filter_config(repository)
+        if repository is not None and neutralize_filters
+        else ()
+    )
+    return subprocess.run(  # noqa: S603
+        command,
+        cwd=cwd,
+        check=check,
+        text=text,
+        capture_output=capture,
+        env=git_environment(filter_config),
     )
 
 
@@ -352,8 +520,9 @@ def github_repository(source: str) -> str | None:
 
 def git_commit(source: Path, reference: str) -> str:
     """Resolve a local Git reference to a full commit SHA."""
-    result = run(
+    result = run_git(
         ["git", "-C", str(source), "rev-parse", f"{reference}^{{commit}}"],
+        repository=source,
         capture=True,
         check=False,
     )
@@ -670,8 +839,9 @@ def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
     label = requested or "latest-local-tag"
     reference = requested
     if reference is None:
-        tags = run(
+        tags = run_git(
             ["git", "-C", str(source_path), "tag", "--sort=-version:refname"],
+            repository=source_path,
             capture=True,
         ).stdout.splitlines()
         if not tags:
@@ -825,6 +995,50 @@ def selected_languages(answers: dict[str, object]) -> set[str]:
     return set()
 
 
+def adoption_lockfiles(answers: dict[str, object]) -> tuple[str, ...]:
+    """Return lockfiles produced by the selected language tooling."""
+    languages = selected_languages(answers)
+    names = {
+        "python": "uv.lock",
+        "rust": "Cargo.lock",
+        "typescript": "pnpm-lock.yaml",
+    }
+    return tuple(names[name] for name in sorted(languages & names.keys()))
+
+
+def predicted_lockfile_effects(
+    target: Path, planned: Plan, answers: dict[str, object]
+) -> Plan:
+    """Represent deferred lock generation without running package tooling."""
+    additions = set(planned.add)
+    overwrites = set(planned.overwrite)
+    preserved = set(planned.preserve)
+    fixed = (
+        additions
+        | overwrites
+        | {
+            *planned.merge,
+            *planned.manual,
+            *planned.unknown,
+        }
+    )
+    existing = project_files(target)
+    for name in adoption_lockfiles(answers):
+        if name in fixed:
+            continue
+        preserved.discard(name)
+        (overwrites if name in existing else additions).add(name)
+    return Plan(
+        tuple(sorted(additions)),
+        tuple(sorted(overwrites)),
+        planned.remove,
+        tuple(sorted(preserved)),
+        planned.merge,
+        planned.manual,
+        planned.unknown,
+    )
+
+
 def is_text(content: bytes) -> bool:
     """Return whether file content can be reviewed as UTF-8 text."""
     if b"\0" in content:
@@ -881,7 +1095,7 @@ def copier_copy(
     stage: Path,
     data: Mapping[str, object],
     *,
-    skip_tasks: bool = False,
+    skip_tasks: bool,
 ) -> None:
     """Render one immutable template revision into a staging directory."""
     command = [
@@ -907,19 +1121,26 @@ def copier_copy(
         result = run(command, capture=True, check=False)
     finally:
         data_file.unlink(missing_ok=True)
+    phase = "preview render" if skip_tasks else "task-bearing render"
     if result.returncode != 0:
         raise CliError(
-            result.stderr.strip() or result.stdout.strip() or "Copier failed."
+            f"Copier {phase} failed: "
+            + (
+                result.stderr.strip()
+                or result.stdout.strip()
+                or "unknown Copier error"
+            )
         )
-    pin_answer_commit(stage, revision.sha)
-    persist_release_answers(stage, data)
+    try:
+        pin_answer_commit(stage, revision.sha)
+        persist_release_answers(stage, data)
+    except CliError as error:
+        raise CliError(f"Copier {phase} failed: {error}") from error
 
 
 def pin_answer_commit(target: Path, commit: str) -> None:
     """Replace Copier's abbreviated revision with the reviewed full SHA."""
-    answers = config_path(target)
-    if not answers.is_file():
-        raise CliError(f"Template did not create {CONFIG_FILE}.")
+    answers = safe_copier_config_path(target)
     lines = answers.read_text(encoding="utf-8").splitlines()
     matches = sum(line.startswith("_commit:") for line in lines)
     if matches != 1:
@@ -928,7 +1149,12 @@ def pin_answer_commit(target: Path, commit: str) -> None:
         f"_commit: {commit}" if line.startswith("_commit:") else line
         for line in lines
     ]
-    answers.write_text("\n".join(pinned) + "\n", encoding="utf-8")
+    atomic_replace_text(
+        target,
+        answers.relative_to(target).as_posix(),
+        "\n".join(pinned) + "\n",
+        mode=stat.S_IMODE(answers.lstat().st_mode),
+    )
 
 
 def config_path(target: Path) -> Path:
@@ -937,6 +1163,26 @@ def config_path(target: Path) -> Path:
     if current.is_file():
         return current
     return target / LEGACY_ANSWERS_FILE
+
+
+def safe_copier_config_path(target: Path) -> Path:
+    """Reject a missing or link-routed Copier configuration."""
+    path = config_path(target)
+    relative = path.relative_to(target).as_posix()
+    path = checked_destination(target, relative)
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError as error:
+        raise CliError(f"Template did not create {CONFIG_FILE}.") from error
+    if not stat.S_ISREG(mode):
+        raise CliError("Copier configuration must be a regular file.")
+    return path
+
+
+def copier_config_binding(target: Path) -> tuple[str, str]:
+    """Bind both the persisted Copier configuration path and its bytes."""
+    path = safe_copier_config_path(target)
+    return path.relative_to(target).as_posix(), file_fingerprint(path)
 
 
 def read_copier_answers(path: Path) -> dict[str, object]:
@@ -958,7 +1204,7 @@ def persist_release_answers(
     target: Path, answers: Mapping[str, object]
 ) -> None:
     """Persist the CLI-resolved release contract in Copier's answer file."""
-    path = config_path(target)
+    path = safe_copier_config_path(target)
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
@@ -974,9 +1220,11 @@ def persist_release_answers(
         release_settings_owner=contract["settings_owner"],
         release_workflow=contract["selected_workflow"] or "",
     )
-    path.write_text(
+    atomic_replace_text(
+        target,
+        path.relative_to(target).as_posix(),
         yaml.safe_dump(payload, allow_unicode=True, sort_keys=False),
-        encoding="utf-8",
+        mode=stat.S_IMODE(path.lstat().st_mode),
     )
 
 
@@ -2381,10 +2629,12 @@ def copy_candidate_files(
 
 def git_target_state(target: Path) -> tuple[str, tuple[str, ...]]:
     """Return the exact committed base and reviewable working-tree state."""
-    head = run(
-        ["git", "-C", str(target), "rev-parse", "HEAD"], capture=True
+    head = run_git(
+        ["git", "-C", str(target), "rev-parse", "HEAD"],
+        repository=target,
+        capture=True,
     ).stdout.strip()
-    status = run(
+    status = run_git(
         [
             "git",
             "-C",
@@ -2392,8 +2642,11 @@ def git_target_state(target: Path) -> tuple[str, tuple[str, ...]]:
             "status",
             "--porcelain=v1",
             "--untracked-files=all",
+            "--no-renames",
         ],
+        repository=target,
         capture=True,
+        neutralize_filters=True,
     ).stdout.splitlines()
     return head, tuple(status)
 
@@ -2408,21 +2661,25 @@ def target_file_snapshot(target: Path) -> dict[str, str]:
 
 def git_changed_paths(target: Path) -> set[str]:
     """Return tracked and untracked paths without parsing display quoting."""
-    tracked = run(
+    tracked = run_git(
         [
             "git",
             "-C",
             str(target),
             "diff",
+            "--no-ext-diff",
+            "--no-textconv",
             "--name-only",
             "--no-renames",
             "-z",
             "HEAD",
             "--",
         ],
+        repository=target,
         capture=True,
+        neutralize_filters=True,
     ).stdout.split("\0")
-    untracked = run(
+    untracked = run_git(
         [
             "git",
             "-C",
@@ -2432,6 +2689,7 @@ def git_changed_paths(target: Path) -> set[str]:
             "--exclude-standard",
             "-z",
         ],
+        repository=target,
         capture=True,
     ).stdout.split("\0")
     return {name for name in (*tracked, *untracked) if name}
@@ -2479,6 +2737,8 @@ def validate_pending_file_sets(
     pending: Mapping[str, object],
     stage: Path,
     planned: Plan,
+    *,
+    task_outputs_available: bool,
 ) -> None:
     """Derive pending paths from the template and reject unrelated changes."""
     expected_managed = set(pending_managed_paths(stage, planned)) - {
@@ -2502,22 +2762,25 @@ def validate_pending_file_sets(
         if isinstance(raw_manual, list)
         else set()
     )
-    if managed != expected_managed or manual != expected_manual:
+    if task_outputs_available and (
+        managed != expected_managed or manual != expected_manual
+    ):
         raise CliError(
             "Pending file classifications do not match the verified template; "
             "restart adoption from a clean commit."
         )
-    rendered = project_files(stage)
-    for name in sorted(expected_managed):
-        current = checked_destination(target, name)
-        expected = rendered.get(name)
-        if expected is None or file_fingerprint(current) != file_fingerprint(
-            expected
-        ):
-            raise CliError(
-                f"Managed adoption file differs from the verified template: "
-                f"{name}. Restart adoption from a clean commit."
-            )
+    if task_outputs_available:
+        rendered = project_files(stage)
+        for name in sorted(expected_managed):
+            current = checked_destination(target, name)
+            expected = rendered.get(name)
+            if expected is None or file_fingerprint(
+                current
+            ) != file_fingerprint(expected):
+                raise CliError(
+                    "Managed adoption file differs from the verified "
+                    f"template: {name}. Restart adoption from a clean commit."
+                )
     allowed = (
         managed
         | manual
@@ -2608,7 +2871,7 @@ def candidate_patch_effects(
 
 def clone_target(target: Path, candidate: Path) -> None:
     """Clone the committed target without mutating its Git metadata."""
-    result = run(
+    result = run_git(
         [
             "git",
             "clone",
@@ -2617,6 +2880,7 @@ def clone_target(target: Path, candidate: Path) -> None:
             str(target),
             str(candidate),
         ],
+        repository=target,
         capture=True,
         check=False,
     )
@@ -2630,8 +2894,8 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
     """Clone HEAD and overlay the current tracked and untracked worktree."""
     clone_target(target, candidate)
     patch = candidate.parent / "working-tree.patch"
-    difference = subprocess.run(  # noqa: S603
-        [  # noqa: S607
+    difference = run_git(
+        [
             "git",
             "-C",
             str(target),
@@ -2644,24 +2908,29 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
             "HEAD",
             "--",
         ],
-        capture_output=True,
+        repository=target,
+        capture=True,
         check=False,
+        text=False,
+        neutralize_filters=True,
     )
     if difference.returncode != 0:
         detail = difference.stderr.decode(errors="replace").strip()
         raise CliError(detail or "Cannot stage tracked adoption work.")
     patch.write_bytes(difference.stdout)
     if difference.stdout:
-        result = run(
+        result = run_git(
             ["git", "-C", str(candidate), "apply", str(patch)],
+            repository=candidate,
             capture=True,
             check=False,
+            neutralize_filters=True,
         )
         if result.returncode != 0:
             raise CliError(
                 result.stderr.strip() or "Cannot stage tracked adoption work."
             )
-    untracked = run(
+    untracked = run_git(
         [
             "git",
             "-C",
@@ -2671,13 +2940,18 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
             "--exclude-standard",
             "-z",
         ],
+        repository=target,
         capture=True,
     ).stdout.split("\0")
     copy_candidate_files(
         target, candidate, tuple(path for path in untracked if path)
     )
-    run(["git", "-C", str(candidate), "add", "--all"])
-    run(
+    run_git(
+        ["git", "-C", str(candidate), "add", "--all"],
+        repository=candidate,
+        neutralize_filters=True,
+    )
+    run_git(
         [
             "git",
             "-C",
@@ -2691,7 +2965,9 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
             "--no-gpg-sign",
             "-m",
             "chore: stage pending adoption",
-        ]
+        ],
+        repository=candidate,
+        neutralize_filters=True,
     )
 
 
@@ -2705,10 +2981,8 @@ def prepare_adoption_candidate(
     generated_at: str,
     candidate: Path,
     preserved_dirty_paths: tuple[str, ...] = (),
-    *,
-    verification_authorized: bool,
 ) -> tuple[Plan, dict[str, str], str, dict[str, object]]:
-    """Build an exact candidate and verify it only after authorization."""
+    """Build an exact preview candidate without executing package tooling."""
     if preserved_dirty_paths:
         clone_working_tree(target, candidate)
     else:
@@ -2742,35 +3016,18 @@ def prepare_adoption_candidate(
                 "Manual file decisions must be completed first.",
             )
         else:
-            create_adoption_lockfiles(candidate, answers)
             write_provenance(
                 candidate,
                 revision,
                 applied_at=generated_at,
                 answers=answers,
             )
-            if not verification_authorized:
-                verification = "pending-authorization"
-                hook = project_verification_evidence(
-                    hook_configuration,
-                    "not-run",
-                    "Candidate verification runs only after plan approval.",
-                )
-            else:
-                try:
-                    hook = verify_project(candidate)
-                except ProjectVerificationError as error:
-                    verification = f"failed: {error}"
-                    hook = error.hook
-                except CliError as error:
-                    verification = f"failed: {error}"
-                    hook = project_verification_evidence(
-                        hook_configuration,
-                        "not-run",
-                        "Candidate preparation failed before the hook ran.",
-                    )
-                else:
-                    verification = "passed"
+            verification = "pending-authorization"
+            hook = project_verification_evidence(
+                hook_configuration,
+                "not-run",
+                "Candidate verification runs only after plan approval.",
+            )
     candidate_files = project_files(candidate)
     target_files = project_files(target)
     dirty_drift = tuple(
@@ -2787,6 +3044,8 @@ def prepare_adoption_candidate(
             + ", ".join(dirty_drift)
         )
     effects, artifacts = candidate_effects(candidate, target, planned)
+    if not (planned.manual or planned.unknown):
+        effects = predicted_lockfile_effects(target, effects, answers)
     return effects, artifacts, verification, hook
 
 
@@ -2838,20 +3097,23 @@ def write_candidate_patch(
         before,
         tuple(name for name in canonical_deletions if name in target_files),
     )
-    patch_result = subprocess.run(  # noqa: S603
-        [  # noqa: S607
+    patch_result = run_git(
+        [
             "git",
             "diff",
             "--no-index",
             "--binary",
+            "--no-ext-diff",
+            "--no-textconv",
             "--no-renames",
             "--",
             before.name,
             after.name,
         ],
         cwd=patch.parent,
-        capture_output=True,
+        capture=True,
         check=False,
+        text=False,
     )
     if patch_result.returncode not in {0, 1}:
         detail = patch_result.stderr.decode(errors="replace").strip()
@@ -2863,7 +3125,13 @@ def write_candidate_patch(
         if check_only:
             command.append("--check")
         command.append(str(patch))
-        apply_result = run(command, capture=True, check=False)
+        apply_result = run_git(
+            command,
+            repository=target,
+            capture=True,
+            check=False,
+            neutralize_filters=True,
+        )
         if apply_result.returncode != 0:
             detail = (
                 apply_result.stderr.strip()
@@ -2872,79 +3140,288 @@ def write_candidate_patch(
             raise CliError(detail)
 
 
+def dependency_tool_environment(root: Path) -> dict[str, str]:
+    """Build an isolated resolver environment without ambient credentials."""
+    inherited = (
+        "COMSPEC",
+        "LANG",
+        "LC_ALL",
+        "PATH",
+        "PATHEXT",
+        "RUSTUP_HOME",
+        "RUSTUP_TOOLCHAIN",
+        "SSL_CERT_DIR",
+        "SSL_CERT_FILE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "WINDIR",
+    )
+    environment = {
+        name: os.environ[name] for name in inherited if name in os.environ
+    }
+    directories = {
+        "CARGO_HOME": root / "cargo",
+        "COREPACK_HOME": root / "corepack",
+        "HOME": root / "home",
+        "PNPM_HOME": root / "pnpm",
+        "UV_CACHE_DIR": root / "uv-cache",
+        "XDG_CACHE_HOME": root / "xdg-cache",
+        "XDG_CONFIG_HOME": root / "xdg-config",
+        "XDG_DATA_HOME": root / "xdg-data",
+        "XDG_STATE_HOME": root / "xdg-state",
+    }
+    for path in directories.values():
+        path.mkdir(parents=True)
+    npm_config = root / "npmrc"
+    npm_config.touch()
+    environment.update({name: str(path) for name, path in directories.items()})
+    rustup_home = Path(
+        os.environ.get("RUSTUP_HOME", str(Path.home() / ".rustup"))
+    )
+    if rustup_home.is_dir():
+        environment["RUSTUP_HOME"] = str(rustup_home)
+    environment.update(
+        {
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_TERMINAL_PROMPT": "0",
+            "NPM_CONFIG_USERCONFIG": str(npm_config),
+        }
+    )
+    return environment
+
+
+def validate_authorized_candidate_effects(
+    planned: Plan, actual: Plan, answers: dict[str, object]
+) -> None:
+    """Reject resolver effects beyond the symbolic lockfile forecast."""
+    lockfiles = set(adoption_lockfiles(answers))
+    fields = (
+        "add",
+        "overwrite",
+        "remove",
+        "preserve",
+        "merge",
+        "manual",
+        "unknown",
+    )
+    for field in fields:
+        expected = set(getattr(planned, field)) - lockfiles
+        observed = set(getattr(actual, field)) - lockfiles
+        if observed != expected:
+            raise CliError(
+                "Authorized dependency tooling changed files outside the "
+                "approved lockfile forecast; create a new adoption plan."
+            )
+    for name in lockfiles:
+        expected = next(
+            (field for field in fields if name in getattr(planned, field)),
+            None,
+        )
+        observed = next(
+            (field for field in fields if name in getattr(actual, field)),
+            None,
+        )
+        if observed != expected and not (
+            expected == "overwrite" and observed is None
+        ):
+            raise CliError(
+                "Authorized dependency tooling did not match the approved "
+                f"lockfile forecast for {name}; create a new adoption plan."
+            )
+
+
 def create_adoption_lockfiles(  # noqa: C901
     target: Path, answers: dict[str, object]
 ) -> None:
-    """Create language lockfiles after an adoption is ready to finalize."""
+    """Create language lockfiles only after adoption is authorized."""
     languages = selected_languages(answers)
-    if "python" in languages:
-        python_version = target / ".python-version"
-        if not python_version.is_file():
-            raise CliError(
-                "Cannot create uv.lock because .python-version is missing; "
-                "restore the managed file, then rerun csarc adopt --finalize."
-            )
-        try:
-            result = run(
-                [
-                    "uv",
-                    "lock",
-                    "--python",
-                    python_version.read_text(encoding="utf-8").strip(),
-                ],
-                cwd=target,
-                capture=True,
-                check=False,
-            )
-        except FileNotFoundError as error:
-            raise CliError(
-                "uv is required to create uv.lock; install uv, then rerun "
-                "csarc adopt --finalize."
-            ) from error
-        if result.returncode != 0:
-            detail = result.stderr.strip() or result.stdout.strip()
-            raise CliError(
-                "Cannot create uv.lock after the manifest merge; fix "
-                f"pyproject.toml, then rerun csarc adopt --finalize. {detail}"
-            )
-    if "typescript" in languages:
-        try:
-            result = run(
-                ["pnpm", "install", "--lockfile-only", "--ignore-scripts"],
-                cwd=target,
-                capture=True,
-                check=False,
-            )
-        except FileNotFoundError as error:
-            raise CliError(
-                "pnpm is required to create pnpm-lock.yaml; install pnpm, "
-                "then rerun csarc adopt --finalize."
-            ) from error
-        if result.returncode != 0:
-            detail = result.stderr.strip() or result.stdout.strip()
-            raise CliError(
-                "Cannot create pnpm-lock.yaml after the manifest merge; fix "
-                f"package.json, then rerun csarc adopt --finalize. {detail}"
-            )
-    if "rust" in languages:
-        try:
-            result = run(
-                ["cargo", "generate-lockfile"],
-                cwd=target,
-                capture=True,
-                check=False,
-            )
-        except FileNotFoundError as error:
-            raise CliError(
-                "Cargo is required to create Cargo.lock; install the Rust "
-                "toolchain, then rerun csarc adopt --finalize."
-            ) from error
-        if result.returncode != 0:
-            detail = result.stderr.strip() or result.stdout.strip()
-            raise CliError(
-                "Cannot create Cargo.lock after the manifest merge; fix "
-                f"Cargo.toml, then rerun csarc adopt --finalize. {detail}"
-            )
+    with tempfile.TemporaryDirectory(
+        prefix="csarc-dependency-tools-"
+    ) as temporary:
+        environment = dependency_tool_environment(Path(temporary))
+        if "python" in languages:
+            python_version = target / ".python-version"
+            if not python_version.is_file():
+                raise CliError(
+                    "Cannot create uv.lock because .python-version is "
+                    "missing; restore the managed file, then rerun csarc "
+                    "adopt --finalize."
+                )
+            base_command = [
+                "uv",
+                "lock",
+                "--python",
+                python_version.read_text(encoding="utf-8").strip(),
+                "--no-python-downloads",
+            ]
+            try:
+                result = None
+                if (target / "uv.lock").is_file():
+                    result = run(
+                        [*base_command, "--check", "--offline"],
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+                if result is None or result.returncode != 0:
+                    result = run(
+                        base_command,
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+            except FileNotFoundError as error:
+                raise CliError(
+                    "uv is required to create uv.lock; install uv, then "
+                    "rerun csarc adopt --finalize."
+                ) from error
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip()
+                raise CliError(
+                    "Cannot create uv.lock after the manifest merge; fix "
+                    "pyproject.toml, then rerun csarc adopt --finalize. "
+                    f"{detail}"
+                )
+        if "typescript" in languages:
+            base_command = [
+                "pnpm",
+                "install",
+                "--lockfile-only",
+                "--ignore-scripts",
+            ]
+            try:
+                result = None
+                if (target / "pnpm-lock.yaml").is_file():
+                    result = run(
+                        [*base_command, "--frozen-lockfile", "--offline"],
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+                if result is None or result.returncode != 0:
+                    result = run(
+                        [*base_command, "--prefer-offline"],
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+            except FileNotFoundError as error:
+                raise CliError(
+                    "pnpm is required to create pnpm-lock.yaml; install "
+                    "pnpm, then rerun csarc adopt --finalize."
+                ) from error
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip()
+                raise CliError(
+                    "Cannot create pnpm-lock.yaml after the manifest merge; "
+                    "fix package.json, then rerun csarc adopt --finalize. "
+                    f"{detail}"
+                )
+        if "rust" in languages:
+            base_command = ["cargo", "generate-lockfile"]
+            try:
+                result = None
+                if (target / "Cargo.lock").is_file():
+                    result = run(
+                        [*base_command, "--locked", "--offline"],
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+                if result is None or result.returncode != 0:
+                    result = run(
+                        base_command,
+                        cwd=target,
+                        capture=True,
+                        check=False,
+                        env=environment,
+                    )
+            except FileNotFoundError as error:
+                raise CliError(
+                    "Cargo is required to create Cargo.lock; install the Rust "
+                    "toolchain, then rerun csarc adopt --finalize."
+                ) from error
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip()
+                raise CliError(
+                    "Cannot create Cargo.lock after the manifest merge; fix "
+                    "Cargo.toml, then rerun csarc adopt --finalize. "
+                    f"{detail}"
+                )
+
+
+def authorize_adoption_candidate(
+    plan: ResolvedPlan, candidate: Path
+) -> ResolvedPlan:
+    """Generate dependencies and verify one already-approved candidate."""
+    adoption = plan.adoption
+    planned = plan.files
+    if adoption is None or planned is None:
+        raise CliError("Adoption candidate is incomplete.")
+    if adoption.get("phase") != "complete":
+        return plan
+    create_adoption_lockfiles(candidate, plan.answers)
+    hook_configuration = project_verification_configuration(
+        candidate, plan.answers
+    )
+    try:
+        hook = verify_project(candidate)
+    except ProjectVerificationError as error:
+        verification = f"failed: {error}"
+        hook = error.hook
+    except CliError as error:
+        verification = f"failed: {error}"
+        hook = project_verification_evidence(
+            hook_configuration,
+            "not-run",
+            "Candidate preparation failed before the hook ran.",
+        )
+    else:
+        verification = "passed"
+    raw_preserved_dirty_paths = adoption.get("preserved_dirty_paths")
+    preserved_dirty_paths = tuple(
+        value
+        for value in (
+            raw_preserved_dirty_paths
+            if isinstance(raw_preserved_dirty_paths, list)
+            else []
+        )
+        if isinstance(value, str)
+    )
+    candidate_files = project_files(candidate)
+    target_files = project_files(plan.target)
+    dirty_drift = tuple(
+        name
+        for name in preserved_dirty_paths
+        if name not in candidate_files
+        or name not in target_files
+        or file_fingerprint(candidate_files[name])
+        != file_fingerprint(target_files[name])
+    )
+    if dirty_drift:
+        verification = (
+            "failed: Candidate verification changed preserved dirty files: "
+            + ", ".join(dirty_drift)
+        )
+    effects, artifacts = candidate_effects(candidate, plan.target, planned)
+    validate_authorized_candidate_effects(planned, effects, plan.answers)
+    owner = adoption.get("code_owner")
+    owner_blocked = isinstance(owner, dict) and owner.get("state") == "blocked"
+    updated = {
+        **adoption,
+        "applicable": verification == "passed" and not owner_blocked,
+        "artifacts": artifacts,
+        "project_verification_hook": hook,
+        "verification": verification,
+    }
+    return replace(plan, files=effects, adoption=updated)
 
 
 def verify_project(target: Path) -> dict[str, object]:
@@ -3052,8 +3529,9 @@ def settings_plan(target: Path) -> None:
 
 def target_repository(target: Path) -> str | None:
     """Return the GitHub origin of an existing target, when discoverable."""
-    root = run(
+    root = run_git(
         ["git", "-C", str(target), "rev-parse", "--show-toplevel"],
+        repository=target,
         capture=True,
         check=False,
     )
@@ -3062,8 +3540,9 @@ def target_repository(target: Path) -> str | None:
         and Path(root.stdout.strip()).resolve() == target.resolve()
     )
     if is_repository_root:
-        result = run(
+        result = run_git(
             ["git", "-C", str(target), "remote", "get-url", "origin"],
+            repository=target,
             capture=True,
             check=False,
         )
@@ -3823,15 +4302,27 @@ def default_security_reporting_channel(repository_url: str) -> str:
 
 def require_clean_repository(target: Path) -> None:
     """Require an existing repository with no tracked or untracked changes."""
-    inside = run(
+    inside = run_git(
         ["git", "-C", str(target), "rev-parse", "--is-inside-work-tree"],
+        repository=target,
         capture=True,
         check=False,
     )
     if inside.returncode != 0:
         raise CliError(f"{target} must be an existing Git repository.")
-    status = run(
-        ["git", "-C", str(target), "status", "--porcelain"], capture=True
+    status = run_git(
+        [
+            "git",
+            "-C",
+            str(target),
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--no-renames",
+        ],
+        repository=target,
+        capture=True,
+        neutralize_filters=True,
     )
     if status.stdout.strip():
         raise CliError("Git working tree must be clean before adopt or update.")
@@ -3840,8 +4331,9 @@ def require_clean_repository(target: Path) -> None:
 def resolve_repository_target(path: Path) -> Path:
     """Resolve any path inside one Git worktree to its root."""
     candidate = path.expanduser().resolve()
-    result = run(
+    result = run_git(
         ["git", "-C", str(candidate), "rev-parse", "--show-toplevel"],
+        repository=candidate,
         capture=True,
         check=False,
     )
@@ -4080,7 +4572,14 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         temporary_root = Path(temporary)
         stage = temporary_root / "rendered"
         stage.mkdir()
-        copier_copy(revision.source, revision, stage, answers)
+        copier_copy(
+            revision.source,
+            revision,
+            stage,
+            answers,
+            skip_tasks=True,
+        )
+        preview_config_binding = copier_config_binding(stage)
         capabilities = capability_preflight(
             stage / "scripts" / "release_policy.py",
             target,
@@ -4093,7 +4592,13 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         planned = compare_stage(
             stage, baseline, adopt=True, merged_paths=merged
         )
-        validate_pending_file_sets(target, pending, stage, planned)
+        validate_pending_file_sets(
+            target,
+            pending,
+            stage,
+            planned,
+            task_outputs_available=False,
+        )
 
         if saved is None:
             generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
@@ -4101,7 +4606,6 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             generated_at = str(saved_adoption["generated_at"])
         candidate = temporary_root / "candidate"
         clone_working_tree(target, candidate)
-        create_adoption_lockfiles(candidate, answers)
         write_provenance(
             candidate,
             revision,
@@ -4111,31 +4615,22 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         checked_destination(
             candidate, PENDING_ADOPTION_FILE.as_posix()
         ).unlink()
-        if saved is None:
-            hook_configuration = project_verification_configuration(
-                candidate, answers
-            )
-            validated_project_verification_hook(candidate, hook_configuration)
-            hook = project_verification_evidence(
-                hook_configuration,
-                "not-run",
-                "Candidate verification runs only after plan approval.",
-            )
-            candidate_verification = "pending-authorization"
-        else:
-            try:
-                hook = verify_project(candidate)
-            except CliError as error:
-                raise CliError(
-                    "Project verification failed; fix the reported failures, "
-                    "then rerun csarc adopt --finalize."
-                ) from error
-            candidate_verification = "passed"
+        hook_configuration = project_verification_configuration(
+            candidate, answers
+        )
+        validated_project_verification_hook(candidate, hook_configuration)
+        hook = project_verification_evidence(
+            hook_configuration,
+            "not-run",
+            "Candidate verification runs only after plan approval.",
+        )
+        candidate_verification = "pending-authorization"
         effects, artifacts = candidate_effects(
             candidate,
             target,
             Plan((), (), (), (), (), (), ()),
         )
+        effects = predicted_lockfile_effects(target, effects, answers)
         head, changes, status_sha256 = target_state(target)
         target_files = target_file_snapshot(target)
         manual_results = {
@@ -4180,6 +4675,22 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
                 "Repository or manual merge results drifted after finalize "
                 "dry-run; create a new finalize plan."
             )
+        if saved is not None:
+            plan = authorize_adoption_candidate(plan, candidate)
+            adoption = cast(dict[str, object], plan.adoption)
+            candidate_verification = str(adoption.get("verification"))
+            if candidate_verification != "passed":
+                raise CliError(
+                    "Project verification failed; fix the reported failures, "
+                    "then rerun csarc adopt --finalize."
+                )
+            effects = cast(Plan, plan.files)
+            raw_artifacts = adoption.get("artifacts")
+            if not isinstance(raw_artifacts, dict):
+                raise CliError(
+                    "Verified finalize candidate has no artifact plan."
+                )
+            artifacts = raw_artifacts
         if args.json:
             print(
                 json.dumps(
@@ -4212,6 +4723,31 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             saved_visibility=saved_visibility,
         )
         validate_target_snapshot(target, adoption)
+        shutil.rmtree(stage)
+        stage.mkdir()
+        copier_copy(
+            revision.source,
+            revision,
+            stage,
+            answers,
+            skip_tasks=False,
+        )
+        if copier_config_binding(stage) != preview_config_binding:
+            raise CliError(
+                "Copier configuration changed during the approved "
+                "task-bearing render."
+            )
+        task_merged = apply_adoption_policies(stage, baseline)
+        task_planned = compare_stage(
+            stage, baseline, adopt=True, merged_paths=task_merged
+        )
+        validate_pending_file_sets(
+            target,
+            pending,
+            stage,
+            task_planned,
+            task_outputs_available=True,
+        )
         write_candidate_patch(
             candidate,
             target,
@@ -4263,8 +4799,6 @@ def build_adoption_plan(
     answers: dict[str, object],
     capabilities: dict[str, object],
     generated_at: str,
-    *,
-    verification_authorized: bool,
 ) -> ResolvedPlan:
     """Build one locked adoption plan and its isolated candidate."""
     head, changes, status_sha256 = target_state(target)
@@ -4295,7 +4829,6 @@ def build_adoption_plan(
             generated_at,
             candidate,
             preserved_dirty_paths,
-            verification_authorized=verification_authorized,
         )
     owner = code_owner_verification(repository, answers.get("code_owner"))
     if not candidate_allowed:
@@ -4435,9 +4968,56 @@ def command_apply_adoption_plan(  # noqa: C901
     )
     with tempfile.TemporaryDirectory(prefix="csarc-apply-") as temporary:
         temporary_root = Path(temporary)
-        stage = temporary_root / "rendered"
-        stage.mkdir()
-        copier_copy(revision.source, revision, stage, answers)
+        preview_stage = temporary_root / "preview"
+        preview_stage.mkdir()
+        copier_copy(
+            revision.source,
+            revision,
+            preview_stage,
+            answers,
+            skip_tasks=True,
+        )
+        preview_config_binding = copier_config_binding(preview_stage)
+        preview_candidate = temporary_root / "preview-candidate"
+        rebuilt_preview = build_adoption_plan(
+            preview_stage,
+            preview_candidate,
+            target,
+            revision,
+            repository,
+            answers,
+            raw_capabilities,
+            generated_at,
+        )
+        saved_binding = pre_verification_binding(saved)
+        preview_binding = pre_verification_binding(
+            adoption_plan_payload(rebuilt_preview)
+        )
+        if preview_binding != saved_binding:
+            differences = json_differences(saved_binding, preview_binding)
+            detail = "; ".join(differences[:10])
+            if len(differences) > 10:
+                detail += f"; ... and {len(differences) - 10} more"
+            raise CliError(
+                "Repository or rendered output drifted after dry-run; create "
+                f"a new adoption plan. Differing fields: {detail}"
+            )
+        shutil.rmtree(preview_stage)
+        preview_stage.mkdir()
+        stage = preview_stage
+        copier_copy(
+            revision.source,
+            revision,
+            stage,
+            answers,
+            skip_tasks=False,
+        )
+        if copier_config_binding(stage) != preview_config_binding:
+            raise CliError(
+                "Copier configuration changed during the approved "
+                "task-bearing render."
+            )
+        validate_target_snapshot(target, raw_adoption)
         candidate = temporary_root / "candidate"
         fresh = build_adoption_plan(
             stage,
@@ -4448,9 +5028,9 @@ def command_apply_adoption_plan(  # noqa: C901
             answers,
             raw_capabilities,
             generated_at,
-            verification_authorized=True,
         )
-        fresh_payload = adoption_plan_payload(fresh)
+        fresh_adoption = fresh.adoption
+        fresh = authorize_adoption_candidate(fresh, candidate)
         fresh_adoption = fresh.adoption
         if fresh_adoption is None or fresh_adoption.get("verification") not in {
             "passed",
@@ -4463,17 +5043,6 @@ def command_apply_adoption_plan(  # noqa: C901
             )
             raise CliError(
                 f"Project verification failed after plan approval: {detail}"
-            )
-        saved_binding = pre_verification_binding(saved)
-        fresh_binding = pre_verification_binding(fresh_payload)
-        if fresh_binding != saved_binding:
-            differences = json_differences(saved_binding, fresh_binding)
-            detail = "; ".join(differences[:10])
-            if len(differences) > 10:
-                detail += f"; ... and {len(differences) - 10} more"
-            raise CliError(
-                "Repository or rendered output drifted after dry-run; create "
-                f"a new adoption plan. Differing fields: {detail}"
             )
         if fresh_adoption.get("applicable") is not True:
             raise CliError("Rebuilt adoption candidate is not applicable.")
@@ -4559,9 +5128,20 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     if repository.repository is not None:
         data["repository_url"] = f"https://github.com/{repository.repository}"
     with tempfile.TemporaryDirectory(prefix="csarc-plan-") as temporary:
-        stage = Path(temporary) / "project"
+        temporary_root = Path(temporary)
+        stage = temporary_root / "preview"
         stage.mkdir()
-        copier_copy(revision.source, revision, stage, data)
+        copier_copy(
+            revision.source,
+            revision,
+            stage,
+            data,
+            skip_tasks=True,
+        )
+        preview_files = {
+            name: file_fingerprint(path)
+            for name, path in project_files(stage).items()
+        }
         answers: dict[str, object] = dict(data)
         answers.update(read_copier_answers(config_path(stage)))
         capabilities = capability_preflight(
@@ -4581,7 +5161,6 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 answers,
                 capabilities,
                 generated_at,
-                verification_authorized=False,
             )
         else:
             plan = ResolvedPlan(
@@ -4608,6 +5187,66 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         if args.dry_run or not confirm(args):
             return 0
         if mode == "init":
+            approved_revision = resolve_revision(
+                source,
+                args.to,
+                expected_sha=revision.sha,
+                allow_unreleased=args.allow_unreleased,
+            )
+            if approved_revision != revision:
+                raise CliError(
+                    "Template revision changed after approval; review a new "
+                    "plan."
+                )
+            validate_copy_target(target, mode, require_clean=True)
+            shutil.rmtree(stage)
+            stage.mkdir()
+            copier_copy(
+                approved_revision.source,
+                approved_revision,
+                stage,
+                data,
+                skip_tasks=True,
+            )
+            rebound_answers: dict[str, object] = dict(data)
+            rebound_answers.update(read_copier_answers(config_path(stage)))
+            rebound_plan = ResolvedPlan(
+                mode=mode,
+                target=target,
+                revision=approved_revision,
+                repository=repository,
+                answers=rebound_answers,
+                capabilities=capabilities,
+                files=compare_stage(stage, target, adopt=False),
+            )
+            rebound_files = {
+                name: file_fingerprint(path)
+                for name, path in project_files(stage).items()
+            }
+            if (
+                rebound_plan.as_dict() != plan.as_dict()
+                or rebound_files != preview_files
+            ):
+                raise CliError(
+                    "Repository or preview render drifted after approval; "
+                    "review a new plan."
+                )
+            preview_config_binding = copier_config_binding(stage)
+            shutil.rmtree(stage)
+            stage.mkdir()
+            copier_copy(
+                approved_revision.source,
+                approved_revision,
+                stage,
+                data,
+                skip_tasks=False,
+            )
+            if copier_config_binding(stage) != preview_config_binding:
+                raise CliError(
+                    "Copier configuration changed during the approved "
+                    "task-bearing render."
+                )
+            validate_copy_target(target, mode, require_clean=True)
             if target.exists():
                 target.rmdir()
             shutil.copytree(stage, target, symlinks=True)
@@ -5123,14 +5762,10 @@ def _render_reinstall_plan(
 
     Never reuses a previous render: called once for the pre-confirmation
     preview and again after confirmation, closing the plan-to-apply TOCTOU
-    window. Always `verification_authorized=False` -- the answers file is
-    excluded from the adopt-style diff below (see the comment at
-    `staged_answers_path.unlink()`), so `prepare_adoption_candidate` would
-    clone the *target's* stale answers file into candidate and run
-    `verify_project` against the wrong configuration if authorized here;
-    real verification is instead run explicitly by the caller, against
-    candidate, after overwriting its answers file with the fresh content
-    this function returns (see `command_update_reinstall`). Always
+    window. The preview skips Copier tasks, while the post-confirmation
+    render runs them. Real verification is run explicitly by the caller,
+    against candidate, after overwriting its answers file with the fresh
+    content this function returns (see `command_update_reinstall`). Always
     resolves `args.to` -- the caller's actual requested target, not a
     hardcoded "latest" -- so an explicit `--to <tag>` is never silently
     substituted; if that same explicit target is also unavailable,
@@ -5150,7 +5785,13 @@ def _render_reinstall_plan(
     temporary_root = Path(tempfile.mkdtemp(prefix=f"csarc-reinstall-{label}-"))
     stage = temporary_root / "rendered"
     stage.mkdir()
-    copier_copy(revision.source, revision, stage, candidate_answers)
+    copier_copy(
+        revision.source,
+        revision,
+        stage,
+        candidate_answers,
+        skip_tasks=label == "preview",
+    )
     # The freshly rendered answers file legitimately differs from the
     # target's (new _commit/_src_path, possibly new answers) on every
     # ordinary reinstall -- that is expected evolution, not a conflict, so
@@ -5174,7 +5815,6 @@ def _render_reinstall_plan(
         candidate_answers,
         capabilities,
         generated_at,
-        verification_authorized=False,
     )
     if plan.adoption is None:
         shutil.rmtree(temporary_root, ignore_errors=True)
@@ -5208,20 +5848,15 @@ def command_update_reinstall(  # noqa: C901
     shown and gates on `--check` and on needing manual merges; only after
     the caller confirms does a second, independent render run, closing the
     plan-to-apply TOCTOU window. That second build still uses
-    `verification_authorized=False` (the answers file is excluded from the
-    adopt-style diff below, so `prepare_adoption_candidate` would clone
-    the *target's* stale answers file into candidate and verify against
-    the wrong configuration); instead, the fresh answers file is written
-    into candidate directly and `verify_project` -- the same canonical
+    based on the approved preview. The fresh answers file is written into
+    candidate directly and `verify_project` -- the same canonical
     `./scripts/verify` plus validated project hook every other
     apply-to-target path in this module runs -- is invoked explicitly
     against it. A `ProjectVerificationError` there fails reinstall closed
     before anything is written to target, exactly like `adopt
     --apply-plan`/`--finalize`/`update`'s own unconditional
     `verify_project` calls already require; the generic `applicable`
-    field is never trusted on its own here, since `verification_authorized
-    =False` always reports `pending-authorization`, which that field alone
-    cannot distinguish from a real pass. A plan that needs manual merges
+    field is never trusted on its own here. A plan that needs manual merges
     is reported and left for `csarc adopt` to resolve against this same
     directory, rather than reimplementing adopt's separate
     pending/finalize replay flow a second time for this narrower recovery
@@ -5560,8 +6195,10 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         temporary_root = Path(temporary).resolve()
         candidate = temporary_root / "candidate"
         clone_target(target, candidate)
-        baseline_head = run(
-            ["git", "-C", str(candidate), "rev-parse", "HEAD"], capture=True
+        baseline_head = run_git(
+            ["git", "-C", str(candidate), "rev-parse", "HEAD"],
+            repository=candidate,
+            capture=True,
         ).stdout.strip()
         candidate_config_path = config_path(candidate)
         migrating_legacy_config = (
@@ -5596,8 +6233,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             # candidate_patch_effects() computes against baseline_head,
             # alongside whatever Copier itself changes, and reaches the
             # real target in one patch.
-            run(["git", "-C", str(candidate), "add", "-A"])
-            run(
+            run_git(
+                ["git", "-C", str(candidate), "add", "-A"],
+                repository=candidate,
+                neutralize_filters=True,
+            )
+            run_git(
                 [
                     "git",
                     "-C",
@@ -5611,7 +6252,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                     "--no-gpg-sign",
                     "-m",
                     "chore: migrate legacy repository configuration",
-                ]
+                ],
+                repository=candidate,
+                neutralize_filters=True,
             )
         data_file = temporary_root / "data.yml"
         data_file.write_text(
@@ -5652,7 +6295,17 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             # the working tree or index (see above): the migration and
             # whatever Copier changed on top of it now both show up as one
             # uncommitted diff against the repository's real prior state.
-            run(["git", "-C", str(candidate), "reset", "--soft", baseline_head])
+            run_git(
+                [
+                    "git",
+                    "-C",
+                    str(candidate),
+                    "reset",
+                    "--soft",
+                    baseline_head,
+                ],
+                repository=candidate,
+            )
         pin_answer_commit(candidate, str(status["target_sha"]))
         persist_release_answers(candidate, answers)
         verify_project(candidate)

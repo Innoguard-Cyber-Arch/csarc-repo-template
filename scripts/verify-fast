@@ -138,7 +138,6 @@ if [[ "$scopes" == *,workflow,* ]]; then
 fi
 
 if [[ "$suite" == "baseline" ]]; then
-  ./scripts/write-verify-attestation baseline "$scope_csv"
   exit 0
 fi
 
@@ -201,9 +200,3 @@ if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then
   verification_step "Repository site render" ./scripts/build-repo-site --check
   verification_step "Paired-file drift" ./scripts/sync-paired-files.sh --check
 fi
-
-# Issue #661: every check above passed (set -euo pipefail would already
-# have exited otherwise) -- record the local-attestation trailer that lets
-# the hosted `verify` check pass without re-running anything. This is the
-# selected cumulative suite exits successfully.
-./scripts/write-verify-attestation "$suite" "$scope_csv"
