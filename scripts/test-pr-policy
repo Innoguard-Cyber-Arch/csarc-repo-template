@@ -719,6 +719,48 @@ PR_BODY="" \
 PR_ISSUE_STATE="" \
   "$validator" >/dev/null
 
+while IFS= read -r version; do
+  case_count=$((case_count + 1))
+  PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="csarc-owned" \
+  PR_TITLE="chore(main): release $version" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="release/v$version" \
+  PR_AUTHOR="maintainer" \
+  PR_COMMIT_AUTHOR="maintainer" \
+  PR_ACTOR_PERMISSION="maintain" \
+  PR_BODY="" \
+  PR_ISSUE_STATE="" \
+    "$validator" >/dev/null
+done <<'VERSIONS'
+0.18.0-alpha.1
+1.2.3-beta.12
+VERSIONS
+
+while IFS= read -r version; do
+  case_count=$((case_count + 1))
+  if PR_BRANCH_STRATEGY="delivery" \
+    PR_RELEASE_OWNERSHIP="csarc-owned" \
+    PR_TITLE="chore(main): release $version" \
+    PR_LABELS="enhancement" \
+    PR_BASE="main" \
+    PR_HEAD="release/v$version" \
+    PR_AUTHOR="maintainer" \
+    PR_COMMIT_AUTHOR="maintainer" \
+    PR_ACTOR_PERMISSION="maintain" \
+    PR_BODY="" \
+    PR_ISSUE_STATE="" \
+      "$validator" >/dev/null 2>&1; then
+    echo "PR policy accepted invalid guided prerelease version '$version'."
+    exit 1
+  fi
+done <<'VERSIONS'
+0.18.0-alpha.0
+0.18.0-alpha.01
+0.18.0-rc.1
+VERSIONS
+
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
   PR_RELEASE_OWNERSHIP="csarc-owned" \
