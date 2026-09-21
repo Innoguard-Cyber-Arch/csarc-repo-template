@@ -241,6 +241,15 @@ def _run_stubbed_verify_fast(
 
     log = tmp_path / "verification.log"
     environment = os.environ.copy()
+    for name in (
+        "CSARC_CI_BASE",
+        "CSARC_CI_DRAFT",
+        "CSARC_CI_LABELS",
+        "CSARC_CI_TIER",
+        "CSARC_RUN_OSV",
+        "CSARC_VERIFICATION_SUITE",
+    ):
+        environment.pop(name, None)
     environment.update(
         {
             "CSARC_CI_SCOPES": "source",
