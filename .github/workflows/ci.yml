@@ -106,6 +106,7 @@ jobs:
         env:
           CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
           CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
+          CSARC_CI_BASE: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}
         run: |
           if [[ "$CSARC_CI_TIER" == "full" ]]; then
             ./scripts/verify-template.sh

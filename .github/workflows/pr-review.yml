@@ -31,6 +31,7 @@ jobs:
     if: ${{ github.event_name != 'issue_comment' || (github.event.issue.pull_request != null && startsWith(github.event.comment.body, 'PR lifecycle merge authorization')) }}
     permissions:
       contents: read
+      issues: read
       pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
