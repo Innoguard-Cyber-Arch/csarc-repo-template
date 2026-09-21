@@ -189,15 +189,9 @@ def test_paired_workflow_files_skips_jinja_without_a_root_counterpart(
 
 
 def test_real_repository_workflows_have_no_undeclared_drift() -> None:
-    """Sanity check: this repo's own known allowlist entries actually apply.
+    """The checked-in workflows have no undeclared behavioral drift."""
+    assert check_jinja_workflow_drift.check(ROOT) == []
 
-    This does not render template/ (that is
-    scripts/check_jinja_workflow_drift's own `check()`, exercised end to
-    end by ./scripts/verify-fast); it only confirms the declared
-    allowlist lines are still present verbatim in the real root
-    workflow, so a future rewording does not silently orphan the
-    allowlist entry without anyone noticing.
-    """
     for (
         jinja_name,
         allowed,
@@ -211,6 +205,28 @@ def test_real_repository_workflows_have_no_undeclared_drift() -> None:
                 "ALLOWED_LINE_DIFFERENCES entry in "
                 "scripts/check_jinja_workflow_drift.py"
             )
+
+
+def test_generated_managed_paths_normalize_without_masking_other_drift() -> (
+    None
+):
+    """Only ownership-path changes are normalized; behavior still differs."""
+    root = (
+        "run: python3 scripts/release_policy.py plan --mode safe\n"
+        "config-file: release-please-config.json\n"
+        "manifest-file: .release-please-manifest.json\n"
+    )
+    rendered = (
+        "run: python3 .csarc/scripts/release_policy.py plan --mode safe\n"
+        "config-file: .csarc/release-please-config.json\n"
+        "manifest-file: .csarc/release-please-manifest.json\n"
+    )
+    changed_behavior = rendered.replace("--mode safe", "--mode unsafe")
+
+    assert check_jinja_workflow_drift.find_drift(root, rendered) == []
+    assert (
+        len(check_jinja_workflow_drift.find_drift(root, changed_behavior)) == 1
+    )
 
 
 def test_a_recognized_covered_condition_has_no_problem() -> None:
