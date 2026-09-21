@@ -193,6 +193,7 @@ jobs:
           BASE_SHA: {% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %}
           COMMAND: {% raw %}${{ steps.identity.outputs.command }}{% endraw %}
           EVENT_ACTION: {% raw %}${{ github.event.action || '' }}{% endraw %}
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
           HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha || '' }}{% endraw %}
           LABELS_SHA: {% raw %}${{ steps.identity.outputs.labels }}{% endraw %}
           RELEASE_LEVEL: {% raw %}${{ steps.identity.outputs.release }}{% endraw %}
