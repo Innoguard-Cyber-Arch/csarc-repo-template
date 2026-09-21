@@ -189,6 +189,7 @@ jobs:
           BASE_SHA: ${{ steps.identity.outputs.base_sha }}
           COMMAND: ${{ steps.identity.outputs.command }}
           EVENT_ACTION: ${{ github.event.action || '' }}
+          GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           LABELS_SHA: ${{ steps.identity.outputs.labels }}
           RELEASE_LEVEL: ${{ steps.identity.outputs.release }}

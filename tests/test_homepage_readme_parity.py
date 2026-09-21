@@ -32,6 +32,12 @@ ZH_HOME_MAX_LINES = 22
 EN_HOME_MAX_CHARS = 2400
 EN_HOME_MAX_LINES = 22
 
+RELEASE_VERSION_PATTERN = r"\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+)?"
+RELEASE_MARKER_PATTERN = re.compile(
+    rf"v?({RELEASE_VERSION_PATTERN})(?:</span>)?"
+    r"<!-- x-release-please-version -->"
+)
+
 # The exact capability table shared, byte-for-byte, between README.md and
 # the zh-tw home slide's default ("basic") view -- the clearest possible
 # proof that the two stay aligned instead of drifting into two separate
@@ -217,12 +223,14 @@ def test_zh_home_repo_version_mentions_stay_in_sync() -> None:
     against the two ever drifting again."""
     zh = (ROOT / "site/content/_index.zh-tw.md").read_text(encoding="utf-8")
     badge_match = re.search(
-        r'<span class="package-badge muted">(v[\d.]+)</span>'
+        r'<span class="package-badge muted">'
+        rf"(v{RELEASE_VERSION_PATTERN})</span>"
         r"<!-- x-release-please-version -->",
         zh,
     )
     paragraph_match = re.search(
-        r"公版版本：</strong>(v[\d.]+)<!-- x-release-please-version -->",
+        rf"公版版本：</strong>(v{RELEASE_VERSION_PATTERN})"
+        r"<!-- x-release-please-version -->",
         zh,
     )
     assert badge_match, "legacy badge's marked version mention is missing"
@@ -290,12 +298,13 @@ def test_en_home_repo_version_mentions_stay_in_sync() -> None:
     hero's badge, once in the always-visible basic-mode paragraph."""
     en = (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8")
     badge_match = re.search(
-        r'<span class="package-badge muted">(v[\d.]+)</span>'
+        r'<span class="package-badge muted">'
+        rf"(v{RELEASE_VERSION_PATTERN})</span>"
         r"<!-- x-release-please-version -->",
         en,
     )
     paragraph_match = re.search(
-        r"Template release:</strong> (v[\d.]+)"
+        rf"Template release:</strong> (v{RELEASE_VERSION_PATTERN})"
         r"<!-- x-release-please-version -->",
         en,
     )
@@ -327,7 +336,6 @@ def test_release_please_tracks_every_root_version_marker() -> None:
         capture_output=True,
         text=True,
     ).stdout.split("\0")
-    marker = re.compile(r"v?(\d+\.\d+\.\d+)[^\n]*x-release-please-version")
     marker_versions = {}
     for path in tracked_files:
         # Generated projects own their version; tests contain marker fixtures.
@@ -336,7 +344,7 @@ def test_release_please_tracks_every_root_version_marker() -> None:
         source = ROOT / path
         if not source.is_file():
             continue
-        versions = marker.findall(
+        versions = RELEASE_MARKER_PATTERN.findall(
             source.read_text(encoding="utf-8", errors="ignore")
         )
         if versions:
@@ -346,3 +354,16 @@ def test_release_please_tracks_every_root_version_marker() -> None:
     assert {
         version for versions in marker_versions.values() for version in versions
     } == {manifest["."]}
+
+
+def test_release_marker_pattern_rejects_noncanonical_prereleases() -> None:
+    marker = "<!-- x-release-please-version -->"
+
+    assert RELEASE_MARKER_PATTERN.findall(f"v0.18.0-alpha.1{marker}") == [
+        "0.18.0-alpha.1"
+    ]
+    assert RELEASE_MARKER_PATTERN.findall(f"v0.18.0-beta.2{marker}") == [
+        "0.18.0-beta.2"
+    ]
+    assert RELEASE_MARKER_PATTERN.findall(f"v0.18.0-rc.1{marker}") == []
+    assert RELEASE_MARKER_PATTERN.findall(f"v0.18.0-alpha{marker}") == []
