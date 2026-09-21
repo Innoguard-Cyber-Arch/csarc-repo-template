@@ -83,10 +83,56 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
         # scripts/sync-paired-files.sh's module docstring: root is
         # canonical for what this repository exercises directly, but a
         # generated project is a different, simpler product).
-        ("./scripts/verify-template.sh", "./scripts/verify"),
+        ("./scripts/verify-template.sh", "./.csarc/scripts/verify"),
         (
             'command="./scripts/verify-template.sh"',
-            'command="./scripts/verify"',
+            'command="./.csarc/scripts/verify"',
+        ),
+        # Issue #742 keeps template-owned tooling under .csarc/scripts while
+        # this repository continues to execute the corresponding root tools
+        # from scripts/. Keep every substitution exact so other drift remains
+        # fail closed.
+        (
+            "cp scripts/*.py scripts/check-trusted-verification \\",
+            "cp .csarc/scripts/*.py "
+            ".csarc/scripts/check-trusted-verification \\",
+        ),
+        (
+            'command="./scripts/verify-fast"',
+            'command="./.csarc/scripts/verify-fast"',
+        ),
+        (
+            "- name: Validate trusted clean sync tier=fast "
+            "scopes=${{ steps.plan.outputs.scopes }} "
+            "tree=${{ steps.identity.outputs.tree }} "
+            "command=./scripts/verify-fast "
+            "base=${{ steps.identity.outputs.base }} "
+            "base-sha=${{ steps.identity.outputs.base_sha }} "
+            "labels=${{ steps.identity.outputs.labels }} "
+            "release=${{ steps.identity.outputs.release }} "
+            "main=${{ steps.sync.outputs.main_sha }} "
+            "source-run=${{ steps.sync.outputs.source_run }} "
+            "source-job=${{ steps.sync.outputs.source_job }} "
+            "source-check=${{ steps.sync.outputs.source_check }}",
+            "- name: Validate trusted clean sync tier=fast "
+            "scopes=${{ steps.plan.outputs.scopes }} "
+            "tree=${{ steps.identity.outputs.tree }} "
+            "command=./.csarc/scripts/verify-fast "
+            "base=${{ steps.identity.outputs.base }} "
+            "base-sha=${{ steps.identity.outputs.base_sha }} "
+            "labels=${{ steps.identity.outputs.labels }} "
+            "release=${{ steps.identity.outputs.release }} "
+            "main=${{ steps.sync.outputs.main_sha }} "
+            "source-run=${{ steps.sync.outputs.source_run }} "
+            "source-job=${{ steps.sync.outputs.source_job }} "
+            "source-check=${{ steps.sync.outputs.source_check }}",
+        ),
+        ("./scripts/verify-template.sh", "./.csarc/scripts/verify"),
+        ("./scripts/verify-fast", "./.csarc/scripts/verify-fast"),
+        (
+            './scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"',
+            "./.csarc/scripts/verify-release-candidate "
+            '"$RUNNER_TEMP/release-pr.json"',
         ),
     },
     "release.yml.jinja": {
@@ -94,7 +140,75 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
         # repository keeps the full release aggregator under its longer name.
         (
             "run: ./scripts/verify-template.sh",
-            "run: ./scripts/verify",
+            "run: ./.csarc/scripts/verify",
+        ),
+        # The root owns release helpers in scripts/ and release metadata at
+        # the repository root. Generated projects receive the same assets
+        # under .csarc/ after Issue #742's path consolidation.
+        (
+            "python3 scripts/release_level.py release-batch \\",
+            "python3 .csarc/scripts/release_level.py release-batch \\",
+        ),
+        (
+            "python3 scripts/release_policy.py plan \\",
+            "python3 .csarc/scripts/release_policy.py plan \\",
+        ),
+        (
+            "python3 scripts/release_policy.py detect \\",
+            "python3 .csarc/scripts/release_policy.py detect \\",
+        ),
+        (
+            'if ./scripts/check-trusted-verification "$GITHUB_SHA" \\',
+            'if ./.csarc/scripts/check-trusted-verification "$GITHUB_SHA" \\',
+        ),
+        (
+            "config-file: release-please-config.json",
+            "config-file: .csarc/release-please-config.json",
+        ),
+        (
+            "manifest-file: .release-please-manifest.json",
+            "manifest-file: .csarc/release-please-manifest.json",
+        ),
+        (
+            './scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"',
+            "./.csarc/scripts/verify-release-candidate "
+            '"$RUNNER_TEMP/release-pr.json"',
+        ),
+        (
+            "python3 scripts/release_level.py annotate-pr \\",
+            "python3 .csarc/scripts/release_level.py annotate-pr \\",
+        ),
+        (
+            r'echo "Run \`python3 scripts/release_policy.py '
+            r'prepare-candidate\`, review the files,"',
+            r'echo "Run \`python3 .csarc/scripts/release_policy.py '
+            r'prepare-candidate\`, review the files,"',
+        ),
+        (
+            "./scripts/publish-release stage \\",
+            "./.csarc/scripts/publish-release stage \\",
+        ),
+        (
+            "./scripts/publish-release resolve \\",
+            "./.csarc/scripts/publish-release resolve \\",
+        ),
+        (
+            "run: python3 scripts/release_bundle.py prepare "
+            '--tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-assets"',
+            "run: python3 .csarc/scripts/release_bundle.py prepare "
+            '--tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-assets"',
+        ),
+        (
+            "python3 scripts/release_level.py annotate-release \\",
+            "python3 .csarc/scripts/release_level.py annotate-release \\",
+        ),
+        (
+            "./scripts/publish-release publish \\",
+            "./.csarc/scripts/publish-release publish \\",
+        ),
+        (
+            "./scripts/publish-release rerun-verify \\",
+            "./.csarc/scripts/publish-release rerun-verify \\",
         ),
     },
 }

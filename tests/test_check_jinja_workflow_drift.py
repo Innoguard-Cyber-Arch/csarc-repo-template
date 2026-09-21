@@ -189,15 +189,9 @@ def test_paired_workflow_files_skips_jinja_without_a_root_counterpart(
 
 
 def test_real_repository_workflows_have_no_undeclared_drift() -> None:
-    """Sanity check: this repo's own known allowlist entries actually apply.
+    """The checked-in workflows have no undeclared behavioral drift."""
+    assert check_jinja_workflow_drift.check(ROOT) == []
 
-    This does not render template/ (that is
-    scripts/check_jinja_workflow_drift's own `check()`, exercised end to
-    end by ./scripts/verify-fast); it only confirms the declared
-    allowlist lines are still present verbatim in the real root
-    workflow, so a future rewording does not silently orphan the
-    allowlist entry without anyone noticing.
-    """
     for (
         jinja_name,
         allowed,
