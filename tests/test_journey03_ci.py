@@ -265,6 +265,9 @@ def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
     source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
         encoding="utf-8"
     )
+    template_source = (
+        REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
+    ).read_text(encoding="utf-8")
 
     preflight = source.index("Validate synchronization structure")
     setup = source.index("Set up Python 3.14")
@@ -276,6 +279,13 @@ def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
     assert "source-run=${{ steps.reuse.outputs.source_run }}" in source
     assert "steps.reuse.outputs.reuse != 'true'" in source
     assert "steps.sync.outputs.clean != 'true'" in source
+
+    for workflow in (source, template_source):
+        reuse_environment = workflow.split(
+            "- name: Find reusable trusted verification", 1
+        )[1].split("run: |", 1)[0]
+        assert "GH_TOKEN:" in reuse_environment
+        assert "github.token" in reuse_environment
 
 
 def test_verifiers_do_not_call_removed_attestation_helpers() -> None:

@@ -99,6 +99,16 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
     },
 }
 
+# Issue #742 moved generated-project internals under .csarc/ while the
+# template repository intentionally keeps its own tools and release metadata
+# at the root. Normalize only those two established ownership boundaries;
+# command names, arguments, and every other line still compare exactly.
+TEMPLATE_PATH_NORMALIZATIONS: tuple[tuple[str, str], ...] = (
+    (".csarc/scripts/", "scripts/"),
+    (".csarc/release-please-config.json", "release-please-config.json"),
+    (".csarc/release-please-manifest.json", ".release-please-manifest.json"),
+)
+
 _JINJA_CONDITION_TAG = re.compile(r"{%-?\s*(?:if|elif)\s+(.+?)\s*-?%}")
 _SET_ALIAS = re.compile(r"{%-?\s*set\s+(\w+)\s*=\s*(.+?)\s*-?%}")
 _LANGUAGE_MEMBERSHIP = re.compile(r"""^["'](\w+)["']\s+in\s+languages$""")
@@ -208,6 +218,16 @@ def _relevant_lines(text: str) -> list[str]:
     return lines
 
 
+def _normalize_template_paths(lines: list[str]) -> list[str]:
+    """Map generated-project-owned paths to their root counterparts."""
+    normalized: list[str] = []
+    for line in lines:
+        for template_path, root_path in TEMPLATE_PATH_NORMALIZATIONS:
+            line = line.replace(template_path, root_path)
+        normalized.append(line)
+    return normalized
+
+
 def _subtract_allowed_pairs(
     removed: list[str], added: list[str], allowed: set[tuple[str, str]]
 ) -> tuple[list[str], list[str]]:
@@ -253,7 +273,7 @@ def find_drift(
 
     allowed = allowed or set()
     root_lines = _relevant_lines(root_text)
-    rendered_lines = _relevant_lines(rendered_text)
+    rendered_lines = _normalize_template_paths(_relevant_lines(rendered_text))
     matcher = difflib.SequenceMatcher(
         None, root_lines, rendered_lines, autojunk=False
     )
