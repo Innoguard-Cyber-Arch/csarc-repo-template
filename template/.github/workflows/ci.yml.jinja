@@ -6,7 +6,7 @@ name: CI
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled, ready_for_review, converted_to_draft]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -32,8 +32,11 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
           ref: {% raw %}${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}{% endraw %}
-      - name: Preserve the trusted verification router
-        run: cp scripts/ci_tier.py "$RUNNER_TEMP/ci_tier.py"
+      - name: Preserve the trusted verification policy
+        run: |
+          mkdir -p "$RUNNER_TEMP/trusted-verification"
+          cp scripts/*.py scripts/check-trusted-verification \
+            "$RUNNER_TEMP/trusted-verification/"
       - name: Check out the exact candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,7 +45,55 @@ jobs:
           ref: {% raw %}${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}{% endraw %}
       - name: Read release ownership
         id: release
-        run: echo "ownership=$(python3 scripts/csarc_config.py release_ownership)" >> "$GITHUB_OUTPUT"
+        run: echo "ownership=$(python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" release_ownership)" >> "$GITHUB_OUTPUT"
+      - name: Validate synchronization structure before verification
+        id: sync
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          EVENT_NAME: {% raw %}${{ github.event_name }}{% endraw %}
+          PR_BASE: {% raw %}${{ github.event.pull_request.base.ref || '' }}{% endraw %}
+          PR_BASE_SHA: {% raw %}${{ github.event.pull_request.base.sha || '' }}{% endraw %}
+          PR_HEAD: {% raw %}${{ github.event.pull_request.head.ref || '' }}{% endraw %}
+          PR_HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha || '' }}{% endraw %}
+          PR_NUMBER: {% raw %}${{ github.event.pull_request.number || '' }}{% endraw %}
+        run: |
+          {
+            echo "route=ordinary"
+            echo "clean=false"
+          } >> "$GITHUB_OUTPUT"
+          if [[ "$EVENT_NAME" != "pull_request_target" || "$PR_HEAD" != sync/main-to-* ]]; then
+            exit 0
+          fi
+          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          sync_result="$(python3 "$RUNNER_TEMP/trusted-verification/delivery_sync.py" verify-sync \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$PR_NUMBER" \
+            --base "$PR_BASE" \
+            --base-sha "$PR_BASE_SHA" \
+            --head-ref "$PR_HEAD" \
+            --head-sha "$PR_HEAD_SHA" \
+            --main-sha "$main_sha" \
+            --github-output "$GITHUB_OUTPUT")"
+          if [[ "$sync_result" != "clean" ]]; then
+            echo "route=manual" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          evidence="$RUNNER_TEMP/main-verification.json"
+          python3 "$RUNNER_TEMP/trusted-verification/check-trusted-verification" \
+            "$main_sha" \
+            --github-repo "$GITHUB_REPOSITORY" \
+            --resolve-merge-source \
+            --required-tier full > "$evidence"
+          source_run="$(jq -r 'if .reused then .source_run_id else .run_id end' "$evidence")"
+          source_job="$(jq -r 'if .reused then .source_job_id else .job_id end' "$evidence")"
+          source_check="$(jq -r 'if .reused then .source_check_run_id else .check_run_id end' "$evidence")"
+          {
+            echo "route=clean"
+            echo "main_sha=$main_sha"
+            echo "source_run=$source_run"
+            echo "source_job=$source_job"
+            echo "source_check=$source_check"
+          } >> "$GITHUB_OUTPUT"
       - name: Select trusted verification plan
         id: plan
         env:
@@ -50,8 +101,10 @@ jobs:
           EVENT_NAME: {% raw %}${{ github.event_name == 'pull_request_target' && 'pull_request' || github.event_name }}{% endraw %}
           HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}{% endraw %}
           LABELS: {% raw %}${{ join(github.event.pull_request.labels.*.name, ',') }}{% endraw %}
+          PR_DRAFT: {% raw %}${{ github.event.pull_request.draft || false }}{% endraw %}
           PR_BASE: {% raw %}${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}{% endraw %}
           PR_HEAD: {% raw %}${{ github.event.pull_request.head.ref || github.event.merge_group.head_ref || '' }}{% endraw %}
+          SYNC_CLEAN: {% raw %}${{ steps.sync.outputs.clean }}{% endraw %}
         run: |
           files="$RUNNER_TEMP/changed-files"
           if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
@@ -64,16 +117,22 @@ jobs:
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             args+=(--force-full)
           fi
-          python3 "$RUNNER_TEMP/ci_tier.py" \
+          sync_args=()
+          if [[ "$SYNC_CLEAN" == "true" ]]; then
+            sync_args+=(--verified-sync)
+          fi
+          python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py" \
             --event "$EVENT_NAME" \
             --base "${PR_BASE#refs/heads/}" \
             --head "${PR_HEAD#refs/heads/}" \
             --labels "$LABELS" \
+            --draft "$PR_DRAFT" \
             --files-from "$files" \
             --output-json ci-plan.json \
             --github-output "$GITHUB_OUTPUT" \
             --summary "$GITHUB_STEP_SUMMARY" \
-            "${args[@]}"
+            "${args[@]}" \
+            "${sync_args[@]}"
       - name: Resolve release-level verification suite
         id: level
         env:
@@ -82,7 +141,7 @@ jobs:
           PR_NUMBER: {% raw %}${{ github.event.pull_request.number || '' }}{% endraw %}
         run: |
           if [[ -n "$PR_NUMBER" ]]; then
-            python3 scripts/release_level.py resolve-pr \
+            python3 "$RUNNER_TEMP/trusted-verification/release_level.py" resolve-pr \
               --repo "$GITHUB_REPOSITORY" \
               --pr "$PR_NUMBER" \
               --path-tier "$PATH_TIER" \
@@ -90,53 +149,124 @@ jobs:
           else
             echo "suite=$PATH_TIER" >> "$GITHUB_OUTPUT"
           fi
+      - name: Resolve effective verification suite
+        id: effective
+        env:
+          PR_DRAFT: {% raw %}${{ github.event.pull_request.draft || false }}{% endraw %}
+          RESOLVED_SUITE: {% raw %}${{ steps.level.outputs.suite }}{% endraw %}
+          SYNC_ROUTE: {% raw %}${{ steps.sync.outputs.route }}{% endraw %}
+        run: |
+          suite="$RESOLVED_SUITE"
+          if [[ "$suite" == "full" && ( "$PR_DRAFT" == "true" || "$SYNC_ROUTE" != "ordinary" ) ]]; then
+            suite=fast
+          fi
+          echo "suite=$suite" >> "$GITHUB_OUTPUT"
       - name: Bind trusted verification identity
         id: identity
         env:
           HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}{% endraw %}
-          TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
+          PR_BASE: {% raw %}${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || 'none' }}{% endraw %}
+          PR_BASE_SHA: {% raw %}${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}{% endraw %}
+          RELEASE_LEVEL: {% raw %}${{ steps.level.outputs.level || 'none' }}{% endraw %}
+          TIER: {% raw %}${{ steps.effective.outputs.suite }}{% endraw %}
         run: |
           tree="$(git rev-parse "$HEAD_SHA^{tree}")"
+          labels="$(jq -c '[.pull_request.labels[].name] | sort' "$GITHUB_EVENT_PATH" 2>/dev/null || printf '[]')"
+          labels_sha="$(printf '%s' "$labels" | sha256sum | cut -d' ' -f1)"
           if [[ "$TIER" == "full" ]]; then
             command="./scripts/verify"
           else
             command="./scripts/verify-fast"
           fi
-          echo "tree=$tree" >> "$GITHUB_OUTPUT"
-          echo "command=$command" >> "$GITHUB_OUTPUT"
+          {
+            echo "tree=$tree"
+            echo "command=$command"
+            echo "base=$PR_BASE"
+            echo "base_sha=$PR_BASE_SHA"
+            echo "labels=$labels_sha"
+            echo "release=$RELEASE_LEVEL"
+          } >> "$GITHUB_OUTPUT"
+      - name: Find reusable trusted verification
+        id: reuse
+        env:
+          BASE: {% raw %}${{ steps.identity.outputs.base }}{% endraw %}
+          BASE_SHA: {% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %}
+          COMMAND: {% raw %}${{ steps.identity.outputs.command }}{% endraw %}
+          EVENT_ACTION: {% raw %}${{ github.event.action || '' }}{% endraw %}
+          HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha || '' }}{% endraw %}
+          LABELS_SHA: {% raw %}${{ steps.identity.outputs.labels }}{% endraw %}
+          RELEASE_LEVEL: {% raw %}${{ steps.identity.outputs.release }}{% endraw %}
+          SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
+          SYNC_ROUTE: {% raw %}${{ steps.sync.outputs.route }}{% endraw %}
+          TIER: {% raw %}${{ steps.effective.outputs.suite }}{% endraw %}
+        run: |
+          echo "reuse=false" >> "$GITHUB_OUTPUT"
+          case "$EVENT_ACTION" in
+            edited|labeled|unlabeled|ready_for_review|converted_to_draft) ;;
+            *) exit 0 ;;
+          esac
+          if [[ "$SYNC_ROUTE" != "ordinary" ]]; then
+            exit 0
+          fi
+          python3 "$RUNNER_TEMP/trusted-verification/check-trusted-verification" \
+            "$HEAD_SHA" \
+            --github-repo "$GITHUB_REPOSITORY" \
+            --find-reusable \
+            --tier "$TIER" \
+            --scopes "$SCOPES" \
+            --command "$COMMAND" \
+            --base "$BASE" \
+            --base-sha "$BASE_SHA" \
+            --labels "$LABELS_SHA" \
+            --release-level "$RELEASE_LEVEL" \
+            --exclude-run-id "$GITHUB_RUN_ID" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Validate trusted clean sync tier=fast scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} tree={% raw %}${{ steps.identity.outputs.tree }}{% endraw %} command=./scripts/verify-fast base={% raw %}${{ steps.identity.outputs.base }}{% endraw %} base-sha={% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %} labels={% raw %}${{ steps.identity.outputs.labels }}{% endraw %} release={% raw %}${{ steps.identity.outputs.release }}{% endraw %} main={% raw %}${{ steps.sync.outputs.main_sha }}{% endraw %} source-run={% raw %}${{ steps.sync.outputs.source_run }}{% endraw %} source-job={% raw %}${{ steps.sync.outputs.source_job }}{% endraw %} source-check={% raw %}${{ steps.sync.outputs.source_check }}{% endraw %}
+        if: {% raw %}${{ steps.sync.outputs.clean == 'true' }}{% endraw %}
+        run: "true"
+      - name: Reuse trusted verification tier={% raw %}${{ steps.effective.outputs.suite }}{% endraw %} scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} tree={% raw %}${{ steps.identity.outputs.tree }}{% endraw %} command={% raw %}${{ steps.identity.outputs.command }}{% endraw %} base={% raw %}${{ steps.identity.outputs.base }}{% endraw %} base-sha={% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %} labels={% raw %}${{ steps.identity.outputs.labels }}{% endraw %} release={% raw %}${{ steps.identity.outputs.release }}{% endraw %} source-run={% raw %}${{ steps.reuse.outputs.source_run }}{% endraw %} source-job={% raw %}${{ steps.reuse.outputs.source_job }}{% endraw %} source-check={% raw %}${{ steps.reuse.outputs.source_check }}{% endraw %}
+        if: {% raw %}${{ steps.reuse.outputs.reuse == 'true' }}{% endraw %}
+        run: "true"
 {% if has_python %}
       - name: Set up Python {{ python_target }}
+        if: {% raw %}${{ steps.reuse.outputs.reuse != 'true' && steps.sync.outputs.clean != 'true' }}{% endraw %}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "{{ python_target }}"
 {% endif %}
       - name: Set up uv 0.12.15
+        if: {% raw %}${{ steps.reuse.outputs.reuse != 'true' && steps.sync.outputs.clean != 'true' }}{% endraw %}
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: "0.12.15"
 {% if has_typescript %}
       - name: Set up pnpm 11.22.0
+        if: {% raw %}${{ steps.reuse.outputs.reuse != 'true' && steps.sync.outputs.clean != 'true' }}{% endraw %}
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: "11.22.0"
           run_install: false
       - name: Set up Node.js 24
+        if: {% raw %}${{ steps.reuse.outputs.reuse != 'true' && steps.sync.outputs.clean != 'true' }}{% endraw %}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
 {% endif %}
 {% if has_rust %}
       - name: Set up Rust 1.98.0
+        if: {% raw %}${{ steps.reuse.outputs.reuse != 'true' && steps.sync.outputs.clean != 'true' }}{% endraw %}
         run: |
           rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
           rustup default 1.98.0
 {% endif %}
-      - name: Execute trusted verification tier={% raw %}${{ steps.plan.outputs.tier }}{% endraw %} scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} tree={% raw %}${{ steps.identity.outputs.tree }}{% endraw %} command={% raw %}${{ steps.identity.outputs.command }}{% endraw %}
+      - name: Execute trusted verification tier={% raw %}${{ steps.effective.outputs.suite }}{% endraw %} scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} tree={% raw %}${{ steps.identity.outputs.tree }}{% endraw %} command={% raw %}${{ steps.identity.outputs.command }}{% endraw %} base={% raw %}${{ steps.identity.outputs.base }}{% endraw %} base-sha={% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %} labels={% raw %}${{ steps.identity.outputs.labels }}{% endraw %} release={% raw %}${{ steps.identity.outputs.release }}{% endraw %}
+        if: {% raw %}${{ steps.reuse.outputs.reuse != 'true' && steps.sync.outputs.clean != 'true' }}{% endraw %}
         env:
           CSARC_CI_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
-          CSARC_CI_TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
+          CSARC_CI_TIER: {% raw %}${{ steps.effective.outputs.suite }}{% endraw %}
           CSARC_CI_BASE: {% raw %}${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}{% endraw %}
-          CSARC_VERIFICATION_SUITE: {% raw %}${{ steps.level.outputs.suite }}{% endraw %}
+          CSARC_CI_DRAFT: {% raw %}${{ github.event.pull_request.draft || false }}{% endraw %}
+          CSARC_VERIFICATION_SUITE: {% raw %}${{ steps.effective.outputs.suite }}{% endraw %}
         run: |
           if [[ "$CSARC_CI_TIER" == "full" ]]; then
             ./scripts/verify

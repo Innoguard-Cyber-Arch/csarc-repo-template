@@ -17,10 +17,15 @@ CHECKER = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "check-trusted-verification")
 )
 resolve_merge_source = CHECKER["resolve_merge_source"]
+find_reusable_evidence = CHECKER["find_reusable_evidence"]
 
 NOW = datetime(2026, 9, 20, 12, tzinfo=UTC)
 HEAD = "a" * 40
+SOURCE_HEAD = "d" * 40
 TREE = "b" * 40
+BASE = "dev/m14-generated-project-fixes"
+BASE_SHA = "f" * 40
+LABELS = "c" * 64
 ROOT_TOOLCHAIN = {
     "python-3.14",
     "uv-0.12.15",
@@ -36,12 +41,17 @@ def evidence(
     command: str = "./scripts/verify-fast",
     tree: str = TREE,
     completed_at: datetime = NOW - timedelta(minutes=2),
+    run_id: int = 200,
+    check_id: int = 7,
+    reuse: tuple[int, int, int] | None = None,
+    sync: tuple[str, int, int, int] | None = None,
+    head: str = HEAD,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Build one valid trusted run and job fixture."""
-    url = "https://github.com/owner/repo/actions/runs/200/job/7"
+    url = f"https://github.com/owner/repo/actions/runs/{run_id}/job/{check_id}"
     check_run = {
-        "id": 7,
-        "head_sha": HEAD,
+        "id": check_id,
+        "head_sha": head,
         "status": "completed",
         "conclusion": "success",
         "details_url": url,
@@ -53,13 +63,38 @@ def evidence(
         },
     }
     workflow_run = {
-        "id": 200,
+        "id": run_id,
         "run_attempt": 1,
-        "head_sha": HEAD,
+        "head_sha": head,
         "status": "completed",
         "conclusion": "success",
         "repository": {"full_name": "owner/repo"},
     }
+    evidence_step = (
+        f"Execute trusted verification tier={tier} scopes=source "
+        f"tree={tree} command={command} base={BASE} base-sha={BASE_SHA} "
+        f"labels={LABELS} "
+        "release=alpha"
+    )
+    if reuse is not None:
+        source_run, source_job, source_check = reuse
+        evidence_step = (
+            f"Reuse trusted verification tier={tier} scopes=source "
+            f"tree={tree} command={command} base={BASE} base-sha={BASE_SHA} "
+            f"labels={LABELS} "
+            f"release=alpha source-run={source_run} source-job={source_job} "
+            f"source-check={source_check}"
+        )
+    if sync is not None:
+        main_sha, source_run, source_job, source_check = sync
+        evidence_step = (
+            "Validate trusted clean sync tier=fast scopes=source "
+            f"tree={tree} command=./scripts/verify-fast base={BASE} "
+            f"base-sha={BASE_SHA} labels={LABELS} release=alpha "
+            f"main={main_sha} "
+            f"source-run={source_run} source-job={source_job} "
+            f"source-check={source_check}"
+        )
     step_names = [
         "Select trusted verification plan",
         "Bind trusted verification identity",
@@ -68,17 +103,14 @@ def evidence(
         "Set up pnpm 11.22.0",
         "Set up Node.js 24",
         "Set up Rust 1.98.0",
-        (
-            f"Execute trusted verification tier={tier} scopes=source "
-            f"tree={tree} command={command}"
-        ),
+        evidence_step,
     ]
     job = {
-        "id": 7,
-        "run_id": 200,
+        "id": check_id,
+        "run_id": run_id,
         "run_attempt": 1,
         "name": "verify",
-        "head_sha": HEAD,
+        "head_sha": head,
         "html_url": url,
         "status": "completed",
         "conclusion": "success",
@@ -121,6 +153,11 @@ def test_valid_trusted_execution_binds_all_claims(
     assert result["tier"] == tier
     assert result["tree_sha"] == TREE
     assert result["command"] == command
+    assert result["base"] == BASE
+    assert result["base_sha"] == BASE_SHA
+    assert result["labels"] == LABELS
+    assert result["release_level"] == "alpha"
+    assert result["reused"] is False
     assert result["toolchain"] == [
         "python-3.14",
         "uv-0.12.15",
@@ -270,7 +307,9 @@ def test_failed_execution_step_fails_closed() -> None:
     """A named execution step must itself have succeeded."""
     check_run, workflow_run, job = evidence()
     job["steps"][-1]["conclusion"] = "failure"
-    with pytest.raises(RuntimeError, match="one successful execution step"):
+    with pytest.raises(
+        RuntimeError, match="one execution, reuse, or sync step"
+    ):
         validate_verification_job(
             check_run,
             workflow_run,
@@ -299,6 +338,179 @@ def test_missing_toolchain_step_fails_closed() -> None:
             now=NOW,
             expected_toolchain=ROOT_TOOLCHAIN,
         )
+
+
+def test_valid_reuse_retains_current_identity_and_original_freshness() -> None:
+    """Keep current IDs and the direct source execution's completion time."""
+    source = evidence(run_id=200, check_id=7)
+    current = evidence(
+        run_id=300,
+        check_id=8,
+        completed_at=NOW - timedelta(minutes=1),
+        reuse=(200, 7, 7),
+    )
+
+    result = validate_verification_job(
+        *current,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        source_evidence=(*source, TREE),
+    )
+
+    assert result["run_id"] == 300
+    assert result["job_id"] == 8
+    assert result["check_run_id"] == 8
+    assert result["reused"] is True
+    assert result["source_run_id"] == 200
+    assert result["completed_at"] == (NOW - timedelta(minutes=2)).isoformat()
+
+
+def test_clean_sync_uses_one_direct_full_source_execution() -> None:
+    """A clean sync binds its own head to one fresh full main execution."""
+    source = evidence(
+        tier="full",
+        command="./scripts/verify-template.sh",
+        run_id=200,
+        check_id=7,
+        head=SOURCE_HEAD,
+    )
+    current = evidence(
+        run_id=300,
+        check_id=8,
+        sync=("e" * 40, 200, 7, 7),
+    )
+
+    result = validate_verification_job(
+        *current,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        source_evidence=(*source, TREE),
+    )
+
+    assert result["reused"] is True
+    assert result["sync_main_sha"] == "e" * 40
+    assert result["source_run_id"] == 200
+
+
+def test_reuse_chain_fails_closed() -> None:
+    """One reused job cannot become another reuse job's source."""
+    source = evidence(run_id=200, check_id=7, reuse=(100, 6, 6))
+    current = evidence(run_id=300, check_id=8, reuse=(200, 7, 7))
+
+    with pytest.raises(RuntimeError, match="direct execution source"):
+        validate_verification_job(
+            *current,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            source_evidence=(*source, TREE),
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["source-id", "route", "head", "tree", "freshness"],
+)
+def test_reuse_source_mismatch_fails_closed(mutation: str) -> None:
+    """Reuse never crosses identity, route, tree, or freshness boundaries."""
+    source = evidence(run_id=200, check_id=7)
+    current = evidence(run_id=300, check_id=8, reuse=(200, 7, 7))
+    if mutation == "source-id":
+        current[2]["steps"][-1]["name"] = current[2]["steps"][-1][
+            "name"
+        ].replace("source-check=7", "source-check=9")
+    elif mutation == "route":
+        source[2]["steps"][-1]["name"] = source[2]["steps"][-1]["name"].replace(
+            f"base={BASE}", "base=main"
+        )
+    elif mutation == "head":
+        source[0]["head_sha"] = "d" * 40
+    elif mutation == "tree":
+        source[2]["steps"][-1]["name"] = source[2]["steps"][-1]["name"].replace(
+            f"tree={TREE}", f"tree={'d' * 40}"
+        )
+    else:
+        source[2]["completed_at"] = (
+            NOW - timedelta(hours=24, seconds=1)
+        ).isoformat()
+
+    with pytest.raises(RuntimeError):
+        validate_verification_job(
+            *current,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            source_evidence=(*source, TREE),
+        )
+
+
+class ReuseGitHub:
+    """Expose candidate check rows to the reusable-evidence selector."""
+
+    def collection(
+        self, _repo: str, _path: str, key: str
+    ) -> list[dict[str, Any]]:
+        assert key == "check_runs"
+        return [{"id": 8}, {"id": 7}]
+
+
+def test_reusable_selector_uses_only_an_original_identical_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Metadata reruns select the newest matching execution, never a reuse."""
+
+    def validate(
+        _github: object,
+        _repo: str,
+        _head: str,
+        _app: int,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        check = kwargs["check_runs"]
+        assert isinstance(check, list)
+        check_id = check[0]["id"]
+        return {
+            "check_run_id": check_id,
+            "run_id": 300 if check_id == 8 else 200,
+            "job_id": check_id,
+            "tier": "fast",
+            "scopes": ["source"],
+            "command": "./scripts/verify-fast",
+            "base": BASE,
+            "base_sha": BASE_SHA,
+            "labels": LABELS,
+            "release_level": "alpha",
+            "reused": check_id == 8,
+        }
+
+    monkeypatch.setitem(
+        find_reusable_evidence.__globals__,
+        "require_trusted_verification",
+        validate,
+    )
+    result = find_reusable_evidence(
+        ReuseGitHub(),
+        "owner/repo",
+        HEAD,
+        tier="fast",
+        scopes="source",
+        command="./scripts/verify-fast",
+        base=BASE,
+        base_sha=BASE_SHA,
+        labels=LABELS,
+        release_level="alpha",
+        exclude_run_id=300,
+        max_age_hours=24,
+    )
+
+    assert result is not None
+    assert result["run_id"] == 200
 
 
 class MergeSourceGitHub:

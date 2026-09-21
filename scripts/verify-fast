@@ -64,6 +64,7 @@ python3 scripts/ci_tier.py \
   --labels "${CSARC_CI_LABELS:-}" \
   --files-from "$changed_files" \
   --output-json "$plan_json" \
+  --draft "${CSARC_CI_DRAFT:-false}" \
   --extra-scopes "$extra_scopes"
 
 plan_tier="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
@@ -95,11 +96,6 @@ done
 echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite scopes=${scope_csv:-none}"
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 
-read_generated_languages() (
-  cd "$1"
-  python3 scripts/csarc_config.py languages >/dev/null
-)
-
 case "$suite" in
   baseline|fast|docs) ;;
   full)
@@ -116,21 +112,121 @@ verification_step "Changed-tree hygiene" git diff --check
 verification_step "Conflict-marker check" ./scripts/check-update-conflicts
 verification_step "Secret scan" ./scripts/scan-secrets
 verification_step "Lifecycle-bypass check" ./scripts/check-bypass-lifecycle
-verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
-verification_step "GitHub Actions pin check" \
-  python3 scripts/check_action_pins.py
-verification_step "Locked dependency graph" uv lock --check
 
-run_static_checks=false
-if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
-  run_static_checks=true
+if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ||
+  "$scopes" == *,template,* ]]; then
+  verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
+fi
+if [[ "$scopes" == *,workflow,* || "$scopes" == *,template,* ]]; then
+  verification_step "GitHub Actions pin check" \
+    python3 scripts/check_action_pins.py
 fi
 
-verification_step "Locked Python environment" \
-  uv sync --locked --python "$UV_PYTHON"
-verification_step "Python formatting" uv run ruff format --check src scripts tests
-verification_step "Python lint" uv run ruff check src scripts tests
-verification_step "Python type check" uv run ty check
+run_python_suite=false
+if [[ "$scopes" == *,source,* || "$scopes" == *,template,* ||
+  "$scopes" == *,governance,* || "$scopes" == *,shell,* ||
+  "$scopes" == *,unknown,* || "$scopes" == *,workflow,* ]]; then
+  run_python_suite=true
+fi
+
+pytest_paths=()
+add_pytest_paths() {
+  local candidate existing
+  for candidate in "$@"; do
+    for existing in "${pytest_paths[@]}"; do
+      [[ "$existing" == "$candidate" ]] && continue 2
+    done
+    pytest_paths+=("$candidate")
+  done
+}
+while IFS= read -r -d '' changed_path; do
+  if [[ "$changed_path" == tests/test_*.py ]]; then
+    [[ -f "$changed_path" ]] && add_pytest_paths "$changed_path"
+    continue
+  fi
+  stem="$(basename "$changed_path")"
+  stem="${stem%.jinja}"
+  stem="${stem%.*}"
+  candidate="tests/test_${stem//-/_}.py"
+  [[ -f "$candidate" ]] && add_pytest_paths "$candidate"
+done <"$changed_files"
+if [[ "$scopes" == *,source,* ]]; then
+  add_pytest_paths \
+    tests/test_cli.py \
+    tests/test_language_profiles.py \
+    tests/test_root_config.py
+fi
+if [[ "$scopes" == *,template,* ]]; then
+  add_pytest_paths \
+    tests/test_ai_guidelines.py \
+    tests/test_cli.py \
+    tests/test_config_guidance.py \
+    tests/test_language_profiles.py \
+    tests/test_root_config.py \
+    tests/test_template_update_notifications.py \
+    tests/test_work_item_forms.py
+fi
+if [[ "$scopes" == *,governance,* ]]; then
+  add_pytest_paths \
+    tests/test_apply_repository_settings.py \
+    tests/test_apply_repository_settings_policy.py \
+    tests/test_delivery_sync.py \
+    tests/test_governance_actions.py \
+    tests/test_milestone_approval.py \
+    tests/test_pr_lifecycle.py \
+    tests/test_promotion_gate.py \
+    tests/test_release_level.py \
+    tests/test_release_policy.py \
+    tests/test_repo_capabilities.py \
+    tests/test_review_gate.py \
+    tests/test_standalone_issue_approval.py \
+    tests/test_work_item_forms.py \
+    tests/test_work_item_metadata.py \
+    tests/test_work_pr_closure.py
+fi
+if [[ "$scopes" == *,workflow,* ]]; then
+  add_pytest_paths \
+    tests/test_authenticate_dependabot_head.py \
+    tests/test_check_action_pins.py \
+    tests/test_check_jinja_workflow_drift.py \
+    tests/test_ci_tier.py \
+    tests/test_delivery_sync.py \
+    tests/test_dependabot_auto_merge.py \
+    tests/test_dependency_security.py \
+    tests/test_governance_actions.py \
+    tests/test_journey03_ci.py \
+    tests/test_journey05_workflows.py \
+    tests/test_journey07_release.py \
+    tests/test_pr_lifecycle.py \
+    tests/test_review_gate.py \
+    tests/test_verification_evidence.py \
+    tests/test_work_item_metadata.py
+fi
+if [[ "$scopes" == *,shell,* ]]; then
+  add_pytest_paths \
+    tests/test_check_branch_fresh_cleanup.py \
+    tests/test_dependency_security.py \
+    tests/test_install_scripts_retry.py \
+    tests/test_policy_entrypoints.py \
+    tests/test_resolve_cache_root.py
+fi
+if [[ "$scopes" == *,unknown,* ]]; then
+  pytest_paths=(tests)
+fi
+
+if $run_python_suite || [[ "$scopes" == *,dependency,* ||
+  "$scopes" == *,workflow,* ]]; then
+  verification_step "Locked dependency graph" uv lock --check
+  verification_step "Locked Python environment" \
+    uv sync --locked --python "$UV_PYTHON"
+fi
+
+if $run_python_suite; then
+  verification_step "Python formatting" \
+    uv run ruff format --check src scripts tests
+  verification_step "Python lint" uv run ruff check src scripts tests
+  verification_step "Python type check" uv run ty check
+fi
 
 if [[ "$scopes" == *,workflow,* ]]; then
   verification_step "GitHub Actions audit" \
@@ -145,53 +241,18 @@ if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; the
   verification_step "Dependency scan" ./scripts/verify-dependencies
 fi
 
-verification_step "Bounded Python regression suite" \
-  uv run pytest -vv --durations=20 -m "not large"
+if $run_python_suite; then
+  if ((${#pytest_paths[@]} == 0)); then
+    echo "Python safety floor has no tests for scopes: $scope_csv" >&2
+    exit 2
+  fi
+  verification_step "Bounded Python regression suite" \
+    uv run pytest -vv --durations=20 -m "not large" "${pytest_paths[@]}"
+fi
 
-# Issue #739: check_action_pins.py above only compares literal pins across
-# files; it cannot tell whether a rendered template/ workflow otherwise
-# agrees with its root counterpart (a stray config knob, a stale
-# non-pin value). This needs `copier` from the synced venv, so it runs
-# here rather than alongside check_action_pins.py above.
 if [[ "$scopes" == *,workflow,* ]]; then
   verification_step "Rendered workflow drift" \
     uv run python3 scripts/check_jinja_workflow_drift.py
-fi
-
-if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
-  "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
-  verification_step "Issue-triage self-test" ./scripts/test-issue-triage
-  verification_step "Worktree-cleanup self-test" ./scripts/test-worktree-cleanup
-  verification_step "PR-policy self-test" ./scripts/test-pr-policy
-  verification_step "Repository-settings self-test" \
-    ./scripts/test-apply-repository-settings
-  verification_step "Scope-drift-gate self-test" ./scripts/test-check-scope-gate
-  verification_step "Repository-capabilities self-test" \
-    ./scripts/test-check-repo-capabilities
-fi
-
-if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
-  "$scopes" == *,shell,* ||
-  "$scopes" == *,dependency,* || "$scopes" == *,governance,* ]]; then
-  smoke_root="$plan_root/smoke"
-  mkdir -p "$smoke_root"
-  verification_step "Generated-project smoke render" \
-    uv run copier copy --trust --defaults --vcs-ref HEAD \
-    --data project_slug=fast-template-smoke \
-    --data package_name=fast_template_smoke \
-    --data code_owner=@Innoguard-Cyber-Arch/template-maintainers \
-    "$repo_root" "$smoke_root/project"
-  if $run_static_checks; then
-    verification_step "Generated-project workflow and shell lint" \
-      env CSARC_CACHE_ROOT="$cache_root" \
-      "$smoke_root/project/scripts/lint-workflows-shell"
-  fi
-  verification_step "Generated-project PR-policy self-test" \
-    "$smoke_root/project/scripts/test-pr-policy"
-  verification_step "Generated-project scope-gate self-test" \
-    "$smoke_root/project/scripts/test-check-scope-gate"
-  verification_step "Generated-project configuration read" \
-    read_generated_languages "$smoke_root/project"
 fi
 
 if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then

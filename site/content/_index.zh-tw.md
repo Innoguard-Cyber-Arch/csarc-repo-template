@@ -280,8 +280,8 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 
 **責任交接（本機 scripts → GitHub Actions → PR gate → Release）：**
 
-- **本機 scripts（`Active`）：** `scripts/verify-fast`／`scripts/verify-template.sh` 由開發者在本機先跑一次，篩掉大部分低階錯誤。
-- **GitHub Actions（`Active`）：** PR 開出後，受信任的 base workflow 會分類所需 tier，checkout 精確的候選 commit，並在 GitHub-hosted runner 執行相同的 repo 驗證入口；合併與發版只接受綁定 repo、commit/tree、tier、命令、工具鏈與 GitHub Actions 執行身分的成功證據。
+- **本機 scripts（`Active`）：** 開發者先跑變更範圍的聚焦檢查；`scripts/verify-fast` 是需要廣泛診斷時的選項，完整交付邊界才在最終候選上跑一次 `scripts/verify-template.sh`。
+- **GitHub Actions（`Active`）：** PR 開出後，受信任的 base workflow 會分類所需 tier，checkout 精確的候選 commit，並在 GitHub-hosted runner 對該 head 執行一次 risk-owned 驗證；合併與發版只接受綁定 repo、commit/tree、tier、命令、工具鏈與 GitHub Actions 執行身分的成功證據。
 - **PR gate（依 GitHub 方案而定）：** 支援時由 Ruleset／branch protection 強制擋下未過檢查或未審查的合併；不支援時標示 `DEGRADED`，改由人工自律（見「規則治理」）。
 - **Release（`Active`，但需人工觸發）：** 版本與發版證據由具 admin 權限者在本機執行 `scripts/publish-release` 產生；hosted 的 Automatic／Guided 發版路徑是已知限制，不是預設路徑（見「版本／交付」）。
 

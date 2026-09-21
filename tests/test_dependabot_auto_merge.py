@@ -543,6 +543,7 @@ def _render_dependabot_config(tmp_path: Path, release_ownership: str) -> str:
     return (project / ".github/dependabot.yml").read_text(encoding="utf-8")
 
 
+@pytest.mark.large
 def test_csarc_owned_projects_split_release_and_dev_dependency_prefixes(
     tmp_path: Path,
 ) -> None:
@@ -561,6 +562,7 @@ def test_csarc_owned_projects_split_release_and_dev_dependency_prefixes(
     }
 
 
+@pytest.mark.large
 def test_non_csarc_owned_projects_keep_the_dependabot_default(
     tmp_path: Path,
 ) -> None:
@@ -576,6 +578,7 @@ def test_non_csarc_owned_projects_keep_the_dependabot_default(
     assert "commit-message" not in uv_update
 
 
+@pytest.mark.large
 def test_github_actions_ecosystem_never_gets_a_release_prefix(
     tmp_path: Path,
 ) -> None:

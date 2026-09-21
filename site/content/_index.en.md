@@ -280,8 +280,8 @@ Users do not need to memorize workflow or script names. Current automation cover
 
 **Responsibility handoff (local scripts → GitHub Actions → PR gate → Release):**
 
-- **Local scripts (`Active`):** `scripts/verify-fast` / `scripts/verify-template.sh` run once locally by the developer first, catching most low-level mistakes.
-- **GitHub Actions (`Active`):** once a PR opens, the trusted base workflow classifies the required tier, checks out the exact candidate commit, and runs the same repository verification entry point on a GitHub-hosted runner. Merge and release accept only successful evidence bound to the repository, commit/tree, tier, command, toolchain, and GitHub Actions identity.
+- **Local scripts (`Active`):** developers first run focused checks for the changed owners; `scripts/verify-fast` is optional when a broad diagnostic is useful, and a full delivery boundary runs `scripts/verify-template.sh` once on the final candidate.
+- **GitHub Actions (`Active`):** once a PR opens, the trusted base workflow classifies the required tier, checks out the exact candidate commit, and runs the risk-owned verification once for that head on a GitHub-hosted runner. Merge and release accept only successful evidence bound to the repository, commit/tree, tier, command, toolchain, and GitHub Actions identity.
 - **PR gate (depends on the GitHub plan):** where supported, a Ruleset / branch protection blocks a merge that failed checks or lacks review; where not supported, it is marked `DEGRADED` and falls back to human discipline (see "Rules governance").
 - **Release (`Active`, but needs a human trigger):** version and release evidence is produced by someone with admin permission running `scripts/publish-release` locally; the hosted Automatic/Guided publish path is a known limitation, not the default path (see "Version / delivery").
 

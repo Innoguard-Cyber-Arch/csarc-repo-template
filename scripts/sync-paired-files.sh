@@ -61,7 +61,6 @@ paired_files=(
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
   scripts/promotion_gate.py
-  scripts/pytest_policy.py
   scripts/review_gate.py
   scripts/verification_evidence.py
   scripts/check-scope-gate
@@ -101,7 +100,7 @@ paired_files=(
   scripts/validate-pr-policy
   scripts/verify-dependencies
   scripts/verification-step
-  tests/conftest.py
+  tests/test_verification_evidence.py
   zizmor.yml
 )
 

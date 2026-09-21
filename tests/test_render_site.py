@@ -1494,6 +1494,7 @@ def test_install_prompt_is_visible_and_matches_what_gets_copied() -> None:
         assert "csarc status" in prompt_text or "csarc" in prompt_text.lower()
 
 
+@pytest.mark.large
 def test_copier_generated_project_builds_its_own_bilingual_repo_site(
     tmp_path: Path,
 ) -> None:

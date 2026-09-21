@@ -635,6 +635,7 @@ def rules(
     }
 
 
+@pytest.mark.large
 def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
     """A new project gets the Copilot Ruleset, check, and gate script."""
     project = generate(tmp_path, {})
@@ -674,6 +675,7 @@ def test_issue_comment_review_gate_can_read_release_level_issues() -> None:
         }
 
 
+@pytest.mark.large
 def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
     """Human mode also delegates the variable approval count to the check."""
     project = generate(tmp_path, {"pr_review_mode": "human"})

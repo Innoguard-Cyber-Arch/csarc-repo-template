@@ -18,6 +18,73 @@ from pr_lifecycle import (
 )
 
 
+def write_outputs(path: Path | None, values: dict[str, object]) -> None:
+    """Append simple scalar results to one GitHub Actions output file."""
+    if path is None:
+        return
+    with path.open("a", encoding="utf-8") as output:
+        for key, value in values.items():
+            rendered = str(value).lower() if isinstance(value, bool) else value
+            output.write(f"{key}={rendered}\n")
+
+
+def find_reusable_evidence(
+    github: GitHub,
+    repo: str,
+    head_sha: str,
+    *,
+    tier: str,
+    scopes: str,
+    command: str,
+    base: str,
+    base_sha: str,
+    labels: str,
+    release_level: str,
+    exclude_run_id: int | None,
+    max_age_hours: float,
+) -> dict[str, object] | None:
+    """Find the newest same-head original execution for an identical route."""
+    expected = {
+        "tier": tier,
+        "scopes": sorted(filter(None, scopes.split(","))),
+        "command": command,
+        "base": base,
+        "base_sha": base_sha,
+        "labels": labels,
+        "release_level": release_level,
+    }
+    checks = github.collection(
+        repo,
+        f"commits/{head_sha}/check-runs?filter=all&per_page=100",
+        "check_runs",
+    )
+    matches: list[dict[str, object]] = []
+    for check in checks:
+        try:
+            evidence = require_trusted_verification(
+                github,
+                repo,
+                head_sha,
+                GITHUB_ACTIONS_APP_ID,
+                max_age_hours=max_age_hours,
+                check_runs=[check],
+            )
+        except RuntimeError:
+            continue
+        if evidence.get("reused") is True:
+            continue
+        if (
+            exclude_run_id is not None
+            and evidence.get("run_id") == exclude_run_id
+        ):
+            continue
+        if all(evidence.get(key) == value for key, value in expected.items()):
+            matches.append(evidence)
+    if not matches:
+        return None
+    return max(matches, key=lambda item: int(item["check_run_id"]))
+
+
 def resolve_merge_source(github: GitHub, repo: str, commit: str) -> str:
     """Resolve one merged main commit to its unique source PR head."""
     pulls = github.pages(repo, f"commits/{commit}/pulls?per_page=100")
@@ -64,8 +131,18 @@ def main() -> None:
     parser.add_argument("commit")
     parser.add_argument("--github-repo", required=True)
     parser.add_argument("--resolve-merge-source", action="store_true")
+    parser.add_argument("--find-reusable", action="store_true")
     parser.add_argument("--max-age-hours", type=float, default=24.0)
     parser.add_argument("--required-tier", choices=("docs", "fast", "full"))
+    parser.add_argument("--tier", choices=("docs", "fast", "full"))
+    parser.add_argument("--scopes", default="")
+    parser.add_argument("--command", default="")
+    parser.add_argument("--base", default="")
+    parser.add_argument("--base-sha", default="")
+    parser.add_argument("--labels", default="")
+    parser.add_argument("--release-level", default="none")
+    parser.add_argument("--exclude-run-id", type=int)
+    parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
     github = GitHub()
     head_sha = (
@@ -73,6 +150,46 @@ def main() -> None:
         if args.resolve_merge_source
         else args.commit
     )
+    if args.find_reusable:
+        if (
+            args.resolve_merge_source
+            or args.required_tier is not None
+            or args.tier is None
+            or not args.scopes
+            or not args.command
+            or not args.base
+            or len(args.base_sha) != 40
+            or len(args.labels) != 64
+        ):
+            parser.error("reusable evidence requires one complete route")
+        evidence = find_reusable_evidence(
+            github,
+            args.github_repo,
+            head_sha,
+            tier=args.tier,
+            scopes=args.scopes,
+            command=args.command,
+            base=args.base,
+            base_sha=args.base_sha,
+            labels=args.labels,
+            release_level=args.release_level,
+            exclude_run_id=args.exclude_run_id,
+            max_age_hours=args.max_age_hours,
+        )
+        if evidence is None:
+            write_outputs(args.github_output, {"reuse": False})
+            sys.stdout.write(json.dumps({"reuse": False}) + "\n")
+            return
+        outputs = {
+            "reuse": True,
+            "source_run": evidence["run_id"],
+            "source_job": evidence["job_id"],
+            "source_check": evidence["check_run_id"],
+        }
+        write_outputs(args.github_output, outputs)
+        payload = json.dumps({**outputs, "evidence": evidence}, sort_keys=True)
+        sys.stdout.write(payload + "\n")
+        return
     evidence = require_trusted_verification(
         github,
         args.github_repo,
