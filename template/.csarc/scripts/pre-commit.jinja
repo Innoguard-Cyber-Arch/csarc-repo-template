@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+config="$(mktemp "${TMPDIR:-/tmp}/csarc-pre-commit.XXXXXX")"
+trap 'rm -f -- "$config"' EXIT HUP INT TERM
+
+# Tool-specific syntax is an ephemeral adapter detail. User choices remain in
+# .csarc/config.yml and Copier renders this stable adapter from those choices.
+cat >"$config" <<'YAML'
+repos:
+  - repo: local
+    hooks:
+      - id: update-conflicts
+        name: Copier update conflicts
+        entry: ./.csarc/scripts/check-update-conflicts
+        language: system
+        pass_filenames: false
+{% if "python" in languages %}
+      - id: ruff-format
+        name: Ruff format
+        entry: uv run ruff format --check
+        language: system
+        types: [python]
+      - id: ruff
+        name: Ruff
+        entry: uv run ruff check
+        language: system
+        types: [python]
+      - id: ty
+        name: ty
+        entry: uv run ty check
+        language: system
+        pass_filenames: false
+{% endif %}
+{% if "typescript" in languages %}
+      - id: biome
+        name: Biome
+        entry: pnpm exec biome ci .
+        language: system
+        pass_filenames: false
+      - id: typescript
+        name: TypeScript
+        entry: pnpm exec tsc --noEmit
+        language: system
+        pass_filenames: false
+{% endif %}
+      - id: gitleaks
+        name: Gitleaks
+        entry: ./.csarc/scripts/scan-secrets
+        language: system
+        pass_filenames: false
+YAML
+
+cd "$repo_root"
+uv run pre-commit --config "$config" "$@"

@@ -268,7 +268,7 @@ Alpha PR 可由 `scripts/pr_lifecycle.py merge` 在 lease＋exact-head 授權留
 只適用於 Milestone 核准留言，不是同一件事，不要混用。
 
 這個 bypass 是否要在本 repo 之外的下游生成 repo 也預設套用，不在本節範圍——公版
-`template/policies/rulesets.json.jinja` 刻意保留空的 `bypass_actors`，只有真的撞上
+`template/.csarc/policies/rulesets.json.jinja` 刻意保留空的 `bypass_actors`，只有真的撞上
 同一個「結構性只有一個真人帳號」問題的下游 repo，才需要自行在自己的
 `policies/rulesets.json` 加上等效項目。
 
@@ -400,7 +400,7 @@ operator 在每次 bypass-merge 後主動對該 PR 執行這個工具確認留�
 機制，只適用於 Milestone 核准留言，不是同一件事，不要混用。
 
 這整套 `release_phase` 機制是否要在本 repo 之外的下游生成 repo 也套用，不在本節
-範圍——公版 `template/policies/rulesets.json.jinja` 刻意保留空的 `bypass_actors`、
+範圍——公版 `template/.csarc/policies/rulesets.json.jinja` 刻意保留空的 `bypass_actors`、
 不帶 `policies/project-stage.json` 或第二個 Ruleset 檔，只有真的撞上同一個「結構性
 只有一個真人帳號」問題的下游 repo，才需要自行決定是否套用等效機制（沿用 #580 已
 落地的判斷）。`scripts/apply-repository-settings.sh` 對這兩個新政策檔案的存在與否
@@ -689,7 +689,7 @@ fingerprint-binding（#632）」一節的「留言編輯本身的過期判斷（
 
 ### `promotion` 必要檢查的產生條件（#601）
 
-`policies/rulesets-required-checks.json`（與 `template/policies/rulesets.json.jinja` 的 `required_status_checks`）
+`policies/rulesets-required-checks.json`（與 `template/.csarc/policies/rulesets.json.jinja` 的 `required_status_checks`）
 長期要求 `title`／`promotion`／`verify` 三個 context，但在 #601 之前，沒有任何 workflow 對一般（非 Milestone
 交付）PR 產生 `promotion` 這個 check-run——`main`、`dev/m*` 交付分支與所有現存 PR 皆缺這個 context，required
 check 因此對這類 PR 永遠卡在 pending。`.github/workflows/pr-policy.yml` 新增的 `promotion` job（與
@@ -749,7 +749,7 @@ path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成�
 ### `verify` 的可信 hosted execution evidence（#834）
 
 #834 supersede #661 將 unsigned commit trailer 當作 required evidence 的設計；#661 希望保留低成本本機回饋
-的目標不變。`scripts/verify-fast`、`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`）仍是本機與
+的目標不變。`scripts/verify-fast`、`scripts/verify-template.sh`（生成 repo 是 `.csarc/scripts/verify`）仍是本機與
 hosted 共用的驗證入口，但本機執行只提供開發回饋，不改寫 commit，也不能單獨滿足 merge 或 release gate。
 
 `.github/workflows/ci.yml` 的單一 `verify` job 由 base-trusted `pull_request_target` 或 `merge_group` workflow
@@ -847,7 +847,7 @@ Milestone 自己的 delivery 分支（`docs/index.html` Journey 01／`AGENTS.md`
 
 修法是 GitHub Rulesets 原生就為這個情境準備的欄位：`required_status_checks` 規則的
 `do_not_enforce_on_create: true`（`policies/rulesets-required-checks.json`；生成 repo 對應
-`template/policies/rulesets.json.jinja` 同一個規則區塊，兩者都不分 `pr_review_mode`／`branch_strategy`，因
+`template/.csarc/policies/rulesets.json.jinja` 同一個規則區塊，兩者都不分 `pr_review_mode`／`branch_strategy`，因
 為這個欄位只影響「這個 ref 第一次被建立的那個瞬間」，跟審核模式或是否啟用 `dev/m*` 無關）。這個欄位**只**
 放寬 ref 第一次出現的那一刻；建立之後對這個分支的每一次 push、每一張 PR、合併進它或它合併出去，仍然要通過
 上面列的全部 required checks，跟 `main` 完全一樣——不影響、也不繞過 `main` 既有的任何保護，因為 `main` 從
@@ -933,7 +933,7 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
    這裡只在 `sync-paired-files.sh` 真的找到 drift（代表這次 bump 確實改到 `copier update` 會下發的內容）時
    才 commit，所以是精準只對「真的動到 template 分發內容」的那次 bump 觸發發版，不會連帶讓每一張跟 template
    無關的 Dependabot commit 都被迫升版號。
-2. 新增 `scripts/check_action_pins.py`（root 與 `template/scripts/check_action_pins.py` 逐位元組同步）：掃
+2. 新增 `scripts/check_action_pins.py`（root 與 `template/.csarc/scripts/check_action_pins.py` 逐位元組同步）：掃
    `.github/workflows/`、`template/.github/workflows/` 底下所有 `.yml`／`.yaml`／`.jinja` 檔案的
    `uses: owner/repo@sha` pin，同一個 action 在整個 repo 裡的 pin 必須完全一致，不一致就 fail closed 並點名
    哪個檔案落後、目前多數版本的 pin 是什麼。這是**跟 Dependabot 白名單無關**的獨立不變量檢查，專門補
@@ -1046,7 +1046,7 @@ focused check。最後要求是發布層級下限與 `scripts/ci_tier.py` 路徑
    exact candidate 執行一次 risk-owned suite，並產生上方 #834 定義的 required merge evidence。
 3. **完整交付驗證（`full`）**——只在 Milestone／canary 交付、hotfix、merge queue、手動
    執行或未知高風險路徑觸發；中央模板入口是 `scripts/verify-template.sh`，生成 repo
-   入口是 `scripts/verify`（不帶參數即預設 full）。PR owner／integrator 只在自己的 PR
+   入口是 `.csarc/scripts/verify`（不帶參數即預設 full）。PR owner／integrator 只在自己的 PR
    本身就落在這個邊界時，才需要在本機另外執行一次；一般 `fast`／`docs` PR 只跑變更 owner 的
    focused checks，不需要先在本機重跑 hosted 將執行的整套 fast 或 full。
 
@@ -1150,7 +1150,7 @@ exit 0 結束，任何一項不符合印出 `REQUIRES-FULL-RERUN` 與具體原�
 Regression tests 階段下（與 `test-issue-triage`／`test-worktree-cleanup`／
 `test-pr-policy` 同一組 self-test）。它不掛在 `scripts/verify-fast`：`verify-fast` 的
 governance／template／workflow／shell scope 自我測試集合與生成 repo 的
-`template/scripts/verify-fast.jinja` 必須逐項相等（`tests/test_journey03_ci.py::
+`template/.csarc/scripts/verify-fast.jinja` 必須逐項相等（`tests/test_journey03_ci.py::
 test_release_verification_contains_issue_pr_regressions` 對此做回歸測試），而
 `scripts/check-base-only-remerge` 只存在於中央模板 repo、不會下發到生成 repo（生成
 repo 的 full 入口是單一 `scripts/verify`，沒有本模板這種多階段重新合併場景），所以只加
@@ -1484,7 +1484,7 @@ Action 建 PR，Guided 只在本機執行 `python3 scripts/release_policy.py pre
 成熟度」，不承諾同一個 `X.Y.Z` 之後一定會有對應的無後綴（早期版或正式版）發布——
 下一次發版可能直接跳到更高的版本號，或維持原地再發一次更高的 `.N`。版本號合法性由
 `scripts/release_phase.py`
-（`template/scripts/` 與 `src/csarc_cli/release_phase.py` 各有一份逐位元組相同的
+（`template/.csarc/scripts/` 與 `src/csarc_cli/release_phase.py` 各有一份逐位元組相同的
 副本，後者是因為 `csarc` 發行的 wheel 只包含 `src/csarc_cli`，見其模組
 docstring）驗證：主版本號為 0 時不帶後綴即為早期版，主版本號 ≥ 1 時不帶後綴即為
 正式版，後綴只接受 `alpha.N`／`beta.N`，其他一律 fail closed。`gh release create`

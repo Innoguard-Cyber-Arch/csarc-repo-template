@@ -3475,7 +3475,10 @@ def canonical_scanner_helper(root: Path, path: Path) -> bool:
         root,
         path,
         frozenset(
-            {"scripts/pr_lifecycle.py", "template/scripts/pr_lifecycle.py"}
+            {
+                "scripts/pr_lifecycle.py",
+                "template/.csarc/scripts/pr_lifecycle.py",
+            }
         ),
     )
 

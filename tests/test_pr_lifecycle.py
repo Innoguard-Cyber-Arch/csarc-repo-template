@@ -742,7 +742,8 @@ def test_writer_scanner_allows_the_shipped_pr_policy_validator() -> None:
     `gh issue edit --milestone` example as human guidance. writer_violations
     cannot distinguish that quoted example from an actual unleased write, so
     every downstream project's own scripts/verify (rendered from
-    template/scripts/verify.jinja, which runs `pr_lifecycle.py scan-writers`)
+    template/.csarc/scripts/verify.jinja, which runs
+    `pr_lifecycle.py scan-writers`)
     failed before its configured verification hook ever ran -- this was only
     ever caught by the full-tier, real-template adoption tests. Regression
     coverage for Issue #645: scan the exact shipped files directly so a
@@ -751,7 +752,7 @@ def test_writer_scanner_allows_the_shipped_pr_policy_validator() -> None:
     root = Path(__file__).resolve().parents[1]
     relative_paths = (
         "scripts/validate-pr-policy",
-        "template/scripts/validate-pr-policy",
+        "template/.csarc/scripts/validate-pr-policy",
     )
     for relative in relative_paths:
         candidate = root / relative

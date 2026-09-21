@@ -264,7 +264,7 @@ def test_branch_strategy_reaches_generated_site_content() -> None:
     """
     root = Path(__file__).parents[1]
     build_module = runpy.run_path(
-        str(root / "template/scripts/build_repo_site.py")
+        str(root / "template/.csarc/scripts/build_repo_site.py")
     )
     substitute_config_tokens = build_module["_substitute_config_tokens"]
 
@@ -328,30 +328,28 @@ def test_generated_site_uses_project_owned_markdown() -> None:
     Markdown file resolved once at `copier copy`/`update` time)."""
     root = Path(__file__).parents[1]
     copier = (root / "copier.yml").read_text(encoding="utf-8")
-    engine = (root / "template/scripts/build_repo_site.py").read_text(
+    engine = (root / "template/.csarc/scripts/build_repo_site.py").read_text(
         encoding="utf-8"
     )
-    zh_tw = (root / "template/site/content/_index.zh-tw.md").read_text(
+    zh_tw = (root / "template/docs/site/content/_index.zh-tw.md").read_text(
         encoding="utf-8"
     )
-    en = (root / "template/site/content/_index.en.md").read_text(
+    en = (root / "template/docs/site/content/_index.en.md").read_text(
         encoding="utf-8"
     )
 
-    assert '  - "site/content/_index.zh-tw.md"' in copier
-    assert '  - "site/content/_index.en.md"' in copier
-    assert "bash scripts/build-repo-site" in copier
+    assert '  - "docs/site/content/_index.zh-tw.md"' in copier
+    assert '  - "docs/site/content/_index.en.md"' in copier
+    assert "bash .csarc/scripts/build-repo-site" in copier
     assert "site-content.js" not in copier
     for content in (zh_tw, en):
         assert "[[project_name]]" in content
         assert "[[languages]]" in content
         assert "[[project_visibility]]" in content
         assert "{{< slide" in content
-    # The engine itself is copied verbatim from root, not hand-simplified;
-    # a real divergence would defeat the point of sharing one contract.
-    assert engine == (root / "scripts/build_repo_site.py").read_text(
-        encoding="utf-8"
-    )
+    assert 'root / "docs/site/content"' in engine
+    assert ".csarc/site/static/styles.css" in engine
+    assert 'default="docs/site/theme.css"' in engine
     assert not (root / "template/site/app.js").exists()
     assert not (root / "template/site/index.html.jinja").exists()
     assert not (root / "template/docs/site-content.md.jinja").exists()
@@ -378,8 +376,9 @@ def test_readme_describes_repo_site_source() -> None:
     )
     template_readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
 
+    assert "site/content/_index.zh-tw.md" in root_readme
+    assert "docs/site/content/_index.zh-tw.md" in template_readme
     for readme in (root_readme, template_readme):
-        assert "site/content/_index.zh-tw.md" in readme
         assert "site-content.js" not in readme
         for line in readme.splitlines():
             if "docs/site-content.md" in line:
@@ -641,7 +640,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     active_components = (root / "site/static/legacy-components.js").read_text(
         encoding="utf-8"
     )
-    template_verify = (root / "template/scripts/verify.jinja").read_text(
+    template_verify = (root / "template/.csarc/scripts/verify.jinja").read_text(
         encoding="utf-8"
     )
     assert "policies/dev-next-ruleset.json" not in template_verify
@@ -1433,7 +1432,7 @@ def test_setup_examples_use_release_source_and_stay_root_only() -> None:
         encoding="utf-8"
     )
     template_components = (
-        ROOT / "template/site/static/legacy-components.js"
+        ROOT / "template/.csarc/site/static/legacy-components.js"
     ).read_text(encoding="utf-8")
     command_prefix = (
         "uvx --python 3.14 --from "
@@ -1449,7 +1448,7 @@ def test_setup_examples_use_release_source_and_stay_root_only() -> None:
 
     template_content = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (ROOT / "template/site/content").glob("*.md")
+        for path in (ROOT / "template/docs/site/content").glob("*.md")
     )
     assert "data-setup=" not in template_content
     assert "setupExamplesByLang" not in template_components
@@ -1534,8 +1533,21 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
     # The retired handbook source is not generated at all any more --
     # there is no template/docs/site-content.md.jinja left to copy from.
     assert not (project / "docs/site-content.md").exists()
-    assert (project / "site/content/_index.zh-tw.md").is_file()
-    assert (project / "site/content/_index.en.md").is_file()
+    assert (project / "docs/site/content/_index.zh-tw.md").is_file()
+    assert (project / "docs/site/content/_index.en.md").is_file()
+    assert {path.name for path in project.iterdir()} == {
+        ".claude",
+        ".csarc",
+        ".github",
+        ".gitignore",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "README.en.md",
+        "README.md",
+        "dist",
+        "docs",
+        "src",
+    }
 
     for output in ("docs/index.html", "docs/index.en.html"):
         html = (project / output).read_text(encoding="utf-8")

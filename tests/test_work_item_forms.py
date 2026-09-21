@@ -92,8 +92,17 @@ def test_milestone_tracker_form_matches_the_lifecycle_contract() -> None:
     root_path = REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / TRACKER_FORM_NAME
     template_path = REPO_ROOT / "template" / root_path.relative_to(REPO_ROOT)
     root_form = load_yaml(root_path)
+    template_source = template_path.read_text(encoding="utf-8")
+    template_form = yaml.safe_load(
+        template_source.replace(".csarc/scripts/", "scripts/").replace(
+            ".csarc/docs/milestone-description.md",
+            "docs/milestone-description.md",
+        )
+    )
 
-    assert root_form == load_yaml(template_path)
+    # The form contract stays identical while each repository points at its
+    # own stable adapter and documentation locations.
+    assert root_form == template_form
     assert root_form["type"] == "Feature"
     assert root_form["labels"] == ["enhancement"]
     assert "assignees" not in root_form
@@ -197,13 +206,13 @@ def test_pr_templates_keep_repository_specific_checks_separate() -> None:
 
     assert "./scripts/verify-template.sh" in root_template
     assert "已測試新專案產生" in root_template
-    assert "./scripts/verify`" in generated_template
+    assert "./.csarc/scripts/verify`" in generated_template
     assert "verify-template.sh" not in generated_template
     assert "已測試新專案產生" not in generated_template
 
 
 def test_paired_files_check_accepts_selected_actions() -> None:
-    """Only the selected active workflows may remain template pairs."""
+    """Only explicitly selected byte-identical assets remain paired."""
     completed = subprocess.run(  # noqa: S603
         [REPO_ROOT / "scripts" / "sync-paired-files.sh", "--check"],
         cwd=REPO_ROOT,

@@ -81,7 +81,7 @@ review／required-check 實際狀態）維持未實作：`scripts/generate_audit
 （#535／#564）尚未併入 `main`，是獨立進行中
 的 Milestone 13 work，#607 刻意不依賴它，改成 operator 針對已識別的單一 PR 主動查核
 （跟 `scripts/check-pr-policy-status` 的用法一樣）；一旦該模組併入，可以再擴充做自動
-交叉核對。這整套機制與 #580 一樣是 root-only：`template/policies/rulesets.json.jinja`
+交叉核對。這整套機制與 #580 一樣是 root-only：`template/.csarc/policies/rulesets.json.jinja`
 刻意保留空的 `bypass_actors`，不帶 `policies/project-stage.json` 或第二個 Ruleset
 檔；`scripts/apply-repository-settings.sh` 對這兩個新政策檔案的存在與否是條件式
 判斷，檔案不存在時（所有既有下游 repo）行為與 #607 之前完全一致。

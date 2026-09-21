@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).parents[1]
 def direct_regression_commands(path: str) -> set[str]:
     """Return standalone regressions invoked by one stage entry point."""
     source = (REPO_ROOT / path).read_text(encoding="utf-8")
+    source = source.replace("./.csarc/scripts/", "./scripts/")
     return set(re.findall(r"\./scripts/test-[A-Za-z0-9-]+", source))
 
 
@@ -82,11 +83,11 @@ def test_verification_reuses_downloads_without_sharing_environments() -> None:
         encoding="utf-8"
     )
     generated_fast = (
-        REPO_ROOT / "template/scripts/verify-fast.jinja"
+        REPO_ROOT / "template/.csarc/scripts/verify-fast.jinja"
     ).read_text(encoding="utf-8")
-    generated_full = (REPO_ROOT / "template/scripts/verify.jinja").read_text(
-        encoding="utf-8"
-    )
+    generated_full = (
+        REPO_ROOT / "template/.csarc/scripts/verify.jinja"
+    ).read_text(encoding="utf-8")
 
     assert all(
         "scripts/resolve-cache-root" in source
@@ -183,8 +184,8 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
     assert "Preserve the trusted verification policy" in source
     assert 'python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py"' in source
     assert "Execute trusted verification tier=" in source
-    assert "./scripts/verify-fast" in source
-    assert "./scripts/verify" in source
+    assert "./.csarc/scripts/verify-fast" in source
+    assert "./.csarc/scripts/verify" in source
     assert "check-verify-attestation" not in source
     assert "hosted_verify_bots" not in source
     assert "CSARC_RUN_OSV" not in source
@@ -281,7 +282,7 @@ def test_verifiers_do_not_call_removed_attestation_helpers() -> None:
     """Keep generated-project verification free of removed legacy scripts."""
     sources = (
         REPO_ROOT / "scripts/verify-stage-regression-tests",
-        REPO_ROOT / "template/scripts/verify.jinja",
+        REPO_ROOT / "template/.csarc/scripts/verify.jinja",
     )
 
     for path in sources:
@@ -294,21 +295,24 @@ def test_documentation_tier_validates_the_generated_site() -> None:
     """Documentation-only changes still verify their built artifact."""
     root_fast = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
     template_fast = (
-        REPO_ROOT / "template/scripts/verify-fast.jinja"
+        REPO_ROOT / "template/.csarc/scripts/verify-fast.jinja"
     ).read_text(encoding="utf-8")
 
     assert "./scripts/build-repo-site --check" in root_fast
-    assert "./scripts/build-repo-site --check" in template_fast
+    assert "./.csarc/scripts/build-repo-site --check" in template_fast
 
 
 def test_local_verification_reuses_the_hosted_path_planner() -> None:
     """Local entry points reuse the planner without minting merge evidence."""
-    for path in (
-        "scripts/verify-fast",
-        "template/scripts/verify-fast.jinja",
+    for path, planner in (
+        ("scripts/verify-fast", "python3 scripts/ci_tier.py"),
+        (
+            "template/.csarc/scripts/verify-fast.jinja",
+            "python3 .csarc/scripts/ci_tier.py",
+        ),
     ):
         source = (REPO_ROOT / path).read_text(encoding="utf-8")
-        assert "python3 scripts/ci_tier.py" in source
+        assert planner in source
         assert 'git merge-base "$base_ref" HEAD' in source
         assert "git diff --no-renames --name-only" in source
         assert '--extra-scopes "$extra_scopes"' in source
@@ -336,12 +340,20 @@ def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
     """
     root_fast = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
     template_fast = (
-        REPO_ROOT / "template/scripts/verify-fast.jinja"
+        REPO_ROOT / "template/.csarc/scripts/verify-fast.jinja"
     ).read_text(encoding="utf-8")
 
-    for source, staleness_check in (
-        (root_fast, "./scripts/build-repo-site --check"),
-        (template_fast, "./scripts/build-repo-site --check"),
+    for source, specification_check, staleness_check in (
+        (
+            root_fast,
+            "python3 scripts/spec_to_issue.py validate",
+            "./scripts/build-repo-site --check",
+        ),
+        (
+            template_fast,
+            "python3 .csarc/scripts/spec_to_issue.py validate",
+            "./.csarc/scripts/build-repo-site --check",
+        ),
     ):
         gate_start = source.index(
             'if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then'
@@ -349,7 +361,7 @@ def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
         gate_end = source.index("\nfi", gate_start)
         gate = source[gate_start:gate_end]
 
-        assert "python3 scripts/spec_to_issue.py validate" in gate
+        assert specification_check in gate
         assert staleness_check in gate
 
 
@@ -405,8 +417,8 @@ def test_verification_entry_points_use_shared_step_reporting() -> None:
     """Keep every long local verification path observable."""
     entries = (
         REPO_ROOT / "scripts/verify-fast",
-        REPO_ROOT / "template/scripts/verify-fast.jinja",
-        REPO_ROOT / "template/scripts/verify.jinja",
+        REPO_ROOT / "template/.csarc/scripts/verify-fast.jinja",
+        REPO_ROOT / "template/.csarc/scripts/verify.jinja",
         *sorted((REPO_ROOT / "scripts").glob("verify-stage-*")),
     )
     for entry in entries:
@@ -529,10 +541,10 @@ def test_release_verification_contains_issue_pr_regressions() -> None:
         "scripts/verify-stage-regression-tests"
     )
     generated_issue = direct_regression_commands(
-        "template/scripts/verify-fast.jinja"
+        "template/.csarc/scripts/verify-fast.jinja"
     )
     generated_release = direct_regression_commands(
-        "template/scripts/verify.jinja"
+        "template/.csarc/scripts/verify.jinja"
     )
 
     assert root_issue == generated_issue
@@ -549,7 +561,7 @@ def test_long_policy_regressions_run_only_in_full() -> None:
     }
     for path in (
         "scripts/verify-fast",
-        "template/scripts/verify-fast.jinja",
+        "template/.csarc/scripts/verify-fast.jinja",
     ):
         source = (REPO_ROOT / path).read_text(encoding="utf-8")
         assert expected.isdisjoint(
@@ -560,7 +572,7 @@ def test_long_policy_regressions_run_only_in_full() -> None:
         "scripts/verify-stage-regression-tests"
     )
     assert expected <= direct_regression_commands(
-        "template/scripts/verify.jinja"
+        "template/.csarc/scripts/verify.jinja"
     )
 
 

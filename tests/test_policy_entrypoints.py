@@ -17,12 +17,14 @@ def test_policy_tests_do_not_read_workflow_yaml() -> None:
         assert "Could not extract" not in source
 
 
-def test_policy_validators_are_shipped_without_forks() -> None:
-    """Generated repositories receive the exact validators tested at root."""
+def test_policy_validators_use_generated_csarc_entrypoints() -> None:
+    """Generated validators call only the generated CSARC entrypoints."""
     for name in ("validate-issue-policy", "validate-pr-policy"):
-        assert (ROOT / "scripts" / name).read_bytes() == (
-            ROOT / "template/scripts" / name
-        ).read_bytes()
+        generated = (ROOT / "template/.csarc/scripts" / name).read_text(
+            encoding="utf-8"
+        )
+        assert ".csarc/scripts/" in generated
+        assert "./scripts/" not in generated
 
 
 def test_workflows_are_thin_trusted_wrappers() -> None:

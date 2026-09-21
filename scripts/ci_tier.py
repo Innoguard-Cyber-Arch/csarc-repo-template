@@ -39,9 +39,9 @@ class Plan:
 def scope_for(path: str) -> str:
     """Map one repository path to its narrowest CI concern."""
     name = Path(path).name.removesuffix(".jinja")
-    if path.startswith(("site/", "template/site/")) or path.startswith(
-        ".github/ISSUE_TEMPLATE/"
-    ):
+    if path.startswith(
+        ("site/", "template/docs/site/", "template/.csarc/site/")
+    ) or path.startswith(".github/ISSUE_TEMPLATE/"):
         return "docs"
     if path == ".gitignore":
         return "source"
@@ -58,14 +58,15 @@ def scope_for(path: str) -> str:
         ".github/REVIEWERS",
         "AGENTS.md",
     } or (
-        path.startswith(("policies/", "template/policies/"))
+        path.startswith(("policies/", "template/.csarc/policies/"))
         or path.startswith("scripts/apply-repository-settings")
         or path.startswith("scripts/check-governance-drift")
         or path.startswith("scripts/request-reviewer")
     ):
         return "governance"
     if path.endswith(".sh") or (
-        path.startswith(("scripts/", "template/scripts/")) and "." not in name
+        path.startswith(("scripts/", "template/.csarc/scripts/"))
+        and "." not in name
     ):
         return "shell"
     if (
@@ -107,15 +108,17 @@ def scope_for(path: str) -> str:
 
 def affects_repo_site(path: str) -> bool:
     """Return whether a changed path affects the portable repo-site build."""
-    return path.startswith(("site/", "template/site/")) or path in {
+    return path.startswith(
+        ("site/", "template/docs/site/", "template/.csarc/site/")
+    ) or path in {
         "docs/index.html",
         "docs/site-content.js",
         "docs/site-content.md",
         "docs/site-theme.css",
         "scripts/render_site.py",
         "template/docs/site-content.md.jinja",
-        "template/docs/site-theme.css.jinja",
-        "template/scripts/render_site.py",
+        "template/docs/site/theme.css.jinja",
+        "template/.csarc/scripts/render_site.py",
     }
 
 
@@ -128,11 +131,11 @@ def requires_full_on_main(path: str) -> bool:
         (
             "template/.github/workflows/",
             "template/.github/actions/",
-            "template/scripts/",
+            "template/.csarc/scripts/",
         )
     ):
         return True
-    return path.startswith(("scripts/", "template/scripts/")) and (
+    return path.startswith(("scripts/", "template/.csarc/scripts/")) and (
         name
         in {
             "check-verify-attestation",

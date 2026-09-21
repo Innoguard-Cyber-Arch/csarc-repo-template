@@ -14,15 +14,16 @@ import yaml
 REPO_ROOT = Path(__file__).parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/dependabot-auto-merge.yml"
 MERGE_WORKFLOW_PATH = REPO_ROOT / ".github/workflows/dependabot-merge.yml"
+GENERATED_WORKFLOW_PATH = (
+    REPO_ROOT / "template/.github/workflows/dependabot-auto-merge.yml"
+)
 
 
 def test_copier_is_never_imported_at_module_level() -> None:
     """Issue #771: keep the `copier` import lazy, not a regression waiting.
 
-    This file is a paired file (`scripts/sync-paired-files.sh`) that ships
-    byte-for-byte to every downstream generated project, but `copier` is a
-    template-authoring-only dependency (root `pyproject.toml`) that a
-    generated project never installs. A top-level `import copier` /
+    `copier` is a template-authoring-only dependency (root `pyproject.toml`).
+    A top-level `import copier` /
     `from copier import ...` here previously broke a generated project's own
     `ty check` (static "unresolved-import" -- `ty` has no way to know the
     import is conditional at runtime) and, without `copier` installed,
@@ -40,6 +41,19 @@ def test_copier_is_never_imported_at_module_level() -> None:
             assert "copier" not in top_level_names
         elif isinstance(node, ast.ImportFrom):
             assert node.module != "copier"
+
+
+def test_generated_workflow_uses_only_its_csarc_adapter() -> None:
+    """Do not ship the template-authoring paired-file sync downstream."""
+    source = GENERATED_WORKFLOW_PATH.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(source)
+
+    assert "sync-template" not in workflow["jobs"]
+    assert "sync_eligible" not in source
+    assert "sync_complete" not in source
+    assert "scripts/sync-paired-files.sh" not in source
+    assert ".csarc/scripts/authenticate_dependabot_head.py" in source
+    assert workflow["jobs"]["classify-update"]["needs"] == "authenticate"
 
 
 def _load_workflow() -> tuple[str, dict]:
@@ -502,12 +516,7 @@ def _render_dependabot_config(tmp_path: Path, release_ownership: str) -> str:
     generated project (`_subdirectory: template` in copier.yml deliberately
     excludes both from the rendered output), and `copier` is likewise only a
     template-authoring dependency (root `pyproject.toml`), never a generated
-    project's own runtime/test dependency. This test file is nonetheless a
-    paired file that `scripts/sync-paired-files.sh` ships to every generated
-    project (so the file's *other*, non-Copier tests can keep validating its
-    own copy of `.github/workflows/dependabot-auto-merge.yml`); skip these
-    Copier-driven cases gracefully there instead of hard-failing import,
-    `ty check`, or pytest collection when `copier` is absent (Issue #771).
+    project's own runtime/test dependency.
     """
     copier = pytest.importorskip("copier")
     if (

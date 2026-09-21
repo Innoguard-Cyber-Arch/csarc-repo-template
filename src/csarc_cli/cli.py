@@ -79,8 +79,8 @@ INSTALL_STATE_NEXT_COMMAND = {
     ),
     INSTALL_STATE_CURRENT: "no action needed",
     INSTALL_STATE_POLICY_ONLY: (
-        "scripts/apply-repository-settings.sh plan to preview, then "
-        "scripts/apply-repository-settings.sh apply"
+        ".csarc/scripts/apply-repository-settings.sh plan to preview, then "
+        ".csarc/scripts/apply-repository-settings.sh apply"
     ),
 }
 POLICY_CHECK_COMPLETED_MARKER = "Repository settings check failed with"
@@ -196,14 +196,11 @@ class ReleaseClient(Protocol):
 
 @dataclass(frozen=True)
 class Plan:
-    """File effects for an init or adoption operation.
+    """Explicit file effects for an init, adoption, or update operation.
 
-    ``remove`` is always empty today: init and adoption only add or update
-    files in the target repository, never delete existing ones. The field
-    stays a first-class, independently countable part of the plan (rather
-    than a hardcoded report constant) so the adoption report's removed-file
-    statistic is genuinely computed, and future removal-aware flows have
-    somewhere real to report into (#530).
+    Init and adoption do not remove files. Update may explicitly move legacy
+    generated assets into ``.csarc`` or retire obsolete generated state; each
+    effect remains independently countable and auditable (#530, #742).
     """
 
     add: tuple[str, ...]
@@ -213,6 +210,7 @@ class Plan:
     merge: tuple[str, ...]
     manual: tuple[str, ...]
     unknown: tuple[str, ...]
+    move: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -280,6 +278,7 @@ class ResolvedPlan:
                 "add": list(self.files.add),
                 "automatic_merge": list(self.files.merge),
                 "manual_merge": list(self.files.manual),
+                "move": list(self.files.move),
                 "overwrite": list(self.files.overwrite),
                 "preserve": list(self.files.preserve),
                 "remove": list(self.files.remove),
@@ -1031,6 +1030,7 @@ def predicted_lockfile_effects(
         planned.merge,
         planned.manual,
         planned.unknown,
+        planned.move,
     )
 
 
@@ -1258,6 +1258,26 @@ def project_verification_evidence(
     return {**configuration, "reason": reason, "result": result}
 
 
+def reject_canonical_verification_hook(
+    target: Path, hook: Path, raw_path: str
+) -> None:
+    """Reject both current and legacy canonical verifier identities."""
+    for canonical in (
+        target / ".csarc" / "scripts" / "verify",
+        target / "scripts" / "verify",
+    ):
+        try:
+            if canonical.exists() and os.path.samefile(hook, canonical):
+                raise CliError(
+                    "Project verification hook must not resolve to the "
+                    f"canonical verifier: {raw_path}"
+                )
+        except OSError as error:
+            raise CliError(
+                f"Cannot compare project verification hook identity: {raw_path}"
+            ) from error
+
+
 def validated_project_verification_hook(
     target: Path, configuration: Mapping[str, object]
 ) -> Path | None:
@@ -1298,17 +1318,7 @@ def validated_project_verification_hook(
         raise CliError(
             f"Project verification hook is not executable: {raw_path}"
         )
-    canonical = target / "scripts" / "verify"
-    try:
-        if canonical.exists() and os.path.samefile(hook, canonical):
-            raise CliError(
-                "Project verification hook must not resolve to the canonical "
-                f"scripts/verify command: {raw_path}"
-            )
-    except OSError as error:
-        raise CliError(
-            f"Cannot compare project verification hook identity: {raw_path}"
-        ) from error
+    reject_canonical_verification_hook(target, hook, raw_path)
     return hook
 
 
@@ -1641,6 +1651,114 @@ def compare_stage(
         tuple(sorted(manual)),
         tuple(sorted(unknown)),
     )
+
+
+def legacy_layout_pairs(
+    stage: Path,
+    target: Path,
+    *,
+    project_mode: object,
+) -> tuple[tuple[str, str], ...]:
+    """Return only known generated paths that need the one-time layout move."""
+    pairs: set[tuple[str, str]] = set()
+    staged = project_files(stage)
+    existing = project_files(target)
+    prefixes = (
+        ("scripts/", ".csarc/scripts/"),
+        ("policies/", ".csarc/policies/"),
+        ("tests/", ".csarc/tests/"),
+        ("site/static/", ".csarc/site/static/"),
+    )
+    for old_prefix, new_prefix in prefixes:
+        for new in staged:
+            if new.startswith(new_prefix):
+                old = old_prefix + new.removeprefix(new_prefix)
+                if old in existing:
+                    pairs.add((old, new))
+    exact = {
+        ".copier-answers.yml": ".csarc/config.yml",
+        ".release-please-manifest.json": (
+            ".csarc/release-please-manifest.json"
+        ),
+        ".github/REVIEWERS": ".csarc/REVIEWERS",
+        "CLAUDE.md": ".claude/CLAUDE.md",
+        "docs/ci-policy.md": ".csarc/docs/ci-policy.md",
+        "docs/csarc.md": ".csarc/docs/csarc.md",
+        "docs/milestone-description.md": (
+            ".csarc/docs/milestone-description.md"
+        ),
+        "docs/site-theme.css": "docs/site/theme.css",
+        "release-please-config.json": ".csarc/release-please-config.json",
+        "site/README.md": ".csarc/site/README.md",
+        "site/data/glossary.toml": ".csarc/site/data/glossary.toml",
+        "site/data/navigation.json": "docs/site/data/navigation.json",
+        "site/version.json": ".csarc/site/version.json",
+        "version.txt": ".csarc/version.txt",
+    }
+    if project_mode == "new":
+        exact["SECURITY.md"] = ".github/SECURITY.md"
+    for old, new in exact.items():
+        if old in existing and new in staged:
+            pairs.add((old, new))
+    for old in existing:
+        if old.startswith("site/content/"):
+            destination = "docs/site/content/" + old.removeprefix(
+                "site/content/"
+            )
+            pairs.add((old, destination))
+    return tuple(sorted(pairs))
+
+
+def update_file_plan(
+    staged: Plan,
+    moves: tuple[tuple[str, str], ...],
+    removals: tuple[str, ...] = (),
+) -> Plan:
+    """Make Copier's update effects explicit without changing the target."""
+    old = {source for source, _destination in moves}
+    new = {destination for _source, destination in moves}
+    return Plan(
+        tuple(sorted(set(staged.add) - new)),
+        tuple(sorted(set(staged.overwrite) | (set(staged.manual) - new))),
+        tuple(sorted(removals)),
+        tuple(sorted(set(staged.preserve) - old - new - set(removals))),
+        staged.merge,
+        (),
+        staged.unknown,
+        tuple(f"{source} -> {destination}" for source, destination in moves),
+    )
+
+
+def apply_layout_moves(
+    target: Path, moves: tuple[tuple[str, str], ...]
+) -> None:
+    """Apply the approved generated-layout moves with collision protection."""
+    for source_name, destination_name in moves:
+        source = checked_destination(target, source_name)
+        destination = checked_destination(target, destination_name)
+        if not source.exists() and not source.is_symlink():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists() or destination.is_symlink():
+            if file_fingerprint(source) != file_fingerprint(destination):
+                raise CliError(
+                    "Generated layout migration collision: "
+                    f"{source_name} -> {destination_name}."
+                )
+            source.unlink()
+        else:
+            source.replace(destination)
+    legacy_directories = (
+        "scripts",
+        "policies",
+        "site/content",
+        "site/data",
+        "site",
+    )
+    for relative in legacy_directories:
+        directory = target / relative
+        with suppress(OSError):
+            directory.rmdir()
 
 
 def plan_status(
@@ -2467,6 +2585,15 @@ def print_capabilities(payload: dict[str, object]) -> None:
         print(f"Next: {next_step}")
 
 
+def print_update_recommendation(update: dict[str, object] | None) -> None:
+    """Print an optional update recommendation."""
+    if update is None:
+        return
+    recommendation = update.get("governance_drift_recommendation")
+    if isinstance(recommendation, str):
+        print(f"Recommendation: {recommendation}")
+
+
 def print_plan(plan: ResolvedPlan) -> None:
     """Print the human-readable form of the shared plan model."""
     print(f"Mode: {plan.mode}")
@@ -2541,6 +2668,7 @@ def print_plan(plan: ResolvedPlan) -> None:
         print_group("Add", plan.files.add)
         print_group("Overwrite", plan.files.overwrite)
         print_group("Remove", plan.files.remove)
+        print_group("Move", plan.files.move)
         print_group("Preserve", plan.files.preserve)
         print_group("Automatic merge", plan.files.merge)
         print_group("Manual merge", plan.files.manual)
@@ -2552,9 +2680,7 @@ def print_plan(plan: ResolvedPlan) -> None:
             "Conflict risk: Copier smart diff; conflicts fail closed and "
             "remain in place."
         )
-        recommendation = plan.update.get("governance_drift_recommendation")
-        if isinstance(recommendation, str):
-            print(f"Recommendation: {recommendation}")
+    print_update_recommendation(plan.update)
 
 
 def confirm(args: argparse.Namespace) -> bool:
@@ -2821,6 +2947,7 @@ def candidate_effects(
             tuple(sorted(merges)),
             planned.manual,
             planned.unknown,
+            planned.move,
         ),
         dict(sorted(artifacts.items())),
     )
@@ -3409,10 +3536,16 @@ def authorize_adoption_candidate(
     return replace(plan, files=effects, adoption=updated)
 
 
+def managed_script(root: Path, name: str) -> Path:
+    """Resolve a current CSARC script or its legacy update-time location."""
+    current = root / ".csarc" / "scripts" / name
+    return current if current.is_file() else root / "scripts" / name
+
+
 def verify_project(target: Path) -> dict[str, object]:
     """Run canonical verification and one validated project hook."""
     configuration = project_verification_configuration(target)
-    verify = target / "scripts" / "verify"
+    verify = managed_script(target, "verify")
     if not verify.is_file():
         hook = project_verification_evidence(
             configuration,
@@ -3420,7 +3553,9 @@ def verify_project(target: Path) -> dict[str, object]:
             "Canonical project verification is unavailable.",
         )
         raise ProjectVerificationError(
-            "Generated project is missing ./scripts/verify.", hook
+            "Generated project is missing ./.csarc/scripts/verify "
+            "(or legacy ./scripts/verify).",
+            hook,
         )
     try:
         project_hook = validated_project_verification_hook(
@@ -3500,7 +3635,7 @@ def verify_project(target: Path) -> dict[str, object]:
 
 def settings_plan(target: Path) -> None:
     """Run only the read-only repository settings plan."""
-    settings = target / "scripts" / "apply-repository-settings.sh"
+    settings = managed_script(target, "apply-repository-settings.sh")
     if not settings.is_file():
         print("Repository settings plan unavailable: script is missing.")
         return
@@ -4566,7 +4701,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         )
         preview_config_binding = copier_config_binding(stage)
         capabilities = capability_preflight(
-            stage / "scripts" / "release_policy.py",
+            managed_script(stage, "release_policy.py"),
             target,
             revision,
             emit=False,
@@ -4772,6 +4907,7 @@ def predicted_adoption_effects(target: Path, planned: Plan) -> Plan:
         planned.merge,
         planned.manual,
         planned.unknown,
+        planned.move,
     )
 
 
@@ -5130,7 +5266,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         answers: dict[str, object] = dict(data)
         answers.update(read_copier_answers(config_path(stage)))
         capabilities = capability_preflight(
-            stage / "scripts" / "release_policy.py",
+            managed_script(stage, "release_policy.py"),
             target,
             revision,
             emit=False,
@@ -5438,7 +5574,7 @@ def run_policy_settings_check(
             [str(script), "check"],
             127,
             "",
-            "scripts/apply-repository-settings.sh is missing.",
+            ".csarc/scripts/apply-repository-settings.sh is missing.",
         )
     return run([str(script), "check"], cwd=target, capture=True, check=False)
 
@@ -5471,8 +5607,7 @@ def trusted_policy_settings_check(
                 skip_tasks=True,
             )
             return run_policy_settings_check(
-                stage / "scripts" / "apply-repository-settings.sh",
-                target,
+                managed_script(stage, "apply-repository-settings.sh"), target
             )
     except CliError as error:
         return subprocess.CompletedProcess(command, 126, "", str(error))
@@ -5483,7 +5618,7 @@ def classify_policy_check(
 ) -> PolicyCheckResult:
     """Classify one policy-drift check without guessing at ambiguous output.
 
-    `scripts/apply-repository-settings.sh check` either runs its full
+    `.csarc/scripts/apply-repository-settings.sh check` either runs its full
     comparison to completion -- exit 0 for a clean match, or exit 1 with its
     own `POLICY_CHECK_COMPLETED_MARKER` summary line once it has counted at
     least one actionable difference -- or it hard-stops early on something
@@ -5523,14 +5658,14 @@ def detect_install_state(
     """Deterministically classify a target into one of five install states.
 
     Reads only `.csarc/config.yml` (or legacy Copier answers), the pinned
-    Copier revision, and `policies/` drift; it never infers a state from
+    Copier revision, and `.csarc/policies/` drift; it never infers a state from
     free-form judgment, so repeated runs against unchanged repository state
     always return the same classification. The five states are: `create`
     (no target yet, or an empty directory), `adopt` (an existing repository
     without CSARC configuration), `update` (a pinned Copier revision behind
     the resolved target release), `current` (revision and policy settings
     both match), and `policy-only-update` (revision matches but the live
-    repository policy settings have drifted from `policies/`).
+    repository policy settings have drifted from `.csarc/policies/`).
     """
     if repository_target_is_new(target):
         return {
@@ -5600,7 +5735,7 @@ def detect_install_state(
             "policy_check": policy_report,
             "reason": (
                 "Copier revision is current; repository policy settings "
-                "have drifted from policies/."
+                "have drifted from .csarc/policies/."
             ),
             "state": INSTALL_STATE_POLICY_ONLY,
             "update_status": status,
@@ -5789,7 +5924,10 @@ def _render_reinstall_plan(
     fresh_answers = staged_answers_path.read_text(encoding="utf-8")
     staged_answers_path.unlink()
     capabilities = capability_preflight(
-        stage / "scripts" / "release_policy.py", target, revision, emit=False
+        stage / ".csarc" / "scripts" / "release_policy.py",
+        target,
+        revision,
+        emit=False,
     )
     plan = build_adoption_plan(
         stage,
@@ -5835,7 +5973,7 @@ def command_update_reinstall(  # noqa: C901
     plan-to-apply TOCTOU window. That second build still uses
     based on the approved preview. The fresh answers file is written into
     candidate directly and `verify_project` -- the same canonical
-    `./scripts/verify` plus validated project hook every other
+    `./.csarc/scripts/verify` plus validated project hook every other
     apply-to-target path in this module runs -- is invoked explicitly
     against it. A `ProjectVerificationError` there fails reinstall closed
     before anything is written to target, exactly like `adopt
@@ -6045,7 +6183,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         target_uses_current_config = (stage / CONFIG_FILE).is_file()
         answers = read_copier_answers(config_path(stage))
         preflight = capability_preflight(
-            stage / "scripts" / "release_policy.py",
+            managed_script(stage, "release_policy.py"),
             target,
             target_revision,
             emit=False,
@@ -6061,10 +6199,31 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             skip_tasks=True,
         )
         current_capabilities = capability_preflight(
-            current_stage / "scripts" / "release_policy.py",
+            managed_script(current_stage, "release_policy.py"),
             target,
             current_revision,
             emit=False,
+        )
+        layout_moves = legacy_layout_pairs(
+            stage,
+            target,
+            project_mode=saved_answers.get("project_mode"),
+        )
+        retirement_candidates = (
+            LEGACY_PROFILE_FILE.as_posix(),
+            ".gitleaks.toml",
+            ".pre-commit-config.yaml",
+            "zizmor.yml",
+        )
+        retiring = tuple(
+            name
+            for name in retirement_candidates
+            if (target / name).is_file() and not (target / name).is_symlink()
+        )
+        files = update_file_plan(
+            compare_stage(stage, target, adopt=False),
+            layout_moves,
+            retiring,
         )
     hook_configuration = project_verification_configuration(target, answers)
     validated_project_verification_hook(target, hook_configuration)
@@ -6115,6 +6274,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         repository=repository,
         answers=answers,
         capabilities=preflight,
+        files=files,
         update=status,
     )
     if args.check:
@@ -6190,26 +6350,29 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             target_uses_current_config
             and candidate_config_path == candidate / LEGACY_ANSWERS_FILE
         )
-        legacy_profile = candidate / LEGACY_PROFILE_FILE
-        retiring_legacy_profile = legacy_profile.is_file()
+        early_layout_moves = tuple(
+            move
+            for move in layout_moves
+            if move[0] == LEGACY_ANSWERS_FILE.as_posix()
+        )
+        deferred_layout_moves = tuple(
+            move for move in layout_moves if move not in early_layout_moves
+        )
+        retiring_files = tuple(candidate / name for name in retiring)
+        # Copier must see the legacy generated paths in their original
+        # locations so its old-to-new comparison can remove and add them
+        # cleanly. Only the answers file moves early because Copier and the
+        # target template's finalize tasks need the canonical config path.
+        apply_layout_moves(candidate, early_layout_moves)
         if migrating_legacy_config:
-            # Migrate the answers file to its current location *before*
-            # Copier runs, not only after. The target template's own
-            # finalize tasks (run by Copier itself as part of this exact
-            # `copier update` call, e.g. scripts/render_site.py) read
-            # CONFIG_FILE directly and would otherwise fail mid-update on a
-            # repository that still only has the legacy path.
-            migrated = candidate / CONFIG_FILE
-            migrated.parent.mkdir(parents=True, exist_ok=True)
-            candidate_config_path.replace(migrated)
-            candidate_config_path = migrated
-        if retiring_legacy_profile:
-            # Superseded by CONFIG_FILE (see LEGACY_PROFILE_FILE); every
-            # field it held is already carried by the migrated answers
-            # above, so retire the stale duplicate instead of leaving it
-            # behind for an update to trip over later.
-            legacy_profile.unlink()
-        if migrating_legacy_config or retiring_legacy_profile:
+            # apply_layout_moves() migrated the answers file before Copier's
+            # finalize tasks read the one canonical configuration path.
+            candidate_config_path = candidate / CONFIG_FILE
+        for retiring_file in retiring_files:
+            # The legacy profile is superseded by CONFIG_FILE. Tool-specific
+            # configs are now materialized by stable adapters at runtime.
+            retiring_file.unlink()
+        if migrating_legacy_config or retiring_files:
             # Copier's own `update` refuses to run against a dirty
             # destination, so commit this filesystem-only migration before
             # invoking it; HEAD is moved back afterward (see below) without
@@ -6275,7 +6438,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                 "the target was not changed. Resolve the listed files in "
                 "the target or template, then rerun the update."
             )
-        if migrating_legacy_config or retiring_legacy_profile:
+        # Copier normally performs clean legacy deletions and additions
+        # itself. Any legacy source left behind is user-modified or otherwise
+        # outside that clean update, so finish the move only when it is safe
+        # and fail closed on a different destination.
+        apply_layout_moves(candidate, deferred_layout_moves)
+        if migrating_legacy_config or retiring_files:
             # Move HEAD back to the pre-migration commit without touching
             # the working tree or index (see above): the migration and
             # whatever Copier changed on top of it now both show up as one

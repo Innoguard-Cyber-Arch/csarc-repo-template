@@ -28,12 +28,12 @@ engine and component set, copied byte-for-byte by
 
 | Path | Responsibility |
 | --- | --- |
-| `template/scripts/build_repo_site.py`, `repo_site_blocks.py` | Byte-identical copies of this engine (see `scripts/sync-paired-files.sh`) |
-| `template/scripts/build-repo-site` | The project's own build/`--check` entry point (simpler than root's: no legacy-parity fixture to compare against) |
-| `template/site/content/_index.zh-tw.md`, `_index.en.md` | Initial project-owned Markdown (three starter slides: home, install, about); Copier preserves later edits |
-| `template/site/static/`, `template/site/data/navigation.json` | Template-owned; kept in sync with `site/static/` and this project's own navigation shape |
-| `template/site/data/glossary.toml.jinja` | Copier-templated at generation time from `.csarc/config.yml` |
-| `template/docs/site-theme.css.jinja` | Project-owned narrow theme overrides |
+| `template/.csarc/scripts/build_repo_site.py`, `repo_site_blocks.py` | Byte-identical copies of this engine (see `scripts/sync-paired-files.sh`) |
+| `template/.csarc/scripts/build-repo-site` | The project's own build/`--check` entry point (simpler than root's: no legacy-parity fixture to compare against) |
+| `template/docs/site/content/_index.zh-tw.md`, `_index.en.md` | Initial project-owned Markdown (three starter slides: home, install, about); Copier preserves later edits |
+| `template/.csarc/site/static/`, `template/docs/site/data/navigation.json` | Template-owned; kept in sync with `site/static/` and this project's own navigation shape |
+| `template/.csarc/site/data/glossary.toml.jinja` | Copier-templated at generation time from `.csarc/config.yml` |
+| `template/docs/site/theme.css.jinja` | Project-owned narrow theme overrides |
 
 Unlike root's own content, a generated project's slides resolve
 `[[project_name]]`-style tokens straight from `.csarc/config.yml` at every
@@ -41,7 +41,7 @@ local build (`_substitute_config_tokens` in `build_repo_site.py`), not once
 at `copier copy`/`update` time -- editing that file is enough to refresh
 them. The retired `docs/site-content.md` handbook source (a single Jinja-
 templated Markdown file with its own smaller renderer) is superseded by this
-same root engine; `template/scripts/build-repo-site` prints a migration
+same root engine; `template/.csarc/scripts/build-repo-site` prints a migration
 notice while that file still exists in an older generated repository.
 
 The legacy fixture is not an authoring source. Its CSS, images, and retained

@@ -1149,16 +1149,9 @@ def test_zh_home_version_paragraph_updates_automatically_on_bump(
     hardcoded (Issue #695/#696's own lesson: a literal version string
     goes stale on every release).
 
-    scripts/sync-paired-files.sh ships this file byte-for-byte into
-    template/tests/, and from there into every generated project's own
-    tests/ -- where the same relative path resolves to that project's
-    own site/content/_index.zh-tw.md, a generic page describing *using*
-    csarc-repo-template rather than *being* it, which structurally never
-    carries these two self-referential markers. Skip rather than fail
-    when they are absent (Issue #699/#702's own lesson: a paired test
-    that hardcodes root-only content fails on every fresh checkout
-    downstream) -- root's own real file, where this test has teeth, is
-    unaffected."""
+    This is intentionally a template-authoring repository test. Generated
+    projects keep their own website content under docs/site and do not ship
+    this root-specific release marker check."""
     zh_source = (
         Path(__file__).parents[1] / "site/content/_index.zh-tw.md"
     ).read_text(encoding="utf-8")
@@ -1641,7 +1634,7 @@ def test_write_release_version_normalizes_uv_lock_extra_file_to_pep440(
 ) -> None:
     """PEP 440 also applies to uv.lock's synced entry, not only pyproject.toml.
 
-    Matches template/release-please-config.json.jinja's actual shape:
+    Matches template/.csarc/release-please-config.json.jinja's actual shape:
     uv.lock is a "$.package[...]" extra-file, handled by a different code
     path than pyproject.toml's own primary write.
     """
