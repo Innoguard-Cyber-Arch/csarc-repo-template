@@ -38,6 +38,11 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert workflow["jobs"]["release"]["timeout-minutes"] == 60
     assert "googleapis/release-please-action@45996ed1" in source
     assert "release_policy.py plan" in source
+    assert "release_level.py release-batch" in source
+    assert "RELEASE_LEVEL: ${{ steps.level.outputs.level }}" in source
+    assert '--phase "$RELEASE_LEVEL"' in source
+    assert "release_level.py annotate-pr" in source
+    assert "release_level.py annotate-release" in source
     assert "release_policy.py detect" in source
     assert "mode == 'automatic'" in source
     assert "mode == 'guided'" in source
@@ -62,6 +67,15 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "release_policy.py release" not in source
     assert "/actions/workflows/" not in source
     assert "source_run_id" not in source
+
+    steps = workflow["jobs"]["release"]["steps"]
+    names = [step.get("name") for step in steps]
+    assert names.index("Resolve included work and release level") < names.index(
+        "Plan the next version from repository history"
+    )
+    assert names.index(
+        "Record included work in the draft Release"
+    ) < names.index("Bind, upload, and publish the release")
 
     settings = (ROOT / "scripts/apply-repository-settings.sh").read_text(
         encoding="utf-8"
@@ -163,7 +177,9 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         ]
         _, resolve = by_name["Resolve the exact release state"]
 
-        assert plan_index == 1
+        level_index, _ = by_name["Resolve included work and release level"]
+        assert level_index == 1
+        assert plan_index == level_index + 1
         assert plan_index < capability_index < blocked_index
         assert blocked_index < attestation_index
         assert attestation_index < min(index for index, _ in toolchain_steps)
@@ -246,7 +262,7 @@ def test_release_please_always_stages_a_draft() -> None:
     )
     assert config["packages"]["."]["draft"] is True
     assert '"draft": true' in (
-        ROOT / "template/release-please-config.json.jinja"
+        ROOT / "template/.csarc/release-please-config.json.jinja"
     ).read_text(encoding="utf-8")
 
 
@@ -275,15 +291,17 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
 
     assert "project_mode == 'new'" in copier
     assert ".github/workflows/release.yml" in copier
-    assert './scripts/check-trusted-verification "$GITHUB_SHA"' in template
+    assert (
+        './.csarc/scripts/check-trusted-verification "$GITHUB_SHA"' in template
+    )
     assert "--resolve-merge-source" in template
     assert '--github-repo "$GITHUB_REPOSITORY"' in template
     assert "--required-tier full" in template
-    assert "./scripts/verify-release-candidate" in template
+    assert "./.csarc/scripts/verify-release-candidate" in template
     assert '{% if "typescript" in languages %}' in template
     assert '{% if "rust" in languages %}' in template
     assert '"path": "Cargo.lock"' in (
-        ROOT / "template/release-please-config.json.jinja"
+        ROOT / "template/.csarc/release-please-config.json.jinja"
     ).read_text(encoding="utf-8")
 
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
@@ -330,21 +348,50 @@ def test_template_only_offers_working_delivery_options() -> None:
     assert unsupported.isdisjoint(config)
 
 
-def test_retired_archive_has_no_release_workflow_copy() -> None:
-    """Use Git history instead of keeping replaced release workflows."""
-    archive = ROOT / "archive/ci-cd/2026-08-27"
-    assert not list((archive / "root-workflows").glob("*release*"))
-    assert not list((archive / "template-workflows").glob("*release*"))
-
-
 def test_guided_path_has_no_repo_local_publisher() -> None:
-    """Only release.yml may create tags or GitHub Releases."""
+    """Only release.yml may create tags or GitHub Releases.
+
+    Issue #744's dry-run retention lister legitimately *reads* an existing
+    Release's `tag_name` (there is no other way to list what already
+    exists), so the narrower invariant this guards is "never construct a
+    create-Release request body" -- a real `gh api ... -f tag_name=...` or
+    JSON payload literal `"tag_name": ` -- not "never mention the field
+    name while reading one back."
+    """
     source = (ROOT / "scripts/release_policy.py").read_text(encoding="utf-8")
 
     assert "def direct_release" not in source
     assert 'add_parser("release")' not in source
-    assert '"tag_name"' not in source
+    assert '"tag_name": ' not in source
     assert '"/dispatches"' not in source
+
+
+def test_release_phase_module_is_synced_across_all_three_copies() -> None:
+    """scripts/release_phase.py has no single canonical source, by CI.
+
+    Its own docstring says three copies (scripts/, template/.csarc/scripts/, and
+    src/csarc_cli/ -- the last only because the distributed `csarc` wheel
+    ships src/csarc_cli alone and cannot import a sibling scripts/ module)
+    are kept byte-identical, but only the first two are enforced by
+    scripts/sync-paired-files.sh (a root-to-template/ tool, not a 3-way
+    one). Without this test, an edit to one copy without the others would
+    only ever be caught by someone's word, not CI.
+    """
+    root_text = (ROOT / "scripts/release_phase.py").read_text(encoding="utf-8")
+    template_text = (
+        ROOT / "template/.csarc/scripts/release_phase.py"
+    ).read_text(encoding="utf-8")
+    cli_text = (ROOT / "src/csarc_cli/release_phase.py").read_text(
+        encoding="utf-8"
+    )
+    assert root_text == template_text, (
+        "scripts/release_phase.py and template/.csarc/scripts/release_phase.py "
+        "have drifted; run scripts/sync-paired-files.sh"
+    )
+    assert root_text == cli_text, (
+        "scripts/release_phase.py and src/csarc_cli/release_phase.py have "
+        "drifted; copy one over the other so all three stay identical"
+    )
 
 
 def test_release_status_stays_candidate_until_default_branch_evidence() -> None:
@@ -384,8 +431,10 @@ def test_shared_ci_policy_names_the_generated_verifier() -> None:
     """Do not send generated repositories to a root-only command."""
     policy = (ROOT / "docs/ci-policy.md").read_text(encoding="utf-8")
 
-    assert "（生成 repo 是 `scripts/verify`）" in policy  # noqa: RUF001
-    assert "生成 repo 用 `scripts/verify full`" in policy
+    assert "（生成 repo 是 `.csarc/scripts/verify`）" in policy  # noqa: RUF001
+    assert (
+        "入口是 `.csarc/scripts/verify`（不帶參數即預設 full）" in policy  # noqa: RUF001
+    )
 
 
 def test_release_drift_check_is_independent_of_release_yml() -> None:
@@ -464,29 +513,32 @@ def test_release_drift_check_ships_with_release_ownership() -> None:
     principle for this same capability pairing.
     """
     copier = (ROOT / "copier.yml").read_text(encoding="utf-8")
-    paired = (ROOT / "scripts/sync-paired-files.sh").read_text(encoding="utf-8")
-
     assert (
         "{% if project_mode == 'new' %}__keep_release_drift_workflow__"
         "{% else %}.github/workflows/release-drift.yml{% endif %}" in copier
     )
     assert (
         "{% if project_mode == 'new' %}__keep_release_drift_script__"
-        "{% else %}scripts/check-release-drift{% endif %}" in copier
+        "{% else %}.csarc/scripts/check-release-drift{% endif %}" in copier
     )
-    assert ".github/workflows/release-drift.yml" in paired
-    assert "scripts/check-release-drift" in paired
 
     template_workflow = (
         ROOT / "template/.github/workflows/release-drift.yml"
-    ).read_bytes()
+    ).read_text(encoding="utf-8")
     template_script = (
-        ROOT / "template/scripts/check-release-drift"
-    ).read_bytes()
-    assert (
-        template_workflow
-        == (ROOT / ".github/workflows/release-drift.yml").read_bytes()
+        ROOT / "template/.csarc/scripts/check-release-drift"
+    ).read_text(encoding="utf-8")
+    root_script = (ROOT / "scripts/check-release-drift").read_text(
+        encoding="utf-8"
     )
-    assert (
-        template_script == (ROOT / "scripts/check-release-drift").read_bytes()
-    )
+    assert "run: ./.csarc/scripts/check-release-drift" in template_workflow
+    assert ".csarc/scripts/check-release-drift" in template_workflow
+    for marker in (
+        "RELEASE_DRIFT_HOURS",
+        "Release-publish-record",
+        "gh issue create",
+        "gh issue edit",
+    ):
+        assert marker in template_script
+        assert marker in root_script
+    assert 'dirname "${BASH_SOURCE[0]}")/../..' in template_script

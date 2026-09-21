@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.17.4</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.17.3</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> and stays synchronized across both languages. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.17.4<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.17.3<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -280,8 +280,8 @@ Users do not need to memorize workflow or script names. Current automation cover
 
 **Responsibility handoff (local scripts → GitHub Actions → PR gate → Release):**
 
-- **Local scripts (`Active`):** `scripts/verify-fast` / `scripts/verify-template.sh` run once locally by the developer first, catching most low-level mistakes.
-- **GitHub Actions (`Active`):** once a PR opens, the trusted base workflow classifies the required tier, checks out the exact candidate commit, and runs the same repository verification entry point on a GitHub-hosted runner. Merge and release accept only successful evidence bound to the repository, commit/tree, tier, command, toolchain, and GitHub Actions identity.
+- **Local scripts (`Active`):** developers first run focused checks for the changed owners; `scripts/verify-fast` is optional when a broad diagnostic is useful, and a full delivery boundary runs `scripts/verify-template.sh` once on the final candidate.
+- **GitHub Actions (`Active`):** once a PR opens, the trusted base workflow classifies the required tier, checks out the exact candidate commit, and runs the risk-owned verification once for that head on a GitHub-hosted runner. Merge and release accept only successful evidence bound to the repository, commit/tree, tier, command, toolchain, and GitHub Actions identity.
 - **PR gate (depends on the GitHub plan):** where supported, a Ruleset / branch protection blocks a merge that failed checks or lacks review; where not supported, it is marked `DEGRADED` and falls back to human discipline (see "Rules governance").
 - **Release (`Active`, but needs a human trigger):** version and release evidence is produced by someone with admin permission running `scripts/publish-release` locally; the hosted Automatic/Guided publish path is a known limitation, not the default path (see "Version / delivery").
 
@@ -338,7 +338,7 @@ Only tools this template directly integrates, executes, or produces into the rep
 | [zizmor](https://github.com/zizmorcore/zizmor) | Static security audit of GitHub Actions workflows | `pyproject.toml`, `scripts/verify-stage-github-actions-audit` | The full tier's `github-actions-audit` stage; local runs provide feedback and a required hosted full tier re-executes it | [MIT](https://github.com/zizmorcore/zizmor/blob/main/LICENSE) |
 | [Dependabot](https://github.com/dependabot/dependabot-core) | Opens dependency-update pull requests | `.github/dependabot.yml` | Root and template package ecosystems | [MIT](https://github.com/dependabot/dependabot-core/blob/main/LICENSE) |
 | [OSV-Scanner](https://github.com/google/osv-scanner) | Scans lockfiles for disclosed vulnerabilities | `scripts/verify-dependencies`, `scripts/install-osv-scanner`, `.github/workflows/osv.yml` | Dependency-change PRs, delivery candidates, weekly schedule | [Apache-2.0](https://github.com/google/osv-scanner/blob/main/LICENSE) |
-| [Syft](https://github.com/anchore/syft) | Generates the release SPDX SBOM | `.github/workflows/release.yml` (`anchore/sbom-action`), `scripts/release_assets.py` | Delivery PR that creates a release | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
+| [Syft](https://github.com/anchore/syft) | Generates the release SPDX SBOM | `.github/workflows/release.yml` (`anchore/sbom-action`), `scripts/release_bundle.py` | Delivery PR that creates a release | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
 | [Release Please](https://github.com/googleapis/release-please) | Maintains the version/changelog pull request and creates the GitHub Release | `.github/workflows/release.yml`, `release-please-config.json`, `.release-please-manifest.json` | Delivery branch to `main` | [Apache-2.0](https://github.com/googleapis/release-please/blob/main/LICENSE) |
 | repo-site render engine | In-house, dependency-free Python engine that builds the bilingual repo-site and `llms.txt` from Markdown; replaced Hugo on 2026-09-03 | `scripts/build_repo_site.py`, `scripts/build-repo-site`, `scripts/render_site.py`, `site/version.json` | `docs/index.html`, `docs/index.en.html`, `llms.txt` | In-house (this repository) |
 {{< /disclosure >}}
@@ -436,18 +436,19 @@ Only tools this template directly integrates, executes, or produces into the rep
 {{< standard key="contract-mode-standard" title="Change size decides how heavy verification gets" >}}
 Developers first run the most relevant local check for quick feedback. Once a PR opens, GitHub selects the tier from the trusted base workflow, checks out the exact candidate commit on a GitHub-hosted runner, and executes the matching verification. Merge and release consume evidence from that hosted run, bound to the repository, commit/tree, tier, command, and toolchain. The system decides which tier applies from the change's scope:
 
-<div class="plan-grid">
-  <article class="plan-card current"><h3>docs</h3><p>Docs-only changes get the lightest check. Example: editing a single explainer document.</p></article>
-  <article class="plan-card team"><h3>fast</h3><p>Ordinary changes default to this tier. Example: a routine code or config change.</p></article>
-  <article class="plan-card enterprise"><h3>full</h3><p>Milestone delivery, a hotfix, or unpinnable risk. Example: Milestone/canary delivery, a hotfix, a merge queue.</p></article>
-</div>
+| Release level | Review | Minimum suite |
+| --- | --- | --- |
+| alpha | exact-head self authorization allowed | baseline |
+| beta | exact-head approval from a non-author | fast |
+| early | exact-head approval from a non-author | docs |
+| formal | exact-head approval from a non-author | full |
 
-The same logic runs locally and in CI, so there is never a second, drifting copy of the rule.
+The Issue declares the level, and a Milestone work Issue inherits its tracker. Changed-path classification may raise this floor but never lower it. Local and hosted checks use the same resolved result.
 {{< /standard >}}
 
 {{< ops key="contract-mode-ops" title="The tiering rule and today's automation status" >}}
 - **During development:** run only the focused check that proves the current change (for example `uv run pytest <path>` or `uv run ruff check <path>`), using fresh output before claiming completion, without waiting on the full pipeline.
-- **Work PR (topic branch → main or `dev/m*`):** `scripts/ci_tier.py` classifies the change as `docs`, `fast`, or `full` from the event, base/head, labels, and changed paths. A pure documentation or site change lands on `docs` (an early-exit case of `fast`); an ordinary change lands on `fast`; any path the classifier cannot confidently place escalates, fail-closed, to `full`.
+- **Work PR (topic branch → main or `dev/m*`):** `scripts/release_level.py` resolves alpha, beta, early, or formal from a trusted Issue or Milestone declaration; `scripts/ci_tier.py` then raises the minimum suite from the event, labels, and changed paths. Conflicting declarations and unknown high-risk paths fail closed.
 - **When full verification is needed:** only for a Milestone or canary delivery, an urgent fix, a merge queue, a manual dispatch, or an unknown high-risk path the system cannot safely narrow.
 - **One implementation, re-executed by the hosted job (#834):** GitHub Actions has one least-privilege `verify` job, and a new commit on the same PR cancels the previous run. The base workflow selects the tier and command, then runs `scripts/verify-fast` / `scripts/verify-template.sh` (`scripts/verify` in a generated repository) against the exact candidate tree. Merge and release accept only fresh, successful evidence from the GitHub Actions App on a GitHub-hosted runner; a handwritten commit trailer, wrong repository/tree/tier, or untrusted signer fails closed.
 - **Repository scope:** an ordinary project verifies only its own change. The template repository's full verification also runs the `large`-marked Copier create / adopt / update regression tests, which actually generate a project and verify the components it preserves — not just check that files exist.
@@ -468,11 +469,12 @@ The states below are checked line by line against `docs/ci-policy.md`'s "Current
 - **Not active:** dedicated promotion, release-handoff, registry-publisher, consumption, live-integration, and deployment workflows do not exist, and are not conditional options waiting to be wired in.
 {{< /disclosure >}}
 
-{{< disclosure key="contract-cost" title="What the three verification tiers actually cost" >}}
+{{< disclosure key="contract-cost" title="What the four cumulative verification suites cost" >}}
 These numbers come from `docs/ci-policy.md`'s most recent measurement. They set cost expectations, not a permanent SLA — a rerun will report different numbers.
 
-- `docs` and `fast` share one bounded path; `docs` is just `fast`'s early-exit case for a pure documentation or site change.
+- `baseline`: core security, governance, formatting, lint, type, workflow, and lockfile checks.
 - `fast`: on 2026-09-01, with a warm cache on the same machine, a source-only scope took about 59 seconds and a scope also touching policy/template files took about 99 seconds; the full PR feedback window runs about 1-4 minutes (#428).
+- `docs`: adds site, documentation, translation, navigation, and root/template synchronization to fast.
 - `full`: 502 seconds (8m22s) with all seven stages PASSED on an exclusive machine; up to 810 seconds when another worktree's process runs concurrently — the difference is contention, not heavier verification content (#458, 2026-09-02). Of the seven stages, Regression tests (the full pytest run plus the `large`-marked Copier create/adopt/update matrix) is usually by far the longest; the other six stages together usually add up to well under a minute.
 {{< /disclosure >}}
 
@@ -615,7 +617,7 @@ Routine updates and security checks run automatically. People step in only for u
 - **Release:** after that PR merges and full verification passes, the system creates the immutable tag, GitHub Release, explicit artifacts, checksums, and SBOM.
 - **Delivery:** merging to `main` is repository delivery and may happen without a new version. A work PR completes one item; a Milestone delivery PR carries the batch.
 - **Standalone work:** when one Issue can be reviewed and verified independently and has no shared deadline or cross-Issue dependency, it needs no Milestone and may target `main` directly.
-- **Hotfix:** only an urgent defect in `main` uses this route. It still needs a Bug Issue, another reviewer, and full verification; a reviewed version PR then materializes the patch release.
+- **Hotfix:** only an urgent defect in `main` uses this route. It still needs a Bug Issue and full verification. At beta or above, an admin may merge without an immediate peer only through an exact-head, reason-bound emergency path that automatically opens a post-merge peer-review item.
 - **Deployment:** operating the product in a real runtime with health checks and recovery belongs to the consuming product, not this template.
 
 {{< disclosure key="deploy-capability-status" title="Every capability's current status, side by side" >}}
@@ -641,7 +643,7 @@ GitHub Release is the portable baseline for every profile. Registry publishing a
 {{< /disclosure >}}
 
 {{< disclosure key="hotfix-delivery" title="Hotfix review, verification, and evidence" >}}
-A hotfix uses a Bug Issue without a Milestone, the `bug` and `hotfix` labels, `fix/<Issue>-*`, and a `fix(scope): summary` PR directly to `main`. Normal review and full verification still apply. Undisclosed security defects use a GitHub Security Advisory instead. After merge, retain the PR, commit SHA, full run, and rollback note. `fix` normally declares patch intent; the exact version is still reviewed in the Release Please version PR.
+A hotfix uses a Bug Issue without a Milestone, the `bug` and `hotfix` labels, `fix/<Issue>-*`, and a `fix(scope): summary` PR directly to `main`; full verification still applies. At beta or above, the emergency path requires one live admin to be the Issue proposer, exact-head authorizer, and merge actor, with a recorded reason; it then opens a `needs-manual-review` Issue automatically. No other PR may use this exception. Undisclosed security defects use a GitHub Security Advisory instead.
 {{< /disclosure >}}
 
 {{< disclosure key="manual-release-boundary" title="Automatic-release ownership" >}}
@@ -660,13 +662,14 @@ Milestone closure remains manual until #400 completes its lifecycle contract, an
 To learn what actually changed in a version, why it shipped, and how it differs from the
 prior one, go straight to GitHub's
 [Releases page](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases): one
-Release per version, always carrying three fields — the **version number** (the Release
+Release per version, always carrying four fields — the **version number** (the Release
 title, equal to the `vMAJOR.MINOR.PATCH` tag), the **release date** (GitHub's own publish
 timestamp, shown automatically), and a **change summary** (GitHub's auto-generated "What's
 Changed" list built from the PR titles merged since the prior version, plus a full-compare
-link back to it).
+link back to it), plus a **work-level list** that names each included work item and release
+level and uses the highest level for this version.
 
-None of the three is hand-typed, and none varies by who runs the release: whether GitHub
+None of the four is hand-typed, and none varies by who runs the release: whether GitHub
 Actions triggers it automatically or a maintainer runs `scripts/publish-release` locally
 because Actions looks unhealthy, both paths call the exact same `scripts/converge-release-tag`
 script and the same `gh release create ... --generate-notes` command to produce the Release
@@ -756,8 +759,9 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Required baseline | `branch_strategy` | `delivery` by default; `delivery` or `main` | branch guidance, `policies/rulesets.json`, and the repo-site's delivery-route section |
 | Organization policy | `code_owner` | one existing `@organization/team` with repository write access | `.github/CODEOWNERS`; checked by repository-settings plan/apply/check; the repo-site's primary-owner line |
 | Organization policy | `reviewers` | one or more GitHub usernames | `.github/REVIEWERS`; `governance-comment.yml` assigns automatically on every non-draft pull request |
+| Project choice | `release_levels_enabled`, `default_release_level`, `release_level_*_{review,verification}` | new repositories default to alpha; adoption and this template root default to beta; each level maps to self/peer and baseline/fast/docs/full | Issue/Milestone resolution, the `review` gate, verification attestations, and release notes |
 | Project choice | `pr_review_mode` | `copilot` by default for new projects; `copilot` or `human`; `copier update` defaults existing projects to `human` | `policies/rulesets.json` (`copilot` requires zero approvals, auto-requests Copilot review on every push, and requires the `review` check); `pr-review.yml` and `scripts/review_gate.py` accept a clean Copilot review or a maintainer approval of the current head; needs a Copilot license |
-| Project choice | `copilot_review_max_level` | `unlimited` by default; `alpha`, `beta`, `early`, or `release` | highest release level a clean Copilot review may approve; until per-work release levels (#745) exist, any value other than `unlimited` makes the Copilot path fail closed |
+| Project choice | `copilot_review_max_level` | `unlimited` by default; `alpha`, `beta`, `early`, or `release` (formal) | highest release level a clean Copilot review may approve; higher levels require maintainer approval |
 | Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection, optional security defaults, and the repo-site's visible-audience line |
 | Project choice | `project_name` | required non-empty string; defaults to `CSARC Project` | the repo-site's title and heading |
 | Project choice | `project_description` | required one-sentence purpose; rejects placeholder text | the repo-site's introduction paragraph |

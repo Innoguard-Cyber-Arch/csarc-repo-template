@@ -172,7 +172,7 @@ JSON
 printf '{"status": "identical"}\n' >"$fixture_root/release-compare.json"
 release_output="$(run_mocked)"
 grep -Fq "valid release evidence" <<<"$release_output"
-grep -Fq "no drift (latest stable GitHub Release covers main)" <<<"$release_output"
+grep -Fq "no drift (latest eligible GitHub Release covers main)" <<<"$release_output"
 [[ ! -s "$fixture_root/issue-calls.log" ]]
 
 # Case 3: an ancestor Release is recent activity, but does not claim to
@@ -209,6 +209,22 @@ grep -Fq "from release PR #42 comment" <<<"$pr_record_output"
 grep -Fq "DRIFT DETECTED" <<<"$pr_record_output"
 grep -Fq "create" "$fixture_root/issue-calls.log"
 
+# Case 4b: Issue #744 -- release_title_pattern must recognize an
+# alpha/beta release-please PR title too (prepare_release_candidate's own
+# title includes the phase suffix verbatim), not silently skip the PR and
+# report "no Release-publish-record comment found".
+reset_fixtures
+cat >"$fixture_root/release-prs.json" <<JSON
+[{"number": 43, "title": "chore(main): release 0.16.0-beta.1", "mergedAt": "2026-09-04T11:55:00Z", "mergeCommit": {"oid": "$main_sha"}, "comments": [{"authorAssociation": "MEMBER", "createdAt": "2026-09-04T11:56:00Z", "body": "Release-publish-record: operator=@octocat commit=$main_sha command=\"scripts/publish-release publish --repo octo/example --tag v0.16.0-beta.1\" result=published"}]}]
+JSON
+set +e
+beta_pr_record_output="$(run_mocked 2>&1)"
+beta_pr_record_status=$?
+set -e
+[[ "$beta_pr_record_status" -ne 0 ]]
+grep -Fq "from release PR #43 comment" <<<"$beta_pr_record_output"
+grep -Fq "DRIFT DETECTED" <<<"$beta_pr_record_output"
+
 # Case 5: a stable Release with a non-ancestor target is not evidence.
 reset_fixtures
 other_sha="cccccccccccccccccccccccccccccccccccccccc"
@@ -237,17 +253,49 @@ set -e
 [[ "$stale_release_status" -ne 0 ]]
 grep -Fq "ignored: published before the current main commit" <<<"$stale_release_output"
 
-# Case 7: draft and prerelease entries are filtered before evaluation.
+# Case 7: a draft entry is filtered before evaluation even when it is the
+# most recently published; a well-formed pre-release underneath is then
+# picked up as valid evidence (Issue #744 -- alpha/beta Releases are no
+# longer ignored outright).
 reset_fixtures
 cat >"$fixture_root/releases.json" <<JSON
-[{"tag_name": "v1.2.4", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:58:00Z", "draft": true, "prerelease": false, "immutable": true}, {"tag_name": "v1.2.3", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:57:00Z", "draft": false, "prerelease": true, "immutable": true}]
+[{"tag_name": "v1.2.4", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:58:00Z", "draft": true, "prerelease": false, "immutable": true}, {"tag_name": "v1.3.0-beta.1", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:57:00Z", "draft": false, "prerelease": true, "immutable": true, "html_url": "https://example.invalid/releases/v1.3.0-beta.1"}]
+JSON
+printf '{"status": "identical"}\n' >"$fixture_root/release-compare.json"
+prerelease_output="$(run_mocked)"
+grep -Fq "valid release evidence" <<<"$prerelease_output"
+grep -Fq "no drift (latest eligible GitHub Release covers main)" <<<"$prerelease_output"
+[[ ! -s "$fixture_root/issue-calls.log" ]]
+
+# Case 7b: a Release whose tag has no alpha/beta suffix but whose
+# `prerelease` flag is true (or vice versa) is a self-contradictory
+# signal and stays fail-closed rather than being silently trusted either
+# way.
+reset_fixtures
+cat >"$fixture_root/releases.json" <<JSON
+[{"tag_name": "v1.2.3", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:57:00Z", "draft": false, "prerelease": true, "immutable": true, "html_url": "https://example.invalid/releases/v1.2.3"}]
+JSON
+printf '{"status": "identical"}\n' >"$fixture_root/release-compare.json"
+set +e
+mismatched_release_output="$(run_mocked 2>&1)"
+mismatched_release_status=$?
+set -e
+[[ "$mismatched_release_status" -ne 0 ]]
+grep -Fq "ignored: prerelease flag does not match tag shape" <<<"$mismatched_release_output"
+grep -Fq "DRIFT DETECTED" <<<"$mismatched_release_output"
+
+# Case 7c: draft and a genuinely unparseable tag are both filtered or
+# ignored, leaving no valid evidence at all.
+reset_fixtures
+cat >"$fixture_root/releases.json" <<JSON
+[{"tag_name": "v1.2.4", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:58:00Z", "draft": true, "prerelease": false, "immutable": true}, {"tag_name": "v1.2.3-rc.1", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:57:00Z", "draft": false, "prerelease": true, "immutable": true}]
 JSON
 set +e
 unstable_release_output="$(run_mocked 2>&1)"
 unstable_release_status=$?
 set -e
 [[ "$unstable_release_status" -ne 0 ]]
-grep -Fq "Latest stable GitHub Release: none found" <<<"$unstable_release_output"
+grep -Fq "ignored: tag is not a legal release-phase version" <<<"$unstable_release_output"
 
 # Case 8: main has advanced past the last successful run, and that run is
 # also older than the 24h threshold, with no local publish record anywhere
@@ -374,4 +422,4 @@ set -e
 [[ "$no_gh_status" -ne 0 ]]
 grep -Fiq "gh" <<<"$no_gh_output"
 
-echo "Release drift check cases passed: 15"
+echo "Release drift check cases passed: 16"

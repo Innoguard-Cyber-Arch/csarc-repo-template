@@ -23,6 +23,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     dependabot_auth = importlib.import_module("authenticate_dependabot_head")
     promotion_gate = importlib.import_module("promotion_gate")
+    release_level = importlib.import_module("release_level")
     review_gate = importlib.import_module("review_gate")
     verification_evidence = importlib.import_module("verification_evidence")
 else:
@@ -30,6 +31,7 @@ else:
         f"{__package__}.authenticate_dependabot_head"
     )
     promotion_gate = importlib.import_module(f"{__package__}.promotion_gate")
+    release_level = importlib.import_module(f"{__package__}.release_level")
     review_gate = importlib.import_module(f"{__package__}.review_gate")
     verification_evidence = importlib.import_module(
         f"{__package__}.verification_evidence"
@@ -52,6 +54,7 @@ ISSUE_WORK_BRANCH = re.compile(
 )
 ALPHA_SELF_MERGE_MARKER = "Alpha 自行合併 / self-merged"
 WORK_CLOSURE_MARKER = "Work Issue closure evidence"
+HOTFIX_POST_REVIEW_MARKER = "Emergency hotfix post-review"
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(
     r"(?<!\w)(?:Closes|Fixes|Resolves)[ \t]+#([1-9][0-9]*)(?!\w)"
@@ -301,6 +304,36 @@ class GitHub:
         if not isinstance(result, dict):
             raise RuntimeError("GitHub comment response is invalid")
         return result
+
+    def create_issue(
+        self,
+        repo: str,
+        title: str,
+        body: str,
+        assignee: str,
+    ) -> dict[str, Any]:
+        """Create one governed post-review task with the repo wrapper."""
+        command = [
+            str(Path(__file__).with_name("gh-issue-create")),
+            "--repo",
+            repo,
+            "--title",
+            title,
+            "--body",
+            body,
+            "--type",
+            "Task",
+            "--label",
+            "enhancement",
+            "--label",
+            "needs-manual-review",
+            "--assignee",
+            assignee,
+        ]
+        url = run(command).splitlines()[-1].strip()
+        if not url.startswith(f"https://github.com/{repo}/issues/"):
+            raise RuntimeError("Hotfix post-review Issue URL is invalid")
+        return {"html_url": url}
 
     def close_issue(self, repo: str, issue_number: int) -> dict[str, Any]:
         """Close one validated work Issue as completed."""
@@ -1010,6 +1043,162 @@ def authorization_statement(repo: str, pr_number: int, head_sha: str) -> str:
     )
 
 
+def hotfix_emergency_evidence(  # noqa: C901
+    github: GitHub,
+    repo: str,
+    pull: dict[str, Any],
+    authorization_payload: dict[str, Any],
+) -> dict[str, object]:
+    """Validate the beta+ admin hotfix exception and return its evidence."""
+    labels = {
+        str(label.get("name") or "").casefold()
+        for label in pull.get("labels", [])
+        if isinstance(label, dict)
+    }
+    if "hotfix" not in labels:
+        raise RuntimeError("Emergency self-review is limited to hotfix PRs")
+    issue_numbers = sorted(
+        {
+            int(value)
+            for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
+        }
+    )
+    if len(issue_numbers) != 1:
+        raise RuntimeError(
+            "Emergency hotfix merge requires exactly one closing Issue"
+        )
+    issue_number = issue_numbers[0]
+    issue = github.get(repo, f"issues/{issue_number}")
+    if not isinstance(issue, dict) or issue.get("pull_request") is not None:
+        raise RuntimeError("Emergency hotfix work item is not an Issue")
+    issue_labels = {
+        str(label.get("name") or "").casefold()
+        for label in issue.get("labels", [])
+        if isinstance(label, dict)
+    }
+    if (
+        issue.get("state") != "open"
+        or issue.get("milestone") is not None
+        or "hotfix" not in issue_labels
+    ):
+        raise RuntimeError(
+            "Emergency hotfix requires one open, standalone hotfix Issue"
+        )
+    actor = str((authorization_payload.get("user") or {}).get("login") or "")
+    proposer = str((issue.get("user") or {}).get("login") or "")
+    if not actor or actor.casefold() != proposer.casefold():
+        raise RuntimeError(
+            "Emergency hotfix authorization must come from the Issue proposer"
+        )
+    permission = github.get(
+        repo,
+        f"collaborators/{urllib.parse.quote(actor, safe='')}/permission",
+    )
+    if (
+        not isinstance(permission, dict)
+        or permission.get("permission") != "admin"
+        or str((permission.get("user") or {}).get("login") or "").casefold()
+        != actor.casefold()
+    ):
+        raise RuntimeError(
+            "Emergency hotfix authorization requires admin permission"
+        )
+    reasons: list[tuple[datetime, str, str]] = []
+    for comment in github.pages(
+        repo, f"issues/{issue_number}/comments?per_page=100"
+    ):
+        user = comment.get("user") or {}
+        body = comment.get("body")
+        if (
+            not isinstance(body, str)
+            or str(user.get("login") or "").casefold() != actor.casefold()
+            or user.get("type") != "User"
+        ):
+            continue
+        command = next(
+            (line.strip() for line in body.splitlines() if line.strip()), ""
+        )
+        prefix = "admin-approve:"
+        if not command.casefold().startswith(prefix):
+            continue
+        reason = command[len(prefix) :].strip()
+        url = comment.get("html_url")
+        if reason and isinstance(url, str):
+            reasons.append(
+                (
+                    parse_time(comment.get("created_at"), "Hotfix approval"),
+                    reason,
+                    url,
+                )
+            )
+    if not reasons:
+        raise RuntimeError(
+            "Emergency hotfix requires `Admin-approve: <reason>` on its Issue"
+        )
+    _, reason, reason_url = max(reasons)
+    return {
+        "issue_number": issue_number,
+        "actor": actor,
+        "permission": "admin",
+        "reason": reason,
+        "reason_url": reason_url,
+    }
+
+
+def ensure_hotfix_post_review(
+    github: GitHub,
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+    release_level_name: str,
+    authorization_url: str,
+    evidence: dict[str, object],
+) -> str:
+    """Create or reuse the required human follow-up for an emergency hotfix."""
+    actor = str(evidence["actor"])
+    binding = canonical_json(
+        {
+            "actor": actor,
+            "head_sha": head_sha,
+            "pull_request": pr_number,
+            "repository": repo,
+        }
+    )
+    marker = f"<!-- {HOTFIX_POST_REVIEW_MARKER}: {binding} -->"
+    for issue in github.pages(
+        repo, "issues?state=all&labels=needs-manual-review&per_page=100"
+    ):
+        if marker in str(issue.get("body") or ""):
+            url = issue.get("html_url")
+            if isinstance(url, str):
+                return url
+    title = f"Review emergency hotfix PR #{pr_number}"
+    body = (
+        "### Problem\n\n"
+        f"PR #{pr_number} was merged through the audited {release_level_name} "
+        "emergency hotfix exception and still needs independent review.\n\n"
+        "### Acceptance criteria\n\n"
+        "- [ ] A maintainer other than the merge actor reviews the "
+        "merged head.\n"
+        "- [ ] Any findings are resolved or linked to follow-up work.\n\n"
+        "### Evidence\n\n"
+        f"- Pull request: https://github.com/{repo}/pull/{pr_number}\n"
+        f"- Exact head: `{head_sha}`\n"
+        f"- Merge actor: `@{actor}` (`admin`)\n"
+        f"- Exact-head authorization: {authorization_url}\n"
+        f"- Emergency reason: {evidence['reason']} "
+        f"({evidence['reason_url']})\n\n"
+        "## Release level / 發布層級\n\n"
+        f"{release_level_name}\n\n"
+        f"{marker}\n"
+    )
+    created = github.create_issue(repo, title, body, actor)
+    url = created.get("html_url")
+    if not isinstance(url, str):
+        raise RuntimeError("Hotfix post-review Issue was not created")
+    return url
+
+
 def require_routine_route(  # noqa: C901
     github: GitHub,
     repo: str,
@@ -1321,14 +1510,14 @@ def effective_protection(  # noqa: C901
     alpha_self_merge: bool = False,
     reviewed_merge: bool = False,
     copilot_mode: bool = False,
-) -> tuple[str, str, set[tuple[str, int]], bool]:
+) -> tuple[str, str, set[tuple[str, int]], bool, bool]:
     """Prove review and check enforcement for an exact-head merge."""
     try:
         rules = github.get(
             repo, f"rules/branches/{urllib.parse.quote(branch, safe='')}"
         )
     except RuntimeError as error:
-        return "unknown", str(error), set(), False
+        return "unknown", str(error), set(), False, False
     if not isinstance(rules, list) or not all(
         isinstance(item, dict) for item in rules
     ):
@@ -1336,6 +1525,7 @@ def effective_protection(  # noqa: C901
             "unknown",
             "effective branch rules are unavailable",
             set(),
+            False,
             False,
         )
     pull_rules = [item for item in rules if item.get("type") == "pull_request"]
@@ -1350,6 +1540,7 @@ def effective_protection(  # noqa: C901
             "unknown",
             "effective rule parameters are malformed",
             set(),
+            False,
             False,
         )
     pull = [item["parameters"] for item in pull_rules]
@@ -1368,12 +1559,24 @@ def effective_protection(  # noqa: C901
         )
         for parameters in pull
     ):
-        return "unknown", "pull request rules are malformed", set(), False
+        return (
+            "unknown",
+            "pull request rules are malformed",
+            set(),
+            False,
+            False,
+        )
     required_groups = [
         parameters.get("required_status_checks") for parameters in checks
     ]
     if any(not isinstance(items, list) for items in required_groups):
-        return "unknown", "required check rules are malformed", set(), False
+        return (
+            "unknown",
+            "required check rules are malformed",
+            set(),
+            False,
+            False,
+        )
     required_items = [item for items in required_groups for item in items]
     if any(
         not isinstance(item, dict)
@@ -1383,7 +1586,13 @@ def effective_protection(  # noqa: C901
         or item["integration_id"] <= 0
         for item in required_items
     ):
-        return "unknown", "required check rules are malformed", set(), False
+        return (
+            "unknown",
+            "required check rules are malformed",
+            set(),
+            False,
+            False,
+        )
     required_contexts = {
         (str(item["context"]), int(item["integration_id"]))
         for item in required_items
@@ -1392,16 +1601,27 @@ def effective_protection(  # noqa: C901
     copilot_rules = [
         item for item in rules if item.get("type") == "copilot_code_review"
     ]
-    if alpha_self_merge:
-        review_controls = bool(pull) and all(
-            type(item.get("required_approving_review_count")) is int
-            and item["required_approving_review_count"] == 0
-            and item.get("required_review_thread_resolution") is True
+    level_check_controls = (
+        bool(pull)
+        and all(
+            item.get("required_approving_review_count") == 0 for item in pull
+        )
+        and any(
+            item.get("dismiss_stale_reviews_on_push") is True for item in pull
+        )
+        and any(
+            item.get("required_review_thread_resolution") is True
             for item in pull
         )
+        and any(
+            context == REVIEW_CHECK_CONTEXT for context, _ in required_contexts
+        )
+    )
+    if alpha_self_merge:
+        review_controls = level_check_controls
         missing_reason = (
-            "explicit zero-review Alpha policy, thread, or check rules are "
-            "missing"
+            "level-aware zero-review, stale-review dismissal, thread, or "
+            "`review` check rules are missing"
         )
     elif copilot_mode:
         # Issue #752: zero required approvals is only safe while Copilot
@@ -1409,15 +1629,7 @@ def effective_protection(  # noqa: C901
         # accepts a clean exact-head Copilot review or a maintainer
         # approval) guards the merge.
         review_controls = (
-            bool(pull)
-            and any(
-                item.get("dismiss_stale_reviews_on_push") is True
-                for item in pull
-            )
-            and any(
-                item.get("required_review_thread_resolution") is True
-                for item in pull
-            )
+            level_check_controls
             and any(
                 isinstance(item.get("parameters"), dict)
                 and item["parameters"].get("review_on_push") is True
@@ -1433,7 +1645,7 @@ def effective_protection(  # noqa: C901
             "`review` check rules are missing"
         )
     else:
-        review_controls = (
+        native_review_controls = (
             any(
                 item.get("required_approving_review_count", 0) >= 1
                 for item in pull
@@ -1453,15 +1665,17 @@ def effective_protection(  # noqa: C901
                 for item in pull
             )
         )
+        review_controls = native_review_controls or level_check_controls
         missing_reason = (
-            "required approval, stale-review dismissal, CODEOWNER, last-push, "
-            "thread, or check rules are missing"
+            "native approval controls or the level-aware `review` check are "
+            "missing"
         )
     if not review_controls or not required_contexts:
         return (
             "blocked",
             missing_reason,
             set(),
+            False,
             False,
         )
     ruleset_id_values = [
@@ -1475,6 +1689,7 @@ def effective_protection(  # noqa: C901
             "effective rules do not expose their Ruleset identity",
             set(),
             False,
+            False,
         )
     ruleset_ids = set(ruleset_id_values)
     reviewed_bypass = False
@@ -1482,15 +1697,22 @@ def effective_protection(  # noqa: C901
         try:
             ruleset = github.get(repo, f"rulesets/{ruleset_id}")
         except RuntimeError as error:
-            return "unknown", str(error), set(), False
+            return "unknown", str(error), set(), False, False
         if not isinstance(ruleset, dict):
-            return "unknown", "effective Ruleset is malformed", set(), False
+            return (
+                "unknown",
+                "effective Ruleset is malformed",
+                set(),
+                False,
+                False,
+            )
         bypass_actors = ruleset.get("bypass_actors")
         if ruleset.get("enforcement") != "active":
             return (
                 "blocked",
                 "an effective Ruleset is inactive",
                 set(),
+                False,
                 False,
             )
         if bypass_actors != []:
@@ -1503,8 +1725,24 @@ def effective_protection(  # noqa: C901
                     "an effective Ruleset permits an unverified bypass",
                     set(),
                     False,
+                    False,
                 )
             reviewed_bypass = True
+    copilot_only_block_possible = all(
+        item.get("type")
+        in {
+            "copilot_code_review",
+            "non_fast_forward",
+            "pull_request",
+            "required_status_checks",
+        }
+        for item in rules
+    ) and any(
+        item.get("ruleset_id") in ruleset_ids
+        and isinstance(item.get("parameters"), dict)
+        and item["parameters"].get("review_on_push") is True
+        for item in copilot_rules
+    )
     return (
         "enforced",
         (
@@ -1514,6 +1752,7 @@ def effective_protection(  # noqa: C901
         ),
         required_contexts,
         reviewed_bypass,
+        copilot_only_block_possible,
     )
 
 
@@ -1739,6 +1978,76 @@ def require_trusted_verification(
     ]
     if len(matching_jobs) != 1:
         raise RuntimeError("Trusted verify check has no unique Actions job")
+    source_evidence = None
+    source_ids = verification_evidence.evidence_source_ids(matching_jobs[0])
+    if source_ids is not None:
+        source_kind, source_run_id, source_job_id, source_check_id = source_ids
+        source_check = github.get(repo, f"check-runs/{source_check_id}")
+        source_run = github.get(repo, f"actions/runs/{source_run_id}")
+        if not isinstance(source_check, dict) or not isinstance(
+            source_run, dict
+        ):
+            raise RuntimeError(
+                "Trusted verification reuse source is unavailable"
+            )
+        source_head = source_check.get("head_sha")
+        if not isinstance(source_head, str) or (
+            source_kind == "reuse" and source_head != head_sha
+        ):
+            raise RuntimeError(
+                "Trusted verification reuse source head is invalid"
+            )
+        source_cache = {source_run_id: source_run}
+        if not trusted_check_run_matches_context(
+            github,
+            repo,
+            source_head,
+            source_check,
+            "verify",
+            integration_id,
+            source_cache,
+        ):
+            raise RuntimeError(
+                "Trusted verification reuse source producer is invalid"
+            )
+        source_jobs = github.collection(
+            repo,
+            f"actions/runs/{source_run_id}/jobs?filter=latest&per_page=100",
+            "jobs",
+        )
+        matching_sources = [
+            source_job
+            for source_job in source_jobs
+            if source_job.get("id") == source_job_id
+            and source_job.get("html_url") == source_check.get("details_url")
+        ]
+        if len(matching_sources) != 1:
+            raise RuntimeError(
+                "Trusted verification reuse source has no unique Actions job"
+            )
+        source_commit = (
+            commit
+            if source_head == head_sha
+            else github.get(repo, f"git/commits/{source_head}")
+        )
+        source_tree = (
+            source_commit.get("tree")
+            if isinstance(source_commit, dict)
+            else None
+        )
+        source_tree_sha = (
+            source_tree.get("sha") if isinstance(source_tree, dict) else None
+        )
+        if not isinstance(source_tree_sha, str):
+            raise RuntimeError(
+                "Trusted verification reuse source tree is unavailable"
+            )
+        source_evidence = (
+            source_check,
+            source_run,
+            matching_sources[0],
+            source_tree_sha,
+        )
     return verification_evidence.validate_verification_job(
         check_run,
         workflow_run,
@@ -1749,6 +2058,7 @@ def require_trusted_verification(
         now=now,
         max_age_hours=max_age_hours,
         required_tier=required_tier,
+        source_evidence=source_evidence,
         full_command=(
             "./scripts/verify-template.sh"
             if Path("scripts/verify-template.sh").is_file()
@@ -2036,7 +2346,24 @@ def merge_snapshot(  # noqa: C901
         raise RuntimeError("Pull request is Draft at merge time")
     if UNCHECKED.search(str(pull.get("body") or "")):
         raise RuntimeError("Pull request has an unchecked checklist item")
-    alpha_self_merge = alpha_self_merge_opt_in(github, repo, lease, pull)
+    level_decision = resolve_release_level(github, repo, pull)
+    label_names = {
+        str(label.get("name") or "").casefold()
+        for label in pull.get("labels", [])
+        if isinstance(label, dict)
+    }
+    bypass_route = (
+        "alpha"
+        if level_decision.level == "alpha"
+        else "hotfix"
+        if "hotfix" in label_names
+        else None
+    )
+    alpha_self_merge = (
+        level_decision.level == "alpha"
+        and level_decision.review == "self"
+        and alpha_self_merge_opt_in(github, repo, lease, pull)
+    )
     comments = [
         *github.pages(repo, f"issues/{pr_number}/comments?per_page=100"),
         *github.pages(repo, f"pulls/{pr_number}/comments?per_page=100"),
@@ -2074,12 +2401,18 @@ def merge_snapshot(  # noqa: C901
             "Authenticated GitHub actor changed after lease acquisition"
         )
     approval = exact_head_approval(github, repo, review_states, head_sha, actor)
+    hotfix_evidence: dict[str, object] | None = None
     review_mode, copilot_max_level = review_settings()
     copilot_mode = review_mode == "copilot"
     copilot_verdict = None
-    if approval is None and not alpha_self_merge and copilot_mode:
+    if (
+        approval is None
+        and not alpha_self_merge
+        and copilot_mode
+        and level_decision.review == "self"
+    ):
         allowed, cap_reason = review_gate.level_allows_copilot(
-            copilot_max_level
+            copilot_max_level, level_decision.level
         )
         if not allowed:
             raise RuntimeError(cap_reason)
@@ -2125,9 +2458,31 @@ def merge_snapshot(  # noqa: C901
         }
         authorization_source = "copilot"
         authorization_url = str(copilot_verdict.review.get("html_url") or "")
+    elif level_decision.review == "peer" and "hotfix" in label_names:
+        if not authorization_url:
+            raise RuntimeError(
+                "Emergency hotfix merge requires an exact-head "
+                "authorization comment"
+            )
+        auth = authorization(
+            github, repo, pr_number, head_sha, authorization_url
+        )
+        acquired_at = parse_time(lease["acquired_at"], "Lease")
+        if parse_time(auth.get("created_at"), "Authorization") < acquired_at:
+            raise RuntimeError(
+                "Emergency hotfix authorization predates the active lease"
+            )
+        auth_actor = str((auth.get("user") or {}).get("login") or "")
+        if auth_actor.casefold() != actor:
+            raise RuntimeError(
+                "Emergency hotfix authorization actor must be the merge actor"
+            )
+        hotfix_evidence = hotfix_emergency_evidence(github, repo, pull, auth)
+        authorization_source = "hotfix-emergency"
     else:
         raise RuntimeError(
-            "An independent maintainer approval for the exact head is required"
+            f"The {level_decision.level} release level requires an "
+            "independent maintainer approval for the exact head"
         )
     authorized_at = parse_time(auth.get("created_at"), "Authorization")
     timeline = github.pages(repo, f"issues/{pr_number}/timeline?per_page=100")
@@ -2162,30 +2517,64 @@ def merge_snapshot(  # noqa: C901
     title = pull.get("title")
     if not isinstance(title, str) or not title.strip():
         raise RuntimeError("Pull request title is unavailable")
-    protection, reason, required_contexts, reviewed_bypass = (
-        effective_protection(
-            github,
-            repo,
-            base_ref,
-            alpha_self_merge,
-            # "comment" only ever arises from `alpha_self_merge` (Issue
-            # #775): the exact-head authorization comment is independently
-            # verified by `authorization()` (maintainer permission, exact
-            # body, exact head SHA), the same trust basis as a native
-            # `review` approval or a clean `copilot` review. Excluding it
-            # here made every alpha self-merge -- default-branch or not --
-            # permanently fail this repo's own live `bypass_actors` (added
-            # by #580 for exactly this structural self-approval case) as an
-            # "unverified bypass", forcing every historical alpha merge back
-            # to a manual `gh pr merge --admin`.
-            authorization_source in {"review", "copilot", "comment"},
-            copilot_mode and not alpha_self_merge,
-        )
+    (
+        protection,
+        reason,
+        required_contexts,
+        reviewed_bypass,
+        copilot_only_block_possible,
+    ) = effective_protection(
+        github,
+        repo,
+        base_ref,
+        alpha_self_merge,
+        # A reviewed bypass is limited to an explicitly selected bypass
+        # route whose exact-head authorization was independently verified.
+        bypass_route is not None
+        and authorization_source
+        in {"review", "copilot", "comment", "hotfix-emergency"},
+        copilot_mode
+        and level_decision.review == "self"
+        and not alpha_self_merge,
     )
     authorization_actor = str((auth.get("user") or {}).get("login", ""))
-    if reviewed_bypass and pull.get("mergeable_state") != "clean":
-        protection = "blocked"
-        reason = "GitHub does not report the reviewed pull request as clean"
+    mergeable_state = pull.get("mergeable_state")
+    if reviewed_bypass and mergeable_state != "clean":
+        alpha_copilot_block = (
+            alpha_self_merge
+            and authorization_source == "comment"
+            and mergeable_state == "blocked"
+            and copilot_mode
+            and copilot_only_block_possible
+        )
+        if alpha_copilot_block:
+            permission = github.get(
+                repo,
+                "collaborators/"
+                f"{urllib.parse.quote(actor, safe='')}/permission",
+            )
+            permission_user = (
+                permission.get("user") if isinstance(permission, dict) else None
+            )
+            if (
+                not isinstance(permission, dict)
+                or permission.get("permission") != "admin"
+                or not isinstance(permission_user, dict)
+                or str(permission_user.get("login", "")).casefold() != actor
+            ):
+                protection = "blocked"
+                reason = "The merge actor is not the live admin bypass actor"
+            elif review_gate.unresolved_threads(repo, pr_number):
+                protection = "blocked"
+                reason = "Unresolved review threads prevent Alpha self-merge"
+            else:
+                reason = (
+                    "exact-head Alpha authorization, checks, and review "
+                    "threads are revalidated despite the native Copilot rule"
+                )
+        else:
+            protection = "blocked"
+            reason = "GitHub does not report the reviewed pull request as clean"
     quota_run_urls = (
         require_routine_quota_fallback(
             github, lease, pull, auth, quota_fallback_note_url
@@ -2215,6 +2604,9 @@ def merge_snapshot(  # noqa: C901
         "authorization_created_at": auth["created_at"],
         "authorization_actor": authorization_actor,
         "authorization_source": authorization_source,
+        "release_level": level_decision.level,
+        "required_review": level_decision.review,
+        "bypass_route": bypass_route,
         "reviewed_bypass": reviewed_bypass,
         "protection": protection,
         "merge_mode": "agent" if protection == "enforced" else "human-only",
@@ -2222,6 +2614,7 @@ def merge_snapshot(  # noqa: C901
         "required_check_evidence": check_evidence,
         "alpha_self_merge": alpha_self_merge,
         "dependabot_head": dependabot_head,
+        "hotfix_evidence": hotfix_evidence,
     }
 
 
@@ -2232,19 +2625,14 @@ def review_settings() -> tuple[str, str]:
     )
 
 
-def release_phase() -> str:
-    """Return the declared phase for a reviewed Ruleset bypass."""
-    path = Path(__file__).resolve().parents[1] / "policies/project-stage.json"
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise RuntimeError("Project release phase is unavailable") from error
-    phase = payload.get("release_phase") if isinstance(payload, dict) else None
-    if phase not in {"alpha", "beta"}:
-        raise RuntimeError(
-            "Reviewed Ruleset bypass requires alpha or beta release phase"
-        )
-    return str(phase)
+def resolve_release_level(
+    github: GitHub, repo: str, pull: dict[str, Any]
+) -> release_level.Decision:
+    """Resolve the live pull request's review requirement."""
+    config = Path(__file__).resolve().parents[1] / ".csarc/config.yml"
+    return release_level.resolve_pull(
+        github, repo, pull, release_level.load_settings(config)
+    )
 
 
 def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
@@ -2432,13 +2820,16 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
         reason = (
             "exact-head-copilot-review"
             if snapshot.get("authorization_source") == "copilot"
+            else "emergency-hotfix"
+            if snapshot.get("authorization_source") == "hotfix-emergency"
             else "exact-head-review"
         )
         github.comment(
             args.repo,
             args.pr_number,
             "bypass-trace: "
-            f"release_phase={release_phase()} "
+            f"release_level={snapshot['release_level']} "
+            f"route={snapshot['bypass_route']} "
             f"actor={lease['actor']} reason={reason}",
         )
     if snapshot.get("authorization_source") == "copilot":
@@ -2491,6 +2882,22 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
     ):
         raise RuntimeError(
             "Merged pull request state does not match the response"
+        )
+    hotfix_evidence = snapshot.get("hotfix_evidence")
+    if isinstance(hotfix_evidence, dict):
+        follow_up_url = ensure_hotfix_post_review(
+            github,
+            args.repo,
+            args.pr_number,
+            args.head_sha,
+            str(snapshot["release_level"]),
+            str(snapshot["authorization_url"]),
+            hotfix_evidence,
+        )
+        github.comment(
+            args.repo,
+            args.pr_number,
+            f"hotfix-post-review: {follow_up_url}",
         )
     release_refs(lease)
 
@@ -3068,7 +3475,10 @@ def canonical_scanner_helper(root: Path, path: Path) -> bool:
         root,
         path,
         frozenset(
-            {"scripts/pr_lifecycle.py", "template/scripts/pr_lifecycle.py"}
+            {
+                "scripts/pr_lifecycle.py",
+                "template/.csarc/scripts/pr_lifecycle.py",
+            }
         ),
     )
 

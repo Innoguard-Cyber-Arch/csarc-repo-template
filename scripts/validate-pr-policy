@@ -79,10 +79,13 @@ if [[ ",${PR_LABELS:-}," == *,duplicate,* ]]; then
 fi
 
 branch_strategy="${PR_BRANCH_STRATEGY:-}"
+branch_strategy_source="PR_BRANCH_STRATEGY"
 if [[ -z "$branch_strategy" ]]; then
   branch_strategy="main"
+  branch_strategy_source="the default value"
   if [[ -f .csarc/config.yml ]]; then
     branch_strategy="$(python3 scripts/csarc_config.py branch_strategy)"
+    branch_strategy_source="the PR base commit's .csarc/config.yml"
   fi
 fi
 
@@ -448,6 +451,14 @@ if [[ -x ./scripts/validate-issue-title ]]; then
   ./scripts/validate-issue-title "$issue_title"
 fi
 
+if [[ "$branch_strategy" != "delivery" ]] &&
+  [[ "$PR_BASE" =~ ^dev/(m|i)[0-9]+-[a-z0-9][a-z0-9-]*$ ]]; then
+  echo "branch_strategy is '${branch_strategy}' (source: ${branch_strategy_source})."
+  echo "This configuration expects pull requests to target '${branch_strategy}', not '${PR_BASE}'."
+  echo "To use a Milestone delivery branch, set branch_strategy to 'delivery' in .csarc/config.yml."
+  exit 1
+fi
+
 if [[ "$branch_strategy" == "delivery" ]]; then
   if [[ "${promotion:-false}" == "true" ]]; then
     if [[ "${tracker_promotion:-false}" != "true" ]]; then
@@ -531,6 +542,17 @@ if [[ "$branch_strategy" == "delivery" ]]; then
     expected_base_kind="milestone"
     expected_base="dev/m${issue_milestone_number}-"
   fi
+
+  if [[ "$PR_BASE" =~ ^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]] &&
+    [[ "$issue_milestone_number" != "${BASH_REMATCH[1]}" ]]; then
+    if [[ "$issue_milestone_number" == "0" ]]; then
+      issue_milestone_description="none (number 0)"
+    else
+      issue_milestone_description="${issue_milestone_number}"
+    fi
+    echo "Issue #${issue_number} Milestone is ${issue_milestone_description}; expected base '${expected_base}', not '${PR_BASE}'."
+    exit 1
+  fi
 else
   expected_base_kind="exact"
   expected_base="$branch_strategy"
@@ -569,7 +591,7 @@ while true; do
     [[ -n "$parent_base" ]] && parent_bases+=("$parent_base")
   done <<<"$parent_output"
   if (( ${#parent_bases[@]} != 1 )); then
-    echo "Base branch ${base_branch} must have exactly one open pull request."
+    echo "Base branch ${base_branch} must have exactly one open pull request; expected final base '${expected_base}'."
     exit 1
   fi
   base_branch="${parent_bases[0]}"

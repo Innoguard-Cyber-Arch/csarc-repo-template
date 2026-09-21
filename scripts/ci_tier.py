@@ -6,8 +6,21 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+
+VALID_SCOPES = frozenset(
+    {
+        "dependency",
+        "docs",
+        "governance",
+        "shell",
+        "source",
+        "template",
+        "unknown",
+        "workflow",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -26,9 +39,9 @@ class Plan:
 def scope_for(path: str) -> str:
     """Map one repository path to its narrowest CI concern."""
     name = Path(path).name.removesuffix(".jinja")
-    if path.startswith(("site/", "template/site/")) or path.startswith(
-        ".github/ISSUE_TEMPLATE/"
-    ):
+    if path.startswith(
+        ("site/", "template/docs/site/", "template/.csarc/site/")
+    ) or path.startswith(".github/ISSUE_TEMPLATE/"):
         return "docs"
     if path == ".gitignore":
         return "source"
@@ -39,24 +52,34 @@ def scope_for(path: str) -> str:
         or name in {"action.yml", "action.yaml", "zizmor.yml"}
     ):
         return "workflow"
-    if path in {".github/CODEOWNERS", ".github/REVIEWERS", "AGENTS.md"} or (
-        path.startswith(("policies/", "template/policies/"))
+    if path in {
+        ".csarc/config.yml",
+        ".github/CODEOWNERS",
+        ".github/REVIEWERS",
+        "AGENTS.md",
+    } or (
+        path.startswith(("policies/", "template/.csarc/policies/"))
         or path.startswith("scripts/apply-repository-settings")
         or path.startswith("scripts/check-governance-drift")
         or path.startswith("scripts/request-reviewer")
     ):
         return "governance"
     if path.endswith(".sh") or (
-        path.startswith(("scripts/", "template/scripts/")) and "." not in name
+        path.startswith(("scripts/", "template/.csarc/scripts/"))
+        and "." not in name
     ):
         return "shell"
     if (
         name
         in {
+            "Cargo.lock",
+            "Cargo.toml",
             "package.json",
+            "package-lock.json",
             "pnpm-lock.yaml",
             "pyproject.toml",
             "uv.lock",
+            "yarn.lock",
         }
         or name in {"dependabot.yml", "pnpm-workspace.yaml"}
         or path.startswith(".github/dependency-review-config")
@@ -85,19 +108,65 @@ def scope_for(path: str) -> str:
 
 def affects_repo_site(path: str) -> bool:
     """Return whether a changed path affects the portable repo-site build."""
-    return path.startswith(("site/", "template/site/")) or path in {
+    return path.startswith(
+        ("site/", "template/docs/site/", "template/.csarc/site/")
+    ) or path in {
         "docs/index.html",
         "docs/site-content.js",
         "docs/site-content.md",
         "docs/site-theme.css",
         "scripts/render_site.py",
         "template/docs/site-content.md.jinja",
-        "template/docs/site-theme.css.jinja",
-        "template/scripts/render_site.py",
+        "template/docs/site/theme.css.jinja",
+        "template/.csarc/scripts/render_site.py",
     }
 
 
-def classify(
+def requires_full_on_main(path: str) -> bool:
+    """Return whether a standalone change needs the full local suite."""
+    name = Path(path).name.removesuffix(".jinja")
+    if path == "copier.yml" or path.startswith(("profiles/", "src/csarc_cli/")):
+        return True
+    if path.startswith("template/") and not path.startswith(
+        (
+            "template/.github/workflows/",
+            "template/.github/actions/",
+            "template/.csarc/scripts/",
+        )
+    ):
+        return True
+    return path.startswith(("scripts/", "template/.csarc/scripts/")) and (
+        name
+        in {
+            "check-verify-attestation",
+            "ci_tier.py",
+            "verify",
+            "verify-fast",
+            "verify-template.sh",
+            "verify_attestation.py",
+            "write-verify-attestation",
+        }
+        or name.startswith("verify-stage-")
+    )
+
+
+def add_scopes(plan: Plan, extra_scopes: set[str]) -> Plan:
+    """Add explicitly requested checks without weakening the computed plan."""
+    unknown = extra_scopes - VALID_SCOPES
+    if unknown:
+        raise ValueError(f"unknown CI scope(s): {', '.join(sorted(unknown))}")
+    scopes = tuple(sorted(set(plan.scopes) | extra_scopes))
+    full = plan.tier == "full"
+    return replace(
+        plan,
+        scopes=scopes,
+        run_governance=plan.run_governance or full or "governance" in scopes,
+        run_osv=plan.run_osv or full or "dependency" in scopes,
+        run_zizmor=plan.run_zizmor or full or "workflow" in scopes,
+    )
+
+
+def classify(  # noqa: C901
     event: str,
     base: str,
     head: str,
@@ -105,6 +174,8 @@ def classify(
     changed_files: list[str],
     *,
     force_full: bool = False,
+    draft: bool = False,
+    verified_sync: bool = False,
 ) -> Plan:
     """Select a safe tier from the event, delivery stage, and changed paths."""
     scopes = tuple(sorted({scope_for(path) for path in changed_files}))
@@ -125,6 +196,10 @@ def classify(
     )
     if force_full:
         tier, reason = "full", "manual full verification"
+    elif draft and scopes == ("docs",):
+        tier, reason = "docs", "draft documentation change"
+    elif draft:
+        tier, reason = "fast", "draft risk-owner verification"
     elif promotion:
         tier, reason = "full", "delivery promotion"
     elif hotfix or recovery:
@@ -134,10 +209,18 @@ def classify(
         tier, reason = "full", "merge queue candidate"
     elif event == "push":
         tier, reason = "post-merge", "pull request result already verified"
+    elif verified_sync:
+        tier, reason = "fast", "verified clean delivery synchronization"
     elif not changed_files:
         tier, reason = "full", "changed paths unavailable"
     elif "unknown" in scopes:
         tier, reason = "full", "unknown high-risk path"
+    elif (
+        event == "pull_request"
+        and base == "main"
+        and any(map(requires_full_on_main, changed_files))
+    ):
+        tier, reason = "full", "standalone generator or verifier change"
     elif scopes == ("docs",):
         tier, reason = "docs", "documentation-only change"
     else:
@@ -218,15 +301,26 @@ def main() -> None:
     parser.add_argument("--github-output", type=Path)
     parser.add_argument("--summary", type=Path)
     parser.add_argument("--force-full", action="store_true")
+    parser.add_argument("--draft", choices=("true", "false"), default="false")
+    parser.add_argument("--verified-sync", action="store_true")
+    parser.add_argument("--extra-scopes", default="")
     args = parser.parse_args()
-    plan = classify(
-        args.event,
-        args.base,
-        args.head,
-        {label for label in args.labels.split(",") if label},
-        read_paths(args.files_from),
-        force_full=args.force_full,
-    )
+    try:
+        plan = add_scopes(
+            classify(
+                args.event,
+                args.base,
+                args.head,
+                {label for label in args.labels.split(",") if label},
+                read_paths(args.files_from),
+                force_full=args.force_full,
+                draft=args.draft == "true",
+                verified_sync=args.verified_sync,
+            ),
+            {scope for scope in args.extra_scopes.split(",") if scope},
+        )
+    except ValueError as error:
+        parser.error(str(error))
     args.output_json.write_text(
         json.dumps(asdict(plan), indent=2) + "\n", encoding="utf-8"
     )

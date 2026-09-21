@@ -14,14 +14,14 @@ _exclude:
   - "{% if project_mode == 'existing' %}/README.md{% else %}__keep_project_readme__{% endif %}"
   - "{% if project_mode == 'existing' %}/README.{{ 'en' if readme_primary_language == 'zh-tw' else 'zh-tw' }}.md{% else %}__keep_project_readme_secondary__{% endif %}"
   - "{% if project_mode == 'existing' %}/CHANGELOG.md{% else %}__keep_project_changelog__{% endif %}"
-  - "{% if enable_precommit %}__keep_precommit__{% else %}.pre-commit-config.yaml{% endif %}"
+  - "{% if enable_precommit %}__keep_precommit__{% else %}.csarc/scripts/pre-commit{% endif %}"
   - "{% if enable_template_update_notifications %}__keep_template_update_workflow__{% else %}.github/workflows/template-update.yml{% endif %}"
-  - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}scripts/check-template-update{% endif %}"
+  - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}.csarc/scripts/check-template-update{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_workflow__{% else %}.github/workflows/governance-drift.yml{% endif %}"
-  - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}scripts/check-governance-drift{% endif %}"
+  - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}.csarc/scripts/check-governance-drift{% endif %}"
   - "{% if project_mode == 'new' %}__keep_release_workflow__{% else %}.github/workflows/release.yml{% endif %}"
   - "{% if project_mode == 'new' %}__keep_release_drift_workflow__{% else %}.github/workflows/release-drift.yml{% endif %}"
-  - "{% if project_mode == 'new' %}__keep_release_drift_script__{% else %}scripts/check-release-drift{% endif %}"
+  - "{% if project_mode == 'new' %}__keep_release_drift_script__{% else %}.csarc/scripts/check-release-drift{% endif %}"
   - "{% if enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
   - "{% if enable_docker | default(false) %}__keep_dockerfile__{% else %}Dockerfile{% endif %}"
   - "{% if enable_docker | default(false) %}__keep_docker_compose__{% else %}docker-compose.yml{% endif %}"
@@ -41,7 +41,7 @@ _exclude:
   - "{% if 'rust' in languages %}__keep_rust_toolchain__{% else %}rust-toolchain.toml{% endif %}"
   - "{% if 'rust' in languages %}__keep_rust_manifest__{% else %}Cargo.toml{% endif %}"
   - "{% if 'rust' in languages %}__keep_rust_source__{% else %}/src/lib.rs{% endif %}"
-  - "{% if not languages %}__keep_ci_version__{% else %}version.txt{% endif %}"
+  - "{% if not languages %}__keep_ci_version__{% else %}.csarc/version.txt{% endif %}"
 _skip_if_exists:
   - "src/**/*.py"
   - "tests/**/*.py"
@@ -50,12 +50,12 @@ _skip_if_exists:
   - "docs/specs/**/*.md"
   - "docs/adr/**/*.md"
   - "docs/site-content.md"
-  - "docs/site-theme.css"
-  - "site/content/_index.zh-tw.md"
-  - "site/content/_index.en.md"
-  - "site/data/navigation.json"
+  - "docs/site/theme.css"
+  - "docs/site/content/_index.zh-tw.md"
+  - "docs/site/content/_index.en.md"
+  - "docs/site/data/navigation.json"
   - "{% if project_mode == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
-  - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
+  - "{% if project_mode == 'existing' %}/.github/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}Cargo.toml{% else %}__overwrite_rust_manifest__{% endif %}"
@@ -68,7 +68,7 @@ _tasks:
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'typescript' in languages }}"
   - command: "cargo generate-lockfile"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'rust' in languages }}"
-  - command: "bash scripts/build-repo-site"
+  - command: "bash .csarc/scripts/build-repo-site"
 _migrations:
   - command:
       - python3
@@ -103,32 +103,110 @@ _migrations:
                 path.write_text(migrated, encoding="utf-8")
 
         legacy_template_tests = {
-            Path("tests/test_delivery_sync.py"):
+            Path("tests/fixtures/syft-v1.50.0-runtime.spdx.json"): {
+                "fda96bc7c659542f481b0845d3319ac607162d85b908a479740f314b82bc10b6",
+            },
+            Path("tests/fixtures/syft-v1.50.0-source-components.spdx.json"): {
+                "bdfa663cd86709c1c3664ca99ea38082b29b15276eef1cb6edd10e30fbc9d1d2",
+            },
+            Path("tests/fixtures/syft-v1.50.0-source.spdx.json"): {
+                "ffe5a3ff5abdf19e6a4b219ce214f82d07d1b0e4577258ec6a33ad258326389a",
+            },
+            Path("tests/test_check_action_pins.py"): {
+                "350f2319482c38bf8e80a3f537b3ba4a29fd72aa3e688f47fda3d9c9359d03ae",
+            },
+            Path("tests/test_ci_tier.py"): {
+                "52149a96946f78fed46894eaa61200ce8c1ae8872d45076cd9ce26ce79e9da53",
+                "f46a06f744e71f4e33a77599310b90fb3aba98f4f6428d4b33f9d804c5ecbc21",
+                "f415bd5add7eae4ab1ebc64e9e8c23bf4415038c14b3a355f5f1a045b8608ea1",
+            },
+            Path("tests/test_delivery_sync.py"): {
                 "50fc918666723264272a9268ebaf5c0b120341e588e1e1f5841686f8448abc99",
-            Path("tests/test_promotion_gate.py"):
+                "64f5b48bc2c356ec14cc6ccc3a2715d0528f0ce31a891f1054dd526ae9645db2",
+            },
+            Path("tests/test_dependabot_auto_merge.py"): {
+                "47974fb8edb1804b425e511f6deb4a10a22ff4b05e9e9930ef561841d88ddb46",
+            },
+            Path("tests/test_dependency_security.py"): {
+                "ec455cce680d8906c15e880037a564b8b32785456971caac7932420350ff50c4",
+                "d104a1a087f963f3edcc02b00d28ddb41229b0ec2891e7e79588014b5bf3a247",
+            },
+            Path("tests/test_hosted_verify_bots.py"): {
+                "67a7573aa57ef2845efdea9d9ec9975e9db3f7838b6fee7dd52561cfe2c78454",
+            },
+            Path("tests/test_issue_edit_warning.py"): {
+                "ec205ac957dd588f04a59c47bcd8fb43b999237c4a59235d00f4020ca0bcdd0b",
+            },
+            Path("tests/test_milestone_approval.py"): {
+                "5557ad85d0d5db2bd9dbfe735415ba278294df62bbb16f518b501a4b68629272",
+            },
+            Path("tests/test_milestone_closure.py"): {
+                "539c859b8313f64dd16cc0fabedf2a7a6a6809e1c355530a43173be7a989b510",
+                "34f8e653cf9df503c9a0fcbdd7bc7cf5c261dcd05a9c41c367102065b4373352",
+            },
+            Path("tests/test_milestone_scope.py"): {
+                "7f175942a785eca1e2beba61781d5faab9bb96f4ccea2f336bae6f860a61ce7c",
+            },
+            Path("tests/test_pr_lifecycle.py"): {
+                "db38d39ae49562285fcdbaa6f764d5362882db995328a3cbd570e92a3ca74719",
+                "222fce951a82840de92b6644992da0443143b5e5c6de9e86e3dc935e75b75adb",
+            },
+            Path("tests/test_promotion_gate.py"): {
                 "c09481ea74c15f679e8eea5c39516a1a77e7d941b91bc716fb225a1ac2b3b0ad",
-            Path("tests/test_release_policy.py"):
+                "422be9682a42c24646676533692bd42d8b1fc15148bf8ec5cb3ce23536480bdf",
+            },
+            Path("tests/test_release_assets.py"): {
+                "e19edd74d9df5bb93da7f4b114965d450ecf9cd7e99e0b66513187b4e4622f44",
+            },
+            Path("tests/test_release_bundle.py"): {
+                "afb4565f2d1e6a12325d39b6c953c75d942028bc4561a5fa9d2ed1e854a958cf",
+                "8362ec8c19e2a4c8f9ceebe76d76d41c5160ff3fe8f1d82438d66799cd2db951",
+            },
+            Path("tests/test_release_phase.py"): {
+                "3ee82ff8861d76f7b63e71c17eecc044b666f7ec7bc7edfd8a3fd64a4acd92dc",
+            },
+            Path("tests/test_release_policy.py"): {
                 "89d35a7eafdf5ec17f607e59ea192b2676989bf2e0ec94dd76961baacdd41bf5",
+                "0cecaadbbc558806e3513dd1d3d0fc08869d6ab643919f73612c2c7a631558ec",
+                "d0f1aba730810965d788f13c88519fa108cb39d9c804519cff2263b625c91ff1",
+                "c89b1d4d27722972776dd7e5bed4685191a9d538944ed322b76eda907c7c4650",
+            },
+            Path("tests/test_repo_capabilities.py"): {
+                "807eade2ce855543ac38d5f09119672384d77f2f637133b8cb134f3ffbe1402b",
+            },
+            Path("tests/test_spec_to_issue.py"): {
+                "cb936cab1f2e239b28c1f9d59edb714a7c8758633f95cbb98989571fa3b2a5fa",
+                "084a7ca06f15b7e48b8a4de729548f7ebf99bf1455bc47a733b21f4355bdfd65",
+            },
+            Path("tests/test_stale_branch_detection.py"): {
+                "8ee3e8a0b655efd60759407f870247ac9b840fac0e2af18ac4c3ad7693d69ff2",
+            },
+            Path("tests/test_standalone_issue_approval.py"): {
+                "dce14b32bfb7aa8557b6e6497c3fa3d787285e8a20a78c83e53ca499c3dc85e1",
+            },
+            Path("tests/test_verify_attestation.py"): {
+                "d21b65e731a64cd471e5450d759a00e068d4952282ea8028cf69b0535e7c1dc8",
+            },
+            Path("tests/test_work_item_metadata.py"): {
+                "b20b1b2928794e4d065b7359a45a039c1011640bb02ce19c3041c338c3c52385",
+            },
+            Path("tests/test_work_pr_closure.py"): {
+                "2377a6d27e0b6895e2bf4c37ae5f6cd8cd1db4f974b0970c1ea9520530c01832",
+            },
         }
-        for legacy_test, legacy_sha256 in legacy_template_tests.items():
+        for legacy_test, known_hashes in legacy_template_tests.items():
             if (
                 legacy_test.is_file()
                 and not legacy_test.is_symlink()
                 and hashlib.sha256(legacy_test.read_bytes()).hexdigest()
-                == legacy_sha256
+                in known_hashes
             ):
                 legacy_test.unlink()
     when: "{{ _stage == 'before' }}"
-  - command:
-      - "{{ _copier_python }}"
-      - "-c"
-      - "import hashlib, pathlib, shutil, sys; target = pathlib.Path('tests/test_spec_to_issue.py'); expected = 'cb936cab1f2e239b28c1f9d59edb714a7c8758633f95cbb98989571fa3b2a5fa'; current = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else ''; shutil.copy2(sys.argv[1], target) if current == expected else None"
-      - "{{ _copier_conf.src_path }}/template/tests/test_spec_to_issue.py"
-    when: "{{ _stage == 'after' }}"
-  - command: "bash scripts/build-repo-site"
+  - command: "bash .csarc/scripts/build-repo-site"
     when: "{{ _stage == 'after' }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% else %}Project created with the CSARC release workflow. Confirm .csarc/config.yml, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
+  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./.csarc/scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% else %}Project created with the CSARC release workflow. Confirm .csarc/config.yml, run ./.csarc/scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./.csarc/scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
 
 project_mode:
   type: str
@@ -252,7 +330,7 @@ code_owner:
 project_run_command:
   type: str
   help: Shortest command that successfully starts or invokes the product
-  default: "{% if languages %}{% if 'python' in languages %}uv run python -c 'import {{ package_name }}'{% endif %}{% if 'python' in languages and ('typescript' in languages or 'rust' in languages) %} && {% endif %}{% if 'typescript' in languages %}pnpm run build{% endif %}{% if 'typescript' in languages and 'rust' in languages %} && {% endif %}{% if 'rust' in languages %}cargo test --locked{% endif %}{% else %}./scripts/verify{% endif %}"
+  default: "{% if languages %}{% if 'python' in languages %}uv run python -c 'import {{ package_name }}'{% endif %}{% if 'python' in languages and ('typescript' in languages or 'rust' in languages) %} && {% endif %}{% if 'typescript' in languages %}pnpm run build{% endif %}{% if 'typescript' in languages and 'rust' in languages %} && {% endif %}{% if 'rust' in languages %}cargo test --locked{% endif %}{% else %}./.csarc/scripts/verify{% endif %}"
   validator: "{% if not project_run_command | default('', true) | trim or project_run_command | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
 
 project_verification_hook:
@@ -315,7 +393,7 @@ coverage_threshold:
 
 enable_precommit:
   type: bool
-  help: Add optional local pre-commit hooks; CI remains authoritative
+  help: Add optional local hooks run through .csarc/scripts/pre-commit; CI remains authoritative
   default: false
 
 enable_template_update_notifications:
@@ -350,23 +428,92 @@ enable_governance_drift_check:
 
 policy_repository_settings:
   type: bool
-  help: Apply this template's repository settings policy (merge strategies, wiki, projects, issues, delete-branch-on-merge) from policies/repository.json
+  help: Apply this template's repository settings policy (merge strategies, wiki, projects, issues, delete-branch-on-merge) from .csarc/policies/repository.json
   default: true
 
 policy_actions_permissions:
   type: bool
-  help: Apply this template's Actions workflow permissions policy (default token permissions and PR-approval capability) from policies/actions.json
+  help: Apply this template's Actions workflow permissions policy (default token permissions and PR-approval capability) from .csarc/policies/actions.json
   default: true
 
 policy_labels:
   type: bool
-  help: Create and maintain this template's governance labels (bug, enhancement, hotfix, and the rest) from policies/labels.json
+  help: Create and maintain this template's governance labels (bug, enhancement, hotfix, and the rest) from .csarc/policies/labels.json
   default: true
 
 policy_branch_ruleset:
   type: bool
-  help: Enforce this template's branch protection Ruleset (required review, non-fast-forward) from policies/rulesets.json where the GitHub plan allows it
+  help: Enforce this template's branch protection Ruleset (required review, non-fast-forward) from .csarc/policies/rulesets.json where the GitHub plan allows it
   default: true
+
+release_levels_enabled:
+  type: bool
+  help: Resolve each pull request's release level from its trusted Issue or Milestone declaration; when disabled, every pull request uses default_release_level
+  default: true
+
+default_release_level:
+  type: str
+  help: Release level used when no trusted declaration is available
+  choices:
+    alpha: alpha
+    beta: beta
+    Early release (0.y.z): early
+    Formal release (1.0.0 and later): formal
+  default: "{{ 'beta' if _copier_operation == 'update' or project_mode == 'existing' else 'alpha' }}"
+
+release_level_alpha_review:
+  type: str
+  help: Review requirement for alpha work
+  choices: &release_level_review_choices
+    Self-review permitted: self
+    Independent peer required: peer
+  default: self
+
+release_level_alpha_verification:
+  type: str
+  help: Minimum verification suite for alpha work
+  choices: &release_level_verification_choices
+    Baseline checks: baseline
+    Baseline and fast tests: fast
+    Baseline, fast tests, documentation and site: docs
+    Full verification: full
+  default: baseline
+
+release_level_beta_review:
+  type: str
+  help: Review requirement for beta work
+  choices: *release_level_review_choices
+  default: peer
+
+release_level_beta_verification:
+  type: str
+  help: Minimum verification suite for beta work
+  choices: *release_level_verification_choices
+  default: fast
+
+release_level_early_review:
+  type: str
+  help: Review requirement for early-release work
+  choices: *release_level_review_choices
+  default: peer
+
+release_level_early_verification:
+  type: str
+  help: Minimum verification suite for early-release work
+  choices: *release_level_verification_choices
+  default: docs
+
+release_level_formal_review:
+  type: str
+  help: Review requirement for formal-release work
+  choices: *release_level_review_choices
+  default: peer
+
+release_level_formal_verification:
+  type: str
+  help: Minimum verification suite for formal-release work
+  choices: *release_level_verification_choices
+  default: full
 
 pr_review_mode:
   type: str
@@ -378,7 +525,7 @@ pr_review_mode:
 
 copilot_review_max_level:
   type: str
-  help: Highest declared release level a clean Copilot review may approve; higher levels need a maintainer approval. Levels other than unlimited fail closed until per-work release levels exist (Issue #745).
+  help: Highest declared release level a clean Copilot review may approve; higher levels need a maintainer approval. The release value is the formal-level alias retained for compatibility.
   choices:
     No limit: unlimited
     alpha: alpha

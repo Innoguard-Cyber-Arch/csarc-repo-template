@@ -43,7 +43,7 @@ SCAN_GLOBS = (
     "template/.github/workflows/*.yml",
     "template/.github/workflows/*.yaml",
 )
-SCAN_DIRS = ("scripts", "template/scripts")
+SCAN_DIRS = ("scripts", "template/.csarc/scripts")
 
 
 def test_converge_release_tag_is_the_single_generate_notes_call() -> None:
@@ -75,7 +75,10 @@ def test_no_other_release_notes_writer_exists_in_scope() -> None:
     for directory in SCAN_DIRS:
         candidates.extend((ROOT / directory).rglob("*"))
 
-    owners = {ROOT / NOTES_OWNER, ROOT / "template" / NOTES_OWNER}
+    owners = {
+        ROOT / NOTES_OWNER,
+        ROOT / "template/.csarc/scripts/converge-release-tag",
+    }
     violations: list[str] = []
     for path in sorted(set(candidates)):
         if not path.is_file() or path in owners:
@@ -100,7 +103,11 @@ def test_publish_release_never_overwrites_generated_notes() -> None:
     source = (ROOT / "scripts/publish-release").read_text(encoding="utf-8")
 
     assert 'gh release edit "$tag" --draft' in source
-    assert 'gh release edit "$tag" --draft=false --latest' in source
+    # Issue #744: --latest is now conditional on the tag having no
+    # alpha/beta suffix (an in-progress pre-release must never be marked
+    # the repository's most mature Release), but the edit call itself
+    # still only ever flips draft/latest state, never notes.
+    assert 'gh release edit "$tag" --draft=false "${latest_flags[@]}"' in source
     assert "--notes" not in source
     assert "--notes-file" not in source
 
@@ -108,11 +115,13 @@ def test_publish_release_never_overwrites_generated_notes() -> None:
 def test_converge_release_tag_is_synced_to_the_template_mirror() -> None:
     """The format contract has one implementation, not a root/template pair."""
     root_text = (ROOT / NOTES_OWNER).read_text(encoding="utf-8")
-    template_text = (ROOT / "template" / NOTES_OWNER).read_text(
-        encoding="utf-8"
-    )
+    template_text = (
+        ROOT / "template/.csarc/scripts/converge-release-tag"
+    ).read_text(encoding="utf-8")
 
-    assert root_text == template_text
+    assert root_text == template_text.replace(
+        '${BASH_SOURCE[0]}")/../..', '${BASH_SOURCE[0]}")/..'
+    ).replace(".csarc/scripts/", "scripts/")
 
 
 def test_ci_policy_records_the_minimum_release_notes_fields() -> None:

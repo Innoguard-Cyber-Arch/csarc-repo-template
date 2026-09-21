@@ -1,7 +1,7 @@
 {% set python_target = "3.14" if python_support_mode == "latest" else python_min_version -%}
 [project]
 name = {{ project_slug | tojson }}
-version = "0.1.0"
+version = "0.1.0a1"
 description = {{ project_description | tojson }}
 readme = "README.md"
 requires-python = "{% if python_support_mode == 'latest' %}>=3.14,<3.15{% else %}>={{ python_min_version }}{% endif %}"
@@ -20,7 +20,6 @@ dev = [
 {% endif %}
   "pytest>=8.4,<10",
   "pytest-cov>=6.2,<8",
-  "pyyaml>=6.0.3,<7",
   "ruff>=0.12,<1",
 ]
 
@@ -45,8 +44,9 @@ known-first-party = [{{ package_name | tojson }}, "scripts"]
 [tool.ruff.lint.per-file-ignores]
 # Bilingual repo-site HTML strings embed full-width CJK punctuation
 # (｜／：（） etc.) throughout by design, same as the root template's own
-# scripts/build_repo_site.py (see pyproject.toml).
-"scripts/build_repo_site.py" = ["RUF001", "RUF002"]
+# .csarc/scripts/build_repo_site.py (see pyproject.toml).
+".csarc/scripts/build_repo_site.py" = ["RUF001", "RUF002"]
+".csarc/tests/**" = ["D", "S101"]
 "tests/**" = ["D", "S101"]
 
 [tool.ty.environment]
@@ -56,10 +56,11 @@ python-version = "{{ python_target }}"
 include = ["src", "scripts", "tests"]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = "-q --strict-markers"
 testpaths = ["tests"]
 markers = [
-  "large: long-running generated-project or adoption coverage reserved for the full gate",
+  "large: long-running end-to-end coverage reserved for the integrated full gate",
+  "runtime: minimal behavior that must pass on every supported Python runtime",
 ]
 
 [tool.coverage.run]

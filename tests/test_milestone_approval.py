@@ -172,7 +172,8 @@ def test_admin_self_approval_opens_the_gate_with_reason(
                 "proposer",
                 "/milestone admin-approve: no reviewer before the deadline",
             )
-        )
+        ),
+        allow_admin_self_approval=True,
     )
 
     assert result.allowed
@@ -198,6 +199,26 @@ def test_admin_self_approval_rejects_non_admin_permission(
     )
 
     assert not result.allowed
+
+
+def test_peer_review_level_blocks_admin_self_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A peer-review level cannot use the admin self-approval escape hatch."""
+    _stub_permission(monkeypatch, "admin")
+    result = approval_decision(
+        snapshot(
+            comment(
+                1,
+                "proposer",
+                "/milestone admin-approve: no reviewer before the deadline",
+            )
+        ),
+        allow_admin_self_approval=False,
+    )
+
+    assert not result.allowed
+    assert "requires approval from another person" in result.summary
 
 
 @pytest.mark.parametrize(

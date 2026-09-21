@@ -2,7 +2,7 @@
  *
  * A repository that carries this template's own root repo-site
  * engine (`scripts/build_repo_site.py`, not the smaller generated-
- * project handbook -- see `template/docs/site-theme.css.jinja` for that
+ * project handbook -- see `template/docs/site/theme.css.jinja` for that
  * separate path) can restyle its copy of the presentation here, without
  * forking the render engine or `site/static/styles.css`.
  *

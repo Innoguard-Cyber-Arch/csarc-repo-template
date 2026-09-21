@@ -1,6 +1,7 @@
 """Regression tests for the minimal Journey 03 verification workflow."""
 
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -15,11 +16,8 @@ REPO_ROOT = Path(__file__).parents[1]
 def direct_regression_commands(path: str) -> set[str]:
     """Return standalone regressions invoked by one stage entry point."""
     source = (REPO_ROOT / path).read_text(encoding="utf-8")
-    return {
-        line.strip()
-        for line in source.splitlines()
-        if line.strip().startswith("./scripts/test-")
-    }
+    source = source.replace("./.csarc/scripts/", "./scripts/")
+    return set(re.findall(r"\./scripts/test-[A-Za-z0-9-]+", source))
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -85,11 +83,11 @@ def test_verification_reuses_downloads_without_sharing_environments() -> None:
         encoding="utf-8"
     )
     generated_fast = (
-        REPO_ROOT / "template/scripts/verify-fast.jinja"
+        REPO_ROOT / "template/.csarc/scripts/verify-fast.jinja"
     ).read_text(encoding="utf-8")
-    generated_full = (REPO_ROOT / "template/scripts/verify.jinja").read_text(
-        encoding="utf-8"
-    )
+    generated_full = (
+        REPO_ROOT / "template/.csarc/scripts/verify.jinja"
+    ).read_text(encoding="utf-8")
 
     assert all(
         "scripts/resolve-cache-root" in source
@@ -146,16 +144,21 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
         "workflow_dispatch",
     }
     assert "edited" in triggers["pull_request_target"]["types"]
-    assert set(workflow["permissions"]) == {"contents"}
+    assert set(workflow["permissions"]) == {
+        "contents",
+        "issues",
+        "pull-requests",
+    }
     assert set(workflow["jobs"]) == {"verify"}
     assert workflow["jobs"]["verify"]["timeout-minutes"] == 30
 
     source = path.read_text(encoding="utf-8")
-    assert 'cp scripts/ci_tier.py "$RUNNER_TEMP/ci_tier.py"' in source
-    assert 'python3 "$RUNNER_TEMP/ci_tier.py"' in source
+    assert "Preserve the trusted verification policy" in source
+    assert 'python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py"' in source
     assert "Check out the exact candidate" in source
     assert "Execute trusted verification tier=" in source
-    assert "CSARC_CI_BASE: ${{ github.event.pull_request.base.ref" in source
+    assert "Reuse trusted verification tier=" in source
+    assert "Validate trusted clean sync tier=fast" in source
     assert "./scripts/verify-fast" in source
     assert "./scripts/verify-template.sh" in source
     assert "check-verify-attestation" not in source
@@ -174,17 +177,15 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
 
     assert "jobs:\n  verify:" in source
     assert (
-        "types: [opened, reopened, synchronize, edited, labeled, unlabeled]"
-        in source
+        "types: [opened, reopened, synchronize, edited, labeled, unlabeled, "
+        "ready_for_review, converted_to_draft]" in source
     )
     assert "timeout-minutes: 30" in source
-    assert 'cp scripts/ci_tier.py "$RUNNER_TEMP/ci_tier.py"' in source
-    assert 'python3 "$RUNNER_TEMP/ci_tier.py"' in source
+    assert "Preserve the trusted verification policy" in source
+    assert 'python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py"' in source
     assert "Execute trusted verification tier=" in source
-    assert "CSARC_CI_BASE:" in source
-    assert "github.event.pull_request.base.ref" in source
-    assert "./scripts/verify-fast" in source
-    assert "./scripts/verify" in source
+    assert "./.csarc/scripts/verify-fast" in source
+    assert "./.csarc/scripts/verify" in source
     assert "check-verify-attestation" not in source
     assert "hosted_verify_bots" not in source
     assert "CSARC_RUN_OSV" not in source
@@ -246,7 +247,8 @@ def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
         assert all(index < hosted_index for index, _ in toolchain)
         source_contracts = []
         for _, step in toolchain:
-            assert "if" not in step
+            assert "steps.reuse.outputs.reuse != 'true'" in step["if"]
+            assert "steps.sync.outputs.clean != 'true'" in step["if"]
             source_contracts.append(str(step.get("uses", "rustup")))
         contracts.append(source_contracts)
 
@@ -258,11 +260,29 @@ def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
     ]
 
 
+def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
+    """Keep metadata reuse and clean-sync proof ahead of heavy setup."""
+    source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
+        encoding="utf-8"
+    )
+
+    preflight = source.index("Validate synchronization structure")
+    setup = source.index("Set up Python 3.14")
+    execute = source.index("Execute trusted verification tier=")
+    assert preflight < setup < execute
+    assert "--find-reusable" in source
+    assert '--exclude-run-id "$GITHUB_RUN_ID"' in source
+    assert "base-sha=${{ steps.identity.outputs.base_sha }}" in source
+    assert "source-run=${{ steps.reuse.outputs.source_run }}" in source
+    assert "steps.reuse.outputs.reuse != 'true'" in source
+    assert "steps.sync.outputs.clean != 'true'" in source
+
+
 def test_verifiers_do_not_call_removed_attestation_helpers() -> None:
     """Keep generated-project verification free of removed legacy scripts."""
     sources = (
         REPO_ROOT / "scripts/verify-stage-regression-tests",
-        REPO_ROOT / "template/scripts/verify.jinja",
+        REPO_ROOT / "template/.csarc/scripts/verify.jinja",
     )
 
     for path in sources:
@@ -275,11 +295,35 @@ def test_documentation_tier_validates_the_generated_site() -> None:
     """Documentation-only changes still verify their built artifact."""
     root_fast = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
     template_fast = (
-        REPO_ROOT / "template/scripts/verify-fast.jinja"
+        REPO_ROOT / "template/.csarc/scripts/verify-fast.jinja"
     ).read_text(encoding="utf-8")
 
     assert "./scripts/build-repo-site --check" in root_fast
-    assert "./scripts/build-repo-site --check" in template_fast
+    assert "./.csarc/scripts/build-repo-site --check" in template_fast
+
+
+def test_local_verification_reuses_the_hosted_path_planner() -> None:
+    """Local entry points reuse the planner without minting merge evidence."""
+    for path, planner in (
+        ("scripts/verify-fast", "python3 scripts/ci_tier.py"),
+        (
+            "template/.csarc/scripts/verify-fast.jinja",
+            "python3 .csarc/scripts/ci_tier.py",
+        ),
+    ):
+        source = (REPO_ROOT / path).read_text(encoding="utf-8")
+        assert planner in source
+        assert 'git merge-base "$base_ref" HEAD' in source
+        assert "git diff --no-renames --name-only" in source
+        assert '--extra-scopes "$extra_scopes"' in source
+        assert "write-verify-attestation" not in source
+
+
+def test_workflow_scope_runs_the_actions_security_audit() -> None:
+    """A fast workflow change must not wait for a later full boundary."""
+    source = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
+    assert 'if [[ "$scopes" == *,workflow,* ]]; then' in source
+    assert "./scripts/verify-stage-github-actions-audit" in source
 
 
 def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
@@ -296,31 +340,91 @@ def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
     """
     root_fast = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
     template_fast = (
-        REPO_ROOT / "template/scripts/verify-fast.jinja"
+        REPO_ROOT / "template/.csarc/scripts/verify-fast.jinja"
     ).read_text(encoding="utf-8")
 
-    for source, staleness_check in (
-        (root_fast, "./scripts/build-repo-site --check"),
-        (template_fast, "./scripts/build-repo-site --check"),
+    for source, specification_check, staleness_check in (
+        (
+            root_fast,
+            "python3 scripts/spec_to_issue.py validate",
+            "./scripts/build-repo-site --check",
+        ),
+        (
+            template_fast,
+            "python3 .csarc/scripts/spec_to_issue.py validate",
+            "./.csarc/scripts/build-repo-site --check",
+        ),
     ):
-        docs_tier_start = source.index('if [[ "$tier" == "docs" ]]; then')
-        docs_tier_exit = source.index("exit 0", docs_tier_start)
-        gate_start = source.index('"$scopes" == *,docs,*', docs_tier_exit)
+        gate_start = source.index(
+            'if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then'
+        )
         gate_end = source.index("\nfi", gate_start)
         gate = source[gate_start:gate_end]
 
-        assert "python3 scripts/spec_to_issue.py validate" in gate
+        assert specification_check in gate
         assert staleness_check in gate
 
 
-def test_template_smoke_reads_config_from_the_generated_repository() -> None:
-    """Resolve the generated config relative to the generated repository."""
+def test_routine_verification_does_not_render_a_generated_project() -> None:
+    """Keep real Copier create, adopt, and update work in the full suite."""
     source = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
 
-    assert (
-        '(cd "$smoke_root/project" '
-        "&& python3 scripts/csarc_config.py languages >/dev/null)" in source
+    assert "copier copy" not in source
+    assert "read_generated_languages" not in source
+
+
+def test_verification_steps_report_progress_heartbeat_and_rerun() -> None:
+    """Make a silent or failing step actionable from the same log."""
+    helper = shlex.quote(str(REPO_ROOT / "scripts/verification-step"))
+    success = subprocess.run(  # noqa: S603 - sources this repository's script
+        [
+            "/bin/bash",
+            "-c",
+            (
+                f"source {helper}; "
+                "CSARC_VERIFICATION_HEARTBEAT_SECONDS=1 "
+                'verification_step "Silent step" sleep 1.1'
+            ),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
+    assert "[verify-step] START Silent step; log=stdout" in success.stdout
+    assert "[verify-step] COMMAND sleep 1.1" in success.stdout
+    assert "[verify-step] HEARTBEAT Silent step" in success.stdout
+    assert "[verify-step] PASSED Silent step" in success.stdout
+
+    failure = subprocess.run(  # noqa: S603 - sources this repository's script
+        [
+            "/bin/bash",
+            "-c",
+            (
+                f"source {helper}; "
+                'verification_step "Broken step" bash -c "exit 7"'
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert failure.returncode == 7
+    assert "[verify-step] FAILED Broken step" in failure.stderr
+    assert "[verify-step] RERUN bash -c exit\\ 7" in failure.stderr
+
+
+def test_verification_entry_points_use_shared_step_reporting() -> None:
+    """Keep every long local verification path observable."""
+    entries = (
+        REPO_ROOT / "scripts/verify-fast",
+        REPO_ROOT / "template/.csarc/scripts/verify-fast.jinja",
+        REPO_ROOT / "template/.csarc/scripts/verify.jinja",
+        *sorted((REPO_ROOT / "scripts").glob("verify-stage-*")),
+    )
+    for entry in entries:
+        source = entry.read_text(encoding="utf-8")
+        assert "scripts/verification-step" in source
+        assert "verification_step " in source
 
 
 def test_template_verification_reports_stage_timings() -> None:
@@ -379,6 +483,7 @@ run_stage "Broken stage" sample_failure
 
     assert failure.returncode == 7
     assert "[verify-template] FAILED Broken stage (" in failure.stderr
+    assert "[verify-template] RERUN sample_failure" in failure.stderr
     assert "FAILED" in failure.stderr
     assert "TOTAL" in failure.stderr
 
@@ -436,10 +541,10 @@ def test_release_verification_contains_issue_pr_regressions() -> None:
         "scripts/verify-stage-regression-tests"
     )
     generated_issue = direct_regression_commands(
-        "template/scripts/verify-fast.jinja"
+        "template/.csarc/scripts/verify-fast.jinja"
     )
     generated_release = direct_regression_commands(
-        "template/scripts/verify.jinja"
+        "template/.csarc/scripts/verify.jinja"
     )
 
     assert root_issue == generated_issue
@@ -447,8 +552,8 @@ def test_release_verification_contains_issue_pr_regressions() -> None:
     assert generated_issue <= generated_release
 
 
-def test_issue_pr_policy_regressions_run_only_for_relevant_scopes() -> None:
-    """Avoid rerunning policy fixtures for unrelated source changes."""
+def test_long_policy_regressions_run_only_in_full() -> None:
+    """Keep shell lifecycle integration out of the bounded fast path."""
     expected = {
         "./scripts/test-issue-triage",
         "./scripts/test-pr-policy",
@@ -456,24 +561,19 @@ def test_issue_pr_policy_regressions_run_only_for_relevant_scopes() -> None:
     }
     for path in (
         "scripts/verify-fast",
-        "template/scripts/verify-fast.jinja",
+        "template/.csarc/scripts/verify-fast.jinja",
     ):
         source = (REPO_ROOT / path).read_text(encoding="utf-8")
-        gate_start = source.index('if [[ "$scopes" == *,governance,*')
-        gate_end = source.index("\nfi", gate_start)
-        gate = source[gate_start:gate_end]
-
-        assert expected <= {
-            line.strip()
-            for line in gate.splitlines()
-            if line.strip().startswith("./scripts/test-")
-        }
-        assert all(
-            scope in gate
-            for scope in ("governance", "template", "workflow", "shell")
+        assert expected.isdisjoint(
+            re.findall(r"\./scripts/test-[A-Za-z0-9-]+", source)
         )
-        assert "source" not in gate
-        assert "dependency" not in gate
+
+    assert expected <= direct_regression_commands(
+        "scripts/verify-stage-regression-tests"
+    )
+    assert expected <= direct_regression_commands(
+        "template/.csarc/scripts/verify.jinja"
+    )
 
 
 def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:
@@ -491,6 +591,8 @@ def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:
         encoding="utf-8"
     )
 
-    assert 'uv run pytest -m "not large"' in issue_entry
-    assert "uv run pytest --cov=csarc_cli" in release_entry
+    assert "uv run pytest -vv --durations=20" in issue_entry
+    assert '-m "not large"' in issue_entry
+    assert "uv run pytest -vv --durations=20" in release_entry
+    assert "--cov=csarc_cli" in release_entry
     assert "pytest.mark.large" not in ai_contract

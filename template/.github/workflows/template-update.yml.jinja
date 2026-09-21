@@ -37,4 +37,4 @@ jobs:
       - name: Check for a template update
         env:
           GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
-        run: ./scripts/check-template-update
+        run: ./.csarc/scripts/check-template-update

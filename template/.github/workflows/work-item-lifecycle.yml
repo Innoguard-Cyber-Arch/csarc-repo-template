@@ -83,7 +83,7 @@ jobs:
           ISSUE_STATE_REASON: ${{ github.event.issue.state_reason }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_TYPE: ${{ github.event.issue.type.name }}
-        run: ./scripts/validate-issue-policy
+        run: ./.csarc/scripts/validate-issue-policy
 
       # -- Milestone lifecycle: reconcile the current Milestone --
       - name: "Milestone lifecycle: reconcile lifecycle and refresh PR checks"
@@ -91,12 +91,36 @@ jobs:
           !cancelled() &&
           (github.event.issue.milestone.number != null || github.event.milestone.number != null)
         env:
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_ISSUE_NUMBER: ${{ github.event.issue.number || 0 }}
           GH_TOKEN: ${{ github.token }}
           MILESTONE_NUMBER: ${{ github.event.issue.milestone.number || github.event.milestone.number }}
         run: >-
-          python3 scripts/sync_milestone_state.py reconcile
+          python3 .csarc/scripts/sync_milestone_state.py reconcile
           --repo "$GITHUB_REPOSITORY"
           --milestone "$MILESTONE_NUMBER"
+          --event-issue "$EVENT_ISSUE_NUMBER"
+          --event-action "$EVENT_ACTION"
+
+      # -- Milestone lifecycle: refresh a standalone/hotfix Issue's linked PR check (#743) --
+      # The no-Milestone counterpart to the step above: an Issue comment is
+      # the only event that can flip a standalone/hotfix Issue's approval
+      # state (Approve/Admin-approve:/Object:/Resolve:, #743), so this is
+      # deliberately scoped to issue_comment rather than every event type
+      # the step above reacts to.
+      - name: "Milestone lifecycle: refresh standalone Issue PR check"
+        if: >-
+          !cancelled() &&
+          github.event_name == 'issue_comment' &&
+          github.event.issue.pull_request == null &&
+          github.event.issue.milestone.number == null
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: >-
+          python3 .csarc/scripts/sync_milestone_state.py refresh-issue-pr-checks
+          --repo "$GITHUB_REPOSITORY"
+          --issue "$ISSUE_NUMBER"
 
       # -- Milestone lifecycle: reconcile the Milestone an Issue moved off of --
       - name: "Milestone lifecycle: reconcile the previous Milestone"
@@ -105,12 +129,16 @@ jobs:
           github.event.changes.milestone.from.number != null &&
           github.event.changes.milestone.from.number != github.event.issue.milestone.number
         env:
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_ISSUE_NUMBER: ${{ github.event.issue.number || 0 }}
           GH_TOKEN: ${{ github.token }}
           MILESTONE_NUMBER: ${{ github.event.changes.milestone.from.number }}
         run: >-
-          python3 scripts/sync_milestone_state.py reconcile
+          python3 .csarc/scripts/sync_milestone_state.py reconcile
           --repo "$GITHUB_REPOSITORY"
           --milestone "$MILESTONE_NUMBER"
+          --event-issue "$EVENT_ISSUE_NUMBER"
+          --event-action "$EVENT_ACTION"
 
       # -- Milestone lifecycle: record promotion evidence for a merged promote/m* PR --
       - name: "Milestone lifecycle: resolve the tracker Issue this promotion closes"
@@ -148,7 +176,7 @@ jobs:
           TRACKER_NUMBER: ${{ steps.tracker.outputs.number }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: >-
-          python3 scripts/sync_milestone_state.py record-promotion-evidence
+          python3 .csarc/scripts/sync_milestone_state.py record-promotion-evidence
           --repo "$GITHUB_REPOSITORY"
           --tracker "$TRACKER_NUMBER"
           --evidence-url "https://github.com/$GITHUB_REPOSITORY/commit/$MERGE_SHA"
@@ -175,7 +203,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: >-
-          python3 scripts/pr_lifecycle.py close-work
+          python3 .csarc/scripts/pr_lifecycle.py close-work
           --repo "$GITHUB_REPOSITORY"
           --pr-number "$PR_NUMBER"
           --head-sha "$PR_HEAD_SHA"

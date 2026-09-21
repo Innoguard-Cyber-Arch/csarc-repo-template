@@ -5,7 +5,7 @@ on:
     branches: [main, "dev/m*"]
     paths:
       - docs/specs/*.md
-      - scripts/spec_to_issue.py
+      - .csarc/scripts/spec_to_issue.py
   workflow_dispatch:
 
 permissions:
@@ -49,7 +49,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mapfile -t spec_files < "$RUNNER_TEMP/specs.txt"
-          uv run --no-project python scripts/spec_to_issue.py sync \
+          uv run --no-project python .csarc/scripts/spec_to_issue.py sync \
             --repo "$GITHUB_REPOSITORY" \
             --source-ref "$GITHUB_SHA" \
             --assignee "$GITHUB_ACTOR" \

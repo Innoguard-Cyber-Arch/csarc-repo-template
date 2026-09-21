@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Verify the required usage trace for an Alpha/Beta bypass-merge (Issue #607).
+"""Verify the required usage trace for a level-aware review bypass.
 
 Issue #607 requires every pull request actually merged with the Ruleset
 self-approval bypass (`#580`, `docs/ci-policy.md` "Alpha 自我核准 bypass")
-during `release_phase` "alpha" or "beta" to leave a structured trace
-comment on that same PR before merging: `stage`, `actor`, and `reason`.
+during Alpha self-review or a beta+ hotfix to leave a structured trace
+comment on that same PR before merging: level, route, actor, and reason.
 
 This module is the "at least one concrete, testable mechanism" Issue #607
 asks for, alongside the documented format in `docs/ci-policy.md`: it
@@ -25,7 +25,7 @@ per PR rather than on a schedule.
 
 Required trace comment format (one line, anywhere in a PR comment body):
 
-    bypass-trace: release_phase=<alpha|beta> actor=<login> reason=<text>
+    bypass-trace: release_level=<level> route=<route> actor=<login> reason=...
 
 `scripts/check-bypass-trace` is the CLI entry point over this module.
 """
@@ -43,7 +43,8 @@ from typing import Any
 JsonObject = dict[str, Any]
 
 TRACE_PATTERN = re.compile(
-    r"^bypass-trace:\s*release_phase=(?P<phase>alpha|beta)\s+"
+    r"^bypass-trace:\s*release_level=(?P<level>alpha|beta|early|formal)\s+"
+    r"route=(?P<route>alpha|hotfix)\s+"
     r"actor=(?P<actor>\S+)\s+reason=(?P<reason>.+)$",
     re.MULTILINE,
 )
@@ -54,8 +55,13 @@ def parse_trace(body: str) -> JsonObject | None:
     match = TRACE_PATTERN.search(body)
     if match is None:
         return None
+    level = match.group("level")
+    route = match.group("route")
+    if (route == "alpha") != (level == "alpha"):
+        return None
     return {
-        "release_phase": match.group("phase"),
+        "release_level": level,
+        "route": route,
         "actor": match.group("actor"),
         "reason": match.group("reason").strip(),
     }
@@ -154,15 +160,15 @@ def _main(argv: list[str]) -> int:
         print(  # noqa: T201
             f"PR #{args.pr_number} in {args.repo} is merged but has no "
             "bypass-trace comment before its merge time. Required "
-            "format: 'bypass-trace: release_phase=<alpha|beta> "
-            "actor=<login> reason=<text>' (Issue #607).",
+            "format: 'bypass-trace: release_level=<level> "
+            "route=<alpha|hotfix> actor=<login> reason=<text>'.",
             file=sys.stderr,
         )
         return 1
 
     print(  # noqa: T201
         f"PR #{args.pr_number} in {args.repo}: bypass-trace found "
-        f"(release_phase={trace['release_phase']}, "
+        f"(release_level={trace['release_level']}, route={trace['route']}, "
         f"actor={trace['actor']}, reason={trace['reason']!r}, "
         f"left by @{trace['commenter']} at {trace['created_at']})."
     )

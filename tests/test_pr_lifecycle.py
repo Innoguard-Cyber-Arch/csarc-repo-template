@@ -35,6 +35,8 @@ edit_standalone_issue = MODULE["edit_standalone_issue"]
 exact_head_approval = MODULE["exact_head_approval"]
 expired_remote_lease = MODULE["expired_remote_lease"]
 GitHub = MODULE["GitHub"]
+ensure_hotfix_post_review = MODULE["ensure_hotfix_post_review"]
+hotfix_emergency_evidence = MODULE["hotfix_emergency_evidence"]
 LEASE_CORE_FIELDS = MODULE["LEASE_CORE_FIELDS"]
 lease_message = MODULE["lease_message"]
 merge = MODULE["merge"]
@@ -63,6 +65,28 @@ def human_review_mode(monkeypatch: pytest.MonkeyPatch) -> None:
         MODULE["merge_snapshot"].__globals__,
         "review_settings",
         lambda: ("human", "unlimited"),
+    )
+
+    def resolved_level(
+        github: object, repo: str, pull: dict[str, Any]
+    ) -> object:
+        del github, repo
+        level = (
+            "alpha"
+            if ALPHA_SELF_MERGE_MARKER in str(pull.get("body") or "")
+            else "beta"
+        )
+        return MODULE["release_level"].Decision(
+            level,
+            "self" if level == "alpha" else "peer",
+            "baseline" if level == "alpha" else "fast",
+            "test",
+        )
+
+    monkeypatch.setitem(
+        MODULE["merge_snapshot"].__globals__,
+        "resolve_release_level",
+        resolved_level,
     )
 
 
@@ -99,7 +123,8 @@ class FakeGitHub:
         self.additional_pull_rules: list[dict[str, object]] = []
         self.additional_check_rules: list[dict[str, object]] = []
         self.required_status_checks: list[dict[str, object]] = [
-            {"context": "verify", "integration_id": 15368}
+            {"context": "verify", "integration_id": 15368},
+            {"context": "review", "integration_id": 15368},
         ]
         self.authorization_type = "User"
         self.authorization_body: str | None = None
@@ -117,6 +142,10 @@ class FakeGitHub:
         self.milestone: str | None = None
         self.issue_state = "open"
         self.issue_milestone_number: int | None = None
+        self.issue_user = "agent"
+        self.issue_labels: set[str] = set()
+        self.hotfix_comments: list[dict[str, Any]] = []
+        self.post_review_issues: list[dict[str, Any]] = []
         self.body = "Ready for review."
         self.check_conclusion = "success"
         self.additional_check_runs: list[dict[str, Any]] = []
@@ -128,7 +157,7 @@ class FakeGitHub:
         self.run_paths = {
             199: ".github/workflows/ci.yml",
             200: ".github/workflows/ci.yml",
-            201: ".github/workflows/ci.yml",
+            201: ".github/workflows/pr-review.yml",
         }
         self.run_events = {
             199: "pull_request_target",
@@ -217,9 +246,10 @@ class FakeGitHub:
                 "created_at": "2026-08-25T01:00:45Z",
                 "body": self.quota_note_body,
             }
-        if path == "issues/42":
+        if path in {"issues/42", "issues/43"}:
+            number = int(path.split("/")[1])
             return {
-                "number": 42,
+                "number": number,
                 "pull_request": None,
                 "state": self.issue_state,
                 "milestone": (
@@ -228,6 +258,10 @@ class FakeGitHub:
                     else None
                 ),
                 "body": "- [x] Acceptance verified",
+                "labels": [
+                    {"name": label} for label in sorted(self.issue_labels)
+                ],
+                "user": {"login": self.issue_user, "type": "User"},
             }
         run_match = re.fullmatch(r"actions/runs/(199|200|201)", path)
         if run_match:
@@ -354,6 +388,18 @@ class FakeGitHub:
                     "app": {"id": 15368},
                     "check_suite": {"id": self.run_suite_ids[200]},
                 },
+                {
+                    "id": 8,
+                    "name": "review",
+                    "head_sha": self.head,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "details_url": (
+                        "https://github.com/owner/repo/actions/runs/201/job/8"
+                    ),
+                    "app": {"id": 15368},
+                    "check_suite": {"id": self.run_suite_ids[201]},
+                },
                 *self.additional_check_runs,
             ]
         if key == "jobs" and path == (
@@ -408,6 +454,10 @@ class FakeGitHub:
             if self.comment_snapshots:
                 return self.comment_snapshots.pop(0)
             return self.comments
+        if path.startswith("issues/43/comments"):
+            return self.hotfix_comments
+        if path.startswith("issues?state=all&labels=needs-manual-review"):
+            return self.post_review_issues
         if path.startswith("pulls/42/comments"):
             if self.inline_comment_snapshots:
                 return self.inline_comment_snapshots.pop(0)
@@ -436,6 +486,23 @@ class FakeGitHub:
             },
             "body": body,
         }
+
+    def create_issue(
+        self,
+        _repo: str,
+        title: str,
+        body: str,
+        assignee: str,
+    ) -> dict[str, Any]:
+        """Record one emergency post-review task."""
+        issue = {
+            "html_url": "https://github.com/owner/repo/issues/99",
+            "title": title,
+            "body": body,
+            "assignee": assignee,
+        }
+        self.post_review_issues.append(issue)
+        return issue
 
     def merge(
         self, _repo: str, _number: int, head_sha: str, _title: str
@@ -675,7 +742,8 @@ def test_writer_scanner_allows_the_shipped_pr_policy_validator() -> None:
     `gh issue edit --milestone` example as human guidance. writer_violations
     cannot distinguish that quoted example from an actual unleased write, so
     every downstream project's own scripts/verify (rendered from
-    template/scripts/verify.jinja, which runs `pr_lifecycle.py scan-writers`)
+    template/.csarc/scripts/verify.jinja, which runs
+    `pr_lifecycle.py scan-writers`)
     failed before its configured verification hook ever ran -- this was only
     ever caught by the full-tier, real-template adoption tests. Regression
     coverage for Issue #645: scan the exact shipped files directly so a
@@ -684,7 +752,7 @@ def test_writer_scanner_allows_the_shipped_pr_policy_validator() -> None:
     root = Path(__file__).resolve().parents[1]
     relative_paths = (
         "scripts/validate-pr-policy",
-        "template/scripts/validate-pr-policy",
+        "template/.csarc/scripts/validate-pr-policy",
     )
     for relative in relative_paths:
         candidate = root / relative
@@ -1537,6 +1605,7 @@ def test_verify_requires_an_actual_success(conclusion: str) -> None:
 def test_newer_pending_verify_blocks_stale_success_on_same_head() -> None:
     """A base-edit rerun must supersede earlier lower-tier evidence."""
     github = FakeGitHub("a" * 40)
+    github.run_paths[201] = ".github/workflows/ci.yml"
     github.additional_check_runs = [
         {
             "id": 8,
@@ -2060,6 +2129,13 @@ def test_exact_head_review_allows_the_known_alpha_ruleset_bypass(
 ) -> None:
     """Lifecycle may enforce the repository's exact reviewed-merge bypass."""
     bind_remote_lease(monkeypatch)
+    monkeypatch.setitem(
+        merge_snapshot.__globals__,
+        "resolve_release_level",
+        lambda github, repo, pull: MODULE["release_level"].Decision(
+            "alpha", "peer", "baseline", "test"
+        ),
+    )
     github = FakeGitHub("a" * 40)
     github.ruleset_response = {
         "enforcement": "active",
@@ -2096,11 +2172,18 @@ def test_reviewed_merge_rejects_an_unknown_ruleset_bypass(
     assert snapshot["merge_mode"] == "human-only"
 
 
-def test_reviewed_bypass_requires_github_to_report_a_clean_merge(
+def test_beta_reviewed_bypass_rejects_the_alpha_bypass_actor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The known bypass cannot conceal conflicts or unresolved threads."""
+    """The native Copilot rule never relaxes a peer-review level."""
     bind_remote_lease(monkeypatch)
+    monkeypatch.setitem(
+        merge_snapshot.__globals__,
+        "resolve_release_level",
+        lambda github, repo, pull: MODULE["release_level"].Decision(
+            "beta", "peer", "fast", "test"
+        ),
+    )
     github = FakeGitHub("a" * 40)
     github.ruleset_response = {
         "enforcement": "active",
@@ -2113,9 +2196,16 @@ def test_reviewed_bypass_requires_github_to_report_a_clean_merge(
         ],
     }
     github.mergeable_state = "blocked"
+    github.additional_pull_rules = [
+        {
+            "type": "copilot_code_review",
+            "ruleset_id": 7,
+            "parameters": {"review_on_push": True},
+        }
+    ]
     snapshot = merge_snapshot(github, lease_fixture())
     assert snapshot["merge_mode"] == "human-only"
-    assert "clean" in snapshot["protection_reason"]
+    assert "unverified bypass" in snapshot["protection_reason"]
 
 
 def quota_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object], str]:
@@ -2191,6 +2281,44 @@ def alpha_quota_snapshot_fixture(
     return github, lease, note_url
 
 
+def alpha_copilot_blocked_snapshot_fixture(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    threads: list[dict[str, object]] | None = None,
+) -> tuple[FakeGitHub, dict[str, object]]:
+    """Reproduce PR #813's rollout boundary with every local gate green."""
+    bind_remote_lease(monkeypatch)
+    copilot_mode(monkeypatch)
+    monkeypatch.setattr(
+        MODULE["review_gate"],
+        "unresolved_threads",
+        lambda *_: list(threads or []),
+    )
+    github, lease, _note_url = alpha_quota_snapshot_fixture()
+    github.check_conclusion = "success"
+    github.required_review_count = 0
+    github.mergeable_state = "blocked"
+    github.permission = "admin"
+    github.additional_pull_rules = [
+        {
+            "type": "copilot_code_review",
+            "ruleset_id": 7,
+            "parameters": {"review_on_push": True},
+        }
+    ]
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+    return github, lease
+
+
 def test_alpha_sync_uses_the_exact_head_self_review_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2200,7 +2328,8 @@ def test_alpha_sync_uses_the_exact_head_self_review_path(
     github.required_review_count = 0
     github.check_conclusion = "success"
     github.required_status_checks = [
-        {"context": "verify", "integration_id": 15368}
+        {"context": "verify", "integration_id": 15368},
+        {"context": "review", "integration_id": 15368},
     ]
     github.additional_check_runs = []
     snapshot = merge_snapshot(
@@ -2211,6 +2340,27 @@ def test_alpha_sync_uses_the_exact_head_self_review_path(
     assert snapshot["alpha_self_merge"] is True
     assert snapshot["authorization_source"] == "comment"
     assert snapshot["merge_mode"] == "agent"
+
+
+def test_alpha_copilot_bypass_rejects_another_effective_rule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not attribute blocked state to Copilot with another live rule."""
+    github, lease = alpha_copilot_blocked_snapshot_fixture(monkeypatch)
+    github.additional_pull_rules.append(
+        {
+            "type": "required_deployments",
+            "ruleset_id": 7,
+            "parameters": {"required_deployment_environments": ["prod"]},
+        }
+    )
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["merge_mode"] == "human-only"
+    assert "does not report" in snapshot["protection_reason"]
 
 
 @pytest.mark.parametrize("invalid_sync", ["missing-main", "wrong-parents"])
@@ -3521,9 +3671,10 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
             "merge_mode": "agent",
             "title": "fix(ci): serialize lifecycle writes",
             "reviewed_bypass": True,
+            "release_level": "alpha",
+            "bypass_route": "alpha",
         },
     )
-    monkeypatch.setitem(merge.__globals__, "release_phase", lambda: "alpha")
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
     released = False
 
@@ -3562,7 +3713,8 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
         github,
     )
     assert github.audit_comments == [
-        "bypass-trace: release_phase=alpha actor=agent reason=exact-head-review"
+        "bypass-trace: release_level=alpha route=alpha actor=agent "
+        "reason=exact-head-review"
     ]
     assert mutations == ["lease-cas", "merge-put"]
     assert github.merged
@@ -3845,13 +3997,23 @@ class CopilotGitHub(FakeGitHub):
 
 
 def copilot_mode(
-    monkeypatch: pytest.MonkeyPatch, level: str = "unlimited"
+    monkeypatch: pytest.MonkeyPatch,
+    cap: str = "unlimited",
+    level: str = "alpha",
+    review: str = "self",
 ) -> None:
     """Switch the lifecycle to pr_review_mode=copilot."""
     monkeypatch.setitem(
         merge_snapshot.__globals__,
         "review_settings",
-        lambda: ("copilot", level),
+        lambda: ("copilot", cap),
+    )
+    monkeypatch.setitem(
+        merge_snapshot.__globals__,
+        "resolve_release_level",
+        lambda github, repo, pull: MODULE["release_level"].Decision(
+            level, review, "baseline", "test"
+        ),
     )
 
 
@@ -3922,6 +4084,9 @@ def test_copilot_mode_requires_copilot_rule_and_review_check(
         if missing == "rule":
             github.additional_pull_rules = []
         else:
+            github.required_status_checks = [
+                {"context": "verify", "integration_id": 15368}
+            ]
             github.additional_check_rules = []
         snapshot = merge_snapshot(github, lease_fixture())
         assert snapshot["merge_mode"] == "human-only", missing
@@ -3938,14 +4103,108 @@ def test_human_mode_ignores_a_clean_copilot_review(
         merge_snapshot(github, lease_fixture())
 
 
-def test_copilot_level_cap_fails_closed_until_release_levels_exist(
+def test_copilot_level_cap_blocks_higher_release_level(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Issue #752: a level cap cannot be evaluated before Issue #745."""
+    """Copilot cannot authorize work above its configured level ceiling."""
     bind_remote_lease(monkeypatch)
-    copilot_mode(monkeypatch, "beta")
-    with pytest.raises(RuntimeError, match="#745"):
+    copilot_mode(monkeypatch, "beta", "formal")
+    with pytest.raises(RuntimeError, match="does not allow Copilot"):
         merge_snapshot(CopilotGitHub("a" * 40), lease_fixture())
+
+
+def test_beta_release_level_requires_peer_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A clean Copilot review cannot satisfy a peer-review level."""
+    bind_remote_lease(monkeypatch)
+    copilot_mode(monkeypatch, level="beta", review="peer")
+    with pytest.raises(RuntimeError, match="beta release level requires"):
+        merge_snapshot(CopilotGitHub("a" * 40), lease_fixture())
+
+
+def emergency_hotfix_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object]]:
+    """Return a beta hotfix with admin reason and exact-head authorization."""
+    github = FakeGitHub("a" * 40)
+    github.reviews = []
+    github.labels = {"bug", "hotfix"}
+    github.body = "Ready for review.\n\nFixes #43"
+    github.head_ref = "fix/43-production-outage"
+    github.issue_user = "maintainer"
+    github.issue_labels = {"bug", "hotfix"}
+    github.hotfix_comments = [
+        {
+            "body": "Admin-approve: production outage",
+            "user": {"login": "maintainer", "type": "User"},
+            "created_at": "2026-08-25T00:59:00Z",
+            "html_url": (
+                "https://github.com/owner/repo/issues/43#issuecomment-8"
+            ),
+        }
+    ]
+    github.permission = "admin"
+    github.authorization_actor = "maintainer"
+    github.authenticated_actor = "maintainer"
+    github.required_review_count = 0
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+    lease = lease_fixture()
+    lease["actor"] = "maintainer"
+    return github, lease
+
+
+def test_beta_hotfix_merge_binds_admin_authorization_to_merge_actor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lifecycle accepts the exception only for the authenticated actor."""
+    bind_remote_lease(monkeypatch)
+    github, lease = emergency_hotfix_snapshot_fixture()
+
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        "maintainer",
+    )
+
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["authorization_source"] == "hotfix-emergency"
+    assert snapshot["authorization_actor"] == "maintainer"
+    assert snapshot["hotfix_evidence"] == {
+        "issue_number": 43,
+        "actor": "maintainer",
+        "permission": "admin",
+        "reason": "production outage",
+        "reason_url": (
+            "https://github.com/owner/repo/issues/43#issuecomment-8"
+        ),
+    }
+
+
+def test_beta_hotfix_merge_rejects_a_different_merge_actor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An admin cannot leave reusable evidence for a different merger."""
+    bind_remote_lease(monkeypatch)
+    github, lease = emergency_hotfix_snapshot_fixture()
+    github.authenticated_actor = "agent"
+    lease["actor"] = "agent"
+
+    with pytest.raises(RuntimeError, match="must be the merge actor"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            "agent",
+        )
 
 
 def test_copilot_merge_leaves_a_review_trace(
@@ -3963,9 +4222,10 @@ def test_copilot_merge_leaves_a_review_trace(
             "reviewed_bypass": True,
             "authorization_source": "copilot",
             "authorization_url": COPILOT_REVIEW_URL,
+            "release_level": "alpha",
+            "bypass_route": "alpha",
         },
     )
-    monkeypatch.setitem(merge.__globals__, "release_phase", lambda: "alpha")
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
     monkeypatch.setitem(merge.__globals__, "release_refs", lambda _lease: None)
     monkeypatch.setitem(merge.__globals__, "confirm_refs", lambda _lease: None)
@@ -3982,7 +4242,7 @@ def test_copilot_merge_leaves_a_review_trace(
         github,
     )
     assert github.audit_comments == [
-        "bypass-trace: release_phase=alpha actor=agent "
+        "bypass-trace: release_level=alpha route=alpha actor=agent "
         "reason=exact-head-copilot-review",
         f"copilot-review-trace: review={COPILOT_REVIEW_URL} "
         f"head={'a' * 40} actor=agent",

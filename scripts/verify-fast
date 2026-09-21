@@ -9,71 +9,255 @@ else
   export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
 fi
 cd "$repo_root"
+source "$repo_root/scripts/verification-step"
 
-tier="${CSARC_CI_TIER:-fast}"
-scopes=",${CSARC_CI_SCOPES:-source},"
+plan_root="$(mktemp -d)"
+trap 'rm -rf "$plan_root"' EXIT
+
+branch="$(git symbolic-ref --quiet --short HEAD || true)"
+base="${CSARC_CI_BASE:-}"
+if [[ -z "$base" && -n "$branch" ]]; then
+  base="$(git config --get "branch.$branch.gh-merge-base" || true)"
+fi
+if [[ -z "$base" ]]; then
+  remote_head="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD || true)"
+  base="${remote_head#origin/}"
+fi
+if [[ -z "$base" ]] && git rev-parse --verify --quiet "main^{commit}" >/dev/null; then
+  base=main
+fi
+if [[ -z "$base" ]]; then
+  echo "Cannot determine the pull request base; set CSARC_CI_BASE explicitly." >&2
+  exit 2
+fi
+base="${base#refs/heads/}"
+base="${base#refs/remotes/origin/}"
+base="${base#origin/}"
+
+base_ref=""
+for candidate in "refs/remotes/origin/$base" "refs/heads/$base" "$base"; do
+  if git rev-parse --verify --quiet "$candidate^{commit}" >/dev/null; then
+    base_ref="$candidate"
+    break
+  fi
+done
+if [[ -z "$base_ref" ]]; then
+  echo "Cannot resolve verification base '$base'; fetch it or set CSARC_CI_BASE." >&2
+  exit 2
+fi
+if ! merge_base="$(git merge-base "$base_ref" HEAD)"; then
+  echo "Cannot find a merge base between '$base_ref' and HEAD." >&2
+  exit 2
+fi
+
+changed_files="$plan_root/changed-files"
+plan_json="$plan_root/ci-plan.json"
+git diff --no-renames --name-only -z "$merge_base" HEAD >"$changed_files"
+extra_scopes="${CSARC_CI_SCOPES:-}"
+if [[ "${CSARC_RUN_OSV:-false}" == "true" ]]; then
+  extra_scopes="${extra_scopes:+$extra_scopes,}dependency"
+fi
+python3 scripts/ci_tier.py \
+  --event pull_request \
+  --base "$base" \
+  --head "${branch:-HEAD}" \
+  --labels "${CSARC_CI_LABELS:-}" \
+  --files-from "$changed_files" \
+  --output-json "$plan_json" \
+  --draft "${CSARC_CI_DRAFT:-false}" \
+  --extra-scopes "$extra_scopes"
+
+plan_tier="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
+scope_csv="$(python3 -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))["scopes"]))' "$plan_json")"
+scopes=",$scope_csv,"
+
+suite_rank() {
+  case "$1" in
+    baseline) echo 0 ;;
+    fast) echo 1 ;;
+    docs) echo 2 ;;
+    full) echo 3 ;;
+    *) return 1 ;;
+  esac
+}
+
+suite="$plan_tier"
+for requested in "${CSARC_VERIFICATION_SUITE:-fast}" "${CSARC_CI_TIER:-}"; do
+  [[ -z "$requested" ]] && continue
+  if ! requested_rank="$(suite_rank "$requested")"; then
+    echo "Unknown verification suite: $requested" >&2
+    exit 2
+  fi
+  current_rank="$(suite_rank "$suite")"
+  if ((requested_rank > current_rank)); then
+    suite="$requested"
+  fi
+done
+echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite scopes=${scope_csv:-none}"
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 
-git diff --check
-./scripts/check-update-conflicts
-./scripts/scan-secrets
-./scripts/check-bypass-lifecycle
+case "$suite" in
+  baseline|fast|docs) ;;
+  full)
+    ./scripts/verify-template.sh
+    exit 0
+    ;;
+  *)
+    echo "Unknown verification suite: $suite" >&2
+    exit 2
+    ;;
+esac
 
-if [[ "$tier" == "docs" ]]; then
-  python3 scripts/spec_to_issue.py validate
-  ./scripts/build-repo-site --check
+verification_step "Changed-tree hygiene" git diff --check
+verification_step "Conflict-marker check" ./scripts/check-update-conflicts
+verification_step "Secret scan" ./scripts/scan-secrets
+verification_step "Lifecycle-bypass check" ./scripts/check-bypass-lifecycle
+
+if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ||
+  "$scopes" == *,template,* ]]; then
+  verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
+fi
+if [[ "$scopes" == *,workflow,* || "$scopes" == *,template,* ]]; then
+  verification_step "GitHub Actions pin check" \
+    python3 scripts/check_action_pins.py
+fi
+
+run_python_suite=false
+if [[ "$scopes" == *,source,* || "$scopes" == *,template,* ||
+  "$scopes" == *,governance,* || "$scopes" == *,shell,* ||
+  "$scopes" == *,unknown,* || "$scopes" == *,workflow,* ]]; then
+  run_python_suite=true
+fi
+
+pytest_paths=()
+add_pytest_paths() {
+  local candidate existing
+  for candidate in "$@"; do
+    for existing in "${pytest_paths[@]}"; do
+      [[ "$existing" == "$candidate" ]] && continue 2
+    done
+    pytest_paths+=("$candidate")
+  done
+}
+while IFS= read -r -d '' changed_path; do
+  if [[ "$changed_path" == tests/test_*.py ]]; then
+    [[ -f "$changed_path" ]] && add_pytest_paths "$changed_path"
+    continue
+  fi
+  stem="$(basename "$changed_path")"
+  stem="${stem%.jinja}"
+  stem="${stem%.*}"
+  candidate="tests/test_${stem//-/_}.py"
+  [[ -f "$candidate" ]] && add_pytest_paths "$candidate"
+done <"$changed_files"
+if [[ "$scopes" == *,source,* ]]; then
+  add_pytest_paths \
+    tests/test_cli.py \
+    tests/test_language_profiles.py \
+    tests/test_root_config.py
+fi
+if [[ "$scopes" == *,template,* ]]; then
+  add_pytest_paths \
+    tests/test_ai_guidelines.py \
+    tests/test_cli.py \
+    tests/test_config_guidance.py \
+    tests/test_language_profiles.py \
+    tests/test_root_config.py \
+    tests/test_template_update_notifications.py \
+    tests/test_work_item_forms.py
+fi
+if [[ "$scopes" == *,governance,* ]]; then
+  add_pytest_paths \
+    tests/test_apply_repository_settings.py \
+    tests/test_apply_repository_settings_policy.py \
+    tests/test_delivery_sync.py \
+    tests/test_governance_actions.py \
+    tests/test_milestone_approval.py \
+    tests/test_pr_lifecycle.py \
+    tests/test_promotion_gate.py \
+    tests/test_release_level.py \
+    tests/test_release_policy.py \
+    tests/test_repo_capabilities.py \
+    tests/test_review_gate.py \
+    tests/test_standalone_issue_approval.py \
+    tests/test_work_item_forms.py \
+    tests/test_work_item_metadata.py \
+    tests/test_work_pr_closure.py
+fi
+if [[ "$scopes" == *,workflow,* ]]; then
+  add_pytest_paths \
+    tests/test_authenticate_dependabot_head.py \
+    tests/test_check_action_pins.py \
+    tests/test_check_jinja_workflow_drift.py \
+    tests/test_ci_tier.py \
+    tests/test_delivery_sync.py \
+    tests/test_dependabot_auto_merge.py \
+    tests/test_dependency_security.py \
+    tests/test_governance_actions.py \
+    tests/test_journey03_ci.py \
+    tests/test_journey05_workflows.py \
+    tests/test_journey07_release.py \
+    tests/test_pr_lifecycle.py \
+    tests/test_review_gate.py \
+    tests/test_verification_evidence.py \
+    tests/test_work_item_metadata.py
+fi
+if [[ "$scopes" == *,shell,* ]]; then
+  add_pytest_paths \
+    tests/test_check_branch_fresh_cleanup.py \
+    tests/test_dependency_security.py \
+    tests/test_install_scripts_retry.py \
+    tests/test_policy_entrypoints.py \
+    tests/test_resolve_cache_root.py
+fi
+if [[ "$scopes" == *,unknown,* ]]; then
+  pytest_paths=(tests)
+fi
+
+if $run_python_suite || [[ "$scopes" == *,dependency,* ||
+  "$scopes" == *,workflow,* ]]; then
+  verification_step "Locked dependency graph" uv lock --check
+  verification_step "Locked Python environment" \
+    uv sync --locked --python "$UV_PYTHON"
+fi
+
+if $run_python_suite; then
+  verification_step "Python formatting" \
+    uv run ruff format --check src scripts tests
+  verification_step "Python lint" uv run ruff check src scripts tests
+  verification_step "Python type check" uv run ty check
+fi
+
+if [[ "$scopes" == *,workflow,* ]]; then
+  verification_step "GitHub Actions audit" \
+    ./scripts/verify-stage-github-actions-audit
+fi
+
+if [[ "$suite" == "baseline" ]]; then
   exit 0
 fi
 
-if [[ "$scopes" == *,docs,* ]]; then
-  python3 scripts/spec_to_issue.py validate
-  ./scripts/build-repo-site --check
-fi
-
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
-  ./scripts/verify-dependencies
+  verification_step "Dependency scan" ./scripts/verify-dependencies
 fi
 
-run_static_checks=false
-if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
-  run_static_checks=true
-  ./scripts/lint-workflows-shell
-fi
-if [[ "$scopes" == *,workflow,* ]]; then
-  python3 scripts/check_action_pins.py
-fi
-
-uv sync --locked --python "$UV_PYTHON"
-uv run ruff format --check src scripts tests
-uv run ruff check src scripts tests
-uv run ty check
-uv run pytest -m "not large"
-
-if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
-  "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
-  ./scripts/test-issue-triage
-  ./scripts/test-worktree-cleanup
-  ./scripts/test-pr-policy
-  ./scripts/test-apply-repository-settings
-  ./scripts/test-check-scope-gate
-  ./scripts/test-check-repo-capabilities
-fi
-
-if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
-  "$scopes" == *,shell,* ||
-  "$scopes" == *,dependency,* || "$scopes" == *,governance,* ]]; then
-  smoke_root="$(mktemp -d)"
-  trap 'rm -rf "$smoke_root"' EXIT
-  uv run copier copy --trust --defaults --vcs-ref HEAD \
-    --data project_slug=fast-template-smoke \
-    --data package_name=fast_template_smoke \
-    --data code_owner=@Innoguard-Cyber-Arch/template-maintainers \
-    "$repo_root" "$smoke_root/project" >/dev/null
-  if $run_static_checks; then
-    CSARC_CACHE_ROOT="$cache_root" \
-      "$smoke_root/project/scripts/lint-workflows-shell"
+if $run_python_suite; then
+  if ((${#pytest_paths[@]} == 0)); then
+    echo "Python safety floor has no tests for scopes: $scope_csv" >&2
+    exit 2
   fi
-  "$smoke_root/project/scripts/test-pr-policy"
-  "$smoke_root/project/scripts/test-check-scope-gate"
-  (cd "$smoke_root/project" && python3 scripts/csarc_config.py languages >/dev/null)
+  verification_step "Bounded Python regression suite" \
+    uv run pytest -vv --durations=20 -m "not large" "${pytest_paths[@]}"
+fi
+
+if [[ "$scopes" == *,workflow,* ]]; then
+  verification_step "Rendered workflow drift" \
+    uv run python3 scripts/check_jinja_workflow_drift.py
+fi
+
+if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then
+  verification_step "Specification validation" \
+    python3 scripts/spec_to_issue.py validate
+  verification_step "Repository site render" ./scripts/build-repo-site --check
+  verification_step "Paired-file drift" ./scripts/sync-paired-files.sh --check
 fi

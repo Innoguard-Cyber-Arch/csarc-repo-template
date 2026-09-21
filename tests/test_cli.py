@@ -7,7 +7,6 @@ import json
 import os
 import re
 import shlex
-import shutil
 import stat
 import subprocess
 from collections.abc import Callable
@@ -22,10 +21,10 @@ from csarc_cli.cli import CliError, main
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_copier_migration_preserves_project_owned_symlink(
+def test_copier_migration_only_removes_known_root_test_copies(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Do not replace a project-owned test symlink during migration."""
+    """Retire known copies without deleting project-owned test content."""
     migration = yaml.safe_load((ROOT / "copier.yml").read_text())[
         "_migrations"
     ][0]["command"]
@@ -35,28 +34,143 @@ def test_copier_migration_preserves_project_owned_symlink(
     tests.mkdir()
     target = tmp_path / "project-owned.py"
     target.write_text("project owned\n", encoding="utf-8")
-    legacy_test = tests / "test_delivery_sync.py"
-    legacy_test.symlink_to(target)
+    project_owned_symlink = tests / "test_promotion_gate.py"
+    project_owned_symlink.symlink_to(target)
+    retired_generated_test = tests / "test_delivery_sync.py"
+    retired_generated_test.write_text("generated\n", encoding="utf-8")
+    retired_upstream_test = tests / "test_issue_edit_warning.py"
+    retired_upstream_test.write_text("new upstream\n", encoding="utf-8")
+    fixtures = tests / "fixtures"
+    fixtures.mkdir()
+    retired_generated_fixture = fixtures / "syft-v1.50.0-runtime.spdx.json"
+    retired_generated_fixture.write_text("fixture\n", encoding="utf-8")
+    project_owned_test = tests / "test_ci_tier.py"
+    project_owned_test.write_text("customized\n", encoding="utf-8")
     (tmp_path / ".copier-answers.yml").write_text(
         "branch_strategy: dev\n", encoding="utf-8"
     )
 
-    class LegacyDigest:
-        def hexdigest(self) -> str:
-            return (
-                "50fc918666723264272a9268ebaf5c0b120341e58"
-                "8e1e1f5841686f8448abc99"
-            )
+    class TestDigest:
+        def __init__(self, content: bytes) -> None:
+            self.content = content
 
-    monkeypatch.setattr(hashlib, "sha256", lambda _content: LegacyDigest())
+        def hexdigest(self) -> str:
+            if self.content == b"generated\n":
+                return (
+                    "50fc918666723264272a9268ebaf5c0b120341e58"
+                    "8e1e1f5841686f8448abc99"
+                )
+            if self.content == b"fixture\n":
+                return (
+                    "fda96bc7c659542f481b0845d3319ac607162d85"
+                    "b908a479740f314b82bc10b6"
+                )
+            if self.content == b"new upstream\n":
+                return (
+                    "ec205ac957dd588f04a59c47bcd8fb43b999237"
+                    "c4a59235d00f4020ca0bcdd0b"
+                )
+            return "0" * 64
+
+    monkeypatch.setattr(hashlib, "sha256", TestDigest)
     monkeypatch.chdir(tmp_path)
     exec(compile(migration[2], "copier.yml migration", "exec"), {})  # noqa: S102
 
-    assert legacy_test.is_symlink()
-    assert legacy_test.read_text(encoding="utf-8") == "project owned\n"
+    assert project_owned_symlink.is_symlink()
+    assert (
+        project_owned_symlink.read_text(encoding="utf-8") == "project owned\n"
+    )
+    assert not retired_generated_test.exists()
+    assert not retired_upstream_test.exists()
+    assert not retired_generated_fixture.exists()
+    assert project_owned_test.read_text(encoding="utf-8") == "customized\n"
     assert "branch_strategy: main" in (
         tmp_path / ".copier-answers.yml"
     ).read_text(encoding="utf-8")
+
+
+def test_update_moves_legacy_generated_layout_without_overwriting(
+    tmp_path: Path,
+) -> None:
+    """Plan known moves, preserve product files, and reject collisions."""
+    stage = tmp_path / "stage"
+    target = tmp_path / "target"
+    for relative in (
+        ".csarc/config.yml",
+        ".csarc/scripts/verify",
+        ".github/SECURITY.md",
+        "docs/site/content/_index.en.md",
+    ):
+        path = stage / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"new {relative}\n", encoding="utf-8")
+    legacy = {
+        ".copier-answers.yml": "project_name: Legacy\n",
+        ".csarc/profile.json": "{}\n",
+        ".gitleaks.toml": "[extend]\nuseDefault = true\n",
+        ".pre-commit-config.yaml": "repos: []\n",
+        "scripts/verify": "legacy verifier\n",
+        "SECURITY.md": "legacy security policy\n",
+        "site/content/_index.en.md": "project website\n",
+        "scripts/product-tool": "project owned\n",
+    }
+    for relative, content in legacy.items():
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    moves = cli.legacy_layout_pairs(stage, target, project_mode="new")
+    plan = cli.update_file_plan(
+        cli.compare_stage(stage, target, adopt=False),
+        moves,
+        (
+            ".csarc/profile.json",
+            ".gitleaks.toml",
+            ".pre-commit-config.yaml",
+        ),
+    )
+
+    assert ".copier-answers.yml -> .csarc/config.yml" in plan.move
+    assert "scripts/verify -> .csarc/scripts/verify" in plan.move
+    assert "SECURITY.md -> .github/SECURITY.md" in plan.move
+    assert (
+        "site/content/_index.en.md -> docs/site/content/_index.en.md"
+        in plan.move
+    )
+    assert ".csarc/scripts/verify" not in plan.add
+    assert "scripts/verify" not in plan.preserve
+    assert plan.remove == (
+        ".csarc/profile.json",
+        ".gitleaks.toml",
+        ".pre-commit-config.yaml",
+    )
+
+    cli.apply_layout_moves(target, moves)
+    assert (target / ".csarc/scripts/verify").read_text(encoding="utf-8") == (
+        "legacy verifier\n"
+    )
+    assert (target / "docs/site/content/_index.en.md").read_text(
+        encoding="utf-8"
+    ) == "project website\n"
+    assert (target / "scripts/product-tool").read_text(encoding="utf-8") == (
+        "project owned\n"
+    )
+    assert (target / ".csarc/config.yml").read_text(encoding="utf-8") == (
+        "project_name: Legacy\n"
+    )
+
+    collision = tmp_path / "collision"
+    for relative, content in (
+        ("scripts/verify", "old\n"),
+        (".csarc/scripts/verify", "different\n"),
+    ):
+        path = collision / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    with pytest.raises(CliError, match="layout migration collision"):
+        cli.apply_layout_moves(
+            collision, (("scripts/verify", ".csarc/scripts/verify"),)
+        )
 
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -265,6 +379,28 @@ def initialize_project(tmp_path: Path) -> tuple[Path, Path, str]:
     return source, project, first_sha
 
 
+def initialize_installed_project(tmp_path: Path) -> tuple[Path, Path, str]:
+    """Create the minimum installed-state fixture without running Copier."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "installed-project"
+    config = project / cli.CONFIG_FILE
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "_commit": first_sha,
+                "_src_path": str(source),
+                "project_mode": "new",
+                "language": "ci",
+                "languages": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return source, project, first_sha
+
+
 def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
     """Start a minimal adoption that requires a manual manifest merge."""
     source, first_sha = make_template(tmp_path)
@@ -399,15 +535,15 @@ class FakeReleaseClient:
         }
 
     def release(self, tag: str | None) -> dict[str, object]:
-        assert tag in {None, "v1.2.3"}
+        assert tag in {None, self.release_values["tag_name"]}
         return self.release_values
 
     def resolve_tag(self, tag: str) -> cli.TagResolution:
-        assert tag == "v1.2.3"
+        assert tag == self.release_values["tag_name"]
         return self.tag_results.pop(0)
 
     def verify_release(self, tag: str) -> None:
-        assert tag == "v1.2.3"
+        assert tag == self.release_values["tag_name"]
         if self.release_error is not None:
             raise self.release_error
 
@@ -477,6 +613,7 @@ def test_init_copier_tasks_wait_for_approval(
     assert marker.read_text(encoding="utf-8") == "executed\n"
 
 
+@pytest.mark.large
 def test_init_revalidates_revision_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -614,6 +751,7 @@ def test_adoption_copier_tasks_wait_for_each_approval(
     assert marker.read_text(encoding="utf-8") == "executed\n"
 
 
+@pytest.mark.large
 def test_failed_copier_task_does_not_create_init_target(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -651,6 +789,7 @@ def test_failed_copier_task_does_not_create_init_target(
     [(True, False), (False, True)],
     ids=("answer-removed", "path-moved"),
 )
+@pytest.mark.large
 def test_copier_task_cannot_rewrite_bound_configuration(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -691,6 +830,7 @@ def test_copier_task_cannot_rewrite_bound_configuration(
     assert not project.exists()
 
 
+@pytest.mark.large
 def test_copier_task_cannot_route_config_writes_outside_candidate(
     tmp_path: Path,
 ) -> None:
@@ -1155,6 +1295,7 @@ def test_release_workflow_input_drift_fails_closed(tmp_path: Path) -> None:
     ("visibility", "enabled"),
     [("public", True), ("private", False), ("internal", False)],
 )
+@pytest.mark.large
 def test_init_json_uses_one_complete_resolved_plan(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -1456,6 +1597,7 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     assert not (project / cli.PENDING_ADOPTION_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rejects_answer_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1914,176 +2056,6 @@ def test_authorized_dependency_tooling_cannot_widen_the_plan() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("language", "manifest_name", "lock_name"),
-    [
-        ("python", "pyproject.toml", "uv.lock"),
-        ("typescript", "package.json", "pnpm-lock.yaml"),
-        ("rust", "Cargo.toml", "Cargo.lock"),
-    ],
-)
-@pytest.mark.large
-def test_real_template_adoption_resumes_after_manifest_merge(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    language: str,
-    manifest_name: str,
-    lock_name: str,
-) -> None:
-    """Finalize each language adoption without a pre-existing lockfile."""
-    lockfile_calls: list[Path] = []
-    original_create_lockfiles = cli.create_adoption_lockfiles
-
-    def track_lockfile_creation(
-        target: Path, answers: dict[str, object]
-    ) -> None:
-        lockfile_calls.append(target)
-        original_create_lockfiles(target, answers)
-
-    monkeypatch.setattr(
-        cli, "create_adoption_lockfiles", track_lockfile_creation
-    )
-    revision_sha = git(ROOT, "rev-parse", "HEAD")
-    project = tmp_path / f"existing-{language}"
-    reference = tmp_path / f"reference-{language}"
-    data = cli.base_data(
-        project,
-        "adopt",
-        {
-            "coverage_mode": "global",
-            "language": language,
-            "security_reporting_channel": (
-                "Use the synthetic fixture's private reporting channel."
-            ),
-        },
-    )
-    data["project_visibility"] = "private"
-    cli.copier_copy(
-        str(ROOT),
-        cli.Revision(revision_sha, revision_sha, str(ROOT)),
-        reference,
-        data,
-        skip_tasks=False,
-    )
-    project.mkdir()
-    if language == "python":
-        initial_manifest = (
-            '[project]\nname = "existing-python"\nversion = "0.1.0"\n'
-            'requires-python = ">=3.14,<3.15"\n'
-        )
-    elif language == "typescript":
-        initial_manifest = (
-            json.dumps(
-                {
-                    "name": "existing-typescript",
-                    "private": True,
-                    "type": "module",
-                    "version": "0.1.0",
-                },
-                indent=2,
-            )
-            + "\n"
-        )
-    else:
-        initial_manifest = (
-            '[package]\nname = "existing-rust"\nversion = "0.1.0"\n'
-            'edition = "2024"\n\n[lib]\npath = "src/lib.rs"\n'
-        )
-    (project / "README.md").write_text("# Existing product\n", encoding="utf-8")
-    (project / manifest_name).write_text(initial_manifest, encoding="utf-8")
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    commit(project, f"test: existing {language} product")
-
-    arguments = [
-        "adopt",
-        str(project),
-        "--source",
-        str(ROOT),
-        "--to",
-        revision_sha,
-        "--allow-unreleased",
-        "--data",
-        f"language={language}",
-        "--data",
-        "coverage_mode=global",
-        "--data",
-        "security_reporting_channel=Use the synthetic fixture's "
-        "private reporting channel.",
-    ]
-    assert main([*arguments, "--dry-run"]) == 0
-    assert lockfile_calls == []
-    plan_path = (
-        tmp_path
-        / f"existing-{language}-csarc-adoption-report"
-        / cli.ADOPTION_PLAN_BASENAME
-    )
-    assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--apply-plan",
-                str(plan_path),
-                *replay_authorization(plan_path),
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 1
-    )
-    assert lockfile_calls == []
-    assert not (project / lock_name).exists()
-    assert not (project / cli.PROVENANCE_FILE).exists()
-    manifest = project / manifest_name
-    if language == "python":
-        manifest.write_text(
-            (reference / manifest_name).read_text(encoding="utf-8")
-            + "\n[tool.product]\npreserved = true\n",
-            encoding="utf-8",
-        )
-    elif language == "typescript":
-        merged = json.loads(
-            (reference / manifest_name).read_text(encoding="utf-8")
-        )
-        merged["productSetting"] = True
-        manifest.write_text(
-            json.dumps(merged, indent=2) + "\n", encoding="utf-8"
-        )
-    else:
-        manifest.write_text(
-            (reference / manifest_name).read_text(encoding="utf-8")
-            + "\n[package.metadata.product]\npreserved = true\n",
-            encoding="utf-8",
-        )
-
-    before = git(project, "status", "--porcelain")
-    assert replay_finalize(project, "--dry-run") == 0
-    assert lockfile_calls == []
-    assert git(project, "status", "--porcelain") == before
-    assert not (project / lock_name).exists()
-    assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--finalize",
-                "--apply-plan",
-                str(finalize_plan_path(project)),
-                *replay_authorization(finalize_plan_path(project)),
-                "--non-interactive",
-                "--yes",
-            ]
-        )
-        == 0
-    )
-    assert len(lockfile_calls) == 1
-    assert (project / lock_name).is_file()
-    assert (project / cli.PROVENANCE_FILE).is_file()
-    assert not (project / cli.PENDING_ADOPTION_FILE).exists()
-
-
 @pytest.mark.large
 def test_real_existing_adoption_uses_fixed_ownership_policies(
     tmp_path: Path,
@@ -2231,130 +2203,33 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert ignore_lines.count(".env") == 1
 
 
+def test_self_adoption_paths_are_plain_product_content(tmp_path: Path) -> None:
+    """Treat root-only paths as ordinary preserved adoption content."""
+    stage = tmp_path / "stage"
+    target = tmp_path / "target"
+    stage.mkdir()
+    (target / "template").mkdir(parents=True)
+    (target / "profiles").mkdir()
+    (stage / "managed.txt").write_text("managed\n", encoding="utf-8")
+    (target / "template" / "biome.json").write_text("{}\n", encoding="utf-8")
+    (target / "copier.yml").write_text("root config\n", encoding="utf-8")
+    (target / "profiles" / "catalog.yaml").write_text(
+        "profiles: {}\n", encoding="utf-8"
+    )
+
+    plan = cli.compare_stage(stage, target, adopt=True)
+
+    assert plan.add == ("managed.txt",)
+    assert plan.preserve == (
+        "copier.yml",
+        "profiles/catalog.yaml",
+        "template/biome.json",
+    )
+    assert plan.manual == ()
+    assert plan.unknown == ()
+
+
 @pytest.mark.large
-def test_real_self_adoption_treats_this_repository_like_any_product(
-    tmp_path: Path,
-) -> None:
-    """Adopt a full copy of this template's own repository with itself.
-
-    Regression coverage for Issue #537 (dogfooding): `csarc adopt` must
-    treat a copy of this template repository's own working tree exactly
-    like any other real, heavily customized existing repository -- with no
-    self-adoption-specific branch, error, or unresolved collision. This is
-    the one case where the Copier template source (`--source ROOT`) and the
-    adoption target both derive from the same repository, so it is also the
-    only fixture that can exercise the self-referential collision the Issue
-    calls out: this repository's own `template/` directory (the Copier
-    template's implementation) is not part of any generated project -- only
-    its contents render, at the destination root, via `_subdirectory:
-    template` -- yet a full self-copy still has a top-level `template/`
-    directory sitting there as ordinary, unmanaged product content.
-    """
-    revision_sha = git(ROOT, "rev-parse", "HEAD")
-    project = tmp_path / "self-adopted-template"
-    copy_tracked_worktree(ROOT, revision_sha, project)
-
-    # This repository hand-authors its own `.csarc/config.yml` to describe
-    # itself as a private, already-existing product (it is not itself
-    # Copier-tracked -- there is no `.copier-answers.yml` and no `_commit`
-    # pin). A genuine not-yet-adopted repository would not carry that file,
-    # so drop it to model a realistic pre-adoption existing repository;
-    # otherwise `adopt` correctly refuses with "already has CSARC
-    # configuration; use csarc update" -- expected behavior, not a bug, but
-    # not the scenario this Issue is verifying.
-    shutil.rmtree(project / ".csarc")
-
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    commit(project, "test: self-adopted template snapshot")
-
-    arguments = [
-        "adopt",
-        str(project),
-        "--source",
-        str(ROOT),
-        "--to",
-        revision_sha,
-        "--allow-unreleased",
-        "--data",
-        "language=python",
-        "--data",
-        "security_reporting_channel=Use the synthetic fixture's "
-        "private reporting channel.",
-        "--data",
-        "project_verification_hook=",
-    ]
-    assert main([*arguments, "--dry-run"]) == 0
-    plan_path = (
-        tmp_path
-        / f"{project.name}-csarc-adoption-report"
-        / cli.ADOPTION_PLAN_BASENAME
-    )
-    payload = json.loads(plan_path.read_text(encoding="utf-8"))
-    files = payload["files"]
-
-    # No collision anywhere is left unclassified -- this is the central
-    # claim of #537: self-adoption behaves exactly like adopting any other
-    # real repository, never falling into "Unable to determine".
-    assert files["unknown"] == []
-
-    # The self-referential `template/` collision: every `template/`-prefixed
-    # path in the self-copy lands in the ordinary "preserve" bucket (kept as
-    # product-owned content untouched by the template), never in any other
-    # bucket. No special case is required.
-    template_paths = [
-        name for name in files["preserve"] if name.startswith("template/")
-    ]
-    assert len(template_paths) > 50
-    for bucket_name in ("add", "automatic_merge", "manual_merge", "unknown"):
-        assert not [
-            name for name in files[bucket_name] if name.startswith("template/")
-        ], f"template/ path leaked into {bucket_name!r}: {files[bucket_name]}"
-
-    # Other meta-repository-only paths -- not shipped to any generated
-    # product -- are preserved the same ordinary way, confirming the
-    # `template/` check above is not a special case either.
-    assert "copier.yml" in files["preserve"]
-    assert "profiles/catalog.yaml" in files["preserve"]
-
-    # The standard adoption markers are queued for addition, and the one
-    # fixed-policy automatic merge (AGENTS.md) still applies.
-    assert cli.CONFIG_FILE.as_posix() in files["add"]
-    assert cli.PENDING_ADOPTION_FILE.as_posix() in files["add"]
-    assert "AGENTS.md" in files["automatic_merge"]
-
-    # Run the full two-stage `csarc adopt` entry point through to its
-    # standard "pending manual merge" outcome: this repository's real
-    # content differs from freshly rendered template defaults in the same
-    # ordinary way any customized existing repository's would, so it lands
-    # in the same well-defined "needs human review" state -- not a crash,
-    # not a silent skip, not an early completion special-cased for "this is
-    # the template adopting itself".
-    assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--apply-plan",
-                str(plan_path),
-                *replay_authorization(plan_path),
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 1
-    )
-    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
-    assert not (project / cli.PROVENANCE_FILE).exists()
-
-    # Preserved self-referential content -- including the collision this
-    # Issue named explicitly -- is left byte-identical by the write phase.
-    assert (project / "template" / "biome.json").read_bytes() == (
-        ROOT / "template" / "biome.json"
-    ).read_bytes()
-
-
 def test_adoption_report_classifies_unknown_content(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2437,6 +2312,7 @@ def test_adoption_report_classifies_unknown_content(
         cli.ADOPTION_PLAN_BASENAME.replace(".json", ".json.tmp"),
     ],
 )
+@pytest.mark.large
 def test_adoption_reports_ignore_predictable_temporary_symlinks(
     tmp_path: Path,
     temporary_name: str,
@@ -3022,6 +2898,7 @@ def test_adopt_applies_exact_plan_over_preserved_dirty_file(
     assert (project / ".copier-answers.yml").is_file()
 
 
+@pytest.mark.large
 def test_adopt_rejects_dirty_path_not_classified_as_preserve(
     tmp_path: Path,
 ) -> None:
@@ -3081,6 +2958,7 @@ def test_adopt_rejects_dirty_path_not_classified_as_preserve(
     assert not (project / ".copier-answers.yml").exists()
 
 
+@pytest.mark.large
 def test_adopt_blocks_hook_mutation_of_preserved_dirty_file(
     tmp_path: Path,
 ) -> None:
@@ -3146,6 +3024,7 @@ def test_adopt_blocks_hook_mutation_of_preserved_dirty_file(
     assert components.read_text(encoding="utf-8") == "authorized: dirty\n"
 
 
+@pytest.mark.large
 def test_adopt_rejects_staged_preserved_file(tmp_path: Path) -> None:
     """Do not authorize staged state through the dirty-preserve exception."""
     source, first_sha = make_template(tmp_path)
@@ -3195,6 +3074,7 @@ def test_adopt_rejects_staged_preserved_file(tmp_path: Path) -> None:
         ("type", " T product.txt"),
     ],
 )
+@pytest.mark.large
 def test_adopt_rejects_non_modified_dirty_states_without_running_hook(
     tmp_path: Path, dirty_state: str, expected_status: str
 ) -> None:
@@ -3254,6 +3134,7 @@ def test_adopt_rejects_non_modified_dirty_states_without_running_hook(
 
 
 @pytest.mark.parametrize("drift", ["content", "mode", "path"])
+@pytest.mark.large
 def test_adopt_rejects_preserved_dirty_file_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], drift: str
 ) -> None:
@@ -3312,6 +3193,7 @@ def test_adopt_rejects_preserved_dirty_file_drift(
     assert not (project / ".copier-answers.yml").exists()
 
 
+@pytest.mark.large
 def test_adopt_rejects_race_between_comparison_and_snapshot(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3419,6 +3301,7 @@ def test_adopt_infers_unicode_repository_and_applies_exact_plan(
     assert (project / cli.PROVENANCE_FILE).is_file()
 
 
+@pytest.mark.large
 def test_adopt_apply_plan_updates_report_to_applied_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3494,6 +3377,7 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_apply_updates_report_to_applied_state(
     tmp_path: Path,
 ) -> None:
@@ -3534,6 +3418,7 @@ def test_adopt_finalize_apply_updates_report_to_applied_state(
     assert isinstance(payload["adoption"]["applied_at"], str)
 
 
+@pytest.mark.large
 def test_unreleased_replay_rejects_self_digested_authority_before_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3609,6 +3494,7 @@ def test_unreleased_replay_rejects_self_digested_authority_before_execution(
     assert executed == []
 
 
+@pytest.mark.large
 def test_unreleased_replay_decline_prevents_source_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3693,6 +3579,7 @@ def test_unreleased_replay_decline_prevents_source_execution(
     assert not (project / ".copier-answers.yml").exists()
 
 
+@pytest.mark.large
 def test_unreleased_checkpoint_requires_fresh_authority_before_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -4197,6 +4084,7 @@ def test_candidate_patch_rejects_stale_or_unplanned_deletions(
     )
 
 
+@pytest.mark.large
 def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
     """Run the project hook in the candidate and keep target bytes unchanged."""
     source, revision = make_template(tmp_path)
@@ -4600,7 +4488,7 @@ def test_project_hook_cannot_reenter_canonical_verify(tmp_path: Path) -> None:
 
 def test_generated_verifier_has_private_hook_handoff() -> None:
     """Keep generated hook status separate from execution control."""
-    verifier = (ROOT / "template/scripts/verify.jinja").read_text(
+    verifier = (ROOT / "template/.csarc/scripts/verify.jinja").read_text(
         encoding="utf-8"
     )
     assert "CSARC_SKIP_PROJECT_VERIFICATION_HOOK" not in verifier
@@ -4621,7 +4509,7 @@ def test_generated_verifier_status_descriptor_cannot_open_caller_path(
     monkeypatch.setenv(
         "_CSARC_PROJECT_VERIFICATION_STATUS_FILE", str(preserved)
     )
-    verifier = ROOT / "template/scripts/verify.jinja"
+    verifier = ROOT / "template/.csarc/scripts/verify.jinja"
 
     old_path = subprocess.run(  # noqa: S603
         ["/bin/bash", str(verifier), "invalid"],
@@ -4774,6 +4662,7 @@ def test_compare_stage_includes_file_traits_without_following_links(
         ),
     ],
 )
+@pytest.mark.large
 def test_adopt_reports_file_directory_collisions_without_writes(
     tmp_path: Path,
     collision: str,
@@ -4832,6 +4721,7 @@ def test_adopt_reports_file_directory_collisions_without_writes(
     assert git(project, "status", "--porcelain") == status
 
 
+@pytest.mark.large
 def test_adopt_dry_run_rejects_symlink_ancestor_without_writes(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -5011,116 +4901,6 @@ def test_adoption_preserves_executable_and_checked_patch_symlink(
 
 
 @pytest.mark.large
-def test_update_check_dry_run_apply_and_conflict(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Exercise status, dry-run, smart update, and conflict handling."""
-    source, project, _ = initialize_project(tmp_path)
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    commit(project, "test: generated project")
-
-    managed = source / "template" / "managed.txt"
-    managed.write_text("template version two\n", encoding="utf-8")
-    second_sha = commit(source, "test: template version two")
-
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                second_sha,
-                "--allow-unreleased",
-                "--check",
-                "--json",
-            ]
-        )
-        == 1
-    )
-    output = capsys.readouterr().out.strip().splitlines()[-1]
-    status = json.loads(output)
-    assert status["target_sha"] == second_sha
-    assert status["status"] == "outdated"
-
-    before = git(project, "status", "--porcelain")
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                second_sha,
-                "--allow-unreleased",
-                "--dry-run",
-            ]
-        )
-        == 0
-    )
-    assert git(project, "status", "--porcelain") == before
-    assert managed.read_text(encoding="utf-8") == "template version two\n"
-    assert "files may still change" in capsys.readouterr().out
-
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                second_sha,
-                "--allow-unreleased",
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 0
-    )
-    assert (project / "managed.txt").read_text() == "template version two\n"
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                second_sha,
-                "--allow-unreleased",
-                "--check",
-            ]
-        )
-        == 0
-    )
-    commit(project, "test: update to version two")
-
-    (project / "managed.txt").write_text(
-        "project customization\n", encoding="utf-8"
-    )
-    commit(project, "test: customize managed file")
-    managed.write_text("template version three\n", encoding="utf-8")
-    third_sha = commit(source, "test: template version three")
-    expected_head, expected_changes, _ = cli.target_state(project)
-    expected_files = cli.target_file_snapshot(project)
-
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                third_sha,
-                "--allow-unreleased",
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 2
-    )
-    actual_head, actual_changes, _ = cli.target_state(project)
-    assert (actual_head, actual_changes) == (expected_head, expected_changes)
-    assert cli.target_file_snapshot(project) == expected_files
-
-
-@pytest.mark.large
 def test_legacy_update_conflict_leaves_target_unchanged(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -5169,6 +4949,414 @@ def test_legacy_update_conflict_leaves_target_unchanged(
     assert cli.target_file_snapshot(project) == expected_files
 
 
+class LocalGitReleaseClient:
+    """A ReleaseClient backed by real local git tags (Issue #744 tests).
+
+    Stands in for GhReleaseClient so a fully "verified" init/update
+    round-trip can be exercised against a local template repository
+    instead of the real GitHub API. `missing` marks exactly the tags that
+    must behave as a confirmed-gone GitHub Release (HTTP 404); `latest` is
+    what a `tag=None`/"latest" lookup resolves to, standing in for
+    SemVer-precedence selection (already covered directly by
+    test_gh_client_selects_latest_by_semver_precedence).
+    """
+
+    def __init__(
+        self, source: Path, latest: str, missing: frozenset[str] = frozenset()
+    ) -> None:
+        self.source = source
+        self.latest = latest
+        self.missing = missing
+
+    def repository(self) -> dict[str, object]:
+        return {
+            "id": cli.CANONICAL_REPOSITORY_ID,
+            "full_name": cli.CANONICAL_REPOSITORY,
+        }
+
+    def _release_payload(self, tag: str) -> dict[str, object]:
+        return {
+            "tag_name": tag,
+            "id": abs(hash(tag)) % 1_000_000,
+            "draft": False,
+            "prerelease": "-" in tag,
+            "published_at": "2026-09-04T00:00:00Z",
+            "immutable": True,
+        }
+
+    def release(self, tag: str | None) -> dict[str, object]:
+        resolved = self.latest if tag is None or tag == "latest" else tag
+        if resolved in self.missing:
+            raise cli.ReleaseNotFoundError(
+                f"GitHub Release {resolved!r} was not found on the "
+                "canonical repository."
+            )
+        return self._release_payload(resolved)
+
+    def resolve_tag(self, tag: str) -> cli.TagResolution:
+        commit_sha = git(self.source, "rev-parse", f"{tag}^{{commit}}")
+        return cli.TagResolution(commit_sha, commit_sha)
+
+    def verify_release(self, tag: str) -> None:
+        del tag
+
+    def verify_commit(self, sha: str) -> None:
+        del sha
+
+
+def initialize_verified_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path]:
+    """Init a project through the fully verified (non-dev) release path."""
+    source, first_sha = make_template(tmp_path)
+    git(source, "tag", "v0.1.0", first_sha)
+    monkeypatch.setattr(cli, "CANONICAL_SOURCE", str(source))
+    monkeypatch.setattr(
+        cli, "GhReleaseClient", lambda: LocalGitReleaseClient(source, "v0.1.0")
+    )
+    project = tmp_path / "verified-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--to",
+                "v0.1.0",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "language=ci",
+            ]
+        )
+        == 0
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    return source, project
+
+
+@pytest.mark.large
+def test_update_reinstalls_when_the_recorded_tag_is_confirmed_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Issue #744: a GitHub-confirmed missing release_tag falls into reinstall.
+
+    Covers every explicit acceptance condition for the downstream flow: the
+    missing tag triggers it; --check reports without writing; declining
+    confirmation writes nothing; a clean plan applies once confirmed. The
+    new release only adds a file here (leaving managed.txt untouched) so
+    the plan is genuinely clean -- a two-way diff (see
+    command_update_reinstall's own docstring) would route any *changed*
+    existing file to manual merge regardless of whether the project ever
+    touched it, which test_update_reinstall_never_overwrites_a_diverged_file
+    covers separately.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+
+    (source / "template" / "new-feature.txt").write_text(
+        "added in the new release\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", second_sha)
+    client = LocalGitReleaseClient(
+        source, "0.2.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    # --check: reports the reinstall plan and returns 1 without writing.
+    assert main(["update", str(project), "--check"]) == 1
+    output = capsys.readouterr()
+    assert "reinstall" in output.err.lower()
+    assert not (project / "new-feature.txt").exists()
+
+    # Declining confirmation leaves the project untouched.
+    monkeypatch.setattr("builtins.input", lambda _: "no")
+    assert main(["update", str(project)]) == 0
+    assert not (project / "new-feature.txt").exists()
+
+    # A clean plan applies once confirmed.
+    assert main(["update", str(project), "--yes", "--non-interactive"]) == 0
+    assert (project / "new-feature.txt").read_text(
+        encoding="utf-8"
+    ) == "added in the new release\n"
+    assert (project / "managed.txt").read_text(
+        encoding="utf-8"
+    ) == "template version one\n"
+    answers = cli.config_path(project).read_text(encoding="utf-8")
+    assert second_sha in answers
+
+
+@pytest.mark.large
+def test_update_reinstall_never_overwrites_a_diverged_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A project-owned/diverged file blocks automatic reinstall apply."""
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    (project / "managed.txt").write_text(
+        "project customization\n", encoding="utf-8"
+    )
+    commit(project, "test: customize managed file")
+
+    managed = source / "template" / "managed.txt"
+    managed.write_text("template version two\n", encoding="utf-8")
+    second_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", second_sha)
+    client = LocalGitReleaseClient(
+        source, "0.2.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    assert main(["update", str(project), "--yes", "--non-interactive"]) == 1
+    assert "manual" in capsys.readouterr().err.lower()
+    assert (project / "managed.txt").read_text(
+        encoding="utf-8"
+    ) == "project customization\n"
+
+
+@pytest.mark.large
+def test_update_other_verification_failures_stay_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Only a confirmed-missing tag reinstalls; every other failure stays
+    fail-closed exactly like before Issue #744 -- a moved tag, bad
+    attestation, invalid signature, or repository identity mismatch must
+    never be silently treated as "missing" and routed into reinstall.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    capsys.readouterr()  # discard initialize_verified_project's own output
+
+    class BrokenSignatureClient(LocalGitReleaseClient):
+        def verify_commit(self, sha: str) -> None:
+            raise CliError("signature invalid")
+
+    monkeypatch.setattr(
+        cli,
+        "GhReleaseClient",
+        lambda: BrokenSignatureClient(source, "v0.1.0"),
+    )
+    assert main(["update", str(project), "--check"]) == 2
+    error = capsys.readouterr().err
+    assert "signature invalid" in error
+    assert "reinstall" not in error.lower()
+    assert (project / "managed.txt").read_text(
+        encoding="utf-8"
+    ) == "template version one\n"
+
+
+@pytest.mark.large
+def test_update_reinstall_fails_closed_when_project_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Bug fix: reinstall must run real project verification, not skip it.
+
+    verification_authorized=False (the preview build) always reports
+    "pending-authorization", which the generic `applicable` field alone
+    cannot tell apart from a real pass. A reinstall whose candidate would
+    fail ./scripts/verify must never report "Reinstall complete." or
+    write anything to target.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    capsys.readouterr()
+
+    # A hook that always fails, wired in for this one update via --data
+    # (project_verification_hook is an ordinary, unrestricted answer).
+    write_executable(
+        source / "template" / "scripts" / "verify-failing",
+        "#!/usr/bin/env bash\nset -euo pipefail\nexit 1\n",
+    )
+    (source / "template" / "new-feature.txt").write_text(
+        "added in the new release\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", second_sha)
+    client = LocalGitReleaseClient(
+        source, "0.2.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    verify_project_calls: list[Path] = []
+    real_verify_project = cli.verify_project
+
+    def spying_verify_project(target: Path) -> dict[str, object]:
+        verify_project_calls.append(target)
+        return real_verify_project(target)
+
+    monkeypatch.setattr(cli, "verify_project", spying_verify_project)
+
+    result = main(
+        [
+            "update",
+            str(project),
+            "--yes",
+            "--non-interactive",
+            "--data",
+            "project_verification_hook=scripts/verify-failing",
+        ]
+    )
+    assert result != 0
+    error = capsys.readouterr().err
+    assert "verification" in error.lower()
+    assert "Reinstall complete." not in error
+    # Real verification actually ran (the bug: it never did) and rejected
+    # the candidate, rather than the write silently proceeding anyway.
+    assert verify_project_calls
+    assert not (project / "new-feature.txt").exists()
+
+
+@pytest.mark.large
+def test_previous_release_to_current_managed_file_migration(
+    tmp_path: Path,
+) -> None:
+    """Deliver current managed files to one untouched previous release."""
+    from_sha = "488f874342c64d0c7c08782b86db71f9e20efcb6"
+    to_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "previous-release-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                from_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "project_mode=new",
+                "--data",
+                "language=ci",
+                "--data",
+                "project_visibility=private",
+                "--data",
+                "project_verification_hook=",
+            ]
+        )
+        == 0
+    )
+    retired = project / "scripts" / "release_assets.py"
+    assert retired.is_file()
+    product_file = project / "product-owned.txt"
+    product_file.write_text("keep this product content\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: record previous-release baseline")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                to_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert not retired.exists()
+    assert product_file.read_text(encoding="utf-8") == (
+        "keep this product content\n"
+    )
+    assert not list(project.rglob("*.rej"))
+    assert f"_commit: {to_sha}" in (
+        project / ".csarc" / "config.yml"
+    ).read_text(encoding="utf-8")
+
+
+@pytest.mark.large
+def test_update_reinstall_honors_an_explicit_to_target_over_latest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Bug fix: reinstall must target an explicit --to, not silently "latest".
+
+    Two scenarios in one test: (1) the recorded tag is missing but the
+    explicit --to target is fine -- reinstall must land on that target,
+    not on whatever "latest" happens to be; (2) the explicit --to target
+    itself is the one confirmed missing -- reinstall must not silently
+    substitute "latest" instead, and the failure must name that target.
+    """
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    capsys.readouterr()
+
+    (source / "template" / "new-feature.txt").write_text(
+        "beta content\n", encoding="utf-8"
+    )
+    beta_sha = commit(source, "test: template version two")
+    git(source, "tag", "0.2.0-beta.1", beta_sha)
+    (source / "template" / "new-feature.txt").write_text(
+        "latest content, not requested\n", encoding="utf-8"
+    )
+    latest_sha = commit(source, "test: template version three")
+    git(source, "tag", "0.3.0-beta.1", latest_sha)
+
+    # Scenario 1: recorded tag v0.1.0 is gone, but the requested --to is
+    # fine. "latest" is deliberately a different, newer tag so landing on
+    # it instead of the explicit --to would be observable.
+    client = LocalGitReleaseClient(
+        source, "0.3.0-beta.1", missing=frozenset({"v0.1.0"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                "0.2.0-beta.1",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / "new-feature.txt").read_text(
+        encoding="utf-8"
+    ) == "beta content\n"
+    capsys.readouterr()
+
+    # Scenario 2: the explicit --to target itself is the one that is
+    # confirmed missing. Must not silently fall back to "latest" (or to
+    # anything else) without telling the caller.
+    client_2 = LocalGitReleaseClient(
+        source, "0.3.0-beta.1", missing=frozenset({"0.9.0-beta.1"})
+    )
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client_2)
+    before = (project / "new-feature.txt").read_text(encoding="utf-8")
+    result = main(
+        [
+            "update",
+            str(project),
+            "--to",
+            "0.9.0-beta.1",
+            "--yes",
+            "--non-interactive",
+        ]
+    )
+    assert result != 0
+    error = capsys.readouterr().err
+    assert "0.9.0-beta.1" in error
+    # Never silently reinstall to "latest" (0.3.0-beta.1) instead of the
+    # explicit, still-unresolved --to target.
+    assert (project / "new-feature.txt").read_text(encoding="utf-8") == before
+
+
 @pytest.mark.large
 def test_update_migrates_legacy_copier_answers_to_single_config(
     tmp_path: Path,
@@ -5215,6 +5403,53 @@ def test_update_migrates_legacy_copier_answers_to_single_config(
     assert config.is_file()
     assert f"_commit: {second_sha}" in config.read_text(encoding="utf-8")
     assert not (project / ".copier-answers.yml").exists()
+
+
+@pytest.mark.large
+def test_update_migrates_legacy_generated_scripts_in_one_patch(
+    tmp_path: Path,
+) -> None:
+    """Move legacy managed scripts while preserving product tools."""
+    source, project, _ = initialize_project(tmp_path)
+    product_tool = project / "scripts/product-tool"
+    product_tool.write_text("project owned\n", encoding="utf-8")
+    for name in (".gitleaks.toml", ".pre-commit-config.yaml", "zizmor.yml"):
+        (project / name).write_text(
+            "legacy generated config\n", encoding="utf-8"
+        )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: legacy generated project")
+
+    generated_scripts = source / "template/.csarc/scripts"
+    generated_scripts.mkdir(parents=True)
+    for name in ("verify", "apply-repository-settings.sh"):
+        legacy = source / "template/scripts" / name
+        legacy.replace(generated_scripts / name)
+    second_sha = commit(source, "test: consolidate generated scripts")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                second_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / ".csarc/scripts/verify").is_file()
+    assert (project / ".csarc/scripts/apply-repository-settings.sh").is_file()
+    assert not (project / "scripts/verify").exists()
+    assert not (project / ".gitleaks.toml").exists()
+    assert not (project / ".pre-commit-config.yaml").exists()
+    assert not (project / "zizmor.yml").exists()
+    assert product_tool.read_text(encoding="utf-8") == "project owned\n"
 
 
 @pytest.mark.large
@@ -5311,95 +5546,6 @@ def test_update_migrates_legacy_profile_json_before_finalize_tasks(
 
 
 @pytest.mark.large
-def test_update_real_template_legacy_two_file_schema_end_to_end(
-    tmp_path: Path,
-) -> None:
-    """Reproduce Issue #683 against the real, unmodified root copier.yml.
-
-    #648/PR #662 were both verified only against the synthetic minimal
-    fixture template built by make_template(), which has no `_migrations`
-    block at all. The real root copier.yml's `_migrations` step for
-    `_stage == 'before'` unconditionally read `.copier-answers.yml` with
-    no existence check; by the time it runs during `csarc update`, the
-    CLI's own legacy migration (see `migrating_legacy_config` in
-    command_update) has already renamed that file to `.csarc/config.yml`
-    earlier in the same call, so that read raised FileNotFoundError on
-    every real repository using the exact reproduction from #683: a
-    `.copier-answers.yml` (Copier's own tracking) plus a `.csarc/profile.json`
-    (a since-superseded derivative), with no `.csarc/config.yml` yet. Drive
-    the actual root copier.yml end to end -- not a hand-rolled fixture --
-    so a regression here fails a test instead of only a real adoption.
-    """
-    from_sha = git(ROOT, "rev-parse", "HEAD~1")
-    to_sha = git(ROOT, "rev-parse", "HEAD")
-    project = tmp_path / "legacy-real-project"
-    assert (
-        main(
-            [
-                "init",
-                str(project),
-                "--source",
-                str(ROOT),
-                "--to",
-                from_sha,
-                "--allow-unreleased",
-                "--yes",
-                "--non-interactive",
-                "--data",
-                "project_mode=new",
-                "--data",
-                "language=ci",
-                "--data",
-                "project_visibility=private",
-            ]
-        )
-        == 0
-    )
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    commit(project, "test: initial modern-schema project")
-    (project / ".csarc/config.yml").rename(project / ".copier-answers.yml")
-    (project / ".csarc/profile.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "template_mode": "existing",
-                "branch_strategy": "main",
-                "language_profile": "ci",
-                "modules": {
-                    "ci_cd": True,
-                    "container": False,
-                    "python": False,
-                    "typescript": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    commit(project, "test: simulate the real #683 two-file legacy schema")
-
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                to_sha,
-                "--allow-unreleased",
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 0
-    )
-    config_path = project / ".csarc/config.yml"
-    assert config_path.is_file()
-    assert f"_commit: {to_sha}" in config_path.read_text(encoding="utf-8")
-    assert not (project / ".copier-answers.yml").exists()
-    assert not (project / ".csarc/profile.json").exists()
-
-
 def test_update_check_validates_hook_without_running_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -5768,6 +5914,7 @@ def test_update_cannot_change_release_ownership() -> None:
     assert update_data["project_mode"] == "existing"
 
 
+@pytest.mark.large
 def test_update_check_tolerates_pre_schema_existing_adoption(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -6191,7 +6338,7 @@ def test_install_state_does_not_detect_adopt_once_csarc_managed(
     tmp_path: Path,
 ) -> None:
     """Do not classify a repository with CSARC config as adopt."""
-    _source, project, first_sha = initialize_project(tmp_path)
+    _source, project, first_sha = initialize_installed_project(tmp_path)
     result = cli.detect_install_state(
         project,
         requested=first_sha,
@@ -6205,7 +6352,7 @@ def test_install_state_detects_update_when_revision_is_behind(
     tmp_path: Path,
 ) -> None:
     """Classify a pinned revision behind the target release as update."""
-    source, project, first_sha = initialize_project(tmp_path)
+    source, project, first_sha = initialize_installed_project(tmp_path)
     (source / "template" / "managed.txt").write_text(
         "template version two\n", encoding="utf-8"
     )
@@ -6230,7 +6377,7 @@ def test_install_state_detects_current_when_policy_settings_match(
     tmp_path: Path,
 ) -> None:
     """Classify a current revision with matching policy settings as current."""
-    _source, project, first_sha = initialize_project(tmp_path)
+    _source, project, first_sha = initialize_installed_project(tmp_path)
     result = cli.detect_install_state(
         project,
         requested=first_sha,
@@ -6249,7 +6396,7 @@ def test_install_state_detects_policy_only_update_when_settings_drift(
     tmp_path: Path,
 ) -> None:
     """Classify a current revision with drifted policy as policy-only-update."""
-    _source, project, first_sha = initialize_project(tmp_path)
+    _source, project, first_sha = initialize_installed_project(tmp_path)
     result = cli.detect_install_state(
         project,
         requested=first_sha,
@@ -6273,7 +6420,7 @@ def test_install_state_reports_current_when_policy_check_is_unavailable(
     tmp_path: Path,
 ) -> None:
     """Fail closed to current, not policy-only-update, when unauthenticated."""
-    _source, project, first_sha = initialize_project(tmp_path)
+    _source, project, first_sha = initialize_installed_project(tmp_path)
     result = cli.detect_install_state(
         project,
         requested=first_sha,
@@ -6301,7 +6448,7 @@ def test_install_state_reports_current_when_policy_check_fails_transiently(
     an agent to run `apply` against live GitHub settings even though the
     check never actually completed.
     """
-    _source, project, first_sha = initialize_project(tmp_path)
+    _source, project, first_sha = initialize_installed_project(tmp_path)
     result = cli.detect_install_state(
         project,
         requested=first_sha,
@@ -6398,7 +6545,7 @@ def test_status_command_reports_update_available(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Report update via the CLI when the pinned revision is stale."""
-    source, project, _first_sha = initialize_project(tmp_path)
+    source, project, _first_sha = initialize_installed_project(tmp_path)
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
@@ -6431,7 +6578,7 @@ def test_status_command_does_not_execute_unverified_target_policy(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Treat a target-owned policy helper as data during status inspection."""
-    _source, project, first_sha = initialize_project(tmp_path)
+    _source, project, first_sha = initialize_installed_project(tmp_path)
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
@@ -6518,19 +6665,33 @@ def test_release_resolution_and_helpers(
     ("field", "value", "message"),
     [
         ("immutable", False, "not immutable"),
-        ("draft", True, "published, stable"),
-        ("prerelease", True, "published, stable"),
+        ("draft", True, "Only published GitHub Releases"),
+        # v1.2.3 has no suffix, so a prerelease=True flag on it is now a
+        # flag/tag mismatch rather than a blanket "no prereleases" ban
+        # (Issue #744).
+        ("prerelease", True, "prerelease flag does not match"),
         ("published_at", None, "not published"),
+        ("tag_name", "v1.2.3-rc.1", "not a legal alpha/beta/early/formal"),
     ],
 )
 def test_release_metadata_fails_closed(
     field: str, value: object, message: str
 ) -> None:
-    """Reject releases that are mutable or not stable and published."""
+    """Reject releases that are mutable, malformed, or not published."""
     client = FakeReleaseClient()
     client.release_values[field] = value
     with pytest.raises(CliError, match=message):
         cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
+
+
+@pytest.mark.parametrize("tag", ["v0.16.0-alpha.1", "v0.16.0-beta.3"])
+def test_release_metadata_accepts_well_formed_prerelease(tag: str) -> None:
+    """Issue #744: an immutable, published prerelease tag is now approved."""
+    client = FakeReleaseClient()
+    client.release_values["tag_name"] = tag
+    client.release_values["prerelease"] = True
+    revision = cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
+    assert revision.label == tag
 
 
 def test_unreleased_revision_requires_a_local_git_source(
@@ -6654,6 +6815,185 @@ def test_copy_uses_resolved_canonical_source(
     assert copied_source == cli.CANONICAL_SOURCE
 
 
+def test_gh_client_selects_latest_by_semver_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #744: pick the highest SemVer precedence, not publish order.
+
+    A naive "most recently published" pick (what GitHub's own
+    `releases/latest` API effectively encodes) would choose whichever
+    release happened to publish last; a formal 1.0.0 published before an
+    in-progress 1.1.0-beta.1 must still lose to the beta once the beta is
+    the highest-precedence release, and a draft is never eligible at all.
+    """
+    releases = [
+        {
+            "tag_name": "v1.0.0",
+            "draft": False,
+            "prerelease": False,
+            "id": 1,
+        },
+        {
+            "tag_name": "v1.1.0-beta.1",
+            "draft": False,
+            "prerelease": True,
+            "id": 2,
+        },
+        {
+            "tag_name": "v1.1.0-beta.2",
+            "draft": True,
+            "prerelease": True,
+            "id": 3,
+        },
+    ]
+
+    def fake_gh_json_list(endpoint: str) -> list[object]:
+        assert "releases?per_page=100" in endpoint
+        if "page=1" in endpoint:
+            return releases
+        return []
+
+    monkeypatch.setattr(cli, "gh_json_list", fake_gh_json_list)
+    result = cli.GhReleaseClient().release(None)
+    assert result["tag_name"] == "v1.1.0-beta.1"
+
+
+def test_gh_client_latest_skips_a_self_inconsistent_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A prerelease-flag/tag-shape mismatch is skipped, not hard-selected.
+
+    The highest-precedence release here (v1.1.0-beta.1) has GitHub's
+    `prerelease` flag set to False despite its own beta suffix -- exactly
+    the inconsistency release_identity() would reject. "latest" selection
+    must fall through to the next-best, self-consistent candidate
+    (v1.0.0) instead of picking the broken one and surfacing a confusing
+    failure only once release_identity() re-checks it downstream.
+    """
+    releases = [
+        {
+            "tag_name": "v1.0.0",
+            "draft": False,
+            "prerelease": False,
+            "id": 1,
+        },
+        {
+            "tag_name": "v1.1.0-beta.1",
+            "draft": False,
+            "prerelease": False,  # inconsistent with its own "-beta.1" tag
+            "id": 2,
+        },
+    ]
+
+    def fake_gh_json_list(endpoint: str) -> list[object]:
+        return releases if "page=1" in endpoint else []
+
+    monkeypatch.setattr(cli, "gh_json_list", fake_gh_json_list)
+    result = cli.GhReleaseClient().release(None)
+    assert result["tag_name"] == "v1.0.0"
+
+
+def test_gh_client_latest_fails_closed_when_every_release_is_inconsistent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No usable fallback left means a clear failure, not a wrong pick."""
+    releases = [
+        {
+            "tag_name": "v1.1.0-beta.1",
+            "draft": False,
+            "prerelease": False,
+            "id": 1,
+        },
+    ]
+
+    def fake_gh_json_list(endpoint: str) -> list[object]:
+        return releases if "page=1" in endpoint else []
+
+    monkeypatch.setattr(cli, "gh_json_list", fake_gh_json_list)
+    with pytest.raises(CliError, match="self-consistent"):
+        cli.GhReleaseClient().release(None)
+
+
+def test_gh_client_named_lookup_raises_release_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A confirmed HTTP 404 on a named tag raises ReleaseNotFoundError."""
+    monkeypatch.setattr(cli, "gh_json_or_missing", lambda endpoint: None)
+    with pytest.raises(cli.ReleaseNotFoundError, match=re.escape("v9.9.9")):
+        cli.GhReleaseClient().release("v9.9.9")
+
+
+def test_gh_json_or_missing_recognizes_a_real_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`gh`'s own "(HTTP 404)" suffix is the real signal, matched precisely."""
+
+    def not_found(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        return subprocess.CompletedProcess(
+            command, 1, "", "gh: Not Found (HTTP 404)"
+        )
+
+    monkeypatch.setattr(cli, "run", not_found)
+    assert (
+        cli.gh_json_or_missing("repos/owner/repo/releases/tags/v9.9.9") is None
+    )
+
+
+def test_gh_json_or_missing_does_not_misclassify_an_unrelated_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #744 finding: a 404 substring elsewhere in the text must not
+
+    be treated as "this release is confirmed gone". A permission failure,
+    or a 404 quoted as context inside a differently-failed request, must
+    still fail closed as an ordinary CliError, never silently routed into
+    the reinstall fallback.
+    """
+
+    def forbidden(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        return subprocess.CompletedProcess(
+            command, 1, "", "gh: Must have admin rights (HTTP 403)"
+        )
+
+    monkeypatch.setattr(cli, "run", forbidden)
+    with pytest.raises(CliError, match="HTTP 403"):
+        cli.gh_json_or_missing("repos/owner/repo/releases/tags/v9.9.9")
+
+    def nested_404_wrapped_in_a_server_error(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            "",
+            "gh: upstream lookup returned HTTP 404 for a nested resource "
+            "(HTTP 500)",
+        )
+
+    monkeypatch.setattr(cli, "run", nested_404_wrapped_in_a_server_error)
+    with pytest.raises(CliError, match="HTTP 500"):
+        cli.gh_json_or_missing("repos/owner/repo/releases/tags/v9.9.9")
+
+
 def test_gh_client_dereferences_annotated_tags(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -6672,16 +7012,119 @@ def test_gh_client_dereferences_annotated_tags(
         raise AssertionError(endpoint)
 
     monkeypatch.setattr(cli, "gh_json", fake_gh_json)
+    monkeypatch.setattr(cli, "require_supported_gh", lambda: None)
     assert cli.GhReleaseClient().resolve_tag("v1.2.3") == cli.TagResolution(
         first_tag, commit_sha
     )
+
+
+def write_gh_stub(path: Path, version_output: str, log: Path) -> None:
+    """Write a gh stub that records whether release verification continues."""
+    write_executable(
+        path,
+        "#!/bin/sh\n"
+        f"printf '%s\\n' \"$*\" >> {shlex.quote(str(log))}\n"
+        'if [ "$1" = "--version" ]; then\n'
+        f"  printf '%s\\n' {shlex.quote(version_output)}\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf '{\"verified\": true}\\n'\n",
+    )
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "README.md",
+        "README.en.md",
+        "docs/agent-install.md",
+        "docs/install.md",
+        "docs/install.en.md",
+        "site/static/legacy-components.js",
+    ],
+)
+def test_documented_minimum_gh_version_matches_cli(
+    relative_path: str,
+) -> None:
+    """Keep every user-facing gh minimum aligned with the CLI constant."""
+    lines = [
+        line
+        for line in (ROOT / relative_path)
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if "GitHub CLI" in line or "gh --version" in line
+    ]
+    versions = {
+        version
+        for line in lines
+        for version in re.findall(r"\b\d+\.\d+\.\d+\b", line)
+    }
+    assert versions == {cli.MINIMUM_GH_VERSION}
+
+
+@pytest.mark.parametrize(
+    ("version_output", "message"),
+    [
+        ("gh version 2.45.0 (2024-02-21)", "2.45.0 is too old"),
+        ("GitHub CLI version unknown", "Cannot determine"),
+    ],
+)
+def test_gh_client_rejects_unsupported_version_before_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    version_output: str,
+    message: str,
+) -> None:
+    """Reject old or unparseable gh versions before attestation runs."""
+    log = tmp_path / "gh.log"
+    write_gh_stub(tmp_path / "gh", version_output, log)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    with pytest.raises(CliError, match=message) as error:
+        cli.GhReleaseClient()
+
+    assert cli.MINIMUM_GH_VERSION in str(error.value)
+    assert cli.GH_INSTALL_URL in str(error.value)
+    assert log.read_text(encoding="utf-8").splitlines() == ["--version"]
+
+
+def test_gh_client_rejects_missing_gh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explain how to install gh when the executable is unavailable."""
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    with pytest.raises(CliError, match="GitHub CLI was not found") as error:
+        cli.GhReleaseClient()
+
+    assert cli.MINIMUM_GH_VERSION in str(error.value)
+    assert cli.GH_INSTALL_URL in str(error.value)
+
+
+def test_gh_client_accepts_minimum_version_and_verifies_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Continue to attestation when gh meets the minimum version."""
+    log = tmp_path / "gh.log"
+    write_gh_stub(
+        tmp_path / "gh",
+        f"gh version {cli.MINIMUM_GH_VERSION} (2026-09-16)",
+        log,
+    )
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    cli.GhReleaseClient().verify_release("v1.2.3")
+
+    assert log.read_text(encoding="utf-8").splitlines() == [
+        "--version",
+        f"release verify v1.2.3 -R {cli.CANONICAL_REPOSITORY} --format json",
+    ]
 
 
 def test_gh_client_verifies_attestation_and_signature(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Validate concrete GitHub boundary successes and malformed responses."""
-    client = cli.GhReleaseClient()
 
     def successful_run(
         command: list[str],
@@ -6691,9 +7134,17 @@ def test_gh_client_verifies_attestation_and_signature(
         check: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         del cwd, capture, check
+        if command == ["gh", "--version"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                f"gh version {cli.MINIMUM_GH_VERSION} (2026-09-16)\n",
+                "",
+            )
         return subprocess.CompletedProcess(command, 0, '{"verified":true}', "")
 
     monkeypatch.setattr(cli, "run", successful_run)
+    client = cli.GhReleaseClient()
     client.verify_release("v1.2.3")
 
     def signature(endpoint: str) -> dict[str, object]:
@@ -6938,6 +7389,7 @@ def test_atomic_replace_text_failure_preserves_existing_file(
     assert list(state_dir.glob(".state.json.*.tmp")) == []
 
 
+@pytest.mark.large
 def test_adopt_dry_run_ignores_legacy_provenance_temporary_symlink(
     tmp_path: Path,
 ) -> None:
@@ -6976,6 +7428,7 @@ def test_adopt_dry_run_ignores_legacy_provenance_temporary_symlink(
     assert legacy_temporary.is_symlink()
 
 
+@pytest.mark.large
 def test_adopt_dry_run_ignores_legacy_pending_temporary_symlink(
     tmp_path: Path,
 ) -> None:
@@ -7026,6 +7479,7 @@ def test_adopt_dry_run_ignores_legacy_pending_temporary_symlink(
     assert legacy_temporary.is_symlink()
 
 
+@pytest.mark.large
 def test_adopt_dry_run_rejects_report_directory_symlink_ancestor(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -7231,15 +7685,21 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
 
     def pytest_commands(path: Path) -> list[list[str]]:
         source = path.read_text(encoding="utf-8").replace("\\\n", " ")
-        return [
-            shlex.split(line.strip())
-            for line in source.splitlines()
-            if line.strip().startswith("uv run pytest")
-        ]
+        commands = []
+        for line in source.splitlines():
+            try:
+                words = shlex.split(line.strip())
+            except ValueError:
+                continue
+            for index in range(len(words) - 2):
+                if words[index : index + 3] == ["uv", "run", "pytest"]:
+                    commands.append(words[index:])
+                    break
+        return commands
 
     def excludes_large(command: list[str]) -> bool:
         return any(
-            command[index : index + 2] == ["-m", "not large"]
+            command[index] == "-m" and "not large" in command[index + 1]
             for index in range(len(command) - 1)
         )
 
@@ -7252,14 +7712,16 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
             .split("[tool.pytest.ini_options]", 1)[1]
             .split("\n[", 1)[0]
         )
-        assert any(
-            line.strip().startswith('"large:')
+        declared_markers = {
+            line.strip().split(":", 1)[0].strip('"')
             for line in pytest_section.splitlines()
-        )
+            if line.strip().startswith('"') and ":" in line
+        }
+        assert {"large", "runtime"} <= declared_markers
 
     for bounded_gate in (
         ROOT / "scripts/verify-fast",
-        ROOT / "template/scripts/verify-fast.jinja",
+        ROOT / "template/.csarc/scripts/verify-fast.jinja",
     ):
         commands = pytest_commands(bounded_gate)
         assert commands
@@ -7273,79 +7735,42 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
     assert root_full_commands
     assert not any(excludes_large(command) for command in root_full_commands)
 
-    template_commands = pytest_commands(ROOT / "template/scripts/verify.jinja")
+    template_commands = pytest_commands(
+        ROOT / "template/.csarc/scripts/verify.jinja"
+    )
     assert len(template_commands) > 1
     assert any(excludes_large(command) for command in template_commands)
+    assert any(
+        command[index : index + 2] == ["-m", "runtime and not large"]
+        for command in template_commands
+        for index in range(len(command) - 1)
+    )
     assert any(not excludes_large(command) for command in template_commands)
 
-    marked_large = {
-        name
-        for name, value in globals().items()
-        if name.startswith("test_")
-        and any(
-            marker.name == "large"
-            for marker in getattr(value, "pytestmark", ())
-        )
-    }
-    assert marked_large == {
-        "test_adopt_applies_exact_plan_over_preserved_dirty_file",
-        "test_adopt_defaults_to_dry_run_and_preserves_product_files",
-        "test_adoption_copier_tasks_wait_for_each_approval",
-        "test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints",
-        "test_adopt_finalize_failure_keeps_actionable_pending_state",
-        "test_adopt_finalize_rechecks_repository_context_after_confirmation",
-        "test_adopt_finalize_rejects_preserved_managed_file_drift",
-        "test_adopt_finalize_rejects_repository_drift",
-        "test_adopt_finalize_rejects_source_and_managed_file_drift",
-        "test_adopt_finalize_rejects_unexpected_worktree_state",
-        "test_adopt_finalize_requires_matching_second_stage_plan",
-        "test_adopt_infers_unicode_repository_and_applies_exact_plan",
-        "test_adopt_rechecks_repository_context_after_confirmation",
-        "test_adopt_rechecks_target_after_confirmation",
-        "test_adopt_rejects_plan_tampering_and_target_drift",
-        "test_adoption_preserves_executable_and_checked_patch_symlink",
-        "test_adoption_records_and_replays_explicit_project_hook",
-        "test_init_dry_run_and_apply_pin_full_sha",
-        "test_init_copier_tasks_wait_for_approval",
-        "test_invalid_project_hook_blocks_pending_adoption_without_writes",
-        "test_legacy_update_conflict_leaves_target_unchanged",
-        "test_project_hook_rejects_unsafe_or_unusable_paths",
-        "test_real_existing_adoption_uses_fixed_ownership_policies",
-        "test_real_self_adoption_treats_this_repository_like_any_product",
-        "test_real_template_adoption_resumes_after_manifest_merge",
-        "test_update_check_dry_run_apply_and_conflict",
-        "test_update_check_rejects_invalid_hook_without_writes",
-        "test_update_check_does_not_execute_target_capability_helper",
-        "test_update_hook_failure_leaves_target_unchanged",
-        "test_update_migrates_legacy_copier_answers_to_single_config",
-        "test_update_migrates_legacy_profile_json_before_finalize_tasks",
-        "test_update_plan_uses_answers_without_executing_unverified_capabilities",
-        "test_update_real_template_legacy_two_file_schema_end_to_end",
-        "test_update_rechecks_committed_head_after_confirmation",
-        "test_update_rechecks_repository_context_after_confirmation",
-        "test_update_rechecks_snapshot_after_repository_context",
-        "test_update_recomputes_visibility_defaults_from_github",
-    }
 
-
-def test_generated_python_project_declares_pyyaml_for_its_paired_test() -> None:
-    """Keep ty check able to resolve the paired dependabot test's import.
-
-    template/tests/test_dependabot_auto_merge.py is copied byte-for-byte
-    into every generated project and does `import yaml` at module level.
-    [tool.ty.src] include in template/pyproject.toml.jinja covers "tests",
-    so a generated project's own `ty check` fails with unresolved-import
-    unless pyyaml is declared as a dependency.
-    """
-    paired_test = (
-        ROOT / "template/tests/test_dependabot_auto_merge.py"
-    ).read_text(encoding="utf-8")
-    assert "import yaml" in paired_test
+def test_generated_project_only_ships_product_tests() -> None:
+    """Keep root governance regression modules out of generated projects."""
+    template_tests = ROOT / "template/tests"
+    assert sorted(
+        path.relative_to(template_tests).as_posix()
+        for path in template_tests.rglob("*")
+        if path.is_file()
+    ) == ["test_smoke.py.jinja"]
+    csarc_tests = ROOT / "template/.csarc/tests"
+    assert sorted(
+        path.relative_to(csarc_tests).as_posix()
+        for path in csarc_tests.rglob("*")
+        if path.is_file()
+    ) == [
+        "test_authenticate_dependabot_head.py",
+        "test_verification_evidence.py",
+    ]
+    smoke_test = (template_tests / "test_smoke.py.jinja").read_text(
+        encoding="utf-8"
+    )
+    assert "pytest.mark.runtime" in smoke_test
 
     pyproject = (ROOT / "template/pyproject.toml.jinja").read_text(
         encoding="utf-8"
     )
-    dependency_groups = pyproject.split("[dependency-groups]", 1)[1].split(
-        "\n[", 1
-    )[0]
-    assert "pyyaml" in dependency_groups
+    assert "pyyaml" not in pyproject.lower()

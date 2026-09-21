@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.17.4</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.17.3</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。本頁內容與 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 對齊、雙語同步維護。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.17.4<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.17.3<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -280,8 +280,8 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 
 **責任交接（本機 scripts → GitHub Actions → PR gate → Release）：**
 
-- **本機 scripts（`Active`）：** `scripts/verify-fast`／`scripts/verify-template.sh` 由開發者在本機先跑一次，篩掉大部分低階錯誤。
-- **GitHub Actions（`Active`）：** PR 開出後，受信任的 base workflow 會分類所需 tier，checkout 精確的候選 commit，並在 GitHub-hosted runner 執行相同的 repo 驗證入口；合併與發版只接受綁定 repo、commit/tree、tier、命令、工具鏈與 GitHub Actions 執行身分的成功證據。
+- **本機 scripts（`Active`）：** 開發者先跑變更範圍的聚焦檢查；`scripts/verify-fast` 是需要廣泛診斷時的選項，完整交付邊界才在最終候選上跑一次 `scripts/verify-template.sh`。
+- **GitHub Actions（`Active`）：** PR 開出後，受信任的 base workflow 會分類所需 tier，checkout 精確的候選 commit，並在 GitHub-hosted runner 對該 head 執行一次 risk-owned 驗證；合併與發版只接受綁定 repo、commit/tree、tier、命令、工具鏈與 GitHub Actions 執行身分的成功證據。
 - **PR gate（依 GitHub 方案而定）：** 支援時由 Ruleset／branch protection 強制擋下未過檢查或未審查的合併；不支援時標示 `DEGRADED`，改由人工自律（見「規則治理」）。
 - **Release（`Active`，但需人工觸發）：** 版本與發版證據由具 admin 權限者在本機執行 `scripts/publish-release` 產生；hosted 的 Automatic／Guided 發版路徑是已知限制，不是預設路徑（見「版本／交付」）。
 
@@ -338,7 +338,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 | [zizmor](https://github.com/zizmorcore/zizmor) | 靜態稽核 GitHub Actions workflow 的安全性 | `pyproject.toml`、`scripts/verify-stage-github-actions-audit` | 完整驗證的 `github-actions-audit` 階段；本機供開發回饋，必要的 hosted full tier 會重新執行 | [MIT](https://github.com/zizmorcore/zizmor/blob/main/LICENSE) |
 | [Dependabot](https://github.com/dependabot/dependabot-core) | 開立相依套件更新 PR | `.github/dependabot.yml` | Root 與 template 的套件生態圈 | [MIT](https://github.com/dependabot/dependabot-core/blob/main/LICENSE) |
 | [OSV-Scanner](https://github.com/google/osv-scanner) | 掃描 lockfile 中已公開的漏洞 | `scripts/verify-dependencies`、`scripts/install-osv-scanner`、`.github/workflows/osv.yml` | 依賴變更 PR、交付候選、每週排程 | [Apache-2.0](https://github.com/google/osv-scanner/blob/main/LICENSE) |
-| [Syft](https://github.com/anchore/syft) | 產生發版用的 SPDX SBOM | `.github/workflows/release.yml`（`anchore/sbom-action`）、`scripts/release_assets.py` | 建立發版的交付 PR | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
+| [Syft](https://github.com/anchore/syft) | 產生發版用的 SPDX SBOM | `.github/workflows/release.yml`（`anchore/sbom-action`）、`scripts/release_bundle.py` | 建立發版的交付 PR | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
 | [Release Please](https://github.com/googleapis/release-please) | 維護版本／CHANGELOG PR 並建立 GitHub Release | `.github/workflows/release.yml`、`release-please-config.json`、`.release-please-manifest.json` | 交付分支到 `main` | [Apache-2.0](https://github.com/googleapis/release-please/blob/main/LICENSE) |
 | repo-site 渲染引擎 | 自製、無外部依賴的 Python 引擎，從 Markdown 建置雙語 repo-site 與 `llms.txt`；2026-09-03 取代 Hugo | `scripts/build_repo_site.py`、`scripts/build-repo-site`、`scripts/render_site.py`、`site/version.json` | `docs/index.html`、`docs/index.en.html`、`llms.txt` | 自製（本 repository） |
 {{< /disclosure >}}
@@ -434,18 +434,19 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< standard key="contract-mode-standard" title="改動大小決定驗證輕重" >}}
 開發者先在自己的電腦跑最相關的檢查，快速找出問題；PR 開出後，GitHub 從受信任的 base workflow 判斷 tier，再於 GitHub-hosted runner checkout 精確的候選 commit 並執行對應驗證。合併與發版使用的是這次 hosted 執行留下、可綁回 repo、commit/tree、tier、命令與工具鏈的證據。系統依變更範圍決定要跑哪一級：
 
-<div class="plan-grid">
-  <article class="plan-card current"><h3>docs</h3><p>純文件變更，檢查最輕量。例如：只改一份說明文件。</p></article>
-  <article class="plan-card team"><h3>fast</h3><p>一般變更，日常開發預設走這一級。例如：一般程式或設定修改。</p></article>
-  <article class="plan-card enterprise"><h3>full</h3><p>里程碑交付、Hotfix，或抓不準風險的變更。例如：里程碑／canary 交付、Hotfix、merge queue。</p></article>
-</div>
+| 發布層級 | 審查 | 最低驗證組合 |
+| --- | --- | --- |
+| alpha | exact-head 自我授權可接受 | baseline |
+| beta | 非作者 exact-head 核准 | fast |
+| early | 非作者 exact-head 核准 | docs |
+| formal | 非作者 exact-head 核准 | full |
 
-本機與 CI 共用同一套判斷邏輯，不會兩邊各自維護一份規則。
+Issue 宣告層級；Milestone work Issue 繼承 tracker。路徑分類若判定風險更高，只會提高驗證下限。本機與 CI 共用同一套解析結果。
 {{< /standard >}}
 
 {{< ops key="contract-mode-ops" title="分級邏輯與目前自動化現況" >}}
 - **開發中：**只跑能證明本次修改的 focused check（例如 `uv run pytest <path>`、`uv run ruff check <path>`），用新鮮輸出才宣稱完成，不等待整條 pipeline。
-- **工作 PR（工作分支 → main 或 `dev/m*`）：**`scripts/ci_tier.py` 依事件、base／head、labels 與變更路徑分類為 `docs`、`fast` 或 `full`；純文件／site 內容落在 `docs`（`fast` 的 early-exit 情境），一般變更落在 `fast`；無法判斷的路徑一律 fail-closed 升級為 `full`。
+- **工作 PR（工作分支 → main 或 `dev/m*`）：**`scripts/release_level.py` 從可信任的 Issue／Milestone 宣告解析 alpha／beta／early／formal；`scripts/ci_tier.py` 再依事件、labels 與變更路徑提高最低組合。宣告衝突或未知高風險路徑一律 fail closed。
 - **需要完整驗證時：**只在 Milestone／canary 交付、緊急修正、merge queue、手動執行，或系統無法安全縮小範圍的未知高風險路徑才觸發。
 - **同一套邏輯，Hosted 端重新執行（#834）：**GitHub Actions 只有一個受限權限的 `verify` job，同一 PR 新 commit 會取消舊 run；base workflow 先選定 tier 與執行命令，再對精確候選 tree 執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`）。合併與發版只採信 GitHub Actions App 在 GitHub-hosted runner 產生、成功且仍新鮮的同一 run/job 證據；手寫 commit trailer、錯誤 repo/tree/tier 或非受信任 signer 一律 fail closed。
 - **專案範圍：**一般專案只驗證自己的改動；公版專案的完整驗證還包含標記 `large` 的 Copier 建立／既有導入／更新回歸測試，實際生成新專案元件並驗證其保存的產品內容，不只是「檔案存在」。
@@ -466,11 +467,12 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **未啟用：**專用的 promotion、release-handoff、registry publisher、consumption、live-integration 與 deployment workflow 都不存在，也不是留待接上的 conditional 選項。
 {{< /disclosure >}}
 
-{{< disclosure key="contract-cost" title="三種驗證分級的實際耗時" >}}
+{{< disclosure key="contract-cost" title="四種累加驗證組合的實際耗時" >}}
 數字取自 `docs/ci-policy.md` 記錄的最近一次量測，是設定成本預期的參考點，不是永久 SLA；重跑會拿到不同數字。
 
-- `docs` 與 `fast` 共用同一條 bounded path；`docs` 只是純文件／site 內容時的 early-exit 情境。
+- `baseline`：基本安全、治理、格式、lint、型別、workflow 與鎖檔一致性。
 - `fast`：2026-09-01 同機暖快取下，只碰 source 的 scope 約 59 秒，同時碰 policy／template 的 scope 約 99 秒；整條 PR feedback window 約 1–4 分鐘（#428）。
+- `docs`：在 fast 上累加 site、文件、翻譯、導覽與 root／template 同步。
 - `full`：獨占環境下七個階段全數 PASSED 共 502 秒（8 分 22 秒）；同機器有其他 worktree 並行執行時量到 810 秒，差異來自資源競爭，不是驗證內容本身變重（#458，2026-09-02）。七個階段中，Regression tests（完整 pytest 加上標記 `large` 的 Copier 建立／導入／更新矩陣）通常是耗時最長的一段，其餘六個階段合計通常只有數十秒。
 {{< /disclosure >}}
 
@@ -613,7 +615,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **發版：**版本 PR 合併並通過完整驗證後，系統建立不可變 tag、GitHub Release、成品、checksum 與 SBOM。
 - **交付：**合併到 `main` 代表 repository delivery；它可以不產生新版本。工作 PR 結束單項工作，Milestone delivery PR 才交付整批。
 - **獨立工作：**能單獨審查與驗證、沒有共同期限或跨 Issue 相依時，不必加入里程碑；PR 可直接進 `main`。
-- **Hotfix：**只用於立即修正 `main` 的缺陷；仍要有 Bug Issue、另一人審查與完整驗證，合併後由版本 PR完成 patch 發版審查。
+- **Hotfix：**只用於立即修正 `main` 的缺陷；仍要有 Bug Issue 與完整驗證。beta 以上缺少即時同儕時，只有 admin 可用綁定 exact head 的理由緊急合併，且合併後自動建立同儕複核工作。
 - **部署：**把產品送進真實 runtime、檢查健康狀態與復原，屬 consuming product，不是本模板目前提供的能力。
 
 {{< disclosure key="deploy-capability-status" title="各項能力目前狀態逐一對照" >}}
@@ -639,7 +641,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI、npm、GHCR 與 artifac
 {{< /disclosure >}}
 
 {{< disclosure key="hotfix-delivery" title="Hotfix 的審查、驗證與證據" >}}
-Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<Issue>-*` 與 `fix(scope): summary`，直接對 `main` 開 PR；仍須正常 review 與 full verification。未公開的安全問題改用 GitHub Security Advisory 私密處理。合併後保留 PR、commit SHA、full run 與 rollback 說明；`fix` 預設是 patch 意圖，精確版本仍要在 Release Please 版本 PR 由人審查。
+Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<Issue>-*` 與 `fix(scope): summary`，直接對 `main` 開 PR，且仍須 full verification。beta 以上若無法等候同儕，緊急路徑要求 Issue 提案者、exact-head 授權者與 merge actor 是同一位即時具有 admin 權限的人，並留下理由；合併後系統自動建立 `needs-manual-review` Issue。其他 PR 不得使用此例外。未公開的安全問題改用 GitHub Security Advisory 私密處理。
 {{< /disclosure >}}
 
 {{< disclosure key="manual-release-boundary" title="自動發版的責任邊界" >}}
@@ -657,11 +659,12 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
 {{< disclosure key="release-notes-format" title="發版紀錄在哪裡看、格式代表什麼" >}}
 想知道某個版本實際變了什麼、為什麼發、跟上一版差在哪，直接看 GitHub 的
 [Releases 頁面](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases)：每個
-版本一則 Release，固定包含三項：**版本號**（Release 標題，等於 `vMAJOR.MINOR.PATCH` tag）、
+版本一則 Release，固定包含四項：**版本號**（Release 標題，等於 `vMAJOR.MINOR.PATCH` tag）、
 **發布日期**（GitHub 自動標示的發布時間，不需要另外找）、**變更摘要**（GitHub 依這段期間
-merge 進來的 PR 標題自動整理成「What's Changed」清單，附上跟前一版的完整比較連結）。
+merge 進來的 PR 標題自動整理成「What's Changed」清單，附上跟前一版的完整比較連結），
+以及**工作層級清單**（逐項列出 work item 與發布層級，並以最高層級決定本次版本）。
 
-這三項不是靠人手動填寫、也不會因為誰執行發版而有不同風格：不管是 hosted GitHub Actions
+這四項不是靠人手動填寫、也不會因為誰執行發版而有不同風格：不管是 hosted GitHub Actions
 自動觸發，還是維護者判斷 Actions 不健康時改在本機執行 `scripts/publish-release`，兩條路徑
 最終都呼叫同一支 `scripts/converge-release-tag`、用同一個 `gh release create ...
 --generate-notes` 指令產生 Release 說明，結構上不存在兩份可能各自長出不同格式的實作。
@@ -748,8 +751,9 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 必要基線 | `branch_strategy` | 預設 `delivery`；可選 `delivery`、`main` | 分支指引、`policies/rulesets.json`，以及 repo-site 的交付路線段落 |
 | 組織政策 | `code_owner` | 一個存在且有 repo write access 的 `@organization/team` | `.github/CODEOWNERS`；由 repository settings plan／apply／check 驗證；repo-site 的主要負責人欄位 |
 | 組織政策 | `reviewers` | 一個或多個 GitHub 使用者名稱 | `.github/REVIEWERS`；`governance-comment.yml` 在每張非 draft PR 自動輪派 |
+| 專案選擇 | `release_levels_enabled`、`default_release_level`、`release_level_*_{review,verification}` | 新專案預設 alpha；既有導入與公版 root 預設 beta；逐層可設定 self／peer 與 baseline／fast／docs／full | Issue／Milestone 層級解析、`review` gate、驗證 attestation 與 release notes |
 | 專案選擇 | `pr_review_mode` | 新專案預設 `copilot`；可選 `copilot`、`human`；`copier update` 對既有專案預設 `human` | `policies/rulesets.json`（`copilot` 改為 0 個 approval、自動請 Copilot 審核每次 push，並要求 `review` 檢查）；`pr-review.yml` 與 `scripts/review_gate.py` 接受 Copilot 對目前 head 沒有意見，或 maintainer 對目前 head 的 approval；需要 Copilot 授權 |
-| 專案選擇 | `copilot_review_max_level` | 預設 `unlimited`；可選 `alpha`、`beta`、`early`、`release` | Copilot 通過可取代人工審核的最高發布層級；每件工作的發布層級（#745）落地前，`unlimited` 以外的值會讓 Copilot 路徑 fail closed |
+| 專案選擇 | `copilot_review_max_level` | 預設 `unlimited`；可選 `alpha`、`beta`、`early`、`release`（formal） | Copilot 通過可取代人工審核的最高發布層級；高於上限時要求 maintainer 核准 |
 | 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及 repo-site 的可見受眾欄位 |
 | 專案選擇 | `project_name` | 必填非空字串；預設 `CSARC Project` | repo-site 的標題與頁首 |
 | 專案選擇 | `project_description` | 必填一句話用途說明，拒絕佔位文字 | repo-site 的簡介段落 |

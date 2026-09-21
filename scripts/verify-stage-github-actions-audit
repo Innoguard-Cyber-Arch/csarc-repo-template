@@ -16,6 +16,7 @@ else
 fi
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 cd "$repo_root"
+source "$repo_root/scripts/verification-step"
 
 # Issue #755: zizmor's auto-discovered config resolved to a stale
 # zizmor.yml outside this worktree when run without --config (observed
@@ -24,5 +25,6 @@ cd "$repo_root"
 # pass the path explicitly so the audit always validates against this
 # tree's own suppression rules, not whatever auto-discovery happens to
 # find first.
-uv run zizmor --config zizmor.yml . --format plain
-python3 scripts/check_action_pins.py
+verification_step "GitHub Actions security audit" \
+  uv run zizmor --config zizmor.yml . --format plain
+verification_step "GitHub Actions pin check" python3 scripts/check_action_pins.py

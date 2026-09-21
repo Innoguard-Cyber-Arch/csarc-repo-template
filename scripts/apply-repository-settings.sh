@@ -48,61 +48,12 @@ issue_creation_policy_payload="$repo_root/policies/issue-creation.json"
 # PATCH atomically, so it is kept out of policies/repository.json and PATCHed
 # in its own dedicated call instead.
 security_scanning_payload="$repo_root/policies/security-scanning.json"
-# release_phase (Issue #607): whole-project release maturity, hand-declared
-# in policies/project-stage.json -- a THIRD axis, deliberately distinct
-# from generate_audit_trail.py's per-PR governance_stage and
-# profiles/catalog.yaml's per-profile stage (see
-# scripts/release_phase_rulesets.py's module docstring for the full
-# naming-collision warning). It gates how far the Alpha self-approval
-# Ruleset bypass (#580) is allowed to reach: required_status_checks may
-# only inherit the bypass in "alpha"; from "beta" onward it lives in its
-# own Ruleset (policies/rulesets-required-checks.json) with an always-empty
-# bypass_actors. Only this repository ships both policy files today --
-# template-generated repositories keep the pre-#607 single-Ruleset layout
-# and are unaffected by any logic gated on release_phase_gated below.
-project_stage_payload="$repo_root/policies/project-stage.json"
 required_checks_ruleset_payload="$repo_root/policies/rulesets-required-checks.json"
-release_phase_module="$repo_root/scripts/release_phase_rulesets.py"
-release_phase_gated=false
-release_phase=""
-if [[ -f "$project_stage_payload" && -f "$required_checks_ruleset_payload" ]]; then
-  release_phase_gated=true
-  release_phase="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["release_phase"])' "$project_stage_payload")"
-fi
-# effective_ruleset_payload / effective_required_checks_ruleset_payload are
-# the per-Ruleset payload(s) actually pushed to or compared against GitHub.
-# When release_phase_gated they are release_phase-assembled temp files
-# (scripts/release_phase_rulesets.py assemble); otherwise they are exactly
-# the checked-in files, unchanged from pre-#607 behavior.
 effective_ruleset_payload="$ruleset_payload"
 effective_required_checks_ruleset_payload="$required_checks_ruleset_payload"
-if [[ "$release_phase_gated" == true ]]; then
-  release_phase_tempdir="$(mktemp -d)"
-  trap 'rm -rf "$release_phase_tempdir"' EXIT
-  effective_ruleset_payload="$release_phase_tempdir/review-ruleset.json"
-  effective_required_checks_ruleset_payload="$release_phase_tempdir/required-checks-ruleset.json"
-  if ! release_phase_assembly_error="$(
-    python3 "$release_phase_module" assemble \
-      --project-stage "$project_stage_payload" \
-      --review-ruleset "$ruleset_payload" \
-      --required-checks-ruleset "$required_checks_ruleset_payload" \
-      2>&1 1>"$release_phase_tempdir/assembled.json"
-  )"; then
-    echo "Cannot assemble release_phase-gated Rulesets." >&2
-    echo "$release_phase_assembly_error" >&2
-    exit 1
-  fi
-  python3 - "$release_phase_tempdir/assembled.json" \
-    "$effective_ruleset_payload" "$effective_required_checks_ruleset_payload" <<'PY'
-import json
-import sys
-
-rulesets = json.load(open(sys.argv[1], encoding="utf-8"))
-with open(sys.argv[2], "w", encoding="utf-8") as handle:
-    json.dump(rulesets[0], handle)
-with open(sys.argv[3], "w", encoding="utf-8") as handle:
-    json.dump(rulesets[1], handle)
-PY
+if [[ ! -f "$required_checks_ruleset_payload" ]]; then
+  echo "Missing policies/rulesets-required-checks.json." >&2
+  exit 1
 fi
 # check_desired_rules_payload_extra is only used by the check-mode drift
 # comparison below: the effective-rules-branches endpoint returns the
@@ -697,8 +648,7 @@ import sys
 
 desired = json.load(open(sys.argv[1], encoding="utf-8"))
 effective = json.loads(sys.argv[2])
-# Issue #607: required_status_checks may live in a separate Ruleset
-# (policies/rulesets-required-checks.json) from beta onward. The
+# required_status_checks lives in a separate, never-bypassed Ruleset. The
 # effective-rules-branches endpoint returns the union of rules enforced
 # across every applicable Ruleset, not scoped by name, so "desired" must
 # be the union of both files' rules too -- see check_desired_rules_payload_extra
@@ -885,11 +835,7 @@ fi
 if [[ "$policy_branch_ruleset" != "true" ]]; then
   echo "- SKIP policies/rulesets.json (disabled by policy_branch_ruleset=false)"
 elif [[ "$ruleset_enforcement_available" == true ]]; then
-  if [[ "$release_phase_gated" == true ]]; then
-    echo "- APPLY policies/rulesets.json + policies/rulesets-required-checks.json (release_phase=$release_phase, enforced by GitHub)"
-  else
-    echo "- APPLY policies/rulesets.json (enforced by GitHub)"
-  fi
+  echo "- APPLY policies/rulesets.json + policies/rulesets-required-checks.json (enforced by GitHub)"
   echo "CODEOWNERS team: $code_owner"
 elif [[ "$ruleset_inventory_available" == true ]]; then
   echo "- PRESERVE policies/rulesets.json locally (public APIs cannot create a Ruleset on this plan)"
@@ -1028,8 +974,7 @@ apply_ruleset_payload() {
   # Create-or-update a single live Ruleset by the `name` field inside the
   # given payload file, against the repository/rulesets inventory already
   # fetched into $ruleset_access. Shared by the always-present review
-  # Ruleset and, when release_phase_gated, the required-checks Ruleset
-  # (Issue #607) -- both follow the identical GitHub API shape.
+  # Ruleset and the required-checks Ruleset; both follow the same API shape.
   local payload_file="$1"
   local payload_name payload_id
   payload_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$payload_file")"
@@ -1052,9 +997,7 @@ if [[ "$policy_branch_ruleset" == "true" && "$ruleset_enforcement_available" == 
     gh api --method DELETE "repos/$repo/rulesets/$legacy_ruleset_id" >/dev/null
   fi
   apply_ruleset_payload "$effective_ruleset_payload"
-  if [[ "$release_phase_gated" == true ]]; then
-    apply_ruleset_payload "$effective_required_checks_ruleset_payload"
-  fi
+  apply_ruleset_payload "$effective_required_checks_ruleset_payload"
 fi
 
 GH_REPO="$repo" "$0" check

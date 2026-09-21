@@ -1,0 +1,32 @@
+{
+  "name": "CSARC protected branches",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"{% if branch_strategy == "delivery" %}, "refs/heads/dev/m*"{% endif %}],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {"type": "non_fast_forward"},
+    {
+      "type": "pull_request",
+      "parameters": {
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_approving_review_count": 0,
+        "required_review_thread_resolution": true
+      }
+    }{% if pr_review_mode | default('human') == 'copilot' %},
+    {
+      "type": "copilot_code_review",
+      "parameters": {
+        "review_draft_pull_requests": false,
+        "review_on_push": true
+      }
+    }{% endif %}
+  ]
+}

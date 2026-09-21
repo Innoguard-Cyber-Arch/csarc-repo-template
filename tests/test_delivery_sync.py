@@ -28,6 +28,8 @@ reconcile = MODULE["reconcile"]
 require_sync_request = MODULE["require_sync_request"]
 select_auto_mode = MODULE["select_auto_mode"]
 sync_branch_name = MODULE["sync_branch_name"]
+validate_sync_identity = MODULE["validate_sync_identity"]
+validate_sync_route = MODULE["validate_sync_route"]
 
 HEAD_SHA = "a" * 40
 BASE_SHA = "b" * 40
@@ -357,6 +359,132 @@ def test_manual_sync_is_deterministic_and_reviewed() -> None:
     assert "git push origin dev/m7-staged-ci" not in commands
 
 
+def test_exact_sync_identity_distinguishes_clean_and_manual_merges() -> None:
+    """Exact parents are mandatory while only the automatic tree is clean."""
+    main_sha = "c" * 40
+    head_sha = "d" * 40
+    tree_sha = "e" * 40
+    base = "dev/m7-staged-ci"
+    head = sync_branch_name(base, main_sha)
+
+    assert validate_sync_identity(
+        base,
+        head,
+        BASE_SHA,
+        head_sha,
+        main_sha,
+        [BASE_SHA, main_sha],
+        tree_sha,
+        tree_sha,
+    )
+    assert not validate_sync_identity(
+        base,
+        head,
+        BASE_SHA,
+        head_sha,
+        main_sha,
+        [BASE_SHA, main_sha],
+        tree_sha,
+        None,
+    )
+
+
+@pytest.mark.parametrize("field", ["head", "parents", "tree"])
+def test_clean_sync_identity_rejects_mismatched_boundary(field: str) -> None:
+    """A clean sync cannot borrow a branch, parent list, or merge tree."""
+    main_sha = "c" * 40
+    head_sha = "d" * 40
+    tree_sha = "e" * 40
+    base = "dev/m7-staged-ci"
+    head = sync_branch_name(base, main_sha)
+    parents = [BASE_SHA, main_sha]
+    merge_tree = tree_sha
+    if field == "head":
+        head = "sync/main-to-m7-staged-ci-wrong"
+    elif field == "parents":
+        parents = [BASE_SHA]
+    else:
+        merge_tree = "f" * 40
+
+    if field == "tree":
+        assert not validate_sync_identity(
+            base,
+            head,
+            BASE_SHA,
+            head_sha,
+            main_sha,
+            parents,
+            tree_sha,
+            merge_tree,
+        )
+    else:
+        with pytest.raises(RuntimeError, match="exact main-to-delivery"):
+            validate_sync_identity(
+                base,
+                head,
+                BASE_SHA,
+                head_sha,
+                main_sha,
+                parents,
+                tree_sha,
+                merge_tree,
+            )
+
+
+def test_sync_route_requires_the_recorded_authorized_request() -> None:
+    """A sync PR binds its exact route to the requesting work PR."""
+    main_sha = "c" * 40
+    base = "dev/m7-staged-ci"
+    head = sync_branch_name(base, main_sha)
+    sync = {
+        "number": 99,
+        "state": "open",
+        "merged": False,
+        "title": f"chore(sync): merge main into {base}",
+        "body": (
+            "Requested from PR #42 for `explicit-dependency`. Created by "
+            "the delivery sync workflow; normal review applies."
+        ),
+        "labels": [{"name": "enhancement"}],
+        "base": {"ref": base, "sha": BASE_SHA},
+        "head": {
+            "ref": head,
+            "sha": HEAD_SHA,
+            "repo": {"full_name": "acme/repo"},
+        },
+    }
+    request = promotion("feat/42-change")
+    request.update(
+        {
+            "base": {"ref": base, "sha": BASE_SHA},
+            "labels": [{"name": "enhancement"}],
+            "body": "- Dependencies / non-parallel work: Needs main",
+        }
+    )
+
+    validate_sync_route(
+        FakeAPI([(200, sync), (200, request), (200, request)]),
+        "acme/repo",
+        99,
+        base,
+        BASE_SHA,
+        head,
+        HEAD_SHA,
+    )
+
+    sync["body"] = "No recorded request"
+    with pytest.raises(RuntimeError, match="route is not authorized"):
+        validate_sync_route(
+            FakeAPI([(200, sync)]),
+            "acme/repo",
+            99,
+            base,
+            BASE_SHA,
+            head,
+            HEAD_SHA,
+        )
+
+
 def test_explicit_dependency_sync_requires_the_requesting_pr_owner() -> None:
     """Early sync is limited to an owner PR with a declared dependency."""
     request = promotion("feat/42-change")
@@ -607,7 +735,7 @@ def test_legacy_persistent_delivery_assets_are_removed() -> None:
     root = Path(__file__).parents[1]
     for relative in (
         "policies/dev-next-ruleset.json",
-        "template/policies/dev-next-ruleset.json",
+        "template/.csarc/policies/dev-next-ruleset.json",
     ):
         assert not (root / relative).exists()
     for relative in (

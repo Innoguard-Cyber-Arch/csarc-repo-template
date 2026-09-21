@@ -11,14 +11,9 @@ correct generated-repo behavior: disabled areas are skipped (no mutating
 areas are still applied and checked exactly as before, and a legacy
 `.csarc/config.yml` predating this feature keeps every area on by default.
 
-The branch-Ruleset domain's `check` drift comparison has a preexisting,
-unrelated bug (`scripts/apply-repository-settings.sh` computes
-`desired_by_type["required_status_checks"]`, a rule type that
-`policies/rulesets.json` no longer declares -- see git history for the
-commit that removed it) that always raises before this feature's code runs.
-`policy_branch_ruleset=false` is used to keep `check`/`apply` scenarios
-independent of that unrelated failure; the toggle's "on" path is instead
-verified through `plan`, which never reaches that comparison.
+The branch-Ruleset domain spans separate required-check and review-policy
+Rulesets. Tests that isolate another policy area disable that domain, while
+the dedicated branch-Ruleset scenarios exercise both owned definitions.
 """
 
 from __future__ import annotations
@@ -193,23 +188,9 @@ def _make_repo(tmp_path: Path, config_yaml: str) -> Path:
         CONFIG_READER_SOURCE.read_text(encoding="utf-8"), encoding="utf-8"
     )
 
-    # project-stage.json and rulesets-required-checks.json are root-repo-only
-    # (Issue #607's release_phase gating of the Alpha self-approval bypass);
-    # template-generated repositories never receive them and keep the
-    # pre-#607 single-Ruleset layout. Copying them into this generic-repo
-    # fixture would spuriously flip release_phase_gated on in
-    # scripts/apply-repository-settings.sh without this fixture also
-    # providing scripts/release_phase_rulesets.py, which it has no reason to
-    # need.
-    root_repo_only_policies = {
-        "project-stage.json",
-        "rulesets-required-checks.json",
-    }
     policies_dir = repo / "policies"
     policies_dir.mkdir()
     for policy_file in POLICIES_SOURCE.glob("*.json"):
-        if policy_file.name in root_repo_only_policies:
-            continue
         (policies_dir / policy_file.name).write_text(
             policy_file.read_text(encoding="utf-8"), encoding="utf-8"
         )
@@ -449,7 +430,11 @@ def test_legacy_config_without_policy_keys_defaults_every_area_on(
         "- APPLY policies/labels.json (create or update policy labels)"
         in plan_output
     )
-    assert "- APPLY policies/rulesets.json (enforced by GitHub)" in plan_output
+    assert (
+        "- APPLY policies/rulesets.json + "
+        "policies/rulesets-required-checks.json (enforced by GitHub)"
+        in plan_output
+    )
     assert (
         "No changes applied. Re-run with 'apply' after review." in plan_output
     )

@@ -211,16 +211,16 @@
             "en": ".github/workflows/ci.yml"
           },
           "title": {
-            "zh-tw": "固定基線｜CI 依風險執行 fast 或 full",
-            "en": "Fixed baseline | CI runs fast or full by risk"
+            "zh-tw": "固定基線｜發布層級與路徑風險共同決定驗證",
+            "en": "Fixed baseline | Release level and path risk resolve verification"
           },
           "goal": {
             "zh-tw": "預設路徑不依賴中央 workflow；穩定 aggregate context 兼顧成本與 required checks。",
             "en": "The default path does not depend on a central workflow; a stable aggregate context balances cost against required checks."
           },
           "code": {
-            "zh-tw": "on:\n  pull_request:\n  merge_group:\n    types: [checks_requested]\n  workflow_dispatch:\npermissions:\n  actions: read\n  contents: read\njobs:\n  fast: # docs／fast routing\n  full: # promotion／hotfix／merge queue／manual\n  verify: # always-present aggregate context",
-            "en": "on:\n  pull_request:\n  merge_group:\n    types: [checks_requested]\n  workflow_dispatch:\npermissions:\n  actions: read\n  contents: read\njobs:\n  fast: # docs/fast routing\n  full: # promotion/hotfix/merge queue/manual\n  verify: # always-present aggregate context"
+            "zh-tw": "release level -> baseline／fast／docs／full\nchanged paths -> can only raise the floor\nverified-locally -> exact tree, suite, freshness\nrequired checks -> never bypassed",
+            "en": "release level -> baseline/fast/docs/full\nchanged paths -> can only raise the floor\nverified-locally -> exact tree, suite, freshness\nrequired checks -> never bypassed"
           }
         },
         {
@@ -318,20 +318,20 @@
             "en": "scripts/verify-fast＋scripts/verify＋.github/workflows/ci.yml"
           },
           "title": {
-            "zh-tw": "固定基線｜一個入口驗證與打包",
-            "en": "Fixed baseline | One entry point verifies and packages"
+            "zh-tw": "固定基線｜四種累加驗證組合",
+            "en": "Fixed baseline | Four cumulative verification suites"
           },
           "goal": {
             "zh-tw": "本機、AI 與 GitHub 執行同一入口；各語言只持有自己的檢查。",
             "en": "Local runs, AI, and GitHub all execute the same entry point; each language owns only its own checks."
           },
           "code": {
-            "zh-tw": "./scripts/verify-fast\n./scripts/verify",
-            "en": "./scripts/verify-fast\n./scripts/verify"
+            "zh-tw": "CSARC_VERIFICATION_SUITE=baseline ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=fast ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=docs ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=full ./scripts/verify-fast",
+            "en": "CSARC_VERIFICATION_SUITE=baseline ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=fast ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=docs ./scripts/verify-fast\nCSARC_VERIFICATION_SUITE=full ./scripts/verify-fast"
           },
           "summary": {
-            "zh-tw": "fast 選必要子集，full 是其超集合，不為不同 PR 階段複製測試。",
-            "en": "`fast` selects the required subset and `full` is its superset; no test is duplicated for a different PR stage."
+            "zh-tw": "baseline、fast、docs、full 逐層累加；發布層級設下限，路徑風險只能提高，不能降低。",
+            "en": "baseline, fast, docs, and full are cumulative; release level sets the floor and path risk can only raise it."
           }
         }
       ]
@@ -412,8 +412,8 @@
       "items": [
         {
           "file": {
-            "zh-tw": "template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml",
-            "en": "template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml"
+            "zh-tw": "template/.csarc/scripts/verify-fast.jinja＋template/.csarc/scripts/verify.jinja＋template/pnpm-workspace.yaml",
+            "en": "template/.csarc/scripts/verify-fast.jinja＋template/.csarc/scripts/verify.jinja＋template/pnpm-workspace.yaml"
           },
           "title": {
             "zh-tw": "固定基線｜依鎖檔重裝，TypeScript 另等三天",
@@ -500,8 +500,8 @@
         },
         {
           "file": {
-            "zh-tw": "scripts/release_assets.py＋tests/test_release_assets.py",
-            "en": "scripts/release_assets.py＋tests/test_release_assets.py"
+            "zh-tw": "scripts/release_bundle.py＋tests/test_release_bundle.py",
+            "en": "scripts/release_bundle.py＋tests/test_release_bundle.py"
           },
           "title": {
             "zh-tw": "條件式契約｜真正成品的 SPDX SBOM 與 checksum",
@@ -512,8 +512,8 @@
             "en": "The inventory must come from the real artifact at an exact tag; it is never guessed from source code alone."
           },
           "code": {
-            "zh-tw": "syft <extracted-artifacts> -o spdx-json=sbom.spdx.json\npython scripts/release_assets.py build ...\npython scripts/release_assets.py verify ...",
-            "en": "syft <extracted-artifacts> -o spdx-json=sbom.spdx.json\npython scripts/release_assets.py build ...\npython scripts/release_assets.py verify ..."
+            "zh-tw": "python3 scripts/release_bundle.py prepare --tag <tag> --output <assets>\npython3 scripts/release_bundle.py finalize --tag <tag> --output <assets>\npython3 scripts/release_bundle.py verify --tag <tag> --output <assets>",
+            "en": "python3 scripts/release_bundle.py prepare --tag <tag> --output <assets>\npython3 scripts/release_bundle.py finalize --tag <tag> --output <assets>\npython3 scripts/release_bundle.py verify --tag <tag> --output <assets>"
           },
           "summary": {
             "zh-tw": "成品存在時可用 Syft 產生 SPDX 2.3 SBOM；repo 程式驗證 root package、dependency graph、checksum、來源與 provenance。目前沒有 active publisher，因此不宣稱已產生成品證據。",
@@ -587,14 +587,14 @@
             "en": "version intent: active\nversion + changelog: manual\ntag + GitHub Release: blocked (#369)\nartifact evidence: conditional\ndeployment: not applicable"
           },
           "summary": {
-            "zh-tw": "Release Please、promotion、成品發布與 consumption workflows 都在 archive；#369 決定唯一 owner 前維持 manual／conditional。",
-            "en": "Release Please, promotion, artifact publication, and consumption workflows all sit in the archive; they stay manual or conditional until #369 decides on a single owner."
+            "zh-tw": "Release Please、promotion、成品發布與 consumption workflows 的退役設計只保留在 Git history；#369 決定唯一 owner 前維持 manual／conditional。",
+            "en": "Retired Release Please, promotion, artifact-publication, and consumption workflow designs remain only in Git history; they stay manual or conditional until #369 decides on a single owner."
           }
         },
         {
           "file": {
-            "zh-tw": "scripts/release_assets.py＋scripts/verify_release_consumption.py",
-            "en": "scripts/release_assets.py＋scripts/verify_release_consumption.py"
+            "zh-tw": "scripts/release_bundle.py＋scripts/verify_release_consumption.py",
+            "en": "scripts/release_bundle.py＋scripts/verify_release_consumption.py"
           },
           "title": {
             "zh-tw": "保留契約｜成品與消費驗證可在本機重跑",
@@ -817,8 +817,8 @@
             "en": "version_policy:\n  stable_release_observation_days: 30\n  update_method: manual_reviewed_pull_request\n  merge_after_full_verification: manual"
           },
           "summary": {
-            "zh-tw": "profiles/catalog.yaml 保存三十天觀察規則；維護者以一般受審查 PR 更新支援版本。舊 python-version-policy workflow 留在 archive，沒有 active bot identity。",
-            "en": "`profiles/catalog.yaml` records the thirty-day observation rule; a maintainer updates the supported version through an ordinary reviewed PR. The old `python-version-policy` workflow stays in the archive, with no active bot identity."
+            "zh-tw": "profiles/catalog.yaml 保存三十天觀察規則；維護者以一般受審查 PR 更新支援版本。舊 python-version-policy workflow 已刪除，沒有 active bot identity。",
+            "en": "`profiles/catalog.yaml` records the thirty-day observation rule; a maintainer updates the supported version through an ordinary reviewed PR. The old `python-version-policy` workflow is deleted, with no active bot identity."
           }
         },
         {

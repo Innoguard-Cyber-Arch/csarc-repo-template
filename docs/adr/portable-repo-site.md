@@ -59,7 +59,7 @@ Issue #524 重新檢視「頁面呈現架構」「首頁重做」「自訂排版
 
 Issue #527 要求：在 #524 讓渲染引擎與排版模板各自獨立版本、可替換之後，讓維護這個 repository 自己（fork 或 vendor 這份公版，不是 Copier 下發的生成專案）repo-site 的人，能不 fork 引擎或版面邏輯就換一套顏色主題。原則維持「盡可能簡單」：只開放顏色與既有區塊的窄範圍視覺覆寫，不開放任意 CSS／HTML。
 
-**機制**：新增 `site/theme.css`，與生成專案既有的 `docs/site-theme.css`（`template/docs/site-theme.css.jinja`）同一套設計、不同路徑——因為根網站與生成專案的 handbook 是兩套不同 renderer（見上方「Ownership 與更新」與 2026-09-03 節）。`scripts/build_repo_site.py` 在 `<head>` 固定多輸出一個 `<link rel="stylesheet" href="../../site/theme.css">`（在 `site/static/styles.css` 之後，讓 CSS cascade 覆寫生效），`scripts/render_site.py` 既有的 stylesheet 內嵌步驟原樣處理它，不需要修改。此檔一律存在（committed，預設空白 `:root {}` 加說明註解），因此預設輸出的 `docs/index.html`／`docs/index.en.html` 不變；有需要時直接覆寫 `site/static/styles.css` 的 `:root` token 或既有 class 的顏色屬性即可，範圍與界線寫在檔案自己的開頭註解裡，由一般 PR review 把關，不另建驗證工具。
+**機制**：新增 `site/theme.css`，與生成專案既有的 `docs/site-theme.css`（`template/docs/site/theme.css.jinja`）同一套設計、不同路徑——因為根網站與生成專案的 handbook 是兩套不同 renderer（見上方「Ownership 與更新」與 2026-09-03 節）。`scripts/build_repo_site.py` 在 `<head>` 固定多輸出一個 `<link rel="stylesheet" href="../../site/theme.css">`（在 `site/static/styles.css` 之後，讓 CSS cascade 覆寫生效），`scripts/render_site.py` 既有的 stylesheet 內嵌步驟原樣處理它，不需要修改。此檔一律存在（committed，預設空白 `:root {}` 加說明註解），因此預設輸出的 `docs/index.html`／`docs/index.en.html` 不變；有需要時直接覆寫 `site/static/styles.css` 的 `:root` token 或既有 class 的顏色屬性即可，範圍與界線寫在檔案自己的開頭註解裡，由一般 PR review 把關，不另建驗證工具。
 
 **不採用 `.csarc/config.yml`**：`scripts/build_repo_site.py` 已明確記載根網站內容不吃 `.csarc/config.yml`（該檔案是 repository 治理設定，`[[key]]` token 機制服務的是生成專案的 `docs/site-content.md`）。用 YAML 顏色鍵值再轉譯成 CSS 會是第二套主題機制，與既有 `site/static/styles.css` 的 CSS custom properties 重複；因此選擇同一種 CSS 覆寫檔案格式，只是換一個 repo 內路徑。
 
@@ -142,29 +142,35 @@ Issue #681 使用者要求：Standard／Ops 分層、雙語鉤稽、簡報式構
 
 **決定**：下游生成專案的 repo-site 改用跟 root 完全相同的引擎與元件，不再是 `docs/site-content.md` 這份由 `scripts/render_site.py` 內建的獨立 Markdown-to-handbook renderer（單語言、無 Standard／Ops 分層、雙欄長卷軸）產生的簡化手冊：
 
-- `scripts/build_repo_site.py`、`scripts/repo_site_blocks.py`、`scripts/check-repo-site-navigation`、`scripts/check-repo-site-translations`、`scripts/check-repo-site-versions` 現在也由 `scripts/sync-paired-files.sh` 逐位元組同步到 `template/scripts/`，跟既有的 `scripts/render_site.py`（本 ADR 原本唯一標記「未修改、雙方共用」的檔案）用同一套機制。下游專案跟 root 執行的是同一份程式碼，不是分頭維護的相似實作。
-- `site/static/styles.css`、`detail-toggle.css`、`deck.js`、`legacy-components.js`、`detail-toggle.js` 同步複製到 `template/site/static/`，提供跟 root 相同的視覺語言、archetype（流程圖 `.step-flow`、能力地圖 `.capability-map`、關係圖 `.relation-map` 等）與 Standard／Ops 切換互動。
-- 下游專案的雙語內容來源改成 `template/site/content/_index.zh-tw.md`／`_index.en.md`（純檔案複製，不經 Copier Jinja），精簡起始頁只含首頁、安裝說明、關於三頁——不是把 root 現有 11 段 Journey 內容整批搬過去，那些內容描述的是「這個模板 repo 自己」的治理示範，不是每個下游專案都適用的通用敘事。專案之後可依需要在 `site/content/` 自行擴充頁面。
+- `scripts/build_repo_site.py`、`scripts/repo_site_blocks.py`、`scripts/check-repo-site-navigation`、`scripts/check-repo-site-translations`、`scripts/check-repo-site-versions` 的下游版本放在 `template/.csarc/scripts/`。Issue #742 起因 root 與下游路徑不同，路徑敏感檔不再假設逐位元組相同，而以相同 contract 與生成專案端對端測試防止行為漂移。
+- `site/static/styles.css`、`detail-toggle.css`、`deck.js`、`legacy-components.js`、`detail-toggle.js` 同步複製到 `template/.csarc/site/static/`，提供跟 root 相同的視覺語言、archetype（流程圖 `.step-flow`、能力地圖 `.capability-map`、關係圖 `.relation-map` 等）與 Standard／Ops 切換互動。
+- 下游專案的雙語內容來源改成 `template/docs/site/content/_index.zh-tw.md`／`_index.en.md`（純檔案複製，不經 Copier Jinja），精簡起始頁只含首頁、安裝說明、關於三頁——不是把 root 現有 11 段 Journey 內容整批搬過去，那些內容描述的是「這個模板 repo 自己」的治理示範，不是每個下游專案都適用的通用敘事。專案之後可依需要在 `docs/site/content/` 自行擴充頁面。
 - 下游專案的專案事實（`project_name`、`project_description`、`languages`、`branch_strategy`、`project_visibility`、`code_owner`、`reviewers`、`repository_url`）透過 `[[key]]` token 在**每次本機建置時**直接讀 `.csarc/config.yml`（`build_repo_site.py` 新增的 `_substitute_config_tokens`／`_load_downstream_config`，沿用既有 `_substitute_version_tokens` 的同一套 `[[key]]` 語法與 fail-closed 設計），不是像舊機制那樣只在 `copier copy`／`update` 當下用 Jinja 解析一次；`.csarc/config.yml` 之後若有變動，不必等下一次 Copier 更新就會反映到網站。允許的 key 就是「規則治理」`governance-config` 表格既有的核准清單，加上 `repository_url`（公開、非敏感，本來就在建立時詢問，用於安裝頁的 clone 指令）。
-- `docs/site-theme.css`（Issue #527，專案自訂主題覆寫）維持不變，機制與路徑都不受影響；`build_repo_site.py`／`render_page()` 新增 `theme_href` 參數，root 傳入 `site/theme.css`、下游生成專案傳入 `docs/site-theme.css`，同一份 page-shell 程式碼服務兩種呼叫者。
+- `docs/site/theme.css`（Issue #527，專案自訂主題覆寫）維持相同機制；`build_repo_site.py`／`render_page()` 的 `theme_href` 參數讓 root 使用 `site/theme.css`、下游生成專案使用 `docs/site/theme.css`，同一份 page-shell 契約服務兩種呼叫者。
 
 **Ownership 更新**（取代上方表格 `docs/site-content.md` 那一列）：
 
 | 內容 | Owner | Copier update 行為 |
 | --- | --- | --- |
-| `site/content/_index.zh-tw.md`／`_index.en.md`（下游生成專案） | consuming project | 首次建立後保留（`_skip_if_exists`），不靜默覆寫 |
-| `site/data/navigation.json`（下游生成專案，若專案自行擴充頁面） | consuming project | 首次建立後保留（`_skip_if_exists`） |
-| `docs/site-theme.css`（下游生成專案） | consuming project | 首次建立後保留，機制不變（Issue #527） |
+| `docs/site/content/_index.zh-tw.md`／`_index.en.md`（下游生成專案） | consuming project | 首次建立後保留（`_skip_if_exists`），不靜默覆寫 |
+| `docs/site/data/navigation.json`（下游生成專案，若專案自行擴充頁面） | consuming project | 首次建立後保留（`_skip_if_exists`） |
+| `docs/site/theme.css`（下游生成專案） | consuming project | 首次建立後保留，機制不變（Issue #527） |
 
-**既有 `docs/site-content.md` 的遷移**：`template/docs/site-content.md.jinja` 已移除，新建立的專案不會再產生這個檔案。已經導入過的既有專案，這個檔案本身不會被刪除或覆寫（沿用「不靜默覆寫 project-owned content」的既有承諾），但已經沒有任何 renderer 讀取它；`scripts/build-repo-site`（下游專案版）偵測到該檔仍存在時，印出遷移提示，要求維護者把要保留的文字移入 `site/content/_index.*.md` 後自行刪除舊檔——沿用本 ADR 原本 `docs/site-content.js` → `docs/site-content.md` 遷移時「保留舊檔＋顯示提示＋不自動搬遷」的同一套先例，這次沒有再往輸出頁面內嵌提示（該機制原本就綁定舊 renderer 的 marker 注入，新引擎不重建這條路徑），改成建置時的終端機提示。
+**既有 `docs/site-content.md` 的遷移**：`template/docs/site-content.md.jinja` 已移除，新建立的專案不會再產生這個檔案。已經導入過的既有專案，這個檔案本身不會被刪除或覆寫（沿用「不靜默覆寫 project-owned content」的既有承諾），但已經沒有任何 renderer 讀取它；`.csarc/scripts/build-repo-site`（下游專案版）偵測到該檔仍存在時，印出遷移提示，要求維護者把要保留的文字移入 `docs/site/content/_index.*.md` 後自行刪除舊檔——沿用本 ADR 原本 `docs/site-content.js` → `docs/site-content.md` 遷移時「保留舊檔＋顯示提示＋不自動搬遷」的同一套先例，這次沒有再往輸出頁面內嵌提示（該機制原本就綁定舊 renderer 的 marker 注入，新引擎不重建這條路徑），改成建置時的終端機提示。
 
-**驗證**：新增 `_substitute_config_tokens`／`_load_downstream_config`／`load_site_data` 容忍缺少非必要資料檔（`glossary.toml` 以外，`similar_tools.json`／`config_examples.json`／`file_map.json`／`audit_trail.json` 對精簡下游網站皆為選用）的單元測試（`tests/test_build_repo_site.py`）；`tests/test_render_site.py::test_copier_generated_project_builds_its_own_bilingual_repo_site` 實際呼叫 `copier.run_copy()`（真正跑過 Copier 樣板引擎本身，不是手動組出的等價 fixture）產生一個全新專案，確認 `_tasks` 的 `bash scripts/build-repo-site` 有實際執行、舊系統檔案完全不存在、雙語 `docs/index.html`／`docs/index.en.html` 正確產生且 `.csarc/config.yml` 各欄位（`project_name`／`project_description`／`code_owner`／`reviewers`／`repository_url`）都正確代入、無殘留 `{{< slide key=`／`[[project_name]]` 等未解析標記、無外部 runtime asset、Standard／Ops 兩個 `data-mode` 面板皆存在；`tests/test_render_site.py`／`tests/test_journey03_ci.py` 更新為驗證新路徑與 `./scripts/build-repo-site --check`（取代舊有 `render_site.py --check` 斷言）。既有 7 個 `audience="archive"` 封存投影片（`rollout`／`access-control`／`principles`／`benchmark`／`fleet-inventory`／`fleet-governance-thresholds`／`spec-format`）中英文結構不對稱的落差已在 Issue #681 決定 P 補齊（英文版翻譯並補上原本缺少的富結構面板）。
+**驗證**：新增 `_substitute_config_tokens`／`_load_downstream_config`／`load_site_data` 容忍缺少非必要資料檔（`glossary.toml` 以外，`similar_tools.json`／`config_examples.json`／`file_map.json`／`audit_trail.json` 對精簡下游網站皆為選用）的單元測試（`tests/test_build_repo_site.py`）；`tests/test_render_site.py::test_copier_generated_project_builds_its_own_bilingual_repo_site` 實際呼叫 `copier.run_copy()`（真正跑過 Copier 樣板引擎本身，不是手動組出的等價 fixture）產生一個全新專案，確認 `_tasks` 的 `bash .csarc/scripts/build-repo-site` 有實際執行、舊系統檔案完全不存在、雙語 `docs/index.html`／`docs/index.en.html` 正確產生且 `.csarc/config.yml` 各欄位（`project_name`／`project_description`／`code_owner`／`reviewers`／`repository_url`）都正確代入、無殘留 `{{< slide key=`／`[[project_name]]` 等未解析標記、無外部 runtime asset、Standard／Ops 兩個 `data-mode` 面板皆存在；`tests/test_render_site.py`／`tests/test_journey03_ci.py` 更新為驗證新路徑與 `./.csarc/scripts/build-repo-site --check`（取代舊有 `render_site.py --check` 斷言）。既有 7 個 `audience="archive"` 封存投影片（`rollout`／`access-control`／`principles`／`benchmark`／`fleet-inventory`／`fleet-governance-thresholds`／`spec-format`）中英文結構不對稱的落差已在 Issue #681 決定 P 補齊（英文版翻譯並補上原本缺少的富結構面板）。
+
+## 2026-09-19 下游文件連結必須自足（Issue #735）
+
+**決定**：延續 Issue #681 決定 N，下游 repo-site 仍只包含首頁、安裝與關於三頁；root Journey 不搬到生成專案。所有會發到下游的 Markdown 文件（包含 `AGENTS.md`、README 與 `docs/`）若使用 repo 內相對連結，目的檔案與錨點都必須由同一個生成專案實際產生，不得把中央模板網站或 GitHub blob 頁面當成下游規範來源。
+
+下游 work-item 與 Copier 更新契約由 `docs/csarc.md` 承載；驗證分級、審查、合併資格、Alpha self-merge 與 quota fallback 由 `docs/ci-policy.md` 承載。`AGENTS.md` 與雙語 README 只連到這兩份下游既有文件。生成專案回歸測試會解析這些文件的相對連結，並驗證 Markdown 標題與 HTML `id`／`name` 錨點實際存在。
 
 ## 2026-09-06 12pt 字級下限與 Ops 模式內容瘦身（Issue #681 決定 Q）
 
 使用者依實測螢幕（1512×982，deck 依 `min(innerWidth/1600, innerHeight/900)` 縮放，換算比例約 0.945）要求：桌面版任何顯示文字（除引用／註腳外）渲染後不得小於 12pt，並授權「該精簡的流暢精簡，該放在懸浮說明文字中的放在懸浮中」。12pt＝16px 實際尺寸；換算縮放後 CSS 原始字級下限抓 **18px**（18×0.945≈17px≈12.7pt，有安全餘裕，也是站上最常用的內文字級）。
 
-**字級**：`site/static/styles.css`、`detail-toggle.css` 約 70 處 11–17.5px 字級提升到 18px，涵蓋表格、badge、標籤、標準／維運與語言切換鈕本身；豁免 `.reference`（引用，已是 12pt）與純裝飾圖示字符（+/−、▸/▾ 展開三角形）。`template/site/static/` 手動複製同步更新（非 `sync-paired-files.sh` 管轄範圍，既有限制見上）。
+**字級**：`site/static/styles.css`、`detail-toggle.css` 約 70 處 11–17.5px 字級提升到 18px，涵蓋表格、badge、標籤、標準／維運與語言切換鈕本身；豁免 `.reference`（引用，已是 12pt）與純裝飾圖示字符（+/−、▸/▾ 展開三角形）。`template/.csarc/site/static/` 手動複製同步更新（非 `sync-paired-files.sh` 管轄範圍，既有限制見上）。
 
 **意外發現與修正的量測缺口**：字級全面提升後，用原本「`.slide.scrollHeight <= .slide.clientHeight`」的稽核法仍回報零溢出，但這個方法量不到 `.markdown-body { overflow-y: auto }`（維運模式內容面板的 fail-safe）悄悄吸收掉的真實溢出。改用逐元素 `getBoundingClientRect()` 精確稽核後，發現維運模式在 deploy、governance、supply、method、files 等十餘頁的內容早就超出 900px 畫布，一直是靠這個「不該被依賴」的內部捲軸擋著——這是先於本次字級改動就存在的既有缺陷，本次改動只是讓它更嚴重，而精確稽核法首次讓它現形。
 

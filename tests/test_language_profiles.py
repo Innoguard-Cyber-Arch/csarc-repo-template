@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -62,82 +63,12 @@ def test_detect_languages_composes_selected_modules(
     """Detect modules without defining combination-specific branches."""
     (tmp_path / "Cargo.toml").touch()
     assert cli.detect_languages(tmp_path) == ["rust"]
-    assert cli.detect_language(tmp_path) == "rust"
 
     (tmp_path / "pyproject.toml").touch()
     assert cli.detect_languages(tmp_path) == ["python", "rust"]
-    assert cli.detect_language(tmp_path) == "python-rust"
 
-
-def test_copier_uses_one_yaml_config_for_language_modules(
-    tmp_path: Path,
-) -> None:
-    """Keep Copier tracking and repository settings in the same file."""
-    source = tmp_path / "source"
-    source.mkdir()
-    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
-    shutil.copytree(ROOT / "template", source / "template")
-    cli.run(["git", "init", "-b", "main"], cwd=source)
-    cli.run(
-        ["git", "config", "user.name", "Language Test"],
-        cwd=source,
-    )
-    cli.run(
-        ["git", "config", "user.email", "language@example.invalid"],
-        cwd=source,
-    )
-    cli.run(["git", "add", "."], cwd=source)
-    cli.run(
-        ["git", "commit", "-m", "test: language template"],
-        cwd=source,
-        capture=True,
-    )
-    revision = cli.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=source,
-        capture=True,
-    ).stdout.strip()
-    project = tmp_path / "project"
-    data = cli.base_data(
-        project,
-        "init",
-        {
-            "languages": "python,rust",
-            "project_description": "Exercises one CSARC configuration.",
-        },
-    )
-
-    cli.copier_copy(
-        str(source),
-        cli.Revision(revision, revision, str(source)),
-        project,
-        data,
-        skip_tasks=True,
-    )
-
-    config_path = project / ".csarc/config.yml"
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    assert config["_commit"] == revision
-    assert config["languages"] == ["python", "rust"]
-    assert not (project / ".copier-answers.yml").exists()
-    assert not (project / ".csarc/profile.json").exists()
-    assert (project / "pyproject.toml").is_file()
-    assert (project / "Cargo.toml").is_file()
-    assert not (project / "package.json").exists()
-    assert not (project / "version.txt").exists()
-    python_config = (project / "pyproject.toml").read_text(encoding="utf-8")
-    assert '"ty==0.0.76"' in python_config
-    assert "[tool.ty.src]" in python_config
-    assert "mypy" not in python_config
-    verifier = (project / "scripts/verify").read_text(encoding="utf-8")
-    assert "uv run ty check" in verifier
-    assert "mypy" not in verifier
-    configured = cli.run(
-        [sys.executable, "scripts/csarc_config.py", "languages"],
-        cwd=project,
-        capture=True,
-    ).stdout.strip()
-    assert configured == "python,rust"
+    (tmp_path / "package.json").touch()
+    assert cli.detect_languages(tmp_path) == ["python", "rust", "typescript"]
 
 
 def test_update_language_selection_stays_a_list() -> None:
@@ -168,12 +99,14 @@ def test_update_language_selection_stays_a_list() -> None:
 def test_config_supports_ci_only_and_extension_settings(tmp_path: Path) -> None:
     """Keep an empty language list and derived-template settings readable."""
     config_dir = tmp_path / ".csarc"
-    scripts_dir = tmp_path / "scripts"
+    scripts_dir = tmp_path / ".csarc/scripts"
     config_dir.mkdir()
     scripts_dir.mkdir()
     shutil.copy2(ROOT / "scripts/csarc_config.py", scripts_dir)
     detector = scripts_dir / "detect-language-profile"
-    shutil.copy2(ROOT / "template/scripts/detect-language-profile", detector)
+    shutil.copy2(
+        ROOT / "template/.csarc/scripts/detect-language-profile", detector
+    )
     detector.chmod(detector.stat().st_mode | 0o100)
     (config_dir / "config.yml").write_text(
         "languages: []\nacme_policy_mode: strict\n",
@@ -195,36 +128,37 @@ def test_config_supports_ci_only_and_extension_settings(tmp_path: Path) -> None:
     assert extension == "strict"
 
 
-@pytest.mark.parametrize(
-    ("language", "required_tools", "verify_mode", "manifest", "lockfile"),
-    [
-        ("python", ("uv",), "python", "pyproject.toml", "uv.lock"),
-        (
-            "typescript",
-            ("node", "pnpm"),
-            "typescript",
-            "package.json",
-            "pnpm-lock.yaml",
-        ),
-        (
-            "rust",
-            ("cargo", "rustc"),
-            "rust",
-            "Cargo.toml",
-            "Cargo.lock",
-        ),
-    ],
-)
+def test_generated_detector_uses_copier_language_order(tmp_path: Path) -> None:
+    """Compare generated language profiles in the Copier choice order."""
+    config_dir = tmp_path / ".csarc"
+    scripts_dir = tmp_path / ".csarc/scripts"
+    config_dir.mkdir()
+    scripts_dir.mkdir()
+    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts_dir)
+    detector = scripts_dir / "detect-language-profile"
+    shutil.copy2(
+        ROOT / "template/.csarc/scripts/detect-language-profile", detector
+    )
+    detector.chmod(detector.stat().st_mode | 0o100)
+    (config_dir / "config.yml").write_text(
+        "languages:\n- rust\n- typescript\n", encoding="utf-8"
+    )
+    (tmp_path / "Cargo.toml").touch()
+    (tmp_path / "package.json").touch()
+
+    detected = subprocess.run(  # noqa: S603
+        [detector], cwd=tmp_path, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+    assert detected == "language modules: rust,typescript"
+
+
 @pytest.mark.large
-def test_generated_language_module_runs_its_own_verifier(
+def test_representative_generated_project_runs_full_verifier(
     tmp_path: Path,
-    language: str,
-    required_tools: tuple[str, ...],
-    verify_mode: str,
-    manifest: str,
-    lockfile: str,
 ) -> None:
-    """Render and execute each standalone language module."""
+    """Run one mixed generated project through the complete verifier."""
+    required_tools = ("uv", "node", "pnpm", "cargo", "rustc")
     missing = [tool for tool in required_tools if shutil.which(tool) is None]
     if missing:
         pytest.skip(
@@ -235,35 +169,165 @@ def test_generated_language_module_runs_its_own_verifier(
     source.mkdir()
     shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
     shutil.copytree(ROOT / "template", source / "template")
-    project = tmp_path / f"{language}-project"
+    cli.run(["git", "init", "-b", "main"], cwd=source)
+    cli.run(["git", "config", "user.name", "Language Test"], cwd=source)
+    cli.run(
+        ["git", "config", "user.email", "language@example.invalid"],
+        cwd=source,
+    )
+    cli.run(["git", "add", "."], cwd=source)
+    cli.run(
+        ["git", "commit", "-m", "test: language template"],
+        cwd=source,
+        capture=True,
+    )
+    revision = cli.run(
+        ["git", "rev-parse", "HEAD"], cwd=source, capture=True
+    ).stdout.strip()
+    project = tmp_path / "representative-project"
+    arguments = [
+        "init",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--data",
+        "languages=python,typescript,rust",
+        "--data",
+        "project_name=Representative Fixture",
+        "--data",
+        "project_slug=representative-fixture",
+        "--data",
+        "project_description=Exercises the representative toolchains.",
+        "--data",
+        "repository_url=https://github.com/example/representative-fixture",
+        "--data",
+        "security_reporting_channel=Use the private security contact.",
+    ]
+    assert cli.main([*arguments, "--dry-run"]) == 0
+    assert not project.exists()
+    assert cli.main([*arguments, "--yes", "--non-interactive"]) == 0
+    assert (
+        json.loads((project / cli.PROVENANCE_FILE).read_text(encoding="utf-8"))[
+            "commit_sha"
+        ]
+        == revision
+    )
+    config = yaml.safe_load(
+        (project / ".csarc/config.yml").read_text(encoding="utf-8")
+    )
+    assert config["languages"] == ["python", "rust", "typescript"]
+    assert not (project / ".copier-answers.yml").exists()
+    assert not (project / ".csarc/profile.json").exists()
+    assert not (project / ".csarc/gitleaks.toml").exists()
+    assert not (project / ".csarc/pre-commit-config.yaml").exists()
+    assert not (project / ".csarc/zizmor.yml").exists()
+    assert not (project / ".csarc/scripts/pre-commit").exists()
+    secret_adapter = (project / ".csarc/scripts/scan-secrets").read_text(
+        encoding="utf-8"
+    )
+    assert "mktemp" in secret_adapter
+    assert "trap 'rm -f" in secret_adapter
+    assert all(
+        (project / manifest).is_file()
+        for manifest in ("pyproject.toml", "package.json", "Cargo.toml")
+    )
+    assert {path.name for path in project.iterdir()} == {
+        ".coverage",
+        ".claude",
+        ".csarc",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".pytest_cache",
+        ".python-version",
+        ".ruff_cache",
+        ".venv",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "Cargo.lock",
+        "Cargo.toml",
+        "README.en.md",
+        "README.md",
+        "biome.json",
+        "coverage",
+        "dist",
+        "docs",
+        "node_modules",
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "pyproject.toml",
+        "rust-toolchain.toml",
+        "src",
+        "target",
+        "tests",
+        "tsconfig.build.json",
+        "tsconfig.json",
+        "typescript",
+        "uv.lock",
+        "vitest.config.ts",
+    }
+    cli.run(["git", "init", "-b", "main"], cwd=project)
+    cli.run(["git", "config", "user.name", "Verification Test"], cwd=project)
+    cli.run(
+        ["git", "config", "user.email", "verification@example.invalid"],
+        cwd=project,
+    )
+    cli.run(["git", "add", "."], cwd=project)
+    cli.run(
+        ["git", "commit", "-m", "test: generated project"],
+        cwd=project,
+        capture=True,
+    )
+
+    subprocess.run(  # noqa: S603
+        [project / ".csarc/scripts/verify", "full"], cwd=project, check=True
+    )
+
+
+@pytest.mark.large
+def test_precommit_adapter_materializes_ephemeral_config(
+    tmp_path: Path,
+) -> None:
+    """Keep tool syntax behind the opt-in stable adapter."""
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "precommit-fixture"
     run_copy(
         str(source),
         project,
         data={
-            "languages": [language],
-            "project_name": f"{language.title()} Fixture",
-            "project_slug": f"{language}-fixture",
-            "project_description": f"A generated {language} fixture.",
-            "repository_url": f"https://github.com/example/{language}-fixture",
+            "languages": ["python", "typescript"],
+            "project_name": "Precommit Fixture",
+            "project_slug": "precommit-fixture",
+            "project_description": "Exercises the pre-commit adapter.",
+            "repository_url": "https://github.com/example/precommit-fixture",
             "security_reporting_channel": "Use the private security contact.",
+            "enable_precommit": True,
         },
         defaults=True,
         unsafe=True,
+        skip_tasks=True,
     )
 
-    profile = yaml.safe_load(
-        (project / ".csarc/config.yml").read_text(encoding="utf-8")
-    )
-    assert profile["languages"] == [language]
-    assert not (project / ".copier-answers.yml").exists()
-    assert not (project / ".csarc/profile.json").exists()
-    assert (project / manifest).is_file()
-    assert (project / lockfile).is_file()
-    subprocess.run(  # noqa: S603
-        [project / "scripts/verify", verify_mode], cwd=project, check=True
-    )
+    adapter = project / ".csarc/scripts/pre-commit"
+    source_text = adapter.read_text(encoding="utf-8")
+    assert adapter.is_file()
+    assert adapter.stat().st_mode & 0o111
+    assert "mktemp" in source_text
+    assert "trap 'rm -f" in source_text
+    assert "uv run ruff check" in source_text
+    assert "pnpm exec tsc --noEmit" in source_text
+    assert not (project / ".pre-commit-config.yaml").exists()
+    assert not (project / ".csarc/pre-commit-config.yaml").exists()
 
 
+@pytest.mark.large
 def test_enable_codeql_generates_a_working_workflow(tmp_path: Path) -> None:
     """Prove enable_codeql=true actually renders a usable CodeQL workflow.
 
@@ -356,6 +420,7 @@ def test_enable_codeql_generates_a_working_workflow(tmp_path: Path) -> None:
     assert init_step["with"]["build-mode"] == "none"
 
 
+@pytest.mark.large
 def test_disabling_codeql_omits_the_workflow(tmp_path: Path) -> None:
     """Keep the exclude-list branch honest when CodeQL stays off."""
     source = tmp_path / "source"
@@ -384,6 +449,7 @@ def test_disabling_codeql_omits_the_workflow(tmp_path: Path) -> None:
     assert not (project / ".github/workflows/codeql.yml").exists()
 
 
+@pytest.mark.large
 def test_enable_docker_generates_container_starter_files(
     tmp_path: Path,
 ) -> None:
@@ -469,6 +535,7 @@ def test_enable_docker_generates_container_starter_files(
     assert build_step["with"]["push"] is False
 
 
+@pytest.mark.large
 def test_disabling_docker_omits_container_files(tmp_path: Path) -> None:
     """Keep the exclude-list branch honest when the Docker option stays off:
     a non-container project must gain no Dockerfile, no compose file, and no

@@ -3,6 +3,7 @@ import re
 import runpy
 import shutil
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import pytest
 from copier import run_copy
@@ -26,6 +27,62 @@ render_testing = BUILD_MODULE["render_testing"]
 render_journey_rail = BUILD_MODULE["render_journey_rail"]
 render_config_guidance = BUILD_MODULE["render_config_guidance"]
 render_page = BUILD_MODULE["render_page"]
+
+
+def _markdown_anchors(text: str) -> set[str]:
+    """Return GitHub-style heading anchors used by generated project docs."""
+    anchors: set[str] = set()
+    counts: dict[str, int] = {}
+    for heading in re.findall(r"^#{1,6}\s+(.+?)\s*#*\s*$", text, re.MULTILINE):
+        heading = re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", heading)
+        heading = re.sub(r"<[^>]+>|[`*_~]", "", heading)
+        base = re.sub(r"[^\w -]", "", heading.lower()).strip().replace(" ", "-")
+        count = counts.get(base, 0)
+        anchors.add(base if count == 0 else f"{base}-{count}")
+        counts[base] = count + 1
+    return anchors
+
+
+def _assert_internal_markdown_links_resolve(project: Path) -> None:
+    """Require delivered Markdown links to resolve inside the same project."""
+    documents = [
+        project / "AGENTS.md",
+        *sorted(project.glob("README*.md")),
+        *sorted((project / "docs").glob("*.md")),
+    ]
+    for source in documents:
+        text = re.sub(
+            r"^```.*?^```\s*$",
+            "",
+            source.read_text(encoding="utf-8"),
+            flags=re.M | re.S,
+        )
+        for raw_target in re.findall(r"(?<!!)\[[^]]+\]\(([^)]+)\)", text):
+            target = raw_target.strip().strip("<>")
+            parsed = urlsplit(target)
+            if parsed.scheme or parsed.netloc:
+                continue
+            destination = (
+                source
+                if not parsed.path
+                else source.parent / unquote(parsed.path)
+            )
+            assert destination.exists(), (
+                f"{source}: missing link target {target}"
+            )
+            if not parsed.fragment:
+                continue
+            fragment = unquote(parsed.fragment)
+            destination_text = destination.read_text(encoding="utf-8")
+            if destination.suffix == ".html":
+                assert re.search(
+                    rf"""(?:id|name)=["']{re.escape(fragment)}["']""",
+                    destination_text,
+                ), f"{source}: missing HTML anchor {target}"
+            elif destination.suffix == ".md":
+                assert fragment in _markdown_anchors(destination_text), (
+                    f"{source}: missing Markdown anchor {target}"
+                )
 
 
 def _write_markdown_site(
@@ -207,7 +264,7 @@ def test_branch_strategy_reaches_generated_site_content() -> None:
     """
     root = Path(__file__).parents[1]
     build_module = runpy.run_path(
-        str(root / "template/scripts/build_repo_site.py")
+        str(root / "template/.csarc/scripts/build_repo_site.py")
     )
     substitute_config_tokens = build_module["_substitute_config_tokens"]
 
@@ -271,30 +328,28 @@ def test_generated_site_uses_project_owned_markdown() -> None:
     Markdown file resolved once at `copier copy`/`update` time)."""
     root = Path(__file__).parents[1]
     copier = (root / "copier.yml").read_text(encoding="utf-8")
-    engine = (root / "template/scripts/build_repo_site.py").read_text(
+    engine = (root / "template/.csarc/scripts/build_repo_site.py").read_text(
         encoding="utf-8"
     )
-    zh_tw = (root / "template/site/content/_index.zh-tw.md").read_text(
+    zh_tw = (root / "template/docs/site/content/_index.zh-tw.md").read_text(
         encoding="utf-8"
     )
-    en = (root / "template/site/content/_index.en.md").read_text(
+    en = (root / "template/docs/site/content/_index.en.md").read_text(
         encoding="utf-8"
     )
 
-    assert '  - "site/content/_index.zh-tw.md"' in copier
-    assert '  - "site/content/_index.en.md"' in copier
-    assert "bash scripts/build-repo-site" in copier
+    assert '  - "docs/site/content/_index.zh-tw.md"' in copier
+    assert '  - "docs/site/content/_index.en.md"' in copier
+    assert "bash .csarc/scripts/build-repo-site" in copier
     assert "site-content.js" not in copier
     for content in (zh_tw, en):
         assert "[[project_name]]" in content
         assert "[[languages]]" in content
         assert "[[project_visibility]]" in content
         assert "{{< slide" in content
-    # The engine itself is copied verbatim from root, not hand-simplified;
-    # a real divergence would defeat the point of sharing one contract.
-    assert engine == (root / "scripts/build_repo_site.py").read_text(
-        encoding="utf-8"
-    )
+    assert 'root / "docs/site/content"' in engine
+    assert ".csarc/site/static/styles.css" in engine
+    assert 'default="docs/site/theme.css"' in engine
     assert not (root / "template/site/app.js").exists()
     assert not (root / "template/site/index.html.jinja").exists()
     assert not (root / "template/docs/site-content.md.jinja").exists()
@@ -321,8 +376,9 @@ def test_readme_describes_repo_site_source() -> None:
     )
     template_readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
 
+    assert "site/content/_index.zh-tw.md" in root_readme
+    assert "docs/site/content/_index.zh-tw.md" in template_readme
     for readme in (root_readme, template_readme):
-        assert "site/content/_index.zh-tw.md" in readme
         assert "site-content.js" not in readme
         for line in readme.splitlines():
             if "docs/site-content.md" in line:
@@ -584,7 +640,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     active_components = (root / "site/static/legacy-components.js").read_text(
         encoding="utf-8"
     )
-    template_verify = (root / "template/scripts/verify.jinja").read_text(
+    template_verify = (root / "template/.csarc/scripts/verify.jinja").read_text(
         encoding="utf-8"
     )
     assert "policies/dev-next-ruleset.json" not in template_verify
@@ -661,7 +717,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         in data["testing"]["duration"]["labels"]["zh-tw"]["runnerNote"]
     )
     assert (
-        "archive/ci-cd/ 只供參考"
+        "已退役 workflow 只保留在 Git/Issue/PR"
         in data["testing"]["duration"]["labels"]["zh-tw"]["archiveNote"]
     )
     assert "名詞與約定" not in chinese
@@ -1370,6 +1426,35 @@ def test_standard_and_maintenance_mode_page_counts() -> None:
         )
 
 
+def test_setup_examples_use_release_source_and_stay_root_only() -> None:
+    """Keep root setup commands valid and omit them from generated sites."""
+    root_components = (ROOT / "site/static/legacy-components.js").read_text(
+        encoding="utf-8"
+    )
+    template_components = (
+        ROOT / "template/.csarc/site/static/legacy-components.js"
+    ).read_text(encoding="utf-8")
+    command_prefix = (
+        "uvx --python 3.14 --from "
+        "'git+https://github.com/Innoguard-Cyber-Arch/"
+        "csarc-repo-template.git@<approved-full-commit-sha>' csarc "
+    )
+
+    assert "--from csarc-repo-cli" not in root_components
+    assert "--from csarc-repo-cli" not in template_components
+    commands = re.findall(r"uvx [^\n`]+", root_components)
+    assert len(commands) == 12
+    assert all(command.startswith(command_prefix) for command in commands)
+
+    template_content = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "template/docs/site/content").glob("*.md")
+    )
+    assert "data-setup=" not in template_content
+    assert "setupExamplesByLang" not in template_components
+    assert "copyCommandText" in template_components
+
+
 def test_install_prompt_is_visible_and_matches_what_gets_copied() -> None:
     """Issue #681/#682: the install page's full agent prompt used to live
     only in the copy button's `data-copy-text` attribute -- a reader could
@@ -1408,6 +1493,7 @@ def test_install_prompt_is_visible_and_matches_what_gets_copied() -> None:
         assert "csarc status" in prompt_text or "csarc" in prompt_text.lower()
 
 
+@pytest.mark.large
 def test_copier_generated_project_builds_its_own_bilingual_repo_site(
     tmp_path: Path,
 ) -> None:
@@ -1447,8 +1533,21 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
     # The retired handbook source is not generated at all any more --
     # there is no template/docs/site-content.md.jinja left to copy from.
     assert not (project / "docs/site-content.md").exists()
-    assert (project / "site/content/_index.zh-tw.md").is_file()
-    assert (project / "site/content/_index.en.md").is_file()
+    assert (project / "docs/site/content/_index.zh-tw.md").is_file()
+    assert (project / "docs/site/content/_index.en.md").is_file()
+    assert {path.name for path in project.iterdir()} == {
+        ".claude",
+        ".csarc",
+        ".github",
+        ".gitignore",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "README.en.md",
+        "README.md",
+        "dist",
+        "docs",
+        "src",
+    }
 
     for output in ("docs/index.html", "docs/index.en.html"):
         html = (project / output).read_text(encoding="utf-8")
@@ -1470,3 +1569,7 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
         assert "<script src=" not in html
         assert 'data-mode="standard"' in html
         assert 'data-mode="ops"' in html
+
+    # Issue #735: every delivered relative link and fragment must resolve
+    # inside the generated repository, never only in the template's site.
+    _assert_internal_markdown_links_resolve(project)

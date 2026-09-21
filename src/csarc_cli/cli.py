@@ -23,11 +23,15 @@ from urllib.parse import quote
 
 import yaml  # type: ignore[import-untyped]
 
+from csarc_cli import release_phase
+
 CANONICAL_SOURCE = (
     "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git"
 )
 CANONICAL_REPOSITORY = "Innoguard-Cyber-Arch/csarc-repo-template"
 CANONICAL_REPOSITORY_ID = 1_340_899_393
+MINIMUM_GH_VERSION = "2.93.0"
+GH_INSTALL_URL = "https://github.com/cli/cli#installation"
 DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
 CONFIG_FILE = Path(".csarc/config.yml")
 LEGACY_ANSWERS_FILE = Path(".copier-answers.yml")
@@ -75,8 +79,8 @@ INSTALL_STATE_NEXT_COMMAND = {
     ),
     INSTALL_STATE_CURRENT: "no action needed",
     INSTALL_STATE_POLICY_ONLY: (
-        "scripts/apply-repository-settings.sh plan to preview, then "
-        "scripts/apply-repository-settings.sh apply"
+        ".csarc/scripts/apply-repository-settings.sh plan to preview, then "
+        ".csarc/scripts/apply-repository-settings.sh apply"
     ),
 }
 POLICY_CHECK_COMPLETED_MARKER = "Repository settings check failed with"
@@ -101,6 +105,17 @@ CURRENT_MILESTONE_HEADINGS = (
 
 class CliError(RuntimeError):
     """An expected command error with an actionable message."""
+
+
+class ReleaseNotFoundError(CliError):
+    """The canonical repository confirmed a named release tag is gone.
+
+    Raised only when GitHub itself reports the tag not found (Issue #744
+    retention deleted it) -- every other verification failure (bad
+    attestation, a moved tag, an invalid signature, a repository identity
+    mismatch) stays a plain ``CliError`` and must keep failing closed, not
+    fall back to reinstall.
+    """
 
 
 class ProjectVerificationError(CliError):
@@ -181,14 +196,11 @@ class ReleaseClient(Protocol):
 
 @dataclass(frozen=True)
 class Plan:
-    """File effects for an init or adoption operation.
+    """Explicit file effects for an init, adoption, or update operation.
 
-    ``remove`` is always empty today: init and adoption only add or update
-    files in the target repository, never delete existing ones. The field
-    stays a first-class, independently countable part of the plan (rather
-    than a hardcoded report constant) so the adoption report's removed-file
-    statistic is genuinely computed, and future removal-aware flows have
-    somewhere real to report into (#530).
+    Init and adoption do not remove files. Update may explicitly move legacy
+    generated assets into ``.csarc`` or retire obsolete generated state; each
+    effect remains independently countable and auditable (#530, #742).
     """
 
     add: tuple[str, ...]
@@ -198,6 +210,7 @@ class Plan:
     merge: tuple[str, ...]
     manual: tuple[str, ...]
     unknown: tuple[str, ...]
+    move: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -265,6 +278,7 @@ class ResolvedPlan:
                 "add": list(self.files.add),
                 "automatic_merge": list(self.files.merge),
                 "manual_merge": list(self.files.manual),
+                "move": list(self.files.move),
                 "overwrite": list(self.files.overwrite),
                 "preserve": list(self.files.preserve),
                 "remove": list(self.files.remove),
@@ -543,23 +557,188 @@ def gh_json(endpoint: str) -> dict[str, object]:
     return payload
 
 
+def require_supported_gh() -> None:
+    """Fail closed unless GitHub CLI supports safe release verification."""
+    requirement = (
+        f"Release verification requires gh {MINIMUM_GH_VERSION} or newer. "
+        f"Install or upgrade it using {GH_INSTALL_URL}."
+    )
+    try:
+        result = run(["gh", "--version"], capture=True, check=False)
+    except FileNotFoundError as error:
+        raise CliError(f"GitHub CLI was not found. {requirement}") from error
+
+    match = re.match(r"^gh version (\d+)\.(\d+)\.(\d+)(?:\s|$)", result.stdout)
+    if result.returncode != 0 or match is None:
+        output = result.stdout.strip() or result.stderr.strip() or "no output"
+        raise CliError(
+            f"Cannot determine the GitHub CLI version from {output!r}. "
+            f"{requirement}"
+        )
+    current = tuple(int(part) for part in match.groups())
+    minimum = tuple(int(part) for part in MINIMUM_GH_VERSION.split("."))
+    if current < minimum:
+        raise CliError(
+            f"GitHub CLI {'.'.join(match.groups())} is too old. {requirement}"
+        )
+
+
+_NOT_FOUND_SUFFIX = re.compile(r"\(HTTP 404\)\s*$")
+
+
+def gh_json_or_missing(endpoint: str) -> dict[str, object] | None:
+    """Read one GitHub API object, or None when GitHub reports HTTP 404.
+
+    Distinguishes "this exact resource is confirmed gone" from every other
+    failure (auth, network, malformed JSON), which still raises through
+    the same actionable ``CliError`` as ``gh_json``. Used only for a named
+    release-tag lookup: a confirmed 404 there is the one condition Issue
+    #744 allows to fall into the downstream reinstall flow instead of
+    failing closed.
+
+    `gh api` has no structured (e.g. JSON) error output to key off of, so
+    this still parses stderr text -- but `_NOT_FOUND_SUFFIX` anchors on
+    the literal `(HTTP 404)` suffix `gh`'s own REST client always appends
+    to a failed request's message, rather than a bare substring search for
+    "HTTP 404" anywhere in the text, which could also match an unrelated
+    404 quoted inside a longer diagnostic (e.g. a nested-resource error
+    embedded in a verbose message). This endpoint
+    (`repos/{repo}/releases/tags/{tag}`) has no nested sub-resource of its
+    own to be confused with, which limits the residual risk further.
+    """
+    try:
+        result = run(
+            ["gh", "api", "--method", "GET", endpoint],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise CliError(
+            "GitHub CLI is required to resolve template releases."
+        ) from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "GitHub API request failed"
+        if _NOT_FOUND_SUFFIX.search(detail):
+            return None
+        raise CliError(f"Cannot resolve an approved GitHub Release: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise CliError(
+            "GitHub returned invalid JSON for the release."
+        ) from error
+    if not isinstance(payload, dict):
+        raise CliError("GitHub returned an unexpected release response.")
+    return payload
+
+
+def gh_json_list(endpoint: str) -> list[object]:
+    """Read one GitHub API array response through the authenticated gh CLI."""
+    try:
+        result = run(
+            ["gh", "api", "--method", "GET", endpoint],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise CliError(
+            "GitHub CLI is required to resolve template releases."
+        ) from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "GitHub API request failed"
+        raise CliError(f"Cannot resolve an approved GitHub Release: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise CliError(
+            "GitHub returned invalid JSON for the release."
+        ) from error
+    if not isinstance(payload, list):
+        raise CliError("GitHub returned an unexpected release response.")
+    return payload
+
+
 class GhReleaseClient:
     """GitHub CLI implementation of the release trust boundary."""
+
+    def __init__(self) -> None:
+        """Check the GitHub CLI before making any release-related call."""
+        require_supported_gh()
 
     def repository(self) -> dict[str, object]:
         """Return canonical repository metadata."""
         return gh_json(f"repos/{CANONICAL_REPOSITORY}")
 
     def release(self, tag: str | None) -> dict[str, object]:
-        """Return the latest or named canonical release."""
+        """Return the highest-precedence or named canonical release.
+
+        A named lookup raises ``ReleaseNotFoundError`` on a confirmed
+        HTTP 404 (Issue #744) so callers can distinguish "this tag is
+        gone" from every other failure. "Latest" is selected by SemVer
+        precedence across every published, non-draft release instead of
+        GitHub's own `releases/latest` API, which never returns a
+        `prerelease: true` Release and therefore cannot see an
+        alpha/beta-suffixed tag.
+        """
         if tag is None or tag == "latest":
-            endpoint = f"repos/{CANONICAL_REPOSITORY}/releases/latest"
-        else:
-            endpoint = (
-                f"repos/{CANONICAL_REPOSITORY}/releases/tags/"
-                f"{quote(tag, safe='')}"
+            return self._latest()
+        endpoint = (
+            f"repos/{CANONICAL_REPOSITORY}/releases/tags/{quote(tag, safe='')}"
+        )
+        release = gh_json_or_missing(endpoint)
+        if release is None:
+            raise ReleaseNotFoundError(
+                f"GitHub Release {tag!r} was not found on the canonical "
+                "repository."
             )
-        return gh_json(endpoint)
+        return release
+
+    def _latest(self) -> dict[str, object]:
+        """Return the highest-SemVer-precedence eligible, consistent release.
+
+        A release whose GitHub `prerelease` flag disagrees with its own
+        tag shape (the same check `release_identity()` applies afterward)
+        is skipped here rather than selected -- selecting it and letting
+        `release_identity()` hard-fail on it later would surface a
+        confusing error for a release that was never going to be usable,
+        when a perfectly good next-best candidate may exist.
+        """
+        eligible: dict[str, dict[str, object]] = {}
+        page = 1
+        while True:
+            endpoint = (
+                f"repos/{CANONICAL_REPOSITORY}/releases?per_page=100"
+                f"&page={page}"
+            )
+            batch = gh_json_list(endpoint)
+            if not batch:
+                break
+            for item in batch:
+                if not isinstance(item, dict):
+                    continue
+                tag_name = item.get("tag_name")
+                if (
+                    not isinstance(tag_name, str)
+                    or item.get("draft") is not False
+                ):
+                    continue
+                try:
+                    parsed = release_phase.parse_version(tag_name)
+                except release_phase.ReleasePhaseError:
+                    continue
+                if item.get("prerelease") is not parsed.is_prerelease:
+                    continue
+                eligible[tag_name] = item
+            if len(batch) < 100:
+                break
+            page += 1
+        latest_tag = release_phase.select_latest(eligible)
+        if latest_tag is None:
+            raise CliError(
+                "No published, well-formed, self-consistent GitHub Release "
+                "was found on the canonical repository."
+            )
+        return eligible[latest_tag]
 
     def resolve_tag(self, tag: str) -> TagResolution:
         """Resolve lightweight or nested annotated tags."""
@@ -671,16 +850,33 @@ def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
 
 
 def release_identity(release: dict[str, object]) -> tuple[str, int]:
-    """Validate stable immutable release metadata."""
+    """Validate immutable release metadata, prerelease or not (Issue #744).
+
+    Every existing verification (immutable, draft, published) is kept
+    unchanged; a `prerelease: true` Release is now approved as long as its
+    tag is a legal alpha/beta version and GitHub's own `prerelease` flag
+    agrees with that shape, so this stays fail-closed for a malformed or
+    self-contradictory tag rather than silently trusting either signal
+    alone.
+    """
     tag = release.get("tag_name")
     release_id = release.get("id")
     if not isinstance(tag, str) or not tag or not isinstance(release_id, int):
         raise CliError("GitHub returned incomplete release metadata.")
-    if (
-        release.get("draft") is not False
-        or release.get("prerelease") is not False
-    ):
-        raise CliError("Only published, stable GitHub Releases are approved.")
+    if release.get("draft") is not False:
+        raise CliError("Only published GitHub Releases are approved.")
+    try:
+        parsed = release_phase.parse_version(tag)
+    except release_phase.ReleasePhaseError as error:
+        raise CliError(
+            f"GitHub Release tag {tag!r} is not a legal alpha/beta/early/"
+            "formal release version (Issue #744)."
+        ) from error
+    if release.get("prerelease") is not parsed.is_prerelease:
+        raise CliError(
+            f"GitHub Release {tag!r} prerelease flag does not match its "
+            "version format."
+        )
     if not isinstance(release.get("published_at"), str):
         raise CliError("The selected GitHub Release is not published.")
     if release.get("immutable") is not True:
@@ -774,17 +970,12 @@ def detect_languages(target: Path) -> list[str]:
     """Return enabled language modules in their canonical order."""
     manifests = (
         ("python", "pyproject.toml"),
-        ("typescript", "package.json"),
         ("rust", "Cargo.toml"),
+        ("typescript", "package.json"),
     )
     return [
         name for name, manifest in manifests if (target / manifest).is_file()
     ]
-
-
-def detect_language(target: Path) -> str:
-    """Return the legacy profile label for compatibility."""
-    return "-".join(detect_languages(target)) or "ci"
 
 
 def selected_languages(answers: dict[str, object]) -> set[str]:
@@ -839,6 +1030,7 @@ def predicted_lockfile_effects(
         planned.merge,
         planned.manual,
         planned.unknown,
+        planned.move,
     )
 
 
@@ -1066,6 +1258,26 @@ def project_verification_evidence(
     return {**configuration, "reason": reason, "result": result}
 
 
+def reject_canonical_verification_hook(
+    target: Path, hook: Path, raw_path: str
+) -> None:
+    """Reject both current and legacy canonical verifier identities."""
+    for canonical in (
+        target / ".csarc" / "scripts" / "verify",
+        target / "scripts" / "verify",
+    ):
+        try:
+            if canonical.exists() and os.path.samefile(hook, canonical):
+                raise CliError(
+                    "Project verification hook must not resolve to the "
+                    f"canonical verifier: {raw_path}"
+                )
+        except OSError as error:
+            raise CliError(
+                f"Cannot compare project verification hook identity: {raw_path}"
+            ) from error
+
+
 def validated_project_verification_hook(
     target: Path, configuration: Mapping[str, object]
 ) -> Path | None:
@@ -1106,17 +1318,7 @@ def validated_project_verification_hook(
         raise CliError(
             f"Project verification hook is not executable: {raw_path}"
         )
-    canonical = target / "scripts" / "verify"
-    try:
-        if canonical.exists() and os.path.samefile(hook, canonical):
-            raise CliError(
-                "Project verification hook must not resolve to the canonical "
-                f"scripts/verify command: {raw_path}"
-            )
-    except OSError as error:
-        raise CliError(
-            f"Cannot compare project verification hook identity: {raw_path}"
-        ) from error
+    reject_canonical_verification_hook(target, hook, raw_path)
     return hook
 
 
@@ -1451,6 +1653,114 @@ def compare_stage(
     )
 
 
+def legacy_layout_pairs(
+    stage: Path,
+    target: Path,
+    *,
+    project_mode: object,
+) -> tuple[tuple[str, str], ...]:
+    """Return only known generated paths that need the one-time layout move."""
+    pairs: set[tuple[str, str]] = set()
+    staged = project_files(stage)
+    existing = project_files(target)
+    prefixes = (
+        ("scripts/", ".csarc/scripts/"),
+        ("policies/", ".csarc/policies/"),
+        ("tests/", ".csarc/tests/"),
+        ("site/static/", ".csarc/site/static/"),
+    )
+    for old_prefix, new_prefix in prefixes:
+        for new in staged:
+            if new.startswith(new_prefix):
+                old = old_prefix + new.removeprefix(new_prefix)
+                if old in existing:
+                    pairs.add((old, new))
+    exact = {
+        ".copier-answers.yml": ".csarc/config.yml",
+        ".release-please-manifest.json": (
+            ".csarc/release-please-manifest.json"
+        ),
+        ".github/REVIEWERS": ".csarc/REVIEWERS",
+        "CLAUDE.md": ".claude/CLAUDE.md",
+        "docs/ci-policy.md": ".csarc/docs/ci-policy.md",
+        "docs/csarc.md": ".csarc/docs/csarc.md",
+        "docs/milestone-description.md": (
+            ".csarc/docs/milestone-description.md"
+        ),
+        "docs/site-theme.css": "docs/site/theme.css",
+        "release-please-config.json": ".csarc/release-please-config.json",
+        "site/README.md": ".csarc/site/README.md",
+        "site/data/glossary.toml": ".csarc/site/data/glossary.toml",
+        "site/data/navigation.json": "docs/site/data/navigation.json",
+        "site/version.json": ".csarc/site/version.json",
+        "version.txt": ".csarc/version.txt",
+    }
+    if project_mode == "new":
+        exact["SECURITY.md"] = ".github/SECURITY.md"
+    for old, new in exact.items():
+        if old in existing and new in staged:
+            pairs.add((old, new))
+    for old in existing:
+        if old.startswith("site/content/"):
+            destination = "docs/site/content/" + old.removeprefix(
+                "site/content/"
+            )
+            pairs.add((old, destination))
+    return tuple(sorted(pairs))
+
+
+def update_file_plan(
+    staged: Plan,
+    moves: tuple[tuple[str, str], ...],
+    removals: tuple[str, ...] = (),
+) -> Plan:
+    """Make Copier's update effects explicit without changing the target."""
+    old = {source for source, _destination in moves}
+    new = {destination for _source, destination in moves}
+    return Plan(
+        tuple(sorted(set(staged.add) - new)),
+        tuple(sorted(set(staged.overwrite) | (set(staged.manual) - new))),
+        tuple(sorted(removals)),
+        tuple(sorted(set(staged.preserve) - old - new - set(removals))),
+        staged.merge,
+        (),
+        staged.unknown,
+        tuple(f"{source} -> {destination}" for source, destination in moves),
+    )
+
+
+def apply_layout_moves(
+    target: Path, moves: tuple[tuple[str, str], ...]
+) -> None:
+    """Apply the approved generated-layout moves with collision protection."""
+    for source_name, destination_name in moves:
+        source = checked_destination(target, source_name)
+        destination = checked_destination(target, destination_name)
+        if not source.exists() and not source.is_symlink():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists() or destination.is_symlink():
+            if file_fingerprint(source) != file_fingerprint(destination):
+                raise CliError(
+                    "Generated layout migration collision: "
+                    f"{source_name} -> {destination_name}."
+                )
+            source.unlink()
+        else:
+            source.replace(destination)
+    legacy_directories = (
+        "scripts",
+        "policies",
+        "site/content",
+        "site/data",
+        "site",
+    )
+    for relative in legacy_directories:
+        directory = target / relative
+        with suppress(OSError):
+            directory.rmdir()
+
+
 def plan_status(
     plan: Plan, adoption: Mapping[str, object] | None = None
 ) -> tuple[str, str]:
@@ -1503,6 +1813,7 @@ def report_settings(data: dict[str, object]) -> str:
         "copilot_review_max_level",
         "coverage_mode",
         "coverage_threshold",
+        "default_release_level",
         "enable_codeql",
         "enable_docker",
         "enable_governance_drift_check",
@@ -1516,6 +1827,15 @@ def report_settings(data: dict[str, object]) -> str:
         "policy_labels",
         "policy_repository_settings",
         "pr_review_mode",
+        "release_level_alpha_review",
+        "release_level_alpha_verification",
+        "release_level_beta_review",
+        "release_level_beta_verification",
+        "release_level_early_review",
+        "release_level_early_verification",
+        "release_level_formal_review",
+        "release_level_formal_verification",
+        "release_levels_enabled",
         "project_description",
         "project_mode",
         "project_name",
@@ -2265,6 +2585,15 @@ def print_capabilities(payload: dict[str, object]) -> None:
         print(f"Next: {next_step}")
 
 
+def print_update_recommendation(update: dict[str, object] | None) -> None:
+    """Print an optional update recommendation."""
+    if update is None:
+        return
+    recommendation = update.get("governance_drift_recommendation")
+    if isinstance(recommendation, str):
+        print(f"Recommendation: {recommendation}")
+
+
 def print_plan(plan: ResolvedPlan) -> None:
     """Print the human-readable form of the shared plan model."""
     print(f"Mode: {plan.mode}")
@@ -2339,6 +2668,7 @@ def print_plan(plan: ResolvedPlan) -> None:
         print_group("Add", plan.files.add)
         print_group("Overwrite", plan.files.overwrite)
         print_group("Remove", plan.files.remove)
+        print_group("Move", plan.files.move)
         print_group("Preserve", plan.files.preserve)
         print_group("Automatic merge", plan.files.merge)
         print_group("Manual merge", plan.files.manual)
@@ -2350,9 +2680,7 @@ def print_plan(plan: ResolvedPlan) -> None:
             "Conflict risk: Copier smart diff; conflicts fail closed and "
             "remain in place."
         )
-        recommendation = plan.update.get("governance_drift_recommendation")
-        if isinstance(recommendation, str):
-            print(f"Recommendation: {recommendation}")
+    print_update_recommendation(plan.update)
 
 
 def confirm(args: argparse.Namespace) -> bool:
@@ -2390,16 +2718,6 @@ def checked_destination(root: Path, relative_name: str) -> Path:
                 f"{relative_name}"
             )
     return root / relative
-
-
-def copy_additions(stage: Path, target: Path, paths: tuple[str, ...]) -> None:
-    """Copy only files that the plan classified as additions."""
-    target.mkdir(parents=True, exist_ok=True)
-    for relative_name in paths:
-        source = stage / relative_name
-        destination = target / relative_name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination, follow_symlinks=False)
 
 
 def copy_candidate_files(
@@ -2629,6 +2947,7 @@ def candidate_effects(
             tuple(sorted(merges)),
             planned.manual,
             planned.unknown,
+            planned.move,
         ),
         dict(sorted(artifacts.items())),
     )
@@ -3217,10 +3536,16 @@ def authorize_adoption_candidate(
     return replace(plan, files=effects, adoption=updated)
 
 
+def managed_script(root: Path, name: str) -> Path:
+    """Resolve a current CSARC script or its legacy update-time location."""
+    current = root / ".csarc" / "scripts" / name
+    return current if current.is_file() else root / "scripts" / name
+
+
 def verify_project(target: Path) -> dict[str, object]:
     """Run canonical verification and one validated project hook."""
     configuration = project_verification_configuration(target)
-    verify = target / "scripts" / "verify"
+    verify = managed_script(target, "verify")
     if not verify.is_file():
         hook = project_verification_evidence(
             configuration,
@@ -3228,7 +3553,9 @@ def verify_project(target: Path) -> dict[str, object]:
             "Canonical project verification is unavailable.",
         )
         raise ProjectVerificationError(
-            "Generated project is missing ./scripts/verify.", hook
+            "Generated project is missing ./.csarc/scripts/verify "
+            "(or legacy ./scripts/verify).",
+            hook,
         )
     try:
         project_hook = validated_project_verification_hook(
@@ -3308,7 +3635,7 @@ def verify_project(target: Path) -> dict[str, object]:
 
 def settings_plan(target: Path) -> None:
     """Run only the read-only repository settings plan."""
-    settings = target / "scripts" / "apply-repository-settings.sh"
+    settings = managed_script(target, "apply-repository-settings.sh")
     if not settings.is_file():
         print("Repository settings plan unavailable: script is missing.")
         return
@@ -4374,7 +4701,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         )
         preview_config_binding = copier_config_binding(stage)
         capabilities = capability_preflight(
-            stage / "scripts" / "release_policy.py",
+            managed_script(stage, "release_policy.py"),
             target,
             revision,
             emit=False,
@@ -4580,6 +4907,7 @@ def predicted_adoption_effects(target: Path, planned: Plan) -> Plan:
         planned.merge,
         planned.manual,
         planned.unknown,
+        planned.move,
     )
 
 
@@ -4938,7 +5266,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         answers: dict[str, object] = dict(data)
         answers.update(read_copier_answers(config_path(stage)))
         capabilities = capability_preflight(
-            stage / "scripts" / "release_policy.py",
+            managed_script(stage, "release_policy.py"),
             target,
             revision,
             emit=False,
@@ -5246,7 +5574,7 @@ def run_policy_settings_check(
             [str(script), "check"],
             127,
             "",
-            "scripts/apply-repository-settings.sh is missing.",
+            ".csarc/scripts/apply-repository-settings.sh is missing.",
         )
     return run([str(script), "check"], cwd=target, capture=True, check=False)
 
@@ -5279,8 +5607,7 @@ def trusted_policy_settings_check(
                 skip_tasks=True,
             )
             return run_policy_settings_check(
-                stage / "scripts" / "apply-repository-settings.sh",
-                target,
+                managed_script(stage, "apply-repository-settings.sh"), target
             )
     except CliError as error:
         return subprocess.CompletedProcess(command, 126, "", str(error))
@@ -5291,7 +5618,7 @@ def classify_policy_check(
 ) -> PolicyCheckResult:
     """Classify one policy-drift check without guessing at ambiguous output.
 
-    `scripts/apply-repository-settings.sh check` either runs its full
+    `.csarc/scripts/apply-repository-settings.sh check` either runs its full
     comparison to completion -- exit 0 for a clean match, or exit 1 with its
     own `POLICY_CHECK_COMPLETED_MARKER` summary line once it has counted at
     least one actionable difference -- or it hard-stops early on something
@@ -5331,14 +5658,14 @@ def detect_install_state(
     """Deterministically classify a target into one of five install states.
 
     Reads only `.csarc/config.yml` (or legacy Copier answers), the pinned
-    Copier revision, and `policies/` drift; it never infers a state from
+    Copier revision, and `.csarc/policies/` drift; it never infers a state from
     free-form judgment, so repeated runs against unchanged repository state
     always return the same classification. The five states are: `create`
     (no target yet, or an empty directory), `adopt` (an existing repository
     without CSARC configuration), `update` (a pinned Copier revision behind
     the resolved target release), `current` (revision and policy settings
     both match), and `policy-only-update` (revision matches but the live
-    repository policy settings have drifted from `policies/`).
+    repository policy settings have drifted from `.csarc/policies/`).
     """
     if repository_target_is_new(target):
         return {
@@ -5408,7 +5735,7 @@ def detect_install_state(
             "policy_check": policy_report,
             "reason": (
                 "Copier revision is current; repository policy settings "
-                "have drifted from policies/."
+                "have drifted from .csarc/policies/."
             ),
             "state": INSTALL_STATE_POLICY_ONLY,
             "update_status": status,
@@ -5541,6 +5868,257 @@ def update_plan_answers(  # noqa: C901
     return result, update_data
 
 
+def _render_reinstall_plan(
+    args: argparse.Namespace,
+    target: Path,
+    source: str,
+    candidate_answers: dict[str, object],
+    repository: RepositoryContext,
+    generated_at: str,
+    *,
+    label: str,
+) -> tuple[Path, ResolvedPlan, Path, str]:
+    """Render the requested revision fresh and build one adoption plan.
+
+    Never reuses a previous render: called once for the pre-confirmation
+    preview and again after confirmation, closing the plan-to-apply TOCTOU
+    window. The preview skips Copier tasks, while the post-confirmation
+    render runs them. Real verification is run explicitly by the caller,
+    against candidate, after overwriting its answers file with the fresh
+    content this function returns (see `command_update_reinstall`). Always
+    resolves `args.to` -- the caller's actual requested target, not a
+    hardcoded "latest" -- so an explicit `--to <tag>` is never silently
+    substituted; if that same explicit target is also unavailable,
+    resolving it here raises the same `ReleaseNotFoundError` again,
+    uncaught, with its own specific message naming that tag.
+
+    Returns `(temporary_root, plan, answers_relative, fresh_answers)`; the
+    caller owns `temporary_root` and must remove it once done (the
+    candidate lives at `temporary_root / "candidate"`).
+    """
+    revision = resolve_revision(
+        source,
+        args.to,
+        expected_sha=args.expected_sha,
+        allow_unreleased=args.allow_unreleased,
+    )
+    temporary_root = Path(tempfile.mkdtemp(prefix=f"csarc-reinstall-{label}-"))
+    stage = temporary_root / "rendered"
+    stage.mkdir()
+    copier_copy(
+        revision.source,
+        revision,
+        stage,
+        candidate_answers,
+        skip_tasks=label == "preview",
+    )
+    # The freshly rendered answers file legitimately differs from the
+    # target's (new _commit/_src_path, possibly new answers) on every
+    # ordinary reinstall -- that is expected evolution, not a conflict, so
+    # it is excluded from the adopt-style diff entirely and written to
+    # target directly once the rest of the patch has applied, exactly
+    # like the normal (non-reinstall) update path leaves answer-file
+    # merging to Copier rather than compare_stage.
+    staged_answers_path = config_path(stage)
+    answers_relative = staged_answers_path.relative_to(stage)
+    fresh_answers = staged_answers_path.read_text(encoding="utf-8")
+    staged_answers_path.unlink()
+    capabilities = capability_preflight(
+        stage / ".csarc" / "scripts" / "release_policy.py",
+        target,
+        revision,
+        emit=False,
+    )
+    plan = build_adoption_plan(
+        stage,
+        temporary_root / "candidate",
+        target,
+        revision,
+        repository,
+        candidate_answers,
+        capabilities,
+        generated_at,
+    )
+    if plan.adoption is None:
+        shutil.rmtree(temporary_root, ignore_errors=True)
+        raise CliError("Reinstall plan has no adoption evidence.")
+    return temporary_root, plan, answers_relative, fresh_answers
+
+
+def command_update_reinstall(  # noqa: C901
+    args: argparse.Namespace,
+    target: Path,
+    source: str,
+    candidate_answers: dict[str, object],
+    repository: RepositoryContext,
+    missing: ReleaseNotFoundError,
+) -> int:
+    """Fall into a from-scratch reinstall plan when a release tag is gone.
+
+    Triggered only by a confirmed missing release tag (Issue #744) --
+    either the saved provenance's `release_tag` or, if the caller passed
+    one, an explicit `--to` target; `missing` names whichever one actually
+    raised and is surfaced verbatim so the two cases are never conflated.
+    Every other verification failure keeps raising through `update_status`
+    unchanged (see the `except ReleaseNotFoundError` in `command_update`).
+    Reuses `csarc adopt`'s exact transactional-plan machinery (Issue #219,
+    `build_adoption_plan`/`compare_stage`) so additions, overwrites,
+    preserved files, and manual-merge items are categorized identically,
+    and a project-owned or diverged file is never silently overwritten.
+
+    Mirrors `command_apply_adoption_plan`/`command_finalize_adoption`'s own
+    preview-then-reverify shape: a cheap, side-effect-free preview build is
+    shown and gates on `--check` and on needing manual merges; only after
+    the caller confirms does a second, independent render run, closing the
+    plan-to-apply TOCTOU window. That second build still uses
+    based on the approved preview. The fresh answers file is written into
+    candidate directly and `verify_project` -- the same canonical
+    `./.csarc/scripts/verify` plus validated project hook every other
+    apply-to-target path in this module runs -- is invoked explicitly
+    against it. A `ProjectVerificationError` there fails reinstall closed
+    before anything is written to target, exactly like `adopt
+    --apply-plan`/`--finalize`/`update`'s own unconditional
+    `verify_project` calls already require; the generic `applicable`
+    field is never trusted on its own here. A plan that needs manual merges
+    is reported and left for `csarc adopt` to resolve against this same
+    directory, rather than reimplementing adopt's separate
+    pending/finalize replay flow a second time for this narrower recovery
+    path.
+
+    Known limitation: unlike the ordinary (non-reinstall) update path,
+    which renders both the old and new revisions to tell "the template
+    changed this file" apart from "the project customized this file",
+    `compare_stage`'s adopt-mode categorization here is a plain two-way
+    diff against the target's current content -- there is no verified old
+    revision to render a three-way baseline from (the whole point of this
+    path is that the old release is confirmed gone). Every file that
+    differs from the newest release's render is therefore routed to
+    `manual`, even one the project never touched itself. This stays safe
+    (never silently overwrites anything) but can make an ordinary
+    reinstall need more manual review than an equivalent up-to-date
+    `csarc update` would; a future revision could add a best-effort
+    three-way diff when the old commit SHA happens to still be fetchable.
+    """
+    target_label = args.to if args.to else "the newest available release"
+    print(
+        f"{missing} Attempting a reinstall targeting {target_label} "
+        "instead of failing outright (Issue #744).",
+        file=sys.stderr,
+    )
+    if not args.check:
+        require_clean_repository(target)
+    generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+
+    preview_root, preview, _preview_answers_relative, _preview_answers = (
+        _render_reinstall_plan(
+            args,
+            target,
+            source,
+            candidate_answers,
+            repository,
+            generated_at,
+            label="preview",
+        )
+    )
+    try:
+        if args.json:
+            print(
+                json.dumps(
+                    preview.as_dict(), sort_keys=True, separators=(",", ":")
+                )
+            )
+        else:
+            print_plan(preview)
+        adoption = preview.adoption
+    finally:
+        shutil.rmtree(preview_root, ignore_errors=True)
+    if adoption is None:
+        raise CliError("Reinstall plan has no adoption evidence.")
+
+    if args.check:
+        return 1
+    if adoption.get("phase") == "pending":
+        print(
+            "Reinstall needs manual merges before it can be applied "
+            "automatically. Resolve the listed manual-merge files "
+            "against this directory with csarc adopt, then rerun "
+            "csarc update.",
+            file=sys.stderr,
+        )
+        return 1
+    if adoption.get("applicable") is not True:
+        raise CliError("Reinstall plan is not applicable.")
+    if not confirm(args):
+        return 0
+
+    # Re-render from scratch now that the caller has approved: this closes
+    # the plan-to-apply TOCTOU window (matching
+    # command_apply_adoption_plan/command_finalize_adoption). The fresh
+    # answers file is written into candidate below and verify_project is
+    # invoked explicitly against it, exactly like command_update's own
+    # unconditional verify_project(candidate) call for its non-reinstall
+    # path (see _render_reinstall_plan's docstring for why).
+    require_clean_repository(target)
+    apply_root, fresh, answers_relative, fresh_answers = _render_reinstall_plan(
+        args,
+        target,
+        source,
+        candidate_answers,
+        repository,
+        generated_at,
+        label="apply",
+    )
+    try:
+        fresh_adoption = fresh.adoption
+        planned = fresh.files
+        if fresh_adoption is None or planned is None:
+            raise CliError("Reinstall plan has no adoption evidence.")
+        if fresh_adoption.get("phase") == "pending":
+            print(
+                "Reinstall needs manual merges before it can be applied "
+                "automatically (the target changed since the preview "
+                "plan). Resolve the listed manual-merge files against "
+                "this directory with csarc adopt, then rerun csarc "
+                "update.",
+                file=sys.stderr,
+            )
+            return 1
+        owner_state = fresh_adoption.get("code_owner")
+        if (
+            isinstance(owner_state, dict)
+            and owner_state.get("state") == "blocked"
+        ):
+            raise CliError(
+                "Reinstall plan is not applicable: "
+                f"{owner_state.get('reason', 'CODEOWNER is blocked')}"
+            )
+        candidate = apply_root / "candidate"
+        (candidate / answers_relative).write_text(
+            fresh_answers, encoding="utf-8"
+        )
+        try:
+            verify_project(candidate)
+        except ProjectVerificationError as error:
+            raise CliError(
+                f"Reinstall verification failed after plan approval: {error}"
+            ) from error
+        _effects, artifacts = candidate_effects(candidate, target, planned)
+        write_candidate_patch(
+            candidate,
+            target,
+            apply_root / "reinstall.patch",
+            artifacts=artifacts,
+            target_snapshot=fresh_adoption,
+        )
+        (target / answers_relative).write_text(fresh_answers, encoding="utf-8")
+    finally:
+        shutil.rmtree(apply_root, ignore_errors=True)
+    write_provenance(target, fresh.revision, answers=candidate_answers)
+    settings_plan(target)
+    print("Reinstall complete.")
+    return 0
+
+
 def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     """Check or apply a Copier smart update."""
     target = resolve_repository_target(args.path)
@@ -5566,14 +6144,29 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         saved_answers, explicit_data, repository
     )
     candidate_answers = resolve_release_answers(target, candidate_answers)
-    status, current_revision, target_revision, previous = update_status(
-        target,
-        args.to,
-        expected_sha=args.expected_sha,
-        allow_unreleased=args.allow_unreleased,
-        accept_legacy=args.accept_legacy,
-        from_release=args.from_release,
-    )
+    try:
+        status, current_revision, target_revision, previous = update_status(
+            target,
+            args.to,
+            expected_sha=args.expected_sha,
+            allow_unreleased=args.allow_unreleased,
+            accept_legacy=args.accept_legacy,
+            from_release=args.from_release,
+        )
+    except ReleaseNotFoundError as missing:
+        # Issue #744: retention deleted the recorded release_tag. Every
+        # other verification failure (bad attestation, a moved tag, an
+        # invalid signature, a repository identity mismatch) is a plain
+        # CliError and keeps failing closed above -- only a GitHub-
+        # confirmed missing tag falls into reinstall.
+        return command_update_reinstall(
+            args,
+            target,
+            read_answer(answers_path, "_src_path"),
+            candidate_answers,
+            repository,
+            missing,
+        )
     source = status.get("source")
     if not isinstance(source, str):
         raise CliError("Update source must be a string.")
@@ -5590,7 +6183,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         target_uses_current_config = (stage / CONFIG_FILE).is_file()
         answers = read_copier_answers(config_path(stage))
         preflight = capability_preflight(
-            stage / "scripts" / "release_policy.py",
+            managed_script(stage, "release_policy.py"),
             target,
             target_revision,
             emit=False,
@@ -5606,10 +6199,31 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             skip_tasks=True,
         )
         current_capabilities = capability_preflight(
-            current_stage / "scripts" / "release_policy.py",
+            managed_script(current_stage, "release_policy.py"),
             target,
             current_revision,
             emit=False,
+        )
+        layout_moves = legacy_layout_pairs(
+            stage,
+            target,
+            project_mode=saved_answers.get("project_mode"),
+        )
+        retirement_candidates = (
+            LEGACY_PROFILE_FILE.as_posix(),
+            ".gitleaks.toml",
+            ".pre-commit-config.yaml",
+            "zizmor.yml",
+        )
+        retiring = tuple(
+            name
+            for name in retirement_candidates
+            if (target / name).is_file() and not (target / name).is_symlink()
+        )
+        files = update_file_plan(
+            compare_stage(stage, target, adopt=False),
+            layout_moves,
+            retiring,
         )
     hook_configuration = project_verification_configuration(target, answers)
     validated_project_verification_hook(target, hook_configuration)
@@ -5660,6 +6274,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         repository=repository,
         answers=answers,
         capabilities=preflight,
+        files=files,
         update=status,
     )
     if args.check:
@@ -5735,26 +6350,29 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             target_uses_current_config
             and candidate_config_path == candidate / LEGACY_ANSWERS_FILE
         )
-        legacy_profile = candidate / LEGACY_PROFILE_FILE
-        retiring_legacy_profile = legacy_profile.is_file()
+        early_layout_moves = tuple(
+            move
+            for move in layout_moves
+            if move[0] == LEGACY_ANSWERS_FILE.as_posix()
+        )
+        deferred_layout_moves = tuple(
+            move for move in layout_moves if move not in early_layout_moves
+        )
+        retiring_files = tuple(candidate / name for name in retiring)
+        # Copier must see the legacy generated paths in their original
+        # locations so its old-to-new comparison can remove and add them
+        # cleanly. Only the answers file moves early because Copier and the
+        # target template's finalize tasks need the canonical config path.
+        apply_layout_moves(candidate, early_layout_moves)
         if migrating_legacy_config:
-            # Migrate the answers file to its current location *before*
-            # Copier runs, not only after. The target template's own
-            # finalize tasks (run by Copier itself as part of this exact
-            # `copier update` call, e.g. scripts/render_site.py) read
-            # CONFIG_FILE directly and would otherwise fail mid-update on a
-            # repository that still only has the legacy path.
-            migrated = candidate / CONFIG_FILE
-            migrated.parent.mkdir(parents=True, exist_ok=True)
-            candidate_config_path.replace(migrated)
-            candidate_config_path = migrated
-        if retiring_legacy_profile:
-            # Superseded by CONFIG_FILE (see LEGACY_PROFILE_FILE); every
-            # field it held is already carried by the migrated answers
-            # above, so retire the stale duplicate instead of leaving it
-            # behind for an update to trip over later.
-            legacy_profile.unlink()
-        if migrating_legacy_config or retiring_legacy_profile:
+            # apply_layout_moves() migrated the answers file before Copier's
+            # finalize tasks read the one canonical configuration path.
+            candidate_config_path = candidate / CONFIG_FILE
+        for retiring_file in retiring_files:
+            # The legacy profile is superseded by CONFIG_FILE. Tool-specific
+            # configs are now materialized by stable adapters at runtime.
+            retiring_file.unlink()
+        if migrating_legacy_config or retiring_files:
             # Copier's own `update` refuses to run against a dirty
             # destination, so commit this filesystem-only migration before
             # invoking it; HEAD is moved back afterward (see below) without
@@ -5820,7 +6438,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                 "the target was not changed. Resolve the listed files in "
                 "the target or template, then rerun the update."
             )
-        if migrating_legacy_config or retiring_legacy_profile:
+        # Copier normally performs clean legacy deletions and additions
+        # itself. Any legacy source left behind is user-modified or otherwise
+        # outside that clean update, so finish the move only when it is safe
+        # and fail closed on a different destination.
+        apply_layout_moves(candidate, deferred_layout_moves)
+        if migrating_legacy_config or retiring_files:
             # Move HEAD back to the pre-migration commit without touching
             # the working tree or index (see above): the migration and
             # whatever Copier changed on top of it now both show up as one

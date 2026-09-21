@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.parse
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,10 +20,12 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     stale_branch_detection = importlib.import_module("stale_branch_detection")
+    release_level = importlib.import_module("release_level")
 else:
     stale_branch_detection = importlib.import_module(
         f"{__package__}.stale_branch_detection"
     )
+    release_level = importlib.import_module(f"{__package__}.release_level")
 
 CHECK_NAME = "Milestone approval"
 TRACKER_SECTIONS = (
@@ -68,6 +71,70 @@ def run_gh(arguments: list[str]) -> str:
         text=True,
     )
     return result.stdout.strip()
+
+
+class _SnapshotGitHub:
+    """Expose an already-loaded Milestone snapshot to the level resolver."""
+
+    def __init__(self, snapshot: dict[str, Any]) -> None:
+        self.snapshot = snapshot
+
+    def get(self, repo: str, path: str) -> object:
+        """Read snapshot data or delegate collaborator permission lookup."""
+        if path.startswith("collaborators/") and path.endswith("/permission"):
+            login = urllib.parse.unquote(path.split("/", 2)[1])
+            permission = _collaborator_permission(repo, login)
+            if permission is None:
+                raise RuntimeError("collaborator permission is unavailable")
+            return {"permission": permission}
+        if path.startswith("milestones/"):
+            number = int(path.split("/", 1)[1])
+            milestone = self.snapshot.get("milestone")
+            if (
+                isinstance(milestone, dict)
+                and milestone.get("number") == number
+            ):
+                return milestone
+            return load_snapshot(repo, number)["milestone"]
+        if path.startswith("issues/"):
+            number = int(path.split("/", 1)[1])
+            issue = self.snapshot.get("issue")
+            if isinstance(issue, dict) and issue.get("number") == number:
+                return issue
+            for issue in self.snapshot.get("issues", []):
+                if issue.get("number") == number:
+                    return issue
+        raise RuntimeError(f"snapshot has no {path}")
+
+    def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
+        """Return the snapshot's Milestone Issue collection."""
+        if path.startswith("issues?milestone="):
+            issues = self.snapshot.get("issues")
+            if isinstance(issues, list):
+                return list(issues)
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(path).query)
+            milestone_number = int(query["milestone"][0])
+            return list(load_snapshot(repo, milestone_number)["issues"])
+        raise RuntimeError(f"snapshot has no {path}")
+
+
+def _admin_self_approval_allowed(
+    github: release_level.GitHubReader,
+    repo: str,
+    issue: dict[str, Any],
+) -> bool:
+    """Return whether this work's configured review policy permits self-use."""
+    labels = {
+        str(label.get("name") or "").casefold()
+        for label in issue.get("labels", [])
+        if isinstance(label, dict)
+    }
+    if issue.get("milestone") is None and "hotfix" in labels:
+        return True
+    decision = release_level.resolve_issue(
+        github, repo, issue, release_level.load_settings()
+    )
+    return decision.review == "self"
 
 
 def _pages(raw: str) -> list[dict[str, Any]]:
@@ -404,7 +471,56 @@ def _collaborator_permission(repo: str, username: str) -> str | None:
     return permission if isinstance(permission, str) else None
 
 
-def _admin_self_approval(
+@dataclass(frozen=True)
+class _ApprovalVocabulary:
+    """One comment grammar an approval gate reads (#743's shared algorithm).
+
+    `approve`/`admin_prefix`/`object_prefix`/`resolve_prefix` must already
+    be cased correctly for `case_sensitive`: lowercase throughout for a
+    case-insensitive vocabulary (matched against `command.lower()`), or
+    the exact literal case for the tracker's case-sensitive `/milestone`
+    family (matched against `command` unchanged). Two vocabularies never
+    cross-match each other's comments, because each is only ever compared
+    against its own `normalize()` rule -- this is what lets the tracker's
+    `/milestone approve` family and the standalone/hotfix Issue's plain
+    `Approve` family (#743) share one decision algorithm without merging
+    into one comparison.
+    """
+
+    approve: str
+    admin_prefix: str
+    object_prefix: str
+    resolve_prefix: str
+    case_sensitive: bool
+
+    def normalize(self, command: str) -> str:
+        """Return `command` as this vocabulary compares it."""
+        return command if self.case_sensitive else command.lower()
+
+
+_TRACKER_VOCABULARY = _ApprovalVocabulary(
+    approve="/milestone approve",
+    admin_prefix="/milestone admin-approve:",
+    object_prefix="/milestone object:",
+    resolve_prefix="/milestone resolve:",
+    case_sensitive=True,
+)
+
+# The standalone/hotfix/release-recovery Issue-approval vocabulary the
+# maintainer decided on 2026-09-18 (Issue #743's own comments): plain,
+# case-insensitive text, deliberately independent of the tracker's slash
+# commands above -- see `standalone_issue_approval_decision()`.
+_ISSUE_VOCABULARY = _ApprovalVocabulary(
+    approve="approve",
+    admin_prefix="admin-approve:",
+    object_prefix="object:",
+    resolve_prefix="resolve:",
+    case_sensitive=False,
+)
+
+
+def _vocabulary_admin_self_approval(
+    vocabulary: _ApprovalVocabulary,
     command: str,
     author: str,
     author_type: str | None,
@@ -412,42 +528,59 @@ def _admin_self_approval(
     proposer: str | None,
 ) -> str | None:
     """Return the reason for one valid admin self-approval, if any."""
-    if not command.startswith("/milestone admin-approve:"):
+    if not vocabulary.normalize(command).startswith(vocabulary.admin_prefix):
         return None
-    reason = command.removeprefix("/milestone admin-approve:").strip()
+    reason = command[len(vocabulary.admin_prefix) :].strip()
     if not reason or author != proposer or author_type == "Bot":
         return None
     return reason if permission == "admin" else None
 
 
-def _record_objection(
-    command: str, author: str, url: object, objections: dict[str, str]
+def _vocabulary_record_objection(
+    vocabulary: _ApprovalVocabulary,
+    normalized: str,
+    command: str,
+    author: str,
+    url: object,
+    objections: dict[str, str],
 ) -> None:
     """Record one objection comment, keyed by its own permalink."""
-    if not command.startswith("/milestone object:") or not isinstance(url, str):
+    if not normalized.startswith(vocabulary.object_prefix) or not isinstance(
+        url, str
+    ):
         return
-    if command.removeprefix("/milestone object:").strip():
+    if command[len(vocabulary.object_prefix) :].strip():
         objections[url] = author
 
 
-def _record_resolution(
-    command: str, author: str, objections: dict[str, str], resolved: set[str]
+def _vocabulary_record_resolution(
+    vocabulary: _ApprovalVocabulary,
+    normalized: str,
+    command: str,
+    author: str,
+    objections: dict[str, str],
+    resolved: set[str],
 ) -> None:
     """Record one objection withdrawal by its original author."""
-    if not command.startswith("/milestone resolve:"):
+    if not normalized.startswith(vocabulary.resolve_prefix):
         return
-    target = command.removeprefix("/milestone resolve:").strip()
+    target = command[len(vocabulary.resolve_prefix) :].strip()
     if objections.get(target) == author:
         resolved.add(target)
 
 
-def _approval_records(
+def _vocabulary_approval_records(
+    vocabulary: _ApprovalVocabulary,
     snapshot: dict[str, Any],
     proposer: str | None,
     *,
     item_updated_at: str | None = None,
 ) -> tuple[set[str], dict[str, str], set[str], dict[str, str], set[str]]:
     """Collect approvals, objections, withdrawals, and admin self-approvals.
+
+    Shared algorithm behind both `_approval_records()` (tracker) and
+    `_issue_approval_records()` (#743's standalone/hotfix Issue gate),
+    parameterized by `vocabulary`.
 
     Also returns the authors whose approve/admin-approve comment no longer
     binds (#632). `item_updated_at` is the tracker's (or work Issue's) own
@@ -475,12 +608,13 @@ def _approval_records(
         command = next(
             (line.strip() for line in body.splitlines() if line.strip()), ""
         )
+        normalized = vocabulary.normalize(command)
         is_stale = _approval_is_stale(
             item_updated_at,
             comment.get("created_at"),
             comment.get("updated_at"),
         )
-        if command == "/milestone approve":
+        if normalized == vocabulary.approve:
             if author != proposer and author_type != "Bot":
                 if is_stale:
                     stale.add(author)
@@ -493,11 +627,11 @@ def _approval_records(
             _collaborator_permission(repo, author)
             if isinstance(repo, str)
             and author == proposer
-            and command.startswith("/milestone admin-approve:")
+            and normalized.startswith(vocabulary.admin_prefix)
             else None
         )
-        reason = _admin_self_approval(
-            command, author, author_type, permission, proposer
+        reason = _vocabulary_admin_self_approval(
+            vocabulary, command, author, author_type, permission, proposer
         )
         if reason is not None:
             if is_stale:
@@ -505,9 +639,62 @@ def _approval_records(
             else:
                 admin_approvals[author] = reason
             continue
-        _record_objection(command, author, url, objections)
-        _record_resolution(command, author, objections, resolved)
+        _vocabulary_record_objection(
+            vocabulary, normalized, command, author, url, objections
+        )
+        _vocabulary_record_resolution(
+            vocabulary, normalized, command, author, objections, resolved
+        )
     return approvals, objections, resolved, admin_approvals, stale
+
+
+def _admin_self_approval(
+    command: str,
+    author: str,
+    author_type: str | None,
+    permission: str | None,
+    proposer: str | None,
+) -> str | None:
+    """Return the reason for one valid tracker admin self-approval, if any."""
+    return _vocabulary_admin_self_approval(
+        _TRACKER_VOCABULARY, command, author, author_type, permission, proposer
+    )
+
+
+def _record_objection(
+    command: str, author: str, url: object, objections: dict[str, str]
+) -> None:
+    """Record one tracker objection comment, keyed by its own permalink."""
+    _vocabulary_record_objection(
+        _TRACKER_VOCABULARY, command, command, author, url, objections
+    )
+
+
+def _record_resolution(
+    command: str, author: str, objections: dict[str, str], resolved: set[str]
+) -> None:
+    """Record one tracker objection withdrawal by its original author."""
+    _vocabulary_record_resolution(
+        _TRACKER_VOCABULARY, command, command, author, objections, resolved
+    )
+
+
+def _approval_records(
+    snapshot: dict[str, Any],
+    proposer: str | None,
+    *,
+    item_updated_at: str | None = None,
+) -> tuple[set[str], dict[str, str], set[str], dict[str, str], set[str]]:
+    """Collect tracker approvals, objections, and admin self-approvals.
+
+    See `_vocabulary_approval_records()` for the shared algorithm.
+    """
+    return _vocabulary_approval_records(
+        _TRACKER_VOCABULARY,
+        snapshot,
+        proposer,
+        item_updated_at=item_updated_at,
+    )
 
 
 def _gate_decision(
@@ -520,6 +707,7 @@ def _gate_decision(
     missing_message: str,
     approved_prefix: str = "Approved by",
     admin_prefix: str = "Admin self-approved by",
+    allow_admin_self_approval: bool = True,
 ) -> Decision:
     """Turn one collected approval-record set into a pass/fail Decision.
 
@@ -532,6 +720,12 @@ def _gate_decision(
     it is the only reason no approval currently counts, the message says
     so explicitly instead of reading identically to "never approved".
     """
+    if not approvals and admin_approvals and not allow_admin_self_approval:
+        return Decision(
+            False,
+            "This release level requires approval from another person; "
+            "admin self-approval is only valid when self-review is configured",
+        )
     if not approvals and not admin_approvals:
         if stale:
             return Decision(
@@ -558,7 +752,10 @@ def _gate_decision(
 
 
 def approval_decision(
-    snapshot: dict[str, Any], *, require_open: bool = True
+    snapshot: dict[str, Any],
+    *,
+    require_open: bool = True,
+    allow_admin_self_approval: bool | None = None,
 ) -> Decision:
     """Require one non-proposer approval, or an owner self-approval.
 
@@ -578,6 +775,12 @@ def approval_decision(
     approvals, objections, resolved, admin_approvals, stale = _approval_records(
         snapshot, proposer, item_updated_at=item.get("updated_at")
     )
+    if allow_admin_self_approval is None and admin_approvals and not approvals:
+        allow_admin_self_approval = _admin_self_approval_allowed(
+            _SnapshotGitHub(snapshot), str(snapshot.get("repo") or ""), item
+        )
+    if allow_admin_self_approval is None:
+        allow_admin_self_approval = False
     return _gate_decision(
         approvals,
         objections,
@@ -585,6 +788,7 @@ def approval_decision(
         admin_approvals,
         stale,
         missing_message="A person other than the proposer must approve",
+        allow_admin_self_approval=allow_admin_self_approval,
     )
 
 
@@ -604,7 +808,9 @@ def load_issue_snapshot(repo: str, number: int) -> dict[str, Any]:
     return {"repo": repo, "issue": issue, "comments": comments}
 
 
-def scope_decision(snapshot: dict[str, Any]) -> Decision:
+def scope_decision(
+    snapshot: dict[str, Any], *, allow_admin_self_approval: bool | None = None
+) -> Decision:
     """Require independent approval only for a self-declared scope expansion.
 
     A work Issue inherits its tracker's approval by default -- no sentinel
@@ -627,6 +833,12 @@ def scope_decision(snapshot: dict[str, Any]) -> Decision:
     approvals, objections, resolved, admin_approvals, stale = _approval_records(
         snapshot, proposer, item_updated_at=issue.get("updated_at")
     )
+    if allow_admin_self_approval is None and admin_approvals and not approvals:
+        allow_admin_self_approval = _admin_self_approval_allowed(
+            _SnapshotGitHub(snapshot), str(snapshot.get("repo") or ""), issue
+        )
+    if allow_admin_self_approval is None:
+        allow_admin_self_approval = False
     return _gate_decision(
         approvals,
         objections,
@@ -639,12 +851,338 @@ def scope_decision(snapshot: dict[str, Any]) -> Decision:
         ),
         approved_prefix="Scope expansion approved by",
         admin_prefix="Scope expansion admin self-approved by",
+        allow_admin_self_approval=allow_admin_self_approval,
     )
 
 
 def check_scope(repo: str, number: int) -> Decision:
     """Validate the scope-expansion gate for one work Issue."""
-    return scope_decision(load_issue_snapshot(repo, number))
+    snapshot = load_issue_snapshot(repo, number)
+    return scope_decision(snapshot)
+
+
+def _issue_approval_records(
+    snapshot: dict[str, Any],
+    proposer: str | None,
+    *,
+    item_updated_at: str | None = None,
+) -> tuple[set[str], dict[str, str], set[str], dict[str, str], set[str]]:
+    """Collect standalone/hotfix Issue approvals, objections, self-approvals.
+
+    Uses `_ISSUE_VOCABULARY`: the plain, case-insensitive `Approve` /
+    `Admin-approve: <reason>` / `Object: <reason>` / `Resolve: <target>`
+    grammar the maintainer decided on 2026-09-18 (Issue #743's own
+    comments) -- deliberately independent of `_approval_records()`'s
+    tracker vocabulary, per that decision, though both now share the same
+    underlying algorithm via `_vocabulary_approval_records()`.
+    """
+    return _vocabulary_approval_records(
+        _ISSUE_VOCABULARY, snapshot, proposer, item_updated_at=item_updated_at
+    )
+
+
+@dataclass(frozen=True)
+class ApprovalEditInvalidation:
+    """One currently valid approval that a body edit would invalidate."""
+
+    author: str
+    url: str
+    reapproval_command: str
+
+
+def _body_edit_vocabulary(
+    issue: dict[str, Any],
+) -> _ApprovalVocabulary | None:
+    """Return the approval vocabulary bound to this Issue's own body."""
+    milestone = issue.get("milestone")
+    if milestone is None:
+        return _ISSUE_VOCABULARY
+    if not isinstance(milestone, dict):
+        return None
+    expected_tracker_title = (
+        f"Milestone {milestone.get('number')}: {milestone.get('title')}"
+    )
+    if issue.get("title") == expected_tracker_title:
+        return _TRACKER_VOCABULARY
+    body = issue.get("body")
+    if isinstance(body, str) and has_scope_sentinel(body):
+        return _TRACKER_VOCABULARY
+    return None
+
+
+def approval_invalidations_for_body_edit(
+    snapshot: dict[str, Any], proposed_updated_at: str
+) -> list[ApprovalEditInvalidation]:
+    """Predict approvals the proposed body edit would make stale (#799).
+
+    Both the current and proposed states use `_approval_is_stale()`; this
+    is an early warning around the existing gate, not another approval
+    decision mechanism.
+    """
+    issue = snapshot.get("issue")
+    if not isinstance(issue, dict):
+        return []
+    vocabulary = _body_edit_vocabulary(issue)
+    if vocabulary is None:
+        return []
+    proposer = issue.get("user", {}).get("login")
+    records = _vocabulary_approval_records(
+        vocabulary,
+        snapshot,
+        proposer,
+        item_updated_at=issue.get("updated_at"),
+    )
+    approvals, _, _, admin_approvals, _ = records
+    if not approvals and not admin_approvals:
+        return []
+
+    invalidations: list[ApprovalEditInvalidation] = []
+    fresh_after_edit = False
+    for comment in snapshot.get("comments", []):
+        body = comment.get("body")
+        author = comment.get("user", {}).get("login")
+        if not isinstance(body, str) or not isinstance(author, str):
+            continue
+        command = next(
+            (line.strip() for line in body.splitlines() if line.strip()), ""
+        )
+        normalized = vocabulary.normalize(command)
+        if normalized == vocabulary.approve and author in approvals:
+            reapproval = (
+                "/milestone approve"
+                if vocabulary is _TRACKER_VOCABULARY
+                else "Approve"
+            )
+        elif (
+            normalized.startswith(vocabulary.admin_prefix)
+            and command[len(vocabulary.admin_prefix) :].strip()
+            and author in admin_approvals
+        ):
+            reapproval = (
+                "/milestone admin-approve: <reason>"
+                if vocabulary is _TRACKER_VOCABULARY
+                else "Admin-approve: <reason>"
+            )
+        else:
+            continue
+        if _approval_is_stale(
+            issue.get("updated_at"),
+            comment.get("created_at"),
+            comment.get("updated_at"),
+        ):
+            continue
+        if not _approval_is_stale(
+            proposed_updated_at,
+            comment.get("created_at"),
+            comment.get("updated_at"),
+        ):
+            fresh_after_edit = True
+            continue
+        url = comment.get("html_url")
+        invalidations.append(
+            ApprovalEditInvalidation(
+                author=author,
+                url=url if isinstance(url, str) else "(URL unavailable)",
+                reapproval_command=reapproval,
+            )
+        )
+    return [] if fresh_after_edit else invalidations
+
+
+def body_edit_warning(
+    snapshot: dict[str, Any], proposed_updated_at: str
+) -> str | None:
+    """Format a non-blocking warning for one approval-invalidating edit."""
+    invalidations = approval_invalidations_for_body_edit(
+        snapshot, proposed_updated_at
+    )
+    if not invalidations:
+        return None
+    issue = snapshot["issue"]
+    lines = [
+        f"WARNING: editing Issue #{issue.get('number')}'s body now will "
+        "invalidate these approval comments:"
+    ]
+    lines.extend(f"- @{item.author}: {item.url}" for item in invalidations)
+    lines.append("After the edit, re-approval is required:")
+    lines.extend(
+        f"- @{item.author} should comment `{item.reapproval_command}` again."
+        for item in invalidations
+    )
+    return "\n".join(lines)
+
+
+def standalone_issue_approval_decision(
+    snapshot: dict[str, Any],
+    issue_number: int,
+    *,
+    require_open: bool = True,
+    allow_admin_self_approval: bool | None = None,
+) -> Decision:
+    """Require independent approval for one Issue with no Milestone (#743).
+
+    Covers standalone, hotfix, and release-recovery Issues alike -- the
+    common trait this function gates on is simply having no Milestone of
+    its own. A Milestone-scoped Issue keeps inheriting its tracker's approval
+    unchanged (see `check_issue_approval()`, which routes there before ever
+    calling this function): this function only runs for the other half of
+    the maintainer's two-point approval model -- an Issue with no Milestone
+    needs its own approval, because nothing else ever gates it.
+
+    Uses the plain, case-insensitive `Approve` / `Admin-approve: <reason>` /
+    `Object: <reason>` / `Resolve: <target>` vocabulary the maintainer
+    decided on 2026-09-18 (Issue #743's own comments) -- a deliberate,
+    independent counterpart to the tracker's and scope-expansion gate's
+    `/milestone approve` family, not a reuse of it: a slash command reads
+    oddly on an Issue that has no Milestone to invoke it against, and a
+    plain keyword needs no prior familiarity with the tracker's own syntax.
+    The two vocabularies are data (`_ISSUE_VOCABULARY` here vs.
+    `_TRACKER_VOCABULARY`), not separate algorithms: `_issue_approval_
+    records()` and `_approval_records()` are both thin wrappers around the
+    shared `_vocabulary_approval_records()`, so neither can accidentally
+    match the other's comments (each is only ever compared against its own
+    vocabulary's `normalize()`), and there is exactly one implementation of
+    the underlying algorithm to keep correct. This is what "no second
+    parallel system" means here: one shared decision engine and one shared
+    comment-matching algorithm, parameterized by two independent
+    vocabularies.
+
+    `require_open` mirrors `approval_decision()`'s own gate exactly: an
+    Issue closed out from under an already-posted `Approve` comment (mis-
+    triaged, marked duplicate, closed by an unrelated PR, etc.) must not
+    keep counting as approved. Without this check, a since-closed Issue's
+    stale-but-syntactically-valid approval would still satisfy the gate the
+    next time `check-pr` or `check-merge-group` re-evaluates it -- a
+    fail-open hole the tracker path has never had, since `approval_decision()`
+    has required `item.get("state") == "open"` since #400. There is no
+    standalone equivalent of the tracker's completed-closure path (which is
+    the only caller that ever passes `require_open=False`), so every real
+    caller keeps the default.
+    """
+    issue = snapshot.get("issue")
+    if not isinstance(issue, dict):
+        return Decision(False, "GitHub returned invalid Issue data")
+    if require_open and issue.get("state") != "open":
+        return Decision(
+            False, f"Issue #{issue_number} must remain open while work runs"
+        )
+    proposer = issue.get("user", {}).get("login")
+    approvals, objections, resolved, admin_approvals, stale = (
+        _issue_approval_records(
+            snapshot, proposer, item_updated_at=issue.get("updated_at")
+        )
+    )
+    if allow_admin_self_approval is None and admin_approvals and not approvals:
+        allow_admin_self_approval = _admin_self_approval_allowed(
+            _SnapshotGitHub(snapshot), str(snapshot.get("repo") or ""), issue
+        )
+    if allow_admin_self_approval is None:
+        allow_admin_self_approval = False
+    return _gate_decision(
+        approvals,
+        objections,
+        resolved,
+        admin_approvals,
+        stale,
+        missing_message=(
+            f"Issue #{issue_number} has no Milestone: a person other than "
+            "the proposer must comment `Approve` on it, or an admin "
+            "collaborator who is also the proposer may comment "
+            "`Admin-approve: <reason>`, before this pull request can merge"
+        ),
+        approved_prefix="Issue approved by",
+        admin_prefix="Issue admin self-approved by",
+        allow_admin_self_approval=allow_admin_self_approval,
+    )
+
+
+def check_issue_approval(
+    repo: str, number: int, *, require_open: bool = True
+) -> Decision:
+    """Validate the standalone/hotfix/release-recovery Issue-approval gate.
+
+    A Milestone-scoped Issue defers to that Milestone's own tracker
+    approval (`approval_decision()`) -- unaffected by this Issue, exactly
+    as before #743. This is normally unreachable through `_pull_decision()`
+    itself (a pull request with a Milestone never reaches this function;
+    `scripts/validate-pr-policy` also requires a pull request's own
+    Milestone to match its closing Issue's Milestone), but `check-issue-
+    approval` is also a standalone CLI entry point, so it re-derives the
+    right answer directly from the Issue's own Milestone field rather than
+    trusting a caller's assumption.
+
+    `require_open` is threaded straight through to
+    `standalone_issue_approval_decision()`; every real caller (the CLI, and
+    `_standalone_pull_decision()`) keeps the default `True`.
+    """
+    snapshot = load_issue_snapshot(repo, number)
+    issue = snapshot.get("issue")
+    if not isinstance(issue, dict):
+        return Decision(False, "GitHub returned invalid Issue data")
+    milestone = issue.get("milestone")
+    if isinstance(milestone, dict) and isinstance(milestone.get("number"), int):
+        return approval_decision(load_snapshot(repo, milestone["number"]))
+    return standalone_issue_approval_decision(
+        snapshot,
+        number,
+        require_open=require_open,
+    )
+
+
+def refresh_issue_pr_checks(repo: str, issue_number: int) -> Decision:
+    """Refresh the Milestone-approval check for one standalone Issue (#743).
+
+    The no-Milestone counterpart to `refresh_pr_checks()`'s tracker-wide
+    refresh: wired into `work-item-lifecycle.yml` so a fresh `Approve` /
+    `Admin-approve:` / `Object:` / `Resolve:` comment on the Issue actually
+    re-triggers "Validate Milestone approval" on its linked pull request,
+    instead of leaving a stale check-run in place until some unrelated PR
+    event happens to re-run it. Without this, the standalone/hotfix path
+    would fail *closed* (correct, never silently open) but *stuck* --
+    breaking the parity the tracker path already has via `reconcile()`'s
+    own `refresh_pr_checks()` call.
+
+    Scans every open pull request repo-wide for one whose body's closing
+    keyword(s) include this Issue number. Deliberately does not itself
+    decide "exactly one closing Issue" here -- `_standalone_pull_
+    decision()` already owns that fail-closed check when the refreshed
+    `check-pr` actually runs, so a PR referencing this Issue among several
+    still gets refreshed and correctly reported as blocked, rather than
+    silently skipped by a duplicate check here. Always returns an allowed
+    Decision: this is a best-effort refresh, not a gate in its own right.
+    """
+    pulls = _pages(
+        run_gh(
+            [
+                "api",
+                "--paginate",
+                "--slurp",
+                f"repos/{repo}/pulls?state=open&per_page=100",
+            ]
+        )
+    )
+    count = 0
+    for pull in pulls:
+        if pull.get("milestone") is not None:
+            continue
+        body = pull.get("body")
+        if not isinstance(body, str):
+            continue
+        issue_numbers = {
+            int(match.group(1)) for match in _CLOSING_KEYWORD.finditer(body)
+        }
+        if issue_number not in issue_numbers:
+            continue
+        number = pull.get("number")
+        if not isinstance(number, int):
+            continue
+        check_pr(repo, number)
+        count += 1
+    return Decision(
+        True,
+        f"Refreshed the Milestone-approval check on {count} pull "
+        f"request(s) closing #{issue_number}",
+    )
 
 
 def _linked_work_items(
@@ -963,11 +1501,45 @@ def check_pr(repo: str, number: int, *, record_check: bool = True) -> Decision:
     return decision
 
 
+_AUTOMATED_PULL_REQUEST_HEAD_PREFIXES = (
+    "dependabot/",
+    "automation/",
+    "release-please--",
+    "sync/main-to-",
+)
+
+
+def _standalone_pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
+    """Read the approval decision for a pull request with no Milestone."""
+    head_ref = pull.get("head", {}).get("ref")
+    if isinstance(head_ref, str) and head_ref.startswith(
+        _AUTOMATED_PULL_REQUEST_HEAD_PREFIXES
+    ):
+        return Decision(True, "This pull request is not part of a Milestone")
+    body = pull.get("body")
+    if not isinstance(body, str):
+        return Decision(True, "This pull request is not part of a Milestone")
+    issue_numbers = {
+        int(match.group(1)) for match in _CLOSING_KEYWORD.finditer(body)
+    }
+    if not issue_numbers:
+        return Decision(True, "This pull request is not part of a Milestone")
+    if len(issue_numbers) > 1:
+        numbers = ", ".join(f"#{number}" for number in sorted(issue_numbers))
+        return Decision(
+            False,
+            "This pull request closes more than one Issue "
+            f"({numbers}); the standalone Issue-approval gate requires "
+            "exactly one closing Issue reference",
+        )
+    return check_issue_approval(repo, next(iter(issue_numbers)))
+
+
 def _pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
     """Read the lifecycle decision for one pull-request payload."""
     milestone = pull.get("milestone")
     if milestone is None:
-        return Decision(True, "This pull request is not part of a Milestone")
+        return _standalone_pull_decision(repo, pull)
     milestone_number = milestone.get("number")
     if not isinstance(milestone_number, int):
         raise RuntimeError(
@@ -1059,15 +1631,33 @@ def preflight(repo: str, number: int) -> Decision:
     return Decision(not errors, f"{base} | {hygiene}")
 
 
-def reconcile(repo: str, number: int) -> Decision:
-    """Synchronize one Milestone and refresh its open PR checks."""
+def reconcile(
+    repo: str,
+    number: int,
+    *,
+    event_issue: int | None = None,
+    event_action: str | None = None,
+) -> Decision:
+    """Synchronize one relevant Milestone event and refresh its PR checks."""
     snapshot = load_snapshot(repo, number)
     milestone = snapshot["milestone"]
     item = tracker(snapshot)
+    errors = tracker_errors(snapshot)
+    if (
+        event_issue not in {None, 0}
+        and event_action not in {"milestoned", "demilestoned"}
+        and not errors
+        and item is not None
+        and item.get("number") != event_issue
+    ):
+        return Decision(
+            True,
+            f"Work Issue #{event_issue} does not change Milestone lifecycle",
+        )
     if item is None:
         if milestone.get("state") == "closed":
             _set_milestone_state(repo, number, "open")
-        decision = Decision(False, "; ".join(tracker_errors(snapshot)))
+        decision = Decision(False, "; ".join(errors))
         refresh_pr_checks(snapshot)
         return decision
     if item.get("state") == "open":
@@ -1075,6 +1665,18 @@ def reconcile(repo: str, number: int) -> Decision:
             _set_milestone_state(repo, number, "open")
         decision = approval_decision(snapshot)
         refresh_pr_checks(snapshot)
+        if not decision.allowed and not errors:
+            notice = (
+                decision.summary.replace("%", "%25")
+                .replace("\r", "%0D")
+                .replace("\n", "%0A")
+            )
+            print(  # noqa: T201
+                f"::notice title=Milestone governance status::{notice}"
+            )
+            return Decision(
+                True, f"Milestone governance status: {decision.summary}"
+            )
         return decision
     decision = closure_decision(snapshot)
     if decision.allowed:
@@ -1108,12 +1710,20 @@ def main() -> None:
     scope = subparsers.add_parser("check-scope")
     scope.add_argument("--repo", required=True)
     scope.add_argument("--issue", required=True, type=int)
+    issue_approval = subparsers.add_parser("check-issue-approval")
+    issue_approval.add_argument("--repo", required=True)
+    issue_approval.add_argument("--issue", required=True, type=int)
+    refresh_issue = subparsers.add_parser("refresh-issue-pr-checks")
+    refresh_issue.add_argument("--repo", required=True)
+    refresh_issue.add_argument("--issue", required=True, type=int)
     reconciliation = subparsers.add_parser("regenerate-reconciliation")
     reconciliation.add_argument("--repo", required=True)
     reconciliation.add_argument("--milestone", required=True, type=int)
     sync = subparsers.add_parser("reconcile")
     sync.add_argument("--repo", required=True)
     sync.add_argument("--milestone", required=True, type=int)
+    sync.add_argument("--event-issue", type=int)
+    sync.add_argument("--event-action")
     pre = subparsers.add_parser("preflight")
     pre.add_argument("--repo", required=True)
     pre.add_argument("--milestone", required=True, type=int)
@@ -1141,6 +1751,36 @@ def main() -> None:
     print(decision.summary)  # noqa: T201
     if not decision.allowed:
         raise SystemExit(1)
+
+
+def _dispatch(args: argparse.Namespace) -> Decision:
+    """Route one parsed subcommand to its handler function."""
+    if args.command == "check-pr":
+        return check_pr(args.repo, args.pr)
+    if args.command == "check-merge-group":
+        return check_merge_group(args.repo, args.head_sha)
+    if args.command == "check-promotion":
+        return promotion_decision(sys.stdin.read())
+    if args.command == "record-promotion-evidence":
+        return record_promotion_evidence(
+            args.repo, args.tracker, args.evidence_url
+        )
+    if args.command == "check-scope":
+        return check_scope(args.repo, args.issue)
+    if args.command == "check-issue-approval":
+        return check_issue_approval(args.repo, args.issue)
+    if args.command == "refresh-issue-pr-checks":
+        return refresh_issue_pr_checks(args.repo, args.issue)
+    if args.command == "regenerate-reconciliation":
+        return record_reconciliation(args.repo, args.milestone)
+    if args.command == "preflight":
+        return preflight(args.repo, args.milestone)
+    return reconcile(
+        args.repo,
+        args.milestone,
+        event_issue=args.event_issue,
+        event_action=args.event_action,
+    )
 
 
 if __name__ == "__main__":

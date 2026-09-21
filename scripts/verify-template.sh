@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+verification_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$verification_root/scripts/verification-step"
+
 stage_names=()
 stage_results=()
 stage_durations=()
 current_stage=""
 current_stage_started=0
+current_stage_command=""
 verification_started=0
 
 record_stage() {
@@ -37,6 +41,7 @@ report_failure() {
     record_stage "$current_stage" "FAILED" "$duration"
     printf '[verify-template] FAILED %s (%ss)\n' \
       "$current_stage" "$duration" >&2
+    printf '[verify-template] RERUN %s\n' "$current_stage_command" >&2
   fi
   print_timing_summary >&2
   exit "$status"
@@ -48,12 +53,14 @@ run_stage() {
 
   current_stage="$name"
   current_stage_started=$SECONDS
+  current_stage_command="$(verification_command_string "$@")"
   printf '\n[verify-template] START %s\n' "$name"
   "$@"
   local duration=$((SECONDS - current_stage_started))
   record_stage "$name" "PASSED" "$duration"
   printf '[verify-template] PASSED %s (%ss)\n' "$name" "$duration"
   current_stage=""
+  current_stage_command=""
 }
 
 main() {

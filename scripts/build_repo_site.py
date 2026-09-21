@@ -67,7 +67,7 @@ def _substitute_version_tokens(markdown: str, data: SiteData) -> str:
 
 
 # Issue #681 decision N: a downstream Copier-generated project's minimal
-# repo-site (`template/site/content/`) uses this engine unmodified but
+# repo-site (`template/docs/site/content/`) uses this engine unmodified but
 # needs its own project facts, which live in `.csarc/config.yml`, not in a
 # hand-written slide. Reusing the same `[[key]]` syntax as the version
 # tokens above (rather than Jinja, which only resolves once at `copier

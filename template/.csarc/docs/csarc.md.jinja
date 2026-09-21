@@ -1,0 +1,26 @@
+# CSARC repository baseline
+
+本文件是既有專案導入 CSARC 後的穩定操作入口；產品用途、安裝與使用方式仍以專案自己的 `README.md` 為準。
+
+## 工作流程
+
+- 修改前先讀取 root `AGENTS.md` 的專案規則與 CSARC managed block。
+- 每項可寫入工作先建立一張 Issue，設定單一 Type、相符 label、負責人，以及需要共同交付時的 Milestone；用 GitHub Development 連結建立 `type/<Issue>-<slug>` 分支，PR 以 `Closes #<Issue>` 形成可追溯鏈。
+- 能獨立交付的 Issue 從 `main` 建分支並以 PR 回到 `main`；Milestone 工作則以自己的分支與 PR 進入同一條 `dev/m<Milestone>-<slug>` 交付分支。完整分支與例外規則見 [`.csarc/docs/ci-policy.md`](ci-policy.md#現行交付路徑)。
+- 實作範圍若超出原 Issue，另開 Issue，不把未核准工作靜默塞進原分支。完成驗收條件與 PR checklist、執行適用的本機驗證並留下證據後，才把 PR 轉為 ready。
+- repository settings 只先執行 `./.csarc/scripts/apply-repository-settings.sh plan`；沒有管理員明確授權不得 apply。
+- 不自動 stash、commit、push、開 PR 或合併使用者既有工作。
+
+## 驗證與發布
+
+- 唯一完整驗證入口是 `./.csarc/scripts/verify`；`project_run_command` 只負責啟動產品。產品額外檢查由 `project_verification_hook` 指定 repo 內的可執行檔案，未指定時才使用 project-owned `scripts/verify-product` fallback；公版驗證會在最後只呼叫一次。
+- `.csarc/config.yml` 是唯一由使用者維護的 CSARC 設定來源。`.csarc/policies/` 與 release-please manifest／config 是公版產生或工具維護的唯讀資料；`.csarc/scripts/` 會把選項轉成工具參數，Gitleaks／pre-commit 所需的專用格式只在執行期間產生並於結束時刪除。啟用 pre-commit 時使用 `./.csarc/scripts/pre-commit run --all-files`。
+- 產品原有 release workflow 保留；CSARC 不產生第二支 release workflow，也不從檔名推測其 owner 或功能。
+- `.csarc/config.yml` 會記錄 `release_ownership`、明確選定的 `release_workflow`、必要 inputs、repository-settings owner、immutable Releases 要求與判定原因；`verification-only` 不會選取或 dispatch workflow。
+- Copier answers 與 `.csarc/provenance.json` 記錄已套用的 template Release 與完整 commit SHA。
+
+## 公版更新
+
+使用 `csarc update --check --json` 先驗證既有 provenance 並查看候選 Release；確認顯示的完整 SHA 與 plan 後，才執行 `csarc update` 套用同一候選版本。若有衝突，CLI 只列出檔案，不會修改 repo；請調整衝突內容後重跑。
+
+更新成功後，檢查 diff、執行 `./.csarc/scripts/verify-fast`（只有 full-tier 交付邊界才執行完整 `./.csarc/scripts/verify`），再用一般編號分支與 PR 交付。更新不會自行套用 repository settings、push 或合併；`docs/site/content/`、`docs/site/theme.css` 與其他 project-owned 內容遇到衝突時保留給維護者決定。

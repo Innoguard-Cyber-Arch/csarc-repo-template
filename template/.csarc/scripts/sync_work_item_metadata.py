@@ -1,0 +1,390 @@
+#!/usr/bin/env python3
+"""Keep pull request metadata aligned with its linked work Issue."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import re
+import shutil
+import subprocess
+import sys
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+JsonObject = dict[str, Any]
+JsonValue = JsonObject | list[Any]
+Runner = Callable[[list[str], str | None], JsonValue]
+MilestoneDetector = Callable[[str], tuple[int, str] | None]
+CLASSIFICATION_LABELS = {"bug", "documentation", "enhancement"}
+MILESTONE_REMINDER_MARKER = "<!-- csarc-milestone-safeguard:551 -->"
+LOGGER = logging.getLogger(__name__)
+BRANCH_ISSUE = re.compile(
+    r"^(?:feat|feature|enhancement|fix|bug|docs|documentation|refactor|test|"
+    r"build|ci|chore|revert)/(\d+)-"
+)
+CLOSING_ISSUE = re.compile(
+    r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.IGNORECASE
+)
+
+
+class MetadataError(RuntimeError):
+    """Raised when metadata cannot be synchronized safely."""
+
+
+def _run_gh(arguments: list[str], stdin: str | None = None) -> JsonValue:
+    """Run GitHub CLI and return one JSON object or array."""
+    gh_binary = shutil.which("gh")
+    if gh_binary is None:
+        raise MetadataError("GitHub CLI (gh) is required")
+    completed = subprocess.run(  # noqa: S603
+        [gh_binary, *arguments],
+        check=False,
+        capture_output=True,
+        input=stdin,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise MetadataError(completed.stderr.strip() or "gh api failed")
+    try:
+        value = json.loads(completed.stdout or "{}")
+    except json.JSONDecodeError as error:
+        raise MetadataError("gh api returned invalid JSON") from error
+    if not isinstance(value, (dict, list)):
+        raise MetadataError("gh api returned an unexpected response")
+    return value
+
+
+def _object(value: JsonValue, description: str) -> JsonObject:
+    """Require one object-shaped API response."""
+    if not isinstance(value, dict):
+        raise MetadataError(f"GitHub returned invalid {description}")
+    return value
+
+
+def _detect_open_milestone(repo: str) -> tuple[int, str] | None:
+    """Reuse the repository's conservative #551 Milestone heuristic."""
+    detector = Path(__file__).with_name("detect-open-milestone")
+    completed = subprocess.run(  # noqa: S603
+        [str(detector), "--repo", repo],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        return None
+    try:
+        number_text, title = completed.stdout.rstrip("\n").split("\t", 1)
+        return int(number_text), title
+    except (TypeError, ValueError) as error:
+        raise MetadataError(
+            "detect-open-milestone returned invalid output"
+        ) from error
+
+
+def linked_issue_number(head: str, body: str) -> int | None:
+    """Read the work Issue from the branch first, then the PR body."""
+    match = BRANCH_ISSUE.match(head) or CLOSING_ISSUE.search(body)
+    return int(match.group(1)) if match else None
+
+
+def resolve_workflow_run_pr(
+    repo: str,
+    head_sha: str,
+    head_repository: str,
+    head_branch: str,
+    run: Runner = _run_gh,
+) -> int:
+    """Resolve exactly one live PR associated with a completed policy run."""
+    pulls = run(
+        [
+            "api",
+            "-H",
+            "Accept: application/vnd.github+json",
+            "--paginate",
+            "--slurp",
+            f"repos/{repo}/commits/{head_sha}/pulls",
+        ],
+        None,
+    )
+    if not isinstance(pulls, list):
+        raise MetadataError("GitHub returned invalid associated pull requests")
+    if all(isinstance(item, dict) for item in pulls):
+        candidates = pulls
+    elif all(isinstance(page, list) for page in pulls):
+        candidates = [item for page in pulls for item in page]
+        if not all(isinstance(item, dict) for item in candidates):
+            raise MetadataError(
+                "GitHub returned invalid associated pull requests"
+            )
+    else:
+        raise MetadataError("GitHub returned invalid associated pull requests")
+
+    matches = [
+        pull
+        for pull in candidates
+        if isinstance(pull, dict)
+        and pull.get("state") == "open"
+        and pull.get("head", {}).get("sha") == head_sha
+        and pull.get("head", {}).get("ref") == head_branch
+        and pull.get("head", {}).get("repo", {}).get("full_name")
+        == head_repository
+        and pull.get("base", {}).get("repo", {}).get("full_name") == repo
+        and isinstance(pull.get("number"), int)
+    ]
+    if len(matches) != 1:
+        raise MetadataError(
+            "policy run must resolve to exactly one open pull request; "
+            f"found {len(matches)}"
+        )
+    return int(matches[0]["number"])
+
+
+def issue_classification(issue: JsonObject) -> str:
+    """Return the one cross-item label implied by Issue metadata."""
+    labels: set[str] = {
+        item["name"]
+        for item in issue.get("labels", [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    selected = labels & CLASSIFICATION_LABELS
+    if len(selected) == 1:
+        return selected.pop()
+    if len(selected) > 1:
+        raise MetadataError(
+            "linked Issue has conflicting classification labels"
+        )
+
+    issue_type = issue.get("type")
+    type_name = issue_type.get("name") if isinstance(issue_type, dict) else None
+    if type_name == "Bug":
+        return "bug"
+    if type_name in {"Feature", "Task"}:
+        return "enhancement"
+    raise MetadataError("linked Issue has no usable classification")
+
+
+def desired_pull_request_metadata(
+    pull: JsonObject, issue: JsonObject
+) -> JsonObject:
+    """Build the minimal REST patch without removing unrelated metadata."""
+    classification = issue_classification(issue)
+    labels = [
+        item["name"]
+        for item in pull.get("labels", [])
+        if isinstance(item, dict)
+        and isinstance(item.get("name"), str)
+        and item["name"] not in CLASSIFICATION_LABELS
+    ]
+    labels.append(classification)
+
+    assignees = [
+        item["login"]
+        for item in pull.get("assignees", [])
+        if isinstance(item, dict) and isinstance(item.get("login"), str)
+    ]
+    author = pull.get("user")
+    if isinstance(author, dict) and author.get("type") == "User":
+        login = author.get("login")
+        if isinstance(login, str):
+            assignees.append(login)
+
+    milestone = issue.get("milestone")
+    milestone_number = (
+        milestone.get("number") if isinstance(milestone, dict) else None
+    )
+    return {
+        "assignees": sorted(set(assignees)),
+        "labels": sorted(set(labels)),
+        "milestone": milestone_number,
+    }
+
+
+def sync_pull_request(repo: str, number: int, run: Runner = _run_gh) -> str:
+    """Synchronize one PR and return a concise status line."""
+    pull = _object(
+        run(["api", f"repos/{repo}/pulls/{number}"], None),
+        "pull-request metadata",
+    )
+    issue_number = linked_issue_number(
+        str(pull.get("head", {}).get("ref", "")), str(pull.get("body") or "")
+    )
+    if issue_number is None:
+        return f"PR #{number}: no linked work Issue; metadata unchanged"
+
+    issue = _object(
+        run(["api", f"repos/{repo}/issues/{issue_number}"], None),
+        "Issue metadata",
+    )
+    if "pull_request" in issue:
+        raise MetadataError(f"#{issue_number} is not an Issue")
+    current = _object(
+        run(["api", f"repos/{repo}/issues/{number}"], None),
+        "pull-request Issue metadata",
+    )
+    desired = desired_pull_request_metadata(current, issue)
+    current_milestone = current.get("milestone")
+    current_metadata = {
+        "assignees": sorted(
+            item["login"]
+            for item in current.get("assignees", [])
+            if isinstance(item, dict) and isinstance(item.get("login"), str)
+        ),
+        "labels": sorted(
+            item["name"]
+            for item in current.get("labels", [])
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        ),
+        "milestone": (
+            current_milestone.get("number")
+            if isinstance(current_milestone, dict)
+            else None
+        ),
+    }
+    if current_metadata == desired:
+        return f"PR #{number}: metadata already matches Issue #{issue_number}"
+    run(
+        [
+            "api",
+            "--method",
+            "PATCH",
+            f"repos/{repo}/issues/{number}",
+            "--input",
+            "-",
+        ],
+        json.dumps(desired),
+    )
+    return f"PR #{number}: synchronized from Issue #{issue_number}"
+
+
+def remind_missing_milestone(
+    repo: str,
+    number: int,
+    run: Runner = _run_gh,
+    detect: MilestoneDetector = _detect_open_milestone,
+) -> str:
+    """Post the non-blocking #551 reminder from the trusted workflow."""
+    pull = _object(
+        run(["api", f"repos/{repo}/pulls/{number}"], None),
+        "pull-request metadata",
+    )
+    issue_number = linked_issue_number(
+        str(pull.get("head", {}).get("ref", "")), str(pull.get("body") or "")
+    )
+    if issue_number is None:
+        return f"PR #{number}: no linked work Issue; no Milestone reminder"
+
+    issue = _object(
+        run(["api", f"repos/{repo}/issues/{issue_number}"], None),
+        "Issue metadata",
+    )
+    current = _object(
+        run(["api", f"repos/{repo}/issues/{number}"], None),
+        "pull-request Issue metadata",
+    )
+    if (
+        issue.get("milestone") is not None
+        or current.get("milestone") is not None
+    ):
+        return f"PR #{number}: Milestone already selected"
+
+    milestone = detect(repo)
+    if milestone is None:
+        return f"PR #{number}: no unambiguous open Milestone"
+    milestone_number, milestone_title = milestone
+
+    pages = run(
+        [
+            "api",
+            "--paginate",
+            "--slurp",
+            f"repos/{repo}/issues/{number}/comments",
+        ],
+        None,
+    )
+    if not isinstance(pages, list):
+        raise MetadataError("GitHub returned invalid pull-request comments")
+    comments = pages if all(isinstance(item, dict) for item in pages) else []
+    if not comments and pages:
+        if not all(isinstance(page, list) for page in pages):
+            raise MetadataError("GitHub returned invalid pull-request comments")
+        comments = [item for page in pages for item in page]
+    if any(
+        isinstance(comment, dict)
+        and MILESTONE_REMINDER_MARKER in str(comment.get("body") or "")
+        for comment in comments
+    ):
+        return f"PR #{number}: Milestone reminder already present"
+
+    body = (
+        f"{MILESTONE_REMINDER_MARKER}\n"
+        f"Neither this pull request nor Issue #{issue_number} has a "
+        "Milestone, and exactly one Milestone is currently open: "
+        f"#{milestone_number} {milestone_title}.\n\n"
+        "If this work belongs to it, attach the Milestone to the Issue "
+        '(see .csarc/docs/ci-policy.md, section "Milestone 掛勾安全網", '
+        "for the "
+        "closed-Milestone REST API workaround) and to this pull request. "
+        "Otherwise no action is needed -- many Issues and pull requests "
+        "are not tied to any Milestone."
+    )
+    _object(
+        run(
+            [
+                "api",
+                "--method",
+                "POST",
+                f"repos/{repo}/issues/{number}/comments",
+                "--raw-field",
+                f"body={body}",
+            ],
+            None,
+        ),
+        "Milestone reminder",
+    )
+    return f"PR #{number}: posted Milestone reminder"
+
+
+def main() -> int:
+    """Run one metadata synchronization command."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo", required=True)
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--pr", type=int)
+    target.add_argument("--resolve-head-sha")
+    parser.add_argument("--head-repository")
+    parser.add_argument("--head-branch")
+    args = parser.parse_args()
+    if args.resolve_head_sha is not None:
+        if args.head_repository is None or args.head_branch is None:
+            parser.error(
+                "--head-repository and --head-branch are required with "
+                "--resolve-head-sha"
+            )
+        number = resolve_workflow_run_pr(
+            args.repo,
+            args.resolve_head_sha,
+            args.head_repository,
+            args.head_branch,
+        )
+        sys.stdout.write(f"{number}\n")
+        return 0
+
+    if args.pr is None:
+        parser.error("--pr is required")
+    LOGGER.info("%s", sync_pull_request(args.repo, args.pr))
+    try:
+        LOGGER.info("%s", remind_missing_milestone(args.repo, args.pr))
+    except MetadataError:
+        LOGGER.warning(
+            "::notice::Could not post the Milestone safeguard reminder "
+            "(non-blocking, Issue #551)."
+        )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

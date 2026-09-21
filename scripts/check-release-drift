@@ -38,10 +38,12 @@ set -euo pipefail
 # --hours, or the RELEASE_DRIFT_HOURS environment variable (the workflow
 # also exposes it as a workflow_dispatch input).
 #
-# The latest stable Release covers main when GitHub marks it immutable, its
-# exact target SHA is main or an ancestor, and it was published no earlier
-# than the current main commit. Mutable Releases, drafts, prereleases,
-# non-ancestor targets, and older releases are ignored.
+# The latest Release (stable or an alpha/beta pre-release, Issue #744)
+# covers main when GitHub marks it immutable, its tag is a legal
+# alpha/beta/early/formal release-phase version, its exact target SHA is
+# main or an ancestor, and it was published no earlier than the current
+# main commit. Mutable Releases, drafts, non-ancestor targets, and older
+# releases are ignored.
 #
 # `Release-publish-record` text remains useful audit evidence when found in a
 # commit message, a trusted tracking-Issue comment, or a trusted merged
@@ -146,7 +148,16 @@ if [[ -n "$last_run_id" ]] && ! gh api "repos/$repo/actions/runs/$last_run_id/jo
   printf '[]\n' >"$last_run_steps_file"
 fi
 
-latest_release_json="$(gh api "repos/$repo/releases?per_page=100" --jq '([.[] | select(.draft == false and .prerelease == false and .published_at != null)] | sort_by(.published_at) | reverse | .[0]) | if . == null then {} else {tag_name, target_commitish, published_at, draft, prerelease, immutable, html_url} end')"
+last_run_steps_file="$work_dir/last-run-steps.json"
+printf '[]\n' >"$last_run_steps_file"
+last_run_id="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("id", ""))' "$last_run_json")"
+if [[ -n "$last_run_id" ]] && ! gh api "repos/$repo/actions/runs/$last_run_id/jobs?per_page=100" \
+  --jq '[.jobs[] | .steps[]? | {name, conclusion}]' >"$last_run_steps_file"; then
+  echo "check-release-drift: successful release run outcome is unavailable" >&2
+  printf '[]\n' >"$last_run_steps_file"
+fi
+
+latest_release_json="$(gh api "repos/$repo/releases?per_page=100" --jq '([.[] | select(.draft == false and .published_at != null)] | sort_by(.published_at) | reverse | .[0]) | if . == null then {} else {tag_name, target_commitish, published_at, draft, prerelease, immutable, html_url} end')"
 main_sha="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["sha"])' "$main_commit_json")"
 release_target="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("target_commitish", ""))' "$latest_release_json")"
 release_compare_json="{}"
@@ -287,6 +298,14 @@ operator_pattern = re.compile(r"@[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
 release_title_pattern = re.compile(
     r"chore\(main\): release (?:0|[1-9][0-9]*)\."
     r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    # Issue #744: prepare_release_candidate()'s own title
+    # (f"chore(main): release {version}", scripts/release_policy.py)
+    # carries the phase suffix verbatim for an alpha/beta candidate; this
+    # pattern must accept the same shape or a prerelease release-please
+    # PR's Release-publish-record comment is silently never found. Suffix
+    # kept byte-identical to release_version_pattern below and to
+    # scripts/release_phase.py's canonical `_VERSION_RE`.
+    r"(?:-(?:alpha|beta)\.[1-9][0-9]*)?"
 )
 trusted_associations = {"OWNER", "MEMBER", "COLLABORATOR"}
 
@@ -374,12 +393,22 @@ if latest_release:
     release_sha = latest_release.get("target_commitish")
     published_at = latest_release.get("published_at")
     compare_status = release_compare.get("status")
-    if latest_release.get("draft") is not False or latest_release.get("prerelease") is not False:
-        release_reason = "ignored: draft or prerelease"
+    release_version_pattern = re.compile(
+        r"v?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+        r"(?:-(?:alpha|beta)\.[1-9][0-9]*)?"
+    )
+    if latest_release.get("draft") is not False:
+        release_reason = "ignored: draft"
     elif latest_release.get("immutable") is not True:
         release_reason = "ignored: release is not immutable"
-    elif not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", str(release_tag or "")):
-        release_reason = "ignored: tag is not a stable semantic version"
+    elif not release_version_pattern.fullmatch(str(release_tag or "")):
+        # Issue #744: a `-alpha.N`/`-beta.N` suffix is a legal release-phase
+        # version too, not only a plain X.Y.Z tag.
+        release_reason = "ignored: tag is not a legal release-phase version"
+    elif bool(re.search(r"-(alpha|beta)\.[1-9][0-9]*$", str(release_tag or ""))) != (
+        latest_release.get("prerelease") is True
+    ):
+        release_reason = "ignored: prerelease flag does not match tag shape"
     elif not sha_pattern.fullmatch(str(release_sha or "")):
         release_reason = "ignored: target is not an exact commit SHA"
     elif compare_status not in {"identical", "ahead"}:
@@ -423,14 +452,14 @@ else:
     lines.append("Last successful release.yml run: none found")
 if latest_release:
     lines.append(
-        "Latest stable GitHub Release: "
+        "Latest eligible GitHub Release: "
         f"{latest_release.get('tag_name')} target "
         f"{latest_release.get('target_commitish')} at "
         f"{latest_release.get('published_at')} "
         f"({latest_release.get('html_url')}; {release_reason})"
     )
 else:
-    lines.append("Latest stable GitHub Release: none found")
+    lines.append("Latest eligible GitHub Release: none found")
 if record:
     lines.append(
         "Local publish record (audit only): "
@@ -444,7 +473,7 @@ lines.append(
     + (
         "DRIFT DETECTED"
         if drift
-        else "no drift (latest stable GitHub Release covers main)"
+        else "no drift (latest eligible GitHub Release covers main)"
         if release_covers_main
         else "no drift (current main explicitly requires no release)"
         if not main_advanced
@@ -470,14 +499,14 @@ if drift:
         else "- 本機發版紀錄（僅供稽核，不影響判定）：找不到符合格式的紀錄"
     )
     release_evidence = (
-        "- 最新 stable GitHub Release：`{tag}` target `{target}`，{published}（{reason}）".format(
+        "- 最新 eligible GitHub Release：`{tag}` target `{target}`，{published}（{reason}）".format(
             tag=latest_release.get("tag_name"),
             target=latest_release.get("target_commitish"),
             published=latest_release.get("published_at"),
             reason=release_reason,
         )
         if latest_release
-        else "- 最新 stable GitHub Release：找不到"
+        else "- 最新 eligible GitHub Release：找不到"
     )
     issue_body = f"""### 問題
 

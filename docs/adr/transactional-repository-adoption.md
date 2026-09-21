@@ -40,6 +40,39 @@ Machine plan 與 pending checkpoint 只保存可比對資料，不承載新的�
 
 Release prompt 以 exact commit 從 canonical GitHub repository 執行 CLI；`uvx --python 3.14` 逐次取得隔離 runtime，不要求預先安裝全域 Python，也不修改 shell profile、`PATH` 或全域環境。Ubuntu 與 macOS 跑完整 adoption 測試；Windows 使用 WSL2，native Windows 明確 fail closed。
 
+## 下游找不到舊 Release 時的重新安裝（#744，2026-09-17）
+
+Issue #744 讓版本號直接表示發布層級，並依保留規則刪除舊的 pre-release Release；
+下游 `csarc update` 讀到的 `release_tag` 因此可能在 canonical repository 上已經
+不存在。GitHub 對此類查詢明確回報 404 時，`src/csarc_cli/cli.py` 用專屬的
+`ReleaseNotFoundError`（`CliError` 子類別）標記出來，`command_update` 只在
+捕捉到這個特定例外時才改走 `command_update_reinstall`：以最新可用版本重新解析
+一個 `Revision`，再直接重用本 ADR「決定」一節描述的同一套機制——
+`build_adoption_plan`／`compare_stage` 產生新增／覆寫／保留／人工合併分類，
+`write_candidate_patch` 以驗證過的 byte-level patch套用——而不是重新實作一套
+平行的比對或寫入邏輯。除了確認 tag 不存在這一種情況，任何其他驗證失敗
+（attestation 不符、tag 指向改變、簽章無效、repository identity 不符）都繼續
+在 `update_status`／`current_revision` 內以一般 `CliError` fail closed，不會被
+誤判為「缺少 Release」而改道重新安裝。
+
+Copier 答案檔（`.copier-answers.yml` 或 `.csarc/config.yml`，視下游 repo 是否已
+遷移到單一設定檔而定）被排除在這次 diff 之外再單獨覆寫：它在每次一般更新都會
+合法地改變（新的 `_commit`／`_src_path`），不是需要人工核可的衝突，這與
+一般（非重新安裝）`update` 路徑把答案檔合併工作留給 Copier 自己、不透過
+`compare_stage` 處理是同一個道理。
+
+**與 `adopt` 的既定行為刻意不同的部分**：重新安裝目前只有在整份 plan 完全乾淨
+（沒有任何人工合併項目）時才會在確認後直接套用；一旦出現人工合併項目，
+`command_update_reinstall` 只列出清單並要求改用 `csarc adopt` 對同一個目錄
+處理，而不是重新實作 adopt 自己的 pending checkpoint／`--finalize` 兩階段
+resumable 流程。這是因為重新安裝沒有已驗證的舊版本可以重新渲染，
+`compare_stage` 因此只能做兩方（新版本 vs. 目前 target）比對，無法像一般
+`update` 一樣用三方比對（舊版本、新版本、target）分辨「範本本身改了這個檔案」
+與「專案自己改了這個檔案」；任何與最新版本不同的既有檔案都會被歸類為需要
+人工合併，即使專案從未碰過它。這維持了「project-owned 檔案一律保留，不自動
+覆寫或刪除」的既有原則（維持安全），但比一般 update 更容易需要人工確認
+（維持能力有限）；不預先假設之後會補上三方比對，需要時應開新 Issue 決定。
+
 ## 評估過的替代方案
 
 - 在 README generic prompt 固定 path 或 SHA：path 無法跨 repo 重用，SHA 也無法在包含自身內容的 commit 中自我引用。

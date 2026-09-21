@@ -205,10 +205,10 @@
         "release": {
           "files": [
             {
-              "path": "scripts/release_assets.py"
+              "path": "scripts/release_bundle.py"
             },
             {
-              "path": "tests/test_release_assets.py"
+              "path": "tests/test_release_bundle.py"
             }
           ],
           "automationNote": {
