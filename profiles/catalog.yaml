@@ -70,9 +70,6 @@ dependency_version_policy:
   known_vulnerability_scanning:
     mechanism: osv_scanner
     stays_independent_of_version_cooldown: true
-  resolver_bound_check:
-    mechanism: report_dependency_ceiling.py
-    scope: resolver_lower_and_upper_bound_only
   shipped_artifact_inventory:
     mechanism: cyclonedx_sbom
 

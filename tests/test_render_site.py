@@ -718,7 +718,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         in data["testing"]["duration"]["labels"]["zh-tw"]["runnerNote"]
     )
     assert (
-        "archive/ci-cd/ 只供參考"
+        "已退役 workflow 只保留在 Git/Issue/PR"
         in data["testing"]["duration"]["labels"]["zh-tw"]["archiveNote"]
     )
     assert "名詞與約定" not in chinese

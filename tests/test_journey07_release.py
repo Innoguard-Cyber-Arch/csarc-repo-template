@@ -346,13 +346,6 @@ def test_template_only_offers_working_delivery_options() -> None:
     assert unsupported.isdisjoint(config)
 
 
-def test_retired_archive_has_no_release_workflow_copy() -> None:
-    """Use Git history instead of keeping replaced release workflows."""
-    archive = ROOT / "archive/ci-cd/2026-08-27"
-    assert not list((archive / "root-workflows").glob("*release*"))
-    assert not list((archive / "template-workflows").glob("*release*"))
-
-
 def test_guided_path_has_no_repo_local_publisher() -> None:
     """Only release.yml may create tags or GitHub Releases.
 

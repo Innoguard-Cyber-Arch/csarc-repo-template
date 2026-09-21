@@ -500,8 +500,8 @@
         },
         {
           "file": {
-            "zh-tw": "scripts/release_assets.py＋tests/test_release_assets.py",
-            "en": "scripts/release_assets.py＋tests/test_release_assets.py"
+            "zh-tw": "scripts/release_bundle.py＋tests/test_release_bundle.py",
+            "en": "scripts/release_bundle.py＋tests/test_release_bundle.py"
           },
           "title": {
             "zh-tw": "條件式契約｜真正成品的 SPDX SBOM 與 checksum",
@@ -512,8 +512,8 @@
             "en": "The inventory must come from the real artifact at an exact tag; it is never guessed from source code alone."
           },
           "code": {
-            "zh-tw": "syft <extracted-artifacts> -o spdx-json=sbom.spdx.json\npython scripts/release_assets.py build ...\npython scripts/release_assets.py verify ...",
-            "en": "syft <extracted-artifacts> -o spdx-json=sbom.spdx.json\npython scripts/release_assets.py build ...\npython scripts/release_assets.py verify ..."
+            "zh-tw": "python3 scripts/release_bundle.py prepare --tag <tag> --output <assets>\npython3 scripts/release_bundle.py finalize --tag <tag> --output <assets>\npython3 scripts/release_bundle.py verify --tag <tag> --output <assets>",
+            "en": "python3 scripts/release_bundle.py prepare --tag <tag> --output <assets>\npython3 scripts/release_bundle.py finalize --tag <tag> --output <assets>\npython3 scripts/release_bundle.py verify --tag <tag> --output <assets>"
           },
           "summary": {
             "zh-tw": "成品存在時可用 Syft 產生 SPDX 2.3 SBOM；repo 程式驗證 root package、dependency graph、checksum、來源與 provenance。目前沒有 active publisher，因此不宣稱已產生成品證據。",
@@ -587,14 +587,14 @@
             "en": "version intent: active\nversion + changelog: manual\ntag + GitHub Release: blocked (#369)\nartifact evidence: conditional\ndeployment: not applicable"
           },
           "summary": {
-            "zh-tw": "Release Please、promotion、成品發布與 consumption workflows 都在 archive；#369 決定唯一 owner 前維持 manual／conditional。",
-            "en": "Release Please, promotion, artifact publication, and consumption workflows all sit in the archive; they stay manual or conditional until #369 decides on a single owner."
+            "zh-tw": "Release Please、promotion、成品發布與 consumption workflows 的退役設計只保留在 Git history；#369 決定唯一 owner 前維持 manual／conditional。",
+            "en": "Retired Release Please, promotion, artifact-publication, and consumption workflow designs remain only in Git history; they stay manual or conditional until #369 decides on a single owner."
           }
         },
         {
           "file": {
-            "zh-tw": "scripts/release_assets.py＋scripts/verify_release_consumption.py",
-            "en": "scripts/release_assets.py＋scripts/verify_release_consumption.py"
+            "zh-tw": "scripts/release_bundle.py＋scripts/verify_release_consumption.py",
+            "en": "scripts/release_bundle.py＋scripts/verify_release_consumption.py"
           },
           "title": {
             "zh-tw": "保留契約｜成品與消費驗證可在本機重跑",
@@ -817,8 +817,8 @@
             "en": "version_policy:\n  stable_release_observation_days: 30\n  update_method: manual_reviewed_pull_request\n  merge_after_full_verification: manual"
           },
           "summary": {
-            "zh-tw": "profiles/catalog.yaml 保存三十天觀察規則；維護者以一般受審查 PR 更新支援版本。舊 python-version-policy workflow 留在 archive，沒有 active bot identity。",
-            "en": "`profiles/catalog.yaml` records the thirty-day observation rule; a maintainer updates the supported version through an ordinary reviewed PR. The old `python-version-policy` workflow stays in the archive, with no active bot identity."
+            "zh-tw": "profiles/catalog.yaml 保存三十天觀察規則；維護者以一般受審查 PR 更新支援版本。舊 python-version-policy workflow 已刪除，沒有 active bot identity。",
+            "en": "`profiles/catalog.yaml` records the thirty-day observation rule; a maintainer updates the supported version through an ordinary reviewed PR. The old `python-version-policy` workflow is deleted, with no active bot identity."
           }
         },
         {
