@@ -425,12 +425,12 @@ def test_alpha_self_merge_collaborator_permission_under_restricted_token(
     """Issue #781: the collaborators/permission call works fine in CI.
 
     PR #779's `bypass-trace` audit comment blamed the `review` job's
-    restricted `GITHUB_TOKEN` (`contents: read, pull-requests: read`) for
+    restricted `GITHUB_TOKEN` for
     being unable to resolve `GET .../collaborators/{user}/permission`. That
     theory was disproven experimentally: three live GitHub Actions runs
-    under that exact permission set returned this call's real response
-    shape successfully. This locks that response shape in as a fixture so
-    nobody "fixes" this by widening `pr-review.yml`'s `permissions:` block.
+    returned this call's real response shape successfully. This locks that
+    response shape in as a fixture; `issues: read` is needed separately for
+    Milestone-backed authorization and must not be credited to this API.
     """
     github = alpha_github()
     github.issue_comments = [alpha_authorization_comment()]
@@ -541,6 +541,19 @@ def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
     }
     assert (project / ".github/workflows/pr-review.yml").is_file()
     assert (project / "scripts/review_gate.py").is_file()
+
+
+def test_review_workflows_can_read_milestone_issues() -> None:
+    """Default-branch workflows can run a delivery base's review gate."""
+    for path in (
+        ROOT / ".github/workflows/pr-review.yml",
+        ROOT / "template/.github/workflows/pr-review.yml",
+    ):
+        source = path.read_text(encoding="utf-8")
+        assert (
+            "contents: read\n      issues: read\n      pull-requests: read"
+            in source
+        )
 
 
 def test_human_review_keeps_the_maintainer_ruleset(tmp_path: Path) -> None:

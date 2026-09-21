@@ -155,6 +155,7 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     assert 'python3 "$RUNNER_TEMP/ci_tier.py"' in source
     assert "Check out the exact candidate" in source
     assert "Execute trusted verification tier=" in source
+    assert "CSARC_CI_BASE: ${{ github.event.pull_request.base.ref" in source
     assert "./scripts/verify-fast" in source
     assert "./scripts/verify-template.sh" in source
     assert "check-verify-attestation" not in source
@@ -180,6 +181,8 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
     assert 'cp scripts/ci_tier.py "$RUNNER_TEMP/ci_tier.py"' in source
     assert 'python3 "$RUNNER_TEMP/ci_tier.py"' in source
     assert "Execute trusted verification tier=" in source
+    assert "CSARC_CI_BASE:" in source
+    assert "github.event.pull_request.base.ref" in source
     assert "./scripts/verify-fast" in source
     assert "./scripts/verify" in source
     assert "check-verify-attestation" not in source
