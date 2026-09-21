@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.17.4] - 2026-09-21
+
+### Bug Fixes
+
+* fix(ci): bootstrap candidate verification inputs (#854) (#855) (2dab047)
+
 ## [0.17.3] - 2026-09-21
 
 ### Bug Fixes
