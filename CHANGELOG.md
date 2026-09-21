@@ -7,6 +7,17 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.18.0-alpha.1] - 2026-09-22
+
+### Features
+
+* feat: promote Milestone 14 delivery (#860) (db4888b)
+* feat: promote Milestone 14 final delivery (#867) (7ff192f)
+
+### Bug Fixes
+
+* fix(ci): accept guided prerelease branches (9d569c0)
+
 ## [0.17.3] - 2026-09-21
 
 ### Bug Fixes
