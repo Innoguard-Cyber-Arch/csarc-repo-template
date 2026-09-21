@@ -222,6 +222,55 @@ enable_codeql:
     return source, commit(source, "test: template version one")
 
 
+def add_marker_task(
+    source: Path,
+    marker: Path,
+    *,
+    fail: bool = False,
+    move_config: bool = False,
+    rewrite_managed: bool = False,
+    symlink_config_to: Path | None = None,
+    tamper_config: bool = False,
+    task_output: bool = False,
+) -> str:
+    """Add one observable Copier task and commit the fixture revision."""
+    config_path = source / "copier.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    script = (
+        "from pathlib import Path; "
+        f"Path({str(marker)!r}).write_text('executed\\n')"
+    )
+    if tamper_config:
+        script += (
+            "; config = Path('.copier-answers.yml'); "
+            "config.write_text('\\n'.join("
+            "line for line in config.read_text().splitlines() "
+            "if not line.startswith('project_slug:')) + '\\n')"
+        )
+    if move_config:
+        script += (
+            "; config = Path('.copier-answers.yml'); "
+            "destination = Path('.csarc/config.yml'); "
+            "destination.parent.mkdir(); config.replace(destination)"
+        )
+    if rewrite_managed:
+        script += "; Path('managed.txt').write_text('task rendered\\n')"
+    if symlink_config_to is not None:
+        script += (
+            "; config = Path('.copier-answers.yml'); config.unlink(); "
+            f"config.symlink_to(Path({str(symlink_config_to)!r}))"
+        )
+    if task_output:
+        script += "; Path('task-output.txt').write_text('generated\\n')"
+    if fail:
+        script += "; raise SystemExit(17)"
+    config["_tasks"] = [{"command": shlex.join(["python3", "-c", script])}]
+    config_path.write_text(
+        yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+    )
+    return commit(source, "test: add observable Copier task")
+
+
 def initialize_project(tmp_path: Path) -> tuple[Path, Path, str]:
     """Create a generated project pinned to the first template commit."""
     source, first_sha = make_template(tmp_path)
@@ -429,6 +478,277 @@ def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     assert provenance["verification"] == "development-unreleased"
 
 
+@pytest.mark.large
+def test_init_copier_tasks_wait_for_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run template tasks only after init approval, never while previewing."""
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "init-task-marker"
+    revision = add_marker_task(source, marker)
+    project = tmp_path / "new-project"
+    arguments = [
+        "init",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--data",
+        "language=ci",
+    ]
+
+    assert main([*arguments, "--dry-run"]) == 0
+    assert not marker.exists()
+    monkeypatch.setattr("builtins.input", lambda _: "no")
+    assert main(arguments) == 0
+    assert not marker.exists()
+    assert main([*arguments, "--yes", "--non-interactive"]) == 0
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+
+
+def test_init_revalidates_revision_after_confirmation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reject a moving source revision before approved tasks can execute."""
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "init-task-marker"
+    approved_sha = add_marker_task(source, marker)
+    project = tmp_path / "new-project"
+
+    def move_revision(_: str) -> str:
+        (source / "template" / "managed.txt").write_text(
+            "template version two\n", encoding="utf-8"
+        )
+        commit(source, "test: move approved revision")
+        return "yes"
+
+    monkeypatch.setattr("builtins.input", move_revision)
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                "main",
+                "--allow-unreleased",
+                "--data",
+                "language=ci",
+            ]
+        )
+        == 2
+    )
+    assert approved_sha != git(source, "rev-parse", "main")
+    assert "Expected commit SHA does not match" in capsys.readouterr().err
+    assert not marker.exists()
+    assert not project.exists()
+
+
+@pytest.mark.large
+def test_adoption_copier_tasks_wait_for_each_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep adopt and finalize tasks behind their respective approvals."""
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "adoption-task-marker"
+    revision = add_marker_task(
+        source, marker, rewrite_managed=True, task_output=True
+    )
+    project = tmp_path / "pending-product"
+    project.mkdir()
+    write_executable(
+        project / "scripts" / "verify",
+        (source / "template" / "scripts" / "verify").read_text(
+            encoding="utf-8"
+        ),
+    )
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "pending-product"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: pending product")
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--data",
+        "language=ci",
+    ]
+
+    assert main(arguments) == 0
+    plan = finalize_plan_path(project)
+    assert not marker.exists()
+    monkeypatch.setattr("builtins.input", lambda _: "no")
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                *replay_authorization(plan),
+            ]
+        )
+        == 0
+    )
+    assert not marker.exists()
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                *replay_authorization(plan),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 1
+    )
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+    assert (project / "task-output.txt").read_text(encoding="utf-8") == (
+        "generated\n"
+    )
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "task rendered\n"
+    )
+    marker.unlink()
+
+    assert replay_finalize(project, "--dry-run") == 0
+    finalize_plan = finalize_plan_path(project)
+    assert not marker.exists()
+    assert replay_finalize(project, "--apply-plan", str(finalize_plan)) == 0
+    assert not marker.exists()
+    assert (
+        replay_finalize(
+            project,
+            "--apply-plan",
+            str(finalize_plan),
+            "--yes",
+            "--non-interactive",
+        )
+        == 0
+    )
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+
+
+def test_failed_copier_task_does_not_create_init_target(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keep task failure inside the approved isolated render."""
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "failed-task-marker"
+    revision = add_marker_task(source, marker, fail=True)
+    project = tmp_path / "new-project"
+
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--data",
+                "language=ci",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+    assert "Copier task-bearing render failed" in capsys.readouterr().err
+    assert not project.exists()
+
+
+@pytest.mark.parametrize(
+    ("tamper_config", "move_config"),
+    [(True, False), (False, True)],
+    ids=("answer-removed", "path-moved"),
+)
+def test_copier_task_cannot_rewrite_bound_configuration(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    tamper_config: bool,
+    move_config: bool,
+) -> None:
+    """Reject task changes to persisted answers or Copier metadata."""
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "tampered-config-marker"
+    revision = add_marker_task(
+        source,
+        marker,
+        tamper_config=tamper_config,
+        move_config=move_config,
+    )
+    project = tmp_path / "new-project"
+
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--data",
+                "language=ci",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+    assert "Copier configuration changed" in capsys.readouterr().err
+    assert not project.exists()
+
+
+def test_copier_task_cannot_route_config_writes_outside_candidate(
+    tmp_path: Path,
+) -> None:
+    """Reject a task-created config symlink before CLI normalization."""
+    external = tmp_path / "external.yml"
+    external.write_text("_commit: unchanged\n", encoding="utf-8")
+    original = external.read_bytes()
+    source, _ = make_template(tmp_path)
+    marker = tmp_path / "symlink-task-marker"
+    revision = add_marker_task(source, marker, symlink_config_to=external)
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    answers = cli.base_data(stage, "init", {"language": "ci"})
+
+    with pytest.raises(CliError, match="Copier task-bearing render failed"):
+        cli.copier_copy(
+            str(source),
+            cli.Revision(revision, revision, str(source)),
+            stage,
+            answers,
+            skip_tasks=False,
+        )
+
+    assert marker.read_text(encoding="utf-8") == "executed\n"
+    assert external.read_bytes() == original
+
+
 def test_capability_preflight_uses_readable_github_origin(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -489,6 +809,7 @@ def test_capability_preflight_uses_readable_github_origin(
             command, 0, stdout=json.dumps(response), stderr=""
         )
 
+    monkeypatch.setattr(cli, "target_repository", lambda _: "owner/repo")
     monkeypatch.setattr(cli, "run", fake_run)
     revision = cli.resolve_revision(
         cli.CANONICAL_SOURCE, "v1.2.3", client=FakeReleaseClient()
@@ -560,7 +881,7 @@ def test_target_repository_uses_explicit_repo_for_new_project(
     monkeypatch.setenv("GH_REPO", "owner/new-repository")
     monkeypatch.setattr(
         cli,
-        "run",
+        "run_git",
         lambda *args, **kwargs: subprocess.CompletedProcess(
             args[0], 1, stdout="", stderr=""
         ),
@@ -1474,11 +1795,154 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
         encoding="utf-8",
     )
 
-    assert replay_finalize(project, "--dry-run") == 2
+    assert replay_finalize(project, "--dry-run") == 0
+    capsys.readouterr()
+    plan = finalize_plan_path(project)
+    assert (
+        replay_finalize(
+            project,
+            "--apply-plan",
+            str(plan),
+            "--yes",
+            "--non-interactive",
+        )
+        == 2
+    )
     assert "differs from the verified template: managed.txt" in (
         capsys.readouterr().err
     )
     assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.parametrize(
+    ("language", "lock_name", "expected_flags"),
+    [
+        ("python", "uv.lock", {"--no-python-downloads"}),
+        ("typescript", "pnpm-lock.yaml", {"--prefer-offline"}),
+        ("rust", "Cargo.lock", set()),
+    ],
+)
+def test_adoption_lock_generation_uses_isolated_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    language: str,
+    lock_name: str,
+    expected_flags: set[str],
+) -> None:
+    """Generate approved locks without forwarding ambient credentials."""
+    target = tmp_path / language
+    target.mkdir()
+    (target / ".python-version").write_text("3.14\n", encoding="utf-8")
+    secrets = {
+        "CARGO_REGISTRIES_CRATES_IO_TOKEN": "cargo-secret",
+        "GITHUB_TOKEN": "github-secret",
+        "HTTPS_PROXY": "https://proxy-secret@example.invalid",
+        "NPM_TOKEN": "npm-secret",
+        "SSH_AUTH_SOCK": str(tmp_path / "credential-agent"),
+        "UV_INDEX_URL": "https://uv-secret@example.invalid/simple",
+    }
+    for name, value in secrets.items():
+        monkeypatch.setenv(name, value)
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        assert cwd == target
+        assert capture is True
+        assert check is False
+        assert env is not None
+        assert Path(env["NPM_CONFIG_USERCONFIG"]).is_file()
+        calls.append((command, env))
+        (target / lock_name).write_text("generated\n", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    cli.create_adoption_lockfiles(target, {"language": language})
+
+    assert (target / lock_name).read_text(encoding="utf-8") == "generated\n"
+    assert len(calls) == 1
+    command, environment = calls[0]
+    assert expected_flags.issubset(command)
+    assert secrets.keys().isdisjoint(environment)
+    assert Path(environment["HOME"]) != Path(os.environ["HOME"])
+
+
+@pytest.mark.parametrize(
+    ("language", "lock_name", "expected_flags"),
+    [
+        ("python", "uv.lock", {"--check", "--offline"}),
+        (
+            "typescript",
+            "pnpm-lock.yaml",
+            {"--frozen-lockfile", "--offline"},
+        ),
+        ("rust", "Cargo.lock", {"--locked", "--offline"}),
+    ],
+)
+def test_existing_adoption_lock_is_checked_offline_first(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    language: str,
+    lock_name: str,
+    expected_flags: set[str],
+) -> None:
+    """Accept an unchanged lock without contacting a registry."""
+    target = tmp_path / language
+    target.mkdir()
+    (target / ".python-version").write_text("3.14\n", encoding="utf-8")
+    (target / lock_name).write_text("existing\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    cli.create_adoption_lockfiles(target, {"language": language})
+
+    assert len(calls) == 1
+    assert expected_flags.issubset(calls[0])
+
+
+def test_authorized_dependency_tooling_cannot_widen_the_plan() -> None:
+    """Apply only forecast lock effects after a resolver is authorized."""
+    planned = cli.Plan(
+        (".csarc/provenance.json", "uv.lock"),
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+    )
+    widened = cli.Plan(
+        (".csarc/provenance.json", "pyproject.toml", "uv.lock"),
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+    )
+
+    with pytest.raises(CliError, match="outside the approved lockfile"):
+        cli.validate_authorized_candidate_effects(
+            planned, widened, {"language": "python"}
+        )
+
+    cli.validate_authorized_candidate_effects(
+        planned, planned, {"language": "python"}
+    )
 
 
 @pytest.mark.parametrize(
@@ -1492,11 +1956,24 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
 @pytest.mark.large
 def test_real_template_adoption_resumes_after_manifest_merge(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     language: str,
     manifest_name: str,
     lock_name: str,
 ) -> None:
     """Finalize each language adoption without a pre-existing lockfile."""
+    lockfile_calls: list[Path] = []
+    original_create_lockfiles = cli.create_adoption_lockfiles
+
+    def track_lockfile_creation(
+        target: Path, answers: dict[str, object]
+    ) -> None:
+        lockfile_calls.append(target)
+        original_create_lockfiles(target, answers)
+
+    monkeypatch.setattr(
+        cli, "create_adoption_lockfiles", track_lockfile_creation
+    )
     revision_sha = git(ROOT, "rev-parse", "HEAD")
     project = tmp_path / f"existing-{language}"
     reference = tmp_path / f"reference-{language}"
@@ -1517,6 +1994,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         cli.Revision(revision_sha, revision_sha, str(ROOT)),
         reference,
         data,
+        skip_tasks=False,
     )
     project.mkdir()
     if language == "python":
@@ -1566,6 +2044,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         "private reporting channel.",
     ]
     assert main([*arguments, "--dry-run"]) == 0
+    assert lockfile_calls == []
     plan_path = (
         tmp_path
         / f"existing-{language}-csarc-adoption-report"
@@ -1585,6 +2064,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         )
         == 1
     )
+    assert lockfile_calls == []
     assert not (project / lock_name).exists()
     assert not (project / cli.PROVENANCE_FILE).exists()
     manifest = project / manifest_name
@@ -1611,6 +2091,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
 
     before = git(project, "status", "--porcelain")
     assert replay_finalize(project, "--dry-run") == 0
+    assert lockfile_calls == []
     assert git(project, "status", "--porcelain") == before
     assert not (project / lock_name).exists()
     assert (
@@ -1628,6 +2109,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         )
         == 0
     )
+    assert len(lockfile_calls) == 1
     assert (project / lock_name).is_file()
     assert (project / cli.PROVENANCE_FILE).is_file()
     assert not (project / cli.PENDING_ADOPTION_FILE).exists()
@@ -2328,6 +2810,164 @@ def test_adopt_help_describes_report_directory(
     assert "plan without writing (the default for adopt)" in help_text
 
 
+@pytest.mark.parametrize("config_source", ["local", "environment"])
+def test_git_planning_ignores_configured_fsmonitor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    config_source: str,
+) -> None:
+    """Detect normal dirty state without invoking configured fsmonitor."""
+    project = tmp_path / f"fsmonitor-{config_source}"
+    project.mkdir()
+    tracked = project / "tracked.txt"
+    tracked.write_text("baseline\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    marker = tmp_path / f"{config_source}-fsmonitor-ran"
+    helper = tmp_path / f"{config_source}-fsmonitor"
+    write_executable(
+        helper,
+        f"#!/usr/bin/env bash\nprintf 'run\\n' >> {shlex.quote(str(marker))}\n",
+    )
+    if config_source == "local":
+        git(project, "config", "core.fsmonitor", str(helper))
+    else:
+        monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+        monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.fsmonitor")
+        monkeypatch.setenv("GIT_CONFIG_VALUE_0", str(helper))
+    tracked.write_text("changed\n", encoding="utf-8")
+    (project / "untracked.txt").write_text("new\n", encoding="utf-8")
+
+    _, changes = cli.git_target_state(project)
+
+    assert changes == (" M tracked.txt", "?? untracked.txt")
+    assert not marker.exists()
+
+
+def test_git_changed_paths_disables_diff_and_filter_helpers(
+    tmp_path: Path,
+) -> None:
+    """Inspect tracked paths without invoking repository-configured helpers."""
+    project = tmp_path / "git-helpers"
+    project.mkdir()
+    tracked = project / "tracked.txt"
+    tracked.write_text("baseline\n", encoding="utf-8")
+    (project / ".gitattributes").write_text(
+        "tracked.txt filter=hostile diff=hostile\n", encoding="utf-8"
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    marker = tmp_path / "git-helper-ran"
+    helper = tmp_path / "git-helper"
+    write_executable(
+        helper,
+        "#!/usr/bin/env bash\n"
+        f"printf 'run\\n' >> {shlex.quote(str(marker))}\n"
+        "cat\n",
+    )
+    git(project, "config", "diff.hostile.command", str(helper))
+    git(project, "config", "diff.hostile.textconv", str(helper))
+    git(project, "config", "filter.hostile.clean", str(helper))
+    git(project, "config", "filter.hostile.smudge", str(helper))
+    git(project, "config", "filter.hostile.process", str(helper))
+    git(project, "config", "filter.hostile.required", "true")
+    tracked.write_text("changed\n", encoding="utf-8")
+    (project / "untracked.txt").write_text("new\n", encoding="utf-8")
+
+    changed = cli.git_changed_paths(project)
+
+    assert changed == {"tracked.txt", "untracked.txt"}
+    assert not marker.exists()
+
+
+def test_git_status_disables_submodule_filter_helpers(tmp_path: Path) -> None:
+    """Keep recursive status from executing a submodule-local filter."""
+    source = tmp_path / "submodule-source"
+    source.mkdir()
+    tracked = source / "tracked.txt"
+    tracked.write_text("baseline\n", encoding="utf-8")
+    (source / ".gitattributes").write_text(
+        "tracked.txt filter=hostile\n", encoding="utf-8"
+    )
+    git(source, "init", "-b", "main")
+    git(source, "config", "user.name", "CLI Test")
+    git(source, "config", "user.email", "cli-test@example.invalid")
+    commit(source, "test: submodule baseline")
+
+    project = tmp_path / "project-with-submodule"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    git(
+        project,
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        str(source),
+        "nested",
+    )
+    commit(project, "test: add submodule")
+    nested = project / "nested"
+    marker = tmp_path / "submodule-filter-ran"
+    helper = tmp_path / "submodule-filter"
+    write_executable(
+        helper,
+        "#!/usr/bin/env bash\n"
+        f"printf 'run\\n' >> {shlex.quote(str(marker))}\n"
+        "cat\n",
+    )
+    git(nested, "config", "filter.hostile.clean", str(helper))
+    git(nested, "config", "filter.hostile.required", "true")
+    tracked = nested / "tracked.txt"
+    tracked.write_text("changed\n", encoding="utf-8")
+
+    _, changes = cli.git_target_state(project)
+
+    assert changes == (" M nested",)
+    assert not marker.exists()
+
+
+def test_git_candidate_staging_ignores_caller_hooks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Clone and commit a candidate without caller-configured Git hooks."""
+    project = tmp_path / "hooked-project"
+    project.mkdir()
+    tracked = project / "tracked.txt"
+    tracked.write_text("baseline\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    tracked.write_text("changed\n", encoding="utf-8")
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    marker = tmp_path / "git-hook-ran"
+    for name in ("post-checkout", "post-commit"):
+        write_executable(
+            hooks / name,
+            "#!/usr/bin/env bash\n"
+            f"printf 'run\\n' >> {shlex.quote(str(marker))}\n",
+        )
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.hooksPath")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", str(hooks))
+
+    candidate = tmp_path / "candidate"
+    cli.clone_working_tree(project, candidate)
+
+    assert (candidate / "tracked.txt").read_text(encoding="utf-8") == (
+        "changed\n"
+    )
+    assert not marker.exists()
+
+
 @pytest.mark.large
 def test_adopt_applies_exact_plan_over_preserved_dirty_file(
     tmp_path: Path,
@@ -2812,6 +3452,7 @@ def test_adopt_infers_unicode_repository_and_applies_exact_plan(
 
 def test_adopt_apply_plan_updates_report_to_applied_state(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Update the same dry-run report in place once adoption is applied."""
     source, revision = make_template(tmp_path)
@@ -2822,6 +3463,13 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     git(project, "config", "user.email", "cli-test@example.invalid")
     (project / "product.txt").write_text("product\n", encoding="utf-8")
     commit(project, "test: applied product")
+    lockfile_calls: list[Path] = []
+
+    def create_lockfile(target: Path, _answers: dict[str, object]) -> None:
+        lockfile_calls.append(target)
+        (target / "uv.lock").write_text("approved\n", encoding="utf-8")
+
+    monkeypatch.setattr(cli, "create_adoption_lockfiles", create_lockfile)
 
     arguments = [
         "adopt",
@@ -2831,9 +3479,12 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
         "--to",
         revision,
         "--allow-unreleased",
+        "--data",
+        "language=python",
         "--dry-run",
     ]
     assert main(arguments) == 0
+    assert lockfile_calls == []
     report_dir = tmp_path / "applied-product-csarc-adoption-report"
     markdown_path = report_dir / "csarc-adoption-dry-run.md"
     plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
@@ -2844,6 +3495,7 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     assert "## Adoption applied" not in before_markdown
     before_payload = json.loads(plan_path.read_text(encoding="utf-8"))
     assert "applied" not in before_payload["adoption"]
+    assert "uv.lock" in before_payload["files"]["add"]
 
     assert (
         main(
@@ -2859,6 +3511,8 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
         )
         == 0
     )
+    assert len(lockfile_calls) == 1
+    assert (project / "uv.lock").read_text(encoding="utf-8") == "approved\n"
 
     after_markdown = markdown_path.read_text(encoding="utf-8")
     assert "Decision: Adopted" in after_markdown
@@ -3000,6 +3654,12 @@ def test_unreleased_replay_decline_prevents_source_execution(
     git(project, "config", "user.email", "cli-test@example.invalid")
     (project / "product.txt").write_text("product\n", encoding="utf-8")
     commit(project, "test: declined plan product")
+    lockfile_calls: list[str] = []
+    monkeypatch.setattr(
+        cli,
+        "create_adoption_lockfiles",
+        lambda *_args: lockfile_calls.append("called"),
+    )
     assert (
         main(
             [
@@ -3010,11 +3670,14 @@ def test_unreleased_replay_decline_prevents_source_execution(
                 "--to",
                 revision,
                 "--allow-unreleased",
+                "--data",
+                "language=python",
                 "--dry-run",
             ]
         )
         == 0
     )
+    assert lockfile_calls == []
     plan = (
         tmp_path
         / "declined-plan-product-csarc-adoption-report"
@@ -3037,6 +3700,7 @@ def test_unreleased_replay_decline_prevents_source_execution(
 
     monkeypatch.setattr(cli, "resolve_revision", reject_execution)
     monkeypatch.setattr(cli, "copier_copy", reject_execution)
+    monkeypatch.setattr(cli, "create_adoption_lockfiles", reject_execution)
     monkeypatch.setattr(cli, "milestone_description_plan", plan_milestones)
     monkeypatch.setattr(
         cli, "apply_milestone_description_plan", reject_execution
@@ -5446,13 +6110,10 @@ def test_update_delivers_the_issue_739_workflow_fix_to_an_adopted_project(
     )
 
     after = ci_workflow.read_text(encoding="utf-8")
-    shared_tool_condition = (
-        "steps.bot.outputs.eligible == 'true' || "
-        "(github.event_name == 'pull_request'"
-    )
     assert after.count("uses: actions/setup-node@") == 1
-    assert after.count("cache: pnpm") == 1
-    assert shared_tool_condition in after
+    assert "cache: pnpm" not in after
+    assert "Check out the exact candidate" in after
+    assert "Execute trusted verification tier=" in after
     assert 'node-version: "24"' in after
     assert "<<<<<<<" not in after
     assert not list(project.rglob("*.rej"))
@@ -7668,6 +8329,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
     assert marked_large == {
         "test_adopt_applies_exact_plan_over_preserved_dirty_file",
         "test_adopt_defaults_to_dry_run_and_preserves_product_files",
+        "test_adoption_copier_tasks_wait_for_each_approval",
         "test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints",
         "test_adopt_finalize_failure_keeps_actionable_pending_state",
         "test_adopt_finalize_rechecks_repository_context_after_confirmation",
@@ -7683,6 +8345,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_adoption_preserves_executable_and_checked_patch_symlink",
         "test_adoption_records_and_replays_explicit_project_hook",
         "test_init_dry_run_and_apply_pin_full_sha",
+        "test_init_copier_tasks_wait_for_approval",
         "test_invalid_project_hook_blocks_pending_adoption_without_writes",
         "test_legacy_update_conflict_leaves_target_unchanged",
         "test_project_hook_rejects_unsafe_or_unusable_paths",
@@ -7714,7 +8377,12 @@ def test_generated_project_only_ships_product_tests() -> None:
         path.relative_to(template_tests).as_posix()
         for path in template_tests.rglob("*")
         if path.is_file()
-    ) == ["conftest.py", "test_smoke.py.jinja"]
+    ) == [
+        "conftest.py",
+        "test_authenticate_dependabot_head.py",
+        "test_smoke.py.jinja",
+        "test_verification_evidence.py",
+    ]
     smoke_test = (template_tests / "test_smoke.py.jinja").read_text(
         encoding="utf-8"
     )

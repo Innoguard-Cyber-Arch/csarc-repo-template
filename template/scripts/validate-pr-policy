@@ -310,7 +310,7 @@ if [[ "$pr_milestone_number" != "$issue_milestone_number" ]]; then
   echo "The pull request Milestone must match Issue #${issue_number}."
   exit 1
 fi
-if [[ "$pr_milestone_number" == "0" && "$issue_milestone_number" == "0" ]]; then
+if [[ "$pr_milestone_number" == "0" && "$issue_milestone_number" == "0" && "${PR_POLICY_READ_ONLY:-false}" != "true" ]]; then
   # Issue #551: the match check above only catches a Milestone
   # *mismatch*; it cannot catch "both silently unset", which is exactly
   # how #546-#550 slipped through during Milestone 8 cleanup. This is a

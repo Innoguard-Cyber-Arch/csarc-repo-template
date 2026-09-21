@@ -28,12 +28,14 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     )
     assert workflow["permissions"] == {"contents": "read"}
     assert set(workflow["jobs"]["release"]["permissions"]) == {
+        "actions",
+        "checks",
         "contents",
         "issues",
         "pull-requests",
         "statuses",
     }
-    assert workflow["jobs"]["release"]["timeout-minutes"] == 30
+    assert workflow["jobs"]["release"]["timeout-minutes"] == 60
     assert "googleapis/release-please-action@45996ed1" in source
     assert "release_policy.py plan" in source
     assert "release_level.py release-batch" in source
@@ -47,25 +49,13 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "mode == 'blocked'" in source
     assert "release_policy.py prepare-candidate" in source
     assert "./scripts/verify-release-candidate" in source
-    # Issue #684: this step used to call ./scripts/verify-template.sh (or
-    # ./scripts/verify full) directly. Since Issue #661 made every success
-    # path of those two end with `git commit --amend`ing a fresh
-    # Verified-locally trailer onto HEAD, running either one on a hosted
-    # runner with no configured git identity always failed with
-    # "Committer identity unknown" -- failing this job on every push to
-    # main. Re-validate the attestation the commit's own PR `verify` check
-    # already wrote instead of re-verifying from scratch (mirrors
-    # .github/workflows/ci.yml's "Validate local verification attestation"
-    # step; see test_root_ci_is_one_bounded_verification_job).
-    assert './scripts/check-verify-attestation "$GITHUB_SHA"' in source
-    assert "run: ./scripts/verify-template.sh" not in source
+    assert './scripts/check-trusted-verification "$GITHUB_SHA"' in source
+    assert "run: ./scripts/verify-template.sh" in source
     assert "run: ./scripts/verify full" not in source
-    # Issue #699: $GITHUB_SHA here is whatever squash-merge produced, not
-    # the PR branch tip that was actually verified locally -- resolve to
-    # the originating PR's head commit first (see
-    # test_release_attestation_check_resolves_the_merged_pr_head).
     assert "--resolve-merge-source" in source
+    assert "--required-tier full" in source
     assert '--github-repo "$GITHUB_REPOSITORY"' in source
+    assert "steps.verification.outputs.reused != 'true'" in source
     assert "scripts/release_bundle.py prepare" in source
     assert "./scripts/publish-release stage" in source
     assert "./scripts/publish-release resolve" in source
@@ -183,7 +173,7 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         ]
         blocked_index, _ = by_name["Stop when GitHub publication is blocked"]
         attestation_index, attestation = by_name[
-            "Validate the pushed main commit's verification attestation"
+            "Reuse the source PR's trusted verification evidence"
         ]
         _, resolve = by_name["Resolve the exact release state"]
 
@@ -201,18 +191,8 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         )
 
 
-def test_release_attestation_check_resolves_the_merged_pr_head() -> None:
-    """Issue #699: validate the resolved PR head, not the squash commit.
-
-    Behavioral proof (fake `gh`, real subprocess) that
-    `scripts/check-verify-attestation --resolve-merge-source` actually
-    resolves a pushed commit to the PR it was merged from lives in
-    tests/test_verify_attestation.py
-    (test_cli_check_resolve_merge_source_validates_the_pr_head); this test
-    only proves release.yml's own step is wired to call it that way, with
-    the `GH_TOKEN` the underlying `gh api` calls need -- a step this
-    workflow never previously required GitHub API access for.
-    """
+def test_release_reuse_resolves_the_exact_merged_pr_head() -> None:
+    """Reuse trusted PR evidence only for the exact merged-main tree."""
     workflow = yaml.safe_load(
         (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     )
@@ -221,7 +201,7 @@ def test_release_attestation_check_resolves_the_merged_pr_head() -> None:
         candidate
         for candidate in steps
         if candidate.get("name")
-        == "Validate the pushed main commit's verification attestation"
+        == "Reuse the source PR's trusted verification evidence"
     )
     assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
     assert "--resolve-merge-source" in step["run"]
@@ -311,9 +291,10 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
 
     assert "project_mode == 'new'" in copier
     assert ".github/workflows/release.yml" in copier
-    assert './scripts/check-verify-attestation "$GITHUB_SHA"' in template
+    assert './scripts/check-trusted-verification "$GITHUB_SHA"' in template
     assert "--resolve-merge-source" in template
     assert '--github-repo "$GITHUB_REPOSITORY"' in template
+    assert "--required-tier full" in template
     assert "./scripts/verify-release-candidate" in template
     assert '{% if "typescript" in languages %}' in template
     assert '{% if "rust" in languages %}' in template
@@ -455,8 +436,8 @@ def test_shared_ci_policy_names_the_generated_verifier() -> None:
     """Do not send generated repositories to a root-only command."""
     policy = (ROOT / "docs/ci-policy.md").read_text(encoding="utf-8")
 
-    assert "（生成 repo：`scripts/verify`）" in policy  # noqa: RUF001
-    assert "入口是 `scripts/verify`（不帶參數即預設 full）" in policy  # noqa: RUF001
+    assert "（生成 repo 是 `scripts/verify`）" in policy  # noqa: RUF001
+    assert "生成 repo 用 `scripts/verify full`" in policy
 
 
 def test_release_drift_check_is_independent_of_release_yml() -> None:

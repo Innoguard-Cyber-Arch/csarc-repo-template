@@ -21,9 +21,11 @@ paired_files=(
   .github/ISSUE_TEMPLATE/milestone-tracker.yml
   .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/dependabot-auto-merge.yml
+  .github/workflows/dependabot-merge.yml
   .github/workflows/governance-comment.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
+  .github/workflows/pr-policy-writes.yml
   .github/workflows/pr-review.yml
   .github/workflows/release-drift.yml
   .github/workflows/spec-to-issue.yml
@@ -46,14 +48,14 @@ paired_files=(
   scripts/check-repo-site-translations
   scripts/check-repo-site-versions
   scripts/apply-repository-settings.sh
+  scripts/authenticate_dependabot_head.py
   scripts/check-governance-drift
   scripts/check-repo-capabilities
   scripts/repo_capabilities.py
   scripts/check-release-drift
-  scripts/check-verify-attestation
+  scripts/check-trusted-verification
   scripts/request-reviewer
   scripts/ci_tier.py
-  scripts/hosted_verify_bots.py
   scripts/gh-issue-edit
   scripts/check_action_pins.py
   scripts/delivery_sync.py
@@ -61,6 +63,7 @@ paired_files=(
   scripts/promotion_gate.py
   scripts/pytest_policy.py
   scripts/review_gate.py
+  scripts/verification_evidence.py
   scripts/check-scope-gate
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
@@ -90,17 +93,14 @@ paired_files=(
   scripts/test-check-scope-gate
   scripts/test-issue-triage
   scripts/test-pr-policy
-  scripts/test-verify-attestation
   scripts/test-worktree-cleanup
   scripts/verify-release-candidate
-  scripts/verify_attestation.py
   scripts/verify_release_consumption.py
   scripts/validate-issue-policy
   scripts/validate-issue-title
   scripts/validate-pr-policy
   scripts/verify-dependencies
   scripts/verification-step
-  scripts/write-verify-attestation
   tests/conftest.py
   zizmor.yml
 )

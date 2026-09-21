@@ -59,6 +59,7 @@ caught here without mocking the full `gh` CLI surface that
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import shutil
@@ -313,9 +314,9 @@ EFFECTIVE_ALL_RULES = [
         "type": "required_status_checks",
         "parameters": {
             "required_status_checks": [
-                {"context": "title"},
-                {"context": "promotion"},
-                {"context": "verify"},
+                {"context": "title", "integration_id": 15368},
+                {"context": "promotion", "integration_id": 15368},
+                {"context": "verify", "integration_id": 15368},
             ]
         },
     },
@@ -339,9 +340,9 @@ DESIRED_ALL_RULES = {
             "parameters": {
                 "strict_required_status_checks_policy": False,
                 "required_status_checks": [
-                    {"context": "title"},
-                    {"context": "promotion"},
-                    {"context": "verify"},
+                    {"context": "title", "integration_id": 15368},
+                    {"context": "promotion", "integration_id": 15368},
+                    {"context": "verify", "integration_id": 15368},
                 ],
             },
         },
@@ -440,6 +441,41 @@ def test_missing_effective_check_is_reported_by_context(
 
     assert result.returncode != 0
     assert f"missing required checks: {missing_context}" in result.stdout
+
+
+def test_wrong_required_check_app_is_reported_by_exact_binding(
+    tmp_path: Path,
+) -> None:
+    """A same-name check from another App does not match desired policy."""
+    effective = copy.deepcopy(EFFECTIVE_ALL_RULES)
+    checks = next(
+        rule for rule in effective if rule["type"] == "required_status_checks"
+    )["parameters"]["required_status_checks"]
+    checks[0]["integration_id"] = 99999
+
+    result = run_drift_check(DESIRED_ALL_RULES, effective, tmp_path)
+
+    assert result.returncode != 0
+    assert "missing required checks: title (App 15368)" in result.stdout
+
+
+@pytest.mark.parametrize("integration_id", [None, True, 0, -1, "15368"])
+def test_required_check_app_binding_must_be_a_positive_integer(
+    integration_id: object, tmp_path: Path
+) -> None:
+    """Missing or malformed App identities fail closed during readback."""
+    effective = copy.deepcopy(EFFECTIVE_ALL_RULES)
+    checks = next(
+        rule for rule in effective if rule["type"] == "required_status_checks"
+    )["parameters"]["required_status_checks"]
+    checks[0]["integration_id"] = integration_id
+
+    result = run_drift_check(DESIRED_ALL_RULES, effective, tmp_path)
+
+    assert result.returncode != 0
+    assert (
+        "effective Ruleset required check binding is malformed" in result.stdout
+    )
 
 
 def _with_do_not_enforce_on_create(

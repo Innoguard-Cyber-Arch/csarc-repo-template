@@ -44,6 +44,8 @@ merge_snapshot = MODULE["merge_snapshot"]
 read_lease = MODULE["read_lease"]
 require_lease = MODULE["require_lease"]
 require_successful_checks = MODULE["require_successful_checks"]
+require_trusted_dependabot_head = MODULE["require_trusted_dependabot_head"]
+trusted_check_run_matches_context = MODULE["trusted_check_run_matches_context"]
 promotion_gate = MODULE["promotion_gate"]
 release_refs = MODULE["release_refs"]
 remote_repository = MODULE["remote_repository"]
@@ -120,6 +122,10 @@ class FakeGitHub:
         self.required_review_count: object = 1
         self.additional_pull_rules: list[dict[str, object]] = []
         self.additional_check_rules: list[dict[str, object]] = []
+        self.required_status_checks: list[dict[str, object]] = [
+            {"context": "verify", "integration_id": 15368},
+            {"context": "review", "integration_id": 15368},
+        ]
         self.authorization_type = "User"
         self.authorization_body: str | None = None
         self.authorization_association = "OWNER"
@@ -147,6 +153,18 @@ class FakeGitHub:
         self.check_details_url = (
             "https://github.com/owner/repo/actions/runs/200/job/7"
         )
+        self.verification_completed_at = datetime.now(UTC).isoformat()
+        self.run_paths = {
+            199: ".github/workflows/ci.yml",
+            200: ".github/workflows/ci.yml",
+            201: ".github/workflows/pr-review.yml",
+        }
+        self.run_events = {
+            199: "pull_request_target",
+            200: "pull_request_target",
+            201: "pull_request_target",
+        }
+        self.run_suite_ids = {199: 9199, 200: 9200, 201: 9201}
         self.quota_note_body: str | None = None
         self.quota_runner_id = 0
         self.quota_steps: list[dict[str, Any]] = []
@@ -245,20 +263,24 @@ class FakeGitHub:
                 ],
                 "user": {"login": self.issue_user, "type": "User"},
             }
-        run_match = re.fullmatch(r"actions/runs/(199|200)", path)
+        run_match = re.fullmatch(r"actions/runs/(199|200|201)", path)
         if run_match:
             run_id = int(run_match.group(1))
             return {
                 "id": run_id,
+                "run_attempt": 1,
+                "check_suite_id": self.run_suite_ids[run_id],
                 "head_sha": self.head,
                 "head_branch": self.head_ref,
-                "event": "pull_request",
+                "event": self.run_events[run_id],
                 "status": "completed",
-                "conclusion": "failure",
+                "conclusion": (
+                    self.check_conclusion if run_id == 200 else "failure"
+                ),
                 "repository": {"full_name": "owner/repo"},
                 "head_repository": {"full_name": "owner/repo"},
                 "pull_requests": [{"number": 42}],
-                "path": ".github/workflows/ci.yml",
+                "path": self.run_paths[run_id],
             }
         jobs_match = re.fullmatch(
             r"actions/runs/(199|200)/jobs\?per_page=100&page=1", path
@@ -309,7 +331,7 @@ class FakeGitHub:
                     "type": "required_status_checks",
                     "ruleset_id": 7,
                     "parameters": {
-                        "required_status_checks": [{"context": "verify"}]
+                        "required_status_checks": self.required_status_checks
                     },
                 },
                 *self.additional_check_rules,
@@ -357,15 +379,68 @@ class FakeGitHub:
         if key == "check_runs" and path.startswith(f"commits/{self.head}/"):
             return [
                 {
-                    "id": 200,
+                    "id": 7,
                     "name": "verify",
                     "head_sha": self.head,
                     "status": "completed",
                     "conclusion": self.check_conclusion,
                     "details_url": self.check_details_url,
                     "app": {"id": 15368},
+                    "check_suite": {"id": self.run_suite_ids[200]},
+                },
+                {
+                    "id": 8,
+                    "name": "review",
+                    "head_sha": self.head,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "details_url": (
+                        "https://github.com/owner/repo/actions/runs/201/job/8"
+                    ),
+                    "app": {"id": 15368},
+                    "check_suite": {"id": self.run_suite_ids[201]},
                 },
                 *self.additional_check_runs,
+            ]
+        if key == "jobs" and path == (
+            "actions/runs/200/jobs?filter=latest&per_page=100"
+        ):
+            names = [
+                "Select trusted verification plan",
+                "Bind trusted verification identity",
+                "Set up Python 3.14",
+                "Set up uv 0.12.15",
+                "Set up pnpm 11.22.0",
+                "Set up Node.js 24",
+                "Set up Rust 1.98.0",
+                (
+                    "Execute trusted verification tier=fast scopes=source "
+                    f"tree={'e' * 40} command=./scripts/verify-fast"
+                ),
+            ]
+            return [
+                {
+                    "id": 7,
+                    "run_id": 200,
+                    "run_attempt": 1,
+                    "name": "verify",
+                    "head_sha": self.head,
+                    "html_url": self.check_details_url,
+                    "status": "completed",
+                    "conclusion": self.check_conclusion,
+                    "labels": ["ubuntu-latest"],
+                    "runner_id": 9,
+                    "runner_group_name": "GitHub Actions",
+                    "completed_at": self.verification_completed_at,
+                    "steps": [
+                        {
+                            "name": name,
+                            "status": "completed",
+                            "conclusion": "success",
+                        }
+                        for name in names
+                    ],
+                }
             ]
         if key == "statuses" and path.startswith(f"commits/{self.head}/"):
             return self.statuses
@@ -779,10 +854,8 @@ def test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows(
 ) -> None:
     """The two exact dependabot-auto-merge.yml paths pass scan_writers.
 
-    Regression test for #602: this copies the actual committed root and
-    template workflow files, unleased `gh pr merge --auto` / `gh pr edit
-    --add-label` writes included, into a scratch repository root and
-    proves scan_writers no longer fails closed on them.
+    Regression test for #602: this copies the exact workflow allowlist with
+    its major-update label write into a scratch root and proves it still scans.
     """
     for relative in (
         ".github/workflows/dependabot-auto-merge.yml",
@@ -798,7 +871,8 @@ def test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows(
             # assert on.
             continue
         source = candidate.read_text(encoding="utf-8")
-        assert 'gh pr merge --auto --squash "$PR_URL"' in source
+        assert "gh pr merge --auto" not in source
+        assert "--disable-auto" not in source
         assert 'gh pr edit "$PR_URL" --add-label needs-manual-review' in source
         destination = tmp_path / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -809,7 +883,6 @@ def test_writer_scanner_trusts_the_real_dependabot_auto_merge_workflows(
 @pytest.mark.parametrize(
     "workflow_body",
     [
-        'run: gh pr merge --auto --squash "$PR_URL"\n',
         'run: gh pr edit "$PR_URL" --add-label needs-manual-review\n',
     ],
 )
@@ -826,7 +899,7 @@ def test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist(
     """The exemption trusts two exact paths only, not the write pattern.
 
     Regression test for #602: a different workflow file reusing the same
-    unleased `gh pr merge` / `gh pr edit --add-label` command text must
+    unleased `gh pr edit --add-label` command text must
     still be caught by scan_writers, proving the #602 exemption is a
     positive list of exact paths rather than a relaxation of the pattern
     those two commands trip.
@@ -1422,99 +1495,6 @@ def test_authorization_ignores_author_association() -> None:
     assert payload["author_association"] == "COLLABORATOR"
 
 
-def test_hotfix_emergency_evidence_binds_admin_reason_and_work_item() -> None:
-    """The emergency path binds a real admin to one standalone hotfix."""
-    github = FakeGitHub("a" * 40)
-    github.permission = "admin"
-    github.issue_user = "maintainer"
-    github.issue_labels = {"bug", "hotfix"}
-    github.hotfix_comments = [
-        {
-            "body": "Admin-approve: production outage",
-            "user": {"login": "maintainer", "type": "User"},
-            "created_at": "2026-08-25T00:59:00Z",
-            "html_url": (
-                "https://github.com/owner/repo/issues/43#issuecomment-8"
-            ),
-        }
-    ]
-    pull = github.pull()
-    pull["body"] = "Fixes #43"
-    pull["labels"] = [{"name": "bug"}, {"name": "hotfix"}]
-
-    evidence = hotfix_emergency_evidence(
-        github,
-        "owner/repo",
-        pull,
-        {"user": {"login": "maintainer", "type": "User"}},
-    )
-
-    assert evidence == {
-        "issue_number": 43,
-        "actor": "maintainer",
-        "permission": "admin",
-        "reason": "production outage",
-        "reason_url": (
-            "https://github.com/owner/repo/issues/43#issuecomment-8"
-        ),
-    }
-
-
-def test_hotfix_emergency_evidence_rejects_non_hotfix_pull() -> None:
-    """A label on the Issue cannot turn an ordinary PR into an exception."""
-    github = FakeGitHub("a" * 40)
-    github.permission = "admin"
-    github.issue_user = "maintainer"
-    github.issue_labels = {"bug", "hotfix"}
-    pull = github.pull()
-    pull["body"] = "Fixes #43"
-
-    with pytest.raises(RuntimeError, match="limited to hotfix PRs"):
-        hotfix_emergency_evidence(
-            github,
-            "owner/repo",
-            pull,
-            {"user": {"login": "maintainer", "type": "User"}},
-        )
-
-
-def test_hotfix_post_review_is_idempotent_and_records_exact_evidence() -> None:
-    """One emergency merge creates one durable post-review tracking Issue."""
-    github = FakeGitHub("a" * 40)
-    evidence = {
-        "actor": "maintainer",
-        "permission": "admin",
-        "reason": "production outage",
-        "reason_url": "https://github.com/owner/repo/issues/43#issuecomment-8",
-    }
-
-    first = ensure_hotfix_post_review(
-        github,
-        "owner/repo",
-        42,
-        "a" * 40,
-        "beta",
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-        evidence,
-    )
-    second = ensure_hotfix_post_review(
-        github,
-        "owner/repo",
-        42,
-        "a" * 40,
-        "beta",
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-        evidence,
-    )
-
-    assert first == second == "https://github.com/owner/repo/issues/99"
-    assert len(github.post_review_issues) == 1
-    body = str(github.post_review_issues[0]["body"])
-    assert "production outage" in body
-    assert f"`{'a' * 40}`" in body
-    assert "@maintainer" in body
-
-
 def test_keyed_github_collections_flatten_every_page(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1564,7 +1544,317 @@ def test_required_check_must_succeed_on_the_exact_head() -> None:
     github.collection = stale_collection  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="exact head: verify"):
         require_successful_checks(
-            github, "owner/repo", "a" * 40, {("verify", None)}
+            github, "owner/repo", "a" * 40, {("verify", 15368)}
+        )
+
+
+def test_required_check_accepts_the_exact_github_app() -> None:
+    """The expected App may satisfy its exact-name check on the exact head."""
+    github = FakeGitHub("a" * 40)
+
+    assert (
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+        == "success"
+    )
+
+
+def test_forged_commit_trailer_cannot_replace_hosted_execution() -> None:
+    """Contributor-written commit text is not trusted verification input."""
+    github = FakeGitHub("a" * 40)
+    github.commit_payloads[f"git/commits/{github.head}"] = {
+        "sha": github.head,
+        "tree": {"sha": "e" * 40},
+        "message": (
+            "change\n\nVerified-locally: sha256="
+            f"{'e' * 40} tier=full at=2099-01-01T00:00:00Z"
+        ),
+    }
+
+    def no_checks(
+        _repo: str,
+        path: str,
+        key: str,
+        response_sha: str | None = None,
+    ) -> list[dict[str, Any]]:
+        assert response_sha in {None, github.head}
+        if key in {"check_runs", "statuses"}:
+            return []
+        raise AssertionError((path, key))
+
+    github.collection = no_checks  # ty: ignore[invalid-assignment]
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+@pytest.mark.parametrize("conclusion", ["neutral", "skipped"])
+def test_verify_requires_an_actual_success(conclusion: str) -> None:
+    """A trusted verify run must execute and succeed, not merely terminate."""
+    github = FakeGitHub("a" * 40)
+    github.check_conclusion = conclusion
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+def test_newer_pending_verify_blocks_stale_success_on_same_head() -> None:
+    """A base-edit rerun must supersede earlier lower-tier evidence."""
+    github = FakeGitHub("a" * 40)
+    github.run_paths[201] = ".github/workflows/ci.yml"
+    github.additional_check_runs = [
+        {
+            "id": 8,
+            "name": "verify",
+            "head_sha": github.head,
+            "status": "queued",
+            "conclusion": None,
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/201/job/8"
+            ),
+            "app": {"id": 15368},
+            "check_suite": {"id": github.run_suite_ids[201]},
+        }
+    ]
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+def test_quota_cannot_replace_trusted_verify_execution() -> None:
+    """Zero-step billing evidence cannot substitute for test execution."""
+    github = FakeGitHub("a" * 40)
+    github.check_conclusion = "failure"
+    with pytest.raises(RuntimeError, match="cannot replace trusted verify"):
+        require_successful_checks(
+            github,
+            "owner/repo",
+            github.head,
+            {("verify", 15368)},
+            {"https://github.com/owner/repo/actions/runs/200"},
+        )
+
+
+@pytest.mark.parametrize(
+    ("context", "path", "event"),
+    [
+        ("title", ".github/workflows/pr-policy.yml", "pull_request_target"),
+        (
+            "promotion",
+            ".github/workflows/pr-policy.yml",
+            "merge_group",
+        ),
+        ("verify", ".github/workflows/ci.yml", "pull_request_target"),
+        (
+            "review",
+            ".github/workflows/pr-review.yml",
+            "pull_request_review",
+        ),
+    ],
+)
+def test_required_contexts_pin_their_trusted_workflow(
+    context: str, path: str, event: str
+) -> None:
+    """Each template-owned context has one exact trusted producer route."""
+    github = FakeGitHub("a" * 40)
+    github.run_paths[200] = path
+    github.run_events[200] = event
+    item = github.collection(
+        "owner/repo",
+        f"commits/{github.head}/check-runs?filter=latest&per_page=100",
+        "check_runs",
+    )[0]
+    item["name"] = context
+
+    assert trusted_check_run_matches_context(
+        github,
+        "owner/repo",
+        github.head,
+        item,
+        context,
+        15368,
+        {},
+    )
+
+
+class DependabotGitHub(FakeGitHub):
+    """Serve exact Dependabot provenance plus one trusted eligibility run."""
+
+    def __init__(self) -> None:
+        super().__init__("a" * 40)
+        self.head_ref = "dependabot/uv/copier-9.18.2"
+        self.run_paths[201] = ".github/workflows/dependabot-auto-merge.yml"
+        self.run_events[201] = "pull_request_target"
+        self.additional_check_runs = [
+            {
+                "id": 8,
+                "name": "dependabot-merge-eligible",
+                "head_sha": self.head,
+                "status": "completed",
+                "conclusion": "success",
+                "details_url": (
+                    "https://github.com/owner/repo/actions/runs/201/job/8"
+                ),
+                "app": {"id": 15368},
+                "check_suite": {"id": self.run_suite_ids[201]},
+            }
+        ]
+        self.dependabot_author = "dependabot[bot]"
+
+    def pull(self, number: int = 42) -> dict[str, Any]:
+        pull = super().pull(number)
+        pull["user"] = {"login": "dependabot[bot]", "type": "Bot"}
+        pull["base"]["repo"] = {"full_name": "owner/repo"}
+        return pull
+
+    def get(self, _repo: str, path: str) -> object:
+        if path == f"commits/{self.head}":
+            return {
+                "sha": self.head,
+                "author": {
+                    "login": self.dependabot_author,
+                    "type": (
+                        "Bot"
+                        if self.dependabot_author == "dependabot[bot]"
+                        else "User"
+                    ),
+                },
+                "committer": {"login": "web-flow"},
+                "commit": {
+                    "verification": {"verified": True, "reason": "valid"}
+                },
+                "parents": [{"sha": self.base_sha}],
+            }
+        if path == f"compare/{self.base_sha}...{self.head}":
+            return {
+                "ahead_by": 1,
+                "files": [{"filename": "uv.lock", "status": "modified"}],
+            }
+        if path == f"commits/{self.base_sha}":
+            return {}
+        if path == f"compare/{self.base_sha}...{self.base_sha}":
+            return {}
+        return super().get(_repo, path)
+
+
+class DependabotSyncChildGitHub(DependabotGitHub):
+    """Serve the deterministic unsigned child of one signed Actions bump."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.head = "c" * 40
+        self.head_ref = "dependabot/github_actions/main/actions-checkout-7"
+        self.additional_check_runs[0]["head_sha"] = self.head
+
+    def get(self, _repo: str, path: str) -> object:
+        if path == f"commits/{self.head}":
+            identity = {
+                "name": "github-actions[bot]",
+                "email": "actions@github.com",
+            }
+            return {
+                "sha": self.head,
+                "author": {"login": "github-actions[bot]", "type": "Bot"},
+                "committer": {
+                    "login": "github-actions[bot]",
+                    "type": "Bot",
+                },
+                "commit": {
+                    "message": (
+                        "fix(deps): sync template copies of this dependency "
+                        "bump (#755)"
+                    ),
+                    "author": identity,
+                    "committer": identity,
+                    "verification": {"verified": False, "reason": "unsigned"},
+                },
+                "parents": [{"sha": "a" * 40}],
+            }
+        if path == f"commits/{'a' * 40}":
+            return {
+                "sha": "a" * 40,
+                "author": {"login": "dependabot[bot]", "type": "Bot"},
+                "committer": {"login": "web-flow"},
+                "commit": {
+                    "verification": {"verified": True, "reason": "valid"}
+                },
+                "parents": [{"sha": self.base_sha}],
+            }
+        if path == f"compare/{self.base_sha}...{'a' * 40}":
+            return {
+                "ahead_by": 1,
+                "files": [
+                    {
+                        "filename": ".github/workflows/ci.yml",
+                        "status": "modified",
+                    }
+                ],
+            }
+        if path == f"compare/{self.base_sha}...{self.head}":
+            return {"ahead_by": 2, "files": []}
+        return super().get(_repo, path)
+
+
+def test_dependabot_merge_reauthenticates_head_and_trusted_eligibility() -> (
+    None
+):
+    """The merge boundary accepts only an exact trusted eligibility run."""
+    github = DependabotGitHub()
+
+    assert (
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
+        )
+        == "direct"
+    )
+
+
+def test_dependabot_merge_accepts_a_reconstructed_sync_child() -> None:
+    """The unsigned child is bound to its signed parent and trusted check."""
+    github = DependabotSyncChildGitHub()
+
+    assert (
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
+        )
+        == "sync-child"
+    )
+
+
+def test_dependabot_merge_rejects_a_human_replacement_head() -> None:
+    """A bot-opened PR cannot carry a human-authored current head to merge."""
+    github = DependabotGitHub()
+    github.dependabot_author = "contributor"
+
+    with pytest.raises(RuntimeError, match="not authenticated"):
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
+        )
+
+
+def test_dependabot_merge_rejects_a_same_name_untrusted_check() -> None:
+    """The shared Actions App cannot move eligibility to another workflow."""
+    github = DependabotGitHub()
+    github.run_paths[201] = ".github/workflows/attacker.yml"
+
+    with pytest.raises(RuntimeError, match="no trusted merge eligibility"):
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
+        )
+
+
+def test_dependabot_merge_rejects_the_wrong_github_app() -> None:
+    """A same-name eligibility check from another App is not authorization."""
+    github = DependabotGitHub()
+    github.additional_check_runs[0]["app"] = {"id": 1234}
+
+    with pytest.raises(RuntimeError, match="no trusted merge eligibility"):
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
         )
 
 
@@ -1574,6 +1864,100 @@ def test_required_check_must_match_its_pinned_github_app() -> None:
     with pytest.raises(RuntimeError, match="exact head: verify"):
         require_successful_checks(
             github, "owner/repo", "a" * 40, {("verify", 1234)}
+        )
+
+
+def test_pr_controlled_actions_workflow_cannot_satisfy_required_check() -> None:
+    """The shared Actions App does not make a PR-controlled run trusted."""
+    github = FakeGitHub("a" * 40)
+    github.check_conclusion = "failure"
+    github.run_paths[201] = ".github/workflows/attacker.yml"
+    github.run_events[201] = "pull_request"
+    github.additional_check_runs = [
+        {
+            "id": 201,
+            "name": "verify",
+            "head_sha": github.head,
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/201/job/8"
+            ),
+            "app": {"id": 15368},
+            "check_suite": {"id": github.run_suite_ids[201]},
+        }
+    ]
+
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "event"),
+    [
+        (".github/workflows/attacker.yml", "pull_request_target"),
+        (".github/workflows/ci.yml", "pull_request"),
+    ],
+)
+def test_required_check_rejects_wrong_workflow_provenance(
+    path: str, event: str
+) -> None:
+    """Both workflow path and base-trusted event must match the policy."""
+    github = FakeGitHub("a" * 40)
+    github.run_paths[200] = path
+    github.run_events[200] = event
+
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+def test_required_check_rejects_borrowed_trusted_run_url() -> None:
+    """A check cannot splice its result onto another run's provenance."""
+    github = FakeGitHub("a" * 40)
+    github.check_conclusion = "failure"
+    github.additional_check_runs = [
+        {
+            "id": 201,
+            "name": "verify",
+            "head_sha": github.head,
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": github.check_details_url,
+            "app": {"id": 15368},
+            "check_suite": {"id": github.run_suite_ids[201]},
+        }
+    ]
+
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
+        )
+
+
+def test_classic_status_cannot_satisfy_a_required_check() -> None:
+    """A same-name classic success status is not trusted check evidence."""
+    github = FakeGitHub("a" * 40)
+
+    def classic_status_only(
+        _repo: str,
+        _path: str,
+        key: str,
+        _response_sha: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if key == "check_runs":
+            return []
+        if key == "statuses":
+            return [{"context": "verify", "state": "success"}]
+        raise AssertionError(key)
+
+    github.collection = classic_status_only  # ty: ignore[invalid-assignment]
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 15368)}
         )
 
 
@@ -1830,14 +2214,31 @@ def quota_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object], str]:
     github.head_ref = "fix/42-quota-fallback"
     github.issue_milestone_number = 7
     github.body += "\n\nCloses #42"
-    github.check_conclusion = "failure"
+    github.required_status_checks.append(
+        {"context": "title", "integration_id": 15368}
+    )
+    github.run_paths[199] = ".github/workflows/pr-policy.yml"
+    github.additional_check_runs = [
+        {
+            "id": 8,
+            "name": "title",
+            "head_sha": github.head,
+            "status": "completed",
+            "conclusion": "failure",
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/199/job/8"
+            ),
+            "app": {"id": 15368},
+            "check_suite": {"id": github.run_suite_ids[199]},
+        }
+    ]
     lease = lease_fixture()
     lease["base_ref"] = github.base_ref
     lease["refs"] = [
         "refs/heads/csarc/leases/pr-42",
         base_lane_ref(github.base_ref),
     ]
-    run_url = "https://github.com/owner/repo/actions/runs/200"
+    run_url = "https://github.com/owner/repo/actions/runs/199"
     github.quota_note_body = promotion_gate.quota_fallback_note(
         "owner/repo", 42, "a" * 40, [run_url]
     )
@@ -1856,24 +2257,6 @@ def alpha_quota_snapshot_fixture(
     github.authorization_actor = "agent"
     github.reviews = []
     github.body += f"\n\n{ALPHA_SELF_MERGE_MARKER}"
-    github.additional_check_rules = [
-        {
-            "type": "required_status_checks",
-            "ruleset_id": 7,
-            "parameters": {"required_status_checks": [{"context": "review"}]},
-        }
-    ]
-    github.additional_check_runs = [
-        {
-            "id": 201,
-            "name": "review",
-            "head_sha": github.head,
-            "status": "completed",
-            "conclusion": "success",
-            "details_url": "https://github.com/owner/repo/actions/runs/201/job/8",
-            "app": {"id": 15368},
-        }
-    ]
     if sync:
         base_ref = "dev/m10-release-backed-adoption"
         github.destination_sha = "f" * 40
@@ -1935,76 +2318,27 @@ def alpha_copilot_blocked_snapshot_fixture(
     return github, lease
 
 
-def test_alpha_self_merge_accepts_only_the_native_copilot_block(
+def test_alpha_sync_uses_the_exact_head_self_review_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Issue #814: PR #813's exact-head Alpha path remains usable."""
-    github, lease = alpha_copilot_blocked_snapshot_fixture(monkeypatch)
+    """Issue #826: a validated delivery sync may use Alpha self-review."""
+    bind_remote_lease(monkeypatch)
+    github, lease, _note_url = alpha_quota_snapshot_fixture(sync=True)
+    github.required_review_count = 0
+    github.check_conclusion = "success"
+    github.required_status_checks = [
+        {"context": "verify", "integration_id": 15368},
+        {"context": "review", "integration_id": 15368},
+    ]
+    github.additional_check_runs = []
     snapshot = merge_snapshot(
         github,
         lease,
         "https://github.com/owner/repo/pull/42#issuecomment-99",
     )
-    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["alpha_self_merge"] is True
     assert snapshot["authorization_source"] == "comment"
-    assert snapshot["required_check_evidence"] == "success"
-
-
-def test_alpha_self_merge_rechecks_threads_before_copilot_bypass(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An unresolved thread remains blocking when GitHub reports blocked."""
-    github, lease = alpha_copilot_blocked_snapshot_fixture(
-        monkeypatch,
-        threads=[{"id": "PRRT_1"}],
-    )
-    snapshot = merge_snapshot(
-        github,
-        lease,
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-    )
-    assert snapshot["merge_mode"] == "human-only"
-    assert "Unresolved review threads" in snapshot["protection_reason"]
-
-
-@pytest.mark.parametrize(
-    ("mergeable_state", "permission", "reason"),
-    [
-        ("dirty", "admin", "clean"),
-        ("blocked", "maintain", "live admin bypass actor"),
-    ],
-)
-def test_alpha_copilot_bypass_rejects_dirty_head_or_wrong_actor(
-    mergeable_state: str,
-    permission: str,
-    reason: str,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Conflicts and actors outside the live bypass role still fail closed."""
-    github, lease = alpha_copilot_blocked_snapshot_fixture(monkeypatch)
-    github.mergeable_state = mergeable_state
-    github.permission = permission
-    snapshot = merge_snapshot(
-        github,
-        lease,
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-    )
-    assert snapshot["merge_mode"] == "human-only"
-    assert reason in snapshot["protection_reason"]
-
-
-def test_alpha_copilot_bypass_still_requires_every_check(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The native Copilot exception never skips exact-head required checks."""
-    github, lease = alpha_copilot_blocked_snapshot_fixture(monkeypatch)
-    github.check_conclusion = "failure"
-    with pytest.raises(RuntimeError, match=r"Required checks.*verify"):
-        merge_snapshot(
-            github,
-            lease,
-            "https://github.com/owner/repo/pull/42#issuecomment-99",
-        )
+    assert snapshot["merge_mode"] == "agent"
 
 
 def test_alpha_copilot_bypass_rejects_another_effective_rule(
@@ -2026,24 +2360,6 @@ def test_alpha_copilot_bypass_rejects_another_effective_rule(
     )
     assert snapshot["merge_mode"] == "human-only"
     assert "does not report" in snapshot["protection_reason"]
-
-
-def test_alpha_sync_uses_the_exact_head_self_review_path(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Issue #826: a validated delivery sync may use Alpha self-review."""
-    bind_remote_lease(monkeypatch)
-    github, lease, _note_url = alpha_quota_snapshot_fixture(sync=True)
-    github.required_review_count = 0
-    github.check_conclusion = "success"
-    snapshot = merge_snapshot(
-        github,
-        lease,
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-    )
-    assert snapshot["alpha_self_merge"] is True
-    assert snapshot["authorization_source"] == "comment"
-    assert snapshot["merge_mode"] == "agent"
 
 
 @pytest.mark.parametrize("invalid_sync", ["missing-main", "wrong-parents"])
@@ -2186,24 +2502,6 @@ def test_default_branch_alpha_route_allows_a_milestone_less_issue(
     github.required_review_count = 0
     github.head_ref = "fix/42-lifecycle"
     github.body = f"Closes #42\n\n{ALPHA_SELF_MERGE_MARKER}"
-    github.additional_check_rules = [
-        {
-            "type": "required_status_checks",
-            "ruleset_id": 7,
-            "parameters": {"required_status_checks": [{"context": "review"}]},
-        }
-    ]
-    github.additional_check_runs = [
-        {
-            "id": 201,
-            "name": "review",
-            "head_sha": github.head,
-            "status": "completed",
-            "conclusion": "success",
-            "details_url": "https://github.com/owner/repo/actions/runs/201/job/8",
-            "app": {"id": 15368},
-        }
-    ]
     github.ruleset_response = {
         "enforcement": "active",
         "bypass_actors": [
@@ -2599,6 +2897,12 @@ def test_non_alpha_malformed_review_count_fails_closed(
     [
         "malformed",
         {"required_status_checks": "verify"},
+        {"required_status_checks": [{"context": "verify"}]},
+        {
+            "required_status_checks": [
+                {"context": "verify", "integration_id": None}
+            ]
+        },
         {
             "required_status_checks": [
                 {"context": "verify", "integration_id": True}
@@ -2724,10 +3028,10 @@ def test_routine_quota_note_rejects_an_arbitrary_non_default_branch(
         )
 
 
-def test_routine_quota_note_accepts_earlier_same_head_run(
+def test_routine_quota_note_rejects_a_successful_same_head_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Latest check filtering does not erase older canonical run evidence."""
+    """Quota evidence may only name exact failed zero-step runs."""
     bind_remote_lease(monkeypatch)
     github, lease, note_url = quota_snapshot_fixture()
     github.quota_note_body = promotion_gate.quota_fallback_note(
@@ -2739,13 +3043,13 @@ def test_routine_quota_note_accepts_earlier_same_head_run(
             "https://github.com/owner/repo/actions/runs/200",
         ],
     )
-    snapshot = merge_snapshot(
-        github,
-        lease,
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-        quota_fallback_note_url=note_url,
-    )
-    assert snapshot["required_check_evidence"] == "quota-fallback"
+    with pytest.raises(RuntimeError, match="failed PR head"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
 
 
 def test_routine_quota_uses_newest_strict_check_identity(
@@ -2754,41 +3058,43 @@ def test_routine_quota_uses_newest_strict_check_identity(
     """Superseded workflow generations do not block the latest result."""
     bind_remote_lease(monkeypatch)
     github, lease, note_url = quota_snapshot_fixture()
-    github.additional_check_runs = [
-        {
-            "id": 198,
-            "name": "verify",
-            "head_sha": "a" * 40,
-            "status": "completed",
-            "conclusion": "failure",
-            "details_url": (
-                "https://github.com/owner/repo/actions/runs/199/job/8"
-            ),
-            "app": {"id": 15368},
-        },
-        {
-            "id": 197,
-            "name": "workflow audit",
-            "head_sha": "a" * 40,
-            "status": "completed",
-            "conclusion": "cancelled",
-            "details_url": (
-                "https://github.com/owner/repo/actions/runs/199/job/9"
-            ),
-            "app": {"id": 15368},
-        },
-        {
-            "id": 201,
-            "name": "workflow audit",
-            "head_sha": "a" * 40,
-            "status": "completed",
-            "conclusion": "skipped",
-            "details_url": (
-                "https://github.com/owner/repo/actions/runs/200/job/10"
-            ),
-            "app": {"id": 15368},
-        },
-    ]
+    github.additional_check_runs.extend(
+        [
+            {
+                "id": 198,
+                "name": "verify",
+                "head_sha": "a" * 40,
+                "status": "completed",
+                "conclusion": "failure",
+                "details_url": (
+                    "https://github.com/owner/repo/actions/runs/199/job/8"
+                ),
+                "app": {"id": 15368},
+            },
+            {
+                "id": 197,
+                "name": "workflow audit",
+                "head_sha": "a" * 40,
+                "status": "completed",
+                "conclusion": "cancelled",
+                "details_url": (
+                    "https://github.com/owner/repo/actions/runs/199/job/9"
+                ),
+                "app": {"id": 15368},
+            },
+            {
+                "id": 201,
+                "name": "workflow audit",
+                "head_sha": "a" * 40,
+                "status": "completed",
+                "conclusion": "skipped",
+                "details_url": (
+                    "https://github.com/owner/repo/actions/runs/200/job/10"
+                ),
+                "app": {"id": 15368},
+            },
+        ]
+    )
     snapshot = merge_snapshot(
         github,
         lease,
@@ -3624,6 +3930,7 @@ class CopilotGitHub(FakeGitHub):
     def __init__(self, head: str) -> None:
         super().__init__(head)
         self.required_review_count = 0
+        self.run_paths[201] = ".github/workflows/pr-review.yml"
         self.copilot_inline: list[dict[str, Any]] = []
         self.copilot_body = (
             "Copilot reviewed 3 out of 3 changed files in this pull request "
@@ -3642,7 +3949,9 @@ class CopilotGitHub(FakeGitHub):
                 "type": "required_status_checks",
                 "ruleset_id": 7,
                 "parameters": {
-                    "required_status_checks": [{"context": "review"}]
+                    "required_status_checks": [
+                        {"context": "review", "integration_id": 15368}
+                    ]
                 },
             }
         ]
@@ -3655,6 +3964,7 @@ class CopilotGitHub(FakeGitHub):
                 "conclusion": "success",
                 "details_url": "https://github.com/owner/repo/actions/runs/201/job/8",
                 "app": {"id": 15368},
+                "check_suite": {"id": self.run_suite_ids[201]},
             }
         ]
 
@@ -3773,6 +4083,9 @@ def test_copilot_mode_requires_copilot_rule_and_review_check(
         if missing == "rule":
             github.additional_pull_rules = []
         else:
+            github.required_status_checks = [
+                {"context": "verify", "integration_id": 15368}
+            ]
             github.additional_check_rules = []
         snapshot = merge_snapshot(github, lease_fixture())
         assert snapshot["merge_mode"] == "human-only", missing
@@ -3832,24 +4145,6 @@ def emergency_hotfix_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object]]:
     github.authorization_actor = "maintainer"
     github.authenticated_actor = "maintainer"
     github.required_review_count = 0
-    github.additional_check_rules = [
-        {
-            "type": "required_status_checks",
-            "ruleset_id": 7,
-            "parameters": {"required_status_checks": [{"context": "review"}]},
-        }
-    ]
-    github.additional_check_runs = [
-        {
-            "id": 201,
-            "name": "review",
-            "head_sha": github.head,
-            "status": "completed",
-            "conclusion": "success",
-            "details_url": "https://github.com/owner/repo/actions/runs/201/job/8",
-            "app": {"id": 15368},
-        }
-    ]
     github.ruleset_response = {
         "enforcement": "active",
         "bypass_actors": [

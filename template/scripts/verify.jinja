@@ -201,22 +201,18 @@ if [[ "$mode" == "rust" ]]; then
   exit 0
 fi
 
-verification_step "Conflict-marker check" ./scripts/check-update-conflicts
-verification_step "Dependency scan" ./scripts/verify-dependencies
-verification_step "Project metadata" ./scripts/check-project-metadata
-verification_step "Repository site render" ./scripts/build-repo-site --check
-verification_step "Language-profile detection" ./scripts/detect-language-profile
-verification_step "Issue-triage self-test" ./scripts/test-issue-triage
-verification_step "Worktree-cleanup self-test" ./scripts/test-worktree-cleanup
-verification_step "PR-policy self-test" ./scripts/test-pr-policy
-verification_step "Repository-settings self-test" \
-  ./scripts/test-apply-repository-settings
-verification_step "Repository-capabilities self-test" \
-  ./scripts/test-check-repo-capabilities
-verification_step "Scope-drift-gate self-test" ./scripts/test-check-scope-gate
-verification_step "Verification-attestation self-test" \
-  ./scripts/test-verify-attestation
-verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
+./scripts/check-update-conflicts
+./scripts/verify-dependencies
+./scripts/check-project-metadata
+./scripts/build-repo-site --check
+./scripts/detect-language-profile
+./scripts/test-issue-triage
+./scripts/test-worktree-cleanup
+./scripts/test-pr-policy
+./scripts/test-apply-repository-settings
+./scripts/test-check-repo-capabilities
+./scripts/test-check-scope-gate
+./scripts/lint-workflows-shell
 
 if $verify_python; then
   verify_python_module
@@ -475,13 +471,6 @@ PY
   fi
 fi
 
-# Issue #661: this "full" mode is the single full-verification entry point
-# for a generated project (mirroring the central template's
-# scripts/verify-template.sh); the scoped python/python-compatibility/
-# typescript/rust modes above each exit earlier and never reach here, the
-# same way scripts/verify-stage-* re-runs are not attestation-worthy on
-# their own in the central template. Every check above -- including the
-# optional project verification hook -- has already passed, or
-# set -euo pipefail (and the explicit exit above) would have stopped this
-# script first.
-./scripts/write-verify-attestation full
+# This is the generated project's full-verification path. Scoped modes exit
+# earlier; reaching this point means every selected check and any optional
+# project verification hook passed.

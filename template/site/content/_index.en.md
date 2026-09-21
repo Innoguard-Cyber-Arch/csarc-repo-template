@@ -52,7 +52,7 @@ git clone [[repository_url]]
 ./scripts/verify-fast
 ```
 
-`scripts/verify-fast` is this repo's day-to-day PR verification entry point; it derives changed scopes from the PR merge base and runs their checks. Run it before every push, since hosted CI does not rerun the suite and only accepts a `Verified-locally:` attestation covering the same suite and scopes. Only a Milestone/canary delivery, a hotfix, or the merge queue needs the full `scripts/verify-template.sh`. Local requirements (language toolchains, `gh` login, and so on) depend on which languages this repo uses ([[languages]]); see the README for detail.
+`scripts/verify-fast` is this repository's day-to-day local feedback entry point; run it before every push to catch problems early. Once a PR opens, the trusted base workflow re-executes the required tier against the exact candidate commit on a GitHub-hosted runner, and merge and release accept only that hosted execution evidence. Only a Milestone/canary delivery, a hotfix, or the merge queue needs a local full `scripts/verify-template.sh` run. Local requirements (language toolchains, `gh` login, and so on) depend on which languages this repo uses ([[languages]]); see the README for detail.
 {{< /ops >}}
 {{< /slide >}}
 

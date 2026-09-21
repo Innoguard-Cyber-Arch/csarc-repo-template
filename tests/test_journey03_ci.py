@@ -132,39 +132,34 @@ def test_pinned_tool_caches_are_platform_scoped_and_revalidated() -> None:
 
 
 def test_root_ci_is_one_bounded_verification_job() -> None:
-    """Spend at most one runner on each template-repository change.
-
-    Issue #661: the `verify` required check no longer re-executes
-    scripts/verify-fast or scripts/verify-template.sh on the runner --
-    those now run locally, and the hosted job only checks the
-    Verified-locally attestation they leave behind (see
-    scripts/check-verify-attestation / scripts/verify_attestation.py).
-    """
+    """Run one trusted, tiered verification job on the exact candidate."""
     path = REPO_ROOT / ".github/workflows/ci.yml"
     workflow = load_yaml(path)
     triggers = workflow.get("on", workflow.get(True))
 
     assert set(triggers) == {
-        "pull_request",
+        "pull_request_target",
         "merge_group",
         "workflow_dispatch",
     }
-    assert workflow["permissions"] == {
-        "contents": "read",
-        "issues": "read",
-        "pull-requests": "read",
+    assert "edited" in triggers["pull_request_target"]["types"]
+    assert set(workflow["permissions"]) == {
+        "contents",
+        "issues",
+        "pull-requests",
     }
     assert set(workflow["jobs"]) == {"verify"}
-    assert workflow["jobs"]["verify"]["timeout-minutes"] == 15
+    assert workflow["jobs"]["verify"]["timeout-minutes"] == 30
 
     source = path.read_text(encoding="utf-8")
-    assert "python3 scripts/ci_tier.py" in source
-    assert "run: ./scripts/check-verify-attestation" in source
-    assert "--required-tier" in source
-    assert "--required-scopes" in source
-    assert 'git merge-base "$BASE_SHA" "$HEAD_SHA"' in source
-    assert "run: ./scripts/verify-fast" not in source
-    assert "run: ./scripts/verify-template.sh" not in source
+    assert 'cp scripts/ci_tier.py "$RUNNER_TEMP/ci_tier.py"' in source
+    assert 'python3 "$RUNNER_TEMP/ci_tier.py"' in source
+    assert "Check out the exact candidate" in source
+    assert "Execute trusted verification tier=" in source
+    assert "./scripts/verify-fast" in source
+    assert "./scripts/verify-template.sh" in source
+    assert "check-verify-attestation" not in source
+    assert "hosted_verify_bots" not in source
     assert "CSARC_RUN_OSV" not in source
     assert all(
         name not in source
@@ -173,24 +168,23 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
 
 
 def test_generated_ci_uses_the_same_one_job_contract() -> None:
-    """Give generated repositories the same local-first wrapper.
-
-    Issue #661: same shift as the central template's own ci.yml above --
-    the hosted job checks the attestation scripts/verify-fast.jinja /
-    scripts/verify.jinja leave behind rather than re-running either.
-    """
+    """Give generated repositories the same trusted hosted execution."""
     path = REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
     source = path.read_text(encoding="utf-8")
 
     assert "jobs:\n  verify:" in source
-    assert "timeout-minutes: 15" in source
-    assert "python3 scripts/ci_tier.py" in source
-    assert "run: ./scripts/check-verify-attestation" in source
-    assert "--required-tier" in source
-    assert "--required-scopes" in source
-    assert 'git merge-base "$BASE_SHA" "$HEAD_SHA"' in source
-    assert "run: ./scripts/verify-fast" not in source
-    assert "run: ./scripts/verify" not in source
+    assert (
+        "types: [opened, reopened, synchronize, edited, labeled, unlabeled]"
+        in source
+    )
+    assert "timeout-minutes: 30" in source
+    assert 'cp scripts/ci_tier.py "$RUNNER_TEMP/ci_tier.py"' in source
+    assert 'python3 "$RUNNER_TEMP/ci_tier.py"' in source
+    assert "Execute trusted verification tier=" in source
+    assert "./scripts/verify-fast" in source
+    assert "./scripts/verify" in source
+    assert "check-verify-attestation" not in source
+    assert "hosted_verify_bots" not in source
     assert "CSARC_RUN_OSV" not in source
     assert all(
         name not in source
@@ -198,8 +192,8 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
     )
 
 
-def test_hosted_bot_verification_reuses_toolchain_setup_first() -> None:
-    """Install every selected language tool before hosted verification."""
+def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
+    """Install each selected language tool before hosted verification."""
     root_source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
         encoding="utf-8"
     )
@@ -223,25 +217,15 @@ def test_hosted_bot_verification_reuses_toolchain_setup_first() -> None:
         ),
     )
 
-    contracts: list[list[tuple[str, str]]] = []
+    contracts: list[list[str]] = []
     for source in (root_source, *rendered_templates):
         steps = ci_steps(source)
         hosted_index = next(
             index
             for index, step in enumerate(steps)
-            if step.get("name")
-            == "Run hosted verification for an allowlisted bot pull request"
-        )
-        assert steps[hosted_index]["if"] == (
-            "${{ steps.bot.outputs.eligible == 'true' }}"
-        )
-        attestation = next(
-            step
-            for step in steps
-            if step.get("name") == "Validate local verification attestation"
-        )
-        assert attestation["if"] == (
-            "${{ steps.bot.outputs.eligible != 'true' }}"
+            if str(step.get("name", "")).startswith(
+                "Execute trusted verification tier="
+            )
         )
         toolchain = [
             (index, step)
@@ -260,26 +244,29 @@ def test_hosted_bot_verification_reuses_toolchain_setup_first() -> None:
         assert all(index < hosted_index for index, _ in toolchain)
         source_contracts = []
         for _, step in toolchain:
-            condition = step.get("if", "")
-            assert "steps.bot.outputs.eligible == 'true'" in condition
-            assert (
-                "startsWith(github.event.pull_request.head.ref, 'release/v')"
-                in condition
-            )
-            source_contracts.append(
-                (
-                    str(step.get("uses", "rustup")),
-                    condition,
-                )
-            )
+            assert "if" not in step
+            source_contracts.append(str(step.get("uses", "rustup")))
         contracts.append(source_contracts)
 
     assert contracts[0] == contracts[1]
-    assert [item[0] for item in contracts[2]] == [
-        item[0]
+    assert contracts[2] == [
+        item
         for item in contracts[0]
-        if not item[0].startswith("actions/setup-python@")
+        if not item.startswith("actions/setup-python@")
     ]
+
+
+def test_verifiers_do_not_call_removed_attestation_helpers() -> None:
+    """Keep generated-project verification free of removed legacy scripts."""
+    sources = (
+        REPO_ROOT / "scripts/verify-stage-regression-tests",
+        REPO_ROOT / "template/scripts/verify.jinja",
+    )
+
+    for path in sources:
+        source = path.read_text(encoding="utf-8")
+        assert "test-verify-attestation" not in source
+        assert "write-verify-attestation" not in source
 
 
 def test_documentation_tier_validates_the_generated_site() -> None:
@@ -294,7 +281,7 @@ def test_documentation_tier_validates_the_generated_site() -> None:
 
 
 def test_local_verification_reuses_the_hosted_path_planner() -> None:
-    """Both local entry points derive scopes from the PR merge base."""
+    """Local entry points reuse the planner without minting merge evidence."""
     for path in (
         "scripts/verify-fast",
         "template/scripts/verify-fast.jinja",
@@ -304,9 +291,7 @@ def test_local_verification_reuses_the_hosted_path_planner() -> None:
         assert 'git merge-base "$base_ref" HEAD' in source
         assert "git diff --no-renames --name-only" in source
         assert '--extra-scopes "$extra_scopes"' in source
-        assert (
-            './scripts/write-verify-attestation "$suite" "$scope_csv"' in source
-        )
+        assert "write-verify-attestation" not in source
 
 
 def test_workflow_scope_runs_the_actions_security_audit() -> None:

@@ -139,7 +139,6 @@ verification_step "Rust lint" \
 {% endif -%}
 
 if [[ "$suite" == "baseline" ]]; then
-  ./scripts/write-verify-attestation baseline "$scope_csv"
   exit 0
 fi
 
@@ -174,9 +173,3 @@ if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then
     python3 scripts/spec_to_issue.py validate
   verification_step "Repository site render" ./scripts/build-repo-site --check
 fi
-
-# Issue #661: every check above passed (set -euo pipefail would already
-# have exited otherwise) -- record the local-attestation trailer that lets
-# the hosted `verify` check pass without re-running anything. This is the
-# selected cumulative suite exits successfully.
-./scripts/write-verify-attestation "$suite" "$scope_csv"

@@ -195,26 +195,6 @@ Issue #681/#682 決定 R 前是獨立的「進階安裝」附錄頁，後併入 
 `.github/workflows/pr-review.yml`／`tests/test_pr_lifecycle.py` 保持逐位元組同步
 （`tests/test_review_gate.py` 不在配對清單內，只在 root 維護）。
 
-## 2026-09-19 以每件工作的發布層級取代全專案 phase（#745）
-
-**狀態：Accepted。** #607 的 `policies/project-stage.json`、全專案 `release_phase` 與
-「把 required checks 搬到可 bypass 的 Ruleset」做法由本節取代。發布層級改由每張 Issue
-表單宣告 alpha／beta／early／formal；Milestone work Issue 繼承 tracker，衝突即失敗。
-只有 repository collaborator 的宣告可信，否則回到 `.csarc/config.yml` 的預設值。
-
-四層預設分別是 self＋baseline、peer＋fast、peer＋docs、peer＋full；設定可調整是否啟用、
-預設層級與逐層 review／verification mapping。這個 template repo 預設 beta，新生成 repo
-預設 alpha，adopt 既有 repo 預設 beta。Dependabot 固定 beta，版本 PR 依版本後綴取得層級。
-
-Ruleset 拆成兩個獨立責任：required status checks 永遠無 bypass；review 規則才可在 alpha
-或已驗證的 hotfix 緊急路徑由 admin 使用。beta 以上仍要求非作者對 exact head 的核准；
-alpha 可使用既有 exact-head lifecycle 授權完成 self-merge。每次實際 bypass 都寫入
-release level、actor、head 與授權來源，避免平台例外吞掉政策證據。
-
-beta 以上 hotfix 的窄例外要求 standalone hotfix Issue、同一位 admin 同時是 Issue
-提案者／exact-head 授權者／merge actor、理由必填且權限即時驗證；合併後自動建立
-`needs-manual-review` 追蹤 Issue。其他 PR 不得使用這條路徑。
-
 ## 2026-09-20 將正式 Alpha delivery sync 納入 self-merge（#826）
 
 Milestone 14 的正式 current-main sync PR #825 已通過完整本機驗證、required checks 與
@@ -246,6 +226,42 @@ update 必須保留既有的 `false`，只在計畫中提供一次啟用建議�
 token 無法讀取的管理員設定標成 `DEGRADED`，不得宣稱 drift 或 aligned。真正 drift
 只使用單一 tracking Issue；輸出未改變時不得 edit 該 Issue，避免每天重複通知。無法辨識
 的 API 錯誤仍依本 ADR 既有決定 fail closed。
+
+## 2026-09-20 隔離 PR policy 的治理寫入權限（#829）
+
+`pull_request`／`merge_group` 會執行候選 revision 的 workflow 定義；即使後續 checkout
+base SHA，也不能改變 job 已取得的 token 權限。PR policy 的 required `title`／
+`promotion` jobs 因此只能持有唯讀權限，並以原生 job conclusion 表達 policy 決策；
+metadata 同步與 `Milestone approval` check-run 改由 default branch 上的
+`workflow_run` 執行，固定 checkout 該次 trusted workflow 的 `github.sha`，不得 checkout
+PR head、執行 PR source 或下載並執行 PR artifact。寫入 job 依 metadata 與 check-run
+職責分開授權，避免任一 job 同時取得不需要的治理能力。PR 寫入目標必須由
+`workflow_run` 的 head SHA、repository 與 branch 重新查詢所有分頁，只有唯一相符的
+open PR 才能繼續；零筆或多筆都 fail closed。同一完整 head identity 的 writer 必須序列化，
+不能讓重複事件並行留下重複治理寫入。
+
+這項決定保留 #745 的發布層級、exact-head review、Alpha self-merge 與 required checks
+規則；#742 後續將 workflow 縮成薄層或搬移 scripts 時，仍必須維持同一個 read-only／
+trusted-writer 邊界，不能以路徑搬移取代隔離。
+
+## 2026-09-20 將 required checks 綁定可信 producer（#835）
+
+Ruleset 的 required status check 不再只保存顯示名稱；`title`、`promotion`、`verify`、
+`review` 都綁定 GitHub Actions App integration ID `15368`。policy 缺少、無法解析或取得
+非正整數 ID 時，設定 readback 與 merge lifecycle 一律 fail closed；classic commit
+status 即使同名且成功，也不能滿足 required context。
+
+GitHub Actions App 是所有 workflow 共用的 producer，單獨綁 App 仍不足以區分可信與
+PR-controlled workflow。因此上述四個 required-name job 改由 base-trusted
+`pull_request_target`（以及既有的 default-branch review／merge queue 事件）載入 workflow
+定義；`pr_lifecycle.py` 除 exact head、name、App 外，也核對 Actions run 的 repository、
+workflow path 與事件。PR 新增或修改的 `pull_request` workflow 即使使用相同 job name 與
+共用 Actions App，也不能成為 lifecycle 的 required evidence。#829 的 privileged
+`workflow_run` writer 邊界保留，並改為接收新的 `pull_request_target` policy run。
+
+這項決定保留 #745 的 required context 集合與 no-bypass 原則、#826 的 Alpha delivery
+sync self-review 路線，以及 #829 的唯讀 gate／trusted writer 分離；驗證證據本身的
+不可偽造性仍由 #834 負責，不在本決定中以名稱或 App 綁定取代。
 
 ## 重新評估條件
 

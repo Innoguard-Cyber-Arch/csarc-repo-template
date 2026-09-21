@@ -148,6 +148,15 @@ if [[ -n "$last_run_id" ]] && ! gh api "repos/$repo/actions/runs/$last_run_id/jo
   printf '[]\n' >"$last_run_steps_file"
 fi
 
+last_run_steps_file="$work_dir/last-run-steps.json"
+printf '[]\n' >"$last_run_steps_file"
+last_run_id="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("id", ""))' "$last_run_json")"
+if [[ -n "$last_run_id" ]] && ! gh api "repos/$repo/actions/runs/$last_run_id/jobs?per_page=100" \
+  --jq '[.jobs[] | .steps[]? | {name, conclusion}]' >"$last_run_steps_file"; then
+  echo "check-release-drift: successful release run outcome is unavailable" >&2
+  printf '[]\n' >"$last_run_steps_file"
+fi
+
 latest_release_json="$(gh api "repos/$repo/releases?per_page=100" --jq '([.[] | select(.draft == false and .published_at != null)] | sort_by(.published_at) | reverse | .[0]) | if . == null then {} else {tag_name, target_commitish, published_at, draft, prerelease, immutable, html_url} end')"
 main_sha="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["sha"])' "$main_commit_json")"
 release_target="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("target_commitish", ""))' "$latest_release_json")"

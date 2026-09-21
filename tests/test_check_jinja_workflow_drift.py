@@ -53,6 +53,25 @@ def test_declared_allowed_difference_does_not_false_positive() -> None:
     assert check_jinja_workflow_drift.find_drift(root, rendered, allowed) == []
 
 
+def test_repeated_declared_difference_is_normalized_per_occurrence() -> None:
+    """One declared substitution covers every matching paired occurrence."""
+    root = (
+        "jobs:\n  verify:\n    steps:\n"
+        "      - run: ./scripts/verify-template.sh\n"
+        "      - run: ./scripts/verify-template.sh\n"
+    )
+    rendered = (
+        "jobs:\n  verify:\n    steps:\n"
+        "      - run: ./scripts/verify\n"
+        "      - run: ./scripts/verify\n"
+    )
+    allowed = {
+        ("- run: ./scripts/verify-template.sh", "- run: ./scripts/verify")
+    }
+
+    assert check_jinja_workflow_drift.find_drift(root, rendered, allowed) == []
+
+
 def test_undeclared_difference_is_reported() -> None:
     """An artificially introduced, undeclared difference fails the check."""
     root = (
@@ -180,20 +199,19 @@ def test_real_repository_workflows_have_no_undeclared_drift() -> None:
     workflow, so a future rewording does not silently orphan the
     allowlist entry without anyone noticing.
     """
-    root_ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
-        encoding="utf-8"
-    )
-    allowed = check_jinja_workflow_drift.ALLOWED_LINE_DIFFERENCES[
-        "ci.yml.jinja"
-    ]
-
-    for root_line, _rendered_line in allowed:
-        assert root_line in root_ci, (
-            f"allowlisted root line {root_line!r} no longer appears in "
-            ".github/workflows/ci.yml -- update or remove the "
-            "ALLOWED_LINE_DIFFERENCES entry in "
-            "scripts/check_jinja_workflow_drift.py"
-        )
+    for (
+        jinja_name,
+        allowed,
+    ) in check_jinja_workflow_drift.ALLOWED_LINE_DIFFERENCES.items():
+        root_workflow = ROOT / ".github" / "workflows" / jinja_name[:-6]
+        root_text = root_workflow.read_text(encoding="utf-8")
+        for root_line, _rendered_line in allowed:
+            assert root_line in root_text, (
+                f"allowlisted root line {root_line!r} no longer appears in "
+                f"{root_workflow.relative_to(ROOT)} -- update or remove the "
+                "ALLOWED_LINE_DIFFERENCES entry in "
+                "scripts/check_jinja_workflow_drift.py"
+            )
 
 
 def test_a_recognized_covered_condition_has_no_problem() -> None:

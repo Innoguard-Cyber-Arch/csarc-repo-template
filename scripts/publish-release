@@ -313,15 +313,8 @@ cmd_publish() {
   downloaded="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
   gh release download "$tag" --dir "$downloaded"
   python3 "$repo_root/scripts/release_bundle.py" verify --tag "$tag" --output "$downloaded"
-  # Issue #744: only a stable (unsuffixed) tag should ever become GitHub's
-  # "latest" release -- marking an alpha/beta prerelease --latest would
-  # misrepresent it as the repository's most mature release, and GitHub's
-  # own `releases/latest` API already excludes any `prerelease: true`
-  # Release regardless. This pattern must stay byte-identical to the one
-  # in cmd_resolve above, to scripts/converge-release-tag's, and to
-  # scripts/release_phase.py's canonical `_VERSION_RE` suffix (`N` never
-  # 0 or zero-padded); see
-  # tests/test_release_phase.py::test_prerelease_suffix_regex_is_consistent_everywhere.
+  # Issue #744: only a stable (unsuffixed) tag should become GitHub's latest
+  # release. Keep this suffix identical to cmd_resolve's pattern above.
   local latest_flags=(--latest)
   if [[ "$tag" =~ -(alpha|beta)\.[1-9][0-9]*$ ]]; then
     latest_flags=()

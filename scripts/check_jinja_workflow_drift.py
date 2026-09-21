@@ -85,6 +85,15 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
         # canonical for what this repository exercises directly, but a
         # generated project is a different, simpler product).
         ("./scripts/verify-template.sh", "./scripts/verify"),
+        (
+            'command="./scripts/verify-template.sh"',
+            'command="./scripts/verify"',
+        ),
+    },
+    "release.yml.jinja": {
+        # Release verification uses the same repository-specific full
+        # entry point distinction as CI.
+        ("run: ./scripts/verify-template.sh", "run: ./scripts/verify"),
     },
 }
 
@@ -216,7 +225,9 @@ def _subtract_allowed_pairs(
     remaining_removed = list(removed)
     remaining_added = list(added)
     for root_line, rendered_line in allowed:
-        if root_line in remaining_removed and rendered_line in remaining_added:
+        while (
+            root_line in remaining_removed and rendered_line in remaining_added
+        ):
             remaining_removed.remove(root_line)
             remaining_added.remove(rendered_line)
     return remaining_removed, remaining_added

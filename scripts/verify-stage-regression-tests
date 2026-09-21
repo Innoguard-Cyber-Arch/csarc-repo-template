@@ -9,7 +9,7 @@ set -Eeuo pipefail
 # PR-policy, apply-repository-settings, repo-capabilities, scope-drift-gate,
 # base-only-remerge, gh-issue-create, detect-open-milestone,
 # check-branch-fresh, PR-policy-status, release-drift, audit-fleet-adoption,
-# create-milestone, and verify-attestation (Issue #661) self-tests.
+# and create-milestone self-tests.
 # This is the single executable regression source for create/adopt/update
 # preservation; do not replace it with generated-profile runs elsewhere.
 # Runnable standalone to re-check just this stage without paying for the
@@ -51,5 +51,3 @@ verification_step "Release-drift self-test" ./scripts/test-check-release-drift
 verification_step "Fleet-adoption self-test" \
   ./scripts/test-audit-fleet-adoption
 verification_step "Milestone-creation self-test" ./scripts/test-create-milestone
-verification_step "Verification-attestation self-test" \
-  ./scripts/test-verify-attestation

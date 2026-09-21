@@ -204,15 +204,9 @@ def _run_stubbed_verify_fast(
         'verification_step() { printf "%s\\n" "$*" >> "$CSARC_TEST_LOG"; }\n',
         encoding="utf-8",
     )
-    (scripts / "write-verify-attestation").write_text(
-        "#!/usr/bin/env bash\n"
-        'printf "attest %s\\n" "$*" >> "$CSARC_TEST_LOG"\n',
-        encoding="utf-8",
-    )
     for name in (
         "resolve-cache-root",
         "verify-fast",
-        "write-verify-attestation",
     ):
         (scripts / name).chmod(0o755)
 
@@ -275,7 +269,6 @@ def test_local_verify_fast_computes_workflow_scope(tmp_path: Path) -> None:
         "GitHub Actions audit ./scripts/verify-stage-github-actions-audit"
         in log
     )
-    assert "attest fast source,workflow" in log
 
 
 @pytest.mark.parametrize("lockfile", ["uv.lock", "Cargo.lock"])
@@ -286,7 +279,6 @@ def test_local_verify_fast_computes_dependency_scope(
     output, log = _run_stubbed_verify_fast(tmp_path, lockfile)
     assert "suite=fast scopes=dependency,source" in output
     assert "Dependency scan ./scripts/verify-dependencies" in log
-    assert "attest fast dependency,source" in log
 
 
 def test_workflow_rename_keeps_old_and_new_paths(tmp_path: Path) -> None:

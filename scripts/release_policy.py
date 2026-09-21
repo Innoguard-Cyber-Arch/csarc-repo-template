@@ -39,18 +39,7 @@ PEP440_SURFACES = {"pyproject.toml", "uv.lock"}
 
 
 def _is_pep440_surface(relative_path: str) -> bool:
-    """Whether `relative_path` must carry the PEP 440-normalized version.
-
-    `pyproject.toml`/`uv.lock` always do (Issue #744: PEP 440 has no
-    hyphenated `-alpha.N`/`-beta.N` segment). So does a Python package's own
-    `src/<package_name>/__init__.py` marker: the generated project's own
-    `scripts/verify` compares its `__version__` against
-    `importlib.metadata.version(...)`, which always reports the installed
-    package's PEP 440-normalized form, so `__version__` must be written the
-    same way or that comparison never matches for any pre-release phase.
-    `<package_name>` varies per generated project, so this matches by shape
-    rather than by a literal path in `PEP440_SURFACES`.
-    """
+    """Return whether a version surface requires PEP 440 normalization."""
     return relative_path in PEP440_SURFACES or (
         relative_path.startswith("src/")
         and relative_path.endswith("/__init__.py")

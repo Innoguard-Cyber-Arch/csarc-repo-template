@@ -1489,39 +1489,18 @@ def refresh_pr_checks(snapshot: dict[str, Any]) -> int:
     return count
 
 
-def check_pr(repo: str, number: int) -> Decision:
-    """Validate and record lifecycle approval for one current pull request."""
+def check_pr(repo: str, number: int, *, record_check: bool = True) -> Decision:
+    """Validate lifecycle approval and optionally record its check."""
     pull = json.loads(run_gh(["api", f"repos/{repo}/pulls/{number}"]))
     head_sha = pull.get("head", {}).get("sha")
     if not isinstance(head_sha, str) or not head_sha:
         raise RuntimeError("GitHub returned an invalid pull-request head")
     decision = _pull_decision(repo, pull)
-    _record_check(repo, head_sha, decision)
+    if record_check:
+        _record_check(repo, head_sha, decision)
     return decision
 
 
-def _pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
-    """Read the lifecycle decision for one pull-request payload."""
-    milestone = pull.get("milestone")
-    if milestone is None:
-        return _standalone_pull_decision(repo, pull)
-    milestone_number = milestone.get("number")
-    if not isinstance(milestone_number, int):
-        raise RuntimeError(
-            "GitHub returned invalid pull-request lifecycle data"
-        )
-    return approval_decision(load_snapshot(repo, milestone_number))
-
-
-# Branch-name prefixes for automated maintenance pull requests that must
-# never be routed into the standalone/hotfix Issue-approval gate (#743),
-# even if their body text happens to contain a Closes/Fixes/Resolves-
-# shaped string -- for example, an upstream changelog Dependabot embeds
-# verbatim in its own PR description. Mirrors the exact branch-prefix
-# carve-outs `scripts/validate-pr-policy` already uses for the same four
-# automation classes: not a blanket bot-author rule (see
-# `scripts/hosted_verify_bots.py`'s own "not a blanket any [bot] account
-# rule" precedent for why a narrow, exact allowlist is preferred here).
 _AUTOMATED_PULL_REQUEST_HEAD_PREFIXES = (
     "dependabot/",
     "automation/",
@@ -1531,35 +1510,7 @@ _AUTOMATED_PULL_REQUEST_HEAD_PREFIXES = (
 
 
 def _standalone_pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
-    """Read the lifecycle decision for one pull request with no Milestone.
-
-    A pull request whose head branch matches one of
-    `_AUTOMATED_PULL_REQUEST_HEAD_PREFIXES` is always unaffected regardless
-    of body text -- the defense #743's own acceptance criteria requires
-    against a false positive: an automated PR whose body happens to embed
-    a `Fixes #<n>`-shaped string must never be routed into this gate.
-
-    Otherwise, this is close in shape to (but not byte-identical with)
-    `scripts/check-scope-gate`'s own signal: a pull request with no
-    `Closes`/`Fixes`/`Resolves #<n>` keyword at all has no linked work
-    Issue to gate. The two patterns differ in one respect: `_CLOSING_
-    KEYWORD` (used here) matches case-insensitively, while `check-scope-
-    gate`'s own inline pattern is case-sensitive -- no behavioral reason
-    for that difference is known, it is simply not unified here to avoid
-    touching an already-shipped, independently-tested script for #743.
-
-    Every distinct Issue number the body references is collected; more
-    than one distinct closing Issue fails closed rather than silently
-    evaluating only the first match (#743 code-review finding) --
-    `scripts/validate-pr-policy` already requires exactly one closing
-    Issue for a routine work pull request, so this is defense-in-depth for
-    `check_issue_approval()`'s other use as a standalone CLI entry point,
-    where that upstream check never runs. When exactly one closing Issue
-    is found, `check_issue_approval()` decides: a Milestone-scoped Issue
-    keeps inheriting its tracker's approval unchanged, and a standalone/
-    hotfix/release-recovery Issue (no Milestone of its own) must itself
-    carry a valid approval.
-    """
+    """Read the approval decision for a pull request with no Milestone."""
     head_ref = pull.get("head", {}).get("ref")
     if isinstance(head_ref, str) and head_ref.startswith(
         _AUTOMATED_PULL_REQUEST_HEAD_PREFIXES
@@ -1584,7 +1535,22 @@ def _standalone_pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
     return check_issue_approval(repo, next(iter(issue_numbers)))
 
 
-def check_merge_group(repo: str, head_sha: str) -> Decision:
+def _pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
+    """Read the lifecycle decision for one pull-request payload."""
+    milestone = pull.get("milestone")
+    if milestone is None:
+        return _standalone_pull_decision(repo, pull)
+    milestone_number = milestone.get("number")
+    if not isinstance(milestone_number, int):
+        raise RuntimeError(
+            "GitHub returned invalid pull-request lifecycle data"
+        )
+    return approval_decision(load_snapshot(repo, milestone_number))
+
+
+def check_merge_group(
+    repo: str, head_sha: str, *, record_check: bool = True
+) -> Decision:
     """Recheck every pull request represented by one merge-group commit."""
     pulls = _pages(run_gh(["api", f"repos/{repo}/commits/{head_sha}/pulls"]))
     if not pulls:
@@ -1602,7 +1568,8 @@ def check_merge_group(repo: str, head_sha: str) -> Decision:
             if blocked
             else "Every queued Milestone is approved",
         )
-    _record_check(repo, head_sha, decision)
+    if record_check:
+        _record_check(repo, head_sha, decision)
     return decision
 
 
@@ -1730,9 +1697,11 @@ def main() -> None:
     check = subparsers.add_parser("check-pr")
     check.add_argument("--repo", required=True)
     check.add_argument("--pr", required=True, type=int)
+    check.add_argument("--read-only", action="store_true")
     queue = subparsers.add_parser("check-merge-group")
     queue.add_argument("--repo", required=True)
     queue.add_argument("--head-sha", required=True)
+    queue.add_argument("--read-only", action="store_true")
     subparsers.add_parser("check-promotion")
     record = subparsers.add_parser("record-promotion-evidence")
     record.add_argument("--repo", required=True)
@@ -1759,7 +1728,26 @@ def main() -> None:
     pre.add_argument("--repo", required=True)
     pre.add_argument("--milestone", required=True, type=int)
     args = parser.parse_args()
-    decision = _dispatch(args)
+    if args.command == "check-pr":
+        decision = check_pr(args.repo, args.pr, record_check=not args.read_only)
+    elif args.command == "check-merge-group":
+        decision = check_merge_group(
+            args.repo, args.head_sha, record_check=not args.read_only
+        )
+    elif args.command == "check-promotion":
+        decision = promotion_decision(sys.stdin.read())
+    elif args.command == "record-promotion-evidence":
+        decision = record_promotion_evidence(
+            args.repo, args.tracker, args.evidence_url
+        )
+    elif args.command == "check-scope":
+        decision = check_scope(args.repo, args.issue)
+    elif args.command == "regenerate-reconciliation":
+        decision = record_reconciliation(args.repo, args.milestone)
+    elif args.command == "preflight":
+        decision = preflight(args.repo, args.milestone)
+    else:
+        decision = reconcile(args.repo, args.milestone)
     print(decision.summary)  # noqa: T201
     if not decision.allowed:
         raise SystemExit(1)
