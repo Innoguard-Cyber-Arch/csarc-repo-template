@@ -175,7 +175,7 @@ compositions:
 
 optional_modules:
   container_delivery:
-    stage: alpha
+    stage: beta
     issue: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/242
     pilot_repository: Innoguard-Cyber-Arch/ai-guardrail
     pilot_containerfile: evaluation/Dockerfile

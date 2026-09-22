@@ -94,7 +94,7 @@ flowchart LR
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 從 Feature、Task、Bug 或 Documentation 表單建立工作；表單直接設定原生 `Feature`、`Task`、`Bug`、`Task` Type，並以 `enhancement`、`bug` 或 `documentation` Label 保留跨 Issue／PR 分類。UI 建立者自行指派自己，agent／CLI 建立時使用 `--assignee @me`；`duplicate` 是既有 Issue 的結案處置，不是建立類型。
 3. 里程碑 Issue 從對應 `dev/m<Milestone 編號>-<簡稱>` 建立工作分支；沒有里程碑時從最新 `main` 建立。只有 Issue 記錄獨立 soak／canary 理由時，才直接使用一次性的 `dev/i<Issue 編號>-<簡稱>` 工作與 delivery。一般工作分支使用 `gh issue develop <issue> --base <base> --name type/<issue-number>-short-slug` 建立，確保 GitHub Development 關聯；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。若後來確認重複，連結 canonical Issue 並用 GitHub 的 Duplicate 原生原因關閉；純 triage 不改檔案，可不開分支與 PR。
-4. 執行 `./.csarc/scripts/verify`；AI 遵守 `AGENTS.md`，審查、合併資格與 Alpha self-merge 例外以[治理政策](.csarc/docs/ci-policy.md#審查與合併資格)為準。
+4. 執行 `./.csarc/scripts/verify`；AI 遵守 `AGENTS.md`，審查、合併資格與設定式 admin approval bypass 以[治理政策](.csarc/docs/ci-policy.md#審查與合併資格)為準。
 5. PR 指向可信 Issue／Milestone 關係決定的 integration branch，或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到該 integration branch。使用 `Closes #<issue-number>` 前，PR 與 referenced Issue 不得留有未勾選 task；風險或回退放在選填補充。PR 沒有原生 Issue Type／Issue Form，只使用 Markdown template；作者自行指派自己，並讓 Milestone 與恰好一個 `bug`、`enhancement` 或 `documentation` 分類 Label 對齊 linked Issue。
 6. 合併前依規則治理檢查目前有效的 review、required checks、Ruleset 與明確授權；README 不另外定義 self-merge 例外。里程碑建立時同時建立一張 `promotion` Issue；完成後用 `dev/m* → main` PR 關閉它。一般孤立工作直接回 `main`；`dev/i*` 的同號 Issue 本身就是 promotion Issue，合併後刪除該暫時 branch。Standalone `fix/*` 只有加上 `hotfix` label 才是緊急 release boundary。
 

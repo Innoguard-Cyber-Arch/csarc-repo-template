@@ -44,7 +44,7 @@ def test_governance_stage_maps_source_branch_pattern() -> None:
     assert governance_stage("feat/590-tighten-label-policy") == "stable"
     assert governance_stage("dev/m9-decision-site-adoption") == "beta"
     assert governance_stage("promote/m9-decision-site-adoption") == "beta"
-    assert governance_stage("dev/i535-audit-trail-soak") == "alpha"
+    assert governance_stage("dev/i535-audit-trail-soak") == "canary"
 
 
 def test_developer_and_reviewer_aggregation() -> None:
@@ -88,7 +88,7 @@ def test_pr_audit_table_reports_reality_including_gaps() -> None:
     # already proved does not exist for this repository's history.
     assert "carol | (none recorded) | beta" in table
 
-    assert "| alpha |" in table
+    assert "| canary |" in table
     assert "dana, frank" in table
 
     # PR #604 targets the milestone branch, not main, and must not leak in.

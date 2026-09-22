@@ -6,7 +6,7 @@ Cyber-Arch's updatable repository foundation: creating a new project, adopting a
 
 | Item | Current status |
 | --- | --- |
-| Template version | v0.21.0-alpha.1<!-- x-release-please-version --> |
+| Template version | v0.22.0<!-- x-release-please-version --> |
 | Supported languages | Python, Rust, TypeScript (independently multi-selectable; choosing none uses only the common workflow) |
 | repo-site presentation template version | 1.1.0 |
 | repo-site render engine version | 1.1.0 |
@@ -203,7 +203,7 @@ See [`docs/adr/release-security-and-dependencies.md`](docs/adr/release-security-
 
 Real, repeatable adoption steps, acceptance evidence, and known platform limitations are collected in [`docs/pilot-adoption.md`](docs/pilot-adoption.md). The first consuming repo, `ai-guardrail`, has completed a v0.2.4 adoption and a v0.3.1 update, proving the shared adopt, update, and live CI paths; Python, Rust, and TypeScript each reached beta through a reproducible create, existing-repo adoption, update, and native-toolchain verification. Selecting multiple modules at once does not form a separate profile.
 
-All three paths below use an approved GitHub Release. The CLI only accepts `Innoguard-Cyber-Arch/csarc-repo-template` (repository ID `1340899393`), and confirms the Release is published, not draft, not prerelease, immutable, has valid attestation, has a tag that did not move during verification, and has a valid commit signature. Only after that does it show the full 40-character commit SHA, the pinned-version install guide, configuration, the added/overwritten/preserved/manual-merge/undetermined lists, and conflict risk. On success it writes `.csarc/provenance.json`; any source or provenance drift always stops.
+All three paths below use an approved GitHub Release. The CLI only accepts `Innoguard-Cyber-Arch/csarc-repo-template` (repository ID `1340899393`), and confirms the Release is published, not draft, immutable, attested, points to an unmoved tag, and has a valid commit signature. Public versions are stable `X.Y.Z` and beta `X.Y.Z-beta.N`; latest stable is the default, while `--channel beta` is an explicit opt-in. `early` and `formal` are project-level declarations, not version suffixes. Only after verification does the CLI show the full commit SHA, pinned install guide, settings, file classifications, and conflict risk. On success it writes `.csarc/provenance.json`; any source or provenance drift stops.
 
 ### Create a new repo
 
@@ -236,27 +236,27 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update
 ```
 
-`update` reads the existing answers, runs a Copier smart update, and fails closed on a conflict marker or a `.rej` file. On a conflict, the CLI lists the affected files without modifying the target; adjust the conflicting content on the current branch and rerun. `update --dry-run` previews both the Copier update and the Milestone description migration; `update --check --json` returns 0 when already current, 1 when an update is available, and 2 on an execution or input error. After writing files successfully, the CLI automatically runs `./scripts/verify`, the repository settings `plan`, and any confirmed legacy CSARC Milestone description upgrade; it never applies repository settings, pushes, or opens a PR itself.
+`update` reads the existing answers, runs a Copier smart update, and fails closed on a conflict marker or a `.rej` file. On a conflict, the CLI lists the affected files without modifying the target; adjust the conflicting content on the current branch and rerun. If the recorded version is a retired alpha, malformed, or otherwise unsupported, the CLI does not retain a legacy parser: it rebuilds the template-managed baseline from the latest stable while preserving settings and project-owned or divergent files wherever safe, and routes ambiguous files to manual merge. `update --check --json` returns 0 when already current, 1 when an update is available, and 2 on an execution or input error. After writing files successfully, the CLI automatically runs `./scripts/verify`, the repository settings `plan`, and any confirmed legacy CSARC Milestone description upgrade; it never applies repository settings, pushes, or opens a PR itself.
 
 ### Agent prompt
 
 The pinned-version install contract is [`docs/agent-install.md`](docs/agent-install.md). Each Release carries one `release-prompt.txt` bound to the canonical repository, tag, full SHA, install guide, and `copier.yml`. It asks `csarc status` to select the lifecycle first, then offers either recommended defaults or grouped customization. Every option still comes from the same Copier schema; the agent only groups questions and passes confirmed values through the existing `--data` option.
 
-This bootstrap prompt only finds the highest immutable SemVer Release accepted by the CLI, including alpha/beta pre-releases, and loads its `release-prompt.txt`. Once pinned, that asset owns status detection, dry-run, summary, and confirmation:
+This bootstrap prompt finds the latest stable immutable Release accepted by the CLI and loads its `release-prompt.txt`. Once pinned, that asset owns status detection, dry-run, summary, and confirmation. Beta is opt-in through `--channel beta`:
 
 ```text
-From the published Releases at https://github.com/Innoguard-Cyber-Arch/csarc-repo-template, select the highest immutable SemVer Release accepted by the official csarc CLI, including alpha or beta pre-releases. Download and read that Release's `release-prompt.txt`; after confirming its repository, tag, and full SHA agree, follow it exactly in the current workspace. Do not use `main`, guess the installation state, or modify files or GitHub settings, push, or open a PR before I confirm.
+From the published Releases at https://github.com/Innoguard-Cyber-Arch/csarc-repo-template, use the official csarc CLI to select the latest stable immutable Release. Download and read that Release's `release-prompt.txt`; after confirming its repository, tag, and full SHA agree, follow it exactly in the current workspace. Do not use `main`, guess the installation state, or modify files or GitHub settings, push, or open a PR before I confirm.
 ```
 
 ### Troubleshooting / advanced Copier
 
-The root CLI is not published to a package registry; a formal prompt always runs from an approved GitHub Release's full commit SHA. Only local development can explicitly use `--allow-unreleased`; it shows a high-risk warning and marks provenance as `development-unreleased`, and must never go into an ordinary prompt. To check a reviewed but not-yet-released development commit, there is no need to clone manually:
+The root CLI is not published to a package registry; a release prompt always runs from an approved GitHub Release's full commit SHA. Only local development can explicitly use `--allow-unreleased`; it shows a high-risk warning and marks provenance as `development-unreleased`, and must never go into an ordinary prompt. To check a reviewed but not-yet-released development commit, there is no need to clone manually:
 
 ```bash
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<full-commit-sha>' csarc --help
 ```
 
-To adjust an advanced Copier answer, repeat `--data KEY=VALUE` after the CLI command; to pin a specific formal version, use `--to vX.Y.Z --expected-sha <full-commit-sha>`. When an old repo has no provenance, first manually review its existing answers, then migrate explicitly with `update --from-release <tag> --accept-legacy` -- the CLI never assumes the old state is already verified by default. `site/content/_index.zh-tw.md` / `_index.en.md` and `docs/site-theme.css` are a generated project's own maintained site source; a template version update never overwrites them, and rebuilds the portable `docs/index.html` / `docs/index.en.html`. The older `docs/site-content.md` is retired; its content is not migrated automatically -- `./scripts/build-repo-site` prints a notice when that file still exists, asking a maintainer to port it and remove the file.
+To adjust an advanced Copier answer, repeat `--data KEY=VALUE` after the CLI command; to pin a specific stable version, use `--to vX.Y.Z --expected-sha <full-commit-sha>`. When an old repo has no provenance, first manually review its existing answers, then migrate explicitly with `update --from-release <tag> --accept-legacy` -- the CLI never assumes the old state is already verified by default. `site/content/_index.zh-tw.md` / `_index.en.md` and `docs/site-theme.css` are a generated project's own maintained site source; a template version update never overwrites them, and rebuilds the portable `docs/index.html` / `docs/index.en.html`. The older `docs/site-content.md` is retired; its content is not migrated automatically -- `./scripts/build-repo-site` prints a notice when that file still exists, asking a maintainer to port it and remove the file.
 
 ### Verification boundary
 

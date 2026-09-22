@@ -716,7 +716,7 @@ while IFS= read -r version; do
   PR_ISSUE_STATE="" \
     "$validator" >/dev/null
 done <<'VERSIONS'
-0.18.0-alpha.1
+0.18.0-beta.1
 1.2.3-beta.12
 VERSIONS
 
@@ -738,6 +738,7 @@ while IFS= read -r version; do
     exit 1
   fi
 done <<'VERSIONS'
+0.18.0-alpha.1
 0.18.0-alpha.0
 0.18.0-alpha.01
 0.18.0-rc.1

@@ -13,9 +13,8 @@ body:
         取代或駁回的既有決策。Feature 是尚未完整達成的 parent；可獨立交付的工作
         另開 Task／Bug Sub-issue。UI 建立者請把自己設為 Assignee；agent／CLI 建立時
         明確使用 `--assignee @me`。若這張 Issue 沒有掛 Milestone（standalone 或
-        hotfix），核准方式依發布層級決定：alpha 可由 admin 留
-        `Admin-approve: <理由>` 自核，beta 以上須由另一位協作者留言 `Approve`。有掛
-        Milestone 則沿用 tracker 的層級與核准，不得另選衝突值。
+        hotfix）固定走 stable；掛在 Milestone 的工作固定走 beta。是否允許 admin 以
+        `Admin-approve: <理由>` 自核，由 repository 的 `admin_bypass` 設定決定。
   - type: textarea
     id: problem
     attributes:
@@ -27,8 +26,8 @@ body:
     id: release_level
     attributes:
       label: Release level / 發布層級
-      description: Milestone 內工作須與 tracker 相同；沒有權限的建立者所選值會改用 repository 預設。
-      options: [alpha, beta, early, formal]
+      description: Milestone 內工作選 beta；standalone／hotfix 選 stable。early／formal 是專案成熟度，不在這裡選。
+      options: [beta, stable]
     validations:
       required: true
   - type: textarea

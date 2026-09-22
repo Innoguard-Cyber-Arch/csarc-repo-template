@@ -318,13 +318,14 @@ verification_mode:
     Require trusted GitHub-hosted checks: hosted
   default: local
 
-review:
+admin_bypass:
   type: str
-  help: Human review fallback when Copilot review is unavailable or not selected
+  help: Allow an administrator to replace human approval; required checks and release evidence remain mandatory
   choices:
-    Repository owner may use the audited self-review path: solo
-    Require an independent maintainer: peer
-  default: solo
+    Never bypass human approval: 'off'
+    Allow only beta work: beta-only
+    Allow beta and stable work: always
+  default: 'off'
 
 copilot_review:
   type: str
@@ -460,12 +461,10 @@ enable_governance_drift_check:
   help: Run the scheduled governance drift check; disable it only when another approved control owns drift monitoring
   default: true
 
-default_release_level:
+project_maturity:
   type: str
-  help: Release level used when no trusted declaration is available
+  help: Project maturity is independent from beta/stable release channels and changes only by an explicit stable release
   choices:
-    alpha: alpha
-    beta: beta
-    Early release (0.y.z): early
-    Formal release (1.0.0 and later): formal
-  default: "{{ 'beta' if _copier_operation == 'update' or project_mode == 'existing' else 'alpha' }}"
+    Early (stable versions remain 0.y.z): early
+    Formal (stable versions are 1.0.0 or later): formal
+  default: early

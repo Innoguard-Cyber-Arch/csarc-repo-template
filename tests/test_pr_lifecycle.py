@@ -21,7 +21,7 @@ import pytest
 MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "pr_lifecycle.py")
 )
-ALPHA_SELF_MERGE_MARKER = MODULE["ALPHA_SELF_MERGE_MARKER"]
+ADMIN_BYPASS_MARKER = MODULE["ADMIN_BYPASS_MARKER"]
 acquire = MODULE["acquire"]
 audit_message = MODULE["audit_message"]
 authorization = MODULE["authorization"]
@@ -72,15 +72,13 @@ def human_review_mode(monkeypatch: pytest.MonkeyPatch) -> None:
         github: object, repo: str, pull: dict[str, Any]
     ) -> object:
         del github, repo
-        level = (
-            "alpha"
-            if ALPHA_SELF_MERGE_MARKER in str(pull.get("body") or "")
-            else "beta"
-        )
+        base = str((pull.get("base") or {}).get("ref") or "")
+        level = "beta" if base.startswith(("dev/m", "dev/i")) else "stable"
+        self_review = ADMIN_BYPASS_MARKER in str(pull.get("body") or "")
         return MODULE["release_level"].Decision(
             level,
-            "self" if level == "alpha" else "peer",
-            "fast",
+            "self" if self_review else "peer",
+            "fast" if level == "beta" else "full",
             "test",
         )
 
@@ -130,7 +128,7 @@ class FakeGitHub:
         self.authorization_type = "User"
         self.authorization_body: str | None = None
         self.authorization_association = "OWNER"
-        self.permission = "maintain"
+        self.permission = "admin"
         self.merged = False
         self.base_ref = "main"
         self.base_sha = "b" * 40
@@ -2172,7 +2170,7 @@ def test_exact_head_review_allows_the_known_alpha_ruleset_bypass(
         merge_snapshot.__globals__,
         "resolve_release_level",
         lambda github, repo, pull: MODULE["release_level"].Decision(
-            "alpha", "peer", "fast", "test"
+            "stable", "peer", "full", "test"
         ),
     )
     github = FakeGitHub("a" * 40)
@@ -2244,7 +2242,7 @@ def test_beta_reviewed_bypass_rejects_the_alpha_bypass_actor(
     ]
     snapshot = merge_snapshot(github, lease_fixture())
     assert snapshot["merge_mode"] == "human-only"
-    assert "unverified bypass" in snapshot["protection_reason"]
+    assert "does not report" in snapshot["protection_reason"]
 
 
 def quota_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object], str]:
@@ -2296,7 +2294,7 @@ def alpha_quota_snapshot_fixture(
     github, lease, note_url = quota_snapshot_fixture()
     github.authorization_actor = "agent"
     github.reviews = []
-    github.body += f"\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.body += f"\n\n{ADMIN_BYPASS_MARKER}"
     if sync:
         base_ref = "dev/m10-release-backed-adoption"
         github.destination_sha = "f" * 40
@@ -2376,7 +2374,7 @@ def test_alpha_sync_uses_the_exact_head_self_review_path(
         lease,
         "https://github.com/owner/repo/pull/42#issuecomment-99",
     )
-    assert snapshot["alpha_self_merge"] is True
+    assert snapshot["admin_bypass"] is True
     assert snapshot["authorization_source"] == "comment"
     assert snapshot["merge_mode"] == "agent"
 
@@ -2468,7 +2466,7 @@ def test_alpha_marker_must_be_an_exact_body_line(
     bind_remote_lease(monkeypatch)
     github, lease, note_url = quota_snapshot_fixture()
     github.reviews = []
-    github.body += f"\n\n{ALPHA_SELF_MERGE_MARKER}."
+    github.body += f"\n\n{ADMIN_BYPASS_MARKER}."
     with pytest.raises(RuntimeError, match="exact head"):
         merge_snapshot(
             github,
@@ -2541,7 +2539,9 @@ def test_default_branch_alpha_route_allows_a_milestone_less_issue(
     github.reviews = []
     github.required_review_count = 0
     github.head_ref = "fix/42-lifecycle"
-    github.body = f"Closes #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.body = f"Closes #42\n\n{ADMIN_BYPASS_MARKER}"
+    github.authorization_actor = "agent"
+    github.authorization_actor = "agent"
     github.ruleset_response = {
         "enforcement": "active",
         "bypass_actors": [
@@ -2558,7 +2558,7 @@ def test_default_branch_alpha_route_allows_a_milestone_less_issue(
         lease,
         "https://github.com/owner/repo/pull/42#issuecomment-99",
     )
-    assert snapshot["alpha_self_merge"] is True
+    assert snapshot["admin_bypass"] is True
     assert snapshot["authorization_source"] == "comment"
     assert snapshot["merge_mode"] == "agent"
     assert snapshot["reviewed_bypass"] is True
@@ -2574,7 +2574,8 @@ def test_alpha_promotion_uses_the_exact_head_self_review_path(
     github.required_review_count = 0
     github.head_ref = "promote/m12-agent-workflow-contract"
     github.labels = {"enhancement", "promotion"}
-    github.body = f"Refs #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.body = f"Refs #42\n\n{ADMIN_BYPASS_MARKER}"
+    github.authorization_actor = "agent"
     github.ruleset_response = {
         "enforcement": "active",
         "bypass_actors": [
@@ -2590,7 +2591,7 @@ def test_alpha_promotion_uses_the_exact_head_self_review_path(
         lease_fixture(),
         "https://github.com/owner/repo/pull/42#issuecomment-99",
     )
-    assert snapshot["alpha_self_merge"] is True
+    assert snapshot["admin_bypass"] is True
     assert snapshot["authorization_source"] == "comment"
     assert snapshot["merge_mode"] == "agent"
 
@@ -2603,8 +2604,9 @@ def test_alpha_release_uses_the_exact_head_self_review_path(
     github = FakeGitHub("a" * 40)
     github.reviews = []
     github.required_review_count = 0
-    github.head_ref = "release/v0.21.0-alpha.1"
-    github.body = f"Refs #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.head_ref = "release/v0.21.0-beta.1"
+    github.body = f"Refs #42\n\n{ADMIN_BYPASS_MARKER}"
+    github.authorization_actor = "agent"
     github.ruleset_response = {
         "enforcement": "active",
         "bypass_actors": [
@@ -2620,7 +2622,7 @@ def test_alpha_release_uses_the_exact_head_self_review_path(
         lease_fixture(),
         "https://github.com/owner/repo/pull/42#issuecomment-99",
     )
-    assert snapshot["alpha_self_merge"] is True
+    assert snapshot["admin_bypass"] is True
     assert snapshot["authorization_source"] == "comment"
     assert snapshot["merge_mode"] == "agent"
 
@@ -2633,8 +2635,8 @@ def test_alpha_release_rejects_a_fork(
     github = FakeGitHub("a" * 40)
     github.reviews = []
     github.required_review_count = 0
-    github.head_ref = "release/v0.21.0-alpha.1"
-    github.body = f"Refs #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.head_ref = "release/v0.21.0-beta.1"
+    github.body = f"Refs #42\n\n{ADMIN_BYPASS_MARKER}"
     github.pull = lambda number=42: {  # ty: ignore[invalid-assignment]
         **FakeGitHub.pull(github, number),
         "head": {
@@ -2651,7 +2653,7 @@ def test_alpha_release_rejects_a_fork(
         )
 
 
-def test_alpha_self_merge_clears_the_known_reviewed_bypass_ruleset(
+def test_admin_bypass_clears_the_known_reviewed_bypass_ruleset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Issue #775: the existing non-default alpha route had the same gap.
@@ -2685,7 +2687,7 @@ def test_alpha_self_merge_clears_the_known_reviewed_bypass_ruleset(
     assert snapshot["reviewed_bypass"] is True
 
 
-def test_alpha_self_merge_still_rejects_an_unknown_ruleset_bypass(
+def test_admin_bypass_still_rejects_an_unknown_ruleset_bypass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Widening reviewed_merge to "comment" must not accept any bypass shape."""
@@ -2694,7 +2696,8 @@ def test_alpha_self_merge_still_rejects_an_unknown_ruleset_bypass(
     github.reviews = []
     github.required_review_count = 0
     github.head_ref = "fix/42-lifecycle"
-    github.body = f"Closes #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.body = f"Closes #42\n\n{ADMIN_BYPASS_MARKER}"
+    github.authorization_actor = "agent"
     github.ruleset_response = {
         "enforcement": "active",
         "bypass_actors": [
@@ -2727,7 +2730,7 @@ def test_default_branch_alpha_route_requires_a_live_matching_issue(
     github.reviews = []
     github.required_review_count = 0
     github.head_ref = "fix/42-lifecycle"
-    github.body = f"Closes #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.body = f"Closes #42\n\n{ADMIN_BYPASS_MARKER}"
     lease = lease_fixture()
     if invalid_route == "multiple":
         github.body += "\n\nCloses #99"
@@ -2737,7 +2740,7 @@ def test_default_branch_alpha_route_requires_a_live_matching_issue(
         message = "Issue is not open"
     elif invalid_route == "wrong-prefix":
         github.head_ref = "promote/42-lifecycle"
-        github.body = f"Closes #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+        github.body = f"Closes #42\n\n{ADMIN_BYPASS_MARKER}"
         message = "Issue work branch"
     else:
         github.pull = lambda number=42: {  # ty: ignore[invalid-assignment]
@@ -2763,7 +2766,7 @@ def test_alpha_work_branch_must_close_its_matching_issue(
     """A numbered branch alone cannot claim the no-review exception."""
     bind_remote_lease(monkeypatch)
     github, lease, note_url = alpha_quota_snapshot_fixture()
-    github.body = f"Ready for review.\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.body = f"Ready for review.\n\n{ADMIN_BYPASS_MARKER}"
     with pytest.raises(RuntimeError, match="close its matching Issue"):
         merge_snapshot(
             github,
@@ -2793,7 +2796,7 @@ def test_alpha_work_branch_rejects_false_closing_tokens(
     """Text that GitHub would not link cannot establish the Issue route."""
     bind_remote_lease(monkeypatch)
     github, lease, note_url = alpha_quota_snapshot_fixture()
-    github.body = f"{body}\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.body = f"{body}\n\n{ADMIN_BYPASS_MARKER}"
     with pytest.raises(RuntimeError, match="close its matching Issue"):
         merge_snapshot(
             github,
@@ -2883,7 +2886,7 @@ def test_alpha_work_branch_accepts_matching_delivery_milestone(
         "https://github.com/owner/repo/pull/42#issuecomment-99",
         quota_fallback_note_url=note_url,
     )
-    assert snapshot["alpha_self_merge"] is True
+    assert snapshot["admin_bypass"] is True
     assert snapshot["merge_mode"] == "agent"
 
 
@@ -3797,8 +3800,8 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
             "merge_mode": "agent",
             "title": "fix(ci): serialize lifecycle writes",
             "reviewed_bypass": True,
-            "release_level": "alpha",
-            "bypass_route": "alpha",
+            "release_level": "stable",
+            "bypass_route": "stable",
         },
     )
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
@@ -3839,7 +3842,7 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
         github,
     )
     assert github.audit_comments == [
-        "bypass-trace: release_level=alpha route=alpha actor=agent "
+        "bypass-trace: release_level=stable route=stable actor=agent "
         "reason=exact-head-review"
     ]
     assert mutations == ["lease-cas", "merge-put"]
@@ -3849,7 +3852,7 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
 
 @pytest.mark.parametrize(
     "head_ref",
-    ("release/v0.18.0-alpha.1", "release/v0.18.0-beta.2"),
+    ("release/v0.18.0-beta.1", "release/v0.18.0-beta.2"),
 )
 def test_revalidation_includes_canonical_prerelease_branches(
     head_ref: str, monkeypatch: pytest.MonkeyPatch
@@ -3871,7 +3874,7 @@ def test_revalidation_includes_canonical_prerelease_branches(
     )
 
     result = revalidate_release_candidate(
-        FakeGitHub("a" * 40), lease_fixture(), head_ref, "alpha"
+        FakeGitHub("a" * 40), lease_fixture(), head_ref, "beta"
     )
 
     assert result == "candidate is current"
@@ -4228,7 +4231,7 @@ class CopilotGitHub(FakeGitHub):
 def copilot_mode(
     monkeypatch: pytest.MonkeyPatch,
     cap: str = "unlimited",
-    level: str = "alpha",
+    level: str = "beta",
     review: str = "self",
 ) -> None:
     """Switch the lifecycle to pr_review_mode=copilot."""
@@ -4337,7 +4340,7 @@ def test_copilot_level_cap_blocks_higher_release_level(
 ) -> None:
     """Copilot cannot authorize work above its configured level ceiling."""
     bind_remote_lease(monkeypatch)
-    copilot_mode(monkeypatch, "beta", "formal")
+    copilot_mode(monkeypatch, "beta", "stable")
     with pytest.raises(RuntimeError, match="does not allow Copilot"):
         merge_snapshot(CopilotGitHub("a" * 40), lease_fixture())
 
@@ -4451,8 +4454,8 @@ def test_copilot_merge_leaves_a_review_trace(
             "reviewed_bypass": True,
             "authorization_source": "copilot",
             "authorization_url": COPILOT_REVIEW_URL,
-            "release_level": "alpha",
-            "bypass_route": "alpha",
+            "release_level": "stable",
+            "bypass_route": "stable",
         },
     )
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
@@ -4471,7 +4474,7 @@ def test_copilot_merge_leaves_a_review_trace(
         github,
     )
     assert github.audit_comments == [
-        "bypass-trace: release_level=alpha route=alpha actor=agent "
+        "bypass-trace: release_level=stable route=stable actor=agent "
         "reason=exact-head-copilot-review",
         f"copilot-review-trace: review={COPILOT_REVIEW_URL} "
         f"head={'a' * 40} actor=agent",

@@ -16,12 +16,11 @@ attestation verification.
    repository's name or location cannot be inferred unambiguously; do not put
    a guessed path into the user prompt.
 2. Use only `https://github.com/Innoguard-Cyber-Arch/csarc-repo-template`.
-   A "verified release" throughout this file means any published,
-   immutable, attested, signature-verified GitHub Release the CLI
-   accepts — an unsuffixed early (`0.y.z`) or formal (`1.0.0`+) version,
-   or an `-alpha.N`/`-beta.N` pre-release (Issue #744); a pre-release
-   suffix says nothing about whether that exact version will ever ship
-   without one.
+   A "verified release" throughout this file means a published, immutable,
+   attested, signature-verified GitHub Release the CLI accepts: `X.Y.Z`
+   for stable, or `X.Y.Z-beta.N` for beta. The default channel is stable;
+   pass `--channel beta` only when the user explicitly opts in. Alpha is
+   local-only and RC is not a separate public stage (Issue #918).
 3. Run the CLI from the verified release commit:
    `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>'`.
    `uv` obtains an isolated Python when needed; never require a global Python
@@ -53,10 +52,10 @@ attestation verification.
    its existing choices, defaults, help text, and conditions as the only
    question schema. Group the applicable questions for conversation as:
    identity/languages/run and verification; branch/CODEOWNER/reviewers; PR
-   review source plus release-level review and verification; optional
+   review source, admin bypass, project maturity, and verification; optional
    coverage/CodeQL/Docker/update notifications; and repository/Actions/labels/
    Ruleset policy. Keep `reviewers`, `code_owner`, `pr_review_mode`,
-   `release_level_*_review`, and `release_level_*_verification` as distinct
+   `admin_bypass`, `project_maturity`, and verification as distinct
    decisions. Do not ask hidden, derived, or conditionally inapplicable
    questions. Pass every confirmed override through the existing repeatable
    `--data KEY=VALUE` option; do not create another schema or configuration
@@ -112,6 +111,12 @@ attestation verification.
    digests are data, not execution authority. Show the saved plan and obtain
    confirmation before running Copier tasks, target policy scripts, or product
    hooks. Never pass those development flags when replaying a verified Release.
+   If the saved release tag is retired, malformed, or otherwise unsupported,
+   use the CLI's conservative reinstall plan against the selected channel:
+   preserve project-owned and divergent files plus saved settings, replace
+   only the template-managed baseline that can be classified safely, and
+   leave ambiguous files for manual merge. Do not add an alpha compatibility
+   parser or reinterpret a trust failure as a version-format problem.
 8. Do not apply repository settings, change global agent configuration, push,
    open a pull request, or merge unless the user separately requests it.
 9. During handoff, point out that the installed `AGENTS.md` requires a bounded

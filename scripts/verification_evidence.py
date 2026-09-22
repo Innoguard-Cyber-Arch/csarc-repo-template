@@ -29,7 +29,7 @@ EXECUTION_STEP = re.compile(
     r"command=(\./scripts/(?:verify-fast|verify-template\.sh|verify))"
     r"(?: base=([A-Za-z0-9._/-]+) base-sha=([0-9a-f]{40}) "
     r"labels=([0-9a-f]{64}) "
-    r"release=(alpha|beta|early|formal|none))?$"
+    r"release=(beta|stable|none))?$"
 )
 REUSE_STEP = re.compile(
     r"^Reuse trusted verification tier=(docs|fast|full) "
@@ -37,7 +37,7 @@ REUSE_STEP = re.compile(
     r"command=(\./scripts/(?:verify-fast|verify-template\.sh|verify)) "
     r"base=([A-Za-z0-9._/-]+) base-sha=([0-9a-f]{40}) "
     r"labels=([0-9a-f]{64}) "
-    r"release=(alpha|beta|early|formal|none) source-run=([1-9][0-9]*) "
+    r"release=(beta|stable|none) source-run=([1-9][0-9]*) "
     r"source-job=([1-9][0-9]*) source-check=([1-9][0-9]*)$"
 )
 SYNC_STEP = re.compile(
@@ -46,7 +46,7 @@ SYNC_STEP = re.compile(
     r"command=(\./scripts/verify-fast) "
     r"base=([A-Za-z0-9._/-]+) base-sha=([0-9a-f]{40}) "
     r"labels=([0-9a-f]{64}) "
-    r"release=(alpha|beta|early|formal|none) main=([0-9a-f]{40}) "
+    r"release=(beta|stable|none) main=([0-9a-f]{40}) "
     r"source-run=([1-9][0-9]*) source-job=([1-9][0-9]*) "
     r"source-check=([1-9][0-9]*)$"
 )

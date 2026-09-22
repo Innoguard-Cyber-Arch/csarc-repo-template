@@ -23,9 +23,11 @@ from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    csarc_config = importlib.import_module("csarc_config")
     stale_branch_detection = importlib.import_module("stale_branch_detection")
     release_phase = importlib.import_module("release_phase")
 else:
+    csarc_config = importlib.import_module(f"{__package__}.csarc_config")
     stale_branch_detection = importlib.import_module(
         f"{__package__}.stale_branch_detection"
     )
@@ -33,8 +35,8 @@ else:
 
 STATES = {"allowed", "blocked", "unknown"}
 # Version parsing/formatting/precedence all go through release_phase (Issue
-# #744: alpha/beta/early/formal phase-suffixed versions) instead of a local
-# plain-triplet pattern.
+# #918: beta/stable channels with no legacy prerelease parser) instead of a
+# local plain-triplet pattern.
 PEP440_SURFACES = {"pyproject.toml", "uv.lock"}
 
 
@@ -307,7 +309,7 @@ def release_follow_up_errors(  # noqa: C901
     elif maintainer_actor and not guided_head:
         errors.append(
             "guided release branch must use release/v<version>, where "
-            "<version> is X.Y.Z or X.Y.Z-alpha.N / X.Y.Z-beta.N"
+            "<version> is X.Y.Z or X.Y.Z-beta.N"
         )
 
     allowed = {".csarc/release-please-manifest.json", "CHANGELOG.md"}
@@ -1205,9 +1207,9 @@ def release_plan(
 ) -> tuple[str, str] | None:
     """Return the next tag/version, or None when HEAD needs no release.
 
-    ``phase`` is the maintainer/#745-declared release phase ("alpha",
-    "beta", "early", or "formal") to apply to a freshly computed core
-    version. It is never consulted when a tag already exists at ``sha`` or
+    ``phase`` is the route-selected release channel (``beta`` or ``stable``)
+    applied to a freshly computed core version. It is never consulted when
+    a tag already exists at ``sha`` or
     when this commit is already a prepared version-bump candidate -- those
     paths report the version that was already decided, unsuffixed or not.
     """
@@ -1279,7 +1281,15 @@ def release_plan(
         return None
     if phase is not None:
         existing = git_output(["tag", "--list"], root).splitlines()
-        version = release_phase.phase_version(version, phase, existing=existing)
+        config_path = root / ".csarc/config.yml"
+        maturity = (
+            str(csarc_config.load_config(config_path)["project_maturity"])
+            if config_path.is_file()
+            else None
+        )
+        version = release_phase.phase_version(
+            version, phase, existing=existing, maturity=maturity
+        )
     return f"v{version}", version
 
 
@@ -1425,8 +1435,8 @@ def _target_version(version: str, relative_path: str) -> str:
     Every surface gets the canonical SemVer string except a Python
     packaging surface (Issue #744): `pyproject.toml`, `uv.lock`, and the
     package's own `src/<package_name>/__init__.py` marker. PEP 440 has no
-    hyphenated `-alpha.N`/`-beta.N` pre-release segment, so those get the
-    normalized form (`0.16.0a1`) regardless of whether they are the primary
+    hyphenated `-beta.N` pre-release segment, so those get the normalized
+    form (`0.16.0b1`) regardless of whether they are the primary
     governed surface or a synced extra-file entry (e.g. a
     typescript+python project's `package.json` stays primary while
     `pyproject.toml` is still an extra-file that needs the same
@@ -1492,7 +1502,7 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
                 if "x-release-please-version" in line:
                     line, count = re.subn(
                         r"(?P<prefix>v?)\d+\.\d+\.\d+"
-                        r"(?:-(?:alpha|beta)\.\d+)?",
+                        r"(?:-[0-9A-Za-z.-]+)?",
                         rf"\g<prefix>{target_version}",
                         line,
                         count=1,
@@ -1848,12 +1858,10 @@ def release_version_errors(  # noqa: C901
             marker_found = True
             # A PEP 440 surface's marker (Issue #744's `_is_pep440_surface`,
             # e.g. `src/<package>/__init__.py`) holds the compact
-            # `a1`/`b1` form instead of the canonical `-alpha.1`/`-beta.1`
+            # `b1` form instead of the canonical `-beta.1`
             # segment; match either so its phase suffix is not silently
             # dropped from `versions` below.
-            match = re.search(
-                r"v?(\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+|[ab]\d+)?)", line
-            )
+            match = re.search(r"v?(\d+\.\d+\.\d+(?:-beta\.\d+|b\d+)?)", line)
             versions[str(path.relative_to(root))] = (
                 match.group(1) if match else ""
             )
@@ -1989,10 +1997,8 @@ def parser() -> argparse.ArgumentParser:
         choices=release_phase.PHASES,
         default=None,
         help=(
-            "Release phase to apply to a freshly computed version "
-            "(alpha/beta/early/formal, Issue #744). Declaring which phase "
-            "a release deserves is Issue #745's job; omit this to report "
-            "the bare core version."
+            "Release channel to apply to a freshly computed version "
+            "(beta/stable, Issue #918); omit it to report the bare core."
         ),
     )
     candidate = subparsers.add_parser("prepare-candidate")

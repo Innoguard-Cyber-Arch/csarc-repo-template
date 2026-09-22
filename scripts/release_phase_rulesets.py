@@ -4,8 +4,8 @@
 GitHub applies ``bypass_actors`` to a whole Ruleset, so required status
 checks must live in a separate Ruleset with no bypass actors. The review
 Ruleset may retain only the known repository-admin pull-request bypass; the
-level-aware review and lifecycle checks decide whether Alpha self-review or
-an audited hotfix may actually use it.
+level-aware review and lifecycle checks decide whether configured beta/stable
+self-review may actually use it.
 
 The filename is retained for update compatibility, but the former
 whole-project ``release_phase`` switch no longer exists.

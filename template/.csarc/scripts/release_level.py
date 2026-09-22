@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve per-work release levels and their review/test requirements."""
+"""Resolve beta/stable channels and their review/test requirements."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ else:
     csarc_config = importlib.import_module(f"{__package__}.csarc_config")
     release_phase = importlib.import_module(f"{__package__}.release_phase")
 
-LEVELS = ("alpha", "beta", "early", "formal")
+LEVELS = ("beta", "stable")
 LEVEL_RANK = {level: rank for rank, level in enumerate(LEVELS)}
 SUITES = ("fast", "full")
 SUITE_RANK = {suite: rank for rank, suite in enumerate(SUITES)}
@@ -39,16 +39,17 @@ COLLABORATOR_PERMISSIONS = {
 }
 DECLARATION_HEADING = "Release level / 發布層級"
 DEFAULT_REVIEW = {
-    "alpha": "self",
     "beta": "peer",
-    "early": "peer",
-    "formal": "peer",
+    "stable": "peer",
 }
 DEFAULT_SUITE = {
-    "alpha": "fast",
     "beta": "fast",
-    "early": "fast",
-    "formal": "full",
+    "stable": "full",
+}
+LEGACY_LEVEL_ALIASES = {
+    "alpha": "beta",
+    "early": "stable",
+    "formal": "stable",
 }
 _CLOSING_ISSUE = re.compile(
     r"(?<!\w)(?:Closes|Fixes|Resolves)[ \t]+#([1-9][0-9]*)(?!\w)",
@@ -56,7 +57,7 @@ _CLOSING_ISSUE = re.compile(
 )
 _RELEASE_VERSION = re.compile(
     r"\brelease\s+v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
-    r"(?:-(alpha|beta)\.([1-9]\d*))?\b",
+    r"(?:-(beta)\.([1-9]\d*))?\b",
     re.IGNORECASE,
 )
 _BATCH_MARKER = "release-level-work-items"
@@ -106,25 +107,28 @@ class Decision:
 def settings_from_mapping(config: dict[str, object]) -> Settings:
     """Build the fixed verification floor and configured human review mode."""
     enabled = True
-    default_level = config.get("default_release_level", "beta")
+    configured_default = config.get("default_release_level", "stable")
+    default_level = LEGACY_LEVEL_ALIASES.get(
+        str(configured_default), configured_default
+    )
     if default_level not in LEVELS:
         raise ValueError(
             "default_release_level must be one of " + ", ".join(LEVELS)
         )
-    review = config.get("review")
-    if review is None:
-        legacy = [
-            config.get(f"release_level_{level}_review", DEFAULT_REVIEW[level])
-            for level in LEVELS
-        ]
-        review = "peer" if "peer" in legacy else "solo"
-    if review not in {"solo", "peer"}:
-        raise ValueError("review must be solo or peer")
-    resolved_review = "self" if review == "solo" else "peer"
+    bypass = config.get("admin_bypass")
+    if bypass is None:
+        bypass = "always" if config.get("review") == "solo" else "off"
+    if bypass not in {"off", "beta-only", "always"}:
+        raise ValueError("admin_bypass must be off, beta-only, or always")
+    reviews = dict(DEFAULT_REVIEW)
+    if bypass in {"beta-only", "always"}:
+        reviews["beta"] = "self"
+    if bypass == "always":
+        reviews["stable"] = "self"
     return Settings(
         enabled,
         str(default_level),
-        {level: resolved_review for level in LEVELS},
+        reviews,
         dict(DEFAULT_SUITE),
     )
 
@@ -147,12 +151,13 @@ def _section(body: str, heading: str) -> str | None:
 
 
 def declared_level(body: object) -> str | None:
-    """Return the exact Issue-form release-level declaration, if present."""
+    """Read a historical declaration and normalize it to a public channel."""
     if not isinstance(body, str):
         return None
     value = _section(body, DECLARATION_HEADING)
     if value is None or value in {"", "_No response_"}:
         return None
+    value = LEGACY_LEVEL_ALIASES.get(value, value)
     if value not in LEVELS:
         raise ValueError(
             f"{DECLARATION_HEADING} must be one of {', '.join(LEVELS)}"
@@ -306,7 +311,12 @@ def level_allows_copilot(max_level: str, level: str) -> bool:
     """Apply the optional Copilot ceiling to one resolved level."""
     if max_level == "unlimited":
         return True
-    normalized = "formal" if max_level == "release" else max_level
+    normalized = {
+        "alpha": "beta",
+        "early": "stable",
+        "formal": "stable",
+        "release": "stable",
+    }.get(max_level, max_level)
     if normalized not in LEVEL_RANK or level not in LEVEL_RANK:
         raise ValueError("invalid Copilot release-level limit")
     return LEVEL_RANK[level] <= LEVEL_RANK[normalized]
@@ -391,29 +401,18 @@ def resolve_issue(
     milestone = issue.get("milestone")
     if isinstance(milestone, dict) and type(milestone.get("number")) is int:
         tracker = _tracker_for(github, repo, int(milestone["number"]))
-        tracker_level = _trusted_declaration(github, repo, tracker)
-        level = tracker_level or settings.default_level
-        if (
-            own_level is not None
-            and issue.get("number") != tracker.get("number")
-            and own_level != level
-        ):
-            raise RuntimeError(
-                f"Issue #{number} declares {own_level}, but Milestone "
-                f"{milestone['number']} requires {level} from its tracker"
-            )
+        is_tracker = issue.get("number") == tracker.get("number")
+        level = "stable" if is_tracker else "beta"
         source = (
-            f"Milestone {milestone['number']} tracker"
-            if tracker_level is not None
-            else "configured default (tracker has no trusted declaration)"
+            f"Milestone {milestone['number']} promotion"
+            if is_tracker
+            else f"Milestone {milestone['number']} work item"
         )
     else:
-        level = own_level or settings.default_level
-        source = (
-            f"Issue #{number}"
-            if own_level is not None
-            else "configured default (Issue has no trusted declaration)"
-        )
+        level = "stable"
+        source = "standalone work item"
+    if own_level is not None and own_level != level:
+        source += f" (legacy {own_level} declaration superseded by route)"
     return Decision(
         level,
         settings.reviews[level],
@@ -466,6 +465,16 @@ def resolve_pull(
             settings.reviews[level],
             settings.suites[level],
             "allowlisted dependency bot",
+        )
+    base = pull.get("base")
+    base_ref = str(base.get("ref") or "") if isinstance(base, dict) else ""
+    if base_ref.startswith(("dev/m", "dev/i")):
+        level = "beta"
+        return Decision(
+            level,
+            settings.reviews[level],
+            settings.suites[level],
+            f"delivery branch {base_ref}",
         )
     release_level = _release_pull_level(pull)
     if release_level is not None:
@@ -580,6 +589,7 @@ def unreleased_pulls(
     repo: str,
     root: Path,
     sha: str,
+    base_branch: str = "main",
 ) -> list[dict[str, Any]]:
     """Return unique merged pull requests since the prior release tag."""
     valid_tags = [
@@ -604,7 +614,7 @@ def unreleased_pulls(
             ):
                 continue
             base = pull.get("base")
-            if not isinstance(base, dict) or base.get("ref") != "main":
+            if not isinstance(base, dict) or base.get("ref") != base_branch:
                 continue
             pulls[int(pull["number"])] = pull
     return list(pulls.values())
@@ -616,9 +626,10 @@ def release_batch_from_git(
     root: Path,
     sha: str,
     settings: Settings,
+    base_branch: str = "main",
 ) -> dict[str, object]:
     """Resolve the unreleased batch represented by one main commit."""
-    pulls = unreleased_pulls(github, repo, root, sha)
+    pulls = unreleased_pulls(github, repo, root, sha, base_branch)
     if pulls:
         return release_batch(github, repo, pulls, settings)
     pointed = [
@@ -748,6 +759,7 @@ def main(argv: list[str] | None = None) -> int:
     batch_parser = subparsers.add_parser("release-batch")
     batch_parser.add_argument("--repo", required=True)
     batch_parser.add_argument("--sha", default="HEAD")
+    batch_parser.add_argument("--base-branch", default="main")
     batch_parser.add_argument("--root", type=Path, default=Path.cwd())
     batch_parser.add_argument("--markdown-output", type=Path)
     batch_parser.add_argument("--github-output", type=Path)
@@ -773,6 +785,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.root.resolve(),
                 args.sha,
                 settings,
+                args.base_branch,
             )
             _write_batch_outputs(
                 batch, args.markdown_output, args.github_output

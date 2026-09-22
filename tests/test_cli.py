@@ -566,7 +566,10 @@ class FakeReleaseClient:
             "full_name": cli.CANONICAL_REPOSITORY,
         }
 
-    def release(self, tag: str | None) -> dict[str, object]:
+    def release(
+        self, tag: str | None, *, channel: str = "stable"
+    ) -> dict[str, object]:
+        assert channel in {"stable", "beta"}
         assert tag in {None, self.release_values["tag_name"]}
         return self.release_values
 
@@ -5058,7 +5061,10 @@ class LocalGitReleaseClient:
             "immutable": True,
         }
 
-    def release(self, tag: str | None) -> dict[str, object]:
+    def release(
+        self, tag: str | None, *, channel: str = "stable"
+    ) -> dict[str, object]:
+        del channel
         resolved = self.latest if tag is None or tag == "latest" else tag
         if resolved in self.missing:
             raise cli.ReleaseNotFoundError(
@@ -5162,6 +5168,43 @@ def test_update_reinstalls_when_the_recorded_tag_is_confirmed_missing(
     ) == "template version one\n"
     answers = cli.config_path(project).read_text(encoding="utf-8")
     assert second_sha in answers
+
+
+@pytest.mark.large
+def test_update_reinstalls_when_the_recorded_version_is_unsupported(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A retired alpha version rebuilds without touching project content."""
+    source, project = initialize_verified_project(tmp_path, monkeypatch)
+    provenance_path = project / cli.PROVENANCE_FILE
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance["release_tag"] = "v0.1.0-alpha.1"
+    provenance_path.write_text(
+        json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    project_owned = project / "project-owned.txt"
+    project_owned.write_text("keep me\n", encoding="utf-8")
+
+    (source / "template" / "new-feature.txt").write_text(
+        "added in stable\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: stable template version")
+    git(source, "tag", "v0.2.0", second_sha)
+    monkeypatch.setattr(
+        cli,
+        "GhReleaseClient",
+        lambda: LocalGitReleaseClient(source, "v0.2.0"),
+    )
+
+    assert main(["update", str(project), "--check"]) == 1
+    output = capsys.readouterr()
+    assert "reinstall" in output.err.lower()
+    assert "not a supported beta/stable" in output.err
+    assert project_owned.read_text(encoding="utf-8") == "keep me\n"
+    assert cli.config_path(project).is_file()
 
 
 @pytest.mark.large
@@ -6791,7 +6834,7 @@ def test_release_resolution_and_helpers(
         # (Issue #744).
         ("prerelease", True, "prerelease flag does not match"),
         ("published_at", None, "not published"),
-        ("tag_name", "v1.2.3-rc.1", "not a legal alpha/beta/early/formal"),
+        ("tag_name", "v1.2.3-rc.1", "not a supported beta/stable"),
     ],
 )
 def test_release_metadata_fails_closed(
@@ -6804,9 +6847,9 @@ def test_release_metadata_fails_closed(
         cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
 
 
-@pytest.mark.parametrize("tag", ["v0.16.0-alpha.1", "v0.16.0-beta.3"])
+@pytest.mark.parametrize("tag", ["v0.16.0-beta.3"])
 def test_release_metadata_accepts_well_formed_prerelease(tag: str) -> None:
-    """Issue #744: an immutable, published prerelease tag is now approved."""
+    """An immutable, published beta release is approved."""
     client = FakeReleaseClient()
     client.release_values["tag_name"] = tag
     client.release_values["prerelease"] = True
@@ -6935,7 +6978,7 @@ def test_copy_uses_resolved_canonical_source(
     assert copied_source == cli.CANONICAL_SOURCE
 
 
-def test_gh_client_selects_latest_by_semver_precedence(
+def test_gh_client_selects_latest_stable_by_default_and_beta_by_opt_in(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Issue #744: pick the highest SemVer precedence, not publish order.
@@ -6974,8 +7017,41 @@ def test_gh_client_selects_latest_by_semver_precedence(
         return []
 
     monkeypatch.setattr(cli, "gh_json_list", fake_gh_json_list)
-    result = cli.GhReleaseClient().release(None)
-    assert result["tag_name"] == "v1.1.0-beta.1"
+    client = cli.GhReleaseClient()
+    assert client.release(None)["tag_name"] == "v1.0.0"
+    assert client.release(None, channel="beta")["tag_name"] == ("v1.1.0-beta.1")
+
+
+def test_release_identity_rejects_retired_alpha_versions() -> None:
+    """Published alpha tags enter conservative reinstall recovery."""
+    release = {
+        "tag_name": "v0.21.0-alpha.1",
+        "id": 1,
+        "draft": False,
+        "prerelease": True,
+        "published_at": "2026-09-01T00:00:00Z",
+        "immutable": True,
+    }
+    with pytest.raises(
+        cli.UnsupportedReleaseVersionError,
+        match="not a supported beta/stable",
+    ):
+        cli.release_identity(release)
+
+
+def test_release_channel_defaults_to_stable_and_beta_is_opt_in() -> None:
+    """Every public install/update command defaults to stable."""
+    for command, path in (
+        ("init", "/project/new"),
+        ("adopt", "/project/existing"),
+        ("update", "/project/existing"),
+        ("status", "/project/existing"),
+    ):
+        assert cli.parser().parse_args([command, path]).channel == "stable"
+        beta_args = cli.parser().parse_args(
+            [command, path, "--channel", "beta"]
+        )
+        assert beta_args.channel == "beta"
 
 
 def test_gh_client_latest_skips_a_self_inconsistent_release(

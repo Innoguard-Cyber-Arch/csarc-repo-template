@@ -20,13 +20,13 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     triggers = workflow.get("on", workflow.get(True))
 
     assert triggers == {
-        "push": {"branches": ["main"]},
+        "push": {"branches": ["main", "dev/m*"]},
         "workflow_dispatch": None,
     }
     assert workflow["concurrency"]["cancel-in-progress"] is False
     assert workflow["jobs"]["release"]["if"] == (
-        "${{ github.ref == 'refs/heads/main' && "
-        "(github.event_name != 'push' || true) }}"
+        "${{ github.ref == 'refs/heads/main' || "
+        "startsWith(github.ref, 'refs/heads/dev/m') }}"
     )
     assert workflow["permissions"] == {"contents": "read"}
     assert set(workflow["jobs"]["release"]["permissions"]) == {
@@ -42,7 +42,7 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
 
     assert "release_policy.py plan" in source
     assert "release_level.py release-batch" in source
-    assert "RELEASE_LEVEL: ${{ steps.level.outputs.level }}" in source
+    assert "RELEASE_LEVEL: ${{ steps.route.outputs.channel }}" in source
     assert '--phase "$RELEASE_LEVEL"' in source
     assert "release_level.py annotate-pr" in source
     assert "release_level.py annotate-release" in source
@@ -53,10 +53,12 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "release_policy.py prepare-candidate" in source
     assert "./scripts/verify-release-candidate" in source
     assert './scripts/check-trusted-verification "$GITHUB_SHA"' in source
-    assert "run: ./scripts/verify-template.sh" in source
+    assert "./scripts/verify-template.sh" in source
+    assert "./scripts/verify-fast" in source
     assert "run: ./scripts/verify full" not in source
     assert "--resolve-merge-source" in source
-    assert "--required-tier full" in source
+    assert "REQUIRED_TIER: ${{ steps.route.outputs.required_tier }}" in source
+    assert '--required-tier "$REQUIRED_TIER"' in source
     assert '--github-repo "$GITHUB_REPOSITORY"' in source
     assert "steps.verification.outputs.reused != 'true'" in source
     assert "scripts/release_bundle.py prepare" in source
@@ -210,8 +212,10 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         ]
         _, resolve = by_name["Resolve the exact release state"]
 
+        route_index, _ = by_name["Resolve release route"]
         level_index, _ = by_name["Resolve included work and release level"]
-        assert level_index == 1
+        assert route_index == 1
+        assert level_index == route_index + 1
         assert plan_index == level_index + 1
         assert plan_index < capability_index < blocked_index
         assert blocked_index < attestation_index
@@ -236,7 +240,10 @@ def test_release_reuse_resolves_the_exact_merged_pr_head() -> None:
         if candidate.get("name")
         == "Reuse the source PR's trusted verification evidence"
     )
-    assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert step["env"] == {
+        "GH_TOKEN": "${{ github.token }}",
+        "REQUIRED_TIER": "${{ steps.route.outputs.required_tier }}",
+    }
     assert "--resolve-merge-source" in step["run"]
     assert '--github-repo "$GITHUB_REPOSITORY"' in step["run"]
 
@@ -330,7 +337,8 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
     )
     assert "--resolve-merge-source" in template
     assert '--github-repo "$GITHUB_REPOSITORY"' in template
-    assert "--required-tier full" in template
+    assert "REQUIRED_TIER: ${{ steps.route.outputs.required_tier }}" in template
+    assert '--required-tier "$REQUIRED_TIER"' in template
     assert "./.csarc/scripts/verify-release-candidate" in template
     assert '{% if "typescript" in languages %}' in template
     assert '{% if "rust" in languages %}' in template

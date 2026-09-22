@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Verify the required usage trace for a level-aware review bypass.
+"""Verify the required usage trace for an audited admin review bypass.
 
 Issue #607 requires every pull request actually merged with the Ruleset
-self-approval bypass (`#580`, `docs/ci-policy.md` "Alpha 自我核准 bypass")
-during Alpha self-review or a beta+ hotfix to leave a structured trace
+self-approval bypass during beta/stable self-review or a hotfix to leave a
+structured trace
 comment on that same PR before merging: level, route, actor, and reason.
 
 This module is the "at least one concrete, testable mechanism" Issue #607
@@ -43,8 +43,8 @@ from typing import Any
 JsonObject = dict[str, Any]
 
 TRACE_PATTERN = re.compile(
-    r"^bypass-trace:\s*release_level=(?P<level>alpha|beta|early|formal)\s+"
-    r"route=(?P<route>alpha|hotfix)\s+"
+    r"^bypass-trace:\s*release_level=(?P<level>beta|stable)\s+"
+    r"route=(?P<route>beta|stable|hotfix)\s+"
     r"actor=(?P<actor>\S+)\s+reason=(?P<reason>.+)$",
     re.MULTILINE,
 )
@@ -57,7 +57,7 @@ def parse_trace(body: str) -> JsonObject | None:
         return None
     level = match.group("level")
     route = match.group("route")
-    if (route == "alpha") != (level == "alpha"):
+    if route != "hotfix" and route != level:
         return None
     return {
         "release_level": level,
@@ -161,7 +161,7 @@ def _main(argv: list[str]) -> int:
             f"PR #{args.pr_number} in {args.repo} is merged but has no "
             "bypass-trace comment before its merge time. Required "
             "format: 'bypass-trace: release_level=<level> "
-            "route=<alpha|hotfix> actor=<login> reason=<text>'.",
+            "route=<beta|stable|hotfix> actor=<login> reason=<text>'.",
             file=sys.stderr,
         )
         return 1
