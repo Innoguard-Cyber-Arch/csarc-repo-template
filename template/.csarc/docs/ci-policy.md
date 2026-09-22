@@ -152,10 +152,11 @@ Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head ma
      仍然有效）；或
   2. Copilot 對**目前 head SHA** 的最新審核沒有任何 inline comment、內文沒有被隱藏的
      低信心意見（suppressed comments），且內文明確寫出沒有產生意見；或
-  3.（#775／#826）這是一張符合 `alpha_self_merge_opt_in` 條件（PR body 恰好一次
+  3.（#775／#826／#905）這是一張符合 `alpha_self_merge_opt_in` 條件（PR body 恰好一次
      `Alpha 自行合併 / self-merged` 標記、Milestone-less Issue 的 direct-to-main
-     路由、既有 `dev/mN` Issue 路由，或經 `require_routine_route()` 完整驗證的正式
-     current-main delivery sync 路由）的 Alpha self-merge PR，且已經有一則
+     路由、既有 `dev/mN` Issue 路由、經 `require_routine_route()` 完整驗證的正式
+     current-main delivery sync 路由，或由 `promotion_gate.route_for()` 分類為 Milestone
+     promotion 的同 repository 路由）的 Alpha self-merge PR，且已經有一則
      `pr_lifecycle.find_exact_head_authorization` 能找到的、綁定**目前 head SHA**
      的真人 maintainer 授權留言（跟 `pr_lifecycle.py merge` 要求的是同一則留言，
      不必另貼兩次）。
@@ -254,11 +255,14 @@ Alpha PR 可由 `.csarc/scripts/pr_lifecycle.py merge` 在 lease＋exact-head �
 - delivery sync：正式 `sync/main-to-mN-<slug>-<current-main-short-sha>` route，且
   `require_routine_route()` 已驗證同 repository、base／head 命名、current `main`
   containment 與 merge parent 拓撲（#826）。
+- Milestone promotion：`promotion_gate.route_for()` 已分類為 `milestone` 的同 repository
+  `dev/mN-*`／`promote/mN-*` route；既有 `title` 與 `verify` required checks 繼續驗證
+  tracker、Milestone、bridge topology 與 exact candidate（#905）。
 
-三者的 PR body 都必須恰好出現一次 `Alpha 自行合併 / self-merged` 標記。未通過上述
+四者的 PR body 都必須恰好出現一次 `Alpha 自行合併 / self-merged` 標記。未通過上述
 既有 route 驗證、不是 Alpha self-merge、或缺少綁定目前 head 的 maintainer 授權留言，
-仍走原本的人工審核／fail-closed 路徑；promotion、release 與 quota fallback 不因 #826
-擴大。
+仍走原本的人工審核／fail-closed 路徑；release、beta／early／formal 與 quota fallback
+不因 #905 擴大。
 
 這是只在「repo 結構性只有一個真人帳號」這段 alpha 期間才成立的例外，不是長期設計；
 有第二個真正的 collaborator 後應重新檢視是否移除，方向由維護者決定（追蹤於 #580）。

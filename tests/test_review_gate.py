@@ -412,6 +412,15 @@ def alpha_sync_github() -> FakeGitHub:
     return github
 
 
+def alpha_promotion_github() -> FakeGitHub:
+    """Return a recognized Milestone promotion candidate."""
+    github = FakeGitHub([])
+    github.head_ref = "promote/m12-agent-workflow-contract"
+    github.labels = {"enhancement", "promotion"}
+    github.body = f"Refs #42\n\n{pr_lifecycle.ALPHA_SELF_MERGE_MARKER}"
+    return github
+
+
 def test_alpha_self_merge_authorization_passes(copilot_config: Path) -> None:
     """Issue #775: a valid exact-head Alpha self-merge comment passes review."""
     github = alpha_github()
@@ -426,6 +435,17 @@ def test_alpha_sync_self_merge_authorization_passes(
 ) -> None:
     """Issue #826: review and lifecycle share the validated sync route."""
     github = alpha_sync_github()
+    github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["passed"]
+    assert result["source"] == "alpha-self-merge"
+
+
+def test_alpha_promotion_self_merge_authorization_passes(
+    copilot_config: Path,
+) -> None:
+    """Issue #905: review and lifecycle share the promotion route."""
+    github = alpha_promotion_github()
     github.issue_comments = [alpha_authorization_comment()]
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert result["passed"]
