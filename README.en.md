@@ -145,15 +145,13 @@ flowchart LR
   S["Standalone Issues"] --> MAIN
   I["Issue #42 needing independent canary"] --> DI["dev/i42-canary"]
   H["Urgent fix/* + hotfix"] --> MAIN["main"]
-  MA -->|promotion: full + canary| MAIN
-  MB -->|promotion: full + canary| MAIN
+  MA -->|promotion bridge: full + canary| MAIN
+  MB -->|promotion bridge: full + canary| MAIN
   DI -->|standalone promotion| MAIN
-  MAIN -. "reviewed sync PR" .-> MA
-  MAIN -. "reviewed sync PR" .-> MB
   MAIN -. "reviewed sync PR" .-> DI
 ```
 
-`main` moving forward never invalidates unrelated Milestone work, and never auto-syncs every branch. Each Milestone only pulls in the then-latest `main` via one reviewed `sync/main-to-m*` PR right before its final delivery; a branch is synced earlier only when its owner records a real dependency.
+`main` moving forward never invalidates unrelated Milestone work, and never auto-syncs every branch. Each Milestone's final Promotion PR uses an exact two-parent bridge to include both the delivery source and the then-current `main`, so it needs no final sync PR. A reviewed `sync/main-to-*` PR remains available only for an owner-recorded dependency or a `dev/i*` canary before delivery.
 
 This template's full entry point is `./scripts/verify-template.sh`; a generated project uses `./scripts/verify`. The current `.github/workflows/ci.yml` has a single `verify` job that selects fast or full by the change and calls the same repo-local program; docs-only work is a fast scope optimization, not another tier. Promotion, hotfix, release recovery, merge queue, and manual runs use full, with a single 30-minute job timeout. During development, run the narrowest focused check directly (e.g. `uv run pytest <path>`, or rerun one stage of `verify-template.sh` alone with `scripts/verify-stage-<name>`); only when the PR itself falls on the full boundary does the owner/integrator additionally run `./scripts/verify-template.sh` once locally. See [`docs/ci-policy.md`](docs/ci-policy.md) for the full tiering and current archive boundary.
 

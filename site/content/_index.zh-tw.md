@@ -580,7 +580,7 @@ Issue 宣告層級；Milestone work Issue 繼承 tracker。路徑分類若判定
 - PR 標題使用 Angular／Conventional Commits 格式：`type(scope)!: English summary`。type 可用 `feat` 新功能、`fix` 修錯、`docs` 文件、`refactor` 重構、`test` 測試、`build` 建置／相依、`ci` 自動化、`chore` 維護、`revert` 撤回；scope 與 `!` 可省略。版本意圖為 `feat`＝minor、`fix`／`revert`＝patch、`!`＝breaking／major，其餘不主動升版。
 - 工作 Label 與里程碑要和 Issue 一致；PR 作者必須列為負責人。
 - 里程碑工作進 `dev/m<里程碑>-*`；一般獨立工作直接進 `main`。
-- `sync/main-to-*` PR 在 Milestone／canary 最終交付前納入最新 main；只有 owner 記錄真實相依時才提前同步，不對所有分支 fan-out。
+- Milestone 的 Promotion PR 以精確雙親 bridge 同時納入 delivery source 與最新 main，不另開 final sync PR；`sync/main-to-*` 只保留給明列的提前相依與 `dev/i*` canary，不對所有分支 fan-out。
 - 只有明確標示的 standalone hotfix 可直接進 main；誰能合併由「規則治理」決定。
 {{< /disclosure >}}
 

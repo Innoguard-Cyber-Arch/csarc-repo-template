@@ -582,7 +582,7 @@ Routine updates and security checks run automatically. People step in only for u
 - PR titles use the Angular / Conventional Commits form `type(scope)!: English summary`: `feat` adds a feature, `fix` corrects behavior, `docs` changes documentation, `refactor` restructures code, `test` changes tests, `build` changes builds or dependencies, `ci` changes automation, `chore` performs maintenance, and `revert` undoes a change. Scope and `!` are optional. Release intent is minor for `feat`, patch for `fix` / `revert`, major for `!`, and no release for the other types.
 - The classification label and Milestone match the linked Issue; the PR author must be an assignee.
 - Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work targets `main` directly.
-- A `sync/main-to-*` PR updates a Milestone or explicit canary branch before final delivery, or earlier only when its owner records a real dependency. It never fans out to every branch.
+- A Milestone Promotion PR uses an exact two-parent bridge to include both its delivery source and current main, with no final sync PR. `sync/main-to-*` remains only for an owner-recorded early dependency or a `dev/i*` canary; it never fans out to every branch.
 - Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.
 {{< /disclosure >}}
 
