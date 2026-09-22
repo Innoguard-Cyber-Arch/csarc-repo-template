@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.21.0-alpha.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.22.0</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> and stays synchronized across both languages. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.21.0-alpha.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.22.0<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -727,7 +727,7 @@ The template prepares an optional CODEOWNER, chooses reviewers from live permiss
 - a fixable mismatch fails until corrected.
 
 {{< disclosure key="governance-live-status" title="This repository's own real status right now (checked 2026-09-07)" >}}
-The `Innoguard-Cyber-Arch` API reports this repository is on the Free plan with **public** visibility. GitHub already has an `enforcement: active` Ruleset named "CSARC protected branches" (created 2026-09-03), applied to `main` and `dev/m*`: all three `title`/`verify`/`review` status checks must pass, the review check evaluates `solo`/`peer` and available Copilot evidence, and force-push is forbidden. This repository explicitly uses `verification_mode: hosted` and `actions_fallback: admin`; the lifecycle may use the admin bypass only after proving a zero-step billing block and revalidating all other evidence.
+The `Innoguard-Cyber-Arch` API reports this repository is on the Free plan with **public** visibility. GitHub already has an `enforcement: active` Ruleset named "CSARC protected branches" (created 2026-09-03), applied to `main` and `dev/m*`: all three `title`/`verify`/`review` status checks must pass, the review check evaluates `admin_bypass` and available Copilot evidence, and force-push is forbidden. This repository explicitly uses `verification_mode: hosted`, `actions_fallback: admin`, and `admin_bypass: always`; admin bypass replaces only peer approval, while `actions_fallback` separately handles a proven zero-step billing block, and neither skips the remaining required evidence.
 
 This maps to the "Free + public, or Pro personal + private" row in the table below, not the **private** degraded scenario the Free row describes in the "Full capability at each Free/Team/Enterprise tier" cards further down (that card describes what happens on Free + *private*, where the REST/GraphQL Ruleset-creation API refuses the request, so only the desired state can be kept while it is marked `DEGRADED`); this repository is public, so it takes the path that applies and verifies directly. If the plan or visibility changes later, rerunning `plan`/`apply`/`check` reflects the latest state -- this records the fact as of when it was checked, not a permanent guarantee, and it does not mean every repository using this template looks the same.
 {{< /disclosure >}}
@@ -755,7 +755,7 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | --- | --- | --- | --- |
 | Governance intent | `governance_mode`, `lifecycle`, `actions_fallback` | `managed`/`observe`; `issues`/`milestones`; fallback defaults to `off`, with `admin` opt-in | repository policy, work-item side effects, and proven zero-step billing fallback |
 | Verification trust | `verification_mode` | new projects default to `local`; `hosted` is optional | local self-attestation plus audited bypass with no hosted validation/release workflow, or trusted GitHub-hosted checks |
-| Review intent | `review`, `copilot_review` | human fallback is `solo`/`peer`; Copilot is `allowed`/`off` | exact-head `review` gate; unavailable Copilot falls back to the human rule |
+| Review intent | `admin_bypass`, `copilot_review` | admin bypass defaults to `off`, with `beta-only`/`always` opt-in; Copilot is `allowed`/`off` | exact-head `review` gate; unavailable Copilot falls back to peer approval or configured admin authorization |
 | Release intent | `release_ownership`, `release_trigger`, `project_maturity` | three ownership modes; trigger is `main`/`manual`; maturity defaults to early | public beta/stable channels, one fixed Conventional Commits algorithm, and candidate triggering |
 | Optional output | `features` | `[repo-site]` by default; add `docker` or leave empty | repo-site/Pages desired policy and Docker starter/build scan switch as units |
 | Organization policy | `code_owner` | optional `@user` or `@organization/team` | `.github/CODEOWNERS`; never a reviewer list |

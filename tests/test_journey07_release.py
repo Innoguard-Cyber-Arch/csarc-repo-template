@@ -57,9 +57,8 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "./scripts/verify-fast" in source
     assert "run: ./scripts/verify full" not in source
     assert "--resolve-merge-source" in source
-    assert (
-        '--required-tier "${{ steps.route.outputs.required_tier }}"' in source
-    )
+    assert "REQUIRED_TIER: ${{ steps.route.outputs.required_tier }}" in source
+    assert '--required-tier "$REQUIRED_TIER"' in source
     assert '--github-repo "$GITHUB_REPOSITORY"' in source
     assert "steps.verification.outputs.reused != 'true'" in source
     assert "scripts/release_bundle.py prepare" in source
@@ -241,7 +240,10 @@ def test_release_reuse_resolves_the_exact_merged_pr_head() -> None:
         if candidate.get("name")
         == "Reuse the source PR's trusted verification evidence"
     )
-    assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert step["env"] == {
+        "GH_TOKEN": "${{ github.token }}",
+        "REQUIRED_TIER": "${{ steps.route.outputs.required_tier }}",
+    }
     assert "--resolve-merge-source" in step["run"]
     assert '--github-repo "$GITHUB_REPOSITORY"' in step["run"]
 
@@ -335,9 +337,8 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
     )
     assert "--resolve-merge-source" in template
     assert '--github-repo "$GITHUB_REPOSITORY"' in template
-    assert (
-        '--required-tier "${{ steps.route.outputs.required_tier }}"' in template
-    )
+    assert "REQUIRED_TIER: ${{ steps.route.outputs.required_tier }}" in template
+    assert '--required-tier "$REQUIRED_TIER"' in template
     assert "./.csarc/scripts/verify-release-candidate" in template
     assert '{% if "typescript" in languages %}' in template
     assert '{% if "rust" in languages %}' in template

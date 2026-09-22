@@ -1067,7 +1067,6 @@ def test_exact_final_alpha_transition_plans_v022_stable(tmp_path: Path) -> None:
     git(tmp_path, "init", "-b", "main")
     git(tmp_path, "config", "user.name", "Release Test")
     git(tmp_path, "config", "user.email", "release@example.invalid")
-    write_release_surfaces(tmp_path, "0.21.0-alpha.1")
     (tmp_path / "release-please-config.json").write_text(
         json.dumps(
             {
@@ -1084,6 +1083,11 @@ def test_exact_final_alpha_transition_plans_v022_stable(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
+    write_release_surfaces(tmp_path, "0.17.4")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: prior stable history")
+    git(tmp_path, "tag", "v0.17.4")
+    write_release_surfaces(tmp_path, "0.21.0-alpha.1")
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "chore: final retired prerelease")
     git(tmp_path, "tag", "v0.21.0-alpha.1")
@@ -1099,6 +1103,9 @@ def test_exact_final_alpha_transition_plans_v022_stable(tmp_path: Path) -> None:
     prepared = prepare_release_candidate(tmp_path, head, phase="stable")
     assert prepared["version"] == "0.22.0"
     assert (tmp_path / "version.txt").read_text(encoding="utf-8") == "0.22.0\n"
+    changelog = (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "feat: define beta stable governance" in changelog
+    assert "feat: prior stable history" not in changelog
 
 
 def test_release_plan_parses_every_git_log_record(tmp_path: Path) -> None:

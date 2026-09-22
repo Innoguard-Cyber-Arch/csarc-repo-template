@@ -21,7 +21,7 @@ fit = "Fit"
 {{< standard key="index-mode-standard" title="This repo's current governance setup" >}}
 This repo is created and kept up to date with [csarc-repo-template](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template), so its way of working can be versioned, verified, and upgraded like its code:
 
-<div class="capability-map"><div class="capability-node"><h3>Languages</h3><p>[[languages]]</p></div><div class="capability-node"><h3>Review</h3><p>[[review]]; Copilot [[copilot_review]]</p></div><div class="capability-node"><h3>Visibility</h3><p>[[project_visibility]]</p></div><div class="capability-node"><h3>Next step</h3><p>Switch to "Install" to get started, or "About" to see what this governance baseline does.</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>Languages</h3><p>[[languages]]</p></div><div class="capability-node"><h3>Admin review bypass</h3><p>[[admin_bypass]]; Copilot [[copilot_review]]</p></div><div class="capability-node"><h3>Visibility</h3><p>[[project_visibility]]</p></div><div class="capability-node"><h3>Next step</h3><p>Switch to "Install" to get started, or "About" to see what this governance baseline does.</p></div></div>
 {{< /standard >}}
 
 {{< ops key="index-mode-ops" title="Where this configuration comes from" >}}
@@ -30,7 +30,7 @@ This repo's governance configuration lives in `.csarc/config.yml`, created and k
 | Setting | Current value |
 | --- | --- |
 | Code owner | `[[code_owner]]` |
-| Review | `[[review]]`; Copilot `[[copilot_review]]` |
+| Admin review bypass | `[[admin_bypass]]`; Copilot `[[copilot_review]]` |
 | Work-item automation | `[[lifecycle]]` |
 | Release trigger | `[[release_trigger]]` |
 | Optional features | `[[features]]` |
@@ -60,7 +60,7 @@ git clone [[repository_url]]
 
 {{< slide key="about" track="about" eyebrow="About" title="This repo is governed with csarc-repo-template" subtitle="Its way of working can be versioned, verified, and upgraded like its code -- not just a one-shot file generator." class="dense single-column" legacy="false" >}}
 {{< standard key="about-mode-standard" title="What this governance baseline keeps doing" >}}
-<div class="capability-map"><div class="capability-node"><h3>Every piece of work is one Issue</h3><p>States what to do and what "done" means; the change happens on its own branch so work never collides.</p></div><div class="capability-node"><h3>Every change goes through review</h3><p>Automated checks run first, then a person reviews the PR; nothing reaches the main branch without both.</p></div><div class="capability-node"><h3>Template updates preview first</h3><p>When `csarc-repo-template` has an update, you review the diff before it applies.</p></div><div class="capability-node"><h3>Routine security checks run alone</h3><p>Package versions and known vulnerabilities are checked on a schedule; you only step in on a real conflict.</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>Every piece of work is one Issue</h3><p>States what to do and what "done" means; the change happens on its own branch so work never collides.</p></div><div class="capability-node"><h3>Every change meets a review gate</h3><p>Automated checks must pass; peer, Copilot, or configured exact-head admin authorization then satisfies the review gate.</p></div><div class="capability-node"><h3>Template updates preview first</h3><p>When `csarc-repo-template` has an update, you review the diff before it applies.</p></div><div class="capability-node"><h3>Routine security checks run alone</h3><p>Package versions and known vulnerabilities are checked on a schedule; you only step in on a real conflict.</p></div></div>
 {{< /standard >}}
 
 {{< ops key="about-mode-ops" title="How the governance baseline works" >}}

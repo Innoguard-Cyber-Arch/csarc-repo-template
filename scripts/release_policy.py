@@ -1251,9 +1251,7 @@ def release_plan(  # noqa: C901
     if materialized == "0.21.0-alpha.1":
         base = materialized
         revision_range = (
-            f"v0.21.0-alpha.1..{sha}"
-            if "v0.21.0-alpha.1" in tags
-            else sha
+            f"v0.21.0-alpha.1..{sha}" if "v0.21.0-alpha.1" in tags else sha
         )
     elif valid_tags:
         latest_tag = release_phase.sort_by_precedence(valid_tags)[-1]
@@ -1593,12 +1591,13 @@ def _write_changelog(root: Path, sha: str, version: str) -> None:
     if re.search(rf"(?m)^## (?:\[)?v?{re.escape(version)}(?:\]|\s|\()", source):
         return
     tags = git_output(["tag", "--merged", sha], root).splitlines()
-    ordered = release_phase.sort_by_precedence(
-        tag for tag in tags if release_phase.is_valid_version(tag)
-    )
-    latest = ordered[-1] if ordered else ""
-    if not latest and "v0.21.0-alpha.1" in tags:
+    if version == "0.22.0" and "v0.21.0-alpha.1" in tags:
         latest = "v0.21.0-alpha.1"
+    else:
+        ordered = release_phase.sort_by_precedence(
+            tag for tag in tags if release_phase.is_valid_version(tag)
+        )
+        latest = ordered[-1] if ordered else ""
     revision = f"{latest}..{sha}" if latest else sha
     raw = git_output(
         ["log", "--reverse", "--format=%h%x1f%s%x1e", revision], root

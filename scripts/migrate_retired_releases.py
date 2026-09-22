@@ -328,7 +328,10 @@ def build_plan(
                 f"{item.replacement_tag}: tag resolves to unexpected commit "
                 f"{replacement_tag_commit}"
             )
-        source_assets = source.get("assets", []) if source else []
+        source_assets_value = source.get("assets", []) if source else []
+        source_assets = (
+            source_assets_value if isinstance(source_assets_value, list) else []
+        )
         downloads = sum(
             int(asset.get("downloadCount", 0))
             for asset in source_assets
