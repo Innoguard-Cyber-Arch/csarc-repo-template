@@ -1,0 +1,48 @@
+# {{ project_name }}
+
+{% if i18n == 'en-zh-tw' %}[繁體中文]({{ 'README.md' if primary_language == 'zh-tw' else 'README.zh-tw.md' }})
+
+{% endif %}<!-- csarc-project-description:start -->
+{{ project_description }}
+<!-- csarc-project-description:end -->
+
+## Highlights
+
+- One updateable baseline for development, verification, and releases.
+- Project teams own content; the template manages only the declared structure and presentation.
+- Local and hosted verification share the same risk-tiered entry point.
+
+## Installation
+
+```bash
+git clone {{ repository_url }}
+cd {{ project_slug }}
+```
+
+{% if languages %}Development toolchains: {{ languages | join(', ') }}.{% else %}This project uses the shared CI/CD baseline without a language module.{% endif %}
+
+## Quick start
+
+<!-- csarc-project-run-command:start -->
+```bash
+{{ project_run_command }}
+```
+<!-- csarc-project-run-command:end -->
+
+## Documentation
+
+{% if documentation_mode == 'template-and-content' %}- [Project documentation](docs/{{ 'index.html' if primary_language == 'en' else 'index.en.html' }})
+{% else %}- [Documentation map](docs/README.md)
+{% endif %}- [Changelog](CHANGELOG.md)
+- [Security reporting](.github/SECURITY.md)
+- [Contributing and AI working rules](AGENTS.md)
+
+The README is a compact entry point. Project documentation under `docs/` owns detailed behavior, configuration, interfaces, and operations.
+
+## Compatibility
+
+{% if languages %}Supported environments are the declared {{ languages | join(', ') }} toolchains covered by `.csarc/config.yml` and verification.{% else %}See `.csarc/config.yml` and the verification entry point for the supported baseline.{% endif %}
+
+## License
+
+{% if project_license == 'proprietary' %}Proprietary software; see [LICENSE](LICENSE). All rights reserved. No use, copying, modification, or distribution is permitted without explicit authorization from {{ copyright_holder }}.{% else %}Licensed under [{{ project_license }}](LICENSE).{% endif %}

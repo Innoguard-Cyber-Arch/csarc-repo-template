@@ -222,7 +222,7 @@ fi
 ./.csarc/scripts/check-update-conflicts
 ./.csarc/scripts/verify-dependencies
 ./.csarc/scripts/check-project-metadata
-{% if 'repo-site' in features -%}
+{% if documentation_mode == 'template-and-content' -%}
 ./.csarc/scripts/build-repo-site --check
 {% endif -%}
 ./.csarc/scripts/detect-language-profile
@@ -256,6 +256,7 @@ if $verify_python; then
 else
   platform_python=(uv run --no-project python)
 fi
+{% if documentation_mode != 'off' -%}
 verification_step "Specification validation" \
   "${platform_python[@]}" .csarc/scripts/spec_to_issue.py validate
 test -f docs/README.md
@@ -266,6 +267,7 @@ grep -q 'Architecture Decision Records' docs/README.md
 grep -q 'Test-Driven Development' docs/README.md
 grep -q 'Behavior-Driven Development' docs/README.md
 grep -q 'docs/decisions/' docs/README.md
+{% endif -%}
 verification_step "Generated configuration contract" \
   "${platform_python[@]}" - <<'PY'
 import runpy
@@ -282,7 +284,7 @@ if config.get("governance_mode") not in {"managed", "observe"}:
     raise SystemExit("governance_mode must be managed or observe")
 if set(config.get("lifecycle", [])) - {"issues", "milestones"}:
     raise SystemExit("lifecycle contains an unsupported capability")
-if set(config.get("features", [])) - {"docker", "repo-site"}:
+if set(config.get("features", [])) - {"docker"}:
     raise SystemExit("features contains an unsupported capability")
 PY
 for json_file in \
@@ -351,17 +353,25 @@ verification_step "PR writer ownership" \
 test -f AGENTS.md
 test "$(cat .claude/CLAUDE.md)" = "@../AGENTS.md"
 template_mode="$("${platform_python[@]}" .csarc/scripts/csarc_config.py project_mode)"
-if [[ "$template_mode" == "new" ]]; then
+documentation_mode="$("${platform_python[@]}" .csarc/scripts/csarc_config.py documentation_mode)"
+if [[ "$template_mode" == "new" && "$documentation_mode" != "off" ]]; then
   test "$(wc -l < AGENTS.md)" -le 200
   required_readme_headings=(
-    "專案概述"
+{% if primary_language == 'zh-tw' -%}
+    "特色"
+    "安裝"
     "快速開始"
-    "技術與目錄"
-    "開發與驗證"
-    "設定與密鑰"
-    "發布與維運"
-    "負責人與支援"
-    "公版更新"
+    "文件"
+    "相容性"
+    "授權"
+{% else -%}
+    "Highlights"
+    "Installation"
+    "Quick start"
+    "Documentation"
+    "Compatibility"
+    "License"
+{% endif -%}
   )
   for heading in "${required_readme_headings[@]}"; do
     if ! grep -qFx "## $heading" README.md; then

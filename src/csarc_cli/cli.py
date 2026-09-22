@@ -5855,9 +5855,24 @@ def migrate_simplified_settings(
             ("formal", "peer"),
         )
     ]
-    legacy_features = ["repo-site"]
-    if answers.get("enable_docker") is True:
-        legacy_features.append("docker")
+    saved_features = answers.get("features")
+    if isinstance(saved_features, list):
+        legacy_features = [
+            feature for feature in saved_features if feature != "repo-site"
+        ]
+        documentation_mode = (
+            "template-and-content"
+            if "repo-site" in saved_features
+            else "content-only"
+        )
+    else:
+        legacy_features = (
+            ["docker"] if answers.get("enable_docker") is True else []
+        )
+        documentation_mode = "template-and-content"
+
+    if isinstance(saved_features, list) and "repo-site" in saved_features:
+        migrated["features"] = legacy_features
 
     defaults: dict[str, object] = {
         "governance_mode": governance_mode,
@@ -5870,6 +5885,13 @@ def migrate_simplified_settings(
         ),
         "release_trigger": "main",
         "features": legacy_features,
+        "documentation_mode": documentation_mode,
+        "primary_language": answers.get("readme_primary_language", "zh-tw"),
+        "i18n": "en-zh-tw",
+        "project_license": "proprietary",
+        "copyright_holder": answers.get(
+            "copyright_holder", answers.get("project_name", "")
+        ),
     }
     for key, value in defaults.items():
         if key not in answers and key not in explicit_data:

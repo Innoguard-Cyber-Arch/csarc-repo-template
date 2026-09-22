@@ -21,7 +21,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 | 公版設定 | 建立／導入時把選項寫入 `.csarc/config.yml`；之後由公版更新，不必到不同檔案重複設定 |
 | 共用能力 | 工作單（Issue）與變更提案（PR）表單、AI 工作規範、自動驗證、依賴安全、版本記錄與公版更新 |
 
-本節內容與 [repo-site](docs/index.html) 的「首頁」投影片對齊，雙語（中／英）由該站台同步維護；本 repository 與 [GitHub Pages repo-site](docs/index.html) 目前均為公開可讀。`noindex`／`robots.txt` 只能降低搜尋引擎索引，不能限制讀取或分享；過渡紀錄見 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)，後續 hosting／access-control 決策留在 [Issue #425](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425)。
+README 是 [repo-site](docs/index.html) 的濃縮入口；兩者維持相同的公開事實，不要求逐字或逐段相同。這個 repository 與 [GitHub Pages repo-site](docs/index.html) 目前均為公開可讀。`noindex`／`robots.txt` 只能降低搜尋引擎索引，不能限制讀取或分享；過渡紀錄見 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)，後續 hosting／access-control 決策留在 [Issue #425](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425)。
 
 > **這份文件的定位：** README 只給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 [`AGENTS.md`](AGENTS.md)（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀 [repo-site 附錄](docs/index.html)。三份文件各自負責一層，避免同一套規則重複維護。
 
@@ -36,12 +36,13 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 - [發布與維運](#發布與維運)
 - [公版更新](#公版更新)
 - [負責人與支援](#負責人與支援)
+- [授權](#授權)
 
 ## 專案概述
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證。`features` 可複選 `repo-site` 與 `docker`：新專案預設只含可離線的雙語網站，Docker 預設關閉；未選的能力不產生檔案、workflow 或驗證。自動版本 PR、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會分開回報帳戶方案與實際 API 能力。
+目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證。`documentation_mode` 可選完整文件模板加內容、只管理內容或完全關閉；`primary_language` 與 `i18n` 決定英文／繁中入口，`features` 只保留 Docker 等非文件能力。自動版本 PR、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會分開回報帳戶方案與實際 API 能力。
 
 ## 快速開始
 
@@ -173,7 +174,7 @@ GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository setti
 
 生成 repo 開啟 `enable_template_update_notifications` 時另會取得 `template-update.yml`：`schedule`（每週一）／`workflow_dispatch` 觸發、`contents: read`＋`issues: write`、10 分鐘 timeout，只呼叫 `scripts/check-template-update` 建立或更新一張通知 Issue，不會自動套用或合併變更。公開模板來源不需要 secret；`_src_path` 指向 private GitHub repository 時，才需設定只有該來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN` repository secret，且只有 `schedule`／`workflow_dispatch` 讀得到，不會流向 `pull_request` workflow。本模板 repo 是來源本身，不消費也不排程它。
 
-`features` 選取 `docker`（Issue #554）時才會取得 `Dockerfile`、`docker-compose.yml` 與唯讀、不推送的 build-and-scan workflow；選取 `repo-site` 時才產生雙語來源、portable HTML、渲染驗證與 Pages desired policy。Pages 不可用時網站仍可離線使用，並明確回報 `DEGRADED`，不會誤稱已部署。
+`features` 選取 `docker`（Issue #554）時才會取得 `Dockerfile`、`docker-compose.yml` 與唯讀、不推送的 build-and-scan workflow。文件改由 `documentation_mode` 單獨控制：`template-and-content` 產生 portable HTML、渲染驗證與 Pages desired policy，`content-only` 只管理 project-owned Markdown／README，`off` 不介入；`i18n` 再決定是否維護英文與繁中兩個入口。Pages 不可用時網站仍可離線使用，並明確回報 `DEGRADED`，不會誤稱已部署。
 
 選配整合（Renovate）與 SAST 啟用依偵測到的平台能力與方案提供建議，不需要導入者建立 PAT 或額外 GitHub App；`csarc init`／`adopt`／`update` 會先顯示唯讀 preflight 結果。選配整合依目前權限引導，分成 `available`／`request-owner`／`fallback` 三種狀態，決定能否直接開啟 [Renovate App 安裝頁](https://github.com/apps/renovate/installations/new)。這個 preflight 不會啟用發版流程。完整能力矩陣與 Fleet 治理觸發門檻見附錄。
 Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`，不要把 token、私鑰或實際密碼寫進 repo。`./scripts/verify-template.sh` 只證明靜態與合成驗證；歷史 live-integration 與 artifact-consumption run 只證明當時的 commit，不能當成現行能力。封存證據與未來恢復條件見 [`docs/live-integration.md`](docs/live-integration.md) 及 [`docs/artifact-consumption.md`](docs/artifact-consumption.md)。
@@ -258,7 +259,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 開發用的 unreleased adoption 每次重播 machine plan 或 pending checkpoint 時，都必須在該次命令重新傳入相同的本機 `--source`、完整 `--expected-sha` 與 `--allow-unreleased`；plan 內保存的 source、SHA、digest 或 `verification=unverified` 只用來比對資料，不能代替本次授權。`--apply-plan` 會先顯示已保存的完整 plan 並取得確認，確認以前不會執行 Copier task、target policy script 或 product hook。正式 verified Release 重播不接受這三個開發旗標。
 
-若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance，或雖有 `.csarc/provenance.json` 但仍是舊版未驗證格式(例如 `verification` 不是 `verified`，常見於較早的 `--allow-unreleased` adopt)時，兩種情況都需要先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移；CLI 不會默認宣稱舊狀態已驗證，也不會把「格式過舊」與「欄位遭竄改」混為一談——已標示 `verified` 卻欄位對不上的記錄，即使加上 `--accept-legacy` 仍會被拒絕。仍在用舊檔名 `.copier-answers.yml`(或已停用的 `.csarc/profile.json`)的既有 repo，`update` 會在套用新版模板前把設定自動遷移到現行的 `.csarc/config.yml`，不需要手動搬檔案。`site/content/_index.zh-tw.md`／`_index.en.md` 與 `docs/site-theme.css` 是生成專案自行維護的網站來源；Copier 更新版型時不會覆寫它們，並會重建 portable `docs/index.html`／`docs/index.en.html`。舊版 `docs/site-content.md` 已停用，其內容不會自動搬到新來源；`./scripts/build-repo-site` 偵測到該檔仍存在時會提示手動遷移後刪除。
+若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance，或雖有 `.csarc/provenance.json` 但仍是舊版未驗證格式(例如 `verification` 不是 `verified`，常見於較早的 `--allow-unreleased` adopt)時，兩種情況都需要先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移；CLI 不會默認宣稱舊狀態已驗證，也不會把「格式過舊」與「欄位遭竄改」混為一談——已標示 `verified` 卻欄位對不上的記錄，即使加上 `--accept-legacy` 仍會被拒絕。仍在用舊檔名 `.copier-answers.yml`(或已停用的 `.csarc/profile.json`)的既有 repo，`update` 會在套用新版模板前把設定自動遷移到現行的 `.csarc/config.yml`；舊 `features: repo-site` 與 `readme_primary_language` 也會一次性轉為 `documentation_mode` 與 `primary_language`。網站內容仍由生成專案維護，Copier 更新版型時不會覆寫；完整規則見 [`docs/documentation-policy.md`](docs/documentation-policy.md)。
 
 ### 驗證邊界
 
@@ -267,3 +268,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 ## 負責人與支援
 
 程式與政策審查者以 `.github/CODEOWNERS` 為準。一般問題與疑似資安問題依 [`.github/SECURITY.md`](.github/SECURITY.md) 建立公開 GitHub Issue，維護者會收到通知；不得張貼 secrets、credentials、personal data 或其他敏感內容。Root [`SECURITY.md`](SECURITY.md) 則提供 repository-wide scanner guidance。
+
+## 授權
+
+本 repository 為專有軟體，保留所有權利；詳見 [`LICENSE`](LICENSE)。Copier 生成專案若未明確選擇其他授權，也採相同的封閉預設。

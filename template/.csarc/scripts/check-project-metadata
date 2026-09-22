@@ -2,7 +2,12 @@
 set -euo pipefail
 
 status=0
-for required_file in README.md .github/SECURITY.md; do
+documentation_mode="$(python3 .csarc/scripts/csarc_config.py documentation_mode)"
+required_files=(.github/SECURITY.md LICENSE)
+if [[ "$documentation_mode" != "off" ]]; then
+  required_files+=(README.md)
+fi
+for required_file in "${required_files[@]}"; do
   if [[ ! -f "$required_file" ]]; then
     echo "$required_file is required for project metadata verification." >&2
     status=1
@@ -45,14 +50,16 @@ reject_controlled_placeholder() {
   fi
 }
 
-reject_placeholder README.md "project description" "A Cyber-Arch project"
-reject_placeholder README.md "project description" "請在這裡補上主要使用者"
-reject_placeholder README.md "run command" "請在這裡補上產品最短"
-reject_placeholder README.md "repository URL" "<repository-url>"
-reject_placeholder README.md "CI badge" "<org>/<repo>"
-reject_controlled_placeholder README.md "project description" \
-  "project-description"
-reject_controlled_placeholder README.md "run command" "project-run-command"
+if [[ -f README.md ]]; then
+  reject_placeholder README.md "project description" "A Cyber-Arch project"
+  reject_placeholder README.md "project description" "請在這裡補上主要使用者"
+  reject_placeholder README.md "run command" "請在這裡補上產品最短"
+  reject_placeholder README.md "repository URL" "<repository-url>"
+  reject_placeholder README.md "CI badge" "<org>/<repo>"
+  reject_controlled_placeholder README.md "project description" \
+    "project-description"
+  reject_controlled_placeholder README.md "run command" "project-run-command"
+fi
 reject_placeholder .github/SECURITY.md "security reporting channel" \
   "Project owner: replace"
 reject_controlled_placeholder .github/SECURITY.md "security reporting channel" \
@@ -63,5 +70,7 @@ fi
 if [[ -f package.json ]]; then
   reject_placeholder package.json "repository URL" "<repository-url>"
 fi
+
+python3 .csarc/scripts/check_license_metadata.py
 
 exit "$status"

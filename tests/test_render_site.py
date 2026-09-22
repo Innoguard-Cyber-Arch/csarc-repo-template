@@ -356,31 +356,23 @@ def test_generated_site_uses_project_owned_markdown() -> None:
     assert not (root / "template/docs/site-content.js.jinja").exists()
 
 
-def test_readme_describes_repo_site_source() -> None:
-    """README.md and the template READMEs must name the current,
-    maintained site source (site/content/_index.*.md), not the retired
-    docs/site-content.md/.js. A remaining docs/site-content.md mention in
-    a README must be about the migration off it, matching
-    docs/adr/portable-repo-site.md.
+def test_documentation_map_describes_repo_site_source() -> None:
+    """Documentation maps must name maintained rather than retired sources.
+
+    The compact root README delegates this implementation detail to the
+    documentation map.
     """
     root = Path(__file__).parents[1]
-    root_readme = (root / "README.md").read_text(encoding="utf-8")
-    # Issue #681: the zh-tw template README's destination name now depends
-    # on the readme_primary_language answer, so its source filename is a
-    # Jinja expression containing "zh-tw" (see test_ai_guidelines.py's
-    # equivalent glob for why this substring reliably identifies it alone).
-    zh_tw_readme_matches = list((root / "template").glob("*zh-tw*.md.jinja"))
-    assert len(zh_tw_readme_matches) == 1, (
-        f"expected exactly one zh-tw README template, found "
-        f"{zh_tw_readme_matches}"
+    root_map = (root / "docs/README.md").read_text(encoding="utf-8")
+    template_map = (root / "template/docs/README.md.jinja").read_text(
+        encoding="utf-8"
     )
-    template_readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
 
-    assert "site/content/_index.zh-tw.md" in root_readme
-    assert "docs/site/content/_index.zh-tw.md" in template_readme
-    for readme in (root_readme, template_readme):
-        assert "site-content.js" not in readme
-        for line in readme.splitlines():
+    assert "| 網站來源 | `site/`" in root_map
+    assert "docs/site/content/_index." in template_map
+    for documentation_map in (root_map, template_map):
+        assert "site-content.js" not in documentation_map
+        for line in documentation_map.splitlines():
             if "docs/site-content.md" in line:
                 assert "遷移" in line or "retired" in line, (
                     "docs/site-content.md may only appear as a "
@@ -1544,6 +1536,7 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
         ".gitignore",
         "AGENTS.md",
         "CHANGELOG.md",
+        "LICENSE",
         "README.en.md",
         "README.md",
         "SECURITY.md",

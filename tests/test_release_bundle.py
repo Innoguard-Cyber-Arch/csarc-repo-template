@@ -46,6 +46,18 @@ def repository(tmp_path: Path) -> Path:
     # stale_branch_detection, Issue #744 for release_phase).
     shutil.copy2(ROOT / "scripts/stale_branch_detection.py", root / "scripts")
     shutil.copy2(ROOT / "scripts/release_phase.py", root / "scripts")
+    shutil.copy2(ROOT / "scripts/csarc_config.py", root / "scripts")
+    (root / ".csarc").mkdir()
+    (root / ".csarc/config.yml").write_text(
+        "project_slug: fixture\n"
+        "project_license: proprietary\n"
+        "copyright_holder: Example Owner\n",
+        encoding="utf-8",
+    )
+    (root / "LICENSE").write_text(
+        "Copyright (c) Example Owner. All rights reserved.\n",
+        encoding="utf-8",
+    )
     (root / "release-please-config.json").write_text(
         json.dumps(
             {
@@ -101,6 +113,16 @@ def test_bundle_is_repeatable_and_verifiable(tmp_path: Path) -> None:
     output = tmp_path / "bundle"
     complete_bundle(root, output)
     invoke(root, output, "verify")
+    sbom = json.loads((output / "sbom.spdx.json").read_text())
+    project_package = next(
+        package
+        for package in sbom["packages"]
+        if package["SPDXID"] == "SPDXRef-CSARCProject"
+    )
+    assert project_package["licenseDeclared"] == "LicenseRef-Proprietary"
+    assert sbom["hasExtractedLicensingInfos"][0]["licenseId"] == (
+        "LicenseRef-Proprietary"
+    )
 
     run(
         "python3",

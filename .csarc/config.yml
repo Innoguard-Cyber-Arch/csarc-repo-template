@@ -4,6 +4,7 @@ actions_fallback: admin
 verification_mode: hosted
 code_owner: '@Innoguard-Cyber-Arch/arch'
 copilot_review: allowed
+copyright_holder: Innoguard Cyber Arch
 coverage_mode: global
 coverage_threshold: 80
 default_release_level: alpha
@@ -11,9 +12,10 @@ enable_codeql: false
 enable_governance_drift_check: false
 enable_precommit: false
 enable_template_update_notifications: false
-features:
-- repo-site
+documentation_mode: template-and-content
+features: []
 governance_mode: managed
+i18n: en-zh-tw
 languages:
 - python
 lifecycle:
@@ -21,11 +23,13 @@ lifecycle:
 - milestones
 package_name: csarc_cli
 project_description: Cyber-Arch cross-language repository template and governance baseline.
+project_license: proprietary
 project_mode: existing
 project_name: CSARC Repository Template
 project_run_command: uv run csarc --help
 project_slug: csarc-repo-template
 project_visibility: public
+primary_language: zh-tw
 python_support_mode: latest
 release_ownership: csarc-owned
 release_trigger: main

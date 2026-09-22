@@ -6,6 +6,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -259,6 +260,7 @@ def test_representative_generated_project_runs_full_verifier(
         "CHANGELOG.md",
         "Cargo.lock",
         "Cargo.toml",
+        "LICENSE",
         "README.en.md",
         "README.md",
         "SECURITY.md",
@@ -620,13 +622,13 @@ def test_disabling_docker_omits_container_files(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "features",
-    [[], ["repo-site"], ["docker"], ["repo-site", "docker"]],
+    "documentation_mode", ["template-and-content", "content-only", "off"]
 )
+@pytest.mark.parametrize("features", [[], ["docker"]])
 def test_optional_features_render_independently(
-    tmp_path: Path, features: list[str]
+    tmp_path: Path, documentation_mode: str, features: list[str]
 ) -> None:
-    """Cover every repo-site and Docker selection without coupled behavior."""
+    """Keep documentation modes and Docker selection independent."""
     source = tmp_path / "source"
     source.mkdir()
     shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
@@ -644,6 +646,7 @@ def test_optional_features_render_independently(
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "private",
             "verification_mode": "hosted",
+            "documentation_mode": documentation_mode,
             "features": features,
         },
         defaults=True,
@@ -651,7 +654,8 @@ def test_optional_features_render_independently(
         skip_tasks=True,
     )
 
-    site_enabled = "repo-site" in features
+    site_enabled = documentation_mode == "template-and-content"
+    content_enabled = documentation_mode != "off"
     docker_enabled = "docker" in features
     assert (project / ".csarc/site").exists() is site_enabled
     assert (project / "docs/site").exists() is site_enabled
@@ -664,9 +668,192 @@ def test_optional_features_render_independently(
         (project / ".csarc/policies/pages.json").read_text(encoding="utf-8")
     )
     assert pages["enabled"] is site_enabled
+    assert (project / "README.md").exists() is content_enabled
+    assert (project / "docs/README.md").exists() is content_enabled
 
     assert (project / "Dockerfile").exists() is docker_enabled
     assert (project / "docker-compose.yml").exists() is docker_enabled
     assert (
         project / ".github/workflows/docker-build-scan.yml"
     ).exists() is docker_enabled
+
+
+@pytest.mark.parametrize(
+    ("primary_language", "i18n", "project_license"),
+    [
+        ("zh-tw", "en-zh-tw", "proprietary"),
+        ("en", "off", "MIT"),
+        ("zh-tw", "off", "Apache-2.0"),
+    ],
+)
+def test_readme_i18n_and_license_metadata_are_synchronized(
+    tmp_path: Path,
+    primary_language: str,
+    i18n: str,
+    project_license: str,
+) -> None:
+    """Render README language and ecosystem license metadata from one source."""
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "documentation-fixture"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": ["python", "typescript", "rust"],
+            "project_name": "Documentation Fixture",
+            "project_slug": "documentation-fixture",
+            "project_description": "Exercises documentation and licensing.",
+            "repository_url": "https://github.com/example/documentation-fixture",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "private",
+            "documentation_mode": "content-only",
+            "primary_language": primary_language,
+            "i18n": i18n,
+            "project_license": project_license,
+            "copyright_holder": "Example Owner",
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+    )
+
+    readme = (project / "README.md").read_text(encoding="utf-8")
+    assert ("## 特色" in readme) is (primary_language == "zh-tw")
+    assert "## 目錄" not in readme
+    assert "## Table of contents" not in readme
+    assert len(readme.splitlines()) < 80
+    secondary = project / (
+        "README.en.md" if primary_language == "zh-tw" else "README.zh-tw.md"
+    )
+    assert secondary.exists() is (i18n == "en-zh-tw")
+
+    license_text = (project / "LICENSE").read_text(encoding="utf-8")
+    assert "Example Owner" in license_text
+    python = tomllib.loads((project / "pyproject.toml").read_text())
+    node = json.loads((project / "package.json").read_text())
+    rust = tomllib.loads((project / "Cargo.toml").read_text())
+    expected = (
+        "LicenseRef-Proprietary"
+        if project_license == "proprietary"
+        else project_license
+    )
+    assert python["project"]["license"] == expected
+    assert python["project"]["license-files"] == ["LICENSE"]
+    assert node["license"] == (
+        "UNLICENSED" if project_license == "proprietary" else project_license
+    )
+    assert node["private"] is (project_license == "proprietary")
+    if project_license == "proprietary":
+        assert rust["package"]["license-file"] == "LICENSE"
+        assert "license" not in rust["package"]
+    else:
+        assert rust["package"]["license"] == project_license
+        assert "license-file" not in rust["package"]
+    subprocess.run(
+        [sys.executable, ".csarc/scripts/check_license_metadata.py"],
+        cwd=project,
+        check=True,
+    )
+
+
+def test_single_language_site_uses_primary_language_at_index(
+    tmp_path: Path,
+) -> None:
+    """Do not emit a second README or site page when i18n is disabled."""
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "english-site"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": [],
+            "project_name": "English Site",
+            "project_slug": "english-site",
+            "project_description": "Exercises a single-language site.",
+            "repository_url": "https://github.com/example/english-site",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "private",
+            "documentation_mode": "template-and-content",
+            "primary_language": "en",
+            "i18n": "off",
+        },
+        defaults=True,
+        unsafe=True,
+    )
+
+    assert "## Highlights" in (project / "README.md").read_text()
+    assert not (project / "README.zh-tw.md").exists()
+    assert not (project / "docs/site/content/_index.zh-tw.md").exists()
+    assert (project / "docs/index.html").is_file()
+    assert not (project / "docs/index.en.html").exists()
+    assert not (project / "docs/index.zh-tw.html").exists()
+    index = (project / "docs/index.html").read_text(encoding="utf-8")
+    assert "[Project documentation](docs/index.html)" in (
+        project / "README.md"
+    ).read_text(encoding="utf-8")
+    assert '<html lang="en"' in index
+    assert 'class="language-control"' in index
+    assert "繁體中文" not in index
+
+    stale_translation = project / "docs/index.en.html"
+    stale_translation.write_text("stale\n", encoding="utf-8")
+    site_builder = project / ".csarc/scripts/build-repo-site"
+    stale_check = subprocess.run(  # noqa: S603
+        [site_builder, "--check"],
+        cwd=project,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert stale_check.returncode == 1
+    assert "stale for the selected i18n mode" in stale_check.stderr
+    subprocess.run(  # noqa: S603
+        [site_builder],
+        cwd=project,
+        check=True,
+    )
+    assert not stale_translation.exists()
+
+
+def test_documentation_off_omits_readme_manifest_references(
+    tmp_path: Path,
+) -> None:
+    """Keep package manifests valid when README management is disabled."""
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "documentation-off"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": ["python", "typescript", "rust"],
+            "project_name": "Documentation Off",
+            "project_slug": "documentation-off",
+            "project_description": "Exercises disabled documentation.",
+            "repository_url": "https://github.com/example/documentation-off",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "private",
+            "documentation_mode": "off",
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+    )
+
+    assert not (project / "README.md").exists()
+    python = tomllib.loads((project / "pyproject.toml").read_text())
+    rust = tomllib.loads((project / "Cargo.toml").read_text())
+    assert "readme" not in python["project"]
+    assert (
+        "README.md"
+        not in python["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
+    )
+    assert "readme" not in rust["package"]

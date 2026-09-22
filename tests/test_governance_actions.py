@@ -362,19 +362,10 @@ def test_governance_workflows_are_thin_and_least_privilege() -> None:
 def test_docs_reflect_restored_governance_actions() -> None:
     """Docs must not claim restored governance Actions are still archived."""
     stale_archived_list = "Zizmor、remote governance、deployment"
-    # Issue #681: template/README.md.jinja's destination name now depends
-    # on the readme_primary_language answer, so its source filename is a
-    # Jinja expression; "zh-tw" always appears in the zh-tw content file's
-    # name and never in the English one, so it is a reliable glob.
-    zh_tw_readme_matches = list((ROOT / "template").glob("*zh-tw*.md.jinja"))
-    assert len(zh_tw_readme_matches) == 1, (
-        f"expected exactly one zh-tw README template, found "
-        f"{zh_tw_readme_matches}"
-    )
     for path in (
         ROOT / "README.md",
         ROOT / "docs/ci-policy.md",
-        zh_tw_readme_matches[0],
+        ROOT / "template/.csarc/docs/ci-policy.md",
     ):
         text = path.read_text(encoding="utf-8")
         assert stale_archived_list not in text, path

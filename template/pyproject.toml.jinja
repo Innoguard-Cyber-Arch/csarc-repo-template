@@ -3,7 +3,11 @@
 name = {{ project_slug | tojson }}
 version = "0.1.0a1"
 description = {{ project_description | tojson }}
+{% if documentation_mode != 'off' -%}
 readme = "README.md"
+{% endif -%}
+license = "{{ 'LicenseRef-Proprietary' if project_license == 'proprietary' else project_license }}"
+license-files = ["LICENSE"]
 requires-python = "{% if python_support_mode == 'latest' %}>=3.14,<3.15{% else %}>={{ python_min_version }}{% endif %}"
 dependencies = []
 
@@ -77,6 +81,9 @@ packages = ["src/{{ package_name }}"]
 [tool.hatch.build.targets.sdist]
 include = [
   "src/{{ package_name }}",
+{% if documentation_mode != 'off' -%}
   "README.md",
+{% endif -%}
+  "LICENSE",
   "pyproject.toml",
 ]

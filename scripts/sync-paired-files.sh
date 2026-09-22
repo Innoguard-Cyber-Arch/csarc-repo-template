@@ -12,9 +12,12 @@ set -euo pipefail
 paired_files=(
   "SECURITY.md|template/SECURITY.md"
   "docs/security-scanner-readiness.md|template/.csarc/docs/security-scanner-readiness.md"
+  "docs/documentation-policy.md|template/.csarc/docs/documentation-policy.md"
   "scripts/authenticate_dependabot_head.py|template/.csarc/scripts/authenticate_dependabot_head.py"
   "scripts/check-trusted-verification|template/.csarc/scripts/check-trusted-verification"
+  "scripts/check_license_metadata.py|template/.csarc/scripts/check_license_metadata.py"
   "scripts/csarc_config.py|template/.csarc/scripts/csarc_config.py"
+  "scripts/documentation_review.py|template/.csarc/scripts/documentation_review.py"
   "scripts/delivery_sync.py|template/.csarc/scripts/delivery_sync.py"
   "scripts/gh-issue-edit|template/.csarc/scripts/gh-issue-edit"
   "scripts/local_verification.py|template/.csarc/scripts/local_verification.py"

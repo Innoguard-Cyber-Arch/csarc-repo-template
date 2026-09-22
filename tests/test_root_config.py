@@ -39,7 +39,12 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["copilot_review"] == "allowed"
     assert config["release_ownership"] == "csarc-owned"
     assert config["release_trigger"] == "main"
-    assert config["features"] == ["repo-site"]
+    assert config["documentation_mode"] == "template-and-content"
+    assert config["primary_language"] == "zh-tw"
+    assert config["i18n"] == "en-zh-tw"
+    assert config["project_license"] == "proprietary"
+    assert config["copyright_holder"] == "Innoguard Cyber Arch"
+    assert config["features"] == []
     assert not any(key.startswith("release_level_") for key in config)
 
 
@@ -95,6 +100,11 @@ def test_root_public_identity_claims_are_consistent() -> None:
         ("release_trigger: tag\n", "Invalid release_trigger"),
         ("lifecycle:\n- projects\n", "Invalid lifecycle"),
         ("features:\n- website\n", "Invalid features"),
+        ("documentation_mode: website\n", "Invalid documentation_mode"),
+        ("primary_language: fr\n", "Invalid primary_language"),
+        ("i18n: all\n", "Invalid i18n"),
+        ("project_license: unknown\n", "Invalid project_license"),
+        ("copyright_holder: ''\n", "Invalid copyright_holder"),
         ("languages:\n- go\n", "Invalid languages"),
         ("languages:\n- python\n- python\n", "Duplicate languages"),
         ("coverage_threshold: 0\n", "Invalid coverage_threshold"),

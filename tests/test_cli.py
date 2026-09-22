@@ -6034,6 +6034,25 @@ def test_update_normalizes_retired_verification_suite_names() -> None:
     assert update_data["verification_mode"] == "local"
 
 
+def test_update_migrates_documentation_language_and_license_settings() -> None:
+    """Replace legacy site and README switches with the core contract."""
+    migrated = cli.migrate_simplified_settings(
+        {
+            "project_name": "Legacy Project",
+            "features": ["repo-site", "docker"],
+            "readme_primary_language": "en",
+        },
+        {},
+    )
+
+    assert migrated["features"] == ["docker"]
+    assert migrated["documentation_mode"] == "template-and-content"
+    assert migrated["primary_language"] == "en"
+    assert migrated["i18n"] == "en-zh-tw"
+    assert migrated["project_license"] == "proprietary"
+    assert migrated["copyright_holder"] == "Legacy Project"
+
+
 @pytest.mark.large
 def test_update_check_tolerates_pre_schema_existing_adoption(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]

@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-22
-- **來源 Issue：**[#900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)
+- **來源 Issues：**[#900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)、[#919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919)
 - **實作 PR：**https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/907
 - **補充決策：**[#908](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/908)
 
@@ -26,7 +26,12 @@ copilot_review: allowed        # allowed | off
 release_ownership: csarc-owned
 release_trigger: main          # main | manual
 default_release_level: alpha
-features: [repo-site]          # repo-site, docker
+documentation_mode: template-and-content
+primary_language: zh-tw
+i18n: en-zh-tw
+project_license: proprietary
+copyright_holder: Example Organization
+features: []                   # docker
 code_owner: "@organization/team" # optional
 ```
 
@@ -39,17 +44,18 @@ Copier 會把每個問題保存成頂層答案；既有無依賴 YAML reader 也
 - branch route 由可信 Issue／Milestone metadata 推導，不再另設 `branch_strategy`。
 - `release_trigger: main` 在每次 main push 執行既有 Conventional Commit 判定；`manual` 只接受明確入口。兩者共用 major／minor／patch／no-release、materialization、freshness、single-writer 與 immutable evidence。
 - release workflow、required inputs、reason、settings owner 與 immutable setting 都是衍生或稽核輸出，不再是一般答案。
-- `features` 是選配產物的唯一集合。`repo-site` 預設開啟；`docker` 預設關閉。未選功能不產生空 workflow 或多餘驗證，project-owned 既有內容不得被靜默刪除。
+- `documentation_mode` 是文件能力的唯一控制面，搭配 `primary_language` 與 `i18n`；`features` 只保留 Docker 等非文件選配。Issue #919 取代原本將 repo-site 放在 `features` 的決定。
+- `project_license` 與 `copyright_holder` 是封裝與文件共用的授權來源；未宣告時採 proprietary，不從 repository identity 推定開源授權。
 - `actions_fallback: admin` 是明確 opt-in，只適用於可證明的 zero-step GitHub billing gate，仍須 exact-head／base、review、適用本機 suite、remote lease 與 trace；失敗或未知狀態一律 fail closed。
 - `verification_mode: local` 是新專案預設值：沿用同一個 risk-owned fast／full router 與 runner，成功後只寫入 Git metadata 的 self-attested evidence；merge lifecycle 重驗 clean worktree、exact head/tree、base、tier、scope、freshness、review 與 remote lease，再走有 trace 的 admin bypass。它不產生任何會重跑驗證的 hosted workflow，包括 release workflow；`hosted` 才保留 #834／#835 的 trusted Actions 與可信 release provenance。
 
 ## 遷移
 
-舊設定以明確規則轉換：全開／全關 `policy_*` 分別成 `managed`／`observe`，混合值要求使用者選擇；`enable_docker` 轉成 `features` membership；舊 `pr_review_mode` 轉成 `copilot_review`；per-level review 只決定 `solo` 或 `peer`，verification 收斂為固定下限且路徑風險只能升級。既有發版行為遷移成 `release_trigger: main`。為避免更新時靜默降低既有保護，沒有 `verification_mode` 的 repository 一律遷移為 `hosted`；只有新建專案預設 `local`。舊 reviewer、branch、level cap、per-level 與 release 衍生答案不再持久化。
+舊設定以明確規則轉換：全開／全關 `policy_*` 分別成 `managed`／`observe`，混合值要求使用者選擇；`enable_docker` 轉成 `features` membership；舊 `features: repo-site` 轉成 `documentation_mode: template-and-content`，沒有 repo-site 時轉成 `content-only`；`readme_primary_language` 轉成 `primary_language`；舊 `pr_review_mode` 轉成 `copilot_review`；per-level review 只決定 `solo` 或 `peer`，verification 收斂為固定下限且路徑風險只能升級。既有發版行為遷移成 `release_trigger: main`。為避免更新時靜默降低既有保護，沒有 `verification_mode` 的 repository 一律遷移為 `hosted`；只有新建專案預設 `local`。舊 reviewer、branch、level cap、per-level 與 release 衍生答案不再持久化。
 
 ## 方案與能力邊界
 
-Free／Pro／Team／Enterprise 與 public／private 的組合只影響 Ruleset、Pages 等能力探測；Copilot 與 Actions 帳務必須分別以實際 entitlement／billing 結果判斷。local mode 能驗 lint、型別、單元／整合測試、本機服務、build、package、secret、dependency scan，以及選用 Docker 時的 Compose 設定、image build 與 Trivy scan，但不能證明執行者誠信、GitHub event／權限、第三方服務、實際部署、遠端 runner 或 release provenance；這些邊界不得顯示為通過。`repo-site` 產物存在不表示 Pages 已發布；Docker feature 也不增加 registry、deployment 或 secret。
+Free／Pro／Team／Enterprise 與 public／private 的組合只影響 Ruleset、Pages 等能力探測；Copilot 與 Actions 帳務必須分別以實際 entitlement／billing 結果判斷。local mode 能驗 lint、型別、單元／整合測試、本機服務、build、package、secret、dependency scan，以及選用 Docker 時的 Compose 設定、image build 與 Trivy scan，但不能證明執行者誠信、GitHub event／權限、第三方服務、實際部署、遠端 runner 或 release provenance；這些邊界不得顯示為通過。repo-site 產物存在不表示 Pages 已發布；Docker feature 也不增加 registry、deployment 或 secret。
 
 ## 取代與保留
 
