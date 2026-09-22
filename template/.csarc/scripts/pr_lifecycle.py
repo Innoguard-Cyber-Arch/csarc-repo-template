@@ -23,6 +23,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     csarc_config = importlib.import_module("csarc_config")
     dependabot_auth = importlib.import_module("authenticate_dependabot_head")
+    local_verification = importlib.import_module("local_verification")
     promotion_gate = importlib.import_module("promotion_gate")
     release_level = importlib.import_module("release_level")
     review_gate = importlib.import_module("review_gate")
@@ -31,6 +32,9 @@ else:
     csarc_config = importlib.import_module(f"{__package__}.csarc_config")
     dependabot_auth = importlib.import_module(
         f"{__package__}.authenticate_dependabot_head"
+    )
+    local_verification = importlib.import_module(
+        f"{__package__}.local_verification"
     )
     promotion_gate = importlib.import_module(f"{__package__}.promotion_gate")
     release_level = importlib.import_module(f"{__package__}.release_level")
@@ -1403,12 +1407,12 @@ def alpha_self_merge_opt_in(
             if isinstance(item, dict)
         }
         route = promotion_gate.route_for(str(base_ref), head_ref, labels)
-        if route.kind == "milestone":
+        if RELEASE_BRANCH.fullmatch(head_ref) or route.kind == "milestone":
             head_repo = head.get("repo") or {}
             head_repo_name = str(head_repo.get("full_name") or "")
             if head_repo_name.casefold() != repo.casefold():
                 raise RuntimeError(
-                    "Alpha promotion requires a same-repository head"
+                    "Alpha release or promotion requires a same-repository head"
                 )
             return True
         require_default_branch_issue_route(github, repo, lease, pull)
@@ -1529,6 +1533,7 @@ def effective_protection(  # noqa: C901
     alpha_self_merge: bool = False,
     reviewed_merge: bool = False,
     copilot_mode: bool = False,
+    local_mode: bool = False,
 ) -> tuple[str, str, set[tuple[str, int]], bool, bool]:
     """Prove review and check enforcement for an exact-head merge."""
     try:
@@ -1636,7 +1641,30 @@ def effective_protection(  # noqa: C901
             context == REVIEW_CHECK_CONTEXT for context, _ in required_contexts
         )
     )
-    if alpha_self_merge:
+    if local_mode:
+        review_controls = (
+            bool(pull)
+            and all(
+                item.get("required_approving_review_count", 0) >= 1
+                for item in pull
+            )
+            and any(
+                item.get("dismiss_stale_reviews_on_push") is True
+                for item in pull
+            )
+            and any(
+                item.get("require_last_push_approval") is True for item in pull
+            )
+            and any(
+                item.get("required_review_thread_resolution") is True
+                for item in pull
+            )
+        )
+        missing_reason = (
+            "local mode needs native review, stale-review dismissal, "
+            "last-push approval, and thread controls"
+        )
+    elif alpha_self_merge:
         review_controls = level_check_controls
         missing_reason = (
             "level-aware zero-review, stale-review dismissal, thread, or "
@@ -1689,7 +1717,7 @@ def effective_protection(  # noqa: C901
             "native approval controls or the level-aware `review` check are "
             "missing"
         )
-    if not review_controls or not required_contexts:
+    if not review_controls or (not local_mode and not required_contexts):
         return (
             "blocked",
             missing_reason,
@@ -1734,7 +1762,17 @@ def effective_protection(  # noqa: C901
                 False,
                 False,
             )
-        if bypass_actors != []:
+        if local_mode:
+            if bypass_actors != REVIEWED_MERGE_BYPASS_ACTORS:
+                return (
+                    "blocked",
+                    "local mode needs the audited admin pull-request bypass",
+                    set(),
+                    False,
+                    False,
+                )
+            reviewed_bypass = True
+        elif bypass_actors != []:
             if (
                 not reviewed_merge
                 or bypass_actors != REVIEWED_MERGE_BYPASS_ACTORS
@@ -1772,6 +1810,50 @@ def effective_protection(  # noqa: C901
         required_contexts,
         reviewed_bypass,
         copilot_only_block_possible,
+    )
+
+
+def repository_root() -> Path:
+    """Return the repository root for root and generated layouts."""
+    parent = Path(__file__).resolve().parents[1]
+    return parent.parent if parent.name == ".csarc" else parent
+
+
+def configured_verification_mode() -> str:
+    """Return the normalized local-or-hosted verification choice."""
+    return str(
+        csarc_config.load_config(repository_root() / ".csarc/config.yml")[
+            "verification_mode"
+        ]
+    )
+
+
+def require_local_pull_policy(repo: str, pull: dict[str, Any]) -> None:
+    """Run the existing PR policy checker locally in read-only mode."""
+    base = pull.get("base") or {}
+    head = pull.get("head") or {}
+    author = pull.get("user") or {}
+    env = os.environ.copy()
+    env.update(
+        {
+            "GITHUB_REPOSITORY": repo,
+            "PR_AUTHOR": str(author.get("login") or ""),
+            "PR_BASE": str(base.get("ref") or ""),
+            "PR_BASE_SHA": str(base.get("sha") or ""),
+            "PR_DRAFT": str(bool(pull.get("draft"))).lower(),
+            "PR_HEAD": str(head.get("ref") or ""),
+            "PR_HEAD_REPOSITORY": str(
+                (head.get("repo") or {}).get("full_name") or ""
+            ),
+            "PR_HEAD_SHA": str(head.get("sha") or ""),
+            "PR_NUMBER": str(pull.get("number") or ""),
+            "PR_POLICY_READ_ONLY": "true",
+            "PR_TITLE": str(pull.get("title") or ""),
+        }
+    )
+    run(
+        [str(repository_root() / ".csarc/scripts/validate-pr-policy")],
+        env=env,
     )
 
 
@@ -2552,6 +2634,9 @@ def merge_snapshot(  # noqa: C901
     title = pull.get("title")
     if not isinstance(title, str) or not title.strip():
         raise RuntimeError("Pull request title is unavailable")
+    verification_mode = configured_verification_mode()
+    if verification_mode == "local":
+        require_local_pull_policy(repo, pull)
     (
         protection,
         reason,
@@ -2571,18 +2656,21 @@ def merge_snapshot(  # noqa: C901
         copilot_mode
         and level_decision.review == "self"
         and not alpha_self_merge,
+        verification_mode == "local",
     )
     authorization_actor = str((auth.get("user") or {}).get("login", ""))
     mergeable_state = pull.get("mergeable_state")
     if reviewed_bypass and mergeable_state != "clean":
-        alpha_copilot_block = (
-            alpha_self_merge
-            and authorization_source == "comment"
-            and mergeable_state == "blocked"
-            and copilot_mode
-            and copilot_only_block_possible
+        reviewed_policy_block = mergeable_state == "blocked" and (
+            verification_mode == "local"
+            or (
+                alpha_self_merge
+                and authorization_source == "comment"
+                and copilot_mode
+                and copilot_only_block_possible
+            )
         )
-        if alpha_copilot_block:
+        if reviewed_policy_block:
             permission = github.get(
                 repo,
                 "collaborators/"
@@ -2604,8 +2692,8 @@ def merge_snapshot(  # noqa: C901
                 reason = "Unresolved review threads prevent Alpha self-merge"
             else:
                 reason = (
-                    "exact-head Alpha authorization, checks, and review "
-                    "threads are revalidated despite the native Copilot rule"
+                    "exact-head authorization, verification, and review "
+                    "threads are revalidated before the audited bypass"
                 )
         else:
             protection = "blocked"
@@ -2618,7 +2706,19 @@ def merge_snapshot(  # noqa: C901
         else set()
     )
     check_evidence = "not-enforced"
-    if protection == "enforced" or quota_run_urls:
+    local_evidence: dict[str, Any] | None = None
+    if verification_mode == "local":
+        if quota_run_urls:
+            raise RuntimeError("Local verification cannot use quota fallback")
+        local_evidence = local_verification.require(
+            head_sha=str(head_sha),
+            tree_sha=str(lease["head_tree"]),
+            base_ref=str(lease["base_ref"]),
+            base_sha=str(lease["base_sha"]),
+            required_tier=level_decision.suite,
+        )
+        check_evidence = "local-self-attested"
+    elif protection == "enforced" or quota_run_urls:
         check_evidence = require_successful_checks(
             github,
             repo,
@@ -2647,6 +2747,7 @@ def merge_snapshot(  # noqa: C901
         "merge_mode": "agent" if protection == "enforced" else "human-only",
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
+        "local_verification": local_evidence,
         "alpha_self_merge": alpha_self_merge,
         "dependabot_head": dependabot_head,
         "hotfix_evidence": hotfix_evidence,
@@ -2899,6 +3000,17 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
             "copilot-review-trace: "
             f"review={snapshot['authorization_url']} "
             f"head={lease['head_sha']} actor={lease['actor']}",
+        )
+    local_evidence = snapshot.get("local_verification")
+    if isinstance(local_evidence, dict):
+        github.comment(
+            args.repo,
+            args.pr_number,
+            "local-verification-trace: "
+            f"head={lease['head_sha']} tree={local_evidence['tree_sha']} "
+            f"base={lease['base_sha']} tier={local_evidence['tier']} "
+            f"scopes={','.join(local_evidence['scopes'])} "
+            "trust=self-attested-local; this is not trusted hosted evidence",
         )
     candidate_evidence = revalidate_release_candidate(
         github,

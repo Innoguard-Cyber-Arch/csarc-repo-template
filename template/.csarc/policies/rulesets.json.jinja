@@ -2,7 +2,7 @@
   "name": "CSARC protected branches",
   "target": "branch",
   "enforcement": "active",
-  "bypass_actors": [{% if actions_fallback == 'admin' %}
+  "bypass_actors": [{% if verification_mode == 'local' or actions_fallback == 'admin' %}
     {"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "pull_request"}
   {% endif %}],
   "conditions": {
@@ -18,8 +18,8 @@
       "parameters": {
         "dismiss_stale_reviews_on_push": true,
         "require_code_owner_review": false,
-        "require_last_push_approval": false,
-        "required_approving_review_count": 0,
+        "require_last_push_approval": {{ 'true' if verification_mode == 'local' else 'false' }},
+        "required_approving_review_count": {{ 1 if verification_mode == 'local' else 0 }},
         "required_review_thread_resolution": true
       }
     }{% if copilot_review == 'allowed' %},

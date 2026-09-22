@@ -30,7 +30,7 @@ Important boundaries are:
 
 - read-only inspection versus approved execution or mutation;
 - pull-request-controlled content versus trusted base-revision automation;
-- local feedback versus trusted hosted merge evidence;
+- self-attested local merge evidence versus trusted hosted merge evidence;
 - CSARC-managed files versus project-owned files;
 - source revisions versus published release artifacts.
 
@@ -46,8 +46,10 @@ Important boundaries are:
   single-writer path and a fresh remote lease.
 - Untrusted pull-request code must not receive administrator credentials or
   control trusted workflow logic.
-- Required verification must bind the repository, exact head and tree, tier,
-  scopes, command, toolchain, trusted producer identity, result, and freshness.
+- Verification must bind the exact head and tree, base, tier, scopes, command,
+  result, and freshness. Hosted mode additionally requires the repository,
+  toolchain, and trusted producer identity; local mode must remain explicitly
+  self-attested and use the audited lifecycle/admin-bypass path.
 - Template adoption and updates must preserve project-owned files, surface
   collisions, and fail closed on ambiguous ownership or drift.
 - Releases must bind the expected repository, tag, revision, artifact digest,
@@ -76,8 +78,11 @@ finding is unreachable.
   checked-in repository.
 - A GitHub plan or permission limitation is not itself a vulnerability when
   the repository reports it accurately and fails closed.
-- No vulnerability class is broadly excluded, and this policy records no
-  accepted security risk.
+- Local verification accepts that a repository writer can forge its
+  self-attested evidence. It protects against stale or accidental mismatch,
+  not a malicious maintainer, and must never be presented as hosted or release
+  provenance.
+- No vulnerability class is otherwise broadly excluded.
 
 ## Known Limitations and Compensating Controls
 

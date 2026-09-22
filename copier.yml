@@ -19,13 +19,19 @@ _exclude:
   - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}.csarc/scripts/check-template-update{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_workflow__{% else %}.github/workflows/governance-drift.yml{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}.csarc/scripts/check-governance-drift{% endif %}"
-  - "{% if project_mode == 'new' %}__keep_release_workflow__{% else %}.github/workflows/release.yml{% endif %}"
-  - "{% if project_mode == 'new' %}__keep_release_drift_workflow__{% else %}.github/workflows/release-drift.yml{% endif %}"
-  - "{% if project_mode == 'new' %}__keep_release_drift_script__{% else %}.csarc/scripts/check-release-drift{% endif %}"
-  - "{% if enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_ci_workflow__{% else %}.github/workflows/ci.yml{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_pr_policy_workflow__{% else %}.github/workflows/pr-policy.yml{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_pr_review_workflow__{% else %}.github/workflows/pr-review.yml{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_osv_workflow__{% else %}.github/workflows/osv.yml{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_dependabot_merge_workflow__{% else %}.github/workflows/dependabot-merge.yml{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_dependabot_auto_merge_workflow__{% else %}.github/workflows/dependabot-auto-merge.yml{% endif %}"
+  - "{% if project_mode == 'new' and verification_mode == 'hosted' %}__keep_release_workflow__{% else %}.github/workflows/release.yml{% endif %}"
+  - "{% if project_mode == 'new' and verification_mode == 'hosted' %}__keep_release_drift_workflow__{% else %}.github/workflows/release-drift.yml{% endif %}"
+  - "{% if project_mode == 'new' and verification_mode == 'hosted' %}__keep_release_drift_script__{% else %}.csarc/scripts/check-release-drift{% endif %}"
+  - "{% if verification_mode == 'hosted' and enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
   - "{% if 'docker' in features %}__keep_dockerfile__{% else %}Dockerfile{% endif %}"
   - "{% if 'docker' in features %}__keep_docker_compose__{% else %}docker-compose.yml{% endif %}"
-  - "{% if 'docker' in features %}__keep_docker_workflow__{% else %}.github/workflows/docker-build-scan.yml{% endif %}"
+  - "{% if verification_mode == 'hosted' and 'docker' in features %}__keep_docker_workflow__{% else %}.github/workflows/docker-build-scan.yml{% endif %}"
   - "{% if 'repo-site' in features %}__keep_repo_site__{% else %}.csarc/site{% endif %}"
   - "{% if 'repo-site' in features %}__keep_repo_site_builder__{% else %}.csarc/scripts/build-repo-site{% endif %}"
   - "{% if 'repo-site' in features %}__keep_repo_site_python__{% else %}.csarc/scripts/build_repo_site.py{% endif %}"
@@ -225,7 +231,7 @@ _migrations:
   - command: "bash .csarc/scripts/build-repo-site"
     when: "{{ _stage == 'after' and 'repo-site' in features }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./.csarc/scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% else %}Project created with the CSARC release workflow. Confirm .csarc/config.yml, run ./.csarc/scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./.csarc/scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
+  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./.csarc/scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% elif verification_mode == 'hosted' %}Project created with the CSARC hosted verification and release workflows. Confirm .csarc/config.yml, run ./.csarc/scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./.csarc/scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% else %}Project created with local verification and no hosted validation or release workflow. Initialize Git, commit the candidate, then run ./.csarc/scripts/verify-fast once to record merge evidence. Switch to verification_mode: hosted and update before the first release.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
 
 project_mode:
   type: str
@@ -303,6 +309,14 @@ actions_fallback:
     Keep hosted checks mandatory: 'off'
     Allow the audited admin fallback: admin
   default: 'off'
+
+verification_mode:
+  type: str
+  help: Use self-attested local checks by default, or trusted GitHub-hosted verification when available
+  choices:
+    Use local verification with audited admin merge: local
+    Require trusted GitHub-hosted checks: hosted
+  default: local
 
 review:
   type: str

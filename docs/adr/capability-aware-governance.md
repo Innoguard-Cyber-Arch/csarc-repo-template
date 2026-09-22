@@ -231,6 +231,22 @@ exact candidate 驗證，lifecycle merge 仍重驗 remote lease、required check
 threads 與 live admin bypass actor。beta／early／formal、release、hotfix 與 quota fallback
 不變。回退方式是 revert #905，恢復 promotion 必須等待 Copilot 或獨立 maintainer。
 
+## 2026-09-23 將 Alpha Guided release 納入 solo review fallback（#913）
+
+Standalone release PR #912 證實 #900 收斂後的 `review: solo` 仍有一個 route 漏口：
+`release/v*` 已通過 current-main freshness、hosted `verify` 與 release-candidate 驗證，
+但 organization 沒有產生 Copilot review 時，`alpha_self_merge_opt_in()` 仍把 release
+排除，因此單一管理員無法完成 Guided 發版。
+
+決定把同 repository、目標為 default branch、且名稱符合 canonical
+`release/v<semver>` 的 Alpha release candidate 納入既有 audited self-merge。這只讓
+lease 期間建立的 exact-head maintainer authorization 成為 `review` 的合格來源；
+`verify-release-candidate` 仍在 hosted CI 與 merge boundary 重驗 current `main`、
+head SHA、版本、提交與檔案範圍，required checks、未解 review threads 與 live admin
+bypass actor 也維持 fail closed。`review: peer`、beta／early／formal、fork、非 canonical
+release branch 與 quota fallback 不變。回退方式是 revert #913，恢復 Guided release
+必須等待 Copilot 或獨立 maintainer。
+
 ## 2026-09-20 下游治理漂移檢查改為預設啟用（#746）
 
 在既有下游 repository 以目前 workflow、`GITHUB_TOKEN` 與公開 GitHub API 實測後，

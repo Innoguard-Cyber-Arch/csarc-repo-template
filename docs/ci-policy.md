@@ -9,8 +9,8 @@ active。版本、發版與成品責任的完整盤點見中央模板的
 
 本文件在每個 repository 內都是審查、required checks、合併資格、Alpha self-merge 與
 quota fallback 的唯一規範來源；`AGENTS.md` 與 README 只連到這裡，不另寫第二套例外。任何 PR 都必須符合
-下方對應交付路徑、目前 head 的審查或明確授權，以及該風險層級的本機驗證聲明與 hosted
-checks；草稿不具合併資格。有 Milestone 的工作繼承 tracker 核准，standalone、hotfix 與
+下方對應交付路徑、目前 head 的審查或明確授權，以及該風險層級的 local self-attested 或 hosted
+trusted evidence；草稿不具合併資格。有 Milestone 的工作繼承 tracker 核准，standalone、hotfix 與
 release recovery 則依本文件各自的 Issue 核可 gate。所有 fallback 都必須使用本文件明列
 的條件與留痕，不得把 runner、方案或權限限制當成略過檢查的理由。
 
@@ -165,7 +165,8 @@ Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head ma
   3.（#775／#826／#905）這是一張符合 `alpha_self_merge_opt_in` 條件（PR body 恰好一次
      `Alpha 自行合併 / self-merged` 標記、Milestone-less Issue 的 direct-to-main
      路由、既有 `dev/mN` Issue 路由、經 `require_routine_route()` 完整驗證的正式
-     current-main delivery sync 路由，或由 `promotion_gate.route_for()` 分類為 Milestone
+     current-main delivery sync 路由、canonical `release/v*` 的同 repository
+     current-main release 路由，或由 `promotion_gate.route_for()` 分類為 Milestone
      promotion 的同 repository 路由）的 Alpha self-merge PR，且已經有一則
      `pr_lifecycle.find_exact_head_authorization` 能找到的、綁定**目前 head SHA**
      的真人 maintainer 授權留言（跟 `pr_lifecycle.py merge` 要求的是同一則留言，
@@ -266,11 +267,14 @@ Alpha PR 可由 `scripts/pr_lifecycle.py merge` 在 lease＋exact-head 授權留
 - Milestone promotion：`promotion_gate.route_for()` 已分類為 `milestone` 的同 repository
   `dev/mN-*`／`promote/mN-*` route；既有 `title` 與 `verify` required checks 繼續驗證
   tracker、Milestone、bridge topology 與 exact candidate（#905）。
+- Guided release：同 repository 的 canonical `release/v<semver>` route 必須以 current
+  `main` 為 base，且既有 `verify-release-candidate` 仍在 hosted CI 與 lease-bound merge
+  boundary 重驗 exact head、candidate freshness、版本與檔案範圍（#913）。
 
-四者的 PR body 都必須恰好出現一次 `Alpha 自行合併 / self-merged` 標記。未通過上述
+五者的 PR body 都必須恰好出現一次 `Alpha 自行合併 / self-merged` 標記。未通過上述
 既有 route 驗證、不是 Alpha self-merge、或缺少綁定目前 head 的 maintainer 授權留言，
-仍走原本的人工審核／fail-closed 路徑；release、beta／early／formal 與 quota fallback
-不因 #905 擴大。
+仍走原本的人工審核／fail-closed 路徑；非 canonical release、beta／early／formal 與 quota
+fallback 不因 #913 擴大。
 
 這是只在「repo 結構性只有一個真人帳號」這段 alpha 期間才成立的例外，不是長期設計；
 有第二個真正的 collaborator 後應重新檢視是否移除，方向由維護者決定（追蹤於 #580）。
@@ -745,6 +749,14 @@ path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成�
 | Milestone comment refresh | 非 Ruleset 的 `Milestone approval` check 只處理核可留言後重新計算 | #875 已有獨立 ownership；#876 不重複改動 |
 
 這份盤點的刪減標準是「是否產生別層無法取代的證據」，不是 gate 名稱或歷史存在時間。
+
+### 本機與 hosted 驗證模式（#908）
+
+新專案預設 `verification_mode: local`；既有 repository 沒有此欄位時維持 `hosted`，避免更新時靜默降低保護。兩種模式共用同一個 `ci_tier.py` router，以及同一組 focused／fast／full 驗證入口；切換模式不增加第二套 runner、matrix 或測試清單。
+
+`local` 模式不產生 `ci.yml`、`pr-policy.yml`、`pr-review.yml`、OSV、CodeQL、Docker scan、Dependabot auto-merge、release 或 release-drift workflow，required-checks Ruleset 也保持 disabled，因此不會建立永遠等不到的 check、在 `main` 重跑完整驗證或製造無意義告警。repo-local 發版工具仍保留，需要可信 release provenance 時先切換成 `hosted` 再更新模板。fast／full 成功後只做常數時間的 metadata 寫入：已 commit 且 clean 的候選會把 exact head/tree、base、tier、scopes、command、success 與 24 小時 freshness 綁到 Git metadata；尚未建立 commit 或仍有未提交修改時，測試結果維持成功但不產生可合併的證明。`pr_lifecycle.py` 在 merge 前重新讀取 GitHub metadata、review、lease 與這份證明，執行既有 PR policy checker，並留下清楚標為 `self-attested-local` 的 trace，再使用受控 admin bypass。
+
+這份本機證明能防止誤拿舊結果、錯誤 branch／base、測完又改檔或跑錯 tier，但不能防止有寫入權限的人偽造 JSON，也不能證明 GitHub event／權限、第三方服務、實際部署、遠端 runner 或 release provenance。local mode 不把這些項目標成成功；需要這些信任性質時，改成 `verification_mode: hosted`，更新模板並重新套用 repository settings。切換到 hosted 後，下節 #834／#835 的規則完整生效。
 
 ### `verify` 的可信 hosted execution evidence（#834）
 

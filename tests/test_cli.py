@@ -6022,6 +6022,16 @@ def test_update_normalizes_retired_verification_suite_names() -> None:
     assert answers["release_level_early_verification"] == "fast"
     assert update_data["release_level_alpha_verification"] == "fast"
     assert update_data["release_level_early_verification"] == "fast"
+    assert answers["verification_mode"] == "hosted"
+    assert update_data["verification_mode"] == "hosted"
+
+    answers, update_data = cli.update_plan_answers(
+        saved,
+        {"verification_mode": "local"},
+        repository,
+    )
+    assert answers["verification_mode"] == "local"
+    assert update_data["verification_mode"] == "local"
 
 
 @pytest.mark.large

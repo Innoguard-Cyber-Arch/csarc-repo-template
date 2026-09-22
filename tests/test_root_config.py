@@ -34,6 +34,7 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["governance_mode"] == "managed"
     assert config["lifecycle"] == ["issues", "milestones"]
     assert config["actions_fallback"] == "admin"
+    assert config["verification_mode"] == "hosted"
     assert config["review"] == "solo"
     assert config["copilot_review"] == "allowed"
     assert config["release_ownership"] == "csarc-owned"
@@ -88,6 +89,7 @@ def test_root_public_identity_claims_are_consistent() -> None:
         ("branch_strategy: trunk\n", "Invalid branch_strategy"),
         ("governance_mode: partial\n", "Invalid governance_mode"),
         ("actions_fallback: automatic\n", "Invalid actions_fallback"),
+        ("verification_mode: automatic\n", "Invalid verification_mode"),
         ("review: anyone\n", "Invalid review"),
         ("copilot_review: required\n", "Invalid copilot_review"),
         ("release_trigger: tag\n", "Invalid release_trigger"),
@@ -212,6 +214,7 @@ def test_compact_release_ownership_needs_no_derived_settings(
     [
         ("governance_mode", "managed"),
         ("actions_fallback", "off"),
+        ("verification_mode", "hosted"),
         ("review", "peer"),
         ("copilot_review", "off"),
         ("release_trigger", "main"),

@@ -64,6 +64,7 @@ class FakeGitHub:
         self.default_branch = "main"
         self.destination_sha = "f" * 40
         self.head_ref = "fix/42-lifecycle"
+        self.title = "fix: lifecycle"
         self.head_repo: str | None = "o/r"
         self.issue_state = "open"
         self.issue_milestone: int | None = None
@@ -77,6 +78,7 @@ class FakeGitHub:
         if path == "pulls/7":
             return {
                 "draft": self.draft,
+                "title": self.title,
                 "body": self.body,
                 "base": {"ref": self.base_ref, "sha": self.base_sha},
                 "head": {
@@ -421,6 +423,15 @@ def alpha_promotion_github() -> FakeGitHub:
     return github
 
 
+def alpha_release_github() -> FakeGitHub:
+    """Return a canonical standalone Alpha release candidate."""
+    github = FakeGitHub([])
+    github.head_ref = "release/v0.21.0-alpha.1"
+    github.title = "chore(main): release 0.21.0-alpha.1"
+    github.body = f"Refs #42\n\n{pr_lifecycle.ALPHA_SELF_MERGE_MARKER}"
+    return github
+
+
 def test_alpha_self_merge_authorization_passes(copilot_config: Path) -> None:
     """Issue #775: a valid exact-head Alpha self-merge comment passes review."""
     github = alpha_github()
@@ -450,6 +461,38 @@ def test_alpha_promotion_self_merge_authorization_passes(
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert result["passed"]
     assert result["source"] == "alpha-self-merge"
+
+
+def test_alpha_release_self_merge_authorization_passes(
+    copilot_config: Path,
+) -> None:
+    """Issue #913: review and lifecycle share the release route."""
+    github = alpha_release_github()
+    github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["passed"]
+    assert result["source"] == "alpha-self-merge"
+
+
+def test_peer_alpha_release_still_requires_an_independent_review(
+    tmp_path: Path,
+) -> None:
+    """The release route does not weaken an explicit peer fallback."""
+    github = alpha_release_github()
+    github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(
+        github,
+        "o/r",
+        7,
+        config(
+            tmp_path,
+            "copilot_review: allowed\n"
+            "review: peer\n"
+            "default_release_level: alpha\n",
+        ),
+    )
+    assert not result["passed"]
+    assert "independent maintainer" in result["reason"]
 
 
 def test_alpha_sync_requires_exact_head_authorization(
@@ -656,32 +699,49 @@ def rules(
 
 
 @pytest.mark.large
-def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
-    """A new project gets the Copilot Ruleset, check, and gate script."""
+def test_new_project_defaults_to_local_verification(tmp_path: Path) -> None:
+    """A new project avoids hosted validation and requires audited bypass."""
     project = generate(tmp_path, {})
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
     assert "copilot_review: allowed" in config
     assert "review: solo" in config
+    assert "verification_mode: local" in config
     generated = rules(project)
     assert generated["copilot_code_review"]["review_on_push"] is True
-    assert generated["pull_request"]["required_approving_review_count"] == 0
+    assert generated["pull_request"]["required_approving_review_count"] == 1
+    assert generated["pull_request"]["require_last_push_approval"] is True
     assert generated["pull_request"]["required_review_thread_resolution"]
     required = rules(project, "rulesets-required-checks.json")
-    contexts = {
-        (item["context"], item["integration_id"])
-        for item in required["required_status_checks"]["required_status_checks"]
-    }
-    assert contexts == {
-        ("title", 15368),
-        ("verify", 15368),
-        ("review", 15368),
-    }
-    assert (project / ".github/workflows/pr-review.yml").is_file()
+    assert required == {}
+    for workflow in (
+        "ci.yml",
+        "dependabot-auto-merge.yml",
+        "dependabot-merge.yml",
+        "osv.yml",
+        "pr-policy.yml",
+        "pr-review.yml",
+        "release-drift.yml",
+        "release.yml",
+    ):
+        assert not (project / ".github/workflows" / workflow).exists()
     assert (project / ".csarc/scripts/review_gate.py").is_file()
+    verifier = (project / ".csarc/scripts/verify").read_text(encoding="utf-8")
+    assert "verify_container" not in verifier
+    guidance = (project / ".csarc/docs/agent-workflow.md").read_text(
+        encoding="utf-8"
+    )
+    assert "self-attested evidence" in guidance
+    assert "run `./.csarc/scripts/verify-fast` once" in guidance
     payload = json.loads(
         (project / ".csarc/policies/rulesets.json").read_text(encoding="utf-8")
     )
-    assert payload["bypass_actors"] == []
+    assert payload["bypass_actors"] == [
+        {
+            "actor_type": "RepositoryRole",
+            "actor_id": 5,
+            "bypass_mode": "pull_request",
+        }
+    ]
 
 
 @pytest.mark.large
@@ -689,7 +749,10 @@ def test_admin_actions_fallback_adds_only_the_admin_ruleset_bypass(
     tmp_path: Path,
 ) -> None:
     """Materialize the bypass only after an explicit admin declaration."""
-    project = generate(tmp_path, {"actions_fallback": "admin"})
+    project = generate(
+        tmp_path,
+        {"actions_fallback": "admin", "verification_mode": "hosted"},
+    )
     payload = json.loads(
         (project / ".csarc/policies/rulesets.json").read_text(encoding="utf-8")
     )
@@ -719,7 +782,14 @@ def test_issue_comment_review_gate_can_read_release_level_issues() -> None:
 @pytest.mark.large
 def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
     """Human mode also delegates the variable approval count to the check."""
-    project = generate(tmp_path, {"copilot_review": "off", "review": "peer"})
+    project = generate(
+        tmp_path,
+        {
+            "copilot_review": "off",
+            "review": "peer",
+            "verification_mode": "hosted",
+        },
+    )
     generated = rules(project)
     assert "copilot_code_review" not in generated
     assert generated["pull_request"] == {
@@ -739,5 +809,9 @@ def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
         ("verify", 15368),
         ("review", 15368),
     }
+    for workflow in ("ci.yml", "pr-policy.yml", "pr-review.yml", "release.yml"):
+        assert (project / ".github/workflows" / workflow).is_file()
+    verifier = (project / ".csarc/scripts/verify").read_text(encoding="utf-8")
+    assert "verify_container" not in verifier
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
     assert "copilot_review: 'off'" in config

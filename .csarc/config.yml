@@ -1,6 +1,7 @@
 # CSARC settings for the template repository itself.
 # Copier source metadata belongs only to repositories generated from this source.
 actions_fallback: admin
+verification_mode: hosted
 code_owner: '@Innoguard-Cyber-Arch/arch'
 copilot_review: allowed
 coverage_mode: global
