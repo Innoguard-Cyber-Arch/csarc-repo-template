@@ -368,6 +368,7 @@ def test_enable_codeql_generates_a_working_workflow(tmp_path: Path) -> None:
             "repository_url": "https://github.com/example/codeql-fixture",
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "public",
+            "verification_mode": "hosted",
             "enable_codeql": True,
         },
         defaults=True,
@@ -491,6 +492,7 @@ def test_docker_feature_generates_container_starter_files(
             "repository_url": "https://github.com/example/docker-fixture",
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "private",
+            "verification_mode": "hosted",
             "features": ["docker"],
         },
         defaults=True,
@@ -544,6 +546,44 @@ def test_docker_feature_generates_container_starter_files(
         if str(step.get("uses", "")).startswith("docker/build-push-action")
     )
     assert build_step["with"]["push"] is False
+
+
+@pytest.mark.large
+def test_local_docker_feature_reuses_full_verification(tmp_path: Path) -> None:
+    """Local mode replaces the hosted container job without a second suite."""
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "local-docker-fixture"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": ["python"],
+            "project_description": "Local container fixture.",
+            "project_name": "Local Container Fixture",
+            "project_slug": "local-container-fixture",
+            "repository_url": (
+                "https://github.com/example/local-container-fixture"
+            ),
+            "security_reporting_channel": "Use the private contact.",
+            "features": ["docker"],
+            "verification_mode": "local",
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+    )
+
+    assert not (project / ".github/workflows/docker-build-scan.yml").exists()
+    verifier = (project / ".csarc/scripts/verify").read_text(encoding="utf-8")
+    assert verifier.count("verify_container") == 2
+    assert (
+        'docker build --tag "local-container-fixture:csarc-verification"'
+        in verifier
+    )
+    assert "trivy image --exit-code 1 --severity HIGH,CRITICAL" in verifier
 
 
 @pytest.mark.large
@@ -603,6 +643,7 @@ def test_optional_features_render_independently(
             "repository_url": "https://github.com/example/feature-fixture",
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "private",
+            "verification_mode": "hosted",
             "features": features,
         },
         defaults=True,

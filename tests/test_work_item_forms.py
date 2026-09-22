@@ -206,7 +206,7 @@ def test_pr_templates_keep_repository_specific_checks_separate() -> None:
 
     assert "./scripts/verify-template.sh" in root_template
     assert "已測試新專案產生" in root_template
-    assert "./.csarc/scripts/verify`" in generated_template
+    assert "./.csarc/scripts/verify-fast`" in generated_template
     assert "verify-template.sh" not in generated_template
     assert "已測試新專案產生" not in generated_template
 

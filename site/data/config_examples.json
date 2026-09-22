@@ -632,8 +632,8 @@
             "en": "The root, generated repositories, and derived templates share one public configuration; there is no separate profile or site-only settings file to maintain."
           },
           "code": {
-            "zh-tw": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nreview: solo                 # solo | peer\ncopilot_review: allowed      # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main        # main | manual\ndefault_release_level: alpha\nfeatures: [repo-site]\ncode_owner: \"@organization/team\"  # optional",
-            "en": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nreview: solo                 # solo | peer\ncopilot_review: allowed      # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main        # main | manual\ndefault_release_level: alpha\nfeatures: [repo-site]\ncode_owner: \"@organization/team\"  # optional"
+            "zh-tw": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nverification_mode: local    # local | hosted\nreview: solo                 # solo | peer\ncopilot_review: allowed      # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main        # main | manual\ndefault_release_level: alpha\nfeatures: [repo-site]\ncode_owner: \"@organization/team\"  # optional",
+            "en": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nverification_mode: local    # local | hosted\nreview: solo                 # solo | peer\ncopilot_review: allowed      # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main        # main | manual\ndefault_release_level: alpha\nfeatures: [repo-site]\ncode_owner: \"@organization/team\"  # optional"
           },
           "summary": {
             "zh-tw": "設定只保留治理、審查、發版、選配功能與 owner 的意圖；方案、帳務與即時能力是偵測結果。",
@@ -698,8 +698,8 @@
             "en": "A free private repository first keeps the same policy stored in the repository; public, Pro, Team, or Enterprise plans can enforce pull requests and required checks. One review check evaluates the solo/peer fallback and optional Copilot evidence; CODEOWNERS is generated only when configured."
           },
           "code": {
-            "zh-tw": "# Intent stays portable; capability is checked live.\nreview: solo        # solo | peer\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\n\nrequired checks:\n  - verify\n  - title\n  - review",
-            "en": "# Intent stays portable; capability is checked live.\nreview: solo        # solo | peer\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\n\nrequired checks:\n  - verify\n  - title\n  - review"
+            "zh-tw": "# Intent stays portable; capability is checked live.\nreview: solo        # solo | peer\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\nverification_mode: local # local | hosted\n\n# hosted 才啟用 required checks：verify、title、review",
+            "en": "# Intent stays portable; capability is checked live.\nreview: solo        # solo | peer\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\nverification_mode: local # local | hosted\n\n# Required checks (verify, title, review) are hosted-only."
           },
           "summary": {
             "zh-tw": "Action 直接查詢 live repository collaborators，排除作者後從 maintain／admin 權限選一位 reviewer；不保存靜態名單。Copilot entitlement 與 Actions billing 只接受即時證據，不從方案名稱推測。Free private 無法強制 Ruleset 時仍明確標示 DEGRADED。",

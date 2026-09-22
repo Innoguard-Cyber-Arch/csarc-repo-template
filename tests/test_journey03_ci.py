@@ -417,12 +417,13 @@ def test_documentation_tier_validates_the_generated_site() -> None:
 
 
 def test_local_verification_reuses_the_hosted_path_planner() -> None:
-    """Local entry points reuse the planner without minting merge evidence."""
-    for path, planner in (
-        ("scripts/verify-fast", "python3 scripts/ci_tier.py"),
+    """Local evidence is appended to the same planner and runner path."""
+    for path, planner, recorder in (
+        ("scripts/verify-fast", "python3 scripts/ci_tier.py", None),
         (
             "template/.csarc/scripts/verify-fast.jinja",
             "python3 .csarc/scripts/ci_tier.py",
+            "python3 .csarc/scripts/local_verification.py record",
         ),
     ):
         source = (REPO_ROOT / path).read_text(encoding="utf-8")
@@ -431,6 +432,8 @@ def test_local_verification_reuses_the_hosted_path_planner() -> None:
         assert "git diff --no-renames --name-only" in source
         assert '--extra-scopes "$extra_scopes"' in source
         assert "write-verify-attestation" not in source
+        if recorder is not None:
+            assert recorder in source
 
 
 def test_workflow_scope_runs_the_actions_security_audit() -> None:

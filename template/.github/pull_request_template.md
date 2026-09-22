@@ -11,7 +11,7 @@ Closes #N
 
 <!-- Closing keywords require every task here and in the linked Issue to be checked. -->
 
-- [ ] CI 依風險自動選擇的 `verify` check（fast／full）已通過；一般工作 PR 不必在本機另外重跑 `./.csarc/scripts/verify`，只有此 PR 本身是 full-tier 交付邊界時，owner／integrator 才需在本機執行過一次（見 `.csarc/docs/ci-policy.md`）；PR assignee／label／Milestone 與 linked Issue 一致；work branch 已顯示於 Issue Development；未超出原 Issue 範圍
+- [ ] 設定模式所需的最終驗證證據已通過：local 模式在 committed、clean 的 exact candidate 跑一次 `./.csarc/scripts/verify-fast`（需要時會自動升級 full），hosted 模式由 `verify` check 執行；沒有為了證明而重跑同一 suite（見 `.csarc/docs/ci-policy.md`）；PR assignee／label／Milestone 與 linked Issue 一致；work branch 已顯示於 Issue Development；未超出原 Issue 範圍
 
 ## 補充
 

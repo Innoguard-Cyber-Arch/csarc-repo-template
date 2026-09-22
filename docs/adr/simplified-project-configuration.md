@@ -4,6 +4,7 @@
 - **日期：**2026-09-22
 - **來源 Issue：**[#900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)
 - **實作 PR：**https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/907
+- **補充決策：**[#908](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/908)
 
 ## 問題與限制
 
@@ -19,6 +20,7 @@ GitHub 方案只能提供能力線索，不能證明 repository visibility、org
 governance_mode: managed       # managed | observe
 lifecycle: [issues, milestones]
 actions_fallback: off          # off | admin
+verification_mode: local       # local | hosted
 review: solo                   # solo | peer
 copilot_review: allowed        # allowed | off
 release_ownership: csarc-owned
@@ -39,14 +41,15 @@ Copier 會把每個問題保存成頂層答案；既有無依賴 YAML reader 也
 - release workflow、required inputs、reason、settings owner 與 immutable setting 都是衍生或稽核輸出，不再是一般答案。
 - `features` 是選配產物的唯一集合。`repo-site` 預設開啟；`docker` 預設關閉。未選功能不產生空 workflow 或多餘驗證，project-owned 既有內容不得被靜默刪除。
 - `actions_fallback: admin` 是明確 opt-in，只適用於可證明的 zero-step GitHub billing gate，仍須 exact-head／base、review、適用本機 suite、remote lease 與 trace；失敗或未知狀態一律 fail closed。
+- `verification_mode: local` 是新專案預設值：沿用同一個 risk-owned fast／full router 與 runner，成功後只寫入 Git metadata 的 self-attested evidence；merge lifecycle 重驗 clean worktree、exact head/tree、base、tier、scope、freshness、review 與 remote lease，再走有 trace 的 admin bypass。它不產生任何會重跑驗證的 hosted workflow，包括 release workflow；`hosted` 才保留 #834／#835 的 trusted Actions 與可信 release provenance。
 
 ## 遷移
 
-舊設定以明確規則轉換：全開／全關 `policy_*` 分別成 `managed`／`observe`，混合值要求使用者選擇；`enable_docker` 轉成 `features` membership；舊 `pr_review_mode` 轉成 `copilot_review`；per-level review 只決定 `solo` 或 `peer`，verification 收斂為固定下限且路徑風險只能升級。既有發版行為遷移成 `release_trigger: main`。舊 reviewer、branch、level cap、per-level 與 release 衍生答案不再持久化。
+舊設定以明確規則轉換：全開／全關 `policy_*` 分別成 `managed`／`observe`，混合值要求使用者選擇；`enable_docker` 轉成 `features` membership；舊 `pr_review_mode` 轉成 `copilot_review`；per-level review 只決定 `solo` 或 `peer`，verification 收斂為固定下限且路徑風險只能升級。既有發版行為遷移成 `release_trigger: main`。為避免更新時靜默降低既有保護，沒有 `verification_mode` 的 repository 一律遷移為 `hosted`；只有新建專案預設 `local`。舊 reviewer、branch、level cap、per-level 與 release 衍生答案不再持久化。
 
 ## 方案與能力邊界
 
-Free／Pro／Team／Enterprise 與 public／private 的組合只影響 Ruleset、Pages 等能力探測；Copilot 與 Actions 帳務必須分別以實際 entitlement／billing 結果判斷。`repo-site` 產物存在不表示 Pages 已發布；Docker feature 也不增加 registry、deployment 或 secret。
+Free／Pro／Team／Enterprise 與 public／private 的組合只影響 Ruleset、Pages 等能力探測；Copilot 與 Actions 帳務必須分別以實際 entitlement／billing 結果判斷。local mode 能驗 lint、型別、單元／整合測試、本機服務、build、package、secret、dependency scan，以及選用 Docker 時的 Compose 設定、image build 與 Trivy scan，但不能證明執行者誠信、GitHub event／權限、第三方服務、實際部署、遠端 runner 或 release provenance；這些邊界不得顯示為通過。`repo-site` 產物存在不表示 Pages 已發布；Docker feature 也不增加 registry、deployment 或 secret。
 
 ## 取代與保留
 
