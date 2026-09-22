@@ -165,7 +165,8 @@ Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head ma
   3.（#775／#826／#905）這是一張符合 `alpha_self_merge_opt_in` 條件（PR body 恰好一次
      `Alpha 自行合併 / self-merged` 標記、Milestone-less Issue 的 direct-to-main
      路由、既有 `dev/mN` Issue 路由、經 `require_routine_route()` 完整驗證的正式
-     current-main delivery sync 路由，或由 `promotion_gate.route_for()` 分類為 Milestone
+     current-main delivery sync 路由、canonical `release/v*` 的同 repository
+     current-main release 路由，或由 `promotion_gate.route_for()` 分類為 Milestone
      promotion 的同 repository 路由）的 Alpha self-merge PR，且已經有一則
      `pr_lifecycle.find_exact_head_authorization` 能找到的、綁定**目前 head SHA**
      的真人 maintainer 授權留言（跟 `pr_lifecycle.py merge` 要求的是同一則留言，
@@ -266,11 +267,14 @@ Alpha PR 可由 `scripts/pr_lifecycle.py merge` 在 lease＋exact-head 授權留
 - Milestone promotion：`promotion_gate.route_for()` 已分類為 `milestone` 的同 repository
   `dev/mN-*`／`promote/mN-*` route；既有 `title` 與 `verify` required checks 繼續驗證
   tracker、Milestone、bridge topology 與 exact candidate（#905）。
+- Guided release：同 repository 的 canonical `release/v<semver>` route 必須以 current
+  `main` 為 base，且既有 `verify-release-candidate` 仍在 hosted CI 與 lease-bound merge
+  boundary 重驗 exact head、candidate freshness、版本與檔案範圍（#913）。
 
-四者的 PR body 都必須恰好出現一次 `Alpha 自行合併 / self-merged` 標記。未通過上述
+五者的 PR body 都必須恰好出現一次 `Alpha 自行合併 / self-merged` 標記。未通過上述
 既有 route 驗證、不是 Alpha self-merge、或缺少綁定目前 head 的 maintainer 授權留言，
-仍走原本的人工審核／fail-closed 路徑；release、beta／early／formal 與 quota fallback
-不因 #905 擴大。
+仍走原本的人工審核／fail-closed 路徑；非 canonical release、beta／early／formal 與 quota
+fallback 不因 #913 擴大。
 
 這是只在「repo 結構性只有一個真人帳號」這段 alpha 期間才成立的例外，不是長期設計；
 有第二個真正的 collaborator 後應重新檢視是否移除，方向由維護者決定（追蹤於 #580）。

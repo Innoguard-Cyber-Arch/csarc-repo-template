@@ -1407,12 +1407,12 @@ def alpha_self_merge_opt_in(
             if isinstance(item, dict)
         }
         route = promotion_gate.route_for(str(base_ref), head_ref, labels)
-        if route.kind == "milestone":
+        if RELEASE_BRANCH.fullmatch(head_ref) or route.kind == "milestone":
             head_repo = head.get("repo") or {}
             head_repo_name = str(head_repo.get("full_name") or "")
             if head_repo_name.casefold() != repo.casefold():
                 raise RuntimeError(
-                    "Alpha promotion requires a same-repository head"
+                    "Alpha release or promotion requires a same-repository head"
                 )
             return True
         require_default_branch_issue_route(github, repo, lease, pull)

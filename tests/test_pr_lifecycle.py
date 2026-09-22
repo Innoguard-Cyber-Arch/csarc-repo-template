@@ -2595,6 +2595,62 @@ def test_alpha_promotion_uses_the_exact_head_self_review_path(
     assert snapshot["merge_mode"] == "agent"
 
 
+def test_alpha_release_uses_the_exact_head_self_review_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #913: a canonical Alpha release may use solo review."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.reviews = []
+    github.required_review_count = 0
+    github.head_ref = "release/v0.21.0-alpha.1"
+    github.body = f"Refs #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+    snapshot = merge_snapshot(
+        github,
+        lease_fixture(),
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["alpha_self_merge"] is True
+    assert snapshot["authorization_source"] == "comment"
+    assert snapshot["merge_mode"] == "agent"
+
+
+def test_alpha_release_rejects_a_fork(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A canonical release branch name cannot authorize another repository."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.reviews = []
+    github.required_review_count = 0
+    github.head_ref = "release/v0.21.0-alpha.1"
+    github.body = f"Refs #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.pull = lambda number=42: {  # ty: ignore[invalid-assignment]
+        **FakeGitHub.pull(github, number),
+        "head": {
+            "ref": github.head_ref,
+            "sha": github.head,
+            "repo": {"full_name": "fork/repo"},
+        },
+    }
+    with pytest.raises(RuntimeError, match="same-repository head"):
+        merge_snapshot(
+            github,
+            lease_fixture(),
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
+
+
 def test_alpha_self_merge_clears_the_known_reviewed_bypass_ruleset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
