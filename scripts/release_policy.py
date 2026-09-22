@@ -1590,17 +1590,49 @@ def prepare_release_candidate(
     }
 
 
+def _promotion_baseline_tree(root: Path, source_sha: str, head_sha: str) -> str:
+    """Return the deterministic pre-release tree for a promotion head."""
+    source_tree = git_output(["rev-parse", f"{source_sha}^{{tree}}"], root)
+    parents = git_output(
+        ["rev-list", "--parents", "-n", "1", head_sha], root
+    ).split()
+    if parents == [head_sha, source_sha]:
+        return source_tree
+    if len(parents) != 3 or parents[1] != source_sha:
+        raise ValueError(
+            "promotion head must have the delivery source as its first parent"
+        )
+
+    executable = shutil.which("git")
+    if executable is None:
+        raise RuntimeError("Git is required for release planning")
+    merged = subprocess.run(  # noqa: S603
+        [executable, "merge-tree", "--write-tree", source_sha, parents[2]],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    first_line = merged.stdout.splitlines()[0] if merged.stdout else ""
+    if merged.returncode == 0:
+        return git_output(["rev-parse", f"{first_line}^{{tree}}"], root)
+    if re.fullmatch(r"[0-9a-f]{40,64}", first_line):
+        return source_tree
+    raise RuntimeError("Git could not reconstruct the promotion baseline")
+
+
 def verify_promotion_version(
     root: Path, source_sha: str, head_sha: str, *, phase: str
 ) -> dict[str, object]:
     """Require a promotion tree to equal its deterministic release candidate."""
-    source_tree = git_output(["rev-parse", f"{source_sha}^{{tree}}"], root)
+    baseline_tree = _promotion_baseline_tree(root, source_sha, head_sha)
     head_tree = git_output(["rev-parse", f"{head_sha}^{{tree}}"], root)
     planned = release_plan(root, head_sha, phase=phase)
     if planned is None:
-        if head_tree != source_tree:
+        if head_tree != baseline_tree:
             raise ValueError(
-                "a no-release promotion must preserve the delivery source tree"
+                "a no-release promotion must preserve its deterministic "
+                "baseline tree"
             )
         return {
             "status": "no-release",
@@ -1630,6 +1662,13 @@ def verify_promotion_version(
             text=True,
         )
         try:
+            subprocess.run(  # noqa: S603
+                [executable, "read-tree", "--reset", "-u", baseline_tree],
+                cwd=worktree,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             payload = prepare_release_candidate(worktree, head_sha, phase=phase)
             subprocess.run(  # noqa: S603
                 [executable, "add", "--all"],
@@ -1655,10 +1694,10 @@ def verify_promotion_version(
             )
     if head_tree != expected_tree:
         expected_paths = git_output(
-            ["diff", "--name-only", source_sha, expected_tree], root
+            ["diff", "--name-only", baseline_tree, expected_tree], root
         ).splitlines()
         actual_paths = git_output(
-            ["diff", "--name-only", source_sha, head_sha], root
+            ["diff", "--name-only", baseline_tree, head_sha], root
         ).splitlines()
         raise ValueError(
             "promotion release materialization is not exact; expected "
