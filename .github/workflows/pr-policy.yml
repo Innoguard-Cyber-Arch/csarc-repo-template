@@ -15,6 +15,7 @@ permissions: {}
 jobs:
   title:
     name: title
+    if: ${{ github.event_name == 'merge_group' || github.event.pull_request.draft == false }}
     permissions:
       contents: read
       issues: read

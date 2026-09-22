@@ -86,6 +86,17 @@ def test_work_item_lifecycle_is_paired_and_bounded() -> None:
     assert job["timeout-minutes"] == 5
     assert "matrix" not in job.get("strategy", {})
 
+    condition = job["if"]
+    assert "github.event.issue.pull_request == null" in condition
+    assert "github.event.changes.milestone.from.number != null" in condition
+    assert "github.event.pull_request.merged == true" in condition
+    assert (
+        "startsWith(github.event.pull_request.base.ref, 'dev/m')" in condition
+    )
+    assert (
+        "!startsWith(github.event.pull_request.head.ref, 'sync/')" in condition
+    )
+
     step_names = [step["name"] for step in job["steps"]]
     assert step_names == EXPECTED_STEP_NAMES
 
