@@ -813,6 +813,12 @@ def test_closing_issue_grammar_accepts_ascii_case() -> None:
     assert issue_number("cLoSeS #27.") == 27
 
 
+def test_milestone_promotion_can_reference_without_closing_tracker() -> None:
+    """Release completion, not the promotion merge, closes the tracker."""
+    assert issue_number("Refs #27", close_on_merge=False) == 27
+    assert issue_number("Closes #27", close_on_merge=False) == 27
+
+
 def test_checkpoint_allows_only_declared_completed_work() -> None:
     """Leave later work open while binding evidence to the current range."""
     issues = [
@@ -1121,7 +1127,7 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
             7,
             "bridge source main",
             "different-tree",
-            "preserve the source tree",
+            "preserve the bridge tree",
         ),
     ],
 )

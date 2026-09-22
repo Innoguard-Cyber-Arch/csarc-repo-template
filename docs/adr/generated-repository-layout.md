@@ -3,7 +3,7 @@
 - **狀態：**Accepted
 - **日期：**2026-09-21
 - **來源 Issue：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)
-- **實作 PR：**本文件隨 Issue #742 的 closing PR 一併審查
+- **實作 PR：**[#860](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/860)
 
 ## 問題與限制
 
@@ -47,8 +47,10 @@ GitHub 只會從固定位置讀取部分檔案，例如 `.github/workflows/`、`
 | 每個工具各自維護一份使用者設定 | 不採用；容易漂移，`.csarc/config.yml` 必須是唯一設定來源 |
 | 更新時直接刪除舊 root 目錄 | 不採用；可能刪到產品檔，改採逐檔已知映射與碰撞保護 |
 
-## Ownership、驗證與重新評估
+## Ownership 與驗證
 
 公版維護 `.csarc/`、managed workflows 與搬移映射；consuming repository 維護產品程式、manifest、`docs/adr/`、`docs/specs/`、`docs/site/content/` 與 `docs/site/theme.css`。最小與完整生成專案以 root allowlist 測試；舊版更新以搬移／碰撞回歸測試；代表性三語言專案執行完整 verifier。
+
+## 重新評估條件
 
 只有平台固定路徑改變、工具無法接受明確 config path，或新的持久狀態不能由 `.csarc/config.yml` 與公版重建時，才重新評估此決定。

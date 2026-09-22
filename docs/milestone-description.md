@@ -154,10 +154,28 @@ tracker 的 `Promotion` 段落只能描述合併前可驗證的條件（例如�
 bundle／完整驗證通過、promotion evidence 已綁定 base／head／candidate tree）；由
 merge 觸發的 tracker 關閉與 branch／worktree 清理則記錄在 `## 補充` 的 post-merge
 runbook，不得寫成必須在 merge 前勾選的 acceptance item。一張 `promote/m<編號>-<簡稱>`
-分支的 PR 以 `Closes #<tracker 編號>` 直接關閉這張 tracker Issue；merge 後 CI 自動把
-merge commit 網址回填進 `Completion evidence` 段落。一個 Milestone 只維護一張
-tracker Issue，不再另開獨立的 final promotion Issue——這捨棄了同一 Milestone 分多次
-checkpoint promotion 的彈性，因為重複樣板成本已判斷高於保留彈性的價值。
+分支的 PR 以 `Refs #<tracker 編號>` 連結 tracker，但不在 merge 當下關閉；CSARC-owned
+release path 先在同一張 promotion PR materialize 精確版本與 CHANGELOG，merge 後由
+hosted／本機共用的 `scripts/publish-release` 發布並驗證 Release，再把 promotion commit 與 Release 網址回填進
+`Completion evidence`、關閉 tracker 與 Milestone。發布失敗時兩者維持 open，重跑成功
+才 idempotently 收尾；`no-release` batch 則以成功的 release workflow run 作為明確處置
+證據。一個 Milestone 只維護一張 tracker Issue，不再另開獨立的 final promotion 或版本
+Issue／PR——這捨棄了同一 Milestone 分多次 checkpoint promotion 的彈性，因為重複樣板
+成本已判斷高於保留彈性的價值。
+
+收尾程式在寫入 evidence 前，仍以 tracker 當下的 `updated_at` 重驗原核可；之後由程式
+寫入的 promotion／Release URL 與 close state 本來就會推進同一個 `updated_at`，因此
+completed closure 改由最新 `Reconciliation` fingerprint 綁定 body，並繼續檢查原核可
+留言本身沒有被事後編輯。若寫入 evidence 後中斷，只有 exact URL 已存在且
+Reconciliation 仍 fresh 時才允許同一 release candidate 重跑，不把一般 stale tracker
+誤當成可自動結案。
+
+建立 promotion bridge 的雙親 merge commit 後，先以 tracker 宣告的發布層級執行
+`python3 scripts/release_policy.py plan --sha HEAD --phase <level>`；結果若為 `pending`，在
+同一個 checkout 執行 `python3 scripts/release_policy.py prepare-candidate --sha HEAD
+--phase <level>`，將產生的版本檔與 CHANGELOG amend 回該 bridge commit，再 push／開 PR。
+若 plan 為 `no-release`，bridge tree 必須與 delivery source 完全相同。Hosted `verify` 會從
+delivery source 重建預期 tree，比對任何多餘、缺漏或被改寫的內容，不能用手改版本檔繞過。
 
 把 tracker 收尾為 `completed` 前，`sync_milestone_state.py regenerate-reconciliation
 --repo <repo> --milestone <編號>` 會在 tracker body 額外維護第五個 H2 段落

@@ -49,6 +49,8 @@ _FINGERPRINT_COMMENT = re.compile(
 _CLOSING_KEYWORD = re.compile(
     r"(?<!\w)(?:Closes|Fixes|Resolves)[ \t]+#(\d+)(?!\w)", re.IGNORECASE
 )
+_TRACKING_KEYWORD = re.compile(r"(?<!\w)Refs[ \t]+#(\d+)(?!\w)", re.IGNORECASE)
+_PROMOTION_BRANCH = re.compile(r"^promote/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
 
 
 @dataclass(frozen=True)
@@ -756,6 +758,7 @@ def approval_decision(
     *,
     require_open: bool = True,
     allow_admin_self_approval: bool | None = None,
+    bind_to_item_update: bool = True,
 ) -> Decision:
     """Require one non-proposer approval, or an owner self-approval.
 
@@ -772,8 +775,9 @@ def approval_decision(
             False, "The lifecycle Issue must remain open while work runs"
         )
     proposer = item.get("user", {}).get("login")
+    item_updated_at = item.get("updated_at") if bind_to_item_update else None
     approvals, objections, resolved, admin_approvals, stale = _approval_records(
-        snapshot, proposer, item_updated_at=item.get("updated_at")
+        snapshot, proposer, item_updated_at=item_updated_at
     )
     if allow_admin_self_approval is None and admin_approvals and not approvals:
         allow_admin_self_approval = _admin_self_approval_allowed(
@@ -1369,7 +1373,13 @@ def _completed_closure(
         return Decision(False, "Complete every Milestone acceptance criterion")
     if not promotion_complete(body):
         return Decision(False, "Complete every Promotion readiness checkbox")
-    approval = approval_decision(snapshot, require_open=False)
+    # Closing the Issue and writing machine-owned evidence both advance its
+    # `updated_at`. The release completer already revalidated the approval
+    # before either write, while the reconciliation fingerprint binds the
+    # current body here. Keep detecting edits to the approval comment itself.
+    approval = approval_decision(
+        snapshot, require_open=False, bind_to_item_update=False
+    )
     if not approval.allowed:
         return approval
     evidence = _section(body, "Completion evidence")
@@ -1603,6 +1613,159 @@ def record_promotion_evidence(
     return Decision(True, f"Recorded promotion evidence on #{tracker_number}")
 
 
+def complete_release(  # noqa: C901
+    repo: str,
+    main_sha: str,
+    evidence_url: str,
+    *,
+    outcome: str,
+) -> Decision:
+    """Close one Milestone only after its promotion release has succeeded."""
+    if outcome == "published":
+        expected_prefix = f"https://github.com/{repo}/releases/tag/"
+    elif outcome == "no-release":
+        expected_prefix = f"https://github.com/{repo}/actions/runs/"
+    else:
+        return Decision(False, f"Unknown release outcome: {outcome}")
+    if not evidence_url.startswith(expected_prefix):
+        return Decision(False, "Release completion evidence URL is invalid")
+
+    pulls = _pages(
+        run_gh(
+            [
+                "api",
+                "--paginate",
+                "--slurp",
+                f"repos/{repo}/commits/{main_sha}/pulls?per_page=100",
+            ]
+        )
+    )
+    promotions = []
+    for pull in pulls:
+        base = pull.get("base")
+        head = pull.get("head")
+        head_ref = head.get("ref") if isinstance(head, dict) else None
+        if (
+            isinstance(base, dict)
+            and base.get("ref") == "main"
+            and isinstance(head_ref, str)
+            and _PROMOTION_BRANCH.fullmatch(head_ref)
+            and pull.get("merge_commit_sha") == main_sha
+            and isinstance(pull.get("merged_at"), str)
+        ):
+            promotions.append(pull)
+    if not promotions:
+        return Decision(True, "This main commit is not a Milestone promotion")
+    if len(promotions) != 1:
+        return Decision(False, "Main commit has no unique Milestone promotion")
+
+    pull = promotions[0]
+    head_ref = str(pull["head"]["ref"])
+    branch_match = _PROMOTION_BRANCH.fullmatch(head_ref)
+    milestone = pull.get("milestone")
+    milestone_number = (
+        milestone.get("number") if isinstance(milestone, dict) else None
+    )
+    if (
+        branch_match is None
+        or not isinstance(milestone_number, int)
+        or milestone_number != int(branch_match.group(1))
+    ):
+        return Decision(False, "Promotion branch and Milestone differ")
+    body = pull.get("body")
+    if not isinstance(body, str) or _CLOSING_KEYWORD.search(body):
+        return Decision(
+            False,
+            "Milestone promotion must keep its tracker open until release",
+        )
+    trackers = {
+        int(match.group(1)) for match in _TRACKING_KEYWORD.finditer(body)
+    }
+    if len(trackers) != 1:
+        return Decision(False, "Milestone promotion needs exactly one Refs #N")
+    tracker_number = next(iter(trackers))
+    snapshot = load_snapshot(repo, milestone_number)
+    issue = tracker(snapshot)
+    if issue is None or issue.get("number") != tracker_number:
+        return Decision(
+            False, "Promotion does not reference its Milestone tracker"
+        )
+    issue_milestone = issue.get("milestone")
+    if (
+        not str(issue.get("title") or "").startswith(
+            f"Milestone {milestone_number}: "
+        )
+        or not isinstance(issue_milestone, dict)
+        or issue_milestone.get("number") != milestone_number
+    ):
+        return Decision(
+            False, "Promotion does not reference its Milestone tracker"
+        )
+
+    promotion_url = f"https://github.com/{repo}/commit/{main_sha}"
+    issue_body = issue.get("body")
+    if not isinstance(issue_body, str):
+        return Decision(False, "The lifecycle Issue body is missing")
+    approval = approval_decision(snapshot)
+    retry_ready = (
+        promotion_url in issue_body
+        and evidence_url in issue_body
+        and reconciliation_status(issue_body).allowed
+    )
+    if not approval.allowed and retry_ready:
+        approval = approval_decision(
+            snapshot, require_open=False, bind_to_item_update=False
+        )
+    if not approval.allowed:
+        return approval
+
+    updated_body = issue_body
+    try:
+        for url in (promotion_url, evidence_url):
+            updated_body = append_completion_evidence(updated_body, url)
+        issue["body"] = updated_body
+        updated_body = regenerate_reconciliation(snapshot)
+    except RuntimeError as error:
+        return Decision(False, str(error))
+    issue["body"] = updated_body
+    issue["state"] = "closed"
+    issue["state_reason"] = "completed"
+    closure = closure_decision(snapshot)
+    if not closure.allowed:
+        return closure
+    if updated_body != issue_body:
+        run_gh(
+            [
+                "issue",
+                "edit",
+                str(tracker_number),
+                "--repo",
+                repo,
+                "--body",
+                updated_body,
+            ]
+        )
+    run_gh(
+        [
+            "api",
+            "--method",
+            "PATCH",
+            f"repos/{repo}/issues/{tracker_number}",
+            "--raw-field",
+            "state=closed",
+            "--raw-field",
+            "state_reason=completed",
+        ]
+    )
+    closed = reconcile(repo, milestone_number)
+    if not closed.allowed:
+        return closed
+    return Decision(
+        True,
+        f"Completed tracker #{tracker_number} and Milestone {milestone_number}",
+    )
+
+
 def preflight(repo: str, number: int) -> Decision:
     """Validate a Milestone's own metadata before any work is dispatched.
 
@@ -1707,6 +1870,13 @@ def main() -> None:
     record.add_argument("--repo", required=True)
     record.add_argument("--tracker", required=True, type=int)
     record.add_argument("--evidence-url", required=True)
+    complete = subparsers.add_parser("complete-release")
+    complete.add_argument("--repo", required=True)
+    complete.add_argument("--main-sha", required=True)
+    complete.add_argument("--evidence-url", required=True)
+    complete.add_argument(
+        "--outcome", choices=("published", "no-release"), required=True
+    )
     scope = subparsers.add_parser("check-scope")
     scope.add_argument("--repo", required=True)
     scope.add_argument("--issue", required=True, type=int)
@@ -1740,6 +1910,13 @@ def main() -> None:
         decision = record_promotion_evidence(
             args.repo, args.tracker, args.evidence_url
         )
+    elif args.command == "complete-release":
+        decision = complete_release(
+            args.repo,
+            args.main_sha,
+            args.evidence_url,
+            outcome=args.outcome,
+        )
     elif args.command == "check-scope":
         decision = check_scope(args.repo, args.issue)
     elif args.command == "regenerate-reconciliation":
@@ -1753,7 +1930,7 @@ def main() -> None:
         raise SystemExit(1)
 
 
-def _dispatch(args: argparse.Namespace) -> Decision:
+def _dispatch(args: argparse.Namespace) -> Decision:  # noqa: C901
     """Route one parsed subcommand to its handler function."""
     if args.command == "check-pr":
         return check_pr(args.repo, args.pr)
@@ -1764,6 +1941,13 @@ def _dispatch(args: argparse.Namespace) -> Decision:
     if args.command == "record-promotion-evidence":
         return record_promotion_evidence(
             args.repo, args.tracker, args.evidence_url
+        )
+    if args.command == "complete-release":
+        return complete_release(
+            args.repo,
+            args.main_sha,
+            args.evidence_url,
+            outcome=args.outcome,
         )
     if args.command == "check-scope":
         return check_scope(args.repo, args.issue)

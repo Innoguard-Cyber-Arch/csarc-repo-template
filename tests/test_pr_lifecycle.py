@@ -48,6 +48,7 @@ require_trusted_dependabot_head = MODULE["require_trusted_dependabot_head"]
 trusted_check_run_matches_context = MODULE["trusted_check_run_matches_context"]
 promotion_gate = MODULE["promotion_gate"]
 release_refs = MODULE["release_refs"]
+revalidate_release_candidate = MODULE["revalidate_release_candidate"]
 remote_repository = MODULE["remote_repository"]
 scan_writers = MODULE["scan_writers"]
 validate_audit_comment = MODULE["validate_audit_comment"]
@@ -3721,6 +3722,103 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     assert released
 
 
+@pytest.mark.parametrize(
+    "head_ref",
+    ("release/v0.18.0-alpha.1", "release/v0.18.0-beta.2"),
+)
+def test_revalidation_includes_canonical_prerelease_branches(
+    head_ref: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Alpha and beta candidates cannot skip the final freshness check."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_kwargs: object) -> str:
+        commands.append(command)
+        return "candidate is current"
+
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_lease",
+        lambda *_: None,
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__, "run", fake_run
+    )
+
+    result = revalidate_release_candidate(
+        FakeGitHub("a" * 40), lease_fixture(), head_ref, "alpha"
+    )
+
+    assert result == "candidate is current"
+    assert len(commands) == 1
+    assert commands[0][0].endswith("scripts/verify-release-candidate")
+
+
+def test_revalidation_rebuilds_a_csarc_owned_promotion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The final merge boundary rechecks promotion release materialization."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_kwargs: object) -> str:
+        commands.append(command)
+        if command[0] == "git":
+            return "b" * 40
+        return "promotion version is exact"
+
+    monkeypatch.setattr(
+        MODULE["csarc_config"],
+        "load_config",
+        lambda *_: {"release_ownership": "csarc-owned"},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_lease",
+        lambda *_: None,
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__, "run", fake_run
+    )
+
+    result = revalidate_release_candidate(
+        FakeGitHub("a" * 40),
+        lease_fixture(),
+        "promote/m14-final-delivery",
+        "beta",
+    )
+
+    assert result == "promotion version is exact"
+    assert commands[0][-1] == f"{'a' * 40}^1"
+    assert "verify-promotion-version" in commands[1]
+    assert commands[1][-2:] == ["--phase", "beta"]
+
+
+def test_revalidation_leaves_product_owned_promotions_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Product-owned promotion contents remain outside CSARC release policy."""
+    monkeypatch.setattr(
+        MODULE["csarc_config"],
+        "load_config",
+        lambda *_: {"release_ownership": "product-owned"},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("must not run"),
+    )
+
+    assert (
+        revalidate_release_candidate(
+            FakeGitHub("a" * 40),
+            lease_fixture(),
+            "promote/m14-final-delivery",
+            "beta",
+        )
+        == ""
+    )
+
+
 def test_merge_revalidates_a_release_candidate_before_the_final_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -3743,8 +3841,14 @@ def test_merge_revalidates_a_release_candidate_before_the_final_snapshot(
     github = FakeGitHub("a" * 40)
     github.head_ref = "release/v0.2.0"
 
-    def stale_candidate(_github: object, _lease: object, head_ref: str) -> str:
+    def stale_candidate(
+        _github: object,
+        _lease: object,
+        head_ref: str,
+        release_phase_name: str,
+    ) -> str:
         assert head_ref == "release/v0.2.0"
+        assert release_phase_name == ""
         raise RuntimeError("current base adds release-worthy commits")
 
     monkeypatch.setitem(

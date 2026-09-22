@@ -38,6 +38,7 @@ select_release_mode = MODULE["select_release_mode"]
 simple_release_boundary = MODULE["simple_release_boundary"]
 verify_release_version = MODULE["verify_release_version"]
 verify_candidate_version = MODULE["verify_candidate_version"]
+verify_promotion_version = MODULE["verify_promotion_version"]
 workflow_policy_observations = MODULE["workflow_policy_observations"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
 _write_release_version = MODULE["_write_release_version"]
@@ -1133,6 +1134,129 @@ def test_guided_candidate_only_materializes_local_release_files(
     report_payload = release_plan_report(tmp_path, "HEAD")
     assert report_payload["version"] == "0.2.0"
     assert report_payload["status"] == "candidate"
+
+
+def test_promotion_version_is_materialized_in_the_delivery_pr(
+    tmp_path: Path,
+) -> None:
+    """The promotion head is the exact deterministic version candidate."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {"type": "generic", "path": "README.md"}
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: deliver milestone")
+    source_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "commit", "--allow-empty", "-m", "chore: promotion bridge")
+    prepare_release_candidate(tmp_path, "HEAD", phase="beta")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "--amend", "--no-edit")
+    head_sha = git(tmp_path, "rev-parse", "HEAD")
+
+    result = verify_promotion_version(
+        tmp_path, source_sha, head_sha, phase="beta"
+    )
+
+    assert result["status"] == "candidate"
+    assert result["version"] == "0.2.0-beta.1"
+    assert result["materialized"] is True
+
+
+def test_promotion_version_rejects_non_release_changes(tmp_path: Path) -> None:
+    """Version materialization cannot hide unrelated edits in promotion."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {"type": "generic", "path": "README.md"}
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "fix: deliver milestone")
+    source_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "commit", "--allow-empty", "-m", "chore: promotion bridge")
+    prepare_release_candidate(tmp_path, "HEAD", phase="beta")
+    (tmp_path / "unexpected").write_text("not release metadata\n")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "--amend", "--no-edit")
+
+    with pytest.raises(ValueError, match="materialization is not exact"):
+        verify_promotion_version(
+            tmp_path,
+            source_sha,
+            git(tmp_path, "rev-parse", "HEAD"),
+            phase="beta",
+        )
+
+
+def test_no_release_promotion_preserves_the_delivery_tree(
+    tmp_path: Path,
+) -> None:
+    """A no-release promotion cannot smuggle any tree change into main."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    source_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "commit", "--allow-empty", "-m", "chore: promotion bridge")
+    head_sha = git(tmp_path, "rev-parse", "HEAD")
+
+    result = verify_promotion_version(
+        tmp_path, source_sha, head_sha, phase="early"
+    )
+
+    assert result["status"] == "no-release"
+    assert result["materialized"] is False
+
+    (tmp_path / "unexpected").write_text("not allowed\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "--amend", "--no-edit")
+    with pytest.raises(ValueError, match="must preserve"):
+        verify_promotion_version(
+            tmp_path,
+            source_sha,
+            git(tmp_path, "rev-parse", "HEAD"),
+            phase="early",
+        )
 
 
 def test_zh_home_version_paragraph_updates_automatically_on_bump(

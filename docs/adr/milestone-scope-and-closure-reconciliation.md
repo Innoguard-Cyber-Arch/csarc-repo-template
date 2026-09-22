@@ -106,6 +106,11 @@ work PR 上，會把同一個 self-lock 複製到每一張 work PR，而且沒�
   approval、evidence 與 Reconciliation freshness 門檻；表格新鮮但有非 `Delivered` 列仍
   必須失敗。`not_planned`（提前終止）路徑不受影響——那條路徑本來就不宣稱交付完成，不
   適用「核對交付內容」這件事。
+- `#871` 的 release completer 在任何 machine-owned body 寫入前，先以 tracker 當下
+  `updated_at` 重驗核可；寫入 exact promotion／Release evidence、重建 Reconciliation
+  或切換 closed state 都會推進 `updated_at`，所以 completed closure 在這個 post-write
+  邊界改由 Reconciliation fingerprint 綁定 body，仍獨立拒絕被編輯過的核可留言。只有
+  exact evidence 已存在且 fingerprint fresh 的同一 candidate 才可在中斷後重跑。
 
 **刻意不做的部分：**Reconciliation 不是 `TRACKER_SECTIONS` 的必要段落，不在建立 tracker
 時要求存在——它必須先有一次 `regenerate-reconciliation` 執行才會出現，若列為建立時必要
@@ -133,7 +138,8 @@ checklist 狀態，所以 linked work Issue 在 regenerate 後又變動時仍會
 - `pr-policy.yml` 新增一個呼叫新腳本 `scripts/check-scope-gate` 的 step，把
   `scope_decision()` 實際接上工作 PR 的合併流程（fail-closed，無連結 Issue 或無
   sentinel 時原樣放行）。
-- `_approval_records()`／`_gate_decision()` 新增 `_approval_is_stale()`：比對核可留言
+- `_approval_records()`／`_gate_decision()` 新增 `_approval_is_stale()`：預設的開工與
+  合併前 gate 比對核可留言
   `created_at` 與其所在 Issue（tracker 或 work Issue）自己的 `updated_at`，超過 60 秒
   緩衝窗（吸收 GitHub 自己「留言建立」到「`updated_at` 反映該留言」之間的實測落差）即視
   為過期。這與 Reconciliation 的 `reconciliation-fingerprint`（比對 bot 自己寫入、可精

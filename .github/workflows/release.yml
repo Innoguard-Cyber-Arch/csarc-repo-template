@@ -223,3 +223,13 @@ jobs:
         run: |
           ./scripts/publish-release rerun-verify \
             --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
+      - name: Complete a no-release Milestone
+        if: ${{ steps.plan.outputs.status == 'no-release' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/sync_milestone_state.py complete-release \
+            --repo "$GITHUB_REPOSITORY" \
+            --main-sha "$GITHUB_SHA" \
+            --evidence-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --outcome no-release

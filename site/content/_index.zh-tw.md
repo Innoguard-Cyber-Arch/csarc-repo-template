@@ -276,7 +276,7 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 | 查看驗證與安全結果 | 模板依變更內容選擇必要檢查；套件變更另確認新版等待、已知漏洞與鎖定版本清單是否一致 |
 | 審查與合併 | 檢查結果和人工審查都清楚後，再把變更合併到正確分支 |
 
-一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化涵蓋工作單、PR 規則與必要驗證；需人審查版本 PR 的發版流程仍是候選。
+一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化涵蓋工作單、PR 規則與必要驗證；需人審查的 Milestone promotion／standalone 版本候選流程仍是候選。
 
 **責任交接（本機 scripts → GitHub Actions → PR gate → Release）：**
 
@@ -560,7 +560,7 @@ Issue 宣告層級；Milestone work Issue 繼承 tracker。路徑分類若判定
 {{< legacy >}}
       <header>
         <h2>步驟 6｜<span class="accent">讓完成的改動可審查、可交付</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>這一頁從準備開 PR 開始：工作 PR 完成一張 Issue，交付 PR 再確認整批成果——下一頁「版本／交付」才會談到版本 PR。</p>
+        <p class="subtitle"><strong>基本導入。</strong>這一頁從準備開 PR 開始：工作 PR 完成一張 Issue；Milestone 交付 PR 同時確認整批成果與版本，不再多開一張版本 PR。</p>
       </header>
       <p class="context-line"><strong>模板的作用｜</strong>把完成的修改帶到正確分支，確認它連回原工作、通過驗證並在合併後結束對應工作。</p>
       <div class="capability-map cols-3"><div class="capability-node"><h3>獨立工作</h3><p>topic → main：一張 PR 只完成一張可驗收 Issue；合併後連動關閉同號 Issue。</p></div><div class="capability-node"><h3>Milestone 工作</h3><p>topic → <code>dev/m*</code> → 交付 PR → main：批次內每張 PR 先進 <code>dev/m*</code>，全部完成後由交付 PR 整批驗證進 main。</p></div><div class="capability-node"><h3>例外：Hotfix</h3><p>修正分支可直接進 main，但仍要 Issue、審查與完整驗證。</p></div></div>
@@ -574,7 +574,7 @@ Issue 宣告層級；Milestone work Issue 繼承 tracker。路徑分類若判定
 | --- | --- | --- |
 | 獨立工作 PR | topic → main | 審查一項改動；合併後關閉連結的 Issue |
 | Milestone 工作 PR | topic → `dev/m*` | 審查批次內的一項改動 |
-| 交付 PR | `dev/m*` 或明列的 `dev/i*` → main | 完整驗證整批成果後交付；維護者再結束里程碑與清理交付分支 |
+| 交付 PR | `dev/m*` 或明列的 `dev/i*` → main | 完整驗證整批成果；CSARC-owned Milestone 同時審查版本，發布成功後自動結束里程碑 |
 
 {{< disclosure key="pr-version-intent" title="PR 標題、分支與例外" >}}
 - 工作分支使用 `type/<Issue>-short-slug`，並連回同號未結案 Issue。
@@ -596,14 +596,14 @@ Issue 宣告層級；Milestone work Issue 繼承 tracker。路徑分類若判定
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="deploy" track="deploy" eyebrow="步驟 07" title="先分清版本、發版與交付；部署交給專案自己決定" subtitle="工作先交付到 main；需要新版本時，系統建立一張仍須人工審查的版本 PR。模板負責到 Release，不含部署。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="deploy" track="deploy" eyebrow="步驟 07" title="先分清版本、發版與交付；部署交給專案自己決定" subtitle="Milestone 的交付 PR 同時承載版本；獨立工作需要新版本時才另開版本 PR。模板負責到 Release，不含部署。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <h2>步驟 7｜<span class="accent">版本規則與成品接續</span></h2>
-        <p class="subtitle"><strong>合併不等於發版，發版也不等於部署。</strong>工作 PR 不直接改版本；Release Please（自動整理版本號的工具）集中更新版本與 CHANGELOG。</p>
+        <p class="subtitle"><strong>合併不等於發版，發版也不等於部署。</strong>工作 PR 不直接改版本；Milestone promotion PR 在交付邊界集中更新版本與 CHANGELOG。</p>
       </header>
-      <p class="context-line"><strong>設計流程｜</strong>工作 PR 只宣告版本影響；版本 PR 經人審查合併後，系統才建立並驗證 Release。</p>
-      <div class="relation-map"><div class="relation-track cols-4"><article class="relation-node"><span class="relation-kind">1｜工作完成並合併</span><h3>獨立工作</h3><p>能自己驗收且沒有共同期限或相依時，受審查 PR 可直接進 main。</p></article><article class="relation-node"><span class="relation-kind">2｜準備版本</span><h3>正式版本</h3><p>需要新版本時，系統依 PR 標題建立版本 PR，同步版本與 CHANGELOG。</p></article><article class="relation-node"><span class="relation-kind">3｜建立 Release</span><h3>Release</h3><p>版本 PR 合併後，系統驗證成品、checksum（檔案校驗碼）與 SBOM，成功才公開不可變 GitHub Release。</p></article><article class="relation-node"><span class="relation-kind">4｜模板不負責這步</span><h3>部署</h3><p>模板負責到 Release；實際部署到 runtime，由個別專案自行設定。</p></article></div></div>
+      <p class="context-line"><strong>設計流程｜</strong>工作 PR 只宣告版本影響；Milestone promotion PR 同時審查整批交付與精確版本，合併後系統建立並驗證 Release，成功才關 tracker 與 Milestone。</p>
+      <div class="relation-map"><div class="relation-track cols-4"><article class="relation-node"><span class="relation-kind">1｜工作完成並合併</span><h3>Milestone 工作</h3><p>各 Issue 的工作 PR 先進 dev/m*，保留獨立審查與驗收。</p></article><article class="relation-node"><span class="relation-kind">2｜交付與版本</span><h3>Promotion PR</h3><p>同一張 PR 把整批交付與版本／CHANGELOG 一起送進 main。</p></article><article class="relation-node"><span class="relation-kind">3｜建立 Release</span><h3>Release 與結案</h3><p>系統驗證成品、checksum 與 SBOM；成功後公開不可變 GitHub Release，並關閉 tracker 與 Milestone。</p></article><article class="relation-node"><span class="relation-kind">4｜模板不負責這步</span><h3>部署</h3><p>模板負責到 Release；實際部署到 runtime，由個別專案自行設定。</p></article></div></div>
       <p class="context-line"><strong>下一步｜</strong>一般工作合併到 main 就完成交付；里程碑分支、Hotfix 與其他版本工具比較請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
@@ -611,9 +611,9 @@ Issue 宣告層級；Milestone work Issue 繼承 tracker。路徑分類若判定
 ### 我們的選擇
 
 - **版本意圖：**PR title 只回答這次改動是 major、minor、patch 或 no-release，不預約精確版本號。
-- **正式版本：**Release Please 用同一張受審查 PR 更新版本檔、package metadata 與 CHANGELOG；CI 不在 checkout 內暫時改版本。
-- **發版：**版本 PR 合併並通過完整驗證後，系統建立不可變 tag、GitHub Release、成品、checksum 與 SBOM。
-- **交付：**合併到 `main` 代表 repository delivery；它可以不產生新版本。工作 PR 結束單項工作，Milestone delivery PR 才交付整批。
+- **正式版本：**CSARC-owned Milestone 在同一張 promotion PR 更新版本檔、package metadata 與 CHANGELOG；standalone work 才沿用 Release Please／Guided 版本 PR。
+- **發版與結案：**promotion PR 合併並通過完整驗證後，系統建立不可變 tag、GitHub Release、成品、checksum 與 SBOM；成功才關 tracker 與 Milestone，失敗維持 open。
+- **交付：**合併到 `main` 代表 repository delivery。工作 PR 結束單項工作，Milestone promotion PR 一次交付整批並承載該批版本候選。
 - **獨立工作：**能單獨審查與驗證、沒有共同期限或跨 Issue 相依時，不必加入里程碑；PR 可直接進 `main`。
 - **Hotfix：**只用於立即修正 `main` 的缺陷；仍要有 Bug Issue 與完整驗證。beta 以上缺少即時同儕時，只有 admin 可用綁定 exact head 的理由緊急合併，且合併後自動建立同儕複核工作。
 - **部署：**把產品送進真實 runtime、檢查健康狀態與復原，屬 consuming product，不是本模板目前提供的能力。
@@ -622,8 +622,8 @@ Issue 宣告層級；Milestone work Issue 繼承 tracker。路徑分類若判定
 | 能力 | 目前狀態 | 現在怎麼做 |
 | --- | --- | --- |
 | PR 的 SemVer 意圖 | Active | `fix`／`revert` 為 patch、`feat` 為 minor、`!` 為 major，其餘 no-release |
-| 正式版本與 CHANGELOG | Candidate／Guided | Automatic 由 Release Please 建立受審查 PR；受平台政策限制時，Guided 由人或 agent 開一般 PR |
-| tag／GitHub Release | Candidate／Blocked | 版本 PR 合併後由唯一 workflow 發布；待預設分支實跑證明 |
+| 正式版本與 CHANGELOG | Candidate／Guided | Milestone promotion PR 直接承載；standalone 的 Automatic 由 Release Please 建 PR，Guided 由人或 agent 開一般 PR |
+| tag／GitHub Release | Candidate／Blocked | promotion／standalone 版本 PR 合併後由共用 publisher 發布；Milestone 發布成功後才自動結案 |
 | checksum／SBOM | Configured | 已納入同一候選流程；首次成功實跑後才算 Active |
 | Production-side attestation | Removed（#439） | 沒有任何 active workflow 消費 release attestation 設定；#439 已移除該設定面，不留下承諾不了結果的選項。有真實需求的產品另開 Issue／ADR 加入 attestation |
 | Consumption-side verification | Conditional | `scripts/verify_release_consumption.py` 與上列產出端設定無關；真實消費者明確採用後才是門禁 |
@@ -649,11 +649,11 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
 
 Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`、adoption plan、Markdown report 與 `.csarc/provenance.json` 一致揭露同一個明確的 `release_ownership`——`csarc-owned`、`product-owned` 或 `verification-only`——以及選定的 workflow 路徑、其 `workflow_dispatch` 必要 inputs、settings owner、是否要求 immutable Releases，以及降級為 `verification-only` 的原因（沒有找到 writer，或找到一個以上）。CSARC 不會 dispatch product-owned workflow，也不從名稱推測其 input contract；只讀取該 workflow 自己宣告的內容。
 
-`release_ownership: csarc-owned` 的生成 repo（含本模板 root 自己）另外取得一條不依賴 GitHub Actions 是否健康的本機發版 backup：`release.yml` 的發布階段抽成單一腳本 `scripts/publish-release`，維護者或 agent 在本機（或任何持有 admin／write 權限的環境）呼叫同一份腳本即可完成 tag、Release、成品與 SBOM，Guided 模式的啟用條件也從「組織政策擋住 Actions 建 PR」擴大為包含「判斷 Actions／webhook 目前不可信任」。這條路徑仍要求版本 PR 經過與其他 `main` PR 相同的 review。驗證（`verify`／`title`／`promotion`）仍只能、也仍建議由 hosted Actions 產生；但實際切版本／發 Release 這一步，hosted job 自己的 `GITHUB_TOKEN` 永遠無法證明 GitHub 的 Immutable Releases 設定（這是一個 GitHub Actions 任何 permission 都無法開放的 repo administration 能力）——所以這條本機路徑現在是標準發版程序，不是備援；細節見 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) 與 [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。這不是一個新的 Copier 選項——既有的 `release_ownership` 已經正確路由這個能力。
+`release_ownership: csarc-owned` 的生成 repo（含本模板 root 自己）另外取得一條不依賴 GitHub Actions 是否健康的本機發版 backup：`release.yml` 的發布階段抽成單一腳本 `scripts/publish-release`，維護者或 agent 在本機（或任何持有 admin／write 權限的環境）呼叫同一份腳本即可完成 tag、Release、成品與 SBOM，Guided 模式的啟用條件也從「組織政策擋住 Actions 建 PR」擴大為包含「判斷 Actions／webhook 目前不可信任」。Milestone 仍要求 promotion PR、standalone 則要求版本 PR 經過正常 review。驗證（`verify`／`title`／`promotion`）仍只能、也仍建議由 hosted Actions 產生；但實際切版本／發 Release 這一步，hosted job 自己的 `GITHUB_TOKEN` 永遠無法證明 GitHub 的 Immutable Releases 設定（這是一個 GitHub Actions 任何 permission 都無法開放的 repo administration 能力）——所以這條本機路徑現在是標準發版程序，不是備援；細節見 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) 與 [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。這不是一個新的 Copier 選項——既有的 `release_ownership` 已經正確路由這個能力。
 
-`release_ownership: csarc-owned` 的生成 repo（含本模板 root 自己）另外取得一條不依賴 GitHub Actions 是否健康的本機發版 backup：`release.yml` 的發布階段抽成單一腳本 `scripts/publish-release`，維護者或 agent 在本機（或任何持有 admin／write 權限的環境）呼叫同一份腳本即可完成 tag、Release、成品與 SBOM，Guided 模式的啟用條件也從「組織政策擋住 Actions 建 PR」擴大為包含「判斷 Actions／webhook 目前不可信任」。這條路徑仍要求版本 PR 經過與其他 `main` PR 相同的 review。驗證（`verify`／`title`／`promotion`）仍只能、也仍建議由 hosted Actions 產生；但實際切版本／發 Release 這一步，hosted job 自己的 `GITHUB_TOKEN` 永遠無法證明 GitHub 的 Immutable Releases 設定（這是一個 GitHub Actions 任何 permission 都無法開放的 repo administration 能力）——所以這條本機路徑現在是標準發版程序，不是備援；細節見 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) 與 [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。這不是一個新的 Copier 選項——既有的 `release_ownership` 已經正確路由這個能力。
+`release_ownership: csarc-owned` 的生成 repo（含本模板 root 自己）另外取得一條不依賴 GitHub Actions 是否健康的本機發版 backup：`release.yml` 的發布階段抽成單一腳本 `scripts/publish-release`，維護者或 agent 在本機（或任何持有 admin／write 權限的環境）呼叫同一份腳本即可完成 tag、Release、成品與 SBOM，Guided 模式的啟用條件也從「組織政策擋住 Actions 建 PR」擴大為包含「判斷 Actions／webhook 目前不可信任」。Milestone 仍要求 promotion PR、standalone 則要求版本 PR 經過正常 review。驗證（`verify`／`title`／`promotion`）仍只能、也仍建議由 hosted Actions 產生；但實際切版本／發 Release 這一步，hosted job 自己的 `GITHUB_TOKEN` 永遠無法證明 GitHub 的 Immutable Releases 設定（這是一個 GitHub Actions 任何 permission 都無法開放的 repo administration 能力）——所以這條本機路徑現在是標準發版程序，不是備援；細節見 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) 與 [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。這不是一個新的 Copier 選項——既有的 `release_ownership` 已經正確路由這個能力。
 
-里程碑完成時人工確認交付證據後再結案；#400、#401 尚未完成的 lifecycle gap 不在本頁複製 validator。工作分支合併後清理，里程碑 delivery branch 則等結案與未完成工作處置完成後才清理。
+Milestone promotion 發版成功後由 hosted／本機共用的 publisher 回填交付與 Release 證據，再自動關 tracker 與 Milestone；失敗時維持 open。工作分支合併後清理，里程碑 delivery branch 則等結案與未完成工作處置完成後才清理。
 {{< /disclosure >}}
 
 {{< disclosure key="release-notes-format" title="發版紀錄在哪裡看、格式代表什麼" >}}
@@ -896,7 +896,7 @@ renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc
           <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>delivery branch 是 CI 整合邊界，不假裝成實體環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不要求每案具備實體 DEV 環境。</p><p><strong>本次判斷｜</strong>獨立工作從最新 <code>main</code> 建立並直接回 <code>main</code>；只有需共同驗收的里程碑使用 <code>dev/m*</code>，獨立 canary 才用暫時 <code>dev/i*</code>，hotfix 也直接修正 main。</p><p><strong>落地方式｜</strong>一般 PR 依變更風險執行必要檢查，里程碑／canary 交付與 hotfix 執行完整檢查；只在 final delivery 或明列 dependency 時同步最新 main。</p></div></details></td></tr>
           <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；<code>governance-comment.yml</code> 在每張非 draft PR 自動輪派一位非作者 reviewer；GitHub Team 以上才支援 team request 與強制核准。</p></div></details></td></tr>
           <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用入口，依風險分層執行</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong>一般 Issue PR 跑 fast；promotion、hotfix、merge queue 與未知高風險路徑跑 full；OSV、Zizmor 與 remote governance 另依 scope／schedule 執行。</p><p><strong>落地方式｜</strong>固定 <code>verify</code> aggregate 避免 skipped workflow 留下 Pending；delivery sync 併入 <code>title</code> policy，候選 full run 不取消，普通 PR 新 commit 則取消舊 run。Ruleset 可用時強制 <code>title</code>、<code>verify</code> 與 <code>promotion</code>。</p></div></details></td></tr>
-          <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>先完成 repository delivery，再審查版本與發版</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>里程碑、獨立工作與 hotfix 合併到 <code>main</code> 都先算 repository delivery；需要新版本時再建立一張可審查版本 PR。</p><p><strong>落地方式｜</strong>Release Please 同步版本與 CHANGELOG；版本 PR 合併後，單一 workflow 建立 checksum、SBOM、成品與 immutable GitHub Release。Attestation 與消費端門禁仍是選配。</p></div></details></td></tr>
+          <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>Milestone 用交付 PR 同時審查版本，standalone 才另開版本 PR</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>CSARC-owned Milestone 的 promotion PR 同時承載 repository delivery、版本與 CHANGELOG；獨立工作與 hotfix 才在需要新版本時另開版本 PR。</p><p><strong>落地方式｜</strong>promotion 合併後，共用 publisher 建立 checksum、SBOM、成品與 immutable GitHub Release，成功才關 tracker 與 Milestone。Attestation 與消費端門禁仍是選配。</p></div></details></td></tr>
           <tr><td>p.9</td><td>可觀測性</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>只有上線服務才做監控和值班</summary><div class="bridge-popover"><p><strong>五月版｜</strong>操作手冊、日誌、指標、追蹤、復原與值班流程保留為第二階段。</p><p><strong>本次判斷｜</strong>只對持續運行的服務導入；先依使用的雲端、環境與負責人選工具，不先綁定 Datadog 或 PagerDuty。</p><p><strong>落地方式｜</strong>測試資料另外管理成不含個資、可建立、可清除的範例，不把測資管理混成線上監控。</p></div></details></td></tr>
           <tr><td>p.10</td><td>Copilot → Agent</td><td><span class="bridge-status defer">分階段</span></td><td><details class="bridge-detail"><summary>先受控 AI 協作；成熟後再自動重試</summary><div class="bridge-popover"><p><strong>五月版｜</strong>鼓勵 AI 從補完程式進步到能執行完整任務，方向保留，但不把工程師縮減成只會下提示詞。</p><p><strong>本次判斷｜</strong>第一階段讓 Agent 依清楚工作單研究、提計畫、修改、驗證並開 PR；平行可寫任務各自使用 branch 與 Git worktree，工具便利性由 agent-kit 管理。</p><p><strong>落地方式｜</strong><code>AGENTS.md</code> 與共同驗證命令限制工作方式；<code>actions.json</code> 設定 Actions 預設唯讀且不能核准 PR，Ruleset 要求人類核准。worktree manager 不是 CI/CD，也不取得額外 secret 或合併權限。</p></div></details></td></tr>
           <tr><td>p.11</td><td>AI 初審</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail"><summary>固定工具負責判定；AI 只補充建議</summary><div class="bridge-popover"><p><strong>五月版｜</strong>AI 初審保留，但程式碼格式與常見錯誤改由 formatter、linter 與靜態檢查穩定執行。</p><p><strong>本次判斷｜</strong>AI 審查只補充情境性錯誤、測試缺口、風險摘要與修正建議，不能當成通過證明。</p><p><strong>落地方式｜</strong>CI、同事審查與指定負責人才有合併決定權；AI 沒有核准、合併或讀取密鑰的權限。</p></div></details></td></tr>

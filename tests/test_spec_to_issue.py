@@ -153,6 +153,14 @@ def test_validates_adr_metadata_and_sources(tmp_path: Path) -> None:
         validate_adr(decision)
 
 
+def test_repository_adrs_follow_the_validated_contract() -> None:
+    root = Path(__file__).parents[1]
+
+    for decision in sorted((root / "docs" / "adr").glob("*.md")):
+        if decision.name != "README.md":
+            validate_adr(decision)
+
+
 def test_rejects_adr_without_pull_request_source(tmp_path: Path) -> None:
     decision = tmp_path / "portable-baseline.md"
     decision.write_text(
