@@ -1599,6 +1599,90 @@ def prepare_release_candidate(
     }
 
 
+def verify_promotion_version(
+    root: Path, source_sha: str, head_sha: str, *, phase: str
+) -> dict[str, object]:
+    """Require a promotion tree to equal its deterministic release candidate."""
+    source_tree = git_output(["rev-parse", f"{source_sha}^{{tree}}"], root)
+    head_tree = git_output(["rev-parse", f"{head_sha}^{{tree}}"], root)
+    planned = release_plan(root, head_sha, phase=phase)
+    if planned is None:
+        if head_tree != source_tree:
+            raise ValueError(
+                "a no-release promotion must preserve the delivery source tree"
+            )
+        return {
+            "status": "no-release",
+            "materialized": False,
+            "source_sha": source_sha,
+            "head_sha": head_sha,
+        }
+
+    executable = shutil.which("git")
+    if executable is None:
+        raise RuntimeError("Git is required for release planning")
+    with tempfile.TemporaryDirectory(prefix="csarc-promotion-version-") as path:
+        worktree = Path(path) / "worktree"
+        subprocess.run(  # noqa: S603
+            [
+                executable,
+                "worktree",
+                "add",
+                "--detach",
+                "--force",
+                str(worktree),
+                source_sha,
+            ],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        try:
+            payload = prepare_release_candidate(worktree, head_sha, phase=phase)
+            subprocess.run(  # noqa: S603
+                [executable, "add", "--all"],
+                cwd=worktree,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            expected_tree = git_output(["write-tree"], worktree)
+        finally:
+            subprocess.run(  # noqa: S603
+                [
+                    executable,
+                    "worktree",
+                    "remove",
+                    "--force",
+                    str(worktree),
+                ],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+    if head_tree != expected_tree:
+        expected_paths = git_output(
+            ["diff", "--name-only", source_sha, expected_tree], root
+        ).splitlines()
+        actual_paths = git_output(
+            ["diff", "--name-only", source_sha, head_sha], root
+        ).splitlines()
+        raise ValueError(
+            "promotion release materialization is not exact; expected "
+            f"{expected_paths or ['no changed files']}, got "
+            f"{actual_paths or ['no changed files']}"
+        )
+    return {
+        **payload,
+        "materialized": True,
+        "source_sha": source_sha,
+        "head_sha": head_sha,
+        "tree": head_tree,
+    }
+
+
 def release_version_errors(  # noqa: C901
     root: Path, expected: str | None = None, *, require_changelog: bool = True
 ) -> list[str]:
@@ -1884,6 +1968,15 @@ def parser() -> argparse.ArgumentParser:
     verify_candidate = subparsers.add_parser("verify-candidate-version")
     verify_candidate.add_argument("--base-sha", required=True)
     verify_candidate.add_argument("--root", type=Path, default=Path.cwd())
+    verify_promotion = subparsers.add_parser("verify-promotion-version")
+    verify_promotion.add_argument("--source-sha", required=True)
+    verify_promotion.add_argument("--head-sha", required=True)
+    verify_promotion.add_argument("--root", type=Path, default=Path.cwd())
+    promotion_version = verify_promotion.add_mutually_exclusive_group(
+        required=True
+    )
+    promotion_version.add_argument("--phase", choices=release_phase.PHASES)
+    promotion_version.add_argument("--tag")
     retention = subparsers.add_parser(
         "retention-plan",
         help=(
@@ -2014,6 +2107,36 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             f"Release candidate {candidate_sha} from source {source_sha} "
             f"matches current base {args.base_sha} decision {version}."
         )
+        return 0
+    if args.command == "verify-promotion-version":
+        try:
+            phase = args.phase
+            if args.tag is not None:
+                version = args.tag.removeprefix("v")
+                if not release_phase.is_valid_version(version):
+                    raise ValueError(f"invalid release tag: {args.tag}")
+                phase = release_phase.parse_version(version).release_kind
+            if phase is None:
+                raise ValueError("promotion phase is required")
+            payload = verify_promotion_version(
+                args.root.resolve(),
+                args.source_sha,
+                args.head_sha,
+                phase=phase,
+            )
+            if args.tag is not None and payload.get("tag") != args.tag:
+                raise ValueError(
+                    f"promotion planned {payload.get('tag')}, "
+                    f"expected {args.tag}"
+                )
+        except (
+            ValueError,
+            json.JSONDecodeError,
+            subprocess.CalledProcessError,
+            tomllib.TOMLDecodeError,
+        ) as error:
+            raise SystemExit(str(error)) from error
+        print(json.dumps(payload, sort_keys=True))  # noqa: T201
         return 0
     if args.command in {"prepare", "verify-version"}:
         tag = args.tag

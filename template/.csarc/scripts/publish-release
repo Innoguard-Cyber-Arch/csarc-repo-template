@@ -10,8 +10,8 @@ set -euo pipefail
 # .csarc/docs/ci-policy.md's "Release 發版不依賴 Actions 健康度的 fallback" section
 # and the release-security-and-dependencies ADR) call the exact same script
 # instead of maintaining two copies of this logic. Local execution never
-# skips the review a version pull request already requires; it only changes
-# who runs the publish step once that pull request is merged.
+# skips the review a promotion or standalone version pull request already
+# requires; it only changes who runs the publish step after merge.
 #
 # .csarc/scripts/release_policy.py plan/detect and prepare-candidate stay separate
 # (they decide *whether* and *how* to propose a version, not how to publish
@@ -205,6 +205,20 @@ verify_release_attestation() {
   fi
 }
 
+complete_published_milestone() {
+  # The publisher is shared by hosted and local release execution, so the
+  # post-publication Milestone transition belongs here too. The synchronizer
+  # is a no-op when TAG does not point at a Milestone promotion commit.
+  local release_tag="$1"
+  local commit_sha
+  commit_sha="$(git -C "$repo_root" rev-parse "${release_tag}^{commit}")"
+  python3 "$repo_root/.csarc/scripts/sync_milestone_state.py" complete-release \
+    --repo "$GITHUB_REPOSITORY" \
+    --main-sha "$commit_sha" \
+    --evidence-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$release_tag" \
+    --outcome published
+}
+
 cmd_stage() {
   [[ -n "$sha" && -n "$tag" ]] || usage
   local status_url="${STATUS_URL:-$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$sha}"
@@ -225,7 +239,25 @@ cmd_stage() {
     headBranchName: $pr.head.ref,
     baseBranchName: $pr.base.ref
   }' >"$RUNNER_TEMP/release-pr.json"
-  "$repo_root/.csarc/scripts/verify-release-candidate" "$RUNNER_TEMP/release-pr.json"
+  local head_ref
+  local candidate_sha
+  head_ref="$(jq -r .head.ref <<<"$pr")"
+  candidate_sha="$(jq -r .head.sha <<<"$pr")"
+  if [[ "$head_ref" == promote/m* ]]; then
+    git -C "$repo_root" fetch --no-tags origin "$candidate_sha"
+    local source_sha
+    source_sha="$(git -C "$repo_root" rev-parse "$candidate_sha^1")"
+    python3 "$repo_root/.csarc/scripts/release_policy.py" \
+      verify-promotion-version \
+      --root "$repo_root" \
+      --source-sha "$source_sha" \
+      --head-sha "$candidate_sha" \
+      --tag "$tag"
+    test "$(git -C "$repo_root" rev-parse "$candidate_sha^{tree}")" = \
+      "$(git -C "$repo_root" rev-parse "$sha^{tree}")"
+  else
+    "$repo_root/.csarc/scripts/verify-release-candidate" "$RUNNER_TEMP/release-pr.json"
+  fi
   git -C "$repo_root" checkout --detach "$sha"
   "$repo_root/.csarc/scripts/converge-release-tag" --repo "$GITHUB_REPOSITORY" --sha "$sha" --tag "$tag"
   write_output "tag=$tag"
@@ -321,6 +353,7 @@ cmd_publish() {
   fi
   gh release edit "$tag" --draft=false "${latest_flags[@]}"
   poll_immutable_and_verify "$tag" "$downloaded"
+  complete_published_milestone "$tag"
 }
 
 cmd_rerun_verify() {
@@ -330,6 +363,7 @@ cmd_rerun_verify() {
   gh release download "$tag" --dir "$downloaded"
   python3 "$repo_root/.csarc/scripts/release_bundle.py" verify --tag "$tag" --output "$downloaded"
   poll_immutable_and_verify "$tag" "$downloaded"
+  complete_published_milestone "$tag"
 }
 
 case "$command" in

@@ -24,6 +24,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import textwrap
 from pathlib import Path
@@ -48,12 +49,13 @@ if [[ "$1" == "api" ]]; then
   method=GET
   fdata=()
   path=""
+  jq_filter=""
   while (($#)); do
     case "$1" in
       --method) method="$2"; shift 2 ;;
       --paginate) shift ;;
       --slurp) shift ;;
-      --jq) shift 2 ;;
+      --jq) jq_filter="$2"; shift 2 ;;
       -f) fdata+=("$2"); shift 2 ;;
       -H) shift 2 ;;
       *)
@@ -86,7 +88,22 @@ if [[ "$1" == "api" ]]; then
   if [[ "$bare_path" == */commits/*/pulls ]]; then
     sha="${bare_path#*/commits/}"; sha="${sha%/pulls}"
     if [[ -f "$state/pulls/by-sha-$sha.numbers" ]]; then
-      cat "$state/pulls/by-sha-$sha.numbers"
+      if [[ -n "$jq_filter" ]]; then
+        cat "$state/pulls/by-sha-$sha.numbers"
+      else
+        python3 - "$state/pulls" "$state/pulls/by-sha-$sha.numbers" <<'PY'
+import json, pathlib, sys
+pulls = pathlib.Path(sys.argv[1])
+numbers = pathlib.Path(sys.argv[2]).read_text().split()
+items = [
+    json.loads((pulls / f"{number}.json").read_text())
+    for number in numbers
+]
+print(json.dumps(items))
+PY
+      fi
+    elif [[ -z "$jq_filter" ]]; then
+      echo '[]'
     fi
     exit 0
   fi
@@ -345,6 +362,9 @@ def build_repo(tmp_path: Path) -> dict[str, str]:
         # for stale_branch_detection, Issue #744 for release_phase).
         "stale_branch_detection.py",
         "release_phase.py",
+        "release_level.py",
+        "csarc_config.py",
+        "sync_milestone_state.py",
         "converge-release-tag",
         "verify-release-candidate",
         "publish-release",
@@ -641,6 +661,68 @@ def test_stage_validates_and_converges_a_merged_candidate(
     meta = json.loads((state / "releases/v0.2.0/meta.json").read_text())
     assert meta == {"isDraft": True, "isImmutable": False, "tagName": "v0.2.0"}
     assert "tag=v0.2.0" in result.stdout
+
+
+@pytest.mark.large
+def test_stage_accepts_an_exact_materialized_milestone_promotion(
+    tmp_path: Path,
+) -> None:
+    """A promotion candidate publishes without a follow-up version PR."""
+    fixture = build_repo(tmp_path)
+    root = Path(fixture["root"])
+    git("checkout", "--detach", fixture["base_sha"], cwd=root)
+    git("commit", "--allow-empty", "-m", "chore: prepare promotion", cwd=root)
+    bridge_sha = git("rev-parse", "HEAD", cwd=root)
+    prepared = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            str(root / "scripts" / "release_policy.py"),
+            "prepare-candidate",
+            "--root",
+            str(root),
+            "--sha",
+            bridge_sha,
+            "--phase",
+            "early",
+        ],
+        cwd=root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert prepared.returncode == 0, prepared.stderr
+    git("add", "-A", cwd=root)
+    git("commit", "--amend", "--no-edit", cwd=root)
+    promotion_sha = git("rev-parse", "HEAD", cwd=root)
+    state = tmp_path / "state"
+    state.mkdir()
+    write_pull_request_fixture(
+        state,
+        number=14,
+        repo="acme/fixture",
+        base_sha=fixture["base_sha"],
+        candidate_sha=promotion_sha,
+        head_ref="promote/m14-final-delivery",
+    )
+    bindir = fixture_bin(tmp_path)
+
+    result = run_publish_release(
+        "stage",
+        "--repo",
+        "acme/fixture",
+        "--sha",
+        promotion_sha,
+        "--tag",
+        "v0.2.0",
+        repo=root,
+        bindir=bindir,
+        state=state,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert git("rev-parse", "v0.2.0^{commit}", cwd=root) == promotion_sha
+    assert (state / "releases/v0.2.0/meta.json").is_file()
 
 
 def test_stage_fails_closed_without_exactly_one_merged_pull_request(

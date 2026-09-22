@@ -42,8 +42,6 @@ EXPECTED_STEP_NAMES = [
     "Milestone lifecycle: reconcile lifecycle and refresh PR checks",
     "Milestone lifecycle: refresh standalone Issue PR check",
     "Milestone lifecycle: reconcile the previous Milestone",
-    "Milestone lifecycle: resolve the tracker Issue this promotion closes",
-    "Milestone lifecycle: record the merge commit as delivery evidence",
     "Work Issue closure: checkout the merge commit",
     "Work Issue closure: close the completed work Issue",
 ]
@@ -152,7 +150,7 @@ def test_work_item_lifecycle_delegates_to_repository_scripts() -> None:
     assert "run: ./scripts/validate-issue-policy" in source
     assert "scripts/sync_milestone_state.py" in source
     assert " reconcile" in source
-    assert "scripts/sync_milestone_state.py record-promotion-evidence" in source
+    assert "record-promotion-evidence" not in source
     assert "scripts/pr_lifecycle.py close-work" in source
     assert "scripts/sync_milestone_state.py refresh-issue-pr-checks" in source
 

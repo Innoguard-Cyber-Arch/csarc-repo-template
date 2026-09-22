@@ -21,12 +21,14 @@ from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    csarc_config = importlib.import_module("csarc_config")
     dependabot_auth = importlib.import_module("authenticate_dependabot_head")
     promotion_gate = importlib.import_module("promotion_gate")
     release_level = importlib.import_module("release_level")
     review_gate = importlib.import_module("review_gate")
     verification_evidence = importlib.import_module("verification_evidence")
 else:
+    csarc_config = importlib.import_module(f"{__package__}.csarc_config")
     dependabot_auth = importlib.import_module(
         f"{__package__}.authenticate_dependabot_head"
     )
@@ -48,6 +50,11 @@ OWNER = re.compile(r"[A-Za-z0-9._/@:-]{1,200}")
 ACTOR = re.compile(r"[A-Za-z0-9_.-]+(?:\[bot\])?")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 DELIVERY_BRANCH = re.compile(r"^dev/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
+PROMOTION_BRANCH = re.compile(r"^promote/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
+RELEASE_BRANCH = re.compile(
+    r"^release/v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+    r"(?:-(?:alpha|beta)\.[1-9]\d*)?$"
+)
 ISSUE_WORK_BRANCH = re.compile(
     r"^(?:build|chore|ci|docs|feat|fix|refactor|revert|test)/"
     r"([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$"
@@ -2751,19 +2758,44 @@ def check(args: argparse.Namespace, github: GitHub) -> None:
 
 
 def revalidate_release_candidate(
-    github: GitHub, lease: dict[str, Any], head_ref: str
+    github: GitHub,
+    lease: dict[str, Any],
+    head_ref: str,
+    release_phase_name: str,
 ) -> str:
     """Refresh the candidate status against the lease-bound current base."""
-    if not (
-        re.fullmatch(r"release/v\d+\.\d+\.\d+", head_ref)
-        or head_ref.startswith("release-please--branches--main--components--")
-    ):
+    release_candidate = RELEASE_BRANCH.fullmatch(
+        head_ref
+    ) or head_ref.startswith("release-please--branches--main--components--")
+    promotion = PROMOTION_BRANCH.fullmatch(head_ref)
+    root = Path(__file__).resolve().parents[2]
+    if promotion is not None:
+        config = csarc_config.load_config(root / ".csarc/config.yml")
+        if config.get("release_ownership") != "csarc-owned":
+            return ""
+    elif not release_candidate:
         return ""
     repo = str(lease["repository"])
     pr_number = int(lease["pull_request"])
     head_sha = str(lease["head_sha"])
     require_lease(github, lease, repo, pr_number, head_sha)
-    root = Path(__file__).resolve().parents[2]
+    if promotion is not None:
+        source_sha = run(["git", "-C", str(root), "rev-parse", f"{head_sha}^1"])
+        return run(
+            [
+                sys.executable,
+                str(root / ".csarc" / "scripts" / "release_policy.py"),
+                "verify-promotion-version",
+                "--root",
+                str(root),
+                "--source-sha",
+                source_sha,
+                "--head-sha",
+                head_sha,
+                "--phase",
+                release_phase_name,
+            ]
+        )
     with tempfile.TemporaryDirectory(
         prefix="csarc-release-candidate-"
     ) as directory:
@@ -2841,7 +2873,10 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
             f"head={lease['head_sha']} actor={lease['actor']}",
         )
     candidate_evidence = revalidate_release_candidate(
-        github, lease, str(snapshot.get("head_ref") or "")
+        github,
+        lease,
+        str(snapshot.get("head_ref") or ""),
+        str(snapshot.get("release_level") or ""),
     )
     if candidate_evidence:
         sys.stdout.write(candidate_evidence.rstrip() + "\n")

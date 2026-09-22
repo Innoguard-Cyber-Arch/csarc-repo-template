@@ -186,13 +186,13 @@ Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交
 
 先分清楚四件事：版本意圖描述相容性影響；正式版本把 manifest、package metadata 與 CHANGELOG 一起寫進受審查的 commit；發版建立不可變 tag、GitHub Release、成品與證據；交付則是把已驗證工作送進權威分支或交給使用者。部署到實際環境不在本模板範圍。
 
-合併到 `main` 先完成 repository delivery；`release.yml` 隨後執行完整驗證，並用同一份 repo-local 規則計算下一版。GitHub 允許 Action 建 PR 時，由 Release Please 自動建立版本 PR；若上層政策禁止，維護者或 agent 執行 `python3 scripts/release_policy.py prepare-candidate`，再依輸出的 branch／title 開一般 PR。兩路都驗證可信作者、允許檔案、版本／CHANGELOG 一致性與可打包性。版本 PR 經人審查合併後，唯一的 `release.yml` 建立 draft Release、成品、checksum 與 SPDX SBOM，下載重驗後才公開並確認 immutable；本機命令不建立 tag 或 Release。
+CSARC-owned Milestone 在 promotion PR 內用同一份 repo-local 規則寫入精確版本與 CHANGELOG，整批內容與版本一起受審；合併到 `main` 後，共用 publisher 建立並驗證 tag、GitHub Release、成品、checksum 與 SPDX SBOM，成功才關閉 tracker 與 Milestone。Standalone work 仍由 Release Please 自動建立版本 PR；若上層政策禁止，維護者或 agent 執行 `python3 scripts/release_policy.py prepare-candidate`，再依輸出的 branch／title 開一般 PR。hosted 與本機發版都呼叫 `scripts/publish-release`，不另開 Milestone 版本 PR。
 
 | 能力 | 目前狀態 | 現在怎麼做 |
 | --- | --- | --- |
 | PR 的 SemVer 意圖 | Active | `fix`／`revert` 為 patch、`feat` 為 minor、`!` 為 major，其餘 no-release |
-| 正式版本與 CHANGELOG | Candidate／Guided | 自動或本機候選共用同一版本決策；組織目前禁止 Actions 建 PR |
-| tag／GitHub Release | Candidate／Blocked | 版本 PR 合併後由唯一 workflow 發布；待 default branch live run |
+| 正式版本與 CHANGELOG | Candidate／Guided | Milestone promotion PR 直接承載；standalone 的自動或本機候選共用同一版本決策 |
+| tag／GitHub Release | Candidate／Blocked | 共用 publisher 在 promotion／standalone 版本 PR 合併後發布；Milestone 成功才結案 |
 | checksum／SBOM | Candidate | `release_bundle.py` 在同一次 run 建立、下載並重驗 exact-tag 成品；待 live run |
 | production-side attestation | Removed | [#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439) 判定零 active 消費者並移除設定面，非留待選配 |
 | 消費端 attestation 驗證 | Conditional | 與上列產出端設定無關；消費端仍使用既有驗證契約 |

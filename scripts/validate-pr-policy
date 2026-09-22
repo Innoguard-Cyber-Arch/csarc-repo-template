@@ -55,7 +55,7 @@ elif [[ "$pr_title_type" == "feat" ]]; then
 elif [[ "$pr_title_type" == "fix" || "$pr_title_type" == "revert" ]]; then
   release_intent="patch"
 fi
-release_message="Release intent: ${release_intent}; exact version is allocated only after main."
+release_message="Release intent: ${release_intent}; exact version is allocated at the reviewed release boundary."
 echo "$release_message"
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   echo "$release_message" >> "$GITHUB_STEP_SUMMARY"
@@ -206,6 +206,7 @@ if [[ "$branch_strategy" == "delivery" ]]; then
   promotion_milestone=""
   promotion=false
   tracker_promotion=false
+  deferred_tracker_close=false
   if [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
     promotion=true
     promotion_milestone="${BASH_REMATCH[1]}"
@@ -225,18 +226,39 @@ if [[ "$branch_strategy" == "delivery" ]]; then
     echo "A delivery promotion must use the promotion label."
     exit 1
   fi
+  if [[ "$PR_HEAD" == dev/m* && "$release_ownership" == "csarc-owned" ]]; then
+    echo "A CSARC-owned Milestone must use a promote/m* bridge so its version is reviewed in the delivery PR."
+    exit 1
+  fi
+  if [[ "$tracker_promotion" == "true" && "$release_ownership" == "csarc-owned" ]]; then
+    deferred_tracker_close=true
+  fi
 elif [[ "$PR_HEAD" == dependabot/* || "$PR_HEAD" == automation/* ]]; then
   exit 0
 fi
 
 branch_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)/([0-9]+)-[a-z0-9][a-z0-9-]*$'
 if [[ "${promotion:-false}" == "true" ]]; then
-  closing_issue_pattern='(Closes|Fixes|Resolves)[[:space:]]+#([0-9]+)([^0-9]|$)'
-  if [[ ! "${PR_BODY:-}" =~ $closing_issue_pattern ]]; then
-    echo "A delivery promotion must close its promotion Issue."
-    exit 1
+  if [[ "${deferred_tracker_close:-false}" == "true" ]]; then
+    tracker_issue_pattern='([Rr][Ee][Ff][Ss])[[:space:]]+#([0-9]+)([^0-9]|$)'
+    closing_issue_pattern='(Closes|Fixes|Resolves)[[:space:]]+#[0-9]+([^0-9]|$)'
+    if [[ ! "${PR_BODY:-}" =~ $tracker_issue_pattern ]]; then
+      echo "A Milestone promotion must reference its tracker with Refs #N."
+      exit 1
+    fi
+    issue_number="${BASH_REMATCH[2]}"
+    if [[ "${PR_BODY:-}" =~ $closing_issue_pattern ]]; then
+      echo "A Milestone promotion must not close its tracker before release succeeds."
+      exit 1
+    fi
+  else
+    closing_issue_pattern='(Closes|Fixes|Resolves)[[:space:]]+#([0-9]+)([^0-9]|$)'
+    if [[ ! "${PR_BODY:-}" =~ $closing_issue_pattern ]]; then
+      echo "A delivery promotion must close its promotion Issue."
+      exit 1
+    fi
+    issue_number="${BASH_REMATCH[2]}"
   fi
-  issue_number="${BASH_REMATCH[2]}"
 else
   if [[ ! "$PR_HEAD" =~ $branch_pattern ]]; then
     echo "Use branch: type/<issue-number>-short-slug"
@@ -436,7 +458,7 @@ if [[ "${tracker_promotion:-false}" != "true" ]] && [[ "$pr_draft" != "true" ]] 
 fi
 if [[ "${tracker_promotion:-false}" == "true" ]]; then
   if [[ "$issue_title" != "Milestone ${promotion_milestone}: "* ]]; then
-    echo "A Milestone ${promotion_milestone} promotion must close its own tracker Issue."
+    echo "A Milestone ${promotion_milestone} promotion must reference its own tracker Issue."
     exit 1
   fi
   if [[ "$issue_milestone_number" != "$promotion_milestone" ]]; then

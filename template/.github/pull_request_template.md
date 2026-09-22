@@ -5,7 +5,7 @@
 Closes #N
 
 <!-- Work PRs use type/N-short-slug and target the configured integration branch. -->
-<!-- A Milestone promotion bridge (promote/m<N>-<slug>) closes its own tracker Issue here, like any other Issue. -->
+<!-- A CSARC-owned Milestone promotion bridge (promote/m<N>-<slug>) replaces the line above with Refs #N so release.yml closes the tracker only after publication succeeds. -->
 
 ## 完成清單
 

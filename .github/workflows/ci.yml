@@ -145,6 +145,19 @@ jobs:
           else
             echo "suite=$PATH_TIER" >> "$GITHUB_OUTPUT"
           fi
+      - name: Validate Milestone promotion version materialization
+        if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'promote/m') && steps.release.outputs.ownership == 'csarc-owned' }}
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE_LEVEL: ${{ steps.level.outputs.level }}
+        run: |
+          source_sha="$(git rev-parse "$HEAD_SHA^1")"
+          python3 "$RUNNER_TEMP/trusted-verification/release_policy.py" \
+            verify-promotion-version \
+            --root "$GITHUB_WORKSPACE" \
+            --source-sha "$source_sha" \
+            --head-sha "$HEAD_SHA" \
+            --phase "$RELEASE_LEVEL"
       - name: Resolve effective verification suite
         id: effective
         env:
@@ -205,7 +218,7 @@ jobs:
           if [[ "$SYNC_ROUTE" != "ordinary" ]]; then
             exit 0
           fi
-          python3 "$RUNNER_TEMP/trusted-verification/check-trusted-verification" \
+          if ! python3 "$RUNNER_TEMP/trusted-verification/check-trusted-verification" \
             "$HEAD_SHA" \
             --github-repo "$GITHUB_REPOSITORY" \
             --find-reusable \
@@ -217,7 +230,9 @@ jobs:
             --labels "$LABELS_SHA" \
             --release-level "$RELEASE_LEVEL" \
             --exclude-run-id "$GITHUB_RUN_ID" \
-            --github-output "$GITHUB_OUTPUT"
+            --github-output "$GITHUB_OUTPUT"; then
+            echo "::notice::Reusable verification is unavailable; running the exact candidate instead."
+          fi
       - name: Validate trusted clean sync tier=fast scopes=${{ steps.plan.outputs.scopes }} tree=${{ steps.identity.outputs.tree }} command=./scripts/verify-fast base=${{ steps.identity.outputs.base }} base-sha=${{ steps.identity.outputs.base_sha }} labels=${{ steps.identity.outputs.labels }} release=${{ steps.identity.outputs.release }} main=${{ steps.sync.outputs.main_sha }} source-run=${{ steps.sync.outputs.source_run }} source-job=${{ steps.sync.outputs.source_job }} source-check=${{ steps.sync.outputs.source_check }}
         if: ${{ steps.sync.outputs.clean == 'true' }}
         run: "true"

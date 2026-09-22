@@ -61,6 +61,8 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "./scripts/publish-release resolve" in source
     assert "./scripts/publish-release publish" in source
     assert "./scripts/publish-release rerun-verify" in source
+    assert "sync_milestone_state.py complete-release" in source
+    assert "steps.plan.outputs.status == 'no-release'" in source
     assert "secrets.GITHUB_TOKEN" in source
     assert "PAT" not in source
     assert "create-github-app-token" not in source
@@ -329,6 +331,39 @@ def test_guided_candidate_validation_is_csarc_owned_only() -> None:
         encoding="utf-8"
     )
     assert "steps.release.outputs.ownership == 'csarc-owned'" in template
+
+
+def test_csarc_owned_promotion_materializes_the_release_in_one_pr() -> None:
+    """The delivery PR itself carries the exact version and changelog."""
+    root = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    template = (ROOT / "template/.github/workflows/ci.yml.jinja").read_text(
+        encoding="utf-8"
+    )
+
+    for source in (root, template):
+        assert "Validate Milestone promotion version materialization" in source
+        assert "verify-promotion-version" in source
+        assert "steps.release.outputs.ownership == 'csarc-owned'" in source
+
+
+def test_one_issue_milestone_uses_only_work_and_promotion_prs() -> None:
+    """No post-promotion version PR is needed for a CSARC-owned Milestone."""
+    release = (ROOT / ".github/workflows/release.yml").read_text(
+        encoding="utf-8"
+    )
+    lifecycle = (ROOT / ".github/workflows/work-item-lifecycle.yml").read_text(
+        encoding="utf-8"
+    )
+    policy = (ROOT / "scripts/validate-pr-policy").read_text(encoding="utf-8")
+    publish = (ROOT / "scripts/publish-release").read_text(encoding="utf-8")
+
+    assert "steps.plan.outputs.materialized != 'true'" in release
+    assert "sync_milestone_state.py complete-release" in release
+    assert "record-promotion-evidence" not in lifecycle
+    assert "Refs #N" in policy
+    assert "must not close its tracker before release succeeds" in policy
+    assert "verify-promotion-version" in publish
+    assert 'sync_milestone_state.py" complete-release' in publish
 
 
 def test_template_only_offers_working_delivery_options() -> None:
