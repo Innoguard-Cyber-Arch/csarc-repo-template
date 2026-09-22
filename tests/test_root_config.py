@@ -174,6 +174,31 @@ def test_derived_templates_can_add_namespaced_settings(tmp_path: Path) -> None:
     assert result.stdout.strip() == "strict"
 
 
+def test_compact_release_ownership_needs_no_derived_settings(
+    tmp_path: Path,
+) -> None:
+    """Accept the compact release contract before all tooling is upgraded."""
+    path = tmp_path / ".csarc/config.yml"
+    path.parent.mkdir()
+    path.write_text(
+        "release_ownership: csarc-owned\nrelease_trigger: main\n",
+        encoding="utf-8",
+    )
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts)
+
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, scripts / "csarc_config.py", "release_ownership"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.strip() == "csarc-owned"
+
+
 @pytest.mark.parametrize(
     "toggle_key",
     [
