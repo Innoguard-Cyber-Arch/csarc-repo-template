@@ -836,6 +836,7 @@ fi
 
 case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="delivery" \
+PR_RELEASE_OWNERSHIP="csarc-owned" \
 PR_TITLE="feat!: promote milestone seven bridge" \
 PR_LABELS="enhancement,promotion" \
 PR_BASE="main" \
@@ -850,6 +851,7 @@ PR_ISSUE_BODY=$'## Proposal\n\nShip the reviewed batch.\n\n## Completion evidenc
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="csarc-owned" \
   PR_TITLE="feat!: promote milestone seven bridge" \
   PR_LABELS="enhancement,promotion" \
   PR_BASE="main" \
@@ -866,6 +868,7 @@ fi
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="csarc-owned" \
   PR_TITLE="feat!: promote milestone seven bridge" \
   PR_LABELS="enhancement,promotion" \
   PR_BASE="main" \
@@ -911,6 +914,7 @@ PR_ISSUE_MILESTONE_NUMBER="9" \
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="csarc-owned" \
   PR_TITLE="feat!: promote unlabeled bridge" \
   PR_LABELS="enhancement" \
   PR_BASE="main" \
@@ -927,6 +931,7 @@ fi
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="csarc-owned" \
   PR_TITLE="feat!: promote wrong milestone bridge" \
   PR_LABELS="enhancement,promotion" \
   PR_BASE="main" \
@@ -943,6 +948,7 @@ fi
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="csarc-owned" \
   PR_TITLE="feat!: promote milestone seven bridge" \
   PR_LABELS="enhancement,promotion" \
   PR_BASE="main" \
