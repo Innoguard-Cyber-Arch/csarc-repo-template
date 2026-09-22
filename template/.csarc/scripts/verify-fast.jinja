@@ -73,14 +73,15 @@ python3 .csarc/scripts/ci_tier.py \
 
 plan_tier="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
 scope_csv="$(python3 -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))["scopes"]))' "$plan_json")"
+{% if has_python or has_typescript or has_rust -%}
+run_project="$(python3 -c 'import json, sys; print(str(json.load(open(sys.argv[1]))["run_project"]).lower())' "$plan_json")"
+{% endif -%}
 scopes=",$scope_csv,"
 
-suite_rank() {
+normalize_suite() {
   case "$1" in
-    baseline) echo 0 ;;
-    fast) echo 1 ;;
-    docs) echo 2 ;;
-    full) echo 3 ;;
+    baseline|docs|fast) echo fast ;;
+    full) echo full ;;
     *) return 1 ;;
   esac
 }
@@ -88,24 +89,20 @@ suite_rank() {
 suite="$plan_tier"
 for requested in "${CSARC_VERIFICATION_SUITE:-fast}" "${CSARC_CI_TIER:-}"; do
   [[ -z "$requested" ]] && continue
-  if ! requested_rank="$(suite_rank "$requested")"; then
+  if ! normalized_suite="$(normalize_suite "$requested")"; then
     echo "Unknown verification suite: $requested" >&2
     exit 2
   fi
-  current_rank="$(suite_rank "$suite")"
-  if ((requested_rank > current_rank)); then
+  requested="$normalized_suite"
+  if [[ "$requested" == "full" ]]; then
     suite="$requested"
   fi
 done
 echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite scopes=${scope_csv:-none}"
 {% if has_python %}export UV_PYTHON="${CSARC_PYTHON_VERSION:-{{ python_target }}}"
 {% endif -%}
-verification_step "Changed-tree hygiene" git diff --check
-verification_step "Conflict-marker check" ./.csarc/scripts/check-update-conflicts
-verification_step "Secret scan" ./.csarc/scripts/scan-secrets
-
 case "$suite" in
-  baseline|fast|docs) ;;
+  fast) ;;
   full)
     ./.csarc/scripts/verify
     exit 0
@@ -116,18 +113,21 @@ case "$suite" in
     ;;
 esac
 
+verification_step "Changed-tree hygiene" git diff --check
+verification_step "Conflict-marker check" ./.csarc/scripts/check-update-conflicts
+verification_step "Secret scan" ./.csarc/scripts/scan-secrets
+
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ||
   "$scopes" == *,template,* ]]; then
   verification_step "Workflow and shell lint" ./.csarc/scripts/lint-workflows-shell
 fi
+if [[ "$scopes" == *,workflow,* || "$scopes" == *,template,* ]]; then
+  verification_step "GitHub Actions pin check" \
+    python3 .csarc/scripts/check_action_pins.py --root .
+fi
 
 {% if has_python or has_typescript or has_rust -%}
-run_project_checks=false
-if [[ "$scopes" == *,source,* || "$scopes" == *,template,* ||
-  "$scopes" == *,governance,* || "$scopes" == *,shell,* ||
-  "$scopes" == *,unknown,* || "$scopes" == *,workflow,* ]]; then
-  run_project_checks=true
-fi
+run_project_checks="$run_project"
 {% endif -%}
 
 {% if has_python -%}
@@ -162,10 +162,6 @@ if $run_project_checks; then
 fi
 {% endif -%}
 
-if [[ "$suite" == "baseline" ]]; then
-  exit 0
-fi
-
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
   verification_step "Dependency scan" ./.csarc/scripts/verify-dependencies
 fi
@@ -186,7 +182,7 @@ if $run_project_checks; then
 fi
 {% endif -%}
 
-if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then
+if [[ "$scopes" == *,docs,* ]]; then
   verification_step "Specification validation" \
     python3 .csarc/scripts/spec_to_issue.py validate
   verification_step "Repository site render" ./.csarc/scripts/build-repo-site --check

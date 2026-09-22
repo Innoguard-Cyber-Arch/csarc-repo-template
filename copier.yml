@@ -100,7 +100,14 @@ _migrations:
                 raise SystemExit(
                     "Found duplicate legacy branch_strategy answers"
                 )
-            if count == 1:
+            migrated = re.sub(
+                r"(?m)^(release_level_(?:alpha|beta|early|formal)_verification:\s*)"
+                r"(?:baseline|'baseline'|\"baseline\"|docs|'docs'|\"docs\")"
+                r"(\s*(?:#.*)?)$",
+                r"\1fast\2",
+                migrated,
+            )
+            if migrated != source:
                 path.write_text(migrated, encoding="utf-8")
 
         legacy_template_tests = {
@@ -474,11 +481,9 @@ release_level_alpha_verification:
   type: str
   help: Minimum verification suite for alpha work
   choices: &release_level_verification_choices
-    Baseline checks: baseline
-    Baseline and fast tests: fast
-    Baseline, fast tests, documentation and site: docs
+    Routine verification: fast
     Full verification: full
-  default: baseline
+  default: fast
 
 release_level_beta_review:
   type: str
@@ -502,7 +507,7 @@ release_level_early_verification:
   type: str
   help: Minimum verification suite for early-release work
   choices: *release_level_verification_choices
-  default: docs
+  default: fast
 
 release_level_formal_review:
   type: str

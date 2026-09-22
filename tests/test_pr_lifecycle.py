@@ -80,7 +80,7 @@ def human_review_mode(monkeypatch: pytest.MonkeyPatch) -> None:
         return MODULE["release_level"].Decision(
             level,
             "self" if level == "alpha" else "peer",
-            "baseline" if level == "alpha" else "fast",
+            "fast",
             "test",
         )
 
@@ -411,9 +411,6 @@ class FakeGitHub:
                 "Bind trusted verification identity",
                 "Set up Python 3.14",
                 "Set up uv 0.12.15",
-                "Set up pnpm 11.22.0",
-                "Set up Node.js 24",
-                "Set up Rust 1.98.0",
                 (
                     "Execute trusted verification tier=fast scopes=source "
                     f"tree={'e' * 40} command=./scripts/verify-fast"
@@ -1645,11 +1642,6 @@ def test_quota_cannot_replace_trusted_verify_execution() -> None:
     ("context", "path", "event"),
     [
         ("title", ".github/workflows/pr-policy.yml", "pull_request_target"),
-        (
-            "promotion",
-            ".github/workflows/pr-policy.yml",
-            "merge_group",
-        ),
         ("verify", ".github/workflows/ci.yml", "pull_request_target"),
         (
             "review",
@@ -2134,7 +2126,7 @@ def test_exact_head_review_allows_the_known_alpha_ruleset_bypass(
         merge_snapshot.__globals__,
         "resolve_release_level",
         lambda github, repo, pull: MODULE["release_level"].Decision(
-            "alpha", "peer", "baseline", "test"
+            "alpha", "peer", "fast", "test"
         ),
     )
     github = FakeGitHub("a" * 40)
@@ -4116,7 +4108,7 @@ def copilot_mode(
         merge_snapshot.__globals__,
         "resolve_release_level",
         lambda github, repo, pull: MODULE["release_level"].Decision(
-            level, review, "baseline", "test"
+            level, review, "fast", "test"
         ),
     )
 

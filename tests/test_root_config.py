@@ -38,7 +38,7 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["default_release_level"] == "alpha"
     for level in ("alpha", "beta", "early", "formal"):
         assert config[f"release_level_{level}_review"] == "self"
-        assert config[f"release_level_{level}_verification"] == "baseline"
+        assert config[f"release_level_{level}_verification"] == "fast"
 
 
 def test_root_public_identity_claims_are_consistent() -> None:

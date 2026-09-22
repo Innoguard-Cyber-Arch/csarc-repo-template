@@ -28,13 +28,13 @@ project_visibility: public
 python_support_mode: latest
 release_immutable_releases: required
 release_level_alpha_review: self
-release_level_alpha_verification: baseline
+release_level_alpha_verification: fast
 release_level_beta_review: self
-release_level_beta_verification: baseline
+release_level_beta_verification: fast
 release_level_early_review: self
-release_level_early_verification: baseline
+release_level_early_verification: fast
 release_level_formal_review: self
-release_level_formal_verification: baseline
+release_level_formal_verification: fast
 release_levels_enabled: false
 release_ownership: csarc-owned
 release_ownership_reason: CSARC owns the only version and GitHub Release workflow.

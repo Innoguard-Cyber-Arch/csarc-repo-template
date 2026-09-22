@@ -289,14 +289,14 @@ repository 共用的階段開關。Milestone 工作一律繼承 tracker 的層�
 
 | 發布層級 | 版本 | PR 與 Issue／Milestone 核可 | 最低驗證組合 |
 | --- | --- | --- | --- |
-| alpha | `X.Y.Z-alpha.N` | 可使用綁定 exact head 的自審授權 | `baseline` |
+| alpha | `X.Y.Z-alpha.N` | 可使用綁定 exact head 的自審授權 | `fast` |
 | beta | `X.Y.Z-beta.N` | 需非作者同行核准 | `fast` |
-| early | `0.y.z` | 需非作者同行核准 | `docs` |
+| early | `0.y.z` | 需非作者同行核准 | `fast` |
 | formal | `1.0.0` 起 | 需非作者同行核准 | `full` |
 
 `.csarc/config.yml` 可開關此模組、設預設層級，也可調整各層的 review
 與 verification 要求。公版 root 關閉一般工作的分層宣告、預設採 `alpha`，並把所有層級
-都映射為 `self`／`baseline`；新生成專案預設啟用分層且採 `alpha`，既有專案
+都映射為 `self`／`fast`；新生成專案預設啟用分層且採 `alpha`，既有專案
 adopt 時預設採 `beta`，兩者都可在導入時改選。Dependabot 固定當作 `beta`。發版批次由
 `scripts/release_level.py release-batch` 列出上次版本以來的工作，取最高
 層級交給版本規則，並寫入版本 PR 與 GitHub Release 說明。
@@ -696,64 +696,51 @@ fingerprint-binding（#632）」一節的「留言編輯本身的過期判斷（
 構出的共用 `_vocabulary_approval_records()` 也已經正確帶入這個新參數（呼叫時傳入
 `comment.get("updated_at")`），不需要在 `#743` 這張分支上重複實作。
 
-### `promotion` 必要檢查的產生條件（#601）
+### Promotion route 併入 PR policy（#601、#876）
 
-`policies/rulesets-required-checks.json`（與 `template/.csarc/policies/rulesets.json.jinja` 的 `required_status_checks`）
-長期要求 `title`／`promotion`／`verify` 三個 context，但在 #601 之前，沒有任何 workflow 對一般（非 Milestone
-交付）PR 產生 `promotion` 這個 check-run——`main`、`dev/m*` 交付分支與所有現存 PR 皆缺這個 context，required
-check 因此對這類 PR 永遠卡在 pending。`.github/workflows/pr-policy.yml` 新增的 `promotion` job（與
-`title` job同檔、同觸發條件，`template/` 同步一份）補上這個缺口，呼叫新增的 `scripts/promotion_gate.py
-check-route` 子指令。
+#601 曾新增獨立的 `promotion` required check，補上 Ruleset 要求一個沒有 producer 的 context
+而永久 pending 的缺口。#876 重新盤點後確認它與 `title` 使用相同事件、trusted base checkout、
+權限與生命週期，而且唯一額外工作只有 `scripts/promotion_gate.py check-route`。因此 route classifier
+現在是 `title` job 內的一個 step，Ruleset 不再要求第四個 `promotion` context。這省掉一個 runner job，
+但沒有刪除 route 判定。
 
-跟 `title` job 一樣，`promotion` job 對 `pull_request_target` 事件 checkout 的是 PR 的 base（trusted）commit，
-不是 PR 自己的 head／merge commit——避免一個惡意 PR 改寫 `route_for()` 自我核准。這代表 `check-route`
-子指令要等這個子指令本身合併進 `main` 之後，後續 PR 的 `promotion` job 才會真的執行到它；`promotion`
-job 沿用 `title` job「Validate Milestone approval」step 已經在用的同一種 bootstrap 寫法——先用
-`python3 scripts/promotion_gate.py --help | grep -q check-route` 探測 base commit 上是否已經有這個子
-指令，沒有就印一則 `::notice::` 直接成功，不 fail closed；引入 `check-route` 本身的這個 PR 靠
-`tests/test_promotion_gate.py` 的 `test_check_route_*` 在本機驗證新邏輯，不靠這個 PR 自己的即時 CI
-執行到它。
+`check-route` 仍重用交付流程的 `route_for()` 分類器。`pull_request_target` 直接從 webhook payload
+讀取 base／head／labels；合法的一般或交付路由成功，target `main` 卻不符合任何已知路由時 fail closed。
+`merge_group` 則辨識為 merge queue。workflow 一律 checkout trusted base，候選 PR 不能改寫分類器來
+自我核准。
 
-這個 job 刻意不是獨立的 `promotion.yml` 檔案：本 repo 在 2026-08-27 的 workflow 全面暫停（#372／#375）之前
-確實有過一支同名、遠更複雜的 `promotion.yml`（含 canary 證據、`prepare()`／`finalize()` 全流程）與其配對的
-`promotion-post-merge.yml`（合併後 ref 清理），原始檔保留在 `git show
-bc05942:archive/ci-cd/2026-08-27/root-workflows/promotion.yml` 可查，`tests/test_delivery_sync.py::
-test_milestone_promotion_check_and_cleanup_cover_delivery_refs` 仍以「`.github/workflows/promotion.yml`
-存在與否」為 skip 條件保留當年的斷言、等待那支被暫停的完整流程有一天正式復原。#601 的範圍與那支舊
-workflow 不同（見 Issue 本文「補充」段的拆分說明），本節新增的 `promotion` check 只解決「required check
-永遠 pending」這一個獨立問題，刻意不使用會誤觸該 skip 條件的檔名，也不重建那支已暫停、且已經跟現在的
-`branch_strategy`／`route_for()` 設計脫節的舊流程；job 的 check-run context 由 job 的 `name:` 決定、跟
-workflow 檔名無關，所以 `promotion` context 一樣被正確產生。
-
-`check-route` 只重用既有的 `route_for()` 分類器（`prepare()` 產生完整交付證據時用的同一份函式），不重新實作
-分支／標籤判斷邏輯，避免兩者對同一個 PR 的路由判斷不一致：
-
-- `pull_request_target` 事件：直接從 webhook payload 讀 base／head／labels（不需要額外 `GH_TOKEN` 呼叫），呼叫
-  `route_for()`。任何 `not-applicable`（一般 topic branch、`dependabot/*`、`automation/*`）或已知的合法路由
-  （`milestone`／`isolated`／`hotfix`／`release-recovery`／`release-follow-up`）都回報成功；只有 target
-  `main` 卻不符合任何已知路由的分支（`invalid-main-route`）才 fail closed。
-- `merge_group` 事件：直接視為 `Route("merge-queue", False)`——來源 PR 開啟當下已經分類過，佇列重跑不必
-  重新讀 event payload（與 `prepare()` 對非 `pull_request_target` 事件的既有 fallback 一致）。
-
-這個 job **不**取代既有的 Milestone 交付驗證：`title` job（`scripts/validate-pr-policy`）仍然負責 tracker
-Issue、Promotion 區塊 checklist 與 promotion 標籤的完整驗證；`.github/workflows/milestone-lifecycle.yml` 的
-`Milestone approval` check（不在 `required_status_checks` 名單內）仍然獨立存在，兩者都不受本節變更影響。
-`promotion` 這個 required check 的責任範圍只到「這個 PR 是否走一條被承認的路由」，不到「這條路由的證據是否
-齊全」——後者仍由 `scripts/promotion_gate.py` 的 `prepare()`／`finalize()` 在正式的 Milestone 交付流程中
-處理，範圍不變。
+`title` 同時負責 Issue、Promotion checklist、scope 與 Milestone approval 的唯讀判定；正式 Milestone
+交付仍由 `promotion_gate.py prepare/finalize` 產生與驗證證據。`.github/workflows/milestone-lifecycle.yml`
+的 `Milestone approval` 是 comment refresh 用的非 Ruleset check，由 #875 另行處理，不在 #876 偷改其
+觸發或狀態語意。
 
 ### Required check producer 綁定（#835）
 
-Ruleset 對 `title`、`promotion`、`verify`、`review` 不只比對 context 名稱，也逐項綁定 GitHub Actions
+Ruleset 對 `title`、`verify`、`review` 不只比對 context 名稱，也逐項綁定 GitHub Actions
 App integration ID `15368`。設定缺少 ID、ID 格式錯誤或 live readback 不完全相同時，repository settings
 檢查與 PR lifecycle 都 fail closed；同名 classic commit status 不再能滿足 required context。
 
-App 身分本身仍不足以區分同一 repository 內由 PR 控制的 workflow。四個 required-name job 因此只由
+App 身分本身仍不足以區分同一 repository 內由 PR 控制的 workflow。三個 required-name job 因此只由
 base-trusted `pull_request_target`、既有的 default-branch review 事件或 `merge_group` 載入 workflow
 定義。lifecycle 對每個 exact-head check run 再核對名稱、App、check suite、Actions run repository、workflow
 path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成有效證據。PR policy 與 review 只 checkout
 可信 base 並維持唯讀權限；CI 沒有 secret 或寫入權限，雖會讀取 proposed head 來驗證聲明，但驗證證據本身
 的不可偽造性仍由 #834 負責。
+
+### Gate owner 盤點（#876）
+
+| 邊界 | 唯一 owner 與失敗模式 | 結論 |
+| --- | --- | --- |
+| Path／release-level 分類 | `ci_tier.py` 與 `release_level.py` 決定要跑 `fast` 或 `full`；未知路徑與高風險交付 fail closed | 保留，但把沒有獨立執行內容的 `baseline`／`docs` 正規化為 `fast` |
+| PR policy | `title` 驗證 Issue 關係、metadata、scope、Milestone 與 delivery route | 保留單一 job；`promotion` classifier 併入此處 |
+| Candidate verification | `verify` 在 trusted runner 對 exact tree 執行 risk-owned suite | 保留，不能由本機結果或 policy check 取代 |
+| Review | `review` 驗證 exact-head self／peer／Copilot 決定與未解決 thread | 保留，不能由測試結果取代 |
+| Acceptance checklist | Issue 定義工作完成條件，PR checklist 定義這次交付包裝與 metadata | 保留，兩者範圍不同；draft 期間不要求完成 |
+| Trusted evidence | 驗證 repo、head/tree、tier、scopes、command、toolchain、runner、結果與 freshness | 保留，阻止舊 run、錯誤 runner 或錯誤候選被重用 |
+| Merge writer | remote lease 加上合併前 snapshot revalidation | 保留，避免兩個自動 writer 同時改寫 mutable PR 狀態 |
+| Milestone comment refresh | 非 Ruleset 的 `Milestone approval` check 只處理核可留言後重新計算 | #875 已有獨立 ownership；#876 不重複改動 |
+
+這份盤點的刪減標準是「是否產生別層無法取代的證據」，不是 gate 名稱或歷史存在時間。
 
 ### `verify` 的可信 hosted execution evidence（#834）
 
@@ -848,7 +835,7 @@ merge／release evidence 一律改用上節的可信 hosted execution。
 
 `CSARC protected branches` Ruleset 的 `conditions.ref_name.include` 涵蓋 `refs/heads/dev/m*`，讓每個
 Milestone 自己的 delivery 分支（`docs/index.html` Journey 01／`AGENTS.md` 工作迴圈第 8 步）跟 `main` 一樣
-受保護。但 `required_status_checks` 規則預設在**建立分支這個動作本身**就要求 `title`／`promotion`／
+受保護。但 `required_status_checks` 規則預設在**建立分支這個動作本身**就要求 `title`／
 `verify`／`review` 全部先通過——一個尚不存在的新分支在建立當下沒有任何 commit 或 PR 能觸發這些 check，
 `required_status_checks` 在這個情境下永遠無法被滿足：任何符合 `dev/m*` pattern 的全新分支都無法直接
 `git push` 建立，僅有的 `bypass_actors`（admin，`bypass_mode: "pull_request"`）又只在「透過合併 PR」時生
@@ -969,7 +956,7 @@ CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.p
 | 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428／#812）；可信 hosted execution（#834） | `pull_request_target`（含 ready／draft 與 metadata-only 事件）、`merge_group`、`workflow_dispatch` | `contents: read`、Issues／PR read；30 分鐘；同一 PR 新 commit 取消舊 run | base-trusted `scripts/ci_tier.py` 分類後，在 GitHub-hosted `ubuntu-latest` 對 exact candidate 執行 risk-owned `scripts/verify-fast`／full verifier；同 head 的 metadata-only run 可單跳引用相同 route 的原始 Execute；clean main-to-delivery sync 先做結構預檢再引用 current main 的 fresh full Execute；所有證據綁定 repository、head/tree、base、tier/scopes、command、toolchain、labels、release level、runner、result 與 24 小時 freshness | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py`；`tests/test_verification_evidence.py`；`tests/test_pr_lifecycle.py`；`tests/test_delivery_sync.py` | #834 hosted execution active；#812 risk-owned/reuse/sync route 為 candidate |
-| PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | `pull_request_target` PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | `contents`／Issues／pull requests 只讀；固定 timeout | `title` job：Issue、route、review policy 與 Milestone approval 唯讀判定；`promotion` job（#601）：呼叫 `scripts/promotion_gate.py check-route` 分類 route，兩者只以原生 job conclusion 回報結果 | `scripts/test-pr-policy`；`tests/test_journey05_workflows.py`；`promotion` job 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | 歷史 run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929) 證明既有 policy 判定；#829 唯讀邊界待合併後首張 PR 取得 live evidence | 既有 policy：active；#829 唯讀邊界：candidate |
+| PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | `pull_request_target` PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | `contents`／Issues／pull requests 只讀；固定 timeout | 單一 `title` job：Issue、route、review policy、promotion route 與 Milestone approval 唯讀判定，以原生 job conclusion 回報結果 | `scripts/test-pr-policy`；`tests/test_journey05_workflows.py`；route classifier 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | 歷史 run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929) 證明既有 policy 判定；#876 合併後首張 PR 補 live consolidated-job evidence | 既有 policy：active；#876 consolidation：candidate |
 | PR policy writes | `.github/workflows/pr-policy-writes.yml` | PR metadata 與 Milestone check-run 寫入（#829） | default branch 的 `workflow_run`，只接續完成的 `PR policy` run | top-level 無權限；resolver 只讀；metadata job 僅 `issues`／`pull-requests: write`；Milestone job 僅 `checks: write`；10 分鐘 | 以完整 head identity 跨頁解析唯一 open PR 後同步 metadata／#551 提醒；另以可信任 script 發布 `Milestone approval` custom check；零筆或多筆都 fail closed，不執行 PR source 或 artifact | `tests/test_work_item_metadata.py`；`tests/test_milestone_approval.py`；`tests/test_journey05_workflows.py` | 新 workflow，待落地 default branch 後由下一張 PR 觸發 | candidate |
 | PR review（Copilot 審核模式，#752／#775／#826） | `.github/workflows/pr-review.yml` | PR 審核授權（#752，銜接 #719／#745／#775／#826） | `pull_request_target`（opened／synchronize／reopened／ready_for_review／converted_to_draft）、`pull_request_review`（submitted／dismissed）、`issue_comment`（created，篩選 PR 上以 `PR lifecycle merge authorization` 開頭的留言）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run | `review` job 呼叫 `scripts/review_gate.py check`：`pr_review_mode=copilot` 時，目前完整 head SHA 已獲 Copilot 乾淨審核、獨立 maintainer `APPROVED`、或符合條件的 Alpha self-merge 授權留言（#775／#826，包括驗證完成的 delivery sync）才過；`pr_review_mode=human` 時只回報，審核仍由 Ruleset 原生 required approval 把關 | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的 Copilot／Alpha self-merge 授權來源見 `tests/test_pr_lifecycle.py` | 尚未落地 `main`，無 live run | candidate（待 main 落地並於首次 PR 觸發後轉 active） |
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
@@ -1035,28 +1022,31 @@ Milestone 本身是否就緒的判定）。
 
 ## 驗證分級與實測成本
 
-驗證契約有四種累加組合，另有一種本機專用、不屬於 CI 政策的
+驗證契約只有 `fast` 與 `full` 兩種組合，另有一種本機專用、不屬於 CI 政策的
 focused check。最後要求是發布層級下限與 `scripts/ci_tier.py` 路徑分類取較強者。
 `scripts/verify-fast` 從 `branch.<name>.gh-merge-base`（必要時以 `CSARC_CI_BASE` 指定）找出 PR base，
 對 merge-base 到 `HEAD` 以 `git diff --no-renames` 取得路徑，再自行執行同一份 plan；base 無法判定時
 直接 fail closed。舊有 `CSARC_CI_TIER`／`CSARC_CI_SCOPES`／`CSARC_RUN_OSV` 只能增加 suite 或 scope，
 不能移除自動算出的要求：
 
+既有下游設定中的 `baseline`／`docs` 在 update migration 與 runtime 都會正規化為 `fast`；新設定只提供
+`fast`／`full`，避免同一套執行內容繼續以多個 tier 名稱存在。
+
 1. **開發中 focused check（本機專用，不是 CI 的第三種政策）**——實作中與一般 push 前直接執行
    變更 owner 的單一命令，例如
    `uv run pytest <path>`、`uv run ruff check <path>`，或針對
    `scripts/verify-template.sh` 其中一階段單獨重跑對應的
    `scripts/verify-stage-<name>`；不需要等待整條 pipeline，也不會被當成合併證據。
-2. **日常 PR gate（`docs`／`fast`，同一個成本邊界）**——`scripts/ci_tier.py` 依事件、
-   base／head、labels 與 changed paths 做 fail-closed 分類；未知或高風險內容升級為
-   full。純文件／site 變更落在 `docs`，是 `fast` 的 early-exit 實作細節，不是獨立的第
-   四套政策；其餘一般變更落在 `fast`。兩者入口都是 `scripts/verify-fast`。本機可在需要廣泛
+2. **日常 PR gate（`fast`）**——`scripts/ci_tier.py` 依事件、base／head、labels 與
+   changed paths 做 fail-closed 分類；未知或高風險內容升級為 full。純文件／site 變更仍是
+   `fast`，由 docs scope 只啟動對應 owner，不再建立一個只有名稱不同的 `docs` tier。
+   入口是 `scripts/verify-fast`。本機可在需要廣泛
    診斷時選擇執行這個入口，但一般 push 不再先重跑整套；hosted `verify` 在可信 runner 對
    exact candidate 執行一次 risk-owned suite，並產生上方 #834 定義的 required merge evidence。
 3. **完整交付驗證（`full`）**——只在 Milestone／canary 交付、hotfix、merge queue、手動
    執行或未知高風險路徑觸發；中央模板入口是 `scripts/verify-template.sh`，生成 repo
    入口是 `.csarc/scripts/verify`（不帶參數即預設 full）。PR owner／integrator 只在自己的 PR
-   本身就落在這個邊界時，才需要在本機另外執行一次；一般 `fast`／`docs` PR 只跑變更 owner 的
+   本身就落在這個邊界時，才需要在本機另外執行一次；一般 `fast` PR 只跑變更 owner 的
    focused checks，不需要先在本機重跑 hosted 將執行的整套 fast 或 full。
 
 數據來自 #428／PR #431 在 2026-09-01 的最新 hosted run，目的是設定成本預期，不是永久 SLA；
@@ -1065,9 +1055,7 @@ before／after 紀錄）。
 
 | 組合 | 最低層級 | 入口與累加測試集合 | 實測 |
 | --- | --- | --- | --- |
-| baseline | alpha | 共同 hygiene／secret／lifecycle-bypass 加上變更 scope 的 owner checks | bounded local path |
-| fast | beta | source／template／governance／shell／workflow 的 Python safety floor；dependency 只做鎖檔與 OSV | 目標三次 warm-cache 中位數不超過 75 秒（#812） |
-| docs | early | 共同安全檢查＋site／文件／翻譯／導覽／配對同步，不啟動 Python regression | fast entry 的窄路徑 |
+| fast | alpha／beta／early | 共同 hygiene／secret，加上變更 scope 的 owner checks；docs-only 不啟動產品語言工具鏈，dependency 只做鎖檔與 OSV | 目標三次 warm-cache 中位數不超過 75 秒（#812） |
 | full | formal | fast owners ＋ `large` 的代表 create／adopt／previous-release update（create 含 Rust native）與 coverage | 目標不超過 15 分鐘（#812） |
 
 #812 的固定 clean-tree 基準是 #815 合併後 PR #853 的 exact tree：hosted `verify-fast`
@@ -1086,7 +1074,7 @@ before／after 紀錄）。
 `copier.yml`、`profiles/`、`src/csarc_cli/`），或分級／驗證器本身（`ci_tier.py`、`verify-fast`、
 `verify-template.sh`、`verify-stage-*`、attestation scripts），path tier 為 `full`，因為後面沒有 promotion
 可補跑。workflow 與其他 scripts 維持 `fast`，但仍依 scope 執行 actionlint／ShellCheck、workflow drift、
-Zizmor、治理 self-tests 等對應檢查。打到 `dev/m*` 的 Milestone 工作 PR 維持既有 docs／fast 分級；完整套件在
+Zizmor、治理 self-tests 等對應檢查。打到 `dev/m*` 的 Milestone 工作 PR 維持 fast；完整套件在
 promotion 邊界對最終候選執行。
 
 ### Base-only re-merge 例外（#468）
@@ -1326,7 +1314,7 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 | 階段（`run_stage` 名稱） | 獨立入口 | 涵蓋風險 | 與 fast tier／其他檢查的關係 |
 | --- | --- | --- | --- |
 | Repository contracts | `scripts/verify-stage-repository-contracts` | changed-tree hygiene、未解決的 Copier／Git 衝突標記、機密掃描、已知漏洞掃描 | fast 每次都跑 `git diff --check`／`check-update-conflicts`／`scan-secrets`；`verify-dependencies` 只在 dependency scope 才跑，呼叫同一支腳本，不是重複邏輯 |
-| Static assets and paired files | `scripts/verify-stage-static-assets` | repo-site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` tier 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
+| Static assets and paired files | `scripts/verify-stage-static-assets` | repo-site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` scope 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
 | Python environment | `scripts/verify-stage-python-environment` | `uv.lock` 與 `pyproject.toml` 一致、環境可從鎖定版本安裝 | fast 的 `uv sync --locked` 是同一份鎖定契約；`uv lock --check` 只在 full 額外執行 |
 | Python quality | `scripts/verify-stage-python-quality` | 格式、lint、靜態型別 | fast 對相同原始碼跑相同三個命令，兩者呼叫同一份工具鏈設定，無額外邏輯 |
 | Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／release-drift／audit-fleet-adoption／create-milestone／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`）；較長的 shell lifecycle fixtures 留在 full，routine fast 由同一 Python suite 的窄版 policy 測試涵蓋。base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status、`scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）與 `scripts/create-milestone`（原子建立 Milestone 與其 tracker Issue，見 `docs/milestone-description.md`；#572）六支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`scripts/test-check-release-drift`（mock `gh`，驗證上方「發版存量漂移偵測（`release-drift.yml`，#605）」一節的 drift 判定邏輯）也只掛在這個 full 專屬階段——`scripts/check-release-drift` 本身像 `release.yml` 一樣逐位元組下發到 `template/`，但比照 `release.yml`／`ci.yml` 沒有生成 repo 端本機再測試的既有慣例（下發前的 root 測試已足夠證明這份靜態、無 Jinja 條件式的實作正確），不隨腳本一起下發、也不掛進生成 repo 的 `scripts/verify`；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
@@ -1465,7 +1453,7 @@ Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本
 | --- | --- | --- | --- | --- |
 | 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
 | 正式版本與 CHANGELOG | 一般工作不直接決定精確版本 | CSARC-owned Milestone 的 promotion bridge 用 `release_policy.py prepare-candidate` materialize 同批版本與 CHANGELOG，可信 CI 逐 tree 驗證只能包含該 deterministic 差異 | Standalone work 仍由 Automatic 開 Release Please 版本 PR；Guided 用同一規則在本機產生候選 | manual 只重跑同一流程，不另開版本來源 |
-| CI | docs／fast／full 依風險 | 一律 full | release workflow 對目前 `main` 跑一次 full | 候選只跑版本／檔案／可打包 focused check；正式發布前已在 main 跑 full |
+| CI | fast／full 依風險 | 一律 full | release workflow 對目前 `main` 跑一次 full | 候選只跑版本／檔案／可打包 focused check；正式發布前已在 main 跑 full |
 | 成品／checksum／SBOM | 不發布 | PR 合併後從精確 main commit 建立 | Standalone 版本 PR 合併後從精確 commit 建立 | draft Release 先上傳、下載重驗，成功才公開 |
 | tag／GitHub Release | 不建立 | PR 合併後由唯一 release workflow 建立；成功才關 tracker 與 Milestone | Standalone 版本 PR 合併後由同一 workflow 建立 | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
 | attestation／registry | 不建立 | 不建立 | 不自動啟用 | #439 已移除設定面（零 active 消費者），非留待選配 |
@@ -1651,7 +1639,7 @@ capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能�
 - **本機執行結果的可稽核性不如 hosted run 的公開 log。** 緩解方式是強制在合併說明或 Issue 留言記錄執行者、commit SHA、指令與結果。
 - **local-vs-hosted 邏輯漂移風險。** 緩解方式是本節設計的第一原則——單一 repo-local 腳本被兩種呼叫方式共用。
 
-**明確保留 GitHub Actions 為預設／建議路徑，不是全面棄用**：`verify`／`title`／`promotion` 三個 required status check 仍然、也必須繼續只由 hosted Actions 產生；CodeQL 上傳到 GitHub 原生 code-scanning 介面同樣不在本節適用範圍。
+**明確保留 GitHub Actions 為預設／建議路徑，不是全面棄用**：`verify`／`title`／`review` 三個 required status check 仍然、也必須繼續只由 hosted Actions 產生；CodeQL 上傳到 GitHub 原生 code-scanning 介面同樣不在本節適用範圍。
 
 ### hosted 發版路徑的已知限制，本機路徑升格為標準程序（2026-09-03）
 

@@ -21,6 +21,9 @@ VALID_SCOPES = frozenset(
         "workflow",
     }
 )
+PROJECT_SCOPES = frozenset(
+    {"governance", "shell", "source", "template", "unknown", "workflow"}
+)
 
 
 @dataclass(frozen=True)
@@ -30,6 +33,7 @@ class Plan:
     tier: str
     reason: str
     scopes: tuple[str, ...]
+    run_project: bool
     run_governance: bool
     run_osv: bool
     run_zizmor: bool
@@ -157,6 +161,9 @@ def add_scopes(plan: Plan, extra_scopes: set[str]) -> Plan:
     return replace(
         plan,
         scopes=scopes,
+        run_project=plan.run_project
+        or full
+        or bool(PROJECT_SCOPES & set(scopes)),
         run_governance=plan.run_governance or full or "governance" in scopes,
         run_osv=plan.run_osv or full or "dependency" in scopes,
         run_zizmor=plan.run_zizmor or full or "workflow" in scopes,
@@ -194,7 +201,7 @@ def classify(  # noqa: C901
     if force_full:
         tier, reason = "full", "manual full verification"
     elif draft and scopes == ("docs",):
-        tier, reason = "docs", "draft documentation change"
+        tier, reason = "fast", "draft documentation change"
     elif draft:
         tier, reason = "fast", "draft risk-owner verification"
     elif promotion:
@@ -219,7 +226,7 @@ def classify(  # noqa: C901
     ):
         tier, reason = "full", "standalone generator or verifier change"
     elif scopes == ("docs",):
-        tier, reason = "docs", "documentation-only change"
+        tier, reason = "fast", "documentation-only change"
     else:
         tier, reason = "fast", "change-aware pull request verification"
     full = tier == "full"
@@ -227,6 +234,7 @@ def classify(  # noqa: C901
         tier=tier,
         reason=reason,
         scopes=scopes,
+        run_project=full or bool(PROJECT_SCOPES & set(scopes)),
         run_governance=full or "governance" in scopes,
         run_osv=(
             full
@@ -261,6 +269,7 @@ def write_outputs(path: Path, plan: Plan) -> None:
         "tier": plan.tier,
         "reason": plan.reason,
         "scopes": ",".join(plan.scopes),
+        "run_project": str(plan.run_project).lower(),
         "run_governance": str(plan.run_governance).lower(),
         "run_osv": str(plan.run_osv).lower(),
         "run_zizmor": str(plan.run_zizmor).lower(),
@@ -279,6 +288,7 @@ def render_summary(plan: Plan) -> str:
         f"- Tier: `{plan.tier}`\n"
         f"- Reason: {plan.reason}\n"
         f"- Scopes: `{scopes}`\n"
+        f"- Project checks: `{plan.run_project}`\n"
         f"- Remote governance: `{plan.run_governance}`\n"
         f"- OSV: `{plan.run_osv}`\n"
         f"- Zizmor: `{plan.run_zizmor}`\n"

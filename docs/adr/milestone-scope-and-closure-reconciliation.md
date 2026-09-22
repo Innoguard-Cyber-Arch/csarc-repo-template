@@ -286,7 +286,7 @@ Milestone work Issue 一律繼承 tracker 層級；子 Issue 若自行宣告不�
 - **來源 Issue：**[#880](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/880)
 
 公版 root 的 `.csarc/config.yml` 關閉一般工作的 release-level 宣告解析、預設採
-`alpha`，並把所有層級都映射為 `self`／`baseline`。Milestone tracker 或 standalone Issue
+`alpha`，並把所有層級都映射為 `self`／`fast`。Milestone tracker 或 standalone Issue
 仍保留原本的核准 gate，但可走既有的 admin self-approval；PR 仍須使用綁定 exact head
 的授權與 `scripts/pr_lifecycle.py`，必要 status checks 及高風險路徑加跑不因本決定放寬。
 

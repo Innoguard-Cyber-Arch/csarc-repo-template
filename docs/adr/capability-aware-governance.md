@@ -231,7 +231,7 @@ token 無法讀取的管理員設定標成 `DEGRADED`，不得宣稱 drift 或 a
 
 `pull_request`／`merge_group` 會執行候選 revision 的 workflow 定義；即使後續 checkout
 base SHA，也不能改變 job 已取得的 token 權限。PR policy 的 required `title`／
-`promotion` jobs 因此只能持有唯讀權限，並以原生 job conclusion 表達 policy 決策；
+promotion route classifier 因此只能放在唯讀的 `title` job，並以原生 job conclusion 表達 policy 決策；
 metadata 同步與 `Milestone approval` check-run 改由 default branch 上的
 `workflow_run` 執行，固定 checkout 該次 trusted workflow 的 `github.sha`，不得 checkout
 PR head、執行 PR source 或下載並執行 PR artifact。寫入 job 依 metadata 與 check-run
@@ -246,7 +246,7 @@ trusted-writer 邊界，不能以路徑搬移取代隔離。
 
 ## 2026-09-20 將 required checks 綁定可信 producer（#835）
 
-Ruleset 的 required status check 不再只保存顯示名稱；`title`、`promotion`、`verify`、
+Ruleset 的 required status check 不再只保存顯示名稱；`title`、`verify`、
 `review` 都綁定 GitHub Actions App integration ID `15368`。policy 缺少、無法解析或取得
 非正整數 ID 時，設定 readback 與 merge lifecycle 一律 fail closed；classic commit
 status 即使同名且成功，也不能滿足 required context。

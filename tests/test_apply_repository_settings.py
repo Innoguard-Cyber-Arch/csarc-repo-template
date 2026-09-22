@@ -315,7 +315,6 @@ EFFECTIVE_ALL_RULES = [
         "parameters": {
             "required_status_checks": [
                 {"context": "title", "integration_id": 15368},
-                {"context": "promotion", "integration_id": 15368},
                 {"context": "verify", "integration_id": 15368},
             ]
         },
@@ -341,7 +340,6 @@ DESIRED_ALL_RULES = {
                 "strict_required_status_checks_policy": False,
                 "required_status_checks": [
                     {"context": "title", "integration_id": 15368},
-                    {"context": "promotion", "integration_id": 15368},
                     {"context": "verify", "integration_id": 15368},
                 ],
             },
@@ -416,7 +414,7 @@ def test_policy_missing_pull_request_reports_clean_error(
     assert "policy is missing a pull_request rule" in result.stdout
 
 
-@pytest.mark.parametrize("missing_context", ["title", "promotion", "verify"])
+@pytest.mark.parametrize("missing_context", ["title", "verify"])
 def test_missing_effective_check_is_reported_by_context(
     missing_context: str, tmp_path: Path
 ) -> None:

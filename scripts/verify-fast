@@ -69,14 +69,13 @@ python3 scripts/ci_tier.py \
 
 plan_tier="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
 scope_csv="$(python3 -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))["scopes"]))' "$plan_json")"
+run_project="$(python3 -c 'import json, sys; print(str(json.load(open(sys.argv[1]))["run_project"]).lower())' "$plan_json")"
 scopes=",$scope_csv,"
 
-suite_rank() {
+normalize_suite() {
   case "$1" in
-    baseline) echo 0 ;;
-    fast) echo 1 ;;
-    docs) echo 2 ;;
-    full) echo 3 ;;
+    baseline|docs|fast) echo fast ;;
+    full) echo full ;;
     *) return 1 ;;
   esac
 }
@@ -84,12 +83,12 @@ suite_rank() {
 suite="$plan_tier"
 for requested in "${CSARC_VERIFICATION_SUITE:-fast}" "${CSARC_CI_TIER:-}"; do
   [[ -z "$requested" ]] && continue
-  if ! requested_rank="$(suite_rank "$requested")"; then
+  if ! normalized_suite="$(normalize_suite "$requested")"; then
     echo "Unknown verification suite: $requested" >&2
     exit 2
   fi
-  current_rank="$(suite_rank "$suite")"
-  if ((requested_rank > current_rank)); then
+  requested="$normalized_suite"
+  if [[ "$requested" == "full" ]]; then
     suite="$requested"
   fi
 done
@@ -97,7 +96,7 @@ echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite sc
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 
 case "$suite" in
-  baseline|fast|docs) ;;
+  fast) ;;
   full)
     ./scripts/verify-template.sh
     exit 0
@@ -122,12 +121,7 @@ if [[ "$scopes" == *,workflow,* || "$scopes" == *,template,* ]]; then
     python3 scripts/check_action_pins.py
 fi
 
-run_python_suite=false
-if [[ "$scopes" == *,source,* || "$scopes" == *,template,* ||
-  "$scopes" == *,governance,* || "$scopes" == *,shell,* ||
-  "$scopes" == *,unknown,* || "$scopes" == *,workflow,* ]]; then
-  run_python_suite=true
-fi
+run_python_suite="$run_project"
 
 pytest_paths=()
 add_pytest_paths() {
@@ -233,10 +227,6 @@ if [[ "$scopes" == *,workflow,* ]]; then
     ./scripts/verify-stage-github-actions-audit
 fi
 
-if [[ "$suite" == "baseline" ]]; then
-  exit 0
-fi
-
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
   verification_step "Dependency scan" ./scripts/verify-dependencies
 fi
@@ -255,7 +245,7 @@ if [[ "$scopes" == *,workflow,* ]]; then
     uv run python3 scripts/check_jinja_workflow_drift.py
 fi
 
-if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then
+if [[ "$scopes" == *,docs,* ]]; then
   verification_step "Specification validation" \
     python3 scripts/spec_to_issue.py validate
   verification_step "Repository site render" ./scripts/build-repo-site --check
