@@ -461,10 +461,10 @@ def test_disabling_codeql_omits_the_workflow(tmp_path: Path) -> None:
 
 
 @pytest.mark.large
-def test_enable_docker_generates_container_starter_files(
+def test_docker_feature_generates_container_starter_files(
     tmp_path: Path,
 ) -> None:
-    """Prove enable_docker=true renders a usable Dockerfile, compose file,
+    """Prove the docker feature renders a usable Dockerfile, compose file,
     and an opt-in, registry-free build-and-scan CI workflow (#554).
 
     Direction 1 (opt-in Dockerfile/docker-compose template) and direction 2
@@ -491,7 +491,7 @@ def test_enable_docker_generates_container_starter_files(
             "repository_url": "https://github.com/example/docker-fixture",
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "private",
-            "enable_docker": True,
+            "features": ["docker"],
         },
         defaults=True,
         unsafe=True,
@@ -567,7 +567,7 @@ def test_disabling_docker_omits_container_files(tmp_path: Path) -> None:
             "repository_url": "https://github.com/example/no-docker-fixture",
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "private",
-            "enable_docker": False,
+            "features": [],
         },
         defaults=True,
         unsafe=True,
@@ -577,3 +577,55 @@ def test_disabling_docker_omits_container_files(tmp_path: Path) -> None:
     assert not (project / "Dockerfile").exists()
     assert not (project / "docker-compose.yml").exists()
     assert not (project / ".github/workflows/docker-build-scan.yml").exists()
+
+
+@pytest.mark.parametrize(
+    "features",
+    [[], ["repo-site"], ["docker"], ["repo-site", "docker"]],
+)
+def test_optional_features_render_independently(
+    tmp_path: Path, features: list[str]
+) -> None:
+    """Cover every repo-site and Docker selection without coupled behavior."""
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "feature-fixture"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": [],
+            "project_name": "Feature Fixture",
+            "project_slug": "feature-fixture",
+            "project_description": "Exercises independent optional features.",
+            "repository_url": "https://github.com/example/feature-fixture",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "private",
+            "features": features,
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+    )
+
+    site_enabled = "repo-site" in features
+    docker_enabled = "docker" in features
+    assert (project / ".csarc/site").exists() is site_enabled
+    assert (project / "docs/site").exists() is site_enabled
+    assert (project / ".csarc/scripts/build-repo-site").exists() is site_enabled
+    verify = (project / ".csarc/scripts/verify").read_text(encoding="utf-8")
+    assert (
+        "./.csarc/scripts/build-repo-site --check" in verify
+    ) is site_enabled
+    pages = json.loads(
+        (project / ".csarc/policies/pages.json").read_text(encoding="utf-8")
+    )
+    assert pages["enabled"] is site_enabled
+
+    assert (project / "Dockerfile").exists() is docker_enabled
+    assert (project / "docker-compose.yml").exists() is docker_enabled
+    assert (
+        project / ".github/workflows/docker-build-scan.yml"
+    ).exists() is docker_enabled

@@ -2251,7 +2251,7 @@ def actions_run_url(details_url: str, repo: str) -> str:
     return f"https://github.com/{repo}/actions/runs/{match.group(1)}"
 
 
-def require_routine_quota_fallback(
+def require_routine_quota_fallback(  # noqa: C901
     github: GitHub,
     lease: dict[str, Any],
     pull: dict[str, Any],
@@ -2259,6 +2259,15 @@ def require_routine_quota_fallback(
     note_url: str,
 ) -> set[str]:
     """Validate a canonical routine-PR quota note and every bound run."""
+    config_path = Path(__file__).resolve().parents[1] / ".csarc/config.yml"
+    if (
+        not config_path.is_file()
+        or csarc_config.load_config(config_path).get("actions_fallback")
+        != "admin"
+    ):
+        raise RuntimeError(
+            "Actions billing fallback requires actions_fallback: admin"
+        )
     repo = str(lease["repository"])
     pr_number = int(lease["pull_request"])
     head_sha = str(lease["head_sha"])
@@ -2627,7 +2636,7 @@ def merge_snapshot(  # noqa: C901
 
 
 def review_settings() -> tuple[str, str]:
-    """Return this checkout's ``(pr_review_mode, copilot_review_max_level)``."""
+    """Return this checkout's normalized Copilot review settings."""
     return review_gate.review_settings(
         Path(__file__).resolve().parents[1] / ".csarc/config.yml"
     )

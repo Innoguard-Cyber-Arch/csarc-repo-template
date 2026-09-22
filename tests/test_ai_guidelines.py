@@ -30,7 +30,7 @@ def test_generated_guidance_has_one_source_and_real_commands(
     """Keep governance references stable and commands profile-specific."""
     environment = Environment(autoescape=True, undefined=StrictUndefined)
     context = {
-        "branch_strategy": "delivery",
+        "copilot_review": "allowed",
         "language": language,
         "languages": [] if language == "ci" else language.split("-"),
         "package_name": "guidance_fixture",

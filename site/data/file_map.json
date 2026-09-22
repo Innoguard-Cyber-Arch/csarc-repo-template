@@ -42,11 +42,11 @@
       }
     },
     {
-      "paths": ["policies/", ".github/CODEOWNERS", ".github/REVIEWERS"],
+      "paths": ["policies/", ".github/CODEOWNERS"],
       "responsibility": "shared",
       "purpose": {
-        "zh-tw": "期望設定、owner 與 reviewer",
-        "en": "Desired settings, owners, and reviewers"
+        "zh-tw": "期望設定與 owner；reviewer 由即時權限選出",
+        "en": "Desired settings and owners; reviewers come from live permissions"
       }
     },
     {

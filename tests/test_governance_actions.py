@@ -17,21 +17,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def run_reviewer_assignment(
-    tmp_path: Path, reviewers: str, author: str = "alice", number: int = 1
+    tmp_path: Path, collaborators: str, author: str = "alice", number: int = 1
 ) -> subprocess.CompletedProcess[str]:
     """Run the repository-local reviewer logic with a fake GitHub CLI."""
     fixture = tmp_path / "fixture"
     (fixture / "scripts").mkdir(parents=True)
-    (fixture / ".github").mkdir()
     script = fixture / "scripts/request-reviewer"
     shutil.copy2(ROOT / "scripts/request-reviewer", script)
-    (fixture / ".github/REVIEWERS").write_text(reviewers, encoding="utf-8")
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     fake_gh = fake_bin / "gh"
     fake_gh.write_text(
-        '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$GH_CAPTURE"\n',
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" >> "$GH_CAPTURE"\n'
+        'if [[ "$*" == *"/collaborators?"* ]]; then\n'
+        '  printf "%s\\n" "$GH_COLLABORATORS"\n'
+        "fi\n",
         encoding="utf-8",
     )
     fake_gh.chmod(0o755)
@@ -39,6 +41,7 @@ def run_reviewer_assignment(
     env = os.environ | {
         "GITHUB_REPOSITORY": "example/project",
         "GH_CAPTURE": str(capture),
+        "GH_COLLABORATORS": collaborators,
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "PR_AUTHOR": author,
         "PR_NUMBER": str(number),
@@ -127,8 +130,8 @@ esac
 
 
 def test_reviewer_assignment_excludes_author(tmp_path: Path) -> None:
-    """Request exactly one configured reviewer who is not the PR author."""
-    result = run_reviewer_assignment(tmp_path, "@alice\n@bob\n", number=8)
+    """Request one eligible repository maintainer who is not the author."""
+    result = run_reviewer_assignment(tmp_path, "alice\nbob", number=8)
 
     assert result.returncode == 0, result.stderr
     assert "Requested review from @bob" in result.stdout
@@ -141,28 +144,32 @@ def test_reviewer_assignment_skips_when_only_author_remains(
     tmp_path: Path,
 ) -> None:
     """Do not turn an impossible request into a misleading merge gate."""
-    result = run_reviewer_assignment(tmp_path, "# owner\n@Alice\n")
+    result = run_reviewer_assignment(tmp_path, "Alice")
 
     assert result.returncode == 0, result.stderr
     assert "Reviewer assignment skipped" in result.stdout
-    assert not (tmp_path / "gh-arguments").exists()
+    assert "requested_reviewers" not in (tmp_path / "gh-arguments").read_text(
+        encoding="utf-8"
+    )
 
 
-def test_reviewer_assignment_rejects_invalid_configuration(
+def test_reviewer_assignment_rejects_invalid_api_data(
     tmp_path: Path,
 ) -> None:
     """Reject malformed reviewer names before making a GitHub API call."""
-    result = run_reviewer_assignment(tmp_path, "alice\n")
+    result = run_reviewer_assignment(tmp_path, "not a login")
 
     assert result.returncode == 1
-    assert "Invalid reviewer" in result.stderr
-    assert not (tmp_path / "gh-arguments").exists()
+    assert "Invalid collaborator login" in result.stderr
+    assert "requested_reviewers" not in (tmp_path / "gh-arguments").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_reviewer_assignment_accepts_a_bot_author(tmp_path: Path) -> None:
     """A bot login (e.g. dependabot[bot]) is a valid PR author (#753)."""
     result = run_reviewer_assignment(
-        tmp_path, "@alice\n@bob\n", author="dependabot[bot]", number=8
+        tmp_path, "alice\nbob", author="dependabot[bot]", number=8
     )
 
     assert result.returncode == 0, result.stderr
@@ -193,7 +200,6 @@ def test_copier_governance_drift_option_is_complete(
             "project_name": "Governance Fixture",
             "project_slug": "governance-fixture",
             "repository_url": "https://github.com/example/governance-fixture",
-            "reviewers": "@alice,@bob",
             "security_reporting_channel": "Use the private security contact.",
         }
         | option,
@@ -204,11 +210,7 @@ def test_copier_governance_drift_option_is_complete(
 
     assert (project / ".github/workflows/governance-comment.yml").is_file()
     assert (project / ".csarc/scripts/request-reviewer").is_file()
-    assert (
-        (project / ".csarc/REVIEWERS")
-        .read_text(encoding="utf-8")
-        .endswith("@alice\n@bob\n")
-    )
+    assert not (project / ".csarc/REVIEWERS").exists()
     assert (
         project / ".github/workflows/governance-drift.yml"
     ).exists() is enabled

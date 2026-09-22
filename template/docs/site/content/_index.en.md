@@ -21,7 +21,7 @@ fit = "Fit"
 {{< standard key="index-mode-standard" title="This repo's current governance setup" >}}
 This repo is created and kept up to date with [csarc-repo-template](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template), so its way of working can be versioned, verified, and upgraded like its code:
 
-<div class="capability-map"><div class="capability-node"><h3>Languages</h3><p>[[languages]]</p></div><div class="capability-node"><h3>Branch strategy</h3><p>[[branch_strategy]]</p></div><div class="capability-node"><h3>Visibility</h3><p>[[project_visibility]]</p></div><div class="capability-node"><h3>Next step</h3><p>Switch to "Install" to get started, or "About" to see what this governance baseline does.</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>Languages</h3><p>[[languages]]</p></div><div class="capability-node"><h3>Review</h3><p>[[review]]; Copilot [[copilot_review]]</p></div><div class="capability-node"><h3>Visibility</h3><p>[[project_visibility]]</p></div><div class="capability-node"><h3>Next step</h3><p>Switch to "Install" to get started, or "About" to see what this governance baseline does.</p></div></div>
 {{< /standard >}}
 
 {{< ops key="index-mode-ops" title="Where this configuration comes from" >}}
@@ -30,8 +30,10 @@ This repo's governance configuration lives in `.csarc/config.yml`, created and k
 | Setting | Current value |
 | --- | --- |
 | Code owner | `[[code_owner]]` |
-| Reviewers | `[[reviewers]]` |
-| Branch strategy | `[[branch_strategy]]` |
+| Review | `[[review]]`; Copilot `[[copilot_review]]` |
+| Work-item automation | `[[lifecycle]]` |
+| Release trigger | `[[release_trigger]]` |
+| Optional features | `[[features]]` |
 | Visibility | `[[project_visibility]]` |
 | Languages | `[[languages]]` |
 

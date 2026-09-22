@@ -61,6 +61,8 @@ GitHub Agents 頁籤可把 repository 工作交給 cloud coding agents，但 ses
 
 ## Copilot code review 作為可選審核路徑（#752，2026-09-18）
 
+> 2026-09-22：本節的 exact-head 證據與 fail-closed 行為保留；`pr_review_mode` 與 `copilot_review_max_level` 已由 #900 的 `review: solo|peer` 與 `copilot_review: allowed|off` 取代。Copilot 可在兩種人工 fallback 下通過，不從帳戶方案推測 entitlement。現行契約見 [`simplified-project-configuration.md`](simplified-project-configuration.md)。
+
 維護者決定新增可選的 PR 審核模式 `pr_review_mode`（`copilot`／`human`），新專案、`csarc adopt` 與本 repo 預設 `copilot`；`copier update` 對既有專案預設 `human`，不悄悄改變既有審核方式。Copilot 模式下 Ruleset 自動請 Copilot 審核每次 push，required check `review` 接受「Copilot 對 exact head 沒有意見」或「獨立 maintainer 對 exact head 的 approval」。本機 agent 修正 Copilot 意見並 push，直到 Copilot 沒有意見，再由 `scripts/pr_lifecycle.py` 在 lease 下合併並留痕。規則細節見 `docs/ci-policy.md`「Copilot 審核模式（#752）」。
 
 與既有決策的關係：

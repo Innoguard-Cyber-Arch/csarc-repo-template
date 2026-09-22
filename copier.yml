@@ -23,9 +23,18 @@ _exclude:
   - "{% if project_mode == 'new' %}__keep_release_drift_workflow__{% else %}.github/workflows/release-drift.yml{% endif %}"
   - "{% if project_mode == 'new' %}__keep_release_drift_script__{% else %}.csarc/scripts/check-release-drift{% endif %}"
   - "{% if enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
-  - "{% if enable_docker | default(false) %}__keep_dockerfile__{% else %}Dockerfile{% endif %}"
-  - "{% if enable_docker | default(false) %}__keep_docker_compose__{% else %}docker-compose.yml{% endif %}"
-  - "{% if enable_docker | default(false) %}__keep_docker_workflow__{% else %}.github/workflows/docker-build-scan.yml{% endif %}"
+  - "{% if 'docker' in features %}__keep_dockerfile__{% else %}Dockerfile{% endif %}"
+  - "{% if 'docker' in features %}__keep_docker_compose__{% else %}docker-compose.yml{% endif %}"
+  - "{% if 'docker' in features %}__keep_docker_workflow__{% else %}.github/workflows/docker-build-scan.yml{% endif %}"
+  - "{% if 'repo-site' in features %}__keep_repo_site__{% else %}.csarc/site{% endif %}"
+  - "{% if 'repo-site' in features %}__keep_repo_site_builder__{% else %}.csarc/scripts/build-repo-site{% endif %}"
+  - "{% if 'repo-site' in features %}__keep_repo_site_python__{% else %}.csarc/scripts/build_repo_site.py{% endif %}"
+  - "{% if 'repo-site' in features %}__keep_repo_site_blocks__{% else %}.csarc/scripts/repo_site_blocks.py{% endif %}"
+  - "{% if 'repo-site' in features %}__keep_repo_site_renderer__{% else %}.csarc/scripts/render_site.py{% endif %}"
+  - "{% if 'repo-site' in features %}__keep_repo_site_navigation_check__{% else %}.csarc/scripts/check-repo-site-navigation{% endif %}"
+  - "{% if 'repo-site' in features %}__keep_repo_site_translation_check__{% else %}.csarc/scripts/check-repo-site-translations{% endif %}"
+  - "{% if 'repo-site' in features %}__keep_repo_site_version_check__{% else %}.csarc/scripts/check-repo-site-versions{% endif %}"
+  - "{% if 'repo-site' in features %}__keep_repo_site_content__{% else %}docs/site{% endif %}"
   - "{% if 'python' in languages %}__keep_python_version__{% else %}.python-version{% endif %}"
   - "{% if 'python' in languages %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
   - "{% if 'python' in languages %}__keep_python_source__{% else %}/src/{{package_name}}{% endif %}"
@@ -42,6 +51,7 @@ _exclude:
   - "{% if 'rust' in languages %}__keep_rust_manifest__{% else %}Cargo.toml{% endif %}"
   - "{% if 'rust' in languages %}__keep_rust_source__{% else %}/src/lib.rs{% endif %}"
   - "{% if not languages %}__keep_ci_version__{% else %}.csarc/version.txt{% endif %}"
+  - "{% if code_owner %}__keep_codeowners__{% else %}.github/CODEOWNERS{% endif %}"
 _skip_if_exists:
   - "src/**/*.py"
   - "tests/**/*.py"
@@ -70,6 +80,7 @@ _tasks:
   - command: "cargo generate-lockfile"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'rust' in languages }}"
   - command: "bash .csarc/scripts/build-repo-site"
+    when: "{{ 'repo-site' in features }}"
 _migrations:
   - command:
       - python3
@@ -212,7 +223,7 @@ _migrations:
                 legacy_test.unlink()
     when: "{{ _stage == 'before' }}"
   - command: "bash .csarc/scripts/build-repo-site"
-    when: "{{ _stage == 'after' }}"
+    when: "{{ _stage == 'after' and 'repo-site' in features }}"
 _message_after_copy: |
   {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./.csarc/scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% else %}Project created with the CSARC release workflow. Confirm .csarc/config.yml, run ./.csarc/scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./.csarc/scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
 
@@ -232,44 +243,6 @@ release_ownership:
     Existing product release workflow: product-owned
     Verification without release writes: verification-only
   default: "{{ 'csarc-owned' if project_mode == 'new' else 'verification-only' }}"
-  when: false
-
-release_workflow:
-  type: str
-  help: Explicit repository-relative workflow selected by the release owner
-  default: "{{ '.github/workflows/release.yml' if release_ownership == 'csarc-owned' else '' }}"
-  when: false
-
-release_required_inputs:
-  type: yaml
-  help: Required workflow_dispatch inputs declared by the selected workflow
-  default: []
-  when: false
-
-release_ownership_reason:
-  type: str
-  help: Auditable reason for the selected release ownership
-  default: "{{ 'CSARC owns the only version and GitHub Release workflow.' if release_ownership == 'csarc-owned' else 'No release workflow is selected; CSARC verifies only.' }}"
-  when: false
-
-release_settings_owner:
-  type: str
-  help: Owner responsible for release-related repository settings
-  choices:
-    CSARC bootstrap administrator: csarc-admin
-    Product administrator: product-admin
-    No release settings owner: none
-  default: "{{ 'csarc-admin' if release_ownership == 'csarc-owned' else 'product-admin' if release_ownership == 'product-owned' else 'none' }}"
-  when: false
-
-release_immutable_releases:
-  type: str
-  help: Whether immutable GitHub Releases are required by this ownership mode
-  choices:
-    Required during CSARC bootstrap: required
-    Defined by the product release contract: product-defined
-    Not required for verification-only: not-required
-  default: "{{ 'required' if release_ownership == 'csarc-owned' else 'product-defined' if release_ownership == 'product-owned' else 'not-required' }}"
   when: false
 
 project_name:
@@ -306,13 +279,63 @@ languages:
     TypeScript: typescript
   default: "{{ [] if language == 'ci' else language.split('-') }}"
 
-branch_strategy:
+governance_mode:
   type: str
-  help: Choose how issue branches are integrated before promotion to main
+  help: Manage supported GitHub settings, or only report the desired state
   choices:
-    Main with short-lived Milestone delivery branches: delivery
-    Short branch → pull request → main: main
-  default: delivery
+    Apply supported repository policies: managed
+    Observe and report only: observe
+  default: managed
+
+lifecycle:
+  type: str
+  help: Select the GitHub work-item automation this repository needs
+  multiselect: true
+  choices:
+    Issue triage and standalone approval refresh: issues
+    Milestone reconciliation and work-item closure: milestones
+  default: [issues, milestones]
+
+actions_fallback:
+  type: str
+  help: Permit audited admin merge only for a proven zero-step Actions billing block
+  choices:
+    Keep hosted checks mandatory: 'off'
+    Allow the audited admin fallback: admin
+  default: 'off'
+
+review:
+  type: str
+  help: Human review fallback when Copilot review is unavailable or not selected
+  choices:
+    Repository owner may use the audited self-review path: solo
+    Require an independent maintainer: peer
+  default: solo
+
+copilot_review:
+  type: str
+  help: Allow a clean GitHub Copilot review of the exact head to satisfy review when the repository is entitled to it
+  choices:
+    Allow when available: allowed
+    Do not use Copilot review: 'off'
+  default: allowed
+
+release_trigger:
+  type: str
+  help: Evaluate a CSARC-owned release on each main update or only when explicitly dispatched
+  choices:
+    Evaluate main updates: main
+    Manual dispatch only: manual
+  default: main
+
+features:
+  type: str
+  help: Optional generated project capabilities; the repo-site stays portable even when Pages is unavailable
+  multiselect: true
+  choices:
+    Offline bilingual repository site: repo-site
+    Docker starter and build scan: docker
+  default: [repo-site]
 
 readme_primary_language:
   type: str
@@ -331,9 +354,9 @@ package_name:
 
 code_owner:
   type: str
-  help: Existing GitHub team used by CODEOWNERS, for example @Innoguard-Cyber-Arch/platform
+  help: Optional GitHub user or team used by CODEOWNERS
   default: "@Innoguard-Cyber-Arch/arch"
-  validator: "{% if not code_owner.startswith('@Innoguard-Cyber-Arch/') %}Use an existing @Innoguard-Cyber-Arch/<team> owner.{% endif %}"
+  validator: "{% if code_owner and not code_owner | regex_search('^@[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?$') %}Use an @user or @organization/team value, or leave it empty.{% endif %}"
 
 project_run_command:
   type: str
@@ -359,12 +382,6 @@ security_reporting_channel:
   help: Organization-approved vulnerability reporting instructions
   default: "Open a GitHub Issue at {{ repository_url }}/issues/new; maintainers receive notifications for new Issues."
   validator: "{% if not security_reporting_channel | default('', true) | trim or security_reporting_channel | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in security_reporting_channel %}Enter the approved reporting channel without placeholder text; do not invent an email address or SLA.{% endif %}"
-
-reviewers:
-  type: str
-  help: Comma-separated GitHub usernames eligible for review assignment; assign manually until the Action is active
-  default: "@jachline28"
-  validator: "{% if not reviewers | regex_search('^@[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:\\s*,\\s*@[A-Za-z0-9][A-Za-z0-9-]{0,38})*$') %}Use one or more @username values separated by commas.{% endif %}"
 
 python_support_mode:
   type: str
@@ -424,39 +441,9 @@ enable_codeql:
   default: "{{ project_visibility == 'public' and ('python' in languages or 'typescript' in languages) }}"
   when: "{{ 'python' in languages or 'typescript' in languages }}"
 
-enable_docker:
-  type: bool
-  help: Add an optional Dockerfile, docker-compose file, and an opt-in build-and-scan CI workflow for a containerized project
-  default: false
-
 enable_governance_drift_check:
   type: bool
   help: Run the scheduled governance drift check; disable it only when another approved control owns drift monitoring
-  default: true
-
-policy_repository_settings:
-  type: bool
-  help: Apply this template's repository settings policy (merge strategies, wiki, projects, issues, delete-branch-on-merge) from .csarc/policies/repository.json
-  default: true
-
-policy_actions_permissions:
-  type: bool
-  help: Apply this template's Actions workflow permissions policy (default token permissions and PR-approval capability) from .csarc/policies/actions.json
-  default: true
-
-policy_labels:
-  type: bool
-  help: Create and maintain this template's governance labels (bug, enhancement, hotfix, and the rest) from .csarc/policies/labels.json
-  default: true
-
-policy_branch_ruleset:
-  type: bool
-  help: Enforce this template's branch protection Ruleset (required review, non-fast-forward) from .csarc/policies/rulesets.json where the GitHub plan allows it
-  default: true
-
-release_levels_enabled:
-  type: bool
-  help: Resolve each pull request's release level from its trusted Issue or Milestone declaration; when disabled, every pull request uses default_release_level
   default: true
 
 default_release_level:
@@ -468,75 +455,3 @@ default_release_level:
     Early release (0.y.z): early
     Formal release (1.0.0 and later): formal
   default: "{{ 'beta' if _copier_operation == 'update' or project_mode == 'existing' else 'alpha' }}"
-
-release_level_alpha_review:
-  type: str
-  help: Review requirement for alpha work
-  choices: &release_level_review_choices
-    Self-review permitted: self
-    Independent peer required: peer
-  default: self
-
-release_level_alpha_verification:
-  type: str
-  help: Minimum verification suite for alpha work
-  choices: &release_level_verification_choices
-    Routine verification: fast
-    Full verification: full
-  default: fast
-
-release_level_beta_review:
-  type: str
-  help: Review requirement for beta work
-  choices: *release_level_review_choices
-  default: peer
-
-release_level_beta_verification:
-  type: str
-  help: Minimum verification suite for beta work
-  choices: *release_level_verification_choices
-  default: fast
-
-release_level_early_review:
-  type: str
-  help: Review requirement for early-release work
-  choices: *release_level_review_choices
-  default: peer
-
-release_level_early_verification:
-  type: str
-  help: Minimum verification suite for early-release work
-  choices: *release_level_verification_choices
-  default: fast
-
-release_level_formal_review:
-  type: str
-  help: Review requirement for formal-release work
-  choices: *release_level_review_choices
-  default: peer
-
-release_level_formal_verification:
-  type: str
-  help: Minimum verification suite for formal-release work
-  choices: *release_level_verification_choices
-  default: full
-
-pr_review_mode:
-  type: str
-  help: How a pull request earns merge approval. Copilot mode auto-requests GitHub Copilot code review on every push and accepts a clean Copilot review of the exact head (a maintainer approval still works); human mode keeps the required maintainer approval. Copilot mode needs a Copilot license with code review enabled.
-  choices:
-    GitHub Copilot review, maintainer approval still accepted: copilot
-    Maintainer approval only: human
-  default: "{{ 'human' if _copier_operation == 'update' else 'copilot' }}"
-
-copilot_review_max_level:
-  type: str
-  help: Highest declared release level a clean Copilot review may approve; higher levels need a maintainer approval. The release value is the formal-level alias retained for compatibility.
-  choices:
-    No limit: unlimited
-    alpha: alpha
-    beta: beta
-    Early release (0.y.z): early
-    Stable release (1.0.0 and later): release
-  default: unlimited
-  when: "{{ pr_review_mode == 'copilot' }}"

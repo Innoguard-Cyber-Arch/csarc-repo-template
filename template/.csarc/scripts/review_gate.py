@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Decide whether a pull request's exact head has earned review.
 
-The resolved work level decides whether self-review is allowed. Peer-review
-levels always require an independent maintainer's exact-head approval.
-Self-review levels may instead use a clean Copilot review when configured, or
-the audited Alpha self-merge authorization path. The Ruleset therefore keeps
-native approval count at zero and makes this level-aware ``review`` check
-required for every pull request.
+The configured human fallback is either solo or peer. When explicitly allowed,
+a clean Copilot review of the exact head can satisfy either mode; otherwise the
+human rule applies. The audited Alpha self-merge authorization remains limited
+to its existing route. The Ruleset keeps native approval count at zero and
+makes this ``review`` check required for every pull request.
 
 Copilot never submits ``APPROVED``; a clean review is a ``COMMENTED``
 review whose body states that it generated no comments. The gate fails
@@ -76,17 +75,22 @@ class CopilotReview:
 
 
 def review_settings(path: Path | None = None) -> tuple[str, str]:
-    """Return ``(pr_review_mode, copilot_review_max_level)``.
+    """Return the normalized Copilot mode and compatibility level cap.
 
-    A missing answers file or key means ``human``: the behavior before this
-    option existed, so an older repository is never switched silently.
+    The new schema deliberately has no release-level cap: an explicitly
+    allowed clean exact-head Copilot review can satisfy either human mode.
     """
     config_path = path or csarc_config.CONFIG_FILE
     if not config_path.exists():
         return "human", UNLIMITED
     config = csarc_config.load_config(config_path)
-    mode = config.get("pr_review_mode") or "human"
-    level = config.get("copilot_review_max_level") or UNLIMITED
+    configured = config.get("copilot_review")
+    if configured is None:
+        configured = (
+            "allowed" if config.get("pr_review_mode") == "copilot" else "off"
+        )
+    mode = "copilot" if configured == "allowed" else "human"
+    level = UNLIMITED
     return str(mode), str(level)
 
 
@@ -253,6 +257,30 @@ def evaluate(  # noqa: C901
             "Draft pull requests are not reviewed; mark it ready for review"
         )
         return result
+    verdict = None
+    if mode == "copilot":
+        verdict = copilot_verdict(
+            reviews, head_sha, _comments_for(github, repo, pr_number)
+        )
+        result["copilot"] = {
+            "state": verdict.state,
+            "reason": verdict.reason,
+            "review_url": (verdict.review or {}).get("html_url"),
+            "findings": verdict.findings,
+        }
+        allowed, cap_reason = level_allows_copilot(
+            max_level, level_decision.level
+        )
+        if allowed and verdict.state == "clean":
+            result.update(
+                passed=True,
+                source="copilot",
+                reason="Copilot reviewed the exact head and found no issues: "
+                + str((verdict.review or {}).get("html_url") or ""),
+            )
+            return result
+        if not allowed:
+            result["reason"] = cap_reason
     if level_decision.review == "peer":
         labels = {
             str(label.get("name") or "").casefold()
@@ -287,30 +315,6 @@ def evaluate(  # noqa: C901
             "independent maintainer approval of the exact head"
         )
         return result
-    verdict = None
-    if mode == "copilot":
-        verdict = copilot_verdict(
-            reviews, head_sha, _comments_for(github, repo, pr_number)
-        )
-        result["copilot"] = {
-            "state": verdict.state,
-            "reason": verdict.reason,
-            "review_url": (verdict.review or {}).get("html_url"),
-            "findings": verdict.findings,
-        }
-        allowed, cap_reason = level_allows_copilot(
-            max_level, level_decision.level
-        )
-        if allowed and verdict.state == "clean":
-            result.update(
-                passed=True,
-                source="copilot",
-                reason="Copilot reviewed the exact head and found no issues: "
-                + str((verdict.review or {}).get("html_url") or ""),
-            )
-            return result
-        if not allowed:
-            result["reason"] = cap_reason
     alpha_authorization, alpha_reason = (
         _alpha_self_merge_authorization(github, repo, pr_number, head_sha, pull)
         if level_decision.level == "alpha"

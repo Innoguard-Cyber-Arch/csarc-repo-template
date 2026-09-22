@@ -78,21 +78,8 @@ if [[ ",${PR_LABELS:-}," == *,duplicate,* ]]; then
   exit 1
 fi
 
-branch_strategy="${PR_BRANCH_STRATEGY:-}"
-branch_strategy_source="PR_BRANCH_STRATEGY"
-if [[ -z "$branch_strategy" ]]; then
-  branch_strategy="main"
-  branch_strategy_source="the default value"
-  if [[ -f .csarc/config.yml ]]; then
-    branch_strategy="$(python3 .csarc/scripts/csarc_config.py branch_strategy)"
-    branch_strategy_source="the PR base commit's .csarc/config.yml"
-  fi
-fi
-
-if [[ "$branch_strategy" != "main" && "$branch_strategy" != "delivery" ]]; then
-  echo "branch_strategy must be main or delivery."
-  exit 1
-fi
+# Delivery routing is derived from trusted Issue and Milestone metadata.
+branch_strategy="delivery"
 release_ownership="${PR_RELEASE_OWNERSHIP:-}"
 if [[ -z "$release_ownership" ]]; then
   # release_ownership is a hidden (when: false) Copier question: its computed
@@ -473,16 +460,7 @@ if [[ -x ./.csarc/scripts/validate-issue-title ]]; then
   ./.csarc/scripts/validate-issue-title "$issue_title"
 fi
 
-if [[ "$branch_strategy" != "delivery" ]] &&
-  [[ "$PR_BASE" =~ ^dev/(m|i)[0-9]+-[a-z0-9][a-z0-9-]*$ ]]; then
-  echo "branch_strategy is '${branch_strategy}' (source: ${branch_strategy_source})."
-  echo "This configuration expects pull requests to target '${branch_strategy}', not '${PR_BASE}'."
-  echo "To use a Milestone delivery branch, set branch_strategy to 'delivery' in .csarc/config.yml."
-  exit 1
-fi
-
-if [[ "$branch_strategy" == "delivery" ]]; then
-  if [[ "${promotion:-false}" == "true" ]]; then
+if [[ "${promotion:-false}" == "true" ]]; then
     if [[ "${tracker_promotion:-false}" != "true" ]]; then
       if [[ ",${issue_labels:-}," != *,promotion,* ]]; then
         echo "A delivery promotion must close an Issue labeled promotion."
@@ -535,9 +513,9 @@ if [[ "$branch_strategy" == "delivery" ]]; then
       fi
     fi
     exit 0
-  fi
+fi
 
-  if (( delivery_cutover_issue > 0 && issue_number < delivery_cutover_issue )); then
+if (( delivery_cutover_issue > 0 && issue_number < delivery_cutover_issue )); then
     expected_base_kind="exact"
     expected_base="main"
   elif [[ "$PR_BASE" == "main" ]]; then
@@ -574,10 +552,6 @@ if [[ "$branch_strategy" == "delivery" ]]; then
     fi
     echo "Issue #${issue_number} Milestone is ${issue_milestone_description}; expected base '${expected_base}', not '${PR_BASE}'."
     exit 1
-  fi
-else
-  expected_base_kind="exact"
-  expected_base="$branch_strategy"
 fi
 
 base_branch="$PR_BASE"

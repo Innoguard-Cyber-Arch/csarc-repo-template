@@ -31,14 +31,15 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert repository_url.endswith("/csarc-repo-template")
     assert config["languages"] == ["python"]
     assert config["package_name"] == "csarc_cli"
+    assert config["governance_mode"] == "managed"
+    assert config["lifecycle"] == ["issues", "milestones"]
+    assert config["actions_fallback"] == "admin"
+    assert config["review"] == "solo"
+    assert config["copilot_review"] == "allowed"
     assert config["release_ownership"] == "csarc-owned"
-    assert config["release_settings_owner"] == "csarc-admin"
-    assert config["release_immutable_releases"] == "required"
-    assert config["release_levels_enabled"] is False
-    assert config["default_release_level"] == "alpha"
-    for level in ("alpha", "beta", "early", "formal"):
-        assert config[f"release_level_{level}_review"] == "self"
-        assert config[f"release_level_{level}_verification"] == "fast"
+    assert config["release_trigger"] == "main"
+    assert config["features"] == ["repo-site"]
+    assert not any(key.startswith("release_level_") for key in config)
 
 
 def test_root_public_identity_claims_are_consistent() -> None:
@@ -85,6 +86,13 @@ def test_root_public_identity_claims_are_consistent() -> None:
     ("source", "message"),
     [
         ("branch_strategy: trunk\n", "Invalid branch_strategy"),
+        ("governance_mode: partial\n", "Invalid governance_mode"),
+        ("actions_fallback: automatic\n", "Invalid actions_fallback"),
+        ("review: anyone\n", "Invalid review"),
+        ("copilot_review: required\n", "Invalid copilot_review"),
+        ("release_trigger: tag\n", "Invalid release_trigger"),
+        ("lifecycle:\n- projects\n", "Invalid lifecycle"),
+        ("features:\n- website\n", "Invalid features"),
         ("languages:\n- go\n", "Invalid languages"),
         ("languages:\n- python\n- python\n", "Duplicate languages"),
         ("coverage_threshold: 0\n", "Invalid coverage_threshold"),
@@ -175,24 +183,19 @@ def test_derived_templates_can_add_namespaced_settings(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "toggle_key",
+    ("key", "expected"),
     [
-        "policy_repository_settings",
-        "policy_actions_permissions",
-        "policy_labels",
-        "policy_branch_ruleset",
+        ("governance_mode", "managed"),
+        ("actions_fallback", "off"),
+        ("review", "peer"),
+        ("copilot_review", "off"),
+        ("release_trigger", "main"),
     ],
 )
-def test_policy_toggle_absent_key_has_no_forced_value(
-    tmp_path: Path, toggle_key: str
+def test_legacy_config_gets_safe_simplified_defaults(
+    tmp_path: Path, key: str, expected: str
 ) -> None:
-    """A policy toggle absent from config.yml is left unset, not defaulted.
-
-    scripts/apply-repository-settings.sh (not this reader) supplies the
-    "on" default for a missing key -- see its policy_config_value helper --
-    so an older answers file predating Issue #532 keeps every policy area
-    on without csarc_config.py needing to know that default.
-    """
+    """Pre-#900 answers remain readable through deterministic defaults."""
     path = tmp_path / ".csarc/config.yml"
     path.parent.mkdir()
     path.write_text("languages: []\n", encoding="utf-8")
@@ -201,7 +204,34 @@ def test_policy_toggle_absent_key_has_no_forced_value(
     shutil.copy2(ROOT / "scripts/csarc_config.py", scripts)
 
     result = subprocess.run(  # noqa: S603
-        [sys.executable, scripts / "csarc_config.py", toggle_key],
+        [sys.executable, scripts / "csarc_config.py", key],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.strip() == expected
+
+
+def test_mixed_legacy_policy_toggles_require_an_explicit_choice(
+    tmp_path: Path,
+) -> None:
+    """Do not guess while collapsing an old mixed policy configuration."""
+    path = tmp_path / ".csarc/config.yml"
+    path.parent.mkdir()
+    path.write_text(
+        "languages: []\n"
+        "policy_repository_settings: false\n"
+        "policy_actions_permissions: true\n",
+        encoding="utf-8",
+    )
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts)
+
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, scripts / "csarc_config.py", "governance_mode"],
         cwd=tmp_path,
         check=False,
         capture_output=True,
@@ -209,37 +239,4 @@ def test_policy_toggle_absent_key_has_no_forced_value(
     )
 
     assert result.returncode == 1
-    assert toggle_key in result.stderr
-
-
-@pytest.mark.parametrize(
-    ("toggle_key", "toggle_value"),
-    [
-        ("policy_repository_settings", "false"),
-        ("policy_actions_permissions", "true"),
-        ("policy_labels", "false"),
-        ("policy_branch_ruleset", "true"),
-    ],
-)
-def test_policy_toggle_explicit_value_round_trips(
-    tmp_path: Path, toggle_key: str, toggle_value: str
-) -> None:
-    """An explicit true/false policy toggle is validated and echoed back."""
-    path = tmp_path / ".csarc/config.yml"
-    path.parent.mkdir()
-    path.write_text(
-        f"languages: []\n{toggle_key}: {toggle_value}\n", encoding="utf-8"
-    )
-    scripts = tmp_path / "scripts"
-    scripts.mkdir()
-    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts)
-
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, scripts / "csarc_config.py", toggle_key],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.stdout.strip() == toggle_value
+    assert "mixed" in result.stderr

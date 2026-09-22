@@ -28,11 +28,11 @@
       "purpose": {
         "zh-tw": {
           "title": "輪派審查人",
-          "description": "只讀取 base branch 的 REVIEWERS，排除 PR 作者後提出一位個別 review request。"
+          "description": "查詢 live repository collaborators，排除 PR 作者後，從 maintain／admin 權限者提出一位個別 review request。"
         },
         "en": {
           "title": "Assign a reviewer",
-          "description": "Read REVIEWERS only from the base branch, exclude the PR author, and request one individual review."
+          "description": "Query live repository collaborators, exclude the PR author, and request one individual review from maintain/admin users."
         }
       },
       "shared": {

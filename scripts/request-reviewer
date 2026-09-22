@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-reviewers_file="${REVIEWERS_FILE:-$repo_root/.github/REVIEWERS}"
 repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 author="${PR_AUTHOR:?PR_AUTHOR is required}"
 pr_number="${PR_NUMBER:?PR_NUMBER is required}"
@@ -15,34 +13,34 @@ if [[ ! "$author" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$ ]]; then
   echo "PR_AUTHOR must be a GitHub username without @ (a bot login may end in [bot])." >&2
   exit 2
 fi
-if [[ ! -f "$reviewers_file" ]]; then
-  echo "Reviewer configuration is missing: $reviewers_file" >&2
-  exit 1
-fi
 command -v gh >/dev/null || {
   echo "GitHub CLI is required to request a reviewer." >&2
   exit 1
 }
 
-eligible_reviewers=()
 author_folded="$(printf '%s' "$author" | tr '[:upper:]' '[:lower:]')"
-while IFS= read -r account; do
-  account="${account%%#*}"
-  account="${account//[[:space:]]/}"
-  [[ -z "$account" ]] && continue
-  if [[ ! "$account" =~ ^@([A-Za-z0-9][A-Za-z0-9-]{0,38})$ ]]; then
-    echo "Invalid reviewer in $reviewers_file: $account" >&2
+if ! collaborators="$(gh api --paginate \
+  "repos/$repo/collaborators?affiliation=all&per_page=100" \
+  --jq '.[] | select((.permissions.admin // false) or (.permissions.maintain // false)) | .login')"; then
+  echo "::notice title=Reviewer assignment skipped::Repository collaborator permissions could not be inspected."
+  exit 0
+fi
+
+eligible_reviewers=()
+while IFS= read -r reviewer; do
+  [[ -z "$reviewer" ]] && continue
+  if [[ ! "$reviewer" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}$ ]]; then
+    echo "Invalid collaborator login returned by GitHub: $reviewer" >&2
     exit 1
   fi
-  reviewer="${BASH_REMATCH[1]}"
   reviewer_folded="$(printf '%s' "$reviewer" | tr '[:upper:]' '[:lower:]')"
   if [[ "$reviewer_folded" != "$author_folded" ]]; then
     eligible_reviewers+=("$reviewer")
   fi
-done < "$reviewers_file"
+done < <(printf '%s\n' "$collaborators" | LC_ALL=C sort -fu)
 
 if ((${#eligible_reviewers[@]} == 0)); then
-  echo "::notice title=Reviewer assignment skipped::No configured reviewer remains after excluding the pull request author."
+  echo "::notice title=Reviewer assignment skipped::No non-author collaborator with maintain or admin permission is available."
   exit 0
 fi
 

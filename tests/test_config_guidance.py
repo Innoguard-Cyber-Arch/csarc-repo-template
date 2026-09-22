@@ -110,9 +110,10 @@ def test_governance_single_source_item_translation_is_accurate() -> None:
     assert item["title"]["en"] == (
         "Single source | Governance keeps only high-value options"
     )
-    assert ".csarc/config.yml" in item["summary"]["en"]
-    assert "policies/" in item["summary"]["en"]
-    assert "branch_strategy" in item["code"]["en"]
+    assert ".csarc/config.yml" in item["file"]["en"]
+    assert "policies/" in item["file"]["en"]
+    assert "governance_mode" in item["code"]["en"]
+    assert "lifecycle" in item["code"]["en"]
     # The code sample is deliberately shared (language-neutral YAML), unlike
     # prose fields.
     assert item["code"]["zh-tw"] == item["code"]["en"]

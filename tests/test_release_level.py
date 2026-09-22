@@ -73,7 +73,12 @@ def issue(
 
 def settings(**overrides: object) -> levels.Settings:
     """Build settings with repository defaults plus explicit overrides."""
-    return levels.settings_from_mapping(overrides)
+    config: dict[str, object] = {
+        "default_release_level": "alpha",
+        "review": "solo",
+    }
+    config.update(overrides)
+    return levels.settings_from_mapping(config)
 
 
 def trust(github: FakeGitHub, *logins: str) -> None:
@@ -87,12 +92,12 @@ def trust(github: FakeGitHub, *logins: str) -> None:
 def test_release_level_defaults_match_the_four_level_decision() -> None:
     configured = settings()
 
-    assert configured.default_level == "beta"
+    assert configured.default_level == "alpha"
     assert configured.reviews == {
         "alpha": "self",
-        "beta": "peer",
-        "early": "peer",
-        "formal": "peer",
+        "beta": "self",
+        "early": "self",
+        "formal": "self",
     }
     assert configured.suites == {
         "alpha": "fast",
@@ -133,7 +138,7 @@ def test_non_collaborator_declaration_uses_default() -> None:
         github, "o/r", issue(7, "formal", author="outsider"), settings()
     )
 
-    assert result.level == "beta"
+    assert result.level == "alpha"
     assert "default" in result.source
 
 
@@ -145,7 +150,7 @@ def test_none_permission_is_not_a_trusted_collaborator() -> None:
         github, "o/r", issue(7, "formal", author="outsider"), settings()
     )
 
-    assert result.level == "beta"
+    assert result.level == "alpha"
 
 
 def test_collaborator_declaration_is_trusted() -> None:
@@ -156,7 +161,7 @@ def test_collaborator_declaration_is_trusted() -> None:
 
     assert (result.level, result.review, result.suite) == (
         "early",
-        "peer",
+        "self",
         "fast",
     )
 
@@ -191,16 +196,10 @@ def test_milestone_issue_cannot_override_tracker_level() -> None:
         )
 
 
-def test_disabled_module_uses_default_without_api_reads() -> None:
-    result = levels.resolve_issue(
-        FakeGitHub(),
-        "o/r",
-        issue(7, "formal"),
-        settings(release_levels_enabled=False, default_release_level="alpha"),
-    )
+def test_legacy_disable_flag_cannot_turn_off_release_classification() -> None:
+    configured = settings(release_levels_enabled=False)
 
-    assert result.level == "alpha"
-    assert "disabled" in result.source
+    assert configured.enabled is True
 
 
 def test_dependabot_is_always_beta() -> None:

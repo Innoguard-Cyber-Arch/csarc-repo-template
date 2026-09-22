@@ -24,8 +24,10 @@ from typing import Any, BinaryIO, Protocol
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    csarc_config = importlib.import_module("csarc_config")
     delivery_sync = importlib.import_module("delivery_sync")
 else:
+    csarc_config = importlib.import_module(f"{__package__}.csarc_config")
     delivery_sync = importlib.import_module(f"{__package__}.delivery_sync")
 
 UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
@@ -1965,6 +1967,10 @@ def finalize(args: argparse.Namespace) -> None:
 
 def note_quota_fallback(args: argparse.Namespace) -> None:
     """Print a routine PR's quota fallback note after proving zero-step."""
+    if csarc_config.load_config().get("actions_fallback") != "admin":
+        raise RuntimeError(
+            "Actions billing fallback requires actions_fallback: admin"
+        )
     if not args.blocked_run_url:
         raise RuntimeError("At least one blocked Actions run is required")
     token = os.environ.get("GH_TOKEN", "")
@@ -2032,6 +2038,10 @@ def note_quota_fallback(args: argparse.Namespace) -> None:
 
 def finalize_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
     """Record a non-release promotion gate from exact local evidence."""
+    if csarc_config.load_config().get("actions_fallback") != "admin":
+        raise RuntimeError(
+            "Actions billing fallback requires actions_fallback: admin"
+        )
     require_distinct_paths(args.input, args.output, args.archive)
     evidence = json.loads(args.input.read_text(encoding="utf-8"))
     required = (

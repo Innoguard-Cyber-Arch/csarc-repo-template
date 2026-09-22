@@ -1,24 +1,24 @@
 # CSARC settings for the template repository itself.
 # Copier source metadata belongs only to repositories generated from this source.
-branch_strategy: delivery
+actions_fallback: admin
 code_owner: '@Innoguard-Cyber-Arch/arch'
-copilot_review_max_level: unlimited
+copilot_review: allowed
 coverage_mode: global
 coverage_threshold: 80
 default_release_level: alpha
 enable_codeql: false
-enable_docker: false
 enable_governance_drift_check: false
 enable_precommit: false
 enable_template_update_notifications: false
+features:
+- repo-site
+governance_mode: managed
 languages:
 - python
+lifecycle:
+- issues
+- milestones
 package_name: csarc_cli
-policy_actions_permissions: true
-policy_branch_ruleset: true
-policy_labels: true
-policy_repository_settings: true
-pr_review_mode: copilot
 project_description: Cyber-Arch cross-language repository template and governance baseline.
 project_mode: existing
 project_name: CSARC Repository Template
@@ -26,21 +26,8 @@ project_run_command: uv run csarc --help
 project_slug: csarc-repo-template
 project_visibility: public
 python_support_mode: latest
-release_immutable_releases: required
-release_level_alpha_review: self
-release_level_alpha_verification: fast
-release_level_beta_review: self
-release_level_beta_verification: fast
-release_level_early_review: self
-release_level_early_verification: fast
-release_level_formal_review: self
-release_level_formal_verification: fast
-release_levels_enabled: false
 release_ownership: csarc-owned
-release_ownership_reason: CSARC owns the only version and GitHub Release workflow.
-release_required_inputs: []
-release_settings_owner: csarc-admin
-release_workflow: .github/workflows/release.yml
+release_trigger: main
 repository_url: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template
-reviewers: '@jachline28'
+review: solo
 security_reporting_channel: Use this public repository's GitHub Issues; never post secrets or sensitive details.

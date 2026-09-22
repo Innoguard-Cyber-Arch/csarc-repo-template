@@ -1198,7 +1198,7 @@ def read_copier_answers(path: Path) -> dict[str, object]:
 def persist_release_answers(
     target: Path, answers: Mapping[str, object]
 ) -> None:
-    """Persist the CLI-resolved release contract in Copier's answer file."""
+    """Persist release answers in the rendered template's schema."""
     path = safe_copier_config_path(target)
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -1206,15 +1206,46 @@ def persist_release_answers(
         raise CliError(f"Cannot read Copier answers from {path}.") from error
     if not isinstance(payload, dict):
         raise CliError(f"Copier answers in {path} must be a mapping.")
-    contract = release_contract(answers)
-    payload.update(
-        release_immutable_releases=contract["immutable_releases"],
-        release_ownership=contract["ownership"],
-        release_ownership_reason=contract["reason"],
-        release_required_inputs=contract["required_inputs"],
-        release_settings_owner=contract["settings_owner"],
-        release_workflow=contract["selected_workflow"] or "",
+    config_reader = managed_script(target, "csarc_config.py")
+    simplified_schema = config_reader.is_file() and (
+        "ACTIONS_FALLBACK_MODES" in config_reader.read_text(encoding="utf-8")
     )
+    if not simplified_schema:
+        contract = release_contract(answers)
+        payload.update(
+            release_immutable_releases=contract["immutable_releases"],
+            release_ownership=contract["ownership"],
+            release_ownership_reason=contract["reason"],
+            release_required_inputs=contract["required_inputs"],
+            release_settings_owner=contract["settings_owner"],
+            release_workflow=contract["selected_workflow"] or "",
+        )
+    else:
+        payload["release_ownership"] = release_ownership(answers)
+        legacy_keys = {
+            "branch_strategy",
+            "copilot_review_max_level",
+            "enable_docker",
+            "policy_actions_permissions",
+            "policy_branch_ruleset",
+            "policy_labels",
+            "policy_repository_settings",
+            "pr_review_mode",
+            "release_levels_enabled",
+            "release_immutable_releases",
+            "release_ownership_reason",
+            "release_required_inputs",
+            "release_settings_owner",
+            "release_workflow",
+            "reviewers",
+        }
+        legacy_keys.update(
+            f"release_level_{level}_{field}"
+            for level in ("alpha", "beta", "early", "formal")
+            for field in ("review", "verification")
+        )
+        for key in legacy_keys:
+            payload.pop(key, None)
     atomic_replace_text(
         target,
         path.relative_to(target).as_posix(),
@@ -1813,34 +1844,22 @@ def markdown_code(value: object) -> str:
 def report_settings(data: dict[str, object]) -> str:
     """Return known non-secret settings used for rendering."""
     allowed = {
-        "branch_strategy",
+        "actions_fallback",
         "code_owner",
-        "copilot_review_max_level",
+        "copilot_review",
         "coverage_mode",
         "coverage_threshold",
         "default_release_level",
         "enable_codeql",
-        "enable_docker",
         "enable_governance_drift_check",
         "enable_precommit",
         "enable_template_update_notifications",
+        "features",
+        "governance_mode",
         "language",
         "languages",
+        "lifecycle",
         "package_name",
-        "policy_actions_permissions",
-        "policy_branch_ruleset",
-        "policy_labels",
-        "policy_repository_settings",
-        "pr_review_mode",
-        "release_level_alpha_review",
-        "release_level_alpha_verification",
-        "release_level_beta_review",
-        "release_level_beta_verification",
-        "release_level_early_review",
-        "release_level_early_verification",
-        "release_level_formal_review",
-        "release_level_formal_verification",
-        "release_levels_enabled",
         "project_description",
         "project_mode",
         "project_name",
@@ -1849,7 +1868,9 @@ def report_settings(data: dict[str, object]) -> str:
         "project_visibility",
         "python_min_version",
         "python_support_mode",
-        "reviewers",
+        "release_ownership",
+        "release_trigger",
+        "review",
     }
     return ", ".join(
         f"`{key}={markdown_code(value)}`"
@@ -4314,6 +4335,7 @@ def resolve_release_answers(  # noqa: C901
             ".github/workflows/release.yml"
             if project_mode == "new"
             else selected
+            or (str(writers[0]["path"]) if len(writers) == 1 else "")
         )
         if not expected:
             raise CliError(
@@ -4618,7 +4640,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
                 "pending template revision, then rerun csarc adopt --finalize."
             )
 
-    answers = read_copier_answers(answers_path)
+    answers = resolve_release_answers(target, read_copier_answers(answers_path))
     saved_visibility = answers.get("project_visibility")
     if not isinstance(saved_visibility, str):
         raise CliError("Copier answers are missing project_visibility.")
@@ -5800,6 +5822,59 @@ def governance_drift_update_recommendation(
     return None
 
 
+def migrate_simplified_settings(
+    answers: Mapping[str, object], explicit_data: Mapping[str, str]
+) -> dict[str, object]:
+    """Map the former overlapping settings to the compact public schema."""
+    migrated: dict[str, object] = {}
+
+    policy_keys = (
+        "policy_repository_settings",
+        "policy_actions_permissions",
+        "policy_labels",
+        "policy_branch_ruleset",
+    )
+    policy_values = [answers.get(key, True) for key in policy_keys]
+    if all(value is True for value in policy_values):
+        governance_mode = "managed"
+    elif all(value is False for value in policy_values):
+        governance_mode = "observe"
+    else:
+        raise CliError(
+            "Legacy policy_* settings are mixed. Pass one explicit "
+            "governance_mode=managed or governance_mode=observe choice."
+        )
+
+    legacy_reviews = [
+        answers.get(f"release_level_{level}_review", fallback)
+        for level, fallback in (
+            ("alpha", "self"),
+            ("beta", "peer"),
+            ("early", "peer"),
+            ("formal", "peer"),
+        )
+    ]
+    legacy_features = ["repo-site"]
+    if answers.get("enable_docker") is True:
+        legacy_features.append("docker")
+
+    defaults: dict[str, object] = {
+        "governance_mode": governance_mode,
+        "lifecycle": ["issues", "milestones"],
+        "actions_fallback": "off",
+        "review": "peer" if "peer" in legacy_reviews else "solo",
+        "copilot_review": (
+            "allowed" if answers.get("pr_review_mode") == "copilot" else "off"
+        ),
+        "release_trigger": "main",
+        "features": legacy_features,
+    }
+    for key, value in defaults.items():
+        if key not in answers and key not in explicit_data:
+            migrated[key] = value
+    return migrated
+
+
 def update_plan_answers(  # noqa: C901
     answers: dict[str, object],
     explicit_data: dict[str, str],
@@ -5808,6 +5883,9 @@ def update_plan_answers(  # noqa: C901
     """Resolve update answers and Copier overrides from repository facts."""
     result = dict(answers)
     update_data: dict[str, object] = dict(explicit_data)
+    migrated_settings = migrate_simplified_settings(answers, explicit_data)
+    result.update(migrated_settings)
+    update_data.update(migrated_settings)
     for level in ("alpha", "beta", "early", "formal"):
         key = f"release_level_{level}_verification"
         value = explicit_data.get(key, answers.get(key))
@@ -5815,7 +5893,6 @@ def update_plan_answers(  # noqa: C901
             update_data[key] = "fast"
     release_ownership(answers)
     release_keys = {
-        "release_ownership",
         "release_ownership_reason",
         "release_immutable_releases",
         "release_required_inputs",
@@ -5824,8 +5901,8 @@ def update_plan_answers(  # noqa: C901
     }
     if release_keys.intersection(explicit_data):
         raise CliError(
-            "Release ownership contract is discovered during adoption and "
-            "cannot be changed with --data."
+            "Derived release observations cannot be changed with --data; "
+            "set only release_ownership and release_trigger."
         )
     requested_mode = explicit_data.get("project_mode")
     if requested_mode is not None and requested_mode != answers["project_mode"]:
@@ -6191,7 +6268,11 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             skip_tasks=True,
         )
         target_uses_current_config = (stage / CONFIG_FILE).is_file()
-        answers = read_copier_answers(config_path(stage))
+        # The persisted file intentionally keeps only user-owned release
+        # choices. Preserve the repository-derived release contract in the
+        # in-memory plan that still needs it for evidence and reporting.
+        answers = dict(candidate_answers)
+        answers.update(read_copier_answers(config_path(stage)))
         preflight = capability_preflight(
             managed_script(stage, "release_policy.py"),
             target,

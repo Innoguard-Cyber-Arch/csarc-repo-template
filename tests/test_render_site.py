@@ -249,10 +249,9 @@ def test_render_reflects_different_project_name_values(tmp_path: Path) -> None:
     assert alpha_bundle != beta_bundle
 
 
-def test_branch_strategy_reaches_generated_site_content() -> None:
-    """The already-approved `branch_strategy` key must actually reach the
-    generated repo-site at build time, proving that a downstream project's
-    facts are config-driven rather than a second, site-only setting.
+def test_lifecycle_reaches_generated_site_content() -> None:
+    """The lifecycle capabilities must reach the generated repo-site,
+    proving downstream facts are config-driven rather than site-only.
 
     Issue #681 decision N replaced the retired docs/site-content.md
     handbook (which resolved `branch_strategy` via Jinja at `copier copy`/
@@ -268,19 +267,19 @@ def test_branch_strategy_reaches_generated_site_content() -> None:
     )
     substitute_config_tokens = build_module["_substitute_config_tokens"]
 
-    def render_for(branch_strategy: str) -> str:
+    def render_for(lifecycle: list[str]) -> str:
         return substitute_config_tokens(
-            "Branch strategy: [[branch_strategy]].",
-            {"branch_strategy": branch_strategy},
+            "Lifecycle: [[lifecycle]].",
+            {"lifecycle": lifecycle},
             lang="en",
         )
 
-    delivery = render_for("delivery")
-    main = render_for("main")
+    issues = render_for(["issues"])
+    full = render_for(["issues", "milestones"])
 
-    assert delivery == "Branch strategy: delivery."
-    assert main == "Branch strategy: main."
-    assert delivery != main
+    assert issues == "Lifecycle: issues."
+    assert full == "Lifecycle: issues, milestones."
+    assert issues != full
 
 
 def test_internal_site_keys_are_documented_once() -> None:
@@ -307,7 +306,8 @@ def test_internal_site_keys_are_documented_once() -> None:
             assert key in governance_config
             assert key not in docs_site_access
         assert "project_visibility" in governance_config
-        assert "branch_strategy" in governance_config
+        for key in ("governance_mode", "lifecycle", "review", "features"):
+            assert key in governance_config
 
 
 def test_render_surfaces_preserved_legacy_content(tmp_path: Path) -> None:
@@ -1527,7 +1527,6 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "public",
             "code_owner": "@Innoguard-Cyber-Arch/generated-project-team",
-            "reviewers": "@octocat",
         },
         defaults=True,
         unsafe=True,
@@ -1567,7 +1566,7 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
         assert "Generated Project" in html
         assert "Exercises the shared repo-site engine through Copier." in html
         assert "@Innoguard-Cyber-Arch/generated-project-team" in html
-        assert "@octocat" in html
+        assert "solo" in html
         assert "https://github.com/example/generated-project" in html
         assert '<link rel="stylesheet"' not in html
         assert "<script src=" not in html

@@ -139,13 +139,15 @@ Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head ma
 
 ### Copilot 審核模式（#752）
 
-`.csarc/config.yml` 的 `pr_review_mode` 決定 PR 怎麼取得審核：
+`.csarc/config.yml` 用兩個互不重疊的選項描述審核意圖：`review` 是人工 fallback，
+可選 `solo` 或 `peer`；`copilot_review` 可選 `allowed` 或 `off`。`allowed` 是明確 opt-in，
+不是 Copilot entitlement 或額度已存在的宣告。新專案預設 `review: solo` 與
+`copilot_review: allowed`；既有專案遷移時，舊的人工／Copilot 選擇會轉成等價新值。
 
-- `human`：Ruleset 要求一位 maintainer approval、CODEOWNER review 與 last-push approval，
-  就是上一節的 exact-head review 流程。缺鍵時一律視為 `human`；`copier update` 對既有
-  專案新增這個問題時也預設 `human`，不會悄悄改變既有 repo 的審核方式。
-- `copilot`（新專案與 `csarc adopt` 的預設，本 repo 也採用）：Ruleset 要求 0 個 approval，
-  改由 `copilot_code_review` 規則在每次 push 後自動請 GitHub Copilot 審核，並把
+- `review: peer`：需要獨立 maintainer 對 exact head 的 approval；`review: solo` 則沿用
+  受控的 self-review／授權路徑。兩者都不把靜態 reviewer 名單當作權限來源。
+- `copilot_review: allowed`：Ruleset 要求 0 個原生 approval，改由
+  `copilot_code_review` 規則在每次 push 後自動請 GitHub Copilot 審核，並把
   `review` 列為 required check（`.github/workflows/pr-review.yml` → `.csarc/scripts/review_gate.py
   check`）。`review` 在下列任一條件成立時通過：
   1. 獨立 maintainer 對**目前 head SHA** 的有效 `APPROVED`（沿用 #719 判斷，人工審核路徑
@@ -184,14 +186,12 @@ Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head ma
 `GITHUB_TOKEN` 的合併不會觸發後續 `push` workflow（例如 release），也會繞過 lease；
 本 repo 所屬 organization 也封鎖原生 auto-merge（#557）。
 
-`copilot_review_max_level` 設定 Copilot 通過可以取代人工審核的最高發布層級，預設
-`unlimited`。每件工作的發布層級要到 #745 才存在，所以在那之前設成 `unlimited` 以外的值
-會讓 Copilot 路徑 fail closed、只接受 maintainer approval，不會假裝已經依層級判斷。
-
 前提與限制：repo 需要有啟用 code review 的 Copilot 授權，每次審核消耗 premium requests
 （取代 #241 的部分暫緩結論；Copilot coding agent 仍暫緩）。沒有授權或額度用盡時 Copilot
 不會審核，`review` 維持失敗，只能走 maintainer approval。Copilot 沒有意見不等於沒有缺陷，
-這是維護者 2026-09-18 接受的取捨。切回人工審核：把 `pr_review_mode` 改成 `human`，再由
+這是維護者 2026-09-18 接受的取捨。系統不會從 Free／Pro／Team／Enterprise 方案名稱推測
+Copilot 是否可用；能力只以實際 review／API 結果判斷。切回純人工審核：把
+`copilot_review` 改成 `off`，再由
 管理員執行 `./.csarc/scripts/apply-repository-settings.sh plan`／`apply`／`check`。
 
 `gh pr merge --admin` 只能用來繞過文件明列的已知例外，目前有兩項：
@@ -243,7 +243,7 @@ CI／webhook 是否正常運作（#580 驗證過：同日 GitHub `pull_request` 
 期間，仍可只靠本機驗證＋這個 bypass 完成合併）。
 
 **這段手動程序現在只是 fallback，不是唯一路徑（#775／#826）。** 在
-`pr_review_mode: copilot` 但帳號沒有可用 Copilot 授權額度時，符合下列任一路由的
+`copilot_review: allowed` 但帳號沒有可用 Copilot 授權額度時，符合下列任一路由的
 Alpha PR 可由 `.csarc/scripts/pr_lifecycle.py merge` 在 lease＋exact-head 授權留言齊全後直接
 合併，不必再手動 `gh pr merge --admin`：
 
@@ -758,8 +758,11 @@ Jobs API，並重用 `.csarc/scripts/pr_lifecycle.py` 的 required-check produce
    均不能滿足 `verify`；
 6. 完成時間不超過 24 小時，且不能超前目前時間超過 5 分鐘。
 
-quota fallback 永遠不能替代缺少或失敗的 `verify`；只有 exact head 已有上述可信成功證據時，其他確認為
-GitHub billing zero-step 的 required check 才可沿用 quota fallback。release 先解析唯一 merged-main source
+quota fallback 永遠不能替代缺少或失敗的 `verify`。新專案預設 `actions_fallback: off`；只有明確設為
+`admin`，且 exact head 已有上述可信成功證據時，其他確認為 GitHub billing zero-step 的 required check
+才可沿用 quota fallback。真正執行失敗或狀態未知仍 fail closed；Ruleset 的 admin bypass 無法被 GitHub
+技術性限制成「只在帳務失敗時有效」，所以 lifecycle 必須重驗 exact head／base、review policy、適用本機
+suite、remote lease 並留下 bypass trace。release 先解析唯一 merged-main source
 PR，且只有 main tree 與 source head tree 完全相同時才重用證據；來源不唯一、tree 漂移、證據過期或任何欄位
 無法驗證時，release workflow 對 exact main tree 重新執行 hosted full verification，而不是退回 unsigned
 trailer。
@@ -834,7 +837,7 @@ Milestone 自己的 delivery 分支（`docs/index.html` Journey 01／`AGENTS.md`
 
 修法是 GitHub Rulesets 原生就為這個情境準備的欄位：`required_status_checks` 規則的
 `do_not_enforce_on_create: true`（`.csarc/policies/rulesets-required-checks.json`；生成 repo 對應
-`template/.csarc/policies/rulesets.json.jinja` 同一個規則區塊，兩者都不分 `pr_review_mode`／`branch_strategy`，因
+`template/.csarc/policies/rulesets.json.jinja` 同一個規則區塊；這項行為由可信 Issue／Milestone route 決定，因
 為這個欄位只影響「這個 ref 第一次被建立的那個瞬間」，跟審核模式或是否啟用 `dev/m*` 無關）。這個欄位**只**
 放寬 ref 第一次出現的那一刻；建立之後對這個分支的每一次 push、每一張 PR、合併進它或它合併出去，仍然要通過
 上面列的全部 required checks，跟 `main` 完全一樣——不影響、也不繞過 `main` 既有的任何保護，因為 `main` 從
@@ -949,12 +952,12 @@ CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.p
 | CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428／#812）；可信 hosted execution（#834） | `pull_request_target`（含 ready／draft 與 metadata-only 事件）、`merge_group`、`workflow_dispatch` | `contents: read`、Issues／PR read；30 分鐘；同一 PR 新 commit 取消舊 run | base-trusted `.csarc/scripts/ci_tier.py` 分類後，在 GitHub-hosted `ubuntu-latest` 對 exact candidate 執行 risk-owned `.csarc/scripts/verify-fast`／full verifier；同 head 的 metadata-only run 可單跳引用相同 route 的原始 Execute，且只有 `promotion`／`hotfix`／`release-recovery` 這三種會改變 tier 的 label 納入 evidence identity；clean main-to-delivery sync 先做結構預檢再引用 current main 的 fresh full Execute；所有證據綁定 repository、head/tree、base、tier/scopes、command、toolchain、tier labels、release level、runner、result 與 24 小時 freshness | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py`；`.csarc/tests/test_verification_evidence.py`；`tests/test_pr_lifecycle.py`；`tests/test_delivery_sync.py` | #834 hosted execution active；#812 risk-owned/reuse/sync route 為 candidate |
 | PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | `pull_request_target` PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | `contents`／Issues／pull requests 只讀；固定 timeout | 單一 `title` job：draft 期間不啟動 runner，`ready_for_review` 後才完整驗證 Issue、route、review policy、promotion route 與 Milestone approval，以原生 job conclusion 回報結果 | `.csarc/scripts/test-pr-policy`；`tests/test_journey05_workflows.py`；route classifier 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | 歷史 run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929) 證明既有 policy 判定；上游 #876 合併後補 live consolidated-job evidence | 既有 policy：active；#876 consolidation：candidate |
 | PR policy writes | `.github/workflows/pr-policy-writes.yml` | PR metadata 與 Milestone check-run 寫入（#829／#886） | default branch 的 `workflow_run`，只接續完成且未取消的 `PR policy` run；同 head 的較新事件取消舊 writer | top-level 無權限；單一 trusted job 只取得其循序 steps 合計所需的 `checks`／`issues`／`pull-requests: write` 與 `contents: read`；10 分鐘 | 一次 checkout 後以完整 head identity 跨頁解析唯一 open PR、同步 metadata／#551 提醒，再發布 `Milestone approval` custom check；metadata step 失敗不會掩蓋後續 check publication；零筆或多筆都 fail closed，不執行 PR source 或 artifact | `tests/test_work_item_metadata.py`；`tests/test_milestone_approval.py`；`tests/test_journey05_workflows.py` | #829 trust boundary 已落地；#886 單一 job／取消 superseded run 待 live evidence | candidate |
-| PR review（Copilot 審核模式，#752／#775／#826） | `.github/workflows/pr-review.yml` | PR 審核授權（#752，銜接 #719／#745／#775／#826） | `pull_request_target`（opened／synchronize／reopened／ready_for_review）、`pull_request_review`（submitted／dismissed）、`issue_comment`（created，篩選 PR 上以 `PR lifecycle merge authorization` 開頭的留言）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run；draft PR 不啟動 runner | `review` job 呼叫 `.csarc/scripts/review_gate.py check`：`pr_review_mode=copilot` 時，目前完整 head SHA 已獲 Copilot 乾淨審核、獨立 maintainer `APPROVED`、或符合條件的 Alpha self-merge 授權留言（#775／#826，包括驗證完成的 delivery sync）才過；`pr_review_mode=human` 時只回報，審核仍由 Ruleset 原生 required approval 把關 | `tests/test_review_gate.py`；`.csarc/scripts/pr_lifecycle.py` 的 Copilot／Alpha self-merge 授權來源見 `tests/test_pr_lifecycle.py` | 尚未落地 `main`，無 live run | candidate（待 main 落地並於首次 PR 觸發後轉 active） |
+| PR review（Copilot 審核模式，#752／#775／#826／#900） | `.github/workflows/pr-review.yml` | PR 審核授權 | `pull_request_target`（opened／synchronize／reopened／ready_for_review）、`pull_request_review`（submitted／dismissed）、`issue_comment`（created，篩選 PR 上以 `PR lifecycle merge authorization` 開頭的留言）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run；draft PR 不啟動 runner | `review` job 呼叫 `.csarc/scripts/review_gate.py check`：`copilot_review=allowed` 時，乾淨 exact-head Copilot review 或獨立 maintainer approval 都可通過；Copilot 不可用時回到 `review=solo|peer` 的人工規則，不由方案名稱猜測能力 | `tests/test_review_gate.py`；`.csarc/scripts/pr_lifecycle.py` 的授權來源見 `tests/test_pr_lifecycle.py` | #900 candidate | candidate |
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併）／#886（runner guard） | `issues`、`issue_comment`、`milestone`、`pull_request.closed` 事件；job guard 在 runner 前排除 PR comment、非 delivery-branch PR close 與沒有任何 owner step 的 Issue 事件 | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `.csarc/scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_approval.py`、`tests/test_milestone_closure.py`、`tests/test_work_pr_closure.py` | #574 單一 job 已落地；#886 job guard 待 live evidence | candidate |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
 | Dependabot | `.github/dependabot.yml`、`.github/workflows/dependabot-auto-merge.yml`、`.github/workflows/dependabot-merge.yml` | GitHub 原生＋依賴安全；與一般 PR 共用可信 hosted verification（#834）；template 同步、Actions pin 一致性（#755）與 exact-head merge（#830／#886） | schedule／manifest 變更；`pull_request_target`；只有 `dependabot/**` branch 的 trusted workflow completions | authentication 只讀；sync 精確 branch write；merge 透過 lifecycle lease 使用必要 PR／contents write | dependency PR；同張 PR 補齊 paired template 副本；minor／patch 在 required checks 後重新驗證並 atomic merge，major 保留人工審核；一般 PR 不建立 exact-merge workflow run | `.csarc/tests/test_authenticate_dependabot_head.py`；`tests/test_dependabot_auto_merge.py`；`tests/test_pr_lifecycle.py`；`.csarc/scripts/sync-paired-files.sh --check` | GitHub 原生 Dependabot active；`dependabot/**` pre-trigger filter 待 live evidence | candidate |
-| Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598／#699／#834 | `main` push（post-merge）、manual rerun | top-level read；release job 另有 `actions: read`、`checks: read`、`contents`／PR／Issue／status write；60 分鐘 | 先規劃版本並探測能力；可證明 main tree 與來源 PR head tree 相同時重用 24 小時內的可信 `verify` evidence，否則對 exact main tree hosted full 重跑，再建立／發布 GitHub Release、checksum 與 SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py`、`.csarc/tests/test_verification_evidence.py` | trusted verification reuse/fallback 為 candidate，待 #834 bootstrap 與首次 live run 後轉 active；發版的 Immutable Release post-hoc 驗證沿用 #770 |
+| Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598／#699／#834／#900 | `release_trigger=main` 時接 main push；`manual` 時只接受明確 dispatch／本機入口 | top-level read；release job 另有 `actions: read`、`checks: read`、`contents`／PR／Issue／status write；60 分鐘 | 固定以 Conventional Commits 判定 major／minor／patch／no-release；no-release 不建候選，只有 materialized 且驗證完成的候選才發布 GitHub Release、checksum 與 SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py`、`.csarc/tests/test_verification_evidence.py` | #900 trigger candidate；Immutable Release post-hoc 驗證沿用 #770 |
 | Release publish drift alert | `.github/workflows/release-drift.yml` | #605（源自 #589 item 4） | daily schedule＋`workflow_dispatch`（`hours` input） | `actions: read`、`contents: read`、`issues: write`；5 分鐘 | 偵測到 drift 時開立或更新追蹤 Issue；未偵測到時只印出證據 | `.csarc/scripts/test-check-release-drift` | 尚未 merge 進 `main`，故無排程或手動觸發的 live run 證據 | candidate（待 main 落地＋首次排程／手動觸發） |
 
 所有第三方 Actions 鎖定完整 commit SHA，旁註可讀 release tag。Workflow YAML 只負責
@@ -970,14 +973,14 @@ timeout，只呼叫 `.csarc/scripts/check-template-update`）。公開模板來�
 secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
 `pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
 
-生成 repo 另有一個選用容器能力（Issue #554 決定）：開啟 `enable_docker` 才產生
+生成 repo 另有一個選用容器能力（Issue #554／#900 決定）：在 `features` 選入 `docker` 才產生
 `Dockerfile`、`docker-compose.yml` 兩份起始範本，以及
 `.github/workflows/docker-build-scan.yml`（`pull_request`，限 Dockerfile／
 docker-compose.yml／已選語言原始碼路徑變更，另加 `workflow_dispatch`；
 `contents: read`；20 分鐘 timeout）。該 job 只呼叫 `docker/build-push-action`
 （`push: false`）在 runner 本機建置映像，再用 `aquasecurity/trivy-action`
 掃描同一本機映像的已知漏洞（`HIGH`／`CRITICAL` 失敗），全程不登入、不推送任何
-registry，也不要求任何 secret。未開啟 `enable_docker` 的專案不會產生上述任一
+registry，也不要求任何 secret。未選 `docker` 的專案不會產生上述任一
 檔案，不會多一個觸發中的 job，也不會取得任何新權限；這維持
 `docs/adr/selective-ci-automation-adoption.md` 記錄的既有決定──「不預先幫所有
 repo 產生 container job，非容器專案不應支付 Docker runner 成本或取得 registry
