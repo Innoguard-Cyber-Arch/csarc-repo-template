@@ -1408,8 +1408,7 @@ def alpha_self_merge_opt_in(
             head_repo_name = str(head_repo.get("full_name") or "")
             if head_repo_name.casefold() != repo.casefold():
                 raise RuntimeError(
-                    "Alpha release or promotion requires a same-repository "
-                    "head"
+                    "Alpha release or promotion requires a same-repository head"
                 )
             return True
         require_default_branch_issue_route(github, repo, lease, pull)
