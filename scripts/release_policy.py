@@ -1220,6 +1220,7 @@ def release_plan(  # noqa: C901
     # keeping a general alpha parser. Once v0.22.0 is published, ordinary
     # beta/stable history owns every later calculation.
     manifest_path = root / ".release-please-manifest.json"
+    materialized = ""
     if manifest_path.is_file():
         materialized = str(
             json.loads(manifest_path.read_text(encoding="utf-8")).get(".", "")
@@ -1247,7 +1248,14 @@ def release_plan(  # noqa: C901
 
     tags = git_output(["tag", "--merged", sha], root).splitlines()
     valid_tags = [tag for tag in tags if release_phase.is_valid_version(tag)]
-    if valid_tags:
+    if materialized == "0.21.0-alpha.1":
+        base = materialized
+        revision_range = (
+            f"v0.21.0-alpha.1..{sha}"
+            if "v0.21.0-alpha.1" in tags
+            else sha
+        )
+    elif valid_tags:
         latest_tag = release_phase.sort_by_precedence(valid_tags)[-1]
         base = latest_tag.removeprefix("v")
         revision_range = f"{latest_tag}..{sha}"
