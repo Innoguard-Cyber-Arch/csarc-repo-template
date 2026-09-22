@@ -656,32 +656,49 @@ def rules(
 
 
 @pytest.mark.large
-def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
-    """A new project gets the Copilot Ruleset, check, and gate script."""
+def test_new_project_defaults_to_local_verification(tmp_path: Path) -> None:
+    """A new project avoids hosted validation and requires audited bypass."""
     project = generate(tmp_path, {})
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
     assert "copilot_review: allowed" in config
     assert "review: solo" in config
+    assert "verification_mode: local" in config
     generated = rules(project)
     assert generated["copilot_code_review"]["review_on_push"] is True
-    assert generated["pull_request"]["required_approving_review_count"] == 0
+    assert generated["pull_request"]["required_approving_review_count"] == 1
+    assert generated["pull_request"]["require_last_push_approval"] is True
     assert generated["pull_request"]["required_review_thread_resolution"]
     required = rules(project, "rulesets-required-checks.json")
-    contexts = {
-        (item["context"], item["integration_id"])
-        for item in required["required_status_checks"]["required_status_checks"]
-    }
-    assert contexts == {
-        ("title", 15368),
-        ("verify", 15368),
-        ("review", 15368),
-    }
-    assert (project / ".github/workflows/pr-review.yml").is_file()
+    assert required == {}
+    for workflow in (
+        "ci.yml",
+        "dependabot-auto-merge.yml",
+        "dependabot-merge.yml",
+        "osv.yml",
+        "pr-policy.yml",
+        "pr-review.yml",
+        "release-drift.yml",
+        "release.yml",
+    ):
+        assert not (project / ".github/workflows" / workflow).exists()
     assert (project / ".csarc/scripts/review_gate.py").is_file()
+    verifier = (project / ".csarc/scripts/verify").read_text(encoding="utf-8")
+    assert "verify_container" not in verifier
+    guidance = (project / ".csarc/docs/agent-workflow.md").read_text(
+        encoding="utf-8"
+    )
+    assert "self-attested evidence" in guidance
+    assert "run `./.csarc/scripts/verify-fast` once" in guidance
     payload = json.loads(
         (project / ".csarc/policies/rulesets.json").read_text(encoding="utf-8")
     )
-    assert payload["bypass_actors"] == []
+    assert payload["bypass_actors"] == [
+        {
+            "actor_type": "RepositoryRole",
+            "actor_id": 5,
+            "bypass_mode": "pull_request",
+        }
+    ]
 
 
 @pytest.mark.large
@@ -689,7 +706,10 @@ def test_admin_actions_fallback_adds_only_the_admin_ruleset_bypass(
     tmp_path: Path,
 ) -> None:
     """Materialize the bypass only after an explicit admin declaration."""
-    project = generate(tmp_path, {"actions_fallback": "admin"})
+    project = generate(
+        tmp_path,
+        {"actions_fallback": "admin", "verification_mode": "hosted"},
+    )
     payload = json.loads(
         (project / ".csarc/policies/rulesets.json").read_text(encoding="utf-8")
     )
@@ -719,7 +739,14 @@ def test_issue_comment_review_gate_can_read_release_level_issues() -> None:
 @pytest.mark.large
 def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
     """Human mode also delegates the variable approval count to the check."""
-    project = generate(tmp_path, {"copilot_review": "off", "review": "peer"})
+    project = generate(
+        tmp_path,
+        {
+            "copilot_review": "off",
+            "review": "peer",
+            "verification_mode": "hosted",
+        },
+    )
     generated = rules(project)
     assert "copilot_code_review" not in generated
     assert generated["pull_request"] == {
@@ -739,5 +766,9 @@ def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
         ("verify", 15368),
         ("review", 15368),
     }
+    for workflow in ("ci.yml", "pr-policy.yml", "pr-review.yml", "release.yml"):
+        assert (project / ".github/workflows" / workflow).is_file()
+    verifier = (project / ".csarc/scripts/verify").read_text(encoding="utf-8")
+    assert "verify_container" not in verifier
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
     assert "copilot_review: 'off'" in config

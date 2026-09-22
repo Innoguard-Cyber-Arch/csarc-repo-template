@@ -1,7 +1,7 @@
 {
   "name": "CSARC required checks",
   "target": "branch",
-  "enforcement": "active",
+  "enforcement": "{{ 'active' if verification_mode == 'hosted' else 'disabled' }}",
   "bypass_actors": [],
   "conditions": {
     "ref_name": {
@@ -9,7 +9,7 @@
       "exclude": []
     }
   },
-  "rules": [
+  "rules": [{% if verification_mode == 'hosted' %}
     {
       "type": "required_status_checks",
       "parameters": {
@@ -21,6 +21,6 @@
           {"context": "review", "integration_id": 15368}
         ]
       }
-    }
+    }{% endif %}
   ]
 }

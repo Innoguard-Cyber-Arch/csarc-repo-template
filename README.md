@@ -153,7 +153,7 @@ flowchart LR
 
 `main` 前進不會讓無關的里程碑工作失效，也不會自動同步所有分支。各里程碑的最終 Promotion PR 以精確雙親 bridge 同時納入 delivery source 與當時最新 `main`，不另開 final sync PR；只有 owner 記錄真實 dependency，或 `dev/i*` canary 要交付時，才使用受審查的 `sync/main-to-*` PR。
 
-公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。本機依變更選擇 fast／full，docs-only 只是 fast 內的 scope 最佳化；現行 `.github/workflows/ci.yml` 另以單一 `verify` job 從受信任的 base policy 選擇分級，並在 GitHub-hosted runner 對 exact candidate 執行同一入口。merge 與 release 只接受綁定 repository、commit/tree、tier、scopes、command、toolchain、runner、result 與 freshness 的 hosted evidence，不接受手寫 commit trailer。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。開發中可直接跑最窄的 focused check；只有 PR 本身落在 full 邊界時，owner／integrator 才需在本機另外執行一次 `./scripts/verify-template.sh`。詳細分級與可信執行證據見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。新專案預設 `verification_mode: local`，fast／full 成功後寫入綁定 exact head/tree、base、tier 與 scopes 的 self-attested evidence，由 merge lifecycle 重驗後走有 trace 的 admin bypass；不產生 hosted validation／release workflow 或 required checks。需要獨立 runner 或 release provenance 時可改為 `hosted`，由 GitHub-hosted `verify` 執行相同入口。本 repo 本身維持 hosted。兩種模式共用同一個 risk-owned router 與 suite，不增加測試矩陣；本機證明不能取代第三方服務、部署或 release provenance。詳細邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 release workflow 已設定為候選，待預設分支實跑後才算啟用。專用 promotion、release handoff、registry publisher 與 deployment workflows 不恢復，歷史由 Git／Issue／PR 保存；Zizmor 由現役的本機驗證階段執行。Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成 repo 啟用；生成 repo 預設產生每日治理漂移排程（`governance-drift.yml`），可用 `enable_governance_drift_check: false` 關閉，本模板 source repo 則只保留同一支 `scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
 
@@ -262,7 +262,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ### 驗證邊界
 
-本模板 repo 用暫存 fixture 驗證上述三條生命週期的入口是 `./scripts/verify-template.sh`，在本機執行；這支腳本與 root 專用升版／同步工具都不會下發。生成 repo 的本機唯一入口是 `./scripts/verify`；兩者的 CI（`.github/workflows/ci.yml`）依變更範圍分級，只驗證各自本機執行成功後留下的驗證聲明，不再自己重跑腳本。
+本模板 repo 用暫存 fixture 驗證上述三條生命週期的入口是 `./scripts/verify-template.sh`，在本機執行；這支腳本與 root 專用升版／同步工具都不會下發。生成 repo 的本機唯一入口是 `./scripts/verify`；local 模式由 lifecycle 消費其 self-attested evidence，hosted 模式則由 `.github/workflows/ci.yml` 在獨立 runner 執行同一套驗證。
 
 ## 負責人與支援
 

@@ -17,6 +17,7 @@ paired_files=(
   "scripts/csarc_config.py|template/.csarc/scripts/csarc_config.py"
   "scripts/delivery_sync.py|template/.csarc/scripts/delivery_sync.py"
   "scripts/gh-issue-edit|template/.csarc/scripts/gh-issue-edit"
+  "scripts/local_verification.py|template/.csarc/scripts/local_verification.py"
   "scripts/release_level.py|template/.csarc/scripts/release_level.py"
   "scripts/release_phase.py|template/.csarc/scripts/release_phase.py"
   "scripts/request-reviewer|template/.csarc/scripts/request-reviewer"

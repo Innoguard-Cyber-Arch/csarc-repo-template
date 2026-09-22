@@ -36,8 +36,12 @@ if [[ "$mode" != "full" && "$mode" != "python" &&
   echo "Usage: $0 [full|python|python-compatibility|typescript|rust]" >&2
   exit 2
 fi
+{% if verification_mode == "local" -%}
+verification_head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+{% endif -%}
 
 for workflow in .github/workflows/{pr-policy,ci}.yml; do
+  [[ -f "$workflow" ]] || continue
   if grep -Eq 'secrets\.(CSARC_SYNC_TOKEN|CSARC_ADMIN_TOKEN|GH_ADMIN_TOKEN|ADMIN_TOKEN)' \
     "$workflow"; then
     echo "$workflow exposes an administration token to an untrusted event."
@@ -104,6 +108,19 @@ verify_rust_module() {
   verification_step "Rust release build" cargo build --release --locked
   verification_step "Rust package" cargo package --locked --allow-dirty
 }
+
+{% if verification_mode == "local" and "docker" in features -%}
+verify_container() {
+  verification_step "Docker availability" command -v docker
+  verification_step "Trivy availability" command -v trivy
+  verification_step "Docker Compose configuration" docker compose config --quiet
+  verification_step "Container build" \
+    docker build --tag "{{ project_slug }}:csarc-verification" .
+  verification_step "Container vulnerability scan" \
+    trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed \
+    "{{ project_slug }}:csarc-verification"
+}
+{% endif -%}
 
 verify_python_module() {
   python_version="${CSARC_PYTHON_VERSION:-3.14}"
@@ -230,6 +247,9 @@ fi
 if $verify_rust; then
   verify_rust_module
 fi
+{% if verification_mode == "local" and "docker" in features %}
+verify_container
+{% endif %}
 
 if $verify_python; then
   platform_python=(uv run python)
@@ -485,3 +505,7 @@ fi
 # This is the generated project's full-verification path. Scoped modes exit
 # earlier; reaching this point means every selected check and any optional
 # project verification hook passed.
+{% if verification_mode == "local" -%}
+python3 .csarc/scripts/local_verification.py record \
+  --tier full --scopes all --head-sha "$verification_head_sha"
+{% endif -%}
