@@ -42,20 +42,41 @@ attestation verification.
    default to dry-run when no `--apply-plan` is supplied. `current` needs no
    action. `policy-only-update` means the Copier revision is already current
    but live repository settings have drifted from `policies/`; skip Copier
-   entirely and run `scripts/apply-repository-settings.sh plan`, then
+   entirely and run `.csarc/scripts/apply-repository-settings.sh plan`, then
    `apply` after the confirmation in step 5 — never rerun a full adopt or
    update just to change a policy setting. For a release-specific request,
-   pass both `--to` and `--expected-sha`. Before `init` or `adopt`, confirm
-   the project description,
-   shortest working product command, and security reporting channel. For an
-   existing repository, separately confirm an optional repository-relative
-   executable `project_verification_hook`; the product run command is never a
-   verification hook. The hook must not resolve to or re-enter canonical
-   `scripts/verify`; update checks validate it before any target write. The
-   default channel is the repository's public GitHub Issues page; warn users
-   never to post secrets, credentials, personal data, or other sensitive
-   details there. Never invent an email address, acknowledgement window, or
-   resolution SLA.
+   pass both `--to` and `--expected-sha`.
+
+   For `create` or `adopt`, offer exactly two setup paths: accept the
+   recommended defaults, or customize the applicable questions. In the
+   customized path, read `copier.yml` from the same verified full SHA and use
+   its existing choices, defaults, help text, and conditions as the only
+   question schema. Group the applicable questions for conversation as:
+   identity/languages/run and verification; branch/CODEOWNER/reviewers; PR
+   review source plus release-level review and verification; optional
+   coverage/CodeQL/Docker/update notifications; and repository/Actions/labels/
+   Ruleset policy. Keep `reviewers`, `code_owner`, `pr_review_mode`,
+   `release_level_*_review`, and `release_level_*_verification` as distinct
+   decisions. Do not ask hidden, derived, or conditionally inapplicable
+   questions. Pass every confirmed override through the existing repeatable
+   `--data KEY=VALUE` option; do not create another schema or configuration
+   layer. Run the matching dry-run with `--json`, summarize its resolved
+   answers and plan, then wait for step 5 confirmation. For `update`, preserve
+   saved `.csarc/config.yml` answers and ask only about newly introduced
+   questions or changes the user explicitly requests.
+
+   Before `init` or `adopt`, confirm the project description, shortest working
+   product command, and security reporting channel. For an existing
+   repository, separately confirm an optional repository-relative executable
+   `project_verification_hook`; the product run command is never a verification
+   hook. The hook must not resolve to or re-enter canonical `scripts/verify`;
+   update checks validate it before any target write. The default channel is
+   the repository's public GitHub Issues page; warn users never to post
+   secrets, credentials, personal data, or other sensitive details there.
+   Never invent an email address, acknowledgement window, or resolution SLA.
+   If intent or a required capability is unknown, leave it decision-required;
+   if GitHub or Copilot capability cannot be verified, report it as unavailable
+   or unknown instead of claiming that review is enabled.
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
    overwrite, preserve, automatic merge, manual merge, or unable to determine.

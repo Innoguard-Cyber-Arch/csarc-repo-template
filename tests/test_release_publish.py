@@ -365,6 +365,7 @@ def build_repo(tmp_path: Path) -> dict[str, str]:
         "release_level.py",
         "csarc_config.py",
         "sync_milestone_state.py",
+        "render_release_prompt.py",
         "converge-release-tag",
         "verify-release-candidate",
         "publish-release",
@@ -898,8 +899,28 @@ def test_publish_builds_uploads_and_marks_the_release_published(
     meta = json.loads((state / "releases/v0.2.0/meta.json").read_text())
     assert meta == {"isDraft": False, "isImmutable": True, "tagName": "v0.2.0"}
     assets = {p.name for p in (state / "releases/v0.2.0/assets").iterdir()}
-    assert {"sbom.spdx.json", "SHA256SUMS", "release-evidence.json"} <= assets
+    assert {
+        "release-prompt.txt",
+        "sbom.spdx.json",
+        "SHA256SUMS",
+        "release-evidence.json",
+    } <= assets
     assert any(name.endswith(".tar") for name in assets)
+    prompt = (state / "releases/v0.2.0/assets/release-prompt.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "核准版本：v0.2.0" in prompt  # noqa: RUF001
+    assert f"核准 commit：{fixture['candidate_sha']}" in prompt  # noqa: RUF001
+    assert f"/{fixture['candidate_sha']}/copier.yml" in prompt
+    assert f"/{fixture['candidate_sha']}/docs/agent-install.md" in prompt
+    checksums = (state / "releases/v0.2.0/assets/SHA256SUMS").read_text(
+        encoding="utf-8"
+    )
+    evidence = json.loads(
+        (state / "releases/v0.2.0/assets/release-evidence.json").read_text()
+    )
+    assert "  release-prompt.txt\n" in checksums
+    assert "release-prompt.txt" in evidence["artifacts"]
     sbom = json.loads(
         (state / "releases/v0.2.0/assets/sbom.spdx.json").read_text()
     )

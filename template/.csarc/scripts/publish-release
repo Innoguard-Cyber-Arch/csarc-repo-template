@@ -333,6 +333,14 @@ cmd_publish() {
       --source-name "$GITHUB_REPOSITORY" --source-version "$tag" \
       -o "spdx-json=$assets/sbom.spdx.json"
   fi
+  local prompt_renderer="$repo_root/.csarc/scripts/render_release_prompt.py"
+  if [[ -f "$prompt_renderer" ]]; then
+    local release_sha
+    release_sha="$(git -C "$repo_root" rev-parse "${tag}^{commit}")"
+    python3 "$prompt_renderer" \
+      --tag "$tag" --sha "$release_sha" \
+      --output "$assets/release-prompt.txt"
+  fi
   python3 "$repo_root/.csarc/scripts/release_bundle.py" finalize --tag "$tag" --output "$assets"
   python3 "$repo_root/.csarc/scripts/release_bundle.py" verify --tag "$tag" --output "$assets"
   # gh release upload's own --clobber already deletes and re-uploads any
