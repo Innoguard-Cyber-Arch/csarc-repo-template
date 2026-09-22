@@ -2,8 +2,8 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-01
-- **備註：**#430 candidate 實作
-- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)
+- **備註：**#430 candidate 實作；#871 將 Milestone 版本候選併入 promotion PR
+- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)
 - **實作 PRs：**[#448](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/448)、[#463](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/463)、[#471](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/471)
 
 ## 問題與限制
@@ -23,22 +23,22 @@ CSARC 過去在版本、發版與供應鏈責任上有多套並存或半途而�
 CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑：
 
 1. 工作 PR 以 Conventional Commits 表達 major／minor／patch／no-release 意圖。
-2. `main` 每次前進先跑一次完整驗證，並以同一份 repo-local 規則計算下一版。
-3. **Automatic：**GitHub 允許 Action 建立 PR 時，由 Release Please 依計算結果建立或更新版本 PR。
-4. **Guided：**上層政策禁止 Action 建立 PR 時，維護者或 agent 在本機執行 `python3 scripts/release_policy.py prepare-candidate`，再以輸出的 branch／title 開一般 PR；命令只改版本檔與 CHANGELOG，不建立 PR、tag 或 Release。
+2. CSARC-owned Milestone 的 final promotion bridge 先用同一份 repo-local 規則 materialize 精確版本與 CHANGELOG；可信 CI 由 delivery source 重建預期 tree，要求 promotion PR 除 deterministic release 差異外不得夾帶其他修改。
+3. Milestone promotion body 用 `Refs #<tracker>`，不在 merge 時提前關 tracker；同一張 PR 同時審查整批交付與版本候選，因此 Milestone 不再另開版本 PR。
+4. Standalone work 維持既有候選路徑：**Automatic** 由 Release Please 建立或更新版本 PR；**Guided** 由維護者或 agent 執行 `python3 scripts/release_policy.py prepare-candidate` 再開一般 PR。
 5. **Blocked：**若 tag 或 GitHub Release 的必要權限不可用，流程留下失敗證據並停止，不改走另一個發布器。
 6. 兩種候選都使用同一組可信 actor／commit、允許檔案、版本、CHANGELOG 與可打包性檢查；`GITHUB_TOKEN` 建立的 PR 若等待人工核准，原 release run 會直接驗證精確 SHA 並回寫 `Release / candidate` status。
 7. 候選驗證也記錄 candidate SHA、來源 merge-base 與 current `main` SHA；正式 lifecycle merge 會在 lease 綁定的 current base 重跑同一支 verifier，發布 stage 再以同一驗證作後盾。base 只新增 `no-release` commits 時可沿用同一張 PR；新增範圍只要包含 release-worthy commit，就必須更新原 PR，舊 base 的成功 status 不得滿足最終邊界（#817）。
-8. 人審查並合併任一版本 PR 後，唯一的 `release.yml` 建立 tag、draft GitHub Release、成品、checksum、SPDX SBOM 與 release evidence；下載重驗成功後才公開且確認 immutable。
+8. 人審查並合併 Milestone promotion PR 或 standalone 版本 PR 後，hosted／本機共用的 `scripts/publish-release` 建立 tag、draft GitHub Release、成品、checksum、SPDX SBOM 與 release evidence；下載重驗成功後才公開且確認 immutable。Milestone tracker 與 Milestone 只在這一步成功後關閉；失敗保持 open，重跑 idempotent 收尾。`no-release` batch 由同一 workflow 的成功判定與 run URL 作為處置證據。
 
-流程只使用短效 `GITHUB_TOKEN`，不要求 PAT、GitHub App、自架 runner 或付費 GitHub 方案。Organization 不允許 Actions 建立 PR 時只切換候選的建立方式；workflow 不可自行核准版本 PR，也沒有第二個 tag／Release writer。
+流程只使用短效 `GITHUB_TOKEN`，不要求 PAT、GitHub App、自架 runner 或付費 GitHub 方案。Organization 不允許 Actions 建立 PR 時只影響 standalone 候選的建立方式；workflow 不可自行核准版本 PR，也沒有第二個 tag／Release writer。既有 repo 的 product-owned／verification-only release ownership 不套用 CSARC-owned 的 Milestone materialization 與自動結案。
 
 ## 名詞邊界
 
 | 用詞 | 在本專案的意思 |
 | --- | --- |
 | 版本意圖 | PR 標題表達相容性影響，不是精確版本號 |
-| 正式版本 | Release Please 在受審查的版本 PR 同步 manifest、package metadata 與 CHANGELOG |
+| 正式版本 | Milestone 在 promotion PR、standalone 在版本 PR，同步 manifest、package metadata 與 CHANGELOG |
 | 交付 | 受審查且已驗證的工作進入 `main`；尚不等於發版 |
 | 發版 | 精確 tag、GitHub Release、明列成品、checksum、SBOM 與來源證據都完成 |
 | 部署 | 成品進入真實 runtime，另需環境、健康檢查與復原責任；不屬本模板通用能力 |
@@ -73,7 +73,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 - 第三方 Actions 固定完整 commit SHA；job 明列最小權限、30 分鐘 timeout 與不取消既有 run 的 concurrency。
 - workflow 只負責 GitHub event、權限與呼叫；版本、候選與 bundle 規則放在可於本機測試的 repo-local scripts。
 - 候選 status 先設 pending；fetch、API、allowlist、版本或打包任一步失敗，都保證回寫 failure。
-- 版本 PR 只能修改 release config 允許的機械版本檔；不允許任意程式碼藏進 bot PR。
+- Milestone promotion 的版本差異與 standalone 版本 PR 都只能修改 release config 允許的機械版本檔；不允許任意程式碼藏進版本 materialization。
 - 發布只接受指向目前 `HEAD` 的 SemVer tag；不移動 tag，也不接受 dirty Rust package。
 - draft 重跑先清除舊 assets，避免改名或多餘檔案殘留；checksum 必須剛好涵蓋全部 bundle。
 - Release 公開後以 bounded retry 等待 GitHub immutable 狀態與 `gh release verify`，避免 eventual consistency 假失敗；確認 immutable 後另外重用 `scripts/verify_release_consumption.py` 對每個上傳成品核對簽發的 release attestation（signer、repository、repositoryId、tag、commit、SHA-256 digest），任一失敗都不視為成功（#770）。
@@ -86,8 +86,8 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | 能力 | 狀態 | Canonical source | 證據／失敗邊界 |
 | --- | --- | --- | --- |
 | 版本意圖 | Active | PR policy／Conventional Commits | PR title regression |
-| 版本與 CHANGELOG | Candidate／Guided | `release_policy.py`＋Release Please config／manifest | 自動或本機候選共用版本決策；組織目前禁止 Actions 建 PR |
-| tag／GitHub Release | Candidate | `.github/workflows/release.yml` | 版本 PR 合併後才建立；待 default branch live run 才能標 Active。hosted Automatic／Guided 不再因無法自證 `immutable_releases` 而結構性 Blocked（#770，見下方「Release attestation 驗證取代 immutable_releases pre-flight probe」一節） |
+| 版本與 CHANGELOG | Candidate／Guided | `release_policy.py`＋Release Please config／manifest | Milestone promotion 直接 materialize；standalone 的 Automatic／Guided 候選共用版本決策 |
+| tag／GitHub Release | Candidate | `scripts/publish-release`（由 workflow 或維護者呼叫） | Milestone promotion 或 standalone 版本 PR 合併後建立；發布驗證成功後才關 Milestone。待 default branch live run 才能標 Active。hosted Automatic／Guided 不再因無法自證 `immutable_releases` 而結構性 Blocked（#770，見下方「Release attestation 驗證取代 immutable_releases pre-flight probe」一節） |
 | source／語言成品 | Candidate | `scripts/release_bundle.py` | 選到的 Python、TypeScript、Rust 原生 package 加 source archive |
 | checksum／SBOM／release evidence | Candidate | `scripts/release_bundle.py`＋Syft | 缺檔、竄改、錯 tag、錯 commit 與重跑測試；待 live run |
 | registry publishing／production-side attestation | Removed | #439 | `container_mode`、`enable_release_attestations`、`enable_pypi_publishing`、`enable_npm_publishing` 已由 #439 移除設定面：零 active workflow 消費這些值，不留下承諾不了結果的選項；需要真實 registry 或 attestation 時另開 Issue 明列 owner、權限與執行者 |

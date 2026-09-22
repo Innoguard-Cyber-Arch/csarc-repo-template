@@ -37,12 +37,20 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─────→ main
 緊急修正 ──────────────── reviewed hotfix PR ─────→ main
 ```
 
-工作 PR 關閉單項工作；Milestone 交付負責批次進入 `main`。`promote/m<編號>-<簡稱>` PR 以
-`Closes #<tracker>` 直接關閉該 Milestone 的 tracker Issue，並由 `work-item-lifecycle.yml`
-的 `process` job（`record-promotion-evidence` step）在合併後自動把 merge commit 網址回填進
-tracker 的 `Completion evidence` 段落（見 #512）；#400 與 #401 的自動結案契約不再是
-blocked gap。
+工作 PR 關閉單項工作；Milestone 交付負責批次進入 `main`。CSARC-owned 的
+`promote/m<編號>-<簡稱>` PR 用 `Refs #<tracker>` 保持 tracker open，並在同一張 PR
+materialize 精確版本與 CHANGELOG。合併後由 hosted／本機共用的 publisher 發布並驗證 Release，再把
+promotion commit 與 Release 網址回填進 tracker 的 `Completion evidence`，接著關閉 tracker
+與 Milestone；發布失敗時維持 open，成功重跑可安全收尾（#871）。Product-owned／
+verification-only repository 不套用這段 CSARC 發版與結案責任。
 delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
+
+`complete-release` 在任何 tracker body 寫入前先用當下 `updated_at` 重驗既有核可，再以
+同一次 snapshot 產生 exact promotion／Release evidence 與 Reconciliation。因為這些
+machine-owned 寫入與 close state 本身一定會推進 `updated_at`，completed closure 不用該
+欄位反過來把自己的收尾動作判成 stale；它改由 fresh Reconciliation fingerprint 綁定
+目前 body，且仍拒絕事後編輯過的核可留言。中途失敗的 retry 只有在同一組 exact evidence
+已存在且 fingerprint 仍 fresh 時才沿用這個 post-write 邊界。
 
 ## Milestone 掛勾安全網（#551）
 
@@ -1455,20 +1463,20 @@ Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
 | --- | --- | --- | --- | --- |
 | 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
-| 正式版本與 CHANGELOG | 一般工作不直接決定精確版本 | 交付 PR 不手改版本 | Automatic 由 Release Please 開版本 PR；受組織政策阻擋時，Guided 用同一規則在本機產生候選並開一般 PR | manual 只重跑同一流程，不另開版本來源 |
+| 正式版本與 CHANGELOG | 一般工作不直接決定精確版本 | CSARC-owned Milestone 的 promotion bridge 用 `release_policy.py prepare-candidate` materialize 同批版本與 CHANGELOG，可信 CI 逐 tree 驗證只能包含該 deterministic 差異 | Standalone work 仍由 Automatic 開 Release Please 版本 PR；Guided 用同一規則在本機產生候選 | manual 只重跑同一流程，不另開版本來源 |
 | CI | docs／fast／full 依風險 | 一律 full | release workflow 對目前 `main` 跑一次 full | 候選只跑版本／檔案／可打包 focused check；正式發布前已在 main 跑 full |
-| 成品／checksum／SBOM | 不發布 | 不發布 | 版本 PR 合併後從精確 commit 建立 | draft Release 先上傳、下載重驗，成功才公開 |
-| tag／GitHub Release | 不建立 | 不建立 | 版本 PR 合併後由唯一 release workflow 建立 | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
+| 成品／checksum／SBOM | 不發布 | PR 合併後從精確 main commit 建立 | Standalone 版本 PR 合併後從精確 commit 建立 | draft Release 先上傳、下載重驗，成功才公開 |
+| tag／GitHub Release | 不建立 | PR 合併後由唯一 release workflow 建立；成功才關 tracker 與 Milestone | Standalone 版本 PR 合併後由同一 workflow 建立 | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
 | attestation／registry | 不建立 | 不建立 | 不自動啟用 | #439 已移除設定面（零 active 消費者），非留待選配 |
 | deployment | 不適用 | 不適用 | 不適用 | 由有真實 runtime target 的產品 repo 定義 |
 
-合併到 `main` 是 repository delivery，不等於 Release。公版本身與新生成 repo 使用 CSARC
-提供的單一 workflow；既有 repo 保留 product-owned release workflow，Copier 不依檔名猜測、
-不覆寫也不重複 dispatch。流程只用短效 `GITHUB_TOKEN`，不要求 GitHub App、PAT、registry
-token 或空 deployment environment。GitHub 會把 `GITHUB_TOKEN` 建立或更新版本 PR 所產生的
-PR workflows 設為等待人工核准；Automatic 由原 release run 驗證候選 SHA。若組織政策禁止
-Action 建 PR，Guided 只在本機執行 `python3 scripts/release_policy.py prepare-candidate` 並由人
-或 agent 開一般 PR；兩路共用版本計算、候選驗證與唯一 `release.yml` publisher。
+合併到 `main` 是 repository delivery，不等於 Release。CSARC-owned Milestone 把版本檔與
+CHANGELOG 納入同一張 promotion PR，但 tracker 與 Milestone 要等唯一 `release.yml` 成功
+發布並驗證後才關閉；promotion body 用 `Refs #N`，不使用會在 merge 當下提早結案的
+`Closes #N`。發布失敗時維持 open，重跑沿用同一候選與 Release。Standalone work 仍維持
+Automatic／Guided 版本 PR；既有 repo 保留 product-owned release workflow，Copier 不依檔名
+猜測、不覆寫也不重複 dispatch。流程只用短效 `GITHUB_TOKEN`，不要求 GitHub App、PAT、
+registry token 或空 deployment environment。
 
 ### 版本號表示發布層級（Issue #744，2026-09-17）
 
@@ -1689,9 +1697,10 @@ gh release create "$tag" --target "$sha" \
 
 `scripts/publish-release stage`（Automatic 與 Guided 共用同一個進入點）呼叫這支腳本；
 `release.yml` 與本機執行都呼叫同一份 `scripts/publish-release`。`googleapis/
-release-please-action` 在 Automatic 路徑只負責開版本 PR、同步版本檔與 CHANGELOG，
-不建立 Release 也不寫入 Release 說明；`release_policy.py prepare-candidate` 在 Guided
-路徑同樣只改版本檔與 CHANGELOG，不建立 Release。兩條路徑最終都收斂到
+release-please-action` 在 standalone Automatic 路徑只負責開版本 PR、同步版本檔與
+CHANGELOG，不建立 Release 也不寫入 Release 說明；Milestone promotion 與 standalone
+Guided 都重用 `release_policy.py prepare-candidate`，同樣只改版本檔與 CHANGELOG，不建立
+Release。所有路徑最終都收斂到
 `converge-release-tag` 這同一行呼叫——不是兩套各自維護、恰好長得很像的邏輯，而是結構上
 只有一份實作，呼應 #589 決定本身的第一原則（單一 repo-local 腳本被兩種呼叫方式共用）。
 `scripts/publish-release` 之後唯二對同一 Release 的寫入是 `gh release edit "$tag"

@@ -33,6 +33,9 @@ CLOSING_ISSUE = re.compile(
     r"(?<!\w)(?a:Closes|Fixes|Resolves)[ \t]+#([1-9][0-9]*)(?!\w)",
     re.IGNORECASE,
 )
+TRACKING_ISSUE = re.compile(
+    r"(?<!\w)(?a:Refs)[ \t]+#([1-9][0-9]*)(?!\w)", re.IGNORECASE
+)
 CHECKPOINT_ISSUES = re.compile(
     r"(?m)^<!-- csarc-promotion-checkpoint: "
     r"(#[1-9][0-9]*(?:, #[1-9][0-9]*)*) -->$"
@@ -226,9 +229,12 @@ def classify_canary(command: str, environment: str) -> Canary:
     )
 
 
-def issue_number(body: str) -> int | None:
-    """Return the first Issue closed by a promotion pull request."""
-    match = CLOSING_ISSUE.search(body)
+def issue_number(body: str, *, close_on_merge: bool = True) -> int | None:
+    """Return the Issue linked by a promotion pull request."""
+    if close_on_merge:
+        match = CLOSING_ISSUE.search(body)
+    else:
+        match = TRACKING_ISSUE.search(body) or CLOSING_ISSUE.search(body)
     return int(match.group(1)) if match else None
 
 
@@ -893,11 +899,9 @@ def promotion_bridge_source(
             "Promotion bridge must merge current main into source delivery"
         )
     source_tree = git_output("rev-parse", f"{source_sha}^{{tree}}")
-    if (
-        git_output("rev-parse", f"{head_sha}^{{tree}}") != source_tree
-        or git_output("rev-parse", f"{candidate_sha}^{{tree}}") != source_tree
-    ):
-        raise RuntimeError("Promotion bridge must preserve the source tree")
+    head_tree = git_output("rev-parse", f"{head_sha}^{{tree}}")
+    if git_output("rev-parse", f"{candidate_sha}^{{tree}}") != head_tree:
+        raise RuntimeError("Promotion candidate must preserve the bridge tree")
     return {
         "source_ref": source_ref,
         "source_sha": source_sha,
@@ -1675,10 +1679,12 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 raise RuntimeError(
                     "Promotion pull request metadata is incomplete"
                 )
-            number = issue_number(body)
+            number = issue_number(
+                body, close_on_merge=route.kind != "milestone"
+            )
             if number is None:
                 raise RuntimeError(
-                    "Promotion pull request must close its tracking Issue"
+                    "Promotion pull request must link its tracking Issue"
                 )
             token = os.environ.get("GH_TOKEN", "")
             tracking_issue_state: dict[str, object] | None = None

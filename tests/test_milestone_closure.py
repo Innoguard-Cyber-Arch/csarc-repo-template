@@ -15,6 +15,8 @@ MODULE = runpy.run_path(
 acceptance_complete = MODULE["acceptance_complete"]
 promotion_complete = MODULE["promotion_complete"]
 append_completion_evidence = MODULE["append_completion_evidence"]
+complete_release = MODULE["complete_release"]
+Decision = MODULE["Decision"]
 record_promotion_evidence = MODULE["record_promotion_evidence"]
 closure_decision = MODULE["closure_decision"]
 reconcile = MODULE["reconcile"]
@@ -468,6 +470,178 @@ def test_record_promotion_evidence_is_a_no_op_when_already_recorded(
 
     assert result.allowed
     assert all(call[:2] != ["issue", "edit"] for call in calls)
+
+
+def test_successful_release_completes_tracker_and_milestone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Publication owns the idempotent tracker and Milestone close."""
+    sha = "a" * 40
+    pull = {
+        "number": 91,
+        "body": "Refs #80\n",
+        "merged_at": "2026-09-22T00:00:00Z",
+        "merge_commit_sha": sha,
+        "base": {"ref": "main"},
+        "head": {"ref": "promote/m8-delivery"},
+        "milestone": {"number": 8},
+    }
+    writes: list[list[str]] = []
+    state = _base_snapshot()
+    tracker_issue = state["issues"][1]
+    tracker_issue["state"] = "open"
+    tracker_issue["state_reason"] = None
+    tracker_issue["milestone"] = {"number": 8}
+    tracker_issue["body"] = tracker_issue["body"].replace(
+        "https://github.com/acme/project/releases/tag/v1.0.0",
+        "<!-- Filled after publication. -->",
+    )
+
+    def fake_run_gh(arguments: list[str]) -> str:
+        if "commits/" in " ".join(arguments):
+            return json.dumps([pull])
+        writes.append(arguments)
+        return ""
+
+    globals_ = complete_release.__globals__
+    monkeypatch.setitem(globals_, "run_gh", fake_run_gh)
+    monkeypatch.setitem(globals_, "load_snapshot", lambda *_: state)
+    monkeypatch.setitem(
+        globals_, "reconcile", lambda *_: Decision(True, "closed")
+    )
+
+    result = complete_release(
+        "acme/project",
+        sha,
+        "https://github.com/acme/project/releases/tag/v1.0.0",
+        outcome="published",
+    )
+
+    assert result.allowed
+    body_write = next(call for call in writes if call[:2] == ["issue", "edit"])
+    written_body = body_write[body_write.index("--body") + 1]
+    assert f"https://github.com/acme/project/commit/{sha}" in written_body
+    assert "https://github.com/acme/project/releases/tag/v1.0.0" in written_body
+    assert "## Reconciliation" in written_body
+    assert any("state_reason=completed" in call for call in writes)
+
+
+def test_release_completion_retries_after_its_evidence_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An interrupted close resumes from exact, reconciled release evidence."""
+    sha = "a" * 40
+    release_url = "https://github.com/acme/project/releases/tag/v1.0.0"
+    state = snapshot()
+    tracker_issue = state["issues"][1]
+    tracker_issue["milestone"] = {"number": 8}
+    tracker_issue["body"] = append_completion_evidence(
+        tracker_issue["body"],
+        f"https://github.com/acme/project/commit/{sha}",
+    )
+    tracker_issue["body"] = regenerate_reconciliation(state)
+    tracker_issue["updated_at"] = "2026-09-22T03:00:00Z"
+    state["comments"][0].update(
+        {
+            "created_at": "2026-09-21T00:00:00Z",
+            "updated_at": "2026-09-21T00:00:00Z",
+        }
+    )
+    pull = {
+        "number": 91,
+        "body": "Refs #80\n",
+        "merged_at": "2026-09-22T00:00:00Z",
+        "merge_commit_sha": sha,
+        "base": {"ref": "main"},
+        "head": {"ref": "promote/m8-delivery"},
+        "milestone": {"number": 8},
+    }
+    writes: list[list[str]] = []
+
+    def fake_run_gh(arguments: list[str]) -> str:
+        if "commits/" in " ".join(arguments):
+            return json.dumps([pull])
+        writes.append(arguments)
+        return ""
+
+    globals_ = complete_release.__globals__
+    monkeypatch.setitem(globals_, "run_gh", fake_run_gh)
+    monkeypatch.setitem(globals_, "load_snapshot", lambda *_: state)
+    monkeypatch.setitem(
+        globals_, "reconcile", lambda *_: Decision(True, "closed")
+    )
+
+    result = complete_release(
+        "acme/project", sha, release_url, outcome="published"
+    )
+
+    assert result.allowed
+    assert all(call[:2] != ["issue", "edit"] for call in writes)
+    assert any("state_reason=completed" in call for call in writes)
+
+
+def test_completed_closure_uses_the_pre_write_approval_boundary() -> None:
+    """Machine evidence and closing writes cannot stale their own approval."""
+    state = snapshot()
+    tracker_issue = state["issues"][1]
+    tracker_issue["updated_at"] = "2026-09-22T03:00:00Z"
+    state["comments"][0].update(
+        {
+            "created_at": "2026-09-21T00:00:00Z",
+            "updated_at": "2026-09-21T00:00:00Z",
+        }
+    )
+
+    assert closure_decision(state).allowed
+
+
+def test_completed_closure_still_rejects_an_edited_approval() -> None:
+    """Ignoring tracker writes must not permit edited approval comments."""
+    state = snapshot()
+    tracker_issue = state["issues"][1]
+    tracker_issue["updated_at"] = "2026-09-22T03:00:00Z"
+    state["comments"][0].update(
+        {
+            "created_at": "2026-09-21T00:00:00Z",
+            "updated_at": "2026-09-21T01:00:01Z",
+        }
+    )
+
+    result = closure_decision(state)
+
+    assert not result.allowed
+    assert "invalidated" in result.summary
+
+
+def test_release_completion_ignores_non_promotion_main_commits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Standalone releases never close an unrelated Milestone tracker."""
+    monkeypatch.setitem(
+        complete_release.__globals__,
+        "run_gh",
+        lambda *_: json.dumps(
+            [
+                {
+                    "number": 91,
+                    "merged_at": "2026-09-22T00:00:00Z",
+                    "merge_commit_sha": "a" * 40,
+                    "base": {"ref": "main"},
+                    "head": {"ref": "feat/42-standalone"},
+                }
+            ]
+        ),
+    )
+
+    result = complete_release(
+        "acme/project",
+        "a" * 40,
+        "https://github.com/acme/project/releases/tag/v1.0.0",
+        outcome="published",
+    )
+
+    assert result.allowed
+    assert "not a Milestone promotion" in result.summary
 
 
 def test_invalid_close_reopens_the_tracker_and_milestone(

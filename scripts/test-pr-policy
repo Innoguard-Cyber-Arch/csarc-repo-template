@@ -294,6 +294,7 @@ PR_LIVE_MILESTONE="7" \
 PR_LIVE_BODY=$'Closes #42\nResolves #43' \
 PR_CLOSING_RELATIONSHIP_STATE="api-error" \
 PR_BRANCH_STRATEGY="delivery" \
+PR_RELEASE_OWNERSHIP="product-owned" \
 PR_TITLE="feat!: promote without routine fallback" \
 PR_BASE="main" \
 PR_HEAD="dev/m7-staged-ci" \
@@ -831,6 +832,7 @@ PR_ISSUE_MILESTONE_NUMBER="7" \
 
 case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="delivery" \
+PR_RELEASE_OWNERSHIP="product-owned" \
 PR_TITLE="feat!: promote milestone seven" \
 PR_LABELS="enhancement,promotion" \
 PR_BASE="main" \
@@ -843,6 +845,23 @@ PR_ISSUE_LABELS="enhancement,promotion" \
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="csarc-owned" \
+  PR_TITLE="feat!: promote milestone seven" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="dev/m7-staged-ci" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a direct CSARC-owned Milestone promotion."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="product-owned" \
   PR_TITLE="fix(delivery): downgrade milestone seven" \
   PR_LABELS="enhancement,promotion" \
   PR_BASE="main" \
@@ -863,7 +882,7 @@ PR_TITLE="feat!: promote milestone seven bridge" \
 PR_LABELS="enhancement,promotion" \
 PR_BASE="main" \
 PR_HEAD="promote/m7-staged-ci" \
-PR_BODY="Closes #42" \
+PR_BODY="Refs #42" \
 PR_ISSUE_STATE="open" \
 PR_ISSUE_TITLE="Milestone 7: Staged CI rollout" \
 PR_ISSUE_MILESTONE_NUMBER="7" \
@@ -882,6 +901,22 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_TITLE="Milestone 7: Staged CI rollout" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
   PR_ISSUE_LABELS="enhancement" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy let a CSARC-owned promotion close its tracker before release."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote milestone seven bridge" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="promote/m7-staged-ci" \
+  PR_BODY="Refs #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Milestone 7: Staged CI rollout" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_ISSUE_LABELS="enhancement" \
   PR_ISSUE_BODY=$'## Proposal\n\nShip the reviewed batch.\n\n## Completion evidence\n\n<!-- Fill after release. -->\n\n## Early termination\n\n<!-- Fill only when stopped. -->\n\n## Promotion\n\n- [x] All other Milestone Issues are closed.\n- [ ] Review ledger resolved and maintainer-confirmed.' \
     "$validator" >/dev/null 2>&1; then
   echo "PR policy accepted a promotion bridge with an unchecked Promotion box."
@@ -890,6 +925,7 @@ fi
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="product-owned" \
   PR_TITLE="feat!: promote unlabeled milestone" \
   PR_LABELS="enhancement" \
   PR_BASE="main" \
@@ -921,7 +957,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_LABELS="enhancement" \
   PR_BASE="main" \
   PR_HEAD="promote/m7-staged-ci" \
-  PR_BODY="Closes #42" \
+  PR_BODY="Refs #42" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_TITLE="Milestone 7: Staged CI rollout" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
@@ -937,7 +973,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_LABELS="enhancement,promotion" \
   PR_BASE="main" \
   PR_HEAD="promote/m7-staged-ci" \
-  PR_BODY="Closes #42" \
+  PR_BODY="Refs #42" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_TITLE="Milestone 8: Other delivery" \
   PR_ISSUE_MILESTONE_NUMBER="8" \
@@ -953,7 +989,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_LABELS="enhancement,promotion" \
   PR_BASE="main" \
   PR_HEAD="promote/m7-staged-ci" \
-  PR_BODY="Closes #42" \
+  PR_BODY="Refs #42" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_TITLE="Add a leaf promotion Issue" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
@@ -966,6 +1002,7 @@ fi
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="product-owned" \
   PR_TITLE="feat!: promote wrong milestone" \
   PR_LABELS="enhancement,promotion" \
   PR_BASE="main" \
@@ -1135,7 +1172,7 @@ intent_output="$(
   PR_ISSUE_TITLE="Add verified report workflow" \
     "$validator"
 )"
-grep -q 'Release intent: minor; exact version is allocated only after main.' \
+grep -q 'Release intent: minor; exact version is allocated at the reviewed release boundary.' \
   <<<"$intent_output"
 
 echo "PR policy regression cases passed: $case_count"
