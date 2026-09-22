@@ -12,10 +12,12 @@ CHANGELOG 的 tag。
 ### Features
 
 * feat: simplify generated project configuration (fa1e6b6)
+* feat: make local verification the default (d9ed351)
 
 ### Bug Fixes
 
 * fix: accept compact release configuration (bf8992f)
+* fix: allow alpha release self-review (2ce14d1)
 
 ## [0.20.0-alpha.1] - 2026-09-22
 
