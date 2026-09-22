@@ -58,15 +58,20 @@ jobs:
     name: process
     if: >-
       ${{
-        github.event_name == 'milestone' ||
-        (github.event_name == 'issue_comment' &&
+        (true &&
+        github.event_name == 'milestone') ||
+        (true &&
+        github.event_name == 'issue_comment' &&
         github.event.issue.pull_request == null) ||
-        (github.event_name == 'issues' &&
+        (true &&
+        github.event_name == 'issues' &&
         (github.event.issue.milestone.number != null ||
         github.event.changes.milestone.from.number != null ||
-        (contains(fromJSON('["opened","edited","reopened","closed"]'), github.event.action) &&
+        (true &&
+        contains(fromJSON('["opened","edited","reopened","closed"]'), github.event.action) &&
         github.event.issue.user.type == 'User'))) ||
-        (github.event_name == 'pull_request' &&
+        (true &&
+        github.event_name == 'pull_request' &&
         github.event.pull_request.merged == true &&
         startsWith(github.event.pull_request.base.ref, 'dev/m') &&
         !startsWith(github.event.pull_request.head.ref, 'sync/'))
@@ -83,6 +88,7 @@ jobs:
       - name: "Issue triage: assign author and apply issue classification"
         if: >-
           !cancelled() &&
+          true &&
           github.event_name == 'issues' &&
           contains(fromJSON('["opened","edited","reopened","closed"]'), github.event.action) &&
           github.event.issue.user.type == 'User'
@@ -101,6 +107,7 @@ jobs:
       - name: "Milestone lifecycle: reconcile lifecycle and refresh PR checks"
         if: >-
           !cancelled() &&
+          true &&
           (github.event.issue.milestone.number != null || github.event.milestone.number != null)
         env:
           EVENT_ACTION: ${{ github.event.action }}
@@ -123,6 +130,7 @@ jobs:
       - name: "Milestone lifecycle: refresh standalone Issue PR check"
         if: >-
           !cancelled() &&
+          true &&
           github.event_name == 'issue_comment' &&
           github.event.issue.pull_request == null &&
           github.event.issue.milestone.number == null
@@ -138,6 +146,7 @@ jobs:
       - name: "Milestone lifecycle: reconcile the previous Milestone"
         if: >-
           !cancelled() &&
+          true &&
           github.event.changes.milestone.from.number != null &&
           github.event.changes.milestone.from.number != github.event.issue.milestone.number
         env:
@@ -156,6 +165,7 @@ jobs:
       - name: "Work Issue closure: checkout the merge commit"
         if: >-
           !cancelled() &&
+          true &&
           github.event.pull_request.merged == true &&
           startsWith(github.event.pull_request.base.ref, 'dev/m') &&
           !startsWith(github.event.pull_request.head.ref, 'sync/')
@@ -166,6 +176,7 @@ jobs:
       - name: "Work Issue closure: close the completed work Issue"
         if: >-
           !cancelled() &&
+          true &&
           github.event.pull_request.merged == true &&
           startsWith(github.event.pull_request.base.ref, 'dev/m') &&
           !startsWith(github.event.pull_request.head.ref, 'sync/')

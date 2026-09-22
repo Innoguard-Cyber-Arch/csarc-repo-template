@@ -299,7 +299,7 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 {{< standard key="files-mode-standard" title="更新流程與已整合工具" >}}
 檔案放在哪裡不是重點；誰能改它才是。每個檔案屬於三種歸屬之一：**公版主導**（模板更新時可能改動，通常不要在生成後直接改）、**共同維護**（你可以直接改，但下次公版更新可能要你合併差異）、**專案持有**（完全由你決定，公版永遠不會覆寫）。
 
-<div class="capability-map"><div class="capability-node"><h3>公版設定 <span class="ownership-tag shared">共同維護</span></h3><p><code>.csarc/config.yml</code>、<code>policies/</code>：語言、分支規則、負責人與審查者都記在這裡。</p></div><div class="capability-node"><h3>GitHub 工作流程 <span class="ownership-tag template">公版主導</span></h3><p><code>.github/</code>：Issue／PR 表單與自動檢查流程。</p></div><div class="capability-node"><h3>Agent 規範 <span class="ownership-tag shared">共同維護</span></h3><p><code>AGENTS.md</code>：agent 在這個 repo 裡怎麼做事。</p></div><div class="capability-node"><h3>專案文件 <span class="ownership-tag shared">共同維護</span></h3><p><code>README.md</code>、<code>docs/</code>、<code>site/</code>：給人看的說明，以及你正在看的這個網站。</p></div><div class="capability-node"><h3>產品程式 <span class="ownership-tag project">專案持有</span></h3><p><code>src/</code>：真正的產品程式碼、測試與規格。</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>公版設定 <span class="ownership-tag shared">共同維護</span></h3><p><code>.csarc/config.yml</code>、<code>policies/</code>：只保存治理、審查、發版、選配功能與 owner 意圖；方案與即時能力另行偵測。</p></div><div class="capability-node"><h3>GitHub 工作流程 <span class="ownership-tag template">公版主導</span></h3><p><code>.github/</code>：Issue／PR 表單與自動檢查流程。</p></div><div class="capability-node"><h3>Agent 規範 <span class="ownership-tag shared">共同維護</span></h3><p><code>AGENTS.md</code>：agent 在這個 repo 裡怎麼做事。</p></div><div class="capability-node"><h3>專案文件 <span class="ownership-tag shared">共同維護</span></h3><p><code>README.md</code>、<code>docs/</code>、<code>site/</code>：給人看的說明，以及你正在看的這個網站。</p></div><div class="capability-node"><h3>產品程式 <span class="ownership-tag project">專案持有</span></h3><p><code>src/</code>：真正的產品程式碼、測試與規格。</p></div></div>
 
 完整檔案樹與每個檔案的責任歸屬，請切換「維運」模式查看。
 
@@ -709,19 +709,19 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
         <p class="subtitle"><strong>基本導入｜</strong>把規則寫進 repo，不代表 GitHub 一定有能力強制它；模板會先檢查平台能力，再決定強制或明確降級。</p>
       </header>
       <p class="context-line"><strong>流程｜</strong>期望政策 → 檢查 GitHub 方案與權限 → 可以強制：套用並驗證 → 無法強制：標示 <code>DEGRADED</code>，留下人工責任。</p>
-      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">提出 PR</span><h3>人審查</h3><p>系統自動指派一位非作者的審查者，並保留審查紀錄。</p></article><article class="relation-node"><span class="relation-kind">檢查方案與權限</span><h3>能不能強制</h3><p>模板查目前方案、repo 可見性與權限，判斷能不能建立 Ruleset（GitHub 強制執行的合併規則）。</p></article><article class="relation-node"><span class="relation-kind">兩種結果</span><h3>套用驗證，或明確降級</h3><p>能強制就套用並在 <code>check</code> 驗證是否生效；不能強制就標示 <code>DEGRADED</code>，改由人工自律把關，不假裝已經強制。</p></article></div></div>
+      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">提出 PR</span><h3>審查意圖</h3><p>系統從 live maintain／admin 協作者中 best-effort 選一位非作者；review check 再依 solo／peer 與可用的 Copilot 證據判定。</p></article><article class="relation-node"><span class="relation-kind">檢查方案與權限</span><h3>能不能強制</h3><p>模板查目前方案、repo 可見性與權限，判斷能不能建立 Ruleset（GitHub 強制執行的合併規則）。</p></article><article class="relation-node"><span class="relation-kind">兩種結果</span><h3>套用驗證，或明確降級</h3><p>能強制就套用並在 <code>check</code> 驗證是否生效；不能強制就標示 <code>DEGRADED</code>，改由人工自律把關，不假裝已經強制。</p></article></div></div>
       <p class="context-line"><strong>下一步｜</strong>方案改變或升級後，重新套用一次設定即可；這個 repo 目前實際處於哪一種結果，以及 Team／Enterprise 各方案的完整能力，請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
 {{< basic >}}
-公版會準備負責人、審查人、repo 基本設定與預期的分支規則。維運者檢查 GitHub 實際方案後：
+公版會準備可選的 CODEOWNER、依權限即時選出的 reviewer、repo 基本設定與預期的分支規則。維運者檢查 GitHub 實際方案後：
 
 - 支援的管制才套用並驗證。
 - 付費方案才有的功能若不可用，會標成 `DEGRADED` 並改由人工處理，不會假裝已強制。
 - 原本可以套用、但目前設定不一致的項目會停止，修正後才能繼續。
 
 {{< disclosure key="governance-live-status" title="這個 repo 本身現在的真實狀態（查詢日期：2026-09-07）" >}}
-`Innoguard-Cyber-Arch` API 回報這個 repository 是 Free 方案、**public** 可見度。GitHub 上已有一個 `enforcement: active` 的 Ruleset「CSARC protected branches」（建立於 2026-09-03），套用在 `main` 與 `dev/m*`：要求至少 1 個核准、CODEOWNER 審查、`title`／`verify`／`review` 三項狀態檢查全部通過，且不允許 force-push——`main` 目前確實有強制的合併保護。
+`Innoguard-Cyber-Arch` API 回報這個 repository 是 Free 方案、**public** 可見度。GitHub 上已有一個 `enforcement: active` 的 Ruleset「CSARC protected branches」（建立於 2026-09-03），套用在 `main` 與 `dev/m*`：`title`／`verify`／`review` 三項狀態檢查必須通過，review check 依 `solo`／`peer` 與可用的 Copilot 證據判定，且不允許 force-push。此 repo 明確開啟 `actions_fallback: admin`，但 lifecycle 只有在確認 zero-step billing block 並重驗其餘證據後才可使用 admin bypass。
 
 這對應下表「Free＋public，或 Pro 個人＋private」那一列，不是下面「Free／Team／Enterprise 各方案完整能力」卡片裡 Free 方案描述的 **private** 降級情境（那張卡片說明的是 Free＋*private* 時，REST／GraphQL 建立 Ruleset 的 API 會拒絕、只能保留期望狀態並標示 `DEGRADED`）；這個 repo 選擇公開，因此適用的是可以直接套用並驗證的那條路徑。方案或可見度之後若改變，重跑 `plan`／`apply`／`check` 就會反映最新狀態——這裡記錄的是查詢當下的事實，不是永久保證，也不代表每個使用這套公版的 repo 都跟這裡一樣。
 {{< /disclosure >}}
@@ -730,16 +730,16 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | GitHub 狀態 | 公版能做什麼 | 需要人處理什麼 |
 | --- | --- | --- |
 | Free＋public，或 Pro 個人＋private | 套用並檢查 repo Ruleset | 套用前先審查變更內容 |
-| Free organization＋private | 套基本設定，期望 Ruleset 留在 `policies/rulesets.json` | workflow 自動輪派 reviewer 並留下審查紀錄；沒有強制合併門禁 |
-| Team／Enterprise organization＋private | 確認 CODEOWNERS team 後套用並檢查 Ruleset | 組織身分、網路、稽核或不可逆變更另由 organization owner 核准 |
+| Free organization＋private | 套基本設定，期望 Ruleset 留在 `policies/rulesets.json` | best-effort 提出 reviewer request；沒有強制合併門禁 |
+| Team／Enterprise organization＋private | 有設定 CODEOWNER 時先確認其身分，再套用並檢查 Ruleset | 組織身分、網路、稽核或不可逆變更另由 organization owner 核准 |
 
 能力以實際證據啟用，不以預設成熟度或日期判定。Repo 可見性或方案變更後重跑 `plan`、`apply`、`check`；真的不支援就保留 `DEGRADED`，非預期的 API 或設定錯誤則停止。
 {{< /disclosure >}}
 
 {{< disclosure key="governance-plan-tiers" title="Free／Team／Enterprise 各方案完整能力" >}}
 <div class="plan-grid">
-  <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查設定，強制能力降級：</strong><code>.github/REVIEWERS</code> 保存 reviewer 名單；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 標示 DEGRADED。</p><ul><li><code>governance-comment.yml</code> 自動輪派一位非作者 reviewer</li><li>沒有 team request 或 merge gate，審查紀錄不能取代強制門禁</li></ul></article>
-  <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、強制核准、CODEOWNER 與必要檢查。</p><ul><li>同一個 CODEOWNERS team 必須存在並有 repo write access</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
+  <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查意圖，強制能力可能降級：</strong>workflow 從 live repository collaborators 中挑選非作者的 <code>maintain</code>／<code>admin</code>；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，check 標示 DEGRADED。</p><ul><li>Copilot entitlement 不從 Free 方案名稱猜測，無法證明時回到 human 規則</li><li>沒有 merge gate 時，審查紀錄不能冒充平台強制門禁</li></ul></article>
+  <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches 與必要檢查；人工 solo／peer 仍由 review check 判定。</p><ul><li>若設定 CODEOWNER team，該 team 必須存在並有 repo write access</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
   <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
 </div>
 {{< /disclosure >}}
@@ -747,12 +747,11 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 {{< disclosure key="governance-config" title="單一設定來源與責任層級" >}}
 | 層級 | `.csarc/config.yml` key | 預設／允許值 | 產生或驗證位置 |
 | --- | --- | --- | --- |
-| 必要基線 | `branch_strategy` | 預設 `delivery`；可選 `delivery`、`main` | 分支指引、`policies/rulesets.json`，以及 repo-site 的交付路線段落 |
-| 組織政策 | `code_owner` | 一個存在且有 repo write access 的 `@organization/team` | `.github/CODEOWNERS`；由 repository settings plan／apply／check 驗證；repo-site 的主要負責人欄位 |
-| 組織政策 | `reviewers` | 一個或多個 GitHub 使用者名稱 | `.github/REVIEWERS`；`governance-comment.yml` 在每張非 draft PR 自動輪派 |
-| 專案選擇 | `release_levels_enabled`、`default_release_level`、`release_level_*_{review,verification}` | 公版 root 關閉一般工作分層、預設 alpha，並把所有層級映射為 self／fast；新專案預設啟用 alpha，既有導入預設啟用 beta；逐層可設定 self／peer 與 fast／full | Issue／Milestone 層級解析、`review` gate、驗證 attestation 與 release notes |
-| 專案選擇 | `pr_review_mode` | 新專案預設 `copilot`；可選 `copilot`、`human`；`copier update` 對既有專案預設 `human` | `policies/rulesets.json`（`copilot` 改為 0 個 approval、自動請 Copilot 審核每次 push，並要求 `review` 檢查）；`pr-review.yml` 與 `scripts/review_gate.py` 接受 Copilot 對目前 head 沒有意見，或 maintainer 對目前 head 的 approval；需要 Copilot 授權 |
-| 專案選擇 | `copilot_review_max_level` | 預設 `unlimited`；可選 `alpha`、`beta`、`early`、`release`（formal） | Copilot 通過可取代人工審核的最高發布層級；高於上限時要求 maintainer 核准 |
+| 治理意圖 | `governance_mode`、`lifecycle`、`actions_fallback` | `managed`／`observe`；`issues`／`milestones`；fallback 預設 `off`、可選 `admin` | repository policy、工作項目 side effects 與經證明的 zero-step billing fallback |
+| 審查意圖 | `review`、`copilot_review` | human 為 `solo`／`peer`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到 human 規則 |
+| 發版意圖 | `release_ownership`、`release_trigger`、`default_release_level` | ownership 三選一；trigger 為 `main`／`manual`；預設 alpha | ownership 先決、固定 Conventional Commits 演算法與發版候選觸發 |
+| 選配產物 | `features` | 預設 `[repo-site]`；可加入 `docker` 或留空 | repo-site／Pages desired policy、Docker starter 與 build scan 一起啟閉 |
+| 組織政策 | `code_owner` | 可省略的 `@user` 或 `@organization/team` | `.github/CODEOWNERS`；不作為 reviewer 名單 |
 | 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及 repo-site 的可見受眾欄位 |
 | 專案選擇 | `project_name` | 必填非空字串；預設 `CSARC Project` | repo-site 的標題與頁首 |
 | 專案選擇 | `project_description` | 必填一句話用途說明，拒絕佔位文字 | repo-site 的簡介段落 |
@@ -760,7 +759,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 專案選擇 | `repository_url`、`project_slug` | 未覆寫時由 `code_owner`／`project_name` 推導 | repo-site 的複製（clone）指引 |
 | 專案選配 | `enable_governance_drift_check` | 預設 `true`，產生每日排程 Action；可設為 `false` 關閉 | `true` 生成 `governance-drift.yml` 與 drift checker；`false` 兩者皆不產生 |
 
-公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。衍生公版可在同一份 YAML 增加 namespaced keys，不另建 profile。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
+公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。方案、帳務、Copilot entitlement、token 權限與 Pages 可用性不是設定值，而是 `allowed`／`blocked`／`unknown` 的即時偵測結果。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
 
 生成專案的 repo-site 與這個公版根網站同一套渲染引擎與元件（Issue #681），只是內容精簡許多；只從上表 key 讀取明確的 `[[key]]` token，直接對照 `.csarc/config.yml`，未知 key 會讓建置直接失敗，因此網站不會另建第二份設定 schema。上表以外的專案文字與樣式選擇，留在 `site/content/_index.zh-tw.md`、`_index.en.md`、`docs/site-theme.css`，由專案自行維護。
 {{< /disclosure >}}
@@ -772,14 +771,14 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 {{< config-guidance track="governance" >}}
 
 {{< disclosure key="governance-plan-behavior" title="GitHub 方案與 apply／check 行為對照" >}}
-<aside class="selection-note"><strong>部署與例外原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能被 Free private 的降級路徑掩蓋。能力只在 live check 證明可用後啟用，不以預設成熟度或日期判斷。Free private 不支援 team request，也無法強制核准；`governance-comment.yml` 自動輪派一位非作者 reviewer，僅提出 review request，不構成 merge gate。每個暫時例外都用 Issue 記錄提出者、另一位核准者、到期日、證據與復原方式，不能把未執行的檢查寫成通過。完整管理欄位驗證由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需 organization owner 另案核准。</span></aside>
+<aside class="selection-note"><strong>部署與例外原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、設定的 CODEOWNER 與 Ruleset API；身分不存在、不可見或沒有 repo write access 時直接停止，不能被 Free private 的降級路徑掩蓋。能力只在 live check 證明可用後啟用，不以預設成熟度或日期判斷。Free private 無法強制 Ruleset；`governance-comment.yml` 只從 live maintain／admin 協作者中 best-effort 提出 review request，不構成 merge gate。每個暫時例外都用 Issue 記錄提出者、另一位核准者、到期日、證據與復原方式，不能把未執行的檢查寫成通過。完整管理欄位驗證由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需 organization owner 另案核准。</span></aside>
 <table class="decision-register" aria-label="GitHub 方案與 apply／check 行為對照">
   <thead><tr><th>GitHub 方案與可見性</th><th><code>apply</code> 結果</th><th><code>check</code>／PR／CI/CD 行為</th></tr></thead>
   <tbody>
     <tr><td>Free＋public</td><td>透過 REST 套用並啟用 Ruleset</td><td>驗證 <code>main</code> 的有效規則；缺少或不符即失敗</td></tr>
-    <tr><td>Free organization＋private</td><td>套用基本設定，並把期望 Ruleset 保留在 <code>policies/rulesets.json</code>；公開 API 無法建立 Ruleset</td><td>標示 <code>DEGRADED</code>；workflow 自動輪派一位個別 reviewer，team request、紅燈或未核准都不能成為 merge gate</td></tr>
+    <tr><td>Free organization＋private</td><td>套用基本設定，並把期望 Ruleset 保留在 <code>policies/rulesets.json</code>；公開 API 無法建立 Ruleset</td><td>標示 <code>DEGRADED</code>；workflow 只 best-effort 提出 reviewer request，紅燈或未核准都不能冒充平台 merge gate</td></tr>
     <tr><td>Pro 個人帳號＋private</td><td>套用並啟用 Ruleset</td><td>與 Free public 相同</td></tr>
-    <tr><td>Team／Enterprise organization＋private</td><td>確認 CODEOWNERS team 後套用並啟用 Ruleset</td><td>必要審查、CODEOWNER 與 status checks 成為 merge gate；不符政策時 fail-closed</td></tr>
+    <tr><td>Team／Enterprise organization＋private</td><td>驗證可選 CODEOWNER 後套用並啟用 Ruleset</td><td>必要 status checks 成為 merge gate；review check 執行 solo／peer 與可用 Copilot 規則，不符政策時 fail-closed</td></tr>
   </tbody>
 </table>
 <p class="reference">Ref. <a href="https://docs.github.com/en/get-started/learning-about-github/githubs-plans" target="_blank" rel="noreferrer">GitHub plans</a>；<a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">About rulesets</a>. Accessed August 21, 2026.</p>
@@ -893,7 +892,7 @@ renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc
           <tr><td>p.3</td><td>SDLC 核心階段</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>把計畫到監控集中在 GitHub</summary><div class="bridge-popover"><p><strong>五月版｜</strong>計畫、開發、測試、部署、監控的核心順序保留。</p><p><strong>本次判斷｜</strong>工作單、模板、合併申請、自動檢查與交付設定都放在 GitHub，方便持續維護。</p><p><strong>落地方式｜</strong>不是每個專案都要部署與監控，但都先遵守工作規劃、變更審查與驗證規則。</p></div></details></td></tr>
           <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>每次改動先有最小 GitHub Issue</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次只保留必要的 GitHub Issue、里程碑與 spec。</p><p><strong>本次判斷｜</strong>一次性工作選一種類型、寫問題與完成條件；複雜需求先開規劃 Issue，再由核准 spec 建立實作 Issue。新增範圍另開 Issue。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 有類型、問題與完成條件兩個必填欄位，另加一個選填補充；<code>work-item-lifecycle.yml</code> 指派開單者；PR workflow 核對標籤、分支與同號未結案 Issue。</p></div></details></td></tr>
           <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>delivery branch 是 CI 整合邊界，不假裝成實體環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不要求每案具備實體 DEV 環境。</p><p><strong>本次判斷｜</strong>獨立工作從最新 <code>main</code> 建立並直接回 <code>main</code>；只有需共同驗收的里程碑使用 <code>dev/m*</code>，獨立 canary 才用暫時 <code>dev/i*</code>，hotfix 也直接修正 main。</p><p><strong>落地方式｜</strong>一般 PR 依變更風險執行必要檢查，里程碑／canary 交付與 hotfix 執行完整檢查；只在 final delivery 或明列 dependency 時同步最新 main。</p></div></details></td></tr>
-          <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；<code>governance-comment.yml</code> 在每張非 draft PR 自動輪派一位非作者 reviewer；GitHub Team 以上才支援 team request 與強制核准。</p></div></details></td></tr>
+          <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成明確的 <code>solo</code>／<code>peer</code> 政策。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue 與 CI；可用時，乾淨的 exact-head Copilot review 可滿足兩種審查政策，否則回到已宣告的人工作法。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；<code>governance-comment.yml</code> 從即時 repository 權限中選出非作者的 maintainer／admin，不保存靜態 reviewer 名單。</p></div></details></td></tr>
           <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用入口，依風險分層執行</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong>一般 Issue PR 跑 fast；promotion、hotfix、merge queue 與未知高風險路徑跑 full；OSV、Zizmor 與 remote governance 另依 scope／schedule 執行。</p><p><strong>落地方式｜</strong>固定 <code>verify</code> aggregate 避免 skipped workflow 留下 Pending；delivery sync 與 promotion route 分類併入 <code>title</code> policy，候選 full run 不取消，普通 PR 新 commit 則取消舊 run。Ruleset 可用時強制 <code>title</code>、<code>verify</code> 與 <code>review</code>。</p></div></details></td></tr>
           <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>Milestone 用交付 PR 同時審查版本，standalone 才另開版本 PR</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>CSARC-owned Milestone 的 promotion PR 同時承載 repository delivery、版本與 CHANGELOG；獨立工作與 hotfix 才在需要新版本時另開版本 PR。</p><p><strong>落地方式｜</strong>promotion 合併後，共用 publisher 建立 checksum、SBOM、成品與 immutable GitHub Release，成功才關 tracker 與 Milestone。Attestation 與消費端門禁仍是選配。</p></div></details></td></tr>
           <tr><td>p.9</td><td>可觀測性</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>只有上線服務才做監控和值班</summary><div class="bridge-popover"><p><strong>五月版｜</strong>操作手冊、日誌、指標、追蹤、復原與值班流程保留為第二階段。</p><p><strong>本次判斷｜</strong>只對持續運行的服務導入；先依使用的雲端、環境與負責人選工具，不先綁定 Datadog 或 PagerDuty。</p><p><strong>落地方式｜</strong>測試資料另外管理成不含個資、可建立、可清除的範例，不把測資管理混成線上監控。</p></div></details></td></tr>

@@ -161,9 +161,7 @@ def copilot_config(tmp_path: Path) -> Path:
     """Return a Copilot-mode answers file."""
     return config(
         tmp_path,
-        "pr_review_mode: copilot\n"
-        "copilot_review_max_level: unlimited\n"
-        "default_release_level: alpha\n",
+        "copilot_review: allowed\nreview: solo\ndefault_release_level: alpha\n",
     )
 
 
@@ -177,14 +175,17 @@ def test_missing_setting_means_human_mode(tmp_path: Path) -> None:
 
 def test_invalid_review_mode_is_rejected(tmp_path: Path) -> None:
     """The flat config validator owns the allowed values."""
-    with pytest.raises(ValueError, match="pr_review_mode"):
-        review_gate.review_settings(config(tmp_path, "pr_review_mode: bot\n"))
+    with pytest.raises(ValueError, match="copilot_review"):
+        review_gate.review_settings(config(tmp_path, "copilot_review: bot\n"))
 
 
 def test_human_mode_requires_exact_head_approval(tmp_path: Path) -> None:
     """The level-aware check enforces peer review in human mode too."""
     result = review_gate.evaluate(
-        FakeGitHub([]), "o/r", 7, config(tmp_path, "pr_review_mode: human\n")
+        FakeGitHub([]),
+        "o/r",
+        7,
+        config(tmp_path, "copilot_review: off\nreview: peer\n"),
     )
     assert not result["passed"]
     assert result["release_level"] == "beta"
@@ -194,7 +195,7 @@ def test_human_mode_requires_exact_head_approval(tmp_path: Path) -> None:
         FakeGitHub([approval("maintainer")]),
         "o/r",
         7,
-        config(tmp_path, "pr_review_mode: human\n"),
+        config(tmp_path, "copilot_review: off\nreview: peer\n"),
     )
     assert approved["passed"]
     assert approved["source"] == "maintainer"
@@ -231,7 +232,8 @@ def test_beta_hotfix_admin_authorization_passes_for_exact_head(
         "o/r",
         7,
         config(
-            tmp_path, "pr_review_mode: human\ndefault_release_level: beta\n"
+            tmp_path,
+            "copilot_review: off\nreview: peer\ndefault_release_level: beta\n",
         ),
     )
 
@@ -337,35 +339,33 @@ def test_draft_fails_even_with_clean_copilot_review(
     assert "Draft" in result["reason"]
 
 
-def test_level_cap_requires_a_maintainer_above_the_configured_level(
+def test_copilot_can_satisfy_every_release_level(
     tmp_path: Path,
 ) -> None:
-    """Copilot cannot satisfy a self-review level above its configured cap."""
-    capped = config(
+    """The simplified schema has no separate Copilot release-level cap."""
+    allowed = config(
         tmp_path,
-        "pr_review_mode: copilot\n"
-        "copilot_review_max_level: beta\n"
-        "default_release_level: formal\n"
-        "release_level_formal_review: self\n",
+        "copilot_review: allowed\n"
+        "review: solo\n"
+        "default_release_level: formal\n",
     )
-    result = review_gate.evaluate(FakeGitHub([copilot()]), "o/r", 7, capped)
-    assert not result["passed"]
-    assert "does not allow Copilot" in result["reason"]
+    result = review_gate.evaluate(FakeGitHub([copilot()]), "o/r", 7, allowed)
+    assert result["passed"]
+    assert result["source"] == "copilot"
 
 
-def test_beta_level_requires_peer_even_with_clean_copilot(
+def test_clean_copilot_can_satisfy_peer_review_mode(
     tmp_path: Path,
 ) -> None:
-    """The default Beta policy cannot be weakened by Copilot mode."""
+    """An explicit Copilot allowance is valid in either human review mode."""
     beta = config(
         tmp_path,
-        "pr_review_mode: copilot\n"
-        "copilot_review_max_level: unlimited\n"
-        "default_release_level: beta\n",
+        "copilot_review: allowed\nreview: peer\ndefault_release_level: beta\n",
     )
     result = review_gate.evaluate(FakeGitHub([copilot()]), "o/r", 7, beta)
-    assert not result["passed"]
+    assert result["passed"]
     assert result["required_review"] == "peer"
+    assert result["source"] == "copilot"
 
 
 def test_impersonating_user_is_not_copilot(copilot_config: Path) -> None:
@@ -660,8 +660,8 @@ def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
     """A new project gets the Copilot Ruleset, check, and gate script."""
     project = generate(tmp_path, {})
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
-    assert "pr_review_mode: copilot" in config
-    assert "copilot_review_max_level: unlimited" in config
+    assert "copilot_review: allowed" in config
+    assert "review: solo" in config
     generated = rules(project)
     assert generated["copilot_code_review"]["review_on_push"] is True
     assert generated["pull_request"]["required_approving_review_count"] == 0
@@ -678,6 +678,28 @@ def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
     }
     assert (project / ".github/workflows/pr-review.yml").is_file()
     assert (project / ".csarc/scripts/review_gate.py").is_file()
+    payload = json.loads(
+        (project / ".csarc/policies/rulesets.json").read_text(encoding="utf-8")
+    )
+    assert payload["bypass_actors"] == []
+
+
+@pytest.mark.large
+def test_admin_actions_fallback_adds_only_the_admin_ruleset_bypass(
+    tmp_path: Path,
+) -> None:
+    """Materialize the bypass only after an explicit admin declaration."""
+    project = generate(tmp_path, {"actions_fallback": "admin"})
+    payload = json.loads(
+        (project / ".csarc/policies/rulesets.json").read_text(encoding="utf-8")
+    )
+    assert payload["bypass_actors"] == [
+        {
+            "actor_type": "RepositoryRole",
+            "actor_id": 5,
+            "bypass_mode": "pull_request",
+        }
+    ]
 
 
 def test_issue_comment_review_gate_can_read_release_level_issues() -> None:
@@ -697,7 +719,7 @@ def test_issue_comment_review_gate_can_read_release_level_issues() -> None:
 @pytest.mark.large
 def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
     """Human mode also delegates the variable approval count to the check."""
-    project = generate(tmp_path, {"pr_review_mode": "human"})
+    project = generate(tmp_path, {"copilot_review": "off", "review": "peer"})
     generated = rules(project)
     assert "copilot_code_review" not in generated
     assert generated["pull_request"] == {
@@ -718,4 +740,4 @@ def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
         ("review", 15368),
     }
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
-    assert "copilot_review_max_level" not in config
+    assert "copilot_review: 'off'" in config

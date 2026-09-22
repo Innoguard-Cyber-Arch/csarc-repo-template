@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 from jinja2 import Environment, StrictUndefined
 
@@ -24,7 +25,8 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     }
     assert workflow["concurrency"]["cancel-in-progress"] is False
     assert workflow["jobs"]["release"]["if"] == (
-        "${{ github.ref == 'refs/heads/main' }}"
+        "${{ github.ref == 'refs/heads/main' && "
+        "(github.event_name != 'push' || true) }}"
     )
     assert workflow["permissions"] == {"contents": "read"}
     assert set(workflow["jobs"]["release"]["permissions"]) == {
@@ -37,6 +39,7 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     }
     assert workflow["jobs"]["release"]["timeout-minutes"] == 60
     assert "googleapis/release-please-action@45996ed1" in source
+
     assert "release_policy.py plan" in source
     assert "release_level.py release-batch" in source
     assert "RELEASE_LEVEL: ${{ steps.level.outputs.level }}" in source
@@ -130,6 +133,34 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "trap revert_to_draft_on_failure EXIT" in publish
 
 
+@pytest.mark.parametrize(
+    ("release_trigger", "push_enabled"),
+    [("main", True), ("manual", False)],
+)
+def test_release_trigger_only_gates_main_push(
+    release_trigger: str, push_enabled: bool
+) -> None:
+    """Keep workflow_dispatch available while making main push optional."""
+    source = (ROOT / "template/.github/workflows/release.yml.jinja").read_text(
+        encoding="utf-8"
+    )
+    environment = Environment(
+        autoescape=False,  # noqa: S701 - trusted local YAML template
+        undefined=StrictUndefined,
+    )
+    rendered = environment.from_string(source).render(
+        languages=[], release_trigger=release_trigger
+    )
+    workflow = yaml.safe_load(rendered)
+
+    assert workflow.get("on", workflow.get(True))["workflow_dispatch"] is None
+    condition = workflow["jobs"]["release"]["if"]
+    assert (
+        f"github.event_name != 'push' || {str(push_enabled).lower()}"
+        in condition
+    )
+
+
 def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
     """Issue #707: cheap gates must run before any expensive setup."""
     root_source = (ROOT / ".github/workflows/release.yml").read_text(
@@ -143,7 +174,7 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         undefined=StrictUndefined,
     )
     rendered_template = environment.from_string(template_source).render(
-        languages=["python", "typescript", "rust"]
+        languages=["python", "typescript", "rust"], release_trigger="main"
     )
     no_release_guard = "${{ steps.plan.outputs.status != 'no-release' }}"
 

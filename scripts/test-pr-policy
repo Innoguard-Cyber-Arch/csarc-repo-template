@@ -484,25 +484,6 @@ fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|f
 CASES
 
 case_count=$((case_count + 1))
-if strategy_output="$(
-  PR_BRANCH_STRATEGY="main" \
-  PR_TITLE="feat(api): add report" \
-  PR_LABELS="enhancement" \
-  PR_BASE="dev/m7-staged-ci" \
-  PR_HEAD="feat/42-report" \
-  PR_BODY="Closes #42" \
-  PR_ISSUE_STATE="open" \
-  PR_ISSUE_MILESTONE_NUMBER="7" \
-    "$validator" 2>&1
-)"; then
-  echo "PR policy accepted a delivery branch while branch_strategy was main."
-  exit 1
-fi
-grep -Fq "branch_strategy is 'main' (source: PR_BRANCH_STRATEGY)." <<<"$strategy_output"
-grep -Fq "expects pull requests to target 'main', not 'dev/m7-staged-ci'" <<<"$strategy_output"
-grep -Fq "set branch_strategy to 'delivery' in .csarc/config.yml" <<<"$strategy_output"
-
-case_count=$((case_count + 1))
 if milestone_output="$(
   PR_BRANCH_STRATEGY="delivery" \
   PR_TITLE="feat(api): add report" \

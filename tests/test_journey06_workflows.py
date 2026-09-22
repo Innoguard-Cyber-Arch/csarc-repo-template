@@ -11,7 +11,9 @@ changing any step's own logic, permissions, or the scripts it calls.
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
+from jinja2 import Environment, StrictUndefined
 
 REPO_ROOT = Path(__file__).parents[1]
 WORKFLOW = "work-item-lifecycle.yml"
@@ -54,13 +56,23 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return document
 
 
+def render_template(lifecycle: list[str]) -> str:
+    """Render the downstream workflow for one lifecycle selection."""
+    source = (
+        REPO_ROOT / "template/.github/workflows/work-item-lifecycle.yml.jinja"
+    ).read_text(encoding="utf-8")
+    environment = Environment(
+        autoescape=False,  # noqa: S701 - trusted local YAML template
+        undefined=StrictUndefined,
+    )
+    return environment.from_string(source).render(lifecycle=lifecycle)
+
+
 def test_work_item_lifecycle_is_paired_and_bounded() -> None:
     """Ship one bounded, merged lifecycle workflow to both repository forms."""
     root_path = REPO_ROOT / ".github" / "workflows" / WORKFLOW
-    template_path = REPO_ROOT / "template" / root_path.relative_to(REPO_ROOT)
-
     root_source = root_path.read_text(encoding="utf-8")
-    template_source = template_path.read_text(encoding="utf-8")
+    template_source = render_template(["issues", "milestones"])
     assert root_source == template_source.replace(".csarc/scripts/", "scripts/")
 
     workflow = load_yaml(root_path)
@@ -99,6 +111,54 @@ def test_work_item_lifecycle_is_paired_and_bounded() -> None:
 
     step_names = [step["name"] for step in job["steps"]]
     assert step_names == EXPECTED_STEP_NAMES
+
+
+@pytest.mark.parametrize(
+    ("lifecycle", "issues_enabled", "milestones_enabled"),
+    [
+        ([], False, False),
+        (["issues"], True, False),
+        (["milestones"], False, True),
+        (["issues", "milestones"], True, True),
+    ],
+)
+def test_lifecycle_selection_gates_each_automation_family(
+    lifecycle: list[str],
+    issues_enabled: bool,
+    milestones_enabled: bool,
+) -> None:
+    """Render every lifecycle combination without weakening route guards."""
+    source = render_template(lifecycle)
+    workflow = yaml.safe_load(source)
+    steps = workflow["jobs"]["process"]["steps"]
+    by_name = {step["name"]: step for step in steps}
+
+    issue_value = str(issues_enabled).lower()
+    milestone_value = str(milestones_enabled).lower()
+    assert (
+        issue_value
+        in by_name[
+            "Issue triage: assign author and apply issue classification"
+        ]["if"]
+    )
+    assert (
+        issue_value
+        in by_name["Milestone lifecycle: refresh standalone Issue PR check"][
+            "if"
+        ]
+    )
+    assert (
+        milestone_value
+        in by_name[
+            "Milestone lifecycle: reconcile lifecycle and refresh PR checks"
+        ]["if"]
+    )
+    assert (
+        milestone_value
+        in by_name["Work Issue closure: close the completed work Issue"]["if"]
+    )
+    assert "startsWith(github.event.pull_request.base.ref, 'dev/m')" in source
+    assert "!startsWith(github.event.pull_request.head.ref, 'sync/')" in source
 
 
 def test_work_item_lifecycle_concurrency_prefers_the_narrowest_entity() -> None:

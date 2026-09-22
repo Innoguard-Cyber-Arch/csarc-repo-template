@@ -61,6 +61,8 @@ REPRESENTATIVE_ANSWERS: dict[str, object] = {
     "project_slug": "jinja-workflow-drift-check",
     "package_name": "jinja_workflow_drift_check",
     "code_owner": "@Innoguard-Cyber-Arch/template-maintainers",
+    "lifecycle": ["issues", "milestones"],
+    "release_trigger": "main",
 }
 
 # Issue #739: a small, exact allowlist of permanent, intentional

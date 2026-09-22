@@ -1,4 +1,4 @@
-"""Read the sole user-maintained CSARC repository configuration."""
+"""Read and normalize the template-managed CSARC configuration."""
 
 from __future__ import annotations
 
@@ -6,10 +6,15 @@ import ast
 import sys
 from pathlib import Path
 
-# Tool-specific files under .csarc are generated implementation artifacts;
-# every user-selectable CSARC setting belongs in this one answers file.
 CONFIG_FILE = Path(".csarc/config.yml")
 LANGUAGES = {"python", "rust", "typescript"}
+FEATURES = {"docker", "repo-site"}
+GOVERNANCE_MODES = {"managed", "observe"}
+LIFECYCLE_CAPABILITIES = {"issues", "milestones"}
+HUMAN_REVIEW_MODES = {"peer", "solo"}
+COPILOT_REVIEW_MODES = {"allowed", "off"}
+ACTIONS_FALLBACK_MODES = {"admin", "off"}
+RELEASE_TRIGGERS = {"main", "manual"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
 RELEASE_SETTINGS = {
     "csarc-owned": ("csarc-admin", "required"),
@@ -37,6 +42,91 @@ COPILOT_REVIEW_MAX_LEVELS = {"unlimited", "alpha", "beta", "early", "release"}
 RELEASE_LEVELS = {"alpha", "beta", "early", "formal"}
 RELEASE_LEVEL_REVIEWS = {"self", "peer"}
 RELEASE_LEVEL_VERIFICATION = {"baseline", "fast", "docs", "full"}
+LEGACY_REVIEW_DEFAULTS = {
+    "alpha": "self",
+    "beta": "peer",
+    "early": "peer",
+    "formal": "peer",
+}
+
+
+def _list_setting(
+    config: dict[str, object], key: str, allowed: set[str], path: Path
+) -> None:
+    value = config.get(key)
+    if value is None:
+        return
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or item not in allowed for item in value
+    ):
+        expected = ", ".join(sorted(allowed))
+        raise ValueError(
+            f"Invalid {key} in {path}; expected a list containing only "
+            f"{expected}"
+        )
+    if len(value) != len(set(value)):
+        raise ValueError(f"Duplicate {key} in {path}")
+
+
+def _legacy_default(  # noqa: C901
+    config: dict[str, object], key: str
+) -> object:
+    """Return one new setting from a pre-#900 answers file."""
+    if key == "governance_mode":
+        values = [config.get(toggle, True) for toggle in POLICY_TOGGLES]
+        for toggle, value in zip(POLICY_TOGGLES, values, strict=True):
+            if not isinstance(value, bool):
+                raise ValueError(
+                    f"Invalid {toggle} in {CONFIG_FILE}: expected true or false"
+                )
+        if all(value is True for value in values):
+            return "managed"
+        if all(value is False for value in values):
+            return "observe"
+        raise ValueError(
+            "Legacy policy_* settings are mixed; choose governance_mode "
+            "explicitly before updating"
+        )
+    if key == "lifecycle":
+        return ["issues", "milestones"]
+    if key == "actions_fallback":
+        return "off"
+    if key == "review":
+        reviews = [
+            config.get(
+                f"release_level_{level}_review",
+                LEGACY_REVIEW_DEFAULTS[level],
+            )
+            for level in RELEASE_LEVELS
+        ]
+        return "peer" if "peer" in reviews else "solo"
+    if key == "copilot_review":
+        return "allowed" if config.get("pr_review_mode") == "copilot" else "off"
+    if key == "release_trigger":
+        return "main"
+    if key == "features":
+        features = ["repo-site"]
+        if config.get("enable_docker") is True:
+            features.append("docker")
+        return features
+    raise KeyError(key)
+
+
+def normalize_config(config: dict[str, object]) -> dict[str, object]:
+    """Add the small public schema to legacy Copier answers in memory."""
+    result = dict(config)
+    for key in (
+        "governance_mode",
+        "lifecycle",
+        "actions_fallback",
+        "review",
+        "copilot_review",
+        "release_trigger",
+        "features",
+    ):
+        if key not in result:
+            result[key] = _legacy_default(result, key)
+    return result
 
 
 def _scalar(value: str) -> object:
@@ -86,25 +176,26 @@ def load_config(path: Path = CONFIG_FILE) -> dict[str, object]:
         raw_value = raw_value.strip()
         result[key] = _scalar(raw_value) if raw_value else []
         active_key = key
+    result = normalize_config(result)
     validate_config(result, path)
     return result
 
 
 def validate_release_config(config: dict[str, object]) -> None:
-    """Validate the flat release ownership contract."""
+    """Validate ownership and any legacy persisted release observations."""
     ownership = config.get("release_ownership")
     if ownership is None:
         return
     if not isinstance(ownership, str) or ownership not in RELEASE_OWNERSHIPS:
         raise ValueError(f"Invalid release_ownership: {ownership!r}")
     legacy_keys = {
-        "release_immutable_releases",
-        "release_ownership_reason",
-        "release_required_inputs",
-        "release_settings_owner",
         "release_workflow",
+        "release_required_inputs",
+        "release_ownership_reason",
+        "release_settings_owner",
+        "release_immutable_releases",
     }
-    if config.keys().isdisjoint(legacy_keys):
+    if not legacy_keys.intersection(config):
         return
     workflow = config.get("release_workflow")
     inputs = config.get("release_required_inputs")
@@ -136,16 +227,21 @@ def validate_config(
 ) -> None:
     """Validate the managed settings consumed by repository automation."""
     choices = {
+        "actions_fallback": ACTIONS_FALLBACK_MODES,
         "branch_strategy": {"delivery", "main"},
+        "copilot_review": COPILOT_REVIEW_MODES,
         "copilot_review_max_level": COPILOT_REVIEW_MAX_LEVELS,
         "container_mode": {"none", "verify", "ghcr"},
         "coverage_mode": {"diff", "global"},
         "default_release_level": RELEASE_LEVELS,
+        "governance_mode": GOVERNANCE_MODES,
         "project_mode": {"existing", "new"},
         "project_visibility": {"internal", "private", "public"},
         "pr_review_mode": PR_REVIEW_MODES,
         "python_support_mode": {"latest", "minimum"},
+        "release_trigger": RELEASE_TRIGGERS,
         "release_ownership": RELEASE_OWNERSHIPS,
+        "review": HUMAN_REVIEW_MODES,
         **{
             f"release_level_{level}_review": RELEASE_LEVEL_REVIEWS
             for level in RELEASE_LEVELS
@@ -163,19 +259,9 @@ def validate_config(
                 f"Invalid {key} in {path}: {value!r}; expected {expected}"
             )
 
-    languages = config.get("languages")
-    if languages is not None:
-        if not isinstance(languages, list) or any(
-            not isinstance(language, str) or language not in LANGUAGES
-            for language in languages
-        ):
-            expected = ", ".join(sorted(LANGUAGES))
-            raise ValueError(
-                f"Invalid languages in {path}; expected a list containing "
-                f"only {expected}"
-            )
-        if len(languages) != len(set(languages)):
-            raise ValueError(f"Duplicate languages in {path}")
+    _list_setting(config, "languages", LANGUAGES, path)
+    _list_setting(config, "features", FEATURES, path)
+    _list_setting(config, "lifecycle", LIFECYCLE_CAPABILITIES, path)
 
     validate_release_config(config)
 
@@ -211,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
     """Print one configuration value for shell callers."""
     arguments = sys.argv[1:] if argv is None else argv
     if len(arguments) != 1:
-        sys.stderr.write("Usage: .csarc/scripts/csarc_config.py <key>\n")
+        sys.stderr.write("Usage: csarc_config.py <key>\n")
         return 2
     try:
         value = load_config()[arguments[0]]

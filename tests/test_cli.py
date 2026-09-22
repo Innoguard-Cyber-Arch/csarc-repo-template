@@ -242,9 +242,35 @@ language:
 code_owner:
   type: str
   default: '@Innoguard-Cyber-Arch/repository-maintainers'
-reviewers:
+governance_mode:
   type: str
-  default: '@default-reviewer'
+  default: managed
+lifecycle:
+  type: str
+  multiselect: true
+  choices:
+    Issues: issues
+    Milestones: milestones
+  default: [issues, milestones]
+actions_fallback:
+  type: str
+  default: 'off'
+review:
+  type: str
+  default: peer
+copilot_review:
+  type: str
+  default: 'off'
+release_trigger:
+  type: str
+  default: main
+features:
+  type: str
+  multiselect: true
+  choices:
+    Repository site: repo-site
+    Docker: docker
+  default: [repo-site]
 project_verification_hook:
   type: str
   default: ''
@@ -1339,7 +1365,10 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["repository"]["visibility"] == visibility
     assert payload["answers"]["project_visibility"] == visibility
     assert payload["answers"]["enable_codeql"] is enabled
-    assert payload["answers"]["reviewers"] == "@default-reviewer"
+    assert payload["answers"]["review"] == "peer"
+    assert payload["answers"]["copilot_review"] == "off"
+    assert payload["answers"]["features"] == ["repo-site"]
+    assert "reviewers" not in payload["answers"]
     assert payload["release_ownership"] == "csarc-owned"
     assert payload["release_capabilities"]["mode"] == "blocked"
     assert not target.exists()
@@ -2082,6 +2111,12 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         encoding="utf-8",
     )
     (project / ".gitignore").write_bytes(b"product-cache/\r\n.env\r\n")
+    (project / "Dockerfile").write_text(
+        "FROM product-owned:latest\n", encoding="utf-8"
+    )
+    site_content = project / "docs/site/content/_index.zh-tw.md"
+    site_content.parent.mkdir(parents=True)
+    site_content.write_text("# Product-owned site\n", encoding="utf-8")
     product_release = write_product_release_workflow(project)
     product_release_source = product_release.read_bytes()
     write_executable(
@@ -2113,6 +2148,8 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "project_slug=product-identity",
         "--data",
         "project_verification_hook=scripts/verify-skills",
+        "--data",
+        "features=[]",
     ]
 
     assert main(arguments) == 0
@@ -2128,6 +2165,8 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert "README.md" in payload["files"]["preserve"]
     assert "CHANGELOG.md" in payload["files"]["preserve"]
     assert "SECURITY.md" in payload["files"]["preserve"]
+    assert "Dockerfile" in payload["files"]["preserve"]
+    assert "docs/site/content/_index.zh-tw.md" in payload["files"]["preserve"]
     assert ".github/workflows/release.yml" in payload["files"]["preserve"]
     assert ".github/workflows/csarc-release.yml" not in payload["files"]["add"]
     assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
@@ -2187,6 +2226,10 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "# Product changes\n"
     )
     assert product_release.read_bytes() == product_release_source
+    assert (project / "Dockerfile").read_text(encoding="utf-8") == (
+        "FROM product-owned:latest\n"
+    )
+    assert site_content.read_text(encoding="utf-8") == "# Product-owned site\n"
     assert not (
         project / ".github" / "workflows" / "csarc-release.yml"
     ).is_file()
@@ -2194,10 +2237,13 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         (project / cli.CONFIG_FILE).read_text(encoding="utf-8")
     )
     assert config["release_ownership"] == "product-owned"
-    assert config["release_workflow"] == ".github/workflows/release.yml"
-    assert config["release_required_inputs"] == ["version"]
-    assert config["release_settings_owner"] == "product-admin"
-    assert config["release_immutable_releases"] == "product-defined"
+    for derived_key in (
+        "release_workflow",
+        "release_required_inputs",
+        "release_settings_owner",
+        "release_immutable_releases",
+    ):
+        assert derived_key not in config
     provenance = json.loads(
         (project / cli.PROVENANCE_FILE).read_text(encoding="utf-8")
     )
@@ -5914,8 +5960,8 @@ def test_update_repository_rename_preserves_custom_security_channel(
         assert "security_reporting_channel" not in update_data
 
 
-def test_update_cannot_change_release_ownership() -> None:
-    """Keep the persisted lifecycle mode as the only release owner input."""
+def test_update_changes_release_ownership_without_project_mode_change() -> None:
+    """Allow an explicit ownership choice while keeping project mode fixed."""
     repository = cli.RepositoryContext(
         "owner/repository",
         "owner",
@@ -5932,16 +5978,17 @@ def test_update_cannot_change_release_ownership() -> None:
             repository,
         )
 
-    with pytest.raises(CliError, match="Release ownership contract"):
-        cli.update_plan_answers(
-            {
-                "project_mode": "existing",
-                "project_visibility": "private",
-                "release_ownership": "verification-only",
-            },
-            {"release_ownership": "product-owned"},
-            repository,
-        )
+    answers, update_data = cli.update_plan_answers(
+        {
+            "project_mode": "existing",
+            "project_visibility": "private",
+            "release_ownership": "verification-only",
+        },
+        {"release_ownership": "product-owned"},
+        repository,
+    )
+    assert answers["release_ownership"] == "product-owned"
+    assert update_data["release_ownership"] == "product-owned"
 
     answers, update_data = cli.update_plan_answers(
         {"project_mode": "existing", "project_visibility": "private"},
@@ -6278,12 +6325,12 @@ def test_update_check_does_not_execute_target_capability_helper(
                 "--json",
             ]
         )
-        == 0
+        == 1
     )
     payload = json.loads(capsys.readouterr().out)
-    assert payload["answers_changed"] is False
+    assert payload["answers_changed"] is True
     assert payload["capabilities_changed"] is False
-    assert payload["update_available"] is False
+    assert payload["update_available"] is True
     assert not sentinel.exists()
 
 

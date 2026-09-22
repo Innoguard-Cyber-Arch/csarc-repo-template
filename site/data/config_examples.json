@@ -363,46 +363,46 @@
         },
         {
           "file": {
-            "zh-tw": "copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py",
-            "en": "copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py"
+            "zh-tw": "Issue／Milestone metadata＋scripts/delivery_sync.py",
+            "en": "Issue/Milestone metadata＋scripts/delivery_sync.py"
           },
           "title": {
-            "zh-tw": "可調整｜工作 PR 的分支模型",
-            "en": "Adjustable | The work PR's branch model"
+            "zh-tw": "固定基線｜由工作項目推導分支路由",
+            "en": "Fixed baseline | Derive branch routing from work items"
           },
           "goal": {
             "zh-tw": "里程碑工作先進 dev/m*，一般獨立工作直接進 main；main 更新後以 PR 同步，不直接改寫開發分支。",
             "en": "Milestone work lands on `dev/m*` first, while an ordinary independent task goes straight to main; once main moves forward, a PR syncs it back instead of rewriting the delivery branch directly."
           },
           "code": {
-            "zh-tw": "branch_strategy: delivery  # delivery | main\n\nwork:    type/123-short-slug -> dev/m8-*\nrelease: dev/m8-* -> main\nsync:    sync/main-to-m8-*-<sha> -> dev/m8-*",
-            "en": "branch_strategy: delivery  # delivery | main\n\nwork:    type/123-short-slug -> dev/m8-*\nrelease: dev/m8-* -> main\nsync:    sync/main-to-m8-*-<sha> -> dev/m8-*"
+            "zh-tw": "Milestone Issue -> type/123-* -> dev/m8-*\nStandalone Issue -> type/123-* -> main\nPromotion -> dev/m8-* -> main\nSync -> sync/main-to-m8-*-<sha> -> dev/m8-*",
+            "en": "Milestone Issue -> type/123-* -> dev/m8-*\nStandalone Issue -> type/123-* -> main\nPromotion -> dev/m8-* -> main\nSync -> sync/main-to-m8-*-<sha> -> dev/m8-*"
           },
           "summary": {
-            "zh-tw": "`branch_strategy` 可選 delivery 或 main；validator 依所選模型檢查目的分支與同步鏈。",
-            "en": "`branch_strategy` selects `delivery` or `main`; the validator checks the base branch and sync chain against the selected model."
+            "zh-tw": "不再設定 `branch_strategy`；validator 依可信 Issue／Milestone 關係檢查目的分支與同步鏈。",
+            "en": "There is no `branch_strategy` setting; the validator checks the base branch and sync chain from trusted Issue/Milestone relationships."
           }
         },
         {
           "file": {
-            "zh-tw": ".csarc/config.yml＋.github/CODEOWNERS＋.github/REVIEWERS",
-            "en": ".csarc/config.yml＋.github/CODEOWNERS＋.github/REVIEWERS"
+            "zh-tw": ".csarc/config.yml＋.github/CODEOWNERS＋governance-comment.yml",
+            "en": ".csarc/config.yml＋.github/CODEOWNERS＋governance-comment.yml"
           },
           "title": {
             "zh-tw": "可調整｜程式碼擁有者與審查人選",
             "en": "Adjustable | Code owners and review candidates"
           },
           "goal": {
-            "zh-tw": "公版產生 CODEOWNERS 與可輪派名單；誰可以合併及例外仍只由規則治理定義。",
-            "en": "The template generates CODEOWNERS and an assignable reviewer list; who may merge and any exception are still defined only by rules governance."
+            "zh-tw": "CODEOWNERS 可省略；reviewer 從 live repository 權限選擇，誰可合併與例外仍只由規則治理定義。",
+            "en": "CODEOWNERS is optional; reviewers come from live repository permissions, while merge eligibility and exceptions remain governed separately."
           },
           "code": {
-            "zh-tw": "code_owner: \"@organization/team\"\nreviewers: \"@alice,@bob\"\n\ndesired reviews: 1\nrequire CODEOWNER: true\ndismiss stale reviews: true\nresolve review threads: true\n\n# Run before relying on enforcement\n./scripts/apply-repository-settings.sh check",
-            "en": "code_owner: \"@organization/team\"\nreviewers: \"@alice,@bob\"\n\ndesired reviews: 1\nrequire CODEOWNER: true\ndismiss stale reviews: true\nresolve review threads: true\n\n# Run before relying on enforcement\n./scripts/apply-repository-settings.sh check"
+            "zh-tw": "review: solo      # solo | peer\ncopilot_review: allowed  # allowed | off\ncode_owner: \"@organization/team\"  # optional\n\nreview assignment: live maintain/admin collaborator\nreview evidence: exact-head Copilot or human policy\n\n./scripts/apply-repository-settings.sh check",
+            "en": "review: solo      # solo | peer\ncopilot_review: allowed  # allowed | off\ncode_owner: \"@organization/team\"  # optional\n\nreview assignment: live maintain/admin collaborator\nreview evidence: exact-head Copilot or human policy\n\n./scripts/apply-repository-settings.sh check"
           },
           "summary": {
-            "zh-tw": "`code_owner` 指定 GitHub team；`reviewers` 是可輪派的帳號名單。平台無法強制時仍需人工指定與確認。",
-            "en": "`code_owner` names a GitHub team; `reviewers` is the list of accounts that can be assigned. When the platform cannot enforce this, a human must still assign and confirm it."
+            "zh-tw": "`code_owner` 與審查人選分離；Copilot 不可用時回到明確宣告的 solo／peer 規則。",
+            "en": "`code_owner` is separate from reviewer selection; unavailable Copilot falls back to the declared solo/peer rule."
           }
         }
       ]
@@ -632,12 +632,12 @@
             "en": "The root, generated repositories, and derived templates share one public configuration; there is no separate profile or site-only settings file to maintain."
           },
           "code": {
-            "zh-tw": "branch_strategy: delivery  # delivery | main\ncode_owner: \"@organization/team\"\nreviewers: \"@alice,@bob\"\nproject_visibility: private  # public | private | internal\nenable_governance_drift_check: true  # default; set false to disable",
-            "en": "branch_strategy: delivery  # delivery | main\ncode_owner: \"@organization/team\"\nreviewers: \"@alice,@bob\"\nproject_visibility: private  # public | private | internal\nenable_governance_drift_check: true  # default; set false to disable"
+            "zh-tw": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nreview: solo                 # solo | peer\ncopilot_review: allowed      # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main        # main | manual\ndefault_release_level: alpha\nfeatures: [repo-site]\ncode_owner: \"@organization/team\"  # optional",
+            "en": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nreview: solo                 # solo | peer\ncopilot_review: allowed      # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main        # main | manual\ndefault_release_level: alpha\nfeatures: [repo-site]\ncode_owner: \"@organization/team\"  # optional"
           },
           "summary": {
-            "zh-tw": "分支、owner、reviewer、可見性與治理漂移設定存在 `.csarc/config.yml`；治理漂移預設開啟、可明確關閉，低頻 GitHub 原生細節仍留在 `policies/`。生成 repo 才另含 Copier 來源 metadata。",
-            "en": "Branch model, owner, reviewers, visibility, and the governance-drift setting live in `.csarc/config.yml`; drift monitoring defaults on and can be explicitly disabled, while low-frequency native GitHub detail stays in `policies/`. Only a generated repository also carries Copier source metadata."
+            "zh-tw": "設定只保留治理、審查、發版、選配功能與 owner 的意圖；方案、帳務與即時能力是偵測結果。",
+            "en": "Configuration keeps only governance, review, release, optional-feature, and owner intent; plan, billing, and live capability are detected results."
           }
         },
         {
@@ -686,24 +686,24 @@
         },
         {
           "file": {
-            "zh-tw": "policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS＋governance-comment.yml",
-            "en": "policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS＋governance-comment.yml"
+            "zh-tw": "policies/rulesets.json＋可選的 .github/CODEOWNERS＋governance-comment.yml",
+            "en": "policies/rulesets.json＋optional .github/CODEOWNERS＋governance-comment.yml"
           },
           "title": {
             "zh-tw": "方案決定 Ruleset 是否成為真正門禁",
             "en": "The plan decides whether the Ruleset becomes a real gate"
           },
           "goal": {
-            "zh-tw": "Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR、一位核准、CODEOWNER 與必要檢查。Enterprise 的組織規則仍另審。",
-            "en": "A free private repository first keeps the same policy stored in the repository; public, Pro, Team, or Enterprise plans can actually enforce a PR, one approval, a CODEOWNER review, and required checks. Enterprise organization rules are still reviewed separately."
+            "zh-tw": "Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR 與必要檢查。人工 solo／peer 與可選 Copilot 由同一個 review check 判斷；CODEOWNER 只有設定時才產生。",
+            "en": "A free private repository first keeps the same policy stored in the repository; public, Pro, Team, or Enterprise plans can enforce pull requests and required checks. One review check evaluates the solo/peer fallback and optional Copilot evidence; CODEOWNERS is generated only when configured."
           },
           "code": {
-            "zh-tw": "# The same policy is stored in every repository and enforced when supported.\nrequired reviews: 1\nrequire CODEOWNER review: true\nrequired checks:\n  - verify\n  - title\n  - scan-pr / osv-scan\n  - audit\n\n# Enterprise organization controls are report-only here.",
-            "en": "# The same policy is stored in every repository and enforced when supported.\nrequired reviews: 1\nrequire CODEOWNER review: true\nrequired checks:\n  - verify\n  - title\n  - scan-pr / osv-scan\n  - audit\n\n# Enterprise organization controls are report-only here."
+            "zh-tw": "# Intent stays portable; capability is checked live.\nreview: solo        # solo | peer\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\n\nrequired checks:\n  - verify\n  - title\n  - review",
+            "en": "# Intent stays portable; capability is checked live.\nreview: solo        # solo | peer\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\n\nrequired checks:\n  - verify\n  - title\n  - review"
           },
           "summary": {
-            "zh-tw": "所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Action 從 base branch 的 REVIEWERS 排除作者後輪派一位個別 reviewer。Free private 仍沒有 team request 或 merge gate。Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。",
-            "en": "Every plan first uses the repository teams API to verify the team and write access configured in the PR; an Action then excludes the author from the base branch's REVIEWERS list and assigns one individual reviewer. A free private repository still gets no team request or merge gate. The Ruleset only records STAGED/MISSING and DEGRADED states."
+            "zh-tw": "Action 直接查詢 live repository collaborators，排除作者後從 maintain／admin 權限選一位 reviewer；不保存靜態名單。Copilot entitlement 與 Actions billing 只接受即時證據，不從方案名稱推測。Free private 無法強制 Ruleset 時仍明確標示 DEGRADED。",
+            "en": "The Action queries live repository collaborators and selects one non-author reviewer with maintain/admin permission; no static list is stored. Copilot entitlement and Actions billing require live evidence and are never inferred from the plan name. A free private repository that cannot enforce a Ruleset remains explicitly DEGRADED."
           }
         },
         {
@@ -769,12 +769,12 @@
             "en": "There is no switch to turn off type checking or secret scanning; the strict threshold is part of the template's contract."
           },
           "code": {
-            "zh-tw": "languages: [python]\nbranch_strategy: delivery  # delivery | main\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # Used only in minimum mode\ncoverage_mode: global  # global | diff\ncoverage_threshold: 80\nenable_precommit: false\nproject_visibility: private  # public defaults CodeQL on\nenable_codeql: false         # private/internal require GitHub Code Security\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\"",
-            "en": "languages: [python]\nbranch_strategy: delivery  # delivery | main\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # Used only in minimum mode\ncoverage_mode: global  # global | diff\ncoverage_threshold: 80\nenable_precommit: false\nproject_visibility: private  # public defaults CodeQL on\nenable_codeql: false         # private/internal require GitHub Code Security\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\""
+            "zh-tw": "languages: [python]\nfeatures: [repo-site]  # add docker when needed\nreview: solo           # solo | peer\ncopilot_review: allowed\nrelease_trigger: main  # main | manual\npython_support_mode: latest\ncoverage_mode: global\ncoverage_threshold: 80\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\"",
+            "en": "languages: [python]\nfeatures: [repo-site]  # add docker when needed\nreview: solo           # solo | peer\ncopilot_review: allowed\nrelease_trigger: main  # main | manual\npython_support_mode: latest\ncoverage_mode: global\ncoverage_threshold: 80\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\""
           },
           "summary": {
-            "zh-tw": "語言與分支模式都在建立時明確選擇；main 是永久整合線，delivery 模式只為 Milestone 建立短期 dev/m*。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。",
-            "en": "Language and branch model are both chosen explicitly at creation time; main is the permanent integration line, and delivery mode creates a short-lived `dev/m*` only for a Milestone. `_skip_if_exists` protects `src`, `tests`, and specs from being overwritten by an update."
+            "zh-tw": "使用者只選語言、選配能力與少量治理意圖；分支路由由 Issue／Milestone 推導。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。",
+            "en": "Users choose languages, optional capabilities, and a small governance intent; Issue/Milestone metadata derives branch routing. `_skip_if_exists` protects `src`, `tests`, and specs from being overwritten by an update."
           }
         },
         {

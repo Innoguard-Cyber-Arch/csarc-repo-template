@@ -1710,8 +1710,8 @@ def _write_minimal_downstream_fixture(root: Path) -> None:
             f"Languages: [[languages]]. Visibility: [[project_visibility]].\n"
             f"{{{{< /standard >}}}}\n\n"
             f'{{{{< ops key="index-ops" title="o" >}}}}\n'
-            f"Owner: [[code_owner]]. Reviewers: [[reviewers]]. "
-            f"Branch strategy: [[branch_strategy]]. "
+            f"Owner: [[code_owner]]. Review: [[review]]. "
+            f"Lifecycle: [[lifecycle]]. "
             f"Clone: [[repository_url]].\n"
             f"{{{{< /ops >}}}}\n"
             f"{{{{< /slide >}}}}\n",
@@ -1729,10 +1729,10 @@ def _write_minimal_downstream_fixture(root: Path) -> None:
         "project_name: Demo Project\n"
         "project_description: A demo downstream project.\n"
         "languages: ['python', 'typescript']\n"
-        "branch_strategy: delivery\n"
+        "lifecycle: ['issues', 'milestones']\n"
+        "review: peer\n"
         "project_visibility: private\n"
         "code_owner: '@example-org/demo-team'\n"
-        "reviewers: ['alice', 'bob']\n"
         "repository_url: https://github.com/example-org/demo-project\n",
         encoding="utf-8",
     )
@@ -1759,8 +1759,8 @@ def test_minimal_downstream_fixture_builds_without_optional_data_files(
     assert "python, typescript" in en
     assert "private" in zh_tw
     assert "@example-org/demo-team" in zh_tw
-    assert "alice、bob" in zh_tw
-    assert "delivery" in zh_tw
+    assert "peer" in zh_tw
+    assert "issues、milestones" in zh_tw
     assert "https://github.com/example-org/demo-project" in zh_tw
 
 

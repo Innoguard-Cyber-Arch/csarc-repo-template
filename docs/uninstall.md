@@ -93,7 +93,6 @@ allowlist 由生成測試驗證：
 .github/workflows/work-item-lifecycle.yml
 SECURITY.md
 .claude/CLAUDE.md
-.csarc/REVIEWERS
 .csarc/config.yml（唯一由使用者維護的 CSARC 設定）
 .csarc/docs/*（CSARC 操作文件）
 .csarc/policies/*.json（公版管理的唯讀政策）

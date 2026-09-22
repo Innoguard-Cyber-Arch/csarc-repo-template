@@ -185,5 +185,7 @@ fi
 if [[ "$scopes" == *,docs,* ]]; then
   verification_step "Specification validation" \
     python3 .csarc/scripts/spec_to_issue.py validate
+{% if 'repo-site' in features -%}
   verification_step "Repository site render" ./.csarc/scripts/build-repo-site --check
+{% endif -%}
 fi

@@ -205,7 +205,9 @@ fi
 ./.csarc/scripts/check-update-conflicts
 ./.csarc/scripts/verify-dependencies
 ./.csarc/scripts/check-project-metadata
+{% if 'repo-site' in features -%}
 ./.csarc/scripts/build-repo-site --check
+{% endif -%}
 ./.csarc/scripts/detect-language-profile
 ./.csarc/scripts/test-issue-triage
 ./.csarc/scripts/test-worktree-cleanup
@@ -256,8 +258,12 @@ if set(config.get("languages", [])) != expected_languages:
     raise SystemExit("Configured languages do not match the rendered template")
 if config.get("project_mode") not in {"new", "existing"}:
     raise SystemExit("project_mode must be new or existing")
-if config.get("branch_strategy") not in {"main", "delivery"}:
-    raise SystemExit("branch_strategy must be main or delivery")
+if config.get("governance_mode") not in {"managed", "observe"}:
+    raise SystemExit("governance_mode must be managed or observe")
+if set(config.get("lifecycle", [])) - {"issues", "milestones"}:
+    raise SystemExit("lifecycle contains an unsupported capability")
+if set(config.get("features", [])) - {"docker", "repo-site"}:
+    raise SystemExit("features contains an unsupported capability")
 PY
 for json_file in \
   .csarc/policies/repository.json \

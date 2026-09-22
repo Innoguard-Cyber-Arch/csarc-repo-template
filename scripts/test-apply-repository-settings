@@ -24,6 +24,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 script_path="$repo_root/scripts/apply-repository-settings.sh"
+pages_policy_enabled="$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1], encoding="utf-8"))["enabled"]).lower())' "$repo_root/policies/pages.json")"
 fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 mkdir -p "$fixture_root/bin"
@@ -132,7 +133,11 @@ grep -qF "security_and_analysis.secret_scanning matches policies/security-scanni
 grep -qF "security_and_analysis.secret_scanning_push_protection matches policies/security-scanning.json (enabled)." <<<"$output"
 grep -qF "security_and_analysis.dependabot_security_updates matches policies/security-scanning.json (enabled)." <<<"$output"
 grep -qF "Repository settings match policies/repository.json." <<<"$output"
-grep -qF "Pages settings match policies/pages.json." <<<"$output"
+if [[ "$pages_policy_enabled" == "true" ]]; then
+  grep -qF "Pages settings match policies/pages.json." <<<"$output"
+else
+  grep -qF "Pages policy disabled: policies/pages.json requests enabled=false; no live GitHub Pages check performed." <<<"$output"
+fi
 
 # Case 2: issue_creation_policy drift (REST cannot see this field at all, so
 # this exercises the dedicated GraphQL check path, not the flat PATCH loop).

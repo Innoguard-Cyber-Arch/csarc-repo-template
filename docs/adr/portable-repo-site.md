@@ -166,6 +166,10 @@ Issue #681 使用者要求：Standard／Ops 分層、雙語鉤稽、簡報式構
 
 下游 work-item 與 Copier 更新契約由 `docs/csarc.md` 承載；驗證分級、審查、合併資格、Alpha self-merge 與 quota fallback 由 `docs/ci-policy.md` 承載。`AGENTS.md` 與雙語 README 只連到這兩份下游既有文件。生成專案回歸測試會解析這些文件的相對連結，並驗證 Markdown 標題與 HTML `id`／`name` 錨點實際存在。
 
+## 2026-09-22 repo-site 改為選配（Issue #900）
+
+本 ADR 的 portable、離線、雙語、可重現與 project-owned 內容保護契約全部保留；取代「每個生成專案都一定產生網站」的決定。`features` 包含 `repo-site` 時才產生 renderer、內容、theme、`docs/index*.html`、驗證與 Pages desired policy；未包含時不產生網站能力包，Pages desired policy 明確為 disabled。既有網站內容不因更新時未選 feature 而被靜默刪除。
+
 ## 2026-09-06 12pt 字級下限與 Ops 模式內容瘦身（Issue #681 決定 Q）
 
 使用者依實測螢幕（1512×982，deck 依 `min(innerWidth/1600, innerHeight/900)` 縮放，換算比例約 0.945）要求：桌面版任何顯示文字（除引用／註腳外）渲染後不得小於 12pt，並授權「該精簡的流暢精簡，該放在懸浮說明文字中的放在懸浮中」。12pt＝16px 實際尺寸；換算縮放後 CSS 原始字級下限抓 **18px**（18×0.945≈17px≈12.7pt，有安全餘裕，也是站上最常用的內文字級）。

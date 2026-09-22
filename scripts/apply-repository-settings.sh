@@ -68,16 +68,13 @@ fi
 ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$ruleset_payload")"
 desired_issue_creation_policy="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["issue_creation_policy"])' "$issue_creation_policy_payload")"
 legacy_ruleset_name="CSARC preserve dev next"
-code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
+code_owner=""
+if [[ -f "$repo_root/.github/CODEOWNERS" ]]; then
+  code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
+fi
 
-# Policy toggles (Issue #532) let a project opt out of one template-owned
-# policy area at a time. A key absent from .csarc/config.yml -- including
-# every repository generated before this feature existed -- means "on", the
-# pre-toggle behavior, so nothing silently loses coverage. Immutable
-# Releases reuses the existing release_immutable_releases contract instead
-# of a duplicate toggle: "required" (csarc-owned) is the only mode that asks
-# this script to enforce it; "product-defined" and "not-required" mean the
-# product's own release contract decides, not this template.
+# One governance mode replaces the four policy-area toggles. Release settings
+# are derived from the selected owner rather than repeated in user config.
 config_reader="$repo_root/scripts/csarc_config.py"
 policy_config_value() {
   local key="$1" fallback_value="$2" value
@@ -89,18 +86,26 @@ policy_config_value() {
     printf '%s' "$fallback_value"
   fi
 }
-policy_repository_settings="$(policy_config_value policy_repository_settings true)"
-policy_actions_permissions="$(policy_config_value policy_actions_permissions true)"
-policy_labels="$(policy_config_value policy_labels true)"
-policy_branch_ruleset="$(policy_config_value policy_branch_ruleset true)"
-release_immutable_releases="$(policy_config_value release_immutable_releases required)"
-for policy_toggle in policy_repository_settings policy_actions_permissions \
-  policy_labels policy_branch_ruleset; do
-  if [[ "${!policy_toggle}" != "true" && "${!policy_toggle}" != "false" ]]; then
-    echo "Invalid $policy_toggle in .csarc/config.yml: ${!policy_toggle} (expected true or false)." >&2
-    exit 1
-  fi
-done
+governance_mode="$(policy_config_value governance_mode managed)"
+release_ownership="$(policy_config_value release_ownership csarc-owned)"
+if [[ "$governance_mode" != "managed" && "$governance_mode" != "observe" ]]; then
+  echo "Invalid governance_mode in .csarc/config.yml: $governance_mode (expected managed or observe)." >&2
+  exit 1
+fi
+policy_enabled=false
+if [[ "$governance_mode" == "managed" ]]; then
+  policy_enabled=true
+fi
+policy_repository_settings="$policy_enabled"
+policy_actions_permissions="$policy_enabled"
+policy_labels="$policy_enabled"
+policy_branch_ruleset="$policy_enabled"
+release_immutable_releases="not-required"
+if [[ "$release_ownership" == "csarc-owned" ]]; then
+  release_immutable_releases="required"
+elif [[ "$release_ownership" == "product-owned" ]]; then
+  release_immutable_releases="product-defined"
+fi
 apply_release_policy=false
 if [[ "$release_immutable_releases" == "required" ]]; then
   apply_release_policy=true
@@ -151,11 +156,12 @@ fi
 codeowners_validation=""
 codeowners_inspection_error=""
 codeowners_inspection_available=false
-if [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
-  codeowners_validation="CODEOWNERS must use a GitHub team: @organization/team."
-elif ! codeowners_state="$(gh api "repos/$repo/teams" --paginate --slurp 2>&1)"; then
-  codeowners_inspection_error="$codeowners_state"
-elif ! codeowners_validation="$(python3 - "$code_owner" "$codeowners_state" 2>&1 <<'PY'
+if [[ -z "$code_owner" ]]; then
+  codeowners_inspection_available=true
+elif [[ "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
+  if ! codeowners_state="$(gh api "repos/$repo/teams" --paginate --slurp 2>&1)"; then
+    codeowners_inspection_error="$codeowners_state"
+  elif ! codeowners_validation="$(python3 - "$code_owner" "$codeowners_state" 2>&1 <<'PY'
 import json
 import sys
 
@@ -178,10 +184,32 @@ else:
         )
 PY
 )"; then
-  codeowners_inspection_error="$codeowners_validation"
-  codeowners_validation=""
+    codeowners_inspection_error="$codeowners_validation"
+    codeowners_validation=""
+  else
+    codeowners_inspection_available=true
+  fi
+elif [[ "$code_owner" =~ ^@([A-Za-z0-9][A-Za-z0-9-]{0,38})$ ]]; then
+  codeowner_user="${BASH_REMATCH[1]}"
+  if ! codeowners_state="$(gh api "repos/$repo/collaborators/$codeowner_user/permission" 2>&1)"; then
+    codeowners_inspection_error="$codeowners_state"
+  elif ! codeowners_validation="$(python3 - "$code_owner" "$codeowners_state" 2>&1 <<'PY'
+import json
+import sys
+
+owner = sys.argv[1]
+state = json.loads(sys.argv[2])
+if state.get("permission") not in {"push", "maintain", "admin"}:
+    print(f"{owner} lacks repository write access.")
+PY
+)"; then
+    codeowners_inspection_error="$codeowners_validation"
+    codeowners_validation=""
+  else
+    codeowners_inspection_available=true
+  fi
 else
-  codeowners_inspection_available=true
+  codeowners_validation="CODEOWNERS must use @user or @organization/team."
 fi
 
 if [[ "$mode" != "check" ]]; then
@@ -206,7 +234,7 @@ print_ruleset_guidance() {
   echo "  $billing_url"
   echo "- ALTERNATIVE only when public access is approved: change repository visibility."
   echo "  https://github.com/$repo/settings"
-  echo "- THEN create or confirm the CODEOWNERS team $code_owner and rerun:"
+  [[ -n "$code_owner" ]] && echo "- THEN create or confirm the CODEOWNERS owner $code_owner and rerun:"
   echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh plan"
   echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh apply"
 }
@@ -349,7 +377,7 @@ if [[ "$mode" == "check" ]]; then
   fi
 
   if [[ "$policy_repository_settings" != "true" ]]; then
-    echo "SKIPPED policies/repository.json (policy_repository_settings=false in .csarc/config.yml)."
+    echo "SKIPPED policies/repository.json (governance_mode=observe in .csarc/config.yml)."
   elif ! repository_state="$(gh api "repos/$repo" 2>&1)"; then
     echo "Cannot inspect repository settings for $repo." >&2
     echo "$repository_state" >&2
@@ -536,7 +564,7 @@ PY
   fi
 
   if [[ "$policy_actions_permissions" != "true" ]]; then
-    echo "SKIPPED policies/actions.json (policy_actions_permissions=false in .csarc/config.yml)."
+    echo "SKIPPED policies/actions.json (governance_mode=observe in .csarc/config.yml)."
   elif ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
     if [[ "$repo_admin" != "true" && "$actions_state" == *"Resource not accessible by integration"* ]]; then
       [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
@@ -590,7 +618,7 @@ PY
   fi
 
   if [[ "$policy_labels" != "true" ]]; then
-    echo "SKIPPED policies/labels.json (policy_labels=false in .csarc/config.yml)."
+    echo "SKIPPED policies/labels.json (governance_mode=observe in .csarc/config.yml)."
   elif ! labels_state="$(gh label list --repo "$repo" --limit 1000 --json name,color,description 2>&1)"; then
     echo "Cannot inspect labels for $repo." >&2
     echo "$labels_state" >&2
@@ -622,7 +650,7 @@ PY
   fi
 
   if [[ "$policy_branch_ruleset" != "true" ]]; then
-    echo "SKIPPED policies/rulesets.json (policy_branch_ruleset=false in .csarc/config.yml)."
+    echo "SKIPPED policies/rulesets.json (governance_mode=observe in .csarc/config.yml)."
   elif [[ "$ruleset_enforcement_available" != true ]]; then
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
       echo "::warning title=Repository governance degraded::Required branch protection is unavailable for this private repository; continuing without it."
@@ -683,10 +711,10 @@ if "pull_request" in desired_by_type:
             if desired_pull_request[setting] and not any(rule.get(setting) for rule in pull_request_rules):
                 errors.append(f"{setting} is not enforced")
 
-# Issue #752: pr_review_mode=copilot replaces the required approval with
-# an automatic Copilot review on every push plus the `review` required
-# check; a live Ruleset that lost the Copilot rule would leave nothing to
-# request that review, so its absence is drift.
+# Issue #752/#900: copilot_review=allowed adds a clean exact-head Copilot
+# review as valid evidence and asks GitHub to review every push. A live
+# Ruleset that lost the Copilot rule would leave nothing to request that
+# review, so its absence is drift.
 if "copilot_code_review" in desired_by_type:
     desired_copilot = desired_by_type["copilot_code_review"].get("parameters", {})
     copilot_rules = effective_by_type.get("copilot_code_review", [])
@@ -780,7 +808,7 @@ echo "Deployment plan:"
 if [[ "$policy_repository_settings" == "true" ]]; then
   echo "- APPLY policies/repository.json"
 else
-  echo "- SKIP policies/repository.json (disabled by policy_repository_settings=false)"
+  echo "- SKIP policies/repository.json (governance_mode=observe)"
 fi
 echo "- APPLY policies/issue-creation.json (issue_creation_policy via GraphQL)"
 if [[ "$apply_release_policy" == "true" ]]; then
@@ -798,13 +826,13 @@ fi
 if [[ "$policy_actions_permissions" == "true" ]]; then
   echo "- APPLY policies/actions.json when account policy permits it"
 else
-  echo "- SKIP policies/actions.json (disabled by policy_actions_permissions=false)"
+  echo "- SKIP policies/actions.json (governance_mode=observe)"
 fi
 echo "- APPLY policies/security-scanning.json (security_and_analysis) when GitHub Advanced Security or repository visibility permits it"
 if [[ "$policy_labels" == "true" ]]; then
   echo "- APPLY policies/labels.json (create or update policy labels)"
 else
-  echo "- SKIP policies/labels.json (disabled by policy_labels=false)"
+  echo "- SKIP policies/labels.json (governance_mode=observe)"
 fi
 if [[ "$policy_branch_ruleset" == "true" && "$legacy_ruleset_id" != "-" ]]; then
   echo "- DELETE stale Ruleset: $legacy_ruleset_name ($legacy_ruleset_id)"
@@ -833,10 +861,10 @@ PY
   fi
 fi
 if [[ "$policy_branch_ruleset" != "true" ]]; then
-  echo "- SKIP policies/rulesets.json (disabled by policy_branch_ruleset=false)"
+  echo "- SKIP policies/rulesets.json (governance_mode=observe)"
 elif [[ "$ruleset_enforcement_available" == true ]]; then
   echo "- APPLY policies/rulesets.json + policies/rulesets-required-checks.json (enforced by GitHub)"
-  echo "CODEOWNERS team: $code_owner"
+  [[ -n "$code_owner" ]] && echo "CODEOWNERS owner: $code_owner"
 elif [[ "$ruleset_inventory_available" == true ]]; then
   echo "- PRESERVE policies/rulesets.json locally (public APIs cannot create a Ruleset on this plan)"
   if [[ "$ruleset_node_id" == "-" ]]; then
@@ -1005,7 +1033,7 @@ if [[ "$policy_branch_ruleset" == "true" && "$ruleset_enforcement_available" == 
   "$pages_policy_applied" == true && "$security_and_analysis_applied" == true ]]; then
   echo "Required repository settings applied, including branch protection."
 elif [[ "$policy_branch_ruleset" != "true" ]]; then
-  echo "Repository settings applied; branch protection Ruleset is disabled by policy_branch_ruleset=false."
+  echo "Repository settings observed only; governance_mode=observe leaves live policies unchanged."
 else
   echo "DEGRADED repository settings applied; unavailable policy remains declarative and runtime workflows adapt."
 fi

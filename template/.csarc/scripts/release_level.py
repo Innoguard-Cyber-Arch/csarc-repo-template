@@ -104,39 +104,29 @@ class Decision:
 
 
 def settings_from_mapping(config: dict[str, object]) -> Settings:
-    """Build validated settings, preserving safe behavior for old configs."""
-    enabled = config.get("release_levels_enabled", True)
+    """Build the fixed verification floor and configured human review mode."""
+    enabled = True
     default_level = config.get("default_release_level", "beta")
-    if not isinstance(enabled, bool):
-        raise ValueError("release_levels_enabled must be true or false")
     if default_level not in LEVELS:
         raise ValueError(
             "default_release_level must be one of " + ", ".join(LEVELS)
         )
-    reviews: dict[str, str] = {}
-    suites: dict[str, str] = {}
-    for level in LEVELS:
-        review = config.get(
-            f"release_level_{level}_review", DEFAULT_REVIEW[level]
-        )
-        suite = config.get(
-            f"release_level_{level}_verification", DEFAULT_SUITE[level]
-        )
-        if review not in REVIEWS:
-            raise ValueError(
-                f"release_level_{level}_review must be one of "
-                + ", ".join(REVIEWS)
-            )
-        if isinstance(suite, str):
-            suite = LEGACY_SUITE_ALIASES.get(suite, suite)
-        if suite not in SUITES:
-            raise ValueError(
-                f"release_level_{level}_verification must be one of "
-                + ", ".join(SUITES)
-            )
-        reviews[level] = str(review)
-        suites[level] = str(suite)
-    return Settings(enabled, str(default_level), reviews, suites)
+    review = config.get("review")
+    if review is None:
+        legacy = [
+            config.get(f"release_level_{level}_review", DEFAULT_REVIEW[level])
+            for level in LEVELS
+        ]
+        review = "peer" if "peer" in legacy else "solo"
+    if review not in {"solo", "peer"}:
+        raise ValueError("review must be solo or peer")
+    resolved_review = "self" if review == "solo" else "peer"
+    return Settings(
+        enabled,
+        str(default_level),
+        {level: resolved_review for level in LEVELS},
+        dict(DEFAULT_SUITE),
+    )
 
 
 def load_settings(path: Path | None = None) -> Settings:

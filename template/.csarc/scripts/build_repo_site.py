@@ -91,10 +91,14 @@ _CONFIG_TOKENS: Final = (
     "project_name",
     "project_description",
     "languages",
-    "branch_strategy",
+    "governance_mode",
+    "lifecycle",
     "project_visibility",
     "code_owner",
-    "reviewers",
+    "review",
+    "copilot_review",
+    "release_trigger",
+    "features",
     "repository_url",
 )
 _CONFIG_TOKEN: Final = re.compile(

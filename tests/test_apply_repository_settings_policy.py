@@ -1,20 +1,4 @@
-"""Policy-toggle regression tests for scripts/apply-repository-settings.sh.
-
-Issue #532 lets a project opt out of one template-owned policy area at a
-time via `.csarc/config.yml` (`policy_repository_settings`,
-`policy_actions_permissions`, `policy_labels`, `policy_branch_ruleset`, and
-the existing `release_immutable_releases` contract for
-policies/releases.json). These tests run the real script end to end against
-a fake `gh` CLI and assert that different policy combinations produce the
-correct generated-repo behavior: disabled areas are skipped (no mutating
-`gh` call, a `SKIPPED`/`SKIP` line, no drift accounted in `check`), enabled
-areas are still applied and checked exactly as before, and a legacy
-`.csarc/config.yml` predating this feature keeps every area on by default.
-
-The branch-Ruleset domain spans separate required-check and review-policy
-Rulesets. Tests that isolate another policy area disable that domain, while
-the dedicated branch-Ruleset scenarios exercise both owned definitions.
-"""
+"""Governance-mode tests for scripts/apply-repository-settings.sh."""
 
 from __future__ import annotations
 
@@ -24,8 +8,6 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_SOURCE = ROOT / "scripts" / "apply-repository-settings.sh"
@@ -73,6 +55,10 @@ case "$1" in
         team_json='[[{"slug": "platform", "permission": "admin",'
         team_json+=' "permissions": {"admin": true}}]]'
         echo "$team_json"
+        ;;
+      */rules/branches/*)
+        jq -s '[.[].rules[]]' \
+          "$FAKE_GH_RULESET_STATE" "$FAKE_GH_REQUIRED_CHECKS_STATE"
         ;;
       */rulesets)
         echo "[]"
@@ -143,31 +129,13 @@ esac
 CONFIG_CSARC_OWNED = """\
 project_mode: existing
 release_ownership: csarc-owned
-release_workflow: .github/workflows/release.yml
-release_required_inputs: []
-release_ownership_reason: CSARC owns the only version and GitHub Release
-  workflow.
-release_settings_owner: csarc-admin
-release_immutable_releases: required
-policy_repository_settings: true
-policy_actions_permissions: true
-policy_labels: true
-policy_branch_ruleset: false
+governance_mode: managed
 """
 
 CONFIG_VERIFICATION_ONLY_ALL_DISABLED = """\
 project_mode: existing
 release_ownership: verification-only
-release_workflow: ''
-release_required_inputs: []
-release_ownership_reason: No product release writer was detected; CSARC
-  verifies only.
-release_settings_owner: none
-release_immutable_releases: not-required
-policy_repository_settings: false
-policy_actions_permissions: false
-policy_labels: false
-policy_branch_ruleset: false
+governance_mode: observe
 """
 
 CONFIG_LEGACY_NO_POLICY_KEYS = "languages: []\n"
@@ -236,6 +204,10 @@ def _run(
     env["FAKE_GH_REPOSITORY_STATE"] = str(ROOT / "policies" / "repository.json")
     env["FAKE_GH_ACTIONS_STATE"] = str(ROOT / "policies" / "actions.json")
     env["FAKE_GH_LABELS_STATE"] = str(ROOT / "policies" / "labels.json")
+    env["FAKE_GH_RULESET_STATE"] = str(ROOT / "policies" / "rulesets.json")
+    env["FAKE_GH_REQUIRED_CHECKS_STATE"] = str(
+        ROOT / "policies" / "rulesets-required-checks.json"
+    )
     env["FAKE_GH_IMMUTABLE_UNREADABLE"] = str(immutable_unreadable).lower()
     env["FAKE_GH_REPO_ADMIN"] = str(repo_admin).lower()
     label_names = tmp_path / "label-names.txt"
@@ -286,7 +258,7 @@ def test_disabled_policies_are_skipped_in_check_and_apply(
     check_output = check_result.stdout + check_result.stderr
     assert check_result.returncode == 0, check_output
     assert (
-        "SKIPPED policies/repository.json (policy_repository_settings=false"
+        "SKIPPED policies/repository.json (governance_mode=observe"
         in check_output
     )
     assert (
@@ -294,12 +266,13 @@ def test_disabled_policies_are_skipped_in_check_and_apply(
         "not-required" in check_output
     )
     assert (
-        "SKIPPED policies/actions.json (policy_actions_permissions=false"
-        in check_output
+        "SKIPPED policies/actions.json (governance_mode=observe" in check_output
     )
-    assert "SKIPPED policies/labels.json (policy_labels=false" in check_output
     assert (
-        "SKIPPED policies/rulesets.json (policy_branch_ruleset=false"
+        "SKIPPED policies/labels.json (governance_mode=observe" in check_output
+    )
+    assert (
+        "SKIPPED policies/rulesets.json (governance_mode=observe"
         in check_output
     )
     # issue_creation_policy, security_and_analysis, and GitHub Pages (Issues
@@ -337,8 +310,7 @@ def test_disabled_policies_are_skipped_in_check_and_apply(
     assert "- SKIP policies/labels.json" in apply_output
     assert "- SKIP policies/rulesets.json" in apply_output
     assert (
-        "branch protection Ruleset is disabled by policy_branch_ruleset=false"
-        in apply_output
+        "governance_mode=observe leaves live policies unchanged" in apply_output
     )
 
     full_log = check_log.read_text(encoding="utf-8") + apply_log.read_text(
@@ -382,18 +354,15 @@ def test_enabled_policies_are_still_applied_and_checked(
         "Policy labels match policies/labels.json; extra labels are allowed."
         in check_output
     )
-    assert (
-        "SKIPPED policies/rulesets.json (policy_branch_ruleset=false"
-        in check_output
-    )
+    assert "Repository governance ready" in check_output
 
     apply_log = tmp_path / "gh-apply.log"
     apply_result = _run(repo, tmp_path, "apply", log_path=apply_log)
     apply_output = apply_result.stdout + apply_result.stderr
     assert apply_result.returncode == 0, apply_output
     assert (
-        "branch protection Ruleset is disabled by policy_branch_ruleset=false"
-        in apply_output
+        "DEGRADED repository settings applied; unavailable policy remains "
+        "declarative and runtime workflows adapt." in apply_output
     )
 
     full_log = apply_log.read_text(encoding="utf-8")
@@ -440,25 +409,16 @@ def test_legacy_config_without_policy_keys_defaults_every_area_on(
     )
 
 
-@pytest.mark.parametrize(
-    "toggle_key",
-    [
-        "policy_repository_settings",
-        "policy_actions_permissions",
-        "policy_labels",
-        "policy_branch_ruleset",
-    ],
-)
-def test_policy_toggle_value_is_readable_through_csarc_config(
-    tmp_path: Path, toggle_key: str
+def test_governance_mode_is_readable_through_csarc_config(
+    tmp_path: Path,
 ) -> None:
-    """Each toggle round-trips through the shared config reader as a bool."""
-    repo = _make_repo(tmp_path, f"languages: []\n{toggle_key}: false\n")
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, "scripts/csarc_config.py", toggle_key],
+    """The single governance switch round-trips through the config reader."""
+    repo = _make_repo(tmp_path, "languages: []\ngovernance_mode: observe\n")
+    result = subprocess.run(
+        [sys.executable, "scripts/csarc_config.py", "governance_mode"],
         cwd=repo,
         check=True,
         capture_output=True,
         text=True,
     )
-    assert result.stdout.strip() == "false"
+    assert result.stdout.strip() == "observe"

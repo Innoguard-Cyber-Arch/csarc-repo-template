@@ -1,11 +1,14 @@
 # Template policy manifest ADR
 
-- **狀態：**Accepted
+- **狀態：**Superseded
 - **日期：**2026-09-04
 - **來源 Issue：**[#532](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/532)
 - **實作 PR：**[#637](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/637)
+- **取代者：**[#900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)
 
 ## 問題與限制
+
+> 2026-09-22：下列四個 `policy_*` 布林值已由 `governance_mode: managed|observe` 取代。歷史理由保留於此；現行契約見 [`simplified-project-configuration.md`](simplified-project-configuration.md)。
 
 `scripts/apply-repository-settings.sh` 目前無條件套用並檢查全部五類模板內建政策（repository、releases、Actions、labels、branch Ruleset），沒有一個統一的地方讓導入者宣告「這個模板內建政策我要用、那個我不要用」。既有 `.csarc/config.yml` 已有 `release_ownership`／`release_immutable_releases` 描述發版擁有權，但沒有任何鍵控制 repository、Actions、labels、Ruleset 四類政策是否套用；重新設計這些既有非政策鍵不在本決策範圍內。
 

@@ -2,10 +2,12 @@
   "name": "CSARC protected branches",
   "target": "branch",
   "enforcement": "active",
-  "bypass_actors": [],
+  "bypass_actors": [{% if actions_fallback == 'admin' %}
+    {"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "pull_request"}
+  {% endif %}],
   "conditions": {
     "ref_name": {
-      "include": ["~DEFAULT_BRANCH"{% if branch_strategy == "delivery" %}, "refs/heads/dev/m*"{% endif %}],
+      "include": ["~DEFAULT_BRANCH", "refs/heads/dev/m*"],
       "exclude": []
     }
   },
@@ -20,7 +22,7 @@
         "required_approving_review_count": 0,
         "required_review_thread_resolution": true
       }
-    }{% if pr_review_mode | default('human') == 'copilot' %},
+    }{% if copilot_review == 'allowed' %},
     {
       "type": "copilot_code_review",
       "parameters": {

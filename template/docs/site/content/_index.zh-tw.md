@@ -21,7 +21,7 @@ fit = "符合畫面"
 {{< standard key="index-mode-standard" title="這個 repo 目前的治理設定" >}}
 這個 repo 使用 [csarc-repo-template](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template) 建立與維護，工作方式跟程式碼一樣可版本化、驗證與升級：
 
-<div class="capability-map"><div class="capability-node"><h3>使用語言</h3><p>[[languages]]</p></div><div class="capability-node"><h3>分支策略</h3><p>[[branch_strategy]]</p></div><div class="capability-node"><h3>可見度</h3><p>[[project_visibility]]</p></div><div class="capability-node"><h3>下一步</h3><p>切換「安裝說明」看怎麼開始，或切換「關於」看這個治理基線做了什麼。</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>使用語言</h3><p>[[languages]]</p></div><div class="capability-node"><h3>審查方式</h3><p>[[review]]；Copilot [[copilot_review]]</p></div><div class="capability-node"><h3>可見度</h3><p>[[project_visibility]]</p></div><div class="capability-node"><h3>下一步</h3><p>切換「安裝說明」看怎麼開始，或切換「關於」看這個治理基線做了什麼。</p></div></div>
 {{< /standard >}}
 
 {{< ops key="index-mode-ops" title="設定來源" >}}
@@ -30,8 +30,10 @@ fit = "符合畫面"
 | 設定 | 目前值 |
 | --- | --- |
 | 負責人 | `[[code_owner]]` |
-| 審查者 | `[[reviewers]]` |
-| 分支策略 | `[[branch_strategy]]` |
+| 審查 | `[[review]]`；Copilot `[[copilot_review]]` |
+| 工作項目自動化 | `[[lifecycle]]` |
+| 發版觸發 | `[[release_trigger]]` |
+| 選配功能 | `[[features]]` |
 | 可見度 | `[[project_visibility]]` |
 | 使用語言 | `[[languages]]` |
 
