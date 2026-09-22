@@ -243,6 +243,20 @@ def test_beta_non_hotfix_rejects_admin_self_approval(
 ) -> None:
     """The emergency exception cannot be used by an ordinary beta Issue."""
     _stub_permission(monkeypatch, "admin")
+    release_level = standalone_issue_approval_decision.__globals__[
+        "release_level"
+    ]
+    monkeypatch.setattr(
+        release_level,
+        "load_settings",
+        lambda: release_level.settings_from_mapping(
+            {
+                "release_levels_enabled": True,
+                "default_release_level": "beta",
+                "release_level_beta_review": "peer",
+            }
+        ),
+    )
     result = standalone_issue_approval_decision(
         issue_snapshot(comment(1, "worker", "Admin-approve: no reviewer")),
         210,

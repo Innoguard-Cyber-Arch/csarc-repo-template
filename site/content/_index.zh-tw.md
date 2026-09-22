@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.18.0-alpha.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.19.0-alpha.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。本頁內容與 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 對齊、雙語同步維護。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.18.0-alpha.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.19.0-alpha.1<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -750,7 +750,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 必要基線 | `branch_strategy` | 預設 `delivery`；可選 `delivery`、`main` | 分支指引、`policies/rulesets.json`，以及 repo-site 的交付路線段落 |
 | 組織政策 | `code_owner` | 一個存在且有 repo write access 的 `@organization/team` | `.github/CODEOWNERS`；由 repository settings plan／apply／check 驗證；repo-site 的主要負責人欄位 |
 | 組織政策 | `reviewers` | 一個或多個 GitHub 使用者名稱 | `.github/REVIEWERS`；`governance-comment.yml` 在每張非 draft PR 自動輪派 |
-| 專案選擇 | `release_levels_enabled`、`default_release_level`、`release_level_*_{review,verification}` | 新專案預設 alpha；既有導入與公版 root 預設 beta；逐層可設定 self／peer 與 fast／full | Issue／Milestone 層級解析、`review` gate、驗證 attestation 與 release notes |
+| 專案選擇 | `release_levels_enabled`、`default_release_level`、`release_level_*_{review,verification}` | 公版 root 關閉一般工作分層、預設 alpha，並把所有層級映射為 self／fast；新專案預設啟用 alpha，既有導入預設啟用 beta；逐層可設定 self／peer 與 fast／full | Issue／Milestone 層級解析、`review` gate、驗證 attestation 與 release notes |
 | 專案選擇 | `pr_review_mode` | 新專案預設 `copilot`；可選 `copilot`、`human`；`copier update` 對既有專案預設 `human` | `policies/rulesets.json`（`copilot` 改為 0 個 approval、自動請 Copilot 審核每次 push，並要求 `review` 檢查）；`pr-review.yml` 與 `scripts/review_gate.py` 接受 Copilot 對目前 head 沒有意見，或 maintainer 對目前 head 的 approval；需要 Copilot 授權 |
 | 專案選擇 | `copilot_review_max_level` | 預設 `unlimited`；可選 `alpha`、`beta`、`early`、`release`（formal） | Copilot 通過可取代人工審核的最高發布層級；高於上限時要求 maintainer 核准 |
 | 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及 repo-site 的可見受眾欄位 |

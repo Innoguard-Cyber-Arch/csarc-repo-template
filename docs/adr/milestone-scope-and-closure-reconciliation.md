@@ -278,3 +278,18 @@ Milestone work Issue 一律繼承 tracker 層級；子 Issue 若自行宣告不�
 是 hotfix 緊急路徑：必須是 standalone hotfix Issue，由同一位即時具 admin 權限的提案者
 對 exact head 留理由並執行 merge，合併後自動建立待同儕複核 Issue。必要 status checks
 在任何層級與任何例外下都不能 bypass。
+
+## `#880`：公版 root 採用單一 alpha 自助治理
+
+- **狀態：**Accepted
+- **日期：**2026-09-22
+- **來源 Issue：**[#880](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/880)
+
+公版 root 的 `.csarc/config.yml` 關閉一般工作的 release-level 宣告解析、預設採
+`alpha`，並把所有層級都映射為 `self`／`fast`。Milestone tracker 或 standalone Issue
+仍保留原本的核准 gate，但可走既有的 admin self-approval；PR 仍須使用綁定 exact head
+的授權與 `scripts/pr_lifecycle.py`，必要 status checks 及高風險路徑加跑不因本決定放寬。
+
+這只取代 #745 的「公版 root 預設啟用分層且採 beta」選擇，不刪除四層模組，也不改變
+新生成專案與既有專案導入的預設。#877 的引導式安裝沿用同一份 Copier questions，讓安裝者
+決定是否啟用分層、預設層級及各層 review／verification；不新增第二份 schema 或 gate。
