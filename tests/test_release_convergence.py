@@ -187,10 +187,9 @@ def test_two_genuinely_concurrent_runs_never_produce_two_releases(
 ) -> None:
     """A real race on tag creation converges to one Release, not two.
 
-    Both processes are synchronized on a barrier so they read "tag does not
-    exist yet" at the same time, guaranteeing an actual race on the create
-    call rather than a timing-dependent one. Exactly one may win; the loser
-    must fail closed (not silently succeed, not create a second Release).
+    Both processes enter the tag lookup together, but either may observe the
+    winner's completed tag and Release. That idempotent path may also succeed;
+    every valid interleaving must still create exactly one Release.
     """
     fixture, state = make_fixture(tmp_path)
     sha = "c" * 40
@@ -210,13 +209,13 @@ def test_two_genuinely_concurrent_runs_never_produce_two_releases(
         results = [future.result(timeout=30) for future in futures]
 
     outcomes = [result.returncode for result in results]
-    assert outcomes.count(0) == 1, [
+    assert 0 in outcomes, [
         (result.returncode, result.stderr) for result in results
     ]
-    assert outcomes.count(0) + outcomes.count(1) == 2
+    assert all(outcome in {0, 1} for outcome in outcomes)
 
-    assert (state / "tags" / "v9.9.9").is_file()
-    assert (state / "releases" / "v9.9.9").is_file()
+    assert {path.name for path in (state / "tags").iterdir()} == {"v9.9.9"}
+    assert {path.name for path in (state / "releases").iterdir()} == {"v9.9.9"}
     create_log = state / "create-log"
     lines = create_log.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
