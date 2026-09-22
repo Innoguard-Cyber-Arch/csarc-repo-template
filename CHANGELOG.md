@@ -7,6 +7,13 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.19.0-alpha.1] - 2026-09-22
+
+### Features
+
+* feat(release): publish milestones from promotion PRs (#873) (eaa3672)
+* feat: prepare AI security scanner guidance (#874) (cd9d756)
+
 ## [0.18.0-alpha.1] - 2026-09-22
 
 ### Features
