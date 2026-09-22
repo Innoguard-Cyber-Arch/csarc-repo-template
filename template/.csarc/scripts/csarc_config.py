@@ -14,6 +14,7 @@ LIFECYCLE_CAPABILITIES = {"issues", "milestones"}
 HUMAN_REVIEW_MODES = {"peer", "solo"}
 COPILOT_REVIEW_MODES = {"allowed", "off"}
 ACTIONS_FALLBACK_MODES = {"admin", "off"}
+VERIFICATION_MODES = {"hosted", "local"}
 RELEASE_TRIGGERS = {"main", "manual"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
 RELEASE_SETTINGS = {
@@ -91,6 +92,8 @@ def _legacy_default(  # noqa: C901
         return ["issues", "milestones"]
     if key == "actions_fallback":
         return "off"
+    if key == "verification_mode":
+        return "hosted"
     if key == "review":
         reviews = [
             config.get(
@@ -119,6 +122,7 @@ def normalize_config(config: dict[str, object]) -> dict[str, object]:
         "governance_mode",
         "lifecycle",
         "actions_fallback",
+        "verification_mode",
         "review",
         "copilot_review",
         "release_trigger",
@@ -228,6 +232,7 @@ def validate_config(
     """Validate the managed settings consumed by repository automation."""
     choices = {
         "actions_fallback": ACTIONS_FALLBACK_MODES,
+        "verification_mode": VERIFICATION_MODES,
         "branch_strategy": {"delivery", "main"},
         "copilot_review": COPILOT_REVIEW_MODES,
         "copilot_review_max_level": COPILOT_REVIEW_MAX_LEVELS,

@@ -2117,6 +2117,52 @@ def test_merge_snapshot_allows_agent_only_with_enforced_no_bypass_rules(
     assert snapshot["merge_mode"] == "human-only"
 
 
+def test_local_mode_uses_exact_local_evidence_without_hosted_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lifecycle reuses local policy and suite evidence on one head."""
+    bind_remote_lease(monkeypatch)
+    monkeypatch.setitem(
+        merge_snapshot.__globals__,
+        "configured_verification_mode",
+        lambda: "local",
+    )
+    monkeypatch.setitem(
+        merge_snapshot.__globals__,
+        "require_local_pull_policy",
+        lambda *_: None,
+    )
+    evidence = {
+        "trust": "self-attested-local",
+        "tree_sha": "e" * 40,
+        "tier": "fast",
+        "scopes": ["source"],
+    }
+    monkeypatch.setattr(
+        MODULE["local_verification"],
+        "require",
+        lambda **kwargs: evidence,
+    )
+    github = FakeGitHub("a" * 40)
+    github.required_status_checks = []
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+
+    snapshot = merge_snapshot(github, lease_fixture())
+
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["required_check_evidence"] == "local-self-attested"
+    assert snapshot["local_verification"] == evidence
+
+
 def test_exact_head_review_allows_the_known_alpha_ruleset_bypass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -1845,6 +1845,7 @@ def report_settings(data: dict[str, object]) -> str:
     """Return known non-secret settings used for rendering."""
     allowed = {
         "actions_fallback",
+        "verification_mode",
         "code_owner",
         "copilot_review",
         "coverage_mode",
@@ -5862,6 +5863,7 @@ def migrate_simplified_settings(
         "governance_mode": governance_mode,
         "lifecycle": ["issues", "milestones"],
         "actions_fallback": "off",
+        "verification_mode": "hosted",
         "review": "peer" if "peer" in legacy_reviews else "solo",
         "copilot_review": (
             "allowed" if answers.get("pr_review_mode") == "copilot" else "off"
@@ -6460,11 +6462,30 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             # apply_layout_moves() migrated the answers file before Copier's
             # finalize tasks read the one canonical configuration path.
             candidate_config_path = candidate / CONFIG_FILE
+        seeding_verification_mode = "verification_mode" not in saved_answers
+        if seeding_verification_mode:
+            # Copier reconstructs both revisions from the saved answers.
+            # Seed this new conditional answer before the three-way update
+            # so legacy projects retain their hosted workflow files.
+            source = candidate_config_path.read_text(encoding="utf-8")
+            separator = "" if source.endswith("\n") else "\n"
+            candidate_config_path.write_text(
+                source
+                + separator
+                + "verification_mode: "
+                + str(candidate_answers["verification_mode"])
+                + "\n",
+                encoding="utf-8",
+            )
         for retiring_file in retiring_files:
             # The legacy profile is superseded by CONFIG_FILE. Tool-specific
             # configs are now materialized by stable adapters at runtime.
             retiring_file.unlink()
-        if migrating_legacy_config or retiring_files:
+        if (
+            migrating_legacy_config
+            or retiring_files
+            or seeding_verification_mode
+        ):
             # Copier's own `update` refuses to run against a dirty
             # destination, so commit this filesystem-only migration before
             # invoking it; HEAD is moved back afterward (see below) without

@@ -49,6 +49,10 @@ if [[ -z "$base_ref" ]]; then
   echo "Cannot resolve verification base '$base'; fetch it or set CSARC_CI_BASE." >&2
   exit 2
 fi
+{% if verification_mode == "local" -%}
+verification_head_sha="$(git rev-parse HEAD)"
+verification_base_sha="$(git rev-parse "$base_ref^{commit}")"
+{% endif -%}
 if ! merge_base="$(git merge-base "$base_ref" HEAD)"; then
   echo "Cannot find a merge base between '$base_ref' and HEAD." >&2
   exit 2
@@ -189,3 +193,9 @@ if [[ "$scopes" == *,docs,* ]]; then
   verification_step "Repository site render" ./.csarc/scripts/build-repo-site --check
 {% endif -%}
 fi
+
+{% if verification_mode == "local" -%}
+python3 .csarc/scripts/local_verification.py record \
+  --tier fast --scopes "${scope_csv:-unknown}" --base "$base" \
+  --head-sha "$verification_head_sha" --base-sha "$verification_base_sha"
+{% endif -%}

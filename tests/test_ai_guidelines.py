@@ -35,6 +35,7 @@ def test_generated_guidance_has_one_source_and_real_commands(
         "languages": [] if language == "ci" else language.split("-"),
         "package_name": "guidance_fixture",
         "project_name": "Guidance fixture",
+        "verification_mode": "hosted",
     }
     entry = environment.from_string(TEMPLATE.read_text(encoding="utf-8"))
     workflow = environment.from_string(

@@ -316,13 +316,14 @@ def test_release_rerun_recovers_a_tag_without_a_release() -> None:
 
 
 def test_template_only_adds_release_workflow_to_new_repositories() -> None:
-    """Leave an existing repository's product-owned release workflow alone."""
+    """Only new hosted repositories receive the release workflow."""
     copier = (ROOT / "copier.yml").read_text(encoding="utf-8")
     template = (
         ROOT / "template/.github/workflows/release.yml.jinja"
     ).read_text(encoding="utf-8")
 
     assert "project_mode == 'new'" in copier
+    assert "verification_mode == 'hosted'" in copier
     assert ".github/workflows/release.yml" in copier
     assert (
         './.csarc/scripts/check-trusted-verification "$GITHUB_SHA"' in template
@@ -571,20 +572,22 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
 
 
 def test_release_drift_check_ships_with_release_ownership() -> None:
-    """Only a repository that owns release.yml needs its drift check.
+    """Only a hosted repository that owns release.yml needs its drift check.
 
-    Reuses release.yml's own project_mode == 'new' exclude condition
-    instead of adding a second Copier option -- consistent with the
+    Reuses release.yml's project and verification mode conditions instead
+    of adding a second Copier option -- consistent with the
     release-security-and-dependencies ADR's "本節也不新增 Copier 選項"
     principle for this same capability pairing.
     """
     copier = (ROOT / "copier.yml").read_text(encoding="utf-8")
     assert (
-        "{% if project_mode == 'new' %}__keep_release_drift_workflow__"
+        "{% if project_mode == 'new' and verification_mode == 'hosted' %}"
+        "__keep_release_drift_workflow__"
         "{% else %}.github/workflows/release-drift.yml{% endif %}" in copier
     )
     assert (
-        "{% if project_mode == 'new' %}__keep_release_drift_script__"
+        "{% if project_mode == 'new' and verification_mode == 'hosted' %}"
+        "__keep_release_drift_script__"
         "{% else %}.csarc/scripts/check-release-drift{% endif %}" in copier
     )
 

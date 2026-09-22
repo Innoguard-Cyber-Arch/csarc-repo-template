@@ -102,9 +102,9 @@ flowchart LR
 
 GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktree 的 agent 也負責在 PR 合併後回收：先離開該 worktree 並更新 integration ref，再從另一個 checkout 執行 `./.csarc/scripts/cleanup-worktrees --apply --worktree <path> origin/<integration-branch>`。腳本預設只列出候選項目，且只接受有 GitHub merged PR 證據、已進入 integration ref、乾淨且未鎖定的 branch worktree；維護者要清理全 repo 時，先執行不含 `--apply` 的 dry run，再省略 `--worktree` 套用全部候選項目。
 
-`./.csarc/scripts/verify` 是本機與 CI 共用的完整入口。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，依變更選擇 fast／full，再呼叫 repo-local 程式；docs-only 是 fast 內的 scope 最佳化，不是另一個 tier。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。開發中可直接跑最窄的 focused check；只有 PR 本身就落在 full 邊界時，owner／integrator 才需要在本機另外執行一次 `./.csarc/scripts/verify`。詳細分級與目前封存邊界見 [`.csarc/docs/ci-policy.md`](.csarc/docs/ci-policy.md)。
+`./.csarc/scripts/verify` 是完整入口。預設 `verification_mode: local` 會在 fast／full 成功後留下綁定 exact head/tree、base、tier 與 scopes 的 self-attested evidence，由 merge lifecycle 重驗後走有 trace 的 admin bypass；不產生 hosted validation／release workflow 或 required checks。需要獨立 runner 或 release provenance 時改成 `hosted`，GitHub-hosted `verify` 會執行相同入口。兩種模式共用同一個 risk-owned router 與 suite，不增加測試矩陣；本機證明不能取代第三方服務、部署或 release provenance。詳細邊界見 [`.csarc/docs/ci-policy.md`](.csarc/docs/ci-policy.md)。
 
-另行的 promotion、release handoff、registry publisher 與 deployment workflows 沒有啟用；單一 `release.yml` 已設定為候選，首次成功實跑後才算 Active。已判定不恢復的版本／交付 archived YAML 已移除。OSV 已啟用；Zizmor、remote governance 與其他仍待 owner 決定的舊 workflow 留在中央模板 archive，不會下發。Reviewer assignment 與選配的治理漂移排程不在此列，詳見下方「設定與密鑰」段落。
+另行的 promotion、release handoff、registry publisher 與 deployment workflows 沒有啟用。{% if verification_mode == "hosted" %}單一 `release.yml` 已設定為候選，首次成功實跑後才算 Active；OSV 會在相關 PR 與排程執行。{% else %}local 模式不產生 hosted release 與 OSV 排程；相同的 dependency scan 由 canonical verifier 在本機執行。{% endif %}已判定不恢復的版本／交付 archived YAML 已移除。Zizmor、remote governance 與其他仍待 owner 決定的舊 workflow 留在中央模板 archive，不會下發。Reviewer assignment 與選配的治理漂移排程不在此列，詳見下方「設定與密鑰」段落。
 
 ### Actions 額度耗盡的一次性驗證
 
@@ -112,11 +112,11 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 
 `./.csarc/scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹；尚未 `git init` 的新專案仍可掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
-{% if enable_codeql | default(false) %}此專案已產生 CodeQL workflow，分析已選取的 Python／TypeScript 模組；它補足跨函式資料流等 SAST 檢查，但仍可能有誤報與漏報，結果需人工 triage。{% else %}此專案未啟用 SAST。語言 lint 與 OSV 分別處理程式品質和已知相依漏洞，不能替代 SAST；public repo 可重新產生並啟用 `enable_codeql`，private／internal repo 則需先確認 GitHub Code Security 授權，或由專案選用核准的替代工具。{% endif %}
+{% if verification_mode == "hosted" and enable_codeql | default(false) %}此專案已產生 CodeQL workflow，分析已選取的 Python／TypeScript 模組；它補足跨函式資料流等 SAST 檢查，但仍可能有誤報與漏報，結果需人工 triage。{% else %}此專案未啟用 SAST。語言 lint 與 OSV 分別處理程式品質和已知相依漏洞，不能替代 SAST；public repo 可切換為 `verification_mode: hosted`、更新模板並啟用 `enable_codeql`，private／internal repo 則需先確認 GitHub Code Security 授權，或由專案選用核准的替代工具。{% endif %}
 
-{% if 'docker' in features %}此專案已透過 `features` 產生 `Dockerfile`、`docker-compose.yml` 起始範本，以及 `.github/workflows/docker-build-scan.yml`：只在建置或掃描相關路徑變更時觸發，`contents: read` 唯讀權限，只在 runner 本機建置映像（不推送）並用 Trivy 掃描已知漏洞，不登入、不推送任何 registry，也不要求任何 secret。{% else %}此專案未選取 `docker` feature，因此不會產生容器相關檔案、job 或權限。{% endif %}
+{% if 'docker' in features %}此專案已透過 `features` 產生 `Dockerfile` 與 `docker-compose.yml` 起始範本。{% if verification_mode == "hosted" %}生成的 `.github/workflows/docker-build-scan.yml` 只在相關路徑變更時觸發，以唯讀權限建置且不推送映像，再用 Trivy 掃描。{% else %}完整本機驗證會使用已安裝的 Docker 與 Trivy 建置並掃描相同映像，不啟動 hosted job，也不需要 registry credentials。{% endif %}{% else %}此專案未選取 `docker` feature，因此不會產生容器相關檔案、job 或權限。{% endif %}
 
-`./.csarc/scripts/verify-template.sh` 與 root 專用升版／同步工具只屬於中央模板 repo，不會下發到本專案；本專案的本機與 CI 驗證入口都是 `./.csarc/scripts/verify`。
+`./.csarc/scripts/verify-template.sh` 與 root 專用升版／同步工具只屬於中央模板 repo，不會下發到本專案；本專案唯一驗證入口是 `./.csarc/scripts/verify`，local 與 hosted 模式都共用它。
 
 {% if not languages %}目前驗證 spec、README、JSON、workflow 與機密字串；沒有語言模組，因此不執行語言測試或打包。
 {% else %}目前驗證包含{% if has_python %} Ruff、ty、pytest、{{ coverage_threshold }}% coverage、wheel 與相依下界{% endif %}{% if has_python and (has_rust or has_typescript) %}，以及{% endif %}{% if has_rust %} rustfmt、Clippy、測試、release build 與 Cargo package{% endif %}{% if has_rust and has_typescript %}，以及{% endif %}{% if has_typescript %} Biome、TypeScript、Vitest {{ coverage_threshold }}% coverage 與 npm tarball{% endif %}，最後再檢查 spec、機密字串與 lockfile。
@@ -128,7 +128,7 @@ Coverage 是找出未測程式碼的訊號，不等於測試品質，也不取�
 
 ## 設定與密鑰
 
-GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。{% if project_mode == "new" %}新案必須在首次發布前由管理員於可信任的 checkout 執行 `./.csarc/scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 驗證 immutable Releases 與其餘必要設定；缺少這一步時 release workflow 會 fail-closed。{% else %}既有案是否套用發布設定由 product-owned release 流程決定；其餘 CSARC 治理可由管理員先執行 `plan`，確認後執行 `apply`，最後以 `check` 驗證。{% endif %}`check` 唯讀比對 CODEOWNERS、repository、immutable Releases、Actions、政策標籤與有效 Ruleset。可修正差異會失敗，Free private Ruleset或組織政策限制則明確標為 `DEGRADED` 並保留具體差異；無法讀取必要的 immutable Releases 狀態則會失敗，不會假設已啟用。需要驗證全部管理欄位時，使用具 repository Administration read 權限的 `gh` 憑證；不要把管理型 token 暴露給未受信任的 PR 程式碼。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。Copier 不在本機建檔階段猜測遠端方案。
+GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。{% if project_mode == "new" and verification_mode == "hosted" %}新案必須在首次發布前由管理員於可信任的 checkout 執行 `./.csarc/scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 驗證 immutable Releases 與其餘必要設定；缺少這一步時 release workflow 會 fail-closed。{% elif project_mode == "new" %}local 模式會套用 review Ruleset，但不產生 release automation；首次發布前先切換為 `verification_mode: hosted`、更新模板，再完成 release settings preflight。{% else %}既有案是否套用發布設定由 product-owned release 流程決定；其餘 CSARC 治理可由管理員先執行 `plan`，確認後執行 `apply`，最後以 `check` 驗證。{% endif %}`check` 唯讀比對 CODEOWNERS、repository、immutable Releases、Actions、政策標籤與有效 Ruleset。可修正差異會失敗，Free private Ruleset或組織政策限制則明確標為 `DEGRADED` 並保留具體差異；無法讀取必要的 immutable Releases 狀態則會失敗，不會假設已啟用。需要驗證全部管理欄位時，使用具 repository Administration read 權限的 `gh` 憑證；不要把管理型 token 暴露給未受信任的 PR 程式碼。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。Copier 不在本機建檔階段猜測遠端方案。
 
 | GitHub 方案與可見性 | `apply` 結果 | `check`／PR／CI/CD 行為 |
 | --- | --- | --- |
@@ -141,9 +141,9 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 
 {% if enable_governance_drift_check %}`enable_governance_drift_check` 已啟用：每日與手動 Action 會呼叫同一支 `.csarc/scripts/check-governance-drift`；可修正的偏離會開立或更新一張追蹤 Issue。{% else %}`enable_governance_drift_check` 未啟用：不產生排程 Action 與檢查程式；需要時先透過 Copier 更新開啟選項。{% endif %}每次檢查都是快照，無法取代 GitHub audit log。
 
-{% if languages %}本機與 release workflow 會以相同原生工具建立已選語言的套件；GitHub Release 另附 checksum 與 SPDX SBOM。Registry publishing、artifact attestation 與消費端門禁由有實際需求的產品自行設定，不屬於公版選項。{% endif %}
+{% if languages %}本機驗證會以已選語言的原生工具建立套件。{% if verification_mode == "hosted" %}release workflow 使用相同工具，並在 GitHub Release 附上 checksum 與 SPDX SBOM。{% endif %}Registry publishing、artifact attestation 與消費端門禁由有實際需求的產品自行設定，不屬於公版選項。{% endif %}
 
-新建專案會取得 `release.yml`。GitHub 允許 Action 建 PR 時，由 Release Please 自動建立版本 PR；若上層政策禁止，執行 `python3 .csarc/scripts/release_policy.py prepare-candidate`，再依輸出的 branch／title 開一般 PR。兩路都在版本 PR 合併後由同一 workflow 發布 GitHub Release；不要求 GitHub App、PAT 或 registry token，本機命令也不建立 tag／Release。既有專案保留自己的 product-owned release workflow，Copier 不覆寫或重複發布。
+{% if project_mode == "new" and verification_mode == "hosted" %}新建的 hosted 專案會取得 `release.yml`。GitHub 允許 Action 建 PR 時，由 Release Please 自動建立版本 PR；若上層政策禁止，執行 `python3 .csarc/scripts/release_policy.py prepare-candidate`，再依輸出的 branch／title 開一般 PR。兩路都在版本 PR 合併後由同一 workflow 發布 GitHub Release；不要求 GitHub App、PAT 或 registry token，本機命令也不建立 tag／Release。{% elif project_mode == "new" %}新建的 local-mode 專案保留 release planning 與 packaging 工具，但不產生 release workflow；要宣稱 release provenance 前先切換為 hosted。{% else %}既有專案保留自己的 product-owned release workflow，Copier 不覆寫或重複發布。{% endif %}
 
 同一個唯讀 preflight 也會依 personal／organization owner、repo admin 與 organization owner 狀態，把選配 Renovate App 標成 `available`、`request-owner` 或 `fallback`。`available` 只提供 [安裝入口](https://github.com/apps/renovate/installations/new)，仍須在 GitHub 同意權限並只選本 repo；organization member 即使有 repo admin，仍需 organization owner 核准。未知權限、API 失敗或無 admin 時不猜測，直接保留 Dependabot 與既有 CI/CD。CLI 不會靜默安裝 App，也不要求長效廣域 PAT。新 repo 尚未有 origin 時，先設定 `GH_REPO=owner/repo` 可讓 `csarc init` 檢查預定目標；推送後也能執行 `python .csarc/scripts/release_policy.py preflight --repo owner/repo` 重查。
 
@@ -151,14 +151,14 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 
 版本意圖、正式版本、發版、交付與部署是不同階段：PR title 只表達 major／minor／patch／no-release；精確版本與 CHANGELOG 要在同一張受審查 PR 一起寫入；合併到 `main` 是 repository delivery；只有不可變 tag、GitHub Release、明列成品與可驗證證據都存在才叫發版。部署到真實 runtime 不在本模板範圍。
 
-{% if project_mode == "new" %}`release.yml` 會依 Conventional Commits 建立可審查的版本 PR；合併後先完整驗證，再建立 draft Release，附上來源封存{% if has_python %}、wheel／sdist{% endif %}{% if has_typescript %}、npm tarball{% endif %}{% if has_rust %}、Cargo package{% endif %}、checksum 與 SPDX SBOM，驗證完成才公開。{% else %}此為既有專案導入；原本的 product-owned release workflow 與成品定義會保留，CSARC 不用檔名猜測或建立第二個 release owner。`.csarc/config.yml` 明列 ownership、選定 workflow、required inputs、settings owner、immutable Releases 要求與 verification-only 原因；CSARC 不會 dispatch 產品 workflow。{% endif %}
+{% if project_mode == "new" and verification_mode == "hosted" %}`release.yml` 會依 Conventional Commits 建立可審查的版本 PR；合併後先完整驗證，再建立 draft Release，附上來源封存{% if has_python %}、wheel／sdist{% endif %}{% if has_typescript %}、npm tarball{% endif %}{% if has_rust %}、Cargo package{% endif %}、checksum 與 SPDX SBOM，驗證完成才公開。{% elif project_mode == "new" %}local mode 刻意只做到 repository delivery；切換 hosted 並重新產生 release workflow 前，不宣稱具有不可變 tag、GitHub Release、checksum、SBOM 或 release attestation。{% else %}此為既有專案導入；原本的 product-owned release workflow 與成品定義會保留，CSARC 不用檔名猜測或建立第二個 release owner。`.csarc/config.yml` 明列 ownership、選定 workflow、required inputs、settings owner、immutable Releases 要求與 verification-only 原因；CSARC 不會 dispatch 產品 workflow。{% endif %}
 
 | 能力 | 目前狀態 | 現在怎麼做 |
 | --- | --- | --- |
 | PR 的 SemVer 意圖 | Active | `fix`／`revert` 為 patch、`feat` 為 minor、`!` 為 major，其餘 no-release |
-| 正式版本與 CHANGELOG | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}Automatic 或 Guided 建立同一種受審查 PR{% else %}沿用產品既有規則{% endif %}；已發布版本不改寫 |
-| tag／GitHub Release | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}版本 PR 合併並通過完整驗證後自動發布；首次成功實跑後才算 Active{% else %}模板不建立第二個 owner{% endif %} |
-| checksum／SBOM | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}與 exact-tag 成品同一次建立、下載並重驗；首次成功實跑後才算 Active{% else %}由產品 release workflow 決定{% endif %} |
+| 正式版本與 CHANGELOG | {% if project_mode == "new" and verification_mode == "hosted" %}Configured{% elif project_mode == "new" %}Deferred{% else %}Product-owned{% endif %} | {% if project_mode == "new" and verification_mode == "hosted" %}Automatic 或 Guided 建立同一種受審查 PR{% elif project_mode == "new" %}切換 hosted 後才 materialize 發布版本{% else %}沿用產品既有規則{% endif %}；已發布版本不改寫 |
+| tag／GitHub Release | {% if project_mode == "new" and verification_mode == "hosted" %}Configured{% elif project_mode == "new" %}Deferred{% else %}Product-owned{% endif %} | {% if project_mode == "new" and verification_mode == "hosted" %}版本 PR 合併並通過完整驗證後自動發布；首次成功實跑後才算 Active{% elif project_mode == "new" %}本機證明不構成 release provenance{% else %}模板不建立第二個 owner{% endif %} |
+| checksum／SBOM | {% if project_mode == "new" and verification_mode == "hosted" %}Configured{% elif project_mode == "new" %}Deferred{% else %}Product-owned{% endif %} | {% if project_mode == "new" and verification_mode == "hosted" %}與 exact-tag 成品同一次建立、下載並重驗；首次成功實跑後才算 Active{% elif project_mode == "new" %}切換 hosted release automation 後才產生{% else %}由產品 release workflow 決定{% endif %} |
 | attestation | Product-owned | 由產品依 registry 與供應鏈需求另案設定 |
 | PyPI／npm／GHCR | Product-owned | 公版不提供 publisher 選項或 job |
 | production deployment | Not applicable | 由產品自行定義環境、健康檢查、核准與復原 |

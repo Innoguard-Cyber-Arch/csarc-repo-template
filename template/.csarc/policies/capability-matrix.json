@@ -33,8 +33,8 @@
         "zh-tw": "透過 GitHub Ruleset 的分支保護"
       },
       "behavior": {
-        "en": "Enforces non-fast-forward pushes, required pull request review, and required status checks on the default branch (`.csarc/policies/rulesets.json`).",
-        "zh-tw": "在預設分支上強制 non-fast-forward push、必要的 PR review 與必要的 status check（`.csarc/policies/rulesets.json`）。"
+        "en": "Enforces non-fast-forward pushes and required pull request review on the default branch; hosted verification mode additionally enforces required status checks (`.csarc/policies/rulesets.json`).",
+        "zh-tw": "在預設分支上強制 non-fast-forward push 與必要的 PR review；hosted verification mode 另外強制必要的 status check（`.csarc/policies/rulesets.json`）。"
       },
       "requirement": {
         "en": "Public repository on any GitHub plan; or a private repository on GitHub Pro (personal account) / GitHub Team or above (organization).",
