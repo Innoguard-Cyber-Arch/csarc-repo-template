@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.19.0-alpha.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.20.0-alpha.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> and stays synchronized across both languages. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.19.0-alpha.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.20.0-alpha.1<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -105,9 +105,9 @@ The result will be one of: **create** a new project, **adopt** an existing one, 
 
 <p class="install-promise"><strong>The promise at this step:</strong> this step only checks the current state and proposes a plan; nothing is modified, no GitHub setting changes, and no PR opens until you confirm.</p>
 
-<div class="command-block"><div class="command-block-head"><span class="command-block-label">The full prompt to paste to your agent</span><button class="copy-command" type="button">Copy prompt</button></div><pre class="command-block-text">Using uv. First, find the latest published GitHub Release of https://github.com/Innoguard-Cyber-Arch/csarc-repo-template (for example, run `gh release view --repo Innoguard-Cyber-Arch/csarc-repo-template --json tagName,targetCommitish`, or check that repository's Releases page), and note that release's tag and full commit SHA -- always use this verified release, never `main` or an unconfirmed branch. Using that SHA, run the official csarc CLI's `status` subcommand to determine which installation state the current workspace/existing Git repository is in; uv should manage an isolated Python 3.14 per invocation, requiring no global Python. Run `csarc status --json` first -- do not judge or assume the current state yourself. Based on the returned state and next_command: for create, adopt, or update, switch to the matching init/adopt/update dry-run prompt and wait for confirmation; for current, report that no action is needed; for policy-only-update, only run `scripts/apply-repository-settings.sh plan`, summarize the diff, and wait for confirmation before running `apply` -- do not redo a full adopt or update. Never modify the global environment, push, or open a PR throughout.</pre></div>
+<div class="command-block"><div class="command-block-head"><span class="command-block-label">The full prompt to paste to your agent</span><button class="copy-command" type="button">Copy prompt</button></div><pre class="command-block-text">From the published Releases at https://github.com/Innoguard-Cyber-Arch/csarc-repo-template, select the highest immutable SemVer Release accepted by the official csarc CLI, including alpha or beta pre-releases. Download and read that Release's `release-prompt.txt`; after confirming its repository, tag, and full SHA agree, follow it exactly in the current workspace. Do not use `main`, guess the installation state, or modify files or GitHub settings, push, or open a PR before I confirm.</pre></div>
 
-The classification logic all lives in the CLI, so a different agent running it gets the same answer; the other three situation prompts (create/adopt/update) live in the [repository README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme).
+Each Release carries one pinned prompt. It lets the CLI classify the state first, then uses that same Release's `copier.yml` to offer recommended defaults or grouped customization instead of switching among separate lifecycle prompts.
 {{< /standard >}}
 
 {{< ops key="install-mode-ops" title="The exact detection rule and command for each state" >}}
@@ -125,10 +125,10 @@ It only reads local files plus, once a repository is already managed, the resolv
 | `adopt` (existing repository) | The target already has content but no `.csarc/config.yml` | `csarc adopt <path>`: write a dry-run plan, review it, then apply with `--apply-plan` |
 | `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | `csarc update <path> --check` to preview, then `csarc update <path>` |
 | `current` (nothing to do) | The Copier revision is current, and `policies/` matches the repository's live GitHub settings | No action needed |
-| `policy-only-update` (policy settings changed) | The Copier revision is current, but `policies/` (for example, whether workarounds are allowed) no longer matches the live GitHub settings | `scripts/apply-repository-settings.sh plan` to preview, then `apply`; this **skips** a full adopt or update run |
+| `policy-only-update` (policy settings changed) | The Copier revision is current, but `policies/` (for example, whether workarounds are allowed) no longer matches the live GitHub settings | `.csarc/scripts/apply-repository-settings.sh plan` to preview, then `apply`; this **skips** a full adopt or update run |
 
 {{< disclosure key="install-policy-only" title="Why a policy-only change skips a full readopt" >}}
-Policy settings (branch protection, required checks, labels, CODEOWNER rules) live in `policies/*.json` and are applied to GitHub directly by `scripts/apply-repository-settings.sh`; they are separate from the Copier template files. Changing a policy never touches a template file and never moves the pinned Copier revision. `csarc status` runs `check` from a complete helper closure rendered from the verified Release; it never trusts or executes the target repository's copy. When the revision is unchanged but policy drift is detected, status returns `policy-only-update` and points straight at the existing, standalone `plan`/`apply` flow instead of suggesting a full adopt or update.
+Policy settings (branch protection, required checks, labels, CODEOWNER rules) live in `.csarc/policies/*.json` and are applied to GitHub directly by `.csarc/scripts/apply-repository-settings.sh`; they are separate from the Copier template files. Changing a policy never touches a template file and never moves the pinned Copier revision. `csarc status` runs `check` from a complete helper closure rendered from the verified Release; it never trusts or executes the target repository's copy. When the revision is unchanged but policy drift is detected, status returns `policy-only-update` and points straight at the existing, standalone `plan`/`apply` flow instead of suggesting a full adopt or update.
 
 If the trusted `apply-repository-settings.sh check` cannot run (for example, the Release is unverified, `gh` is not authenticated, or there is no network), `csarc status` does not assume policy drift. It falls back to `current` and marks `policy_check.available` as `false`, leaving the confirmation to a human.
 {{< /disclosure >}}

@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issues：**[#7](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/7), [#31](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/31), [#76](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/76), [#113](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/113), [#116](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/116), [#157](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/157), [#196](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/196), [#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#368](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/368), [#411](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/411), [#433](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/433)
+- **來源 Issues：**[#7](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/7), [#31](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/31), [#76](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/76), [#113](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/113), [#116](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/116), [#157](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/157), [#196](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/196), [#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#368](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/368), [#411](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/411), [#433](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/433), [#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)
 - **實作 PRs：**[#8](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/8), [#53](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/53), [#88](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/88), [#115](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/115), [#124](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/124), [#160](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/160), [#217](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/217), [#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231), [#412](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/412)
 
 ## 問題與限制
@@ -15,6 +15,7 @@
 - 完全相同的 root／template 檔案由 `scripts/sync-paired-files.sh` 以 root 為來源產生；參數化或刻意不同的檔案由生成 fixture 驗證。
 - `docs/specs/**/*.md`、產品 source／tests 與網站內容等 project-owned 檔案在 update 時保留。
 - `csarc init/adopt/update` 先解析 immutable release 與完整 SHA，dry-run 不改 target；正式操作仍不自動 push、開 PR 或套遠端 settings。
+- 每個 Release 只發布一份綁定 canonical repository、tag、full SHA、安裝指南與 `copier.yml` 的 status-first agent prompt；agent 依同一份 Copier schema 分組詢問 applicable questions，並沿用 `--data` 與 dry-run JSON，不維護第二份問題或設定 schema。
 - 任何 conflict marker 或 `.rej` 使驗證失敗；不能把 Copier 完成等同產品語意已整合。
 - 成熟度證據分兩層：真實 consuming repo 證明共用導入、更新與線上 CI 邊界；各語言模組以建立、既有 repo 導入、更新與原生工具鏈的可重現測試取得 beta，不為每種語言建立專用測試 repo。
 - Python 模組採用 Astral 工具鏈：uv 管理環境、鎖檔與執行，Ruff 負責格式與 lint，ty 負責型別檢查；ty 在 0.x 期間固定精確版本以避免規則漂移。
@@ -27,6 +28,7 @@
 | Preserved | 更新衝突 fail closed | [#31](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/31)／[#53](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/53) |
 | Superseded | 人工雙改 byte-identical root／template 檔案 | [#76](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/76)／[#88](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/88) |
 | Preserved | adopt 在 manual merge 後的 resumability 與 transaction boundary（same-plan 重建、target／plan 漂移偵測、失敗時 target 不變） | [#196](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/196)／[#217](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/217)／[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219)／[#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231) |
+| Superseded in presentation | 四份 lifecycle prompts 改由一份 status-first prompt 選路徑；固定版本身份與 dry-run／確認邊界保留 | [#631](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/631)／[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877) |
 
 ## Ownership 與驗證
 

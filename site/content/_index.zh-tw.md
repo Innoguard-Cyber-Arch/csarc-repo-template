@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.19.0-alpha.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.20.0-alpha.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。本頁內容與 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 對齊、雙語同步維護。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.19.0-alpha.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.20.0-alpha.1<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -105,9 +105,9 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 <p class="install-promise"><strong>這一步的承諾：</strong>這一步只檢查目前狀態並提出計畫；在你確認前，不修改檔案、不變更 GitHub 設定，也不會建立 PR。</p>
 
-<div class="command-block"><div class="command-block-head"><span class="command-block-label">貼給 agent 的完整指令</span><button class="copy-command" type="button">複製指令</button></div><pre class="command-block-text">請使用 uv。先從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 查出目前最新的正式 GitHub Release（例如執行 `gh release view --repo Innoguard-Cyber-Arch/csarc-repo-template --json tagName,targetCommitish`，或直接看該 repository 的 Releases 頁面），記下這個 release 的 tag 與完整 commit SHA——一律使用這個已驗證的 release，不要用 main 或未經確認的分支。用這個 SHA 執行官方 csarc CLI 的 `status` 子指令，判斷目前 workspace／既有 Git repository 屬於哪一種安裝狀態；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。先執行 `csarc status --json`，不要自行判斷或假設目前狀態。依回傳的 state 與 next_command：create 或 adopt 或 update 時，改用對應的 init／adopt／update dry-run prompt 並等待確認；current 時回報不需動作；policy-only-update 時只執行 `scripts/apply-repository-settings.sh plan`、摘要差異並等待確認，確認後才 `apply`，不要重新走完整 adopt 或 update。全程不要修改全域環境、push 或開 PR。</pre></div>
+<div class="command-block"><div class="command-block-head"><span class="command-block-label">貼給 agent 的完整指令</span><button class="copy-command" type="button">複製指令</button></div><pre class="command-block-text">請從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 的 published Releases 中，依官方 csarc CLI 的版本規則選出最高 SemVer 且 immutable 的 Release（包含 alpha／beta pre-release），下載並讀取它的 `release-prompt.txt`，確認附件內的 repository、tag 與 full SHA 一致後，完全依該 prompt 在目前 workspace 繼續。不要使用 main、猜測目前安裝狀態，或在我確認前修改檔案、GitHub 設定、push 或建立 PR。</pre></div>
 
-判斷邏輯全部在 CLI 裡，換一個 agent 執行也會得到同樣答案；其他三種情境（新建／既有導入／更新）的完整 prompt 收在 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme)。
+每個 Release 只有一份固定版本 prompt；它先交給 CLI 判斷狀態，再依同一份 `copier.yml` 讓你選擇接受建議值或逐項客製，不再切換多份 lifecycle prompts。
 {{< /standard >}}
 
 {{< ops key="install-mode-ops" title="狀態判斷的精確條件與下一步指令" >}}
@@ -125,10 +125,10 @@ csarc status <path> --json
 | `adopt`（舊 repo 導入） | 目標已存在內容，但沒有 `.csarc/config.yml` | `csarc adopt <path>`：先寫出 dry-run 計畫，審查後用 `--apply-plan` 套用 |
 | `update`（有可用更新） | 已有 `.csarc/config.yml`，其中記錄的 Copier revision 落後目前可用版本 | `csarc update <path> --check` 預覽差異，確認後執行 `csarc update <path>` |
 | `current`（已是最新，不用做事） | Copier revision 已是最新，且 `policies/` 與 GitHub 上實際設定一致 | 不需要動作 |
-| `policy-only-update`（已是最新，但政策設定變了） | Copier revision 已是最新，但 `policies/`（例如允不允許 workaround）與 GitHub 上實際設定不一致 | `scripts/apply-repository-settings.sh plan` 預覽，確認後 `apply`；**不必**重新走一次完整 adopt／update |
+| `policy-only-update`（已是最新，但政策設定變了） | Copier revision 已是最新，但 `policies/`（例如允不允許 workaround）與 GitHub 上實際設定不一致 | `.csarc/scripts/apply-repository-settings.sh plan` 預覽，確認後 `apply`；**不必**重新走一次完整 adopt／update |
 
 {{< disclosure key="install-policy-only" title="為什麼「已最新版但政策異動」不用重新導入" >}}
-政策設定（分支保護、必要檢查、標籤、CODEOWNER 規則）記錄在 `policies/*.json`，由 `scripts/apply-repository-settings.sh` 直接讀取並套用到 GitHub，跟 Copier 範本檔案是兩件事：改政策不需要改到任何範本檔案，Copier revision 也不會變。`csarc status` 使用已驗證 Release 重新產生的完整 helper closure 執行 `check`，不信任或執行 target repo 內的同名腳本；偵測到 revision 相同但政策有落差時，回傳 `policy-only-update` 並直接指向 `plan`／`apply`，不會建議重跑整個 adopt 或 update。
+政策設定（分支保護、必要檢查、標籤、CODEOWNER 規則）記錄在 `.csarc/policies/*.json`，由 `.csarc/scripts/apply-repository-settings.sh` 直接讀取並套用到 GitHub，跟 Copier 範本檔案是兩件事：改政策不需要改到任何範本檔案，Copier revision 也不會變。`csarc status` 使用已驗證 Release 重新產生的完整 helper closure 執行 `check`，不信任或執行 target repo 內的同名腳本；偵測到 revision 相同但政策有落差時，回傳 `policy-only-update` 並直接指向 `plan`／`apply`，不會建議重跑整個 adopt 或 update。
 
 若受信任的 `apply-repository-settings.sh check` 跑不動（例如 Release 未驗證、`gh` 未登入或沒有網路），`csarc status` 不會冒然回報「政策已變」；會退回 `current` 並在 `policy_check.available` 標示 `false`，保留由人工再次確認。
 {{< /disclosure >}}
