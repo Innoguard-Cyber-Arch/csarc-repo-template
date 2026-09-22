@@ -286,6 +286,13 @@ def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
         )[1].split("run: |", 1)[0]
         assert "GH_TOKEN:" in reuse_environment
         assert "github.token" in reuse_environment
+        reuse_command = workflow.split(
+            "- name: Find reusable trusted verification", 1
+        )[1].split("- name: Validate trusted clean sync", 1)[0]
+        assert (
+            'if ! python3 "$RUNNER_TEMP/trusted-verification/' in reuse_command
+        )
+        assert "running the exact candidate instead" in reuse_command
 
 
 def test_verifiers_do_not_call_removed_attestation_helpers() -> None:
