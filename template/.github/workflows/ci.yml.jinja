@@ -22,7 +22,27 @@ permissions:
 
 jobs:
   verify:
-    name: verify
+    name: >-
+      {% raw %}${{
+        github.event_name == 'pull_request_target' &&
+        (github.event.action == 'labeled' ||
+        github.event.action == 'unlabeled') &&
+        github.event.label.name != '' &&
+        !contains(fromJSON('["promotion","hotfix","release-recovery"]'), github.event.label.name) &&
+        'ignored non-tier label' ||
+        'verify'
+      }}{% endraw %}
+    if: >-
+      {% raw %}${{
+        github.event_name != 'pull_request_target' ||
+        github.event.action == 'ready_for_review' ||
+        (github.event.action != 'converted_to_draft' &&
+        github.event.pull_request.draft != true &&
+        ((github.event.action != 'labeled' &&
+        github.event.action != 'unlabeled') ||
+        github.event.label.name == '' ||
+        contains(fromJSON('["promotion","hotfix","release-recovery"]'), github.event.label.name)))
+      }}{% endraw %}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
