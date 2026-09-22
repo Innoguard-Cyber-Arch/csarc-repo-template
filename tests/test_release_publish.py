@@ -684,7 +684,7 @@ def test_stage_accepts_an_exact_materialized_milestone_promotion(
             "--sha",
             bridge_sha,
             "--phase",
-            "early",
+            "stable",
         ],
         cwd=root,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},

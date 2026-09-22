@@ -307,10 +307,10 @@ import runpy
 import tomllib
 from pathlib import Path
 
-# .csarc/scripts/release_phase.py's `normalize()` (Issue #744) so a Python
-# packaging surface's PEP 440-normalized value (e.g. pyproject.toml's
-# "0.16.0a1") compares equal to every other surface's canonical value
-# (e.g. the release manifest's "0.16.0-alpha.1") -- they are the same
+# .csarc/scripts/release_phase.py's `normalize()` so a Python packaging
+# surface's PEP 440-normalized value (e.g. pyproject.toml's "0.16.0b1")
+# compares equal to every other surface's canonical value (e.g. the release
+# manifest's "0.16.0-beta.1") -- they are the same
 # version, just written differently, not a real mismatch.
 release_phase = runpy.run_path(".csarc/scripts/release_phase.py")
 normalize = release_phase["normalize"]

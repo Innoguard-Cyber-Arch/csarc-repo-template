@@ -18,6 +18,8 @@ LIFECYCLE_CAPABILITIES = {"issues", "milestones"}
 HUMAN_REVIEW_MODES = {"peer", "solo"}
 COPILOT_REVIEW_MODES = {"allowed", "off"}
 ACTIONS_FALLBACK_MODES = {"admin", "off"}
+ADMIN_BYPASS_MODES = {"off", "beta-only", "always"}
+PROJECT_MATURITIES = {"early", "formal"}
 VERIFICATION_MODES = {"hosted", "local"}
 RELEASE_TRIGGERS = {"main", "manual"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
@@ -43,8 +45,15 @@ POLICY_TOGGLES = (
 # "human" keeps the maintainer-approval-only Ruleset. A key absent from an
 # older answers file means "human", the behavior before this option existed.
 PR_REVIEW_MODES = {"copilot", "human"}
-COPILOT_REVIEW_MAX_LEVELS = {"unlimited", "alpha", "beta", "early", "release"}
-RELEASE_LEVELS = {"alpha", "beta", "early", "formal"}
+COPILOT_REVIEW_MAX_LEVELS = {
+    "unlimited",
+    "alpha",
+    "beta",
+    "stable",
+    "early",
+    "release",
+}
+RELEASE_LEVELS = {"beta", "stable"}
 RELEASE_LEVEL_REVIEWS = {"self", "peer"}
 RELEASE_LEVEL_VERIFICATION = {"baseline", "fast", "docs", "full"}
 LEGACY_REVIEW_DEFAULTS = {
@@ -53,6 +62,28 @@ LEGACY_REVIEW_DEFAULTS = {
     "early": "peer",
     "formal": "peer",
 }
+
+
+def _legacy_admin_bypass(config: dict[str, object]) -> str:
+    """Preserve the effective self-review scope of older configurations."""
+    review = config.get("review")
+    if review == "solo":
+        return "always"
+    if review == "peer":
+        return "off"
+    beta_reviews = {
+        config.get("release_level_alpha_review", "self"),
+        config.get("release_level_beta_review", "peer"),
+    }
+    stable_reviews = {
+        config.get("release_level_early_review", "peer"),
+        config.get("release_level_formal_review", "peer"),
+    }
+    if stable_reviews == {"self"}:
+        return "always"
+    if "self" in beta_reviews:
+        return "beta-only"
+    return "off"
 
 
 def _list_setting(
@@ -96,6 +127,14 @@ def _legacy_default(  # noqa: C901
         return ["issues", "milestones"]
     if key == "actions_fallback":
         return "off"
+    if key == "admin_bypass":
+        return _legacy_admin_bypass(config)
+    if key == "project_maturity":
+        return (
+            "formal"
+            if config.get("default_release_level") == "formal"
+            else "early"
+        )
     if key == "verification_mode":
         return "hosted"
     if key == "review":
@@ -104,7 +143,7 @@ def _legacy_default(  # noqa: C901
                 f"release_level_{level}_review",
                 LEGACY_REVIEW_DEFAULTS[level],
             )
-            for level in RELEASE_LEVELS
+            for level in LEGACY_REVIEW_DEFAULTS
         ]
         return "peer" if "peer" in reviews else "solo"
     if key == "copilot_review":
@@ -140,6 +179,8 @@ def normalize_config(config: dict[str, object]) -> dict[str, object]:
         "governance_mode",
         "lifecycle",
         "actions_fallback",
+        "admin_bypass",
+        "project_maturity",
         "verification_mode",
         "review",
         "copilot_review",
@@ -254,14 +295,22 @@ def validate_config(
     """Validate the managed settings consumed by repository automation."""
     choices = {
         "actions_fallback": ACTIONS_FALLBACK_MODES,
+        "admin_bypass": ADMIN_BYPASS_MODES,
+        "project_maturity": PROJECT_MATURITIES,
         "verification_mode": VERIFICATION_MODES,
         "branch_strategy": {"delivery", "main"},
         "copilot_review": COPILOT_REVIEW_MODES,
         "copilot_review_max_level": COPILOT_REVIEW_MAX_LEVELS,
         "container_mode": {"none", "verify", "ghcr"},
         "coverage_mode": {"diff", "global"},
-        "default_release_level": RELEASE_LEVELS,
         "documentation_mode": DOCUMENTATION_MODES,
+        "default_release_level": {
+            "alpha",
+            "beta",
+            "early",
+            "formal",
+            "stable",
+        },
         "governance_mode": GOVERNANCE_MODES,
         "i18n": I18N_MODES,
         "primary_language": PRIMARY_LANGUAGES,

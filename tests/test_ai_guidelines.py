@@ -62,7 +62,7 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert "docs/index.html#" not in rendered
     assert "docs/index.html#work" not in rendered
     assert "review requirements, merge eligibility" in rendered
-    assert "Alpha self-merge" in rendered
+    assert "configured admin bypass" in rendered
     assert ".csarc/docs/csarc.md#公版更新" in rendered
     assert "automation are suspended" not in rendered
     assert ("Python setup:" in rendered) is python_command

@@ -222,7 +222,7 @@ def test_two_genuinely_concurrent_runs_never_produce_two_releases(
     assert lines[0].split()[:2] == ["create", "v9.9.9"]
 
 
-def test_alpha_and_beta_tags_are_created_as_github_prereleases(
+def test_only_beta_tags_are_created_as_github_prereleases(
     tmp_path: Path,
 ) -> None:
     """Issue #744: only a phase-suffixed tag gets `--prerelease` on create."""
@@ -233,10 +233,10 @@ def test_alpha_and_beta_tags_are_created_as_github_prereleases(
     beta = run_converge(fixture, state, sha="b" * 40, tag="v1.3.0-beta.1")
     assert beta.returncode == 0, beta.stderr
     alpha = run_converge(fixture, state, sha="c" * 40, tag="v2.0.0-alpha.4")
-    assert alpha.returncode == 0, alpha.stderr
+    assert alpha.returncode != 0
 
     lines = (state / "create-log").read_text(encoding="utf-8").splitlines()
     by_tag = {line.split()[1]: line for line in lines}
     assert "--prerelease" not in by_tag["v1.2.3"]
     assert "--prerelease" in by_tag["v1.3.0-beta.1"]
-    assert "--prerelease" in by_tag["v2.0.0-alpha.4"]
+    assert "v2.0.0-alpha.4" not in by_tag

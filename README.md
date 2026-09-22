@@ -6,7 +6,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.21.0-alpha.1<!-- x-release-please-version --> |
+| 公版版本 | v0.22.0<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
@@ -168,7 +168,7 @@ Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 re
 
 GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./.csarc/scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗；`GITHUB_TOKEN` 無法讀取的管理員欄位、Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud）、組織政策限制或缺少 GitHub Advanced Security，則明確標為 `DEGRADED`，不會誤稱為 drift 或 compliant。生成 repo 預設由 `.github/workflows/governance-drift.yml` 每天重跑同一個 `check`，只在可修正的偏離出現或內容改變時開立或更新唯一追蹤 Issue；可用 `enable_governance_drift_check: false` 關閉。本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。非 draft PR 會從 repository 當下具有 `maintain`／`admin` 權限且不是作者的協作者中 best-effort 選一位 reviewer；這只是提出 review request，不是強制合併門禁。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見 [repo-site 附錄](docs/index.html)「先辨識 GitHub 方案」章節。
 
-`review` 設定 Copilot 不可用時採 `solo` 或 `peer`；`copilot_review: allowed` 則明確允許乾淨的 exact-head Copilot review 在兩種 human 模式下作為通過證據。Copilot 授權與額度是即時能力，不由 Free／Team 等方案名稱推定；不可用、舊 head、有意見或未解 thread 時回到 human 規則。詳見 [`docs/ci-policy.md`](docs/ci-policy.md)「Copilot 審核模式（#752）」。
+`admin_bypass` 決定管理員可否以 exact-head 授權自審：預設 `off`，也可限於 beta 或明確設為 `always`；`copilot_review: allowed` 則允許乾淨的 exact-head Copilot review 作為證據。Copilot 授權與額度是即時能力，不由 Free／Team 等方案名稱推定；不可用、舊 head、有意見或未解 thread 時回到同行核准或設定允許的管理員授權。詳見 [`docs/ci-policy.md`](docs/ci-policy.md)「Copilot 審核模式（#752）」。
 
 `.csarc/config.yml` 用 `governance_mode: managed|observe` 表達要套用或只觀察支援的平台政策；`lifecycle` 選擇 Issue／Milestone side effects，不能關掉 required checks；`actions_fallback: admin` 只開放經證明的 zero-step billing fallback。方案、visibility、token 權限、Actions 帳務、Copilot 與 Pages 狀態都由 live probe 回報 `allowed`／`blocked`／`unknown`，不是使用者設定。
 
@@ -204,7 +204,7 @@ CSARC-owned Milestone 在 promotion PR 內用同一份 repo-local 規則寫入�
 
 真實導入的可重複步驟、驗收證據與已知平台限制整理在 [`docs/pilot-adoption.md`](docs/pilot-adoption.md)。第一個 consuming repo `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 更新，證明共用導入、更新與線上 CI 路徑；Python、Rust、TypeScript 則各以可重現的建立、既有 repo 導入、更新與原生工具鏈驗證取得 beta。同時選取多個模組不會形成另一種 profile。
 
-以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效；版本號本身表示發布層級（`-alpha.N`／`-beta.N` 為 pre-release，不帶後綴為早期版或正式版），CLI 依 SemVer 優先順序選版，不依賴 GitHub `releases/latest` API（該 API 不會回傳 pre-release）。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併／無法判定清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
+以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效；公開版本只有 stable `X.Y.Z` 與 beta `X.Y.Z-beta.N`，預設只選最新 stable，明確加上 `--channel beta` 才選 beta。`early`／`formal` 是專案層級的宣告，不是版本後綴。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併／無法判定清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
 
 ### 建立新 repo
 
@@ -237,16 +237,16 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update
 ```
 
-`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。若有衝突，CLI 會列出檔案但不修改 target；請在目前分支調整衝突內容後重跑。`update --dry-run` 同時預覽 Copier 與 Milestone description migration；`update --check --json` 目前已是最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify`、repository settings `plan`，以及已確認的舊 CSARC Milestone description 升級；它不會套用 repository settings、push 或開 PR。
+`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。若有衝突，CLI 會列出檔案但不修改 target；請在目前分支調整衝突內容後重跑。若記錄的版本是已退役的 alpha、格式不符或無法理解，CLI 不保留舊版解析器，而是以最新 stable 重建模板管理的基線；設定、專案自有與已分歧檔案盡可能保留，無法安全判斷的項目交給人工合併。`update --check --json` 目前已是最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify`、repository settings `plan`，以及已確認的舊 CSARC Milestone description 升級；它不會套用 repository settings、push 或開 PR。
 
 ### Agent prompt
 
 固定版本的安裝契約是 [`docs/agent-install.md`](docs/agent-install.md)。每個 Release 只提供一份 `release-prompt.txt`：它綁定 canonical repository、tag、full SHA、安裝指南與 `copier.yml`，先由 `csarc status` 判斷 lifecycle，再讓使用者選擇接受建議值或逐項客製。所有選項仍由同一份 Copier schema 提供，agent 只負責分組提問與透過既有 `--data` 傳值。
 
-以下 bootstrap prompt 只負責找到 CLI 契約接受的最高 SemVer immutable Release（包含 alpha／beta pre-release）並讀取該 Release 的 `release-prompt.txt`；固定版本後的狀態判斷、dry-run、摘要與確認流程都以附件為準：
+以下 bootstrap prompt 只負責找到 CLI 契約接受的最新 stable immutable Release 並讀取該 Release 的 `release-prompt.txt`；固定版本後的狀態判斷、dry-run、摘要與確認流程都以附件為準。要試用 beta 時，需另外明確指定 `--channel beta`：
 
 ```text
-請從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 的 published Releases 中，依官方 CLI 的版本規則選出最高 SemVer 且 immutable 的 Release（包含 alpha／beta pre-release），下載並讀取它的 `release-prompt.txt`，確認附件內的 repository、tag 與 full SHA 一致後，完全依該 prompt 在目前 workspace 繼續。不要使用 main、猜測目前安裝狀態，或在我確認前修改檔案、GitHub 設定、push 或建立 PR。
+請從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 的 published Releases 中，依官方 csarc CLI 選出最新 stable 且 immutable 的 Release，下載並讀取它的 `release-prompt.txt`，確認附件內的 repository、tag 與 full SHA 一致後，完全依該 prompt 在目前 workspace 繼續。不要使用 main、猜測目前安裝狀態，或在我確認前修改檔案、GitHub 設定、push 或建立 PR。
 ```
 
 ### Troubleshooting／進階 Copier
@@ -259,7 +259,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 開發用的 unreleased adoption 每次重播 machine plan 或 pending checkpoint 時，都必須在該次命令重新傳入相同的本機 `--source`、完整 `--expected-sha` 與 `--allow-unreleased`；plan 內保存的 source、SHA、digest 或 `verification=unverified` 只用來比對資料，不能代替本次授權。`--apply-plan` 會先顯示已保存的完整 plan 並取得確認，確認以前不會執行 Copier task、target policy script 或 product hook。正式 verified Release 重播不接受這三個開發旗標。
 
-若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance，或雖有 `.csarc/provenance.json` 但仍是舊版未驗證格式(例如 `verification` 不是 `verified`，常見於較早的 `--allow-unreleased` adopt)時，兩種情況都需要先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移；CLI 不會默認宣稱舊狀態已驗證，也不會把「格式過舊」與「欄位遭竄改」混為一談——已標示 `verified` 卻欄位對不上的記錄，即使加上 `--accept-legacy` 仍會被拒絕。仍在用舊檔名 `.copier-answers.yml`(或已停用的 `.csarc/profile.json`)的既有 repo，`update` 會在套用新版模板前把設定自動遷移到現行的 `.csarc/config.yml`；舊 `features: repo-site` 與 `readme_primary_language` 也會一次性轉為 `documentation_mode` 與 `primary_language`。網站內容仍由生成專案維護，Copier 更新版型時不會覆寫；完整規則見 [`docs/documentation-policy.md`](docs/documentation-policy.md)。
+若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance，或雖有 `.csarc/provenance.json` 但仍是舊版未驗證格式(例如 `verification` 不是 `verified`，常見於較早的 `--allow-unreleased` adopt)時，兩種情況都需要先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移；CLI 不會默認宣稱舊狀態已驗證，也不會把「格式過舊」與「欄位遭竄改」混為一談——已標示 `verified` 卻欄位對不上的記錄，即使加上 `--accept-legacy` 仍會被拒絕。仍在用舊檔名 `.copier-answers.yml`(或已停用的 `.csarc/profile.json`)的既有 repo，`update` 會在套用新版模板前把設定自動遷移到現行的 `.csarc/config.yml`；舊 `features: repo-site` 與 `readme_primary_language` 也會一次性轉為 `documentation_mode` 與 `primary_language`。`site/content/_index.zh-tw.md`、`_index.en.md` 與 `docs/site-theme.css` 由生成專案維護，Copier 更新版型時不會覆寫；portable `docs/index.html`／`docs/index.en.html` 則重新建置。已退役的 `docs/site-content.md` 不會自動搬移，`./scripts/build-repo-site` 會提示維護者先移植再刪除。完整規則見 [`docs/documentation-policy.md`](docs/documentation-policy.md)。
 
 ### 驗證邊界
 

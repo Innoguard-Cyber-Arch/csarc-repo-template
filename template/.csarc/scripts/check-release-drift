@@ -38,9 +38,9 @@ set -euo pipefail
 # --hours, or the RELEASE_DRIFT_HOURS environment variable (the workflow
 # also exposes it as a workflow_dispatch input).
 #
-# The latest Release (stable or an alpha/beta pre-release, Issue #744)
+# The latest Release (stable or beta pre-release, Issue #918)
 # covers main when GitHub marks it immutable, its tag is a legal
-# alpha/beta/early/formal release-phase version, its exact target SHA is
+# beta/stable release-channel version, its exact target SHA is
 # main or an ancestor, and it was published no earlier than the current
 # main commit. Mutable Releases, drafts, non-ancestor targets, and older
 # releases are ignored.
@@ -300,12 +300,12 @@ release_title_pattern = re.compile(
     r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
     # Issue #744: prepare_release_candidate()'s own title
     # (f"chore(main): release {version}", .csarc/scripts/release_policy.py)
-    # carries the phase suffix verbatim for an alpha/beta candidate; this
+    # carries the phase suffix verbatim for a beta candidate; this
     # pattern must accept the same shape or a prerelease release-please
     # PR's Release-publish-record comment is silently never found. Suffix
     # kept byte-identical to release_version_pattern below and to
     # .csarc/scripts/release_phase.py's canonical `_VERSION_RE`.
-    r"(?:-(?:alpha|beta)\.[1-9][0-9]*)?"
+    r"(?:-beta\.[1-9][0-9]*)?"
 )
 trusted_associations = {"OWNER", "MEMBER", "COLLABORATOR"}
 
@@ -395,17 +395,17 @@ if latest_release:
     compare_status = release_compare.get("status")
     release_version_pattern = re.compile(
         r"v?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
-        r"(?:-(?:alpha|beta)\.[1-9][0-9]*)?"
+        r"(?:-beta\.[1-9][0-9]*)?"
     )
     if latest_release.get("draft") is not False:
         release_reason = "ignored: draft"
     elif latest_release.get("immutable") is not True:
         release_reason = "ignored: release is not immutable"
     elif not release_version_pattern.fullmatch(str(release_tag or "")):
-        # Issue #744: a `-alpha.N`/`-beta.N` suffix is a legal release-phase
+        # Issue #918: a `-beta.N` suffix is the only public pre-release
         # version too, not only a plain X.Y.Z tag.
         release_reason = "ignored: tag is not a legal release-phase version"
-    elif bool(re.search(r"-(alpha|beta)\.[1-9][0-9]*$", str(release_tag or ""))) != (
+    elif bool(re.search(r"-beta\.[1-9][0-9]*$", str(release_tag or ""))) != (
         latest_release.get("prerelease") is True
     ):
         release_reason = "ignored: prerelease flag does not match tag shape"

@@ -22,16 +22,16 @@ def _comment(body: str, created_at: str, login: str = "matheme-justyn") -> dict:
 
 def test_parse_trace_extracts_a_well_formed_line() -> None:
     body = (
-        "Merging via the alpha self-approval bypass (#580).\n"
-        "bypass-trace: release_level=alpha route=alpha actor=matheme-justyn "
+        "Merging via the stable admin bypass.\n"
+        "bypass-trace: release_level=stable route=stable actor=matheme-justyn "
         "reason=only collaborator, content independently verified\n"
     )
 
     parsed = cbt.parse_trace(body)
 
     assert parsed == {
-        "release_level": "alpha",
-        "route": "alpha",
+        "release_level": "stable",
+        "route": "stable",
         "actor": "matheme-justyn",
         "reason": "only collaborator, content independently verified",
     }
@@ -42,7 +42,7 @@ def test_parse_trace_returns_none_for_an_unrelated_comment() -> None:
 
 
 def test_parse_trace_rejects_a_mismatched_route() -> None:
-    body = "bypass-trace: release_level=formal route=alpha actor=x reason=y"
+    body = "bypass-trace: release_level=stable route=beta actor=x reason=y"
 
     assert cbt.parse_trace(body) is None
 
@@ -72,7 +72,7 @@ def test_find_bypass_trace_ignores_a_trace_left_after_the_merge() -> None:
     it must predate the bypass merge it documents."""
     comments = [
         _comment(
-            "bypass-trace: release_level=alpha route=alpha "
+            "bypass-trace: release_level=stable route=stable "
             "actor=matheme-justyn "
             "reason=backfilled after the fact",
             "2026-09-01T13:00:00Z",
@@ -96,7 +96,7 @@ def test_find_bypass_trace_returns_none_when_absent() -> None:
 def test_find_bypass_trace_accepts_any_trace_when_not_yet_merged() -> None:
     comments = [
         _comment(
-            "bypass-trace: release_level=alpha route=alpha actor=x "
+            "bypass-trace: release_level=beta route=beta actor=x "
             "reason=early note",
             "2026-09-01T09:00:00Z",
         ),
@@ -105,19 +105,17 @@ def test_find_bypass_trace_accepts_any_trace_when_not_yet_merged() -> None:
     trace = cbt.find_bypass_trace(comments, merged_at=None)
 
     assert trace is not None
-    assert trace["release_level"] == "alpha"
+    assert trace["release_level"] == "beta"
 
 
 def test_find_bypass_trace_picks_the_latest_qualifying_trace() -> None:
     comments = [
         _comment(
-            "bypass-trace: release_level=alpha route=alpha actor=x "
-            "reason=first",
+            "bypass-trace: release_level=beta route=beta actor=x reason=first",
             "2026-09-01T09:00:00Z",
         ),
         _comment(
-            "bypass-trace: release_level=alpha route=alpha actor=x "
-            "reason=second",
+            "bypass-trace: release_level=beta route=beta actor=x reason=second",
             "2026-09-01T10:00:00Z",
         ),
     ]

@@ -31,8 +31,9 @@ set -euo pipefail
 # in draft rather than leaving a falsely-trusted mutable Release public.
 #
 # Usage:
-#   .csarc/scripts/publish-release stage --repo OWNER/NAME --sha SHA --tag TAG
-#     Validate the merged version pull request at SHA and converge the tag
+#   .csarc/scripts/publish-release stage --repo OWNER/NAME --sha SHA --tag TAG \
+#       [--branch BRANCH]
+#     Validate the merged release candidate at SHA and converge the tag
 #     and draft Release for TAG (idempotent; safe to rerun).
 #
 #   .csarc/scripts/publish-release resolve --repo OWNER/NAME --sha SHA \
@@ -68,7 +69,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  .csarc/scripts/publish-release stage   --repo OWNER/NAME --sha SHA --tag TAG
+  .csarc/scripts/publish-release stage   --repo OWNER/NAME --sha SHA --tag TAG [--branch BRANCH]
   .csarc/scripts/publish-release resolve --repo OWNER/NAME --sha SHA [--tag TAG] [--created true|false]
   .csarc/scripts/publish-release publish --repo OWNER/NAME --tag TAG
   .csarc/scripts/publish-release rerun-verify --repo OWNER/NAME --tag TAG
@@ -85,6 +86,7 @@ sha=""
 tag=""
 created="false"
 output=""
+branch="main"
 while (($#)); do
   case "$1" in
     --repo)
@@ -105,6 +107,10 @@ while (($#)); do
       ;;
     --output)
       output="$2"
+      shift 2
+      ;;
+    --branch)
+      branch="$2"
       shift 2
       ;;
     *)
@@ -228,7 +234,7 @@ cmd_stage() {
   mapfile -t numbers < <(gh api \
     -H 'Accept: application/vnd.github+json' \
     "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" \
-    --jq ".[] | select(.merged_at != null and .base.ref == \"main\" and .merge_commit_sha == \"$sha\") | .number")
+    --jq ".[] | select(.merged_at != null and .base.ref == \"$branch\" and .merge_commit_sha == \"$sha\") | .number")
   test "${#numbers[@]}" -eq 1
   local pr
   pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/${numbers[0]}")"
@@ -255,7 +261,14 @@ cmd_stage() {
       --tag "$tag"
     test "$(git -C "$repo_root" rev-parse "$candidate_sha^{tree}")" = \
       "$(git -C "$repo_root" rev-parse "$sha^{tree}")"
+  elif [[ "$branch" == dev/m* ]]; then
+    [[ "$tag" =~ -beta\.[1-9][0-9]*$ ]]
+    python3 "$repo_root/.csarc/scripts/release_policy.py" verify-version \
+      --root "$repo_root" --tag "$tag"
+    test "$(git -C "$repo_root" rev-parse "$candidate_sha^{tree}")" = \
+      "$(git -C "$repo_root" rev-parse "$sha^{tree}")"
   else
+    test "$branch" = main
     "$repo_root/.csarc/scripts/verify-release-candidate" "$RUNNER_TEMP/release-pr.json"
   fi
   git -C "$repo_root" checkout --detach "$sha"
@@ -269,14 +282,14 @@ cmd_resolve() {
   local tag="$tag"
   if [[ -z "$tag" ]]; then
     local tags
-    # Issue #744: a `-alpha.N`/`-beta.N` suffix is a legal release-phase
+    # Issue #918: a `-beta.N` suffix is the only public pre-release
     # version too, not only a plain X.Y.Z tag. This pattern's suffix must
     # stay byte-identical to cmd_publish's below, to
     # .csarc/scripts/converge-release-tag's, and to .csarc/scripts/release_phase.py's
     # canonical `_VERSION_RE` (`N` never 0 or zero-padded); see
     # tests/test_release_phase.py::test_prerelease_suffix_regex_is_consistent_everywhere.
     mapfile -t tags < <(git -C "$repo_root" tag --points-at "$sha" |
-      grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta)\.[1-9][0-9]*)?$' || true)
+      grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[1-9][0-9]*)?$' || true)
     [[ "${#tags[@]}" -le 1 ]]
     tag="${tags[0]:-}"
   fi
@@ -356,7 +369,7 @@ cmd_publish() {
   # Issue #744: only a stable (unsuffixed) tag should become GitHub's latest
   # release. Keep this suffix identical to cmd_resolve's pattern above.
   local latest_flags=(--latest)
-  if [[ "$tag" =~ -(alpha|beta)\.[1-9][0-9]*$ ]]; then
+  if [[ "$tag" =~ -beta\.[1-9][0-9]*$ ]]; then
     latest_flags=()
   fi
   gh release edit "$tag" --draft=false "${latest_flags[@]}"

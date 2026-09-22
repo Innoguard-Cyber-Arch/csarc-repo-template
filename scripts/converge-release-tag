@@ -36,6 +36,10 @@ while (($#)); do
   esac
 done
 [[ -n "$repo" && -n "$sha" && -n "$tag" ]] || usage
+if ! [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[1-9][0-9]*)?$ ]]; then
+  echo "Unsupported release tag: $tag" >&2
+  exit 1
+fi
 
 if tag_sha="$(gh api "repos/$repo/git/ref/tags/$tag" --jq .object.sha 2>/dev/null)"; then
   test "$tag_sha" = "$sha"
@@ -45,7 +49,7 @@ else
 fi
 
 if ! gh release view "$tag" >/dev/null 2>&1; then
-  # Issue #744: a `-alpha.N`/`-beta.N` tag must be created as a GitHub
+  # Issue #918: a `-beta.N` tag must be created as a GitHub
   # prerelease so release_identity()'s prerelease-flag/tag-shape
   # consistency check (src/csarc_cli/cli.py) and the CLI's SemVer-
   # precedence "latest" selection both see a self-consistent Release.
@@ -57,7 +61,7 @@ if ! gh release view "$tag" >/dev/null 2>&1; then
   # hand and by
   # tests/test_release_phase.py::test_prerelease_suffix_regex_is_consistent_everywhere.
   prerelease_flags=()
-  if [[ "$tag" =~ -(alpha|beta)\.[1-9][0-9]*$ ]]; then
+  if [[ "$tag" =~ -beta\.[1-9][0-9]*$ ]]; then
     prerelease_flags=(--prerelease)
   fi
   gh release create "$tag" --target "$sha" \

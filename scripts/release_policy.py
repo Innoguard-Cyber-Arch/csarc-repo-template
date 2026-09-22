@@ -23,9 +23,11 @@ from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    csarc_config = importlib.import_module("csarc_config")
     stale_branch_detection = importlib.import_module("stale_branch_detection")
     release_phase = importlib.import_module("release_phase")
 else:
+    csarc_config = importlib.import_module(f"{__package__}.csarc_config")
     stale_branch_detection = importlib.import_module(
         f"{__package__}.stale_branch_detection"
     )
@@ -33,7 +35,7 @@ else:
 
 STATES = {"allowed", "blocked", "unknown"}
 # Version parsing/formatting/precedence all go through release_phase (Issue
-# #744: alpha/beta/early/formal phase-suffixed versions) instead of a local
+# #918: beta/stable channels with one exact migration bridge) instead of a local
 # plain-triplet pattern.
 PEP440_SURFACES = {"pyproject.toml", "uv.lock"}
 
@@ -303,7 +305,7 @@ def release_follow_up_errors(  # noqa: C901
     elif maintainer_actor and not guided_head:
         errors.append(
             "guided release branch must use release/v<version>, where "
-            "<version> is X.Y.Z or X.Y.Z-alpha.N / X.Y.Z-beta.N"
+            "<version> is X.Y.Z or X.Y.Z-beta.N"
         )
 
     allowed = {".release-please-manifest.json", "CHANGELOG.md"}
@@ -1196,14 +1198,14 @@ def git_output(arguments: list[str], root: Path) -> str:
     return result.stdout.strip()
 
 
-def release_plan(
+def release_plan(  # noqa: C901
     root: Path, sha: str, *, phase: str | None = None
 ) -> tuple[str, str] | None:
     """Return the next tag/version, or None when HEAD needs no release.
 
-    ``phase`` is the maintainer/#745-declared release phase ("alpha",
-    "beta", "early", or "formal") to apply to a freshly computed core
-    version. It is never consulted when a tag already exists at ``sha`` or
+    ``phase`` is the route-selected release channel (``beta`` or ``stable``)
+    applied to a freshly computed core version. It is never consulted when
+    a tag already exists at ``sha`` or
     when this commit is already a prepared version-bump candidate -- those
     paths report the version that was already decided, unsuffixed or not.
     """
@@ -1214,9 +1216,44 @@ def release_plan(
     if released:
         return released[-1], released[-1].removeprefix("v")
 
+    # One exact bridge retires the final pre-#918 version spelling without
+    # keeping a general alpha parser. Once v0.22.0 is published, ordinary
+    # beta/stable history owns every later calculation.
+    manifest_path = root / ".release-please-manifest.json"
+    materialized = ""
+    if manifest_path.is_file():
+        materialized = str(
+            json.loads(manifest_path.read_text(encoding="utf-8")).get(".", "")
+        )
+        try:
+            parent = git_output(["rev-parse", f"{sha}^"], root)
+            parent_manifest = json.loads(
+                git_output(
+                    ["show", f"{parent}:.release-please-manifest.json"], root
+                )
+            )
+        except (
+            subprocess.CalledProcessError,
+            json.JSONDecodeError,
+            KeyError,
+        ):
+            parent_manifest = {}
+        if (
+            parent_manifest.get(".") == "0.21.0-alpha.1"
+            and materialized == "0.22.0"
+            and phase in {None, "stable"}
+            and not release_version_errors(root, materialized)
+        ):
+            return "v0.22.0", "0.22.0"
+
     tags = git_output(["tag", "--merged", sha], root).splitlines()
     valid_tags = [tag for tag in tags if release_phase.is_valid_version(tag)]
-    if valid_tags:
+    if materialized == "0.21.0-alpha.1":
+        base = materialized
+        revision_range = (
+            f"v0.21.0-alpha.1..{sha}" if "v0.21.0-alpha.1" in tags else sha
+        )
+    elif valid_tags:
         latest_tag = release_phase.sort_by_precedence(valid_tags)[-1]
         base = latest_tag.removeprefix("v")
         revision_range = f"{latest_tag}..{sha}"
@@ -1260,7 +1297,13 @@ def release_plan(
             base_core = release_phase.parse_version(base).core_string()
             if bump_version(parent_core, parent_messages) == base_core:
                 return f"v{base}", base
-    base_core = release_phase.parse_version(base).core_string()
+    if base == "0.21.0-alpha.1":
+        # Exact one-time bridge from the final retired public spelling.
+        base_core = "0.21.0"
+        if "v0.21.0-alpha.1" in tags:
+            revision_range = f"v0.21.0-alpha.1..{sha}"
+    else:
+        base_core = release_phase.parse_version(base).core_string()
     raw = git_output(["log", "--format=%s%x1f%b%x1e", revision_range], root)
     messages = [
         message.strip("\n").replace("\x1f", "\n")
@@ -1272,7 +1315,15 @@ def release_plan(
         return None
     if phase is not None:
         existing = git_output(["tag", "--list"], root).splitlines()
-        version = release_phase.phase_version(version, phase, existing=existing)
+        config_path = root / ".csarc/config.yml"
+        maturity = (
+            str(csarc_config.load_config(config_path)["project_maturity"])
+            if config_path.is_file()
+            else None
+        )
+        version = release_phase.phase_version(
+            version, phase, existing=existing, maturity=maturity
+        )
     return f"v{version}", version
 
 
@@ -1317,6 +1368,19 @@ def verify_candidate_version(root: Path, base_sha: str) -> tuple[str, str, str]:
         raise RuntimeError("Git is required for release planning")
     candidate_sha = git_output(["rev-parse", "HEAD"], root)
     source_sha = git_output(["merge-base", candidate_sha, base_sha], root)
+    candidate_manifest = json.loads(
+        (root / ".release-please-manifest.json").read_text(encoding="utf-8")
+    )
+    base_manifest = json.loads(
+        git_output(["show", f"{base_sha}:.release-please-manifest.json"], root)
+    )
+    if (
+        source_sha == base_sha
+        and base_manifest.get(".") == "0.21.0-alpha.1"
+        and candidate_manifest.get(".") == "0.22.0"
+    ):
+        verify_release_version(root, "0.22.0")
+        return "0.22.0", candidate_sha, source_sha
     new_base_log = git_output(
         ["log", "--format=%H%x1f%s%x1f%b%x1e", f"{source_sha}..{base_sha}"],
         root,
@@ -1418,8 +1482,8 @@ def _target_version(version: str, relative_path: str) -> str:
     Every surface gets the canonical SemVer string except a Python
     packaging surface (Issue #744): `pyproject.toml`, `uv.lock`, and the
     package's own `src/<package_name>/__init__.py` marker. PEP 440 has no
-    hyphenated `-alpha.N`/`-beta.N` pre-release segment, so those get the
-    normalized form (`0.16.0a1`) regardless of whether they are the primary
+    hyphenated `-beta.N` pre-release segment, so those get the normalized
+    form (`0.16.0b1`) regardless of whether they are the primary
     governed surface or a synced extra-file entry (e.g. a
     typescript+python project's `package.json` stays primary while
     `pyproject.toml` is still an extra-file that needs the same
@@ -1483,7 +1547,7 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
                 if "x-release-please-version" in line:
                     line, count = re.subn(
                         r"(?P<prefix>v?)\d+\.\d+\.\d+"
-                        r"(?:-(?:alpha|beta)\.\d+)?",
+                        r"(?:-[0-9A-Za-z.-]+)?",
                         rf"\g<prefix>{target_version}",
                         line,
                         count=1,
@@ -1527,10 +1591,13 @@ def _write_changelog(root: Path, sha: str, version: str) -> None:
     if re.search(rf"(?m)^## (?:\[)?v?{re.escape(version)}(?:\]|\s|\()", source):
         return
     tags = git_output(["tag", "--merged", sha], root).splitlines()
-    ordered = release_phase.sort_by_precedence(
-        tag for tag in tags if release_phase.is_valid_version(tag)
-    )
-    latest = ordered[-1] if ordered else ""
+    if version == "0.22.0" and "v0.21.0-alpha.1" in tags:
+        latest = "v0.21.0-alpha.1"
+    else:
+        ordered = release_phase.sort_by_precedence(
+            tag for tag in tags if release_phase.is_valid_version(tag)
+        )
+        latest = ordered[-1] if ordered else ""
     revision = f"{latest}..{sha}" if latest else sha
     raw = git_output(
         ["log", "--reverse", "--format=%h%x1f%s%x1e", revision], root
@@ -1838,12 +1905,10 @@ def release_version_errors(  # noqa: C901
             marker_found = True
             # A PEP 440 surface's marker (Issue #744's `_is_pep440_surface`,
             # e.g. `src/<package>/__init__.py`) holds the compact
-            # `a1`/`b1` form instead of the canonical `-alpha.1`/`-beta.1`
+            # `b1` form instead of the canonical `-beta.1`
             # segment; match either so its phase suffix is not silently
             # dropped from `versions` below.
-            match = re.search(
-                r"v?(\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+|[ab]\d+)?)", line
-            )
+            match = re.search(r"v?(\d+\.\d+\.\d+(?:-beta\.\d+|b\d+)?)", line)
             versions[str(path.relative_to(root))] = (
                 match.group(1) if match else ""
             )
@@ -1977,10 +2042,8 @@ def parser() -> argparse.ArgumentParser:
         choices=release_phase.PHASES,
         default=None,
         help=(
-            "Release phase to apply to a freshly computed version "
-            "(alpha/beta/early/formal, Issue #744). Declaring which phase "
-            "a release deserves is Issue #745's job; omit this to report "
-            "the bare core version."
+            "Release channel to apply to a freshly computed version "
+            "(beta/stable, Issue #918); omit it to report the bare core."
         ),
     )
     candidate = subparsers.add_parser("prepare-candidate")

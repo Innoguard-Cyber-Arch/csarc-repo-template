@@ -57,13 +57,13 @@ DELIVERY_BRANCH = re.compile(r"^dev/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
 PROMOTION_BRANCH = re.compile(r"^promote/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
 RELEASE_BRANCH = re.compile(
     r"^release/v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
-    r"(?:-(?:alpha|beta)\.[1-9]\d*)?$"
+    r"(?:-beta\.[1-9]\d*)?$"
 )
 ISSUE_WORK_BRANCH = re.compile(
     r"^(?:build|chore|ci|docs|feat|fix|refactor|revert|test)/"
     r"([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$"
 )
-ALPHA_SELF_MERGE_MARKER = "Alpha 自行合併 / self-merged"
+ADMIN_BYPASS_MARKER = "Admin bypass / 管理員略過審核"
 WORK_CLOSURE_MARKER = "Work Issue closure evidence"
 HOTFIX_POST_REVIEW_MARKER = "Emergency hotfix post-review"
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
@@ -982,7 +982,7 @@ def find_exact_head_authorization(
     points to (the merge attempt's own evidence), this scans every comment
     on the pull request to answer "has a maintainer authorized this exact
     head at all" -- used by `.csarc/scripts/review_gate.py` to let the `review`
-    required check recognize an Alpha self-merge authorization the same way
+    required check recognize an admin-bypass authorization the same way
     it recognizes a native `APPROVED` review, without needing a lease or a
     specific comment URL threaded through.
 
@@ -1352,12 +1352,12 @@ def require_default_branch_issue_route(
         or head_repo.casefold() != repo.casefold()
     ):
         raise RuntimeError(
-            "Default-branch alpha route requires a same-repository head"
+            "Default-branch stable route requires a same-repository head"
         )
     work = ISSUE_WORK_BRANCH.fullmatch(str(head_ref)) if head_ref else None
     if work is None:
         raise RuntimeError(
-            "Default-branch alpha route requires an Issue work branch"
+            "Default-branch stable route requires an Issue work branch"
         )
     issue_number = int(work.group(1))
     closing_issues = [
@@ -1366,7 +1366,7 @@ def require_default_branch_issue_route(
     ]
     if closing_issues != [issue_number]:
         raise RuntimeError(
-            "Default-branch alpha route must close its matching Issue exactly"
+            "Default-branch stable route must close its matching Issue exactly"
         )
     issue = github.get(repo, f"issues/{issue_number}")
     if (
@@ -1376,27 +1376,27 @@ def require_default_branch_issue_route(
         or issue.get("pull_request") is not None
         or issue.get("state") != "open"
     ):
-        raise RuntimeError("Default-branch alpha route Issue is not open")
+        raise RuntimeError("Default-branch stable route Issue is not open")
     if issue.get("milestone") is not None:
         raise RuntimeError(
-            "Default-branch alpha route requires a Milestone-less Issue"
+            "Default-branch stable route requires a Milestone-less Issue"
         )
 
 
-def alpha_self_merge_opt_in(
+def admin_bypass_opt_in(
     github: GitHub,
     repo: str,
     lease: dict[str, Any],
     pull: dict[str, Any],
 ) -> bool:
-    """Validate the exact Alpha marker and its audited route."""
+    """Validate the exact admin-bypass marker and its audited route."""
     marker_count = (
-        str(pull.get("body") or "").splitlines().count(ALPHA_SELF_MERGE_MARKER)
+        str(pull.get("body") or "").splitlines().count(ADMIN_BYPASS_MARKER)
     )
     if marker_count == 0:
         return False
     if marker_count != 1:
-        raise RuntimeError("Alpha self-merge marker must appear exactly once")
+        raise RuntimeError("Admin bypass marker must appear exactly once")
     base_ref = (pull.get("base") or {}).get("ref")
     if base_ref == lease["default_branch"]:
         head = pull.get("head") or {}
@@ -1412,7 +1412,8 @@ def alpha_self_merge_opt_in(
             head_repo_name = str(head_repo.get("full_name") or "")
             if head_repo_name.casefold() != repo.casefold():
                 raise RuntimeError(
-                    "Alpha release or promotion requires a same-repository head"
+                    "Admin-bypassed release or promotion requires a "
+                    "same-repository head"
                 )
             return True
         require_default_branch_issue_route(github, repo, lease, pull)
@@ -1420,8 +1421,7 @@ def alpha_self_merge_opt_in(
     route = require_routine_route(github, repo, lease, pull)
     if route not in {"issue", "sync"}:
         raise RuntimeError(
-            "Alpha self-merge is only available for routine Issue or sync "
-            "routes"
+            "Admin bypass is only available for routine Issue or sync routes"
         )
     return True
 
@@ -1530,7 +1530,7 @@ def effective_protection(  # noqa: C901
     github: GitHub,
     repo: str,
     branch: str,
-    alpha_self_merge: bool = False,
+    admin_bypass: bool = False,
     reviewed_merge: bool = False,
     copilot_mode: bool = False,
     local_mode: bool = False,
@@ -1664,7 +1664,7 @@ def effective_protection(  # noqa: C901
             "local mode needs native review, stale-review dismissal, "
             "last-push approval, and thread controls"
         )
-    elif alpha_self_merge:
+    elif admin_bypass:
         review_controls = level_check_controls
         missing_reason = (
             "level-aware zero-review, stale-review dismissal, thread, or "
@@ -1763,10 +1763,16 @@ def effective_protection(  # noqa: C901
                 False,
             )
         if local_mode:
-            if bypass_actors != REVIEWED_MERGE_BYPASS_ACTORS:
+            if bypass_actors == []:
+                continue
+            if (
+                not reviewed_merge
+                or bypass_actors != REVIEWED_MERGE_BYPASS_ACTORS
+            ):
                 return (
                     "blocked",
-                    "local mode needs the audited admin pull-request bypass",
+                    "local mode exposes an unverified admin pull-request "
+                    "bypass",
                     set(),
                     False,
                     False,
@@ -2469,17 +2475,15 @@ def merge_snapshot(  # noqa: C901
         for label in pull.get("labels", [])
         if isinstance(label, dict)
     }
+    admin_bypass = level_decision.review == "self" and admin_bypass_opt_in(
+        github, repo, lease, pull
+    )
     bypass_route = (
-        "alpha"
-        if level_decision.level == "alpha"
+        level_decision.level
+        if admin_bypass
         else "hotfix"
         if "hotfix" in label_names
         else None
-    )
-    alpha_self_merge = (
-        level_decision.level == "alpha"
-        and level_decision.review == "self"
-        and alpha_self_merge_opt_in(github, repo, lease, pull)
     )
     comments = [
         *github.pages(repo, f"issues/{pr_number}/comments?per_page=100"),
@@ -2524,7 +2528,7 @@ def merge_snapshot(  # noqa: C901
     copilot_verdict = None
     if (
         approval is None
-        and not alpha_self_merge
+        and not admin_bypass
         and copilot_mode
         and level_decision.review == "self"
     ):
@@ -2553,10 +2557,10 @@ def merge_snapshot(  # noqa: C901
         }
         authorization_source = "review"
         authorization_url = str(approval.get("html_url") or "")
-    elif alpha_self_merge:
+    elif admin_bypass:
         if not authorization_url:
             raise RuntimeError(
-                "Alpha self-merge requires an exact maintainer "
+                "Admin bypass requires an exact maintainer "
                 "authorization comment"
             )
         auth = authorization(
@@ -2567,6 +2571,22 @@ def merge_snapshot(  # noqa: C901
             raise RuntimeError(
                 "Authorization predates the active lifecycle lease"
             )
+        auth_actor = str((auth.get("user") or {}).get("login") or "")
+        if auth_actor.casefold() != actor:
+            raise RuntimeError(
+                "Admin-bypass authorization actor must be the merge actor"
+            )
+        permission = github.get(
+            repo,
+            f"collaborators/{urllib.parse.quote(actor, safe='')}/permission",
+        )
+        if (
+            not isinstance(permission, dict)
+            or permission.get("permission") != "admin"
+            or str((permission.get("user") or {}).get("login") or "").casefold()
+            != actor
+        ):
+            raise RuntimeError("Admin bypass requires live admin permission")
         authorization_source = "comment"
     elif copilot_verdict is not None and copilot_verdict.review is not None:
         auth = {
@@ -2647,15 +2667,12 @@ def merge_snapshot(  # noqa: C901
         github,
         repo,
         base_ref,
-        alpha_self_merge,
-        # A reviewed bypass is limited to an explicitly selected bypass
-        # route whose exact-head authorization was independently verified.
-        bypass_route is not None
-        and authorization_source
+        admin_bypass,
+        # Any exact-head authorization may safely coexist with the one
+        # configured admin bypass actor; unknown bypass shapes still block.
+        authorization_source
         in {"review", "copilot", "comment", "hotfix-emergency"},
-        copilot_mode
-        and level_decision.review == "self"
-        and not alpha_self_merge,
+        copilot_mode and level_decision.review == "self" and not admin_bypass,
         verification_mode == "local",
     )
     authorization_actor = str((auth.get("user") or {}).get("login", ""))
@@ -2664,7 +2681,7 @@ def merge_snapshot(  # noqa: C901
         reviewed_policy_block = mergeable_state == "blocked" and (
             verification_mode == "local"
             or (
-                alpha_self_merge
+                admin_bypass
                 and authorization_source == "comment"
                 and copilot_mode
                 and copilot_only_block_possible
@@ -2689,7 +2706,7 @@ def merge_snapshot(  # noqa: C901
                 reason = "The merge actor is not the live admin bypass actor"
             elif review_gate.unresolved_threads(repo, pr_number):
                 protection = "blocked"
-                reason = "Unresolved review threads prevent Alpha self-merge"
+                reason = "Unresolved review threads prevent admin bypass"
             else:
                 reason = (
                     "exact-head authorization, verification, and review "
@@ -2748,7 +2765,7 @@ def merge_snapshot(  # noqa: C901
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
         "local_verification": local_evidence,
-        "alpha_self_merge": alpha_self_merge,
+        "admin_bypass": admin_bypass,
         "dependabot_head": dependabot_head,
         "hotfix_evidence": hotfix_evidence,
     }

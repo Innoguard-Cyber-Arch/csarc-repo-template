@@ -52,12 +52,7 @@ def test_forms_set_native_type_and_one_classification(
         True,
         False,
     ]
-    assert fields[1]["attributes"]["options"] == [
-        "alpha",
-        "beta",
-        "early",
-        "formal",
-    ]
+    assert fields[1]["attributes"]["options"] == ["beta", "stable"]
     assert "--assignee @me" in root_form["body"][0]["attributes"]["value"]
 
 
@@ -138,12 +133,7 @@ def test_milestone_tracker_form_matches_the_lifecycle_contract() -> None:
         )
         == tracker_sections
     )
-    assert fields[1]["attributes"]["options"] == [
-        "alpha",
-        "beta",
-        "early",
-        "formal",
-    ]
+    assert fields[1]["attributes"]["options"] == ["stable"]
     assert fields[5]["attributes"]["label"] == "References"
     assert [field["validations"]["required"] for field in fields] == [
         True,

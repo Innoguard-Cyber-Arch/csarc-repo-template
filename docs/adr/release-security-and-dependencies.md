@@ -2,8 +2,8 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-01
-- **備註：**#430 candidate 實作；#871 將 Milestone 版本候選併入 promotion PR
-- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)
+- **備註：**#430 candidate 實作；#871 將 Milestone 版本候選併入 promotion PR；#918 以 beta／stable 雙通道與獨立專案成熟度取代四層版本模型
+- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)、[#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918)
 - **實作 PRs：**[#448](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/448)、[#463](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/463)、[#471](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/471)
 
 ## 問題與限制
@@ -19,6 +19,16 @@ CSARC 過去在版本、發版與供應鏈責任上有多套並存或半途而�
 - 本 ADR 只涵蓋 repository delivery 到 GitHub Release 的邊界，不涵蓋成品進入真實 runtime 之後的責任。
 
 ## 決定
+
+### 2026-09-23：公開通道與專案成熟度分離（#918）
+
+- 公開版本只有 beta `X.Y.Z-beta.N` 與 stable `X.Y.Z`；alpha 僅限本機開發，RC 直接併入 stable。
+- 每張 Milestone work Issue 進入 `dev/m*` 後發布 beta；Milestone promotion、standalone 與 hotfix 發 stable。進行中的 Milestone 每次以目前 stable 為版本基準。
+- `project_maturity: early|formal` 是獨立專案宣告，預設 early；只有明確的 standalone stable 決策可改為 formal。
+- CLI 預設選 stable，beta 必須以 `--channel beta` 明確選擇。舊 alpha 或未知版本不保留相容 parser，改走保守重裝：保留設定與專案自有／分歧內容，只重建能安全識別的模板基線。
+- 歷史 alpha Release 以相同 commit 建立 beta replacement，逐一驗證後才刪除原 Release/tag。這是一次性資料遷移，不擴張正式 parser。
+
+這項決定 supersede #744 的四層版本號模型，以及 #745 將發布層級與審核強度綁在一起的部分；其 exact-head、信任鏈與 path-risk 原則保留。
 
 CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑：
 

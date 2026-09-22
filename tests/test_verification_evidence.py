@@ -74,7 +74,7 @@ def evidence(
         f"Execute trusted verification tier={tier} scopes=source "
         f"tree={tree} command={command} base={BASE} base-sha={BASE_SHA} "
         f"labels={LABELS} "
-        "release=alpha"
+        "release=beta"
     )
     if reuse is not None:
         source_run, source_job, source_check = reuse
@@ -82,7 +82,7 @@ def evidence(
             f"Reuse trusted verification tier={tier} scopes=source "
             f"tree={tree} command={command} base={BASE} base-sha={BASE_SHA} "
             f"labels={LABELS} "
-            f"release=alpha source-run={source_run} source-job={source_job} "
+            f"release=beta source-run={source_run} source-job={source_job} "
             f"source-check={source_check}"
         )
     if sync is not None:
@@ -90,7 +90,7 @@ def evidence(
         evidence_step = (
             "Validate trusted clean sync tier=fast scopes=source "
             f"tree={tree} command=./scripts/verify-fast base={BASE} "
-            f"base-sha={BASE_SHA} labels={LABELS} release=alpha "
+            f"base-sha={BASE_SHA} labels={LABELS} release=beta "
             f"main={main_sha} "
             f"source-run={source_run} source-job={source_job} "
             f"source-check={source_check}"
@@ -156,7 +156,7 @@ def test_valid_trusted_execution_binds_all_claims(
     assert result["base"] == BASE
     assert result["base_sha"] == BASE_SHA
     assert result["labels"] == LABELS
-    assert result["release_level"] == "alpha"
+    assert result["release_level"] == "beta"
     assert result["reused"] is False
     assert result["toolchain"] == [
         "python-3.14",
@@ -485,7 +485,7 @@ def test_reusable_selector_uses_only_an_original_identical_route(
             "base": BASE,
             "base_sha": BASE_SHA,
             "labels": LABELS,
-            "release_level": "alpha",
+            "release_level": "beta",
             "reused": check_id == 8,
         }
 
@@ -504,7 +504,7 @@ def test_reusable_selector_uses_only_an_original_identical_route(
         base=BASE,
         base_sha=BASE_SHA,
         labels=LABELS,
-        release_level="alpha",
+        release_level="beta",
         exclude_run_id=300,
         max_age_hours=24,
     )

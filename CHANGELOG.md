@@ -7,6 +7,16 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.22.0] - 2026-09-23
+
+### Features
+
+* feat: define beta and stable release governance (9a521a3)
+
+### Bug Fixes
+
+* fix: bridge final alpha version to stable (f7f9d0f)
+
 ## [0.21.0-alpha.1] - 2026-09-23
 
 ### Features

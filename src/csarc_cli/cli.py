@@ -107,7 +107,11 @@ class CliError(RuntimeError):
     """An expected command error with an actionable message."""
 
 
-class ReleaseNotFoundError(CliError):
+class ReleaseRecoveryError(CliError):
+    """A release identity is unusable but safe reinstall remains possible."""
+
+
+class ReleaseNotFoundError(ReleaseRecoveryError):
     """The canonical repository confirmed a named release tag is gone.
 
     Raised only when GitHub itself reports the tag not found (Issue #744
@@ -116,6 +120,10 @@ class ReleaseNotFoundError(CliError):
     mismatch) stays a plain ``CliError`` and must keep failing closed, not
     fall back to reinstall.
     """
+
+
+class UnsupportedReleaseVersionError(ReleaseRecoveryError):
+    """A saved or selected Release uses an unsupported version shape."""
 
 
 class ProjectVerificationError(CliError):
@@ -181,7 +189,9 @@ class ReleaseClient(Protocol):
     def repository(self) -> dict[str, object]:
         """Return canonical repository metadata."""
 
-    def release(self, tag: str | None) -> dict[str, object]:
+    def release(
+        self, tag: str | None, *, channel: str = "stable"
+    ) -> dict[str, object]:
         """Return the latest or named release metadata."""
 
     def resolve_tag(self, tag: str) -> TagResolution:
@@ -669,7 +679,9 @@ class GhReleaseClient:
         """Return canonical repository metadata."""
         return gh_json(f"repos/{CANONICAL_REPOSITORY}")
 
-    def release(self, tag: str | None) -> dict[str, object]:
+    def release(
+        self, tag: str | None, *, channel: str = "stable"
+    ) -> dict[str, object]:
         """Return the highest-precedence or named canonical release.
 
         A named lookup raises ``ReleaseNotFoundError`` on a confirmed
@@ -678,10 +690,10 @@ class GhReleaseClient:
         precedence across every published, non-draft release instead of
         GitHub's own `releases/latest` API, which never returns a
         `prerelease: true` Release and therefore cannot see an
-        alpha/beta-suffixed tag.
+        beta-suffixed tag. Stable is the default; beta is explicit opt-in.
         """
         if tag is None or tag == "latest":
-            return self._latest()
+            return self._latest(channel)
         endpoint = (
             f"repos/{CANONICAL_REPOSITORY}/releases/tags/{quote(tag, safe='')}"
         )
@@ -693,7 +705,7 @@ class GhReleaseClient:
             )
         return release
 
-    def _latest(self) -> dict[str, object]:
+    def _latest(self, channel: str = "stable") -> dict[str, object]:
         """Return the highest-SemVer-precedence eligible, consistent release.
 
         A release whose GitHub `prerelease` flag disagrees with its own
@@ -726,7 +738,10 @@ class GhReleaseClient:
                     parsed = release_phase.parse_version(tag_name)
                 except release_phase.ReleasePhaseError:
                     continue
-                if item.get("prerelease") is not parsed.is_prerelease:
+                if (
+                    item.get("prerelease") is not parsed.is_prerelease
+                    or parsed.release_kind != channel
+                ):
                     continue
                 eligible[tag_name] = item
             if len(batch) < 100:
@@ -736,7 +751,8 @@ class GhReleaseClient:
         if latest_tag is None:
             raise CliError(
                 "No published, well-formed, self-consistent GitHub Release "
-                "was found on the canonical repository."
+                f"was found for the {channel} channel on the canonical "
+                "repository."
             )
         return eligible[latest_tag]
 
@@ -850,11 +866,11 @@ def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
 
 
 def release_identity(release: dict[str, object]) -> tuple[str, int]:
-    """Validate immutable release metadata, prerelease or not (Issue #744).
+    """Validate immutable beta/stable Release metadata (Issue #918).
 
     Every existing verification (immutable, draft, published) is kept
     unchanged; a `prerelease: true` Release is now approved as long as its
-    tag is a legal alpha/beta version and GitHub's own `prerelease` flag
+    tag is a legal beta/stable version and GitHub's own `prerelease` flag
     agrees with that shape, so this stays fail-closed for a malformed or
     self-contradictory tag rather than silently trusting either signal
     alone.
@@ -868,9 +884,9 @@ def release_identity(release: dict[str, object]) -> tuple[str, int]:
     try:
         parsed = release_phase.parse_version(tag)
     except release_phase.ReleasePhaseError as error:
-        raise CliError(
-            f"GitHub Release tag {tag!r} is not a legal alpha/beta/early/"
-            "formal release version (Issue #744)."
+        raise UnsupportedReleaseVersionError(
+            f"GitHub Release tag {tag!r} is not a supported beta/stable "
+            "version; reinstall from the latest stable release is required."
         ) from error
     if release.get("prerelease") is not parsed.is_prerelease:
         raise CliError(
@@ -891,6 +907,7 @@ def resolve_revision(
     expected_sha: str | None = None,
     allow_unreleased: bool = False,
     client: ReleaseClient | None = None,
+    channel: str = "stable",
 ) -> Revision:
     """Resolve and verify an immutable canonical GitHub Release."""
     if allow_unreleased:
@@ -915,6 +932,8 @@ def resolve_revision(
     if expected_sha is not None and FULL_SHA.fullmatch(expected_sha) is None:
         raise CliError("--expected-sha must be a full 40-character commit SHA.")
 
+    if channel not in release_phase.PHASES:
+        raise CliError("--channel must be stable or beta.")
     github = client or GhReleaseClient()
     repository = github.repository()
     if (
@@ -922,7 +941,7 @@ def resolve_revision(
         or repository.get("full_name") != CANONICAL_REPOSITORY
     ):
         raise CliError("Canonical GitHub repository identity mismatch.")
-    release = github.release(requested)
+    release = github.release(requested, channel=channel)
     tag, release_id = release_identity(release)
 
     before = github.resolve_tag(tag)
@@ -4700,6 +4719,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         release,
         expected_sha=sha,
         allow_unreleased=allow_unreleased,
+        channel=args.channel,
     )
     source_path = Path(revision.source)
     if allow_unreleased:
@@ -5261,6 +5281,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         args.to,
         expected_sha=args.expected_sha,
         allow_unreleased=args.allow_unreleased,
+        channel=args.channel,
     )
     if not revision.verified:
         print(
@@ -5341,6 +5362,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 args.to,
                 expected_sha=revision.sha,
                 allow_unreleased=args.allow_unreleased,
+                channel=args.channel,
             )
             if approved_revision != revision:
                 raise CliError(
@@ -5539,6 +5561,7 @@ def update_status(
     accept_legacy: bool = False,
     from_release: str | None = None,
     client: ReleaseClient | None = None,
+    channel: str = "stable",
 ) -> tuple[dict[str, object], Revision, Revision, dict[str, object] | None]:
     """Return stable status plus verified current and target state."""
     answers = config_path(target)
@@ -5561,6 +5584,7 @@ def update_status(
         expected_sha=expected_sha,
         allow_unreleased=allow_unreleased,
         client=client,
+        channel=channel,
     )
     status: dict[str, object] = {
         "current_version": previous_revision.label,
@@ -5679,6 +5703,7 @@ def detect_install_state(
     accept_legacy: bool = False,
     from_release: str | None = None,
     client: ReleaseClient | None = None,
+    channel: str = "stable",
     policy_check: (
         Callable[[Path], subprocess.CompletedProcess[str]] | None
     ) = None,
@@ -5718,6 +5743,7 @@ def detect_install_state(
         accept_legacy=accept_legacy,
         from_release=from_release,
         client=client,
+        channel=channel,
     )
     if status["update_available"]:
         return {
@@ -5794,6 +5820,7 @@ def command_status(args: argparse.Namespace) -> int:
         allow_unreleased=args.allow_unreleased,
         accept_legacy=args.accept_legacy,
         from_release=args.from_release,
+        channel=args.channel,
     )
     result["target"] = str(target)
     if args.json:
@@ -5846,15 +5873,29 @@ def migrate_simplified_settings(
             "governance_mode=managed or governance_mode=observe choice."
         )
 
-    legacy_reviews = [
-        answers.get(f"release_level_{level}_review", fallback)
+    legacy_reviews = {
+        level: answers.get(f"release_level_{level}_review", fallback)
         for level, fallback in (
             ("alpha", "self"),
             ("beta", "peer"),
             ("early", "peer"),
             ("formal", "peer"),
         )
-    ]
+    }
+    stable_self = any(
+        legacy_reviews[level] == "self" for level in ("early", "formal")
+    )
+    beta_self = any(
+        legacy_reviews[level] == "self" for level in ("alpha", "beta")
+    )
+    admin_bypass = (
+        "always" if stable_self else "beta-only" if beta_self else "off"
+    )
+    project_maturity = (
+        "formal"
+        if answers.get("default_release_level") == "formal"
+        else "early"
+    )
     saved_features = answers.get("features")
     if isinstance(saved_features, list):
         legacy_features = [
@@ -5879,7 +5920,8 @@ def migrate_simplified_settings(
         "lifecycle": ["issues", "milestones"],
         "actions_fallback": "off",
         "verification_mode": "hosted",
-        "review": "peer" if "peer" in legacy_reviews else "solo",
+        "admin_bypass": admin_bypass,
+        "project_maturity": project_maturity,
         "copilot_review": (
             "allowed" if answers.get("pr_review_mode") == "copilot" else "off"
         ),
@@ -6000,7 +6042,7 @@ def _render_reinstall_plan(
     resolves `args.to` -- the caller's actual requested target, not a
     hardcoded "latest" -- so an explicit `--to <tag>` is never silently
     substituted; if that same explicit target is also unavailable,
-    resolving it here raises the same `ReleaseNotFoundError` again,
+    resolving it here raises the same `ReleaseRecoveryError` again,
     uncaught, with its own specific message naming that tag.
 
     Returns `(temporary_root, plan, answers_relative, fresh_answers)`; the
@@ -6012,6 +6054,7 @@ def _render_reinstall_plan(
         args.to,
         expected_sha=args.expected_sha,
         allow_unreleased=args.allow_unreleased,
+        channel=args.channel,
     )
     temporary_root = Path(tempfile.mkdtemp(prefix=f"csarc-reinstall-{label}-"))
     stage = temporary_root / "rendered"
@@ -6062,16 +6105,14 @@ def command_update_reinstall(  # noqa: C901
     source: str,
     candidate_answers: dict[str, object],
     repository: RepositoryContext,
-    missing: ReleaseNotFoundError,
+    missing: ReleaseRecoveryError,
 ) -> int:
-    """Fall into a from-scratch reinstall plan when a release tag is gone.
+    """Fall into a from-scratch reinstall plan for an unusable release.
 
-    Triggered only by a confirmed missing release tag (Issue #744) --
-    either the saved provenance's `release_tag` or, if the caller passed
-    one, an explicit `--to` target; `missing` names whichever one actually
-    raised and is surfaced verbatim so the two cases are never conflated.
+    Triggered by a confirmed-missing release or an unsupported version
+    shape. ``missing`` identifies the exact recovery reason.
     Every other verification failure keeps raising through `update_status`
-    unchanged (see the `except ReleaseNotFoundError` in `command_update`).
+    unchanged (see the `except ReleaseRecoveryError` in `command_update`).
     Reuses `csarc adopt`'s exact transactional-plan machinery (Issue #219,
     `build_adoption_plan`/`compare_stage`) so additions, overwrites,
     preserved files, and manual-merge items are categorized identically,
@@ -6113,7 +6154,7 @@ def command_update_reinstall(  # noqa: C901
     target_label = args.to if args.to else "the newest available release"
     print(
         f"{missing} Attempting a reinstall targeting {target_label} "
-        "instead of failing outright (Issue #744).",
+        "instead of failing outright (Issue #918).",
         file=sys.stderr,
     )
     if not args.check:
@@ -6263,13 +6304,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             allow_unreleased=args.allow_unreleased,
             accept_legacy=args.accept_legacy,
             from_release=args.from_release,
+            channel=args.channel,
         )
-    except ReleaseNotFoundError as missing:
-        # Issue #744: retention deleted the recorded release_tag. Every
-        # other verification failure (bad attestation, a moved tag, an
-        # invalid signature, a repository identity mismatch) is a plain
-        # CliError and keeps failing closed above -- only a GitHub-
-        # confirmed missing tag falls into reinstall.
+    except ReleaseRecoveryError as missing:
+        # A retired or malformed version cannot be interpreted safely.
+        # Preserve user-owned content and rebuild the managed baseline.
+        # Every other trust failure remains fail-closed.
         return command_update_reinstall(
             args,
             target,
@@ -6639,6 +6679,12 @@ def parser() -> argparse.ArgumentParser:
         else:
             subparser.add_argument("path", type=Path)
         subparser.add_argument("--to", metavar="RELEASE_OR_SHA")
+        subparser.add_argument(
+            "--channel",
+            choices=release_phase.PHASES,
+            default="stable",
+            help="select latest stable (default) or opt in to latest beta",
+        )
         subparser.add_argument("--source")
         subparser.add_argument("--expected-sha", metavar="FULL_SHA")
         subparser.add_argument("--allow-unreleased", action="store_true")
@@ -6674,6 +6720,12 @@ def parser() -> argparse.ArgumentParser:
     )
     update.add_argument("path", nargs="?", type=Path, default=Path.cwd())
     update.add_argument("--to", metavar="RELEASE_OR_SHA")
+    update.add_argument(
+        "--channel",
+        choices=release_phase.PHASES,
+        default="stable",
+        help="select latest stable (default) or opt in to latest beta",
+    )
     update.add_argument("--expected-sha", metavar="FULL_SHA")
     update.add_argument("--from-release", metavar="RELEASE")
     update.add_argument("--accept-legacy", action="store_true")
@@ -6694,6 +6746,12 @@ def parser() -> argparse.ArgumentParser:
     )
     status.add_argument("path", nargs="?", type=Path, default=Path.cwd())
     status.add_argument("--to", metavar="RELEASE_OR_SHA")
+    status.add_argument(
+        "--channel",
+        choices=release_phase.PHASES,
+        default="stable",
+        help="select latest stable (default) or opt in to latest beta",
+    )
     status.add_argument("--expected-sha", metavar="FULL_SHA")
     status.add_argument("--from-release", metavar="RELEASE")
     status.add_argument("--accept-legacy", action="store_true")

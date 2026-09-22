@@ -21,7 +21,7 @@ fit = "符合畫面"
 {{< standard key="index-mode-standard" title="這個 repo 目前的治理設定" >}}
 這個 repo 使用 [csarc-repo-template](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template) 建立與維護，工作方式跟程式碼一樣可版本化、驗證與升級：
 
-<div class="capability-map"><div class="capability-node"><h3>使用語言</h3><p>[[languages]]</p></div><div class="capability-node"><h3>審查方式</h3><p>[[review]]；Copilot [[copilot_review]]</p></div><div class="capability-node"><h3>可見度</h3><p>[[project_visibility]]</p></div><div class="capability-node"><h3>下一步</h3><p>切換「安裝說明」看怎麼開始，或切換「關於」看這個治理基線做了什麼。</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>使用語言</h3><p>[[languages]]</p></div><div class="capability-node"><h3>管理員略過審核</h3><p>[[admin_bypass]]；Copilot [[copilot_review]]</p></div><div class="capability-node"><h3>可見度</h3><p>[[project_visibility]]</p></div><div class="capability-node"><h3>下一步</h3><p>切換「安裝說明」看怎麼開始，或切換「關於」看這個治理基線做了什麼。</p></div></div>
 {{< /standard >}}
 
 {{< ops key="index-mode-ops" title="設定來源" >}}
@@ -30,7 +30,7 @@ fit = "符合畫面"
 | 設定 | 目前值 |
 | --- | --- |
 | 負責人 | `[[code_owner]]` |
-| 審查 | `[[review]]`；Copilot `[[copilot_review]]` |
+| 管理員略過審核 | `[[admin_bypass]]`；Copilot `[[copilot_review]]` |
 | 工作項目自動化 | `[[lifecycle]]` |
 | 發版觸發 | `[[release_trigger]]` |
 | 文件模式 | `[[documentation_mode]]` |
@@ -63,7 +63,7 @@ git clone [[repository_url]]
 
 {{< slide key="about" track="about" eyebrow="關於" title="這個 repo 用 csarc-repo-template 治理" subtitle="工作方式跟程式碼一樣可版本化、驗證與升級，不只是產生檔案的模板。" class="dense single-column" legacy="false" >}}
 {{< standard key="about-mode-standard" title="這套治理基線持續在做什麼" >}}
-<div class="capability-map"><div class="capability-node"><h3>每項工作是一張 Issue</h3><p>寫清楚要做什麼、怎樣算完成，改動在自己的分支進行，不會互相干擾。</p></div><div class="capability-node"><h3>每次改動都要通過審查</h3><p>自動檢查先跑過一輪，PR 經人審查合併，沒通過就不會進主要分支。</p></div><div class="capability-node"><h3>公版更新先給你看差異</h3><p>`csarc-repo-template` 之後有更新，一樣先讓你看過差異，確認後才套用。</p></div><div class="capability-node"><h3>例行安全檢查是自動的</h3><p>套件版本與已知漏洞排好定期執行，只在真的有衝突時才需要你判斷。</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>每項工作是一張 Issue</h3><p>寫清楚要做什麼、怎樣算完成，改動在自己的分支進行，不會互相干擾。</p></div><div class="capability-node"><h3>每次改動都有審查門檻</h3><p>自動檢查一定要過；同行、Copilot 或設定允許的管理員 exact-head 授權再滿足審查門檻。</p></div><div class="capability-node"><h3>公版更新先給你看差異</h3><p>`csarc-repo-template` 之後有更新，一樣先讓你看過差異，確認後才套用。</p></div><div class="capability-node"><h3>例行安全檢查是自動的</h3><p>套件版本與已知漏洞排好定期執行，只在真的有衝突時才需要你判斷。</p></div></div>
 {{< /standard >}}
 
 {{< ops key="about-mode-ops" title="治理基線的機制" >}}

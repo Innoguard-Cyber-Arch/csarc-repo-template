@@ -1,4 +1,4 @@
-"""Regression tests for scripts/release_phase.py (Issue #744).
+"""Regression tests for beta/stable channels and project maturity (#918).
 
 Covers the maintainer-decided version-to-phase mapping directly: parsing,
 formatting (canonical SemVer and PEP 440), legality checks, `.N`
@@ -34,7 +34,6 @@ rp = SimpleNamespace(
     [
         ("1.2.3", rp.ParsedVersion(1, 2, 3, None, None)),
         ("v1.2.3", rp.ParsedVersion(1, 2, 3, None, None)),
-        ("0.16.0-alpha.1", rp.ParsedVersion(0, 16, 0, "alpha", 1)),
         ("v0.16.0-beta.12", rp.ParsedVersion(0, 16, 0, "beta", 12)),
     ],
 )
@@ -60,24 +59,24 @@ def test_parse_version_accepts_legal_shapes(
     ],
 )
 def test_parse_version_fails_closed_on_illegal_shapes(text: str) -> None:
-    """Reject anything outside X.Y.Z / X.Y.Z-alpha.N / X.Y.Z-beta.N."""
+    """Reject anything outside ``X.Y.Z`` or ``X.Y.Z-beta.N``."""
     assert not rp.is_valid_version(text)
     with pytest.raises(rp.ReleasePhaseError):
         rp.parse_version(text)
 
 
-def test_release_kind_classifies_by_major_version() -> None:
-    """early/formal are both unsuffixed, split purely by major version."""
-    assert rp.parse_version("0.16.0").release_kind == "early"
-    assert rp.parse_version("1.0.0").release_kind == "formal"
-    assert rp.parse_version("2.4.1").release_kind == "formal"
-    assert rp.parse_version("0.16.0-alpha.1").release_kind == "alpha"
+def test_channel_and_maturity_are_independent() -> None:
+    """Suffix selects channel; maturity must be supplied explicitly."""
+    assert rp.parse_version("0.16.0").release_kind == "stable"
+    assert rp.parse_version("1.0.0").release_kind == "stable"
     assert rp.parse_version("1.0.0-beta.2").release_kind == "beta"
+    rp.validate_declared_phase("0.16.0", "stable", "early")
+    rp.validate_declared_phase("2.4.1", "stable", "formal")
 
 
 def test_format_version_round_trips_with_parse() -> None:
     """format_version is the exact inverse of parse_version's core fields."""
-    for text in ("1.2.3", "0.16.0-alpha.1", "1.0.0-beta.9"):
+    for text in ("1.2.3", "1.0.0-beta.9"):
         parsed = rp.parse_version(text)
         assert (
             rp.format_version(
@@ -85,6 +84,13 @@ def test_format_version_round_trips_with_parse() -> None:
             )
             == text
         )
+
+
+def test_historical_alpha_is_not_part_of_the_public_parser() -> None:
+    with pytest.raises(rp.ReleasePhaseError):
+        rp.parse_version("0.16.0-alpha.1")
+    with pytest.raises(rp.ReleasePhaseError):
+        rp.format_version(0, 16, 0, "alpha", 1)
 
 
 def test_format_version_rejects_inconsistent_arguments() -> None:
@@ -104,7 +110,6 @@ def test_format_version_rejects_inconsistent_arguments() -> None:
     [
         (0, 16, 0, None, None, "0.16.0"),
         (1, 0, 0, None, None, "1.0.0"),
-        (0, 16, 0, "alpha", 1, "0.16.0a1"),
         (0, 16, 0, "beta", 12, "0.16.0b12"),
     ],
 )
@@ -116,7 +121,7 @@ def test_format_pep440_matches_python_normalized_form(
     n: int | None,
     expected: str,
 ) -> None:
-    """PEP 440 has no hyphen; alpha/beta compress to a bare letter+number."""
+    """PEP 440 has no hyphen; beta compresses to a bare letter+number."""
     assert rp.format_pep440(major, minor, patch, phase, n) == expected
 
 
@@ -125,7 +130,6 @@ def test_format_pep440_matches_python_normalized_form(
     [
         ("0.16.0", rp.ParsedVersion(0, 16, 0, None, None)),
         ("1.0.0", rp.ParsedVersion(1, 0, 0, None, None)),
-        ("v0.16.0a1", rp.ParsedVersion(0, 16, 0, "alpha", 1)),
         ("0.16.0b12", rp.ParsedVersion(0, 16, 0, "beta", 12)),
     ],
 )
@@ -153,7 +157,6 @@ def test_parse_pep440_rejects_the_canonical_form_and_other_junk(
     [
         ("0.16.0", "0.16.0"),
         ("1.0.0", "1.0.0"),
-        ("0.16.0-alpha.1", "0.16.0a1"),
         ("1.4.0-beta.3", "1.4.0b3"),
     ],
 )
@@ -173,60 +176,58 @@ def test_normalize_agrees_across_canonical_and_pep440_forms(
 
 
 @pytest.mark.parametrize(
-    ("version", "phase"),
+    ("version", "phase", "maturity"),
     [
-        ("0.16.0-alpha.1", "alpha"),
-        ("1.4.0-beta.3", "beta"),
-        ("0.16.0", "early"),
-        ("1.0.0", "formal"),
-        ("2.3.4", "formal"),
+        ("1.4.0-beta.3", "beta", "formal"),
+        ("0.16.0", "stable", "early"),
+        ("1.0.0", "stable", "formal"),
+        ("2.3.4", "stable", "formal"),
     ],
 )
 def test_validate_declared_phase_accepts_legal_combinations(
-    version: str, phase: str
+    version: str, phase: str, maturity: str
 ) -> None:
-    """Every legal (version, phase) pair from Issue #744 decision 1 passes."""
-    rp.validate_declared_phase(version, phase)
+    """Every legal channel/maturity combination passes."""
+    rp.validate_declared_phase(version, phase, maturity)
 
 
 @pytest.mark.parametrize(
-    ("version", "phase"),
+    ("version", "phase", "maturity"),
     [
-        ("1.0.0", "early"),  # major >= 1 cannot be "early"
-        ("0.16.0", "formal"),  # major == 0 cannot be "formal"
-        ("0.16.0-alpha.1", "beta"),  # suffix must match the declared phase
-        ("0.16.0-beta.1", "alpha"),
-        ("0.16.0", "alpha"),  # declared prerelease phase needs a suffix
-        ("1.2.3-alpha.1", "early"),  # early/formal must be unsuffixed
-        ("1.2.3", "rc"),  # not one of the four legal phases
+        ("1.0.0", "stable", "early"),
+        ("0.16.0", "stable", "formal"),
+        ("0.16.0-alpha.1", "beta", "early"),
+        ("0.16.0", "beta", "early"),
+        ("1.2.3-beta.1", "stable", "formal"),
+        ("1.2.3", "rc", "formal"),
     ],
 )
 def test_validate_declared_phase_fails_closed_on_illegal_combinations(
-    version: str, phase: str
+    version: str, phase: str, maturity: str
 ) -> None:
-    """Issue #744's legality rule: suffix only alpha.N/beta.N, else reject."""
+    """New releases reject legacy channels and maturity mismatches."""
     with pytest.raises(rp.ReleasePhaseError):
-        rp.validate_declared_phase(version, phase)
+        rp.validate_declared_phase(version, phase, maturity)
 
 
 def test_next_prerelease_n_increments_within_the_same_core_and_phase() -> None:
-    """Same X.Y.Z + phase increments; a different phase or core resets to 1."""
-    existing = ["0.16.0-alpha.1", "0.16.0-alpha.2", "0.16.0-beta.1"]
-    assert rp.next_prerelease_n(existing, 0, 16, 0, "alpha") == 3
+    """Same X.Y.Z beta increments; malformed or another core is ignored."""
+    existing = ["0.16.0-alpha.2", "0.16.0-beta.1"]
     assert rp.next_prerelease_n(existing, 0, 16, 0, "beta") == 2
-    assert rp.next_prerelease_n(existing, 0, 16, 1, "alpha") == 1
+    assert rp.next_prerelease_n(existing, 0, 16, 1, "beta") == 1
     assert rp.next_prerelease_n([], 1, 0, 0, "beta") == 1
 
 
 def test_phase_version_applies_the_declared_phase_to_a_core_version() -> None:
-    """phase_version formats and re-validates in one step (Issue #744)."""
-    assert rp.phase_version("0.16.0", "early") == "0.16.0"
-    assert rp.phase_version("1.0.0", "formal") == "1.0.0"
+    """phase_version formats and re-validates both independent axes."""
+    assert rp.phase_version("0.16.0", "stable", maturity="early") == "0.16.0"
+    assert rp.phase_version("1.0.0", "stable", maturity="formal") == "1.0.0"
     assert (
         rp.phase_version("0.16.0", "beta", existing=["0.16.0-beta.1"])
         == "0.16.0-beta.2"
     )
-    assert rp.phase_version("0.16.0", "alpha") == "0.16.0-alpha.1"
+    with pytest.raises(rp.ReleasePhaseError):
+        rp.phase_version("0.16.0", "alpha")
 
 
 def test_phase_version_rejects_a_core_version_that_already_has_a_suffix() -> (
@@ -242,21 +243,20 @@ def test_phase_version_fails_closed_when_the_phase_disagrees_with_major() -> (
 ):
     """A formal declaration for a still-0.x core stays fail-closed."""
     with pytest.raises(rp.ReleasePhaseError):
-        rp.phase_version("0.16.0", "formal")
+        rp.phase_version("0.16.0", "stable", maturity="formal")
     with pytest.raises(rp.ReleasePhaseError):
-        rp.phase_version("1.0.0", "early")
+        rp.phase_version("1.0.0", "stable", maturity="early")
 
 
 def test_sort_by_precedence_orders_prerelease_before_release() -> None:
     """A release always outranks any pre-release of the same core version."""
     ordered = rp.sort_by_precedence(
-        ["1.0.0", "1.0.0-beta.1", "1.0.0-alpha.2", "1.0.0-alpha.1", "0.9.0"]
+        ["1.0.0", "1.0.0-beta.2", "1.0.0-alpha.1", "1.0.0-beta.1", "0.9.0"]
     )
     assert ordered == [
         "0.9.0",
-        "1.0.0-alpha.1",
-        "1.0.0-alpha.2",
         "1.0.0-beta.1",
+        "1.0.0-beta.2",
         "1.0.0",
     ]
 
@@ -276,6 +276,14 @@ def test_select_latest_prefers_semver_precedence_over_list_order() -> None:
         == "0.16.0-beta.1"
     )
     assert rp.select_latest(["0.16.0-beta.1", "0.16.0"]) == "0.16.0"
+    assert (
+        rp.select_latest(["0.16.0-beta.1", "0.16.0"], channel="beta")
+        == "0.16.0-beta.1"
+    )
+    assert (
+        rp.select_latest(["0.16.0-beta.1", "0.16.0"], channel="stable")
+        == "0.16.0"
+    )
     assert rp.select_latest([]) is None
     assert rp.select_latest(["not-a-version"]) is None
 
@@ -295,19 +303,17 @@ def test_retention_plan_keeps_only_the_latest_prerelease_string() -> None:
         "v0.2.2",
         "v0.15.5",
         "v0.15.6",
-        "0.16.0-alpha.1",
         "0.16.0-beta.1",
         "0.16.1-beta.1",
-        "0.17.0-alpha.1",
+        "0.17.0-beta.1",
     ]
     decisions = {
         decision.version: decision for decision in rp.retention_plan(versions)
     }
     kept = {version for version, decision in decisions.items() if decision.keep}
-    assert kept == {"v0.2.2", "v0.15.5", "v0.15.6", "0.17.0-alpha.1"}
+    assert kept == {"v0.2.2", "v0.15.5", "v0.15.6", "0.17.0-beta.1"}
     # Older prereleases in the same 0.16 group, and the whole 0.16 group
     # itself once 0.17 has one, are all marked for deletion with a reason.
-    assert decisions["0.16.0-alpha.1"].keep is False
     assert decisions["0.16.0-beta.1"].keep is False
     assert decisions["0.16.1-beta.1"].keep is False
     assert all(decision.reason for decision in decisions.values())
@@ -315,10 +321,12 @@ def test_retention_plan_keeps_only_the_latest_prerelease_string() -> None:
 
 def test_retention_plan_ignores_malformed_tags_without_crashing() -> None:
     """A retention listing must survive one bad tag among many real ones."""
-    decisions = rp.retention_plan(["1.0.0", "not-a-version", "0.16.0-alpha.1"])
+    decisions = rp.retention_plan(
+        ["1.0.0", "not-a-version", "0.16.0-alpha.1", "0.16.0-beta.1"]
+    )
     assert {decision.version for decision in decisions} == {
         "1.0.0",
-        "0.16.0-alpha.1",
+        "0.16.0-beta.1",
     }
 
 
@@ -328,36 +336,32 @@ def test_retention_plan_handles_only_no_suffix_versions() -> None:
     assert all(decision.keep for decision in decisions)
 
 
-# --- Issue #744 finding: the alpha/beta suffix regex must not drift ----
+# --- Issue #918: the beta suffix regex must not drift -----------------
 #
 # scripts/converge-release-tag, scripts/publish-release (two sites:
 # cmd_resolve and cmd_publish), and scripts/check-release-drift (three
 # sites: release_title_pattern, release_version_pattern, and the
 # prerelease-flag consistency check) each re-derive the same
-# `-(alpha|beta).N` suffix shape in bash/Python source text rather than
+# `-beta.N` suffix shape in bash/Python source text rather than
 # calling into this module (there is no cheap way to share a compiled
 # regex between bash and Python), so nothing but a text-level check
 # catches one of them drifting from release_phase.py's own canonical
-# `_VERSION_RE`. Sites differ cosmetically between a capturing `(alpha|
-# beta)` and a non-capturing `(?:alpha|beta)` group, so the search
-# substring below deliberately starts *after* the group-opening
-# characters, matching either style.
-_BASH_SUFFIX_TAIL = r"alpha|beta)\.[1-9][0-9]*"
+_BASH_SUFFIX_TAIL = r"beta\.[1-9][0-9]*"
 _BASH_SUFFIX_SITES = (
-    ("scripts/converge-release-tag", 1),
-    ("scripts/publish-release", 2),
+    ("scripts/converge-release-tag", 2),
+    ("scripts/publish-release", 3),
     ("scripts/check-release-drift", 3),
 )
 # The exact shape Issue #744's review found two sites still using: `N`
 # accepts a leading zero or a literal 0, instead of requiring 1-9 first.
-_REGRESSED_SUFFIX_TAIL = r"alpha|beta)\.[0-9]+"
+_REGRESSED_SUFFIX_TAIL = r"beta\.[0-9]+"
 
 
 def test_prerelease_suffix_regex_is_consistent_everywhere() -> None:
     """Every bash site's suffix pattern matches the canonical one.
 
     Also proves the *behavioral* consequence of Issue #744's review
-    finding directly: a tag like `v1.2.3-alpha.0` (N=0) must be rejected
+    finding directly: a tag like `v1.2.3-beta.0` (N=0) must be rejected
     by the canonical pattern -- the exact shape the regressed pattern
     would have wrongly accepted -- so the fixed sites and
     release_phase.py's own parser agree, not just look similar.
@@ -386,10 +390,10 @@ def test_prerelease_suffix_regex_is_consistent_everywhere() -> None:
 
     import re as _re
 
-    canonical = _re.compile(r"-(alpha|beta)\.[1-9][0-9]*$")
+    canonical = _re.compile(r"-beta\.[1-9][0-9]*$")
     for tag, expected in (
-        ("v1.2.3-alpha.1", True),
         ("v1.2.3-beta.12", True),
+        ("v1.2.3-alpha.1", False),
         ("v1.2.3-alpha.0", False),
         ("v1.2.3-alpha.01", False),
         ("v1.2.3-alpha", False),

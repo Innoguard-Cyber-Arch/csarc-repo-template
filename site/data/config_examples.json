@@ -397,12 +397,12 @@
             "en": "CODEOWNERS is optional; reviewers come from live repository permissions, while merge eligibility and exceptions remain governed separately."
           },
           "code": {
-            "zh-tw": "review: solo      # solo | peer\ncopilot_review: allowed  # allowed | off\ncode_owner: \"@organization/team\"  # optional\n\nreview assignment: live maintain/admin collaborator\nreview evidence: exact-head Copilot or human policy\n\n./scripts/apply-repository-settings.sh check",
-            "en": "review: solo      # solo | peer\ncopilot_review: allowed  # allowed | off\ncode_owner: \"@organization/team\"  # optional\n\nreview assignment: live maintain/admin collaborator\nreview evidence: exact-head Copilot or human policy\n\n./scripts/apply-repository-settings.sh check"
+            "zh-tw": "admin_bypass: off  # off | beta-only | always\ncopilot_review: allowed  # allowed | off\ncode_owner: \"@organization/team\"  # optional\n\nreview assignment: live maintain/admin collaborator\nreview evidence: exact-head Copilot or human policy\n\n./scripts/apply-repository-settings.sh check",
+            "en": "admin_bypass: off  # off | beta-only | always\ncopilot_review: allowed  # allowed | off\ncode_owner: \"@organization/team\"  # optional\n\nreview assignment: live maintain/admin collaborator\nreview evidence: exact-head Copilot or human policy\n\n./scripts/apply-repository-settings.sh check"
           },
           "summary": {
-            "zh-tw": "`code_owner` 與審查人選分離；Copilot 不可用時回到明確宣告的 solo／peer 規則。",
-            "en": "`code_owner` is separate from reviewer selection; unavailable Copilot falls back to the declared solo/peer rule."
+            "zh-tw": "`code_owner` 與審查人選分離；Copilot 不可用時回到 `admin_bypass` 宣告的同行核准或受稽核管理員自核規則。",
+            "en": "`code_owner` is separate from reviewer selection; unavailable Copilot falls back to peer approval or the audited admin path declared by `admin_bypass`."
           }
         }
       ]
@@ -632,8 +632,8 @@
             "en": "The root, generated repositories, and derived templates share one public configuration; there is no separate profile or site-only settings file to maintain."
           },
           "code": {
-            "zh-tw": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nverification_mode: local    # local | hosted\nreview: solo                 # solo | peer\ncopilot_review: allowed      # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main        # main | manual\ndefault_release_level: alpha\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []                 # docker\ncode_owner: \"@organization/team\"  # optional",
-            "en": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nverification_mode: local    # local | hosted\nreview: solo                 # solo | peer\ncopilot_review: allowed      # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main        # main | manual\ndefault_release_level: alpha\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []                 # docker\ncode_owner: \"@organization/team\"  # optional"
+            "zh-tw": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nverification_mode: local    # local | hosted\nadmin_bypass: off           # off | beta-only | always\ncopilot_review: allowed     # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main       # main | manual\nproject_maturity: early     # early | formal\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []                # docker\ncode_owner: \"@organization/team\"  # optional",
+            "en": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nverification_mode: local    # local | hosted\nadmin_bypass: off           # off | beta-only | always\ncopilot_review: allowed     # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main       # main | manual\nproject_maturity: early     # early | formal\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []                # docker\ncode_owner: \"@organization/team\"  # optional"
           },
           "summary": {
             "zh-tw": "設定只保留治理、審查、發版、選配功能與 owner 的意圖；方案、帳務與即時能力是偵測結果。",
@@ -694,12 +694,12 @@
             "en": "The plan decides whether the Ruleset becomes a real gate"
           },
           "goal": {
-            "zh-tw": "Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR 與必要檢查。人工 solo／peer 與可選 Copilot 由同一個 review check 判斷；CODEOWNER 只有設定時才產生。",
-            "en": "A free private repository first keeps the same policy stored in the repository; public, Pro, Team, or Enterprise plans can enforce pull requests and required checks. One review check evaluates the solo/peer fallback and optional Copilot evidence; CODEOWNERS is generated only when configured."
+            "zh-tw": "Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR 與必要檢查。同行核准、設定式 admin bypass 與可選 Copilot 由同一個 review check 判斷；CODEOWNER 只有設定時才產生。",
+            "en": "A free private repository first keeps the same policy stored in the repository; public, Pro, Team, or Enterprise plans can enforce pull requests and required checks. One review check evaluates peer approval, the configured admin bypass, and optional Copilot evidence; CODEOWNERS is generated only when configured."
           },
           "code": {
-            "zh-tw": "# Intent stays portable; capability is checked live.\nreview: solo        # solo | peer\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\nverification_mode: local # local | hosted\n\n# hosted 才啟用 required checks：verify、title、review",
-            "en": "# Intent stays portable; capability is checked live.\nreview: solo        # solo | peer\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\nverification_mode: local # local | hosted\n\n# Required checks (verify, title, review) are hosted-only."
+            "zh-tw": "# Intent stays portable; capability is checked live.\nadmin_bypass: off   # off | beta-only | always\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\nverification_mode: local # local | hosted\n\n# hosted 才啟用 required checks：verify、title、review",
+            "en": "# Intent stays portable; capability is checked live.\nadmin_bypass: off   # off | beta-only | always\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\nverification_mode: local # local | hosted\n\n# Required checks (verify, title, review) are hosted-only."
           },
           "summary": {
             "zh-tw": "Action 直接查詢 live repository collaborators，排除作者後從 maintain／admin 權限選一位 reviewer；不保存靜態名單。Copilot entitlement 與 Actions billing 只接受即時證據，不從方案名稱推測。Free private 無法強制 Ruleset 時仍明確標示 DEGRADED。",
@@ -769,8 +769,8 @@
             "en": "There is no switch to turn off type checking or secret scanning; the strict threshold is part of the template's contract."
           },
           "code": {
-            "zh-tw": "languages: [python]\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []  # add docker when needed\nreview: solo           # solo | peer\ncopilot_review: allowed\nrelease_trigger: main  # main | manual\npython_support_mode: latest\ncoverage_mode: global\ncoverage_threshold: 80\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\"",
-            "en": "languages: [python]\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []  # add docker when needed\nreview: solo           # solo | peer\ncopilot_review: allowed\nrelease_trigger: main  # main | manual\npython_support_mode: latest\ncoverage_mode: global\ncoverage_threshold: 80\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\""
+            "zh-tw": "languages: [python]\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []  # add docker when needed\nadmin_bypass: off      # off | beta-only | always\ncopilot_review: allowed\nrelease_trigger: main  # main | manual\nproject_maturity: early\npython_support_mode: latest\ncoverage_mode: global\ncoverage_threshold: 80\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\"",
+            "en": "languages: [python]\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []  # add docker when needed\nadmin_bypass: off      # off | beta-only | always\ncopilot_review: allowed\nrelease_trigger: main  # main | manual\nproject_maturity: early\npython_support_mode: latest\ncoverage_mode: global\ncoverage_threshold: 80\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\""
           },
           "summary": {
             "zh-tw": "使用者只選語言、選配能力與少量治理意圖；分支路由由 Issue／Milestone 推導。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。",

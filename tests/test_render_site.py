@@ -1559,7 +1559,7 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
         assert "Generated Project" in html
         assert "Exercises the shared repo-site engine through Copier." in html
         assert "@Innoguard-Cyber-Arch/generated-project-team" in html
-        assert "solo" in html
+        assert "admin_bypass" in html
         assert "https://github.com/example/generated-project" in html
         assert '<link rel="stylesheet"' not in html
         assert "<script src=" not in html

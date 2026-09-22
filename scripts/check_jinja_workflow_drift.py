@@ -123,11 +123,20 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
         (_ROOT_FULL, _DOWNSTREAM_PRODUCT),
     },
     "release.yml.jinja": {
+        # The generated workflow also honors the user's main/manual trigger
+        # choice; this repository always publishes on its governed branches.
+        (
+            "if: ${{ github.ref == 'refs/heads/main' || "
+            "startsWith(github.ref, 'refs/heads/dev/m') }}",
+            "if: ${{ (github.ref == 'refs/heads/main' || "
+            "startsWith(github.ref, 'refs/heads/dev/m')) && "
+            "(github.event_name != 'push' || true) }}",
+        ),
         # Generated repositories expose scripts/verify; this template
         # repository keeps the full release aggregator under its longer name.
         (
-            "run: ./scripts/verify-template.sh",
-            "run: ./scripts/verify",
+            "./scripts/verify-template.sh",
+            "./scripts/verify",
         ),
     },
 }

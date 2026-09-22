@@ -3,7 +3,7 @@
 
 The configured human fallback is either solo or peer. When explicitly allowed,
 a clean Copilot review of the exact head can satisfy either mode; otherwise the
-human rule applies. The audited Alpha self-merge authorization remains limited
+human rule applies. The audited admin-bypass authorization remains limited
 to its existing route. The Ruleset keeps native approval count at zero and
 makes this ``review`` check required for every pull request.
 
@@ -315,17 +315,17 @@ def evaluate(  # noqa: C901
             "independent maintainer approval of the exact head"
         )
         return result
-    alpha_authorization, alpha_reason = (
-        _alpha_self_merge_authorization(github, repo, pr_number, head_sha, pull)
-        if level_decision.level == "alpha"
+    bypass_authorization, bypass_reason = (
+        _admin_bypass_authorization(github, repo, pr_number, head_sha, pull)
+        if level_decision.review == "self"
         else (None, "")
     )
-    if alpha_authorization is not None:
+    if bypass_authorization is not None:
         result.update(
             passed=True,
-            source="alpha-self-merge",
-            reason="Alpha self-merge exact-head authorization: "
-            + str(alpha_authorization.get("html_url") or ""),
+            source="admin-bypass",
+            reason="Admin bypass exact-head authorization: "
+            + str(bypass_authorization.get("html_url") or ""),
         )
         return result
     if not result["reason"]:
@@ -336,26 +336,26 @@ def evaluate(  # noqa: C901
         )
         result["reason"] = (
             f"{reason}. Get an independent maintainer approval, or use the "
-            "audited Alpha self-merge authorization path (Issue #775) when "
-            "it applies." + (f" {alpha_reason}" if alpha_reason else "")
+            "configured audited admin-bypass path when it applies."
+            + (f" {bypass_reason}" if bypass_reason else "")
         )
     return result
 
 
-def _alpha_self_merge_authorization(
+def _admin_bypass_authorization(
     github: GitHubReader,
     repo: str,
     pr_number: int,
     head_sha: str,
     pull: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, str]:
-    """Return the Alpha self-merge authorization for this head, if valid.
+    """Return the configured admin-bypass authorization for this head.
 
-    Mirrors `pr_lifecycle.merge_snapshot`'s alpha self-merge path (marker,
+    Mirrors `pr_lifecycle.merge_snapshot`'s admin-bypass path (marker,
     route, exact-head authorization) without needing a lease: this gate
     runs on every push, well before any lease is acquired. Any rejection
-    inside `alpha_self_merge_opt_in` (malformed marker, wrong route, a
-    Milestone Issue, ...) means this path simply does not apply here, not
+    inside `admin_bypass_opt_in` (malformed marker, wrong route, or invalid
+    Issue) means this path simply does not apply here, not
     that the check should error.
 
     The second return value explains *why* there is no authorization, so
@@ -376,14 +376,14 @@ def _alpha_self_merge_authorization(
     marker_count = (
         str(pull.get("body") or "")
         .splitlines()
-        .count(lifecycle.ALPHA_SELF_MERGE_MARKER)
+        .count(lifecycle.ADMIN_BYPASS_MARKER)
     )
     if marker_count == 0:
         # Cheap check first: skip every further API call (default branch,
         # route validation) for the overwhelming majority of pull requests,
-        # which never opt into Alpha self-merge at all. No separate
-        # release_phase gate here: `alpha_self_merge_opt_in` itself does not
-        # check release_phase either (its safety comes from the marker,
+        # which never opt into admin bypass at all. No separate
+        # release-channel gate here: `admin_bypass_opt_in` itself does not
+        # check it either (its safety comes from the marker,
         # route, and live Ruleset shape), so adding one only here would let
         # this check and `pr_lifecycle.py merge` disagree about which heads
         # are actually mergeable.
@@ -397,11 +397,11 @@ def _alpha_self_merge_authorization(
         )
         if not isinstance(default_branch, str):
             return None, "The repository default branch is unavailable"
-        opted_in = lifecycle.alpha_self_merge_opt_in(
+        opted_in = lifecycle.admin_bypass_opt_in(
             github, repo, {"default_branch": default_branch}, pull
         )
     except RuntimeError as error:
-        return None, f"Alpha self-merge does not apply here: {error}"
+        return None, f"Admin bypass does not apply here: {error}"
     if not opted_in:
         return None, ""
     authorization = lifecycle.find_exact_head_authorization(
@@ -409,7 +409,7 @@ def _alpha_self_merge_authorization(
     )
     if authorization is None:
         return None, (
-            "Alpha self-merge applies but no exact-head maintainer "
+            "Admin bypass applies but no exact-head maintainer "
             "authorization comment was found"
         )
     return authorization, ""

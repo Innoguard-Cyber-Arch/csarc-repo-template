@@ -161,7 +161,7 @@ if [[ "$PR_BASE" == "main" ]] &&
   fi
   if [[ "$PR_HEAD" == release/v* ]]; then
     guided_version="${PR_HEAD#release/v}"
-    if [[ ! "$guided_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta)\.[1-9][0-9]*)?$ ]] ||
+    if [[ ! "$guided_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[1-9][0-9]*)?$ ]] ||
       [[ "$PR_TITLE" != "chore(main): release $guided_version" ]]; then
       echo "A guided release must use release/v<version> and the matching chore(main) title."
       exit 1

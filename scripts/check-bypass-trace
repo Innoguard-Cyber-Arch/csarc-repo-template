@@ -4,10 +4,10 @@ set -euo pipefail
 # Audit one pull request for the required release-level bypass trace.
 #
 # Every PR actually merged with the Ruleset self-approval bypass (#580)
-# on an alpha self-merge or validated beta+ hotfix must carry a structured
+# on an admin-bypassed merge must carry a structured
 # `gh pr comment` trace, left before the merge:
 #
-#   bypass-trace: release_level=<level> route=<alpha|hotfix> actor=<login> reason=<text>
+#   bypass-trace: release_level=<level> route=<beta|stable|hotfix> actor=<login> reason=<text>
 #
 # Run this right after (or as part of) an admin-bypass merge to confirm
 # the trace was actually recorded -- the same way scripts/check-pr-policy-status
