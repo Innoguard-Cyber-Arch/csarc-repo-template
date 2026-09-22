@@ -215,6 +215,22 @@ default-branch 非 Issue PR、promotion、release、beta／early／formal 與 qu
 Alpha 自審與 required checks 邊界、#752 的無 Copilot 時 fail-closed 原則，以及 #580 的
 bypass 留痕與 live actor 驗證。
 
+## 2026-09-22 將 Alpha promotion 納入受稽核 self-merge（#905）
+
+M12 promotion PR #888 證實 #775／#826 的 Alpha self-merge allowlist 仍漏掉最終
+`promote/mN-*` 路由：exact-head 授權、Milestone approval、`title` 與 hosted full
+`verify` 都有效時，`review` 仍因 organization 沒有 Copilot code review 授權而永久
+失敗。直接替 required-check Ruleset 增加 bypass actor 會讓管理員略過所有檢查，範圍
+過大，因此拒絕。
+
+決定把 `promotion_gate.route_for()` 已分類為 `milestone`、且 head repository 與目標
+repository 相同的 Alpha promotion 納入既有 `alpha_self_merge_opt_in()`。這只讓
+exact-head maintainer authorization 成為 `review` 的合格來源；`title` 與 `verify`
+required checks 仍負責 Milestone／tracker、bridge topology、版本 materialization 與
+exact candidate 驗證，lifecycle merge 仍重驗 remote lease、required checks、未解 review
+threads 與 live admin bypass actor。beta／early／formal、release、hotfix 與 quota fallback
+不變。回退方式是 revert #905，恢復 promotion 必須等待 Copilot 或獨立 maintainer。
+
 ## 2026-09-20 下游治理漂移檢查改為預設啟用（#746）
 
 在既有下游 repository 以目前 workflow、`GITHUB_TOKEN` 與公開 GitHub API 實測後，

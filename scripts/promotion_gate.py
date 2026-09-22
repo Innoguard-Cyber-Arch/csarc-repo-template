@@ -914,13 +914,10 @@ def promotion_bridge_source(
 def promotion_freshness_sha(
     head_sha: str, bridge: dict[str, str] | None
 ) -> str:
-    """Return the delivery SHA that must contain current main."""
-    if bridge is None:
-        return head_sha
-    source_sha = bridge.get("source_sha")
-    if not isinstance(source_sha, str):
+    """Return the reviewed promotion SHA that must contain current main."""
+    if bridge is not None and not isinstance(bridge.get("source_sha"), str):
         raise RuntimeError("Promotion bridge source SHA is invalid")
-    return source_sha
+    return head_sha
 
 
 def contains_commit(ancestor: str, descendant: str) -> bool:

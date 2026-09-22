@@ -53,6 +53,15 @@ def test_pr_policy_delegates_to_repository_scripts() -> None:
 
 def test_required_check_names_only_run_from_trusted_workflows() -> None:
     """A PR-controlled workflow cannot impersonate a required check name."""
+
+    def reports_required_name(raw_name: object, required_name: str) -> bool:
+        if not isinstance(raw_name, str):
+            return False
+        return raw_name == required_name or any(
+            quoted in raw_name
+            for quoted in (f"'{required_name}'", f'"{required_name}"')
+        )
+
     producers = {
         "pr-policy.yml": {"title"},
         "ci.yml": {"verify"},
@@ -65,17 +74,26 @@ def test_required_check_names_only_run_from_trusted_workflows() -> None:
         triggers = workflow.get("on", workflow.get(True))
         assert "pull_request_target" in triggers
         assert "pull_request" not in triggers
-        assert {
-            job.get("name") for job in workflow["jobs"].values()
-        } >= expected_names
+        job_names = [job.get("name") for job in workflow["jobs"].values()]
+        assert all(
+            any(
+                reports_required_name(job_name, expected_name)
+                for job_name in job_names
+            )
+            for expected_name in expected_names
+        )
 
     for path in (REPO_ROOT / ".github" / "workflows").glob("*.yml"):
         workflow = load_yaml(path)
         triggers = workflow.get("on", workflow.get(True))
         if "pull_request" not in triggers:
             continue
-        names = {job.get("name") for job in workflow["jobs"].values()}
-        assert names.isdisjoint(required_names), path
+        names = [job.get("name") for job in workflow["jobs"].values()]
+        assert not any(
+            reports_required_name(name, required_name)
+            for name in names
+            for required_name in required_names
+        ), path
 
     generated_ci = (
         REPO_ROOT / "template/.github/workflows/ci.yml.jinja"

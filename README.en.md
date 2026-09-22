@@ -6,7 +6,7 @@ Cyber-Arch's updatable repository foundation: creating a new project, adopting a
 
 | Item | Current status |
 | --- | --- |
-| Template version | v0.19.0-alpha.1<!-- x-release-please-version --> |
+| Template version | v0.20.0-alpha.1<!-- x-release-please-version --> |
 | Supported languages | Python, Rust, TypeScript (independently multi-selectable; choosing none uses only the common workflow) |
 | repo-site presentation template version | 1.1.0 |
 | repo-site render engine version | 1.1.0 |
@@ -145,15 +145,13 @@ flowchart LR
   S["Standalone Issues"] --> MAIN
   I["Issue #42 needing independent canary"] --> DI["dev/i42-canary"]
   H["Urgent fix/* + hotfix"] --> MAIN["main"]
-  MA -->|promotion: full + canary| MAIN
-  MB -->|promotion: full + canary| MAIN
+  MA -->|promotion bridge: full + canary| MAIN
+  MB -->|promotion bridge: full + canary| MAIN
   DI -->|standalone promotion| MAIN
-  MAIN -. "reviewed sync PR" .-> MA
-  MAIN -. "reviewed sync PR" .-> MB
   MAIN -. "reviewed sync PR" .-> DI
 ```
 
-`main` moving forward never invalidates unrelated Milestone work, and never auto-syncs every branch. Each Milestone only pulls in the then-latest `main` via one reviewed `sync/main-to-m*` PR right before its final delivery; a branch is synced earlier only when its owner records a real dependency.
+`main` moving forward never invalidates unrelated Milestone work, and never auto-syncs every branch. Each Milestone's final Promotion PR uses an exact two-parent bridge to include both the delivery source and the then-current `main`, so it needs no final sync PR. A reviewed `sync/main-to-*` PR remains available only for an owner-recorded dependency or a `dev/i*` canary before delivery.
 
 This template's full entry point is `./scripts/verify-template.sh`; a generated project uses `./scripts/verify`. The current `.github/workflows/ci.yml` has a single `verify` job that selects fast or full by the change and calls the same repo-local program; docs-only work is a fast scope optimization, not another tier. Promotion, hotfix, release recovery, merge queue, and manual runs use full, with a single 30-minute job timeout. During development, run the narrowest focused check directly (e.g. `uv run pytest <path>`, or rerun one stage of `verify-template.sh` alone with `scripts/verify-stage-<name>`); only when the PR itself falls on the full boundary does the owner/integrator additionally run `./scripts/verify-template.sh` once locally. See [`docs/ci-policy.md`](docs/ci-policy.md) for the full tiering and current archive boundary.
 
@@ -167,7 +165,7 @@ A local fallback is only ever possible once GitHub Actions' zero-step billing bl
 
 ## Configuration and secrets
 
-Creating a repo from GitHub or adopting via Copier only copies files, never repository settings; a newly generated repo's administrator must run `./scripts/apply-repository-settings.sh plan`/`apply`/`check` in order before the first release, to enable immutable Releases and the other release prerequisites. `check` performs a read-only comparison of CODEOWNERS, the repository (including narrowing Issue/PR creation to collaborators-only), immutable Releases, GitHub Pages, Actions, `security_and_analysis` (secret scanning, push protection, Dependabot security updates), policy labels, and an effective Ruleset. A fixable difference fails the check; administrator-only fields unreadable by `GITHUB_TOKEN`, a Free private Ruleset, a private repo's GitHub Pages, an organization policy restriction, or missing GitHub Advanced Security is explicitly marked `DEGRADED`, never drift or compliant. Generated repositories run `.github/workflows/governance-drift.yml` daily by default and may opt out with `enable_governance_drift_check: false`; the workflow opens one tracking Issue only for fixable drift and updates it only when the drift body changes. This template's own source repo keeps only the same local checker, without a separate schedule. A non-draft PR gets a best-effort review request from a current non-author collaborator with `maintain` or `admin` permission; this request is not the merge gate itself. See the "Identify the GitHub plan first" section on the [repo-site appendix](docs/index.html) for `apply`/`check` and review capability's actual behavior under each GitHub plan.
+Creating a repo from GitHub or adopting via Copier only copies files, never repository settings; a newly generated repo's administrator must run `./.csarc/scripts/apply-repository-settings.sh plan`/`apply`/`check` in order before the first release, to enable immutable Releases and the other release prerequisites. `check` performs a read-only comparison of CODEOWNERS, the repository (including narrowing Issue/PR creation to collaborators-only), immutable Releases, GitHub Pages, Actions, `security_and_analysis` (secret scanning, push protection, Dependabot security updates), policy labels, and an effective Ruleset. A fixable difference fails the check; administrator-only fields unreadable by `GITHUB_TOKEN`, a Free private Ruleset, a private repo's GitHub Pages, an organization policy restriction, or missing GitHub Advanced Security is explicitly marked `DEGRADED`, never drift or compliant. Generated repositories run `.github/workflows/governance-drift.yml` daily by default and may opt out with `enable_governance_drift_check: false`; the workflow opens one tracking Issue only for fixable drift and updates it only when the drift body changes. This template's own source repo keeps only the same local checker, without a separate schedule. A non-draft PR gets a best-effort review request from a current non-author collaborator with `maintain` or `admin` permission; this request is not the merge gate itself. See the "Identify the GitHub plan first" section on the [repo-site appendix](docs/index.html) for `apply`/`check` and review capability's actual behavior under each GitHub plan.
 
 `review` selects the `solo` or `peer` human fallback. `copilot_review: allowed` explicitly lets a clean exact-head Copilot review satisfy either human mode. Copilot entitlement and quota are live capabilities, never inferred from a Free or Team plan name; unavailable Copilot, an old head, findings, or unresolved threads fall back to the human rule. See [`docs/ci-policy.md`](docs/ci-policy.md) "Copilot 審核模式（#752）".
 
@@ -242,32 +240,12 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ### Agent prompt
 
-The pinned-version install contract is [`docs/agent-install.md`](docs/agent-install.md). The four prompts below only choose the lifecycle; the CLI resolves and verifies the full SHA from the canonical immutable Release, then locks it into the plan and provenance. When a version must be pinned in advance, use the four pinned prompts attached to the Release instead.
+The pinned-version install contract is [`docs/agent-install.md`](docs/agent-install.md). Each Release carries one `release-prompt.txt` bound to the canonical repository, tag, full SHA, install guide, and `copier.yml`. It asks `csarc status` to select the lifecycle first, then offers either recommended defaults or grouped customization. Every option still comes from the same Copier schema; the agent only groups questions and passes confirmed values through the existing `--data` option.
 
-When unsure of the repo's current state, or to let the CLI decide automatically, start with the "auto-detect" prompt: `csarc status` reads only local files and, if already adopted, the template version and repository settings on GitHub, classifying the result into one of five states (`create`/`adopt`/`update`/`current`/`policy-only-update`) with all decision logic inside the CLI, never left to agent judgment, and consistent across repeated runs in the same state; then follow the returned `next_command` into the matching create, adopt, or update prompt below, or (only for a policy-only setting change) run `scripts/apply-repository-settings.sh plan` then `apply` directly, without redoing a full adopt/update.
-
-Auto-detect (recommended):
+This bootstrap prompt only finds the highest immutable SemVer Release accepted by the CLI, including alpha/beta pre-releases, and loads its `release-prompt.txt`. Once pinned, that asset owns status detection, dry-run, summary, and confirmation:
 
 ```text
-Using uv, run the official csarc CLI's `status` subcommand from the canonical GitHub repository's approved release commit, to determine which installation state the current workspace/existing Git repository is in; uv should manage an isolated Python 3.14 per invocation, requiring no global Python. Run `csarc status --json` first -- do not judge or assume the current state yourself. Based on the returned state and next_command: for create, adopt, or update, switch to the matching init/adopt/update dry-run prompt and wait for confirmation; for current, report that no action is needed; for policy-only-update, only run `scripts/apply-repository-settings.sh plan`, summarize the diff, and wait for confirmation before running `apply` -- do not redo a full adopt or update. Never modify the global environment, push, or open a PR throughout.
-```
-
-Create:
-
-```text
-Using uv, run the official csarc CLI from the canonical GitHub repository's approved release commit to create a new CSARC repository in the current workspace; uv should manage an isolated Python 3.14 per invocation, requiring no global Python. Judge the name and location from context yourself, and ask first only if they cannot be determined uniquely. First verify the canonical immutable Release and show its tag and full SHA, then run only an init dry run, summarize the plan, and wait for confirmation; after confirmation, create and verify for real using the same tag and SHA. Do not modify the global environment, apply GitHub settings, push, or open a PR.
-```
-
-Adopt an existing repo:
-
-```text
-Using uv, run the official csarc CLI from the canonical GitHub repository's approved release commit to adopt CSARC into the existing Git repository currently open; uv should manage an isolated Python 3.14 per invocation, requiring no global Python. Determine the repo root yourself. First verify the canonical immutable Release and show its tag and full SHA, then run only an adopt dry run, review the out-of-repo report, summarize the plan, and wait for confirmation; do not stash, commit, or modify existing work. After confirmation, apply only the machine plan produced by the dry run and confirmed to have not drifted, then run verification. Do not apply GitHub settings, push, or open a PR.
-```
-
-Update:
-
-```text
-Using uv, run the official csarc CLI from the canonical GitHub repository's approved release commit to update the currently open Git repository that has already adopted CSARC; uv should manage an isolated Python 3.14 per invocation, requiring no global Python. Determine the repo root yourself. First verify the existing provenance and the canonical immutable Release, show the current and target tag/full SHA, then run only the update check and dry run, summarize the smart diff and risk, and wait for confirmation; after confirmation, update and verify for real using the same target tag and SHA. Do not modify the global environment, apply GitHub settings, push, or open a PR.
+From the published Releases at https://github.com/Innoguard-Cyber-Arch/csarc-repo-template, select the highest immutable SemVer Release accepted by the official csarc CLI, including alpha or beta pre-releases. Download and read that Release's `release-prompt.txt`; after confirming its repository, tag, and full SHA agree, follow it exactly in the current workspace. Do not use `main`, guess the installation state, or modify files or GitHub settings, push, or open a PR before I confirm.
 ```
 
 ### Troubleshooting / advanced Copier

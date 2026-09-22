@@ -7,6 +7,19 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.20.0-alpha.1] - 2026-09-22
+
+### Features
+
+* feat: restore guided release setup (#884) (260c992)
+
+### Bug Fixes
+
+* fix(promotion): use bridge for main freshness (3e2ef57)
+* fix(release): verify materialized promotion bridges (28089da)
+* fix(ci): suppress non-actionable verify runners (ff252c8)
+* fix(governance): allow alpha promotion self-merge (e9131dc)
+
 ## [0.19.0-alpha.1] - 2026-09-22
 
 ### Features

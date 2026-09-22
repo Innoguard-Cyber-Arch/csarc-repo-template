@@ -6,7 +6,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.19.0-alpha.1<!-- x-release-please-version --> |
+| 公版版本 | v0.20.0-alpha.1<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
@@ -145,15 +145,13 @@ flowchart LR
   S["一般孤立 Issues"] --> MAIN
   I["需獨立 canary 的 Issue #42"] --> DI["dev/i42-canary"]
   H["緊急 fix/* + hotfix"] --> MAIN["main"]
-  MA -->|promotion: full + canary| MAIN
-  MB -->|promotion: full + canary| MAIN
+  MA -->|promotion bridge: full + canary| MAIN
+  MB -->|promotion bridge: full + canary| MAIN
   DI -->|單獨 promotion| MAIN
-  MAIN -. "reviewed sync PR" .-> MA
-  MAIN -. "reviewed sync PR" .-> MB
   MAIN -. "reviewed sync PR" .-> DI
 ```
 
-`main` 前進不會讓無關的里程碑工作失效，也不會自動同步所有分支。各里程碑只在最終交付前以受審查的 `sync/main-to-m*` PR 納入當時最新 `main`；只有 owner 記錄真實 dependency 時才提前同步自己的分支。
+`main` 前進不會讓無關的里程碑工作失效，也不會自動同步所有分支。各里程碑的最終 Promotion PR 以精確雙親 bridge 同時納入 delivery source 與當時最新 `main`，不另開 final sync PR；只有 owner 記錄真實 dependency，或 `dev/i*` canary 要交付時，才使用受審查的 `sync/main-to-*` PR。
 
 公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。本機依變更選擇 fast／full，docs-only 只是 fast 內的 scope 最佳化；現行 `.github/workflows/ci.yml` 另以單一 `verify` job 從受信任的 base policy 選擇分級，並在 GitHub-hosted runner 對 exact candidate 執行同一入口。merge 與 release 只接受綁定 repository、commit/tree、tier、scopes、command、toolchain、runner、result 與 freshness 的 hosted evidence，不接受手寫 commit trailer。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。開發中可直接跑最窄的 focused check；只有 PR 本身落在 full 邊界時，owner／integrator 才需在本機另外執行一次 `./scripts/verify-template.sh`。詳細分級與可信執行證據見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
@@ -167,7 +165,7 @@ Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 re
 
 ## 設定與密鑰
 
-GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗；`GITHUB_TOKEN` 無法讀取的管理員欄位、Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud）、組織政策限制或缺少 GitHub Advanced Security，則明確標為 `DEGRADED`，不會誤稱為 drift 或 compliant。生成 repo 預設由 `.github/workflows/governance-drift.yml` 每天重跑同一個 `check`，只在可修正的偏離出現或內容改變時開立或更新唯一追蹤 Issue；可用 `enable_governance_drift_check: false` 關閉。本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。非 draft PR 會從 repository 當下具有 `maintain`／`admin` 權限且不是作者的協作者中 best-effort 選一位 reviewer；這只是提出 review request，不是強制合併門禁。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見 [repo-site 附錄](docs/index.html)「先辨識 GitHub 方案」章節。
+GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./.csarc/scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗；`GITHUB_TOKEN` 無法讀取的管理員欄位、Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud）、組織政策限制或缺少 GitHub Advanced Security，則明確標為 `DEGRADED`，不會誤稱為 drift 或 compliant。生成 repo 預設由 `.github/workflows/governance-drift.yml` 每天重跑同一個 `check`，只在可修正的偏離出現或內容改變時開立或更新唯一追蹤 Issue；可用 `enable_governance_drift_check: false` 關閉。本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。非 draft PR 會從 repository 當下具有 `maintain`／`admin` 權限且不是作者的協作者中 best-effort 選一位 reviewer；這只是提出 review request，不是強制合併門禁。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見 [repo-site 附錄](docs/index.html)「先辨識 GitHub 方案」章節。
 
 `review` 設定 Copilot 不可用時採 `solo` 或 `peer`；`copilot_review: allowed` 則明確允許乾淨的 exact-head Copilot review 在兩種 human 模式下作為通過證據。Copilot 授權與額度是即時能力，不由 Free／Team 等方案名稱推定；不可用、舊 head、有意見或未解 thread 時回到 human 規則。詳見 [`docs/ci-policy.md`](docs/ci-policy.md)「Copilot 審核模式（#752）」。
 
@@ -242,32 +240,12 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ### Agent prompt
 
-固定版本的安裝契約是 [`docs/agent-install.md`](docs/agent-install.md)。下列四個 prompt 只選擇 lifecycle；CLI 會從 canonical immutable Release 解析並驗證 full SHA，再把它鎖進 plan 與 provenance。需要預先固定版本時，改用 Release 附件中的四個 pinned prompts。
+固定版本的安裝契約是 [`docs/agent-install.md`](docs/agent-install.md)。每個 Release 只提供一份 `release-prompt.txt`：它綁定 canonical repository、tag、full SHA、安裝指南與 `copier.yml`，先由 `csarc status` 判斷 lifecycle，再讓使用者選擇接受建議值或逐項客製。所有選項仍由同一份 Copier schema 提供，agent 只負責分組提問與透過既有 `--data` 傳值。
 
-不確定目前 repo 狀態、或想讓 CLI 自動判斷時，先用「自動判斷」prompt：`csarc status` 只讀取本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，把結果分成五種狀態（`create`／`adopt`／`update`／`current`／`policy-only-update`）。政策檢查使用核准 Release 重新產生的完整 helper closure，不執行 target repo 內的 script；來源未驗證時該檢查標示 unavailable，不把未知冒充一致。判斷邏輯全部在 CLI 裡、不靠 agent 自由發揮；再依回傳的 `next_command` 走下方對應流程。
-
-自動判斷（推薦）：
+以下 bootstrap prompt 只負責找到 CLI 契約接受的最高 SemVer immutable Release（包含 alpha／beta pre-release）並讀取該 Release 的 `release-prompt.txt`；固定版本後的狀態判斷、dry-run、摘要與確認流程都以附件為準：
 
 ```text
-請使用 uv 從 canonical GitHub repository 的核准 release commit 執行官方 csarc CLI 的 `status` 子指令，判斷目前 workspace／既有 Git repository 屬於哪一種安裝狀態；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。先執行 `csarc status --json`，不要自行判斷或假設目前狀態。依回傳的 state 與 next_command：create 或 adopt 或 update 時，改用對應的 init／adopt／update dry-run prompt 並等待確認；current 時回報不需動作；policy-only-update 時只執行 `scripts/apply-repository-settings.sh plan`、摘要差異並等待確認，確認後才 `apply`，不要重新走完整 adopt 或 update。全程不要修改全域環境、push 或開 PR。
-```
-
-新建：
-
-```text
-請使用 uv 從 canonical GitHub repository 的核准 release commit 執行官方 csarc CLI，在目前 workspace 建立新的 CSARC repository；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。自行依工作脈絡判斷名稱與位置，無法唯一判斷時先詢問。先驗證 canonical immutable Release 並顯示 tag 與 full SHA，只執行 init dry-run、摘要 plan 並等待確認；確認後使用相同 tag 與 SHA 正式建立及驗證。不要修改全域環境、套用 GitHub settings、push 或開 PR。
-```
-
-既有導入：
-
-```text
-請使用 uv 從 canonical GitHub repository 的核准 release commit 執行官方 csarc CLI，把 CSARC 導入目前開啟的既有 Git repository；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。自行判斷 repo root。先驗證 canonical immutable Release 並顯示 tag 與 full SHA，只執行 adopt dry-run、檢視 repo 外報告、摘要 plan 並等待確認；不要 stash、commit 或修改既有工作。確認後只套用 dry-run 產生且未漂移的 machine plan，再執行驗證。不要套用 GitHub settings、push 或開 PR。
-```
-
-更新：
-
-```text
-請使用 uv 從 canonical GitHub repository 的核准 release commit 執行官方 csarc CLI，更新目前開啟且已導入 CSARC 的 Git repository；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。自行判斷 repo root。先驗證既有 provenance 與 canonical immutable Release，顯示目前及目標 tag／full SHA，只執行 update check 與 dry-run、摘要 smart diff 和風險並等待確認；確認後使用相同目標 tag 與 SHA 更新及驗證。不要修改全域環境、套用 GitHub settings、push 或開 PR。
+請從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 的 published Releases 中，依官方 CLI 的版本規則選出最高 SemVer 且 immutable 的 Release（包含 alpha／beta pre-release），下載並讀取它的 `release-prompt.txt`，確認附件內的 repository、tag 與 full SHA 一致後，完全依該 prompt 在目前 workspace 繼續。不要使用 main、猜測目前安裝狀態，或在我確認前修改檔案、GitHub 設定、push 或建立 PR。
 ```
 
 ### Troubleshooting／進階 Copier

@@ -162,10 +162,11 @@ Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head ma
      仍然有效）；或
   2. Copilot 對**目前 head SHA** 的最新審核沒有任何 inline comment、內文沒有被隱藏的
      低信心意見（suppressed comments），且內文明確寫出沒有產生意見；或
-  3.（#775／#826）這是一張符合 `alpha_self_merge_opt_in` 條件（PR body 恰好一次
+  3.（#775／#826／#905）這是一張符合 `alpha_self_merge_opt_in` 條件（PR body 恰好一次
      `Alpha 自行合併 / self-merged` 標記、Milestone-less Issue 的 direct-to-main
-     路由、既有 `dev/mN` Issue 路由，或經 `require_routine_route()` 完整驗證的正式
-     current-main delivery sync 路由）的 Alpha self-merge PR，且已經有一則
+     路由、既有 `dev/mN` Issue 路由、經 `require_routine_route()` 完整驗證的正式
+     current-main delivery sync 路由，或由 `promotion_gate.route_for()` 分類為 Milestone
+     promotion 的同 repository 路由）的 Alpha self-merge PR，且已經有一則
      `pr_lifecycle.find_exact_head_authorization` 能找到的、綁定**目前 head SHA**
      的真人 maintainer 授權留言（跟 `pr_lifecycle.py merge` 要求的是同一則留言，
      不必另貼兩次）。
@@ -262,11 +263,14 @@ Alpha PR 可由 `scripts/pr_lifecycle.py merge` 在 lease＋exact-head 授權留
 - delivery sync：正式 `sync/main-to-mN-<slug>-<current-main-short-sha>` route，且
   `require_routine_route()` 已驗證同 repository、base／head 命名、current `main`
   containment 與 merge parent 拓撲（#826）。
+- Milestone promotion：`promotion_gate.route_for()` 已分類為 `milestone` 的同 repository
+  `dev/mN-*`／`promote/mN-*` route；既有 `title` 與 `verify` required checks 繼續驗證
+  tracker、Milestone、bridge topology 與 exact candidate（#905）。
 
-三者的 PR body 都必須恰好出現一次 `Alpha 自行合併 / self-merged` 標記。未通過上述
+四者的 PR body 都必須恰好出現一次 `Alpha 自行合併 / self-merged` 標記。未通過上述
 既有 route 驗證、不是 Alpha self-merge、或缺少綁定目前 head 的 maintainer 授權留言，
-仍走原本的人工審核／fail-closed 路徑；promotion、release 與 quota fallback 不因 #826
-擴大。
+仍走原本的人工審核／fail-closed 路徑；release、beta／early／formal 與 quota fallback
+不因 #905 擴大。
 
 這是只在「repo 結構性只有一個真人帳號」這段 alpha 期間才成立的例外，不是長期設計；
 有第二個真正的 collaborator 後應重新檢視是否移除，方向由維護者決定（追蹤於 #580）。
@@ -754,6 +758,12 @@ hosted 共用的驗證入口，但本機執行只提供開發回饋，不改寫 
 工具鏈，依可信 plan 實際執行 `scripts/verify-fast` 或 full verifier。Dependabot 與一般 contributor 共用同一路徑，
 不再有 bot 白名單。
 
+`verify` 的 job-level guard 在 runner 排程前排除 Draft PR 活動與不會改變 tier 的 label 事件。轉成 Ready、
+非 Draft 的新 head／`edited`、`promotion`／`hotfix`／`release-recovery` label、merge queue 與手動執行仍會啟動；
+label payload 缺少名稱或事件無法可靠分類時也預設執行。這個 guard 只節省非必要 runner，不產生可信成功證據，
+也不改變下方 exact-head 驗證條件。無關 label 的 skipped job 使用非 required 名稱，既有同-head `verify`
+成功或失敗仍是 authoritative result，不會被 skipped conclusion 覆蓋。
+
 `scripts/check-trusted-verification` 與 `scripts/verification_evidence.py` 消費 GitHub Check Runs、Actions run 與
 Jobs API，並重用 `scripts/pr_lifecycle.py` 的 required-check producer selector。有效證據必須同時符合：
 
@@ -796,10 +806,11 @@ dependency-only 不啟動 pytest；生成 repo 測試量本來就小，仍對自
 
 | 事件／邊界 | `verify` 行為 |
 | --- | --- |
-| Draft push | 先跑共同安全檢查與 risk-owned fast；即使 release level／路徑要求 full，也暫時上限為 fast |
-| `ready_for_review`（同一 head） | 重新解析 release level、tier、scopes；若需要 full 就在該 exact head 執行 full |
-| 新 head（opened／reopened／synchronize） | 不跨 commit 沿用結果；按新 diff 的 scopes 執行 |
-| Metadata-only（edited／labeled／unlabeled／ready／draft） | 先重算完整 route；只有 repo、head、tree、base SHA、tier、scopes、command、toolchain、labels、release level 與 freshness 全相同時，才一跳引用原始 hosted Execute |
+| Draft PR 活動（opened／reopened／synchronize／edited／labeled／unlabeled／converted-to-draft） | job-level guard 在 runner 前略過；skipped／zero-step 不構成可信 `verify` 證據 |
+| `ready_for_review`（同一 head） | 一律啟動，重新解析 release level、tier、scopes；若需要 full 就在該 exact head 執行 full |
+| 非 Draft 新 head（opened／reopened／synchronize） | 不跨 commit 沿用結果；按新 diff 的 scopes 執行 |
+| 非 Draft `edited` | 啟動並重新解析 release metadata 與完整 route；所有 evidence identity 欄位相同時才可一跳引用原始 hosted Execute |
+| 非 Draft `labeled`／`unlabeled` | 只有事件本身變動 `promotion`／`hotfix`／`release-recovery` 才啟動 required `verify` 並重算 tier；其他 label 只留下非 required skipped check、不啟動 runner，缺少 label name 則 fail closed 執行 |
 | 無衝突 `main → dev/m*` sync | 先以可信 base script 驗 authorization route、live refs、雙親順序與自動 merge tree，再直接引用 current main 對應來源 PR 的 fresh full Execute |
 | 衝突／人工整合 sync | 同樣先驗 route、live refs 與雙親；不沿用 main tree，改跑 affected owners 與 fast |
 | Promotion／hotfix／merge queue／manual dispatch | 對 exact final head 執行 full |
@@ -958,7 +969,7 @@ CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.p
 
 | 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428／#812）；可信 hosted execution（#834） | `pull_request_target`（含 ready／draft 與 metadata-only 事件）、`merge_group`、`workflow_dispatch` | `contents: read`、Issues／PR read；30 分鐘；同一 PR 新 commit 取消舊 run | base-trusted `scripts/ci_tier.py` 分類後，在 GitHub-hosted `ubuntu-latest` 對 exact candidate 執行 risk-owned `scripts/verify-fast`／full verifier；同 head 的 metadata-only run 可單跳引用相同 route 的原始 Execute，且只有 `promotion`／`hotfix`／`release-recovery` 這三種會改變 tier 的 label 納入 evidence identity；clean main-to-delivery sync 先做結構預檢再引用 current main 的 fresh full Execute；所有證據綁定 repository、head/tree、base、tier/scopes、command、toolchain、tier labels、release level、runner、result 與 24 小時 freshness | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py`；`tests/test_verification_evidence.py`；`tests/test_pr_lifecycle.py`；`tests/test_delivery_sync.py` | #834 hosted execution active；#812 risk-owned/reuse/sync route 為 candidate |
+| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428／#812）；可信 hosted execution（#834）；runner guard（#901） | `pull_request_target`、`merge_group`、`workflow_dispatch`；Draft 活動與無關 label 由 job guard 在 runner 前排除，Ready、非 Draft code／edited 與三種 tier label 保留 | `contents: read`、Issues／PR read；30 分鐘；同一 PR 新 commit 取消舊 run | base-trusted `scripts/ci_tier.py` 分類後，在 GitHub-hosted `ubuntu-latest` 對 exact candidate 執行 risk-owned `scripts/verify-fast`／full verifier；同 head 的 `edited`／tier-label run 可單跳引用相同 route 的原始 Execute，且只有 `promotion`／`hotfix`／`release-recovery` 三種 label 會啟動 required `verify` 並納入 evidence identity；其他 label 的 skipped check 使用非 required 名稱，不能覆蓋既有 `verify` 結果；clean main-to-delivery sync 先做結構預檢再引用 current main 的 fresh full Execute；所有證據綁定 repository、head/tree、base、tier/scopes、command、toolchain、tier labels、release level、runner、result 與 24 小時 freshness | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py`；`tests/test_verification_evidence.py`；`tests/test_pr_lifecycle.py`；`tests/test_delivery_sync.py` | #834 hosted execution active；#812 risk-owned/reuse/sync route active；#901 guard 待首次 Ready／label 事件 live evidence |
 | PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | `pull_request_target` PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | `contents`／Issues／pull requests 只讀；固定 timeout | 單一 `title` job：draft 期間不啟動 runner，`ready_for_review` 後才完整驗證 Issue、route、review policy、promotion route 與 Milestone approval，以原生 job conclusion 回報結果 | `scripts/test-pr-policy`；`tests/test_journey05_workflows.py`；route classifier 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | 歷史 run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929) 證明既有 policy 判定；#876 合併後首張 PR 補 live consolidated-job evidence | 既有 policy：active；#876 consolidation：candidate |
 | PR policy writes | `.github/workflows/pr-policy-writes.yml` | PR metadata 與 Milestone check-run 寫入（#829／#886） | default branch 的 `workflow_run`，只接續完成且未取消的 `PR policy` run；同 head 的較新事件取消舊 writer | top-level 無權限；單一 trusted job 只取得其循序 steps 合計所需的 `checks`／`issues`／`pull-requests: write` 與 `contents: read`；10 分鐘 | 一次 checkout 後以完整 head identity 跨頁解析唯一 open PR、同步 metadata／#551 提醒，再發布 `Milestone approval` custom check；metadata step 失敗不會掩蓋後續 check publication；零筆或多筆都 fail closed，不執行 PR source 或 artifact | `tests/test_work_item_metadata.py`；`tests/test_milestone_approval.py`；`tests/test_journey05_workflows.py` | #829 trust boundary 已落地；#886 單一 job／取消 superseded run 待 live evidence | candidate |
 | PR review（Copilot 審核模式，#752／#775／#826／#900） | `.github/workflows/pr-review.yml` | PR 審核授權 | `pull_request_target`（opened／synchronize／reopened／ready_for_review）、`pull_request_review`（submitted／dismissed）、`issue_comment`（created，篩選 PR 上以 `PR lifecycle merge authorization` 開頭的留言）、`merge_group` | `contents: read`、`pull-requests: read`；10 分鐘；同 PR 新事件取消舊 run；draft PR 不啟動 runner | `review` job 呼叫 `scripts/review_gate.py check`：`copilot_review=allowed` 時，乾淨 exact-head Copilot review 或獨立 maintainer approval 都可通過；Copilot 不可用時回到 `review=solo|peer` 的人工規則，不由方案名稱猜測能力 | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的授權來源見 `tests/test_pr_lifecycle.py` | #900 candidate | candidate |
@@ -1013,7 +1024,8 @@ Issue／PR，不要邊開邊試錯**。
 因此後續節流以「runner 啟動前排除無 owner 的事件」與「同一 trusted writer 內串行短工作」為主。
 `Dependabot exact merge` 只接收 `dependabot/**` branch 的 upstream completion；Work item lifecycle
 不為 PR comment 或無關 PR close 啟動 runner；draft PR 的 policy／review 等到 `ready_for_review`；
-一般分類 label 不再使同 head 的可信 CI evidence 失效。這些過濾不得用 skipped required check
+`CI / verify` 也不為 Draft 活動或一般分類 label 啟動 runner，Ready、非 Draft code／edited 與三種 tier label
+仍重新分類；一般分類 label 不再使同 head 的可信 CI evidence 失效。這些過濾不得用 skipped required check
 覆蓋既有失敗，也不得放寬 exact-head、workflow provenance、權限或 Ruleset。
 
 這個 `preflight` 子指令定義在「Enforce Milestone metadata at creation, not after PRs

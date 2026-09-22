@@ -199,6 +199,55 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
     )
 
 
+def test_ci_skips_non_actionable_pr_events_before_runner() -> None:
+    """Keep draft and unrelated-label churn out of the verify runner."""
+    root_source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
+        encoding="utf-8"
+    )
+    template_source = (
+        REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
+    ).read_text(encoding="utf-8")
+    rendered_template = (
+        Environment(
+            autoescape=False,  # noqa: S701 - trusted local YAML template
+            undefined=StrictUndefined,
+        )
+        .from_string(template_source)
+        .render(
+            languages=["python", "typescript", "rust"],
+            python_support_mode="latest",
+            python_min_version="3.12",
+        )
+    )
+    expected = (
+        "${{ github.event_name != 'pull_request_target' || "
+        "github.event.action == 'ready_for_review' || "
+        "(github.event.action != 'converted_to_draft' && "
+        "github.event.pull_request.draft != true && "
+        "((github.event.action != 'labeled' && "
+        "github.event.action != 'unlabeled') || "
+        "github.event.label.name == '' || "
+        'contains(fromJSON(\'["promotion","hotfix",'
+        '"release-recovery"]\'), github.event.label.name))) }}'
+    )
+    expected_name = (
+        "${{ github.event_name == 'pull_request_target' && "
+        "(github.event.action == 'labeled' || "
+        "github.event.action == 'unlabeled') && "
+        "github.event.label.name != '' && "
+        '!contains(fromJSON(\'["promotion","hotfix",'
+        '"release-recovery"]\'), github.event.label.name) && '
+        "'ignored non-tier label' || 'verify' }}"
+    )
+
+    for source in (root_source, rendered_template):
+        workflow = yaml.safe_load(source)
+        job = workflow["jobs"]["verify"]
+        condition = " ".join(job["if"].split())
+        assert condition == expected
+        assert " ".join(job["name"].split()) == expected_name
+
+
 def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
     """Install each selected language tool before hosted verification."""
     root_source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
