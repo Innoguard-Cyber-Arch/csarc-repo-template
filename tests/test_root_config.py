@@ -34,12 +34,11 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["release_ownership"] == "csarc-owned"
     assert config["release_settings_owner"] == "csarc-admin"
     assert config["release_immutable_releases"] == "required"
-    assert config["release_levels_enabled"] is True
-    assert config["default_release_level"] == "beta"
-    assert config["release_level_alpha_review"] == "self"
-    assert config["release_level_alpha_verification"] == "fast"
-    assert config["release_level_early_verification"] == "fast"
-    assert config["release_level_formal_verification"] == "full"
+    assert config["release_levels_enabled"] is False
+    assert config["default_release_level"] == "alpha"
+    for level in ("alpha", "beta", "early", "formal"):
+        assert config[f"release_level_{level}_review"] == "self"
+        assert config[f"release_level_{level}_verification"] == "fast"
 
 
 def test_root_public_identity_claims_are_consistent() -> None:

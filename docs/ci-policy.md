@@ -295,8 +295,9 @@ repository 共用的階段開關。Milestone 工作一律繼承 tracker 的層�
 | formal | `1.0.0` 起 | 需非作者同行核准 | `full` |
 
 `.csarc/config.yml` 可開關此模組、設預設層級，也可調整各層的 review
-與 verification 要求；公版本身預設 `beta`，新生成專案預設 `alpha`，
-既有專案 adopt 時可選擇。Dependabot 固定當作 `beta`。發版批次由
+與 verification 要求。公版 root 關閉一般工作的分層宣告、預設採 `alpha`，並把所有層級
+都映射為 `self`／`fast`；新生成專案預設啟用分層且採 `alpha`，既有專案
+adopt 時預設採 `beta`，兩者都可在導入時改選。Dependabot 固定當作 `beta`。發版批次由
 `scripts/release_level.py release-batch` 列出上次版本以來的工作，取最高
 層級交給版本規則，並寫入版本 PR 與 GitHub Release 說明。
 
