@@ -99,6 +99,7 @@ def test_update_moves_legacy_generated_layout_without_overwriting(
         ".csarc/config.yml",
         ".csarc/scripts/verify",
         ".github/SECURITY.md",
+        "SECURITY.md",
         "docs/site/content/_index.en.md",
     ):
         path = stage / relative
@@ -119,7 +120,7 @@ def test_update_moves_legacy_generated_layout_without_overwriting(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
 
-    moves = cli.legacy_layout_pairs(stage, target, project_mode="new")
+    moves = cli.legacy_layout_pairs(stage, target)
     plan = cli.update_file_plan(
         cli.compare_stage(stage, target, adopt=False),
         moves,
@@ -132,7 +133,9 @@ def test_update_moves_legacy_generated_layout_without_overwriting(
 
     assert ".copier-answers.yml -> .csarc/config.yml" in plan.move
     assert "scripts/verify -> .csarc/scripts/verify" in plan.move
-    assert "SECURITY.md -> .github/SECURITY.md" in plan.move
+    assert "SECURITY.md -> .github/SECURITY.md" not in plan.move
+    assert "SECURITY.md" in plan.overwrite
+    assert ".github/SECURITY.md" in plan.add
     assert (
         "site/content/_index.en.md -> docs/site/content/_index.en.md"
         in plan.move
@@ -154,6 +157,9 @@ def test_update_moves_legacy_generated_layout_without_overwriting(
     ) == "project website\n"
     assert (target / "scripts/product-tool").read_text(encoding="utf-8") == (
         "project owned\n"
+    )
+    assert (target / "SECURITY.md").read_text(encoding="utf-8") == (
+        "legacy security policy\n"
     )
     assert (target / ".csarc/config.yml").read_text(encoding="utf-8") == (
         "project_name: Legacy\n"
@@ -2068,6 +2074,9 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     (project / "CHANGELOG.md").write_text(
         "# Product changes\n", encoding="utf-8"
     )
+    (project / "SECURITY.md").write_text(
+        "# Product security policy\n", encoding="utf-8"
+    )
     (project / "AGENTS.md").write_text(
         "# Product agent rules\r\n\r\nKeep this rule.\r\n",
         encoding="utf-8",
@@ -2118,6 +2127,7 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert payload["files"]["automatic_merge"] == [".gitignore", "AGENTS.md"]
     assert "README.md" in payload["files"]["preserve"]
     assert "CHANGELOG.md" in payload["files"]["preserve"]
+    assert "SECURITY.md" in payload["files"]["preserve"]
     assert ".github/workflows/release.yml" in payload["files"]["preserve"]
     assert ".github/workflows/csarc-release.yml" not in payload["files"]["add"]
     assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
@@ -2139,6 +2149,9 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "result": "not-run",
         "source": "explicit",
     }
+    assert (project / "SECURITY.md").read_text(encoding="utf-8") == (
+        "# Product security policy\n"
+    )
     assert payload["adoption"]["verification"] == "pending-authorization"
     assert payload["answers"]["package_name"] == "product_identity"
     markdown = plan_path.with_name(
@@ -4588,7 +4601,7 @@ def test_project_hook_rejects_symlink_escape(tmp_path: Path) -> None:
         cli.verify_project(project)
 
 
-def test_fixed_merges_preserve_product_content_and_crlf() -> None:
+def test_fixed_merges_preserve_product_content_and_crlf(tmp_path: Path) -> None:
     """Apply only deterministic AGENTS and gitignore ownership policies."""
     generated = f"{cli.AGENTS_BLOCK_START}\nmanaged\n{cli.AGENTS_BLOCK_END}\n"
     existing = "# Product rules\r\n\r\nKeep this.\r\n"
@@ -4601,8 +4614,23 @@ def test_fixed_merges_preserve_product_content_and_crlf() -> None:
     ignored = cli.merge_gitignore("dist/\r\n.env\r\n", ".env\n.venv/\n")
     assert ignored == "dist/\r\n.env\r\n\r\n.venv/\r\n"
 
+    stage = tmp_path / "stage"
+    target = tmp_path / "target"
+    stage.mkdir()
+    target.mkdir()
+    (stage / "SECURITY.md").write_text("template policy\n", encoding="utf-8")
+    (target / "SECURITY.md").write_text("product policy\n", encoding="utf-8")
+    assert cli.apply_adoption_policies(stage, target) == ()
+    assert not (stage / "SECURITY.md").exists()
+    assert cli.compare_stage(stage, target, adopt=True).preserve == (
+        "SECURITY.md",
+    )
+    assert (target / "SECURITY.md").read_text(encoding="utf-8") == (
+        "product policy\n"
+    )
 
-@pytest.mark.parametrize("name", ["AGENTS.md", ".gitignore"])
+
+@pytest.mark.parametrize("name", ["AGENTS.md", ".gitignore", "SECURITY.md"])
 def test_adoption_policies_do_not_follow_final_symlinks(
     tmp_path: Path, name: str
 ) -> None:
@@ -5269,6 +5297,16 @@ def test_previous_release_to_current_managed_file_migration(
         == 0
     )
     assert not retired.exists()
+    assert (
+        (project / "SECURITY.md")
+        .read_text(encoding="utf-8")
+        .startswith("# Security Review Policy\n")
+    )
+    assert (
+        (project / ".github/SECURITY.md")
+        .read_text(encoding="utf-8")
+        .startswith("# Security Policy\n")
+    )
     assert product_file.read_text(encoding="utf-8") == (
         "keep this product content\n"
     )

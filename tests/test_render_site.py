@@ -1547,6 +1547,7 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
         "CHANGELOG.md",
         "README.en.md",
         "README.md",
+        "SECURITY.md",
         "dist",
         "docs",
         "src",

@@ -8,6 +8,7 @@ from jinja2 import Environment, StrictUndefined
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "template" / "AGENTS.md.jinja"
 WORKFLOW_TEMPLATE = ROOT / "template/.csarc/docs/agent-workflow.md.jinja"
+READINESS = ROOT / "docs/security-scanner-readiness.md"
 
 
 @pytest.mark.parametrize(
@@ -105,3 +106,41 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
     assert "一般情況下不能自行合併" not in readme
     assert ".csarc/docs/ci-policy.md#審查與合併資格" in readme
+
+
+def test_security_scanner_policy_and_guidance_are_shared() -> None:
+    """Keep scanner context distinct from disclosure and present downstream."""
+    root_policy = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    assert root_policy == (ROOT / "template/SECURITY.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Threat Model and Trust Boundaries" in root_policy
+    assert ".github/SECURITY.md" in root_policy
+
+    disclosure = (ROOT / ".github/SECURITY.md").read_text(encoding="utf-8")
+    assert "## Reporting a vulnerability" in disclosure
+    assert "## Threat Model and Trust Boundaries" not in disclosure
+
+    readiness = READINESS.read_text(encoding="utf-8")
+    assert readiness == (
+        ROOT / "template/.csarc/docs/security-scanner-readiness.md"
+    ).read_text(encoding="utf-8")
+    for required in (
+        "Codex Security",
+        "Claude / Anthropic",
+        "unavailable / not established",
+        "./scripts/security-smoke",
+        "./.csarc/scripts/security-smoke",
+        "does not run an AI security scanner",
+    ):
+        assert required in readiness
+
+    assert "docs/security-scanner-readiness.md" in (
+        ROOT / "AGENTS.md"
+    ).read_text(encoding="utf-8")
+    assert ".csarc/docs/security-scanner-readiness.md" in (
+        WORKFLOW_TEMPLATE.read_text(encoding="utf-8")
+    )
+    assert "{% if project_mode == 'existing' %}/SECURITY.md" in (
+        ROOT / "copier.yml"
+    ).read_text(encoding="utf-8")

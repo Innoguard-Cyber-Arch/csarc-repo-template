@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+if [[ -x scripts/test-pr-policy ]]; then
+  owner_root="scripts"
+elif [[ -x .csarc/scripts/test-pr-policy ]]; then
+  owner_root=".csarc/scripts"
+else
+  echo "Cannot find the CSARC security owner tests." >&2
+  exit 2
+fi
+
+for owner_test in \
+  test-pr-policy \
+  test-apply-repository-settings \
+  test-check-repo-capabilities \
+  test-check-scope-gate; do
+  "$repo_root/$owner_root/$owner_test"
+done

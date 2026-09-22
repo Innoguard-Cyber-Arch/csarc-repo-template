@@ -91,6 +91,7 @@ allowlist 由生成測試驗證：
 .github/workflows/release.yml
 .github/workflows/spec-to-issue.yml
 .github/workflows/work-item-lifecycle.yml
+SECURITY.md
 .claude/CLAUDE.md
 .csarc/REVIEWERS
 .csarc/config.yml（唯一由使用者維護的 CSARC 設定）

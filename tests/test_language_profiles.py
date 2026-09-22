@@ -251,6 +251,7 @@ def test_representative_generated_project_runs_full_verifier(
         "Cargo.toml",
         "README.en.md",
         "README.md",
+        "SECURITY.md",
         "biome.json",
         "coverage",
         "dist",

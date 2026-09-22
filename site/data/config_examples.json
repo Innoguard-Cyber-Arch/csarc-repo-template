@@ -522,8 +522,8 @@
         },
         {
           "file": {
-            "zh-tw": ".csarc/config.yml＋SECURITY.md",
-            "en": ".csarc/config.yml＋SECURITY.md"
+            "zh-tw": ".csarc/config.yml＋.github/SECURITY.md",
+            "en": ".csarc/config.yml＋.github/SECURITY.md"
           },
           "title": {
             "zh-tw": "可調整｜回報本專案自身的漏洞",
@@ -538,8 +538,8 @@
             "en": "security_reporting_channel: >-\n  Use the approved private reporting channel.\n\n## Reporting a vulnerability\n\nDo not open a public GitHub Issue for a\nsuspected vulnerability, exploit code,\ncredentials, tokens, or customer data.\n\n<!-- Project owner: replace with the actual\nprivate reporting channel and expected\nacknowledgement window. -->"
           },
           "summary": {
-            "zh-tw": "不寫死聯絡信箱或 SLA：模板不知道下游專案的實際通報管道，假造一個反而誤導回報者。專案 owner 必須在 `SECURITY.md` 填入實際管道與回應期待後，這份政策才算生效。",
-            "en": "No contact address or SLA is hard-coded: the template does not know a downstream project's real reporting channel, and inventing one would only mislead reporters. This policy takes effect only after the project owner fills in the real channel and response expectations in `SECURITY.md`."
+            "zh-tw": "不寫死聯絡信箱或 SLA：模板不知道下游專案的實際通報管道，假造一個反而誤導回報者。專案 owner 必須在 `.github/SECURITY.md` 填入實際管道與回應期待後，這份政策才算生效；root `SECURITY.md` 另供 scanner guidance 使用。",
+            "en": "No contact address or SLA is hard-coded: the template does not know a downstream project's real reporting channel, and inventing one would only mislead reporters. This policy takes effect only after the project owner fills in the real channel and response expectations in `.github/SECURITY.md`; root `SECURITY.md` separately provides scanner guidance."
           }
         }
       ]

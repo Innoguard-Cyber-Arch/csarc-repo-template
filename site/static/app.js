@@ -554,7 +554,7 @@ trustPolicy: no-downgrade`
           title: '回報本專案自身的漏洞，不是掃相依套件',
           goal: '掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。GitHub Issue 是公開索引的，必須避免張貼任何敏感資料。',
           summary: '本公版與生成專案預設使用實際 repository 的 GitHub Issues，建立後維護者會收到通知。公開 Issue 不得包含 secrets、credentials、personal data 或其他敏感內容；不寫死未核准的 email 或 SLA，驗證腳本也會拒絕未完成的 placeholder。',
-          file: 'SECURITY.md',
+          file: '.github/SECURITY.md',
           code: `## Reporting a vulnerability
 
 Open a GitHub Issue. Maintainers receive
