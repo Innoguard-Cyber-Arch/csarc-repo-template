@@ -64,15 +64,13 @@ flowchart LR
   S["一般孤立 Issues"] --> MAIN
   I["需獨立 canary 的 Issue #42"] --> DI["dev/i42-canary"]
   H["緊急 fix/* + hotfix"] --> MAIN["main"]
-  MA -->|promotion: full + canary| MAIN
-  MB -->|promotion: full + canary| MAIN
+  MA -->|promotion bridge: full + canary| MAIN
+  MB -->|promotion bridge: full + canary| MAIN
   DI -->|單獨 promotion| MAIN
-  MAIN -. "reviewed sync PR" .-> MA
-  MAIN -. "reviewed sync PR" .-> MB
   MAIN -. "reviewed sync PR" .-> DI
 ```
 
-`main` 前進不會讓 ordinary 里程碑 PR stale，也不會 fan out 同步。各里程碑到 final delivery 前才建立一張 reviewed `sync/main-to-m*` PR；只有 owner 明列 dependency 時可提前同步自己的 branch。`dev/i*` canary 也必須在 delivery 前包含當時最新 `main`。
+`main` 前進不會讓 ordinary 里程碑 PR stale，也不會 fan out 同步。各里程碑的 final Promotion PR 以精確雙親 bridge 同時納入 delivery source 與當時最新 `main`，不另開 final sync PR；只有 owner 明列 dependency，或 `dev/i*` canary 要交付時，才使用 reviewed `sync/main-to-*` PR。
 {% endif %}
 
 ## 技術與目錄

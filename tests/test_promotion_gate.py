@@ -1068,7 +1068,7 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
         "source_sha": source_sha,
         "source_tree": source_tree,
     }
-    assert promotion_freshness_sha(bridge_sha, bridge) == source_sha
+    assert promotion_freshness_sha(bridge_sha, bridge) == bridge_sha
     assert (
         run_git(
             "merge-base", "--is-ancestor", base_sha, bridge_sha, check=False
@@ -1082,7 +1082,9 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
         != 0
     )
     monkeypatch.setattr(
-        MODULE["delivery_sync"], "merged_sync_pr_number", lambda *_: None
+        MODULE["delivery_sync"],
+        "merged_sync_pr_number",
+        lambda *_: pytest.fail("a valid promotion bridge needs no sync PR"),
     )
     assert (
         promotion_main_evidence(
@@ -1092,7 +1094,19 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
             base_sha,
             source_branch,
             promotion_freshness_sha(bridge_sha, bridge),
-            False,
+            True,
+        )
+        == "direct-ancestry"
+    )
+    assert (
+        promotion_main_evidence(
+            object(),
+            "owner/repo",
+            "new-main",
+            base_sha,
+            source_branch,
+            promotion_freshness_sha(bridge_sha, bridge),
+            True,
         )
         is None
     )
