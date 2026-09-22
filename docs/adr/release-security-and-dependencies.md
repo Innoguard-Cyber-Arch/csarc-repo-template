@@ -3,7 +3,7 @@
 - **狀態：**Accepted
 - **日期：**2026-09-01
 - **備註：**#430 candidate 實作；#871 將 Milestone 版本候選併入 promotion PR
-- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)
+- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)
 - **實作 PRs：**[#448](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/448)、[#463](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/463)、[#471](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/471)
 
 ## 問題與限制
@@ -29,7 +29,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 5. **Blocked：**若 tag 或 GitHub Release 的必要權限不可用，流程留下失敗證據並停止，不改走另一個發布器。
 6. 兩種候選都使用同一組可信 actor／commit、允許檔案、版本、CHANGELOG 與可打包性檢查；`GITHUB_TOKEN` 建立的 PR 若等待人工核准，原 release run 會直接驗證精確 SHA 並回寫 `Release / candidate` status。
 7. 候選驗證也記錄 candidate SHA、來源 merge-base 與 current `main` SHA；正式 lifecycle merge 會在 lease 綁定的 current base 重跑同一支 verifier，發布 stage 再以同一驗證作後盾。base 只新增 `no-release` commits 時可沿用同一張 PR；新增範圍只要包含 release-worthy commit，就必須更新原 PR，舊 base 的成功 status 不得滿足最終邊界（#817）。
-8. 人審查並合併 Milestone promotion PR 或 standalone 版本 PR 後，hosted／本機共用的 `scripts/publish-release` 建立 tag、draft GitHub Release、成品、checksum、SPDX SBOM 與 release evidence；下載重驗成功後才公開且確認 immutable。Milestone tracker 與 Milestone 只在這一步成功後關閉；失敗保持 open，重跑 idempotent 收尾。`no-release` batch 由同一 workflow 的成功判定與 run URL 作為處置證據。
+8. 人審查並合併 Milestone promotion PR 或 standalone 版本 PR 後，hosted／本機共用的 `scripts/publish-release` 建立 tag、draft GitHub Release、成品、單一固定版本 `release-prompt.txt`、checksum、SPDX SBOM 與 release evidence；下載重驗成功後才公開且確認 immutable。Milestone tracker 與 Milestone 只在這一步成功後關閉；失敗保持 open，重跑 idempotent 收尾。`no-release` batch 由同一 workflow 的成功判定與 run URL 作為處置證據。
 
 流程只使用短效 `GITHUB_TOKEN`，不要求 PAT、GitHub App、自架 runner 或付費 GitHub 方案。Organization 不允許 Actions 建立 PR 時只影響 standalone 候選的建立方式；workflow 不可自行核准版本 PR，也沒有第二個 tag／Release writer。既有 repo 的 product-owned／verification-only release ownership 不套用 CSARC-owned 的 Milestone materialization 與自動結案。
 
@@ -90,6 +90,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | tag／GitHub Release | Candidate | `scripts/publish-release`（由 workflow 或維護者呼叫） | Milestone promotion 或 standalone 版本 PR 合併後建立；發布驗證成功後才關 Milestone。待 default branch live run 才能標 Active。hosted Automatic／Guided 不再因無法自證 `immutable_releases` 而結構性 Blocked（#770，見下方「Release attestation 驗證取代 immutable_releases pre-flight probe」一節） |
 | source／語言成品 | Candidate | `scripts/release_bundle.py` | 選到的 Python、TypeScript、Rust 原生 package 加 source archive |
 | checksum／SBOM／release evidence | Candidate | `scripts/release_bundle.py`＋Syft | 缺檔、竄改、錯 tag、錯 commit 與重跑測試；待 live run |
+| agent setup prompt | Candidate | `scripts/render_release_prompt.py`＋`scripts/publish-release` | 單一 status-first prompt 綁定同一 tag／commit、安裝指南與 Copier schema，並由 checksum／release evidence 涵蓋 |
 | registry publishing／production-side attestation | Removed | #439 | `container_mode`、`enable_release_attestations`、`enable_pypi_publishing`、`enable_npm_publishing` 已由 #439 移除設定面：零 active workflow 消費這些值，不留下承諾不了結果的選項；需要真實 registry 或 attestation 時另開 Issue 明列 owner、權限與執行者 |
 | artifact consumption（消費端 attestation 驗證） | Conditional | `scripts/verify_release_consumption.py` | 與上列產出端設定無關；真實消費者明確採用後才是門禁 |
 | repository delivery | Active | CI、PR policy、#429 branch model | 精確 PR head、review、分級驗證與 closing evidence |
@@ -100,7 +101,8 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | 檔案 | 責任 |
 | --- | --- |
 | `.github/workflows/release.yml` | 一支 GitHub event／permission wrapper；root 與新生成 repo 的發布入口；發布階段呼叫 `scripts/publish-release`，不保留自己的一份邏輯 |
-| `scripts/publish-release`（#589；attestation 驗證見 #770） | 發布階段的單一實作：`stage`／`resolve`／`publish`／`rerun-verify` 子命令，涵蓋驗證並暫存已合併候選、判定 tag／Release 狀態、build 成品與 SBOM、上傳並公開、驗證重跑，以及發布失敗時把仍可變的 Release 收回 draft；`publish`／`rerun-verify` 確認 GitHub 回報 immutable 後，另外重用 `scripts/verify_release_consumption.py` 對每個上傳成品核對 release attestation（#770）；`release.yml` 與本機／agent 執行呼叫同一份腳本 |
+| `scripts/publish-release`（#589；attestation 驗證見 #770） | 發布階段的單一實作：`stage`／`resolve`／`publish`／`rerun-verify` 子命令，涵蓋驗證並暫存已合併候選、判定 tag／Release 狀態、build 成品、單一固定版本 agent prompt 與 SBOM、上傳並公開、驗證重跑，以及發布失敗時把仍可變的 Release 收回 draft；`publish`／`rerun-verify` 確認 GitHub 回報 immutable 後，另外重用 `scripts/verify_release_consumption.py` 對每個上傳成品核對 release attestation（#770）；`release.yml` 與本機／agent 執行呼叫同一份腳本 |
+| `scripts/render_release_prompt.py`（#877） | 以 exact release tag／full SHA 產生唯一的 status-first `release-prompt.txt`，指向同 SHA 的安裝指南與 `copier.yml`；問題與答案仍由 Copier 和既有 `--data` 契約管理 |
 | `scripts/install-syft`（#589） | 本機／agent 發布路徑產生 SPDX SBOM 的直接 CLI 等效：抓取與 `release.yml` 的 `anchore/sbom-action` 相同 pin 版本的 Syft 二進位並驗證 checksum |
 | `scripts/verify-release-candidate` | 驗證自動或 guided 版本 PR 的身分、變更範圍與精確 SHA，再回寫 status |
 | `scripts/release_policy.py` | 共用 Conventional Commit／版本決策；本機只產生候選檔，不寫 GitHub；`detect`／`select_release_mode` 的 Guided 觸發條件（#589）已擴充為政策阻擋或維護者／agent 明示的 `--operator-reason` 兩者之一；`PUBLISH_CAPABILITIES`／`detect_runtime_capabilities()` 不再包含 `immutable_releases` pre-flight probe（#770，見下方獨立小節） |
