@@ -95,11 +95,21 @@ def test_release_level_defaults_match_the_four_level_decision() -> None:
         "formal": "peer",
     }
     assert configured.suites == {
-        "alpha": "baseline",
+        "alpha": "fast",
         "beta": "fast",
-        "early": "docs",
+        "early": "fast",
         "formal": "full",
     }
+
+
+def test_legacy_verification_suites_normalize_to_fast() -> None:
+    configured = settings(
+        release_level_alpha_verification="baseline",
+        release_level_early_verification="docs",
+    )
+
+    assert configured.suites["alpha"] == "fast"
+    assert configured.suites["early"] == "fast"
 
 
 def test_declaration_accepts_legacy_h2_and_issue_form_h3() -> None:
@@ -147,7 +157,7 @@ def test_collaborator_declaration_is_trusted() -> None:
     assert (result.level, result.review, result.suite) == (
         "early",
         "peer",
-        "docs",
+        "fast",
     )
 
 
@@ -256,21 +266,21 @@ def test_level_floor_and_path_tier_use_the_stronger_suite() -> None:
     configured = settings()
 
     assert levels.required_suite("alpha", "fast", configured) == "fast"
-    assert levels.required_suite("early", "fast", configured) == "docs"
+    assert levels.required_suite("early", "fast", configured) == "fast"
     assert levels.required_suite("formal", "docs", configured) == "full"
 
 
 @pytest.mark.parametrize(
     ("level", "path_tier", "expected"),
     [
-        ("alpha", "docs", "docs"),
+        ("alpha", "docs", "fast"),
         ("alpha", "fast", "fast"),
         ("alpha", "full", "full"),
-        ("beta", "docs", "docs"),
+        ("beta", "docs", "fast"),
         ("beta", "fast", "fast"),
         ("beta", "full", "full"),
-        ("early", "docs", "docs"),
-        ("early", "fast", "docs"),
+        ("early", "docs", "fast"),
+        ("early", "fast", "fast"),
         ("early", "full", "full"),
         ("formal", "docs", "full"),
         ("formal", "fast", "full"),

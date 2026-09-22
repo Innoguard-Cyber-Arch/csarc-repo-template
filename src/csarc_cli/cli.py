@@ -5808,6 +5808,11 @@ def update_plan_answers(  # noqa: C901
     """Resolve update answers and Copier overrides from repository facts."""
     result = dict(answers)
     update_data: dict[str, object] = dict(explicit_data)
+    for level in ("alpha", "beta", "early", "formal"):
+        key = f"release_level_{level}_verification"
+        value = explicit_data.get(key, answers.get(key))
+        if isinstance(value, str) and value in {"baseline", "docs"}:
+            update_data[key] = "fast"
     release_ownership(answers)
     release_keys = {
         "release_ownership",

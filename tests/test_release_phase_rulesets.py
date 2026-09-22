@@ -37,7 +37,6 @@ REQUIRED_CHECKS_RULESET = {
                 "strict_required_status_checks_policy": False,
                 "required_status_checks": [
                     {"context": "title", "integration_id": 15368},
-                    {"context": "promotion", "integration_id": 15368},
                     {"context": "verify", "integration_id": 15368},
                 ],
             },

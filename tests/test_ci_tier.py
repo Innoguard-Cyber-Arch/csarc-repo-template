@@ -66,12 +66,13 @@ def test_scope_for(path: str, scope: str) -> None:
     assert scope_for(path) == scope
 
 
-def test_docs_only_uses_docs_tier() -> None:
+def test_docs_only_uses_fast_tier_without_project_toolchains() -> None:
     """Documentation does not start language or generator matrices."""
     plan = classify(
         "pull_request", "main", "docs/9-guide", set(), ["README.md"]
     )
-    assert plan.tier == "docs"
+    assert plan.tier == "fast"
+    assert not plan.run_project
     assert not plan.run_osv
     assert not plan.run_zizmor
 
@@ -117,7 +118,7 @@ def test_issue_form_and_gitignore_do_not_fall_through_to_full() -> None:
         set(),
         [".gitignore"],
     )
-    assert issue_form.tier == "docs"
+    assert issue_form.tier == "fast"
     assert gitignore.tier == "fast"
 
 
@@ -128,6 +129,7 @@ def test_source_uses_fast_canonical_runtime() -> None:
     )
     assert plan.tier == "fast"
     assert plan.scopes == ("source",)
+    assert plan.run_project
 
 
 @pytest.mark.parametrize(

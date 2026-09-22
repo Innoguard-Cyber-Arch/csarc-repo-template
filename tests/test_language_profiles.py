@@ -156,8 +156,9 @@ def test_generated_detector_uses_copier_language_order(tmp_path: Path) -> None:
 @pytest.mark.large
 def test_representative_generated_project_runs_full_verifier(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Run one mixed generated project through the complete verifier."""
+    """Run one mixed generated project through the complete verifier once."""
     required_tools = ("uv", "node", "pnpm", "cargo", "rustc")
     missing = [tool for tool in required_tools if shutil.which(tool) is None]
     if missing:
@@ -206,9 +207,18 @@ def test_representative_generated_project_runs_full_verifier(
         "--data",
         "security_reporting_channel=Use the private security contact.",
     ]
+    verified_projects: list[Path] = []
+    original_verify_project = cli.verify_project
+
+    def record_verification(target: Path) -> dict[str, object]:
+        verified_projects.append(target)
+        return original_verify_project(target)
+
+    monkeypatch.setattr(cli, "verify_project", record_verification)
     assert cli.main([*arguments, "--dry-run"]) == 0
     assert not project.exists()
     assert cli.main([*arguments, "--yes", "--non-interactive"]) == 0
+    assert verified_projects == [project]
     assert (
         json.loads((project / cli.PROVENANCE_FILE).read_text(encoding="utf-8"))[
             "commit_sha"
@@ -285,7 +295,7 @@ def test_representative_generated_project_runs_full_verifier(
     )
 
     subprocess.run(  # noqa: S603
-        [project / ".csarc/scripts/verify", "full"], cwd=project, check=True
+        [project / ".csarc/scripts/scan-secrets"], cwd=project, check=True
     )
 
 

@@ -37,6 +37,8 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["release_levels_enabled"] is True
     assert config["default_release_level"] == "beta"
     assert config["release_level_alpha_review"] == "self"
+    assert config["release_level_alpha_verification"] == "fast"
+    assert config["release_level_early_verification"] == "fast"
     assert config["release_level_formal_verification"] == "full"
 
 

@@ -24,8 +24,9 @@ else:
 
 LEVELS = ("alpha", "beta", "early", "formal")
 LEVEL_RANK = {level: rank for rank, level in enumerate(LEVELS)}
-SUITES = ("baseline", "fast", "docs", "full")
+SUITES = ("fast", "full")
 SUITE_RANK = {suite: rank for rank, suite in enumerate(SUITES)}
+LEGACY_SUITE_ALIASES = {"baseline": "fast", "docs": "fast"}
 REVIEWS = ("self", "peer")
 COLLABORATOR_PERMISSIONS = {
     "pull",
@@ -44,9 +45,9 @@ DEFAULT_REVIEW = {
     "formal": "peer",
 }
 DEFAULT_SUITE = {
-    "alpha": "baseline",
+    "alpha": "fast",
     "beta": "fast",
-    "early": "docs",
+    "early": "fast",
     "formal": "full",
 }
 _CLOSING_ISSUE = re.compile(
@@ -126,6 +127,8 @@ def settings_from_mapping(config: dict[str, object]) -> Settings:
                 f"release_level_{level}_review must be one of "
                 + ", ".join(REVIEWS)
             )
+        if isinstance(suite, str):
+            suite = LEGACY_SUITE_ALIASES.get(suite, suite)
         if suite not in SUITES:
             raise ValueError(
                 f"release_level_{level}_verification must be one of "
@@ -169,6 +172,8 @@ def declared_level(body: object) -> str | None:
 
 def stronger_suite(first: str, second: str) -> str:
     """Return the stronger of two verification suites."""
+    first = LEGACY_SUITE_ALIASES.get(first, first)
+    second = LEGACY_SUITE_ALIASES.get(second, second)
     if first not in SUITE_RANK or second not in SUITE_RANK:
         raise ValueError("unknown verification suite")
     return max((first, second), key=SUITE_RANK.__getitem__)
@@ -178,7 +183,7 @@ def required_suite(level: str, path_tier: str, settings: Settings) -> str:
     """Combine the work-level floor with the path-selected test tier."""
     if level not in LEVELS:
         raise ValueError(f"unknown release level: {level}")
-    if path_tier not in {"docs", "fast", "full"}:
+    if path_tier not in {*SUITES, *LEGACY_SUITE_ALIASES}:
         raise ValueError(f"unknown path verification tier: {path_tier}")
     return stronger_suite(settings.suites[level], path_tier)
 

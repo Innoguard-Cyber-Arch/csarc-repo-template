@@ -28,11 +28,11 @@ project_visibility: public
 python_support_mode: latest
 release_immutable_releases: required
 release_level_alpha_review: self
-release_level_alpha_verification: baseline
+release_level_alpha_verification: fast
 release_level_beta_review: peer
 release_level_beta_verification: fast
 release_level_early_review: peer
-release_level_early_verification: docs
+release_level_early_verification: fast
 release_level_formal_review: peer
 release_level_formal_verification: full
 release_levels_enabled: true

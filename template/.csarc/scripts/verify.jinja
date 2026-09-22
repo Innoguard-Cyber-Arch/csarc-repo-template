@@ -214,6 +214,8 @@ fi
 ./.csarc/scripts/test-check-repo-capabilities
 ./.csarc/scripts/test-check-scope-gate
 ./.csarc/scripts/lint-workflows-shell
+verification_step "GitHub Actions pin check" \
+  python3 .csarc/scripts/check_action_pins.py --root .
 
 if $verify_python; then
   verify_python_module

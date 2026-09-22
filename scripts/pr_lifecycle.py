@@ -86,10 +86,6 @@ TRUSTED_CHECK_PRODUCERS: dict[str, tuple[str, frozenset[str]]] = {
         ".github/workflows/pr-policy.yml",
         frozenset({"merge_group", "pull_request_target"}),
     ),
-    "promotion": (
-        ".github/workflows/pr-policy.yml",
-        frozenset({"merge_group", "pull_request_target"}),
-    ),
     "verify": (
         ".github/workflows/ci.yml",
         frozenset({"merge_group", "pull_request_target"}),
@@ -2055,7 +2051,7 @@ def require_trusted_verification(
             matching_sources[0],
             source_tree_sha,
         )
-    return verification_evidence.validate_verification_job(
+    evidence = verification_evidence.validate_verification_job(
         check_run,
         workflow_run,
         matching_jobs[0],
@@ -2071,18 +2067,23 @@ def require_trusted_verification(
             if Path("scripts/verify-template.sh").is_file()
             else "./scripts/verify"
         ),
-        expected_toolchain=(
-            {
-                "python-3.14",
-                "uv-0.12.15",
-                "pnpm-11.22.0",
-                "node-24",
-                "rust-1.98.0",
-            }
-            if Path("scripts/verify-template.sh").is_file()
-            else None
-        ),
     )
+    require_template_toolchain(evidence, Path("scripts/verify-template.sh"))
+    return evidence
+
+
+def require_template_toolchain(
+    evidence: dict[str, object], marker: Path
+) -> None:
+    """Require only the template-repository toolchains used by this tier."""
+    if not marker.is_file():
+        return
+    expected = {"python-3.14", "uv-0.12.15"}
+    if evidence["tier"] == "full":
+        expected.update({"pnpm-11.22.0", "node-24", "rust-1.98.0"})
+    toolchain = evidence.get("toolchain")
+    if not isinstance(toolchain, list) or set(toolchain) != expected:
+        raise RuntimeError("Trusted verification toolchain evidence is invalid")
 
 
 def authoritative_check_runs(

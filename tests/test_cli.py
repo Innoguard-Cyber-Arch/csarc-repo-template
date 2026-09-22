@@ -5952,6 +5952,31 @@ def test_update_cannot_change_release_ownership() -> None:
     assert update_data["project_mode"] == "existing"
 
 
+def test_update_normalizes_retired_verification_suite_names() -> None:
+    """Existing answers remain updateable after the suite consolidation."""
+    repository = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+    saved = {
+        "project_mode": "existing",
+        "project_visibility": "private",
+        "release_level_alpha_verification": "baseline",
+        "release_level_early_verification": "docs",
+    }
+
+    answers, update_data = cli.update_plan_answers(saved, {}, repository)
+
+    assert answers["release_level_alpha_verification"] == "fast"
+    assert answers["release_level_early_verification"] == "fast"
+    assert update_data["release_level_alpha_verification"] == "fast"
+    assert update_data["release_level_early_verification"] == "fast"
+
+
 @pytest.mark.large
 def test_update_check_tolerates_pre_schema_existing_adoption(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]

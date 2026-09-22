@@ -59,8 +59,8 @@
               "path": ".github/workflows/ci.yml",
               "job": "verify",
               "trigger": {
-                "zh-tw": "同一 PR；依內容選 docs／fast／full",
-                "en": "The same PR; selects docs, fast, or full by content"
+                "zh-tw": "同一 PR；依內容選 fast／full",
+                "en": "The same PR; selects fast or full by content"
               },
               "timeout": "30 min"
             }
