@@ -75,6 +75,30 @@ REPRESENTATIVE_ANSWERS: dict[str, object] = {
 # whole-file or whole-job exclusion. The diagnostic printed for an
 # undeclared difference (see find_drift) already prints stripped lines,
 # so they can be pasted straight into a new entry here.
+_ROOT_ACTIVE = (
+    "if: ${{ steps.reuse.outputs.reuse != 'true' && "
+    "steps.sync.outputs.clean != 'true' }}"
+)
+_ROOT_FULL = (
+    "if: ${{ steps.reuse.outputs.reuse != 'true' && "
+    "steps.sync.outputs.clean != 'true' && "
+    "steps.effective.outputs.suite == 'full' }}"
+)
+_DOWNSTREAM_PRODUCT_OR_OSV = (
+    "if: ${{ steps.reuse.outputs.reuse != 'true' && "
+    "steps.sync.outputs.clean != 'true' && "
+    "(steps.effective.outputs.suite == 'full' || "
+    "steps.plan.outputs.run_project == 'true' || "
+    "steps.plan.outputs.run_osv == 'true') }}"
+)
+_DOWNSTREAM_PRODUCT = (
+    "if: ${{ steps.reuse.outputs.reuse != 'true' && "
+    "steps.sync.outputs.clean != 'true' && "
+    "(steps.effective.outputs.suite == 'full' || "
+    "steps.plan.outputs.run_project == 'true') }}"
+)
+
+
 ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
     "ci.yml.jinja": {
         # Downstream generated projects run their own, simpler
@@ -88,6 +112,13 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
             'command="./scripts/verify-template.sh"',
             'command="./scripts/verify"',
         ),
+        # Root verification always needs Python and only needs the
+        # non-Python toolchains for full delivery. Generated projects can
+        # skip every product toolchain when the selected scopes do not run
+        # project or dependency checks.
+        (_ROOT_ACTIVE, _DOWNSTREAM_PRODUCT_OR_OSV),
+        (_ROOT_FULL, _DOWNSTREAM_PRODUCT_OR_OSV),
+        (_ROOT_FULL, _DOWNSTREAM_PRODUCT),
     },
     "release.yml.jinja": {
         # Generated repositories expose scripts/verify; this template

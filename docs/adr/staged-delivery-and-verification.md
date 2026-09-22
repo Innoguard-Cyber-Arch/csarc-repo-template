@@ -21,7 +21,7 @@
 - 14→3／4 job-minute 是明確標示的規劃估算；hosted duration 與 `ci-plan` 僅在 runner 可用時作 telemetry，不是交付關卡。Portable baseline 不要求管理員調整帳單、方案或維護額外 runner。
 - Acceptance checklist 未完成時不得使用 closing keyword；PR metadata 從 linked Issue 同步 assignee、classification label 與 Milestone，離開 draft 時要求非作者 reviewer。CSARC-owned Milestone promotion 以 `Refs #tracker` 保持 tracker open，版本與 CHANGELOG 納入同一張 promotion PR；只有 Release 發布驗證成功（或同一 release workflow 明確判定 `no-release`）才補齊 evidence、關 tracker 與 Milestone（#871）。
 - Draft push 上限為 risk-owned fast；ready event 對同一 exact head 重新升級。metadata-only event 只有在 repo/head/tree/base、resolved tier/scopes/command/toolchain、labels、release level 與 24 小時 freshness 全同時，才能直接引用一次原始 hosted Execute；新 head 永不沿用。
-- Routine verification 保留一個 `ci_tier.py` router 與一個 `verify` required context。docs／dependency 不執行無關 Python regression；真實 Copier create／adopt／previous-release update 與 Rust native 代表 canary 留在 full，不建立逐測試 cache 或 evidence DAG。
+- Routine verification 保留一個 `ci_tier.py` router 與一個 `verify` required context。#876 把沒有獨立執行內容的 `baseline`／`docs` 名稱收斂成 `fast`；docs／dependency scope 不執行無關 Python regression。真實 Copier create／adopt／previous-release update 與 Rust native 代表 canary 留在 full，不建立逐測試 cache 或 evidence DAG。
 - TDD 留下最小 regression 與最終 evidence，不保存逐次 red／green 暫態。
 
 ## 歷史 disposition

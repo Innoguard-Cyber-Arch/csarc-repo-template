@@ -653,7 +653,6 @@ def test_new_project_defaults_to_copilot_review(tmp_path: Path) -> None:
     }
     assert contexts == {
         ("title", 15368),
-        ("promotion", 15368),
         ("verify", 15368),
         ("review", 15368),
     }
@@ -695,7 +694,6 @@ def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
     }
     assert contexts == {
         ("title", 15368),
-        ("promotion", 15368),
         ("verify", 15368),
         ("review", 15368),
     }

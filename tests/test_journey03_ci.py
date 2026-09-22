@@ -260,6 +260,50 @@ def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
     ]
 
 
+def test_hosted_setup_skips_unowned_language_toolchains() -> None:
+    """Routine jobs only install product toolchains their plan will use."""
+    root = ci_steps(
+        (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+    root_steps = {str(step.get("name")): step for step in root}
+    for name in (
+        "Set up pnpm 11.22.0",
+        "Set up Node.js 24",
+        "Set up Rust 1.98.0",
+    ):
+        assert (
+            "steps.effective.outputs.suite == 'full'" in root_steps[name]["if"]
+        )
+
+    template_source = (
+        REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
+    ).read_text(encoding="utf-8")
+    rendered = (
+        Environment(
+            autoescape=False,  # noqa: S701 - trusted local YAML template
+            undefined=StrictUndefined,
+        )
+        .from_string(template_source)
+        .render(
+            languages=["python", "typescript", "rust"],
+            python_support_mode="latest",
+            python_min_version="3.12",
+        )
+    )
+    generated = {str(step.get("name")): step for step in ci_steps(rendered)}
+    for name in (
+        "Set up Python 3.14",
+        "Set up pnpm 11.22.0",
+        "Set up Node.js 24",
+    ):
+        condition = generated[name]["if"]
+        assert "steps.plan.outputs.run_project == 'true'" in condition
+        assert "steps.plan.outputs.run_osv == 'true'" in condition
+    rust_condition = generated["Set up Rust 1.98.0"]["if"]
+    assert "steps.plan.outputs.run_project == 'true'" in rust_condition
+    assert "steps.plan.outputs.run_osv" not in rust_condition
+
+
 def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
     """Keep metadata reuse and clean-sync proof ahead of heavy setup."""
     source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
@@ -338,23 +382,41 @@ def test_local_verification_reuses_the_hosted_path_planner() -> None:
 
 def test_workflow_scope_runs_the_actions_security_audit() -> None:
     """A fast workflow change must not wait for a later full boundary."""
-    source = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
-    assert 'if [[ "$scopes" == *,workflow,* ]]; then' in source
-    assert "./scripts/verify-stage-github-actions-audit" in source
+    root_fast = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
+    generated_fast = (
+        REPO_ROOT / "template/.csarc/scripts/verify-fast.jinja"
+    ).read_text(encoding="utf-8")
+    generated_full = (
+        REPO_ROOT / "template/.csarc/scripts/verify.jinja"
+    ).read_text(encoding="utf-8")
+
+    assert 'if [[ "$scopes" == *,workflow,* ]]; then' in root_fast
+    assert "./scripts/verify-stage-github-actions-audit" in root_fast
+    assert (
+        "python3 .csarc/scripts/check_action_pins.py --root ." in generated_fast
+    )
+    assert (
+        "python3 .csarc/scripts/check_action_pins.py --root ." in generated_full
+    )
+
+
+def test_full_dispatch_skips_redundant_fast_checks() -> None:
+    """A local full request delegates before checks owned by full."""
+    for path, full_command in (
+        ("scripts/verify-fast", "./scripts/verify-template.sh"),
+        (
+            "template/.csarc/scripts/verify-fast.jinja",
+            "./.csarc/scripts/verify",
+        ),
+    ):
+        source = (REPO_ROOT / path).read_text(encoding="utf-8")
+        assert source.index(full_command) < source.index(
+            'verification_step "Changed-tree hygiene"'
+        )
 
 
 def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
-    """A fast-tier PR that also touches docs must not skip docs checks.
-
-    Issue #588: a PR with scopes = {"workflow", "docs", ...} classifies as
-    tier "fast", not "docs", so the docs-only early-exit branch never runs.
-    Both docs checks it used to bundle -- spec validation and the
-    repo-site staleness check -- must also fire from a second gate,
-    keyed on scopes rather than tier, that survives past that early exit.
-    Issue #598: #593 fixed only the staleness check in that second gate and
-    left spec_to_issue.py validate behind, silently skipped for any mixed-
-    scope PR that touches docs/specs/ or an ADR.
-    """
+    """Docs checks follow scope in both docs-only and mixed fast work."""
     root_fast = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
     template_fast = (
         REPO_ROOT / "template/.csarc/scripts/verify-fast.jinja"
@@ -372,9 +434,7 @@ def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
             "./.csarc/scripts/build-repo-site --check",
         ),
     ):
-        gate_start = source.index(
-            'if [[ "$suite" == "docs" || "$scopes" == *,docs,* ]]; then'
-        )
+        gate_start = source.index('if [[ "$scopes" == *,docs,* ]]; then')
         gate_end = source.index("\nfi", gate_start)
         gate = source[gate_start:gate_end]
 

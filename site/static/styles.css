@@ -929,7 +929,7 @@
     .plan-card li + li { margin-top: 4px; }
     .plan-state { display: inline-block; margin-left: 5px; padding: 2px 7px; border-radius: 999px; background: var(--soft); font-size: 18px; font-weight: 850; }
     /* Issue #681/#682 UX review: a standard-mode pane whose main content
-       is a short .plan-grid (contract's docs/fast/full tiers, and
+       is a short .plan-grid (contract's fast/full tiers, and
        similarly on files/template-release) or a short bullet list
        (about) packs to the top of `.markdown-body`'s grid --
        `align-content: start` below is set so a long, multi-row ops pane

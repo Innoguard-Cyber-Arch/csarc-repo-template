@@ -54,7 +54,7 @@ def test_pr_policy_delegates_to_repository_scripts() -> None:
 def test_required_check_names_only_run_from_trusted_workflows() -> None:
     """A PR-controlled workflow cannot impersonate a required check name."""
     producers = {
-        "pr-policy.yml": {"title", "promotion"},
+        "pr-policy.yml": {"title"},
         "ci.yml": {"verify"},
         "pr-review.yml": {"review"},
     }
@@ -82,6 +82,13 @@ def test_required_check_names_only_run_from_trusted_workflows() -> None:
     ).read_text(encoding="utf-8")
     assert "  pull_request_target:\n" in generated_ci
     assert "  pull_request:\n" not in generated_ci
+
+    policy = load_yaml(REPO_ROOT / ".github/workflows/pr-policy.yml")
+    assert set(policy["jobs"]) == {"title"}
+    assert any(
+        step.get("name") == "Classify the delivery-promotion route"
+        for step in policy["jobs"]["title"]["steps"]
+    )
 
 
 def test_pr_policy_writes_run_only_from_the_trusted_revision() -> None:

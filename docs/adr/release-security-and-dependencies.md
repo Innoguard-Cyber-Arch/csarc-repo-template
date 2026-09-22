@@ -62,7 +62,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | 適用條件 | 一張 Issue 可獨立審查、驗證與交付，沒有共同期限、批次驗收、跨 Issue 相依或獨立環境 | `main` 上的缺陷必須立即修正；不是一般工作的插隊標籤 |
 | 提出 | 無里程碑的一般 Issue | 無里程碑 Bug Issue＋`bug`／`hotfix`；未公開安全問題改用 GitHub Security Advisory |
 | Branch／PR | 從最新 `main` 建立 `type/<Issue>-*`，PR target `main` | 從最新 `main` 建立 `fix/<Issue>-*`，PR target `main` |
-| 審查與驗證 | 正常 review；CI 依風險選 docs／fast／full | 另一人 review 且一律 full；緊急不能略過必要檢查 |
+| 審查與驗證 | 正常 review；CI 依風險選 fast／full | 另一人 review 且一律 full；緊急不能略過必要檢查 |
 | 合併與證據 | closing keyword 關 Issue，保留 PR 與精確 head evidence | 另保留 rollback 說明與是否立即發版的決策 |
 | 版本影響 | 依 Conventional Commit 決定 | `fix` 預設 patch；實際版本仍由版本 PR 審查後確定 |
 
@@ -158,7 +158,8 @@ exact-head merge eligible，major 只加 `needs-manual-review` 標籤並留言�
 auto-merge；#830 發現這項 PR-wide 狀態不會持續綁定啟用時的 head SHA，因此改由 default-branch
 `dependabot-merge.yml` 在 required checks 完成後喚醒，透過 repository-native `pr_lifecycle.py` 取得 remote lease、
 重新驗證 current head 與 trusted check producer，並以 expected-head REST merge 原子合併。既有 review 與
-`title`／`promotion`／`verify` required checks 全數保留，沒有新增 Ruleset context 或 bypass。
+`title`／`verify`／`review` required checks 全數保留，沒有新增 Ruleset context 或 bypass。#876 將
+promotion route classifier 併入 `title`，移除沒有獨立證據邊界的 `promotion` context。
 
 範圍邊界：本節只取代「PR 開出後如何自動合併」這一段判斷，不重新開放整個 #322，也不影響已經 preserved 的 cooldown／SBOM
 半部——`.github/dependabot.yml` 的 `cooldown.default-days: 3` 維持原樣，不因本節新增而重新設定或延長。同步下發 `template/`
@@ -230,7 +231,7 @@ Syft 二進位直接呼叫 `syft scan dir:. -o spdx-json=<output>`，兩條路�
 - **local-vs-hosted 邏輯漂移風險。** 緩解方式是本節設計的第一原則——單一 repo-local 腳本被兩種
   呼叫方式共用，不維持兩套實作。
 
-**明確的非目標：** `verify`／`title`／`promotion` 三個 required status check 仍然、也必須繼續只由
+**明確的非目標：** `verify`／`title`／`review` 三個 required status check 仍然、也必須繼續只由
 hosted Actions 產生——它們的價值來自 GitHub 自己信任這份報告，本機執行無法滿足這個信任邊界，本節
 不主張、也沒有把這三者改成可本機執行。CodeQL 上傳到 GitHub 原生 code-scanning 介面同樣不在本節
 適用範圍。GitHub Actions 仍是預設／建議路徑，一般情況下仍建議走 hosted `release.yml`；本機路徑是
