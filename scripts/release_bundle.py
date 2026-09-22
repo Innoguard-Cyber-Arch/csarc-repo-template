@@ -45,7 +45,7 @@ def digest(path: Path) -> str:
 def identity(root: Path, tag: str) -> tuple[str, str]:
     """Validate the release tag and return its version and commit.
 
-    Issue #744: a tag may carry a legal `-alpha.N`/`-beta.N` phase suffix;
+    Issue #918: a tag may carry the legal `-beta.N` prerelease suffix;
     `is_valid_version` (scripts/release_phase.py) is the one canonical
     parser for that shape, reused here instead of a second hand-rolled
     regex that could drift from it.

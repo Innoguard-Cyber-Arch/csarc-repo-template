@@ -7,7 +7,7 @@ active。版本、發版與成品責任的完整盤點見中央模板的
 
 ## 審查與合併資格
 
-本文件在每個 repository 內都是審查、required checks、合併資格、Alpha self-merge 與
+本文件在每個 repository 內都是審查、required checks、合併資格、admin bypass 與
 quota fallback 的唯一規範來源；`AGENTS.md` 與 README 只連到這裡，不另寫第二套例外。任何 PR 都必須符合
 下方對應交付路徑、目前 head 的審查或明確授權，以及該風險層級的 local self-attested 或 hosted
 trusted evidence；草稿不具合併資格。有 Milestone 的工作繼承 tracker 核准，standalone、hotfix 與
@@ -139,21 +139,21 @@ lease，並透過 `scripts/pr_lifecycle.py` 執行；`scripts/verify` 會拒絕�
 失效；`CHANGES_REQUESTED`、新的 Draft 事件、未解決的 blocking comment、未完成 checklist
 或 required check 仍會 fail closed。
 
-目前 alpha Ruleset 的已知 admin `pull_request` bypass 也只能由 lifecycle 在上述
+目前設定允許的 admin `pull_request` bypass 也只能由 lifecycle 在上述
 exact-head approval 成立、GitHub 回報 `mergeable_state=clean`、必要檢查逐項重驗成功，且
 live bypass actor 清單精確等於 repo 宣告值時使用；其他 bypass 形狀仍降級為 human-only。
 這條路徑會在最後一次 merge snapshot 前自動留下 `bypass-trace:`。沒有獨立 review 的
-Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head maintainer 授權留言。
+admin self-merge 仍必須使用取得 lease 後的 exact-head maintainer 授權留言。
 
 ### Copilot 審核模式（#752）
 
-`.csarc/config.yml` 用兩個互不重疊的選項描述審核意圖：`review` 是人工 fallback，
-可選 `solo` 或 `peer`；`copilot_review` 可選 `allowed` 或 `off`。`allowed` 是明確 opt-in，
-不是 Copilot entitlement 或額度已存在的宣告。新專案預設 `review: solo` 與
-`copilot_review: allowed`；既有專案遷移時，舊的人工／Copilot 選擇會轉成等價新值。
+`.csarc/config.yml` 用兩個互不重疊的選項描述審核意圖：`admin_bypass` 可選
+`off`、`beta-only` 或 `always`；`copilot_review` 可選 `allowed` 或 `off`。
+`allowed` 是明確 opt-in，不是 Copilot entitlement 或額度已存在的宣告。舊的
+`review`／per-level review 設定只在更新時轉成等價的 `admin_bypass`，不再是現行設定面。
 
-- `review: peer`：需要獨立 maintainer 對 exact head 的 approval；`review: solo` 則沿用
-  受控的 self-review／授權路徑。兩者都不把靜態 reviewer 名單當作權限來源。
+- `admin_bypass: off` 要求獨立 maintainer approval；`beta-only` 只允許 beta；`always`
+  同時允許 beta 與 stable。所有模式都不把靜態 reviewer 名單當作權限來源。
 - `copilot_review: allowed`：Ruleset 要求 0 個原生 approval，改由
   `copilot_code_review` 規則在每次 push 後自動請 GitHub Copilot 審核，並把
   `review` 列為 required check（`.github/workflows/pr-review.yml` → `scripts/review_gate.py
@@ -162,12 +162,12 @@ Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head ma
      仍然有效）；或
   2. Copilot 對**目前 head SHA** 的最新審核沒有任何 inline comment、內文沒有被隱藏的
      低信心意見（suppressed comments），且內文明確寫出沒有產生意見；或
-  3.（#775／#826／#905）這是一張符合 `alpha_self_merge_opt_in` 條件（PR body 恰好一次
-     `Alpha 自行合併 / self-merged` 標記、Milestone-less Issue 的 direct-to-main
+  3.（#775／#826／#905／#918）這是一張符合 `admin_bypass_opt_in` 條件（PR body恰好一次
+     `Admin bypass / 管理員略過審核` 標記、Milestone-less Issue 的 direct-to-main
      路由、既有 `dev/mN` Issue 路由、經 `require_routine_route()` 完整驗證的正式
      current-main delivery sync 路由、canonical `release/v*` 的同 repository
      current-main release 路由，或由 `promotion_gate.route_for()` 分類為 Milestone
-     promotion 的同 repository 路由）的 Alpha self-merge PR，且已經有一則
+     promotion 的同 repository 路由）的 admin-bypass PR，且已經有一則
      `pr_lifecycle.find_exact_head_authorization` 能找到的、綁定**目前 head SHA**
      的真人 maintainer 授權留言（跟 `pr_lifecycle.py merge` 要求的是同一則留言，
      不必另貼兩次）。
@@ -189,7 +189,7 @@ Alpha self-merge 例外不變，仍必須使用取得 lease 後的 exact-head ma
 4. 依上方 single-writer 規則取得 lease，`scripts/pr_lifecycle.py merge` 以
    `authorization_source=copilot` 合併；lifecycle 在合併前重新驗證同一個 exact-head
    Copilot 審核、required checks、Draft、checklist 與 lease，並自動留下
-   `copilot-review-trace: review=<URL> head=<SHA> actor=<login>`（alpha bypass 另外留下
+   `copilot-review-trace: review=<URL> head=<SHA> actor=<login>`（admin bypass 另外留下
    `bypass-trace: ... reason=exact-head-copilot-review`）。
 
 自動合併由本機 agent 經 lifecycle 執行，不用 workflow 的 `GITHUB_TOKEN` 合併：
@@ -212,8 +212,7 @@ Copilot 是否可用；能力只以實際 review／API 結果判斷。切回純�
    的 conclusion 就一併略過——用 #513 的 `scripts/check-pr-policy-status`（完成前，
    改用 `gh run view <run-id> --log | grep -E "Validate pull request policy|##\[error\]"`
    手動確認）。
-2. Ruleset 的 self-approval 結構性卡點，見下方「Alpha 自我核准 bypass」及其後的
-   「Release phase 與 bypass 範圍收斂」。
+2. Ruleset 的 self-approval 結構性卡點，見下方「Admin bypass」與發布通道規則。
 
 **`--admin` 本身不足以繞過任何 Ruleset 規則。** 舊版 classic branch protection 會自動
 給 repository admin 身分繞過，但 Ruleset 只認 `policies/rulesets.json`（或本節後述
@@ -222,7 +221,9 @@ Copilot 是否可用；能力只以實際 review／API 結果判斷。切回純�
 的既有踩坑：`gh pr merge --admin` 對新版 Ruleset 也不生效，不像舊版 classic branch
 protection 那樣自動給 admin 身分繞過）。
 
-### Alpha 自我核准 bypass（#580）
+### 已取代：Alpha 自我核准 bypass（#580）
+
+> 本節保留歷史背景。現行規則以「Beta／stable 發布通道與 admin bypass（#918）」為準。
 
 Repository 結構性只有一個真人帳號、沒有第二人可核准時，`require_code_owner_review`／
 `required_approving_review_count` 一旦透過 Ruleset 生效，任何人都無法核准自己開的
@@ -288,7 +289,40 @@ fallback 不因 #913 擴大。
 同一個「結構性只有一個真人帳號」問題的下游 repo，才需要自行在自己的
 `policies/rulesets.json` 加上等效項目。
 
-### 每件工作的發布層級與 Ruleset（#745）
+### Beta／stable 發布通道與 admin bypass（#918）
+
+公開發布只有兩個通道；專案成熟度是另一條、只靠明確宣告改變的軸線：
+
+| 通道 | 版本 | 來源 | 最低驗證組合 |
+| --- | --- | --- | --- |
+| beta | `X.Y.Z-beta.N` | 每張 Milestone work Issue 合併進 `dev/m*` 後 | `fast`，路徑風險可升為 `full` |
+| stable | `X.Y.Z` | Milestone promotion、standalone 或 hotfix | `full` |
+
+`alpha` 只代表發布前的本機開發，不是公開版本，也沒有 `-alpha.N` tag 或 Release。
+RC 不另立階段；通過 stable 的完整門檻就直接發布 stable。Milestone 開發期間若
+`main` 已有新的 stable，下一個 beta 以目前 stable 為基準重新計算，不鎖死舊 core。
+
+`.csarc/config.yml` 的 `project_maturity: early|formal` 只描述整個專案的成熟度。
+預設永遠是 `early`；只有一張明確宣告此變更的 standalone stable PR 才能改成
+`formal`。成熟度不改寫 beta/stable 通道，也不從版本號或 branch 自動推斷。
+
+`admin_bypass: off|beta-only|always` 控制 admin 是否可用 exact-head 自我授權取代
+同行核准。本 repo 設為 `always`；生成專案預設 `off`，可明確選擇另外兩種模式。
+無論設定值為何，bypass 都不能略過 release-level/path-risk 選出的 suite、required
+checks、候選版本檢查、remote lease、即時 admin 身分或 exact-head 綁定。實際使用由
+`scripts/pr_lifecycle.py` 寫入：
+
+```text
+bypass-trace: release_level=<beta|stable> route=<beta|stable|hotfix> actor=<github-login> reason=<原因>
+```
+
+GitHub 的 Ruleset bypass 是整個 ruleset 層級的能力，因此 required checks 保持在
+沒有 bypass actor 的獨立 Ruleset；review 規則才依 `admin_bypass` 決定是否包含 admin
+角色。`--admin` 不是直接操作捷徑，所有自動合併仍只經 lifecycle single-writer。
+
+### 已取代：每件工作的四層發布模型（#745）
+
+> 以下保留歷史設計脈絡；現行行為以上方 #918 的雙通道／獨立成熟度模型為準。
 
 發布成熟度由 Issue 的 `Release level / 發布層級` 宣告，不再是整個
 repository 共用的階段開關。Milestone 工作一律繼承 tracker 的層級；子 Issue
@@ -660,9 +694,9 @@ fail-open 漏洞：一張 Issue 在開啟狀態下取得非提案者核可後，
 併。與 tracker 路徑一樣，這裡沒有對應「完成收尾」的情境需要 `require_open=False`（那
 是 tracker 專屬的 `closure_decision()` 收尾路徑），所以每個真實呼叫端都維持預設值。
 
-**Hotfix 的緊急路徑：**alpha 依其層級規則可自核；beta／early／
-formal 原則上都需同行核准，只有真正緊急的 standalone `hotfix` 保留
-admin 例外。提案者先在 Issue 留 `Admin-approve: <理由>`，再在作用中的
+**Hotfix 的緊急路徑：**hotfix 是 stable；`admin_bypass: always` 時可用
+admin 例外，`off` 或 `beta-only` 時仍須同行核准。提案者先在 Issue 留
+`Admin-approve: <理由>`，再在作用中的
 lifecycle lease 內對 exact PR head 授權；`review` check 與合併當下都重讀 admin
 權限、Issue／PR 的 `hotfix` 路徑、授權者與 merge actor。成功合併後，
 `pr_lifecycle.py` 自動建立一張 `needs-manual-review` 事後補審 Issue，其內綁定
@@ -1089,8 +1123,8 @@ before／after 紀錄）。
 
 | 組合 | 最低層級 | 入口與累加測試集合 | 實測 |
 | --- | --- | --- | --- |
-| fast | alpha／beta／early | 共同 hygiene／secret，加上變更 scope 的 owner checks；docs-only 不啟動產品語言工具鏈，dependency 只做鎖檔與 OSV | 目標三次 warm-cache 中位數不超過 75 秒（#812） |
-| full | formal | fast owners ＋ `large` 的代表 create／adopt／previous-release update（create 含 Rust native）與 coverage | 目標不超過 15 分鐘（#812） |
+| fast | beta | 共同 hygiene／secret，加上變更 scope 的 owner checks；docs-only 不啟動產品語言工具鏈，dependency 只做鎖檔與 OSV；路徑風險仍可升為 full | 目標三次 warm-cache 中位數不超過 75 秒（#812／#918） |
+| full | stable | fast owners ＋ `large` 的代表 create／adopt／previous-release update（create 含 Rust native）與 coverage | 目標三次 warm-cache 中位數不超過 15 分鐘（#812／#918） |
 
 #812 的固定 clean-tree 基準是 #815 合併後 PR #853 的 exact tree：hosted `verify-fast`
 收集 1,530 個 pytest cases、排除 49 個 `large`、執行 1,481 個，pytest／regression stage／
@@ -1486,10 +1520,10 @@ Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
 | --- | --- | --- | --- | --- |
 | 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
-| 正式版本與 CHANGELOG | 一般工作不直接決定精確版本 | CSARC-owned Milestone 的 promotion bridge 用 `release_policy.py prepare-candidate` materialize 同批版本與 CHANGELOG，可信 CI 逐 tree 驗證只能包含該 deterministic 差異 | Standalone work 仍由 Automatic 開 Release Please 版本 PR；Guided 用同一規則在本機產生候選 | manual 只重跑同一流程，不另開版本來源 |
-| CI | fast／full 依風險 | 一律 full | release workflow 對目前 `main` 跑一次 full | 候選只跑版本／檔案／可打包 focused check；正式發布前已在 main 跑 full |
-| 成品／checksum／SBOM | 不發布 | PR 合併後從精確 main commit 建立 | Standalone 版本 PR 合併後從精確 commit 建立 | draft Release 先上傳、下載重驗，成功才公開 |
-| tag／GitHub Release | 不建立 | PR 合併後由唯一 release workflow 建立；成功才關 tracker 與 Milestone | Standalone 版本 PR 合併後由同一 workflow 建立 | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
+| 精確版本與 CHANGELOG | Milestone work PR materialize 下一個 beta | promotion bridge materialize stable 與 CHANGELOG | standalone／hotfix 以版本 PR materialize stable | manual 只重跑同一流程，不另開版本來源 |
+| CI | beta 的最低組合是 fast，路徑風險可升 full | stable 一律 full | release workflow 重用 exact candidate 的可信證據，缺少時只補跑所需 tier | 不重複已具備且仍有效的 routine suite |
+| 成品／checksum／SBOM | 合併進 `dev/m*` 後從精確 commit 發 beta prerelease | 合併後從精確 main commit 發 stable | stable 候選合併後從精確 commit建立 | draft Release 先上傳、下載重驗，成功才公開 |
+| tag／GitHub Release | `X.Y.Z-beta.N` | `X.Y.Z`；成功才關 tracker 與 Milestone | `X.Y.Z` | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
 | attestation／registry | 不建立 | 不建立 | 不自動啟用 | #439 已移除設定面（零 active 消費者），非留待選配 |
 | deployment | 不適用 | 不適用 | 不適用 | 由有真實 runtime target 的產品 repo 定義 |
 
@@ -1501,7 +1535,26 @@ Automatic／Guided 版本 PR；既有 repo 保留 product-owned release workflow
 猜測、不覆寫也不重複 dispatch。流程只用短效 `GITHUB_TOKEN`，不要求 GitHub App、PAT、
 registry token 或空 deployment environment。
 
-### 版本號表示發布層級（Issue #744，2026-09-17）
+### 版本通道與專案成熟度（Issue #918，2026-09-23）
+
+公開版本只接受 `X.Y.Z-beta.N` 與 `X.Y.Z`。前者是 beta prerelease，後者是 stable；
+沒有公開 alpha，也沒有獨立 RC。`early`／`formal` 不再出現在版本後綴或每張 Issue 的
+發布層級，而是 `.csarc/config.yml` 的 `project_maturity` 宣告。它只會在一張明確的
+standalone stable 變更中由 `early` 改為 `formal`；沒有宣告時維持 `early`。
+
+CLI 預設只選最新 stable，使用者明確傳入 `--channel beta` 才選 beta。解析器不保留
+`alpha` 相容路徑；記錄到已退役、格式錯誤或無法理解的版本時，`csarc update` 會改以
+最新 stable 重建模板管理的基線，沿用 adopt 的交易式差異計畫，盡可能保留
+`.csarc/config.yml`、專案自有內容與已分歧檔案，並把無法安全合併的項目交給人工處理。
+身分、簽章、attestation 或 tag 移動等信任失敗仍 fail closed，不能偽裝成版本格式問題。
+
+歷史 `v0.18.0-alpha.1` 至 `v0.21.0-alpha.1` 以同一 commit 建立 `-beta.1` replacement，
+驗證新 Release 的 commit、prerelease 旗標、immutable attestation 與 assets 後，才刪除
+舊 Release/tag；任一檢查失敗就保留原件並停止。
+
+### 已取代：四層版本號模型（Issue #744，2026-09-17）
+
+> 以下保留歷史決策脈絡；現行版本規則以上方 #918 為準。
 
 版本號本身就是發布層級，不是另外一個側欄狀態：alpha 為 `X.Y.Z-alpha.N`；beta 為
 `X.Y.Z-beta.N`（0.x 或 1.x 都可以）；早期版為不帶後綴的 `0.y.z`；正式版為 `1.0.0`

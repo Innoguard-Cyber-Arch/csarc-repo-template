@@ -1062,6 +1062,45 @@ def test_release_plan_uses_reachable_tags_and_commit_order(
     assert release_plan(tmp_path, second) == ("v0.2.1", "0.2.1")
 
 
+def test_exact_final_alpha_transition_plans_v022_stable(tmp_path: Path) -> None:
+    """Retire 0.21 alpha without adding a general legacy version parser."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.21.0-alpha.1")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {"type": "generic", "path": "README.md"}
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: final retired prerelease")
+    git(tmp_path, "tag", "v0.21.0-alpha.1")
+    (tmp_path / "file").write_text("beta stable governance\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: define beta stable governance")
+
+    head = git(tmp_path, "rev-parse", "HEAD")
+    assert release_plan(tmp_path, head, phase="stable") == (
+        "v0.22.0",
+        "0.22.0",
+    )
+    prepared = prepare_release_candidate(tmp_path, head, phase="stable")
+    assert prepared["version"] == "0.22.0"
+    assert (tmp_path / "version.txt").read_text(encoding="utf-8") == "0.22.0\n"
+
+
 def test_release_plan_parses_every_git_log_record(tmp_path: Path) -> None:
     """A leading newline after a record separator cannot hide older intent."""
     git(tmp_path, "init", "-b", "main")
@@ -1266,7 +1305,7 @@ def test_no_release_promotion_preserves_the_delivery_tree(
     head_sha = git(tmp_path, "rev-parse", "HEAD")
 
     result = verify_promotion_version(
-        tmp_path, source_sha, head_sha, phase="early"
+        tmp_path, source_sha, head_sha, phase="stable"
     )
 
     assert result["status"] == "no-release"
@@ -1280,7 +1319,7 @@ def test_no_release_promotion_preserves_the_delivery_tree(
             tmp_path,
             source_sha,
             git(tmp_path, "rev-parse", "HEAD"),
-            phase="early",
+            phase="stable",
         )
 
 
@@ -1566,13 +1605,13 @@ def test_prepare_requires_tag_version_without_mutating_files(
     assert "README.md has no x-release-please-version marker" in errors
 
 
-# --- Issue #744: release-phase versioning -----------------------------
+# --- Issue #918: release-channel versioning ---------------------------
 
 
 def test_bump_version_ignores_an_existing_phase_suffix() -> None:
     """bump_version only ever bumps the core; the suffix is applied later."""
     assert bump_version("0.16.0-beta.1", ["fix: one"]) == "0.16.1"
-    assert bump_version("0.16.0-alpha.3", ["feat: one"]) == "0.17.0"
+    assert bump_version("0.16.0-beta.3", ["feat: one"]) == "0.17.0"
     assert (
         bump_version("0.16.0-beta.1", ["fix: one\n\nBREAKING CHANGE: x"])
         == "1.0.0"
@@ -1621,7 +1660,7 @@ def test_release_plan_applies_the_declared_phase_to_a_fresh_core_version(
         "v0.2.1-beta.1",
         "0.2.1-beta.1",
     )
-    assert release_plan(tmp_path, second, phase="early") == (
+    assert release_plan(tmp_path, second, phase="stable") == (
         "v0.2.1",
         "0.2.1",
     )
@@ -1658,10 +1697,10 @@ def test_release_plan_reports_an_existing_phase_suffixed_tag_unchanged(
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "feat: initial capability")
     first = git(tmp_path, "rev-parse", "HEAD")
-    git(tmp_path, "tag", "v0.2.0-alpha.1")
+    git(tmp_path, "tag", "v0.2.0-beta.1")
     assert release_plan(tmp_path, first, phase="beta") == (
-        "v0.2.0-alpha.1",
-        "0.2.0-alpha.1",
+        "v0.2.0-beta.1",
+        "0.2.0-beta.1",
     )
 
 
@@ -1722,10 +1761,9 @@ def test_write_release_version_normalizes_init_py_marker_to_pep440(
         '__version__ = "0.1.0"  # x-release-please-version\n',
         encoding="utf-8",
     )
-    _write_release_version(tmp_path, "0.16.0-alpha.1")
+    _write_release_version(tmp_path, "0.16.0-beta.1")
     content = init_py.read_text(encoding="utf-8")
-    assert '__version__ = "0.16.0a1"  # x-release-please-version' in content
-    assert "0.16.0-alpha.1" not in content
+    assert '__version__ = "0.16.0b1"  # x-release-please-version' in content
 
 
 def test_release_version_errors_compares_pep440_for_init_py_marker(
@@ -1816,12 +1854,11 @@ def test_write_release_version_normalizes_uv_lock_extra_file_to_pep440(
         'version = 4\n\n[[package]]\nname = "demo"\nversion = "0.1.0"\n',
         encoding="utf-8",
     )
-    _write_release_version(tmp_path, "0.16.0-alpha.2")
+    _write_release_version(tmp_path, "0.16.0-beta.2")
     pyproject = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
     uv_lock = (tmp_path / "uv.lock").read_text(encoding="utf-8")
-    assert 'version = "0.16.0a2"' in pyproject
-    assert 'version = "0.16.0a2"' in uv_lock
-    assert "0.16.0-alpha.2" not in uv_lock
+    assert 'version = "0.16.0b2"' in pyproject
+    assert 'version = "0.16.0b2"' in uv_lock
 
 
 def test_write_release_version_replaces_an_existing_phase_suffix_in_a_marker(
@@ -1905,9 +1942,9 @@ def test_retention_report_lists_keep_and_delete_without_deleting_anything() -> (
         [
             {"tag_name": "v0.2.2", "draft": False, "id": 1},
             {"tag_name": "v0.15.6", "draft": False, "id": 2},
-            {"tag_name": "0.16.0-alpha.1", "draft": False, "id": 3},
-            {"tag_name": "0.16.0-beta.1", "draft": False, "id": 4},
-            {"tag_name": "0.17.0-alpha.1", "draft": False, "id": 5},
+            {"tag_name": "0.16.0-beta.1", "draft": False, "id": 3},
+            {"tag_name": "0.16.0-beta.2", "draft": False, "id": 4},
+            {"tag_name": "0.17.0-beta.1", "draft": False, "id": 5},
             {"tag_name": "still-drafting", "draft": True, "id": 6},
         ]
     )
@@ -1915,8 +1952,8 @@ def test_retention_report_lists_keep_and_delete_without_deleting_anything() -> (
     assert payload["dry_run"] is True
     keep = {entry["tag"] for entry in payload["keep"]}
     delete = {entry["tag"] for entry in payload["delete"]}
-    assert keep == {"v0.2.2", "v0.15.6", "0.17.0-alpha.1"}
-    assert delete == {"0.16.0-alpha.1", "0.16.0-beta.1"}
+    assert keep == {"v0.2.2", "v0.15.6", "0.17.0-beta.1"}
+    assert delete == {"0.16.0-beta.1", "0.16.0-beta.2"}
     # The draft entry never enters either list -- it is not yet a Release.
     assert "still-drafting" not in keep | delete
 
@@ -1937,14 +1974,12 @@ def test_main_plan_command_accepts_a_phase_argument(
     sha = git(tmp_path, "rev-parse", "HEAD")
 
     assert (
-        main(
-            ["plan", "--root", str(tmp_path), "--sha", sha, "--phase", "alpha"]
-        )
+        main(["plan", "--root", str(tmp_path), "--sha", sha, "--phase", "beta"])
         == 0
     )
     payload = json.loads(capsys.readouterr().out)
-    assert payload["version"] == "0.2.0-alpha.1"
-    assert payload["tag"] == "v0.2.0-alpha.1"
+    assert payload["version"] == "0.2.0-beta.1"
+    assert payload["tag"] == "v0.2.0-beta.1"
 
 
 def test_main_retention_plan_command_requires_a_token_and_never_deletes(

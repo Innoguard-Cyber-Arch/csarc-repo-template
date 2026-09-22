@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
-"""Shared release-version format: alpha/beta/early/formal (Issue #744).
+"""Shared beta/stable release format and early/formal maturity (Issue #918).
 
-Maintainer decision (2026-09-17): the version number itself encodes release
-maturity. Per-work governance uses the same four canonical names through
-the sibling ``release_level.py`` adapter.
+Release channel and project maturity are independent axes:
 
-    alpha   X.Y.Z-alpha.N   (any major; a later pre-release of the same
-    beta    X.Y.Z-beta.N     X.Y.Z increments N -- tag names are never
-                              reused once published)
-    early   X.Y.Z            (major == 0, no suffix)
-    formal  X.Y.Z            (major >= 1, no suffix)
+    beta    X.Y.Z-beta.N   (GitHub pre-release)
+    stable  X.Y.Z          (GitHub latest candidate)
+    early   stable major == 0
+    formal  stable major >= 1
 
-Alpha or beta can be published at any time, including after an early or
-formal release has already shipped for a higher X.Y.Z. This module only
-maps a *given* declared phase to a version string and validates the
-result; deciding which phase a release deserves (the declaration/
-computation mechanism) is Issue #745's job.
+Historical alpha tags are migrated out-of-band. They are intentionally not
+part of this public parser, so unknown or retired versions fail closed.
 
 Shared verbatim between the root repository, `template/.csarc/scripts/` (see
 AGENTS.md's "Keep shared policy changes synchronized between root and
@@ -32,23 +26,24 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-PHASES = ("alpha", "beta", "early", "formal")
-PRERELEASE_PHASES = ("alpha", "beta")
+PHASES = ("beta", "stable")
+MATURITIES = ("early", "formal")
+PRERELEASE_PHASES = ("beta",)
 
 # Canonical SemVer form used everywhere except PEP 440 (Python) surfaces.
 _VERSION_RE = re.compile(
     r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
-    r"(?:-(?P<phase>alpha|beta)\.(?P<n>[1-9]\d*))?$"
+    r"(?:-(?P<phase>beta)\.(?P<n>[1-9]\d*))?$"
 )
 
 
 class ReleasePhaseError(ValueError):
-    """A version string or requested phase is not legal under Issue #744."""
+    """A version string or requested channel is not legal under Issue #918."""
 
 
 @dataclass(frozen=True)
 class ParsedVersion:
-    """One parsed `X.Y.Z` or `X.Y.Z-{alpha,beta}.N` version."""
+    """One parsed ``X.Y.Z`` or ``X.Y.Z-beta.N`` version."""
 
     major: int
     minor: int
@@ -63,22 +58,13 @@ class ParsedVersion:
 
     @property
     def is_prerelease(self) -> bool:
-        """Return whether this version carries an alpha/beta suffix."""
+        """Return whether this version carries a beta suffix."""
         return self.phase is not None
 
     @property
     def release_kind(self) -> str:
-        """Classify this version as alpha/beta/early/formal.
-
-        `early` and `formal` are both unsuffixed; the split is purely by
-        major version, per Issue #744's legality rule: an unsuffixed
-        version with major version 0 is classified `early`, and an
-        unsuffixed version with major version >= 1 is classified
-        `formal`.
-        """
-        if self.phase is not None:
-            return self.phase
-        return "early" if self.major == 0 else "formal"
+        """Return the canonical public channel for this version."""
+        return "beta" if self.phase is not None else "stable"
 
     def core_string(self) -> str:
         """Return the unsuffixed `X.Y.Z` form."""
@@ -94,9 +80,7 @@ class ParsedVersion:
         """Return a sortable key implementing SemVer precedence.
 
         A release (no suffix) always outranks any pre-release of the same
-        core version; among pre-releases, the phase name compares
-        alphabetically ("alpha" < "beta", matching maturity order) and
-        then the numeric `.N` field compares numerically.
+        core version; beta sequence numbers compare numerically.
         """
         is_release = 1 if self.phase is None else 0
         return (
@@ -113,15 +97,14 @@ def parse_version(text: str) -> ParsedVersion:
     """Parse a canonical version string (an optional leading 'v' is fine).
 
     Raises `ReleasePhaseError` for anything that doesn't match the exact
-    `X.Y.Z` or `X.Y.Z-alpha.N` / `X.Y.Z-beta.N` shape -- this is the one
+    ``X.Y.Z`` or ``X.Y.Z-beta.N`` shape -- this is the one
     fail-closed gate every other check in this module builds on.
     """
     stripped = text[1:] if text[:1] in {"v", "V"} else text
     match = _VERSION_RE.fullmatch(stripped)
     if match is None:
         raise ReleasePhaseError(
-            f"invalid release version {text!r}; expected X.Y.Z or "
-            "X.Y.Z-alpha.N / X.Y.Z-beta.N"
+            f"invalid release version {text!r}; expected X.Y.Z or X.Y.Z-beta.N"
         )
     phase = match.group("phase")
     n = match.group("n")
@@ -146,7 +129,7 @@ def is_valid_version(text: str) -> bool:
 def format_version(
     major: int, minor: int, patch: int, phase: str | None, n: int | None
 ) -> str:
-    """Return the canonical `X.Y.Z` or `X.Y.Z-{alpha,beta}.N` string."""
+    """Return the canonical ``X.Y.Z`` or ``X.Y.Z-beta.N`` string."""
     if phase is None:
         if n is not None:
             raise ReleasePhaseError(
@@ -167,9 +150,9 @@ def format_pep440(
 ) -> str:
     """Return the PEP 440-normalized form for Python package surfaces.
 
-    PEP 440 has no hyphenated `-alpha.N`/`-beta.N` pre-release segment; its
-    normalized form is a bare letter and number instead
-    (`0.16.0a1` / `0.16.0b1`). Only a "python" release-please package's
+    PEP 440 has no hyphenated ``-beta.N`` pre-release segment; its
+    normalized form is a bare letter and number instead (``0.16.0b1``).
+    Only a "python" release-please package's
     `pyproject.toml`/`uv.lock` need this form; every other surface (Git
     tag, GitHub Release name, CHANGELOG heading, `package.json`,
     `Cargo.toml`) uses the canonical SemVer string from `format_version`
@@ -178,7 +161,7 @@ def format_pep440(
     """
     if phase is None:
         return format_version(major, minor, patch, None, None)
-    letter = {"alpha": "a", "beta": "b"}.get(phase)
+    letter = {"beta": "b"}.get(phase)
     if letter is None or not isinstance(n, int) or n < 1:
         raise ReleasePhaseError(
             f"cannot render a PEP 440 version for phase {phase!r}"
@@ -186,13 +169,13 @@ def format_pep440(
     return f"{major}.{minor}.{patch}{letter}{n}"
 
 
-# The mirror image of `_VERSION_RE`'s hyphenated `-alpha.N`/`-beta.N` shape:
-# the compact form `format_pep440` produces (`0.16.0a1` / `0.16.0b1`).
+# The mirror image of `_VERSION_RE`'s hyphenated `-beta.N` shape: the compact
+# form `format_pep440` produces (`0.16.0b1`).
 _PEP440_COMPACT_RE = re.compile(
     r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
-    r"(?:(?P<letter>a|b)(?P<n>[1-9]\d*))?$"
+    r"(?:(?P<letter>b)(?P<n>[1-9]\d*))?$"
 )
-_PEP440_LETTER_TO_PHASE = {"a": "alpha", "b": "beta"}
+_PEP440_LETTER_TO_PHASE = {"b": "beta"}
 
 
 def parse_pep440(text: str) -> ParsedVersion:
@@ -208,8 +191,7 @@ def parse_pep440(text: str) -> ParsedVersion:
     match = _PEP440_COMPACT_RE.fullmatch(stripped)
     if match is None:
         raise ReleasePhaseError(
-            f"invalid PEP 440 version {text!r}; expected X.Y.Z or "
-            "X.Y.Za1 / X.Y.Zb1"
+            f"invalid PEP 440 version {text!r}; expected X.Y.Z or X.Y.Zb1"
         )
     letter = match.group("letter")
     n = match.group("n")
@@ -226,8 +208,8 @@ def normalize(text: str) -> str:
     """Return `text`'s canonical SemVer form, accepting either shape.
 
     Every release surface must ultimately agree on one version regardless
-    of whether it is written in the canonical form (`0.16.0-alpha.1`,
-    used everywhere) or the PEP 440-normalized form (`0.16.0a1`, used only
+    of whether it is written in the canonical form (``0.16.0-beta.1``,
+    used everywhere) or the PEP 440-normalized form (``0.16.0b1``, used only
     by a Python packaging surface per `format_pep440`). This tries
     `parse_version` first and falls back to `parse_pep440`, so a caller
     that needs to compare surfaces written in either shape (e.g. a
@@ -239,47 +221,43 @@ def normalize(text: str) -> str:
         parsed = parse_version(text)
     except ReleasePhaseError:
         parsed = parse_pep440(text)
-    return format_version(
-        parsed.major, parsed.minor, parsed.patch, parsed.phase, parsed.n
-    )
+    return parsed.format()
 
 
-def validate_declared_phase(version: str, declared_phase: str) -> ParsedVersion:
-    """Fail closed unless `version` legally represents `declared_phase`.
-
-    `declared_phase` must be one of `PHASES` ("alpha", "beta", "early",
-    "formal"). Implements Issue #744's legality rule: a suffix is only
-    ever `alpha.N` or `beta.N`; an unsuffixed version is "early" only when
-    its major version is 0, and "formal" only when its major version is
-    >= 1.
-    """
+def validate_declared_phase(
+    version: str, declared_phase: str, maturity: str | None = None
+) -> ParsedVersion:
+    """Fail closed unless ``version`` matches its channel and maturity."""
     if declared_phase not in PHASES:
         raise ReleasePhaseError(
             f"unknown release phase {declared_phase!r}; expected one of "
             + ", ".join(PHASES)
         )
     parsed = parse_version(version)
-    if declared_phase in PRERELEASE_PHASES:
-        if parsed.phase != declared_phase:
+    if maturity is not None and maturity not in MATURITIES:
+        raise ReleasePhaseError(
+            f"unknown project maturity {maturity!r}; expected one of "
+            + ", ".join(MATURITIES)
+        )
+    if declared_phase == "beta":
+        if parsed.phase != "beta":
             raise ReleasePhaseError(
-                f"{version} does not carry the declared {declared_phase} suffix"
+                f"{version} does not carry the declared beta suffix"
             )
-        return parsed
-    if parsed.phase is not None:
+    elif parsed.phase is not None:
         raise ReleasePhaseError(
             f"{version} carries a {parsed.phase} suffix but {declared_phase} "
             "releases must be unsuffixed"
         )
-    if declared_phase == "early" and parsed.major != 0:
+    if maturity == "early" and parsed.major != 0:
         raise ReleasePhaseError(
             f"{version} has major version {parsed.major}; an early release "
-            "requires major version 0 (declare formal instead)"
+            "requires major version 0"
         )
-    if declared_phase == "formal" and parsed.major == 0:
+    if maturity == "formal" and parsed.major == 0:
         raise ReleasePhaseError(
             f"{version} has major version 0; a formal release requires "
-            "major version >= 1 (declare early instead, or bump a "
-            "breaking change first)"
+            "major version >= 1"
         )
     return parsed
 
@@ -318,16 +296,18 @@ def next_prerelease_n(
 
 
 def phase_version(
-    core_version: str, phase: str, existing: Iterable[str] = ()
+    core_version: str,
+    phase: str,
+    existing: Iterable[str] = (),
+    *,
+    maturity: str | None = None,
 ) -> str:
     """Return the version string for `core_version` (plain X.Y.Z) at `phase`.
 
-    For alpha/beta this appends the next `.N` for that exact X.Y.Z+phase
+    For beta this appends the next `.N` for that exact X.Y.Z channel
     combination (existing published versions are consulted so a tag name
-    is never reused, per Issue #744 decision 1). For early/formal the core
-    version is returned unchanged. The result is always re-validated
-    through `validate_declared_phase` so this function itself fails closed
-    on an inconsistent request (e.g. `phase="early"` with a major-1 core).
+    is never reused). For stable the core version is returned unchanged.
+    The result is always re-validated through `validate_declared_phase`.
     """
     parsed_core = parse_version(core_version)
     if parsed_core.phase is not None:
@@ -347,7 +327,7 @@ def phase_version(
         )
     else:
         candidate = core_version
-    validate_declared_phase(candidate, phase)
+    validate_declared_phase(candidate, phase, maturity)
     return candidate
 
 
@@ -363,13 +343,21 @@ def sort_by_precedence(versions: Iterable[str]) -> list[str]:
     return [raw for _, raw in parsed]
 
 
-def select_latest(versions: Iterable[str]) -> str | None:
-    """Return the highest-precedence version, or None if none are well-formed.
-
-    Used in place of GitHub's `releases/latest` API, which never returns a
-    `prerelease: true` Release and therefore cannot see an alpha/beta tag.
-    """
-    ordered = sort_by_precedence(versions)
+def select_latest(
+    versions: Iterable[str], channel: str | None = None
+) -> str | None:
+    """Return the latest readable version, optionally within one channel."""
+    if channel not in {None, *PHASES}:
+        raise ReleasePhaseError(f"unknown release channel: {channel!r}")
+    readable = []
+    for raw in versions:
+        try:
+            parsed = parse_version(raw)
+        except ReleasePhaseError:
+            continue
+        if channel is None or parsed.release_kind == channel:
+            readable.append(raw)
+    ordered = sort_by_precedence(readable)
     return ordered[-1] if ordered else None
 
 
@@ -391,7 +379,7 @@ class RetentionDecision:
 def retention_plan(versions: Iterable[str]) -> list[RetentionDecision]:
     """Classify every version as keep/delete under Issue #744 decision 5.
 
-    Keep every unsuffixed (early or formal) version, unconditionally. For
+    Keep every unsuffixed stable version, unconditionally. For
     pre-releases, only the single highest-precedence pre-release within
     the *newest* major.minor group that has one is kept ("the latest
     pre-release string"); every other pre-release -- older pre-releases in

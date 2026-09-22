@@ -203,7 +203,7 @@ CSARC-owned Milestone 在 promotion PR 內用同一份 repo-local 規則寫入�
 
 真實導入的可重複步驟、驗收證據與已知平台限制整理在 [`docs/pilot-adoption.md`](docs/pilot-adoption.md)。第一個 consuming repo `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 更新，證明共用導入、更新與線上 CI 路徑；Python、Rust、TypeScript 則各以可重現的建立、既有 repo 導入、更新與原生工具鏈驗證取得 beta。同時選取多個模組不會形成另一種 profile。
 
-以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效；版本號本身表示發布層級（`-alpha.N`／`-beta.N` 為 pre-release，不帶後綴為早期版或正式版），CLI 依 SemVer 優先順序選版，不依賴 GitHub `releases/latest` API（該 API 不會回傳 pre-release）。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併／無法判定清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
+以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效；公開版本只有 stable `X.Y.Z` 與 beta `X.Y.Z-beta.N`，預設只選最新 stable，明確加上 `--channel beta` 才選 beta。`early`／`formal` 是專案層級的宣告，不是版本後綴。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併／無法判定清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
 
 ### 建立新 repo
 
@@ -236,16 +236,16 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update
 ```
 
-`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。若有衝突，CLI 會列出檔案但不修改 target；請在目前分支調整衝突內容後重跑。`update --dry-run` 同時預覽 Copier 與 Milestone description migration；`update --check --json` 目前已是最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify`、repository settings `plan`，以及已確認的舊 CSARC Milestone description 升級；它不會套用 repository settings、push 或開 PR。
+`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。若有衝突，CLI 會列出檔案但不修改 target；請在目前分支調整衝突內容後重跑。若記錄的版本是已退役的 alpha、格式不符或無法理解，CLI 不保留舊版解析器，而是以最新 stable 重建模板管理的基線；設定、專案自有與已分歧檔案盡可能保留，無法安全判斷的項目交給人工合併。`update --check --json` 目前已是最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify`、repository settings `plan`，以及已確認的舊 CSARC Milestone description 升級；它不會套用 repository settings、push 或開 PR。
 
 ### Agent prompt
 
 固定版本的安裝契約是 [`docs/agent-install.md`](docs/agent-install.md)。每個 Release 只提供一份 `release-prompt.txt`：它綁定 canonical repository、tag、full SHA、安裝指南與 `copier.yml`，先由 `csarc status` 判斷 lifecycle，再讓使用者選擇接受建議值或逐項客製。所有選項仍由同一份 Copier schema 提供，agent 只負責分組提問與透過既有 `--data` 傳值。
 
-以下 bootstrap prompt 只負責找到 CLI 契約接受的最高 SemVer immutable Release（包含 alpha／beta pre-release）並讀取該 Release 的 `release-prompt.txt`；固定版本後的狀態判斷、dry-run、摘要與確認流程都以附件為準：
+以下 bootstrap prompt 只負責找到 CLI 契約接受的最新 stable immutable Release 並讀取該 Release 的 `release-prompt.txt`；固定版本後的狀態判斷、dry-run、摘要與確認流程都以附件為準。要試用 beta 時，需另外明確指定 `--channel beta`：
 
 ```text
-請從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 的 published Releases 中，依官方 CLI 的版本規則選出最高 SemVer 且 immutable 的 Release（包含 alpha／beta pre-release），下載並讀取它的 `release-prompt.txt`，確認附件內的 repository、tag 與 full SHA 一致後，完全依該 prompt 在目前 workspace 繼續。不要使用 main、猜測目前安裝狀態，或在我確認前修改檔案、GitHub 設定、push 或建立 PR。
+請從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 的 published Releases 中，依官方 csarc CLI 選出最新 stable 且 immutable 的 Release，下載並讀取它的 `release-prompt.txt`，確認附件內的 repository、tag 與 full SHA 一致後，完全依該 prompt 在目前 workspace 繼續。不要使用 main、猜測目前安裝狀態，或在我確認前修改檔案、GitHub 設定、push 或建立 PR。
 ```
 
 ### Troubleshooting／進階 Copier

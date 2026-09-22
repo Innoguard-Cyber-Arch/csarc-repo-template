@@ -1,0 +1,310 @@
+{
+  "issue": 918,
+  "policy": "Create and verify every beta replacement before deleting any source Release or tag; never move or reuse a tag.",
+  "releases": [
+    {
+      "action": "create-beta-replacement",
+      "commit": "01d94d4263233ffb6d44764a89543ee293ff536c",
+      "documentationLinks": [
+        "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/tag/v0.18.0-alpha.1",
+        "https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/01d94d4263233ffb6d44764a89543ee293ff536c/docs/agent-install.md",
+        "https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/01d94d4263233ffb6d44764a89543ee293ff536c/copier.yml"
+      ],
+      "knownDownstreamProvenance": {
+        "consumerIdentities": "not exposed by GitHub Releases",
+        "recordedAssetDownloads": 24
+      },
+      "replacement": null,
+      "replacementTag": "v0.18.0-beta.1",
+      "replacementTagCommit": null,
+      "source": {
+        "assets": [
+          {
+            "digest": "sha256:e97b9b480d4ad647e61fee28bfb8a8ce46b41844d10a6db4039796f8ae77dc93",
+            "downloadCount": 4,
+            "name": "csarc-repo-template-0.18.0-alpha.1.tar",
+            "size": 10915840,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.18.0-alpha.1/csarc-repo-template-0.18.0-alpha.1.tar"
+          },
+          {
+            "digest": "sha256:ce5755977eca9d76627128789660b7b7aa0ef9910de165e7e254f8324788278e",
+            "downloadCount": 4,
+            "name": "csarc_repo_template-0.18.0a1-py3-none-any.whl",
+            "size": 79034,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.18.0-alpha.1/csarc_repo_template-0.18.0a1-py3-none-any.whl"
+          },
+          {
+            "digest": "sha256:8ddffedabc3486c68be1e8d3e7dec2b1df4aeb31fcac52fefc62b29f25492e5e",
+            "downloadCount": 4,
+            "name": "csarc_repo_template-0.18.0a1.tar.gz",
+            "size": 2895895,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.18.0-alpha.1/csarc_repo_template-0.18.0a1.tar.gz"
+          },
+          {
+            "digest": "sha256:b330248e42ebaec3879881904c4bcb3e6a6743527d5e1fb455adafb25a0ac27c",
+            "downloadCount": 4,
+            "name": "release-evidence.json",
+            "size": 684,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.18.0-alpha.1/release-evidence.json"
+          },
+          {
+            "digest": "sha256:46dde1dded10af023b497f9162c9d3aae4d2968475971dfc7eb56f3b02e4b3bd",
+            "downloadCount": 4,
+            "name": "sbom.spdx.json",
+            "size": 434655,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.18.0-alpha.1/sbom.spdx.json"
+          },
+          {
+            "digest": "sha256:103b7293e90b9c1cb720b213276e0a3d3245109d5f3c5228e8fe75621e39f115",
+            "downloadCount": 4,
+            "name": "SHA256SUMS",
+            "size": 488,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.18.0-alpha.1/SHA256SUMS"
+          }
+        ],
+        "attestationVerified": true,
+        "isDraft": false,
+        "isImmutable": true,
+        "isPrerelease": true,
+        "publishedAt": "2026-09-21T23:40:52Z",
+        "tagCommit": "01d94d4263233ffb6d44764a89543ee293ff536c",
+        "tagName": "v0.18.0-alpha.1",
+        "targetCommitish": "01d94d4263233ffb6d44764a89543ee293ff536c",
+        "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/tag/v0.18.0-alpha.1"
+      },
+      "sourceTag": "v0.18.0-alpha.1"
+    },
+    {
+      "action": "create-beta-replacement",
+      "commit": "1ac74b3d8fe80aa03118c7e52e04b00fb5778096",
+      "documentationLinks": [
+        "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/tag/v0.19.0-alpha.1",
+        "https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/1ac74b3d8fe80aa03118c7e52e04b00fb5778096/docs/agent-install.md",
+        "https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/1ac74b3d8fe80aa03118c7e52e04b00fb5778096/copier.yml"
+      ],
+      "knownDownstreamProvenance": {
+        "consumerIdentities": "not exposed by GitHub Releases",
+        "recordedAssetDownloads": 12
+      },
+      "replacement": null,
+      "replacementTag": "v0.19.0-beta.1",
+      "replacementTagCommit": null,
+      "source": {
+        "assets": [
+          {
+            "digest": "sha256:51d1e1c598fdfa5fca04248b577040e049d21e1071bdfd24f3b3676cb42b1913",
+            "downloadCount": 2,
+            "name": "csarc-repo-template-0.19.0-alpha.1.tar",
+            "size": 11018240,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.19.0-alpha.1/csarc-repo-template-0.19.0-alpha.1.tar"
+          },
+          {
+            "digest": "sha256:4b01b4671be715752f1044386f300903ec31ce99209082c1365c649fe9b21f6a",
+            "downloadCount": 2,
+            "name": "csarc_repo_template-0.19.0a1-py3-none-any.whl",
+            "size": 79222,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.19.0-alpha.1/csarc_repo_template-0.19.0a1-py3-none-any.whl"
+          },
+          {
+            "digest": "sha256:50139a7d1cfa273c2cab03dc1dc2fad1cf2a78c69280ffa082650e707c038a7f",
+            "downloadCount": 2,
+            "name": "csarc_repo_template-0.19.0a1.tar.gz",
+            "size": 2922653,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.19.0-alpha.1/csarc_repo_template-0.19.0a1.tar.gz"
+          },
+          {
+            "digest": "sha256:9c81451bb35ddaa7ec3bba57fb309ee433bd1c459d1bf74611698af6c9f6a9cb",
+            "downloadCount": 2,
+            "name": "release-evidence.json",
+            "size": 684,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.19.0-alpha.1/release-evidence.json"
+          },
+          {
+            "digest": "sha256:177fbbef7ac691b7c332a00033796c08e16291ae8e992710a1282365112710fc",
+            "downloadCount": 2,
+            "name": "sbom.spdx.json",
+            "size": 434655,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.19.0-alpha.1/sbom.spdx.json"
+          },
+          {
+            "digest": "sha256:9fbd0a65f66139210badc45a0ad8cd06405261adb1c246493911150348d38865",
+            "downloadCount": 2,
+            "name": "SHA256SUMS",
+            "size": 488,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.19.0-alpha.1/SHA256SUMS"
+          }
+        ],
+        "attestationVerified": true,
+        "isDraft": false,
+        "isImmutable": true,
+        "isPrerelease": true,
+        "publishedAt": "2026-09-22T07:42:59Z",
+        "tagCommit": "1ac74b3d8fe80aa03118c7e52e04b00fb5778096",
+        "tagName": "v0.19.0-alpha.1",
+        "targetCommitish": "1ac74b3d8fe80aa03118c7e52e04b00fb5778096",
+        "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/tag/v0.19.0-alpha.1"
+      },
+      "sourceTag": "v0.19.0-alpha.1"
+    },
+    {
+      "action": "create-beta-replacement",
+      "commit": "bb5d1d7b819cab826bd11c9a59ce76d4f262ee33",
+      "documentationLinks": [
+        "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/tag/v0.20.0-alpha.1",
+        "https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/bb5d1d7b819cab826bd11c9a59ce76d4f262ee33/docs/agent-install.md",
+        "https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/bb5d1d7b819cab826bd11c9a59ce76d4f262ee33/copier.yml"
+      ],
+      "knownDownstreamProvenance": {
+        "consumerIdentities": "not exposed by GitHub Releases",
+        "recordedAssetDownloads": 22
+      },
+      "replacement": null,
+      "replacementTag": "v0.20.0-beta.1",
+      "replacementTagCommit": null,
+      "source": {
+        "assets": [
+          {
+            "digest": "sha256:96f7dacae88853faf54734765f32b64f26acea3d86a1a6adac83d75eb47f0e03",
+            "downloadCount": 3,
+            "name": "csarc-repo-template-0.20.0-alpha.1.tar",
+            "size": 11028480,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.20.0-alpha.1/csarc-repo-template-0.20.0-alpha.1.tar"
+          },
+          {
+            "digest": "sha256:7c16a72ad58ea3bfff0b8446c9c630d94e1c3e02b4bf6190787218ac69fb8c4a",
+            "downloadCount": 3,
+            "name": "csarc_repo_template-0.20.0a1-py3-none-any.whl",
+            "size": 78732,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.20.0-alpha.1/csarc_repo_template-0.20.0a1-py3-none-any.whl"
+          },
+          {
+            "digest": "sha256:757d02debe5fef92538236c9eb40c9e2a74d8fd9efbe107879942b203bce9d7c",
+            "downloadCount": 3,
+            "name": "csarc_repo_template-0.20.0a1.tar.gz",
+            "size": 2925456,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.20.0-alpha.1/csarc_repo_template-0.20.0a1.tar.gz"
+          },
+          {
+            "digest": "sha256:d242057aafc75f11a21bf646110cf5f52017b1a46e6d39815f6f235002ce9877",
+            "downloadCount": 4,
+            "name": "release-evidence.json",
+            "size": 778,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.20.0-alpha.1/release-evidence.json"
+          },
+          {
+            "digest": "sha256:d62fc6d517da123b9743582bd8ea25a9d63244e593df41be5ef7ddfa0ddd4f3d",
+            "downloadCount": 3,
+            "name": "release-prompt.txt",
+            "size": 1517,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.20.0-alpha.1/release-prompt.txt"
+          },
+          {
+            "digest": "sha256:bb902411a6c2db1d735166f87da13e9ca3ac56937a9a38ab87ca79d59120bff2",
+            "downloadCount": 3,
+            "name": "sbom.spdx.json",
+            "size": 434655,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.20.0-alpha.1/sbom.spdx.json"
+          },
+          {
+            "digest": "sha256:c404951a8918dce2df0b6193fe7faf6b3cbb37c79d6f496dc0bd3beaf2ae980d",
+            "downloadCount": 3,
+            "name": "SHA256SUMS",
+            "size": 573,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.20.0-alpha.1/SHA256SUMS"
+          }
+        ],
+        "attestationVerified": true,
+        "isDraft": false,
+        "isImmutable": true,
+        "isPrerelease": true,
+        "publishedAt": "2026-09-22T14:49:02Z",
+        "tagCommit": "bb5d1d7b819cab826bd11c9a59ce76d4f262ee33",
+        "tagName": "v0.20.0-alpha.1",
+        "targetCommitish": "bb5d1d7b819cab826bd11c9a59ce76d4f262ee33",
+        "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/tag/v0.20.0-alpha.1"
+      },
+      "sourceTag": "v0.20.0-alpha.1"
+    },
+    {
+      "action": "create-beta-replacement",
+      "commit": "e57c90d26261d05f3be422c64c838ebfc026b1eb",
+      "documentationLinks": [
+        "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/tag/v0.21.0-alpha.1",
+        "https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/e57c90d26261d05f3be422c64c838ebfc026b1eb/docs/agent-install.md",
+        "https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/e57c90d26261d05f3be422c64c838ebfc026b1eb/copier.yml"
+      ],
+      "knownDownstreamProvenance": {
+        "consumerIdentities": "not exposed by GitHub Releases",
+        "recordedAssetDownloads": 28
+      },
+      "replacement": null,
+      "replacementTag": "v0.21.0-beta.1",
+      "replacementTagCommit": null,
+      "source": {
+        "assets": [
+          {
+            "digest": "sha256:b1f615c850c6115665e39046ce657b672ccb6f4409e578e08dc55f6ce071ed1b",
+            "downloadCount": 4,
+            "name": "csarc-repo-template-0.21.0-alpha.1.tar",
+            "size": 11110400,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.21.0-alpha.1/csarc-repo-template-0.21.0-alpha.1.tar"
+          },
+          {
+            "digest": "sha256:0d04b76eb63fabace9c54e5b7dac623377b8aa07939bcfdb1f2cf3f5ebc8eda4",
+            "downloadCount": 4,
+            "name": "csarc_repo_template-0.21.0a1-py3-none-any.whl",
+            "size": 79298,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.21.0-alpha.1/csarc_repo_template-0.21.0a1-py3-none-any.whl"
+          },
+          {
+            "digest": "sha256:6a7b8e4d27886a5d0aafe247f07fe9115e5db0ae38d2995e525a994261d4bfb9",
+            "downloadCount": 4,
+            "name": "csarc_repo_template-0.21.0a1.tar.gz",
+            "size": 2942131,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.21.0-alpha.1/csarc_repo_template-0.21.0a1.tar.gz"
+          },
+          {
+            "digest": "sha256:fadafa0f162be5fd51a904475160c7e39cdf403726459a006b712a98427aceac",
+            "downloadCount": 4,
+            "name": "release-evidence.json",
+            "size": 778,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.21.0-alpha.1/release-evidence.json"
+          },
+          {
+            "digest": "sha256:320901cf09befd7ab3a44e9f3be3c7717fff186fd9d48a30c90a250c5d6ed933",
+            "downloadCount": 4,
+            "name": "release-prompt.txt",
+            "size": 1517,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.21.0-alpha.1/release-prompt.txt"
+          },
+          {
+            "digest": "sha256:5475234e6d3c672d7178732c7c3cae70d4f86a4cee71e8d54a0d8bdd750a4810",
+            "downloadCount": 4,
+            "name": "sbom.spdx.json",
+            "size": 432911,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.21.0-alpha.1/sbom.spdx.json"
+          },
+          {
+            "digest": "sha256:1f0b5ba43b71f59053e3fbd4929903b4b644942d3be04225618f55c871cdfb36",
+            "downloadCount": 4,
+            "name": "SHA256SUMS",
+            "size": 573,
+            "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/download/v0.21.0-alpha.1/SHA256SUMS"
+          }
+        ],
+        "attestationVerified": true,
+        "isDraft": false,
+        "isImmutable": true,
+        "isPrerelease": true,
+        "publishedAt": "2026-09-22T18:10:52Z",
+        "tagCommit": "e57c90d26261d05f3be422c64c838ebfc026b1eb",
+        "tagName": "v0.21.0-alpha.1",
+        "targetCommitish": "e57c90d26261d05f3be422c64c838ebfc026b1eb",
+        "url": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases/tag/v0.21.0-alpha.1"
+      },
+      "sourceTag": "v0.21.0-alpha.1"
+    }
+  ],
+  "repository": "Innoguard-Cyber-Arch/csarc-repo-template",
+  "schemaVersion": 1
+}

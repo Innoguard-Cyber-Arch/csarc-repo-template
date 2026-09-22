@@ -35,7 +35,8 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["lifecycle"] == ["issues", "milestones"]
     assert config["actions_fallback"] == "admin"
     assert config["verification_mode"] == "hosted"
-    assert config["review"] == "solo"
+    assert config["admin_bypass"] == "always"
+    assert config["project_maturity"] == "early"
     assert config["copilot_review"] == "allowed"
     assert config["release_ownership"] == "csarc-owned"
     assert config["release_trigger"] == "main"
@@ -125,17 +126,15 @@ def test_root_public_identity_claims_are_consistent() -> None:
             "release_levels_enabled: maybe\n",
             "Invalid release_levels_enabled",
         ),
+        ("admin_bypass: sometimes\n", "Invalid admin_bypass"),
+        ("project_maturity: mature\n", "Invalid project_maturity"),
         (
-            "default_release_level: stable\n",
-            "Invalid default_release_level",
+            "release_level_beta_review: optional\n",
+            "Invalid release_level_beta_review",
         ),
         (
-            "release_level_alpha_review: optional\n",
-            "Invalid release_level_alpha_review",
-        ),
-        (
-            "release_level_formal_verification: smoke\n",
-            "Invalid release_level_formal_verification",
+            "release_level_stable_verification: smoke\n",
+            "Invalid release_level_stable_verification",
         ),
     ],
 )

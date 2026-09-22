@@ -19,7 +19,7 @@ It produces two files:
   rule path (`policies/` by default): change time, `proposed_by` +
   `proposing_pr`, `approved_by` + `approving_review`.
 
-`governance_stage` (alpha/beta/stable) is deliberately a different axis
+`governance_stage` (canary/beta/stable) is deliberately a different axis
 from `profiles/catalog.yaml`'s repository-scoped `stage` field (see the
 Issue body's naming-collision warning). It classifies the *source*
 branch pattern a pull request used to reach the target branch, not the
@@ -27,7 +27,7 @@ target itself -- every included row targets the same branch, so only the
 source pattern carries a signal. The three delivery paths this maps
 across are the ones `docs/ci-policy.md` already documents:
 
-* `dev/i<N>-*`            -> "alpha"  (canary: an explicit, Issue-justified
+* `dev/i<N>-*`            -> "canary" (an explicit, Issue-justified
                                         exception path)
 * `dev/m<N>-*`, `promote/m<N>-*` -> "beta" (Milestone delivery: a batched,
                                         cross-Issue promotion)
@@ -137,11 +137,11 @@ class PullRequestRecord:
 def governance_stage(head_ref: str) -> str:
     """Classify the delivery path a pull request used to reach its target.
 
-    See the module docstring for the alpha/beta/stable mapping and why it
+    See the module docstring for the canary/beta/stable mapping and why it
     is deliberately distinct from `profiles/catalog.yaml`'s `stage` field.
     """
     if re.match(r"^dev/i\d+-", head_ref):
-        return "alpha"
+        return "canary"
     if re.match(r"^(dev|promote)/m\d+-", head_ref):
         return "beta"
     return "stable"

@@ -2,7 +2,7 @@
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'dev/m*']
   workflow_dispatch:
 
 concurrency:
@@ -15,7 +15,7 @@ permissions:
 jobs:
   release:
     name: version and publish
-    if: ${{ github.ref == 'refs/heads/main' && (github.event_name != 'push' || {% endraw %}{{ 'true' if release_trigger == 'main' else 'false' }}{% raw %}) }}
+    if: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/dev/m')) && (github.event_name != 'push' || {% endraw %}{{ 'true' if release_trigger == 'main' else 'false' }}{% raw %}) }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -30,6 +30,19 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Resolve release route
+        id: route
+        run: |
+          if [[ "$GITHUB_REF_NAME" == main ]]; then
+            echo "channel=stable" >> "$GITHUB_OUTPUT"
+            echo "required_tier=full" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF_NAME" == dev/m* ]]; then
+            echo "channel=beta" >> "$GITHUB_OUTPUT"
+            echo "required_tier=fast" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unsupported release branch: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
       - name: Resolve included work and release level
         id: level
         env:
@@ -38,13 +51,14 @@ jobs:
           python3 .csarc/scripts/release_level.py release-batch \
             --repo "$GITHUB_REPOSITORY" \
             --sha "$GITHUB_SHA" \
+            --base-branch "$GITHUB_REF_NAME" \
             --markdown-output "$RUNNER_TEMP/release-levels.md" \
             --github-output "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/release-levels.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Plan the next version from repository history
         id: plan
         env:
-          RELEASE_LEVEL: ${{ steps.level.outputs.level }}
+          RELEASE_LEVEL: ${{ steps.route.outputs.channel }}
         run: |
           python3 .csarc/scripts/release_policy.py plan \
             --sha "$GITHUB_SHA" \
@@ -59,7 +73,7 @@ jobs:
           python3 .csarc/scripts/release_policy.py detect \
             --repo "$GITHUB_REPOSITORY" \
             --sha "$GITHUB_SHA" \
-            --branch main \
+            --branch "$GITHUB_REF_NAME" \
             --github-output "$GITHUB_OUTPUT"
       - name: Stop when GitHub publication is blocked
         if: ${{ (steps.plan.outputs.status == 'pending' || steps.plan.outputs.status == 'candidate' || steps.plan.outputs.status == 'released') && steps.capability.outputs.mode == 'blocked' }}
@@ -76,7 +90,7 @@ jobs:
         run: |
           if ./.csarc/scripts/check-trusted-verification "$GITHUB_SHA" \
             --resolve-merge-source --github-repo "$GITHUB_REPOSITORY" \
-            --required-tier full; then
+            --required-tier "${{ steps.route.outputs.required_tier }}"; then
             echo "reused=true" >> "$GITHUB_OUTPUT"
           else
             echo "reused=false" >> "$GITHUB_OUTPUT"
@@ -112,15 +126,25 @@ jobs:
           rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
           rustup default 1.98.0
 {% endraw %}{% endif %}{% raw %}
-      - name: Re-verify the exact main tree when reuse is unavailable
+      - name: Re-verify the exact release tree when reuse is unavailable
         if: ${{ steps.plan.outputs.status != 'no-release' && steps.verification.outputs.reused != 'true' }}
         env:
           CSARC_CI_SCOPES: dependency,docs,governance,shell,source,template,workflow
-          CSARC_CI_TIER: full
-        run: ./.csarc/scripts/verify
+          CSARC_CI_TIER: ${{ steps.route.outputs.required_tier }}
+        run: |
+          if [[ "${{ steps.route.outputs.required_tier }}" == full ]]; then
+            ./.csarc/scripts/verify
+          else
+            ./.csarc/scripts/verify-fast
+          fi
+      - name: Require beta materialization in the delivery pull request
+        if: ${{ steps.route.outputs.channel == 'beta' && steps.plan.outputs.status == 'pending' }}
+        run: |
+          echo "Delivery work must include its planned beta version before merge." >&2
+          exit 1
       - name: Create or update the version pull request
         id: release
-        if: ${{ steps.plan.outputs.status == 'pending' && steps.plan.outputs.materialized != 'true' && steps.capability.outputs.mode == 'automatic' }}
+        if: ${{ steps.route.outputs.channel == 'stable' && steps.plan.outputs.status == 'pending' && steps.plan.outputs.materialized != 'true' && steps.capability.outputs.mode == 'automatic' }}
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -149,7 +173,7 @@ jobs:
             --actor "$GITHUB_ACTOR" \
             --body-file "$RUNNER_TEMP/release-levels.md"
       - name: Explain the guided version path
-        if: ${{ steps.plan.outputs.status == 'pending' && steps.plan.outputs.materialized != 'true' && steps.capability.outputs.mode == 'guided' }}
+        if: ${{ steps.route.outputs.channel == 'stable' && steps.plan.outputs.status == 'pending' && steps.plan.outputs.materialized != 'true' && steps.capability.outputs.mode == 'guided' }}
         env:
           RELEASE_TAG: ${{ steps.plan.outputs.tag }}
           RELEASE_VERSION: ${{ steps.plan.outputs.version }}
@@ -171,7 +195,7 @@ jobs:
         run: |
           ./.csarc/scripts/publish-release stage \
             --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" \
-            --tag "$RELEASE_TAG"
+            --tag "$RELEASE_TAG" --branch "$GITHUB_REF_NAME"
       - name: Resolve the exact release state
         id: state
         if: ${{ steps.plan.outputs.status != 'no-release' }}

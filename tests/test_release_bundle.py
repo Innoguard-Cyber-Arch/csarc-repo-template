@@ -42,8 +42,8 @@ def repository(tmp_path: Path) -> Path:
     (root / "scripts").mkdir(parents=True)
     shutil.copy2(ROOT / "scripts/release_bundle.py", root / "scripts")
     shutil.copy2(ROOT / "scripts/release_policy.py", root / "scripts")
-    # release_policy.py imports these modules at load time (Issue #667 for
-    # stale_branch_detection, Issue #744 for release_phase).
+    # release_policy.py imports these modules at load time.
+    shutil.copy2(ROOT / "scripts/csarc_config.py", root / "scripts")
     shutil.copy2(ROOT / "scripts/stale_branch_detection.py", root / "scripts")
     shutil.copy2(ROOT / "scripts/release_phase.py", root / "scripts")
     (root / "release-please-config.json").write_text(

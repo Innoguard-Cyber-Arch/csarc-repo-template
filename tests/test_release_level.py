@@ -1,4 +1,4 @@
-"""Regression tests for per-work release-level governance (Issue #745)."""
+"""Regression tests for beta/stable release governance (Issue #918)."""
 
 from __future__ import annotations
 
@@ -74,8 +74,8 @@ def issue(
 def settings(**overrides: object) -> levels.Settings:
     """Build settings with repository defaults plus explicit overrides."""
     config: dict[str, object] = {
-        "default_release_level": "alpha",
-        "review": "solo",
+        "default_release_level": "stable",
+        "admin_bypass": "always",
     }
     config.update(overrides)
     return levels.settings_from_mapping(config)
@@ -89,32 +89,35 @@ def trust(github: FakeGitHub, *logins: str) -> None:
         }
 
 
-def test_release_level_defaults_match_the_four_level_decision() -> None:
+def test_release_level_defaults_match_the_two_channel_decision() -> None:
     configured = settings()
 
-    assert configured.default_level == "alpha"
+    assert configured.default_level == "stable"
     assert configured.reviews == {
-        "alpha": "self",
         "beta": "self",
-        "early": "self",
-        "formal": "self",
+        "stable": "self",
     }
     assert configured.suites == {
-        "alpha": "fast",
         "beta": "fast",
-        "early": "fast",
-        "formal": "full",
+        "stable": "full",
     }
 
 
-def test_legacy_verification_suites_normalize_to_fast() -> None:
-    configured = settings(
-        release_level_alpha_verification="baseline",
-        release_level_early_verification="docs",
-    )
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        ("off", {"beta": "peer", "stable": "peer"}),
+        ("beta-only", {"beta": "self", "stable": "peer"}),
+        ("always", {"beta": "self", "stable": "self"}),
+    ],
+)
+def test_admin_bypass_mode_controls_only_human_approval(
+    mode: str, expected: dict[str, str]
+) -> None:
+    configured = settings(admin_bypass=mode)
 
-    assert configured.suites["alpha"] == "fast"
-    assert configured.suites["early"] == "fast"
+    assert configured.reviews == expected
+    assert configured.suites == {"beta": "fast", "stable": "full"}
 
 
 def test_declaration_accepts_legacy_h2_and_issue_form_h3() -> None:
@@ -122,7 +125,7 @@ def test_declaration_accepts_legacy_h2_and_issue_form_h3() -> None:
         levels.declared_level(
             f"### {levels.DECLARATION_HEADING}\n\nearly\n\n### Details\n\nText"
         )
-        == "early"
+        == "stable"
     )
     assert (
         levels.declared_level(f"## {levels.DECLARATION_HEADING}\n\nbeta\n")
@@ -138,8 +141,8 @@ def test_non_collaborator_declaration_uses_default() -> None:
         github, "o/r", issue(7, "formal", author="outsider"), settings()
     )
 
-    assert result.level == "alpha"
-    assert "default" in result.source
+    assert result.level == "stable"
+    assert result.source == "standalone work item"
 
 
 def test_none_permission_is_not_a_trusted_collaborator() -> None:
@@ -150,7 +153,7 @@ def test_none_permission_is_not_a_trusted_collaborator() -> None:
         github, "o/r", issue(7, "formal", author="outsider"), settings()
     )
 
-    assert result.level == "alpha"
+    assert result.level == "stable"
 
 
 def test_collaborator_declaration_is_trusted() -> None:
@@ -160,13 +163,13 @@ def test_collaborator_declaration_is_trusted() -> None:
     result = levels.resolve_issue(github, "o/r", issue(7, "early"), settings())
 
     assert (result.level, result.review, result.suite) == (
-        "early",
+        "stable",
         "self",
-        "fast",
+        "full",
     )
 
 
-def test_milestone_issue_inherits_tracker_level() -> None:
+def test_milestone_work_issue_is_always_beta() -> None:
     github = FakeGitHub()
     trust(github, "worker", "tracker-owner")
     tracker = issue(80, "alpha", author="tracker-owner", milestone=8)
@@ -178,11 +181,11 @@ def test_milestone_issue_inherits_tracker_level() -> None:
         github, "o/r", issue(7, None, milestone=8), settings()
     )
 
-    assert result.level == "alpha"
-    assert result.source == "Milestone 8 tracker"
+    assert result.level == "beta"
+    assert result.source == "Milestone 8 work item"
 
 
-def test_milestone_issue_cannot_override_tracker_level() -> None:
+def test_milestone_tracker_is_always_stable() -> None:
     github = FakeGitHub()
     trust(github, "worker", "tracker-owner")
     tracker = issue(80, "beta", author="tracker-owner", milestone=8)
@@ -190,10 +193,9 @@ def test_milestone_issue_cannot_override_tracker_level() -> None:
     github.objects["milestones/8"] = {"title": "Delivery"}
     github.collections["issues?milestone=8&state=all&per_page=100"] = [tracker]
 
-    with pytest.raises(RuntimeError, match="requires beta"):
-        levels.resolve_issue(
-            github, "o/r", issue(7, "alpha", milestone=8), settings()
-        )
+    result = levels.resolve_issue(github, "o/r", tracker, settings())
+
+    assert result.level == "stable"
 
 
 def test_legacy_disable_flag_cannot_turn_off_release_classification() -> None:
@@ -217,10 +219,9 @@ def test_dependabot_is_always_beta() -> None:
 @pytest.mark.parametrize(
     ("title", "expected"),
     [
-        ("chore(main): release 0.16.0-alpha.2", "alpha"),
         ("chore(main): release 0.16.0-beta.1", "beta"),
-        ("chore(main): release 0.16.0", "early"),
-        ("chore(main): release 1.0.0", "formal"),
+        ("chore(main): release 0.16.0", "stable"),
+        ("chore(main): release 1.0.0", "stable"),
     ],
 )
 def test_release_pull_uses_its_version_level(title: str, expected: str) -> None:
@@ -257,33 +258,26 @@ def test_milestone_promotion_pull_uses_tracker_level() -> None:
 
     decision = levels.resolve_pull(github, "o/r", pull, settings())
 
-    assert decision.level == "early"
-    assert decision.source == "Milestone 14 tracker"
+    assert decision.level == "stable"
+    assert decision.source == "Milestone 14 promotion"
 
 
 def test_level_floor_and_path_tier_use_the_stronger_suite() -> None:
     configured = settings()
 
-    assert levels.required_suite("alpha", "fast", configured) == "fast"
-    assert levels.required_suite("early", "fast", configured) == "fast"
-    assert levels.required_suite("formal", "docs", configured) == "full"
+    assert levels.required_suite("beta", "fast", configured) == "fast"
+    assert levels.required_suite("stable", "docs", configured) == "full"
 
 
 @pytest.mark.parametrize(
     ("level", "path_tier", "expected"),
     [
-        ("alpha", "docs", "fast"),
-        ("alpha", "fast", "fast"),
-        ("alpha", "full", "full"),
         ("beta", "docs", "fast"),
         ("beta", "fast", "fast"),
         ("beta", "full", "full"),
-        ("early", "docs", "fast"),
-        ("early", "fast", "fast"),
-        ("early", "full", "full"),
-        ("formal", "docs", "full"),
-        ("formal", "fast", "full"),
-        ("formal", "full", "full"),
+        ("stable", "docs", "full"),
+        ("stable", "fast", "full"),
+        ("stable", "full", "full"),
     ],
 )
 def test_release_level_and_path_tier_matrix(
@@ -292,8 +286,8 @@ def test_release_level_and_path_tier_matrix(
     assert levels.required_suite(level, path_tier, settings()) == expected
 
 
-def test_highest_level_uses_maturity_order() -> None:
-    assert levels.highest_level(["alpha", "formal", "beta"]) == "formal"
+def test_highest_level_uses_channel_order() -> None:
+    assert levels.highest_level(["beta", "stable", "beta"]) == "stable"
 
 
 def test_release_batch_lists_each_work_item_and_uses_highest_level() -> None:
@@ -327,11 +321,11 @@ def test_release_batch_lists_each_work_item_and_uses_highest_level() -> None:
     batch = levels.release_batch(github, "o/r", pulls, settings())
     markdown = levels.release_batch_markdown(batch)
 
-    assert batch["level"] == "formal"
-    assert [item["level"] for item in batch["items"]] == ["alpha", "formal"]
+    assert batch["level"] == "stable"
+    assert [item["level"] for item in batch["items"]] == ["stable", "stable"]
     assert "Issue #7: Work" in markdown
     assert "Issue #8: Work" in markdown
-    assert "Highest included level: `formal`" in markdown
+    assert "Highest included level: `stable`" in markdown
 
 
 def test_release_batch_expands_a_milestone_to_its_child_work() -> None:
@@ -416,10 +410,10 @@ def test_release_batch_without_prior_tag_or_work_uses_default(
         "o/r",
         ROOT,
         "head",
-        settings(default_release_level="alpha"),
+        settings(default_release_level="stable"),
     )
 
-    assert batch == {"level": "alpha", "items": []}
+    assert batch == {"level": "stable", "items": []}
 
 
 def test_release_pull_annotation_is_idempotent_for_the_same_actor() -> None:

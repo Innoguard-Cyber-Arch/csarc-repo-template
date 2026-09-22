@@ -165,6 +165,23 @@ jobs:
           else
             echo "suite=$PATH_TIER" >> "$GITHUB_OUTPUT"
           fi
+      - name: Require the route-owned release candidate
+        if: ${{ github.event_name == 'pull_request_target' && !startsWith(github.event.pull_request.head.ref, 'promote/m') && steps.release.outputs.ownership == 'csarc-owned' }}
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE_LEVEL: ${{ steps.level.outputs.level }}
+        run: |
+          plan="$RUNNER_TEMP/release-plan.json"
+          python3 "$RUNNER_TEMP/trusted-verification/release_policy.py" plan \
+            --root "$GITHUB_WORKSPACE" \
+            --sha "$HEAD_SHA" \
+            --phase "$RELEASE_LEVEL" \
+            --output "$plan"
+          status="$(jq -r .status "$plan")"
+          if [[ "$status" == pending ]]; then
+            echo "Release-worthy work must materialize its $RELEASE_LEVEL version in the same pull request." >&2
+            exit 1
+          fi
       - name: Validate Milestone promotion version materialization
         if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'promote/m') && steps.release.outputs.ownership == 'csarc-owned' }}
         env:

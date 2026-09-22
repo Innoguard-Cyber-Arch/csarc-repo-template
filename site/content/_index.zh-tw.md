@@ -105,7 +105,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 <p class="install-promise"><strong>這一步的承諾：</strong>這一步只檢查目前狀態並提出計畫；在你確認前，不修改檔案、不變更 GitHub 設定，也不會建立 PR。</p>
 
-<div class="command-block"><div class="command-block-head"><span class="command-block-label">貼給 agent 的完整指令</span><button class="copy-command" type="button">複製指令</button></div><pre class="command-block-text">請從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 的 published Releases 中，依官方 csarc CLI 的版本規則選出最高 SemVer 且 immutable 的 Release（包含 alpha／beta pre-release），下載並讀取它的 `release-prompt.txt`，確認附件內的 repository、tag 與 full SHA 一致後，完全依該 prompt 在目前 workspace 繼續。不要使用 main、猜測目前安裝狀態，或在我確認前修改檔案、GitHub 設定、push 或建立 PR。</pre></div>
+<div class="command-block"><div class="command-block-head"><span class="command-block-label">貼給 agent 的完整指令</span><button class="copy-command" type="button">複製指令</button></div><pre class="command-block-text">請從 https://github.com/Innoguard-Cyber-Arch/csarc-repo-template 的 published Releases 中，依官方 csarc CLI 選出最新 stable 且 immutable 的 Release，下載並讀取它的 `release-prompt.txt`，確認附件內的 repository、tag 與 full SHA 一致後，完全依該 prompt 在目前 workspace 繼續。不要使用 main、猜測目前安裝狀態，或在我確認前修改檔案、GitHub 設定、push 或建立 PR。</pre></div>
 
 每個 Release 只有一份固定版本 prompt；它先交給 CLI 判斷狀態，再依同一份 `copier.yml` 讓你選擇接受建議值或逐項客製，不再切換多份 lifecycle prompts。
 {{< /standard >}}
@@ -436,17 +436,15 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 
 | 發布層級 | 審查 | 最低驗證組合 |
 | --- | --- | --- |
-| alpha | exact-head 自我授權可接受 | fast |
-| beta | 非作者 exact-head 核准 | fast |
-| early | 非作者 exact-head 核准 | fast |
-| formal | 非作者 exact-head 核准 | full |
+| beta | 依 `admin_bypass` 決定同行核准或 exact-head 管理員授權 | fast；高風險路徑升為 full |
+| stable | 依 `admin_bypass` 決定同行核准或 exact-head 管理員授權 | full |
 
-Issue 宣告層級；Milestone work Issue 繼承 tracker。路徑分類若判定風險更高，只會提高驗證下限。本機與 CI 共用同一套解析結果。
+路由決定通道：Milestone work 是 beta，promotion、standalone 與 hotfix 是 stable。路徑分類若判定風險更高，只會提高驗證下限。本機與 CI 共用同一套解析結果。
 {{< /standard >}}
 
 {{< ops key="contract-mode-ops" title="分級邏輯與目前自動化現況" >}}
 - **開發中：**只跑能證明本次修改的 focused check（例如 `uv run pytest <path>`、`uv run ruff check <path>`），用新鮮輸出才宣稱完成，不等待整條 pipeline。
-- **工作 PR（工作分支 → main 或 `dev/m*`）：**`scripts/release_level.py` 從可信任的 Issue／Milestone 宣告解析 alpha／beta／early／formal；`scripts/ci_tier.py` 再依事件、labels 與變更路徑提高最低組合。宣告衝突或未知高風險路徑一律 fail closed。
+- **工作 PR（工作分支 → main 或 `dev/m*`）：**`scripts/release_level.py` 從可信任的 Issue／Milestone 宣告解析 beta／stable；`scripts/ci_tier.py` 再依事件、labels 與變更路徑提高最低組合。`early`／`formal` 只由專案設定宣告，不參與單張 Issue 分級；宣告衝突或未知高風險路徑一律 fail closed。
 - **需要完整驗證時：**只在 Milestone／canary 交付、緊急修正、merge queue、手動執行，或系統無法安全縮小範圍的未知高風險路徑才觸發。
 - **同一套邏輯，Hosted 端重新執行（#834）：**GitHub Actions 只有一個受限權限的 `verify` job，同一 PR 新 commit 會取消舊 run；base workflow 先選定 tier 與執行命令，再對精確候選 tree 執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`）。合併與發版只採信 GitHub Actions App 在 GitHub-hosted runner 產生、成功且仍新鮮的同一 run/job 證據；手寫 commit trailer、錯誤 repo/tree/tier 或非受信任 signer 一律 fail closed。
 - **專案範圍：**一般專案只驗證自己的改動；公版專案的完整驗證還包含標記 `large` 的 Copier 建立／既有導入／更新回歸測試，實際生成新專案元件並驗證其保存的產品內容，不只是「檔案存在」。
@@ -610,11 +608,11 @@ Issue 宣告層級；Milestone work Issue 繼承 tracker。路徑分類若判定
 ### 我們的選擇
 
 - **版本意圖：**PR title 只回答這次改動是 major、minor、patch 或 no-release，不預約精確版本號。
-- **正式版本：**CSARC-owned Milestone 在同一張 promotion PR 更新版本檔、package metadata 與 CHANGELOG；standalone work 才沿用 Release Please／Guided 版本 PR。
+- **公開版本：**每張 Milestone work Issue 進入 `dev/m*` 後發 `X.Y.Z-beta.N`；Milestone promotion、standalone 與 hotfix 發不帶後綴的 stable。RC 不另立階段。
 - **發版與結案：**promotion PR 合併並通過完整驗證後，系統建立不可變 tag、GitHub Release、成品、checksum 與 SBOM；成功才關 tracker 與 Milestone，失敗維持 open。
 - **交付：**合併到 `main` 代表 repository delivery。工作 PR 結束單項工作，Milestone promotion PR 一次交付整批並承載該批版本候選。
 - **獨立工作：**能單獨審查與驗證、沒有共同期限或跨 Issue 相依時，不必加入里程碑；PR 可直接進 `main`。
-- **Hotfix：**只用於立即修正 `main` 的缺陷；仍要有 Bug Issue 與完整驗證。beta 以上缺少即時同儕時，只有 admin 可用綁定 exact head 的理由緊急合併，且合併後自動建立同儕複核工作。
+- **Hotfix：**只用於立即修正 `main` 的缺陷；仍要有 Bug Issue 與完整驗證。`admin_bypass` 允許時，admin 可用綁定 exact head 的理由緊急合併，且合併後自動建立同儕複核工作。
 - **部署：**把產品送進真實 runtime、檢查健康狀態與復原，屬 consuming product，不是本模板目前提供的能力。
 
 {{< disclosure key="deploy-capability-status" title="各項能力目前狀態逐一對照" >}}
@@ -709,7 +707,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
         <p class="subtitle"><strong>基本導入｜</strong>把規則寫進 repo，不代表 GitHub 一定有能力強制它；模板會先檢查平台能力，再決定強制或明確降級。</p>
       </header>
       <p class="context-line"><strong>流程｜</strong>期望政策 → 檢查 GitHub 方案與權限 → 可以強制：套用並驗證 → 無法強制：標示 <code>DEGRADED</code>，留下人工責任。</p>
-      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">提出 PR</span><h3>審查意圖</h3><p>系統從 live maintain／admin 協作者中 best-effort 選一位非作者；review check 再依 solo／peer 與可用的 Copilot 證據判定。</p></article><article class="relation-node"><span class="relation-kind">檢查方案與權限</span><h3>能不能強制</h3><p>模板查目前方案、repo 可見性與權限，判斷能不能建立 Ruleset（GitHub 強制執行的合併規則）。</p></article><article class="relation-node"><span class="relation-kind">兩種結果</span><h3>套用驗證，或明確降級</h3><p>能強制就套用並在 <code>check</code> 驗證是否生效；不能強制就標示 <code>DEGRADED</code>，改由人工自律把關，不假裝已經強制。</p></article></div></div>
+      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">提出 PR</span><h3>審查意圖</h3><p>系統從 live maintain／admin 協作者中 best-effort 選一位非作者；review check 再依同行核准、設定式 admin bypass 與可用的 Copilot 證據判定。</p></article><article class="relation-node"><span class="relation-kind">檢查方案與權限</span><h3>能不能強制</h3><p>模板查目前方案、repo 可見性與權限，判斷能不能建立 Ruleset（GitHub 強制執行的合併規則）。</p></article><article class="relation-node"><span class="relation-kind">兩種結果</span><h3>套用驗證，或明確降級</h3><p>能強制就套用並在 <code>check</code> 驗證是否生效；不能強制就標示 <code>DEGRADED</code>，改由人工自律把關，不假裝已經強制。</p></article></div></div>
       <p class="context-line"><strong>下一步｜</strong>方案改變或升級後，重新套用一次設定即可；這個 repo 目前實際處於哪一種結果，以及 Team／Enterprise 各方案的完整能力，請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
@@ -739,7 +737,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 {{< disclosure key="governance-plan-tiers" title="Free／Team／Enterprise 各方案完整能力" >}}
 <div class="plan-grid">
   <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查意圖，強制能力可能降級：</strong>workflow 從 live repository collaborators 中挑選非作者的 <code>maintain</code>／<code>admin</code>；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，check 標示 DEGRADED。</p><ul><li>Copilot entitlement 不從 Free 方案名稱猜測，無法證明時回到 human 規則</li><li>沒有 merge gate 時，審查紀錄不能冒充平台強制門禁</li></ul></article>
-  <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches 與必要檢查；人工 solo／peer 仍由 review check 判定。</p><ul><li>若設定 CODEOWNER team，該 team 必須存在並有 repo write access</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
+  <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches 與必要檢查；同行核准或設定式 admin bypass 仍由 review check 判定。</p><ul><li>若設定 CODEOWNER team，該 team 必須存在並有 repo write access</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
   <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
 </div>
 {{< /disclosure >}}
@@ -750,7 +748,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 治理意圖 | `governance_mode`、`lifecycle`、`actions_fallback` | `managed`／`observe`；`issues`／`milestones`；fallback 預設 `off`、可選 `admin` | repository policy、工作項目 side effects 與經證明的 zero-step billing fallback |
 | 驗證信任 | `verification_mode` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted validation／release workflow；或 trusted GitHub-hosted checks |
 | 審查意圖 | `review`、`copilot_review` | human 為 `solo`／`peer`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到 human 規則 |
-| 發版意圖 | `release_ownership`、`release_trigger`、`default_release_level` | ownership 三選一；trigger 為 `main`／`manual`；預設 alpha | ownership 先決、固定 Conventional Commits 演算法與發版候選觸發 |
+| 發版意圖 | `release_ownership`、`release_trigger`、`project_maturity` | ownership 三選一；trigger 為 `main`／`manual`；成熟度預設 early | 公開 beta／stable 通道、固定 Conventional Commits 演算法與發版候選觸發 |
 | 選配產物 | `features` | 預設 `[repo-site]`；可加入 `docker` 或留空 | repo-site／Pages desired policy、Docker starter 與 build scan 一起啟閉 |
 | 組織政策 | `code_owner` | 可省略的 `@user` 或 `@organization/team` | `.github/CODEOWNERS`；不作為 reviewer 名單 |
 | 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及 repo-site 的可見受眾欄位 |
@@ -779,7 +777,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
     <tr><td>Free＋public</td><td>透過 REST 套用並啟用 Ruleset</td><td>驗證 <code>main</code> 的有效規則；缺少或不符即失敗</td></tr>
     <tr><td>Free organization＋private</td><td>套用基本設定，並把期望 Ruleset 保留在 <code>policies/rulesets.json</code>；公開 API 無法建立 Ruleset</td><td>標示 <code>DEGRADED</code>；workflow 只 best-effort 提出 reviewer request，紅燈或未核准都不能冒充平台 merge gate</td></tr>
     <tr><td>Pro 個人帳號＋private</td><td>套用並啟用 Ruleset</td><td>與 Free public 相同</td></tr>
-    <tr><td>Team／Enterprise organization＋private</td><td>驗證可選 CODEOWNER 後套用並啟用 Ruleset</td><td>必要 status checks 成為 merge gate；review check 執行 solo／peer 與可用 Copilot 規則，不符政策時 fail-closed</td></tr>
+    <tr><td>Team／Enterprise organization＋private</td><td>驗證可選 CODEOWNER 後套用並啟用 Ruleset</td><td>必要 status checks 成為 merge gate；review check 執行同行核准、設定式 admin bypass 與可用 Copilot 規則，不符政策時 fail-closed</td></tr>
   </tbody>
 </table>
 <p class="reference">Ref. <a href="https://docs.github.com/en/get-started/learning-about-github/githubs-plans" target="_blank" rel="noreferrer">GitHub plans</a>；<a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">About rulesets</a>. Accessed August 21, 2026.</p>

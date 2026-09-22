@@ -21,8 +21,8 @@ body:
         `tracker_errors()` 檢查的固定契約：H2 標題文字（含大小寫）不可更動、刪除或翻譯，
         只有 `Proposal` 段落要求非空白的真實內容，其餘三段可以先保留說明用的 HTML 註解，
         待實際發生時再填入內容——這份表單先把骨架帶好，減少手動照抄漏段落的機率，
-        `tracker_errors()` 仍會在建立後把關格式是否正確。alpha 可由 admin 提案者自核；
-        beta 以上要求非提案者留言 `/milestone approve`。細節見 AGENTS.md 與
+        `tracker_errors()` 仍會在建立後把關格式是否正確。Milestone promotion 固定走
+        stable；是否允許 admin 提案者自核由 `admin_bypass` 決定。細節見 AGENTS.md 與
         `.csarc/docs/milestone-description.md`。UI 建立者
         請把自己設為 Assignee；agent／CLI 建立時明確使用 `--assignee @me`。
   - type: textarea
@@ -43,8 +43,8 @@ body:
     id: release_level
     attributes:
       label: Release level / 發布層級
-      description: Milestone 內所有 Issue 與 promotion 都繼承這個層級。
-      options: [alpha, beta, early, formal]
+      description: Milestone 工作各自發布 beta；tracker 的 promotion 固定發布 stable。
+      options: [stable]
     validations:
       required: true
   - type: textarea

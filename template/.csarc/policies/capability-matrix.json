@@ -93,8 +93,8 @@
         "zh-tw": "即時探測：`GET /repos/{owner}/{repo}/actions/permissions/workflow`。回傳 `true` 可確認目前確實可用；`false` 只反映目前的開關狀態，無法判斷是否有 organization 政策擋下開啟——只有實際嘗試 `apply`（由 `apply-repository-settings.sh` 捕捉）才能證實。"
       },
       "workaround": {
-        "en": "Existing DEGRADED marker: \"DEGRADED Actions PR policy\" when an `apply` attempt is rejected. Downgrade to manual human approval for automated pull requests, or ask an organization owner to allow Actions to approve PRs; the documented alpha self-approval Ruleset bypass (`.csarc/policies/rulesets.json` `bypass_actors`, see `.csarc/docs/ci-policy.md`) is a separate, narrower mechanism and not a substitute for this capability.",
-        "zh-tw": "既有 DEGRADED 標記：`apply` 嘗試被拒絕時印出「DEGRADED Actions PR policy」。降級為人工核准自動化 PR，或請 organization owner 允許 Actions 核准 PR；既有的 alpha 自我核准 Ruleset bypass（`.csarc/policies/rulesets.json` 的 `bypass_actors`，見 `.csarc/docs/ci-policy.md`）是另一套範圍更窄的機制，不能取代這項能力。"
+        "en": "Existing DEGRADED marker: \"DEGRADED Actions PR policy\" when an `apply` attempt is rejected. Downgrade to manual human approval for automated pull requests, or ask an organization owner to allow Actions to approve PRs; the configured admin review bypass (`.csarc/policies/rulesets.json` `bypass_actors`, see `.csarc/docs/ci-policy.md`) is a separate, narrower mechanism and not a substitute for this capability.",
+        "zh-tw": "既有 DEGRADED 標記：`apply` 嘗試被拒絕時印出「DEGRADED Actions PR policy」。降級為人工核准自動化 PR，或請 organization owner 允許 Actions 核准 PR；設定的 admin review bypass（`.csarc/policies/rulesets.json` 的 `bypass_actors`，見 `.csarc/docs/ci-policy.md`）是另一套範圍更窄的機制，不能取代這項能力。"
       },
       "related_degraded_marker": "DEGRADED Actions PR policy"
     },

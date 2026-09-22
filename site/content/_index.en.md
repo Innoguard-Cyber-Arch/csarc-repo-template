@@ -105,7 +105,7 @@ The result will be one of: **create** a new project, **adopt** an existing one, 
 
 <p class="install-promise"><strong>The promise at this step:</strong> this step only checks the current state and proposes a plan; nothing is modified, no GitHub setting changes, and no PR opens until you confirm.</p>
 
-<div class="command-block"><div class="command-block-head"><span class="command-block-label">The full prompt to paste to your agent</span><button class="copy-command" type="button">Copy prompt</button></div><pre class="command-block-text">From the published Releases at https://github.com/Innoguard-Cyber-Arch/csarc-repo-template, select the highest immutable SemVer Release accepted by the official csarc CLI, including alpha or beta pre-releases. Download and read that Release's `release-prompt.txt`; after confirming its repository, tag, and full SHA agree, follow it exactly in the current workspace. Do not use `main`, guess the installation state, or modify files or GitHub settings, push, or open a PR before I confirm.</pre></div>
+<div class="command-block"><div class="command-block-head"><span class="command-block-label">The full prompt to paste to your agent</span><button class="copy-command" type="button">Copy prompt</button></div><pre class="command-block-text">From the published Releases at https://github.com/Innoguard-Cyber-Arch/csarc-repo-template, use the official csarc CLI to select the latest stable immutable Release. Download and read that Release's `release-prompt.txt`; after confirming its repository, tag, and full SHA agree, follow it exactly in the current workspace. Do not use `main`, guess the installation state, or modify files or GitHub settings, push, or open a PR before I confirm.</pre></div>
 
 Each Release carries one pinned prompt. It lets the CLI classify the state first, then uses that same Release's `copier.yml` to offer recommended defaults or grouped customization instead of switching among separate lifecycle prompts.
 {{< /standard >}}
@@ -438,17 +438,15 @@ Developers first run the most relevant local check for quick feedback. Once a PR
 
 | Release level | Review | Minimum suite |
 | --- | --- | --- |
-| alpha | exact-head self authorization allowed | fast |
-| beta | exact-head approval from a non-author | fast |
-| early | exact-head approval from a non-author | fast |
-| formal | exact-head approval from a non-author | full |
+| beta | peer approval or exact-head admin authorization, as configured | fast; risky paths escalate to full |
+| stable | peer approval or exact-head admin authorization, as configured | full |
 
-The Issue declares the level, and a Milestone work Issue inherits its tracker. Changed-path classification may raise this floor but never lower it. Local and hosted checks use the same resolved result.
+The route declares the channel: Milestone work is beta, while promotion, standalone work, and hotfixes are stable. Changed-path classification may raise this floor but never lower it. Local and hosted checks use the same resolved result.
 {{< /standard >}}
 
 {{< ops key="contract-mode-ops" title="The tiering rule and today's automation status" >}}
 - **During development:** run only the focused check that proves the current change (for example `uv run pytest <path>` or `uv run ruff check <path>`), using fresh output before claiming completion, without waiting on the full pipeline.
-- **Work PR (topic branch → main or `dev/m*`):** `scripts/release_level.py` resolves alpha, beta, early, or formal from a trusted Issue or Milestone declaration; `scripts/ci_tier.py` then raises the minimum suite from the event, labels, and changed paths. Conflicting declarations and unknown high-risk paths fail closed.
+- **Work PR (topic branch → main or `dev/m*`):** `scripts/release_level.py` resolves beta or stable from a trusted Issue or Milestone declaration; `scripts/ci_tier.py` then raises the minimum suite from the event, labels, and changed paths. `early` and `formal` are project declarations, not per-Issue levels. Conflicting declarations and unknown high-risk paths fail closed.
 - **When full verification is needed:** only for a Milestone or canary delivery, an urgent fix, a merge queue, a manual dispatch, or an unknown high-risk path the system cannot safely narrow.
 - **One implementation, re-executed by the hosted job (#834):** GitHub Actions has one least-privilege `verify` job, and a new commit on the same PR cancels the previous run. The base workflow selects the tier and command, then runs `scripts/verify-fast` / `scripts/verify-template.sh` (`scripts/verify` in a generated repository) against the exact candidate tree. Merge and release accept only fresh, successful evidence from the GitHub Actions App on a GitHub-hosted runner; a handwritten commit trailer, wrong repository/tree/tier, or untrusted signer fails closed.
 - **Repository scope:** an ordinary project verifies only its own change. The template repository's full verification also runs the `large`-marked Copier create / adopt / update regression tests, which actually generate a project and verify the components it preserves — not just check that files exist.
@@ -612,11 +610,11 @@ Routine updates and security checks run automatically. People step in only for u
 ### Our choice
 
 - **Version intent:** a PR title states major, minor, patch, or no-release impact without reserving an exact number.
-- **Version materialization:** a CSARC-owned Milestone updates version files, package metadata, and the changelog in the same promotion PR; standalone work keeps the Release Please / Guided version PR.
+- **Public versions:** each Milestone work Issue publishes `X.Y.Z-beta.N` after landing on `dev/m*`; Milestone promotion, standalone work, and hotfixes publish unsuffixed stable releases. RC is not a separate stage.
 - **Release and closure:** after the promotion PR merges and full verification passes, the system creates the immutable tag, GitHub Release, explicit artifacts, checksums, and SBOM. Only success closes the tracker and Milestone; failure leaves both open.
 - **Delivery:** merging to `main` is repository delivery. A work PR completes one item; a Milestone promotion PR carries the batch and its version candidate together.
 - **Standalone work:** when one Issue can be reviewed and verified independently and has no shared deadline or cross-Issue dependency, it needs no Milestone and may target `main` directly.
-- **Hotfix:** only an urgent defect in `main` uses this route. It still needs a Bug Issue and full verification. At beta or above, an admin may merge without an immediate peer only through an exact-head, reason-bound emergency path that automatically opens a post-merge peer-review item.
+- **Hotfix:** only an urgent defect in `main` uses this route. It still needs a Bug Issue and full verification. When `admin_bypass` allows it, an admin may merge without an immediate peer only through an exact-head, reason-bound emergency path that automatically opens a post-merge peer-review item.
 - **Deployment:** operating the product in a real runtime with health checks and recovery belongs to the consuming product, not this template.
 
 {{< disclosure key="deploy-capability-status" title="Every capability's current status, side by side" >}}
@@ -717,7 +715,7 @@ release. The full format contract and the reasoning behind this scope live in th
         <p class="subtitle"><strong>Baseline｜</strong>writing a rule into the repo doesn't mean GitHub can actually enforce it; the template checks the platform's capability first, then decides between enforcing it or degrading explicitly.</p>
       </header>
       <p class="context-line"><strong>Flow｜</strong>desired policy → check the GitHub plan and permissions → can enforce: apply and verify → cannot enforce: mark <code>DEGRADED</code> and leave the responsibility with a person.</p>
-      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">PR opened</span><h3>Review intent</h3><p>The system best-effort selects a non-author live collaborator with maintain/admin permission; the review check then evaluates solo/peer and available Copilot evidence.</p></article><article class="relation-node"><span class="relation-kind">Check the plan and permissions</span><h3>Can it be enforced?</h3><p>The template checks the current plan, repository visibility, and permissions to judge whether it can create a Ruleset (GitHub's own enforced merge rule).</p></article><article class="relation-node"><span class="relation-kind">Two outcomes</span><h3>Apply and verify, or degrade explicitly</h3><p>When it can enforce, it applies the rule and verifies it took effect in <code>check</code>; when it cannot, it marks <code>DEGRADED</code> and falls back to human discipline, never pretending it is already enforced.</p></article></div></div>
+      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">PR opened</span><h3>Review intent</h3><p>The system best-effort selects a non-author live collaborator with maintain/admin permission; the review check then evaluates peer approval, the configured admin bypass, and available Copilot evidence.</p></article><article class="relation-node"><span class="relation-kind">Check the plan and permissions</span><h3>Can it be enforced?</h3><p>The template checks the current plan, repository visibility, and permissions to judge whether it can create a Ruleset (GitHub's own enforced merge rule).</p></article><article class="relation-node"><span class="relation-kind">Two outcomes</span><h3>Apply and verify, or degrade explicitly</h3><p>When it can enforce, it applies the rule and verifies it took effect in <code>check</code>; when it cannot, it marks <code>DEGRADED</code> and falls back to human discipline, never pretending it is already enforced.</p></article></div></div>
       <p class="context-line"><strong>Next step｜</strong>after a plan change or upgrade, just reapply settings once; which outcome this repository is actually in today, and the full capability of the Team and Enterprise tiers, are covered in Maintenance mode.</p>
 {{< /legacy >}}
 
@@ -747,7 +745,7 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 {{< disclosure key="governance-plan-tiers" title="Full capability at each Free / Team / Enterprise tier" >}}
 <div class="plan-grid">
   <article class="plan-card current"><h3>Free <span class="plan-state">Current</span></h3><p><strong>Review intent is preserved while enforcement may degrade:</strong> the workflow selects a non-author <code>maintain</code>/<code>admin</code> user from live repository collaborators; a private repository keeps its desired Ruleset in <code>policies/rulesets.json</code>, and check reports DEGRADED.</p><ul><li>Copilot entitlement is never inferred from the Free plan name; unproven availability falls back to the human rule</li><li>Without a merge gate, review history cannot masquerade as platform enforcement</li></ul></article>
-  <article class="plan-card team"><h3>Team <span class="plan-state">Minimum recommended</span></h3><p><strong>Adds:</strong> a private-repository Ruleset, protected branches, and required checks; the review check still evaluates the human solo/peer choice.</p><ul><li>A configured CODEOWNERS team must exist with repository write access</li><li>The template can apply the repository's existing Ruleset directly</li></ul></article>
+  <article class="plan-card team"><h3>Team <span class="plan-state">Minimum recommended</span></h3><p><strong>Adds:</strong> a private-repository Ruleset, protected branches, and required checks; the review check still evaluates peer approval or the configured admin bypass.</p><ul><li>A configured CODEOWNERS team must exist with repository write access</li><li>The template can apply the repository's existing Ruleset directly</li></ul></article>
   <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">Organization-wide</span></h3><p><strong>Adds:</strong> SAML SSO/SCIM, internal repositories, private/internal deployment protection, private Pages, audit log streaming, and IP allow lists.</p><ul><li>An organization or Enterprise Ruleset can govern centrally</li><li>Currently only detected and reported, never changed automatically</li></ul></article>
 </div>
 {{< /disclosure >}}
@@ -758,7 +756,7 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Governance intent | `governance_mode`, `lifecycle`, `actions_fallback` | `managed`/`observe`; `issues`/`milestones`; fallback defaults to `off`, with `admin` opt-in | repository policy, work-item side effects, and proven zero-step billing fallback |
 | Verification trust | `verification_mode` | new projects default to `local`; `hosted` is optional | local self-attestation plus audited bypass with no hosted validation/release workflow, or trusted GitHub-hosted checks |
 | Review intent | `review`, `copilot_review` | human fallback is `solo`/`peer`; Copilot is `allowed`/`off` | exact-head `review` gate; unavailable Copilot falls back to the human rule |
-| Release intent | `release_ownership`, `release_trigger`, `default_release_level` | three ownership modes; trigger is `main`/`manual`; alpha default | ownership first, one fixed Conventional Commits algorithm, and candidate triggering |
+| Release intent | `release_ownership`, `release_trigger`, `project_maturity` | three ownership modes; trigger is `main`/`manual`; maturity defaults to early | public beta/stable channels, one fixed Conventional Commits algorithm, and candidate triggering |
 | Optional output | `features` | `[repo-site]` by default; add `docker` or leave empty | repo-site/Pages desired policy and Docker starter/build scan switch as units |
 | Organization policy | `code_owner` | optional `@user` or `@organization/team` | `.github/CODEOWNERS`; never a reviewer list |
 | Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection, optional security defaults, and the repo-site's visible-audience line |
@@ -787,7 +785,7 @@ Use a linked Issue to record the proposer, a different approver, expiry, evidenc
     <tr><td>Free + public</td><td>Applies and enables a Ruleset over REST</td><td>Verifies the effective rule on <code>main</code>; missing or mismatched fails</td></tr>
     <tr><td>Free organization + private</td><td>Applies the baseline settings and keeps the desired Ruleset in <code>policies/rulesets.json</code>; the public API cannot create a Ruleset here</td><td>Marked <code>DEGRADED</code>; the workflow only makes a best-effort review request, and a red check or missing approval can never masquerade as a platform merge gate</td></tr>
     <tr><td>Pro individual account + private</td><td>Applies and enables a Ruleset</td><td>Same as Free public</td></tr>
-    <tr><td>Team/Enterprise organization + private</td><td>Validates an optional CODEOWNER, then applies and enables a Ruleset</td><td>Required status checks become the merge gate; the review check enforces solo/peer and available Copilot rules, and policy mismatch fails closed</td></tr>
+    <tr><td>Team/Enterprise organization + private</td><td>Validates an optional CODEOWNER, then applies and enables a Ruleset</td><td>Required status checks become the merge gate; the review check enforces peer approval, the configured admin bypass, and available Copilot rules, and policy mismatch fails closed</td></tr>
   </tbody>
 </table>
 <p class="reference">Ref. <a href="https://docs.github.com/en/get-started/learning-about-github/githubs-plans" target="_blank" rel="noreferrer">GitHub plans</a>; <a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">About rulesets</a>. Accessed August 21, 2026.</p>

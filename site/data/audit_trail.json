@@ -30,8 +30,8 @@
     {
       "path": "docs/audit-trail/pr-audit.md",
       "description": {
-        "zh-tw": "涵蓋每一筆合併進目標分支的 PR：開啟／合併時間、來源→目標分支、連結 Issue 的開啟／關閉時間、Milestone、開發者、審查者，以及依來源分支模式分類的 `governance_stage`（alpha／beta／stable）。",
-        "en": "One row per pull request merged into the target branch: open/merge time, source -> target branch, the linked Issue's open/close time, Milestone, developers, reviewers, and a `governance_stage` classification (alpha/beta/stable) based on the source branch pattern."
+        "zh-tw": "涵蓋每一筆合併進目標分支的 PR：開啟／合併時間、來源→目標分支、連結 Issue 的開啟／關閉時間、Milestone、開發者、審查者，以及依來源分支模式分類的 `governance_stage`（canary／beta／stable）。",
+        "en": "One row per pull request merged into the target branch: open/merge time, source -> target branch, the linked Issue's open/close time, Milestone, developers, reviewers, and a `governance_stage` classification (canary/beta/stable) based on the source branch pattern."
       },
       "columns": [
         "PR",
