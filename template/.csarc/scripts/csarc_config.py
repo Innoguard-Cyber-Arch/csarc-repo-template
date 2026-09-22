@@ -97,6 +97,15 @@ def validate_release_config(config: dict[str, object]) -> None:
         return
     if not isinstance(ownership, str) or ownership not in RELEASE_OWNERSHIPS:
         raise ValueError(f"Invalid release_ownership: {ownership!r}")
+    legacy_keys = {
+        "release_immutable_releases",
+        "release_ownership_reason",
+        "release_required_inputs",
+        "release_settings_owner",
+        "release_workflow",
+    }
+    if config.keys().isdisjoint(legacy_keys):
+        return
     workflow = config.get("release_workflow")
     inputs = config.get("release_required_inputs")
     reason = config.get("release_ownership_reason")
