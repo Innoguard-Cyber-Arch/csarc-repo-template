@@ -288,4 +288,4 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ## 負責人與支援
 
-程式與政策審查者以 `.github/CODEOWNERS` 為準。一般問題與疑似資安問題依 [`SECURITY.md`](SECURITY.md) 建立公開 GitHub Issue，維護者會收到通知；不得張貼 secrets、credentials、personal data 或其他敏感內容。
+程式與政策審查者以 `.github/CODEOWNERS` 為準。一般問題與疑似資安問題依 [`.github/SECURITY.md`](.github/SECURITY.md) 建立公開 GitHub Issue，維護者會收到通知；不得張貼 secrets、credentials、personal data 或其他敏感內容。Root [`SECURITY.md`](SECURITY.md) 則提供 repository-wide scanner guidance。

@@ -14,6 +14,7 @@
 - This file applies repository-wide. A nearer `AGENTS.md` may add subtree-specific guidance.
 - `.csarc/config.yml` is the template-managed source for enabled language and repository modules.
 - Use the linked Issue or `docs/specs/` SDD contract for scope; `docs/README.md` maps durable project memory.
+- Root `SECURITY.md` is repository-wide scanner policy; `.github/SECURITY.md` is the human vulnerability-disclosure policy. See [`.csarc/docs/security-scanner-readiness.md`](.csarc/docs/security-scanner-readiness.md) for provider capabilities, exact validation commands, scope, cost, and offline boundaries.
 - Use `docs/adr/` for decisions. On updated projects, also search project-owned `docs/decisions/`; never move or overwrite it automatically.
 - Edit project site content in `docs/site/content/_index.zh-tw.md` / `_index.en.md` and theme overrides in `docs/site/theme.css`, then rebuild with `./.csarc/scripts/build-repo-site`; do not hand-edit the generated `docs/index.html` / `docs/index.en.html`.
 
@@ -50,6 +51,7 @@ Existing-repository history changes start read-only: propose semantic story grou
 {% endif %}{% if "rust" in languages %}- Rust setup: `rustup show && cargo fetch --locked`. On Linux/WSL2, compiling this project also needs a system C linker -- install `build-essential` (or the equivalent toolchain) first; a machine with only `rustup` fails with `error: linker 'cc' not found`.
 {% endif %}{% if not languages %}- Environment setup: no language toolchain install is required.
 {% endif %}- Site source check: `./.csarc/scripts/build-repo-site --check`.
+- Security smoke: `./.csarc/scripts/security-smoke` selects four existing offline owner self-tests; it is not an AI security scan and is not part of every routine gate. See `.csarc/docs/security-scanner-readiness.md` for the exact command inventory and limits.
 {% if "python" in languages %}- Python iteration: `uv run ruff check <paths>`, `uv run ty check`, and `uv run pytest <test-path>`.
 {% endif %}{% if "typescript" in languages %}- TypeScript iteration: `pnpm exec biome check <paths>`, `pnpm exec tsc --noEmit`, and `pnpm exec vitest run <test-path>`.
 {% endif %}{% if "rust" in languages %}- Rust iteration: `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, and `cargo test --locked`.

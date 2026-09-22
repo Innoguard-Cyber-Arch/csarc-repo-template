@@ -1549,8 +1549,17 @@ def is_regular_file(path: Path) -> bool:
         return False
 
 
+def preserve_existing_security_policy(stage: Path, target: Path) -> None:
+    """Leave an existing product-owned root security policy unchanged."""
+    security = target / "SECURITY.md"
+    staged_security = stage / "SECURITY.md"
+    if is_regular_file(security) and is_regular_file(staged_security):
+        staged_security.unlink()
+
+
 def apply_adoption_policies(stage: Path, target: Path) -> tuple[str, ...]:
-    """Apply the small fixed set of safe existing-repository merges."""
+    """Apply the fixed merges and preservation for an existing repository."""
+    preserve_existing_security_policy(stage, target)
     merged: list[str] = []
     agents = target / "AGENTS.md"
     staged_agents = stage / "AGENTS.md"
@@ -1656,8 +1665,6 @@ def compare_stage(
 def legacy_layout_pairs(
     stage: Path,
     target: Path,
-    *,
-    project_mode: object,
 ) -> tuple[tuple[str, str], ...]:
     """Return only known generated paths that need the one-time layout move."""
     pairs: set[tuple[str, str]] = set()
@@ -1695,8 +1702,6 @@ def legacy_layout_pairs(
         "site/version.json": ".csarc/site/version.json",
         "version.txt": ".csarc/version.txt",
     }
-    if project_mode == "new":
-        exact["SECURITY.md"] = ".github/SECURITY.md"
     for old, new in exact.items():
         if old in existing and new in staged:
             pairs.add((old, new))
@@ -6204,10 +6209,11 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             current_revision,
             emit=False,
         )
+        if saved_answers.get("project_mode") == "existing":
+            preserve_existing_security_policy(stage, target)
         layout_moves = legacy_layout_pairs(
             stage,
             target,
-            project_mode=saved_answers.get("project_mode"),
         )
         retirement_candidates = (
             LEGACY_PROFILE_FILE.as_posix(),

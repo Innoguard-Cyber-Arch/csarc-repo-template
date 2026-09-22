@@ -10,6 +10,8 @@ set -euo pipefail
 #   scripts/sync-paired-files.sh          Regenerate every paired copy.
 #   scripts/sync-paired-files.sh --check  Verify copies without writing.
 paired_files=(
+  "SECURITY.md|template/SECURITY.md"
+  "docs/security-scanner-readiness.md|template/.csarc/docs/security-scanner-readiness.md"
   "scripts/authenticate_dependabot_head.py|template/.csarc/scripts/authenticate_dependabot_head.py"
   "scripts/check-trusted-verification|template/.csarc/scripts/check-trusted-verification"
   "scripts/delivery_sync.py|template/.csarc/scripts/delivery_sync.py"
@@ -17,6 +19,7 @@ paired_files=(
   "scripts/release_level.py|template/.csarc/scripts/release_level.py"
   "scripts/release_phase.py|template/.csarc/scripts/release_phase.py"
   "scripts/review_gate.py|template/.csarc/scripts/review_gate.py"
+  "scripts/security-smoke|template/.csarc/scripts/security-smoke"
   "scripts/test-worktree-cleanup|template/.csarc/scripts/test-worktree-cleanup"
   "scripts/validate-issue-title|template/.csarc/scripts/validate-issue-title"
   "scripts/verification-step|template/.csarc/scripts/verification-step"

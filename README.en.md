@@ -286,4 +286,4 @@ This template repo's own CI runs `./scripts/verify-template.sh`, verifying the t
 
 ## Owners and support
 
-Code and policy reviewers follow `.github/CODEOWNERS`. Report a general question or a suspected security issue as a public GitHub Issue per [`SECURITY.md`](SECURITY.md); maintainers are notified. Never post secrets, credentials, personal data, or other sensitive content there.
+Code and policy reviewers follow `.github/CODEOWNERS`. Report a general question or a suspected security issue as a public GitHub Issue per [`.github/SECURITY.md`](.github/SECURITY.md); maintainers are notified. Never post secrets, credentials, personal data, or other sensitive content there. Root [`SECURITY.md`](SECURITY.md) provides repository-wide scanner guidance instead.

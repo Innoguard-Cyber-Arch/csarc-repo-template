@@ -1,8 +1,34 @@
 """Regression tests for workflow-independent policy validation."""
 
 from pathlib import Path
+from stat import S_IXUSR
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_security_smoke_selects_existing_offline_owners() -> None:
+    """Keep the smoke as one thin selector, not a provider-specific suite."""
+    root_path = ROOT / "scripts/security-smoke"
+    generated_path = ROOT / "template/.csarc/scripts/security-smoke"
+    source = root_path.read_text(encoding="utf-8")
+
+    assert source == generated_path.read_text(encoding="utf-8")
+    assert root_path.stat().st_mode & S_IXUSR
+    assert generated_path.stat().st_mode & S_IXUSR
+    for owner in (
+        "test-pr-policy",
+        "test-apply-repository-settings",
+        "test-check-repo-capabilities",
+        "test-check-scope-gate",
+    ):
+        assert source.count(owner) >= 1
+    for excluded in (
+        "codex-security",
+        "claude-security",
+        "scan-secrets",
+        "verify-dependencies",
+    ):
+        assert excluded not in source
 
 
 def test_policy_tests_do_not_read_workflow_yaml() -> None:
