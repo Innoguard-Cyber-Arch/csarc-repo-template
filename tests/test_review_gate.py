@@ -64,6 +64,7 @@ class FakeGitHub:
         self.default_branch = "main"
         self.destination_sha = "f" * 40
         self.head_ref = "fix/42-lifecycle"
+        self.title = "fix: lifecycle"
         self.head_repo: str | None = "o/r"
         self.issue_state = "open"
         self.issue_milestone: int | None = None
@@ -77,6 +78,7 @@ class FakeGitHub:
         if path == "pulls/7":
             return {
                 "draft": self.draft,
+                "title": self.title,
                 "body": self.body,
                 "base": {"ref": self.base_ref, "sha": self.base_sha},
                 "head": {
@@ -421,6 +423,15 @@ def alpha_promotion_github() -> FakeGitHub:
     return github
 
 
+def alpha_release_github() -> FakeGitHub:
+    """Return a canonical standalone Alpha release candidate."""
+    github = FakeGitHub([])
+    github.head_ref = "release/v0.21.0-alpha.1"
+    github.title = "chore(main): release 0.21.0-alpha.1"
+    github.body = f"Refs #42\n\n{pr_lifecycle.ALPHA_SELF_MERGE_MARKER}"
+    return github
+
+
 def test_alpha_self_merge_authorization_passes(copilot_config: Path) -> None:
     """Issue #775: a valid exact-head Alpha self-merge comment passes review."""
     github = alpha_github()
@@ -450,6 +461,38 @@ def test_alpha_promotion_self_merge_authorization_passes(
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert result["passed"]
     assert result["source"] == "alpha-self-merge"
+
+
+def test_alpha_release_self_merge_authorization_passes(
+    copilot_config: Path,
+) -> None:
+    """Issue #913: review and lifecycle share the release route."""
+    github = alpha_release_github()
+    github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["passed"]
+    assert result["source"] == "alpha-self-merge"
+
+
+def test_peer_alpha_release_still_requires_an_independent_review(
+    tmp_path: Path,
+) -> None:
+    """The release route does not weaken an explicit peer fallback."""
+    github = alpha_release_github()
+    github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(
+        github,
+        "o/r",
+        7,
+        config(
+            tmp_path,
+            "copilot_review: allowed\n"
+            "review: peer\n"
+            "default_release_level: alpha\n",
+        ),
+    )
+    assert not result["passed"]
+    assert "independent maintainer" in result["reason"]
 
 
 def test_alpha_sync_requires_exact_head_authorization(
