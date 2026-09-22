@@ -413,6 +413,7 @@ def test_exact_merge_wakes_only_from_trusted_completed_workflows() -> None:
                 "PR review",
                 "Dependabot auto-merge",
             ],
+            "branches": ["dependabot/**"],
             "types": ["completed"],
         }
     }

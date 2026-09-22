@@ -164,6 +164,8 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     assert "check-verify-attestation" not in source
     assert "hosted_verify_bots" not in source
     assert "CSARC_RUN_OSV" not in source
+    assert 'select(. == "promotion" or . == "hotfix" or' in source
+    assert '. == "release-recovery")' in source
     assert all(
         name not in source
         for name in ("zizmor", "matrix:", "schedule:", "push:")
@@ -189,6 +191,8 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
     assert "check-verify-attestation" not in source
     assert "hosted_verify_bots" not in source
     assert "CSARC_RUN_OSV" not in source
+    assert 'select(. == "promotion" or . == "hotfix" or' in source
+    assert '. == "release-recovery")' in source
     assert all(
         name not in source
         for name in ("zizmor", "matrix:", "schedule:", "push:")

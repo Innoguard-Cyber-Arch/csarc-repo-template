@@ -12,12 +12,9 @@ name: Work item lifecycle
 # Deliberately NOT merged here (keep reading before adding anything):
 # - CI (ci.yml): grows independently with rust/node/python toolchain checks,
 #   at a different pace than these lightweight governance checks.
-# - Reviewer assignment (governance-comment.yml): runs on pull_request_target
-#   with the base repo's write-privileged token, while PR-branch code (CI,
-#   PR policy) runs on pull_request with the untrusted head branch checked
-#   out. Combining those two permission models in one job would let a fork
-#   PR's code reach a write-privileged token. This is a hard security
-#   boundary, not a performance tradeoff — never merge it in.
+# - Reviewer assignment (governance-comment.yml): has pull-request write
+#   permission and a separate PR-only lifecycle. Keeping it separate from
+#   Issue/Milestone writes preserves the least-privilege boundary.
 #
 # Each step below is independently gated with its original job-level `if:`
 # condition (plus an explicit event/action check where the original trigger
@@ -59,6 +56,21 @@ concurrency:
 jobs:
   process:
     name: process
+    if: >-
+      ${{
+        github.event_name == 'milestone' ||
+        (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request == null) ||
+        (github.event_name == 'issues' &&
+        (github.event.issue.milestone.number != null ||
+        github.event.changes.milestone.from.number != null ||
+        (contains(fromJSON('["opened","edited","reopened","closed"]'), github.event.action) &&
+        github.event.issue.user.type == 'User'))) ||
+        (github.event_name == 'pull_request' &&
+        github.event.pull_request.merged == true &&
+        startsWith(github.event.pull_request.base.ref, 'dev/m') &&
+        !startsWith(github.event.pull_request.head.ref, 'sync/'))
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

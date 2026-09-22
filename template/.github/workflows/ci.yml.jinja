@@ -184,7 +184,8 @@ jobs:
           TIER: {% raw %}${{ steps.effective.outputs.suite }}{% endraw %}
         run: |
           tree="$(git rev-parse "$HEAD_SHA^{tree}")"
-          labels="$(jq -c '[.pull_request.labels[].name] | sort' "$GITHUB_EVENT_PATH" 2>/dev/null || printf '[]')"
+          # Only labels that change the verification tier belong in evidence identity.
+          labels="$(jq -c '[.pull_request.labels[].name | select(. == "promotion" or . == "hotfix" or . == "release-recovery")] | sort' "$GITHUB_EVENT_PATH" 2>/dev/null || printf '[]')"
           labels_sha="$(printf '%s' "$labels" | sha256sum | cut -d' ' -f1)"
           if [[ "$TIER" == "full" ]]; then
             command="./.csarc/scripts/verify"
