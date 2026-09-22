@@ -174,8 +174,10 @@ Reconciliation 仍 fresh 時才允許同一 release candidate 重跑，不把一
 `python3 scripts/release_policy.py plan --sha HEAD --phase <level>`；結果若為 `pending`，在
 同一個 checkout 執行 `python3 scripts/release_policy.py prepare-candidate --sha HEAD
 --phase <level>`，將產生的版本檔與 CHANGELOG amend 回該 bridge commit，再 push／開 PR。
-若 plan 為 `no-release`，bridge tree 必須與 delivery source 完全相同。Hosted `verify` 會從
-delivery source 重建預期 tree，比對任何多餘、缺漏或被改寫的內容，不能用手改版本檔繞過。
+若 plan 為 `no-release`，bridge tree 必須與 deterministic pre-release baseline 完全相同：
+雙親可乾淨合併時使用 delivery source 與 current `main` 的 merge tree；雙親衝突時沿用
+source-preserving bridge 的 delivery source tree。Hosted `verify` 會重建同一 baseline，
+再比對 deterministic release 差異中的任何多餘、缺漏或被改寫內容，不能用手改版本檔繞過。
 
 把 tracker 收尾為 `completed` 前，`sync_milestone_state.py regenerate-reconciliation
 --repo <repo> --milestone <編號>` 會在 tracker body 額外維護第五個 H2 段落

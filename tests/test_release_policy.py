@@ -1163,11 +1163,17 @@ def test_promotion_version_is_materialized_in_the_delivery_pr(
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "chore: baseline")
     git(tmp_path, "tag", "v0.1.0")
+    git(tmp_path, "checkout", "-b", "delivery")
     (tmp_path / "feature").write_text("new\n", encoding="utf-8")
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "feat: deliver milestone")
     source_sha = git(tmp_path, "rev-parse", "HEAD")
-    git(tmp_path, "commit", "--allow-empty", "-m", "chore: promotion bridge")
+    git(tmp_path, "checkout", "main")
+    (tmp_path / "main-only").write_text("current main\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "docs: advance main")
+    git(tmp_path, "checkout", "delivery")
+    git(tmp_path, "merge", "--no-ff", "main", "-m", "chore: promotion bridge")
     prepare_release_candidate(tmp_path, "HEAD", phase="beta")
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "--amend", "--no-edit")
@@ -1207,11 +1213,30 @@ def test_promotion_version_rejects_non_release_changes(tmp_path: Path) -> None:
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "chore: baseline")
     git(tmp_path, "tag", "v0.1.0")
-    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "checkout", "-b", "delivery")
+    (tmp_path / "feature").write_text("delivery\n", encoding="utf-8")
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "fix: deliver milestone")
     source_sha = git(tmp_path, "rev-parse", "HEAD")
-    git(tmp_path, "commit", "--allow-empty", "-m", "chore: promotion bridge")
+    source_tree = git(tmp_path, "rev-parse", "HEAD^{tree}")
+    git(tmp_path, "checkout", "main")
+    (tmp_path / "feature").write_text("current main\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "docs: advance main")
+    main_sha = git(tmp_path, "rev-parse", "HEAD")
+    bridge_sha = git(
+        tmp_path,
+        "commit-tree",
+        source_tree,
+        "-p",
+        source_sha,
+        "-p",
+        main_sha,
+        "-m",
+        "chore: promotion bridge",
+    )
+    git(tmp_path, "checkout", "delivery")
+    git(tmp_path, "reset", "--hard", bridge_sha)
     prepare_release_candidate(tmp_path, "HEAD", phase="beta")
     (tmp_path / "unexpected").write_text("not release metadata\n")
     git(tmp_path, "add", ".")

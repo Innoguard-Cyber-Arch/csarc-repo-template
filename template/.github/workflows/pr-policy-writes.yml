@@ -12,19 +12,24 @@ permissions: {}
 concurrency:
   group: >-
     pr-policy-writes-${{ github.event.workflow_run.event }}-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  resolve-pr:
-    name: resolve pull request
-    if: ${{ github.event.workflow_run.event == 'pull_request_target' }}
+  process:
+    name: process
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion != 'cancelled' &&
+        (github.event.workflow_run.event == 'pull_request_target' ||
+        github.event.workflow_run.event == 'merge_group')
+      }}
     permissions:
+      checks: write
       contents: read
-      pull-requests: read
+      issues: write
+      pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    outputs:
-      number: ${{ steps.resolve.outputs.number }}
     steps:
       - name: Check out the trusted default-branch revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,6 +38,7 @@ jobs:
           ref: ${{ github.sha }}
       - name: Resolve the unique triggering pull request
         id: resolve
+        if: ${{ github.event.workflow_run.event == 'pull_request_target' }}
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -47,64 +53,40 @@ jobs:
               --head-branch "$HEAD_BRANCH"
           )"
           echo "number=$pr_number" >> "$GITHUB_OUTPUT"
-
-  metadata:
-    name: metadata
-    needs: resolve-pr
-    if: ${{ needs.resolve-pr.result == 'success' }}
-    permissions:
-      contents: read
-      issues: write
-      pull-requests: write
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out the trusted default-branch revision
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ github.sha }}
       - name: Synchronize pull request metadata
+        if: >-
+          ${{
+            !cancelled() &&
+            github.event.workflow_run.event == 'pull_request_target' &&
+            steps.resolve.outcome == 'success'
+          }}
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
         run: >-
           python3 .csarc/scripts/sync_work_item_metadata.py
           --repo "$GITHUB_REPOSITORY"
           --pr "$PR_NUMBER"
-
-  milestone-approval:
-    name: milestone approval
-    needs: resolve-pr
-    if: >-
-      always() &&
-      (github.event.workflow_run.event == 'merge_group' ||
-      (github.event.workflow_run.event == 'pull_request_target' &&
-      needs.resolve-pr.result == 'success'))
-    permissions:
-      checks: write
-      contents: read
-      issues: read
-      pull-requests: read
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out the trusted default-branch revision
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ github.sha }}
       - name: Publish the pull request approval decision
-        if: ${{ github.event.workflow_run.event == 'pull_request_target' }}
+        if: >-
+          ${{
+            !cancelled() &&
+            github.event.workflow_run.event == 'pull_request_target' &&
+            steps.resolve.outcome == 'success'
+          }}
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
         run: >-
           python3 .csarc/scripts/sync_milestone_state.py check-pr
           --repo "$GITHUB_REPOSITORY"
           --pr "$PR_NUMBER"
       - name: Publish the merge queue approval decision
-        if: ${{ github.event.workflow_run.event == 'merge_group' }}
+        if: >-
+          ${{
+            !cancelled() &&
+            github.event.workflow_run.event == 'merge_group'
+          }}
         env:
           GH_TOKEN: ${{ github.token }}
           MERGE_GROUP_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}

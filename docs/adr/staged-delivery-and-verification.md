@@ -13,7 +13,7 @@
 ## 決定
 
 - `main` 是唯一永久 branch。Milestone work 進短命 `dev/m*`；standalone、hotfix 與 bot work 由短分支直接進 `main`。只有 Issue 明列獨立環境、soak／canary 目標與停止條件時，才使用一條短命 `dev/i*`。
-- Main advance 不會批次回灌或使 ordinary delivery PR stale；各 Milestone 到 final promotion 才用一張 reviewed sync PR 納入 current main。只有 owner 已在 PR 明列 dependency 時可提前同步。無衝突 sync 先驗 exact refs、雙親、tree 與授權路由，再沿用 current main 的 fresh full evidence；人工解衝突只跑 affected owners 與 fast，promotion 才跑 final full。
+- Main advance 不會批次回灌或使 ordinary delivery PR stale；各 Milestone 的 final Promotion PR 以精確雙親 bridge 同時納入 delivery source 與 current main，不另開 final sync PR。只有 owner 已在 PR 明列 dependency，或 `dev/i*` canary 要交付時，才使用 reviewed sync PR。無衝突 sync 先驗 exact refs、雙親、tree 與授權路由，再沿用 current main 的 fresh full evidence；人工解衝突只跑 affected owners 與 fast，promotion 才跑 final full。
 - CI 分 policy、fast、full、scheduled／release 四層，以 stable aggregate context 收斂結果。
 - Promotion 綁定 base／head SHA、candidate tree、full verification 與 canary 三態；artifact-only 不冒充 external canary。
 - Human-confirmed quota-only、zero-step failure 可讓 promotion 以相同 full verification 與 SHA/tree evidence 合併 main；本機 evidence 固定不可發布，待 hosted checks 補跑。
@@ -37,6 +37,7 @@
 | Superseded | Quota fallback 逐 PR 要求人工區分「額度用盡」與「付款失敗」 | [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171) → [#249](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/249) |
 | Preserved | 一般 Issue PR 的 quota fallback 自動化：機械式 zero-step 偵測＋本機驗證＋說明留言即可合併；promotion 到 `main` 維持雙方 attestation／authorization | [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254)／[#251](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/251) |
 | Preserved | Zero-step block 不是 hosted success；本機 full、promotion tree、security 與 supply-chain gates 不因 telemetry 不可用而降低 | [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171)／[#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254)／[#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287) |
+| Superseded（narrowed） | Milestone final promotion 前必須另開 reviewed sync PR；改由同一張 Promotion bridge 的 exact delivery／current-main 雙親承擔 freshness，`sync/main-to-*` 只保留給提前相依與 `dev/i*` canary | [#817](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/817) → [#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)／[#895](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/895) |
 | Unresolved | 真實 runner-minute 降幅需要至少一次成功 hosted run 才能量測；Teams private plan 結構性超額下缺乏穩定量測窗口 | [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189) |
 
 ## Ownership 與驗證

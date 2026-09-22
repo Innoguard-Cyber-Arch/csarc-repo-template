@@ -6,7 +6,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.18.0-alpha.1<!-- x-release-please-version --> |
+| 公版版本 | v0.20.0-alpha.1<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
@@ -145,15 +145,13 @@ flowchart LR
   S["一般孤立 Issues"] --> MAIN
   I["需獨立 canary 的 Issue #42"] --> DI["dev/i42-canary"]
   H["緊急 fix/* + hotfix"] --> MAIN["main"]
-  MA -->|promotion: full + canary| MAIN
-  MB -->|promotion: full + canary| MAIN
+  MA -->|promotion bridge: full + canary| MAIN
+  MB -->|promotion bridge: full + canary| MAIN
   DI -->|單獨 promotion| MAIN
-  MAIN -. "reviewed sync PR" .-> MA
-  MAIN -. "reviewed sync PR" .-> MB
   MAIN -. "reviewed sync PR" .-> DI
 ```
 
-`main` 前進不會讓無關的里程碑工作失效，也不會自動同步所有分支。各里程碑只在最終交付前以受審查的 `sync/main-to-m*` PR 納入當時最新 `main`；只有 owner 記錄真實 dependency 時才提前同步自己的分支。
+`main` 前進不會讓無關的里程碑工作失效，也不會自動同步所有分支。各里程碑的最終 Promotion PR 以精確雙親 bridge 同時納入 delivery source 與當時最新 `main`，不另開 final sync PR；只有 owner 記錄真實 dependency，或 `dev/i*` canary 要交付時，才使用受審查的 `sync/main-to-*` PR。
 
 公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。本機依變更選擇 fast／full，docs-only 只是 fast 內的 scope 最佳化；現行 `.github/workflows/ci.yml` 另以單一 `verify` job 從受信任的 base policy 選擇分級，並在 GitHub-hosted runner 對 exact candidate 執行同一入口。merge 與 release 只接受綁定 repository、commit/tree、tier、scopes、command、toolchain、runner、result 與 freshness 的 hosted evidence，不接受手寫 commit trailer。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。開發中可直接跑最窄的 focused check；只有 PR 本身落在 full 邊界時，owner／integrator 才需在本機另外執行一次 `./scripts/verify-template.sh`。詳細分級與可信執行證據見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 

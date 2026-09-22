@@ -53,6 +53,15 @@ def test_pr_policy_delegates_to_repository_scripts() -> None:
 
 def test_required_check_names_only_run_from_trusted_workflows() -> None:
     """A PR-controlled workflow cannot impersonate a required check name."""
+
+    def reports_required_name(raw_name: object, required_name: str) -> bool:
+        if not isinstance(raw_name, str):
+            return False
+        return raw_name == required_name or any(
+            quoted in raw_name
+            for quoted in (f"'{required_name}'", f'"{required_name}"')
+        )
+
     producers = {
         "pr-policy.yml": {"title"},
         "ci.yml": {"verify"},
@@ -65,17 +74,26 @@ def test_required_check_names_only_run_from_trusted_workflows() -> None:
         triggers = workflow.get("on", workflow.get(True))
         assert "pull_request_target" in triggers
         assert "pull_request" not in triggers
-        assert {
-            job.get("name") for job in workflow["jobs"].values()
-        } >= expected_names
+        job_names = [job.get("name") for job in workflow["jobs"].values()]
+        assert all(
+            any(
+                reports_required_name(job_name, expected_name)
+                for job_name in job_names
+            )
+            for expected_name in expected_names
+        )
 
     for path in (REPO_ROOT / ".github" / "workflows").glob("*.yml"):
         workflow = load_yaml(path)
         triggers = workflow.get("on", workflow.get(True))
         if "pull_request" not in triggers:
             continue
-        names = {job.get("name") for job in workflow["jobs"].values()}
-        assert names.isdisjoint(required_names), path
+        names = [job.get("name") for job in workflow["jobs"].values()]
+        assert not any(
+            reports_required_name(name, required_name)
+            for name in names
+            for required_name in required_names
+        ), path
 
     generated_ci = (
         REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
@@ -85,6 +103,10 @@ def test_required_check_names_only_run_from_trusted_workflows() -> None:
 
     policy = load_yaml(REPO_ROOT / ".github/workflows/pr-policy.yml")
     assert set(policy["jobs"]) == {"title"}
+    assert (
+        "github.event.pull_request.draft == false"
+        in policy["jobs"]["title"]["if"]
+    )
     assert any(
         step.get("name") == "Classify the delivery-promotion route"
         for step in policy["jobs"]["title"]["steps"]
@@ -116,23 +138,27 @@ def test_pr_policy_writes_run_only_from_the_trusted_revision() -> None:
             "${{ github.event.workflow_run.head_branch }}-"
             "${{ github.event.workflow_run.head_sha }}"
         ),
-        "cancel-in-progress": False,
+        "cancel-in-progress": True,
     }
-    assert workflow["jobs"]["resolve-pr"]["permissions"] == {
-        "contents": "read",
-        "pull-requests": "read",
-    }
-    assert workflow["jobs"]["metadata"]["permissions"] == {
+    assert set(workflow["jobs"]) == {"process"}
+    process = workflow["jobs"]["process"]
+    assert process["permissions"] == {
+        "checks": "write",
         "contents": "read",
         "issues": "write",
         "pull-requests": "write",
     }
-    assert workflow["jobs"]["milestone-approval"]["permissions"] == {
-        "checks": "write",
-        "contents": "read",
-        "issues": "read",
-        "pull-requests": "read",
-    }
+    assert "workflow_run.conclusion != 'cancelled'" in process["if"]
+    steps = {step["name"]: step for step in process["steps"]}
+    checkout_count = sum(
+        "actions/checkout@" in str(step) for step in process["steps"]
+    )
+    assert checkout_count == 1
+    assert "!cancelled()" in steps["Synchronize pull request metadata"]["if"]
+    assert (
+        "!cancelled()"
+        in steps["Publish the pull request approval decision"]["if"]
+    )
 
     source = root_path.read_text(encoding="utf-8")
     assert "ref: ${{ github.sha }}" in source
@@ -146,3 +172,20 @@ def test_pr_policy_writes_run_only_from_the_trusted_revision() -> None:
     assert "scripts/sync_work_item_metadata.py" in source
     assert "scripts/sync_milestone_state.py check-pr" in source
     assert "scripts/sync_milestone_state.py check-merge-group" in source
+
+
+def test_pr_review_skips_draft_and_conversion_churn() -> None:
+    """Defer draft review churn while retaining merge authorization."""
+    root_path = REPO_ROOT / ".github/workflows/pr-review.yml"
+    template_path = REPO_ROOT / "template/.github/workflows/pr-review.yml"
+    root_source = root_path.read_text(encoding="utf-8")
+    template_source = template_path.read_text(encoding="utf-8")
+    assert root_source == template_source.replace(".csarc/scripts/", "scripts/")
+
+    workflow = load_yaml(root_path)
+    triggers = workflow.get("on", workflow.get(True))
+    assert "converted_to_draft" not in triggers["pull_request_target"]["types"]
+    condition = workflow["jobs"]["review"]["if"]
+    assert "github.event.pull_request.draft == false" in condition
+    assert "PR lifecycle merge authorization" in condition
+    assert "github.event_name == 'merge_group'" in condition

@@ -64,15 +64,13 @@ flowchart LR
   S["Standalone Issues"] --> MAIN
   I["Issue #42 needing independent canary"] --> DI["dev/i42-canary"]
   H["Urgent fix/* + hotfix"] --> MAIN["main"]
-  MA -->|promotion: full + canary| MAIN
-  MB -->|promotion: full + canary| MAIN
+  MA -->|promotion bridge: full + canary| MAIN
+  MB -->|promotion bridge: full + canary| MAIN
   DI -->|standalone promotion| MAIN
-  MAIN -. "reviewed sync PR" .-> MA
-  MAIN -. "reviewed sync PR" .-> MB
   MAIN -. "reviewed sync PR" .-> DI
 ```
 
-`main` moving forward never makes an ordinary Milestone PR stale, and never fans out a sync automatically. Each Milestone opens one reviewed `sync/main-to-m*` PR right before its final delivery to pick up the latest `main`; a branch is synced earlier only when its owner records a real dependency. A `dev/i*` canary must also include the then-latest `main` before its own delivery.
+`main` moving forward never makes an ordinary Milestone PR stale, and never fans out a sync automatically. Each Milestone's final Promotion PR uses an exact two-parent bridge to include both the delivery source and the then-current `main`, so it needs no final sync PR. A reviewed `sync/main-to-*` PR remains available only for an owner-recorded dependency or a `dev/i*` canary before delivery.
 {% endif %}
 
 ## Technology and layout

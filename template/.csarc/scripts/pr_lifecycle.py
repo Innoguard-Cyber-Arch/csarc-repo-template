@@ -1385,7 +1385,7 @@ def alpha_self_merge_opt_in(
     lease: dict[str, Any],
     pull: dict[str, Any],
 ) -> bool:
-    """Validate the exact Alpha marker and its routine route."""
+    """Validate the exact Alpha marker and its audited route."""
     marker_count = (
         str(pull.get("body") or "").splitlines().count(ALPHA_SELF_MERGE_MARKER)
     )
@@ -1395,6 +1395,30 @@ def alpha_self_merge_opt_in(
         raise RuntimeError("Alpha self-merge marker must appear exactly once")
     base_ref = (pull.get("base") or {}).get("ref")
     if base_ref == lease["default_branch"]:
+        head = pull.get("head") or {}
+        head_ref = str(head.get("ref") or "")
+        labels = {
+            str(item.get("name") or "")
+            for item in pull.get("labels", [])
+            if isinstance(item, dict)
+        }
+        config = csarc_config.load_config(
+            Path(__file__).resolve().parents[1] / ".csarc/config.yml"
+        )
+        route = promotion_gate.route_for(
+            str(base_ref),
+            head_ref,
+            labels,
+            str(config.get("branch_strategy") or "main"),
+        )
+        if route.kind == "milestone":
+            head_repo = head.get("repo") or {}
+            head_repo_name = str(head_repo.get("full_name") or "")
+            if head_repo_name.casefold() != repo.casefold():
+                raise RuntimeError(
+                    "Alpha promotion requires a same-repository head"
+                )
+            return True
         require_default_branch_issue_route(github, repo, lease, pull)
         return True
     route = require_routine_route(github, repo, lease, pull)

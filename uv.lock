@@ -104,7 +104,7 @@ wheels = [
 
 [[package]]
 name = "csarc-repo-template"
-version = "0.18.0a1"
+version = "0.20.0a1"
 source = { editable = "." }
 dependencies = [
     { name = "copier" },

@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.18.0-alpha.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.20.0-alpha.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. This page mirrors the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> and stays synchronized across both languages. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.18.0-alpha.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.20.0-alpha.1<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -582,7 +582,7 @@ Routine updates and security checks run automatically. People step in only for u
 - PR titles use the Angular / Conventional Commits form `type(scope)!: English summary`: `feat` adds a feature, `fix` corrects behavior, `docs` changes documentation, `refactor` restructures code, `test` changes tests, `build` changes builds or dependencies, `ci` changes automation, `chore` performs maintenance, and `revert` undoes a change. Scope and `!` are optional. Release intent is minor for `feat`, patch for `fix` / `revert`, major for `!`, and no release for the other types.
 - The classification label and Milestone match the linked Issue; the PR author must be an assignee.
 - Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work targets `main` directly.
-- A `sync/main-to-*` PR updates a Milestone or explicit canary branch before final delivery, or earlier only when its owner records a real dependency. It never fans out to every branch.
+- A Milestone Promotion PR uses an exact two-parent bridge to include both its delivery source and current main, with no final sync PR. `sync/main-to-*` remains only for an owner-recorded early dependency or a `dev/i*` canary; it never fans out to every branch.
 - Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.
 {{< /disclosure >}}
 
@@ -758,7 +758,7 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Required baseline | `branch_strategy` | `delivery` by default; `delivery` or `main` | branch guidance, `policies/rulesets.json`, and the repo-site's delivery-route section |
 | Organization policy | `code_owner` | one existing `@organization/team` with repository write access | `.github/CODEOWNERS`; checked by repository-settings plan/apply/check; the repo-site's primary-owner line |
 | Organization policy | `reviewers` | one or more GitHub usernames | `.github/REVIEWERS`; `governance-comment.yml` assigns automatically on every non-draft pull request |
-| Project choice | `release_levels_enabled`, `default_release_level`, `release_level_*_{review,verification}` | new repositories default to alpha; adoption and this template root default to beta; each level maps to self/peer and fast/full | Issue/Milestone resolution, the `review` gate, verification attestations, and release notes |
+| Project choice | `release_levels_enabled`, `default_release_level`, `release_level_*_{review,verification}` | this template root disables work-item tiers, defaults to alpha, and maps every level to self/fast; new repositories enable alpha by default, while adoption enables beta by default; each level maps to self/peer and fast/full | Issue/Milestone resolution, the `review` gate, verification attestations, and release notes |
 | Project choice | `pr_review_mode` | `copilot` by default for new projects; `copilot` or `human`; `copier update` defaults existing projects to `human` | `policies/rulesets.json` (`copilot` requires zero approvals, auto-requests Copilot review on every push, and requires the `review` check); `pr-review.yml` and `scripts/review_gate.py` accept a clean Copilot review or a maintainer approval of the current head; needs a Copilot license |
 | Project choice | `copilot_review_max_level` | `unlimited` by default; `alpha`, `beta`, `early`, or `release` (formal) | highest release level a clean Copilot review may approve; higher levels require maintainer approval |
 | Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection, optional security defaults, and the repo-site's visible-audience line |

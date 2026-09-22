@@ -2518,6 +2518,37 @@ def test_default_branch_alpha_route_allows_a_milestone_less_issue(
     assert snapshot["reviewed_bypass"] is True
 
 
+def test_alpha_promotion_uses_the_exact_head_self_review_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #905: a recognized Alpha promotion may use self-review."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.reviews = []
+    github.required_review_count = 0
+    github.head_ref = "promote/m12-agent-workflow-contract"
+    github.labels = {"enhancement", "promotion"}
+    github.body = f"Refs #42\n\n{ALPHA_SELF_MERGE_MARKER}"
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": [
+            {
+                "actor_type": "RepositoryRole",
+                "actor_id": 5,
+                "bypass_mode": "pull_request",
+            }
+        ],
+    }
+    snapshot = merge_snapshot(
+        github,
+        lease_fixture(),
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["alpha_self_merge"] is True
+    assert snapshot["authorization_source"] == "comment"
+    assert snapshot["merge_mode"] == "agent"
+
+
 def test_alpha_self_merge_clears_the_known_reviewed_bypass_ruleset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

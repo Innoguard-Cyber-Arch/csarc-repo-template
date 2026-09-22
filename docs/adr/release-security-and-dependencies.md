@@ -23,7 +23,7 @@ CSARC 過去在版本、發版與供應鏈責任上有多套並存或半途而�
 CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑：
 
 1. 工作 PR 以 Conventional Commits 表達 major／minor／patch／no-release 意圖。
-2. CSARC-owned Milestone 的 final promotion bridge 先用同一份 repo-local 規則 materialize 精確版本與 CHANGELOG；可信 CI 由 delivery source 重建預期 tree，要求 promotion PR 除 deterministic release 差異外不得夾帶其他修改。
+2. CSARC-owned Milestone 的 final promotion bridge 先用同一份 repo-local 規則 materialize 精確版本與 CHANGELOG；可信 CI 由雙親的 deterministic pre-release baseline 重建預期 tree（乾淨時是 delivery source 與 current `main` 的 merge tree，衝突時是既有 source-preserving bridge 的 delivery source tree），要求 promotion PR 除 deterministic release 差異外不得夾帶其他修改。
 3. Milestone promotion body 用 `Refs #<tracker>`，不在 merge 時提前關 tracker；同一張 PR 同時審查整批交付與版本候選，因此 Milestone 不再另開版本 PR。
 4. Standalone work 維持既有候選路徑：**Automatic** 由 Release Please 建立或更新版本 PR；**Guided** 由維護者或 agent 執行 `python3 scripts/release_policy.py prepare-candidate` 再開一般 PR。
 5. **Blocked：**若 tag 或 GitHub Release 的必要權限不可用，流程留下失敗證據並停止，不改走另一個發布器。
