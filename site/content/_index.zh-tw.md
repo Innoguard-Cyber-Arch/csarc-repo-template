@@ -751,7 +751,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 必要基線 | `branch_strategy` | 預設 `delivery`；可選 `delivery`、`main` | 分支指引、`policies/rulesets.json`，以及 repo-site 的交付路線段落 |
 | 組織政策 | `code_owner` | 一個存在且有 repo write access 的 `@organization/team` | `.github/CODEOWNERS`；由 repository settings plan／apply／check 驗證；repo-site 的主要負責人欄位 |
 | 組織政策 | `reviewers` | 一個或多個 GitHub 使用者名稱 | `.github/REVIEWERS`；`governance-comment.yml` 在每張非 draft PR 自動輪派 |
-| 專案選擇 | `release_levels_enabled`、`default_release_level`、`release_level_*_{review,verification}` | 新專案預設 alpha；既有導入與公版 root 預設 beta；逐層可設定 self／peer 與 baseline／fast／docs／full | Issue／Milestone 層級解析、`review` gate、驗證 attestation 與 release notes |
+| 專案選擇 | `release_levels_enabled`、`default_release_level`、`release_level_*_{review,verification}` | 公版 root 關閉一般工作分層、預設 alpha，並把所有層級映射為 self／baseline；新專案預設啟用 alpha，既有導入預設啟用 beta；逐層可設定 self／peer 與 baseline／fast／docs／full | Issue／Milestone 層級解析、`review` gate、驗證 attestation 與 release notes |
 | 專案選擇 | `pr_review_mode` | 新專案預設 `copilot`；可選 `copilot`、`human`；`copier update` 對既有專案預設 `human` | `policies/rulesets.json`（`copilot` 改為 0 個 approval、自動請 Copilot 審核每次 push，並要求 `review` 檢查）；`pr-review.yml` 與 `scripts/review_gate.py` 接受 Copilot 對目前 head 沒有意見，或 maintainer 對目前 head 的 approval；需要 Copilot 授權 |
 | 專案選擇 | `copilot_review_max_level` | 預設 `unlimited`；可選 `alpha`、`beta`、`early`、`release`（formal） | Copilot 通過可取代人工審核的最高發布層級；高於上限時要求 maintainer 核准 |
 | 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及 repo-site 的可見受眾欄位 |
