@@ -268,6 +268,9 @@ class FakeGitHub:
             run_id = int(run_match.group(1))
             return {
                 "id": run_id,
+                "html_url": (
+                    f"https://github.com/owner/repo/actions/runs/{run_id}"
+                ),
                 "run_attempt": 1,
                 "check_suite_id": self.run_suite_ids[run_id],
                 "head_sha": self.head,
@@ -1718,6 +1721,57 @@ def test_required_contexts_pin_their_trusted_workflow(
         github.head,
         item,
         context,
+        15368,
+        {},
+    )
+
+
+def test_published_review_check_binds_to_its_trusted_workflow_run() -> None:
+    """A three-state review check may use a separate GitHub check suite."""
+    github = FakeGitHub("a" * 40)
+    github.run_paths[201] = ".github/workflows/pr-review.yml"
+    github.run_events[201] = "pull_request_target"
+    item = {
+        "id": 9,
+        "name": "review",
+        "head_sha": github.head,
+        "status": "in_progress",
+        "conclusion": None,
+        "details_url": "https://github.com/owner/repo/actions/runs/201",
+        "external_id": f"csarc-review:201:{github.head}",
+        "app": {"id": 15368},
+        "check_suite": {"id": 9999},
+    }
+
+    assert trusted_check_run_matches_context(
+        github,
+        "owner/repo",
+        github.head,
+        item,
+        "review",
+        15368,
+        {},
+    )
+
+    item["external_id"] = f"csarc-review:200:{github.head}"
+    assert not trusted_check_run_matches_context(
+        github,
+        "owner/repo",
+        github.head,
+        item,
+        "review",
+        15368,
+        {},
+    )
+
+    item["external_id"] = f"csarc-review:201:{github.head}"
+    item["check_suite"] = None
+    assert not trusted_check_run_matches_context(
+        github,
+        "owner/repo",
+        github.head,
+        item,
+        "review",
         15368,
         {},
     )

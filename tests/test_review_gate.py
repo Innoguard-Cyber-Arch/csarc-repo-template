@@ -190,6 +190,7 @@ def test_human_mode_requires_exact_head_approval(tmp_path: Path) -> None:
         config(tmp_path, "copilot_review: off\nadmin_bypass: off\n"),
     )
     assert not result["passed"]
+    assert result["state"] == "pending"
     assert result["release_level"] == "stable"
     assert "independent maintainer" in result["reason"]
 
@@ -200,6 +201,7 @@ def test_human_mode_requires_exact_head_approval(tmp_path: Path) -> None:
         config(tmp_path, "copilot_review: off\nadmin_bypass: off\n"),
     )
     assert approved["passed"]
+    assert approved["state"] == "success"
     assert approved["source"] == "maintainer"
 
 
@@ -240,6 +242,7 @@ def test_beta_hotfix_admin_authorization_passes_for_exact_head(
     )
 
     assert result["passed"]
+    assert result["state"] == "success"
     assert result["source"] == "hotfix-emergency"
     assert "production outage" in result["reason"]
 
@@ -271,21 +274,33 @@ def test_clean_copilot_review_of_head_passes(copilot_config: Path) -> None:
         FakeGitHub([copilot()]), "o/r", 7, copilot_config
     )
     assert result["passed"]
+    assert result["state"] == "success"
     assert result["source"] == "copilot"
 
 
 @pytest.mark.parametrize(
-    ("reviews", "inline", "reason"),
+    ("reviews", "inline", "reason", "state"),
     [
-        ([], [], "not reviewed this pull request"),
-        ([copilot("b" * 40)], [], "not reviewed the current head"),
+        ([], [], "not reviewed this pull request", "pending"),
+        ([copilot("b" * 40)], [], "not reviewed the current head", "pending"),
         (
             [copilot()],
             [{"path": "x.py", "line": 1, "body": "Bug"}],
             "1 comment",
+            "failure",
         ),
-        ([copilot(body="Comments suppressed (2)")], [], "suppressed"),
-        ([copilot(body="Copilot encountered an error.")], [], "does not state"),
+        (
+            [copilot(body="Comments suppressed (2)")],
+            [],
+            "suppressed",
+            "failure",
+        ),
+        (
+            [copilot(body="Copilot encountered an error.")],
+            [],
+            "does not state",
+            "failure",
+        ),
     ],
 )
 def test_copilot_review_that_is_not_clean_fails(
@@ -293,12 +308,14 @@ def test_copilot_review_that_is_not_clean_fails(
     reviews: list[dict[str, Any]],
     inline: list[dict[str, Any]],
     reason: str,
+    state: str,
 ) -> None:
-    """Pending, stale, commented, or unrecognized reviews fail closed."""
+    """Waiting reviews stay pending; conclusive findings fail closed."""
     github = FakeGitHub(reviews)
     github.inline = inline
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert not result["passed"]
+    assert result["state"] == state
     assert reason in result["reason"]
     assert "maintainer approval" in result["reason"]
 
@@ -330,7 +347,7 @@ def test_stale_maintainer_approval_does_not_count(copilot_config: Path) -> None:
     assert not result["passed"]
 
 
-def test_draft_fails_even_with_clean_copilot_review(
+def test_draft_stays_pending_even_with_clean_copilot_review(
     copilot_config: Path,
 ) -> None:
     """Draft pull requests are not ready to merge."""
@@ -338,7 +355,66 @@ def test_draft_fails_even_with_clean_copilot_review(
     github.draft = True
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert not result["passed"]
+    assert result["state"] == "pending"
     assert "Draft" in result["reason"]
+
+
+@pytest.mark.parametrize(
+    ("state", "status", "conclusion"),
+    [
+        ("pending", "queued", None),
+        ("success", "completed", "success"),
+        ("failure", "completed", "failure"),
+    ],
+)
+def test_publish_check_preserves_three_states(
+    monkeypatch: pytest.MonkeyPatch,
+    state: str,
+    status: str,
+    conclusion: str | None,
+) -> None:
+    """The workflow passes after publishing the authoritative check state."""
+    payloads: list[dict[str, Any]] = []
+
+    def fake_run(
+        command: list[str],
+        *,
+        input_text: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> str:
+        del env
+        assert command[-3:] == ["repos/o/r/check-runs", "--input", "-"]
+        assert input_text is not None
+        payload = json.loads(input_text)
+        payloads.append(payload)
+        return json.dumps({**payload, "conclusion": payload.get("conclusion")})
+
+    monkeypatch.setattr(pr_lifecycle, "run", fake_run)
+    review_gate.publish_check(
+        "o/r",
+        {"head_sha": HEAD, "state": state, "reason": "review evidence"},
+        "https://github.com/o/r/actions/runs/123",
+        123,
+    )
+
+    assert payloads == [
+        {
+            "name": "review",
+            "head_sha": HEAD,
+            "status": status,
+            "details_url": "https://github.com/o/r/actions/runs/123",
+            "external_id": f"csarc-review:123:{HEAD}",
+            "output": {
+                "title": (
+                    "Review pending"
+                    if state == "pending"
+                    else "Review decision"
+                ),
+                "summary": "review evidence",
+            },
+            **({"conclusion": conclusion} if conclusion is not None else {}),
+        }
+    ]
 
 
 def test_copilot_can_satisfy_every_release_level(
@@ -787,7 +863,8 @@ def test_issue_comment_review_gate_can_read_release_level_issues() -> None:
         ROOT / "template/.github/workflows/pr-review.yml",
     ):
         workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
-        assert workflow["jobs"]["review"]["permissions"] == {
+        assert workflow["jobs"]["publish"]["permissions"] == {
+            "checks": "write",
             "contents": "read",
             "issues": "read",
             "pull-requests": "read",

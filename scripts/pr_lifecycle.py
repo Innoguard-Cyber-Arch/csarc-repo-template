@@ -1906,14 +1906,25 @@ def trusted_check_run_matches_context(
     repository = run.get("repository")
     check_suite = item.get("check_suite")
     workflow_path, trusted_events = producer
-    return (
-        type(run.get("id")) is int
-        and run["id"] == run_id
-        and isinstance(check_suite, dict)
+    suite_matches = (
+        isinstance(check_suite, dict)
         and type(check_suite.get("id")) is int
         and check_suite["id"] > 0
         and type(run.get("check_suite_id")) is int
         and run["check_suite_id"] == check_suite["id"]
+    )
+    published_review_matches = (
+        context == REVIEW_CHECK_CONTEXT
+        and isinstance(check_suite, dict)
+        and type(check_suite.get("id")) is int
+        and check_suite["id"] > 0
+        and item.get("external_id") == f"csarc-review:{run_id}:{head_sha}"
+        and item.get("details_url") == run.get("html_url")
+    )
+    return (
+        type(run.get("id")) is int
+        and run["id"] == run_id
+        and (suite_matches or published_review_matches)
         and run.get("head_sha") == head_sha
         and isinstance(repository, dict)
         and repository.get("full_name") == repo

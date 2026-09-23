@@ -59,6 +59,7 @@ class Decision:
 
     allowed: bool
     summary: str
+    pending: bool = False
 
 
 def run_gh(arguments: list[str]) -> str:
@@ -727,6 +728,7 @@ def _gate_decision(
             False,
             "This release level requires approval from another person; "
             "admin self-approval is only valid when self-review is configured",
+            pending=True,
         )
     if not approvals and not admin_approvals:
         if stale:
@@ -734,8 +736,9 @@ def _gate_decision(
                 False,
                 f"{missing_message} (a later edit invalidated the approval "
                 f"from {', '.join(sorted(stale))} -- re-approve)",
+                pending=True,
             )
-        return Decision(False, missing_message)
+        return Decision(False, missing_message, pending=True)
     unresolved = sorted(set(objections) - resolved)
     if unresolved:
         return Decision(
@@ -1457,27 +1460,27 @@ def _set_issue_state(repo: str, number: int, state: str) -> None:
 
 def _record_check(repo: str, head_sha: str, decision: Decision) -> None:
     """Publish the latest approval decision on one pull-request head."""
-    conclusion = "success" if decision.allowed else "failure"
-    run_gh(
-        [
-            "api",
-            "--method",
-            "POST",
-            f"repos/{repo}/check-runs",
-            "--raw-field",
-            f"name={CHECK_NAME}",
-            "--raw-field",
-            f"head_sha={head_sha}",
-            "--raw-field",
-            "status=completed",
-            "--raw-field",
-            f"conclusion={conclusion}",
-            "--raw-field",
-            f"output[title]={CHECK_NAME}",
-            "--raw-field",
-            f"output[summary]={decision.summary}",
-        ]
-    )
+    status = "queued" if decision.pending else "completed"
+    arguments = [
+        "api",
+        "--method",
+        "POST",
+        f"repos/{repo}/check-runs",
+        "--raw-field",
+        f"name={CHECK_NAME}",
+        "--raw-field",
+        f"head_sha={head_sha}",
+        "--raw-field",
+        f"status={status}",
+        "--raw-field",
+        f"output[title]={CHECK_NAME}",
+        "--raw-field",
+        f"output[summary]={decision.summary}",
+    ]
+    if not decision.pending:
+        conclusion = "success" if decision.allowed else "failure"
+        arguments.extend(["--raw-field", f"conclusion={conclusion}"])
+    run_gh(arguments)
 
 
 def refresh_pr_checks(snapshot: dict[str, Any]) -> int:
@@ -1577,6 +1580,8 @@ def check_merge_group(
             "; ".join(blocked)
             if blocked
             else "Every queued Milestone is approved",
+            pending=bool(blocked)
+            and all(item.pending for item in decisions if not item.allowed),
         )
     if record_check:
         _record_check(repo, head_sha, decision)
@@ -1860,11 +1865,15 @@ def main() -> None:
     check = subparsers.add_parser("check-pr")
     check.add_argument("--repo", required=True)
     check.add_argument("--pr", required=True, type=int)
-    check.add_argument("--read-only", action="store_true")
+    check_mode = check.add_mutually_exclusive_group()
+    check_mode.add_argument("--read-only", action="store_true")
+    check_mode.add_argument("--publish-only", action="store_true")
     queue = subparsers.add_parser("check-merge-group")
     queue.add_argument("--repo", required=True)
     queue.add_argument("--head-sha", required=True)
-    queue.add_argument("--read-only", action="store_true")
+    queue_mode = queue.add_mutually_exclusive_group()
+    queue_mode.add_argument("--read-only", action="store_true")
+    queue_mode.add_argument("--publish-only", action="store_true")
     subparsers.add_parser("check-promotion")
     record = subparsers.add_parser("record-promotion-evidence")
     record.add_argument("--repo", required=True)
@@ -1907,10 +1916,20 @@ def main() -> None:
 def _dispatch(args: argparse.Namespace) -> Decision:  # noqa: C901
     """Route one parsed subcommand to its handler function."""
     if args.command == "check-pr":
-        return check_pr(args.repo, args.pr, record_check=not args.read_only)
+        decision = check_pr(args.repo, args.pr, record_check=not args.read_only)
+        return (
+            Decision(True, f"Published {CHECK_NAME}: {decision.summary}")
+            if args.publish_only
+            else decision
+        )
     if args.command == "check-merge-group":
-        return check_merge_group(
+        decision = check_merge_group(
             args.repo, args.head_sha, record_check=not args.read_only
+        )
+        return (
+            Decision(True, f"Published {CHECK_NAME}: {decision.summary}")
+            if args.publish_only
+            else decision
         )
     if args.command == "check-promotion":
         return promotion_decision(sys.stdin.read())

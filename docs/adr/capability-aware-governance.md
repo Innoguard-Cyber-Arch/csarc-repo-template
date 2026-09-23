@@ -307,6 +307,23 @@ workflow path 與事件。PR 新增或修改的 `pull_request` workflow 即使�
 sync self-review 路線，以及 #829 的唯讀 gate／trusted writer 分離；驗證證據本身的
 不可偽造性仍由 #834 負責，不在本決定中以名稱或 App 綁定取代。
 
+## 2026-09-23 將預期治理狀態與自動化故障分開（#933）
+
+維護者確認，自動化不應為了「fail closed」而把所有尚未完成或已成功處理的狀態都回報
+為 failure。狀態契約改為三類：尚待審核或重新核可用 pending；已滿足條件或已成功發布
+決定／告警用 success；確定的政策違規、負面審核或執行／寫入錯誤才用 failure。
+
+`pr-review.yml` 因而由可信 base workflow 的 publisher 建立 `review` check-run，而不再
+直接拿 publisher job 的 conclusion 當審核結論。check-run 以 exact head、Actions run URL
+與 `csarc-review:<run-id>:<head-sha>` external ID 綁定來源；`pr_lifecycle.py` 仍驗證 GitHub
+Actions App、repository、workflow path、event 與 exact head。pending check 不滿足 Ruleset，
+所以等待狀態沒有紅燈，也不會被誤當成可合併。
+
+同一原則套用到 trusted PR-policy writer 與 release drift：approval 尚待核可時發布 pending，
+writer 成功送出決定後自身成功；release drift 成功建立或更新追蹤 Issue 後自身成功。GitHub
+API 或寫入失敗仍失敗。真實的 title／branch route／Issue binding 違規仍由 `title` 失敗，
+zero-step Actions quota 也維持 #325 的明示例外，不能用合成成功掩蓋未執行的 required check。
+
 ## 重新評估條件
 
 Repository 方案、organization policy、fleet 規模或實測 drift 頻率改變時，重新執行 capability preflight 與 fleet threshold review；不要把安裝時快照當永久真相。

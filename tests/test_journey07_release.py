@@ -595,7 +595,11 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
     assert "audit evidence is unavailable" in script
     assert "gh issue create" in script
     assert "gh issue edit" in script
-    assert "exit 1" in script
+    assert (
+        "Release publish drift detected; publishing the tracking Issue."
+        in script
+    )
+    assert script.rstrip().endswith("exit 0")
 
 
 def test_release_drift_check_ships_with_release_ownership() -> None:
