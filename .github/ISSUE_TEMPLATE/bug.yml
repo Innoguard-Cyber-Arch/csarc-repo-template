@@ -1,6 +1,7 @@
 name: Bug｜非預期行為
 description: 回報實際行為不符合預期且能重現的問題
 title: ""
+# Portable fallback; lifecycle removes it when native Issue Types work.
 labels: ["bug"]
 type: "Bug"
 body:

@@ -578,7 +578,7 @@ Routine updates and security checks run automatically. People step in only for u
 {{< disclosure key="pr-version-intent" title="PR titles, branches, and exceptions" >}}
 - Work branches use `type/<Issue>-short-slug`, and the PR links the matching open Issue.
 - PR titles use the Angular / Conventional Commits form `type(scope)!: English summary`: `feat` adds a feature, `fix` corrects behavior, `docs` changes documentation, `refactor` restructures code, `test` changes tests, `build` changes builds or dependencies, `ci` changes automation, `chore` performs maintenance, and `revert` undoes a change. Scope and `!` are optional. Release intent is minor for `feat`, patch for `fix` / `revert`, major for `!`, and no release for the other types.
-- The classification label and Milestone match the linked Issue; the PR author must be an assignee.
+- The PR carries one lowercase work label derived from the Issue Type (or its fallback label when Types are unavailable); its Milestone matches the Issue, and the PR author must be an assignee.
 - Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work targets `main` directly.
 - A Milestone Promotion PR uses an exact two-parent bridge to include both its delivery source and current main, with no final sync PR. `sync/main-to-*` remains only for an owner-recorded early dependency or a `dev/i*` canary; it never fans out to every branch.
 - Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.
@@ -640,7 +640,7 @@ GitHub Release is the portable baseline for every profile. Registry publishing a
 {{< /disclosure >}}
 
 {{< disclosure key="hotfix-delivery" title="Hotfix review, verification, and evidence" >}}
-A hotfix uses a Bug Issue without a Milestone, the `bug` and `hotfix` labels, `fix/<Issue>-*`, and a `fix(scope): summary` PR directly to `main`; full verification still applies. At beta or above, the emergency path requires one live admin to be the Issue proposer, exact-head authorizer, and merge actor, with a recorded reason; it then opens a `needs-manual-review` Issue automatically. No other PR may use this exception. Undisclosed security defects use a GitHub Security Advisory instead.
+A hotfix uses a Bug Issue without a Milestone and adds only `hotfix` to the Issue. Its PR carries `bug` and `hotfix`, uses `fix/<Issue>-*` and `fix(scope): summary`, and targets `main`; full verification still applies. At beta or above, the emergency path requires one live admin to be the Issue proposer, exact-head authorizer, and merge actor, with a recorded reason; it then opens a `needs-manual-review` Issue automatically. No other PR may use this exception. Undisclosed security defects use a GitHub Security Advisory instead.
 {{< /disclosure >}}
 
 {{< disclosure key="manual-release-boundary" title="Automatic-release ownership" >}}

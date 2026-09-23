@@ -576,7 +576,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< disclosure key="pr-version-intent" title="PR 標題、分支與例外" >}}
 - 工作分支使用 `type/<Issue>-short-slug`，並連回同號未結案 Issue。
 - PR 標題使用 Angular／Conventional Commits 格式：`type(scope)!: English summary`。type 可用 `feat` 新功能、`fix` 修錯、`docs` 文件、`refactor` 重構、`test` 測試、`build` 建置／相依、`ci` 自動化、`chore` 維護、`revert` 撤回；scope 與 `!` 可省略。版本意圖為 `feat`＝minor、`fix`／`revert`＝patch、`!`＝breaking／major，其餘不主動升版。
-- 工作 Label 與里程碑要和 Issue 一致；PR 作者必須列為負責人。
+- PR 使用一個由 Issue Type（或 Type 不可用時的 fallback Label）推導的小寫工作 Label；里程碑要和 Issue 一致，PR 作者必須列為負責人。
 - 里程碑工作進 `dev/m<里程碑>-*`；一般獨立工作直接進 `main`。
 - Milestone 的 Promotion PR 以精確雙親 bridge 同時納入 delivery source 與最新 main，不另開 final sync PR；`sync/main-to-*` 只保留給明列的提前相依與 `dev/i*` canary，不對所有分支 fan-out。
 - 只有明確標示的 standalone hotfix 可直接進 main；誰能合併由「規則治理」決定。
@@ -638,7 +638,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI、npm、GHCR 與 artifac
 {{< /disclosure >}}
 
 {{< disclosure key="hotfix-delivery" title="Hotfix 的審查、驗證與證據" >}}
-Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<Issue>-*` 與 `fix(scope): summary`，直接對 `main` 開 PR，且仍須 full verification。beta 以上若無法等候同儕，緊急路徑要求 Issue 提案者、exact-head 授權者與 merge actor 是同一位即時具有 admin 權限的人，並留下理由；合併後系統自動建立 `needs-manual-review` Issue。其他 PR 不得使用此例外。未公開的安全問題改用 GitHub Security Advisory 私密處理。
+Hotfix 建立不屬於里程碑的 Bug Issue，Issue 只加 `hotfix`，PR 使用 `bug`＋`hotfix`、`fix/<Issue>-*` 與 `fix(scope): summary`，直接對 `main` 開 PR，且仍須 full verification。beta 以上若無法等候同儕，緊急路徑要求 Issue 提案者、exact-head 授權者與 merge actor 是同一位即時具有 admin 權限的人，並留下理由；合併後系統自動建立 `needs-manual-review` Issue。其他 PR 不得使用此例外。未公開的安全問題改用 GitHub Security Advisory 私密處理。
 {{< /disclosure >}}
 
 {{< disclosure key="manual-release-boundary" title="自動發版的責任邊界" >}}

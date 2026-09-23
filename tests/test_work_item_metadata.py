@@ -145,7 +145,7 @@ def test_metadata_preserves_facets_and_mirrors_issue() -> None:
         "labels": [{"name": "hotfix"}, {"name": "documentation"}],
     }
     issue = {
-        "labels": [{"name": "bug"}],
+        "labels": [],
         "type": {"name": "Bug"},
         "milestone": {"number": 11},
     }
@@ -162,6 +162,19 @@ def test_task_without_label_uses_enhancement_fallback() -> None:
     )
 
 
+def test_label_is_used_only_without_a_native_type() -> None:
+    assert issue_classification({"labels": [{"name": "bug"}]}) == "bug"
+
+    try:
+        issue_classification(
+            {"labels": [{"name": "bug"}], "type": {"name": "Bug"}}
+        )
+    except MetadataError as error:
+        assert "redundant" in str(error)
+    else:
+        raise AssertionError("native Issue Type and work-kind label overlapped")
+
+
 def test_sync_patches_pr_issue_metadata() -> None:
     calls: list[tuple[list[str], str | None]] = []
 
@@ -175,7 +188,7 @@ def test_sync_patches_pr_issue_metadata() -> None:
             }
         if endpoint.endswith("/issues/42"):
             return {
-                "labels": [{"name": "bug"}],
+                "labels": [],
                 "type": {"name": "Bug"},
                 "milestone": {"number": 7},
             }
@@ -207,7 +220,7 @@ def test_sync_skips_an_identical_patch() -> None:
             }
         if endpoint.endswith("/issues/42"):
             return {
-                "labels": [{"name": "bug"}],
+                "labels": [],
                 "type": {"name": "Bug"},
                 "milestone": {"number": 7},
             }

@@ -143,15 +143,13 @@ def resolve_workflow_run_pr(
 
 
 def issue_classification(issue: JsonObject) -> str:
-    """Return the one cross-item label implied by Issue metadata."""
+    """Return the PR label implied by native Issue metadata or fallback."""
     labels: set[str] = {
         item["name"]
         for item in issue.get("labels", [])
         if isinstance(item, dict) and isinstance(item.get("name"), str)
     }
     selected = labels & CLASSIFICATION_LABELS
-    if len(selected) == 1:
-        return selected.pop()
     if len(selected) > 1:
         raise MetadataError(
             "linked Issue has conflicting classification labels"
@@ -159,10 +157,19 @@ def issue_classification(issue: JsonObject) -> str:
 
     issue_type = issue.get("type")
     type_name = issue_type.get("name") if isinstance(issue_type, dict) else None
+    selected_label = next(iter(selected), None)
+    if type_name == "Task" and selected_label == "documentation":
+        return "documentation"
+    if type_name in {"Bug", "Feature", "Task"} and selected_label is not None:
+        raise MetadataError(
+            "linked Issue has a redundant or conflicting work-kind label"
+        )
     if type_name == "Bug":
         return "bug"
     if type_name in {"Feature", "Task"}:
         return "enhancement"
+    if selected_label is not None:
+        return selected_label
     raise MetadataError("linked Issue has no usable classification")
 
 
