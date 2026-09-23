@@ -70,10 +70,8 @@ set -euo pipefail
 #                       scripts/test-check-release-drift for determinism;
 #                       defaults to the real current time.
 #
-# Exit status: 0 when no drift is detected (prints the evidence either
-# way); non-zero when drift is detected (after opening or updating the
-# tracking Issue) so the scheduled workflow run itself also shows failed,
-# same convention as scripts/check-governance-drift.
+# Exit status: 0 when no drift is detected or when drift was reported
+# through the tracking Issue; non-zero when detection or notification fails.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -566,7 +564,7 @@ if [[ "$drift" != "True" ]]; then
   exit 0
 fi
 
-echo "Release publish drift detected." >&2
+echo "Release publish drift detected; publishing the tracking Issue."
 
 issue_body_file="$work_dir/issue-body.md"
 python3 -c 'import json,sys; sys.stdout.write(json.load(open(sys.argv[1], encoding="utf-8"))["issue_body"])' "$result_file" >"$issue_body_file"
@@ -584,4 +582,4 @@ else
   echo "Opened a release drift tracking Issue."
 fi
 
-exit 1
+exit 0

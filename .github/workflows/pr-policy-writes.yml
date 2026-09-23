@@ -81,6 +81,7 @@ jobs:
           python3 scripts/sync_milestone_state.py check-pr
           --repo "$GITHUB_REPOSITORY"
           --pr "$PR_NUMBER"
+          --publish-only
       - name: Publish the merge queue approval decision
         if: >-
           ${{
@@ -94,3 +95,4 @@ jobs:
           python3 scripts/sync_milestone_state.py check-merge-group
           --repo "$GITHUB_REPOSITORY"
           --head-sha "$MERGE_GROUP_HEAD_SHA"
+          --publish-only

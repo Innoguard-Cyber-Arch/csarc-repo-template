@@ -64,12 +64,20 @@ case "$1" in
         jq -r "$jq_query" "$MOCK_ROOT/open-issues.json"
         ;;
       edit)
+        if [[ "${MOCK_FAIL_ISSUE:-0}" == "1" ]]; then
+          echo "mock gh: Issue update failure" >&2
+          exit 1
+        fi
         issue_number="$3"
         body_file="$(find_flag_value --body-file "$@")"
         echo "edit $issue_number" >>"$MOCK_ROOT/issue-calls.log"
         cp "$body_file" "$MOCK_ROOT/last-issue-body.md"
         ;;
       create)
+        if [[ "${MOCK_FAIL_ISSUE:-0}" == "1" ]]; then
+          echo "mock gh: Issue creation failure" >&2
+          exit 1
+        fi
         body_file="$(find_flag_value --body-file "$@")"
         echo "create" >>"$MOCK_ROOT/issue-calls.log"
         cp "$body_file" "$MOCK_ROOT/last-issue-body.md"
@@ -191,7 +199,7 @@ set +e
 stale_ancestor_output="$(run_mocked --hours 0.01 2>&1)"
 stale_ancestor_status=$?
 set -e
-[[ "$stale_ancestor_status" -ne 0 ]]
+[[ "$stale_ancestor_status" -eq 0 ]]
 grep -Fq "DRIFT DETECTED" <<<"$stale_ancestor_output"
 
 # Case 4: even a well-formed trusted release-PR comment is audit text, not
@@ -204,7 +212,7 @@ set +e
 pr_record_output="$(run_mocked 2>&1)"
 pr_record_status=$?
 set -e
-[[ "$pr_record_status" -ne 0 ]]
+[[ "$pr_record_status" -eq 0 ]]
 grep -Fq "from release PR #42 comment" <<<"$pr_record_output"
 grep -Fq "DRIFT DETECTED" <<<"$pr_record_output"
 grep -Fq "create" "$fixture_root/issue-calls.log"
@@ -221,7 +229,7 @@ set +e
 beta_pr_record_output="$(run_mocked 2>&1)"
 beta_pr_record_status=$?
 set -e
-[[ "$beta_pr_record_status" -ne 0 ]]
+[[ "$beta_pr_record_status" -eq 0 ]]
 grep -Fq "from release PR #43 comment" <<<"$beta_pr_record_output"
 grep -Fq "DRIFT DETECTED" <<<"$beta_pr_record_output"
 
@@ -236,7 +244,7 @@ set +e
 unrelated_release_output="$(run_mocked 2>&1)"
 unrelated_release_status=$?
 set -e
-[[ "$unrelated_release_status" -ne 0 ]]
+[[ "$unrelated_release_status" -eq 0 ]]
 grep -Fq "ignored: target is not main or its ancestor" <<<"$unrelated_release_output"
 
 # Case 6: an ancestor Release published before current main is stale rather
@@ -250,7 +258,7 @@ set +e
 stale_release_output="$(run_mocked 2>&1)"
 stale_release_status=$?
 set -e
-[[ "$stale_release_status" -ne 0 ]]
+[[ "$stale_release_status" -eq 0 ]]
 grep -Fq "ignored: published before the current main commit" <<<"$stale_release_output"
 
 # Case 7: a draft entry is filtered before evaluation even when it is the
@@ -280,7 +288,7 @@ set +e
 mismatched_release_output="$(run_mocked 2>&1)"
 mismatched_release_status=$?
 set -e
-[[ "$mismatched_release_status" -ne 0 ]]
+[[ "$mismatched_release_status" -eq 0 ]]
 grep -Fq "ignored: prerelease flag does not match tag shape" <<<"$mismatched_release_output"
 grep -Fq "DRIFT DETECTED" <<<"$mismatched_release_output"
 
@@ -294,7 +302,7 @@ set +e
 unstable_release_output="$(run_mocked 2>&1)"
 unstable_release_status=$?
 set -e
-[[ "$unstable_release_status" -ne 0 ]]
+[[ "$unstable_release_status" -eq 0 ]]
 grep -Fq "ignored: tag is not a legal release-phase version" <<<"$unstable_release_output"
 
 # Case 8: main has advanced past the last successful run, and that run is
@@ -308,7 +316,7 @@ set +e
 drift_output="$(run_mocked --repo "$mock_repo" 2>&1)"
 drift_status=$?
 set -e
-[[ "$drift_status" -ne 0 ]]
+[[ "$drift_status" -eq 0 ]]
 grep -Fq "DRIFT DETECTED" <<<"$drift_output"
 grep -Fq "create" "$fixture_root/issue-calls.log"
 grep -Fq "已經前進" "$fixture_root/last-issue-body.md"
@@ -329,7 +337,7 @@ set +e
 update_output="$(run_mocked 2>&1)"
 update_status=$?
 set -e
-[[ "$update_status" -ne 0 ]]
+[[ "$update_status" -eq 0 ]]
 grep -Fq "from tracking Issue comment" <<<"$update_output"
 grep -Fq "DRIFT DETECTED" <<<"$update_output"
 grep -Fq "edit 77" "$fixture_root/issue-calls.log"
@@ -345,7 +353,7 @@ set +e
 record_output="$(run_mocked 2>&1)"
 record_status=$?
 set -e
-[[ "$record_status" -ne 0 ]]
+[[ "$record_status" -eq 0 ]]
 grep -Fq "Local publish record (audit only): operator=@octocat commit=$previous_sha" <<<"$record_output"
 grep -Fq "DRIFT DETECTED" <<<"$record_output"
 grep -Fq "create" "$fixture_root/issue-calls.log"
@@ -361,7 +369,7 @@ set +e
 mutable_release_output="$(run_mocked 2>&1)"
 mutable_release_status=$?
 set -e
-[[ "$mutable_release_status" -ne 0 ]]
+[[ "$mutable_release_status" -eq 0 ]]
 grep -Fq "ignored: release is not immutable" <<<"$mutable_release_output"
 
 # Case 12: an older API payload without the immutable field also fails
@@ -375,7 +383,7 @@ set +e
 missing_immutable_output="$(run_mocked 2>&1)"
 missing_immutable_status=$?
 set -e
-[[ "$missing_immutable_status" -ne 0 ]]
+[[ "$missing_immutable_status" -eq 0 ]]
 grep -Fq "ignored: release is not immutable" <<<"$missing_immutable_output"
 
 # Case 13: a recent successful Guided run at current main only printed
@@ -391,7 +399,7 @@ set +e
 guided_output="$(run_mocked 2>&1)"
 guided_status=$?
 set -e
-[[ "$guided_status" -ne 0 ]]
+[[ "$guided_status" -eq 0 ]]
 grep -Fq "guided instructions only (not publication evidence)" <<<"$guided_output"
 grep -Fq "DRIFT DETECTED" <<<"$guided_output"
 grep -Fq "create" "$fixture_root/issue-calls.log"
@@ -406,12 +414,22 @@ set +e
 audit_failure_output="$(MOCK_FAIL_AUDIT=1 run_mocked 2>&1)"
 audit_failure_status=$?
 set -e
-[[ "$audit_failure_status" -ne 0 ]]
+[[ "$audit_failure_status" -eq 0 ]]
 grep -Fq "release PR audit evidence is unavailable" <<<"$audit_failure_output"
 grep -Fq "commit audit evidence is unavailable" <<<"$audit_failure_output"
 grep -Fq "tracking Issue audit evidence is unavailable" <<<"$audit_failure_output"
 grep -Fq "DRIFT DETECTED" <<<"$audit_failure_output"
 grep -Fq "edit 77" "$fixture_root/issue-calls.log"
+
+# Case 15: drift is handled only after GitHub accepts the tracking-Issue
+# write. A failed notification remains a real workflow failure.
+reset_fixtures
+set +e
+issue_failure_output="$(MOCK_FAIL_ISSUE=1 run_mocked 2>&1)"
+issue_failure_status=$?
+set -e
+[[ "$issue_failure_status" -ne 0 ]]
+grep -Fq "Issue creation failure" <<<"$issue_failure_output"
 
 # Misuse guard: `gh` missing from PATH must fail clearly, not silently
 # produce a wrong or empty answer.
@@ -422,4 +440,4 @@ set -e
 [[ "$no_gh_status" -ne 0 ]]
 grep -Fiq "gh" <<<"$no_gh_output"
 
-echo "Release drift check cases passed: 16"
+echo "Release drift check cases passed: 17"
