@@ -5845,6 +5845,50 @@ def test_update_hook_failure_leaves_target_unchanged(
 
 
 @pytest.mark.large
+def test_update_verification_failure_does_not_claim_candidate_preserved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Report candidate cleanup honestly when update verification fails."""
+    source, project, _ = initialize_project(tmp_path)
+    capsys.readouterr()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    base = commit(project, "test: generated project")
+    before_files = cli.target_file_snapshot(project)
+
+    (source / "template" / "managed.txt").unlink()
+    revision = commit(source, "test: remove required managed file")
+    temporary_root = tmp_path / "temporary"
+    temporary_root.mkdir()
+    monkeypatch.setattr(cli.tempfile, "tempdir", str(temporary_root))
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    error = capsys.readouterr().err
+    assert "Project verification failed." in error
+    assert "preserved" not in error.lower()
+    assert list(temporary_root.iterdir()) == []
+    assert git(project, "rev-parse", "HEAD") == base
+    assert git(project, "status", "--porcelain") == ""
+    assert cli.target_file_snapshot(project) == before_files
+
+
+@pytest.mark.large
 def test_update_rechecks_committed_head_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
