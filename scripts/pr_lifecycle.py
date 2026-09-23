@@ -2099,7 +2099,7 @@ def require_trusted_verification(
             repo,
             f"check-runs/{check_run['id']}/annotations?per_page=100",
         )
-        if verification_evidence.needs_reuse_annotations(job)
+        if verification_evidence.needs_route_annotations(job)
         else []
     )
     source_evidence = None

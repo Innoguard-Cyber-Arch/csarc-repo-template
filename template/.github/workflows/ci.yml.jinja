@@ -16,6 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
+  checks: read
   contents: read
   issues: read
   pull-requests: read
@@ -271,9 +273,34 @@ jobs:
             --github-output "$GITHUB_OUTPUT"; then
             echo "::notice::Reusable verification is unavailable; running the exact candidate instead."
           fi
-      - name: Validate trusted clean sync tier=fast scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} tree={% raw %}${{ steps.identity.outputs.tree }}{% endraw %} command=./.csarc/scripts/verify-fast base={% raw %}${{ steps.identity.outputs.base }}{% endraw %} base-sha={% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %} labels={% raw %}${{ steps.identity.outputs.labels }}{% endraw %} release={% raw %}${{ steps.identity.outputs.release }}{% endraw %} main={% raw %}${{ steps.sync.outputs.main_sha }}{% endraw %} source-run={% raw %}${{ steps.sync.outputs.source_run }}{% endraw %} source-job={% raw %}${{ steps.sync.outputs.source_job }}{% endraw %} source-check={% raw %}${{ steps.sync.outputs.source_check }}{% endraw %}
+      - name: Validate trusted clean sync
         if: {% raw %}${{ steps.sync.outputs.clean == 'true' }}{% endraw %}
-        run: "true"
+        env:
+          BASE: {% raw %}${{ steps.identity.outputs.base }}{% endraw %}
+          BASE_SHA: {% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %}
+          LABELS_SHA: {% raw %}${{ steps.identity.outputs.labels }}{% endraw %}
+          MAIN_SHA: {% raw %}${{ steps.sync.outputs.main_sha }}{% endraw %}
+          RELEASE_LEVEL: {% raw %}${{ steps.identity.outputs.release }}{% endraw %}
+          SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
+          SOURCE_CHECK: {% raw %}${{ steps.sync.outputs.source_check }}{% endraw %}
+          SOURCE_JOB: {% raw %}${{ steps.sync.outputs.source_job }}{% endraw %}
+          SOURCE_RUN: {% raw %}${{ steps.sync.outputs.source_run }}{% endraw %}
+          TREE: {% raw %}${{ steps.identity.outputs.tree }}{% endraw %}
+        run: |
+          evidence="$(jq -cn \
+            --arg scopes "$SCOPES" \
+            --arg tree "$TREE" \
+            --arg base "$BASE" \
+            --arg base_sha "$BASE_SHA" \
+            --arg labels "$LABELS_SHA" \
+            --arg release "$RELEASE_LEVEL" \
+            --arg main "$MAIN_SHA" \
+            --argjson source_run "$SOURCE_RUN" \
+            --argjson source_job "$SOURCE_JOB" \
+            --argjson source_check "$SOURCE_CHECK" \
+            '{schema_version: 1, kind: "sync", tier: "fast", scopes: $scopes, tree: $tree, command: "./.csarc/scripts/verify-fast", base: $base, base_sha: $base_sha, labels: $labels, release: $release, main: $main, source_run: $source_run, source_job: $source_job, source_check: $source_check}')"
+          evidence="${evidence//'%'/'%25'}"
+          printf '::notice title=Trusted verification route evidence::%s\n' "$evidence"
       - name: Reuse trusted verification
         if: {% raw %}${{ steps.reuse.outputs.reuse == 'true' }}{% endraw %}
         env:
@@ -303,7 +330,7 @@ jobs:
             --argjson source_check "$SOURCE_CHECK" \
             '{schema_version: 1, kind: "reuse", tier: $tier, scopes: $scopes, tree: $tree, command: $command, base: $base, base_sha: $base_sha, labels: $labels, release: $release, source_run: $source_run, source_job: $source_job, source_check: $source_check}')"
           evidence="${evidence//'%'/'%25'}"
-          printf '::notice title=Trusted verification reuse evidence::%s\n' "$evidence"
+          printf '::notice title=Trusted verification route evidence::%s\n' "$evidence"
 {% if has_python %}
       - name: Set up Python {{ python_target }}
         if: {% raw %}${{ steps.sync.outputs.clean != 'true' && ((steps.reuse.outputs.reuse != 'true' && (steps.effective.outputs.suite == 'full' || steps.plan.outputs.run_project == 'true' || steps.plan.outputs.run_osv == 'true')) || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned')) }}{% endraw %}

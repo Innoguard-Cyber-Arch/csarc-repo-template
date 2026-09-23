@@ -12,6 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
+  checks: read
   contents: read
   issues: read
   pull-requests: read
@@ -267,9 +269,34 @@ jobs:
             --github-output "$GITHUB_OUTPUT"; then
             echo "::notice::Reusable verification is unavailable; running the exact candidate instead."
           fi
-      - name: Validate trusted clean sync tier=fast scopes=${{ steps.plan.outputs.scopes }} tree=${{ steps.identity.outputs.tree }} command=./scripts/verify-fast base=${{ steps.identity.outputs.base }} base-sha=${{ steps.identity.outputs.base_sha }} labels=${{ steps.identity.outputs.labels }} release=${{ steps.identity.outputs.release }} main=${{ steps.sync.outputs.main_sha }} source-run=${{ steps.sync.outputs.source_run }} source-job=${{ steps.sync.outputs.source_job }} source-check=${{ steps.sync.outputs.source_check }}
+      - name: Validate trusted clean sync
         if: ${{ steps.sync.outputs.clean == 'true' }}
-        run: "true"
+        env:
+          BASE: ${{ steps.identity.outputs.base }}
+          BASE_SHA: ${{ steps.identity.outputs.base_sha }}
+          LABELS_SHA: ${{ steps.identity.outputs.labels }}
+          MAIN_SHA: ${{ steps.sync.outputs.main_sha }}
+          RELEASE_LEVEL: ${{ steps.identity.outputs.release }}
+          SCOPES: ${{ steps.plan.outputs.scopes }}
+          SOURCE_CHECK: ${{ steps.sync.outputs.source_check }}
+          SOURCE_JOB: ${{ steps.sync.outputs.source_job }}
+          SOURCE_RUN: ${{ steps.sync.outputs.source_run }}
+          TREE: ${{ steps.identity.outputs.tree }}
+        run: |
+          evidence="$(jq -cn \
+            --arg scopes "$SCOPES" \
+            --arg tree "$TREE" \
+            --arg base "$BASE" \
+            --arg base_sha "$BASE_SHA" \
+            --arg labels "$LABELS_SHA" \
+            --arg release "$RELEASE_LEVEL" \
+            --arg main "$MAIN_SHA" \
+            --argjson source_run "$SOURCE_RUN" \
+            --argjson source_job "$SOURCE_JOB" \
+            --argjson source_check "$SOURCE_CHECK" \
+            '{schema_version: 1, kind: "sync", tier: "fast", scopes: $scopes, tree: $tree, command: "./scripts/verify-fast", base: $base, base_sha: $base_sha, labels: $labels, release: $release, main: $main, source_run: $source_run, source_job: $source_job, source_check: $source_check}')"
+          evidence="${evidence//'%'/'%25'}"
+          printf '::notice title=Trusted verification route evidence::%s\n' "$evidence"
       - name: Reuse trusted verification
         if: ${{ steps.reuse.outputs.reuse == 'true' }}
         env:
@@ -299,7 +326,7 @@ jobs:
             --argjson source_check "$SOURCE_CHECK" \
             '{schema_version: 1, kind: "reuse", tier: $tier, scopes: $scopes, tree: $tree, command: $command, base: $base, base_sha: $base_sha, labels: $labels, release: $release, source_run: $source_run, source_job: $source_job, source_check: $source_check}')"
           evidence="${evidence//'%'/'%25'}"
-          printf '::notice title=Trusted verification reuse evidence::%s\n' "$evidence"
+          printf '::notice title=Trusted verification route evidence::%s\n' "$evidence"
       - name: Set up Python 3.14
         if: ${{ steps.sync.outputs.clean != 'true' && (steps.reuse.outputs.reuse != 'true' || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned')) }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

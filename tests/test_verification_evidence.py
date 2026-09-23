@@ -34,7 +34,6 @@ find_reusable_evidence = CHECKER["find_reusable_evidence"]
 
 NOW = datetime(2026, 9, 20, 12, tzinfo=UTC)
 HEAD = "a" * 40
-SOURCE_HEAD = "d" * 40
 TREE = "b" * 40
 BASE = "dev/m14-generated-project-fixes"
 BASE_SHA = "f" * 40
@@ -68,7 +67,7 @@ def reuse_annotation(**changes: object) -> dict[str, object]:
     claim.update(changes)
     return {
         "annotation_level": "notice",
-        "title": "Trusted verification reuse evidence",
+        "title": "Trusted verification route evidence",
         "message": json.dumps(claim, separators=(",", ":"), sort_keys=True),
     }
 
@@ -78,6 +77,17 @@ def reuse_annotation_without(field: str) -> dict[str, object]:
     annotation = reuse_annotation()
     claim = json.loads(str(annotation["message"]))
     del claim[field]
+    annotation["message"] = json.dumps(
+        claim, separators=(",", ":"), sort_keys=True
+    )
+    return annotation
+
+
+def sync_annotation(**changes: object) -> dict[str, object]:
+    """Build the structured annotation emitted by the trusted sync step."""
+    annotation = reuse_annotation(kind="sync", main="e" * 40)
+    claim = json.loads(str(annotation["message"]))
+    claim.update(changes)
     annotation["message"] = json.dumps(
         claim, separators=(",", ":"), sort_keys=True
     )
@@ -463,6 +473,43 @@ def test_template_consumer_reads_the_same_structured_annotation() -> None:
     assert result["source_run_id"] == 200
 
 
+def test_template_consumer_reads_structured_sync_annotation() -> None:
+    """The generated-project consumer binds the clean-sync main SHA."""
+    source = evidence(
+        tier="full",
+        command="./scripts/verify-template.sh",
+        run_id=200,
+        check_id=7,
+        head="e" * 40,
+    )
+    current = evidence(
+        run_id=300,
+        check_id=8,
+        sync=("e" * 40, 200, 7, 7),
+    )
+    for job in (source[2], current[2]):
+        job["steps"][-1]["name"] = (
+            job["steps"][-1]["name"]
+            .replace("./scripts/verify-template.sh", "./.csarc/scripts/verify")
+            .replace("./scripts/verify-fast", "./.csarc/scripts/verify-fast")
+        )
+    current[2]["steps"][-1]["name"] = "Validate trusted clean sync"
+
+    result = validate_template_verification_job(
+        *current,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        source_evidence=(*source, TREE),
+        annotations=[sync_annotation(command="./.csarc/scripts/verify-fast")],
+        full_command="./.csarc/scripts/verify",
+    )
+
+    assert result["sync_main_sha"] == "e" * 40
+    assert result["source_run_id"] == 200
+
+
 def test_literal_reuse_step_expression_fails_closed() -> None:
     """Never interpret GitHub's unexpanded dynamic display-name as evidence."""
     source = evidence(run_id=200, check_id=7)
@@ -534,7 +581,7 @@ def test_clean_sync_uses_one_direct_full_source_execution() -> None:
         command="./scripts/verify-template.sh",
         run_id=200,
         check_id=7,
-        head=SOURCE_HEAD,
+        head="e" * 40,
     )
     current = evidence(
         run_id=300,
@@ -554,6 +601,97 @@ def test_clean_sync_uses_one_direct_full_source_execution() -> None:
     assert result["reused"] is True
     assert result["sync_main_sha"] == "e" * 40
     assert result["source_run_id"] == 200
+
+
+def test_fixed_sync_step_reads_structured_annotation() -> None:
+    """A clean sync reads its main and source identities from one annotation."""
+    source = evidence(
+        tier="full",
+        command="./scripts/verify-template.sh",
+        run_id=200,
+        check_id=7,
+        head="e" * 40,
+    )
+    current = evidence(
+        run_id=300,
+        check_id=8,
+        sync=("e" * 40, 200, 7, 7),
+    )
+    current[2]["steps"][-1]["name"] = "Validate trusted clean sync"
+
+    result = validate_verification_job(
+        *current,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        source_evidence=(*source, TREE),
+        annotations=[sync_annotation()],
+    )
+
+    assert result["sync_main_sha"] == "e" * 40
+    assert result["source_run_id"] == 200
+
+
+def test_literal_sync_step_expression_fails_closed() -> None:
+    """Never interpret GitHub's unexpanded sync display-name as evidence."""
+    current = evidence(
+        run_id=300,
+        check_id=8,
+        sync=("e" * 40, 200, 7, 7),
+    )
+    current[2]["steps"][-1]["name"] = (
+        "Validate trusted clean sync tier=fast "
+        "scopes=${{ steps.plan.outputs.scopes }}"
+    )
+
+    with pytest.raises(RuntimeError, match="evidence is malformed"):
+        validate_verification_job(
+            *current,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+        )
+
+
+@pytest.mark.parametrize(
+    ("annotations", "message"),
+    [
+        ([], "annotation is missing"),
+        ([sync_annotation(), sync_annotation()], "annotation is missing"),
+        ([sync_annotation(main="f" * 40)], "main does not match"),
+        ([sync_annotation(source_check=9)], "source identity"),
+    ],
+)
+def test_structured_sync_annotation_fails_closed(
+    annotations: list[dict[str, object]], message: str
+) -> None:
+    """Missing, duplicate, or mismatched sync claims never authorize reuse."""
+    source = evidence(
+        tier="full",
+        command="./scripts/verify-template.sh",
+        run_id=200,
+        check_id=7,
+        head="e" * 40,
+    )
+    current = evidence(
+        run_id=300,
+        check_id=8,
+        sync=("e" * 40, 200, 7, 7),
+    )
+    current[2]["steps"][-1]["name"] = "Validate trusted clean sync"
+
+    with pytest.raises(RuntimeError, match=message):
+        validate_verification_job(
+            *current,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            source_evidence=(*source, TREE),
+            annotations=annotations,
+        )
 
 
 def test_reuse_chain_fails_closed() -> None:

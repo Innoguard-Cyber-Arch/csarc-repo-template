@@ -25,7 +25,8 @@ REQUIRED_STEPS = (
     "Bind trusted verification identity",
 )
 REUSE_STEP_NAME = "Reuse trusted verification"
-REUSE_ANNOTATION_TITLE = "Trusted verification reuse evidence"
+SYNC_STEP_NAME = "Validate trusted clean sync"
+ROUTE_ANNOTATION_TITLE = "Trusted verification route evidence"
 EXECUTION_STEP = re.compile(
     r"^Execute trusted verification tier=(docs|fast|full) "
     r"scopes=([a-z,-]+) tree=([0-9a-f]{40}) "
@@ -59,41 +60,42 @@ TOOLCHAIN_STEP = re.compile(
 )
 
 
-def needs_reuse_annotations(job: dict[str, Any]) -> bool:
-    """Return whether a successful fixed reuse step needs its annotation."""
+def needs_route_annotations(job: dict[str, Any]) -> bool:
+    """Return whether a successful fixed route step needs its annotation."""
     steps = job.get("steps")
     return isinstance(steps, list) and any(
         isinstance(step, dict)
-        and step.get("name") == REUSE_STEP_NAME
+        and step.get("name") in {REUSE_STEP_NAME, SYNC_STEP_NAME}
         and step.get("status") == "completed"
         and step.get("conclusion") == "success"
         for step in steps
     )
 
 
-def reuse_annotation_match(
+def route_annotation_match(
     annotations: list[dict[str, Any]] | None,
+    kind: str,
 ) -> re.Match[str]:
-    """Parse the one structured reuse claim emitted by the trusted job."""
+    """Parse the one structured route claim emitted by the trusted job."""
     matches = [
         annotation
         for annotation in annotations or []
-        if annotation.get("title") == REUSE_ANNOTATION_TITLE
+        if annotation.get("title") == ROUTE_ANNOTATION_TITLE
     ]
     if len(matches) != 1:
         raise RuntimeError(
-            "Trusted verification reuse annotation is missing or duplicate"
+            "Trusted verification route annotation is missing or duplicate"
         )
     annotation = matches[0]
     if annotation.get("annotation_level") != "notice" or not isinstance(
         annotation.get("message"), str
     ):
-        raise RuntimeError("Trusted verification reuse annotation is malformed")
+        raise RuntimeError("Trusted verification route annotation is malformed")
     try:
         claim = json.loads(annotation["message"])
     except (TypeError, json.JSONDecodeError) as error:
         raise RuntimeError(
-            "Trusted verification reuse annotation is malformed"
+            "Trusted verification route annotation is malformed"
         ) from error
     fields = {
         "schema_version",
@@ -110,12 +112,14 @@ def reuse_annotation_match(
         "source_job",
         "source_check",
     }
+    if kind == "sync":
+        fields.add("main")
     if (
         not isinstance(claim, dict)
         or set(claim) != fields
         or type(claim.get("schema_version")) is not int
         or claim.get("schema_version") != 1
-        or claim.get("kind") != "reuse"
+        or claim.get("kind") != kind
         or any(
             not isinstance(claim.get(field), str)
             for field in (
@@ -129,24 +133,31 @@ def reuse_annotation_match(
                 "release",
             )
         )
+        or (kind == "sync" and not isinstance(claim.get("main"), str))
         or any(
             type(claim.get(field)) is not int or claim[field] <= 0
             for field in ("source_run", "source_job", "source_check")
         )
     ):
-        raise RuntimeError("Trusted verification reuse annotation is malformed")
+        raise RuntimeError("Trusted verification route annotation is malformed")
+    prefix = (
+        "Reuse trusted verification"
+        if kind == "reuse"
+        else "Validate trusted clean sync"
+    )
+    main = f" main={claim['main']}" if kind == "sync" else ""
     rendered = (
-        f"Reuse trusted verification tier={claim['tier']} "
+        f"{prefix} tier={claim['tier']} "
         f"scopes={claim['scopes']} tree={claim['tree']} "
         f"command={claim['command']} base={claim['base']} "
         f"base-sha={claim['base_sha']} labels={claim['labels']} "
-        f"release={claim['release']} source-run={claim['source_run']} "
+        f"release={claim['release']}{main} source-run={claim['source_run']} "
         f"source-job={claim['source_job']} "
         f"source-check={claim['source_check']}"
     )
-    match = REUSE_STEP.fullmatch(rendered)
+    match = (REUSE_STEP if kind == "reuse" else SYNC_STEP).fullmatch(rendered)
     if match is None:
-        raise RuntimeError("Trusted verification reuse annotation is malformed")
+        raise RuntimeError("Trusted verification route annotation is malformed")
     return match
 
 
@@ -165,18 +176,28 @@ def evidence_match(
         if name.startswith("Reuse trusted") and name != REUSE_STEP_NAME
     ]
     sync_names = [
-        name for name in steps if name.startswith("Validate trusted clean sync")
+        name
+        for name in steps
+        if name.startswith("Validate trusted clean sync")
+        and name != SYNC_STEP_NAME
     ]
     fixed_reuse = REUSE_STEP_NAME in steps
+    fixed_sync = SYNC_STEP_NAME in steps
     if (
-        len(execution_names) + len(reuse_names) + len(sync_names) + fixed_reuse
+        len(execution_names)
+        + len(reuse_names)
+        + len(sync_names)
+        + fixed_reuse
+        + fixed_sync
         != 1
     ):
         raise RuntimeError(
             "Trusted verification must have one execution, reuse, or sync step"
         )
     if fixed_reuse:
-        return "reuse", reuse_annotation_match(annotations)
+        return "reuse", route_annotation_match(annotations, "reuse")
+    if fixed_sync:
+        return "sync", route_annotation_match(annotations, "sync")
     name = (
         execution_names[0]
         if execution_names
@@ -408,7 +429,7 @@ def validate_verification_job(  # noqa: C901
                 "Trusted verification reuse source identity does not match"
             )
         if (
-            needs_reuse_annotations(source_job)
+            needs_route_annotations(source_job)
             or evidence_source_ids(source_job) is not None
         ):
             raise RuntimeError(
@@ -445,6 +466,10 @@ def validate_verification_job(  # noqa: C901
         ):
             raise RuntimeError(
                 "Trusted verification reuse route does not match its source"
+            )
+        if sync and source["head_sha"] != match.group(9):
+            raise RuntimeError(
+                "Trusted verification sync main does not match its source"
             )
         return {
             **common,
