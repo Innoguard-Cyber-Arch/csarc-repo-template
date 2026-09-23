@@ -436,8 +436,10 @@ def initialize_installed_project(tmp_path: Path) -> tuple[Path, Path, str]:
 def initialize_pending_adoption(
     tmp_path: Path,
     *,
+    complete_manual_merge: bool = True,
     language: str = "ci",
     existing_lockfile: str | None = None,
+    manual_eol_crlf: bool = False,
 ) -> tuple[Path, Path]:
     """Start a minimal adoption that requires a manual manifest merge."""
     source, first_sha = make_template(tmp_path)
@@ -470,10 +472,19 @@ def initialize_pending_adoption(
         (project / existing_lockfile).write_text(
             "existing lock\n", encoding="utf-8"
         )
+    if manual_eol_crlf:
+        (project / ".gitattributes").write_text(
+            "*.toml text eol=crlf\n", encoding="utf-8"
+        )
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
     commit(project, "test: pending product")
+    if manual_eol_crlf:
+        manifest.write_bytes(manifest.read_bytes().replace(b"\n", b"\r\n"))
+        git(project, "add", "--", manifest.name)
+        assert b"\r\n" in manifest.read_bytes()
+        assert git(project, "status", "--porcelain") == ""
     arguments = [
         "adopt",
         str(project),
@@ -505,6 +516,17 @@ def initialize_pending_adoption(
         )
         == 1
     )
+    if complete_manual_merge:
+        if language == "typescript":
+            package = json.loads(manifest.read_text(encoding="utf-8"))
+            package["devDependencies"] = {"typescript": "^5.9.0"}
+            manifest.write_text(json.dumps(package) + "\n", encoding="utf-8")
+        else:
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8")
+                + 'requires-python = ">=3.14"\n',
+                encoding="utf-8",
+            )
     return source, project
 
 
@@ -789,6 +811,11 @@ def test_adoption_copier_tasks_wait_for_each_approval(
         "task rendered\n"
     )
     marker.unlink()
+    manifest = project / "pyproject.toml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8") + 'requires-python = ">=3.14"\n',
+        encoding="utf-8",
+    )
 
     assert replay_finalize(project, "--dry-run") == 0
     finalize_plan = finalize_plan_path(project)
@@ -1612,6 +1639,11 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     assert (project / ".copier-answers.yml").is_file()
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8")
+        + "# manually reconciled with the template\n",
+        encoding="utf-8",
+    )
     pending_status = git(project, "status", "--porcelain")
     assert (
         main(
@@ -1677,6 +1709,157 @@ def test_adopt_finalize_accepts_committed_pending_state(
     assert git(project, "rev-parse", "HEAD") == head
     assert git(project, "status", "--porcelain") == ""
     assert "returned non-zero exit status" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("commit_pending", [False, True])
+@pytest.mark.large
+def test_adopt_finalize_reports_unchanged_manual_merges(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    commit_pending: bool,
+) -> None:
+    """Reject an untouched manual file regardless of its Git state."""
+    _, project = initialize_pending_adoption(
+        tmp_path, complete_manual_merge=False
+    )
+    checkpoint_path = project / cli.PENDING_ADOPTION_FILE
+    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    assert checkpoint["schema_version"] == 2
+    assert checkpoint["manual_merge_files"] == ["pyproject.toml"]
+    assert checkpoint["manual_file_git_oid"]["pyproject.toml"] == (
+        git(project, "rev-parse", "HEAD:pyproject.toml")
+    )
+    if commit_pending:
+        commit(project, "test: commit untouched pending adoption")
+    before_status = git(project, "status", "--porcelain")
+    before_report = finalize_plan_path(project).read_bytes()
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 2
+
+    error = capsys.readouterr().err
+    assert "unchanged content after Git normalization" in error
+    assert "pyproject.toml" in error
+    assert "rerun csarc adopt --finalize" in error
+    assert git(project, "status", "--porcelain") == before_status
+    assert finalize_plan_path(project).read_bytes() == before_report
+    assert checkpoint_path.is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.large
+def test_adopt_finalize_rejects_legacy_manual_checkpoint(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Fail closed when an old checkpoint cannot prove manual work changed."""
+    _, project = initialize_pending_adoption(tmp_path)
+    checkpoint_path = project / cli.PENDING_ADOPTION_FILE
+    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    checkpoint["schema_version"] = 1
+    checkpoint.pop("manual_file_git_oid")
+    checkpoint.pop("manual_merge_files")
+    checkpoint_path.write_text(
+        json.dumps(checkpoint, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 2
+
+    error = capsys.readouterr().err
+    assert "predates manual-file fingerprints" in error
+    assert "cannot determine whether its manual merges were completed" in error
+    assert checkpoint_path.is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected"),
+    [
+        ("empty-manual-set", "fingerprints are invalid"),
+        ("forged-digest", "do not match the original Git revision"),
+    ],
+)
+@pytest.mark.large
+def test_adopt_finalize_rejects_tampered_manual_evidence(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    tamper: str,
+    expected: str,
+) -> None:
+    """Re-derive manual merge evidence instead of trusting the checkpoint."""
+    _, project = initialize_pending_adoption(tmp_path)
+    checkpoint_path = project / cli.PENDING_ADOPTION_FILE
+    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    if tamper == "empty-manual-set":
+        checkpoint["manual_merge_files"] = []
+        checkpoint["manual_file_git_oid"] = {}
+    else:
+        checkpoint["manual_file_git_oid"]["pyproject.toml"] = "0" * 40
+    checkpoint_path.write_text(
+        json.dumps(checkpoint, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    before = cli.target_file_snapshot(project)
+    before_status = git(project, "status", "--porcelain")
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 2
+
+    assert expected in capsys.readouterr().err
+    assert cli.target_file_snapshot(project) == before
+    assert git(project, "status", "--porcelain") == before_status
+    assert checkpoint_path.is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.large
+def test_adopt_finalize_rejects_untouched_crlf_manual_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Compare manual content with the same Git checkout normalization."""
+    _, project = initialize_pending_adoption(
+        tmp_path,
+        complete_manual_merge=False,
+        manual_eol_crlf=True,
+    )
+    manifest = project / "pyproject.toml"
+    before = cli.target_file_snapshot(project)
+    before_status = git(project, "status", "--porcelain")
+    assert b"\r\n" in manifest.read_bytes()
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 2
+
+    error = capsys.readouterr().err
+    assert "unchanged content after Git normalization" in error
+    assert "pyproject.toml" in error
+    assert cli.target_file_snapshot(project) == before
+    assert git(project, "status", "--porcelain") == before_status
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.large
+def test_adopt_finalize_rejects_mismatched_typescript_package_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Explain a merged package name mismatch before project verification."""
+    _, project = initialize_pending_adoption(tmp_path, language="typescript")
+    package_path = project / "package.json"
+    package = json.loads(package_path.read_text(encoding="utf-8"))
+    package["name"] = "wrong-package"
+    package_path.write_text(json.dumps(package) + "\n", encoding="utf-8")
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 2
+
+    error = capsys.readouterr().err
+    assert "package.json name must match project_slug" in error
+    assert "'pending-product'" in error
+    assert "'wrong-package'" in error
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
 
 
 @pytest.mark.large
@@ -1869,16 +2052,26 @@ def test_adopt_finalize_failure_keeps_actionable_pending_state(
 ) -> None:
     """Keep the checkpoint and explain how to retry a failed verification."""
     _, project = initialize_pending_adoption(tmp_path)
-    monkeypatch.setattr(
-        cli,
-        "verify_project",
-        lambda _: (_ for _ in ()).throw(CliError("fixture failure")),
-    )
-
     assert replay_finalize(project, "--dry-run") == 0
     plan = finalize_plan_path(project)
     payload = json.loads(plan.read_text(encoding="utf-8"))
     assert payload["adoption"]["verification"] == "pending-authorization"
+    before = cli.target_file_snapshot(project)
+    before_status = git(project, "status", "--porcelain")
+    monkeypatch.setattr(
+        cli,
+        "verify_project",
+        lambda _: (_ for _ in ()).throw(
+            cli.ProjectVerificationError(
+                "TypeScript package verification failed with pnpm.",
+                {
+                    "path": "scripts/verify-product",
+                    "reason": "pnpm failed",
+                    "result": "failed",
+                },
+            )
+        ),
+    )
     assert (
         replay_finalize(
             project,
@@ -1889,7 +2082,14 @@ def test_adopt_finalize_failure_keeps_actionable_pending_state(
         )
         == 2
     )
-    assert "rerun csarc adopt --finalize" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "TypeScript package verification failed with pnpm" in error
+    assert "Project verification failed at ./scripts/verify" in error
+    assert "Structured result: pnpm failed" in error
+    assert "Pending manual files: pyproject.toml" in error
+    assert "rerun csarc adopt --finalize" in error
+    assert cli.target_file_snapshot(project) == before
+    assert git(project, "status", "--porcelain") == before_status
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
 
