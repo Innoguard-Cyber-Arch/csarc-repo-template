@@ -357,6 +357,53 @@ def test_hosted_setup_skips_unowned_language_toolchains() -> None:
     assert "steps.plan.outputs.run_osv" not in rust_condition
 
 
+def test_reused_release_validation_installs_only_owned_package_tools() -> None:
+    """Keep release builds runnable without slowing ordinary evidence reuse."""
+    candidate = "startsWith(github.event.pull_request.head.ref, 'release/v')"
+    root_steps = {
+        str(step.get("name")): step
+        for step in ci_steps(
+            (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        )
+    }
+    assert candidate in root_steps["Set up Python 3.14"]["if"]
+    assert candidate in root_steps["Set up uv 0.12.15"]["if"]
+    for name in (
+        "Set up pnpm 11.22.0",
+        "Set up Node.js 24",
+        "Set up Rust 1.98.0",
+    ):
+        assert candidate not in root_steps[name]["if"]
+
+    template_source = (
+        REPO_ROOT / "template/.github/workflows/ci.yml.jinja"
+    ).read_text(encoding="utf-8")
+    template = Environment(
+        autoescape=False,  # noqa: S701 - trusted local YAML template
+        undefined=StrictUndefined,
+    ).from_string(template_source)
+
+    for language, expected in (
+        ("python", {"Set up Python 3.14", "Set up uv 0.12.15"}),
+        ("typescript", {"Set up pnpm 11.22.0", "Set up Node.js 24"}),
+        ("rust", {"Set up Rust 1.98.0"}),
+    ):
+        rendered = template.render(
+            languages=[language],
+            python_support_mode="latest",
+            python_min_version="3.12",
+        )
+        setup = {
+            str(step.get("name")): step
+            for step in ci_steps(rendered)
+            if str(step.get("name", "")).startswith("Set up ")
+        }
+        actual = {
+            name for name, step in setup.items() if candidate in step["if"]
+        }
+        assert actual == expected
+
+
 def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
     """Keep metadata reuse and clean-sync proof ahead of heavy setup."""
     source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
