@@ -1898,33 +1898,7 @@ def main() -> None:
     pre.add_argument("--repo", required=True)
     pre.add_argument("--milestone", required=True, type=int)
     args = parser.parse_args()
-    if args.command == "check-pr":
-        decision = check_pr(args.repo, args.pr, record_check=not args.read_only)
-    elif args.command == "check-merge-group":
-        decision = check_merge_group(
-            args.repo, args.head_sha, record_check=not args.read_only
-        )
-    elif args.command == "check-promotion":
-        decision = promotion_decision(sys.stdin.read())
-    elif args.command == "record-promotion-evidence":
-        decision = record_promotion_evidence(
-            args.repo, args.tracker, args.evidence_url
-        )
-    elif args.command == "complete-release":
-        decision = complete_release(
-            args.repo,
-            args.main_sha,
-            args.evidence_url,
-            outcome=args.outcome,
-        )
-    elif args.command == "check-scope":
-        decision = check_scope(args.repo, args.issue)
-    elif args.command == "regenerate-reconciliation":
-        decision = record_reconciliation(args.repo, args.milestone)
-    elif args.command == "preflight":
-        decision = preflight(args.repo, args.milestone)
-    else:
-        decision = reconcile(args.repo, args.milestone)
+    decision = _dispatch(args)
     print(decision.summary)  # noqa: T201
     if not decision.allowed:
         raise SystemExit(1)
@@ -1933,9 +1907,11 @@ def main() -> None:
 def _dispatch(args: argparse.Namespace) -> Decision:  # noqa: C901
     """Route one parsed subcommand to its handler function."""
     if args.command == "check-pr":
-        return check_pr(args.repo, args.pr)
+        return check_pr(args.repo, args.pr, record_check=not args.read_only)
     if args.command == "check-merge-group":
-        return check_merge_group(args.repo, args.head_sha)
+        return check_merge_group(
+            args.repo, args.head_sha, record_check=not args.read_only
+        )
     if args.command == "check-promotion":
         return promotion_decision(sys.stdin.read())
     if args.command == "record-promotion-evidence":

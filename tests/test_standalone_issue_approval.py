@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import runpy
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -877,6 +878,52 @@ def test_refresh_issue_pr_checks_recheck_only_matching_prs(
     assert checked == [42]
     assert "1" in result.summary
     assert "#210" in result.summary
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        Path(__file__).parents[1] / "scripts" / "sync_milestone_state.py",
+        Path(__file__).parents[1]
+        / "template"
+        / ".csarc"
+        / "scripts"
+        / "sync_milestone_state.py",
+    ],
+)
+def test_refresh_issue_pr_checks_cli_dispatch(
+    script: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The real CLI parser must route the standalone refresh command."""
+    module = runpy.run_path(str(script))
+    called: list[tuple[str, int]] = []
+    monkeypatch.setitem(
+        module["main"].__globals__,
+        "refresh_issue_pr_checks",
+        lambda repo, issue: (
+            called.append((repo, issue))
+            or module["Decision"](True, "refreshed")
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(script),
+            "refresh-issue-pr-checks",
+            "--repo",
+            "acme/project",
+            "--issue",
+            "210",
+        ],
+    )
+
+    module["main"]()
+
+    assert called == [("acme/project", 210)]
+    assert capsys.readouterr().out == "refreshed\n"
 
 
 def test_refresh_issue_pr_checks_rechecks_a_pr_with_multiple_closing_issues(
