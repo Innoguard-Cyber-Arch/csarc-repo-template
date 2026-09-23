@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.25.9-beta.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.25.10-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.25.9-beta.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.25.10-beta.1<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -95,13 +95,13 @@ The template promises only capabilities that are implemented and tested. Go, gen
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="install" parity="supplemental" eyebrow="Install guide" title="Paste one prompt to your agent; it figures out what happens next" subtitle="`csarc status` reads `.csarc/config.yml`, the Copier revision, and policies/ drift; the result never depends on agent judgment." class="dense" legacy="false" >}}
+{{< slide key="install" parity="supplemental" eyebrow="Install guide" title="Paste one prompt to your agent; it figures out what happens next" subtitle="`csarc status` checks the adoption checkpoint first, then `.csarc/config.yml`, the Copier revision, and policies/ drift; the result never depends on agent judgment." class="dense" legacy="false" >}}
 Whether the repository is brand new, an existing one, or already CSARC-managed, the way you find out is the same: you do not need to remember a command yourself -- paste the text below straight to your coding agent (Claude Code, Copilot, and the like) and let it run and judge for you.
 
 {{< standard key="install-mode-standard" title="The prompt to paste to your agent" >}}
-<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Paste it</h3><p>Paste the full prompt below to your coding agent -- no command to remember.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI decides</h3><p>The agent runs <code>csarc status</code>; the CLI itself (not the agent's own judgment) classifies create, adopt, update, or a policy-only change.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Preview first</h3><p>Whatever the result, the agent shows you the plan and waits for confirmation before doing anything.</p></article></div>
+<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Paste it</h3><p>Paste the full prompt below to your coding agent -- no command to remember.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI decides</h3><p>The agent runs <code>csarc status</code>; the CLI itself (not the agent's own judgment) classifies create, adopt, pending adoption, update, or a policy-only change.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Preview first</h3><p>Whatever the result, the agent shows you the plan and waits for confirmation before doing anything.</p></article></div>
 
-The result will be one of: **create** a new project, **adopt** an existing one, apply an available **update**, find it **already current** with nothing to do, or apply **policy-only** settings -- whichever it is, the agent always shows you the plan before touching anything.
+The result will be one of: **create** a new project, **adopt** an existing one, **finish a pending adoption**, apply an available **update**, find it **already current** with nothing to do, or apply **policy-only** settings -- whichever it is, the agent always shows you the plan before touching anything.
 
 <p class="install-promise"><strong>The promise at this step:</strong> this step only checks the current state and proposes a plan; nothing is modified, no GitHub setting changes, and no PR opens until you confirm.</p>
 
@@ -123,6 +123,7 @@ It only reads local files plus, once a repository is already managed, the resolv
 | --- | --- | --- |
 | `create` (new repository) | The target path does not exist, or exists but is an empty directory | `csarc init <path>`: preview with `--dry-run`, then confirm with `--yes --non-interactive` |
 | `adopt` (existing repository) | The target already has content but no `.csarc/config.yml` | `csarc adopt <path>`: write a dry-run plan, review it, then apply with `--apply-plan` |
+| `adoption-pending` (adoption incomplete) | The local adoption checkpoint passes identity validation, but adoption is not complete | `csarc adopt <path> --finalize`: preview and continue the existing finalize flow |
 | `migrate` (legacy answers) | `.csarc/config.yml` has a non-full `_commit` and no trusted verified provenance | Review a tag or short SHA and follow `next_command` to bind it to a verified Release; restore the correct SHA for any other format |
 | `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | `csarc update <path> --check` to preview, then `csarc update <path>` |
 | `current` (nothing to do) | The Copier revision is current, and `policies/` matches the repository's live GitHub settings | No action needed |

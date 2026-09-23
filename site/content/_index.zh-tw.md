@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.25.9-beta.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.25.10-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.25.9-beta.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.25.10-beta.1<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -95,13 +95,13 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="install" parity="supplemental" eyebrow="安裝說明" title="一句話貼給 agent，自動判斷目前該做什麼" subtitle="`csarc status` 讀 `.csarc/config.yml`、Copier 版本與 policies/ 現況，決定結果、不靠 agent 自由判斷。" class="dense" legacy="false" >}}
+{{< slide key="install" parity="supplemental" eyebrow="安裝說明" title="一句話貼給 agent，自動判斷目前該做什麼" subtitle="`csarc status` 先讀 adoption checkpoint，再讀 `.csarc/config.yml`、Copier 版本與 policies/ 現況，決定結果、不靠 agent 自由判斷。" class="dense" legacy="false" >}}
 不管是新 repo、舊 repo 還是已經導入過公版的 repo，判斷方式都一樣：不用自己記指令，把下面這段話直接貼給你的 coding agent（Claude Code、Copilot 等），它會自己執行、自己判斷。
 
 {{< standard key="install-mode-standard" title="貼給 agent 的一句話" >}}
-<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>貼上</h3><p>把下面這段完整指令貼給你的 coding agent，不用自己記指令。</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI 判斷</h3><p>Agent 執行 <code>csarc status</code>，由 CLI（不是 agent 自由判斷）自動分類這是新建、既有導入、有更新，還是只是政策變動。</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>先預覽</h3><p>不管哪一種結果，agent 都會先讓你看過計畫，確認後才真的動手。</p></article></div>
+<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>貼上</h3><p>把下面這段完整指令貼給你的 coding agent，不用自己記指令。</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI 判斷</h3><p>Agent 執行 <code>csarc status</code>，由 CLI（不是 agent 自由判斷）自動分類這是新建、既有導入、待完成導入、有更新，還是只是政策變動。</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>先預覽</h3><p>不管哪一種結果，agent 都會先讓你看過計畫，確認後才真的動手。</p></article></div>
 
-結果會是以下其中一種：**建立**新專案、**導入**既有專案、套用可用**更新**、**已是最新**不用做事，或**只有政策設定**要補套用；不論哪一種，agent 都會先讓你確認才動手。
+結果會是以下其中一種：**建立**新專案、**導入**既有專案、**完成待處理導入**、套用可用**更新**、**已是最新**不用做事，或**只有政策設定**要補套用；不論哪一種，agent 都會先讓你確認才動手。
 
 <p class="install-promise"><strong>這一步的承諾：</strong>這一步只檢查目前狀態並提出計畫；在你確認前，不修改檔案、不變更 GitHub 設定，也不會建立 PR。</p>
 
@@ -123,6 +123,7 @@ csarc status <path> --json
 | --- | --- | --- |
 | `create`（新 repo 建立） | 目標路徑不存在，或存在但是空目錄 | `csarc init <path>`：先 `--dry-run` 預覽，確認後加 `--yes --non-interactive` |
 | `adopt`（舊 repo 導入） | 目標已存在內容，但沒有 `.csarc/config.yml` | `csarc adopt <path>`：先寫出 dry-run 計畫，審查後用 `--apply-plan` 套用 |
+| `adoption-pending`（導入待完成） | 本機 adoption checkpoint 通過 identity 驗證，但導入尚未完成 | `csarc adopt <path> --finalize`：先預覽並完成既有 finalize 流程 |
 | `migrate`（舊版答案遷移） | `.csarc/config.yml` 的 `_commit` 不是完整 SHA，且沒有可信的 verified provenance | tag／短 SHA 先核對來源與版本，再依 `next_command` 綁回已驗證 Release；其他格式先還原正確 SHA |
 | `update`（有可用更新） | 已有 `.csarc/config.yml`，其中記錄的 Copier revision 落後目前可用版本 | `csarc update <path> --check` 預覽差異，確認後執行 `csarc update <path>` |
 | `current`（已是最新，不用做事） | Copier revision 已是最新，且 `policies/` 與 GitHub 上實際設定一致 | 不需要動作 |

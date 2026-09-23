@@ -65,6 +65,7 @@ RELEASE_WRITER_MARKERS = (
 )
 INSTALL_STATE_CREATE = "create"
 INSTALL_STATE_ADOPT = "adopt"
+INSTALL_STATE_ADOPTION_PENDING = "adoption-pending"
 INSTALL_STATE_MIGRATE = "migrate"
 INSTALL_STATE_UPDATE = "update"
 INSTALL_STATE_CURRENT = "current"
@@ -77,6 +78,7 @@ INSTALL_STATE_NEXT_COMMAND = {
         "csarc adopt <path> to write a dry-run plan, review it, then "
         "csarc adopt <path> --apply-plan <plan>"
     ),
+    INSTALL_STATE_ADOPTION_PENDING: "csarc adopt <path> --finalize",
     INSTALL_STATE_UPDATE: (
         "csarc update <path> --check to preview, then csarc update <path>"
     ),
@@ -1518,10 +1520,17 @@ def write_pending_adoption(target: Path, payload: dict[str, object]) -> None:
 def read_pending_adoption(target: Path) -> dict[str, object]:
     """Read and minimally validate an adoption checkpoint."""
     path = checked_destination(target, PENDING_ADOPTION_FILE.as_posix())
-    if path.is_symlink() or not path.is_file():
+    try:
+        mode = path.lstat().st_mode
+    except (FileNotFoundError, NotADirectoryError) as error:
         raise CliError(
             "No pending adoption exists; run csarc adopt first or use "
             "csarc update for a completed adoption."
+        ) from error
+    if not stat.S_ISREG(mode):
+        raise CliError(
+            "Pending adoption state is not a regular file; restore the "
+            "checkpoint or restart adoption from a clean commit."
         )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -1744,6 +1753,102 @@ def pending_adoption_target_head(
             "restore the checkpoint or restart adoption from a clean commit."
         )
     return saved_head
+
+
+def validate_pending_adoption_identity(  # noqa: C901
+    target: Path,
+) -> tuple[dict[str, object], Path, str]:
+    """Validate only the local identity of one pending adoption."""
+    pending = read_pending_adoption(target)
+    raw_template = pending["template"]
+    raw_repository = pending["repository"]
+    raw_managed = pending["managed_files"]
+    if (
+        not isinstance(raw_template, dict)
+        or not isinstance(raw_repository, dict)
+        or not isinstance(raw_managed, list)
+    ):
+        raise CliError("Pending adoption state is invalid.")
+    source = raw_template.get("source")
+    release = raw_template.get("release")
+    sha = raw_template.get("sha")
+    verification = raw_template.get("verification")
+    if (
+        not isinstance(source, str)
+        or not source
+        or not isinstance(release, str)
+        or not release
+        or not isinstance(sha, str)
+        or FULL_SHA.fullmatch(sha) is None
+        or verification not in {"verified", "development-unreleased"}
+    ):
+        raise CliError(
+            "Pending template identity is invalid; restore the checkpoint or "
+            "restart adoption from a clean commit."
+        )
+
+    answers_path = checked_destination(
+        target, config_path(target).relative_to(target).as_posix()
+    )
+    if answers_path.is_symlink() or not answers_path.is_file():
+        raise CliError(
+            "Pending adoption is missing the CSARC configuration; restore the "
+            "managed file, then rerun csarc adopt --finalize."
+        )
+    actual_answers_hash = hashlib.sha256(answers_path.read_bytes()).hexdigest()
+    if actual_answers_hash != pending["answers_sha256"]:
+        raise CliError(
+            "Copier answers changed after adoption started; restore "
+            "configuration or restart adoption from a clean commit."
+        )
+    if read_answer(answers_path, "_src_path") != source:
+        raise CliError(
+            "Copier source drifted after adoption started; restore the saved "
+            "answers or restart adoption from a clean commit."
+        )
+    if read_answer(answers_path, "_commit").lower() != sha.lower():
+        raise CliError(
+            "Copier commit drifted after adoption started; restore the saved "
+            "answers or restart adoption from a clean commit."
+        )
+    saved_repository = raw_repository.get("repository")
+    saved_visibility = raw_repository.get("visibility")
+    current_repository = target_repository(target)
+    repository_matches = (
+        saved_repository is None and current_repository is None
+    ) or (
+        isinstance(saved_repository, str)
+        and current_repository is not None
+        and current_repository.casefold() == saved_repository.casefold()
+    )
+    if (
+        not repository_matches
+        or saved_visibility not in REPOSITORY_VISIBILITIES
+        or read_answer(answers_path, "project_visibility") != saved_visibility
+    ):
+        raise CliError(
+            "Repository origin or visibility changed after adoption started; "
+            "restore it or restart adoption from a clean commit."
+        )
+
+    for item in raw_managed:
+        if not isinstance(item, dict):
+            raise CliError("Pending managed-file state is invalid.")
+        name = item.get("path")
+        expected = item.get("fingerprint")
+        if not isinstance(name, str) or not isinstance(expected, str):
+            raise CliError("Pending managed-file state is invalid.")
+        relative_path = Path(name)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise CliError("Pending managed-file path is invalid.")
+        path = checked_destination(target, name)
+        if file_fingerprint(path) != expected:
+            raise CliError(
+                f"Managed adoption file drifted: {name}. Restore it from the "
+                "pending template revision, then rerun csarc adopt --finalize."
+            )
+
+    return pending, answers_path, pending_adoption_target_head(target, pending)
 
 
 def provenance_data(
@@ -4872,81 +4977,21 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
                 "Finalize plan does not match this target repository."
             )
 
-    pending = read_pending_adoption(target)
-    raw_template = pending["template"]
-    raw_repository = pending["repository"]
-    raw_managed = pending["managed_files"]
-    if (
-        not isinstance(raw_template, dict)
-        or not isinstance(raw_repository, dict)
-        or not isinstance(raw_managed, list)
-    ):
-        raise CliError("Pending adoption state is invalid.")
-    source = raw_template.get("source")
-    release = raw_template.get("release")
-    sha = raw_template.get("sha")
-    verification = raw_template.get("verification")
-    if (
-        not isinstance(source, str)
-        or not source
-        or not isinstance(release, str)
-        or not release
-        or not isinstance(sha, str)
-        or FULL_SHA.fullmatch(sha) is None
-        or verification not in {"verified", "development-unreleased"}
-    ):
-        raise CliError(
-            "Pending template identity is invalid; restore the checkpoint or "
-            "restart adoption from a clean commit."
-        )
-
-    answers_path = checked_destination(
-        target, config_path(target).relative_to(target).as_posix()
+    pending, answers_path, pending_target_head = (
+        validate_pending_adoption_identity(target)
     )
-    if answers_path.is_symlink() or not answers_path.is_file():
-        raise CliError(
-            "Pending adoption is missing the CSARC configuration; restore the "
-            "managed file, then rerun csarc adopt --finalize."
-        )
-    actual_answers_hash = hashlib.sha256(answers_path.read_bytes()).hexdigest()
-    if actual_answers_hash != pending["answers_sha256"]:
-        raise CliError(
-            "Copier answers changed after adoption started; restore "
-            "configuration or restart adoption from a clean commit."
-        )
-    if read_answer(answers_path, "_src_path") != source:
-        raise CliError(
-            "Copier source drifted after adoption started; restore the saved "
-            "answers or restart adoption from a clean commit."
-        )
-    if read_answer(answers_path, "_commit").lower() != sha.lower():
-        raise CliError(
-            "Copier commit drifted after adoption started; restore the saved "
-            "answers or restart adoption from a clean commit."
-        )
+    raw_template = cast(dict[str, object], pending["template"])
+    raw_repository = cast(dict[str, object], pending["repository"])
+    source = cast(str, raw_template.get("source"))
+    release = cast(str, raw_template.get("release"))
+    sha = cast(str, raw_template.get("sha"))
+    verification = cast(str, raw_template.get("verification"))
     allow_unreleased = require_replay_authorization(
         args,
         source=source,
         sha=sha,
         verification=verification,
     )
-
-    for item in raw_managed:
-        if not isinstance(item, dict):
-            raise CliError("Pending managed-file state is invalid.")
-        name = item.get("path")
-        expected = item.get("fingerprint")
-        if not isinstance(name, str) or not isinstance(expected, str):
-            raise CliError("Pending managed-file state is invalid.")
-        relative_path = Path(name)
-        if relative_path.is_absolute() or ".." in relative_path.parts:
-            raise CliError("Pending managed-file path is invalid.")
-        path = target / relative_path
-        if file_fingerprint(path) != expected:
-            raise CliError(
-                f"Managed adoption file drifted: {name}. Restore it from the "
-                "pending template revision, then rerun csarc adopt --finalize."
-            )
 
     answers = resolve_release_answers(target, read_copier_answers(answers_path))
     saved_visibility = answers.get("project_visibility")
@@ -5018,7 +5063,6 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             )
         git_commit(source_path, sha)
 
-    pending_target_head = pending_adoption_target_head(target, pending)
     with tempfile.TemporaryDirectory(prefix="csarc-finalize-") as temporary:
         temporary_root = Path(temporary)
         stage = temporary_root / "rendered"
@@ -6150,24 +6194,44 @@ def detect_install_state(
         Callable[[Path], subprocess.CompletedProcess[str]] | None
     ) = None,
 ) -> dict[str, object]:
-    """Deterministically classify a target into one of six install states.
+    """Deterministically classify a target into one of seven install states.
 
-    Reads only `.csarc/config.yml` (or legacy Copier answers), the pinned
-    Copier revision, and `.csarc/policies/` drift; it never infers a state from
-    free-form judgment, so repeated runs against unchanged repository state
-    always return the same classification. The six states are: `create`
+    Reads the local adoption checkpoint first, then `.csarc/config.yml` (or
+    legacy Copier answers), the pinned Copier revision, and `.csarc/policies/`
+    drift; it never infers a state from free-form judgment, so repeated runs
+    against unchanged repository state always return the same classification.
+    The seven states are: `create`
     (no target yet, or an empty directory), `adopt` (an existing repository
-    without CSARC configuration), `migrate` (legacy Copier answers need an
-    explicit verified-release migration), `update` (a pinned Copier revision
-    behind the resolved target release), `current` (revision and policy
-    settings both match), and `policy-only-update` (revision matches but the
-    live repository policy settings have drifted from `.csarc/policies/`).
+    without CSARC configuration), `adoption-pending` (a locally authenticated
+    checkpoint still needs finalize), `migrate` (legacy Copier answers need
+    an explicit verified-release migration), `update` (a pinned Copier
+    revision behind the resolved target release), `current` (revision and
+    policy settings both match), and `policy-only-update` (revision matches
+    but the live repository policy settings have drifted from
+    `.csarc/policies/`).
     """
     if repository_target_is_new(target):
         return {
             "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_CREATE],
             "reason": f"{target} does not exist or is an empty directory.",
             "state": INSTALL_STATE_CREATE,
+        }
+    pending_path = checked_destination(target, PENDING_ADOPTION_FILE.as_posix())
+    try:
+        pending_path.lstat()
+    except FileNotFoundError, NotADirectoryError:
+        pass
+    else:
+        validate_pending_adoption_identity(target)
+        return {
+            "next_command": INSTALL_STATE_NEXT_COMMAND[
+                INSTALL_STATE_ADOPTION_PENDING
+            ],
+            "reason": (
+                "A valid adoption checkpoint is present; adoption is not "
+                "complete."
+            ),
+            "state": INSTALL_STATE_ADOPTION_PENDING,
         }
     answers_path = config_path(target)
     if not answers_path.is_file():
@@ -7193,9 +7257,8 @@ def parser() -> argparse.ArgumentParser:
     status = subparsers.add_parser(
         "status",
         help=(
-            "the one-prompt entry point: deterministically classify a "
-            "repository as create/adopt/migrate/update/current/"
-            "policy-only-update"
+            "classify repository state as adoption-pending, create, adopt, "
+            "migrate, update, current, or policy-only-update"
         ),
     )
     status.add_argument("path", nargs="?", type=Path, default=Path.cwd())

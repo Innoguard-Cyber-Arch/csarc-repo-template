@@ -6908,6 +6908,129 @@ def test_install_state_does_not_detect_adopt_once_csarc_managed(
     assert result["state"] != cli.INSTALL_STATE_ADOPT
 
 
+@pytest.mark.large
+def test_status_reports_staged_or_unstaged_pending_adoption(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Report finalize before release, policy, Copier, or project checks."""
+    _source, project = initialize_pending_adoption(tmp_path)
+    (project / "uv.lock").write_text("pending lock update\n", encoding="utf-8")
+    capsys.readouterr()
+
+    def reject_execution(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("pending status reached a later verification")
+
+    monkeypatch.setattr(cli, "update_status", reject_execution)
+    monkeypatch.setattr(cli, "trusted_policy_settings_check", reject_execution)
+    monkeypatch.setattr(cli, "copier_copy", reject_execution)
+    monkeypatch.setattr(cli, "verify_project", reject_execution)
+
+    for staged in (False, True):
+        if staged:
+            git(project, "add", "--all")
+        before = git(project, "status", "--porcelain=v1")
+
+        assert main(["status", str(project), "--json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["state"] == cli.INSTALL_STATE_ADOPTION_PENDING
+        assert payload["next_command"] == "csarc adopt <path> --finalize"
+
+        assert main(["status", str(project)]) == 0
+        output = capsys.readouterr().out
+        assert "Install state: adoption-pending" in output
+        assert "Next: csarc adopt <path> --finalize" in output
+        assert git(project, "status", "--porcelain=v1") == before
+
+
+@pytest.mark.large
+def test_status_fails_closed_for_invalid_pending_identity(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Reject malformed, linked, or wrong-history pending checkpoints."""
+    _source, project = initialize_pending_adoption(tmp_path)
+    checkpoint = project / cli.PENDING_ADOPTION_FILE
+    original = checkpoint.read_bytes()
+    capsys.readouterr()
+
+    checkpoint.write_text("{\n", encoding="utf-8")
+    assert main(["status", str(project), "--json"]) == 2
+    assert "unreadable" in json.loads(capsys.readouterr().out)["error"]
+
+    outside = tmp_path / "outside-pending.json"
+    outside.write_bytes(original)
+    checkpoint.unlink()
+    checkpoint.symlink_to(outside)
+    assert main(["status", str(project), "--json"]) == 2
+    assert "not a regular file" in json.loads(capsys.readouterr().out)["error"]
+
+    checkpoint.unlink()
+    checkpoint.write_bytes(original)
+    payload = json.loads(original)
+    payload["repository"]["repository"] = "owner/other"
+    checkpoint.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    assert main(["status", str(project), "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert "Repository origin or visibility changed" in error
+
+    checkpoint.write_bytes(original)
+    git(project, "commit", "--allow-empty", "-m", "test: unrelated history")
+    assert main(["status", str(project), "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert "original Git revision" in error
+
+
+@pytest.mark.large
+def test_status_returns_to_current_and_update_after_finalize(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Resume ordinary install-state classification after finalize."""
+    source, project = initialize_pending_adoption(tmp_path)
+    current_sha = git(source, "rev-parse", "HEAD")
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 0
+    plan = finalize_plan_path(project)
+    assert (
+        replay_finalize(
+            project,
+            "--apply-plan",
+            str(plan),
+            "--yes",
+            "--non-interactive",
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    status_args = [
+        "status",
+        str(project),
+        "--allow-unreleased",
+        "--to",
+        current_sha,
+        "--expected-sha",
+        current_sha,
+        "--json",
+    ]
+    assert main(status_args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == cli.INSTALL_STATE_CURRENT
+
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    next_sha = commit(source, "test: template version two")
+    status_args[status_args.index(current_sha)] = next_sha
+    status_args[status_args.index(current_sha)] = next_sha
+    assert main(status_args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == cli.INSTALL_STATE_UPDATE
+
+
 def test_install_state_detects_update_when_revision_is_behind(
     tmp_path: Path,
 ) -> None:
@@ -7083,16 +7206,16 @@ def test_status_command_reports_create_without_writes(
     assert not target.exists()
 
 
-def test_status_help_lists_the_migrate_state(
+def test_status_help_lists_all_install_states(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Keep the public command summary aligned with install states."""
     with pytest.raises(SystemExit) as error:
         cli.parser().parse_args(["--help"])
     assert error.value.code == 0
-    assert "create/adopt/migrate/update/current/policy-only-update" in (
-        capsys.readouterr().out
-    )
+    help_text = capsys.readouterr().out
+    assert "adoption-pending" in help_text
+    assert "policy-only-update" in help_text
 
 
 def test_status_command_reports_adopt_in_human_readable_form(
