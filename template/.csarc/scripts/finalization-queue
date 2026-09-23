@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/finalization-queue announce --issue N --base BRANCH [--ttl-minutes N]
+  scripts/finalization-queue status [--issue N] [--base BRANCH]
+  scripts/finalization-queue leave --issue N
+
+Coordinate the expensive finalization window across worktrees in one clone.
+The queue is advisory, expires automatically, and never replaces the remote
+PR lifecycle lease or live GitHub checks.
+EOF
+}
+
+fail() {
+  echo "ERROR: $*" >&2
+  exit 2
+}
+
+require_value() {
+  local flag="$1"
+  shift
+  (($#)) || fail "$flag requires a value"
+}
+
+validate_issue() {
+  [[ "$1" =~ ^[1-9][0-9]*$ ]] || fail "--issue must be a positive integer"
+}
+
+validate_base() {
+  git check-ref-format --branch "$1" >/dev/null 2>&1 ||
+    fail "--base must be a valid branch name"
+}
+
+command="${1:-}"
+[[ -n "$command" ]] || {
+  usage >&2
+  exit 2
+}
+shift
+
+issue=""
+base=""
+ttl_minutes=90
+while (($#)); do
+  case "$1" in
+    --issue)
+      require_value "$1" "${@:2}"
+      issue="$2"
+      shift 2
+      ;;
+    --base)
+      require_value "$1" "${@:2}"
+      base="$2"
+      shift 2
+      ;;
+    --ttl-minutes)
+      require_value "$1" "${@:2}"
+      ttl_minutes="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+  fail "run this command inside a Git worktree"
+common_dir="$(git rev-parse --git-common-dir)"
+if [[ "$common_dir" != /* ]]; then
+  common_dir="$repo_root/$common_dir"
+fi
+queue_dir="$common_dir/csarc/finalization-queue"
+now="${CSARC_FINALIZATION_QUEUE_NOW:-$(date -u +%s)}"
+[[ "$now" =~ ^[0-9]+$ ]] || fail "current time must be an integer epoch"
+
+active_records() {
+  local filter_base="${1:-}"
+  local file record_issue record_base branch head announced expires extra
+  [[ -d "$queue_dir" ]] || return 0
+  for file in "$queue_dir"/*.tsv; do
+    [[ -f "$file" ]] || continue
+    IFS=$'\t' read -r record_issue record_base branch head announced expires extra <"$file" ||
+      continue
+    [[ -z "$extra" && "$record_issue" =~ ^[1-9][0-9]*$ ]] || continue
+    [[ "$announced" =~ ^[0-9]+$ && "$expires" =~ ^[0-9]+$ ]] || continue
+    ((expires > now)) || continue
+    [[ -z "$filter_base" || "$record_base" == "$filter_base" ]] || continue
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$record_issue" "$record_base" "$branch" "$head" "$announced" "$expires"
+  done | sort -t $'\t' -k2,2 -k5,5n -k1,1n
+}
+
+show_status() {
+  local wanted_issue="${1:-}"
+  local wanted_base="${2:-}"
+  local records own_record first_issue first_base
+
+  if [[ -n "$wanted_issue" ]]; then
+    own_record="$(active_records | awk -F '\t' -v issue="$wanted_issue" '$1 == issue { print; exit }')"
+    if [[ -z "$own_record" ]]; then
+      echo "STATUS: absent"
+      echo "Issue #$wanted_issue has no active finalization intent."
+      return 0
+    fi
+    IFS=$'\t' read -r _ wanted_base _ _ _ _ <<<"$own_record"
+  fi
+
+  records="$(active_records "$wanted_base")"
+  if [[ -z "$records" ]]; then
+    echo "STATUS: empty"
+    echo "No active finalization intents."
+    return 0
+  fi
+
+  IFS=$'\t' read -r first_issue first_base _ _ _ _ <<<"${records%%$'\n'*}"
+  if [[ -n "$wanted_issue" && "$first_issue" == "$wanted_issue" ]]; then
+    echo "STATUS: ready"
+    echo "Issue #$wanted_issue is first for base $first_base."
+  elif [[ -n "$wanted_issue" ]]; then
+    echo "STATUS: wait"
+    echo "Issue #$wanted_issue follows #$first_issue for base $first_base; this is advisory and does not block commands."
+  else
+    echo "STATUS: listed"
+  fi
+  echo $'issue\tbase\tbranch\thead\tannounced\texpires'
+  printf '%s\n' "$records"
+}
+
+case "$command" in
+  announce)
+    [[ -n "$issue" && -n "$base" ]] ||
+      fail "announce requires --issue and --base"
+    validate_issue "$issue"
+    validate_base "$base"
+    [[ "$ttl_minutes" =~ ^[1-9][0-9]*$ ]] ||
+      fail "--ttl-minutes must be a positive integer"
+    ((ttl_minutes <= 1440)) || fail "--ttl-minutes cannot exceed 1440"
+    branch="$(git symbolic-ref --quiet --short HEAD)" ||
+      fail "announce requires a checked-out branch"
+    [[ -z "$(git status --porcelain --untracked-files=all)" ]] ||
+      fail "announce requires a clean worktree"
+    head="$(git rev-parse HEAD)"
+    expires=$((now + ttl_minutes * 60))
+    mkdir -p "$queue_dir"
+    umask 077
+    intent_tmp="$(mktemp "$queue_dir/.${issue}.XXXXXX")"
+    trap 'rm -f "$intent_tmp"' EXIT
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$issue" "$base" "$branch" "$head" "$now" "$expires" >"$intent_tmp"
+    mv "$intent_tmp" "$queue_dir/$issue.tsv"
+    trap - EXIT
+    show_status "$issue"
+    ;;
+  status)
+    [[ -z "$issue" ]] || validate_issue "$issue"
+    [[ -z "$base" ]] || validate_base "$base"
+    [[ "$ttl_minutes" == 90 ]] || fail "--ttl-minutes is only valid with announce"
+    show_status "$issue" "$base"
+    ;;
+  leave)
+    [[ -n "$issue" ]] || fail "leave requires --issue"
+    [[ -z "$base" ]] || fail "--base is not valid with leave"
+    [[ "$ttl_minutes" == 90 ]] || fail "--ttl-minutes is only valid with announce"
+    validate_issue "$issue"
+    rm -f "$queue_dir/$issue.tsv"
+    echo "Removed finalization intent for Issue #$issue."
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
