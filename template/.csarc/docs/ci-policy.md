@@ -866,6 +866,11 @@ dependency-only 不啟動 pytest；生成 repo 測試量本來就小，仍對自
 test result。現階段只實作完全相同的 effective tier／scopes 沿用；較高 tier 或 scope 超集合覆蓋留待有實測需求
 時再做，避免在 #812 引入另一套依賴圖。
 
+same-head reuse 的 step 使用固定名稱；可信 workflow 透過 workflow command 在該 check 寫入一筆版本化的
+JSON notice annotation，承載 route identity 與原始 Execute 的 run／job／check ID。consumer 只接受唯一且
+schema 完整的 annotation，再依上述契約遞迴驗證 direct evidence。GitHub API 若回傳未展開的 step-name
+expression、重複 annotation、未知欄位或任一 identity 不符，一律 fail closed；不把顯示名稱當資料通道（#964）。
+
 同步結構預檢位於工具鏈安裝與 verifier 之前。分支名稱只決定「需要檢查」而不構成授權；可信 script 仍核對
 PR route、requesting PR、base/head SHA、`[base, main]` 雙親與 tree。這可讓錯誤拓撲在秒級失敗，避免先跑 full
 才由 merge lifecycle 發現。clean sync 的 required check 仍綁定自身 exact repo/head/tree/run/job/App 與來源

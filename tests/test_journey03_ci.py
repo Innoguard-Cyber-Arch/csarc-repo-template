@@ -157,7 +157,7 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     assert 'python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py"' in source
     assert "Check out the exact candidate" in source
     assert "Execute trusted verification tier=" in source
-    assert "Reuse trusted verification tier=" in source
+    assert "- name: Reuse trusted verification" in source
     assert "Validate trusted clean sync tier=fast" in source
     assert "./scripts/verify-fast" in source
     assert "./scripts/verify-template.sh" in source
@@ -420,7 +420,9 @@ def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
     assert "--find-reusable" in source
     assert '--exclude-run-id "$GITHUB_RUN_ID"' in source
     assert "base-sha=${{ steps.identity.outputs.base_sha }}" in source
-    assert "source-run=${{ steps.reuse.outputs.source_run }}" in source
+    assert "- name: Reuse trusted verification" in source
+    assert "Trusted verification reuse evidence" in source
+    assert "source_run: $source_run" in source
     assert "steps.reuse.outputs.reuse != 'true'" in source
     assert "steps.sync.outputs.clean != 'true'" in source
 
@@ -437,6 +439,15 @@ def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
             'if ! python3 "$RUNNER_TEMP/trusted-verification/' in reuse_command
         )
         assert "running the exact candidate instead" in reuse_command
+        reuse_step = workflow.split("- name: Reuse trusted verification", 1)[
+            1
+        ].split("- name: Set up Python", 1)[0]
+        assert (
+            "::notice title=Trusted verification reuse evidence::" in reuse_step
+        )
+        assert "SOURCE_RUN:" in reuse_step
+        assert "SOURCE_JOB:" in reuse_step
+        assert "SOURCE_CHECK:" in reuse_step
 
 
 def test_verifiers_do_not_call_removed_attestation_helpers() -> None:

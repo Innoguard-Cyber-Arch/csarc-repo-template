@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -23,6 +24,8 @@ REQUIRED_STEPS = (
     "Select trusted verification plan",
     "Bind trusted verification identity",
 )
+REUSE_STEP_NAME = "Reuse trusted verification"
+REUSE_ANNOTATION_TITLE = "Trusted verification reuse evidence"
 EXECUTION_STEP = re.compile(
     r"^Execute trusted verification tier=(docs|fast|full) "
     r"scopes=([a-z,-]+) tree=([0-9a-f]{40}) "
@@ -54,6 +57,144 @@ TOOLCHAIN_STEP = re.compile(
     r"^Set up (Python 3\.[0-9]+|uv 0\.12\.15|pnpm 11\.22\.0|"
     r"Node\.js 24|Rust 1\.98\.0)$"
 )
+
+
+def needs_reuse_annotations(job: dict[str, Any]) -> bool:
+    """Return whether a successful fixed reuse step needs its annotation."""
+    steps = job.get("steps")
+    return isinstance(steps, list) and any(
+        isinstance(step, dict)
+        and step.get("name") == REUSE_STEP_NAME
+        and step.get("status") == "completed"
+        and step.get("conclusion") == "success"
+        for step in steps
+    )
+
+
+def reuse_annotation_match(
+    annotations: list[dict[str, Any]] | None,
+) -> re.Match[str]:
+    """Parse the one structured reuse claim emitted by the trusted job."""
+    matches = [
+        annotation
+        for annotation in annotations or []
+        if annotation.get("title") == REUSE_ANNOTATION_TITLE
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(
+            "Trusted verification reuse annotation is missing or duplicate"
+        )
+    annotation = matches[0]
+    if annotation.get("annotation_level") != "notice" or not isinstance(
+        annotation.get("message"), str
+    ):
+        raise RuntimeError("Trusted verification reuse annotation is malformed")
+    try:
+        claim = json.loads(annotation["message"])
+    except (TypeError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            "Trusted verification reuse annotation is malformed"
+        ) from error
+    fields = {
+        "schema_version",
+        "kind",
+        "tier",
+        "scopes",
+        "tree",
+        "command",
+        "base",
+        "base_sha",
+        "labels",
+        "release",
+        "source_run",
+        "source_job",
+        "source_check",
+    }
+    if (
+        not isinstance(claim, dict)
+        or set(claim) != fields
+        or type(claim.get("schema_version")) is not int
+        or claim.get("schema_version") != 1
+        or claim.get("kind") != "reuse"
+        or any(
+            not isinstance(claim.get(field), str)
+            for field in (
+                "tier",
+                "scopes",
+                "tree",
+                "command",
+                "base",
+                "base_sha",
+                "labels",
+                "release",
+            )
+        )
+        or any(
+            type(claim.get(field)) is not int or claim[field] <= 0
+            for field in ("source_run", "source_job", "source_check")
+        )
+    ):
+        raise RuntimeError("Trusted verification reuse annotation is malformed")
+    rendered = (
+        f"Reuse trusted verification tier={claim['tier']} "
+        f"scopes={claim['scopes']} tree={claim['tree']} "
+        f"command={claim['command']} base={claim['base']} "
+        f"base-sha={claim['base_sha']} labels={claim['labels']} "
+        f"release={claim['release']} source-run={claim['source_run']} "
+        f"source-job={claim['source_job']} "
+        f"source-check={claim['source_check']}"
+    )
+    match = REUSE_STEP.fullmatch(rendered)
+    if match is None:
+        raise RuntimeError("Trusted verification reuse annotation is malformed")
+    return match
+
+
+def evidence_match(
+    job: dict[str, Any],
+    annotations: list[dict[str, Any]] | None = None,
+) -> tuple[str, re.Match[str]]:
+    """Return the job's one trusted execution, reuse, or sync claim."""
+    steps = successful_steps(job)
+    execution_names = [
+        name for name in steps if name.startswith("Execute trusted")
+    ]
+    reuse_names = [
+        name
+        for name in steps
+        if name.startswith("Reuse trusted") and name != REUSE_STEP_NAME
+    ]
+    sync_names = [
+        name for name in steps if name.startswith("Validate trusted clean sync")
+    ]
+    fixed_reuse = REUSE_STEP_NAME in steps
+    if (
+        len(execution_names) + len(reuse_names) + len(sync_names) + fixed_reuse
+        != 1
+    ):
+        raise RuntimeError(
+            "Trusted verification must have one execution, reuse, or sync step"
+        )
+    if fixed_reuse:
+        return "reuse", reuse_annotation_match(annotations)
+    name = (
+        execution_names[0]
+        if execution_names
+        else reuse_names[0]
+        if reuse_names
+        else sync_names[0]
+    )
+    kind, pattern = (
+        ("execution", EXECUTION_STEP)
+        if execution_names
+        else ("reuse", REUSE_STEP)
+        if reuse_names
+        else ("sync", SYNC_STEP)
+    )
+    match = pattern.fullmatch(name)
+    if match is None:
+        raise RuntimeError("Trusted verification evidence is malformed")
+    return kind, match
 
 
 def parse_github_time(value: object, field: str) -> datetime:
@@ -105,25 +246,12 @@ def toolchain_token(step_name: str) -> str | None:
 
 def evidence_source_ids(
     job: dict[str, Any],
+    annotations: list[dict[str, Any]] | None = None,
 ) -> tuple[str, int, int, int] | None:
     """Return one direct execution source claimed by a reuse or sync job."""
-    steps = job.get("steps")
-    if not isinstance(steps, list):
+    kind, match = evidence_match(job, annotations)
+    if kind == "execution":
         return None
-    matches: list[tuple[str, re.Match[str]]] = []
-    for step in steps:
-        if (
-            isinstance(step, dict)
-            and step.get("status") == "completed"
-            and step.get("conclusion") == "success"
-            and isinstance(step.get("name"), str)
-        ):
-            for kind, pattern in (("reuse", REUSE_STEP), ("sync", SYNC_STEP)):
-                if (match := pattern.fullmatch(step["name"])) is not None:
-                    matches.append((kind, match))
-    if len(matches) != 1:
-        return None
-    kind, match = matches[0]
     offset = 8 if kind == "reuse" else 9
     source_run, source_job, source_check = map(
         int, match.groups()[offset : offset + 3]
@@ -147,6 +275,7 @@ def validate_verification_job(  # noqa: C901
     expected_toolchain: set[str] | None = None,
     source_evidence: tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]
     | None = None,
+    annotations: list[dict[str, Any]] | None = None,
 ) -> dict[str, object]:
     """Validate exact-tree, toolchain, result, runner, and freshness claims."""
     if max_age_hours <= 0 or max_clock_skew_minutes < 0:
@@ -220,34 +349,9 @@ def validate_verification_job(  # noqa: C901
             "Trusted verification toolchain or routing steps did not succeed: "
             + ", ".join(missing_steps)
         )
-    execution_names = [
-        name for name in steps if name.startswith("Execute trusted")
-    ]
-    reuse_names = [name for name in steps if name.startswith("Reuse trusted")]
-    sync_names = [
-        name for name in steps if name.startswith("Validate trusted clean sync")
-    ]
-    if len(execution_names) + len(reuse_names) + len(sync_names) != 1:
-        raise RuntimeError(
-            "Trusted verification must have one execution, reuse, or sync step"
-        )
-    name = (
-        execution_names[0]
-        if execution_names
-        else reuse_names[0]
-        if reuse_names
-        else sync_names[0]
-    )
-    pattern = (
-        EXECUTION_STEP
-        if execution_names
-        else REUSE_STEP
-        if reuse_names
-        else SYNC_STEP
-    )
-    match = pattern.fullmatch(name)
-    if match is None:
-        raise RuntimeError("Trusted verification evidence is malformed")
+    kind, match = evidence_match(job, annotations)
+    reuse = kind == "reuse"
+    sync = kind == "sync"
     tier, raw_scopes, claimed_tree, command, base, base_sha, labels, release = (
         match.groups()[:8]
     )
@@ -285,12 +389,12 @@ def validate_verification_job(  # noqa: C901
         "labels": labels,
         "release_level": release,
     }
-    if reuse_names or sync_names:
+    if reuse or sync:
         if source_evidence is None:
             raise RuntimeError(
                 "Trusted verification reuse has no direct execution source"
             )
-        offset = 8 if reuse_names else 9
+        offset = 8 if reuse else 9
         source_run_id, source_job_id, source_check_id = map(
             int, match.groups()[offset : offset + 3]
         )
@@ -303,7 +407,10 @@ def validate_verification_job(  # noqa: C901
             raise RuntimeError(
                 "Trusted verification reuse source identity does not match"
             )
-        if evidence_source_ids(source_job) is not None:
+        if (
+            needs_reuse_annotations(source_job)
+            or evidence_source_ids(source_job) is not None
+        ):
             raise RuntimeError(
                 "Trusted verification reuse has no direct execution source"
             )
@@ -318,10 +425,10 @@ def validate_verification_job(  # noqa: C901
             max_age_hours=max_age_hours,
             max_clock_skew_minutes=max_clock_skew_minutes,
             full_command=full_command,
-            required_tier="full" if sync_names else required_tier,
+            required_tier="full" if sync else required_tier,
             expected_toolchain=expected_toolchain,
         )
-        if reuse_names and any(
+        if reuse and any(
             source[key] != common[key]
             for key in (
                 "repository",
@@ -347,7 +454,7 @@ def validate_verification_job(  # noqa: C901
             "source_run_id": source_run_id,
             "source_job_id": source_job_id,
             "source_check_run_id": source_check_id,
-            "sync_main_sha": match.group(9) if sync_names else None,
+            "sync_main_sha": match.group(9) if sync else None,
         }
 
     successful_toolchain = [

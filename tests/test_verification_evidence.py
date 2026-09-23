@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import runpy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -13,6 +14,18 @@ MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "verification_evidence.py")
 )
 validate_verification_job = MODULE["validate_verification_job"]
+TEMPLATE_MODULE = runpy.run_path(
+    str(
+        Path(__file__).parents[1]
+        / "template"
+        / ".csarc"
+        / "scripts"
+        / "verification_evidence.py"
+    )
+)
+validate_template_verification_job = TEMPLATE_MODULE[
+    "validate_verification_job"
+]
 CHECKER = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "check-trusted-verification")
 )
@@ -33,6 +46,42 @@ ROOT_TOOLCHAIN = {
     "node-24",
     "rust-1.98.0",
 }
+
+
+def reuse_annotation(**changes: object) -> dict[str, object]:
+    """Build the structured annotation emitted by the trusted reuse step."""
+    claim: dict[str, object] = {
+        "schema_version": 1,
+        "kind": "reuse",
+        "tier": "fast",
+        "scopes": "source",
+        "tree": TREE,
+        "command": "./scripts/verify-fast",
+        "base": BASE,
+        "base_sha": BASE_SHA,
+        "labels": LABELS,
+        "release": "beta",
+        "source_run": 200,
+        "source_job": 7,
+        "source_check": 7,
+    }
+    claim.update(changes)
+    return {
+        "annotation_level": "notice",
+        "title": "Trusted verification reuse evidence",
+        "message": json.dumps(claim, separators=(",", ":"), sort_keys=True),
+    }
+
+
+def reuse_annotation_without(field: str) -> dict[str, object]:
+    """Build a structured annotation with one required claim removed."""
+    annotation = reuse_annotation()
+    claim = json.loads(str(annotation["message"]))
+    del claim[field]
+    annotation["message"] = json.dumps(
+        claim, separators=(",", ":"), sort_keys=True
+    )
+    return annotation
 
 
 def evidence(
@@ -365,6 +414,117 @@ def test_valid_reuse_retains_current_identity_and_original_freshness() -> None:
     assert result["reused"] is True
     assert result["source_run_id"] == 200
     assert result["completed_at"] == (NOW - timedelta(minutes=2)).isoformat()
+
+
+def test_fixed_reuse_step_reads_structured_annotation() -> None:
+    """GitHub may leave expressions literal in names; use the annotation."""
+    source = evidence(run_id=200, check_id=7)
+    current = evidence(run_id=300, check_id=8, reuse=(200, 7, 7))
+    current[2]["steps"][-1]["name"] = "Reuse trusted verification"
+
+    result = validate_verification_job(
+        *current,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        source_evidence=(*source, TREE),
+        annotations=[reuse_annotation()],
+    )
+
+    assert result["reused"] is True
+    assert result["source_run_id"] == 200
+    assert result["source_job_id"] == 7
+    assert result["source_check_run_id"] == 7
+
+
+def test_template_consumer_reads_the_same_structured_annotation() -> None:
+    """The generated-project consumer accepts its path-specific claim."""
+    source = evidence(run_id=200, check_id=7)
+    current = evidence(run_id=300, check_id=8, reuse=(200, 7, 7))
+    for job in (source[2], current[2]):
+        job["steps"][-1]["name"] = job["steps"][-1]["name"].replace(
+            "./scripts/", "./.csarc/scripts/"
+        )
+    current[2]["steps"][-1]["name"] = "Reuse trusted verification"
+
+    result = validate_template_verification_job(
+        *current,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        source_evidence=(*source, TREE),
+        annotations=[reuse_annotation(command="./.csarc/scripts/verify-fast")],
+        full_command="./.csarc/scripts/verify",
+    )
+
+    assert result["reused"] is True
+    assert result["source_run_id"] == 200
+
+
+def test_literal_reuse_step_expression_fails_closed() -> None:
+    """Never interpret GitHub's unexpanded dynamic display-name as evidence."""
+    source = evidence(run_id=200, check_id=7)
+    current = evidence(run_id=300, check_id=8, reuse=(200, 7, 7))
+    current[2]["steps"][-1]["name"] = (
+        "Reuse trusted verification tier=${{ steps.effective.outputs.suite }} "
+        "scopes=${{ steps.plan.outputs.scopes }}"
+    )
+
+    with pytest.raises(RuntimeError, match="evidence is malformed"):
+        validate_verification_job(
+            *current,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            source_evidence=(*source, TREE),
+        )
+
+
+@pytest.mark.parametrize(
+    ("annotations", "message"),
+    [
+        ([], "annotation is missing"),
+        ([reuse_annotation(), reuse_annotation()], "annotation is missing"),
+        (
+            [
+                {
+                    **reuse_annotation(),
+                    "message": "not-json",
+                }
+            ],
+            "annotation is malformed",
+        ),
+        ([reuse_annotation_without("source_job")], "annotation is malformed"),
+        ([reuse_annotation(source_check=9)], "source identity"),
+        ([reuse_annotation(tree="d" * 40)], "tree does not match"),
+        (
+            [reuse_annotation(tier="full")],
+            "tier, scopes, or command is invalid",
+        ),
+        ([reuse_annotation(base="main")], "route does not match"),
+    ],
+)
+def test_structured_reuse_annotation_fails_closed(
+    annotations: list[dict[str, object]], message: str
+) -> None:
+    """Malformed or mismatched structured claims never authorize reuse."""
+    source = evidence(run_id=200, check_id=7)
+    current = evidence(run_id=300, check_id=8, reuse=(200, 7, 7))
+    current[2]["steps"][-1]["name"] = "Reuse trusted verification"
+
+    with pytest.raises(RuntimeError, match=message):
+        validate_verification_job(
+            *current,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            source_evidence=(*source, TREE),
+            annotations=annotations,
+        )
 
 
 def test_clean_sync_uses_one_direct_full_source_execution() -> None:
