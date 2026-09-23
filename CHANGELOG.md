@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.25.1] - 2026-09-23
+
+### Bug Fixes
+
+* fix(ci): eliminate duplicate hosted full runs (e33c5a2)
+
 ## [0.25.0] - 2026-09-23
 
 ### Features
