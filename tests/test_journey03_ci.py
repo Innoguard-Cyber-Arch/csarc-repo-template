@@ -3,6 +3,7 @@
 import os
 import re
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -621,6 +622,92 @@ def test_verification_steps_report_progress_heartbeat_and_rerun() -> None:
     assert failure.returncode == 7
     assert "[verify-step] FAILED Broken step" in failure.stderr
     assert "[verify-step] RERUN bash -c exit\\ 7" in failure.stderr
+
+
+def test_package_smoke_ignores_stale_dist_wheels(tmp_path: Path) -> None:
+    """Run only the wheel produced by this package-smoke invocation."""
+    root = tmp_path / "repo"
+    scripts = root / "scripts"
+    tools = tmp_path / "bin"
+    temporary = tmp_path / "tmp"
+    scripts.mkdir(parents=True)
+    tools.mkdir()
+    temporary.mkdir()
+    for name in (
+        "resolve-cache-root",
+        "verification-step",
+        "verify-stage-package-smoke",
+    ):
+        shutil.copy2(REPO_ROOT / "scripts" / name, scripts / name)
+
+    dist = root / "dist"
+    dist.mkdir()
+    stale = dist / "csarc_repo_template-0.23.0-py3-none-any.whl"
+    current = dist / "csarc_repo_template-0.24.2-py3-none-any.whl"
+    unrelated = dist / "another_project-1.0.0-py3-none-any.whl"
+    for path in (stale, current, unrelated):
+        path.write_text(path.name, encoding="utf-8")
+
+    uv = tools / "uv"
+    uv.write_text(
+        """#!/usr/bin/env bash
+set -eu
+test "$1" = build
+test "${2:-}" = --out-dir
+mkdir -p "$3"
+touch "$3/csarc_repo_template-0.24.2-py3-none-any.whl"
+if [[ "${SMOKE_SECOND_WHEEL:-}" == 1 ]]; then
+  touch "$3/another_project-1.0.0-py3-none-any.whl"
+fi
+""",
+        encoding="utf-8",
+    )
+    uvx = tools / "uvx"
+    uvx.write_text(
+        """#!/usr/bin/env bash
+set -eu
+test "$1" = --from
+printf '%s\n' "$2" >"$SMOKE_WHEEL_LOG"
+test "$(basename "$2")" = csarc_repo_template-0.24.2-py3-none-any.whl
+""",
+        encoding="utf-8",
+    )
+    uv.chmod(0o755)
+    uvx.chmod(0o755)
+
+    environment = os.environ.copy()
+    environment["PATH"] = f"{tools}:{environment['PATH']}"
+    environment["TMPDIR"] = str(temporary)
+    environment["CSARC_CACHE_ROOT"] = str(tmp_path / "cache")
+    wheel_log = tmp_path / "selected-wheel"
+    environment["SMOKE_WHEEL_LOG"] = str(wheel_log)
+    success = subprocess.run(  # noqa: S603 - isolated test-owned scripts
+        [scripts / "verify-stage-package-smoke"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert success.returncode == 0, success.stderr
+    selected = Path(wheel_log.read_text(encoding="utf-8").strip())
+    assert selected.name == "csarc_repo_template-0.24.2-py3-none-any.whl"
+    assert selected.parent != dist
+    assert not selected.exists()
+    assert all(path.is_file() for path in (stale, current, unrelated))
+
+    wheel_log.unlink()
+    environment["SMOKE_SECOND_WHEEL"] = "1"
+    ambiguous = subprocess.run(  # noqa: S603 - isolated test-owned scripts
+        [scripts / "verify-stage-package-smoke"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert ambiguous.returncode != 0
+    assert "FAILED Locate exactly one built wheel" in ambiguous.stderr
+    assert not wheel_log.exists()
 
 
 def test_verification_entry_points_use_shared_step_reporting() -> None:
