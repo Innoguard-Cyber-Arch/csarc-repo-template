@@ -41,7 +41,7 @@ from jinja2 import Environment, StrictUndefined, TemplateError
 
 # Answers chosen to render every conditional branch a root workflow
 # exercises unconditionally (root always sets up Python, pnpm/Node, and
-# Rust toolchains for its own release-candidate validation), so the
+# Rust toolchains for its full verification), so the
 # rendered template can be compared to root line-for-line instead of
 # comparing against a project that skipped whole blocks. See copier.yml
 # for the full question schema. These are the only answers referenced by
@@ -78,8 +78,12 @@ REPRESENTATIVE_ANSWERS: dict[str, object] = {
 # undeclared difference (see find_drift) already prints stripped lines,
 # so they can be pasted straight into a new entry here.
 _ROOT_ACTIVE = (
-    "if: ${{ steps.reuse.outputs.reuse != 'true' && "
-    "steps.sync.outputs.clean != 'true' }}"
+    "if: ${{ steps.sync.outputs.clean != 'true' && "
+    "(steps.reuse.outputs.reuse != 'true' || "
+    "(github.event_name == 'pull_request_target' && "
+    "github.event.pull_request.base.ref == 'main' && "
+    "startsWith(github.event.pull_request.head.ref, 'release/v') && "
+    "steps.release.outputs.ownership == 'csarc-owned')) }}"
 )
 _ROOT_FULL = (
     "if: ${{ steps.reuse.outputs.reuse != 'true' && "
@@ -87,17 +91,25 @@ _ROOT_FULL = (
     "steps.effective.outputs.suite == 'full' }}"
 )
 _DOWNSTREAM_PRODUCT_OR_OSV = (
-    "if: ${{ steps.reuse.outputs.reuse != 'true' && "
-    "steps.sync.outputs.clean != 'true' && "
+    "if: ${{ steps.sync.outputs.clean != 'true' && "
+    "((steps.reuse.outputs.reuse != 'true' && "
     "(steps.effective.outputs.suite == 'full' || "
     "steps.plan.outputs.run_project == 'true' || "
-    "steps.plan.outputs.run_osv == 'true') }}"
+    "steps.plan.outputs.run_osv == 'true')) || "
+    "(github.event_name == 'pull_request_target' && "
+    "github.event.pull_request.base.ref == 'main' && "
+    "startsWith(github.event.pull_request.head.ref, 'release/v') && "
+    "steps.release.outputs.ownership == 'csarc-owned')) }}"
 )
 _DOWNSTREAM_PRODUCT = (
-    "if: ${{ steps.reuse.outputs.reuse != 'true' && "
-    "steps.sync.outputs.clean != 'true' && "
+    "if: ${{ steps.sync.outputs.clean != 'true' && "
+    "((steps.reuse.outputs.reuse != 'true' && "
     "(steps.effective.outputs.suite == 'full' || "
-    "steps.plan.outputs.run_project == 'true') }}"
+    "steps.plan.outputs.run_project == 'true')) || "
+    "(github.event_name == 'pull_request_target' && "
+    "github.event.pull_request.base.ref == 'main' && "
+    "startsWith(github.event.pull_request.head.ref, 'release/v') && "
+    "steps.release.outputs.ownership == 'csarc-owned')) }}"
 )
 
 
@@ -114,10 +126,10 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
             'command="./scripts/verify-template.sh"',
             'command="./scripts/verify"',
         ),
-        # Root verification always needs Python and only needs the
-        # non-Python toolchains for full delivery. Generated projects can
-        # skip every product toolchain when the selected scopes do not run
-        # project or dependency checks.
+        # Root release packaging is Python-only; generated projects install
+        # only their selected package toolchains. Outside a guided release,
+        # generated projects can still skip product toolchains when the
+        # selected scopes do not run project or dependency checks.
         (_ROOT_ACTIVE, _DOWNSTREAM_PRODUCT_OR_OSV),
         (_ROOT_FULL, _DOWNSTREAM_PRODUCT_OR_OSV),
         (_ROOT_FULL, _DOWNSTREAM_PRODUCT),
