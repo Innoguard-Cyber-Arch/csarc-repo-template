@@ -280,7 +280,7 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 
 **責任交接（本機 scripts → GitHub Actions → PR gate → Release）：**
 
-- **本機 scripts（`Active`）：** 開發者先跑變更範圍的聚焦檢查；`scripts/verify-fast` 是需要廣泛診斷時的選項，完整交付邊界才在最終候選上跑一次 `scripts/verify-template.sh`。
+- **本機 scripts（`Active`）：** 開發者先跑變更範圍的聚焦檢查；`scripts/verify-fast` 是需要廣泛診斷時的選項。hosted 模式不因 tier 是 full 就在本機重跑 `scripts/verify-template.sh`；只有明定 fallback 或診斷才本機跑 full。
 - **GitHub Actions（`Active`）：** PR 開出後，受信任的 base workflow 會分類所需 tier，checkout 精確的候選 commit，並在 GitHub-hosted runner 對該 head 執行一次 risk-owned 驗證；合併與發版只接受綁定 repo、commit/tree、tier、命令、工具鏈與 GitHub Actions 執行身分的成功證據。
 - **PR gate（依 GitHub 方案而定）：** 支援時由 Ruleset／branch protection 強制擋下未過檢查或未審查的合併；不支援時標示 `DEGRADED`，改由人工自律（見「規則治理」）。
 - **Release（`Candidate`）：** 原 PR 先物化版本，hosted `release.yml` 預設發布；Actions 不健康時，維護者或 agent 可在本機呼叫同一份 `scripts/publish-release`（見「版本／交付」）。
@@ -443,7 +443,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /standard >}}
 
 {{< ops key="contract-mode-ops" title="分級邏輯與目前自動化現況" >}}
-- **開發中：**只跑能證明本次修改的 focused check（例如 `uv run pytest <path>`、`uv run ruff check <path>`），用新鮮輸出才宣稱完成，不等待整條 pipeline。
+- **開發中：**只跑能證明本次修改的 focused check（例如 `uv run pytest <path>`、`uv run ruff check <path>`），用新鮮輸出才宣稱完成；hosted 模式不因最後路由是 full 就在本機重跑 aggregate suite。
 - **工作 PR（工作分支 → main 或 `dev/m*`）：**`scripts/release_level.py` 從可信任的 Issue／Milestone 宣告解析 beta／stable；`scripts/ci_tier.py` 再依事件、labels 與變更路徑提高最低組合。`early`／`formal` 只由專案設定宣告，不參與單張 Issue 分級；宣告衝突或未知高風險路徑一律 fail closed。
 - **需要完整驗證時：**只在 Milestone／canary 交付、緊急修正、merge queue、手動執行，或系統無法安全縮小範圍的未知高風險路徑才觸發。
 - **同一套邏輯，Hosted 端重新執行（#834）：**GitHub Actions 只有一個受限權限的 `verify` job，同一 PR 新 commit 會取消舊 run；base workflow 先選定 tier 與執行命令，再對精確候選 tree 執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`）。合併與發版只採信 GitHub Actions App 在 GitHub-hosted runner 產生、成功且仍新鮮的同一 run/job 證據；手寫 commit trailer、錯誤 repo/tree/tier 或非受信任 signer 一律 fail closed。
@@ -470,7 +470,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 
 - `fast`：2026-09-01 同機暖快取下，只碰 source 的 scope 約 59 秒，同時碰 policy／template 的 scope 約 99 秒；整條 PR feedback window 約 1–4 分鐘（#428）。
 - docs-only 仍是 `fast`，但只跑共同安全檢查與 docs scope owner，不啟動產品語言工具鏈。
-- `full`：獨占環境下七個階段全數 PASSED 共 502 秒（8 分 22 秒）；同機器有其他 worktree 並行執行時量到 810 秒，差異來自資源競爭，不是驗證內容本身變重（#458，2026-09-02）。七個階段中，Regression tests（完整 pytest 加上標記 `large` 的 Copier 建立／導入／更新矩陣）通常是耗時最長的一段，其餘六個階段合計通常只有數十秒。
+- `full`：#940 的 2026-09-23 候選在本機為 919 秒，hosted 為 400 秒；hosted 的 Regression tests 佔 387 秒，其餘六階段合計 13 秒。#955 因此移除 hosted 模式的本機＋hosted 重複執行，但七個階段與測試集合不變。
 {{< /disclosure >}}
 
 {{< config-guidance track="contract" >}}

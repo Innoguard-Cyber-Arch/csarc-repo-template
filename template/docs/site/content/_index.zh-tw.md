@@ -57,7 +57,7 @@ git clone [[repository_url]]
 ./.csarc/scripts/verify-fast
 ```
 
-`.csarc/scripts/verify-fast` 是這個 repo 日常 PR 的本機快速回饋入口；push 前先跑過，可以提早發現問題。PR 開出後，受信任的 base workflow 會在 GitHub-hosted runner 對精確候選 commit 重新執行所需 tier，合併與發版只接受該 hosted 執行的可信證據。只有 Milestone／canary 交付、hotfix 或 merge queue 才需要在本機跑完整的 `.csarc/scripts/verify`。本機需求（語言工具鏈、`gh` 登入等）與這個 repo 選用的語言（[[languages]]）有關，詳見 README。
+實作時先跑變更 owner 的聚焦檢查。local 模式在 committed、clean 的最終候選執行一次 `.csarc/scripts/verify-fast`，需要時會自動升級 full 並記錄本機證據；hosted 模式則由受信任的 base workflow 在 GitHub-hosted runner 對精確候選執行所需 tier，本機不因 tier 是 full 就重跑同一套 aggregate suite。合併與發版只接受設定模式對應的證據；本機需求（語言工具鏈、`gh` 登入等）與這個 repo 選用的語言（[[languages]]）有關，詳見 README。
 {{< /ops >}}
 {{< /slide >}}
 

@@ -280,7 +280,7 @@ Users do not need to memorize workflow or script names. Current automation cover
 
 **Responsibility handoff (local scripts → GitHub Actions → PR gate → Release):**
 
-- **Local scripts (`Active`):** developers first run focused checks for the changed owners; `scripts/verify-fast` is optional when a broad diagnostic is useful, and a full delivery boundary runs `scripts/verify-template.sh` once on the final candidate.
+- **Local scripts (`Active`):** developers first run focused checks for the changed owners; `scripts/verify-fast` is optional when a broad diagnostic is useful. Hosted mode does not rerun `scripts/verify-template.sh` locally just because the tier is full; local full is reserved for a documented fallback or diagnostic.
 - **GitHub Actions (`Active`):** once a PR opens, the trusted base workflow classifies the required tier, checks out the exact candidate commit, and runs the risk-owned verification once for that head on a GitHub-hosted runner. Merge and release accept only successful evidence bound to the repository, commit/tree, tier, command, toolchain, and GitHub Actions identity.
 - **PR gate (depends on the GitHub plan):** where supported, a Ruleset / branch protection blocks a merge that failed checks or lacks review; where not supported, it is marked `DEGRADED` and falls back to human discipline (see "Rules governance").
 - **Release (`Candidate`):** the original PR materializes the version; hosted `release.yml` publishes it by default, while a maintainer or agent may run the same `scripts/publish-release` locally when Actions is unhealthy (see "Version / delivery").
@@ -445,7 +445,7 @@ The route declares the channel: Milestone work is beta, while promotion, standal
 {{< /standard >}}
 
 {{< ops key="contract-mode-ops" title="The tiering rule and today's automation status" >}}
-- **During development:** run only the focused check that proves the current change (for example `uv run pytest <path>` or `uv run ruff check <path>`), using fresh output before claiming completion, without waiting on the full pipeline.
+- **During development:** run only the focused check that proves the current change (for example `uv run pytest <path>` or `uv run ruff check <path>`), using fresh output before claiming completion. Hosted mode does not rerun the aggregate suite locally merely because the final route is full.
 - **Work PR (topic branch → main or `dev/m*`):** `scripts/release_level.py` resolves beta or stable from a trusted Issue or Milestone declaration; `scripts/ci_tier.py` then raises the minimum suite from the event, labels, and changed paths. `early` and `formal` are project declarations, not per-Issue levels. Conflicting declarations and unknown high-risk paths fail closed.
 - **When full verification is needed:** only for a Milestone or canary delivery, an urgent fix, a merge queue, a manual dispatch, or an unknown high-risk path the system cannot safely narrow.
 - **One implementation, re-executed by the hosted job (#834):** GitHub Actions has one least-privilege `verify` job, and a new commit on the same PR cancels the previous run. The base workflow selects the tier and command, then runs `scripts/verify-fast` / `scripts/verify-template.sh` (`scripts/verify` in a generated repository) against the exact candidate tree. Merge and release accept only fresh, successful evidence from the GitHub Actions App on a GitHub-hosted runner; a handwritten commit trailer, wrong repository/tree/tier, or untrusted signer fails closed.
@@ -472,7 +472,7 @@ These numbers come from `docs/ci-policy.md`'s most recent measurement. They set 
 
 - `fast`: on 2026-09-01, with a warm cache on the same machine, a source-only scope took about 59 seconds and a scope also touching policy/template files took about 99 seconds; the full PR feedback window runs about 1-4 minutes (#428).
 - Documentation-only work is still `fast`, but it runs only shared safety checks and docs-scope owners without starting product-language toolchains.
-- `full`: 502 seconds (8m22s) with all seven stages PASSED on an exclusive machine; up to 810 seconds when another worktree's process runs concurrently — the difference is contention, not heavier verification content (#458, 2026-09-02). Of the seven stages, Regression tests (the full pytest run plus the `large`-marked Copier create/adopt/update matrix) is usually by far the longest; the other six stages together usually add up to well under a minute.
+- `full`: on #940's 2026-09-23 candidate, local execution took 919 seconds and hosted execution took 400 seconds. Hosted Regression tests accounted for 387 seconds and the other six stages for 13 seconds. #955 therefore removes the duplicate local-plus-hosted run in hosted mode without changing the seven stages or their test set.
 {{< /disclosure >}}
 
 {{< config-guidance track="contract" >}}

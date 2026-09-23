@@ -784,7 +784,7 @@ path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成�
 
 `local` 模式不產生 `ci.yml`、`pr-policy.yml`、`pr-policy-writes.yml`、`pr-review.yml`、reviewer assignment、spec sync、work-item lifecycle、Pages、OSV、CodeQL、Docker scan、Dependabot auto-merge、release 或 release-drift workflow，required-checks Ruleset 與 Pages policy 也保持 disabled，因此不會建立永遠等不到的 check、在 `main` 重跑完整驗證或製造無意義告警。Issue／PR／Milestone 操作改用既有本機 wrapper；外部協作者若直接在 GitHub UI 修改 metadata，local mode 不會即時自動修正，只能由人工或可選的低頻 governance drift check 發現。repo-local 發版工具仍保留，需要可信 release provenance 或 Pages deployment 時先切換成 `hosted` 再更新模板。fast／full 成功後只做常數時間的 metadata 寫入：已 commit 且 clean 的候選會把 exact head/tree、base、tier、scopes、command、success 與 24 小時 freshness 綁到 Git metadata；尚未建立 commit 或仍有未提交修改時，測試結果維持成功但不產生可合併的證明。`pr_lifecycle.py` 在 merge 前重新讀取 GitHub metadata、review、lease 與這份證明，執行既有 PR policy checker，並留下清楚標為 `self-attested-local` 的 trace，再使用受控 admin bypass。
 
-hosted 模式仍保留 required `verify`／`title`／`review`。Draft 的 CI、policy、review 與 reviewer assignment 都在 runner 前略過；`PR policy writes` 只接續上游 `success`／`failure`，不為 `skipped`／`cancelled` 開 runner。Pages 只在 `documentation_mode: template-and-content` 時產生，採 Actions deployment，僅回應 `docs/**` 變更或手動 dispatch。`release_trigger: manual` 完全不註冊 push trigger；本模板 root 採此設定。
+hosted 模式仍保留 required `verify`／`title`／`review`。實作中與一般 push 前只跑變更 owner 的 focused checks；`verify-fast` 是可選的廣泛診斷，不因 trusted plan 選到 `full` 就再於本機跑一次 aggregate suite。required `verify` 在 exact candidate 執行所選 fast／full，並提供唯一的正常 merge evidence；本機 full 只留給本文件明定的 Actions／發布 fallback 或明確診斷，且不會在 fallback 邊界外取代 hosted evidence。Draft 的 CI、policy、review 與 reviewer assignment 都在 runner 前略過；`PR policy writes` 只接續上游 `success`／`failure`，不為 `skipped`／`cancelled` 開 runner。Pages 只在 `documentation_mode: template-and-content` 時產生，採 Actions deployment，僅回應 `docs/**` 變更或手動 dispatch。`release_trigger: manual` 完全不註冊 push trigger；本模板 root 採此設定。
 
 這份本機證明能防止誤拿舊結果、錯誤 branch／base、測完又改檔或跑錯 tier，但不能防止有寫入權限的人偽造 JSON，也不能證明 GitHub event／權限、第三方服務、實際部署、遠端 runner 或 release provenance。local mode 不把這些項目標成成功；需要這些信任性質時，改成 `verification_mode: hosted`，更新模板並重新套用 repository settings。切換到 hosted 後，下節 #834／#835 的規則完整生效。
 
@@ -1111,9 +1111,10 @@ focused check。最後要求是發布層級下限與 `.csarc/scripts/ci_tier.py`
    exact candidate 執行一次 risk-owned suite，並產生上方 #834 定義的 required merge evidence。
 3. **完整交付驗證（`full`）**——只在 Milestone／canary 交付、hotfix、merge queue、手動
    執行或未知高風險路徑觸發；中央模板入口是 `.csarc/scripts/verify-template.sh`，生成 repo
-   入口是 `.csarc/scripts/verify`（不帶參數即預設 full）。PR owner／integrator 只在自己的 PR
-   本身就落在這個邊界時，才需要在本機另外執行一次；一般 `fast` PR 只跑變更 owner 的
-   focused checks，不需要先在本機重跑 hosted 將執行的整套 fast 或 full。
+   入口是 `.csarc/scripts/verify`（不帶參數即預設 full）。hosted 模式由 required `verify`
+   在 exact candidate 執行一次，owner／integrator 不因 tier 是 `full` 就在本機重跑；local
+   模式則由 committed、clean 的 exact candidate 執行 `verify-fast`，依同一 router 自動升級
+   full 並記錄 self-attested evidence。hosted 模式的本機 full 只保留給明定 fallback 或診斷。
 
 數據來自 #428／PR #431 在 2026-09-01 的最新 hosted run，目的是設定成本預期，不是永久 SLA；
 `full` 一列已由 #458 在 2026-09-02 於同一本機環境重新量測（見下方階段盤點與 PR 內文的
@@ -1133,6 +1134,11 @@ before／after 紀錄）。
 執行，沒有刪除其驗證責任；hosted 與本機總時間因環境不同，只用各自的 stage 證據比對，不把
 兩者混成單一速度倍率。
 
+#940／PR #953 在 2026-09-23 的同一候選提供了重複成本基準：本機 full 為 919 秒，hosted
+full 為 400 秒；hosted 的 Regression tests 佔 387 秒，其餘六階段合計 13 秒。#955 因此移除
+hosted 模式「本機 full 後再跑 hosted full」的強制重複；這是執行位置與次數的收斂，不是降低
+full 的 stage、測試集合、風險路由或 required evidence。
+
 相依 manifest／lockfile 變更加跑 `.csarc/scripts/verify-dependencies`。CI 不建立 release asset，
 也不把測試 artifact 當成正式成品。#408 已把更細的 stage timing 輸出納入現行入口。
 
@@ -1150,13 +1156,11 @@ promotion 邊界對最終候選執行。
 trailer 造成的暫時限制已由 #834 supersede；`.csarc/scripts/check-base-only-remerge` 的四項判斷與下方流程恢復
 完整效力。
 
-上表「full」列與 #458 規則只回答「這張 PR 要不要跑 full」：只有 PR 本身落在 full 邊界
-時，owner／integrator 才需要在最終候選樹本機執行一次 `./.csarc/scripts/verify-template.sh`
-（生成 repo 是 `./.csarc/scripts/verify`）。這條規則沒回答的是另一個問題：**同一張已經跑過
-這一次本機全綠的 PR，之後因為共用整合分支（例如本 Milestone 的 `dev/m8-hugo-docs`）
-持續前進、被迫重新合併 base 時，是不是每次都要重跑同一套完整驗證。** 本節是 #458 規
-則的窄範圍例外，回答「同一張 PR 內，什麼時候可以不用每次都重跑」——**不是**放寬「full
--tier PR 永遠不用本機跑」，也不代表任何 PR 的第一次本機全綠可以省略。
+#955 之後，hosted 模式不再要求 full-tier PR 先於本機執行 full；required `verify` 直接在
+exact candidate 執行並產生可信證據。這個歷史例外只在文件明定的 fallback 或明確診斷已經
+產生一份本機 full，之後 base 又前進時，回答「需不需要為本機用途重跑」；它不會讓本機結果
+取代 hosted evidence。local 模式的 self-attested evidence 必須綁定 exact head/tree，base
+改變後直接依 local 模式規則重新執行，不套用本節例外。
 
 一次重新合併（re-merge）只在下列四個條件**同時**成立時，才算「base-only re-merge」、
 才可以直接 push 並信任 hosted `verify` check，不必再本機重跑：
@@ -1192,15 +1196,14 @@ trailer 造成的暫時限制已由 #834 supersede；`.csarc/scripts/check-base-
 續套用本節例外，只要每次都用同一個原始 own-verified-head 重新檢查最新的
 `new-base-tip`。
 
-以下情況**明確不符合**本節例外，一律仍要求本機重跑，不確定時也一律視為不符合：
+以下情況**明確不符合**本節例外；若 fallback／診斷仍要求本機 full，就必須重跑，不確定時也視為不符合：
 
 - 重新合併產生真實衝突（無論是否已手動解決）。
 - 上游變更觸及這個 branch 自己這一輪已驗證的任何檔案，即使只是同一檔案的不同行、不會
   造成文字衝突。
 - 上游變更觸及上方條件 4 列出的驗證／CI／政策基礎設施。
 - 這個 branch 在上次本機全綠之後，又有新的自有 commit（不是單純的 base 重新合併）。
-- 這次 push 本身就是新的 full-tier 邊界起點（例如這是這張 PR 第一次落入 full 邊界，或
-  是另一條獨立的 hotfix／canary／manual 路徑），而不是同一張已驗證 PR 的後續重新合併。
+- 這次 push 開始了一次新的 fallback／診斷需求，而不是同一張已驗證 PR 的後續重新合併。
 
 `.csarc/scripts/check-base-only-remerge <own-verified-head> <new-base-tip> [<old-base-tip>]`
 提供上述四項判斷的可執行版本：省略 `<old-base-tip>` 時預設為
@@ -1471,24 +1474,23 @@ CSARC_CACHE_ROOT="$HOME/.cache/csarc" ./.csarc/scripts/verify-template.sh
 
 ### 本機驗證分級判斷原則（cheap-stage-first，#538）
 
-上方三層成本邊界只回答「這次改動落在哪一級」，Base-only re-merge 例外只回答「同一張已經
-驗證過的 PR 要不要重跑」。這裡把兩者之間還沒寫清楚的問題——「這次到底要不要在本機跑一次
-full」與「真的要跑時如何排序」——寫成可執行原則，延續這次 session 已經在用、源自
+上方三層成本邊界只回答「這次改動落在哪一級」，Base-only re-merge 例外只回答「既有本機
+full 能不能沿用」。這裡把「這次到底要不要在本機跑 full」與「真的要跑時如何排序」寫成
+可執行原則，延續這次 session 已經在用、源自
 Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本機測試反覆鬼打牆
 （redundant full rerun、網路瞬斷、環境競爭噪音耗掉大量時間）。
 
 **先判斷要不要在本機跑，依序四步：**
 
-1. 這張 PR 本身是不是 full-tier 邊界？不是的話，不必為了保險另外在本機跑一次 full；本機
-   只需執行變更 owner 的 focused checks，`./.csarc/scripts/verify-fast` 留作需要廣泛診斷時的選項；
-   required merge evidence 由 hosted `verify` 對 exact candidate 執行一次 risk-owned suite 產生。
-2. 是 full-tier 邊界：這個 branch 自己這一輪內容有沒有本機全綠跑過一次
-   `./.csarc/scripts/verify-template.sh`（生成 repo 是 `./.csarc/scripts/verify`）？沒有的話，這正是
-   #458 規則要求的那一次，不能省略。
-3. 已經全綠過、現在只是因為 base 前進被迫重新合併：套用上方「Base-only re-merge 例外
-   （#468）」四項條件；全部成立時可省略第二次本機 full，新的 exact tip 仍由 hosted `verify`
-   重新執行 full。任一條件不成立就必須本機重跑。
-4. 以上都不成立，才真的執行一次本機 full；開始前先確認沒有其他 worktree／`pytest`／
+1. 先看 `verification_mode`。hosted 模式只跑變更 owner 的 focused checks；
+   `./.csarc/scripts/verify-fast` 留作可選廣泛診斷，不因 plan 選到 full 就在本機重跑 aggregate suite。
+   required merge evidence 由 hosted `verify` 對 exact candidate 執行一次。
+2. local 模式在 committed、clean 的最終候選執行一次 `verify-fast`；同一 router 需要時會自動
+   升級 full，並把結果記成 exact-head self-attested evidence，不再為了證明重跑第二次。
+3. hosted 模式只有文件明定的 fallback 或 maintainer 明確要求診斷時才需要本機 full。若同一
+   branch 已經有一輪本機 full、只是 base 前進，先套用上方「Base-only re-merge 例外（#468）」；
+   符合全部條件即可沿用本機結果，新的 exact tip 仍由 hosted `verify` 驗證。
+4. fallback／診斷確實需要新的本機 full 時，開始前先確認沒有其他 worktree／`pytest`／
    `verify`／`copier` 程序同時佔用本機資源——上方「逐階段耗時量測（#465）」記錄的 4002
    秒即混入另一個 worktree 的背景負載，不是乾淨基準，容易把負載噪音誤判成回歸。
 
@@ -1509,9 +1511,9 @@ Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本
   內所有**還沒開始**的驗證步驟，不要因為原計畫已經寫好就照舊執行；已經真正執行並拿到結果
   的步驟不必重跑。
 
-以上四步起頭判斷與 cheap-stage-first 排序，都不是放寬「full-tier PR 一定要本機全綠跑過
-一次」的既有規則（#458），只回答「什麼時候該跑」與「真的要跑時怎麼跑最省時間」；merge
-資格與 required check 仍由 Journey 08 與本文件既有規則決定。
+以上四步不減少 full 的內容：hosted 模式只是把 authoritative full 固定留在 trusted runner
+執行一次；local 模式與 fallback 仍依各自證據契約執行。merge 資格與 required check 仍由
+Journey 08 與本文件既有規則決定。
 
 ## 版本、發版、交付與部署矩陣
 
