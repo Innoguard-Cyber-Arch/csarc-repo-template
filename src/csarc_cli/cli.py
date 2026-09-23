@@ -57,6 +57,7 @@ RELEASE_WRITER_MARKERS = (
     "gh release create",
     "gh release edit",
     "gh release upload",
+    "scripts/publish-release publish",
     "googleapis/release-please-action@",
     "ncipollo/release-action@",
     "softprops/action-gh-release@",
@@ -4384,7 +4385,8 @@ def resolve_release_answers(  # noqa: C901
             release_immutable_releases="required",
             release_ownership=ownership,
             release_ownership_reason=(
-                "CSARC owns the only version and GitHub Release workflow."
+                "CSARC owns the only version policy and GitHub Release "
+                "workflow."
             ),
             release_required_inputs=observed_inputs,
             release_settings_owner="csarc-admin",

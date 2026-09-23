@@ -665,6 +665,71 @@ def test_stage_validates_and_converges_a_merged_candidate(
 
 
 @pytest.mark.large
+def test_stage_accepts_a_standalone_same_pr_candidate(tmp_path: Path) -> None:
+    """An ordinary work PR publishes after its final release-only commit."""
+    fixture = build_repo(tmp_path)
+    root = Path(fixture["root"])
+    git("reset", "--hard", fixture["base_sha"], cwd=root)
+    prepared = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            str(root / "scripts" / "release_policy.py"),
+            "prepare-candidate",
+            "--root",
+            str(root),
+            "--sha",
+            fixture["base_sha"],
+            "--phase",
+            "stable",
+        ],
+        cwd=root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert prepared.returncode == 0, prepared.stderr
+    git("add", "-A", cwd=root)
+    git("commit", "-m", "chore: materialize stable release", cwd=root)
+    candidate_sha = git("rev-parse", "HEAD", cwd=root)
+    state = tmp_path / "state"
+    state.mkdir()
+    write_pull_request_fixture(
+        state,
+        number=925,
+        repo="acme/fixture",
+        base_sha=fixture["release_point_sha"],
+        candidate_sha=candidate_sha,
+        head_ref="task/925-stable-release-materialization",
+        actor="maintainer",
+        committer="maintainer",
+        changed_files=(
+            ".release-please-manifest.json",
+            "CHANGELOG.md",
+            "feature.txt",
+            "version.txt",
+        ),
+    )
+    bindir = fixture_bin(tmp_path)
+
+    result = run_publish_release(
+        "stage",
+        "--repo",
+        "acme/fixture",
+        "--sha",
+        candidate_sha,
+        "--tag",
+        "v0.2.0",
+        repo=root,
+        bindir=bindir,
+        state=state,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert git("rev-parse", "v0.2.0^{commit}", cwd=root) == candidate_sha
+
+
+@pytest.mark.large
 def test_stage_accepts_an_exact_materialized_milestone_promotion(
     tmp_path: Path,
 ) -> None:

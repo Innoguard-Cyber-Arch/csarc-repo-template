@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release:
-    name: version and publish
+    name: validate and publish
     if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/dev/m') }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -23,7 +23,7 @@ jobs:
       checks: read
       contents: write
       issues: write
-      pull-requests: write
+      pull-requests: read
       statuses: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,6 +64,11 @@ jobs:
             --sha "$GITHUB_SHA" \
             --phase "$RELEASE_LEVEL" \
             --github-output "$GITHUB_OUTPUT"
+      - name: Reject an unmaterialized merged delivery
+        if: ${{ steps.plan.outputs.status == 'pending' }}
+        run: |
+          echo "Release-worthy work must materialize its planned version before merge." >&2
+          exit 1
       - name: Detect the available release path
         id: capability
         if: ${{ steps.plan.outputs.status != 'no-release' }}
@@ -76,7 +81,7 @@ jobs:
             --branch "$GITHUB_REF_NAME" \
             --github-output "$GITHUB_OUTPUT"
       - name: Stop when GitHub publication is blocked
-        if: ${{ (steps.plan.outputs.status == 'pending' || steps.plan.outputs.status == 'candidate' || steps.plan.outputs.status == 'released') && steps.capability.outputs.mode == 'blocked' }}
+        if: ${{ (steps.plan.outputs.status == 'candidate' || steps.plan.outputs.status == 'released') && steps.capability.outputs.mode == 'blocked' }}
         env:
           BLOCK_REASON: ${{ steps.capability.outputs.reason }}
         run: |
@@ -135,54 +140,6 @@ jobs:
           else
             ./scripts/verify-fast
           fi
-      - name: Require beta materialization in the delivery pull request
-        if: ${{ steps.route.outputs.channel == 'beta' && steps.plan.outputs.status == 'pending' }}
-        run: |
-          echo "Delivery work must include its planned beta version before merge." >&2
-          exit 1
-      - name: Create or update the version pull request
-        id: release
-        if: ${{ steps.route.outputs.channel == 'stable' && steps.plan.outputs.status == 'pending' && steps.plan.outputs.materialized != 'true' && steps.capability.outputs.mode == 'automatic' }}
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          release-as: ${{ steps.plan.outputs.version }}
-      - name: Validate the exact version pull request commit
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_PR: ${{ steps.release.outputs.pr }}
-          STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          printf '%s\n' "$RELEASE_PR" >"$RUNNER_TEMP/release-pr.json"
-          ./scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
-      - name: Record included work on the version pull request
-        if: ${{ steps.release.outputs.pr != '' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_PR: ${{ steps.release.outputs.pr }}
-        run: |
-          pr_number="$(jq -r '.number' <<<"$RELEASE_PR")"
-          python3 scripts/release_level.py annotate-pr \
-            --repo "$GITHUB_REPOSITORY" \
-            --pr "$pr_number" \
-            --actor "$GITHUB_ACTOR" \
-            --body-file "$RUNNER_TEMP/release-levels.md"
-      - name: Explain the guided version path
-        if: ${{ steps.route.outputs.channel == 'stable' && steps.plan.outputs.status == 'pending' && steps.plan.outputs.materialized != 'true' && steps.capability.outputs.mode == 'guided' }}
-        env:
-          RELEASE_TAG: ${{ steps.plan.outputs.tag }}
-          RELEASE_VERSION: ${{ steps.plan.outputs.version }}
-        run: |
-          {
-            echo "## Guided release candidate"
-            echo
-            echo "GitHub policy blocked the automatic version PR. No tag or Release was created."
-            echo "Run \`python3 scripts/release_policy.py prepare-candidate\`, review the files,"
-            echo "then open \`release/v$RELEASE_VERSION\` as \`chore(main): release $RELEASE_VERSION\`."
-          } >>"$GITHUB_STEP_SUMMARY"
       - name: Validate and stage the merged version candidate
         id: stage
         if: ${{ (steps.plan.outputs.status == 'candidate' || steps.plan.outputs.status == 'released') && steps.plan.outputs.materialized == 'true' }}
@@ -199,13 +156,11 @@ jobs:
         if: ${{ steps.plan.outputs.status != 'no-release' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag_name || steps.stage.outputs.tag }}
-          RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
+          RELEASE_TAG: ${{ steps.stage.outputs.tag }}
         run: |
           ./scripts/publish-release resolve \
             --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" \
-            --tag "$RELEASE_TAG" \
-            --created "$RELEASE_CREATED"
+            --tag "$RELEASE_TAG"
       - name: Prepare release assets
         if: ${{ steps.state.outputs.state == 'draft' }}
         env:

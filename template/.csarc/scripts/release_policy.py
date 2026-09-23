@@ -1586,7 +1586,11 @@ def _write_changelog(root: Path, sha: str, version: str) -> None:
 
 
 def prepare_release_candidate(
-    root: Path, sha: str, *, phase: str | None = None
+    root: Path,
+    sha: str,
+    *,
+    phase: str | None = None,
+    changelog_sha: str | None = None,
 ) -> dict[str, object]:
     """Write a local candidate; never create a PR, tag, or GitHub Release."""
     planned = release_plan(root, sha, phase=phase)
@@ -1596,7 +1600,7 @@ def prepare_release_candidate(
     if tag in git_output(["tag", "--points-at", sha], root).splitlines():
         raise ValueError(f"{tag} already identifies this commit")
     _write_release_version(root, version)
-    _write_changelog(root, sha, version)
+    _write_changelog(root, changelog_sha or sha, version)
     errors = release_version_errors(root, version)
     if errors:
         raise ValueError("; ".join(errors))
@@ -1641,16 +1645,21 @@ def _promotion_baseline_tree(root: Path, source_sha: str, head_sha: str) -> str:
 
 
 def verify_promotion_version(
-    root: Path, source_sha: str, head_sha: str, *, phase: str
+    root: Path,
+    source_sha: str,
+    head_sha: str,
+    *,
+    phase: str,
+    context: str = "promotion",
 ) -> dict[str, object]:
-    """Require a promotion tree to equal its deterministic release candidate."""
+    """Require a release tree to equal its deterministic candidate."""
     baseline_tree = _promotion_baseline_tree(root, source_sha, head_sha)
     head_tree = git_output(["rev-parse", f"{head_sha}^{{tree}}"], root)
     planned = release_plan(root, head_sha, phase=phase)
     if planned is None:
         if head_tree != baseline_tree:
             raise ValueError(
-                "a no-release promotion must preserve its deterministic "
+                f"a no-release {context} must preserve its deterministic "
                 "baseline tree"
             )
         return {
@@ -1688,7 +1697,12 @@ def verify_promotion_version(
                 capture_output=True,
                 text=True,
             )
-            payload = prepare_release_candidate(worktree, head_sha, phase=phase)
+            payload = prepare_release_candidate(
+                worktree,
+                head_sha,
+                phase=phase,
+                changelog_sha=source_sha,
+            )
             subprocess.run(  # noqa: S603
                 [executable, "add", "--all"],
                 cwd=worktree,
@@ -1719,7 +1733,7 @@ def verify_promotion_version(
             ["diff", "--name-only", baseline_tree, head_sha], root
         ).splitlines()
         raise ValueError(
-            "promotion release materialization is not exact; expected "
+            f"{context} release materialization is not exact; expected "
             f"{expected_paths or ['no changed files']}, got "
             f"{actual_paths or ['no changed files']}"
         )
@@ -1730,6 +1744,40 @@ def verify_promotion_version(
         "head_sha": head_sha,
         "tree": head_tree,
     }
+
+
+def verify_delivery_version(
+    root: Path, base_sha: str, head_sha: str, *, phase: str
+) -> dict[str, object]:
+    """Require release-worthy work to end in one exact release-only commit."""
+    planned = release_plan(root, head_sha, phase=phase)
+    if planned is None:
+        return {
+            "status": "no-release",
+            "materialized": False,
+            "base_sha": base_sha,
+            "head_sha": head_sha,
+        }
+    if git_output(["merge-base", base_sha, head_sha], root) != base_sha:
+        raise ValueError(
+            "release-worthy delivery must contain the current destination "
+            "base before materialization"
+        )
+    parents = git_output(
+        ["rev-list", "--parents", "-n", "1", head_sha], root
+    ).split()
+    if len(parents) != 2:
+        raise ValueError(
+            "release-worthy delivery must end in one release-only commit"
+        )
+    payload = verify_promotion_version(
+        root,
+        parents[1],
+        head_sha,
+        phase=phase,
+        context="delivery",
+    )
+    return {**payload, "base_sha": base_sha}
 
 
 def release_version_errors(  # noqa: C901
@@ -2013,6 +2061,15 @@ def parser() -> argparse.ArgumentParser:
     verify_candidate = subparsers.add_parser("verify-candidate-version")
     verify_candidate.add_argument("--base-sha", required=True)
     verify_candidate.add_argument("--root", type=Path, default=Path.cwd())
+    verify_delivery = subparsers.add_parser("verify-delivery-version")
+    verify_delivery.add_argument("--base-sha", required=True)
+    verify_delivery.add_argument("--head-sha", required=True)
+    verify_delivery.add_argument("--root", type=Path, default=Path.cwd())
+    delivery_version = verify_delivery.add_mutually_exclusive_group(
+        required=True
+    )
+    delivery_version.add_argument("--phase", choices=release_phase.PHASES)
+    delivery_version.add_argument("--tag")
     verify_promotion = subparsers.add_parser("verify-promotion-version")
     verify_promotion.add_argument("--source-sha", required=True)
     verify_promotion.add_argument("--head-sha", required=True)
@@ -2153,7 +2210,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             f"matches current base {args.base_sha} decision {version}."
         )
         return 0
-    if args.command == "verify-promotion-version":
+    if args.command in {"verify-delivery-version", "verify-promotion-version"}:
         try:
             phase = args.phase
             if args.tag is not None:
@@ -2162,16 +2219,24 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
                     raise ValueError(f"invalid release tag: {args.tag}")
                 phase = release_phase.parse_version(version).release_kind
             if phase is None:
-                raise ValueError("promotion phase is required")
-            payload = verify_promotion_version(
-                args.root.resolve(),
-                args.source_sha,
-                args.head_sha,
-                phase=phase,
-            )
+                raise ValueError("release phase is required")
+            if args.command == "verify-delivery-version":
+                payload = verify_delivery_version(
+                    args.root.resolve(),
+                    args.base_sha,
+                    args.head_sha,
+                    phase=phase,
+                )
+            else:
+                payload = verify_promotion_version(
+                    args.root.resolve(),
+                    args.source_sha,
+                    args.head_sha,
+                    phase=phase,
+                )
             if args.tag is not None and payload.get("tag") != args.tag:
                 raise ValueError(
-                    f"promotion planned {payload.get('tag')}, "
+                    f"{args.command} planned {payload.get('tag')}, "
                     f"expected {args.tag}"
                 )
         except (

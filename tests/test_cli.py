@@ -1191,7 +1191,9 @@ def test_release_ownership_matrix_uses_explicit_workflow_contracts(
     assert cli.release_contract(new) == {
         "immutable_releases": "required",
         "ownership": "csarc-owned",
-        "reason": "CSARC owns the only version and GitHub Release workflow.",
+        "reason": (
+            "CSARC owns the only version policy and GitHub Release workflow."
+        ),
         "required_inputs": [],
         "selected_workflow": ".github/workflows/release.yml",
         "settings_owner": "csarc-admin",

@@ -2915,11 +2915,8 @@ def revalidate_release_candidate(
     ) or head_ref.startswith("release-please--branches--main--components--")
     promotion = PROMOTION_BRANCH.fullmatch(head_ref)
     root = Path(__file__).resolve().parents[2]
-    if promotion is not None:
-        config = csarc_config.load_config(root / ".csarc/config.yml")
-        if config.get("release_ownership") != "csarc-owned":
-            return ""
-    elif not release_candidate:
+    config = csarc_config.load_config(root / ".csarc/config.yml")
+    if config.get("release_ownership") != "csarc-owned":
         return ""
     repo = str(lease["repository"])
     pr_number = int(lease["pull_request"])
@@ -2936,6 +2933,22 @@ def revalidate_release_candidate(
                 str(root),
                 "--source-sha",
                 source_sha,
+                "--head-sha",
+                head_sha,
+                "--phase",
+                release_phase_name,
+            ]
+        )
+    if not release_candidate:
+        return run(
+            [
+                sys.executable,
+                str(root / ".csarc" / "scripts" / "release_policy.py"),
+                "verify-delivery-version",
+                "--root",
+                str(root),
+                "--base-sha",
+                str(lease["base_sha"]),
                 "--head-sha",
                 head_sha,
                 "--phase",
@@ -3704,43 +3717,6 @@ def dependabot_auto_merge_exemption(root: Path, path: Path) -> bool:
     )
 
 
-def release_please_exemption(root: Path, path: Path) -> bool:
-    """Trust the one exact release.yml path that runs release-please (#643).
-
-    `googleapis/release-please-action` creates or updates its own version
-    pull request without going through this file's lease -- it is a
-    third-party Action, not something this repo's Python tooling can wrap.
-    That PR is not one of this repo's task-PR routes (independent Issue,
-    Milestone Issue, `dev/i*` canary, or hotfix); it is reviewed and merged
-    by a maintainer directly (see AGENTS.md's "Release execution"), so no
-    lease-gated agent flow ever writes to it. The workflow already
-    serializes itself with `concurrency: group: release-${{
-    github.repository }}`, and release-please only ever touches its own
-    `release-please--branches--main--components--*` head ref (see
-    `.csarc/scripts/release_policy.py`'s `expected_head`, and the same ref
-    prefix special-cased in `.csarc/scripts/promotion_gate.py`) -- no other
-    automation in this repo writes that ref. That means this is not the
-    immediate-write
-    race the lease mechanism exists to prevent, so a narrow, exact-path
-    exemption is safe here without routing a third-party Action through the
-    lease.
-
-    This is a positive list, not a pattern relaxation: only this one exact
-    path is trusted. A different file reusing the same
-    `googleapis/release-please-action@` reference is still caught by
-    scan_writers. `template/.github/workflows/release.yml.jinja` is a
-    Jinja template, not a `.yml`/`.yaml` file, so scan_writers's glob never
-    scans it in the first place -- there is no second path to exempt.
-
-    Every scanner exemption must have its own tracking Issue (#643 is this
-    one's), and all exemptions are re-reviewed once the project leaves
-    beta -- see .csarc/docs/ci-policy.md's "PR lifecycle single-writer" section.
-    """
-    return _trusted_exact_path(
-        root, path, frozenset({".github/workflows/release.yml"})
-    )
-
-
 def scan_writers(root: Path) -> None:
     """Fail when repository automation bypasses the lifecycle tool."""
     paths = [
@@ -3759,7 +3735,6 @@ def scan_writers(root: Path) -> None:
             or ("__pycache__" in relative.parts and path.suffix == ".pyc")
             or canonical_scanner_helper(root, path)
             or dependabot_auto_merge_exemption(root, path)
-            or release_please_exemption(root, path)
         ):
             continue
         try:
