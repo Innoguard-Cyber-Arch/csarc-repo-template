@@ -1812,6 +1812,135 @@ def test_release_plan_applies_the_declared_phase_to_a_fresh_core_version(
     )
 
 
+@pytest.mark.parametrize(
+    ("existing_beta", "expected"),
+    [
+        (False, "v0.25.5-beta.1"),
+        (True, "v0.25.5-beta.2"),
+    ],
+)
+def test_beta_uses_main_stable_floor_without_expanding_changelog(
+    tmp_path: Path, existing_beta: bool, expected: str
+) -> None:
+    """Trust main's stable floor and preserve off-branch beta numbering."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": ["README.md"],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_release_surfaces(tmp_path, "0.24.0")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.24.0")
+    git(tmp_path, "checkout", "-b", "delivery")
+    write_release_surfaces(tmp_path, "0.24.1-beta.1")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(main): release 0.24.1-beta.1")
+    git(tmp_path, "tag", "v0.24.1-beta.1")
+
+    git(tmp_path, "checkout", "main")
+    write_release_surfaces(tmp_path, "0.25.4")
+    (tmp_path / "main-only").write_text("stable work\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: unrelated stable work")
+    stable_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "tag", "v0.25.4")
+    tree = git(tmp_path, "rev-parse", "HEAD^{tree}")
+    orphan_sha = git(
+        tmp_path,
+        "commit-tree",
+        tree,
+        "-m",
+        "feat: unreviewed future work",
+    )
+    git(tmp_path, "tag", "v999.0.0", orphan_sha)
+    git(tmp_path, "tag", "v998.0.0", stable_sha)
+    if existing_beta:
+        git(tmp_path, "tag", "v0.25.5-beta.1", stable_sha)
+
+    git(tmp_path, "checkout", "delivery")
+    (tmp_path / "main-only").write_text("stable work\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(sync): merge main into delivery")
+    assert (
+        subprocess.run(  # noqa: S603
+            ["git", "merge-base", "--is-ancestor", stable_sha, "HEAD"],  # noqa: S607
+            cwd=tmp_path,
+            check=False,
+        ).returncode
+        == 1
+    )
+    (tmp_path / "fix").write_text("milestone fix\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "fix: milestone work")
+
+    assert release_plan(tmp_path, "HEAD", phase="beta") == (
+        expected,
+        expected.removeprefix("v"),
+    )
+    prepare_release_candidate(tmp_path, "HEAD", phase="beta")
+    changelog = (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "fix: milestone work" in changelog
+    assert "feat: unrelated stable work" not in changelog
+    assert "feat: unreviewed future work" not in changelog
+
+
+def test_beta_rejects_higher_stable_without_a_canonical_main_ref(
+    tmp_path: Path,
+) -> None:
+    """Do not silently trust or ignore a higher tag when main is unknown."""
+    git(tmp_path, "init", "-b", "delivery")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {".": {"component": "demo"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_release_surfaces(tmp_path, "0.24.1-beta.1")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(main): release 0.24.1-beta.1")
+    git(tmp_path, "tag", "v0.24.1-beta.1")
+    tree = git(tmp_path, "rev-parse", "HEAD^{tree}")
+    orphan_sha = git(
+        tmp_path,
+        "commit-tree",
+        tree,
+        "-m",
+        "chore(main): release 0.25.4",
+    )
+    git(tmp_path, "tag", "v0.25.4", orphan_sha)
+    (tmp_path / "notes.md").write_text("docs only\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "docs: explain milestone work")
+    assert release_plan(tmp_path, "HEAD", phase="beta") is None
+    (tmp_path / "fix").write_text("milestone fix\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "fix: milestone work")
+
+    with pytest.raises(
+        ValueError,
+        match="origin/main and main are unavailable",
+    ):
+        release_plan(tmp_path, "HEAD", phase="beta")
+
+
 def test_release_plan_without_phase_still_returns_a_bare_core_version(
     tmp_path: Path,
 ) -> None:
