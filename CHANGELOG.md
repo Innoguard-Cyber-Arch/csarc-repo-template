@@ -7,6 +7,16 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.23.0] - 2026-09-23
+
+### Features
+
+* feat: govern documentation and licensing lifecycle (09f117c)
+
+### Bug Fixes
+
+* fix(ci): install reused release tools (c3abd45)
+
 ## [0.22.0] - 2026-09-23
 
 ### Features
