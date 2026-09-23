@@ -197,3 +197,9 @@ def test_pr_review_skips_draft_and_conversion_churn() -> None:
     assert "review_gate.py publish" in root_source
     assert "--details-url" in root_source
     assert "--run-id" in root_source
+    assert 'publisher_sha="$base_sha"' in root_source
+    assert 'if [[ "$head_ref" == sync/main-to-* ]]' in root_source
+    assert (
+        "repos/$GITHUB_REPOSITORY/git/ref/heads/$default_branch" in root_source
+    )
+    assert "ref: ${{ steps.pr.outputs.publisher_sha }}" in root_source

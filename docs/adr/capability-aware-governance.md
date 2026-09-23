@@ -324,6 +324,19 @@ writer 成功送出決定後自身成功；release drift 成功建立或更新�
 API 或寫入失敗仍失敗。真實的 title／branch route／Issue binding 違規仍由 `title` 失敗，
 zero-step Actions quota 也維持 #325 的明示例外，不能用合成成功掩蓋未執行的 required check。
 
+## 2026-09-23 保持治理升級後的 delivery sync 可用（#958）
+
+正式 current-main sync 不是 work Issue 或新的發版邊界。可信 CI 必須先以 #812／#826 的
+exact current-main、base/head、同 repository 與雙父 merge topology 驗證辨識 sync，才可
+略過 #925 為 release-bearing work PR 設計的單父 release-only materialization；下一張真正
+的 Milestone work PR 仍從同步後的 delivery tip 物化 beta。`pr_lifecycle.py merge` 在最後
+合併邊界重用 `require_routine_route()` 再驗一次相同 topology，不以 branch prefix 單獨放行。
+
+`pr-review.yml` 一般情況仍執行 PR base 的可信 publisher；只有正式 sync 需要把新治理帶進
+較舊 delivery base，因此改由 GitHub API 解析 current default branch 的 commit 並執行其中
+的 trusted publisher。該 publisher 仍用 exact head 與完整 sync route 判定，不能執行 PR
+head 的 evaluator，也不會把等待或真正的政策錯誤改成成功。
+
 ## 重新評估條件
 
 Repository 方案、organization policy、fleet 規模或實測 drift 頻率改變時，重新執行 capability preflight 與 fleet threshold review；不要把安裝時快照當永久真相。

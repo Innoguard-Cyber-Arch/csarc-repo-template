@@ -38,7 +38,7 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─────→ main
 ```
 
 工作 PR 關閉單項工作；Milestone 交付負責批次進入 `main`。每張 CSARC-owned
-release-worthy PR 都在同一張 PR 的 final release-only commit materialize 精確版本與
+release-worthy work／promotion PR 都在同一張 PR 的 final release-only commit materialize 精確版本與
 CHANGELOG；Milestone work 使用 beta，`promote/m<編號>-<簡稱>`、standalone 與 hotfix
 使用 stable。Promotion PR 用 `Refs #<tracker>` 保持 tracker open。合併後由
 hosted／本機共用的 publisher 發布並驗證 Release，再把
@@ -46,6 +46,10 @@ promotion commit 與 Release 網址回填進 tracker 的 `Completion evidence`�
 與 Milestone；發布失敗時維持 open，成功重跑可安全收尾（#871）。Product-owned／
 verification-only repository 不套用這段 CSARC 發版與結案責任。
 delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
+正式 `sync/main-to-mN-*` 只是把 current `main` 的已審查內容帶入 delivery branch，不是
+work Issue 或新的發版邊界；它先通過 exact current-main、base/head、同 repository 與雙父
+merge topology 驗證後，才略過互斥的單父 release-only 檢查。下一張真正的 Milestone work
+PR 仍須依最新 delivery tip 重新計算並物化 beta。
 
 `complete-release` 在任何 tracker body 寫入前先用當下 `updated_at` 重驗既有核可，再以
 同一次 snapshot 產生 exact promotion／Release evidence 與 Reconciliation。因為這些
@@ -180,6 +184,11 @@ admin self-merge 仍必須使用取得 lease 後的 exact-head maintainer 授權
   `queued`（pending）；exact-head 審核符合上列條件時為 `success`；已留下意見、內文格式
   無法辨識或授權路由無效時才是 `failure`。發布 job 本身只在判定或 GitHub API 寫入失敗
   時失敗，避免把預期等待誤報成自動化故障。
+  一般 PR 仍使用 PR base 的可信 publisher；正式 current-main sync 因為目的就是把新治理
+  帶進較舊的 delivery base，改用 GitHub API 解析出的 current default-branch commit 作為
+  可信 publisher。該 evaluator 仍以 exact head 與 `require_routine_route()` 驗證 sync
+  branch、base、同 repository、current main containment 與雙父 topology，不執行 PR-controlled
+  程式碼。
   Copilot 只會留下 `COMMENTED`，永遠不會 `APPROVED`，所以這個模式不能靠 GitHub 原生的
   approval 計數。未解決的 review thread 由 Ruleset 的 `required_review_thread_resolution`
   原生擋下。Draft PR 不審核，`review` 維持 pending 直到 PR 標為 ready。`.github/workflows/
