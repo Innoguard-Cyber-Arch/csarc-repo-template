@@ -57,7 +57,7 @@ git clone [[repository_url]]
 ./.csarc/scripts/verify-fast
 ```
 
-`.csarc/scripts/verify-fast` is this repository's day-to-day local feedback entry point; run it before every push to catch problems early. Once a PR opens, the trusted base workflow re-executes the required tier against the exact candidate commit on a GitHub-hosted runner, and merge and release accept only that hosted execution evidence. Only a Milestone/canary delivery, a hotfix, or the merge queue needs a local full `.csarc/scripts/verify` run. Local requirements (language toolchains, `gh` login, and so on) depend on which languages this repo uses ([[languages]]); see the README for detail.
+Run focused checks for the changed owners while implementing. In local mode, run `.csarc/scripts/verify-fast` once on the committed, clean final candidate; it automatically promotes to full when required and records local evidence. In hosted mode, the trusted base workflow runs the required tier against the exact candidate on a GitHub-hosted runner, so a full tier does not cause the same aggregate suite to run locally. Merge and release accept the evidence required by the configured mode. Local requirements (language toolchains, `gh` login, and so on) depend on which languages this repo uses ([[languages]]); see the README for detail.
 {{< /ops >}}
 {{< /slide >}}
 
