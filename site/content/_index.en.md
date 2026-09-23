@@ -363,6 +363,7 @@ Only tools this template directly integrates, executes, or produces into the rep
 - **Overall:** turn the request into one Issue that can be completed and verified independently.
 - **Work branch:** when implementation starts, create one short-lived `type/<Issue>-short-slug` branch per Issue and do not mix unrelated work into it.
 - **Milestone:** create one only when several Issues share an outcome, deadline, or delivery batch, and give it one lifecycle tracking Issue.
+  - When research or a Feature expands into that delivery, attach the originating Feature, its leaf Issues, and their PRs to the same Milestone.
   - Title it `Milestone <number>: <Milestone title>`; the text after the colon must exactly match the Milestone title.
   - Keep approvals, objections, and early termination in the body or comments, not the title.
   - Work may start only after at least one person other than the proposer agrees and no objection remains unresolved.

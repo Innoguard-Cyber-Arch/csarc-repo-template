@@ -34,6 +34,7 @@ TRACKER_SECTIONS = (
     "Early termination",
     "Promotion",
 )
+WORK_KIND_LABELS = {"bug", "documentation", "enhancement"}
 # A work Issue self-declares scope expansion with this literal body line.
 # Its own presence (not its wording) is the whole signal -- see
 # `has_scope_sentinel()`.
@@ -408,6 +409,69 @@ def _milestone_errors(milestone: dict[str, Any]) -> list[str]:
     return []
 
 
+def _parent_membership_errors(
+    issues: list[dict[str, Any]], milestone_number: int
+) -> list[str]:
+    """Require native Feature parents to share their sub-issue Milestone."""
+    members = {
+        issue.get("number")
+        for issue in issues
+        if "pull_request" not in issue and isinstance(issue.get("number"), int)
+    }
+    missing: dict[int, list[int]] = {}
+    for issue in issues:
+        if "pull_request" in issue or issue.get("parent_issue_url") is None:
+            continue
+        parent_url = issue.get("parent_issue_url")
+        match = (
+            re.search(r"/issues/([1-9][0-9]*)$", parent_url)
+            if isinstance(parent_url, str)
+            else None
+        )
+        if match is None:
+            return ["GitHub returned invalid parent Issue data"]
+        parent = int(match.group(1))
+        child = issue.get("number")
+        if parent not in members and isinstance(child, int):
+            missing.setdefault(parent, []).append(child)
+    return [
+        f"Feature parent #{parent} must share Milestone {milestone_number} "
+        f"with sub-issue(s) {', '.join(f'#{child}' for child in children)}"
+        for parent, children in sorted(missing.items())
+    ]
+
+
+def _tracker_classification_errors(item: dict[str, Any]) -> list[str]:
+    """Validate native Feature type or the portable label fallback."""
+    labels = {
+        str(label.get("name") or "").casefold()
+        for label in item.get("labels", [])
+        if isinstance(label, dict)
+    }
+    issue_type = item.get("type")
+    if issue_type is None:
+        if "enhancement" in labels:
+            return []
+        return [
+            "The lifecycle Issue must use the enhancement label when "
+            "native Issue Types are unavailable"
+        ]
+    if not isinstance(issue_type, dict) or not isinstance(
+        issue_type.get("name"), str
+    ):
+        return ["GitHub returned invalid lifecycle Issue type data"]
+
+    errors = []
+    if issue_type["name"] != "Feature":
+        errors.append("The lifecycle Issue must use the Feature type")
+    if labels & WORK_KIND_LABELS:
+        errors.append(
+            "The lifecycle Issue must not repeat its native Type with a "
+            "work-kind label"
+        )
+    return errors
+
+
 def tracker_errors(snapshot: dict[str, Any]) -> list[str]:
     """Validate the lifecycle Issue identity and stable body contract."""
     milestone = snapshot.get("milestone")
@@ -419,19 +483,14 @@ def tracker_errors(snapshot: dict[str, Any]) -> list[str]:
     if not isinstance(number, int) or not isinstance(title, str):
         return ["GitHub returned invalid Milestone identity"]
     errors = _milestone_errors(milestone)
+    errors.extend(_parent_membership_errors(snapshot["issues"], number))
     item = tracker(snapshot)
     if item is None:
         errors.append(
             f"Create exactly one Issue titled: Milestone {number}: {title}"
         )
         return errors
-    labels = {
-        label.get("name")
-        for label in item.get("labels", [])
-        if isinstance(label, dict)
-    }
-    if "enhancement" not in labels:
-        errors.append("The lifecycle Issue must use the enhancement label")
+    errors.extend(_tracker_classification_errors(item))
     body = item.get("body")
     if not isinstance(body, str):
         errors.append("The lifecycle Issue body is missing")

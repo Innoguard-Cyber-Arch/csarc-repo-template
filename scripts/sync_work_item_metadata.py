@@ -64,6 +64,19 @@ def _object(value: JsonValue, description: str) -> JsonObject:
     return value
 
 
+def _objects(value: JsonValue, description: str) -> list[JsonObject]:
+    """Flatten one paginated GitHub response into validated objects."""
+    if not isinstance(value, list):
+        raise MetadataError(f"GitHub returned invalid {description}")
+    if all(isinstance(item, dict) for item in value):
+        return value
+    if all(isinstance(page, list) for page in value):
+        items = [item for page in value for item in page]
+        if all(isinstance(item, dict) for item in items):
+            return items
+    raise MetadataError(f"GitHub returned invalid {description}")
+
+
 def _detect_open_milestone(repo: str) -> tuple[int, str] | None:
     """Reuse the repository's conservative #551 Milestone heuristic."""
     detector = Path(__file__).with_name("detect-open-milestone")
@@ -84,10 +97,22 @@ def _detect_open_milestone(repo: str) -> tuple[int, str] | None:
         ) from error
 
 
+def linked_issue_numbers(head: str, body: str) -> tuple[int, ...]:
+    """Read every unique work Issue named by the branch or PR body."""
+    numbers: list[int] = []
+    branch_match = BRANCH_ISSUE.match(head)
+    if branch_match:
+        numbers.append(int(branch_match.group(1)))
+    numbers.extend(
+        int(match.group(1)) for match in CLOSING_ISSUE.finditer(body)
+    )
+    return tuple(dict.fromkeys(numbers))
+
+
 def linked_issue_number(head: str, body: str) -> int | None:
-    """Read the work Issue from the branch first, then the PR body."""
-    match = BRANCH_ISSUE.match(head) or CLOSING_ISSUE.search(body)
-    return int(match.group(1)) if match else None
+    """Return the first linked work Issue for compatibility with callers."""
+    numbers = linked_issue_numbers(head, body)
+    return numbers[0] if numbers else None
 
 
 def resolve_workflow_run_pr(
@@ -109,18 +134,7 @@ def resolve_workflow_run_pr(
         ],
         None,
     )
-    if not isinstance(pulls, list):
-        raise MetadataError("GitHub returned invalid associated pull requests")
-    if all(isinstance(item, dict) for item in pulls):
-        candidates = pulls
-    elif all(isinstance(page, list) for page in pulls):
-        candidates = [item for page in pulls for item in page]
-        if not all(isinstance(item, dict) for item in candidates):
-            raise MetadataError(
-                "GitHub returned invalid associated pull requests"
-            )
-    else:
-        raise MetadataError("GitHub returned invalid associated pull requests")
+    candidates = _objects(pulls, "associated pull requests")
 
     matches = [
         pull
@@ -215,11 +229,17 @@ def sync_pull_request(repo: str, number: int, run: Runner = _run_gh) -> str:
         run(["api", f"repos/{repo}/pulls/{number}"], None),
         "pull-request metadata",
     )
-    issue_number = linked_issue_number(
+    issue_numbers = linked_issue_numbers(
         str(pull.get("head", {}).get("ref", "")), str(pull.get("body") or "")
     )
-    if issue_number is None:
+    if not issue_numbers:
         return f"PR #{number}: no linked work Issue; metadata unchanged"
+    if len(issue_numbers) != 1:
+        joined = ", ".join(f"#{value}" for value in issue_numbers)
+        raise MetadataError(
+            f"PR #{number} references multiple work Issues: {joined}"
+        )
+    issue_number = issue_numbers[0]
 
     issue = _object(
         run(["api", f"repos/{repo}/issues/{issue_number}"], None),
@@ -264,6 +284,42 @@ def sync_pull_request(repo: str, number: int, run: Runner = _run_gh) -> str:
         json.dumps(desired),
     )
     return f"PR #{number}: synchronized from Issue #{issue_number}"
+
+
+def sync_issue_pull_requests(
+    repo: str, issue_number: int, run: Runner = _run_gh
+) -> str:
+    """Resynchronize open PRs after their linked Issue changes Milestone."""
+    pulls = _objects(
+        run(
+            [
+                "api",
+                "--paginate",
+                "--slurp",
+                f"repos/{repo}/pulls?state=open&per_page=100",
+            ],
+            None,
+        ),
+        "open pull requests",
+    )
+    numbers = sorted(
+        {
+            int(pull["number"])
+            for pull in pulls
+            if isinstance(pull.get("number"), int)
+            and issue_number
+            in linked_issue_numbers(
+                str(pull.get("head", {}).get("ref", "")),
+                str(pull.get("body") or ""),
+            )
+        }
+    )
+    for number in numbers:
+        sync_pull_request(repo, number, run)
+    return (
+        f"Issue #{issue_number}: synchronized {len(numbers)} open pull "
+        "request(s)"
+    )
 
 
 def remind_missing_milestone(
@@ -331,7 +387,7 @@ def remind_missing_milestone(
         "Milestone, and exactly one Milestone is currently open: "
         f"#{milestone_number} {milestone_title}.\n\n"
         "If this work belongs to it, attach the Milestone to the Issue "
-        '(see docs/ci-policy.md, section "Milestone 掛勾安全網", for the '
+        '(see docs/ci-policy.md, section "Milestone 掛勾與持續同步", for the '
         "closed-Milestone REST API workaround) and to this pull request. "
         "Otherwise no action is needed -- many Issues and pull requests "
         "are not tied to any Milestone."
@@ -360,6 +416,7 @@ def main() -> int:
     parser.add_argument("--repo", required=True)
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--pr", type=int)
+    target.add_argument("--issue", type=int)
     target.add_argument("--resolve-head-sha")
     parser.add_argument("--head-repository")
     parser.add_argument("--head-branch")
@@ -379,8 +436,11 @@ def main() -> int:
         sys.stdout.write(f"{number}\n")
         return 0
 
+    if args.issue is not None:
+        LOGGER.info("%s", sync_issue_pull_requests(args.repo, args.issue))
+        return 0
     if args.pr is None:
-        parser.error("--pr is required")
+        parser.error("--pr or --issue is required")
     LOGGER.info("%s", sync_pull_request(args.repo, args.pr))
     try:
         LOGGER.info("%s", remind_missing_milestone(args.repo, args.pr))

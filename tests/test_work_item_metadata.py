@@ -4,6 +4,8 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 MODULE_PATH = (
     Path(__file__).parents[1] / "scripts" / "sync_work_item_metadata.py"
 )
@@ -16,8 +18,10 @@ MetadataError = MODULE.MetadataError
 desired_pull_request_metadata = MODULE.desired_pull_request_metadata
 issue_classification = MODULE.issue_classification
 linked_issue_number = MODULE.linked_issue_number
+linked_issue_numbers = MODULE.linked_issue_numbers
 remind_missing_milestone = MODULE.remind_missing_milestone
 resolve_workflow_run_pr = MODULE.resolve_workflow_run_pr
+sync_issue_pull_requests = MODULE.sync_issue_pull_requests
 sync_pull_request = MODULE.sync_pull_request
 
 
@@ -28,6 +32,13 @@ def test_linked_issue_prefers_branch_and_accepts_promotion_body() -> None:
     assert linked_issue_number("enhancement/266-status-path", "") == 266
     assert linked_issue_number("dev/m11-native-hierarchy", "Closes #303") == 303
     assert linked_issue_number("dependabot/pip/pytest", "") is None
+
+
+def test_linked_issue_numbers_deduplicate_and_expose_conflicts() -> None:
+    assert linked_issue_numbers(
+        "fix/42-timeout", "Fixes #42\n\nResolves #99"
+    ) == (42, 99)
+    assert linked_issue_numbers("fix/42-timeout", "Fixes #42") == (42,)
 
 
 def test_workflow_run_resolves_one_exact_open_pr() -> None:
@@ -234,6 +245,93 @@ def test_sync_skips_an_identical_patch() -> None:
     result = sync_pull_request("owner/repo", 44, fake_run)
     assert "already matches" in result
     assert not any("PATCH" in arguments for arguments, _ in calls)
+
+
+def test_sync_rejects_multiple_linked_issues() -> None:
+    def fake_run(arguments: list[str], _stdin: str | None) -> dict[str, Any]:
+        assert arguments[-1].endswith("/pulls/44")
+        return {
+            "head": {"ref": "fix/42-timeout"},
+            "body": "Fixes #42\n\nResolves #99",
+        }
+
+    try:
+        sync_pull_request("owner/repo", 44, fake_run)
+    except MetadataError as error:
+        assert "multiple work Issues" in str(error)
+    else:
+        raise AssertionError("conflicting Issue relationships should fail")
+
+
+def test_issue_milestone_change_resynchronizes_matching_open_prs() -> None:
+    patches: list[int] = []
+
+    def fake_run(
+        arguments: list[str], stdin: str | None
+    ) -> dict[str, Any] | list[Any]:
+        endpoint = arguments[-1]
+        if endpoint.endswith("pulls?state=open&per_page=100"):
+            return [
+                [
+                    {
+                        "number": 44,
+                        "head": {"ref": "fix/42-timeout"},
+                        "body": "Fixes #42",
+                    },
+                    {
+                        "number": 45,
+                        "head": {"ref": "fix/41-other"},
+                        "body": "Fixes #41",
+                    },
+                ]
+            ]
+        if endpoint.endswith("/pulls/44"):
+            return {
+                "head": {"ref": "fix/42-timeout"},
+                "body": "Fixes #42",
+            }
+        if endpoint.endswith("/issues/42"):
+            return {
+                "labels": [],
+                "type": {"name": "Bug"},
+                "milestone": {"number": 7},
+            }
+        if arguments[:3] == ["api", "--method", "PATCH"]:
+            patches.append(int(arguments[-3].rsplit("/", 1)[1]))
+            return {}
+        if endpoint.endswith("/issues/44"):
+            return {
+                "user": {"login": "author", "type": "User"},
+                "assignees": [],
+                "labels": [],
+                "milestone": None,
+            }
+        raise AssertionError(arguments)
+
+    result = sync_issue_pull_requests("owner/repo", 42, fake_run)
+
+    assert result == "Issue #42: synchronized 1 open pull request(s)"
+    assert patches == [44]
+
+
+def test_issue_dispatch_uses_the_issue_resynchronizer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, int]] = []
+
+    def fake_sync(repo: str, issue: int) -> str:
+        calls.append((repo, issue))
+        return "done"
+
+    monkeypatch.setattr(MODULE, "sync_issue_pull_requests", fake_sync)
+    monkeypatch.setattr(
+        MODULE.sys,
+        "argv",
+        ["sync_work_item_metadata.py", "--repo", "owner/repo", "--issue", "42"],
+    )
+
+    assert MODULE.main() == 0
+    assert calls == [("owner/repo", 42)]
 
 
 def test_missing_milestone_reminder_is_posted_once() -> None:
