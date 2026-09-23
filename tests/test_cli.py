@@ -271,6 +271,9 @@ features:
     Repository site: repo-site
     Docker: docker
   default: [repo-site]
+documentation_mode:
+  type: str
+  default: 'off'
 project_verification_hook:
   type: str
   default: ''
@@ -2411,6 +2414,96 @@ def test_authorized_dependency_tooling_cannot_widen_the_plan() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("documentation_mode", "readme_kind", "expected_status"),
+    [
+        (None, "missing", 2),
+        (None, "symlink", 2),
+        ("off", "missing", 0),
+        (None, "regular", 0),
+    ],
+)
+@pytest.mark.large
+def test_real_typescript_adoption_requires_product_readme_when_documented(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    documentation_mode: str | None,
+    readme_kind: str,
+    expected_status: int,
+) -> None:
+    """Reject a missing product README before an existing repo is changed."""
+    revision = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "existing-typescript"
+    (project / "src").mkdir(parents=True)
+    (project / "package.json").write_text(
+        '{"name":"existing-typescript","version":"0.1.0"}\n',
+        encoding="utf-8",
+    )
+    (project / "tsconfig.json").write_text("{}\n", encoding="utf-8")
+    (project / "src" / "index.ts").write_text(
+        "export const existing = true;\n", encoding="utf-8"
+    )
+    readme = project / "README.md"
+    if readme_kind == "regular":
+        readme.write_text("# Existing TypeScript product\n", encoding="utf-8")
+    elif readme_kind == "symlink":
+        readme.symlink_to(tmp_path / "outside-readme.md")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: existing TypeScript product")
+    before_head = git(project, "rev-parse", "HEAD")
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(ROOT),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--data",
+        "languages=typescript",
+        "--data",
+        "project_name=Existing TypeScript",
+        "--data",
+        "project_slug=existing-typescript",
+        "--data",
+        "project_description=Existing TypeScript product.",
+        "--data",
+        "security_reporting_channel=Use the private security contact.",
+        "--json",
+    ]
+    if documentation_mode is not None:
+        arguments.extend(["--data", f"documentation_mode={documentation_mode}"])
+
+    assert main(arguments) == expected_status
+
+    output = capsys.readouterr()
+    assert git(project, "rev-parse", "HEAD") == before_head
+    assert git(project, "status", "--porcelain") == ""
+    assert not (project / cli.CONFIG_FILE).exists()
+    assert not (project / cli.PENDING_ADOPTION_FILE).exists()
+    if expected_status == 2:
+        assert not (
+            tmp_path
+            / "existing-typescript-csarc-adoption-report"
+            / cli.ADOPTION_PLAN_BASENAME
+        ).exists()
+        error = json.loads(output.out)["error"]
+        assert "product-owned regular README.md" in error
+        assert "Create and commit README.md" in error
+        assert "--data documentation_mode=off" in error
+        return
+
+    payload = json.loads(output.out)
+    file_plan = payload["files"]
+    if readme_kind == "regular":
+        assert readme.read_bytes() == b"# Existing TypeScript product\n"
+        assert "README.md" in file_plan["preserve"]
+    else:
+        assert all("README.md" not in paths for paths in file_plan.values())
+
+
 @pytest.mark.large
 def test_real_existing_adoption_uses_fixed_ownership_policies(
     tmp_path: Path,
@@ -2870,6 +2963,20 @@ def test_adoption_report_records_template_version(tmp_path: Path) -> None:
         f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
         in report
     )
+
+
+def test_adoption_readme_prerequisite_is_documented_bilingually() -> None:
+    """Keep the README prerequisite and explicit opt-out discoverable."""
+    traditional = (ROOT / "README.md").read_text(encoding="utf-8")
+    english = (ROOT / "README.en.md").read_text(encoding="utf-8")
+    agent_contract = (ROOT / "docs/agent-install.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "由產品自行維護的 regular `README.md`" in traditional
+    assert "regular, product-owned `README.md`" in english
+    for content in (traditional, english, agent_contract):
+        assert "--data documentation_mode=off" in content
 
 
 def test_readme_displays_adoption_report_template_version() -> None:

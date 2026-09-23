@@ -5435,6 +5435,15 @@ def build_adoption_plan(
     generated_at: str,
 ) -> ResolvedPlan:
     """Build one locked adoption plan and its isolated candidate."""
+    if answers.get("documentation_mode") != "off" and not is_regular_file(
+        target / "README.md"
+    ):
+        raise CliError(
+            "Existing repositories with documentation enabled require a "
+            "product-owned regular README.md before adoption. Create and "
+            "commit README.md, then rerun csarc adopt, or explicitly choose "
+            "--data documentation_mode=off."
+        )
     head, changes, status_sha256 = target_state(target)
     target_files = target_file_snapshot(target)
     dirty_paths = tuple(sorted(git_changed_paths(target))) if changes else ()

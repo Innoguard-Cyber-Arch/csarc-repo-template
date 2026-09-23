@@ -223,6 +223,8 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 ```
 
+既有 repository 啟用文件管理時，必須先建立並 commit 一份由產品自行維護的 regular `README.md`；若明確不管理文件，可傳入 `--data documentation_mode=off`，README 就不會列入導入計畫。
+
 若目標 repo 不在 `Innoguard-Cyber-Arch`，請在預覽時明確傳入自己的 owner：個人 repo 用 `--data code_owner=@<user>`，組織 repo 用 `--data code_owner=@<organization>/<team>`；不需要 CODEOWNERS 時可傳 `--data code_owner=`。已連到 GitHub 的 repo 會先查該 user／team 是否具 write 以上權限；組織名稱與 repo owner 不一致，或可確認 owner 不存在／沒有權限時會停止。還沒有 remote 的本機 repo 可以先產生計畫，但有設定的 owner 狀態會標成 `unknown`；若同時以 `--data code_owner=` 省略 CODEOWNERS，必須一併傳入 `--data repository_url=https://github.com/<owner>/<repository>`，即使 `documentation_mode=off` 也一樣，避免產生無效的 repository 身分。push 後必須執行產生的 `./.csarc/scripts/apply-repository-settings.sh plan`／`apply`／`check`。這些步驟只驗證權限，不會替 user／team 加入 repo；若 CODEOWNER 沒有存取權，設定會 fail closed。
 
 `adopt` 預設就是 dry-run；明確寫出 `--dry-run` 仍相容。它只產生 repo 外的純 Markdown 導入報告（不再產生 PDF）與 machine-readable plan，不修改 repo，也不執行 target-owned helper 或 product hook。導入報告本身有獨立版本號（目前為 `1.0.0`，即 `ADOPTION_REPORT_TEMPLATE_VERSION`，記錄在報告檔案內），內容具體包含新增／編輯／移除檔案數、衝擊分析，以及需要使用者做決策的項目清單；試導入與正式導入完成後更新的是同一份報告檔案、同一套版本控制邏輯，不會另外產生第二份檔案。若 dirty path 全部是未 staged 的 tracked modification 且由 plan 明列為 `preserve`，CLI 會用原始 bytes 建立候選，允許套用同一份 plan；其他 dirty 狀態只能審查。plan 鎖定 target HEAD、完整 working-tree 狀態、Release full SHA、answers 與輸出 digest，任何漂移都會停止。核准 `--apply-plan` 後，CLI 才在暫存 clone 重建候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
