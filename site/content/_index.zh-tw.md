@@ -123,6 +123,7 @@ csarc status <path> --json
 | --- | --- | --- |
 | `create`（新 repo 建立） | 目標路徑不存在，或存在但是空目錄 | `csarc init <path>`：先 `--dry-run` 預覽，確認後加 `--yes --non-interactive` |
 | `adopt`（舊 repo 導入） | 目標已存在內容，但沒有 `.csarc/config.yml` | `csarc adopt <path>`：先寫出 dry-run 計畫，審查後用 `--apply-plan` 套用 |
+| `migrate`（舊版答案遷移） | `.csarc/config.yml` 的 `_commit` 不是完整 SHA，且沒有可信的 verified provenance | tag／短 SHA 先核對來源與版本，再依 `next_command` 綁回已驗證 Release；其他格式先還原正確 SHA |
 | `update`（有可用更新） | 已有 `.csarc/config.yml`，其中記錄的 Copier revision 落後目前可用版本 | `csarc update <path> --check` 預覽差異，確認後執行 `csarc update <path>` |
 | `current`（已是最新，不用做事） | Copier revision 已是最新，且 `policies/` 與 GitHub 上實際設定一致 | 不需要動作 |
 | `policy-only-update`（已是最新，但政策設定變了） | Copier revision 已是最新，但 `policies/`（例如允不允許 workaround）與 GitHub 上實際設定不一致 | `.csarc/scripts/apply-repository-settings.sh plan` 預覽，確認後 `apply`；**不必**重新走一次完整 adopt／update |
@@ -807,6 +808,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 - 新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自元件（模組），不建立組合專屬流程。
 - 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan；dry-run 不執行 target-owned helper 或 product hook。人核准同一份未漂移的 plan 後，CLI 才在隔離候選執行驗證，通過後寫入；第一張 PR 再由人核對來源、plan、diff 與本機結果。
 - 第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先用 dry-run 預覽，候選內容與衝突全部驗證完成才修改 target，若有衝突就保持 repo 不變，修正後重跑，再由一般 PR 與 trusted-base checks 審查。
+- 若既有 repo 是直接由 Copier 建立，`_commit` 可能仍是 release tag 或短 SHA，`csarc status` 會分類為 `migrate` 並指出目前值與格式；維護者核對後以 `update --check --accept-legacy --from-release <tag>` 將它綁回經 immutability、attestation 與 signature 驗證的完整 SHA。已標示為 verified 卻不一致的 provenance 仍會 fail closed。
 - 可選的更新通知每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。
 
 {{< disclosure key="copier-update" title="Copier＋root dogfood＋建立／導入／更新回歸" >}}

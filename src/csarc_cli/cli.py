@@ -64,6 +64,7 @@ RELEASE_WRITER_MARKERS = (
 )
 INSTALL_STATE_CREATE = "create"
 INSTALL_STATE_ADOPT = "adopt"
+INSTALL_STATE_MIGRATE = "migrate"
 INSTALL_STATE_UPDATE = "update"
 INSTALL_STATE_CURRENT = "current"
 INSTALL_STATE_POLICY_ONLY = "policy-only-update"
@@ -5492,6 +5493,105 @@ def require_legacy_migration_flags(saved: dict[str, object] | None) -> NoReturn:
     )
 
 
+def legacy_commit_kind(commit: str) -> str:
+    """Classify a non-full Copier revision for actionable diagnostics."""
+    if release_phase.is_valid_version(commit):
+        return "release tag"
+    if re.fullmatch(r"[0-9a-fA-F]{7,39}", commit):
+        return "short commit SHA"
+    return "unsupported revision"
+
+
+def legacy_commit_migration_command(commit: str) -> str:
+    """Return the explicit verified-release migration command."""
+    if legacy_commit_kind(commit) == "unsupported revision":
+        return (
+            "restore _commit to the full SHA from an immutable release, "
+            "then run csarc status <path> --json"
+        )
+    release = commit if release_phase.is_valid_version(commit) else "<tag>"
+    return (
+        f"csarc update <path> --check --accept-legacy --from-release {release}"
+    )
+
+
+def legacy_commit_error(commit: str) -> str:
+    """Explain a malformed Copier revision and its safe migration path."""
+    kind = legacy_commit_kind(commit)
+    if kind == "unsupported revision":
+        command = legacy_commit_migration_command(commit)
+        return (
+            f"Copier answer _commit is {commit!r} ({kind}); expected a full "
+            f"40-character commit SHA. {command}."
+        )
+    command = legacy_commit_migration_command(commit)
+    return (
+        f"Copier answer _commit is {commit!r} ({kind}); expected a full "
+        "40-character commit SHA. Review the recorded template source and "
+        f"revision, then run `{command}` to verify and migrate it."
+    )
+
+
+def legacy_commit_matches_release(commit: str, revision: Revision) -> bool:
+    """Bind a legacy tag or abbreviated SHA to one verified release."""
+    if release_phase.is_valid_version(commit):
+        return release_phase.normalize(commit) == release_phase.normalize(
+            revision.label
+        )
+    return bool(
+        re.fullmatch(r"[0-9a-fA-F]{7,39}", commit)
+        and revision.sha.startswith(commit.lower())
+    )
+
+
+def legacy_migration_source(
+    source: str, accept_legacy: bool, from_release: str | None
+) -> str:
+    """Normalize a canonical GitHub alias only for explicit migration."""
+    if (
+        accept_legacy
+        and from_release is not None
+        and github_repository(source) == CANONICAL_REPOSITORY
+    ):
+        return CANONICAL_SOURCE
+    return source
+
+
+def migrate_legacy_commit(
+    source: str,
+    commit: str,
+    saved: dict[str, object] | None,
+    accept_legacy: bool,
+    from_release: str | None,
+    client: ReleaseClient | None,
+) -> tuple[Revision, dict[str, object]]:
+    """Verify and replace one legacy tag or abbreviated commit answer."""
+    if saved is not None and saved.get("verification") == "verified":
+        raise CliError(
+            f"{legacy_commit_error(commit)} Saved verified provenance "
+            "prevents legacy migration; restore _commit to its recorded "
+            "commit_sha instead."
+        )
+    if (
+        not accept_legacy
+        or from_release is None
+        or legacy_commit_kind(commit) == "unsupported revision"
+    ):
+        raise CliError(legacy_commit_error(commit))
+    revision = resolve_revision(source, from_release, client=client)
+    if not legacy_commit_matches_release(commit, revision):
+        raise CliError(
+            f"Copier answer _commit {commit!r} does not match verified "
+            f"release {from_release!r} at {revision.sha}."
+        )
+    return revision, {
+        "commit_sha": revision.sha,
+        "release_tag": from_release,
+        "repository": revision.source,
+        "verification": "legacy-unverified",
+    }
+
+
 def current_revision(
     target: Path,
     source: str,
@@ -5503,9 +5603,17 @@ def current_revision(
     client: ReleaseClient | None = None,
 ) -> tuple[Revision, dict[str, object] | None]:
     """Verify saved provenance or explicitly migrate a legacy installation."""
-    if FULL_SHA.fullmatch(commit) is None:
-        raise CliError("Copier answers do not contain a full commit SHA.")
     saved = read_provenance(target)
+    source = legacy_migration_source(source, accept_legacy, from_release)
+    if FULL_SHA.fullmatch(commit) is None:
+        return migrate_legacy_commit(
+            source,
+            commit,
+            saved,
+            accept_legacy,
+            from_release,
+            client,
+        )
     if allow_unreleased:
         revision = resolve_revision(
             source,
@@ -5592,6 +5700,7 @@ def update_status(
         from_release=from_release,
         client=client,
     )
+    source = previous_revision.source
     target_revision = resolve_revision(
         source,
         requested,
@@ -5722,17 +5831,18 @@ def detect_install_state(
         Callable[[Path], subprocess.CompletedProcess[str]] | None
     ) = None,
 ) -> dict[str, object]:
-    """Deterministically classify a target into one of five install states.
+    """Deterministically classify a target into one of six install states.
 
     Reads only `.csarc/config.yml` (or legacy Copier answers), the pinned
     Copier revision, and `.csarc/policies/` drift; it never infers a state from
     free-form judgment, so repeated runs against unchanged repository state
-    always return the same classification. The five states are: `create`
+    always return the same classification. The six states are: `create`
     (no target yet, or an empty directory), `adopt` (an existing repository
-    without CSARC configuration), `update` (a pinned Copier revision behind
-    the resolved target release), `current` (revision and policy settings
-    both match), and `policy-only-update` (revision matches but the live
-    repository policy settings have drifted from `.csarc/policies/`).
+    without CSARC configuration), `migrate` (legacy Copier answers need an
+    explicit verified-release migration), `update` (a pinned Copier revision
+    behind the resolved target release), `current` (revision and policy
+    settings both match), and `policy-only-update` (revision matches but the
+    live repository policy settings have drifted from `.csarc/policies/`).
     """
     if repository_target_is_new(target):
         return {
@@ -5748,6 +5858,16 @@ def detect_install_state(
                 f"{target} has no {CONFIG_FILE}; it is not yet CSARC-managed."
             ),
             "state": INSTALL_STATE_ADOPT,
+        }
+    current = read_answer(answers_path, "_commit")
+    saved = read_provenance(target)
+    if FULL_SHA.fullmatch(current) is None and (
+        saved is None or saved.get("verification") != "verified"
+    ):
+        return {
+            "next_command": legacy_commit_migration_command(current),
+            "reason": legacy_commit_error(current),
+            "state": INSTALL_STATE_MIGRATE,
         }
     status, current_revision, _target_revision, _previous = update_status(
         target,
@@ -6755,7 +6875,8 @@ def parser() -> argparse.ArgumentParser:
         "status",
         help=(
             "the one-prompt entry point: deterministically classify a "
-            "repository as create/adopt/update/current/policy-only-update"
+            "repository as create/adopt/migrate/update/current/"
+            "policy-only-update"
         ),
     )
     status.add_argument("path", nargs="?", type=Path, default=Path.cwd())

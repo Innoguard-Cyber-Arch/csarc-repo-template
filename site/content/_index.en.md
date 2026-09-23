@@ -123,6 +123,7 @@ It only reads local files plus, once a repository is already managed, the resolv
 | --- | --- | --- |
 | `create` (new repository) | The target path does not exist, or exists but is an empty directory | `csarc init <path>`: preview with `--dry-run`, then confirm with `--yes --non-interactive` |
 | `adopt` (existing repository) | The target already has content but no `.csarc/config.yml` | `csarc adopt <path>`: write a dry-run plan, review it, then apply with `--apply-plan` |
+| `migrate` (legacy answers) | `.csarc/config.yml` has a non-full `_commit` and no trusted verified provenance | Review a tag or short SHA and follow `next_command` to bind it to a verified Release; restore the correct SHA for any other format |
 | `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | `csarc update <path> --check` to preview, then `csarc update <path>` |
 | `current` (nothing to do) | The Copier revision is current, and `policies/` matches the repository's live GitHub settings | No action needed |
 | `policy-only-update` (policy settings changed) | The Copier revision is current, but `policies/` (for example, whether workarounds are allowed) no longer matches the live GitHub settings | `.csarc/scripts/apply-repository-settings.sh plan` to preview, then `apply`; this **skips** a full adopt or update run |
@@ -815,6 +816,7 @@ Three places each own something different: `template/` is the single source of w
 - A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent components (modules); it never builds a combination-specific pipeline.
 - A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan; the dry-run never executes a target-owned helper or product hook. Once a person approves that same undrifted plan, the CLI verifies an isolated candidate before writing it, and the first PR then reviews the source, plan, diff, and local results.
 - After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a dry-run preview, and only apply to the target once the candidate content and conflicts are fully verified; a conflict leaves the repository unchanged so it can be corrected, rerun, and reviewed by a normal PR and trusted-base checks.
+- If an existing repository was created directly by Copier, `_commit` may still be a release tag or short SHA. `csarc status` classifies it as `migrate` and reports the current value and format; after reviewing it, the maintainer runs `update --check --accept-legacy --from-release <tag>` to bind it to the immutable, attested, signature-verified Release's full SHA. Provenance that already claims to be verified but disagrees still fails closed.
 - The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.
 
 {{< disclosure key="copier-update" title="Copier + root dogfood + create/adopt/update regression" >}}

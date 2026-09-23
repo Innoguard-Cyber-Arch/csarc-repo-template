@@ -41,7 +41,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ## 不確定目前狀態時
 
-先用「自動判斷」：`csarc status` 只讀本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，判斷屬於 `create`／`adopt`／`update`／`current`／`policy-only-update` 五種狀態之一，再依回傳的 `next_command` 走對應流程。固定版本的完整 agent 安裝契約見 [`docs/agent-install.md`](agent-install.md)。
+先用「自動判斷」：`csarc status` 只讀本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，判斷屬於 `create`／`adopt`／`migrate`／`update`／`current`／`policy-only-update` 六種狀態之一，再依回傳的 `next_command` 走對應流程。`migrate` 表示既有 Copier answers 使用 release tag 或短 SHA，需依指示核對並綁回已驗證 Release 的完整 SHA。固定版本的完整 agent 安裝契約見 [`docs/agent-install.md`](agent-install.md)。
 
 ## 完整細節
 

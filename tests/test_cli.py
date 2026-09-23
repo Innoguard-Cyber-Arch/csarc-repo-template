@@ -6788,6 +6788,18 @@ def test_status_command_reports_create_without_writes(
     assert not target.exists()
 
 
+def test_status_help_lists_the_migrate_state(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Keep the public command summary aligned with install states."""
+    with pytest.raises(SystemExit) as error:
+        cli.parser().parse_args(["--help"])
+    assert error.value.code == 0
+    assert "create/adopt/migrate/update/current/policy-only-update" in (
+        capsys.readouterr().out
+    )
+
+
 def test_status_command_reports_adopt_in_human_readable_form(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -7546,6 +7558,179 @@ def test_provenance_validation_and_legacy_migration(tmp_path: Path) -> None:
     )
     assert migrated.verified
     assert prior is not None and prior["verification"] == "legacy-unverified"
+
+
+@pytest.mark.parametrize(
+    ("commit", "kind"),
+    [
+        ("v1.2.3", "release tag"),
+        ("b" * 7, "short commit SHA"),
+        ("not-a-revision", "unsupported revision"),
+    ],
+)
+def test_legacy_copier_revision_error_is_actionable(
+    tmp_path: Path, commit: str, kind: str
+) -> None:
+    """Describe the malformed value, expected SHA, and a safe next step."""
+    with pytest.raises(CliError) as error:
+        cli.current_revision(
+            tmp_path,
+            cli.CANONICAL_SOURCE,
+            commit,
+            allow_unreleased=False,
+            accept_legacy=False,
+            from_release=None,
+            client=FakeReleaseClient(),
+        )
+
+    message = str(error.value)
+    assert repr(commit) in message
+    assert kind in message
+    assert "full 40-character commit SHA" in message
+    assert "csarc " in message
+
+
+@pytest.mark.parametrize("commit", ["v1.2.3", "b" * 7, "b" * 40])
+def test_legacy_copier_revision_migrates_through_verified_release(
+    tmp_path: Path, commit: str
+) -> None:
+    """Bind legacy tags, short SHAs, and gh: sources to a verified release."""
+    config = tmp_path / cli.CONFIG_FILE
+    config.parent.mkdir()
+    config.write_text(
+        f"_commit: {commit}\n_src_path: gh:{cli.CANONICAL_REPOSITORY}\n",
+        encoding="utf-8",
+    )
+    client = FakeReleaseClient()
+    client.tag_results *= 2
+
+    status, migrated, target, prior = cli.update_status(
+        tmp_path,
+        "v1.2.3",
+        allow_unreleased=False,
+        accept_legacy=True,
+        from_release="v1.2.3",
+        client=client,
+    )
+
+    assert migrated.verified
+    assert migrated.source == cli.CANONICAL_SOURCE
+    assert target == migrated
+    assert status["source"] == cli.CANONICAL_SOURCE
+    assert prior is not None
+    assert prior["commit_sha"] == "b" * 40
+    assert prior["verification"] == "legacy-unverified"
+
+
+def test_legacy_copier_revision_rejects_wrong_release(
+    tmp_path: Path,
+) -> None:
+    """Do not let explicit migration detach a short SHA from its release."""
+    with pytest.raises(CliError, match="does not match verified release"):
+        cli.current_revision(
+            tmp_path,
+            cli.CANONICAL_SOURCE,
+            "a" * 7,
+            allow_unreleased=False,
+            accept_legacy=True,
+            from_release="v1.2.3",
+            client=FakeReleaseClient(),
+        )
+
+
+def test_legacy_copier_revision_cannot_override_verified_provenance(
+    tmp_path: Path,
+) -> None:
+    """Treat malformed answers beside verified provenance as tampering."""
+    revision = cli.resolve_revision(
+        cli.CANONICAL_SOURCE,
+        "v1.2.3",
+        client=FakeReleaseClient(),
+    )
+    cli.write_provenance(tmp_path, revision)
+
+    with pytest.raises(CliError, match="prevents legacy migration"):
+        cli.current_revision(
+            tmp_path,
+            cli.CANONICAL_SOURCE,
+            "v1.2.3",
+            allow_unreleased=False,
+            accept_legacy=True,
+            from_release="v1.2.3",
+            client=FakeReleaseClient(),
+        )
+
+
+def test_status_classifies_legacy_copier_revision_as_migrate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Return a migration state instead of a low-level revision error."""
+    project = tmp_path / "legacy-copier-project"
+    (project / ".csarc").mkdir(parents=True)
+    (project / cli.CONFIG_FILE).write_text(
+        f"_commit: v1.2.3\n_src_path: gh:{cli.CANONICAL_REPOSITORY}\n",
+        encoding="utf-8",
+    )
+    git(project, "init", "-b", "main")
+
+    assert main(["status", str(project), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["state"] == cli.INSTALL_STATE_MIGRATE
+    assert result["next_command"].endswith(
+        "--accept-legacy --from-release v1.2.3"
+    )
+    assert "release tag" in result["reason"]
+
+
+@pytest.mark.large
+def test_update_check_migrates_direct_copier_answers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Exercise the CLI path for tag answers and a gh: source alias."""
+    source, project, revision = initialize_installed_project(tmp_path)
+    answers_path = project / cli.CONFIG_FILE
+    answers = cli.read_copier_answers(answers_path)
+    answers.update(
+        {
+            "_commit": "v1.2.3",
+            "_src_path": f"gh:{cli.CANONICAL_REPOSITORY}",
+        }
+    )
+    answers_path.write_text(
+        yaml.safe_dump(answers, sort_keys=False), encoding="utf-8"
+    )
+    (project / cli.PROVENANCE_FILE).unlink(missing_ok=True)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: legacy Copier answers")
+    client = FakeReleaseClient()
+    resolution = cli.TagResolution(revision, revision)
+    client.tag_results = [resolution] * 8
+    monkeypatch.setattr(cli, "CANONICAL_SOURCE", str(source))
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--check",
+                "--json",
+                "--accept-legacy",
+                "--from-release",
+                "v1.2.3",
+                "--to",
+                "v1.2.3",
+            ]
+        )
+        == 1
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["answers_changed"] is True
+    assert result["source"] == str(source)
 
 
 def write_lifecycle_state(
