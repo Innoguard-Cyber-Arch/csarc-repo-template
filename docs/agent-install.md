@@ -75,7 +75,11 @@ attestation verification.
    product command, and security reporting channel. For an existing
    repository, separately confirm an optional repository-relative executable
    `project_verification_hook`; the product run command is never a verification
-   hook. The hook must not resolve to or re-enter canonical `scripts/verify`;
+   hook. If `documentation_mode` is not `off`, also require an existing,
+   committed, regular `README.md` that remains product-owned; otherwise create
+   and commit it before adoption, or explicitly pass
+   `--data documentation_mode=off`. The hook must not resolve to or re-enter
+   canonical `scripts/verify`;
    update checks validate it before any target write. The default channel is
    the repository's public GitHub Issues page; warn users never to post
    secrets, credentials, personal data, or other sensitive details there.

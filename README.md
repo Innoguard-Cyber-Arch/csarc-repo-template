@@ -6,7 +6,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.25.11-beta.1<!-- x-release-please-version --> |
+| 公版版本 | v0.25.12-beta.1<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
@@ -222,6 +222,8 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt \
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 ```
+
+既有 repository 啟用文件管理時，必須先建立並 commit 一份由產品自行維護的 regular `README.md`；若明確不管理文件，可傳入 `--data documentation_mode=off`，README 就不會列入導入計畫。
 
 若目標 repo 不在 `Innoguard-Cyber-Arch`，請在預覽時明確傳入自己的 owner：個人 repo 用 `--data code_owner=@<user>`，組織 repo 用 `--data code_owner=@<organization>/<team>`；不需要 CODEOWNERS 時可傳 `--data code_owner=`。已連到 GitHub 的 repo 會先查該 user／team 是否具 write 以上權限；組織名稱與 repo owner 不一致，或可確認 owner 不存在／沒有權限時會停止。還沒有 remote 的本機 repo 可以先產生計畫，但有設定的 owner 狀態會標成 `unknown`；若同時以 `--data code_owner=` 省略 CODEOWNERS，必須一併傳入 `--data repository_url=https://github.com/<owner>/<repository>`，即使 `documentation_mode=off` 也一樣，避免產生無效的 repository 身分。push 後必須執行產生的 `./.csarc/scripts/apply-repository-settings.sh plan`／`apply`／`check`。這些步驟只驗證權限，不會替 user／team 加入 repo；若 CODEOWNER 沒有存取權，設定會 fail closed。
 

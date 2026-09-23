@@ -6,7 +6,7 @@ Cyber-Arch's updatable repository foundation: creating a new project, adopting a
 
 | Item | Current status |
 | --- | --- |
-| Template version | v0.25.11-beta.1<!-- x-release-please-version --> |
+| Template version | v0.25.12-beta.1<!-- x-release-please-version --> |
 | Supported languages | Python, Rust, TypeScript (independently multi-selectable; choosing none uses only the common workflow) |
 | repo-site presentation template version | 1.1.0 |
 | repo-site render engine version | 1.1.0 |
@@ -222,6 +222,8 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt \
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 ```
+
+An existing repository with documentation enabled must first create and commit a regular, product-owned `README.md`; when documentation is explicitly unmanaged, pass `--data documentation_mode=off` and README stays out of the adoption plan.
 
 For a target outside `Innoguard-Cyber-Arch`, pass its owner explicitly during preview: use `--data code_owner=@<user>` for a personal repository, `--data code_owner=@<organization>/<team>` for an organization repository, or `--data code_owner=` to omit CODEOWNERS. A repository already connected to GitHub verifies that the user or team has write-or-above access; an organization that does not match the repository owner, or an owner confirmed missing or unwritable, blocks adoption. A local repository without a remote may still produce a plan, but a configured owner is reported as `unknown`. If that repository also uses `--data code_owner=`, pass `--data repository_url=https://github.com/<owner>/<repository>` at the same time, even with `documentation_mode=off`, so the repository identity cannot become an invalid derived URL. After pushing, run the generated `./.csarc/scripts/apply-repository-settings.sh plan`, `apply`, and `check`. These commands verify access but never grant it, so repository settings fail closed when the CODEOWNER lacks access.
 
