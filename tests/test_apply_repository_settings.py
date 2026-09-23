@@ -38,9 +38,8 @@ caught here without mocking the full `gh` CLI surface that
       live API probe.
    b. A Python drift-check heredoc (mirrors the pattern used for
       `policies/repository.json`/`policies/releases.json`/
-      `policies/rulesets.json`) that compares `policies/pages.json`'s
-      `source` object against the live `GET /repos/{owner}/{repo}/pages`
-      response body.
+      `policies/rulesets.json`) that compares the selected Pages build type
+      and optional source against `GET /repos/{owner}/{repo}/pages`.
 
 3. The `apply` mode's `issueCreationPolicy` GraphQL mutation (Issue #757).
    GitHub's schema declares this field's input type as `IssueCreationPolicy`
@@ -646,6 +645,32 @@ def test_pages_degraded_when_private_without_enterprise(
 # -- Pages drift-check heredoc: matching and drifted live state --
 
 DESIRED_SOURCE = {"branch": "main", "path": "/docs"}
+
+
+def test_matching_pages_workflow_build_type_passes_cleanly(
+    tmp_path: Path,
+) -> None:
+    """Actions-owned Pages does not depend on a branch source."""
+    result = run_pages_drift(
+        {"enabled": True, "build_type": "workflow"},
+        {"build_type": "workflow", "status": "built"},
+        tmp_path,
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert result.stdout == ""
+
+
+def test_pages_build_type_drift_is_reported(tmp_path: Path) -> None:
+    """Branch publishing cannot masquerade as path-filtered Actions."""
+    result = run_pages_drift(
+        {"enabled": True, "build_type": "workflow"},
+        {"build_type": "legacy", "source": DESIRED_SOURCE},
+        tmp_path,
+    )
+
+    assert result.returncode != 0
+    assert "build_type: desired 'workflow', live 'legacy'" in result.stdout
 
 
 def test_matching_pages_source_passes_cleanly(tmp_path: Path) -> None:

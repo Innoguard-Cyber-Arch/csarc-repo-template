@@ -512,6 +512,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "governance-comment.yml": "reviewer 指派",
         "governance-drift.yml": "治理漂移",
         "osv.yml": "漏洞排程",
+        "pages.yml": "Pages 發布",
         "pr-policy.yml": "PR 規則",
         "pr-policy-writes.yml": "PR 治理寫入",
         "pr-review.yml": "PR 審核",
@@ -527,13 +528,15 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
             f"{workflow} lost its file-map mention ({label!r})"
         )
     # codeql.yml is conditional on enable_codeql (see copier.yml), exactly
-    # like template-update.yml is conditional on
+    # like pages.yml is conditional on the hosted automation and full
+    # documentation selections, template-update.yml is conditional on
     # enable_template_update_notifications, governance-drift.yml is
     # conditional on enable_governance_drift_check, and docker-build-scan.yml
-    # is conditional on enable_docker: none of the four ship to every new
+    # is conditional on enable_docker: none of the five ship to every new
     # repo.
-    assert "選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描" in (
-        workflows_purpose
+    assert (
+        "選配的治理漂移、模板更新通知排程、Pages 發布、"
+        "CodeQL SAST 與容器建置掃描" in workflows_purpose
     )
     for inactive in ("release-please.yml",):
         assert inactive not in workflows_purpose

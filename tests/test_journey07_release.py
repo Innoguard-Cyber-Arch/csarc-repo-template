@@ -19,10 +19,7 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     workflow = yaml.safe_load(source)
     triggers = workflow.get("on", workflow.get(True))
 
-    assert triggers == {
-        "push": {"branches": ["main", "dev/m*"]},
-        "workflow_dispatch": None,
-    }
+    assert triggers == {"workflow_dispatch": None}
     assert workflow["concurrency"]["cancel-in-progress"] is False
     assert workflow["jobs"]["release"]["if"] == (
         "${{ github.ref == 'refs/heads/main' || "
@@ -144,10 +141,10 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     ("release_trigger", "push_enabled"),
     [("main", True), ("manual", False)],
 )
-def test_release_trigger_only_gates_main_push(
+def test_release_trigger_omits_unwanted_push_runs(
     release_trigger: str, push_enabled: bool
 ) -> None:
-    """Keep workflow_dispatch available while making main push optional."""
+    """Manual releases create no push-triggered workflow run at all."""
     source = (ROOT / "template/.github/workflows/release.yml.jinja").read_text(
         encoding="utf-8"
     )
@@ -160,12 +157,13 @@ def test_release_trigger_only_gates_main_push(
     )
     workflow = yaml.safe_load(rendered)
 
-    assert workflow.get("on", workflow.get(True))["workflow_dispatch"] is None
+    triggers = workflow.get("on", workflow.get(True))
+    assert triggers["workflow_dispatch"] is None
+    assert ("push" in triggers) is push_enabled
+    if push_enabled:
+        assert triggers["push"]["branches"] == ["main", "dev/m*"]
     condition = workflow["jobs"]["release"]["if"]
-    assert (
-        f"github.event_name != 'push' || {str(push_enabled).lower()}"
-        in condition
-    )
+    assert "github.event_name != 'push'" not in condition
 
 
 def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
