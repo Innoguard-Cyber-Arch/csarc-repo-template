@@ -1217,6 +1217,7 @@ def release_plan(  # noqa: C901
         return released[-1], released[-1].removeprefix("v")
 
     tags = git_output(["tag", "--merged", sha], root).splitlines()
+    all_tags = git_output(["tag", "--list"], root).splitlines()
 
     # One exact bridge retires the final pre-#918 version spelling without
     # keeping a general alpha parser. Once v0.22.0 is published, ordinary
@@ -1315,8 +1316,106 @@ def release_plan(  # noqa: C901
     version = bump_version(base_core, messages)
     if version is None:
         return None
+
+    # A formal sync is squash-merged, so main's stable tag may not be an
+    # ancestor. Use the stable version recorded by authoritative main only
+    # when its matching tag is reachable there; the delivery tag above still
+    # bounds the changelog and release-intent range.
+    if phase == "beta":
+        refs = set(
+            git_output(
+                [
+                    "for-each-ref",
+                    "--format=%(refname)",
+                    "refs/remotes/origin/main",
+                    "refs/heads/main",
+                ],
+                root,
+            ).splitlines()
+        )
+        main_ref = next(
+            (
+                ref
+                for ref in (
+                    "refs/remotes/origin/main",
+                    "refs/heads/main",
+                )
+                if ref in refs
+            ),
+            "",
+        )
+        if not main_ref:
+            higher_stable_tags = [
+                tag
+                for tag in all_tags
+                if release_phase.is_valid_version(tag)
+                and not release_phase.parse_version(tag).is_prerelease
+                and release_phase.parse_version(tag).core
+                > release_phase.parse_version(base_core).core
+            ]
+            if higher_stable_tags:
+                raise ValueError(
+                    "cannot determine the authoritative stable version: "
+                    "origin/main and main are unavailable"
+                )
+        if main_ref:
+            try:
+                main_version = str(
+                    json.loads(
+                        git_output(
+                            [
+                                "show",
+                                f"{main_ref}:.release-please-manifest.json",
+                            ],
+                            root,
+                        )
+                    )["."]
+                )
+                stable = release_phase.parse_version(main_version)
+            except (
+                subprocess.CalledProcessError,
+                json.JSONDecodeError,
+                KeyError,
+                release_phase.ReleasePhaseError,
+            ) as error:
+                raise ValueError(
+                    "cannot determine the authoritative stable version "
+                    "from main"
+                ) from error
+            main_tag = f"v{main_version}"
+            main_tags = git_output(
+                ["tag", "--merged", main_ref], root
+            ).splitlines()
+            tag_version = ""
+            if main_tag in main_tags:
+                try:
+                    tag_version = str(
+                        json.loads(
+                            git_output(
+                                [
+                                    "show",
+                                    f"{main_tag}:.release-please-manifest.json",
+                                ],
+                                root,
+                            )
+                        )["."]
+                    )
+                except (
+                    subprocess.CalledProcessError,
+                    json.JSONDecodeError,
+                    KeyError,
+                ):
+                    tag_version = ""
+            if stable.is_prerelease or tag_version != main_version:
+                if stable.core > release_phase.parse_version(base_core).core:
+                    raise ValueError(
+                        "authoritative main version has no matching reachable "
+                        "stable tag"
+                    )
+            elif stable.core > release_phase.parse_version(base_core).core:
+                base_core = stable.core_string()
+                version = bump_version(base_core, messages) or version
     if phase is not None:
-        existing = git_output(["tag", "--list"], root).splitlines()
         config_path = root / ".csarc/config.yml"
         maturity = (
             str(csarc_config.load_config(config_path)["project_maturity"])
@@ -1324,7 +1423,7 @@ def release_plan(  # noqa: C901
             else None
         )
         version = release_phase.phase_version(
-            version, phase, existing=existing, maturity=maturity
+            version, phase, existing=all_tags, maturity=maturity
         )
     return f"v{version}", version
 
