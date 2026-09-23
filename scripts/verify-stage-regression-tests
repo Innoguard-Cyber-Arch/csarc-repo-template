@@ -7,7 +7,7 @@ set -Eeuo pipefail
 # the verify-template.sh stage-split regression in tests/test_journey03_ci.py)
 # with a coverage floor, plus the Issue-triage, worktree-cleanup,
 # PR-policy, apply-repository-settings, repo-capabilities, scope-drift-gate,
-# base-only-remerge, gh-issue-create, detect-open-milestone,
+# base-only-remerge, gh-issue-create, gh-issue-develop, detect-open-milestone,
 # check-branch-fresh, PR-policy-status, release-drift, audit-fleet-adoption,
 # and create-milestone self-tests.
 # This is the single executable regression source for create/adopt/update
@@ -41,6 +41,7 @@ verification_step "Scope-drift-gate self-test" ./scripts/test-check-scope-gate
 verification_step "Base-only-remerge self-test" \
   ./scripts/test-check-base-only-remerge
 verification_step "Issue-creation self-test" ./scripts/test-gh-issue-create
+verification_step "Issue-branch self-test" ./scripts/test-gh-issue-develop
 verification_step "Open-milestone self-test" \
   ./scripts/test-detect-open-milestone
 verification_step "Branch-freshness self-test" \

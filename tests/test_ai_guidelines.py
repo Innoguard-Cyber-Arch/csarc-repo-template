@@ -63,6 +63,8 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert "docs/index.html#work" not in rendered
     assert "review requirements, merge eligibility" in rendered
     assert "configured admin bypass" in rendered
+    assert ".csarc/scripts/gh-issue-develop" in rendered
+    assert "never rename or delete an open PR's head" in rendered
     assert ".csarc/docs/csarc.md#公版更新" in rendered
     assert "automation are suspended" not in rendered
     assert ("Python setup:" in rendered) is python_command

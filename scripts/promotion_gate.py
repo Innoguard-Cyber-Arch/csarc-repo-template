@@ -210,7 +210,9 @@ def check_route(args: argparse.Namespace) -> None:
         raise RuntimeError(
             "Only a promotion, hotfix, release recovery, or release "
             "follow-up branch/label combination may target main; use a "
-            "topic branch instead, or the matching promotion route"
+            "type/<issue-number>-short-slug topic branch or the matching "
+            "promotion route. This check is read-only; GitHub closes an "
+            "open pull request when its head branch is renamed"
         )
     write_summary(args.summary, [f"- Promotion route — {route.kind}"])
     print(f"Promotion route: {route.kind}")  # noqa: T201
