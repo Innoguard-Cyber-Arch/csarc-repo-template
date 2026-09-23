@@ -27,9 +27,10 @@ attestation verification.
    installation or edit a shell profile or global environment. Before doing
    anything else, run `csarc status <path> --json` (append `csarc` to the
    `uvx` invocation above). It deterministically classifies the repository
-   into exactly one of six states — `create`, `adopt`, `migrate`, `update`,
-   `current`, or `policy-only-update` — from `.csarc/config.yml`, the pinned Copier
-   revision, and `policies/` drift. Policy inspection renders the complete
+   into exactly one of seven states — `create`, `adopt`, `adoption-pending`,
+   `migrate`, `update`, `current`, or `policy-only-update` — from the local
+   adoption checkpoint, `.csarc/config.yml`, the pinned Copier revision, and
+   `policies/` drift. Policy inspection renders the complete
    helper closure from the verified Release and treats the target checkout
    only as data; it never executes the target's helper. An unverified source
    makes policy inspection unavailable rather than trusted. The classification logic lives entirely
@@ -37,7 +38,9 @@ attestation verification.
    judgment, and running it again against unchanged repository state always
    returns the same answer. Follow the returned `next_command`: for
    `create`, `adopt`, or `update`, run the matching `csarc init`, `adopt`, or
-   `update` command as a dry-run first. `migrate` means `_commit` came from
+   `update` command as a dry-run first. `adoption-pending` means the local
+   checkpoint is valid but adoption is not complete; run the returned `csarc
+   adopt <path> --finalize` command. `migrate` means `_commit` came from
    Copier rather than this CLI as a release tag or short SHA; review the saved
    source and revision, then run the returned `update --check --accept-legacy
    --from-release <tag>` command. This verifies an immutable release and binds
