@@ -426,13 +426,13 @@
       "key": "versionMaterialization",
       "title": {"zh-tw": "何時形成精確版本與 CHANGELOG", "en": "When the exact version and changelog materialize"},
       "description": {"zh-tw": "比較可審查的版本 PR、成功 CI 後全自動配置，以及人工一次同步所有版本面。", "en": "Compares a reviewable version PR, fully automatic materialization after CI, and one manual change that synchronizes every version surface."},
-      "csarc": {"zh-tw": "Release Please 建立一張可審查的版本 PR，同步 manifest、package metadata、CHANGELOG 與 marker；CI checkout 不暫時改版本。", "en": "Release Please opens one reviewable version PR that synchronizes the manifest, package metadata, changelog, and markers; CI does not make a temporary version edit."}
+      "csarc": {"zh-tw": "Agent 在原 release-worthy PR 的最後一個 release-only commit 同步 manifest、package metadata、CHANGELOG 與 marker；CI 重建 exact tree。", "en": "The agent synchronizes the manifest, package metadata, changelog, and markers in the original release-worthy PR's final release-only commit; CI reconstructs the exact tree."}
     },
     {
       "key": "releaseOwnership",
       "title": {"zh-tw": "誰建立 tag 與 GitHub Release", "en": "Who creates the tag and GitHub Release"},
       "description": {"zh-tw": "比較工具自動擁有整條發版、版本 PR 合併後建立 Release、維護分支如何發布修補，以及產品自行持有發布流程。", "en": "Compares a tool owning the whole release, creating a Release after a version PR merges, publishing fixes from maintenance branches, and product-owned publishing."},
-      "csarc": {"zh-tw": "Hotfix 仍先經 Bug Issue、review 與 full verification 進 main；Release Please 再建立 patch 版本 PR，合併後由單一 workflow 發布。", "en": "A hotfix still reaches main through a Bug Issue, review, and full verification; Release Please then opens the patch version PR and one workflow publishes after merge."}
+      "csarc": {"zh-tw": "Hotfix 在同一張 Bug Issue PR 物化 patch、通過 review 與 full verification 後進 main，再由單一 workflow 發布。", "en": "A hotfix materializes its patch in the same Bug Issue PR, passes review and full verification, reaches main, and is then published by one workflow."}
     },
     {
       "key": "releaseEvidence",

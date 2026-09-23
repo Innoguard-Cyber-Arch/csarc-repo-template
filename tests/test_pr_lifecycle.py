@@ -908,16 +908,10 @@ def test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist(
         scan_writers(tmp_path)
 
 
-def test_writer_scanner_trusts_the_real_release_please_workflow(
+def test_real_release_workflow_has_no_unleased_pr_writer(
     tmp_path: Path,
 ) -> None:
-    """The one exact release.yml path passes scan_writers.
-
-    Regression test for #643: this copies the actual committed
-    `.github/workflows/release.yml`, unleased `googleapis/
-    release-please-action@` reference included, into a scratch repository
-    root and proves scan_writers no longer fails closed on it.
-    """
+    """The release workflow publishes only and needs no writer exemption."""
     candidate = REPO_ROOT / ".github/workflows/release.yml"
     if not candidate.is_file():
         # The template/ tree only ships release.yml.jinja (rendered to
@@ -929,7 +923,7 @@ def test_writer_scanner_trusts_the_real_release_please_workflow(
         # auto_merge_workflows above.
         return
     source = candidate.read_text(encoding="utf-8")
-    assert "googleapis/release-please-action@" in source
+    assert "googleapis/release-please-action@" not in source
     destination = tmp_path / ".github/workflows/release.yml"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(source, encoding="utf-8")
@@ -939,27 +933,22 @@ def test_writer_scanner_trusts_the_real_release_please_workflow(
 @pytest.mark.parametrize(
     "relative",
     [
+        ".github/workflows/release.yml",
         ".github/workflows/some-other-release.yml",
         "template/.github/workflows/some-other-release.yml",
     ],
 )
-def test_release_please_exemption_is_an_exact_path_allowlist(
+def test_retired_release_please_action_is_rejected_everywhere(
     tmp_path: Path, relative: str
 ) -> None:
-    """The exemption trusts one exact path only, not the reference itself.
-
-    Regression test for #643: a different workflow file reusing the same
-    unleased `googleapis/release-please-action@` reference must still be
-    caught by scan_writers, proving the #643 exemption is a positive list
-    of one exact path rather than a relaxation of the pattern it trips.
-    """
+    """The retired post-merge PR writer has no scanner exemption."""
     imposter = tmp_path / relative
     imposter.parent.mkdir(parents=True, exist_ok=True)
     imposter.write_text(
         "uses: googleapis/release-please-action@abc123 # v5\n",
         encoding="utf-8",
     )
-    with pytest.raises(RuntimeError, match=r"some-other-release\.yml"):
+    with pytest.raises(RuntimeError, match=re.escape(relative)):
         scan_writers(tmp_path)
 
 
@@ -1218,6 +1207,9 @@ def bind_remote_lease(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make remote ref checks observe the fixture lease."""
     monkeypatch.setitem(
         merge_snapshot.__globals__, "require_lease", lambda *_: None
+    )
+    monkeypatch.setitem(
+        merge.__globals__, "revalidate_release_candidate", lambda *_: ""
     )
 
 
@@ -3805,6 +3797,9 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
         },
     )
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
+    monkeypatch.setitem(
+        merge.__globals__, "revalidate_release_candidate", lambda *_: ""
+    )
     released = False
 
     def record_release(_lease: dict[str, Any]) -> None:
@@ -3919,6 +3914,50 @@ def test_revalidation_rebuilds_a_csarc_owned_promotion(
     assert commands[0][-1] == f"{'a' * 40}^1"
     assert "verify-promotion-version" in commands[1]
     assert commands[1][-2:] == ["--phase", "beta"]
+
+
+def test_revalidation_rebuilds_an_ordinary_same_pr_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The final merge boundary rechecks every CSARC-owned delivery."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_kwargs: object) -> str:
+        commands.append(command)
+        return "delivery version is exact"
+
+    monkeypatch.setattr(
+        MODULE["csarc_config"],
+        "load_config",
+        lambda *_: {"release_ownership": "csarc-owned"},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_lease",
+        lambda *_: None,
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__, "run", fake_run
+    )
+
+    result = revalidate_release_candidate(
+        FakeGitHub("a" * 40),
+        lease_fixture(),
+        "task/925-stable-release-materialization",
+        "stable",
+    )
+
+    assert result == "delivery version is exact"
+    assert len(commands) == 1
+    assert "verify-delivery-version" in commands[0]
+    assert commands[0][-6:] == [
+        "--base-sha",
+        "b" * 40,
+        "--head-sha",
+        "a" * 40,
+        "--phase",
+        "stable",
+    ]
 
 
 def test_revalidation_leaves_product_owned_promotions_unchanged(
@@ -4127,6 +4166,9 @@ def test_merge_does_not_release_a_lease_for_an_unconfirmed_result(
         },
     )
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
+    monkeypatch.setitem(
+        merge.__globals__, "revalidate_release_candidate", lambda *_: ""
+    )
     monkeypatch.setitem(
         merge.__globals__,
         "release_refs",
@@ -4459,6 +4501,9 @@ def test_copilot_merge_leaves_a_review_trace(
         },
     )
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
+    monkeypatch.setitem(
+        merge.__globals__, "revalidate_release_candidate", lambda *_: ""
+    )
     monkeypatch.setitem(merge.__globals__, "release_refs", lambda _lease: None)
     monkeypatch.setitem(merge.__globals__, "confirm_refs", lambda _lease: None)
     github = FakeGitHub("a" * 40)

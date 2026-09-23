@@ -12,8 +12,8 @@ from jinja2 import Environment, StrictUndefined
 ROOT = Path(__file__).parents[1]
 
 
-def test_release_workflow_is_one_capability_aware_pipeline() -> None:
-    """Keep candidate creation and publication in one workflow owner."""
+def test_release_workflow_only_publishes_premerged_candidates() -> None:
+    """Candidate creation belongs to the reviewed delivery pull request."""
     path = ROOT / ".github/workflows/release.yml"
     source = path.read_text(encoding="utf-8")
     workflow = yaml.safe_load(source)
@@ -37,21 +37,23 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
         "pull-requests",
         "statuses",
     }
+    assert workflow["jobs"]["release"]["permissions"]["pull-requests"] == (
+        "read"
+    )
     assert workflow["jobs"]["release"]["timeout-minutes"] == 60
-    assert "googleapis/release-please-action@45996ed1" in source
+    assert "googleapis/release-please-action@" not in source
 
     assert "release_policy.py plan" in source
     assert "release_level.py release-batch" in source
     assert "RELEASE_LEVEL: ${{ steps.route.outputs.channel }}" in source
     assert '--phase "$RELEASE_LEVEL"' in source
-    assert "release_level.py annotate-pr" in source
+    assert "release_level.py annotate-pr" not in source
     assert "release_level.py annotate-release" in source
     assert "release_policy.py detect" in source
-    assert "mode == 'automatic'" in source
-    assert "mode == 'guided'" in source
     assert "mode == 'blocked'" in source
-    assert "release_policy.py prepare-candidate" in source
-    assert "./scripts/verify-release-candidate" in source
+    assert "release_policy.py prepare-candidate" not in source
+    assert "./scripts/verify-release-candidate" not in source
+    assert "Reject an unmaterialized merged delivery" in source
     assert './scripts/check-trusted-verification "$GITHUB_SHA"' in source
     assert "./scripts/verify-template.sh" in source
     assert "./scripts/verify-fast" in source
@@ -68,7 +70,7 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "./scripts/publish-release rerun-verify" in source
     assert "sync_milestone_state.py complete-release" in source
     assert "steps.plan.outputs.status == 'no-release'" in source
-    assert "secrets.GITHUB_TOKEN" in source
+    assert "secrets.GITHUB_TOKEN" not in source
     assert "PAT" not in source
     assert "create-github-app-token" not in source
     assert "release_policy.py release" not in source
@@ -80,6 +82,9 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert names.index("Resolve included work and release level") < names.index(
         "Plan the next version from repository history"
     )
+    assert names.index(
+        "Reject an unmaterialized merged delivery"
+    ) < names.index("Detect the available release path")
     assert names.index(
         "Record included work in the draft Release"
     ) < names.index("Bind, upload, and publish the release")
@@ -339,7 +344,8 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
     assert '--github-repo "$GITHUB_REPOSITORY"' in template
     assert "REQUIRED_TIER: ${{ steps.route.outputs.required_tier }}" in template
     assert '--required-tier "$REQUIRED_TIER"' in template
-    assert "./.csarc/scripts/verify-release-candidate" in template
+    assert "googleapis/release-please-action@" not in template
+    assert "Reject an unmaterialized merged delivery" in template
     assert '{% if "typescript" in languages %}' in template
     assert '{% if "rust" in languages %}' in template
     assert '"path": "Cargo.lock"' in (
@@ -386,6 +392,20 @@ def test_csarc_owned_promotion_materializes_the_release_in_one_pr() -> None:
         assert "steps.release.outputs.ownership == 'csarc-owned'" in source
 
 
+def test_csarc_owned_ordinary_work_materializes_the_release_in_one_pr() -> None:
+    """Standalone and Milestone work use the same exact final-commit gate."""
+    root = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    template = (ROOT / "template/.github/workflows/ci.yml.jinja").read_text(
+        encoding="utf-8"
+    )
+
+    for source in (root, template):
+        assert "Validate same-PR release materialization" in source
+        assert "verify-delivery-version" in source
+        assert '--base-sha "$BASE_SHA"' in source
+        assert "steps.release.outputs.ownership == 'csarc-owned'" in source
+
+
 def test_one_issue_milestone_uses_only_work_and_promotion_prs() -> None:
     """No post-promotion version PR is needed for a CSARC-owned Milestone."""
     release = (ROOT / ".github/workflows/release.yml").read_text(
@@ -397,7 +417,8 @@ def test_one_issue_milestone_uses_only_work_and_promotion_prs() -> None:
     policy = (ROOT / "scripts/validate-pr-policy").read_text(encoding="utf-8")
     publish = (ROOT / "scripts/publish-release").read_text(encoding="utf-8")
 
-    assert "steps.plan.outputs.materialized != 'true'" in release
+    assert "steps.plan.outputs.status == 'pending'" in release
+    assert "googleapis/release-please-action@" not in release
     assert "sync_milestone_state.py complete-release" in release
     assert "record-promotion-evidence" not in lifecycle
     assert "Refs #N" in policy

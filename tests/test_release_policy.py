@@ -38,6 +38,7 @@ select_release_mode = MODULE["select_release_mode"]
 simple_release_boundary = MODULE["simple_release_boundary"]
 verify_release_version = MODULE["verify_release_version"]
 verify_candidate_version = MODULE["verify_candidate_version"]
+verify_delivery_version = MODULE["verify_delivery_version"]
 verify_promotion_version = MODULE["verify_promotion_version"]
 workflow_policy_observations = MODULE["workflow_policy_observations"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
@@ -1180,6 +1181,144 @@ def test_guided_candidate_only_materializes_local_release_files(
     report_payload = release_plan_report(tmp_path, "HEAD")
     assert report_payload["version"] == "0.2.0"
     assert report_payload["status"] == "candidate"
+
+
+def test_delivery_version_requires_one_exact_final_release_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ordinary work carries its reviewed release surfaces in the same PR."""
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-09-22T23:59:00Z")
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-09-22T23:59:00Z")
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {"type": "generic", "path": "README.md"}
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    base_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: same pull request release")
+    feature_sha = git(tmp_path, "rev-parse", "HEAD")
+
+    with pytest.raises(ValueError, match="materialization is not exact"):
+        verify_delivery_version(tmp_path, base_sha, feature_sha, phase="stable")
+
+    prepare_release_candidate(tmp_path, feature_sha, phase="stable")
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-09-23T00:01:00Z")
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-09-23T00:01:00Z")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: materialize stable release")
+    head_sha = git(tmp_path, "rev-parse", "HEAD")
+
+    result = verify_delivery_version(
+        tmp_path, base_sha, head_sha, phase="stable"
+    )
+    assert result["status"] == "candidate"
+    assert result["version"] == "0.2.0"
+    assert result["materialized"] is True
+    assert result["base_sha"] == base_sha
+
+
+def test_delivery_version_rejects_a_stale_release_worthy_branch(
+    tmp_path: Path,
+) -> None:
+    """A materialized delivery must contain the lease-bound destination."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    git(tmp_path, "branch", "delivery")
+    (tmp_path / "main-only").write_text("advance\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "docs: advance main")
+    current_base = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "checkout", "delivery")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "fix: stale delivery")
+
+    with pytest.raises(ValueError, match="current destination base"):
+        verify_delivery_version(
+            tmp_path,
+            current_base,
+            git(tmp_path, "rev-parse", "HEAD"),
+            phase="stable",
+        )
+
+
+def test_delivery_version_allows_non_release_work_without_materialization(
+    tmp_path: Path,
+) -> None:
+    """Docs-only work does not invent a version commit."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    base_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "docs").write_text("clarify\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "docs: clarify release")
+
+    result = verify_delivery_version(
+        tmp_path,
+        base_sha,
+        git(tmp_path, "rev-parse", "HEAD"),
+        phase="stable",
+    )
+    assert result["status"] == "no-release"
+    assert result["materialized"] is False
+
+
+def test_v022_bridge_cannot_reuse_an_already_published_release(
+    tmp_path: Path,
+) -> None:
+    """Regression for #920: merging tagged v0.22 must plan the next stable."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.21.0-alpha.1")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: retired alpha")
+    git(tmp_path, "tag", "v0.21.0-alpha.1")
+    git(tmp_path, "checkout", "-b", "delivery")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: post release work")
+    git(tmp_path, "checkout", "main")
+    write_release_surfaces(tmp_path, "0.22.0")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(main): release 0.22.0")
+    git(tmp_path, "tag", "v0.22.0")
+    git(tmp_path, "checkout", "delivery")
+    git(tmp_path, "merge", "--no-ff", "main", "-m", "chore: merge main")
+
+    assert release_plan(
+        tmp_path, git(tmp_path, "rev-parse", "HEAD"), phase="stable"
+    ) == ("v0.23.0", "0.23.0")
 
 
 def test_promotion_version_is_materialized_in_the_delivery_pr(

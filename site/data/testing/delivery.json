@@ -68,8 +68,8 @@
         },
         "release": {
           "note": {
-            "zh-tw": "合併先完成 repository delivery；release workflow 再判斷是否需要版本 PR，不把兩個動作混成一次。",
-            "en": "Merge first completes repository delivery; the release workflow then decides whether a version PR is needed instead of combining both actions."
+            "zh-tw": "Release-worthy PR 在合併前物化 stable；合併後的 release workflow 只發布，不另開版本 PR。",
+            "en": "A release-worthy PR materializes stable before merge; afterward the release workflow only publishes and never opens another version PR."
           }
         }
       },
@@ -126,8 +126,8 @@
         },
         "release": {
           "note": {
-            "zh-tw": "fix 預設是 patch 意圖；Release Please 產生精確版本 PR，仍須人審查後才發布。",
-            "en": "fix declares patch intent by default; Release Please creates the exact version PR, which still requires human review before publication."
+            "zh-tw": "fix 預設是 patch 意圖；agent 在同一張 hotfix PR 物化精確 stable，仍須審查後才發布。",
+            "en": "fix declares patch intent by default; the agent materializes the exact stable version in the same hotfix PR, which still requires review before publication."
           }
         }
       },
@@ -144,11 +144,11 @@
       "purpose": {
         "zh-tw": {
           "title": "版本與 Release ownership",
-          "description": "PR 只宣告 SemVer 意圖；Release Please 集中更新精確版本與 CHANGELOG，單一 workflow 負責 tag 與 GitHub Release。"
+          "description": "PR title 宣告 SemVer 意圖；agent 在原 PR 物化精確版本與 CHANGELOG，單一 workflow 負責 tag 與 GitHub Release。"
         },
         "en": {
           "title": "Version and Release ownership",
-          "description": "A PR declares only SemVer intent. Release Please centralizes the exact version and changelog, while one workflow owns the tag and GitHub Release."
+          "description": "A PR title declares SemVer intent. The agent materializes the exact version and changelog in that PR, while one workflow owns the tag and GitHub Release."
         }
       },
       "shared": {
@@ -159,8 +159,8 @@
             }
           ],
           "automationNote": {
-            "zh-tw": "root 與新 repo 由 Release Please 建版本 PR；既有 repo 保留 product-owned workflow。",
-            "en": "Release Please opens version PRs for the root and new repositories; adopted repositories retain their product-owned workflow."
+            "zh-tw": "root 與新 repo 在原交付 PR 物化版本；既有 repo 保留 product-owned workflow。",
+            "en": "The root and new repositories materialize versions in the original delivery PR; adopted repositories retain their product-owned workflow."
           }
         },
         "release": {
@@ -194,18 +194,18 @@
       "purpose": {
         "zh-tw": {
           "title": "版本候選與發布證據",
-          "description": "同一 workflow 驗證 bot 版本 PR 的精確 SHA；合併後以 draft、下載重驗與 immutable check 完成發布。"
+          "description": "CI 與 merge lifecycle 驗證原 PR 的精確候選；合併後以 draft、下載重驗與 immutable check 完成發布。"
         },
         "en": {
           "title": "Version candidate and release evidence",
-          "description": "The same workflow validates the bot version PR's exact SHA; after merge, draft staging, download verification, and the immutable check complete publication."
+          "description": "CI and the merge lifecycle validate the original PR's exact candidate; after merge, draft staging, download verification, and the immutable check complete publication."
         }
       },
       "shared": {
         "milestone": {
           "files": [
             {
-              "path": "scripts/verify-release-candidate"
+              "path": "scripts/release_policy.py"
             }
           ]
         },

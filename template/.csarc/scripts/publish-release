@@ -10,12 +10,12 @@ set -euo pipefail
 # .csarc/docs/ci-policy.md's "Release 發版不依賴 Actions 健康度的 fallback" section
 # and the release-security-and-dependencies ADR) call the exact same script
 # instead of maintaining two copies of this logic. Local execution never
-# skips the review a promotion or standalone version pull request already
-# requires; it only changes who runs the publish step after merge.
+# skips the review and exact same-PR materialization the delivery pull request
+# already requires; it only changes who runs the publish step after merge.
 #
 # .csarc/scripts/release_policy.py plan/detect and prepare-candidate stay separate
-# (they decide *whether* and *how* to propose a version, not how to publish
-# one already merged to main) and are not duplicated here.
+# (they decide *whether* and *how* to materialize a version before merge, not
+# how to publish one already merged) and are not duplicated here.
 #
 # Issue #770: `publish` and `rerun-verify` cross-check GitHub's own signed
 # release attestation (`gh release verify --format json`) against every
@@ -41,7 +41,7 @@ set -euo pipefail
 #     Resolve the exact release state for SHA: none, draft, or published.
 #     Always safe to run, including on ordinary pushes with no release
 #     activity. Pass --tag when a prior `stage` (or, in Actions, the
-#     Automatic release-please-action run) already knows the tag; omit it to
+#     same-PR materialization stage) already knows the tag; omit it to
 #     fall back to searching Git tags that point at SHA.
 #
 #   .csarc/scripts/publish-release publish --repo OWNER/NAME --tag TAG
@@ -243,12 +243,15 @@ cmd_stage() {
     number: $pr.number,
     sha: $pr.head.sha,
     headBranchName: $pr.head.ref,
-    baseBranchName: $pr.base.ref
+    baseBranchName: $pr.base.ref,
+    baseSha: $pr.base.sha
   }' >"$RUNNER_TEMP/release-pr.json"
   local head_ref
   local candidate_sha
+  local base_sha
   head_ref="$(jq -r .head.ref <<<"$pr")"
   candidate_sha="$(jq -r .head.sha <<<"$pr")"
+  base_sha="$(jq -r .base.sha <<<"$pr")"
   if [[ "$head_ref" == promote/m* ]]; then
     git -C "$repo_root" fetch --no-tags origin "$candidate_sha"
     local source_sha
@@ -263,13 +266,27 @@ cmd_stage() {
       "$(git -C "$repo_root" rev-parse "$sha^{tree}")"
   elif [[ "$branch" == dev/m* ]]; then
     [[ "$tag" =~ -beta\.[1-9][0-9]*$ ]]
-    python3 "$repo_root/.csarc/scripts/release_policy.py" verify-version \
-      --root "$repo_root" --tag "$tag"
+    git -C "$repo_root" fetch --no-tags origin "$base_sha" "$candidate_sha"
+    python3 "$repo_root/.csarc/scripts/release_policy.py" \
+      verify-delivery-version \
+      --root "$repo_root" --base-sha "$base_sha" \
+      --head-sha "$candidate_sha" --tag "$tag"
     test "$(git -C "$repo_root" rev-parse "$candidate_sha^{tree}")" = \
       "$(git -C "$repo_root" rev-parse "$sha^{tree}")"
   else
     test "$branch" = main
-    "$repo_root/.csarc/scripts/verify-release-candidate" "$RUNNER_TEMP/release-pr.json"
+    if [[ "$head_ref" == release/v* || \
+      "$head_ref" == release-please--branches--main--components--* ]]; then
+      "$repo_root/.csarc/scripts/verify-release-candidate" "$RUNNER_TEMP/release-pr.json"
+    else
+      git -C "$repo_root" fetch --no-tags origin "$base_sha" "$candidate_sha"
+      python3 "$repo_root/.csarc/scripts/release_policy.py" \
+        verify-delivery-version \
+        --root "$repo_root" --base-sha "$base_sha" \
+        --head-sha "$candidate_sha" --tag "$tag"
+      test "$(git -C "$repo_root" rev-parse "$candidate_sha^{tree}")" = \
+        "$(git -C "$repo_root" rev-parse "$sha^{tree}")"
+    fi
   fi
   git -C "$repo_root" checkout --detach "$sha"
   "$repo_root/.csarc/scripts/converge-release-tag" --repo "$GITHUB_REPOSITORY" --sha "$sha" --tag "$tag"

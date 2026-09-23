@@ -538,10 +538,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     for inactive in ("release-please.yml",):
         assert inactive not in workflows_purpose
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
-    assert (
-        "需人審查的 Milestone promotion／standalone 版本候選流程仍是候選"  # noqa: RUF001
-        in flow
-    )
+    assert "在原 release-worthy PR 內完成精確版本物化" in flow
     # Issue #525: the "Current state" selection-note that used to carry
     # this "candidate release workflow" phrasing was removed along with
     # every other such box; the Candidate/Blocked status in the
@@ -552,7 +549,10 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     assert "Candidate／Blocked" in chinese_delivery  # noqa: RUF001
     assert "promotion-gated adaptive release" not in chinese_delivery
     assert "下方 technical view 保留 2026-08" not in chinese_delivery
-    assert "A Milestone delivery PR carries its version" in english_delivery
+    assert (
+        "Every release-worthy work PR carries its reviewed version candidate"
+        in english_delivery
+    )
     assert "Candidate / Blocked" in english_delivery
     assert "使用 AI／vibe coding 的一般開發者" in chinese_home  # noqa: RUF001
     assert "不要求具備工程或 CI/CD 維運背景" in chinese_home
@@ -1086,7 +1086,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         {"path": "tests/test_release_bundle.py"},
     ]
     assert delivery_rows[3]["shared"]["milestone"]["files"] == [
-        {"path": "scripts/verify-release-candidate"}
+        {"path": "scripts/release_policy.py"}
     ]
     assert delivery_rows[3]["shared"]["release"]["files"] == [
         {"path": "scripts/release_bundle.py"},

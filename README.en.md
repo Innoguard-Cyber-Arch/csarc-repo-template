@@ -6,7 +6,7 @@ Cyber-Arch's updatable repository foundation: creating a new project, adopting a
 
 | Item | Current status |
 | --- | --- |
-| Template version | v0.23.1<!-- x-release-please-version --> |
+| Template version | v0.24.0<!-- x-release-please-version --> |
 | Supported languages | Python, Rust, TypeScript (independently multi-selectable; choosing none uses only the common workflow) |
 | repo-site presentation template version | 1.1.0 |
 | repo-site render engine version | 1.1.0 |
@@ -42,7 +42,7 @@ README is the compact entry point to the [repo-site](docs/index.html). They keep
 
 This repo maintains a Copier template, shared CI, security checks, and GitHub configuration drafts. `template/` is what gets shipped downstream; the root of this repository uses the same rules on itself.
 
-Available today: a common CI/CD baseline plus independently selectable Python, Rust, and TypeScript language modules, along with Issue/spec, PR checks, and verification. `documentation_mode` selects the full template plus content, content management only, or no documentation management. `primary_language` and `i18n` select the English/Traditional Chinese entry points, while `features` is reserved for non-documentation capabilities such as Docker. Automated version PRs, GitHub Releases, packaging, checksums, and SBOMs remain candidates until proven by a default-branch live run. Registry publishing and general deployment remain disabled. The settings script reports the account plan separately from live API capability.
+Available today: a common CI/CD baseline plus independently selectable Python, Rust, and TypeScript language modules, along with Issue/spec, PR checks, and verification. `documentation_mode` selects the full template plus content, content management only, or no documentation management. `primary_language` and `i18n` select the English/Traditional Chinese entry points, while `features` is reserved for non-documentation capabilities such as Docker. Same-PR version materialization, GitHub Releases, packaging, checksums, and SBOMs remain candidates until proven by a default-branch live run. Registry publishing and general deployment remain disabled. The settings script reports the account plan separately from live API capability.
 
 ## Quick start
 
@@ -185,13 +185,13 @@ Actions credentials live in GitHub Secrets/Variables; only local runtime uses an
 
 Four things stay distinct: version intent describes compatibility impact; an official version writes the manifest, package metadata, and CHANGELOG together into one reviewed commit; a release creates an immutable tag, GitHub Release, artifacts, and evidence; delivery is sending verified work into the authoritative branch or to users. Deploying to a real environment is out of this template's scope.
 
-Merging to `main` completes repository delivery first; `release.yml` then runs full verification and computes the next version with the same repo-local rules. When GitHub allows an Action to open a PR, Release Please creates the version PR automatically; when an upstream policy forbids it, a maintainer or agent runs `python3 scripts/release_policy.py prepare-candidate` and opens an ordinary PR from its output branch/title. Either path verifies a trusted author, allowed files, version/CHANGELOG consistency, and packageability. Once a human reviews and merges the version PR, the single `release.yml` creates a draft Release, artifacts, a checksum, and an SPDX SBOM, publishing and confirming immutability only after downloading and re-verifying them; no local command creates a tag or Release.
+All release-worthy CSARC-owned work materializes its exact version and CHANGELOG in the original delivery PR. Milestone work materializes beta before merging to `dev/m*`; Milestone promotion, standalone work, and hotfixes materialize stable before merging to `main`. While the PR is still draft, the agent updates from the current base, runs `python3 scripts/release_policy.py prepare-candidate --sha HEAD --phase <beta|stable>`, and leaves the generated release surfaces in one final release-only commit. CI and `pr_lifecycle.py` reconstruct the expected tree and block a missing or stale candidate. After merge, `release.yml` only publishes and verifies the tag, GitHub Release, artifacts, checksum, and SPDX SBOM; it never opens a second version PR.
 
 | Capability | Current status | How it works today |
 | --- | --- | --- |
 | A PR's SemVer intent | Active | `fix`/`revert` is patch, `feat` is minor, `!` is major, everything else is no-release |
-| Official version and CHANGELOG | Candidate/Guided | Automatic or local-candidate mode shares the same version decision; the organization currently forbids an Action opening a PR |
-| Tag / GitHub Release | Candidate/Blocked | Published by the single workflow once the version PR merges; awaiting a default-branch live run |
+| Official version and CHANGELOG | Candidate | The final release-only commit in the delivery PR carries them; CI and the merge lifecycle verify the exact tree |
+| Tag / GitHub Release | Candidate/Blocked | Published by the shared publisher after the same-PR candidate merges; awaiting a default-branch live run |
 | Checksum / SBOM | Candidate | `release_bundle.py` creates, downloads, and re-verifies the exact-tag artifact in the same run; awaiting a live run |
 | Production-side attestation | Removed | [#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439) found zero active consumers and removed the configuration surface -- not left as optional |
 | Consumer-side attestation verification | Conditional | Independent of the producer-side configuration above; consumers still use the existing verification contract |

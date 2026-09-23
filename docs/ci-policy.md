@@ -37,9 +37,11 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─────→ main
 緊急修正 ──────────────── reviewed hotfix PR ─────→ main
 ```
 
-工作 PR 關閉單項工作；Milestone 交付負責批次進入 `main`。CSARC-owned 的
-`promote/m<編號>-<簡稱>` PR 用 `Refs #<tracker>` 保持 tracker open，並在同一張 PR
-materialize 精確版本與 CHANGELOG。合併後由 hosted／本機共用的 publisher 發布並驗證 Release，再把
+工作 PR 關閉單項工作；Milestone 交付負責批次進入 `main`。每張 CSARC-owned
+release-worthy PR 都在同一張 PR 的 final release-only commit materialize 精確版本與
+CHANGELOG；Milestone work 使用 beta，`promote/m<編號>-<簡稱>`、standalone 與 hotfix
+使用 stable。Promotion PR 用 `Refs #<tracker>` 保持 tracker open。合併後由
+hosted／本機共用的 publisher 發布並驗證 Release，再把
 promotion commit 與 Release 網址回填進 tracker 的 `Completion evidence`，接著關閉 tracker
 與 Milestone；發布失敗時維持 open，成功重跑可安全收尾（#871）。Product-owned／
 verification-only repository 不套用這段 CSARC 發版與結案責任。
@@ -268,9 +270,9 @@ Alpha PR 可由 `scripts/pr_lifecycle.py merge` 在 lease＋exact-head 授權留
 - Milestone promotion：`promotion_gate.route_for()` 已分類為 `milestone` 的同 repository
   `dev/mN-*`／`promote/mN-*` route；既有 `title` 與 `verify` required checks 繼續驗證
   tracker、Milestone、bridge topology 與 exact candidate（#905）。
-- Guided release：同 repository 的 canonical `release/v<semver>` route 必須以 current
-  `main` 為 base，且既有 `verify-release-candidate` 仍在 hosted CI 與 lease-bound merge
-  boundary 重驗 exact head、candidate freshness、版本與檔案範圍（#913）。
+- Legacy in-flight release：#925 落地前已存在的同 repository canonical
+  `release/v<semver>` route 仍可依 current `main`、exact head、candidate freshness、版本與
+  檔案範圍完成（#913）；新工作不得建立這條 route，而是在原交付 PR 物化版本。
 
 五者的 PR body 都必須恰好出現一次 `Alpha 自行合併 / self-merged` 標記。未通過上述
 既有 route 驗證、不是 Alpha self-merge、或缺少綁定目前 head 的 maintainer 授權留言，
@@ -475,21 +477,10 @@ lease。`dependabot_auto_merge_exemption` 仍只正面表列兩個精確 workflo
 （回歸測試見 `tests/test_pr_lifecycle.py` 的
 `test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist`）。
 
-`.github/workflows/release.yml` 裡 `googleapis/release-please-action` 這一步
-同樣未經過 lease 就會建立／更新自己的版本 PR，且從未有例外或對應 Issue 記錄過，
-直到 #643 才發現。理由與 dependabot 例外一致但更直接：release-please 建立的 PR
-不是本 repo 任何一條 task-PR 路線（獨立 Issue／Milestone Issue／`dev/i*`
-canary／hotfix），而是第五條、由維護者直接人工審查合併的獨立路徑（見
-`AGENTS.md`「Release execution」）；`release.yml` 本身已用
-`concurrency: group: release-${{ github.repository }}` 把自己序列化，且
-release-please 只會動到自己的 `release-please--branches--main--components--*`
-head ref（`scripts/release_policy.py` 的 `expected_head`，`scripts/
-promotion_gate.py` 對同一 ref 前綴的特殊處理），沒有任何 lease 保護的 agent
-流程會寫這個 ref。因此 #643 為 `scripts/pr_lifecycle.py` 新增
-`release_please_exemption`，只正面表列 `.github/workflows/release.yml` 這一個
-精確路徑（`template/.github/workflows/release.yml.jinja` 是 Jinja 樣板，
-`scan_writers` 的 glob 本來就不掃描它，不需要第二個路徑）（回歸測試見
-`test_release_please_exemption_is_an_exact_path_allowlist`）。
+#643 曾為 `.github/workflows/release.yml` 內未經 lease 建立版本 PR 的
+`googleapis/release-please-action` 加入精確路徑豁免。#925 改成原交付 PR 在 merge 前
+materialize 版本，release workflow 只發布，因此 action 與 `release_please_exemption`
+已一起移除；任何 workflow 再加入同一個未租約 PR writer 都會被 `scan_writers` 擋下。
 
 同一次調查也發現 `command_writer_violations` 本身兩個誤判：它把整份檔案接成
 一個 block 比對，導致 `scripts/gh-issue-create` 裡兩句不相干的 `#` 註解（一句
@@ -517,7 +508,9 @@ command substitution，這段文字從未被執行，但掃描器分不出「描
 一張 Issue 若能獨立審查、驗證與交付，且沒有共同期限、跨 Issue 相依、整批驗收或
 soak／canary 需求，就不必加入里程碑。它從最新 `main` 建立 topic branch，PR 直接回
 `main`，接受一般 review 與風險分級驗證，並以 `Closes #N` 在合併後結案。合併只代表
-repository delivery；後續由 release workflow 判斷是否需要建立版本 PR。**這張 Issue
+repository delivery；release-worthy 工作必須在這張 PR 仍為 Draft 時先 materialize stable
+版本與 CHANGELOG，通過 exact-tree 與 current-base 驗證後才可 Ready／merge；merge 後的
+release workflow 只發布，不建立第二張版本 PR。**這張 Issue
 本身在合併前需要通過核可**（非提案者核准或 admin 自核），見下方「Standalone／
 hotfix／release recovery Issue 核可 gate（#743）」——它與有 Milestone 的 Issue 自動
 繼承 tracker 核可形成對稱，避免拆成 standalone 變成繞過批次治理的捷徑。
@@ -535,8 +528,8 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
    `main`。它仍須正常 review，且 CI 一律執行 full；不得以緊急為由跳過。
 3. PR 以 `Fixes #N`／`Closes #N` 連結 Issue。合併後保留 PR、commit SHA、full run、
    rollback 說明與是否發版的決策；#401 負責一般 GitHub native 關單契約。
-4. `fix` 預設表達 patch 意圖；破壞相容性時明列 `!`。Release Please 會據此更新版本 PR；
-   版本 PR 尚未審查、合併且正式成品尚未發布前，hotfix 仍只算已交付、尚未發版。
+4. `fix` 預設表達 patch 意圖；破壞相容性時明列 `!`。Agent 在同一張 hotfix PR 物化
+   stable 候選；exact-tree 驗證、PR 審查與正式成品發布任一步尚未完成前，都不能宣稱已發版。
 5. Hotfix Issue 本身在合併前需要核可（非提案者核准，或 proposer 同時是 repo `admin`
    collaborator 時的自核例外，理由必填）——見下方「Standalone／hotfix／release
    recovery Issue 核可 gate（#743）」。這與第 2 步的 PR review 是兩道獨立關卡：真正
@@ -1028,8 +1021,8 @@ CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.p
 
 所有第三方 Actions 鎖定完整 commit SHA，旁註可讀 release tag。Workflow YAML 只負責
 event、權限、環境與呼叫；分類與驗證規則留在本機可測的 scripts。Repository 預設
-`GITHUB_TOKEN` 為 read-only；release job 只在自己的 workflow 提升必要權限。Automatic
-模式必須允許 Actions 建立 PR；若上層政策禁止則使用 Guided，workflow 仍不能自行核准版本 PR。
+`GITHUB_TOKEN` 為 read-only；release job 只在自己的 workflow 提升必要權限。Release job
+只發布 merge 前已在原 PR 受審的候選，不需要也不允許 Actions 另建或自行核准版本 PR。
 
 上表只列本 repo 自己的 active automation。生成 repo 另有一個選用能力：開啟
 `enable_template_update_notifications` 才產生 `template-update.yml`
@@ -1520,7 +1513,7 @@ Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
 | --- | --- | --- | --- | --- |
 | 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
-| 精確版本與 CHANGELOG | Milestone work PR materialize 下一個 beta | promotion bridge materialize stable 與 CHANGELOG | standalone／hotfix 以版本 PR materialize stable | manual 只重跑同一流程，不另開版本來源 |
+| 精確版本與 CHANGELOG | 原 Milestone work PR 的 final release-only commit materialize 下一個 beta | promotion bridge materialize stable 與 CHANGELOG | standalone／hotfix 原 PR materialize stable | manual 只重跑同一流程，不另開版本來源 |
 | CI | beta 的最低組合是 fast，路徑風險可升 full | stable 一律 full | release workflow 重用 exact candidate 的可信證據，缺少時只補跑所需 tier | 不重複已具備且仍有效的 routine suite |
 | 成品／checksum／SBOM | 合併進 `dev/m*` 後從精確 commit 發 beta prerelease | 合併後從精確 main commit 發 stable | stable 候選合併後從精確 commit建立 | draft Release 先上傳、下載重驗，成功才公開 |
 | tag／GitHub Release | `X.Y.Z-beta.N` | `X.Y.Z`；成功才關 tracker 與 Milestone | `X.Y.Z` | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
@@ -1530,8 +1523,8 @@ Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本
 合併到 `main` 是 repository delivery，不等於 Release。CSARC-owned Milestone 把版本檔與
 CHANGELOG 納入同一張 promotion PR，但 tracker 與 Milestone 要等唯一 `release.yml` 成功
 發布並驗證後才關閉；promotion body 用 `Refs #N`，不使用會在 merge 當下提早結案的
-`Closes #N`。發布失敗時維持 open，重跑沿用同一候選與 Release。Standalone work 仍維持
-Automatic／Guided 版本 PR；既有 repo 保留 product-owned release workflow，Copier 不依檔名
+`Closes #N`。發布失敗時維持 open，重跑沿用同一候選與 Release。Standalone work 與 hotfix
+也在原 PR 物化 stable；既有 repo 保留 product-owned release workflow，Copier 不依檔名
 猜測、不覆寫也不重複 dispatch。流程只用短效 `GITHUB_TOKEN`，不要求 GitHub App、PAT、
 registry token 或空 deployment environment。
 
@@ -1595,13 +1588,12 @@ pre-release 列為應刪除。`scripts/release_policy.py retention-plan --repo O
 一律維持 fail closed。詳見 `docs/adr/release-security-and-dependencies.md` 與
 `docs/adr/transactional-repository-adoption.md` 的新增段落。
 
-版本 PR 的成功檢查只對當時的 `main` 有效。正式 `scripts/pr_lifecycle.py merge` 會在 remote
-lease 綁定的 current `main` 上重跑同一支 `scripts/verify-release-candidate`，並以同一個
-`Release / candidate` status 留下 candidate SHA、來源 merge-base 與 current base 的證據；
-`scripts/publish-release stage` 在發布前再走同一驗證作為人工作業的 fail-closed 後盾。若
-candidate 建立後的 `main` 只新增 `docs`／`chore` 等 `no-release` commits，原 PR 可直接重新驗證；
-只要新增範圍含 `feat`／`fix`／`revert` 或 breaking change，就必須更新同一張版本 PR 後再驗證，
-不能沿用舊 base 上的成功結果（#817）。
+同 PR 候選的成功檢查只對當時的 destination base 有效。正式
+`scripts/pr_lifecycle.py merge` 會在 remote lease 綁定的 current base 上重跑
+`release_policy.py verify-delivery-version`，確認 head 的最後一個 commit 恰好是從前一個
+implementation commit 產生的 release surfaces；`scripts/publish-release stage` 在發布前再以
+來源 PR 與 merge tree 重驗。Base 一旦前進，agent 必須先同步並重新 materialize，舊 base 的
+成功 status 不得滿足最終邊界（#817、#925）。
 
 ## Conditional 與退役能力
 
@@ -1716,7 +1708,7 @@ capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能�
 
 2026-09-03 的實際事故（#587）證明「發版」目前完全綁在 `release.yml` 這一支 workflow 是否能在 GitHub Actions 上成功執行：M8 promotion 後，`docs/index.html` 過期讓 full-tier 驗證卡住，`main` 上每一次 push 觸發的 `release.yml` run 全部失敗，加上同一天稍早出現的 `pull_request` webhook 投遞間歇性異常，讓「能不能發版」完全停擺超過 8 小時、沒有人自動被通知，直到人工檢查 Releases 頁面才發現。既有的「Actions 額度 fallback」（見 [staged-delivery-and-verification ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/staged-delivery-and-verification.md)）解決的是不同的觸發條件：額度用盡有 GitHub 回傳的明確錯誤訊息（zero-step billing block），可以機械式偵測；本節處理的觸發條件——hosted runner 卡住、webhook 沒有投遞、或其他導致 Actions 本身不健康的狀況——**沒有對應的機械式訊號**：它看起來就是「什麼都沒發生」，而「什麼都沒發生」本來就有可能只是因為沒有東西需要發版。這個不對稱是本節 fallback 刻意設計成「人或 agent 主動決定啟用」而非自動觸發的原因，也是為什麼另外需要一道獨立排程的存量檢查——這道檢查因範圍與時間考量從 #589 拆分為獨立追蹤，已落地為下方「發版存量漂移偵測（`release-drift.yml`，#605）」一節。
 
-**設計：** Guided 模式（[版本／交付 ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md) 決策）原本只在「組織政策禁止 Actions 建立 PR」時啟用；本節把同一條路徑的啟用條件擴大為「維護者或 agent 判斷 Actions／webhook 目前不可信任」時同樣可以啟用，機制不變：`python3 scripts/release_policy.py prepare-candidate` 在本機計算版本與 CHANGELOG，人或 agent 開一般 PR，經過與其他 `main` PR 相同的 review 才能合併——本機執行不能成為省略審查的手段。合併後的發布步驟（建 tag、draft Release、build 成品、checksum、SPDX SBOM、`gh release` 系列指令）改抽成 `scripts/publish-release`，`release.yml` 與本機路徑呼叫同一份實作，不維持兩套邏輯。
+**設計：** #589 的 Guided 名稱現在只表示「由維護者或 agent 在本機呼叫 publisher」，不再表示另開版本 PR。#925 要求所有候選都已在原交付 PR 內產生並通過同一 review；Actions／webhook 不健康時，只把合併後的發布步驟（建 tag、draft Release、build 成品、checksum、SPDX SBOM、`gh release` 系列指令）切到本機執行。`release.yml` 與本機路徑呼叫同一份 `scripts/publish-release`，不維持兩套邏輯，也不能藉本機執行省略審查。
 
 **代價（不能只講好處）：**
 
@@ -1749,19 +1741,18 @@ capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能�
 `release.yml` 仍在每次 `main` push 上執行，但只在 checkout 後先用 runner 內建的 Python／Git
 完成 release plan；`no-release` 直接結束，不探測 capability、不驗證 attestation，也不安裝
 Python 3.14、uv、pnpm、Node 或 Rust。需要發版時才探測 capability；若 publication
-為 `blocked`（現在只可能來自 `contents`／`release`／`actions_pull_requests`），維持 #123 的
+為 `blocked`（現在只可能來自 `contents`／`release`），維持 #123 的
 fail-closed 結果並在工具鏈 setup 前停止。只有未被擋下的實際 release 路徑才先嘗試重用來源 PR
 的可信 hosted verification；來源與 main tree 不同、證據過期或查證失敗時，改在 release workflow
-對 exact main tree 重跑 full，接著才進入版本候選或發布步驟（#707）。這只把便宜判定移到前面，
+對 exact main tree 重跑 full，接著才驗證已物化候選並發布（#707）。這只把便宜判定移到前面，
 不放寬驗證、權限或供應鏈要求。
 
 ### Release 說明文字的最低格式規範（#616）
 
-M8 補發版（#587）過程中發現：`release.yml` 產生的 GitHub Release 說明文字，完全交給
-`googleapis/release-please-action`（Automatic）或本機 candidate 產生，沒有任何規定
-「一則正式 Release 的說明文字最低限度要包含什麼」。上兩節把本機 `scripts/publish-release`
-從 fallback 升格為標準程序後，Release 內容理論上可能來自兩種不同執行環境（hosted
-Actions 或本機），本節盤點實際程式碼路徑，回答這個風險是否需要額外規範或檢查。
+M8 補發版（#587）過程中曾發現：當時的 `release.yml` 把 GitHub Release 說明文字交給
+`googleapis/release-please-action`（Automatic）或本機 candidate 產生，卻沒有規定
+「一則正式 Release 的說明文字最低限度要包含什麼」。#925 已移除 post-merge version PR；
+現在版本與 CHANGELOG 一律由原交付 PR 物化，而 hosted Actions 與本機仍共用下列唯一 publisher。
 
 **盤點結論：整個 repo 只有一個程式碼路徑會建立 Release 說明文字。**
 `scripts/converge-release-tag` 是唯一呼叫 `gh release create` 的地方：
@@ -1771,12 +1762,10 @@ gh release create "$tag" --target "$sha" \
   --title "$tag" --draft --generate-notes
 ```
 
-`scripts/publish-release stage`（Automatic 與 Guided 共用同一個進入點）呼叫這支腳本；
-`release.yml` 與本機執行都呼叫同一份 `scripts/publish-release`。`googleapis/
-release-please-action` 在 standalone Automatic 路徑只負責開版本 PR、同步版本檔與
-CHANGELOG，不建立 Release 也不寫入 Release 說明；Milestone promotion 與 standalone
-Guided 都重用 `release_policy.py prepare-candidate`，同樣只改版本檔與 CHANGELOG，不建立
-Release。所有路徑最終都收斂到
+`scripts/publish-release stage`（hosted 與本機共用同一個進入點）呼叫這支腳本；
+`release.yml` 與本機執行都呼叫同一份 `scripts/publish-release`。版本與 CHANGELOG 已由
+原交付 PR 的 `release_policy.py prepare-candidate` 產生；合併後不再執行 Release Please 或
+建立另一張 PR。所有路徑最終都收斂到
 `converge-release-tag` 這同一行呼叫——不是兩套各自維護、恰好長得很像的邏輯，而是結構上
 只有一份實作，呼應 #589 決定本身的第一原則（單一 repo-local 腳本被兩種呼叫方式共用）。
 `scripts/publish-release` 之後唯二對同一 Release 的寫入是 `gh release edit "$tag"
@@ -1849,9 +1838,9 @@ Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 
 
 最新 eligible Release 必須由 GitHub API 明確回報 `immutable=true`；其 `target_commitish` 必須是精確 40 字元 SHA，且等於 `main` HEAD，或經 GitHub compare API 證明為其 ancestor；`published_at` 還必須不早於目前 `main` commit。精確 target 會持續視為涵蓋該 HEAD；ancestor target 只算 N 小時內的近期發布活動，不能永久掩蓋較新的 `main`。mutable Release、draft、非 ancestor target、移動中的 branch ref 或比目前 `main` 更早發布的 Release 都不能壓掉告警。這使 immutable GitHub Release 本身成為首要發布事實，不再要求一條已知會被 #123 fail closed 的 hosted run 偽裝成成功。
 
-`release.yml` 在每次 push 到 `main` 後都會執行，但 workflow 的綠燈本身不是發布證據：`release_policy.py` 明確判定 `no-release` 時會成功結束，Guided 模式只輸出人工指示、未建立候選也未發布時同樣會成功結束。detector 會讀取該 success run 的 job steps；只有「Plan the next version from repository history」成功，且後續「Detect the available release path」因 plan 為 `no-release` 而 skipped，才把該 run 視為健康證據。Guided 指示、候選 PR 建立／更新或其他未發布的 success run 都不算；真正的發布只能由上段的 immutable stable Release 證明。因此重複執行 Guided no-op 不會重設 N 小時門檻，也不會讓 SHA 相同就永久掩蓋 drift。
+`release.yml` 在每次 push 到 `main` 後都會執行，但 workflow 的綠燈本身不是發布證據：`release_policy.py` 明確判定 `no-release` 時會成功結束；若 release-worthy commit 未在 merge 前物化，workflow 必須失敗，不能用人工指示或第二張 PR 把它視為成功。Detector 會讀取該 success run 的 job steps；只有「Plan the next version from repository history」成功，且後續「Detect the available release path」因 plan 為 `no-release` 而 skipped，才把該 run 視為健康證據。真正的發布仍只能由上段的 immutable stable Release 證明。
 
-**N 預設 24 小時**，可用 `RELEASE_DRIFT_HOURS` 環境變數或 workflow 的 `hours` workflow_dispatch input 覆寫。`release.yml` 正常在 push 後幾分鐘內就有結果；24 小時涵蓋「一整天沒有任何 release 相關 push」的正常空窗期，不誤報安靜的一天，同時仍能在同一個工作日內就被發現，不會像 #587 一樣拖過一整個週末。Guided no-op 不是活動證據，因此重跑它不會重新起算門檻。
+**N 預設 24 小時**，可用 `RELEASE_DRIFT_HOURS` 環境變數或 workflow 的 `hours` workflow_dispatch input 覆寫。`release.yml` 正常在 push 後幾分鐘內就有結果；24 小時涵蓋「一整天沒有任何 release 相關 push」的正常空窗期，不誤報安靜的一天，同時仍能在同一個工作日內就被發現，不會像 #587 一樣拖過一整個週末。失敗或未發布的 run 不是活動證據，因此重跑不會重新起算門檻。
 
 **本機發版紀錄只作稽核用途**：#589 的既有約定仍要求在合併說明或 Issue／PR 留言留下：
 
