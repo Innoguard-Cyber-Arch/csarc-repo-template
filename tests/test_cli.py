@@ -433,9 +433,20 @@ def initialize_installed_project(tmp_path: Path) -> tuple[Path, Path, str]:
     return source, project, first_sha
 
 
-def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
+def initialize_pending_adoption(
+    tmp_path: Path,
+    *,
+    language: str = "ci",
+    existing_lockfile: str | None = None,
+) -> tuple[Path, Path]:
     """Start a minimal adoption that requires a manual manifest merge."""
     source, first_sha = make_template(tmp_path)
+    if language == "typescript":
+        (source / "template" / "package.json").write_text(
+            '{"devDependencies":{"typescript":"^5.9.0"}}\n',
+            encoding="utf-8",
+        )
+        first_sha = commit(source, "test: add TypeScript manifest")
     project = tmp_path / "pending-product"
     project.mkdir()
     write_executable(
@@ -444,10 +455,21 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
             encoding="utf-8"
         ),
     )
-    (project / "pyproject.toml").write_text(
-        '[project]\nname = "pending-product"\nversion = "0.1.0"\n',
+    manifest = project / (
+        "package.json" if language == "typescript" else "pyproject.toml"
+    )
+    manifest.write_text(
+        (
+            '{"name":"pending-product","version":"0.1.0"}\n'
+            if language == "typescript"
+            else '[project]\nname = "pending-product"\nversion = "0.1.0"\n'
+        ),
         encoding="utf-8",
     )
+    if existing_lockfile is not None:
+        (project / existing_lockfile).write_text(
+            "existing lock\n", encoding="utf-8"
+        )
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
@@ -461,7 +483,7 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
         first_sha,
         "--allow-unreleased",
         "--data",
-        "language=ci",
+        f"language={language}",
     ]
     assert main(arguments) == 0
     plan = (
@@ -1946,6 +1968,79 @@ def test_adopt_finalize_rejects_unexpected_worktree_state(
         capsys.readouterr().err
     )
     assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.parametrize(
+    ("language", "lock_name", "existing"),
+    [
+        ("python", "uv.lock", False),
+        ("python", "uv.lock", True),
+        ("typescript", "pnpm-lock.yaml", False),
+        ("typescript", "pnpm-lock.yaml", True),
+    ],
+)
+@pytest.mark.large
+def test_adopt_finalize_accepts_pending_lockfile_updates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    language: str,
+    lock_name: str,
+    existing: bool,
+) -> None:
+    """Allow only the selected dependency lockfile while adoption is pending."""
+    _, project = initialize_pending_adoption(
+        tmp_path,
+        language=language,
+        existing_lockfile=lock_name if existing else None,
+    )
+    manifest = project / (
+        "package.json" if language == "typescript" else "pyproject.toml"
+    )
+    manifest.write_text(
+        (
+            '{"name":"pending-product","version":"0.1.0",'
+            '"devDependencies":{"typescript":"^5.9.0"}}\n'
+            if language == "typescript"
+            else manifest.read_text(encoding="utf-8")
+            + '[dependency-groups]\ndev = ["pytest"]\n'
+        ),
+        encoding="utf-8",
+    )
+    lockfile = project / lock_name
+    lockfile.write_text("resolved lock\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "create_adoption_lockfiles", lambda *_: None)
+
+    assert replay_finalize(project, "--dry-run") == 0
+    plan = finalize_plan_path(project)
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert lock_name in payload["files"]["overwrite"]
+    assert (
+        replay_finalize(
+            project,
+            "--apply-plan",
+            str(plan),
+            "--yes",
+            "--non-interactive",
+        )
+        == 0
+    )
+    assert lockfile.read_text(encoding="utf-8") == "resolved lock\n"
+    assert not (project / cli.PENDING_ADOPTION_FILE).exists()
+
+
+@pytest.mark.large
+def test_adopt_finalize_rejects_unselected_pending_lockfile(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keep lockfiles for unselected languages outside the allowlist."""
+    _, project = initialize_pending_adoption(tmp_path, language="typescript")
+    (project / "uv.lock").write_text("unexpected lock\n", encoding="utf-8")
+
+    assert replay_finalize(project, "--dry-run") == 2
+    assert (
+        "Pending adoption contains unexpected working-tree changes: uv.lock"
+        in capsys.readouterr().err
+    )
 
 
 @pytest.mark.large

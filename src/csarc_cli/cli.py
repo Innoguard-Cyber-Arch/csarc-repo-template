@@ -2896,6 +2896,7 @@ def validate_pending_file_sets(
     pending: Mapping[str, object],
     stage: Path,
     planned: Plan,
+    answers: dict[str, object],
     *,
     task_outputs_available: bool,
 ) -> None:
@@ -2943,6 +2944,7 @@ def validate_pending_file_sets(
     allowed = (
         managed
         | manual
+        | set(adoption_lockfiles(answers))
         | {
             CONFIG_FILE.as_posix(),
             LEGACY_ANSWERS_FILE.as_posix(),
@@ -4780,6 +4782,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             pending,
             stage,
             planned,
+            answers,
             task_outputs_available=False,
         )
 
@@ -4929,6 +4932,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             pending,
             stage,
             task_planned,
+            answers,
             task_outputs_available=True,
         )
         write_candidate_patch(
