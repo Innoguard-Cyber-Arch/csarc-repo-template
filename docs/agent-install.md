@@ -97,7 +97,9 @@ attestation verification.
    verification must pass before the target is written. For init or update,
    reuse the resolved tag and full SHA explicitly. Report the
    `./scripts/verify` result. If adoption creates a resumable manual-merge checkpoint, complete
-   only the listed merges, run `adopt --finalize --dry-run`, review its new
+   only the listed merges; the checkpoint and completed merges may be committed
+   before finalize, and the same bytes are accepted committed or uncommitted.
+   Run `adopt --finalize --dry-run`, review its new
    external plan, wait for confirmation again, then use `adopt --finalize
    --apply-plan PATH`. Direct finalize and any unplanned working-tree or manual
    result drift must stop.

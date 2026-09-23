@@ -1638,6 +1638,26 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
 
 
 @pytest.mark.large
+def test_adopt_finalize_accepts_committed_pending_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finalize the same pending bytes after the user commits them."""
+    _, project = initialize_pending_adoption(tmp_path)
+    commit(project, "test: commit pending adoption")
+    head = git(project, "rev-parse", "HEAD")
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 0
+    payload = json.loads(
+        finalize_plan_path(project).read_text(encoding="utf-8")
+    )
+    assert payload["adoption"]["phase"] == "complete"
+    assert git(project, "rev-parse", "HEAD") == head
+    assert git(project, "status", "--porcelain") == ""
+    assert "returned non-zero exit status" not in capsys.readouterr().err
+
+
+@pytest.mark.large
 def test_adopt_finalize_rejects_answer_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2875,6 +2895,23 @@ def test_git_candidate_staging_ignores_caller_hooks(
         "changed\n"
     )
     assert not marker.exists()
+
+
+def test_clone_working_tree_accepts_clean_repository(tmp_path: Path) -> None:
+    """Reuse the cloned HEAD when there are no working-tree bytes to commit."""
+    project = tmp_path / "clean-project"
+    project.mkdir()
+    (project / "tracked.txt").write_text("baseline\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    head = commit(project, "test: baseline")
+
+    candidate = tmp_path / "candidate"
+    cli.clone_working_tree(project, candidate)
+
+    assert git(candidate, "rev-parse", "HEAD") == head
+    assert git(candidate, "status", "--porcelain") == ""
 
 
 @pytest.mark.large

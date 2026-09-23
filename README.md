@@ -227,7 +227,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 導入時可以 `--data project_verification_hook=scripts/verify-skills` 指定產品驗證。該值必須是 repo 內存在、可執行的相對檔案，不會透過 shell 解析，也不得解析成或間接呼叫 canonical `scripts/verify`；初始 plan 與 Markdown 報告會列出精確路徑並標示尚未執行，核准 plan 後才記錄實際結果與原因。沒有顯式設定時，只在既有 `scripts/verify-product` 可執行時使用相容 fallback；同一路徑只執行一次。`update --check` 只驗證 hook 設定、不執行 hook，正式 update 則在暫存 clone 通過 canonical 與產品驗證後才寫入 target。
 
-若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize`；它同樣預設為 dry-run，會重建靜態候選但不執行 target-owned 驗證，並將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 觸發候選驗證與套用；任何 plan 後漂移或驗證失敗都會停止。
+若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize`；pending 內容可以先 commit，finalize 會接受內容相同的乾淨 commit 或尚未提交狀態。它同樣預設為 dry-run，會重建靜態候選但不執行 target-owned 驗證，並將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 觸發候選驗證與套用；任何 plan 未列出的變更、plan 後漂移或驗證失敗都會停止。
 
 ### 更新已導入的 repo
 
