@@ -137,6 +137,7 @@ jobs:
       - name: Re-verify the exact release tree when reuse is unavailable
         if: ${{ steps.plan.outputs.status != 'no-release' && steps.verification.outputs.reused != 'true' }}
         env:
+          CSARC_CI_BASE: ${{ github.event.before || github.event.repository.default_branch }}
           CSARC_CI_SCOPES: dependency,docs,governance,shell,source,template,workflow
           CSARC_CI_TIER: ${{ steps.route.outputs.required_tier }}
         run: |

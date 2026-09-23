@@ -213,6 +213,9 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         attestation_index, attestation = by_name[
             "Reuse the source PR's trusted verification evidence"
         ]
+        _, fallback = by_name[
+            "Re-verify the exact release tree when reuse is unavailable"
+        ]
         _, resolve = by_name["Resolve the exact release state"]
 
         route_index, _ = by_name["Resolve release route"]
@@ -225,6 +228,10 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         assert attestation_index < min(index for index, _ in toolchain_steps)
         assert capability["if"] == no_release_guard
         assert attestation["if"] == no_release_guard
+        assert fallback["env"]["CSARC_CI_BASE"] == (
+            "${{ github.event.before || "
+            "github.event.repository.default_branch }}"
+        )
         assert resolve["if"] == no_release_guard
         assert all(
             step["if"] == no_release_guard for _, step in toolchain_steps
