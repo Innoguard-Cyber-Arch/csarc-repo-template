@@ -3110,6 +3110,19 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
         repository=candidate,
         neutralize_filters=True,
     )
+    staged = run_git(
+        ["git", "-C", str(candidate), "diff", "--cached", "--quiet"],
+        repository=candidate,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    if staged.returncode == 0:
+        return
+    if staged.returncode != 1:
+        raise CliError(
+            staged.stderr.strip() or "Cannot inspect staged adoption work."
+        )
     run_git(
         [
             "git",
