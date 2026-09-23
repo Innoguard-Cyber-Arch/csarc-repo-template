@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.25.10-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(status): report pending adoption (89d247b)
+
 ## [0.25.9-beta.1] - 2026-09-24
 
 ### Bug Fixes
