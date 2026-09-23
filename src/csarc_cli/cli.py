@@ -7031,7 +7031,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     target_capabilities = dict(preflight)
     current_capabilities.pop("observed_at", None)
     target_capabilities.pop("observed_at", None)
-    answers_changed = answers != saved_answers
+    answers_changed = answers != current_answers
     capabilities_changed = target_capabilities != current_capabilities
     update_available = bool(status["update_available"]) or any(
         (answers_changed, capabilities_changed)
