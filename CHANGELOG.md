@@ -7,6 +7,18 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.24.2] - 2026-09-23
+
+### Bug Fixes
+
+* fix(governance): report expected states accurately (957800a)
+
+## [0.24.1] - 2026-09-23
+
+### Bug Fixes
+
+* fix(governance): prevent invalid work branches (b2b506b)
+
 ## [0.24.1-beta.1] - 2026-09-23
 
 ### Bug Fixes

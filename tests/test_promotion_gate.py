@@ -238,7 +238,9 @@ def test_check_route_blocks_an_unrecognized_branch_targeting_main(
         github_output=None,
         summary=None,
     )
-    with pytest.raises(RuntimeError, match="promotion, hotfix"):
+    with pytest.raises(
+        RuntimeError, match="GitHub closes an open pull request"
+    ):
         check_route(arguments)
 
 

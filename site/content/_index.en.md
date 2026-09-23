@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.24.1-beta.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.24.2</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.24.1-beta.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.24.2<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -727,7 +727,7 @@ The template prepares an optional CODEOWNER, chooses reviewers from live permiss
 - a fixable mismatch fails until corrected.
 
 {{< disclosure key="governance-live-status" title="This repository's own real status right now (checked 2026-09-07)" >}}
-The `Innoguard-Cyber-Arch` API reports this repository is on the Free plan with **public** visibility. GitHub already has an `enforcement: active` Ruleset named "CSARC protected branches" (created 2026-09-03), applied to `main` and `dev/m*`: all three `title`/`verify`/`review` status checks must pass, the review check evaluates `admin_bypass` and available Copilot evidence, and force-push is forbidden. This repository explicitly uses `verification_mode: hosted`, `actions_fallback: admin`, and `admin_bypass: always`; admin bypass replaces only peer approval, while `actions_fallback` separately handles a proven zero-step billing block, and neither skips the remaining required evidence.
+The `Innoguard-Cyber-Arch` API reports this repository is on the Free plan with **public** visibility. GitHub already has an `enforcement: active` Ruleset named "CSARC protected branches" (created 2026-09-03), applied to `main` and `dev/m*`: all three `title`/`verify`/`review` status checks must pass, the review check evaluates `admin_bypass` and available Copilot evidence, and force-push is forbidden. This repository explicitly uses `verification_mode: hosted`, `release_trigger: manual`, `actions_fallback: admin`, and `admin_bypass: always`; admin bypass replaces only peer approval, while `actions_fallback` separately handles a proven zero-step billing block, and neither skips the remaining required evidence.
 
 This maps to the "Free + public, or Pro personal + private" row in the table below, not the **private** degraded scenario the Free row describes in the "Full capability at each Free/Team/Enterprise tier" cards further down (that card describes what happens on Free + *private*, where the REST/GraphQL Ruleset-creation API refuses the request, so only the desired state can be kept while it is marked `DEGRADED`); this repository is public, so it takes the path that applies and verifies directly. If the plan or visibility changes later, rerunning `plan`/`apply`/`check` reflects the latest state -- this records the fact as of when it was checked, not a permanent guarantee, and it does not mean every repository using this template looks the same.
 {{< /disclosure >}}
@@ -744,7 +744,7 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 
 {{< disclosure key="governance-plan-tiers" title="Full capability at each Free / Team / Enterprise tier" >}}
 <div class="plan-grid">
-  <article class="plan-card current"><h3>Free <span class="plan-state">Current</span></h3><p><strong>Review intent is preserved while enforcement may degrade:</strong> the workflow selects a non-author <code>maintain</code>/<code>admin</code> user from live repository collaborators; a private repository keeps its desired Ruleset in <code>policies/rulesets.json</code>, and check reports DEGRADED.</p><ul><li>Copilot entitlement is never inferred from the Free plan name; unproven availability falls back to the human rule</li><li>Without a merge gate, review history cannot masquerade as platform enforcement</li></ul></article>
+  <article class="plan-card current"><h3>Free <span class="plan-state">Current</span></h3><p><strong>Review intent is preserved while enforcement may degrade:</strong> the hosted workflow selects a non-author <code>maintain</code>/<code>admin</code> user from live repository collaborators, while local mode uses the local lifecycle instead; a private repository keeps its desired Ruleset in <code>policies/rulesets.json</code>, and check reports DEGRADED.</p><ul><li>Copilot entitlement is never inferred from the Free plan name; unproven availability falls back to the human rule</li><li>Without a merge gate, review history cannot masquerade as platform enforcement</li></ul></article>
   <article class="plan-card team"><h3>Team <span class="plan-state">Minimum recommended</span></h3><p><strong>Adds:</strong> a private-repository Ruleset, protected branches, and required checks; the review check still evaluates peer approval or the configured admin bypass.</p><ul><li>A configured CODEOWNERS team must exist with repository write access</li><li>The template can apply the repository's existing Ruleset directly</li></ul></article>
   <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">Organization-wide</span></h3><p><strong>Adds:</strong> SAML SSO/SCIM, internal repositories, private/internal deployment protection, private Pages, audit log streaming, and IP allow lists.</p><ul><li>An organization or Enterprise Ruleset can govern centrally</li><li>Currently only detected and reported, never changed automatically</li></ul></article>
 </div>
@@ -754,10 +754,10 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Layer | `.csarc/config.yml` key | Default / allowed values | Generated or checked at |
 | --- | --- | --- | --- |
 | Governance intent | `governance_mode`, `lifecycle`, `actions_fallback` | `managed`/`observe`; `issues`/`milestones`; fallback defaults to `off`, with `admin` opt-in | repository policy, work-item side effects, and proven zero-step billing fallback |
-| Verification trust | `verification_mode` | new projects default to `local`; `hosted` is optional | local self-attestation plus audited bypass with no hosted validation/release workflow, or trusted GitHub-hosted checks |
+| Verification trust | `verification_mode` | new projects default to `local`; `hosted` is optional | local self-attestation plus audited bypass with no hosted CI, PR governance, Pages, or release workflow; or trusted GitHub-hosted checks |
 | Review intent | `admin_bypass`, `copilot_review` | admin bypass defaults to `off`, with `beta-only`/`always` opt-in; Copilot is `allowed`/`off` | exact-head `review` gate; unavailable Copilot falls back to peer approval or configured admin authorization |
 | Release intent | `release_ownership`, `release_trigger`, `project_maturity` | three ownership modes; trigger is `main`/`manual`; maturity defaults to early | public beta/stable channels, one fixed Conventional Commits algorithm, and candidate triggering |
-| Documentation | `documentation_mode` | `template-and-content`/`content-only`/`off` | separates the presentation template from project-owned content; Pages follows only the full template |
+| Documentation | `documentation_mode` | `template-and-content`/`content-only`/`off` | separates the presentation template from project-owned content; Pages requires hosted plus the full template and runs only for `docs/**` or manual dispatch |
 | Documentation languages | `primary_language`, `i18n` | `en`/`zh-tw`; bilingual or `off` | README and documentation entry points; bilingual mode maintains the counterpart |
 | License | `project_license`, `copyright_holder` | `proprietary` by default; `MIT` and `Apache-2.0` are available | `LICENSE`, README, package manifests, and SBOM |
 | Optional output | `features` | empty by default; currently accepts `docker` | Docker starter and build scan switch as one unit |

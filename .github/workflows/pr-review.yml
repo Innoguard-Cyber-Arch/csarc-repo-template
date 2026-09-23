@@ -1,9 +1,9 @@
 name: PR review
 
-# Produces the `review` required status check for pr_review_mode=copilot
+# Publishes the `review` required status check for pr_review_mode=copilot
 # (Issue #752): the exact head passes when GitHub Copilot reviewed it and
-# found no issues, an independent maintainer approved it, or (Issue #775) a
-# An admin-bypass PR has its own exact-head authorization
+# found no issues, or an independent maintainer approved it. An
+# admin-bypass PR (Issue #775) has its own exact-head authorization
 # comment. Copilot's own review submission re-runs this check; the
 # `issue_comment` trigger re-runs it when that authorization comment is
 # posted, since posting a comment does not itself fire `pull_request_target`. In
@@ -26,29 +26,36 @@ concurrency:
 permissions: {}
 
 jobs:
-  review:
+  merge-group-review:
     name: review
+    if: ${{ github.event_name == 'merge_group' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Accept the queued pull request
+        run: echo "::notice::The review check passed on the pull request head before it entered the merge queue."
+  publish:
+    name: publish review decision
     if: >-
       ${{
-        github.event_name == 'merge_group' ||
         (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request != null &&
         startsWith(github.event.comment.body, 'PR lifecycle merge authorization')) ||
         (github.event_name != 'issue_comment' &&
+        github.event_name != 'merge_group' &&
         github.event.pull_request.draft == false)
       }}
     permissions:
+      checks: write
       contents: read
       issues: read
       pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Accept the queued pull request
-        if: ${{ github.event_name == 'merge_group' }}
-        run: echo "::notice::The review check passed on the pull request head before it entered the merge queue."
       - name: Resolve the pull request number and its trusted base commit
-        if: ${{ github.event_name != 'merge_group' }}
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
@@ -63,21 +70,21 @@ jobs:
           echo "number=$number" >>"$GITHUB_OUTPUT"
           echo "base_sha=$base_sha" >>"$GITHUB_OUTPUT"
       - name: Check out the trusted base commit
-        if: ${{ github.event_name != 'merge_group' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ steps.pr.outputs.base_sha }}
-      - name: Require a clean Copilot review or a maintainer approval of the exact head
-        if: ${{ github.event_name != 'merge_group' }}
+      - name: Publish the exact-head review decision
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
           if [[ -f scripts/review_gate.py ]]; then
-            python3 scripts/review_gate.py check \
+            python3 scripts/review_gate.py publish \
               --repo "$GITHUB_REPOSITORY" \
-              --pr "$PR_NUMBER"
+              --pr "$PR_NUMBER" \
+              --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+              --run-id "$GITHUB_RUN_ID"
           else
             echo "::notice::The review gate starts after the rollout PR reaches its base branch."
           fi

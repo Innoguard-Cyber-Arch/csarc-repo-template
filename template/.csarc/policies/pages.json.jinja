@@ -1,7 +1,4 @@
 {
-  "enabled": {{ 'true' if documentation_mode == 'template-and-content' else 'false' }},
-  "source": {
-    "branch": "main",
-    "path": "/docs"
-  }
+  "enabled": {{ 'true' if verification_mode == 'hosted' and documentation_mode == 'template-and-content' else 'false' }},
+  "build_type": "workflow"
 }

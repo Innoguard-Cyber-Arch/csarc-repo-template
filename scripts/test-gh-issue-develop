@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gh-issue-develop"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+
+stub_bin="$fixture_root/bin"
+mkdir -p "$stub_bin"
+call_log="$fixture_root/calls.log"
+rename_state="$fixture_root/renamed"
+current_branch_file="$fixture_root/current-branch"
+test_sha="0123456789abcdef0123456789abcdef01234567"
+
+cat >"$stub_bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'gh' >>"$CALL_LOG"
+printf '\t%s' "$@" >>"$CALL_LOG"
+printf '\n' >>"$CALL_LOG"
+
+if [[ "$1 $2" == "repo view" ]]; then
+  if [[ "${3:-}" == --* ]]; then
+    printf '%s\n' "${CURRENT_REPO:-owner/repo}"
+  else
+    printf '%s\n' "${SELECTED_REPO:-${CURRENT_REPO:-owner/repo}}"
+  fi
+elif [[ "$1 $2" == "pr list" ]]; then
+  printf '%s\n' "${OPEN_PR_COUNT:-0}"
+elif [[ "$1" == "api" ]]; then
+  touch "$RENAME_STATE"
+  printf '{"name":"%s","commit":{"sha":"%s"}}\n' \
+    "$EXPECTED_NEW" "$TEST_SHA"
+fi
+EOF
+
+cat >"$stub_bin/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'git' >>"$CALL_LOG"
+printf '\t%s' "$@" >>"$CALL_LOG"
+printf '\n' >>"$CALL_LOG"
+
+case "$1" in
+  check-ref-format)
+    [[ "$3" != -* && "$3" != *" "* ]]
+    ;;
+  symbolic-ref)
+    cat "$CURRENT_BRANCH_FILE"
+    ;;
+  fetch)
+    exit 0
+    ;;
+  rev-parse)
+    case "$2" in
+      "refs/heads/$EXPECTED_OLD"|"refs/remotes/origin/$EXPECTED_OLD")
+        if [[ -e "$RENAME_STATE" && "$2" == refs/remotes/* ]]; then
+          exit 1
+        fi
+        if [[ "$2" == refs/remotes/* ]]; then
+          printf '%s\n' "${REMOTE_SHA_OVERRIDE:-$TEST_SHA}"
+        else
+          printf '%s\n' "${LOCAL_SHA_OVERRIDE:-$TEST_SHA}"
+        fi
+        ;;
+      "refs/heads/$EXPECTED_NEW"|"refs/remotes/origin/$EXPECTED_NEW")
+        [[ -e "$RENAME_STATE" ]]
+        printf '%s\n' "$TEST_SHA"
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+    ;;
+  show-ref)
+    if [[ "$4" == "refs/heads/$EXPECTED_NEW" ]]; then
+      [[ "${TARGET_LOCAL_EXISTS:-0}" == 1 ]]
+    elif [[ "$4" == "refs/remotes/origin/$EXPECTED_OLD" ]]; then
+      [[ ! -e "$RENAME_STATE" ]]
+    else
+      exit 1
+    fi
+    ;;
+  ls-remote)
+    if [[ "${TARGET_REMOTE_EXISTS:-0}" == 1 ]]; then
+      printf '%s\trefs/heads/%s\n' "$TEST_SHA" "$EXPECTED_NEW"
+      exit 0
+    fi
+    exit 2
+    ;;
+  branch)
+    if [[ "$2" == "-m" ]]; then
+      printf '%s\n' "$3" >"$CURRENT_BRANCH_FILE"
+    fi
+    ;;
+  update-ref)
+    exit 0
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+EOF
+chmod +x "$stub_bin/gh" "$stub_bin/git"
+
+export CALL_LOG="$call_log"
+export RENAME_STATE="$rename_state"
+export CURRENT_BRANCH_FILE="$current_branch_file"
+export TEST_SHA="$test_sha"
+export EXPECTED_OLD="task/925-stable-release-materialization"
+export EXPECTED_NEW="feat/925-stable-release-materialization"
+export GH_BINARY="$stub_bin/gh"
+export GIT_BINARY="$stub_bin/git"
+
+reset_fixture() {
+  : >"$call_log"
+  rm -f "$rename_state"
+  printf '%s\n' "$EXPECTED_OLD" >"$current_branch_file"
+  unset OPEN_PR_COUNT TARGET_LOCAL_EXISTS TARGET_REMOTE_EXISTS \
+    LOCAL_SHA_OVERRIDE REMOTE_SHA_OVERRIDE CURRENT_REPO SELECTED_REPO
+}
+
+expect_failure() {
+  local expected="$1"
+  shift
+  set +e
+  output="$($script_path "$@" 2>&1)"
+  command_exit=$?
+  set -e
+  [[ "$command_exit" -ne 0 ]]
+  grep -Fq -- "$expected" <<<"$output"
+}
+
+reset_fixture
+expect_failure "must match type/<issue-number>-short-slug" \
+  925 --base main --name task/925-stable-release-materialization
+[[ ! -s "$call_log" ]]
+
+reset_fixture
+expect_failure "belongs to Issue #924, not #925" \
+  925 --base main --name feat/924-stable-release-materialization
+[[ ! -s "$call_log" ]]
+
+reset_fixture
+"$script_path" 925 --base main --name "$EXPECTED_NEW" --repo owner/repo >/dev/null
+grep -Fq $'gh\tissue\tdevelop\t925\t--base\tmain\t--name\tfeat/925-stable-release-materialization\t--repo\towner/repo' "$call_log"
+
+reset_fixture
+"$script_path" 925 --repair-from "$EXPECTED_OLD" --name "$EXPECTED_NEW" \
+  --repo owner/repo >/dev/null
+[[ -e "$rename_state" ]]
+[[ "$(<"$current_branch_file")" == "$EXPECTED_NEW" ]]
+grep -Fq $'gh\tapi\t--method\tPOST\trepos/owner/repo/branches/task%2F925-stable-release-materialization/rename\t-f\tnew_name=feat/925-stable-release-materialization' "$call_log"
+grep -Fq $'git\tbranch\t-m\tfeat/925-stable-release-materialization' "$call_log"
+
+reset_fixture
+export OPEN_PR_COUNT=1
+expect_failure "GitHub closes an open PR when its head branch is renamed" \
+  925 --repair-from "$EXPECTED_OLD" --name "$EXPECTED_NEW" --repo owner/repo
+[[ ! -e "$rename_state" ]]
+
+reset_fixture
+export TARGET_REMOTE_EXISTS=1
+expect_failure "remote target branch '$EXPECTED_NEW' already exists" \
+  925 --repair-from "$EXPECTED_OLD" --name "$EXPECTED_NEW" --repo owner/repo
+[[ ! -e "$rename_state" ]]
+
+reset_fixture
+export REMOTE_SHA_OVERRIDE="fedcba9876543210fedcba9876543210fedcba98"
+expect_failure "do not point at the same exact head" \
+  925 --repair-from "$EXPECTED_OLD" --name "$EXPECTED_NEW" --repo owner/repo
+[[ ! -e "$rename_state" ]]
+
+reset_fixture
+export SELECTED_REPO="other/repo"
+expect_failure "limited to the current same-repository checkout" \
+  925 --repair-from "$EXPECTED_OLD" --name "$EXPECTED_NEW" --repo other/repo
+[[ ! -e "$rename_state" ]]
+
+reset_fixture
+expect_failure "--branch-repo is not valid with --repair-from" \
+  925 --repair-from "$EXPECTED_OLD" --name "$EXPECTED_NEW" \
+  --branch-repo fork/repo
+[[ ! -e "$rename_state" ]]
+
+echo "gh-issue-develop self-test passed."

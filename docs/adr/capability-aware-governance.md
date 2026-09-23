@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-25
-- **來源 Issues：**[#18](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/18), [#28](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/28), [#62](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/62), [#65](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/65), [#87](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/146), [#163](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/163), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301), [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576), [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580), [#607](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/607), [#719](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/719), [#531](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/531), [#325](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/325), [#746](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/746), [#775](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/775), [#826](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/826), [#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918)
+- **來源 Issues：**[#18](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/18), [#28](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/28), [#62](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/62), [#65](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/65), [#87](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/146), [#163](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/163), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301), [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576), [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580), [#607](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/607), [#719](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/719), [#531](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/531), [#325](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/325), [#746](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/746), [#775](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/775), [#826](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/826), [#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918), [#932](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/932)
 - **實作 PRs：**[#25](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/25), [#59](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/59), [#63](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/63), [#66](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/66), [#90](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/90), [#128](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/128), [#154](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/154), [#165](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/165), [#306](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/306), [#579](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/579), [#663](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/663)
 
 ## 問題與限制
@@ -23,6 +23,11 @@ standalone stable 宣告改變，不能自動開啟或關閉 bypass。這項決�
 Free private repository 無法強制 Ruleset 或 team review 時，仍執行 repository-local checks、保留 desired policy 並輪派一位個別 reviewer，但標示 `DEGRADED`，不能宣稱有平台 merge gate。Portable baseline 不要求 PAT、GitHub App 或 organization policy 變更。
 
 Projects 預設關閉；工作階層使用 GitHub 原生 Issue Type、subissue、dependency、Milestone 與 Development link。Issue Type 不可用時才退回 labels，並明示 degraded；不得用自訂 Project 欄位製造第二套狀態來源。
+
+工作 branch 由 repo-local `gh-issue-develop` 在建立遠端 ref 前驗證 canonical 名稱與
+Issue 編號；錯名 ref 只在同 repository、local／remote exact head 一致、目標名稱不存在
+且尚無 open PR 時才能由同一入口修復。PR policy 維持唯讀，因為 GitHub 重新命名 open
+PR 的 head branch 會關閉該 PR；不得用 workflow branch writer 偽裝成透明修復（#932）。
 
 Hosted runner 同樣視為可觀測的平台能力：可用時收集 telemetry，受限或未知時保留誠實狀態與適用的本機驗證。不要求管理員調整帳單、升級方案或維護額外 runner 才能完成 portable 交付。
 
@@ -301,6 +306,23 @@ workflow path 與事件。PR 新增或修改的 `pull_request` workflow 即使�
 這項決定保留 #745 的 required context 集合與 no-bypass 原則、#826 的 Alpha delivery
 sync self-review 路線，以及 #829 的唯讀 gate／trusted writer 分離；驗證證據本身的
 不可偽造性仍由 #834 負責，不在本決定中以名稱或 App 綁定取代。
+
+## 2026-09-23 將預期治理狀態與自動化故障分開（#933）
+
+維護者確認，自動化不應為了「fail closed」而把所有尚未完成或已成功處理的狀態都回報
+為 failure。狀態契約改為三類：尚待審核或重新核可用 pending；已滿足條件或已成功發布
+決定／告警用 success；確定的政策違規、負面審核或執行／寫入錯誤才用 failure。
+
+`pr-review.yml` 因而由可信 base workflow 的 publisher 建立 `review` check-run，而不再
+直接拿 publisher job 的 conclusion 當審核結論。check-run 以 exact head、Actions run URL
+與 `csarc-review:<run-id>:<head-sha>` external ID 綁定來源；`pr_lifecycle.py` 仍驗證 GitHub
+Actions App、repository、workflow path、event 與 exact head。pending check 不滿足 Ruleset，
+所以等待狀態沒有紅燈，也不會被誤當成可合併。
+
+同一原則套用到 trusted PR-policy writer 與 release drift：approval 尚待核可時發布 pending，
+writer 成功送出決定後自身成功；release drift 成功建立或更新追蹤 Issue 後自身成功。GitHub
+API 或寫入失敗仍失敗。真實的 title／branch route／Issue binding 違規仍由 `title` 失敗，
+zero-step Actions quota 也維持 #325 的明示例外，不能用合成成功掩蓋未執行的 required check。
 
 ## 重新評估條件
 

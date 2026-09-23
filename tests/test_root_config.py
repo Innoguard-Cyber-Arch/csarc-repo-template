@@ -39,7 +39,7 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["project_maturity"] == "early"
     assert config["copilot_review"] == "allowed"
     assert config["release_ownership"] == "csarc-owned"
-    assert config["release_trigger"] == "main"
+    assert config["release_trigger"] == "manual"
     assert config["documentation_mode"] == "template-and-content"
     assert config["primary_language"] == "zh-tw"
     assert config["i18n"] == "en-zh-tw"
@@ -72,10 +72,7 @@ def test_root_public_identity_claims_are_consistent() -> None:
         "public repository's GitHub Issues"
         in config["security_reporting_channel"]
     )
-    assert pages == {
-        "enabled": True,
-        "source": {"branch": "main", "path": "/docs"},
-    }
+    assert pages == {"enabled": True, "build_type": "workflow"}
 
     for text in readmes + site_sources:
         assert "issues/79" in text

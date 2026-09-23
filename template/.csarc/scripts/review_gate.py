@@ -8,18 +8,19 @@ to its existing route. The Ruleset keeps native approval count at zero and
 makes this ``review`` check required for every pull request.
 
 Copilot never submits ``APPROVED``; a clean review is a ``COMMENTED``
-review whose body states that it generated no comments. The gate fails
-closed on anything else: a review of an older head, a review still being
-prepared, inline comments, findings Copilot moved into the body as
-suppressed low-confidence comments, or wording this module does not
+review whose body states that it generated no comments. The gate remains
+pending while the current head has not been reviewed, and fails closed on
+conclusive problems: inline comments, findings Copilot moved into the body
+as suppressed low-confidence comments, or wording this module does not
 recognize. Unresolved review threads are enforced natively by the
 Ruleset's ``required_review_thread_resolution``; ``status`` still lists
 them so the local agent loop knows what is left to answer.
 
 Commands:
 
-* ``check``: the hosted ``review`` required check; exits non-zero with the
-  reason when the head has not earned review.
+* ``check``: a local fail-closed evaluation of the ``review`` decision.
+* ``publish``: the hosted publisher for the required check. Waiting states
+  stay in progress, while conclusive decisions complete as success or failure.
 * ``status``: JSON for the local fix loop -- the Copilot findings on the
   current head and the unresolved threads to answer before merging.
 """
@@ -232,6 +233,7 @@ def evaluate(  # noqa: C901
         "release_level": level_decision.level,
         "required_review": level_decision.review,
         "head_sha": head_sha,
+        "state": "pending",
         "passed": False,
         "source": None,
         "reason": "",
@@ -246,6 +248,7 @@ def evaluate(  # noqa: C901
     )
     if approval is not None:
         result.update(
+            state="success",
             passed=True,
             source="maintainer",
             reason="An independent maintainer approved the exact head: "
@@ -268,11 +271,14 @@ def evaluate(  # noqa: C901
             "review_url": (verdict.review or {}).get("html_url"),
             "findings": verdict.findings,
         }
+        if verdict.state in {"changes", "unrecognized"}:
+            result["state"] = "failure"
         allowed, cap_reason = level_allows_copilot(
             max_level, level_decision.level
         )
         if allowed and verdict.state == "clean":
             result.update(
+                state="success",
                 passed=True,
                 source="copilot",
                 reason="Copilot reviewed the exact head and found no issues: "
@@ -297,9 +303,11 @@ def evaluate(  # noqa: C901
                         github, repo, pull, authorization
                     )
                 except RuntimeError as error:
+                    result["state"] = "failure"
                     result["reason"] = str(error)
                 else:
                     result.update(
+                        state="success",
                         passed=True,
                         source="hotfix-emergency",
                         reason=(
@@ -322,6 +330,7 @@ def evaluate(  # noqa: C901
     )
     if bypass_authorization is not None:
         result.update(
+            state="success",
             passed=True,
             source="admin-bypass",
             reason="Admin bypass exact-head authorization: "
@@ -339,6 +348,8 @@ def evaluate(  # noqa: C901
             "configured audited admin-bypass path when it applies."
             + (f" {bypass_reason}" if bypass_reason else "")
         )
+    if bypass_reason.startswith("Admin bypass does not apply here:"):
+        result["state"] = "failure"
     return result
 
 
@@ -471,12 +482,81 @@ def parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     result = argparse.ArgumentParser(description=__doc__)
     commands = result.add_subparsers(dest="command", required=True)
-    for name in ("check", "status"):
+    for name in ("check", "status", "publish"):
         command = commands.add_parser(name)
         command.add_argument("--repo", required=True)
         command.add_argument("--pr", type=int, required=True)
         command.add_argument("--config", type=Path)
+        if name == "publish":
+            command.add_argument("--details-url", required=True)
+            command.add_argument("--run-id", type=int, required=True)
     return result
+
+
+def publish_check(
+    repo: str,
+    decision: dict[str, Any],
+    details_url: str,
+    run_id: int,
+) -> None:
+    """Publish one three-state review check from the trusted workflow."""
+    lifecycle = importlib.import_module(
+        "pr_lifecycle"
+        if __package__ in {None, ""}
+        else f"{__package__}.pr_lifecycle"
+    )
+    state = decision.get("state")
+    head_sha = decision.get("head_sha")
+    run_url = lifecycle.actions_run_url(details_url, repo)
+    if (
+        state not in {"pending", "success", "failure"}
+        or not isinstance(head_sha, str)
+        or re.fullmatch(r"[0-9a-f]{40}", head_sha) is None
+        or run_id < 1
+        or run_url != details_url.rstrip("/")
+        or not run_url.endswith(f"/{run_id}")
+    ):
+        raise RuntimeError("Review check publication identity is invalid")
+    payload: dict[str, Any] = {
+        "name": "review",
+        "head_sha": head_sha,
+        "status": "queued" if state == "pending" else "completed",
+        "details_url": run_url,
+        "external_id": f"csarc-review:{run_id}:{head_sha}",
+        "output": {
+            "title": "Review pending"
+            if state == "pending"
+            else "Review decision",
+            "summary": str(
+                decision.get("reason") or "Review decision unavailable"
+            ),
+        },
+    }
+    if state != "pending":
+        payload["conclusion"] = state
+    response = json.loads(
+        lifecycle.run(
+            [
+                "gh",
+                "api",
+                "--method",
+                "POST",
+                f"repos/{repo}/check-runs",
+                "--input",
+                "-",
+            ],
+            input_text=json.dumps(payload),
+        )
+    )
+    if (
+        not isinstance(response, dict)
+        or response.get("name") != "review"
+        or response.get("head_sha") != head_sha
+        or response.get("status") != payload["status"]
+        or response.get("external_id") != payload["external_id"]
+        or response.get("conclusion") != payload.get("conclusion")
+    ):
+        raise RuntimeError("GitHub returned an invalid review check")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -495,6 +575,12 @@ def main(argv: list[str] | None = None) -> int:
                 args.repo, args.pr
             )
             sys.stdout.write(json.dumps(decision, indent=2) + "\n")
+            return 0
+        if args.command == "publish":
+            publish_check(args.repo, decision, args.details_url, args.run_id)
+            sys.stdout.write(
+                f"Published review {decision['state']}: {decision['reason']}\n"
+            )
             return 0
     except (RuntimeError, ValueError, KeyError) as error:
         sys.stderr.write(f"review gate failed closed: {error}\n")

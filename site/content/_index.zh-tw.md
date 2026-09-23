@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.24.1-beta.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.24.2</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.24.1-beta.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.24.2<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -719,7 +719,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 - 原本可以套用、但目前設定不一致的項目會停止，修正後才能繼續。
 
 {{< disclosure key="governance-live-status" title="這個 repo 本身現在的真實狀態（查詢日期：2026-09-07）" >}}
-`Innoguard-Cyber-Arch` API 回報這個 repository 是 Free 方案、**public** 可見度。GitHub 上已有一個 `enforcement: active` 的 Ruleset「CSARC protected branches」（建立於 2026-09-03），套用在 `main` 與 `dev/m*`：`title`／`verify`／`review` 三項狀態檢查必須通過，review check 依 `admin_bypass` 與可用的 Copilot 證據判定，且不允許 force-push。此 repo 明確使用 `verification_mode: hosted`、`actions_fallback: admin` 與 `admin_bypass: always`；admin bypass 只替代同行核准，`actions_fallback` 則只處理已證明的 zero-step billing block，兩者都不會略過其他必要證據。
+`Innoguard-Cyber-Arch` API 回報這個 repository 是 Free 方案、**public** 可見度。GitHub 上已有一個 `enforcement: active` 的 Ruleset「CSARC protected branches」（建立於 2026-09-03），套用在 `main` 與 `dev/m*`：`title`／`verify`／`review` 三項狀態檢查必須通過，review check 依 `admin_bypass` 與可用的 Copilot 證據判定，且不允許 force-push。此 repo 明確使用 `verification_mode: hosted`、`release_trigger: manual`、`actions_fallback: admin` 與 `admin_bypass: always`；admin bypass 只替代同行核准，`actions_fallback` 則只處理已證明的 zero-step billing block，兩者都不會略過其他必要證據。
 
 這對應下表「Free＋public，或 Pro 個人＋private」那一列，不是下面「Free／Team／Enterprise 各方案完整能力」卡片裡 Free 方案描述的 **private** 降級情境（那張卡片說明的是 Free＋*private* 時，REST／GraphQL 建立 Ruleset 的 API 會拒絕、只能保留期望狀態並標示 `DEGRADED`）；這個 repo 選擇公開，因此適用的是可以直接套用並驗證的那條路徑。方案或可見度之後若改變，重跑 `plan`／`apply`／`check` 就會反映最新狀態——這裡記錄的是查詢當下的事實，不是永久保證，也不代表每個使用這套公版的 repo 都跟這裡一樣。
 {{< /disclosure >}}
@@ -736,7 +736,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 
 {{< disclosure key="governance-plan-tiers" title="Free／Team／Enterprise 各方案完整能力" >}}
 <div class="plan-grid">
-  <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查意圖，強制能力可能降級：</strong>workflow 從 live repository collaborators 中挑選非作者的 <code>maintain</code>／<code>admin</code>；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，check 標示 DEGRADED。</p><ul><li>Copilot entitlement 不從 Free 方案名稱猜測，無法證明時回到 human 規則</li><li>沒有 merge gate 時，審查紀錄不能冒充平台強制門禁</li></ul></article>
+  <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查意圖，強制能力可能降級：</strong>hosted 模式的 workflow 從 live repository collaborators 中挑選非作者的 <code>maintain</code>／<code>admin</code>；local 模式改由本機流程處理。private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，check 標示 DEGRADED。</p><ul><li>Copilot entitlement 不從 Free 方案名稱猜測，無法證明時回到 human 規則</li><li>沒有 merge gate 時，審查紀錄不能冒充平台強制門禁</li></ul></article>
   <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches 與必要檢查；同行核准或設定式 admin bypass 仍由 review check 判定。</p><ul><li>若設定 CODEOWNER team，該 team 必須存在並有 repo write access</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
   <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
 </div>
@@ -746,10 +746,10 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 層級 | `.csarc/config.yml` key | 預設／允許值 | 產生或驗證位置 |
 | --- | --- | --- | --- |
 | 治理意圖 | `governance_mode`、`lifecycle`、`actions_fallback` | `managed`／`observe`；`issues`／`milestones`；fallback 預設 `off`、可選 `admin` | repository policy、工作項目 side effects 與經證明的 zero-step billing fallback |
-| 驗證信任 | `verification_mode` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted validation／release workflow；或 trusted GitHub-hosted checks |
+| 驗證信任 | `verification_mode` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted CI、PR 治理、Pages／release workflow；或 trusted GitHub-hosted checks |
 | 審查意圖 | `admin_bypass`、`copilot_review` | admin bypass 預設 `off`、可選 `beta-only`／`always`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到同行核准或設定允許的管理員授權 |
 | 發版意圖 | `release_ownership`、`release_trigger`、`project_maturity` | ownership 三選一；trigger 為 `main`／`manual`；成熟度預設 early | 公開 beta／stable 通道、固定 Conventional Commits 演算法與發版候選觸發 |
-| 文件治理 | `documentation_mode` | `template-and-content`／`content-only`／`off` | 文件模板與 project-owned 內容分層，Pages 只隨完整模板啟用 |
+| 文件治理 | `documentation_mode` | `template-and-content`／`content-only`／`off` | 文件模板與 project-owned 內容分層；Pages 只在 hosted＋完整模板時啟用，且只因 `docs/**` 或手動觸發 |
 | 文件語言 | `primary_language`、`i18n` | `en`／`zh-tw`；雙語並行或 `off` | README 與文件入口；雙語時維護另一語言版 |
 | 授權 | `project_license`、`copyright_holder` | 預設 `proprietary`；也可選 `MIT`／`Apache-2.0` | `LICENSE`、README、套件 manifest 與 SBOM |
 | 選配產物 | `features` | 預設空白；目前可加入 `docker` | Docker starter 與 build scan 一起啟閉 |
