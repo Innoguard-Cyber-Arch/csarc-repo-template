@@ -20,6 +20,7 @@ paired_files=(
   "scripts/documentation_review.py|template/.csarc/scripts/documentation_review.py"
   "scripts/delivery_sync.py|template/.csarc/scripts/delivery_sync.py"
   "scripts/gh-issue-edit|template/.csarc/scripts/gh-issue-edit"
+  "scripts/gh-issue-develop|template/.csarc/scripts/gh-issue-develop"
   "scripts/local_verification.py|template/.csarc/scripts/local_verification.py"
   "scripts/release_level.py|template/.csarc/scripts/release_level.py"
   "scripts/release_phase.py|template/.csarc/scripts/release_phase.py"
