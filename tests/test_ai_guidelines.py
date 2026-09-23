@@ -36,6 +36,8 @@ def test_generated_guidance_has_one_source_and_real_commands(
         "package_name": "guidance_fixture",
         "project_name": "Guidance fixture",
         "verification_mode": "hosted",
+        "documentation_mode": "template-and-content",
+        "i18n": "en-zh-tw",
     }
     entry = environment.from_string(TEMPLATE.read_text(encoding="utf-8"))
     workflow = environment.from_string(
@@ -94,8 +96,8 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
         encoding="utf-8"
     )
 
-    # Issue #681: template/README.md.jinja's destination name now depends on
-    # the readme_primary_language answer, so its source filename is a Jinja
+    # The template README's destination name depends on primary_language, so
+    # its source filename is a Jinja
     # expression too (e.g. "{% if ... == 'zh-tw' %}README{% else %}...").
     # "zh-tw" always appears somewhere in that expression for the zh-tw
     # content file, and never in the English one, so it is a reliable glob.
@@ -106,7 +108,10 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     )
     readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
     assert "一般情況下不能自行合併" not in readme
-    assert ".csarc/docs/ci-policy.md#審查與合併資格" in readme
+    assert "AGENTS.md" in readme
+    assert ".csarc/docs/ci-policy.md#審查與合併資格" in (
+        WORKFLOW_TEMPLATE.read_text(encoding="utf-8")
+    )
 
 
 def test_security_scanner_policy_and_guidance_are_shared() -> None:

@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issues：**[Issue #177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)、[Issue #178](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178)
+- **來源 Issues：**[Issue #177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)、[Issue #178](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178)、[Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919)
 - **實作 PRs：**[#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)、[#187](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/187)
 
 ## 問題與限制
@@ -191,6 +191,18 @@ Issue #681 使用者要求：Standard／Ops 分層、雙語鉤稽、簡報式構
 跨檔案錨點更新：`docs/agent-install.md`、`docs/ci-policy.md`、`docs/adr/capability-aware-governance.md` 原本指向 `docs/index.html#advanced-install` 的說明文字與連結，改指向 `docs/index.html#install`（deck.js 依 slide key 做 hash 路由，`install` 才是現在唯一存在的 slide key）。`tests/test_advanced_install_content.py` 的 `test_navigation_declares_the_advanced_install_entry` 改寫為 `test_advanced_install_has_no_separate_navigation_entry`，斷言 `navigation.json` 不再有 `advanced-install` 條目；同檔的能力 id 對齊測試（`test_every_matrix_capability_id_is_mentioned_in_both_language_slides`）不變，因為 capability id 仍以行內程式碼形式出現在合併後的內容裡。
 
 **驗證**：`check-repo-site-translations`（83 個 keyed blocks，數量不變——移除 1 個 slide key、新增 1 個 disclosure key，`advanced-install-results`／`advanced-install-workarounds` 兩個既有 disclosure key 原樣保留）、`check-repo-site-navigation`、`pytest -m "not large"`、`ruff`、`ty`、`sync-paired-files.sh --check`、`build-repo-site --check` 全數通過；桌面 1600×900、雙語、Standard／Ops 雙模式精確稽核零溢出（總頁數由 27 降為 26）。
+
+## 2026-09-23 文件生命週期、i18n 與授權（Issue #919）
+
+Issue #919 把 Issue #900 的單一 `repo-site` feature 拆成明確的兩層契約：公版擁有 renderer、layout、theme、navigation schema、i18n UI、輸出與遷移；consuming project 擁有功能、範例、API／CLI／設定、架構與維運內容。`documentation_mode` 取代 `features: repo-site` 作為唯一控制面：`template-and-content` 管理兩層、`content-only` 只整理並保留 project-owned 內容、`off` 完全不管理文件。舊設定只在 update 時映射一次，不長期保留第二個開關。
+
+共同資訊架構只定義五種讀者任務：開始使用、日常使用、精確參考、理解與維運、專案生命週期。這些是內容角色，不是固定目錄；一個檔案可以涵蓋多個角色，沒有內容時不建立空頁。README 改成主流套件常見的短入口，不再複製完整治理或架構文件，也不要求與深度文件逐字對稱；只要求公開事實、命令、連結、支援狀態與授權不矛盾。
+
+語言由 `primary_language: en|zh-tw` 與 `i18n: off|en-zh-tw` 共同決定。雙語時 `README.md` 使用主要語言並維護另一份 `README.<lang>.md`；完整模板模式也保留雙語呈現入口。授權是同一層核心設定：`project_license` 未宣告時採 `proprietary`，以 `LICENSE` 的 all-rights-reserved 文字及各套件生態的封閉授權慣例同步，不能從帳號或 CODEOWNERS 推定 holder。開源選項限定為模板能內建完整法律文本並可驗證的 `MIT` 與 `Apache-2.0`；不接受任意 SPDX expression，避免產生無對應 `LICENSE` 或錯誤多重授權的宣告。
+
+每個非 Draft 候選由本機 AI 比對 changed paths、specs、公開介面、設定、測試與文件，記錄 `aligned`、`not-applicable`、`drift` 或 `inconclusive` 並綁定 exact head；後兩者阻擋交付，`not-applicable` 必須說明理由。GitHub 只在既有 PR policy job 做確定性的欄位與 SHA 檢查，不新增 hosted AI job、workflow 或第二套測試矩陣；新的 push 會使舊紀錄失效。完整細節由 `docs/documentation-policy.md` 維護。
+
+此決定保留 portable、離線、project-owned 內容不覆寫與可重建輸出的既有契約；取代 Issue #526 要求 README 與首頁內容逐字對齊，以及 Issue #900 以 `features: repo-site` 作為文件能力開關的部分。
 
 ## 互動決策收納
 

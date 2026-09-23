@@ -14,7 +14,7 @@ README、agent instructions、深入決策與簡報若各自重述同一件事�
 
 ## Outcome
 
-一般使用者、維護者與 agent 各有清楚入口；canonical Markdown 與網站來源可重建一份 self-contained `docs/index.html`，即使沒有 Pages、CDN 或外部服務也能閱讀與交付。
+一般使用者、維護者與 agent 各有清楚入口；專案可選擇完整文件模板、只管理內容或完全關閉。啟用完整模板時，canonical Markdown 與網站來源可重建一份 self-contained `docs/index.html`，即使沒有 Pages、CDN 或外部服務也能閱讀與交付。
 
 ## Context
 
@@ -29,6 +29,10 @@ README、agent instructions、深入決策與簡報若各自重述同一件事�
 - [x] `noindex`／`robots.txt` 只標示資料邊界，不被描述成 access control。
 - [x] 聊天只在使用者確認後摘要進 work item／decision record；不保存完整逐字稿、敏感資訊或模型 chain-of-thought。
 - [x] Hugo 已由 Issue #524（Milestone 13）正式 cutover 為本機 Python 渲染引擎；i18n（雙語）與 `llms.txt`（AI-readable output）已隨同一批改動落地，不再是候選狀態。
+- [x] `documentation_mode` 是文件能力的唯一控制面；舊 `features: repo-site` 更新時遷移，不形成平行開關。
+- [x] `primary_language` 與 `i18n` 控制主要入口與英文／繁體中文 README，且不要求 README 與深度文件逐字一致。
+- [x] 本機 AI review 以四態結果綁定 exact PR head，`drift`／`inconclusive` 阻擋交付，不新增 hosted AI job。
+- [x] `project_license` 預設 proprietary，並同步 `LICENSE`、README、manifest、package 與 SPDX SBOM 語意。
 
 ## Plan
 
@@ -53,3 +57,5 @@ README、agent instructions、深入決策與簡報若各自重述同一件事�
 - [Issue #178](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178)／[PR #187](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/187)
 - Planned work: [#194](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/194), [#205–#209](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/205)
 - [Portable repo-site architecture ADR](../adr/portable-repo-site.md)
+- [Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919)
+- [Documentation lifecycle and licensing policy](../documentation-policy.md)

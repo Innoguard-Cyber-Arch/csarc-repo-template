@@ -1,0 +1,48 @@
+# {{ project_name }}
+
+{% if i18n == 'en-zh-tw' %}[English]({{ 'README.md' if primary_language == 'en' else 'README.en.md' }})
+
+{% endif %}<!-- csarc-project-description:start -->
+{{ project_description }}
+<!-- csarc-project-description:end -->
+
+## 特色
+
+- 用一套可更新的基線管理開發、驗證與發版流程。
+- 專案內容由團隊維護，公版只管理已宣告的文件結構與呈現。
+- 本機與 hosted 驗證共用相同的風險分級入口。
+
+## 安裝
+
+```bash
+git clone {{ repository_url }}
+cd {{ project_slug }}
+```
+
+{% if languages %}需要的開發工具：{{ languages | join('、') }}。{% else %}此專案只使用共通 CI/CD 基線，沒有語言模組。{% endif %}
+
+## 快速開始
+
+<!-- csarc-project-run-command:start -->
+```bash
+{{ project_run_command }}
+```
+<!-- csarc-project-run-command:end -->
+
+## 文件
+
+{% if documentation_mode == 'template-and-content' %}- [專案文件](docs/{{ 'index.html' if primary_language == 'zh-tw' else 'index.zh-tw.html' }})
+{% else %}- [文件導覽](docs/README.md)
+{% endif %}- [變更紀錄](CHANGELOG.md)
+- [安全性回報](.github/SECURITY.md)
+- [貢獻與 AI 工作規範](AGENTS.md)
+
+README 是文件的簡要入口；功能、設定、介面與維運細節以 `docs/` 中的專案文件為準。
+
+## 相容性
+
+{% if languages %}支援已在 `.csarc/config.yml` 宣告並由驗證流程涵蓋的 {{ languages | join('、') }} 環境。{% else %}支援範圍以 `.csarc/config.yml` 與驗證流程為準。{% endif %}
+
+## 授權
+
+{% if project_license == 'proprietary' %}專有軟體，詳見 [LICENSE](LICENSE)。保留所有權利；未取得 {{ copyright_holder }} 明確授權，不得使用、複製、修改或散布。{% else %}採用 [{{ project_license }}](LICENSE) 授權。{% endif %}

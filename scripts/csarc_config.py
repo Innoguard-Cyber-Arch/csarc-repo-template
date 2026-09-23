@@ -8,7 +8,11 @@ from pathlib import Path
 
 CONFIG_FILE = Path(".csarc/config.yml")
 LANGUAGES = {"python", "rust", "typescript"}
-FEATURES = {"docker", "repo-site"}
+FEATURES = {"docker"}
+DOCUMENTATION_MODES = {"template-and-content", "content-only", "off"}
+PRIMARY_LANGUAGES = {"en", "zh-tw"}
+I18N_MODES = {"en-zh-tw", "off"}
+PROJECT_LICENSES = {"Apache-2.0", "MIT", "proprietary"}
 GOVERNANCE_MODES = {"managed", "observe"}
 LIFECYCLE_CAPABILITIES = {"issues", "milestones"}
 HUMAN_REVIEW_MODES = {"peer", "solo"}
@@ -147,16 +151,30 @@ def _legacy_default(  # noqa: C901
     if key == "release_trigger":
         return "main"
     if key == "features":
-        features = ["repo-site"]
-        if config.get("enable_docker") is True:
-            features.append("docker")
-        return features
+        return ["docker"] if config.get("enable_docker") is True else []
+    if key == "documentation_mode":
+        features = config.get("features")
+        if isinstance(features, list) and "repo-site" not in features:
+            return "content-only"
+        return "template-and-content"
+    if key == "primary_language":
+        return config.get("readme_primary_language", "zh-tw")
+    if key == "i18n":
+        return "en-zh-tw"
+    if key == "project_license":
+        return "proprietary"
     raise KeyError(key)
 
 
 def normalize_config(config: dict[str, object]) -> dict[str, object]:
     """Add the small public schema to legacy Copier answers in memory."""
     result = dict(config)
+    legacy_features = result.get("features")
+    if isinstance(legacy_features, list) and "repo-site" in legacy_features:
+        result.setdefault("documentation_mode", "template-and-content")
+        result["features"] = [
+            feature for feature in legacy_features if feature != "repo-site"
+        ]
     for key in (
         "governance_mode",
         "lifecycle",
@@ -167,7 +185,11 @@ def normalize_config(config: dict[str, object]) -> dict[str, object]:
         "review",
         "copilot_review",
         "release_trigger",
+        "documentation_mode",
         "features",
+        "primary_language",
+        "i18n",
+        "project_license",
     ):
         if key not in result:
             result[key] = _legacy_default(result, key)
@@ -281,6 +303,7 @@ def validate_config(
         "copilot_review_max_level": COPILOT_REVIEW_MAX_LEVELS,
         "container_mode": {"none", "verify", "ghcr"},
         "coverage_mode": {"diff", "global"},
+        "documentation_mode": DOCUMENTATION_MODES,
         "default_release_level": {
             "alpha",
             "beta",
@@ -289,6 +312,9 @@ def validate_config(
             "stable",
         },
         "governance_mode": GOVERNANCE_MODES,
+        "i18n": I18N_MODES,
+        "primary_language": PRIMARY_LANGUAGES,
+        "project_license": PROJECT_LICENSES,
         "project_mode": {"existing", "new"},
         "project_visibility": {"internal", "private", "public"},
         "pr_review_mode": PR_REVIEW_MODES,
@@ -316,6 +342,14 @@ def validate_config(
     _list_setting(config, "languages", LANGUAGES, path)
     _list_setting(config, "features", FEATURES, path)
     _list_setting(config, "lifecycle", LIFECYCLE_CAPABILITIES, path)
+
+    holder = config.get("copyright_holder")
+    if holder is not None and (
+        not isinstance(holder, str) or not holder.strip()
+    ):
+        raise ValueError(
+            f"Invalid copyright_holder in {path}; expected a non-empty string"
+        )
 
     validate_release_config(config)
 

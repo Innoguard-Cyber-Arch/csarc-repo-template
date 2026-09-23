@@ -186,13 +186,15 @@ if $run_project_checks; then
 fi
 {% endif -%}
 
+{% if documentation_mode != 'off' -%}
 if [[ "$scopes" == *,docs,* ]]; then
   verification_step "Specification validation" \
     python3 .csarc/scripts/spec_to_issue.py validate
-{% if 'repo-site' in features -%}
+{% if documentation_mode == 'template-and-content' -%}
   verification_step "Repository site render" ./.csarc/scripts/build-repo-site --check
 {% endif -%}
 fi
+{% endif -%}
 
 {% if verification_mode == "local" -%}
 python3 .csarc/scripts/local_verification.py record \

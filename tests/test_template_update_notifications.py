@@ -157,10 +157,10 @@ def test_template_update_notification_is_opt_in(
     checker_path = project / ".csarc/scripts/check-template-update"
     assert workflow_path.exists() is enabled
     assert checker_path.exists() is enabled
-    assert (
-        "每週一或手動執行 template update workflow"
-        in (project / "README.md").read_text(encoding="utf-8")
-    ) is enabled
+    readme = (project / "README.md").read_text(encoding="utf-8")
+    policy = (project / ".csarc/docs/ci-policy.md").read_text(encoding="utf-8")
+    assert "每週一或手動執行 template update workflow" not in readme
+    assert "enable_template_update_notifications" in policy
 
     if not enabled:
         return

@@ -18,6 +18,7 @@ export PR_HEAD_REPOSITORY="acme/project"
 export PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 export PR_NUMBER="41"
 export PR_POLICY_FIXTURE=true
+export PR_DOCUMENTATION_REVIEW_CUTOVER_PR=999999
 # Issue #551: scripts/validate-pr-policy's non-blocking Milestone-safeguard
 # reminder calls `gh issue comment`; capture those calls here (append-mode,
 # cleared per case below) instead of the generic overwrite-based logging
@@ -183,6 +184,35 @@ product-owned|release/v1.2.3
 product-owned|$release_branch
 verification-only|release/v1.2.3
 CASES
+
+release_documentation_body=$'## 文件一致性\n\n- Status: aligned\n- Reviewed head: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`\n- Reason: Release documentation matches the exact candidate.'
+case_count=$((case_count + 1))
+if ! PR_DOCUMENTATION_REVIEW_REQUIRED="true" \
+  PR_DOCUMENTATION_REVIEW_CUTOVER_PR="1" \
+  PR_RELEASE_OWNERSHIP="product-owned" \
+  PR_TITLE="chore(release): publish product artifacts" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="release/v1.2.3" \
+  PR_BODY="$release_documentation_body" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy rejected an exact-head release documentation review."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_DOCUMENTATION_REVIEW_REQUIRED="true" \
+  PR_DOCUMENTATION_REVIEW_CUTOVER_PR="1" \
+  PR_RELEASE_OWNERSHIP="product-owned" \
+  PR_TITLE="chore(release): publish product artifacts" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="release/v1.2.3" \
+  PR_BODY="${release_documentation_body/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a stale release documentation review."
+  exit 1
+fi
 export GITHUB_REPOSITORY="acme/project"
 export PATH="$fixture:$PATH"
 
@@ -1162,5 +1192,38 @@ intent_output="$(
 )"
 grep -q 'Release intent: minor; exact version is allocated at the reviewed release boundary.' \
   <<<"$intent_output"
+
+documentation_body=$'Closes #42\n\n## 文件一致性\n\n- Status: aligned\n- Reviewed head: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`\n- Reason: Public behavior and documentation agree.'
+case_count=$((case_count + 1))
+if ! PR_DOCUMENTATION_REVIEW_REQUIRED="true" \
+  PR_DOCUMENTATION_REVIEW_CUTOVER_PR="1" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="$documentation_body" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add verified report workflow" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy rejected an aligned exact-head documentation review."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_DOCUMENTATION_REVIEW_REQUIRED="true" \
+  PR_DOCUMENTATION_REVIEW_CUTOVER_PR="1" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="${documentation_body/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add verified report workflow" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a documentation review for a stale head."
+  exit 1
+fi
 
 echo "PR policy regression cases passed: $case_count"

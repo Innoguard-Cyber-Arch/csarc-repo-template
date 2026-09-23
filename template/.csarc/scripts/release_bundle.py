@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import runpy
 import shutil
 import subprocess
 import sys
@@ -40,6 +41,78 @@ def digest(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             value.update(chunk)
     return value.hexdigest()
+
+
+def project_license_metadata(root: Path) -> tuple[str, str, str] | None:
+    """Return the explicit project package name, license, and copyright."""
+    config_path = root / ".csarc/config.yml"
+    if not config_path.is_file():
+        return None
+    config_script = root / "scripts/csarc_config.py"
+    if not config_script.is_file():
+        config_script = root / ".csarc/scripts/csarc_config.py"
+    load_config = runpy.run_path(str(config_script))["load_config"]
+    config = load_config(config_path)
+    declared = str(config["project_license"])
+    if declared == "proprietary":
+        declared = "LicenseRef-Proprietary"
+    return (
+        str(config["project_slug"]),
+        declared,
+        str(config["copyright_holder"]),
+    )
+
+
+def annotate_sbom(root: Path, sbom_path: Path, version: str) -> None:
+    """Bind the explicit project license to the SPDX release document."""
+    metadata = project_license_metadata(root)
+    if metadata is None:
+        return
+    name, declared, holder = metadata
+    sbom = json.loads(sbom_path.read_text(encoding="utf-8"))
+    package_id = "SPDXRef-CSARCProject"
+    packages = sbom.setdefault("packages", [])
+    if not isinstance(packages, list):
+        raise ValueError("release SBOM packages must be a list")
+    packages[:] = [
+        package for package in packages if package.get("SPDXID") != package_id
+    ]
+    packages.append(
+        {
+            "SPDXID": package_id,
+            "copyrightText": f"Copyright (c) {holder}",
+            "downloadLocation": "NOASSERTION",
+            "filesAnalyzed": False,
+            "licenseConcluded": declared,
+            "licenseDeclared": declared,
+            "name": name,
+            "versionInfo": version,
+        }
+    )
+    described = sbom.setdefault("documentDescribes", [])
+    if not isinstance(described, list):
+        raise ValueError("release SBOM documentDescribes must be a list")
+    if package_id not in described:
+        described.append(package_id)
+    if declared == "LicenseRef-Proprietary":
+        extracted = sbom.setdefault("hasExtractedLicensingInfos", [])
+        if not isinstance(extracted, list):
+            raise ValueError(
+                "release SBOM hasExtractedLicensingInfos must be a list"
+            )
+        extracted[:] = [
+            item for item in extracted if item.get("licenseId") != declared
+        ]
+        extracted.append(
+            {
+                "extractedText": (root / "LICENSE").read_text(encoding="utf-8"),
+                "licenseId": declared,
+                "name": "Proprietary",
+            }
+        )
+    sbom_path.write_text(
+        json.dumps(sbom, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def identity(root: Path, tag: str) -> tuple[str, str]:
@@ -122,6 +195,7 @@ def finalize(root: Path, output: Path, tag: str) -> None:
     sbom = output / "sbom.spdx.json"
     if not sbom.is_file():
         raise ValueError("sbom.spdx.json is missing")
+    annotate_sbom(root, sbom, version)
     files = sorted(path for path in output.iterdir() if path.is_file())
     evidence = {
         "schema_version": 1,
@@ -179,6 +253,19 @@ def verify(root: Path, output: Path, tag: str) -> None:
         or sbom.get("SPDXID") != "SPDXRef-DOCUMENT"
     ):
         raise ValueError("release SBOM is not an SPDX 2.3 document")
+    license_metadata = project_license_metadata(root)
+    if license_metadata is not None:
+        _, expected_license, _ = license_metadata
+        project_packages = [
+            package
+            for package in sbom.get("packages", [])
+            if package.get("SPDXID") == "SPDXRef-CSARCProject"
+        ]
+        if (
+            len(project_packages) != 1
+            or project_packages[0].get("licenseDeclared") != expected_license
+        ):
+            raise ValueError("release SBOM license does not match config")
     evidence = json.loads(
         (output / "release-evidence.json").read_text(encoding="utf-8")
     )

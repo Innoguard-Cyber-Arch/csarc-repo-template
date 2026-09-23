@@ -33,6 +33,9 @@ fit = "符合畫面"
 | 管理員略過審核 | `[[admin_bypass]]`；Copilot `[[copilot_review]]` |
 | 工作項目自動化 | `[[lifecycle]]` |
 | 發版觸發 | `[[release_trigger]]` |
+| 文件模式 | `[[documentation_mode]]` |
+| 文件語言 | `[[primary_language]]`；i18n `[[i18n]]` |
+| 授權 | `[[project_license]]` |
 | 選配功能 | `[[features]]` |
 | 可見度 | `[[project_visibility]]` |
 | 使用語言 | `[[languages]]` |

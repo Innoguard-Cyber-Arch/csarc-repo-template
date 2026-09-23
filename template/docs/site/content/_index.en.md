@@ -33,6 +33,9 @@ This repo's governance configuration lives in `.csarc/config.yml`, created and k
 | Admin review bypass | `[[admin_bypass]]`; Copilot `[[copilot_review]]` |
 | Work-item automation | `[[lifecycle]]` |
 | Release trigger | `[[release_trigger]]` |
+| Documentation mode | `[[documentation_mode]]` |
+| Documentation languages | `[[primary_language]]`; i18n `[[i18n]]` |
+| License | `[[project_license]]` |
 | Optional features | `[[features]]` |
 | Visibility | `[[project_visibility]]` |
 | Languages | `[[languages]]` |

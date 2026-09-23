@@ -16,9 +16,13 @@
 - This file applies repository-wide. A nearer `AGENTS.md` may add subtree-specific guidance.
 - `.csarc/config.yml` is the template-managed source for enabled language and repository modules.
 - Use the linked Issue or `docs/specs/` SDD contract for scope; `docs/README.md` maps durable project memory.
+- Follow [`.csarc/docs/documentation-policy.md`](.csarc/docs/documentation-policy.md) for the template/content boundary, i18n, README, and licensing. Before a non-Draft pull request is delivered, compare changed behavior and configuration with project-owned documentation, then record `aligned` or reasoned `not-applicable` against the exact head; `drift` and `inconclusive` block delivery.
 - Root `SECURITY.md` is repository-wide scanner policy; `.github/SECURITY.md` is the human vulnerability-disclosure policy. See [`.csarc/docs/security-scanner-readiness.md`](.csarc/docs/security-scanner-readiness.md) for provider capabilities, exact validation commands, scope, cost, and offline boundaries.
 - Use `docs/adr/` for decisions. On updated projects, also search project-owned `docs/decisions/`; never move or overwrite it automatically.
-- Edit project site content in `docs/site/content/_index.zh-tw.md` / `_index.en.md` and theme overrides in `docs/site/theme.css`, then rebuild with `./.csarc/scripts/build-repo-site`; do not hand-edit the generated `docs/index.html` / `docs/index.en.html`.
+{% if documentation_mode == 'template-and-content' %}- Edit project site content in `docs/site/content/_index.zh-tw.md`{% if i18n == 'en-zh-tw' %} / `_index.en.md`{% endif %} and theme overrides in `docs/site/theme.css`, then rebuild with `./.csarc/scripts/build-repo-site`; do not hand-edit generated HTML.
+{% elif documentation_mode == 'content-only' %}- Project-owned Markdown and README files are maintained without the CSARC presentation renderer; do not introduce a parallel site configuration.
+{% else %}- Documentation management is disabled; the template does not create or enforce documentation content.
+{% endif %}
 
 ## Working loop
 

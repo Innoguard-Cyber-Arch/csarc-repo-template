@@ -1,5 +1,5 @@
 {
-  "enabled": {{ 'true' if 'repo-site' in features else 'false' }},
+  "enabled": {{ 'true' if documentation_mode == 'template-and-content' else 'false' }},
   "source": {
     "branch": "main",
     "path": "/docs"

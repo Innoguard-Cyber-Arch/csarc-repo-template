@@ -85,6 +85,10 @@ def _substitute_version_tokens(markdown: str, data: SiteData) -> str:
 _CONFIG_TOKENS: Final = (
     "project_name",
     "project_description",
+    "documentation_mode",
+    "primary_language",
+    "i18n",
+    "project_license",
     "languages",
     "governance_mode",
     "lifecycle",
@@ -1479,6 +1483,8 @@ def render_page(
     root: Path | None = None,
     config: dict[str, Any] | None = None,
     theme_href: str = "site/theme.css",
+    languages: tuple[str, ...] = _LANGUAGE_ORDER,
+    primary_language: str = "zh-tw",
 ) -> str:
     """Render one language's complete pre-bundle HTML source.
 
@@ -1535,11 +1541,14 @@ def render_page(
     content = "\n".join(slides)
 
     language_links = "\n".join(
-        f'      <a href="{_LANGUAGES[code]["output"]}" '
+        f'      <a href="{output}" '
         f'lang="{_LANGUAGES[code]["code"]}"'
         + (' aria-current="page"' if code == lang else "")
         + f">{_esc(_LANGUAGES[code]['name'])}</a>"
-        for code in _LANGUAGE_ORDER
+        for code in languages
+        for output in [
+            "index.html" if code == primary_language else f"index.{code}.html"
+        ]
     )
 
     mermaid_block = ""
@@ -1770,14 +1779,25 @@ def _load_downstream_config(root: Path) -> dict[str, Any] | None:
 
 
 def build(
-    root: Path, output_dir: Path, *, theme_href: str = "site/theme.css"
+    root: Path,
+    output_dir: Path,
+    *,
+    theme_href: str = "site/theme.css",
+    languages: tuple[str, ...] = _LANGUAGE_ORDER,
+    primary_language: str = "zh-tw",
 ) -> dict[str, Path]:
-    """Render both languages and the shared llms.txt into `output_dir`."""
+    """Render selected languages and the shared llms.txt into `output_dir`."""
+    if (
+        not languages
+        or set(languages) - set(_LANGUAGE_ORDER)
+        or primary_language not in languages
+    ):
+        raise BuildError("invalid repository-site language selection")
     data = load_site_data(root)
     config = _load_downstream_config(root)
     output_dir.mkdir(parents=True, exist_ok=True)
     outputs: dict[str, Path] = {}
-    for lang in _LANGUAGE_ORDER:
+    for lang in languages:
         source = root / "site/content" / f"_index.{lang}.md"
         html_text = render_page(
             source.read_text(encoding="utf-8"),
@@ -1786,8 +1806,13 @@ def build(
             root=root,
             config=config,
             theme_href=theme_href,
+            languages=languages,
+            primary_language=primary_language,
         )
-        output_path = output_dir / _LANGUAGES[lang]["output"]
+        output_name = (
+            "index.html" if lang == primary_language else f"index.{lang}.html"
+        )
+        output_path = output_dir / output_name
         output_path.write_text(html_text, encoding="utf-8")
         outputs[lang] = output_path
     llms_path = output_dir / "llms.txt"
@@ -1811,6 +1836,16 @@ def _parser() -> argparse.ArgumentParser:
             "project passes docs/site-theme.css)."
         ),
     )
+    parser.add_argument(
+        "--languages",
+        default=",".join(_LANGUAGE_ORDER),
+        help="Comma-separated site languages (zh-tw,en).",
+    )
+    parser.add_argument(
+        "--primary-language",
+        default="zh-tw",
+        choices=_LANGUAGE_ORDER,
+    )
     return parser
 
 
@@ -1820,7 +1855,11 @@ def main() -> int:
     root = args.root.resolve()
     try:
         outputs = build(
-            root, root / args.output_dir, theme_href=args.theme_href
+            root,
+            root / args.output_dir,
+            theme_href=args.theme_href,
+            languages=tuple(args.languages.split(",")),
+            primary_language=args.primary_language,
         )
     except (
         BuildError,

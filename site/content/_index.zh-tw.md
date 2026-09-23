@@ -65,7 +65,7 @@ fit = "符合畫面"
 {{< /legacy >}}
 
 {{< basic >}}
-Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。本頁內容與 [repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 對齊、雙語同步維護。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
+Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
 <p class="template-version"><strong>公版版本：</strong>v0.22.0<!-- x-release-please-version --></p>
 
@@ -749,7 +749,10 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 驗證信任 | `verification_mode` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted validation／release workflow；或 trusted GitHub-hosted checks |
 | 審查意圖 | `admin_bypass`、`copilot_review` | admin bypass 預設 `off`、可選 `beta-only`／`always`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到同行核准或設定允許的管理員授權 |
 | 發版意圖 | `release_ownership`、`release_trigger`、`project_maturity` | ownership 三選一；trigger 為 `main`／`manual`；成熟度預設 early | 公開 beta／stable 通道、固定 Conventional Commits 演算法與發版候選觸發 |
-| 選配產物 | `features` | 預設 `[repo-site]`；可加入 `docker` 或留空 | repo-site／Pages desired policy、Docker starter 與 build scan 一起啟閉 |
+| 文件治理 | `documentation_mode` | `template-and-content`／`content-only`／`off` | 文件模板與 project-owned 內容分層，Pages 只隨完整模板啟用 |
+| 文件語言 | `primary_language`、`i18n` | `en`／`zh-tw`；雙語並行或 `off` | README 與文件入口；雙語時維護另一語言版 |
+| 授權 | `project_license`、`copyright_holder` | 預設 `proprietary`；也可選 `MIT`／`Apache-2.0` | `LICENSE`、README、套件 manifest 與 SBOM |
+| 選配產物 | `features` | 預設空白；目前可加入 `docker` | Docker starter 與 build scan 一起啟閉 |
 | 組織政策 | `code_owner` | 可省略的 `@user` 或 `@organization/team` | `.github/CODEOWNERS`；不作為 reviewer 名單 |
 | 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及 repo-site 的可見受眾欄位 |
 | 專案選擇 | `project_name` | 必填非空字串；預設 `CSARC Project` | repo-site 的標題與頁首 |
@@ -760,7 +763,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 
 公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。方案、帳務、Copilot entitlement、token 權限與 Pages 可用性不是設定值，而是 `allowed`／`blocked`／`unknown` 的即時偵測結果。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
 
-生成專案的 repo-site 與這個公版根網站同一套渲染引擎與元件（Issue #681），只是內容精簡許多；只從上表 key 讀取明確的 `[[key]]` token，直接對照 `.csarc/config.yml`，未知 key 會讓建置直接失敗，因此網站不會另建第二份設定 schema。上表以外的專案文字與樣式選擇，留在 `site/content/_index.zh-tw.md`、`_index.en.md`、`docs/site-theme.css`，由專案自行維護。
+`documentation_mode: template-and-content` 的生成專案與這個公版根網站使用同一套渲染引擎與元件（Issue #681），只是內容精簡許多；只從上表 key 讀取明確的 `[[key]]` token，直接對照 `.csarc/config.yml`，未知 key 會讓建置直接失敗，因此網站不會另建第二份設定 schema。專案文字與樣式選擇留在 `docs/site/content/` 與 `docs/site/theme.css`，由專案自行維護；完整責任與遷移規則見 `docs/documentation-policy.md`。
 {{< /disclosure >}}
 
 {{< disclosure key="governance-exceptions" title="暫時例外怎麼留下紀錄" >}}
@@ -898,7 +901,7 @@ renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc
           <tr><td>p.10</td><td>Copilot → Agent</td><td><span class="bridge-status defer">分階段</span></td><td><details class="bridge-detail"><summary>先受控 AI 協作；成熟後再自動重試</summary><div class="bridge-popover"><p><strong>五月版｜</strong>鼓勵 AI 從補完程式進步到能執行完整任務，方向保留，但不把工程師縮減成只會下提示詞。</p><p><strong>本次判斷｜</strong>第一階段讓 Agent 依清楚工作單研究、提計畫、修改、驗證並開 PR；平行可寫任務各自使用 branch 與 Git worktree，工具便利性由 agent-kit 管理。</p><p><strong>落地方式｜</strong><code>AGENTS.md</code> 與共同驗證命令限制工作方式；<code>actions.json</code> 設定 Actions 預設唯讀且不能核准 PR，Ruleset 要求人類核准。worktree manager 不是 CI/CD，也不取得額外 secret 或合併權限。</p></div></details></td></tr>
           <tr><td>p.11</td><td>AI 初審</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail"><summary>固定工具負責判定；AI 只補充建議</summary><div class="bridge-popover"><p><strong>五月版｜</strong>AI 初審保留，但程式碼格式與常見錯誤改由 formatter、linter 與靜態檢查穩定執行。</p><p><strong>本次判斷｜</strong>AI 審查只補充情境性錯誤、測試缺口、風險摘要與修正建議，不能當成通過證明。</p><p><strong>落地方式｜</strong>CI、同事審查與指定負責人才有合併決定權；AI 沒有核准、合併或讀取密鑰的權限。</p></div></details></td></tr>
           <tr><td>p.12</td><td>AI CI/CD log</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>先摘要失敗；自動復原只給成熟部署</summary><div class="bridge-popover"><p><strong>五月版｜</strong>AI 可先摘要 CI 失敗紀錄；自動退版只適用於已有正式環境與可靠健康指標的部署。</p><p><strong>本次判斷｜</strong>PR 測試失敗就阻擋合併並用新提交修正，不跳過錯誤提交；若 <code>main</code> 已出問題，就用復原 PR 並建立工作單追蹤。</p><p><strong>落地方式｜</strong>只有健康指標、停止門檻、可重現復原與完整紀錄都成熟後，才考慮讓系統自動復原。</p></div></details></td></tr>
-          <tr><td>p.13</td><td>AI 文件與知識庫</td><td><span class="bridge-status defer">分階段</span></td><td><details class="bridge-detail"><summary>先維護 repo 內網站；託管與 RAG 延後</summary><div class="bridge-popover"><p><strong>五月版｜</strong>文件同步方向保留；讓 AI 搜尋文件再回答（RAG）改成選配。</p><p><strong>本次判斷｜</strong>README、規格與 <code>docs/index.html</code> 都和程式一起走 PR；生成專案另有可更新版型與不被覆寫的內容檔。</p><p><strong>落地方式｜</strong>Cloudflare 託管尚未接入；網站渲染已改用內建 Python 引擎，Hugo 已於 Milestone 13（Issue #524）移除。AI 語意審查也要等模型端點與資料政策確定後才成為門禁，只有來源、owner、存取規則、引用與測試題都準備好時才做 RAG。</p></div></details></td></tr>
+          <tr><td>p.13</td><td>AI 文件與知識庫</td><td><span class="bridge-status defer">分階段</span></td><td><details class="bridge-detail"><summary>先維護 repo 內文件；託管與 RAG 延後</summary><div class="bridge-popover"><p><strong>五月版｜</strong>文件同步方向保留；讓 AI 搜尋文件再回答（RAG）改成選配。</p><p><strong>本次判斷｜</strong>README、規格與 <code>docs/index.html</code> 都和程式一起走 PR；生成專案另有可更新版型與不被覆寫的內容檔。</p><p><strong>落地方式｜</strong>本機 AI 在每個候選版本檢查文件一致性，PR policy 只驗證四態結果與 exact head，不新增 hosted AI job。Cloudflare 託管與 RAG 仍未接入；只有來源、owner、存取規則、引用與測試題都準備好時才評估 RAG。</p></div></details></td></tr>
           <tr><td>p.14</td><td>Legacy modernization</td><td><span class="bridge-status remove">可選</span></td><td><details class="bridge-detail"><summary>舊系統改造是專案需求，不放共同模板</summary><div class="bridge-popover"><p><strong>五月版｜</strong>提到用 AI 協助舊系統現代化；本次不放進所有專案都必須使用的共同模板。</p><p><strong>本次判斷｜</strong>這是特定專案的轉型工作，做法是先用測試記錄目前行為，再小步替換、用短 PR 審查，並保留復原方法。</p><p><strong>落地方式｜</strong>有真實舊系統、風險與效益後再建立專用模板或指南，不先把空工具放進所有新案。</p></div></details></td></tr>
         </tbody>
       </table>

@@ -11,8 +11,8 @@ _exclude:
   - ".git"
   - ".DS_Store"
   - ".svn"
-  - "{% if project_mode == 'existing' %}/README.md{% else %}__keep_project_readme__{% endif %}"
-  - "{% if project_mode == 'existing' %}/README.{{ 'en' if readme_primary_language == 'zh-tw' else 'zh-tw' }}.md{% else %}__keep_project_readme_secondary__{% endif %}"
+  - "{% if documentation_mode == 'off' or project_mode == 'existing' %}/README.md{% else %}__keep_project_readme__{% endif %}"
+  - "{% if documentation_mode == 'off' or i18n == 'off' %}/README.{{ 'en' if primary_language == 'zh-tw' else 'zh-tw' }}.md{% else %}__keep_project_readme_secondary__{% endif %}"
   - "{% if project_mode == 'existing' %}/CHANGELOG.md{% else %}__keep_project_changelog__{% endif %}"
   - "{% if enable_precommit %}__keep_precommit__{% else %}.csarc/scripts/pre-commit{% endif %}"
   - "{% if enable_template_update_notifications %}__keep_template_update_workflow__{% else %}.github/workflows/template-update.yml{% endif %}"
@@ -32,15 +32,19 @@ _exclude:
   - "{% if 'docker' in features %}__keep_dockerfile__{% else %}Dockerfile{% endif %}"
   - "{% if 'docker' in features %}__keep_docker_compose__{% else %}docker-compose.yml{% endif %}"
   - "{% if verification_mode == 'hosted' and 'docker' in features %}__keep_docker_workflow__{% else %}.github/workflows/docker-build-scan.yml{% endif %}"
-  - "{% if 'repo-site' in features %}__keep_repo_site__{% else %}.csarc/site{% endif %}"
-  - "{% if 'repo-site' in features %}__keep_repo_site_builder__{% else %}.csarc/scripts/build-repo-site{% endif %}"
-  - "{% if 'repo-site' in features %}__keep_repo_site_python__{% else %}.csarc/scripts/build_repo_site.py{% endif %}"
-  - "{% if 'repo-site' in features %}__keep_repo_site_blocks__{% else %}.csarc/scripts/repo_site_blocks.py{% endif %}"
-  - "{% if 'repo-site' in features %}__keep_repo_site_renderer__{% else %}.csarc/scripts/render_site.py{% endif %}"
-  - "{% if 'repo-site' in features %}__keep_repo_site_navigation_check__{% else %}.csarc/scripts/check-repo-site-navigation{% endif %}"
-  - "{% if 'repo-site' in features %}__keep_repo_site_translation_check__{% else %}.csarc/scripts/check-repo-site-translations{% endif %}"
-  - "{% if 'repo-site' in features %}__keep_repo_site_version_check__{% else %}.csarc/scripts/check-repo-site-versions{% endif %}"
-  - "{% if 'repo-site' in features %}__keep_repo_site_content__{% else %}docs/site{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site__{% else %}.csarc/site{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_builder__{% else %}.csarc/scripts/build-repo-site{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_python__{% else %}.csarc/scripts/build_repo_site.py{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_blocks__{% else %}.csarc/scripts/repo_site_blocks.py{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_renderer__{% else %}.csarc/scripts/render_site.py{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_navigation_check__{% else %}.csarc/scripts/check-repo-site-navigation{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_translation_check__{% else %}.csarc/scripts/check-repo-site-translations{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_version_check__{% else %}.csarc/scripts/check-repo-site-versions{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_content__{% else %}docs/site{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' and i18n == 'en-zh-tw' %}__keep_secondary_site_content__{% else %}docs/site/content/_index.{{ 'en' if primary_language == 'zh-tw' else 'zh-tw' }}.md{% endif %}"
+  - "{% if documentation_mode != 'off' %}__keep_docs_map__{% else %}docs/README.md{% endif %}"
+  - "{% if documentation_mode != 'off' %}__keep_docs_specs__{% else %}docs/specs{% endif %}"
+  - "{% if documentation_mode != 'off' %}__keep_docs_decisions__{% else %}docs/adr{% endif %}"
   - "{% if 'python' in languages %}__keep_python_version__{% else %}.python-version{% endif %}"
   - "{% if 'python' in languages %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
   - "{% if 'python' in languages %}__keep_python_source__{% else %}/src/{{package_name}}{% endif %}"
@@ -71,6 +75,8 @@ _skip_if_exists:
   - "docs/site/content/_index.en.md"
   - "docs/site/data/navigation.json"
   - "{% if project_mode == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
+  - "{% if project_mode == 'existing' %}/README.{{ 'en' if primary_language == 'zh-tw' else 'zh-tw' }}.md{% else %}__overwrite_secondary_readme__{% endif %}"
+  - "{% if project_mode == 'existing' %}/LICENSE{% else %}__overwrite_license__{% endif %}"
   - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_scanner_policy__{% endif %}"
   - "{% if project_mode == 'existing' %}/.github/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
@@ -86,7 +92,7 @@ _tasks:
   - command: "cargo generate-lockfile"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'rust' in languages }}"
   - command: "bash .csarc/scripts/build-repo-site"
-    when: "{{ 'repo-site' in features }}"
+    when: "{{ documentation_mode == 'template-and-content' }}"
 _migrations:
   - command:
       - python3
@@ -229,9 +235,9 @@ _migrations:
                 legacy_test.unlink()
     when: "{{ _stage == 'before' }}"
   - command: "bash .csarc/scripts/build-repo-site"
-    when: "{{ _stage == 'after' and 'repo-site' in features }}"
+    when: "{{ _stage == 'after' and documentation_mode == 'template-and-content' }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./.csarc/scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% elif verification_mode == 'hosted' %}Project created with the CSARC hosted verification and release workflows. Confirm .csarc/config.yml, run ./.csarc/scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./.csarc/scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% else %}Project created with local verification and no hosted validation or release workflow. Initialize Git, commit the candidate, then run ./.csarc/scripts/verify-fast once to record merge evidence. Switch to verification_mode: hosted and update before the first release.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
+  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in .csarc/docs/csarc.md, run ./.csarc/scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% elif verification_mode == 'hosted' %}Project created with the CSARC hosted verification and release workflows. Confirm .csarc/config.yml, run ./.csarc/scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./.csarc/scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% else %}Project created with local verification and no hosted validation or release workflow. Initialize Git, commit the candidate, then run ./.csarc/scripts/verify-fast once to record merge evidence. Switch to verification_mode: hosted and update before the first release.{% endif %} GitHub template creation and Copier do not copy repository settings. See {% if documentation_mode == 'off' %}.csarc/docs/csarc.md{% else %}README.md{% endif %} for the remaining project guidance.
 
 project_mode:
   type: str
@@ -268,6 +274,46 @@ project_description:
   help: Organization-approved one-sentence purpose for README and package metadata
   default: "Source code and delivery automation for {{ project_name }}."
   validator: "{% if not project_description | default('', true) | trim or project_description | trim | lower in ['a cyber-arch project', 'todo', 'tbd', 'placeholder'] or '<' in project_description %}Enter the approved project purpose without placeholder text.{% endif %}"
+
+documentation_mode:
+  type: str
+  help: Apply the CSARC documentation presentation and content starter, organize project-owned content only, or leave documentation unmanaged
+  choices:
+    Apply documentation template and content structure: template-and-content
+    Organize documentation content without the presentation template: content-only
+    Do not manage documentation: 'off'
+  default: "{{ 'content-only' if project_mode == 'existing' else 'template-and-content' }}"
+
+primary_language:
+  type: str
+  help: Language used by README.md and the primary documentation entry point
+  choices:
+    繁體中文 (Traditional Chinese): zh-tw
+    English: en
+  default: zh-tw
+
+i18n:
+  type: str
+  help: Maintain English and Traditional Chinese documentation together, or use only the primary language
+  choices:
+    Maintain English and Traditional Chinese: en-zh-tw
+    Primary language only: 'off'
+  default: en-zh-tw
+
+project_license:
+  type: str
+  help: Project license; proprietary is closed by default
+  choices:
+    Proprietary, all rights reserved: proprietary
+    MIT License: MIT
+    Apache License 2.0: Apache-2.0
+  default: proprietary
+
+copyright_holder:
+  type: str
+  help: Copyright holder written to LICENSE and package metadata
+  default: "{{ project_name }}"
+  validator: "{% if not copyright_holder | trim %}Enter the copyright holder; it is never inferred from repository ownership.{% endif %}"
 
 language:
   type: str
@@ -345,20 +391,11 @@ release_trigger:
 
 features:
   type: str
-  help: Optional generated project capabilities; the repo-site stays portable even when Pages is unavailable
+  help: Optional generated project capabilities
   multiselect: true
   choices:
-    Offline bilingual repository site: repo-site
     Docker starter and build scan: docker
-  default: [repo-site]
-
-readme_primary_language:
-  type: str
-  help: Which README language GitHub shows by default at README.md; the other language is generated as README.<lang>.md
-  choices:
-    繁體中文 (Traditional Chinese): zh-tw
-    English: en
-  default: zh-tw
+  default: []
 
 package_name:
   type: str

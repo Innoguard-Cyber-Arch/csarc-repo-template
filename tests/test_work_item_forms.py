@@ -199,6 +199,26 @@ def test_pr_templates_keep_repository_specific_checks_separate() -> None:
     assert "./.csarc/scripts/verify-fast`" in generated_template
     assert "verify-template.sh" not in generated_template
     assert "已測試新專案產生" not in generated_template
+    for template in (root_template, generated_template):
+        assert "## 文件一致性" in template
+        assert "Status: `inconclusive`" in template
+        assert "Reviewed head:" in template
+
+
+def test_pr_policy_enforces_exact_head_documentation_review() -> None:
+    """Wire the deterministic review contract into both PR policy layers."""
+    root = (REPO_ROOT / "scripts/validate-pr-policy").read_text(
+        encoding="utf-8"
+    )
+    generated = (
+        REPO_ROOT / "template/.csarc/scripts/validate-pr-policy"
+    ).read_text(encoding="utf-8")
+
+    for policy in (root, generated):
+        assert "documentation_review.py" in policy
+        assert "PR_HEAD_SHA" in policy
+        assert "PR_DOCUMENTATION_REVIEW_CUTOVER_PR" in policy
+        assert policy.count("validate_documentation_review") >= 3
 
 
 def test_paired_files_check_accepts_selected_actions() -> None:

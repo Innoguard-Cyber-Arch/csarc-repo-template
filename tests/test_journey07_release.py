@@ -473,7 +473,7 @@ def test_release_status_stays_candidate_until_default_branch_evidence() -> None:
     """Keep root, generated README, and both site languages honest."""
     root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
     # Issue #681: template/README.md.jinja's destination name now depends
-    # on the readme_primary_language answer, so its source filename is a
+    # on the primary_language answer, so its source filename is a
     # Jinja expression; "zh-tw" always appears in the zh-tw content file's
     # name and never in the English one, so it is a reliable glob.
     zh_tw_readme_matches = list((ROOT / "template").glob("*zh-tw*.md.jinja"))
@@ -491,7 +491,7 @@ def test_release_status_stays_candidate_until_default_branch_evidence() -> None:
     fullwidth_slash = "\N{FULLWIDTH SOLIDUS}"
 
     assert f"Candidate{fullwidth_slash}Blocked" in root_readme
-    assert "Configured" in template_readme
+    assert "Tag / GitHub Release" not in template_readme
     assert f"Candidate{fullwidth_slash}Blocked" in chinese
     assert "Candidate / Blocked" in english
     assert f"Candidate{fullwidth_slash}Blocked" in rendered_chinese

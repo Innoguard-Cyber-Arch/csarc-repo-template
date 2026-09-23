@@ -61,6 +61,7 @@
 | AI 閱讀索引 | `llms.txt`、`docs/llms.txt` | 由渲染引擎從共用 glossary 同源產生；不直接編輯 |
 | 網站來源 | `site/` | 分開維護雙語 Markdown、純 Python 渲染引擎、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
 | 操作契約 | `docs/agent-install.md`、`docs/milestone-description.md` | 已發布且可能由固定版本 URL 讀取的介面；路徑保持穩定 |
+| 文件治理 | `docs/documentation-policy.md` | 文件模板／內容責任、資訊架構、i18n、README、AI 一致性 review 與授權同步 |
 | Scanner readiness | `docs/security-scanner-readiness.md` | Provider capability、policy chain、真實 attack surface、精確命令與離線 smoke 邊界；以 paired copy 下發至 `.csarc/docs/` |
 | Runbook | `docs/live-integration.md`、`docs/artifact-consumption.md` | 維護者執行線上驗證或排查交付鏈時使用 |
 | Runbook | `docs/uninstall.md` | repository owner 決定不再採用 CSARC 時的自助解除安裝指南 |
