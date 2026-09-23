@@ -409,6 +409,7 @@ def test_csarc_owned_ordinary_work_materializes_the_release_in_one_pr() -> None:
         assert "verify-delivery-version" in source
         assert '--base-sha "$BASE_SHA"' in source
         assert "steps.release.outputs.ownership == 'csarc-owned'" in source
+        assert "steps.sync.outputs.route == 'ordinary'" in source
 
 
 def test_one_issue_milestone_uses_only_work_and_promotion_prs() -> None:

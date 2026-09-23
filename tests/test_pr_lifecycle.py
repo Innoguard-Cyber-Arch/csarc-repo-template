@@ -4072,6 +4072,81 @@ def test_revalidation_rebuilds_an_ordinary_same_pr_release(
     ]
 
 
+def test_revalidation_skips_a_formal_delivery_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A topology-validated sync is not a release-bearing work PR."""
+    monkeypatch.setattr(
+        MODULE["csarc_config"],
+        "load_config",
+        lambda *_: {"release_ownership": "csarc-owned"},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_lease",
+        lambda *_: None,
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "live_pull",
+        lambda *_: {"number": 42},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_routine_route",
+        lambda *_: "sync",
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("must not validate a release"),
+    )
+
+    assert (
+        revalidate_release_candidate(
+            FakeGitHub("a" * 40),
+            lease_fixture(),
+            "sync/main-to-m15-repository-lifecycle-abcdef012345",
+            "beta",
+        )
+        == ""
+    )
+
+
+def test_revalidation_rejects_an_unverified_sync_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sync-looking branch cannot bypass the exact routine route."""
+    monkeypatch.setattr(
+        MODULE["csarc_config"],
+        "load_config",
+        lambda *_: {"release_ownership": "csarc-owned"},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_lease",
+        lambda *_: None,
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "live_pull",
+        lambda *_: {"number": 42},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_routine_route",
+        lambda *_: "issue",
+    )
+
+    with pytest.raises(RuntimeError, match="formal sync route"):
+        revalidate_release_candidate(
+            FakeGitHub("a" * 40),
+            lease_fixture(),
+            "sync/main-to-m15-repository-lifecycle-abcdef012345",
+            "beta",
+        )
+
+
 def test_revalidation_leaves_product_owned_promotions_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

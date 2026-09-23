@@ -172,7 +172,7 @@ jobs:
             echo "suite=$PATH_TIER" >> "$GITHUB_OUTPUT"
           fi
       - name: Validate same-PR release materialization
-        if: {% raw %}${{ github.event_name == 'pull_request_target' && !startsWith(github.event.pull_request.head.ref, 'promote/m') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
+        if: {% raw %}${{ github.event_name == 'pull_request_target' && steps.sync.outputs.route == 'ordinary' && !startsWith(github.event.pull_request.head.ref, 'promote/m') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
         env:
           BASE_SHA: {% raw %}${{ github.event.pull_request.base.sha }}{% endraw %}
           HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha }}{% endraw %}

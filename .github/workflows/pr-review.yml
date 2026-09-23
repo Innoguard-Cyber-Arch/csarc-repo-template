@@ -55,25 +55,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Resolve the pull request number and its trusted base commit
+      - name: Resolve the pull request and trusted publisher commit
         id: pr
         env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref || '' }}
+          EVENT_ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            number="${{ github.event.issue.number }}"
+          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
+            number="$EVENT_ISSUE_NUMBER"
             base_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq .base.sha)"
+            head_ref="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq .head.ref)"
           else
-            number="${{ github.event.pull_request.number }}"
-            base_sha="${{ github.event.pull_request.base.sha }}"
+            number="$EVENT_PR_NUMBER"
+            base_sha="$EVENT_BASE_SHA"
+            head_ref="$EVENT_HEAD_REF"
+          fi
+          publisher_sha="$base_sha"
+          if [[ "$head_ref" == sync/main-to-* ]]; then
+            default_branch="$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)"
+            publisher_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$default_branch" --jq .object.sha)"
           fi
           echo "number=$number" >>"$GITHUB_OUTPUT"
-          echo "base_sha=$base_sha" >>"$GITHUB_OUTPUT"
-      - name: Check out the trusted base commit
+          echo "publisher_sha=$publisher_sha" >>"$GITHUB_OUTPUT"
+      - name: Check out the trusted review publisher
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ steps.pr.outputs.base_sha }}
+          ref: ${{ steps.pr.outputs.publisher_sha }}
       - name: Publish the exact-head review decision
         env:
           GH_TOKEN: ${{ github.token }}

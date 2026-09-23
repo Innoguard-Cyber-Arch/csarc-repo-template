@@ -3016,6 +3016,11 @@ def revalidate_release_candidate(
     pr_number = int(lease["pull_request"])
     head_sha = str(lease["head_sha"])
     require_lease(github, lease, repo, pr_number, head_sha)
+    if head_ref.startswith("sync/main-to-"):
+        pull = live_pull(github, repo, pr_number, head_sha)
+        if require_routine_route(github, repo, lease, pull) != "sync":
+            raise RuntimeError("Release bypass requires a formal sync route")
+        return ""
     if promotion is not None:
         source_sha = run(["git", "-C", str(root), "rev-parse", f"{head_sha}^1"])
         return run(
