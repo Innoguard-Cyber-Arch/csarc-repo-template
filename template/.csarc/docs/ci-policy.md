@@ -299,6 +299,10 @@ Alpha PR 可由 `.csarc/scripts/pr_lifecycle.py merge` 在 lease＋exact-head �
 `alpha` 只代表發布前的本機開發，不是公開版本，也沒有 `-alpha.N` tag 或 Release。
 RC 不另立階段；通過 stable 的完整門檻就直接發布 stable。Milestone 開發期間若
 `main` 已有新的 stable，下一個 beta 以目前 stable 為基準重新計算，不鎖死舊 core。
+即使正式 main→delivery 同步最後以 squash 合併而使 stable tag 不再位於 delivery 的
+祖先鏈上，版本基準仍只取 authoritative `main` 版本面相符且 `main` 可達的 stable
+tag；release intent 的 commit range 則維持從 delivery 可達的最新 tag 計算，不能把
+其他 branch 的變更重複列入。
 
 `.csarc/config.yml` 的 `project_maturity: early|formal` 只描述整個專案的成熟度。
 預設永遠是 `early`；只有一張明確宣告此變更的 standalone stable PR 才能改成
