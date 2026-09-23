@@ -145,10 +145,13 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     }
     assert "edited" in triggers["pull_request_target"]["types"]
     assert set(workflow["permissions"]) == {
+        "actions",
+        "checks",
         "contents",
         "issues",
         "pull-requests",
     }
+    assert all(level == "read" for level in workflow["permissions"].values())
     assert set(workflow["jobs"]) == {"verify"}
     assert workflow["jobs"]["verify"]["timeout-minutes"] == 30
 
@@ -157,8 +160,8 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     assert 'python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py"' in source
     assert "Check out the exact candidate" in source
     assert "Execute trusted verification tier=" in source
-    assert "Reuse trusted verification tier=" in source
-    assert "Validate trusted clean sync tier=fast" in source
+    assert "- name: Reuse trusted verification" in source
+    assert "- name: Validate trusted clean sync" in source
     assert "./scripts/verify-fast" in source
     assert "./scripts/verify-template.sh" in source
     assert "check-verify-attestation" not in source
@@ -183,6 +186,14 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
         "ready_for_review, converted_to_draft]" in source
     )
     assert "timeout-minutes: 30" in source
+    permissions = source.split("permissions:", 1)[1].split("jobs:", 1)[0]
+    assert set(yaml.safe_load(f"permissions:{permissions}")["permissions"]) == {
+        "actions",
+        "checks",
+        "contents",
+        "issues",
+        "pull-requests",
+    }
     assert "Preserve the trusted verification policy" in source
     assert 'python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py"' in source
     assert "Execute trusted verification tier=" in source
@@ -420,7 +431,9 @@ def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
     assert "--find-reusable" in source
     assert '--exclude-run-id "$GITHUB_RUN_ID"' in source
     assert "base-sha=${{ steps.identity.outputs.base_sha }}" in source
-    assert "source-run=${{ steps.reuse.outputs.source_run }}" in source
+    assert "- name: Reuse trusted verification" in source
+    assert "Trusted verification route evidence" in source
+    assert "source_run: $source_run" in source
     assert "steps.reuse.outputs.reuse != 'true'" in source
     assert "steps.sync.outputs.clean != 'true'" in source
 
@@ -437,6 +450,23 @@ def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
             'if ! python3 "$RUNNER_TEMP/trusted-verification/' in reuse_command
         )
         assert "running the exact candidate instead" in reuse_command
+        reuse_step = workflow.split("- name: Reuse trusted verification", 1)[
+            1
+        ].split("- name: Set up Python", 1)[0]
+        assert (
+            "::notice title=Trusted verification route evidence::" in reuse_step
+        )
+        assert "SOURCE_RUN:" in reuse_step
+        assert "SOURCE_JOB:" in reuse_step
+        assert "SOURCE_CHECK:" in reuse_step
+        sync_step = workflow.split("- name: Validate trusted clean sync", 1)[
+            1
+        ].split("- name: Reuse trusted verification", 1)[0]
+        assert (
+            "::notice title=Trusted verification route evidence::" in sync_step
+        )
+        assert "MAIN_SHA:" in sync_step
+        assert 'kind: "sync"' in sync_step
 
 
 def test_verifiers_do_not_call_removed_attestation_helpers() -> None:
