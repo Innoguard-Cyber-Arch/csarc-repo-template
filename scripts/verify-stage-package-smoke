@@ -18,8 +18,10 @@ export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 cd "$repo_root"
 source "$repo_root/scripts/verification-step"
 
-verification_step "Build Python package" uv build
+artifact_dir="$(mktemp -d "${TMPDIR:-/tmp}/csarc-package-smoke.XXXXXX")"
+trap 'rm -rf "$artifact_dir"' EXIT
+verification_step "Build Python package" uv build --out-dir "$artifact_dir"
 
-wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
-verification_step "Locate built wheel" test -n "$wheel"
+wheel="$(find "$artifact_dir" -maxdepth 1 -type f -name '*.whl' -print)"
+verification_step "Locate exactly one built wheel" test -f "$wheel"
 verification_step "Run packaged CLI" uvx --from "$wheel" csarc --help

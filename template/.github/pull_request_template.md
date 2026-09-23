@@ -11,7 +11,7 @@ Closes #N
 
 <!-- Closing keywords require every task here and in the linked Issue to be checked. -->
 
-- [ ] 設定模式所需的最終驗證證據已通過：local 模式在 committed、clean 的 exact candidate 跑一次 `./.csarc/scripts/verify-fast`（需要時會自動升級 full），hosted 模式由 `verify` check 執行；沒有為了證明而重跑同一 suite（見 `.csarc/docs/ci-policy.md`）；PR assignee／label／Milestone 與 linked Issue 一致；work branch 已顯示於 Issue Development；未超出原 Issue 範圍
+- [ ] 已完成變更 owner 的 focused checks，並由設定模式產生最終證據：local 模式在 committed、clean 的 exact candidate 跑一次 `./.csarc/scripts/verify-fast`（需要時自動升級 full）；hosted 模式只由 required `verify` check 在 exact candidate 執行所選 suite，不因選到 full 就在本機重跑（文件明定的 fallback／診斷除外，見 `.csarc/docs/ci-policy.md`）；PR assignee／label／Milestone 與 linked Issue 一致；work branch 已顯示於 Issue Development；未超出原 Issue 範圍
 
 ## 文件一致性
 

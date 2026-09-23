@@ -579,6 +579,21 @@ def test_local_docker_feature_reuses_full_verification(tmp_path: Path) -> None:
     )
 
     assert not (project / ".github/workflows/docker-build-scan.yml").exists()
+    for workflow in (
+        "ci.yml",
+        "pr-policy.yml",
+        "pr-policy-writes.yml",
+        "pr-review.yml",
+        "governance-comment.yml",
+        "spec-to-issue.yml",
+        "work-item-lifecycle.yml",
+        "pages.yml",
+    ):
+        assert not (project / ".github/workflows" / workflow).exists()
+    pages = json.loads(
+        (project / ".csarc/policies/pages.json").read_text(encoding="utf-8")
+    )
+    assert pages == {"enabled": False, "build_type": "workflow"}
     verifier = (project / ".csarc/scripts/verify").read_text(encoding="utf-8")
     assert verifier.count("verify_container") == 2
     assert (
@@ -668,6 +683,17 @@ def test_optional_features_render_independently(
         (project / ".csarc/policies/pages.json").read_text(encoding="utf-8")
     )
     assert pages["enabled"] is site_enabled
+    assert pages["build_type"] == "workflow"
+    assert (project / ".github/workflows/pages.yml").exists() is site_enabled
+    if site_enabled:
+        pages_workflow = yaml.safe_load(
+            (project / ".github/workflows/pages.yml").read_text(
+                encoding="utf-8"
+            )
+        )
+        triggers = pages_workflow.get("on", pages_workflow.get(True))
+        assert triggers["push"]["paths"] == ["docs/**"]
+        assert triggers["workflow_dispatch"] is None
     assert (project / "README.md").exists() is content_enabled
     assert (project / "docs/README.md").exists() is content_enabled
 

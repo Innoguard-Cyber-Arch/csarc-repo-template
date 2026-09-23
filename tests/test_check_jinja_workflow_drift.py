@@ -263,6 +263,16 @@ def test_an_unrecognized_condition_shape_is_reported() -> None:
     assert "python_support_mode" in problems[0]
 
 
+def test_release_trigger_condition_has_separate_contract_coverage() -> None:
+    """The downstream-only main trigger is explicitly allowlisted."""
+    problems = check_jinja_workflow_drift.find_uncovered_conditionals(
+        "{% if release_trigger == 'main' %}\npush:\n{% endif %}\n",
+        ["python", "rust", "typescript"],
+    )
+
+    assert problems == []
+
+
 def test_a_language_missing_from_representative_languages_is_reported() -> None:
     """A recognized check for a language not in the fixture list is flagged."""
     jinja_text = '{% if "go" in languages %}\nx\n{% endif %}\n'

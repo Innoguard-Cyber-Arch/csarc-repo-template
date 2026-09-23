@@ -111,6 +111,7 @@ def test_no_approval_blocks_a_standalone_issue() -> None:
     result = standalone_issue_approval_decision(issue_snapshot(), 210)
 
     assert not result.allowed
+    assert result.pending
     assert "#210" in result.summary
     assert "no Milestone" in result.summary
 

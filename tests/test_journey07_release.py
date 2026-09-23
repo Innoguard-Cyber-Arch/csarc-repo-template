@@ -19,10 +19,7 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     workflow = yaml.safe_load(source)
     triggers = workflow.get("on", workflow.get(True))
 
-    assert triggers == {
-        "push": {"branches": ["main", "dev/m*"]},
-        "workflow_dispatch": None,
-    }
+    assert triggers == {"workflow_dispatch": None}
     assert workflow["concurrency"]["cancel-in-progress"] is False
     assert workflow["jobs"]["release"]["if"] == (
         "${{ github.ref == 'refs/heads/main' || "
@@ -144,10 +141,10 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     ("release_trigger", "push_enabled"),
     [("main", True), ("manual", False)],
 )
-def test_release_trigger_only_gates_main_push(
+def test_release_trigger_omits_unwanted_push_runs(
     release_trigger: str, push_enabled: bool
 ) -> None:
-    """Keep workflow_dispatch available while making main push optional."""
+    """Manual releases create no push-triggered workflow run at all."""
     source = (ROOT / "template/.github/workflows/release.yml.jinja").read_text(
         encoding="utf-8"
     )
@@ -160,12 +157,13 @@ def test_release_trigger_only_gates_main_push(
     )
     workflow = yaml.safe_load(rendered)
 
-    assert workflow.get("on", workflow.get(True))["workflow_dispatch"] is None
+    triggers = workflow.get("on", workflow.get(True))
+    assert triggers["workflow_dispatch"] is None
+    assert ("push" in triggers) is push_enabled
+    if push_enabled:
+        assert triggers["push"]["branches"] == ["main", "dev/m*"]
     condition = workflow["jobs"]["release"]["if"]
-    assert (
-        f"github.event_name != 'push' || {str(push_enabled).lower()}"
-        in condition
-    )
+    assert "github.event_name != 'push'" not in condition
 
 
 def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
@@ -215,6 +213,9 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         attestation_index, attestation = by_name[
             "Reuse the source PR's trusted verification evidence"
         ]
+        _, fallback = by_name[
+            "Re-verify the exact release tree when reuse is unavailable"
+        ]
         _, resolve = by_name["Resolve the exact release state"]
 
         route_index, _ = by_name["Resolve release route"]
@@ -227,6 +228,10 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         assert attestation_index < min(index for index, _ in toolchain_steps)
         assert capability["if"] == no_release_guard
         assert attestation["if"] == no_release_guard
+        assert fallback["env"]["CSARC_CI_BASE"] == (
+            "${{ github.event.before || "
+            "github.event.repository.default_branch }}"
+        )
         assert resolve["if"] == no_release_guard
         assert all(
             step["if"] == no_release_guard for _, step in toolchain_steps
@@ -404,6 +409,7 @@ def test_csarc_owned_ordinary_work_materializes_the_release_in_one_pr() -> None:
         assert "verify-delivery-version" in source
         assert '--base-sha "$BASE_SHA"' in source
         assert "steps.release.outputs.ownership == 'csarc-owned'" in source
+        assert "steps.sync.outputs.route == 'ordinary'" in source
 
 
 def test_one_issue_milestone_uses_only_work_and_promotion_prs() -> None:
@@ -597,7 +603,11 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
     assert "audit evidence is unavailable" in script
     assert "gh issue create" in script
     assert "gh issue edit" in script
-    assert "exit 1" in script
+    assert (
+        "Release publish drift detected; publishing the tracking Issue."
+        in script
+    )
+    assert script.rstrip().endswith("exit 0")
 
 
 def test_release_drift_check_ships_with_release_ownership() -> None:

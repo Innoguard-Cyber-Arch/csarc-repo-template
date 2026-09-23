@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import runpy
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -17,6 +18,9 @@ check_merge_group = MODULE["check_merge_group"]
 tracker_errors = MODULE["tracker_errors"]
 _approval_is_stale = MODULE["_approval_is_stale"]
 preflight = MODULE["preflight"]
+Decision = MODULE["Decision"]
+_dispatch = MODULE["_dispatch"]
+_record_check = MODULE["_record_check"]
 
 _NO_STALE_BRANCHES = {
     "available": True,
@@ -151,7 +155,61 @@ def test_missing_independent_approval_fails_closed(
     comments: tuple[dict[str, Any], ...],
 ) -> None:
     """Silence, self-approval, and bots do not approve a Milestone."""
-    assert not approval_decision(snapshot(*comments)).allowed
+    decision = approval_decision(snapshot(*comments))
+    assert not decision.allowed
+    assert decision.pending
+
+
+@pytest.mark.parametrize(
+    ("decision", "status", "conclusion"),
+    [
+        (Decision(False, "waiting", pending=True), "queued", None),
+        (Decision(True, "approved"), "completed", "success"),
+        (Decision(False, "invalid"), "completed", "failure"),
+    ],
+)
+def test_approval_check_preserves_three_states(
+    monkeypatch: pytest.MonkeyPatch,
+    decision: object,
+    status: str,
+    conclusion: str | None,
+) -> None:
+    """Approval publication distinguishes waiting from a rejected gate."""
+    calls: list[list[str]] = []
+    monkeypatch.setitem(
+        _record_check.__globals__,
+        "run_gh",
+        lambda arguments: calls.append(arguments) or "{}",
+    )
+
+    _record_check("acme/project", "abc", decision)
+
+    flattened = calls[0]
+    assert f"status={status}" in flattened
+    assert (f"conclusion={conclusion}" in flattened) is (conclusion is not None)
+
+
+def test_publish_only_reports_writer_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A successful check publication is not the approval decision itself."""
+    waiting = Decision(False, "waiting", pending=True)
+    monkeypatch.setitem(
+        _dispatch.__globals__, "check_pr", lambda *_a, **_k: waiting
+    )
+
+    result = _dispatch(
+        SimpleNamespace(
+            command="check-pr",
+            repo="acme/project",
+            pr=42,
+            read_only=False,
+            publish_only=True,
+        )
+    )
+
+    assert result.allowed
+    assert result.summary == "Published Milestone approval: waiting"
 
 
 def test_admin_self_approval_opens_the_gate_with_reason(
