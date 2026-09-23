@@ -3663,8 +3663,7 @@ def verify_project(target: Path) -> dict[str, object]:
             "Canonical project verification failed before the hook ran.",
         )
         raise ProjectVerificationError(
-            "Project verification failed; generated differences were "
-            "preserved for review.",
+            "Project verification failed.",
             hook,
         )
     if project_hook is not None:
