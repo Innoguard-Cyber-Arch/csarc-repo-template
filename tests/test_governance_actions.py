@@ -208,7 +208,9 @@ def test_copier_governance_drift_option_is_complete(
         skip_tasks=True,
     )
 
-    assert (project / ".github/workflows/governance-comment.yml").is_file()
+    # The default local-first mode keeps reviewer selection local and omits
+    # the event-driven hosted workflow.
+    assert not (project / ".github/workflows/governance-comment.yml").exists()
     assert (project / ".csarc/scripts/request-reviewer").is_file()
     assert not (project / ".csarc/REVIEWERS").exists()
     assert (

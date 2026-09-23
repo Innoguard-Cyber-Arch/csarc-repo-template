@@ -355,7 +355,9 @@ def test_manual_sync_is_deterministic_and_reviewed() -> None:
     )
     commands = manual_commands("dev/m7-staged-ci", "abcdef0123456789")
     assert "git merge --no-ff origin/main" in commands
-    assert "gh pr create --base dev/m7-staged-ci" in commands
+    assert "pr_lifecycle.py create" in commands
+    assert "--base dev/m7-staged-ci" in commands
+    assert "--body-file .github/pull_request_template.md" in commands
     assert "git push origin dev/m7-staged-ci" not in commands
 
 

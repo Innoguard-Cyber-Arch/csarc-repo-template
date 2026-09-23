@@ -148,7 +148,9 @@ def test_pr_policy_writes_run_only_from_the_trusted_revision() -> None:
         "issues": "write",
         "pull-requests": "write",
     }
-    assert "workflow_run.conclusion != 'cancelled'" in process["if"]
+    assert 'fromJSON(\'["success","failure"]\')' in process["if"]
+    assert "workflow_run.conclusion" in process["if"]
+    assert "!= 'cancelled'" not in process["if"]
     steps = {step["name"]: step for step in process["steps"]}
     checkout_count = sum(
         "actions/checkout@" in str(step) for step in process["steps"]

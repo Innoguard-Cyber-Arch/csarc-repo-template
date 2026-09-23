@@ -39,13 +39,10 @@ from pathlib import Path
 
 from jinja2 import Environment, StrictUndefined, TemplateError
 
-# Answers chosen to render every conditional branch a root workflow
-# exercises unconditionally (root always sets up Python, pnpm/Node, and
-# Rust toolchains for its full verification), so the
-# rendered template can be compared to root line-for-line instead of
-# comparing against a project that skipped whole blocks. See copier.yml
-# for the full question schema. These are the only answers referenced by
-# the paired workflow templates, and `languages` selects every module.
+# Answers chosen to match root behavior while rendering every language
+# branch a root workflow exercises during full verification. See copier.yml
+# for the full question schema. The downstream-only release-trigger variant
+# has its own explicit contract test in tests/test_journey07_release.py.
 #
 # Kept as its own typed constant (not just a value inside
 # REPRESENTATIVE_ANSWERS) because find_uncovered_conditionals() below
@@ -62,8 +59,14 @@ REPRESENTATIVE_ANSWERS: dict[str, object] = {
     "package_name": "jinja_workflow_drift_check",
     "code_owner": "@Innoguard-Cyber-Arch/template-maintainers",
     "lifecycle": ["issues", "milestones"],
-    "release_trigger": "main",
+    "release_trigger": "manual",
 }
+
+# A paired workflow may have a downstream-only configuration branch that the
+# root deliberately does not use. Keep this list exact and require a separate
+# regression test for every entry instead of teaching the drift checker a
+# broad expression language.
+ALLOWED_CONDITIONS: frozenset[str] = frozenset({"release_trigger == 'main'"})
 
 # Issue #739: a small, exact allowlist of permanent, intentional
 # differences between a root workflow and its rendered `template/`
@@ -135,15 +138,6 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
         (_ROOT_FULL, _DOWNSTREAM_PRODUCT),
     },
     "release.yml.jinja": {
-        # The generated workflow also honors the user's main/manual trigger
-        # choice; this repository always publishes on its governed branches.
-        (
-            "if: ${{ github.ref == 'refs/heads/main' || "
-            "startsWith(github.ref, 'refs/heads/dev/m') }}",
-            "if: ${{ (github.ref == 'refs/heads/main' || "
-            "startsWith(github.ref, 'refs/heads/dev/m')) && "
-            "(github.event_name != 'push' || true) }}",
-        ),
         # Generated repositories expose scripts/verify; this template
         # repository keeps the full release aggregator under its longer name.
         (
@@ -214,6 +208,8 @@ def find_uncovered_conditionals(
     problems: list[str] = []
     for raw_condition in _JINJA_CONDITION_TAG.findall(jinja_text):
         condition = raw_condition.strip()
+        if condition in ALLOWED_CONDITIONS:
+            continue
         expr = aliases.get(condition, condition).strip()
         match = _LANGUAGE_MEMBERSHIP.match(expr)
         if match is None:

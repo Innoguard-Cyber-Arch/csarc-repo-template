@@ -1,8 +1,10 @@
 {% raw %}name: Release
 
 on:
+{% endraw %}{% if release_trigger == 'main' %}{% raw %}
   push:
     branches: [main, 'dev/m*']
+{% endraw %}{% endif %}{% raw %}
   workflow_dispatch:
 
 concurrency:
@@ -15,7 +17,7 @@ permissions:
 jobs:
   release:
     name: validate and publish
-    if: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/dev/m')) && (github.event_name != 'push' || {% endraw %}{{ 'true' if release_trigger == 'main' else 'false' }}{% raw %}) }}
+    if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/dev/m') }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
