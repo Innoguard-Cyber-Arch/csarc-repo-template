@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/finalization-queue"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+repo="$fixture_root/repo"
+
+git init -q -b main "$repo"
+git -C "$repo" config user.email test@example.invalid
+git -C "$repo" config user.name "Finalization Queue Test"
+printf 'base\n' >"$repo/content.txt"
+git -C "$repo" add content.txt
+git -C "$repo" commit -q -m base
+
+first="$fixture_root/first"
+second="$fixture_root/second"
+other_base="$fixture_root/other-base"
+git -C "$repo" worktree add -q -b feat/101-first "$first" main
+git -C "$repo" worktree add -q -b feat/102-second "$second" main
+git -C "$repo" worktree add -q -b feat/103-other "$other_base" main
+
+first_out="$(
+  cd "$first"
+  CSARC_FINALIZATION_QUEUE_NOW=1000 "$script_path" announce \
+    --issue 101 --base main --ttl-minutes 10
+)"
+grep -Fq 'STATUS: ready' <<<"$first_out"
+
+second_out="$(
+  cd "$second"
+  CSARC_FINALIZATION_QUEUE_NOW=1001 "$script_path" announce \
+    --issue 102 --base main --ttl-minutes 10
+)"
+grep -Fq 'STATUS: wait' <<<"$second_out"
+grep -Fq 'follows #101 for base main' <<<"$second_out"
+
+other_out="$(
+  cd "$other_base"
+  CSARC_FINALIZATION_QUEUE_NOW=1002 "$script_path" announce \
+    --issue 103 --base dev/m1-example --ttl-minutes 10
+)"
+grep -Fq 'STATUS: ready' <<<"$other_out"
+
+list_out="$(
+  cd "$repo"
+  CSARC_FINALIZATION_QUEUE_NOW=1003 "$script_path" status --base main
+)"
+grep -Fq $'101\tmain\tfeat/101-first' <<<"$list_out"
+grep -Fq $'102\tmain\tfeat/102-second' <<<"$list_out"
+
+(cd "$repo" && "$script_path" leave --issue 101 >/dev/null)
+promoted_out="$(
+  cd "$second"
+  CSARC_FINALIZATION_QUEUE_NOW=1004 "$script_path" status --issue 102
+)"
+grep -Fq 'STATUS: ready' <<<"$promoted_out"
+
+expired_out="$(
+  cd "$second"
+  CSARC_FINALIZATION_QUEUE_NOW=2000 "$script_path" status --issue 102
+)"
+grep -Fq 'STATUS: absent' <<<"$expired_out"
+
+printf 'dirty\n' >>"$first/content.txt"
+set +e
+dirty_out="$(
+  cd "$first"
+  CSARC_FINALIZATION_QUEUE_NOW=2001 "$script_path" announce \
+    --issue 104 --base main 2>&1
+)"
+dirty_status=$?
+set -e
+[[ "$dirty_status" -eq 2 ]]
+grep -Fq 'announce requires a clean worktree' <<<"$dirty_out"
+
+echo "Finalization queue cases passed: 6"
