@@ -32,6 +32,8 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 `adopt` 預設為 dry-run，只產生 repo 外的 Markdown 導入報告與 machine-readable plan，不修改 repo；確認後才用 `--apply-plan` 套用。
 
+目標在其他組織時，以 `--data code_owner=@<organization>/<team>` 指定該 repo 的 team；個人 repo 則用 `--data code_owner=@<user>`，不需要 CODEOWNERS 時留空。尚未設定 remote 的本機 repo 會把有值的 owner 標成 `unknown`，允許先審查導入計畫；若 owner 留空，需同時傳入合法的 `--data repository_url=https://github.com/<owner>/<repository>`，即使文件模式關閉也不能省略。push 後再依序執行產生的 repository settings `plan`／`apply`／`check`。檢查不會自動授予 user／team 權限，owner 不存在或沒有 write 以上權限時會停止。
+
 ## 更新已導入的 repo
 
 ```bash

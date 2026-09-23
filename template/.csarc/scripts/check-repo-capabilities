@@ -144,9 +144,33 @@ else
   if [[ -f "$repo_root/.github/CODEOWNERS" ]]; then
     code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
   fi
-  if [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
+  if [[ -z "$code_owner" ]]; then
+    codeowners_status="allowed"
+    codeowners_detail="CODEOWNERS is not configured; no owner requires validation"
+  elif [[ "$code_owner" =~ ^@([A-Za-z0-9_.-]+)$ ]]; then
+    codeowner_user="${BASH_REMATCH[1]}"
+    if [[ ! "$codeowner_user" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}$ || "$codeowner_user" == *--* || "$codeowner_user" == *- ]]; then
+      codeowners_status="blocked"
+      codeowners_detail="CODEOWNERS must reference @user or @organization/team; got: $code_owner"
+    elif ! codeowner_state="$(gh api "repos/$repo/collaborators/$codeowner_user/permission" 2>&1)"; then
+      codeowners_status="unknown"
+      codeowners_detail="cannot inspect repository user $code_owner: $codeowner_state"
+    else
+      codeowner_permission="$(jq -r '.permission // "unknown"' <<<"$codeowner_state")"
+      if [[ "$codeowner_permission" =~ ^(write|push|maintain|admin)$ ]]; then
+        codeowners_status="allowed"
+        codeowners_detail="$code_owner has repository write access"
+      else
+        codeowners_status="blocked"
+        codeowners_detail="$code_owner lacks repository write access (permission: $codeowner_permission)"
+      fi
+    fi
+  elif [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
     codeowners_status="blocked"
-    codeowners_detail="CODEOWNERS must reference a GitHub team (@org/team); got: ${code_owner:-<empty>}"
+    codeowners_detail="CODEOWNERS must reference @user or @organization/team; got: $code_owner"
+  elif [[ "$(tr '[:upper:]' '[:lower:]' <<<"${BASH_REMATCH[1]}")" != "$(tr '[:upper:]' '[:lower:]' <<<"$owner")" ]]; then
+    codeowners_status="blocked"
+    codeowners_detail="CODEOWNER organization @${BASH_REMATCH[1]} does not match repository owner @$owner"
   elif ! teams_pages="$(gh api "repos/$repo/teams" --paginate --slurp 2>&1)"; then
     codeowners_status="unknown"
     codeowners_detail="cannot list repository teams: $teams_pages"
