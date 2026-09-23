@@ -96,8 +96,14 @@ attestation verification.
    capabilities are resolved by the runtime workflow and never treated as
    allowed.
 5. Stop and wait for explicit confirmation before changing files.
-   Treat an unverified `code_owner` as unknown and call it out before accepting
-   the plan; a confirmed missing team is blocking.
+   Treat an unverified configured `code_owner` as unknown and call it out
+   before accepting the plan. An empty value intentionally omits CODEOWNERS;
+   without a GitHub origin or `GH_REPO`, it must be paired with an explicit,
+   valid `repository_url` even when documentation is disabled. A confirmed
+   missing or unwritable `@user` or `@organization/team` is blocking. A local
+   repository without a remote may defer that live lookup, but after push the
+   generated repository-settings `plan`/`apply`/`check` must verify the owner
+   and never grant access automatically.
 6. After confirmation, apply an adoption only with the exact machine plan
    emitted by dry-run and `--yes --non-interactive`. Only after this approval
    may the CLI run the target-owned project hook in the isolated candidate;

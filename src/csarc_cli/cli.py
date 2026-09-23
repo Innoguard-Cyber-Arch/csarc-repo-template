@@ -52,6 +52,14 @@ AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 GIT_OBJECT_ID = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
+CODE_OWNER_USER = re.compile(
+    r"^@(?![A-Za-z0-9-]*--)([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}"
+    r"[A-Za-z0-9])?)$"
+)
+CODE_OWNER_TEAM = re.compile(r"^@([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$")
+GITHUB_REPOSITORY_URL = re.compile(
+    r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+)
 REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
 RELEASE_WRITER_MARKERS = (
@@ -2831,25 +2839,88 @@ def target_state(target: Path) -> tuple[str, tuple[str, ...], str]:
     return head, changes, digest
 
 
-def code_owner_verification(
+def code_owner_verification(  # noqa: C901
     repository: RepositoryContext, code_owner: object
 ) -> dict[str, str]:
-    """Verify a team CODEOWNER when the GitHub API can enumerate access."""
-    value = str(code_owner)
-    match = re.fullmatch(r"@([^/]+)/([^/]+)", value)
-    if repository.repository is None or match is None:
+    """Verify one optional user or team CODEOWNER against its repository."""
+    value = "" if code_owner is None else str(code_owner)
+    if not value:
         return {
-            "reason": "Repository or team owner is unavailable.",
+            "reason": "No CODEOWNER is configured.",
+            "state": "not-configured",
+            "value": value,
+        }
+    user_match = CODE_OWNER_USER.fullmatch(value)
+    team_match = CODE_OWNER_TEAM.fullmatch(value)
+    if user_match is None and team_match is None:
+        return {
+            "reason": "Use an @user or @organization/team CODEOWNER.",
+            "state": "blocked",
+            "value": value,
+        }
+    if repository.repository is None:
+        return {
+            "reason": (
+                "No GitHub origin or GH_REPO is available; verify the "
+                "CODEOWNER after the repository is pushed."
+            ),
             "state": "unknown",
             "value": value,
         }
-    organization, team = match.groups()
+    if user_match is not None:
+        user = user_match.group(1)
+        try:
+            result = run(
+                [
+                    "gh",
+                    "api",
+                    f"repos/{repository.repository}/collaborators/"
+                    f"{user}/permission",
+                    "--jq",
+                    ".permission",
+                ],
+                capture=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return {
+                "reason": "GitHub CLI is unavailable.",
+                "state": "unknown",
+                "value": value,
+            }
+        if result.returncode != 0:
+            return {
+                "reason": result.stderr.strip() or "User access is unreadable.",
+                "state": "unknown",
+                "value": value,
+            }
+        if result.stdout.strip() not in {
+            "write",
+            "push",
+            "maintain",
+            "admin",
+        }:
+            return {
+                "reason": "User lacks repository write access.",
+                "state": "blocked",
+                "value": value,
+            }
+        return {
+            "reason": "User has repository write access.",
+            "state": "verified",
+            "value": value,
+        }
+
+    organization, team = cast(re.Match[str], team_match).groups()
     if (
         repository.owner is None
         or organization.casefold() != repository.owner.casefold()
     ):
         return {
-            "reason": "CODEOWNER organization does not match the repository.",
+            "reason": (
+                f"CODEOWNER organization @{organization} does not match "
+                f"repository owner @{repository.owner or '(unknown)'}."
+            ),
             "state": "blocked",
             "value": value,
         }
@@ -2861,7 +2932,8 @@ def code_owner_verification(
                 "--paginate",
                 f"repos/{repository.repository}/teams",
                 "--jq",
-                ".[].slug",
+                ".[] | select((.slug | ascii_downcase) == "
+                f'"{team.casefold()}") | .permission',
             ],
             capture=True,
             check=False,
@@ -2878,10 +2950,16 @@ def code_owner_verification(
             "state": "unknown",
             "value": value,
         }
-    teams = {line.strip().casefold() for line in result.stdout.splitlines()}
-    if team.casefold() not in teams:
+    permissions = {line.strip() for line in result.stdout.splitlines()}
+    if not permissions:
         return {
             "reason": "Team is not attached to the target repository.",
+            "state": "blocked",
+            "value": value,
+        }
+    if not permissions.intersection({"push", "maintain", "admin"}):
+        return {
+            "reason": "Team lacks repository write access.",
             "state": "blocked",
             "value": value,
         }
@@ -4840,6 +4918,16 @@ def base_data(
     if mode == "adopt":
         data["coverage_mode"] = "diff"
     data.update(values)
+    code_owner = data.get("code_owner")
+    if not isinstance(code_owner, str) or (
+        code_owner
+        and CODE_OWNER_USER.fullmatch(code_owner) is None
+        and CODE_OWNER_TEAM.fullmatch(code_owner) is None
+    ):
+        raise CliError(
+            "code_owner must use an @user or @organization/team value, "
+            "or be empty."
+        )
     if "languages" in values:
         data["languages"] = parse_languages(values["languages"])
     if "language" in values and "languages" not in values:
@@ -5671,6 +5759,19 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     repository = repository_context(
         target, explicit_data.get("project_visibility")
     )
+    if (
+        repository.repository is None
+        and explicit_data.get("code_owner", DEFAULT_OWNER) == ""
+        and GITHUB_REPOSITORY_URL.fullmatch(
+            explicit_data.get("repository_url", "")
+        )
+        is None
+    ):
+        raise CliError(
+            "code_owner is empty and no GitHub origin or GH_REPO is "
+            "available; also pass --data "
+            "repository_url=https://github.com/owner/repository."
+        )
     data = base_data(target, mode, explicit_data)
     data["project_visibility"] = repository.visibility
     if repository.repository is not None:

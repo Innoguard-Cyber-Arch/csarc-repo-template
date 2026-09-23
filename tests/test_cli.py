@@ -5197,13 +5197,15 @@ def test_code_owner_verification_distinguishes_team_states(
         "github",
         True,
     )
-    monkeypatch.setattr(
-        cli,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(
-            args[0], 0, stdout="arch\n", stderr=""
-        ),
-    )
+
+    def team_run(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        assert command[-2] == "--jq"
+        output = "" if '"missing"' in command[-1] else "push\n"
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
+
+    monkeypatch.setattr(cli, "run", team_run)
     assert (
         cli.code_owner_verification(repository, "@Innoguard-Cyber-Arch/arch")[
             "state"
@@ -5216,6 +5218,45 @@ def test_code_owner_verification_distinguishes_team_states(
         )["state"]
         == "blocked"
     )
+    external_repository = cli.RepositoryContext(
+        "outside-org/product",
+        "outside-org",
+        "organization",
+        "private",
+        "github",
+        True,
+    )
+    assert (
+        cli.code_owner_verification(external_repository, "@outside-org/arch")[
+            "state"
+        ]
+        == "verified"
+    )
+    mismatch = cli.code_owner_verification(
+        external_repository, "@Innoguard-Cyber-Arch/arch"
+    )
+    assert mismatch["state"] == "blocked"
+    assert "@Innoguard-Cyber-Arch" in mismatch["reason"]
+    assert "@outside-org" in mismatch["reason"]
+
+    for permission in ("read", "triage"):
+        monkeypatch.setattr(
+            cli,
+            "run",
+            lambda *args, permission=permission, **kwargs: (
+                subprocess.CompletedProcess(
+                    args[0], 0, stdout=f"{permission}\n", stderr=""
+                )
+            ),
+        )
+        insufficient = cli.code_owner_verification(
+            repository, "@Innoguard-Cyber-Arch/arch"
+        )
+        assert insufficient == {
+            "reason": "Team lacks repository write access.",
+            "state": "blocked",
+            "value": "@Innoguard-Cyber-Arch/arch",
+        }
 
     monkeypatch.setattr(
         cli,
@@ -5229,6 +5270,235 @@ def test_code_owner_verification_distinguishes_team_states(
     )
     assert unknown["state"] == "unknown"
     assert unknown["reason"] == "not authorized"
+
+
+def test_code_owner_verification_supports_personal_repositories(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify a personal CODEOWNER through repository collaborator access."""
+    repository = cli.RepositoryContext(
+        "outside-user/product",
+        "outside-user",
+        "user",
+        "private",
+        "github",
+        True,
+    )
+    permission = "write"
+
+    def fake_run(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        assert command == [
+            "gh",
+            "api",
+            "repos/outside-user/product/collaborators/outside-user/permission",
+            "--jq",
+            ".permission",
+        ]
+        return subprocess.CompletedProcess(
+            command, 0, stdout=f"{permission}\n", stderr=""
+        )
+
+    monkeypatch.setattr(cli, "run", fake_run)
+    assert (
+        cli.code_owner_verification(repository, "@outside-user")["state"]
+        == "verified"
+    )
+
+    permission = "read"
+    blocked = cli.code_owner_verification(repository, "@outside-user")
+    assert blocked == {
+        "reason": "User lacks repository write access.",
+        "state": "blocked",
+        "value": "@outside-user",
+    }
+
+
+def test_code_owner_verification_handles_no_remote_and_empty_owner() -> None:
+    """Keep local-first adoption reviewable and an omitted owner intentional."""
+    repository = cli.RepositoryContext(
+        None,
+        None,
+        None,
+        "private",
+        "safe-default",
+        False,
+        "No GitHub origin or GH_REPO was found.",
+    )
+
+    assert cli.code_owner_verification(repository, "")["state"] == (
+        "not-configured"
+    )
+    unknown = cli.code_owner_verification(repository, "@outside-user")
+    assert unknown["state"] == "unknown"
+    assert "after the repository is pushed" in unknown["reason"]
+
+
+@pytest.mark.parametrize(
+    ("repository", "repository_url", "expected_url"),
+    [
+        (None, None, None),
+        (None, "https://github.com//product", None),
+        (
+            None,
+            "https://github.com/outside-user/product",
+            "https://github.com/outside-user/product",
+        ),
+        (
+            "outside-user/product",
+            None,
+            "https://github.com/outside-user/product",
+        ),
+    ],
+)
+def test_cli_requires_repository_identity_for_ownerless_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    repository: str | None,
+    repository_url: str | None,
+    expected_url: str | None,
+) -> None:
+    """Require an explicit or remote identity before entering Copier."""
+    revision = cli.Revision("development", "a" * 40, str(tmp_path))
+    monkeypatch.setattr(
+        cli, "resolve_revision", lambda *args, **kwargs: revision
+    )
+    monkeypatch.setattr(
+        cli,
+        "repository_context",
+        lambda *args, **kwargs: cli.RepositoryContext(
+            repository,
+            "outside-user" if repository else None,
+            "user" if repository else None,
+            "private",
+            "github" if repository else "safe-default",
+            repository is not None,
+        ),
+    )
+    received: dict[str, object] = {}
+
+    def capture_copy(
+        source: str,
+        resolved: cli.Revision,
+        destination: Path,
+        data: dict[str, object],
+        *,
+        skip_tasks: bool,
+    ) -> None:
+        del source, resolved, destination, skip_tasks
+        received.update(data)
+        raise CliError("stop after pre-Copier validation")
+
+    monkeypatch.setattr(cli, "copier_copy", capture_copy)
+    arguments = [
+        "init",
+        str(tmp_path / "new-project"),
+        "--data",
+        "code_owner=",
+        "--data",
+        "documentation_mode=off",
+        "--dry-run",
+    ]
+    if repository_url is not None:
+        arguments.extend(["--data", f"repository_url={repository_url}"])
+    assert main(arguments) == 2
+
+    if expected_url is None:
+        error = capsys.readouterr().err
+        assert "repository_url=https://github.com/owner/repository" in error
+        assert "Traceback" not in error
+        assert received == {}
+    else:
+        assert received["repository_url"] == expected_url
+        assert received["code_owner"] == ""
+        assert received["documentation_mode"] == "off"
+
+
+@pytest.mark.large
+def test_adopt_ownerless_repository_without_remote_uses_explicit_url(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Carry an explicit repository identity through a real adoption plan."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "ownerless-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: ownerless product")
+    monkeypatch.delenv("GH_REPO", raising=False)
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--dry-run",
+                "--data",
+                "code_owner=",
+                "--data",
+                "repository_url=https://github.com/outside-user/product",
+                "--data",
+                "documentation_mode=off",
+            ]
+        )
+        == 0
+    )
+    plan = json.loads(
+        (
+            tmp_path
+            / "ownerless-product-csarc-adoption-report"
+            / cli.ADOPTION_PLAN_BASENAME
+        ).read_text(encoding="utf-8")
+    )
+    assert plan["answers"]["code_owner"] == ""
+    assert plan["answers"]["repository_url"] == (
+        "https://github.com/outside-user/product"
+    )
+    assert plan["adoption"]["code_owner"]["state"] == "not-configured"
+
+
+@pytest.mark.parametrize(
+    "code_owner",
+    ["outside-user", "@bad_user", "@bad.user", "@bad--user", "@bad-"],
+)
+def test_cli_rejects_malformed_code_owner_without_copier_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    code_owner: str,
+) -> None:
+    """Validate a Copier override before starting the renderer."""
+    revision = cli.Revision("development", "a" * 40, str(tmp_path))
+    monkeypatch.setattr(
+        cli, "resolve_revision", lambda *args, **kwargs: revision
+    )
+    monkeypatch.delenv("GH_REPO", raising=False)
+
+    assert (
+        main(
+            [
+                "init",
+                str(tmp_path / "new-project"),
+                "--data",
+                f"code_owner={code_owner}",
+                "--dry-run",
+            ]
+        )
+        == 2
+    )
+    error = capsys.readouterr().err
+    assert "csarc: code_owner must use an @user" in error
+    assert "Traceback" not in error
 
 
 @pytest.mark.large

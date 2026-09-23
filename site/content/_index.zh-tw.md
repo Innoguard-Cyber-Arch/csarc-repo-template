@@ -140,7 +140,7 @@ csarc status <path> --json
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-capabilities" title="搞清楚這個 repo 實際能啟用什麼" >}}
-「規則治理」（Step 08）的方案能力表回答的是「這個帳號的 GitHub *方案* 允許什麼」；這是必要條件，但不夠：organization 政策、CODEOWNERS team 是否真的存在、token 權限範圍，都可能在方案本身支援的情況下仍然擋住某項能力。除了上述方案探測，`policies/capability-matrix.json` 列出這個模板依賴的每一項能力、各自的最低需求與已記錄的 workaround；`scripts/check-repo-capabilities` 會即時對照這個 repo 與 token 本身實際具備什麼：
+「規則治理」（Step 08）的方案能力表回答的是「這個帳號的 GitHub *方案* 允許什麼」；這是必要條件，但不夠：organization 政策、CODEOWNER user／team 是否真的存在、token 權限範圍，都可能在方案本身支援的情況下仍然擋住某項能力。除了上述方案探測，`policies/capability-matrix.json` 列出這個模板依賴的每一項能力、各自的最低需求與已記錄的 workaround；`scripts/check-repo-capabilities` 會即時對照這個 repo 與 token 本身實際具備什麼：
 
 ```bash
 ./scripts/check-repo-capabilities        # 人類可讀報告
@@ -151,12 +151,14 @@ csarc status <path> --json
 | --- | --- | --- | --- |
 | `repository_admin` | 以下每一項能力的前提 | 目前 token 的 `permissions.admin == true` | 請 owner／admin 執行 `apply`，或申請 Admin 角色 |
 | `ruleset_enforcement` | 預設分支的 Ruleset 分支保護 | public repository（任何方案），或 private 且 Pro／Team 以上 | DEGRADED 標記；`policies/rulesets.json` 保留為 desired state |
-| `codeowners_enforcement` | CODEOWNERS review 真的能擋下合併 | 需先具備上一項，且 `@org/team` 具寫入權限 | DEGRADED 標記；修正 team，或先用 `scripts/request-reviewer` |
+| `codeowners_enforcement` | CODEOWNERS review 真的能擋下合併 | 有設定時需先具備上一項，且 `@user` 或 `@organization/team` 具寫入權限 | DEGRADED 標記；修正 owner、留空省略，或先用 `scripts/request-reviewer` |
 | `actions_pr_approval` | Actions 能自動核准 PR（例如 Dependabot auto-merge） | organization 允許 `can_approve_pull_request_reviews` | DEGRADED 標記；降級為人工核准 |
 | `security_and_analysis` | secret scanning、push protection、Dependabot security updates | public repository，或 private 且具備 GitHub Advanced Security | DEGRADED 標記；改用本機 `scripts/scan-secrets` |
 | `github_pages` | 將 `docs/index.html` 發布成 hosted 網站 | public repository，或 private 且為 GitHub Enterprise Cloud | DEGRADED 標記；改分享 commit 進 repo 的 HTML 檔案 |
 | `repository_settings_inspection` | `check` 模式能比對即時的管理員專屬欄位 | 與 `repository_admin` 相同 | DEGRADED 標記；改在具 admin 身分的可信環境執行 `check` |
 | `immutable_releases` | GitHub 用來為每個已發布 Release 簽發 attestation 的 repository 設定 | admin 透過 `apply-repository-settings.sh apply` 開啟一次；`GITHUB_TOKEN` 仍無法直接讀取 | 不再 pre-flight 卡關（#770）；`scripts/publish-release` post-hoc 驗證簽發的 attestation，缺少時 fail closed |
+
+本機 repo 尚未設定 remote 時，有值的 CODEOWNER 可以先標為 `unknown`；若用 `--data code_owner=` 省略 CODEOWNERS，則必須同時傳入合法的 `--data repository_url=https://github.com/<owner>/<repository>`。這個 repository 身分在關閉文件功能時仍會被其他設定與套件 metadata 使用，不能從空 owner 猜測。
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="怎麼解讀 check-repo-capabilities 的結果" >}}

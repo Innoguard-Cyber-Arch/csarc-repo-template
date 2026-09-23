@@ -140,7 +140,7 @@ The full machine-readable contract lives in [`docs/agent-install.md`](https://gi
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-capabilities" title="Know what this specific repository can actually enable" >}}
-The Governance step's plan table (Step 08) answers "what does the account's GitHub *plan* allow." That is necessary but not sufficient: organization policy, CODEOWNERS team membership, and token scope can still block a capability on a plan that would otherwise support it. Beyond that plan probing, `policies/capability-matrix.json` names every capability this template relies on, its minimum requirement, and a documented workaround; `scripts/check-repo-capabilities` evaluates it against what this repository and token actually have, live:
+The Governance step's plan table (Step 08) answers "what does the account's GitHub *plan* allow." That is necessary but not sufficient: organization policy, CODEOWNER user or team access, and token scope can still block a capability on a plan that would otherwise support it. Beyond that plan probing, `policies/capability-matrix.json` names every capability this template relies on, its minimum requirement, and a documented workaround; `scripts/check-repo-capabilities` evaluates it against what this repository and token actually have, live:
 
 ```bash
 ./scripts/check-repo-capabilities        # human-readable report
@@ -151,12 +151,14 @@ The Governance step's plan table (Step 08) answers "what does the account's GitH
 | --- | --- | --- | --- |
 | `repository_admin` | Prerequisite for every row below | `permissions.admin == true` for the acting token | Ask an owner/admin to run `apply`, or request the Admin role |
 | `ruleset_enforcement` | Branch protection Ruleset on the default branch | Public repository (any plan), or private on Pro/Team or above | DEGRADED marker; desired Ruleset stays declarative in `policies/rulesets.json` |
-| `codeowners_enforcement` | CODEOWNERS review actually blocks merge | Ruleset above, plus a `@org/team` with write access | DEGRADED marker; fix the team, or use `scripts/request-reviewer` meanwhile |
+| `codeowners_enforcement` | CODEOWNERS review actually blocks merge | When configured, the Ruleset above plus an `@user` or `@organization/team` with write access | DEGRADED marker; fix the owner, omit it, or use `scripts/request-reviewer` meanwhile |
 | `actions_pr_approval` | Actions can auto-approve pull requests (for example Dependabot auto-merge) | Organization allows `can_approve_pull_request_reviews` | DEGRADED marker; fall back to manual human approval |
 | `security_and_analysis` | Secret scanning, push protection, Dependabot security updates | Public repository, or GitHub Advanced Security if private | DEGRADED marker; rely on local `scripts/scan-secrets` instead |
 | `github_pages` | Hosts `docs/index.html` as a live site | Public repository, or GitHub Enterprise Cloud if private | DEGRADED marker; distribute the committed HTML file instead |
 | `repository_settings_inspection` | `check` mode can compare live admin-only fields | Same as `repository_admin` | DEGRADED marker; run `check` from a trusted admin checkout |
 | `immutable_releases` | Repository setting GitHub uses to sign each published Release's attestation | An admin enables it once via `apply-repository-settings.sh apply`; `GITHUB_TOKEN` still can't read it directly | No longer pre-flight-blocking (#770); `scripts/publish-release` verifies the signed attestation post-hoc and fails closed if it's missing |
+
+For a local repository without a remote, a configured CODEOWNER may first be reported as `unknown`. If CODEOWNERS is omitted with `--data code_owner=`, also pass a valid `--data repository_url=https://github.com/<owner>/<repository>`. Other configuration and package metadata still use this repository identity when documentation is disabled, so it cannot be guessed from an empty owner.
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="How to read a check-repo-capabilities result" >}}
