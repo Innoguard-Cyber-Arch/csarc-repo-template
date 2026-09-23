@@ -47,12 +47,61 @@ ADOPTION_PLAN_BASENAME = "csarc-adoption-plan.json"
 # Version of the adoption report's own Markdown template, independent from
 # the CLI package version. Bump this when the report's structure or field
 # set changes; README.md displays the same value (#530).
-ADOPTION_REPORT_TEMPLATE_VERSION = "1.0.0"
+ADOPTION_REPORT_TEMPLATE_VERSION = "1.1.0"
 AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
+WORK_ITEM_DEFAULTS = (
+    {
+        "kind": "Bug",
+        "issue_type": "Bug",
+        "issue_label": None,
+        "pr_label": "bug",
+    },
+    {
+        "kind": "Feature",
+        "issue_type": "Feature",
+        "issue_label": None,
+        "pr_label": "enhancement",
+    },
+    {
+        "kind": "Task",
+        "issue_type": "Task",
+        "issue_label": None,
+        "pr_label": "enhancement",
+    },
+    {
+        "kind": "Documentation",
+        "issue_type": "Task",
+        "issue_label": "documentation",
+        "pr_label": "documentation",
+    },
+)
+WORK_ITEM_LABEL_ALIASES = {
+    "bug": ("Bug", "bug"),
+    "bugs": ("Bug", "bug"),
+    "bugfix": ("Bug", "bug"),
+    "defect": ("Bug", "bug"),
+    "defects": ("Bug", "bug"),
+    "enhancement": (None, "enhancement"),
+    "enhancements": (None, "enhancement"),
+    "feature": ("Feature", "enhancement"),
+    "features": ("Feature", "enhancement"),
+    "task": ("Task", "enhancement"),
+    "tasks": ("Task", "enhancement"),
+    "doc": ("Task", "documentation"),
+    "docs": ("Task", "documentation"),
+    "documentation": ("Task", "documentation"),
+}
+WORK_ITEM_ORTHOGONAL_LABELS = {
+    "duplicate",
+    "hotfix",
+    "needs-manual-review",
+    "promotion",
+    "release-recovery",
+}
 RELEASE_WRITER_MARKERS = (
     "gh release create",
     "gh release edit",
@@ -1861,6 +1910,11 @@ def markdown_code(value: object) -> str:
     return printable(value).replace("`", r"\`")
 
 
+def markdown_table_code(value: object) -> str:
+    """Return a safe inline code value for a Markdown table cell."""
+    return markdown_code(value).replace("|", r"\|")
+
+
 def report_settings(data: dict[str, object]) -> str:
     """Return known non-secret settings used for rendering."""
     allowed = {
@@ -2058,6 +2112,92 @@ def adoption_report_markdown(  # noqa: C901
             ]
         )
 
+    mapping_lines: list[str] = []
+    mapping: dict[str, object] = {}
+    if adoption is not None:
+        raw_mapping = adoption.get("work_item_mapping")
+        mapping = raw_mapping if isinstance(raw_mapping, dict) else {}
+    if mapping:
+        mapping_lines = [
+            "## Work-item mapping guidance",
+            "",
+            "This is read-only guidance. Adoption does not rename or delete "
+            "GitHub labels. Review the safe suggestions interactively; keep "
+            "custom labels unless you explicitly decide otherwise.",
+            "",
+            "| Work kind | Issue Type | Issue label | PR / fallback label |",
+            "| --- | --- | --- | --- |",
+        ]
+        defaults = mapping.get("defaults")
+        if isinstance(defaults, list):
+            for item in defaults:
+                if not isinstance(item, dict):
+                    continue
+                issue_label = item.get("issue_label") or "(none)"
+                mapping_lines.append(
+                    "| `"
+                    f"{markdown_table_code(item.get('kind'))}` | `"
+                    f"{markdown_table_code(item.get('issue_type'))}` | `"
+                    f"{markdown_table_code(issue_label)}` "
+                    "| `"
+                    f"{markdown_table_code(item.get('pr_label'))}` |"
+                )
+        mapping_lines.extend(
+            (
+                "",
+                "Inspection: `"
+                f"{markdown_code(mapping.get('state', 'unknown'))}` — "
+                f"{
+                    markdown_code(
+                        mapping.get('reason', 'No details available.')
+                    )
+                }",
+            )
+        )
+        issue_types = mapping.get("issue_types")
+        if isinstance(issue_types, list) and issue_types:
+            mapping_lines.extend(
+                (
+                    "",
+                    "### Existing Issue Types",
+                    "",
+                    "| Existing | Suggestion | Target |",
+                    "| --- | --- | --- |",
+                )
+            )
+            for item in issue_types:
+                if not isinstance(item, dict):
+                    continue
+                mapping_lines.append(
+                    "| `"
+                    f"{markdown_table_code(item.get('source'))}` | `"
+                    f"{markdown_table_code(item.get('action'))}` | `"
+                    f"{markdown_table_code(item.get('target') or '(none)')}` |"
+                )
+        labels = mapping.get("labels")
+        if isinstance(labels, list) and labels:
+            mapping_lines.extend(
+                (
+                    "",
+                    "### Existing labels",
+                    "",
+                    "| Existing | Suggestion | Issue Type | Canonical label |",
+                    "| --- | --- | --- | --- |",
+                )
+            )
+            for item in labels:
+                if not isinstance(item, dict):
+                    continue
+                issue_type = item.get("issue_type") or "(none)"
+                mapping_lines.append(
+                    "| `"
+                    f"{markdown_table_code(item.get('source'))}` | `"
+                    f"{markdown_table_code(item.get('action'))}` | `"
+                    f"{markdown_table_code(issue_type)}` "
+                    "| `"
+                    f"{markdown_table_code(item.get('target') or '(none)')}` |"
+                )
+
     decision_items: list[str] = []
     if adoption is not None and owner_state in {"blocked", "unknown"}:
         decision_items.append(
@@ -2070,6 +2210,21 @@ def adoption_report_markdown(  # noqa: C901
             "- Project verification hook `"
             f"{markdown_code(hook.get('path') or '(none)')}` failed - "
             f"{markdown_code(hook.get('reason', 'No details available.'))}."
+        )
+    for group, item_kind in (
+        (mapping.get("issue_types"), "Issue Type"),
+        (mapping.get("labels"), "label"),
+    ):
+        if not isinstance(group, list):
+            continue
+        decision_items.extend(
+            "- Existing "
+            f"{item_kind} `{markdown_code(item.get('source'))}` has no safe "
+            "automatic mapping; preserve it unless you explicitly choose a "
+            "target."
+            for item in group
+            if isinstance(item, dict)
+            and item.get("action") == "decision-required"
         )
     attention = (
         (path, "template and repository contain different UTF-8 text")
@@ -2112,6 +2267,8 @@ def adoption_report_markdown(  # noqa: C901
         "",
         *impact_lines,
         "",
+        *mapping_lines,
+        *(("",) if mapping_lines else ()),
         *decision_lines,
     ]
     if plan.merge:
@@ -3825,6 +3982,167 @@ def repository_context(  # noqa: C901
     )
 
 
+def inspect_work_item_mapping(  # noqa: C901
+    repository: RepositoryContext,
+) -> dict[str, object]:
+    """Suggest a conservative mapping from existing GitHub metadata."""
+    result: dict[str, object] = {
+        "defaults": [dict(item) for item in WORK_ITEM_DEFAULTS],
+        "issue_types": [],
+        "labels": [],
+        "mutation": "none",
+    }
+    if not repository.verified or repository.repository is None:
+        result.update(
+            state="unknown",
+            reason=(
+                repository.reason
+                or "GitHub repository context was not verified."
+            ),
+        )
+        return result
+
+    commands = {
+        "labels": [
+            "gh",
+            "label",
+            "list",
+            "--repo",
+            repository.repository,
+            "--limit",
+            "1000",
+            "--json",
+            "name",
+        ],
+        "issues": [
+            "gh",
+            "issue",
+            "list",
+            "--repo",
+            repository.repository,
+            "--state",
+            "all",
+            "--limit",
+            "1000",
+            "--json",
+            "issueType",
+        ],
+    }
+    payloads: dict[str, list[object]] = {}
+    for name, command in commands.items():
+        try:
+            response = run(command, capture=True, check=False)
+        except FileNotFoundError:
+            result.update(
+                state="unknown",
+                reason=(
+                    "GitHub CLI is unavailable; live work-item metadata was "
+                    "not inspected."
+                ),
+            )
+            return result
+        if response.returncode != 0:
+            result.update(
+                state="unknown",
+                reason=(
+                    "GitHub permissions or connectivity prevented live "
+                    "work-item inspection."
+                ),
+            )
+            return result
+        try:
+            payload = json.loads(response.stdout)
+        except json.JSONDecodeError:
+            payload = None
+        if not isinstance(payload, list):
+            result.update(
+                state="unknown",
+                reason="GitHub returned invalid work-item metadata.",
+            )
+            return result
+        payloads[name] = payload
+
+    observed_types = sorted(
+        {
+            str(issue_type["name"])
+            for item in payloads["issues"]
+            if isinstance(item, dict)
+            and isinstance((issue_type := item.get("issueType")), dict)
+            and isinstance(issue_type.get("name"), str)
+        },
+        key=str.casefold,
+    )
+    type_suggestions = []
+    canonical_types = {"bug": "Bug", "feature": "Feature", "task": "Task"}
+    for name in observed_types:
+        target = canonical_types.get(name.casefold())
+        type_suggestions.append(
+            {
+                "action": (
+                    "preserve"
+                    if name in canonical_types.values()
+                    else "map"
+                    if target is not None
+                    else "decision-required"
+                ),
+                "source": name,
+                "target": target,
+            }
+        )
+
+    observed_labels = sorted(
+        {
+            str(item["name"])
+            for item in payloads["labels"]
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        },
+        key=str.casefold,
+    )
+    label_suggestions = []
+    for name in observed_labels:
+        normalized = re.sub(r"[ _-]+", " ", name.strip().casefold())
+        alias = WORK_ITEM_LABEL_ALIASES.get(normalized)
+        canonical = name.casefold()
+        if canonical in WORK_ITEM_ORTHOGONAL_LABELS:
+            suggestion = {
+                "action": "preserve" if name == canonical else "map",
+                "issue_type": None,
+                "pr_label": canonical,
+                "source": name,
+                "target": canonical,
+            }
+        elif alias is not None:
+            issue_type, pr_label = alias
+            canonical_name = pr_label
+            suggestion = {
+                "action": ("preserve" if name == canonical_name else "map"),
+                "issue_type": issue_type,
+                "pr_label": pr_label,
+                "source": name,
+                "target": canonical_name,
+            }
+        else:
+            suggestion = {
+                "action": "decision-required",
+                "issue_type": None,
+                "pr_label": None,
+                "source": name,
+                "target": None,
+            }
+        label_suggestions.append(suggestion)
+
+    result.update(
+        state="available",
+        reason=(
+            "Read-only GitHub inspection completed; suggestions do not "
+            "rename or delete labels."
+        ),
+        issue_types=type_suggestions,
+        labels=label_suggestions,
+    )
+    return result
+
+
 def validate_repository_context(
     target: Path,
     expected: RepositoryContext,
@@ -5029,6 +5347,7 @@ def build_adoption_plan(
         "target_head": head,
         "target_status_sha256": status_sha256,
         "verification": verification,
+        "work_item_mapping": inspect_work_item_mapping(repository),
     }
     validate_target_snapshot(target, adoption)
     return ResolvedPlan(

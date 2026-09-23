@@ -1126,6 +1126,151 @@ def test_repository_context_without_remote_uses_safe_or_explicit_value(
     assert explicit.source == "explicit"
 
 
+def test_work_item_mapping_suggests_only_conservative_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Separate native Issue Types, PR labels, and custom metadata."""
+    repository = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+
+    def fake_run(
+        command: list[str], **_: object
+    ) -> subprocess.CompletedProcess[str]:
+        payload: object
+        if command[1:3] == ["label", "list"]:
+            payload = [
+                {"name": "Bug"},
+                {"name": "docs"},
+                {"name": "enhancement"},
+                {"name": "hotfix"},
+                {"name": "team/backend"},
+            ]
+        else:
+            payload = [
+                {"issueType": {"name": "bug"}},
+                {"issueType": {"name": "Feature"}},
+                {"issueType": {"name": "Chore"}},
+                {"issueType": None},
+            ]
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    mapping = cli.inspect_work_item_mapping(repository)
+
+    assert mapping["state"] == "available"
+    assert mapping["mutation"] == "none"
+    assert mapping["issue_types"] == [
+        {"action": "map", "source": "bug", "target": "Bug"},
+        {"action": "decision-required", "source": "Chore", "target": None},
+        {"action": "preserve", "source": "Feature", "target": "Feature"},
+    ]
+    assert mapping["labels"] == [
+        {
+            "action": "map",
+            "issue_type": "Bug",
+            "pr_label": "bug",
+            "source": "Bug",
+            "target": "bug",
+        },
+        {
+            "action": "map",
+            "issue_type": "Task",
+            "pr_label": "documentation",
+            "source": "docs",
+            "target": "documentation",
+        },
+        {
+            "action": "preserve",
+            "issue_type": None,
+            "pr_label": "enhancement",
+            "source": "enhancement",
+            "target": "enhancement",
+        },
+        {
+            "action": "preserve",
+            "issue_type": None,
+            "pr_label": "hotfix",
+            "source": "hotfix",
+            "target": "hotfix",
+        },
+        {
+            "action": "decision-required",
+            "issue_type": None,
+            "pr_label": None,
+            "source": "team/backend",
+            "target": None,
+        },
+    ]
+
+
+def test_work_item_mapping_degrades_without_verified_github_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep defaults but never claim live inspection without GitHub."""
+    monkeypatch.setattr(
+        cli,
+        "run",
+        lambda *args, **kwargs: pytest.fail("GitHub must not be queried"),
+    )
+    repository = cli.RepositoryContext(
+        None,
+        None,
+        None,
+        "private",
+        "safe-default",
+        False,
+        "No GitHub origin was found.",
+    )
+
+    mapping = cli.inspect_work_item_mapping(repository)
+
+    assert mapping["state"] == "unknown"
+    assert mapping["reason"] == "No GitHub origin was found."
+    assert mapping["defaults"] == [
+        dict(item) for item in cli.WORK_ITEM_DEFAULTS
+    ]
+    assert mapping["issue_types"] == []
+    assert mapping["labels"] == []
+    assert mapping["mutation"] == "none"
+
+
+def test_work_item_mapping_reports_unavailable_github_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Report permission or connectivity failures without partial claims."""
+    repository = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+    monkeypatch.setattr(
+        cli,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 1, stdout="", stderr="permission denied"
+        ),
+    )
+
+    mapping = cli.inspect_work_item_mapping(repository)
+
+    assert mapping["state"] == "unknown"
+    assert "permissions or connectivity" in str(mapping["reason"])
+    assert mapping["issue_types"] == []
+    assert mapping["labels"] == []
+
+
 def write_product_release_workflow(
     root: Path,
     name: str = "release.yml",
@@ -1565,10 +1710,15 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
         f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
         in report_text
     )
+    assert "## Work-item mapping guidance" in report_text
+    assert "Inspection: `unknown`" in report_text
     assert main([*arguments, "--dry-run"]) == 0
     assert git(project, "status", "--porcelain") == before
     plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
     assert plan_path.is_file()
+    saved_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert saved_plan["adoption"]["work_item_mapping"]["state"] == "unknown"
+    assert saved_plan["adoption"]["work_item_mapping"]["mutation"] == "none"
     assert (
         main(
             [
@@ -2659,6 +2809,65 @@ def test_adoption_report_zero_removed_files_is_explicit(tmp_path: Path) -> None:
     assert "| Edited files | 0 |" in report
     assert "| Removed files | 0 |" in report
     assert "| Remove | 0 |" in report
+
+
+def test_adoption_report_guides_work_item_mapping(tmp_path: Path) -> None:
+    """Render safe defaults and surface custom metadata for a decision."""
+    mapping = {
+        "defaults": [dict(item) for item in cli.WORK_ITEM_DEFAULTS],
+        "issue_types": [
+            {"action": "preserve", "source": "Bug", "target": "Bug"},
+            {
+                "action": "decision-required",
+                "source": "Chore",
+                "target": None,
+            },
+        ],
+        "labels": [
+            {
+                "action": "map",
+                "issue_type": "Bug",
+                "source": "Bug",
+                "target": "bug",
+            },
+            {
+                "action": "decision-required",
+                "issue_type": None,
+                "source": "team|backend",
+                "target": None,
+            },
+        ],
+        "mutation": "none",
+        "reason": "Read-only inspection completed.",
+        "state": "available",
+    }
+    report = cli.adoption_report_markdown(
+        tmp_path,
+        cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
+        cli.RepositoryContext(
+            "owner/repository",
+            "owner",
+            "Organization",
+            "private",
+            "github",
+            True,
+        ),
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
+        cli.Plan((), (), (), (), (), (), ()),
+        "2026-09-23T00:00:00+08:00",
+        {"work_item_mapping": mapping},
+    )
+
+    assert "## Work-item mapping guidance" in report
+    assert "| `Bug` | `Bug` | `(none)` | `bug` |" in report
+    assert "| `Bug` | `map` | `Bug` | `bug` |" in report
+    assert "| `team\\|backend` | `decision-required`" in report
+    assert "Existing Issue Type `Chore` has no safe automatic mapping" in report
+    assert (
+        "Existing label `team|backend` has no safe automatic mapping" in report
+    )
 
 
 def test_adoption_report_lists_codeowner_blocked_as_decision_item(
