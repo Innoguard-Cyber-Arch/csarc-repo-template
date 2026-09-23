@@ -6,7 +6,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.25.6-beta.1<!-- x-release-please-version --> |
+| 公版版本 | v0.25.7-beta.1<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
@@ -259,7 +259,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 開發用的 unreleased adoption 每次重播 machine plan 或 pending checkpoint 時，都必須在該次命令重新傳入相同的本機 `--source`、完整 `--expected-sha` 與 `--allow-unreleased`；plan 內保存的 source、SHA、digest 或 `verification=unverified` 只用來比對資料，不能代替本次授權。`--apply-plan` 會先顯示已保存的完整 plan 並取得確認，確認以前不會執行 Copier task、target policy script 或 product hook。正式 verified Release 重播不接受這三個開發旗標。
 
-若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance，或雖有 `.csarc/provenance.json` 但仍是舊版未驗證格式(例如 `verification` 不是 `verified`，常見於較早的 `--allow-unreleased` adopt)時，兩種情況都需要先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移；CLI 不會默認宣稱舊狀態已驗證，也不會把「格式過舊」與「欄位遭竄改」混為一談——已標示 `verified` 卻欄位對不上的記錄，即使加上 `--accept-legacy` 仍會被拒絕。仍在用舊檔名 `.copier-answers.yml`(或已停用的 `.csarc/profile.json`)的既有 repo，`update` 會在套用新版模板前把設定自動遷移到現行的 `.csarc/config.yml`；舊 `features: repo-site` 與 `readme_primary_language` 也會一次性轉為 `documentation_mode` 與 `primary_language`。`site/content/_index.zh-tw.md`、`_index.en.md` 與 `docs/site-theme.css` 由生成專案維護，Copier 更新版型時不會覆寫；portable `docs/index.html`／`docs/index.en.html` 則重新建置。已退役的 `docs/site-content.md` 不會自動搬移，`./scripts/build-repo-site` 會提示維護者先移植再刪除。完整規則見 [`docs/documentation-policy.md`](docs/documentation-policy.md)。
+若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance，或雖有 `.csarc/provenance.json` 但仍是舊版未驗證格式（例如 `verification` 不是 `verified`，常見於較早的 `--allow-unreleased` adopt）時，兩種情況都需要先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移；若 `_commit` 是直接使用 Copier 留下的 release tag 或短 SHA，`csarc status` 會回報 `migrate`，並給出同一條可先預覽的遷移指令。CLI 會把該值綁回經過 immutability、attestation 與 signature 驗證的 Release 完整 SHA，不會默認宣稱舊狀態已驗證，也不會把「格式過舊」與「欄位遭竄改」混為一談——已標示 `verified` 卻欄位對不上的記錄，即使加上 `--accept-legacy` 仍會被拒絕。仍在用舊檔名 `.copier-answers.yml`（或已停用的 `.csarc/profile.json`）的既有 repo，`update` 會在套用新版模板前把設定自動遷移到現行的 `.csarc/config.yml`；舊 `features: repo-site` 與 `readme_primary_language` 也會一次性轉為 `documentation_mode` 與 `primary_language`。`site/content/_index.zh-tw.md`、`_index.en.md` 與 `docs/site-theme.css` 由生成專案維護，Copier 更新版型時不會覆寫；portable `docs/index.html`／`docs/index.en.html` 則重新建置。已退役的 `docs/site-content.md` 不會自動搬移，`./scripts/build-repo-site` 會提示維護者先移植再刪除。完整規則見 [`docs/documentation-policy.md`](docs/documentation-policy.md)。
 
 ### 驗證邊界
 

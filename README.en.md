@@ -6,7 +6,7 @@ Cyber-Arch's updatable repository foundation: creating a new project, adopting a
 
 | Item | Current status |
 | --- | --- |
-| Template version | v0.25.6-beta.1<!-- x-release-please-version --> |
+| Template version | v0.25.7-beta.1<!-- x-release-please-version --> |
 | Supported languages | Python, Rust, TypeScript (independently multi-selectable; choosing none uses only the common workflow) |
 | repo-site presentation template version | 1.1.0 |
 | repo-site render engine version | 1.1.0 |
@@ -257,7 +257,7 @@ The root CLI is not published to a package registry; a release prompt always run
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<full-commit-sha>' csarc --help
 ```
 
-To adjust an advanced Copier answer, repeat `--data KEY=VALUE` after the CLI command; to pin a specific stable version, use `--to vX.Y.Z --expected-sha <full-commit-sha>`. When an old repo has no provenance, first manually review its existing answers, then migrate explicitly with `update --from-release <tag> --accept-legacy` -- the CLI never assumes the old state is already verified by default. Repositories using the old `features: repo-site` and `readme_primary_language` settings migrate once to `documentation_mode` and `primary_language`. `site/content/_index.zh-tw.md` / `_index.en.md` and `docs/site-theme.css` are project-owned and remain preserved across template updates; the portable `docs/index.html` / `docs/index.en.html` outputs are rebuilt. The retired `docs/site-content.md` is not migrated automatically; `./scripts/build-repo-site` asks a maintainer to port and remove it. See [`docs/documentation-policy.md`](docs/documentation-policy.md) for the complete contract.
+To adjust an advanced Copier answer, repeat `--data KEY=VALUE` after the CLI command; to pin a specific stable version, use `--to vX.Y.Z --expected-sha <full-commit-sha>`. When an old repo has no provenance or has an older unverified `.csarc/provenance.json` shape, first manually review its existing answers, then migrate explicitly with `update --from-release <tag> --accept-legacy`. If `_commit` is a release tag or short SHA left by direct Copier use, `csarc status` reports `migrate` and returns the same previewable migration command. The CLI binds that value to the immutable, attested, signature-verified Release's full SHA; it never assumes the old state is verified, and a record that already claims `verified` but disagrees still fails closed. Repositories using the old `.copier-answers.yml` (or retired `.csarc/profile.json`) migrate to `.csarc/config.yml`; the old `features: repo-site` and `readme_primary_language` settings migrate once to `documentation_mode` and `primary_language`. `site/content/_index.zh-tw.md` / `_index.en.md` and `docs/site-theme.css` are project-owned and remain preserved across template updates; the portable `docs/index.html` / `docs/index.en.html` outputs are rebuilt. The retired `docs/site-content.md` is not migrated automatically; `./scripts/build-repo-site` asks a maintainer to port and remove it. See [`docs/documentation-policy.md`](docs/documentation-policy.md) for the complete contract.
 
 ### Verification boundary
 
