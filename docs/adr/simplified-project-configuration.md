@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-22
-- **來源 Issues：**[#900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)、[#919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919)
+- **來源 Issues：**[#900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)、[#919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919)、[#926](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/926)
 - **實作 PR：**https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/907
 - **補充決策：**[#908](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/908)
 
@@ -42,12 +42,13 @@ Copier 會把每個問題保存成頂層答案；既有無依賴 YAML reader 也
 - `admin_bypass` 預設 `off`，可明確選擇 `beta-only` 或 `always`；`copilot_review: allowed` 讓乾淨 exact-head Copilot review 可作為證據。不可用、額度不足、舊 head、有意見或未解 thread 時回到同行核准或設定允許的管理員授權。
 - reviewer 從 live repository `maintain`／`admin` 權限 best-effort 選取，不保存靜態名單；`code_owner` 可省略，仍只表示 ownership。
 - branch route 由可信 Issue／Milestone metadata 推導，不再另設 `branch_strategy`。
-- `release_trigger: main` 在每次 main push 執行既有 Conventional Commit 判定；`manual` 只接受明確入口。兩者共用 major／minor／patch／no-release、materialization、freshness、single-writer 與 immutable evidence。
+- `release_trigger: main` 在每次 main push 執行既有 Conventional Commit 判定；`manual` 完全不註冊 push trigger，只接受明確 dispatch 或本機入口。兩者共用 major／minor／patch／no-release、materialization、freshness、single-writer 與 immutable evidence。本模板 root 採 `manual`，避免每次主幹更新都建立無效發版 run。
 - release workflow、required inputs、reason、settings owner 與 immutable setting 都是衍生或稽核輸出，不再是一般答案。
 - `documentation_mode` 是文件能力的唯一控制面，搭配 `primary_language` 與 `i18n`；`features` 只保留 Docker 等非文件選配。Issue #919 取代原本將 repo-site 放在 `features` 的決定。
 - `project_license` 與 `copyright_holder` 是封裝與文件共用的授權來源；未宣告時採 proprietary，不從 repository identity 推定開源授權。
 - `actions_fallback: admin` 是明確 opt-in，只適用於可證明的 zero-step GitHub billing gate，仍須 exact-head／base、review、適用本機 suite、remote lease 與 trace；失敗或未知狀態一律 fail closed。
-- `verification_mode: local` 是新專案預設值：沿用同一個 risk-owned fast／full router 與 runner，成功後只寫入 Git metadata 的 self-attested evidence；merge lifecycle 重驗 clean worktree、exact head/tree、base、tier、scope、freshness、review 與 remote lease，再走有 trace 的 admin bypass。它不產生任何會重跑驗證的 hosted workflow，包括 release workflow；`hosted` 才保留 #834／#835 的 trusted Actions 與可信 release provenance。
+- `verification_mode: local` 是新專案預設值：沿用同一個 risk-owned fast／full router 與 runner，成功後只寫入 Git metadata 的 self-attested evidence；merge lifecycle 重驗 clean worktree、exact head/tree、base、tier、scope、freshness、review 與 remote lease，再走有 trace 的 admin bypass。它不產生 hosted CI、PR policy／writer、review／reviewer assignment、spec sync、work-item lifecycle、Pages 或 release workflow；這些操作改走既有本機 wrapper，平台 UI 的直接變更只由手動或低頻 drift check 發現。`hosted` 才保留 #834／#835 的 trusted Actions、Pages deployment 與可信 release provenance。
+- `documentation_mode: template-and-content` 只負責產生可離線使用的 `docs/**`；只有同時選 `verification_mode: hosted` 才產生 Pages workflow 與 enabled policy。Pages 改用 `build_type: workflow`，只在 `docs/**` 變動或手動 dispatch 時部署。
 
 ## 遷移
 

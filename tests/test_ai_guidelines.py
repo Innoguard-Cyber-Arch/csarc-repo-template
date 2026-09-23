@@ -63,6 +63,20 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert "docs/index.html#work" not in rendered
     assert "review requirements, merge eligibility" in rendered
     assert "configured admin bypass" in rendered
+    assert "do not rerun the aggregate suite solely because" in rendered
+    assert "local full is reserved for a documented fallback" in rendered
+    local_rendered = workflow.render(
+        **{**context, "verification_mode": "local"}
+    )
+    assert "run `./.csarc/scripts/verify-fast` once" in local_rendered
+    assert (
+        "do not rerun the aggregate suite solely because" not in local_rendered
+    )
+    assert ".csarc/scripts/gh-issue-develop" in rendered
+    assert ".csarc/scripts/finalization-queue announce" in rendered
+    assert "READY_TO_FINALIZE" in rendered
+    assert "ARCHIVE_READY" in rendered
+    assert "never rename or delete an open PR's head" in rendered
     assert ".csarc/docs/csarc.md#公版更新" in rendered
     assert "automation are suspended" not in rendered
     assert ("Python setup:" in rendered) is python_command
@@ -85,6 +99,14 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     assert "## Responsibility map" in root_guidance
     assert "Approved specs and ADRs preserve durable context" in root_guidance
     assert "Journey 08" in root_guidance
+    assert "scripts/finalization-queue announce" in root_guidance
+    assert "READY_TO_FINALIZE" in root_guidance
+    assert "ARCHIVE_READY" in root_guidance
+    assert (
+        "does not rerun the aggregate fast or full suite locally"
+        in root_guidance
+    )
+    assert "Run local full only for a documented fallback" in root_guidance
     assert "automation are suspended" not in root_guidance
 
     template_guidance = TEMPLATE.read_text(encoding="utf-8")

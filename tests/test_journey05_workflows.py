@@ -148,7 +148,9 @@ def test_pr_policy_writes_run_only_from_the_trusted_revision() -> None:
         "issues": "write",
         "pull-requests": "write",
     }
-    assert "workflow_run.conclusion != 'cancelled'" in process["if"]
+    assert 'fromJSON(\'["success","failure"]\')' in process["if"]
+    assert "workflow_run.conclusion" in process["if"]
+    assert "!= 'cancelled'" not in process["if"]
     steps = {step["name"]: step for step in process["steps"]}
     checkout_count = sum(
         "actions/checkout@" in str(step) for step in process["steps"]
@@ -172,6 +174,7 @@ def test_pr_policy_writes_run_only_from_the_trusted_revision() -> None:
     assert "scripts/sync_work_item_metadata.py" in source
     assert "scripts/sync_milestone_state.py check-pr" in source
     assert "scripts/sync_milestone_state.py check-merge-group" in source
+    assert source.count("--publish-only") == 2
 
 
 def test_pr_review_skips_draft_and_conversion_churn() -> None:
@@ -185,7 +188,18 @@ def test_pr_review_skips_draft_and_conversion_churn() -> None:
     workflow = load_yaml(root_path)
     triggers = workflow.get("on", workflow.get(True))
     assert "converted_to_draft" not in triggers["pull_request_target"]["types"]
-    condition = workflow["jobs"]["review"]["if"]
+    assert workflow["jobs"]["merge-group-review"]["name"] == "review"
+    condition = workflow["jobs"]["publish"]["if"]
     assert "github.event.pull_request.draft == false" in condition
     assert "PR lifecycle merge authorization" in condition
-    assert "github.event_name == 'merge_group'" in condition
+    assert "github.event_name != 'merge_group'" in condition
+    assert workflow["jobs"]["publish"]["permissions"]["checks"] == "write"
+    assert "review_gate.py publish" in root_source
+    assert "--details-url" in root_source
+    assert "--run-id" in root_source
+    assert 'publisher_sha="$base_sha"' in root_source
+    assert 'if [[ "$head_ref" == sync/main-to-* ]]' in root_source
+    assert (
+        "repos/$GITHUB_REPOSITORY/git/ref/heads/$default_branch" in root_source
+    )
+    assert "ref: ${{ steps.pr.outputs.publisher_sha }}" in root_source

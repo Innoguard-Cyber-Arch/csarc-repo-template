@@ -16,7 +16,7 @@ set -euo pipefail
 #
 # The stubbed repository is public (see the `@tsv` case below), so the
 # GitHub Pages check added by Issue #571 is always enforcement-available
-# here; the `pages` endpoint stub below reports a live source that matches
+# here; the `pages` endpoint stub below reports live settings that match
 # policies/pages.json so the "fully matching fixture" case (Case 1) reports
 # no drift. Pages' own drift/DEGRADED/enforcement-availability behavior is
 # covered independently in tests/test_apply_repository_settings.py.
@@ -90,7 +90,8 @@ import json
 import os
 
 desired = json.load(open(os.path.join(os.environ["REPO_ROOT"], "policies/pages.json"), encoding="utf-8"))
-print(json.dumps({"source": desired["source"], "status": "built"}))
+live = {key: desired[key] for key in ("build_type", "source") if key in desired}
+print(json.dumps({**live, "status": "built"}))
 PY
     ;;
   "api repos/\$test_repo/actions/permissions/workflow")

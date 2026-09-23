@@ -33,6 +33,6 @@ project_visibility: public
 primary_language: zh-tw
 python_support_mode: latest
 release_ownership: csarc-owned
-release_trigger: main
+release_trigger: manual
 repository_url: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template
 security_reporting_channel: Use this public repository's GitHub Issues; never post secrets or sensitive details.

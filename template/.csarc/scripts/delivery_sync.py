@@ -530,14 +530,17 @@ def merge_group_gate(
 def manual_commands(delivery_branch: str, main_sha: str) -> str:
     """Return the portable reviewed-PR fallback for one branch."""
     sync_branch = sync_branch_name(delivery_branch, main_sha)
+    lifecycle = Path(__file__).with_name("pr_lifecycle.py")
     return "\n".join(
         [
             f"git fetch origin main {delivery_branch}",
             f"git switch -c {sync_branch} origin/{delivery_branch}",
             "git merge --no-ff origin/main",
             f"git push -u origin {sync_branch}",
-            f"gh pr create --base {delivery_branch} --head {sync_branch} "
-            f"--title 'chore(sync): merge main into {delivery_branch}'",
+            f"python3 {lifecycle} create --repo $GITHUB_REPOSITORY "
+            f"--base {delivery_branch} --head {sync_branch} "
+            f"--title 'chore(sync): merge main into {delivery_branch}' "
+            "--body-file .github/pull_request_template.md",
             "# Add the enhancement label only through pr_lifecycle.py edit.",
         ]
     )

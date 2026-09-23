@@ -30,6 +30,7 @@ authorization_template = MODULE["authorization_template"]
 base_lane_ref = MODULE["base_lane_ref"]
 confirm_refs = MODULE["confirm_refs"]
 create_refs = MODULE["create_refs"]
+create_draft_pull = MODULE["create_draft_pull"]
 edit_metadata = MODULE["edit_metadata"]
 edit_standalone_issue = MODULE["edit_standalone_issue"]
 exact_head_approval = MODULE["exact_head_approval"]
@@ -267,6 +268,9 @@ class FakeGitHub:
             run_id = int(run_match.group(1))
             return {
                 "id": run_id,
+                "html_url": (
+                    f"https://github.com/owner/repo/actions/runs/{run_id}"
+                ),
                 "run_attempt": 1,
                 "check_suite_id": self.run_suite_ids[run_id],
                 "head_sha": self.head,
@@ -1036,12 +1040,69 @@ def test_issue_label_helper_rejects_a_pull_request(
         )
 
 
-def test_writer_scanner_allows_pr_creation_without_state_or_metadata() -> None:
-    """Creating a plain PR is followed by a separately leased edit."""
-    assert not writer_violations(
+def test_writer_scanner_requires_the_managed_pr_creation_path() -> None:
+    """Agents cannot bypass the canonical direct-to-Draft creator."""
+    assert "direct gh pr creation" in writer_violations(
         "gh pr create --base dev/m7-staged-ci --head fix/x "
         "--title fix --body body"
     )
+
+
+def test_managed_pr_creation_starts_draft_and_checks_remote_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Create one clean pushed PR without a Ready-to-Draft transition."""
+    head_sha = "a" * 40
+    github = FakeGitHub(head_sha)
+    github.head_ref = "ci/926-reduce-hosted-automation"
+    github.body = "Closes #926\n"
+    github.draft = True
+    body_path = tmp_path / "body.md"
+    body_path.write_text(github.body, encoding="utf-8")
+    calls: list[tuple[list[str], str | None]] = []
+
+    def fake_run(
+        command: list[str], *, input_text: str | None = None, **_kwargs: object
+    ) -> str:
+        calls.append((command, input_text))
+        if command[:3] == ["git", "branch", "--show-current"]:
+            return github.head_ref
+        if command[:3] == ["git", "status", "--porcelain"]:
+            return ""
+        if command[:3] == ["git", "rev-parse", "HEAD"]:
+            return head_sha
+        if command[:3] == ["gh", "pr", "create"]:
+            return "https://github.com/owner/repo/pull/42"
+        return ""
+
+    monkeypatch.setitem(
+        create_draft_pull.__globals__, "require_origin", lambda *_: None
+    )
+    monkeypatch.setitem(
+        create_draft_pull.__globals__,
+        "branch_sha",
+        lambda _github, _repo, branch: (
+            head_sha if branch == github.head_ref else github.base_sha
+        ),
+    )
+    monkeypatch.setitem(create_draft_pull.__globals__, "run", fake_run)
+
+    create_draft_pull(
+        SimpleNamespace(
+            repo="owner/repo",
+            base="main",
+            head=github.head_ref,
+            title="fix(ci): serialize lifecycle writes",
+            body_file=body_path,
+        ),
+        github,
+    )
+
+    create_call = next(
+        call for call in calls if call[0][:3] == ["gh", "pr", "create"]
+    )
+    assert "--draft" in create_call[0]
+    assert create_call[1] == github.body
 
 
 def test_github_app_actor_must_come_from_trusted_caller_input(
@@ -1660,6 +1721,57 @@ def test_required_contexts_pin_their_trusted_workflow(
         github.head,
         item,
         context,
+        15368,
+        {},
+    )
+
+
+def test_published_review_check_binds_to_its_trusted_workflow_run() -> None:
+    """A three-state review check may use a separate GitHub check suite."""
+    github = FakeGitHub("a" * 40)
+    github.run_paths[201] = ".github/workflows/pr-review.yml"
+    github.run_events[201] = "pull_request_target"
+    item = {
+        "id": 9,
+        "name": "review",
+        "head_sha": github.head,
+        "status": "in_progress",
+        "conclusion": None,
+        "details_url": "https://github.com/owner/repo/actions/runs/201",
+        "external_id": f"csarc-review:201:{github.head}",
+        "app": {"id": 15368},
+        "check_suite": {"id": 9999},
+    }
+
+    assert trusted_check_run_matches_context(
+        github,
+        "owner/repo",
+        github.head,
+        item,
+        "review",
+        15368,
+        {},
+    )
+
+    item["external_id"] = f"csarc-review:200:{github.head}"
+    assert not trusted_check_run_matches_context(
+        github,
+        "owner/repo",
+        github.head,
+        item,
+        "review",
+        15368,
+        {},
+    )
+
+    item["external_id"] = f"csarc-review:201:{github.head}"
+    item["check_suite"] = None
+    assert not trusted_check_run_matches_context(
+        github,
+        "owner/repo",
+        github.head,
+        item,
+        "review",
         15368,
         {},
     )
@@ -3958,6 +4070,81 @@ def test_revalidation_rebuilds_an_ordinary_same_pr_release(
         "--phase",
         "stable",
     ]
+
+
+def test_revalidation_skips_a_formal_delivery_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A topology-validated sync is not a release-bearing work PR."""
+    monkeypatch.setattr(
+        MODULE["csarc_config"],
+        "load_config",
+        lambda *_: {"release_ownership": "csarc-owned"},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_lease",
+        lambda *_: None,
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "live_pull",
+        lambda *_: {"number": 42},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_routine_route",
+        lambda *_: "sync",
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("must not validate a release"),
+    )
+
+    assert (
+        revalidate_release_candidate(
+            FakeGitHub("a" * 40),
+            lease_fixture(),
+            "sync/main-to-m15-repository-lifecycle-abcdef012345",
+            "beta",
+        )
+        == ""
+    )
+
+
+def test_revalidation_rejects_an_unverified_sync_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sync-looking branch cannot bypass the exact routine route."""
+    monkeypatch.setattr(
+        MODULE["csarc_config"],
+        "load_config",
+        lambda *_: {"release_ownership": "csarc-owned"},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_lease",
+        lambda *_: None,
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "live_pull",
+        lambda *_: {"number": 42},
+    )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "require_routine_route",
+        lambda *_: "issue",
+    )
+
+    with pytest.raises(RuntimeError, match="formal sync route"):
+        revalidate_release_candidate(
+            FakeGitHub("a" * 40),
+            lease_fixture(),
+            "sync/main-to-m15-repository-lifecycle-abcdef012345",
+            "beta",
+        )
 
 
 def test_revalidation_leaves_product_owned_promotions_unchanged(

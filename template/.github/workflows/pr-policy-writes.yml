@@ -19,7 +19,7 @@ jobs:
     name: process
     if: >-
       ${{
-        github.event.workflow_run.conclusion != 'cancelled' &&
+        contains(fromJSON('["success","failure"]'), github.event.workflow_run.conclusion) &&
         (github.event.workflow_run.event == 'pull_request_target' ||
         github.event.workflow_run.event == 'merge_group')
       }}
@@ -81,6 +81,7 @@ jobs:
           python3 .csarc/scripts/sync_milestone_state.py check-pr
           --repo "$GITHUB_REPOSITORY"
           --pr "$PR_NUMBER"
+          --publish-only
       - name: Publish the merge queue approval decision
         if: >-
           ${{
@@ -94,3 +95,4 @@ jobs:
           python3 .csarc/scripts/sync_milestone_state.py check-merge-group
           --repo "$GITHUB_REPOSITORY"
           --head-sha "$MERGE_GROUP_HEAD_SHA"
+          --publish-only

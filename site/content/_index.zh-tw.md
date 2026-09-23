@@ -280,7 +280,7 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 
 **責任交接（本機 scripts → GitHub Actions → PR gate → Release）：**
 
-- **本機 scripts（`Active`）：** 開發者先跑變更範圍的聚焦檢查；`scripts/verify-fast` 是需要廣泛診斷時的選項，完整交付邊界才在最終候選上跑一次 `scripts/verify-template.sh`。
+- **本機 scripts（`Active`）：** 開發者先跑變更範圍的聚焦檢查；`scripts/verify-fast` 是需要廣泛診斷時的選項。hosted 模式不因 tier 是 full 就在本機重跑 `scripts/verify-template.sh`；只有明定 fallback 或診斷才本機跑 full。
 - **GitHub Actions（`Active`）：** PR 開出後，受信任的 base workflow 會分類所需 tier，checkout 精確的候選 commit，並在 GitHub-hosted runner 對該 head 執行一次 risk-owned 驗證；合併與發版只接受綁定 repo、commit/tree、tier、命令、工具鏈與 GitHub Actions 執行身分的成功證據。
 - **PR gate（依 GitHub 方案而定）：** 支援時由 Ruleset／branch protection 強制擋下未過檢查或未審查的合併；不支援時標示 `DEGRADED`，改由人工自律（見「規則治理」）。
 - **Release（`Candidate`）：** 原 PR 先物化版本，hosted `release.yml` 預設發布；Actions 不健康時，維護者或 agent 可在本機呼叫同一份 `scripts/publish-release`（見「版本／交付」）。
@@ -443,7 +443,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /standard >}}
 
 {{< ops key="contract-mode-ops" title="分級邏輯與目前自動化現況" >}}
-- **開發中：**只跑能證明本次修改的 focused check（例如 `uv run pytest <path>`、`uv run ruff check <path>`），用新鮮輸出才宣稱完成，不等待整條 pipeline。
+- **開發中：**只跑能證明本次修改的 focused check（例如 `uv run pytest <path>`、`uv run ruff check <path>`），用新鮮輸出才宣稱完成；hosted 模式不因最後路由是 full 就在本機重跑 aggregate suite。
 - **工作 PR（工作分支 → main 或 `dev/m*`）：**`scripts/release_level.py` 從可信任的 Issue／Milestone 宣告解析 beta／stable；`scripts/ci_tier.py` 再依事件、labels 與變更路徑提高最低組合。`early`／`formal` 只由專案設定宣告，不參與單張 Issue 分級；宣告衝突或未知高風險路徑一律 fail closed。
 - **需要完整驗證時：**只在 Milestone／canary 交付、緊急修正、merge queue、手動執行，或系統無法安全縮小範圍的未知高風險路徑才觸發。
 - **同一套邏輯，Hosted 端重新執行（#834）：**GitHub Actions 只有一個受限權限的 `verify` job，同一 PR 新 commit 會取消舊 run；base workflow 先選定 tier 與執行命令，再對精確候選 tree 執行 `scripts/verify-fast`／`scripts/verify-template.sh`（生成 repo 是 `scripts/verify`）。合併與發版只採信 GitHub Actions App 在 GitHub-hosted runner 產生、成功且仍新鮮的同一 run/job 證據；手寫 commit trailer、錯誤 repo/tree/tier 或非受信任 signer 一律 fail closed。
@@ -470,7 +470,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 
 - `fast`：2026-09-01 同機暖快取下，只碰 source 的 scope 約 59 秒，同時碰 policy／template 的 scope 約 99 秒；整條 PR feedback window 約 1–4 分鐘（#428）。
 - docs-only 仍是 `fast`，但只跑共同安全檢查與 docs scope owner，不啟動產品語言工具鏈。
-- `full`：獨占環境下七個階段全數 PASSED 共 502 秒（8 分 22 秒）；同機器有其他 worktree 並行執行時量到 810 秒，差異來自資源競爭，不是驗證內容本身變重（#458，2026-09-02）。七個階段中，Regression tests（完整 pytest 加上標記 `large` 的 Copier 建立／導入／更新矩陣）通常是耗時最長的一段，其餘六個階段合計通常只有數十秒。
+- `full`：#940 的 2026-09-23 候選在本機為 919 秒，hosted 為 400 秒；hosted 的 Regression tests 佔 387 秒，其餘六階段合計 13 秒。#955 因此移除 hosted 模式的本機＋hosted 重複執行，但七個階段與測試集合不變。
 {{< /disclosure >}}
 
 {{< config-guidance track="contract" >}}
@@ -719,7 +719,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 - 原本可以套用、但目前設定不一致的項目會停止，修正後才能繼續。
 
 {{< disclosure key="governance-live-status" title="這個 repo 本身現在的真實狀態（查詢日期：2026-09-07）" >}}
-`Innoguard-Cyber-Arch` API 回報這個 repository 是 Free 方案、**public** 可見度。GitHub 上已有一個 `enforcement: active` 的 Ruleset「CSARC protected branches」（建立於 2026-09-03），套用在 `main` 與 `dev/m*`：`title`／`verify`／`review` 三項狀態檢查必須通過，review check 依 `admin_bypass` 與可用的 Copilot 證據判定，且不允許 force-push。此 repo 明確使用 `verification_mode: hosted`、`actions_fallback: admin` 與 `admin_bypass: always`；admin bypass 只替代同行核准，`actions_fallback` 則只處理已證明的 zero-step billing block，兩者都不會略過其他必要證據。
+`Innoguard-Cyber-Arch` API 回報這個 repository 是 Free 方案、**public** 可見度。GitHub 上已有一個 `enforcement: active` 的 Ruleset「CSARC protected branches」（建立於 2026-09-03），套用在 `main` 與 `dev/m*`：`title`／`verify`／`review` 三項狀態檢查必須通過，review check 依 `admin_bypass` 與可用的 Copilot 證據判定，且不允許 force-push。此 repo 明確使用 `verification_mode: hosted`、`release_trigger: manual`、`actions_fallback: admin` 與 `admin_bypass: always`；admin bypass 只替代同行核准，`actions_fallback` 則只處理已證明的 zero-step billing block，兩者都不會略過其他必要證據。
 
 這對應下表「Free＋public，或 Pro 個人＋private」那一列，不是下面「Free／Team／Enterprise 各方案完整能力」卡片裡 Free 方案描述的 **private** 降級情境（那張卡片說明的是 Free＋*private* 時，REST／GraphQL 建立 Ruleset 的 API 會拒絕、只能保留期望狀態並標示 `DEGRADED`）；這個 repo 選擇公開，因此適用的是可以直接套用並驗證的那條路徑。方案或可見度之後若改變，重跑 `plan`／`apply`／`check` 就會反映最新狀態——這裡記錄的是查詢當下的事實，不是永久保證，也不代表每個使用這套公版的 repo 都跟這裡一樣。
 {{< /disclosure >}}
@@ -736,7 +736,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 
 {{< disclosure key="governance-plan-tiers" title="Free／Team／Enterprise 各方案完整能力" >}}
 <div class="plan-grid">
-  <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查意圖，強制能力可能降級：</strong>workflow 從 live repository collaborators 中挑選非作者的 <code>maintain</code>／<code>admin</code>；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，check 標示 DEGRADED。</p><ul><li>Copilot entitlement 不從 Free 方案名稱猜測，無法證明時回到 human 規則</li><li>沒有 merge gate 時，審查紀錄不能冒充平台強制門禁</li></ul></article>
+  <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查意圖，強制能力可能降級：</strong>hosted 模式的 workflow 從 live repository collaborators 中挑選非作者的 <code>maintain</code>／<code>admin</code>；local 模式改由本機流程處理。private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，check 標示 DEGRADED。</p><ul><li>Copilot entitlement 不從 Free 方案名稱猜測，無法證明時回到 human 規則</li><li>沒有 merge gate 時，審查紀錄不能冒充平台強制門禁</li></ul></article>
   <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches 與必要檢查；同行核准或設定式 admin bypass 仍由 review check 判定。</p><ul><li>若設定 CODEOWNER team，該 team 必須存在並有 repo write access</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
   <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
 </div>
@@ -746,10 +746,10 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 層級 | `.csarc/config.yml` key | 預設／允許值 | 產生或驗證位置 |
 | --- | --- | --- | --- |
 | 治理意圖 | `governance_mode`、`lifecycle`、`actions_fallback` | `managed`／`observe`；`issues`／`milestones`；fallback 預設 `off`、可選 `admin` | repository policy、工作項目 side effects 與經證明的 zero-step billing fallback |
-| 驗證信任 | `verification_mode` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted validation／release workflow；或 trusted GitHub-hosted checks |
+| 驗證信任 | `verification_mode` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted CI、PR 治理、Pages／release workflow；或 trusted GitHub-hosted checks |
 | 審查意圖 | `admin_bypass`、`copilot_review` | admin bypass 預設 `off`、可選 `beta-only`／`always`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到同行核准或設定允許的管理員授權 |
 | 發版意圖 | `release_ownership`、`release_trigger`、`project_maturity` | ownership 三選一；trigger 為 `main`／`manual`；成熟度預設 early | 公開 beta／stable 通道、固定 Conventional Commits 演算法與發版候選觸發 |
-| 文件治理 | `documentation_mode` | `template-and-content`／`content-only`／`off` | 文件模板與 project-owned 內容分層，Pages 只隨完整模板啟用 |
+| 文件治理 | `documentation_mode` | `template-and-content`／`content-only`／`off` | 文件模板與 project-owned 內容分層；Pages 只在 hosted＋完整模板時啟用，且只因 `docs/**` 或手動觸發 |
 | 文件語言 | `primary_language`、`i18n` | `en`／`zh-tw`；雙語並行或 `off` | README 與文件入口；雙語時維護另一語言版 |
 | 授權 | `project_license`、`copyright_holder` | 預設 `proprietary`；也可選 `MIT`／`Apache-2.0` | `LICENSE`、README、套件 manifest 與 SBOM |
 | 選配產物 | `features` | 預設空白；目前可加入 `docker` | Docker starter 與 build scan 一起啟閉 |

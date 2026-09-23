@@ -3,6 +3,7 @@
 import os
 import re
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -145,10 +146,13 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     }
     assert "edited" in triggers["pull_request_target"]["types"]
     assert set(workflow["permissions"]) == {
+        "actions",
+        "checks",
         "contents",
         "issues",
         "pull-requests",
     }
+    assert all(level == "read" for level in workflow["permissions"].values())
     assert set(workflow["jobs"]) == {"verify"}
     assert workflow["jobs"]["verify"]["timeout-minutes"] == 30
 
@@ -157,8 +161,8 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     assert 'python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py"' in source
     assert "Check out the exact candidate" in source
     assert "Execute trusted verification tier=" in source
-    assert "Reuse trusted verification tier=" in source
-    assert "Validate trusted clean sync tier=fast" in source
+    assert "- name: Reuse trusted verification" in source
+    assert "- name: Validate trusted clean sync" in source
     assert "./scripts/verify-fast" in source
     assert "./scripts/verify-template.sh" in source
     assert "check-verify-attestation" not in source
@@ -183,6 +187,14 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
         "ready_for_review, converted_to_draft]" in source
     )
     assert "timeout-minutes: 30" in source
+    permissions = source.split("permissions:", 1)[1].split("jobs:", 1)[0]
+    assert set(yaml.safe_load(f"permissions:{permissions}")["permissions"]) == {
+        "actions",
+        "checks",
+        "contents",
+        "issues",
+        "pull-requests",
+    }
     assert "Preserve the trusted verification policy" in source
     assert 'python3 "$RUNNER_TEMP/trusted-verification/ci_tier.py"' in source
     assert "Execute trusted verification tier=" in source
@@ -420,7 +432,9 @@ def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
     assert "--find-reusable" in source
     assert '--exclude-run-id "$GITHUB_RUN_ID"' in source
     assert "base-sha=${{ steps.identity.outputs.base_sha }}" in source
-    assert "source-run=${{ steps.reuse.outputs.source_run }}" in source
+    assert "- name: Reuse trusted verification" in source
+    assert "Trusted verification route evidence" in source
+    assert "source_run: $source_run" in source
     assert "steps.reuse.outputs.reuse != 'true'" in source
     assert "steps.sync.outputs.clean != 'true'" in source
 
@@ -437,6 +451,23 @@ def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
             'if ! python3 "$RUNNER_TEMP/trusted-verification/' in reuse_command
         )
         assert "running the exact candidate instead" in reuse_command
+        reuse_step = workflow.split("- name: Reuse trusted verification", 1)[
+            1
+        ].split("- name: Set up Python", 1)[0]
+        assert (
+            "::notice title=Trusted verification route evidence::" in reuse_step
+        )
+        assert "SOURCE_RUN:" in reuse_step
+        assert "SOURCE_JOB:" in reuse_step
+        assert "SOURCE_CHECK:" in reuse_step
+        sync_step = workflow.split("- name: Validate trusted clean sync", 1)[
+            1
+        ].split("- name: Reuse trusted verification", 1)[0]
+        assert (
+            "::notice title=Trusted verification route evidence::" in sync_step
+        )
+        assert "MAIN_SHA:" in sync_step
+        assert 'kind: "sync"' in sync_step
 
 
 def test_verifiers_do_not_call_removed_attestation_helpers() -> None:
@@ -591,6 +622,92 @@ def test_verification_steps_report_progress_heartbeat_and_rerun() -> None:
     assert failure.returncode == 7
     assert "[verify-step] FAILED Broken step" in failure.stderr
     assert "[verify-step] RERUN bash -c exit\\ 7" in failure.stderr
+
+
+def test_package_smoke_ignores_stale_dist_wheels(tmp_path: Path) -> None:
+    """Run only the wheel produced by this package-smoke invocation."""
+    root = tmp_path / "repo"
+    scripts = root / "scripts"
+    tools = tmp_path / "bin"
+    temporary = tmp_path / "tmp"
+    scripts.mkdir(parents=True)
+    tools.mkdir()
+    temporary.mkdir()
+    for name in (
+        "resolve-cache-root",
+        "verification-step",
+        "verify-stage-package-smoke",
+    ):
+        shutil.copy2(REPO_ROOT / "scripts" / name, scripts / name)
+
+    dist = root / "dist"
+    dist.mkdir()
+    stale = dist / "csarc_repo_template-0.23.0-py3-none-any.whl"
+    current = dist / "csarc_repo_template-0.24.2-py3-none-any.whl"
+    unrelated = dist / "another_project-1.0.0-py3-none-any.whl"
+    for path in (stale, current, unrelated):
+        path.write_text(path.name, encoding="utf-8")
+
+    uv = tools / "uv"
+    uv.write_text(
+        """#!/usr/bin/env bash
+set -eu
+test "$1" = build
+test "${2:-}" = --out-dir
+mkdir -p "$3"
+touch "$3/csarc_repo_template-0.24.2-py3-none-any.whl"
+if [[ "${SMOKE_SECOND_WHEEL:-}" == 1 ]]; then
+  touch "$3/another_project-1.0.0-py3-none-any.whl"
+fi
+""",
+        encoding="utf-8",
+    )
+    uvx = tools / "uvx"
+    uvx.write_text(
+        """#!/usr/bin/env bash
+set -eu
+test "$1" = --from
+printf '%s\n' "$2" >"$SMOKE_WHEEL_LOG"
+test "$(basename "$2")" = csarc_repo_template-0.24.2-py3-none-any.whl
+""",
+        encoding="utf-8",
+    )
+    uv.chmod(0o755)
+    uvx.chmod(0o755)
+
+    environment = os.environ.copy()
+    environment["PATH"] = f"{tools}:{environment['PATH']}"
+    environment["TMPDIR"] = str(temporary)
+    environment["CSARC_CACHE_ROOT"] = str(tmp_path / "cache")
+    wheel_log = tmp_path / "selected-wheel"
+    environment["SMOKE_WHEEL_LOG"] = str(wheel_log)
+    success = subprocess.run(  # noqa: S603 - isolated test-owned scripts
+        [scripts / "verify-stage-package-smoke"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert success.returncode == 0, success.stderr
+    selected = Path(wheel_log.read_text(encoding="utf-8").strip())
+    assert selected.name == "csarc_repo_template-0.24.2-py3-none-any.whl"
+    assert selected.parent != dist
+    assert not selected.exists()
+    assert all(path.is_file() for path in (stale, current, unrelated))
+
+    wheel_log.unlink()
+    environment["SMOKE_SECOND_WHEEL"] = "1"
+    ambiguous = subprocess.run(  # noqa: S603 - isolated test-owned scripts
+        [scripts / "verify-stage-package-smoke"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert ambiguous.returncode != 0
+    assert "FAILED Locate exactly one built wheel" in ambiguous.stderr
+    assert not wheel_log.exists()
 
 
 def test_verification_entry_points_use_shared_step_reporting() -> None:

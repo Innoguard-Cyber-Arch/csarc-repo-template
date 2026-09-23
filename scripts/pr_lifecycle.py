@@ -1906,14 +1906,25 @@ def trusted_check_run_matches_context(
     repository = run.get("repository")
     check_suite = item.get("check_suite")
     workflow_path, trusted_events = producer
-    return (
-        type(run.get("id")) is int
-        and run["id"] == run_id
-        and isinstance(check_suite, dict)
+    suite_matches = (
+        isinstance(check_suite, dict)
         and type(check_suite.get("id")) is int
         and check_suite["id"] > 0
         and type(run.get("check_suite_id")) is int
         and run["check_suite_id"] == check_suite["id"]
+    )
+    published_review_matches = (
+        context == REVIEW_CHECK_CONTEXT
+        and isinstance(check_suite, dict)
+        and type(check_suite.get("id")) is int
+        and check_suite["id"] > 0
+        and item.get("external_id") == f"csarc-review:{run_id}:{head_sha}"
+        and item.get("details_url") == run.get("html_url")
+    )
+    return (
+        type(run.get("id")) is int
+        and run["id"] == run_id
+        and (suite_matches or published_review_matches)
         and run.get("head_sha") == head_sha
         and isinstance(repository, dict)
         and repository.get("full_name") == repo
@@ -2082,8 +2093,17 @@ def require_trusted_verification(
     ]
     if len(matching_jobs) != 1:
         raise RuntimeError("Trusted verify check has no unique Actions job")
+    job = matching_jobs[0]
+    annotations = (
+        github.pages(
+            repo,
+            f"check-runs/{check_run['id']}/annotations?per_page=100",
+        )
+        if verification_evidence.needs_route_annotations(job)
+        else []
+    )
     source_evidence = None
-    source_ids = verification_evidence.evidence_source_ids(matching_jobs[0])
+    source_ids = verification_evidence.evidence_source_ids(job, annotations)
     if source_ids is not None:
         source_kind, source_run_id, source_job_id, source_check_id = source_ids
         source_check = github.get(repo, f"check-runs/{source_check_id}")
@@ -2129,6 +2149,7 @@ def require_trusted_verification(
             raise RuntimeError(
                 "Trusted verification reuse source has no unique Actions job"
             )
+        source_job = matching_sources[0]
         source_commit = (
             commit
             if source_head == head_sha
@@ -2149,13 +2170,13 @@ def require_trusted_verification(
         source_evidence = (
             source_check,
             source_run,
-            matching_sources[0],
+            source_job,
             source_tree_sha,
         )
     evidence = verification_evidence.validate_verification_job(
         check_run,
         workflow_run,
-        matching_jobs[0],
+        job,
         repo=repo,
         head_sha=head_sha,
         tree_sha=tree_sha,
@@ -2163,6 +2184,7 @@ def require_trusted_verification(
         max_age_hours=max_age_hours,
         required_tier=required_tier,
         source_evidence=source_evidence,
+        annotations=annotations,
         full_command=(
             "./scripts/verify-template.sh"
             if Path("scripts/verify-template.sh").is_file()
@@ -2817,6 +2839,78 @@ def read_body_file(body_file: Path | None) -> str | None:
         ) from error
 
 
+def create_draft_pull(  # noqa: C901
+    args: argparse.Namespace, github: GitHub
+) -> None:
+    """Create one clean, pushed pull request directly in Draft state."""
+    if REPOSITORY.fullmatch(args.repo) is None:
+        raise RuntimeError("Repository identity is invalid")
+    if not args.title.strip() or "\n" in args.title:
+        raise RuntimeError("Pull request title must be one non-empty line")
+    body = read_body_file(args.body_file)
+    if body is None or not body.strip():
+        raise RuntimeError("Pull request body must not be empty")
+    require_origin(args.repo)
+    for branch in (args.base, args.head):
+        run(["git", "check-ref-format", "--branch", branch])
+    current_branch = run(["git", "branch", "--show-current"])
+    if current_branch != args.head:
+        raise RuntimeError("Current branch does not match --head")
+    if run(["git", "status", "--porcelain"]):
+        raise RuntimeError("Pull request creation requires a clean worktree")
+    head_sha = run(["git", "rev-parse", "HEAD"])
+    if SHA.fullmatch(head_sha) is None:
+        raise RuntimeError("Current head commit is invalid")
+    if branch_sha(github, args.repo, args.head) != head_sha:
+        raise RuntimeError("Remote pull request branch is not at current HEAD")
+    branch_sha(github, args.repo, args.base)
+    output = run(
+        [
+            "gh",
+            "pr",
+            "create",
+            "--repo",
+            args.repo,
+            "--base",
+            args.base,
+            "--head",
+            args.head,
+            "--title",
+            args.title,
+            "--body-file",
+            "-",
+            "--draft",
+        ],
+        input_text=body,
+    )
+    url = output.splitlines()[-1].strip() if output else ""
+    match = re.fullmatch(
+        rf"https://github\.com/{re.escape(args.repo)}/pull/([1-9][0-9]*)",
+        url,
+    )
+    if match is None:
+        raise RuntimeError("GitHub did not return a pull request URL")
+    pull = github.get(args.repo, f"pulls/{int(match.group(1))}")
+    head = pull.get("head") if isinstance(pull, dict) else None
+    base = pull.get("base") if isinstance(pull, dict) else None
+    actual_body = str(pull.get("body") or "") if isinstance(pull, dict) else ""
+    if (
+        not isinstance(pull, dict)
+        or pull.get("state") != "open"
+        or pull.get("draft") is not True
+        or pull.get("title") != args.title
+        or actual_body.replace("\r\n", "\n").rstrip("\n")
+        != body.replace("\r\n", "\n").rstrip("\n")
+        or not isinstance(head, dict)
+        or head.get("ref") != args.head
+        or head.get("sha") != head_sha
+        or not isinstance(base, dict)
+        or base.get("ref") != args.base
+    ):
+        raise RuntimeError("Created pull request did not match requested Draft")
+    sys.stdout.write(url + "\n")
+
+
 def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
     """Edit the body, labels, or milestone while the lease remains live."""
     lease = read_lease(args.lease)
@@ -2917,6 +3011,11 @@ def revalidate_release_candidate(
     pr_number = int(lease["pull_request"])
     head_sha = str(lease["head_sha"])
     require_lease(github, lease, repo, pr_number, head_sha)
+    if head_ref.startswith("sync/main-to-"):
+        pull = live_pull(github, repo, pr_number, head_sha)
+        if require_routine_route(github, repo, lease, pull) != "sync":
+            raise RuntimeError("Release bypass requires a formal sync route")
+        return ""
     if promotion is not None:
         source_sha = run(["git", "-C", str(root), "rev-parse", f"{head_sha}^1"])
         return run(
@@ -3359,13 +3458,8 @@ def command_writer_violations(text: str) -> list[str]:
             for operation in ("ready", "edit", "merge")
         ):
             violations.append("direct gh pr lifecycle command")
-        if "ghprcreate" in compact and any(
-            option in compact
-            for option in ("--label", "--milestone", "--draft")
-        ):
-            violations.append(
-                "PR creation with an unleased metadata/state write"
-            )
+        if "ghprcreate" in compact:
+            violations.append("direct gh pr creation")
         if "ghissueedit" in compact and any(
             option in compact
             for option in (
@@ -3762,6 +3856,13 @@ def parser() -> argparse.ArgumentParser:
     scan_command = commands.add_parser("scan-writers")
     scan_command.add_argument("--root", type=Path, default=Path.cwd())
     scan_command.set_defaults(scan_root=True)
+    create_command = commands.add_parser("create")
+    create_command.add_argument("--repo", required=True)
+    create_command.add_argument("--base", required=True)
+    create_command.add_argument("--head", required=True)
+    create_command.add_argument("--title", required=True)
+    create_command.add_argument("--body-file", type=Path, required=True)
+    create_command.set_defaults(handler=create_draft_pull)
     issue_edit = commands.add_parser("issue-edit")
     issue_edit.add_argument("--repo", required=True)
     issue_edit.add_argument("--issue-number", required=True, type=int)

@@ -546,13 +546,21 @@ PY
 import json
 import sys
 
-desired = json.load(open(sys.argv[1], encoding="utf-8"))["source"]
-actual = json.loads(sys.argv[2]).get("source", {})
+desired = json.load(open(sys.argv[1], encoding="utf-8"))
+actual = json.loads(sys.argv[2])
 drift = [
-    f"source.{key}: desired {value!r}, live {actual.get(key)!r}"
-    for key, value in desired.items()
-    if actual.get(key) != value
+    f"{key}: desired {desired[key]!r}, live {actual.get(key)!r}"
+    for key in ("build_type",)
+    if key in desired and actual.get(key) != desired[key]
 ]
+desired_source = desired.get("source")
+actual_source = actual.get("source", {})
+if isinstance(desired_source, dict):
+    drift.extend(
+        f"source.{key}: desired {value!r}, live {actual_source.get(key)!r}"
+        for key, value in desired_source.items()
+        if actual_source.get(key) != value
+    )
 if drift:
     raise SystemExit("; ".join(drift))
 PY
@@ -924,14 +932,14 @@ if [[ "$pages_policy_enabled" == "true" ]]; then
     pages_policy_applied=false
     echo "DEGRADED GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. policies/pages.json stays enabled=true for when this repository is public or the account upgrades."
   else
-    pages_source_payload="$(python3 -c 'import json,sys; policy=json.load(open(sys.argv[1], encoding="utf-8")); print(json.dumps({"source": policy["source"]}))' "$pages_policy")"
+    pages_apply_payload="$(python3 -c 'import json,sys; policy=json.load(open(sys.argv[1], encoding="utf-8")); policy.pop("enabled", None); print(json.dumps(policy))' "$pages_policy")"
     if gh api "repos/$repo/pages" >/dev/null 2>&1; then
-      if ! pages_policy_error="$(echo "$pages_source_payload" | gh api --method PUT "repos/$repo/pages" --input - 2>&1)"; then
+      if ! pages_policy_error="$(echo "$pages_apply_payload" | gh api --method PUT "repos/$repo/pages" --input - 2>&1)"; then
         echo "Cannot update GitHub Pages settings for $repo." >&2
         echo "$pages_policy_error" >&2
         exit 1
       fi
-    elif ! pages_policy_error="$(echo "$pages_source_payload" | gh api --method POST "repos/$repo/pages" --input - 2>&1)"; then
+    elif ! pages_policy_error="$(echo "$pages_apply_payload" | gh api --method POST "repos/$repo/pages" --input - 2>&1)"; then
       echo "Cannot enable GitHub Pages for $repo." >&2
       echo "$pages_policy_error" >&2
       exit 1

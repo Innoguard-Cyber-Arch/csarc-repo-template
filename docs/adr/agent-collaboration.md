@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-25
-- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241), [#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308)
+- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241), [#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308), [#938](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/938)
 - **實作 PRs：**[#127](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/127), [#147](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/147), [#158](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/158), [#173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/173), [#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)
 
 ## 問題與限制
@@ -52,6 +52,34 @@ GitHub Agents 頁籤可把 repository 工作交給 cloud coding agents，但 ses
 | GitHub Agents 頁籤作為預設執行層 | 暫不採用；會增加依 token 計價的 AI credits 與 Actions 用量，現階段沒有成本效益證據 |
 | 只用本機 lock file 或 worktree 路徑互斥 | 不採用；無法涵蓋另一個 process、host 或 GitHub client |
 | 在 Free private 把 shared admin credential 視為 Ruleset | 不採用；repository-local tool 無法阻止刻意繞過，agent merge 必須停止 |
+
+## 2026-09-23 Soft finalization queue 與完成邊界（#938）
+
+平行工作繼續使用各自的 branch／worktree，實作與 focused checks 不互鎖。只有會被
+upstream base、版本或共同治理檔案作廢的 finalization window，才依 destination base
+排序：current-base sync、release materialization、一次 local full、Ready、hosted exact-head
+verify、merge 與 release readback。共用 parent 的 subagents 先以
+`READY_TO_FINALIZE` 訊息讓 parent 排序；沒有共同 parent、但位於同一 clone 的 sessions
+使用 `scripts/finalization-queue` 在 Git common directory 公告有期限的 intent。等待者讓出
+執行資源，不做 busy polling。
+
+這個 queue 明確不是 lock：它不阻擋任何 Git 或 GitHub 命令、不授予 merge 權限、逾時後
+自動不列入排序，也無法協調不同 clone。遠端 Ready／Draft／metadata／authorization／merge
+仍一律由 #240 的 `pr_lifecycle.py` lease 與 live-state revalidation 保護。這保留跨 host 的
+安全邊界，同時避免用長效鎖讓另一位協作者陷入無法解釋的等待。
+
+未被使用者縮限的「實作／修正 Issue」以 post-merge closeout 為預設終點。Agent 只有在
+確認 exact merge、Issue 狀態、configured release 或明確 no-release 結果與 readback、來源
+branch／lease、本機 worktree，以及 final report 後才能回報 `DONE`；外部條件未完成時回報
+`WAITING`，無安全進展時才回報 `BLOCKED`。Worker 最後回報 `ARCHIVE_READY` 並退出或 yield，
+由 parent／client 在 final report 後封存。這遵守 OpenAI Docs 的平台邊界：`/agent`／
+`/subagents` 可切換 spawned threads，而 `/archive` 在 task 執行中不可用，封存不能由同一個
+仍在執行的 turn 冒充完成。官方說明：
+<https://learn.chatgpt.com/docs/developer-commands#cli-archive-the-current-session-with-archive>。
+
+不採用 background daemon、強制本機 mutex、輪詢服務或第二套 release／cleanup 工具；
+這些方案會增加卡死與狀態漂移面，且沒有比短期 advisory intent 加現有遠端 lease 提供更多
+可信保證。
 
 ## 重新評估條件
 
