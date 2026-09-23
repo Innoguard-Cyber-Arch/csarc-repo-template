@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.25.9-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(adopt): detect unfinished manual merges (8777208)
+
 ## [0.25.8-beta.1] - 2026-09-24
 
 ### Bug Fixes

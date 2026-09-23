@@ -51,6 +51,7 @@ ADOPTION_REPORT_TEMPLATE_VERSION = "1.0.0"
 AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
+GIT_OBJECT_ID = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
 RELEASE_WRITER_MARKERS = (
@@ -1394,6 +1395,77 @@ def file_fingerprint(path: Path) -> str:
     return digest.hexdigest()
 
 
+def git_blob_oid(target: Path, revision: str, relative_name: str) -> str:
+    """Return one file's blob identity at a trusted revision."""
+    checked_destination(target, relative_name)
+    result = run_git(
+        [
+            "git",
+            "-C",
+            str(target),
+            "rev-parse",
+            "--verify",
+            f"{revision}:{relative_name}",
+        ],
+        repository=target,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    oid = result.stdout.strip()
+    if result.returncode != 0 or GIT_OBJECT_ID.fullmatch(oid) is None:
+        detail = result.stderr.strip()
+        raise CliError(
+            f"Cannot recover the original manual file {relative_name} from "
+            f"Git history. {detail}"
+        )
+    kind = run_git(
+        ["git", "-C", str(target), "cat-file", "-t", oid],
+        repository=target,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    if kind.returncode != 0 or kind.stdout.strip() != "blob":
+        raise CliError(f"Original manual path is not a file: {relative_name}.")
+    return oid.lower()
+
+
+def git_worktree_file_oid(
+    attributes_repo: Path, target: Path, relative_name: str
+) -> str:
+    """Hash working-tree bytes through trusted Git path attributes."""
+    path = checked_destination(target, relative_name)
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError as error:
+        raise CliError(f"Manual adoption file is missing: {path}") from error
+    if not stat.S_ISREG(mode):
+        raise CliError(f"Manual adoption file is not a regular file: {path}")
+    result = run_git(
+        [
+            "git",
+            "-C",
+            str(attributes_repo),
+            "hash-object",
+            f"--path={relative_name}",
+            str(path),
+        ],
+        repository=attributes_repo,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    oid = result.stdout.strip()
+    if result.returncode != 0 or GIT_OBJECT_ID.fullmatch(oid) is None:
+        detail = result.stderr.strip()
+        raise CliError(
+            f"Cannot hash manual adoption file {relative_name} with Git path "
+            f"attributes. {detail}"
+        )
+    return oid.lower()
+
+
 def pending_adoption_data(
     target: Path,
     revision: Revision,
@@ -1401,6 +1473,8 @@ def pending_adoption_data(
     answers_path: Path,
     managed_files: tuple[str, ...],
     manual_files: tuple[str, ...],
+    unknown_files: tuple[str, ...],
+    target_head: str,
 ) -> dict[str, object]:
     """Build the checkpoint needed to resume one exact adoption."""
     return {
@@ -1411,9 +1485,15 @@ def pending_adoption_data(
             if name
             not in {CONFIG_FILE.as_posix(), LEGACY_ANSWERS_FILE.as_posix()}
         ],
-        "manual_files": list(manual_files),
+        "manual_file_git_oid": {
+            name: git_blob_oid(target, target_head, name)
+            for name in manual_files
+        },
+        "manual_files": list((*manual_files, *unknown_files)),
+        "manual_merge_files": list(manual_files),
         "repository": repository.as_dict(),
-        "schema_version": 1,
+        "schema_version": 2,
+        "target_head": target_head,
         "template": {
             "release": revision.label,
             "sha": revision.sha,
@@ -1459,7 +1539,7 @@ def read_pending_adoption(target: Path) -> dict[str, object]:
     )
     if (
         not isinstance(payload, dict)
-        or payload.get("schema_version") != 1
+        or payload.get("schema_version") not in {1, 2}
         or not isinstance(payload.get("answers_sha256"), str)
         or not isinstance(template, dict)
         or not isinstance(repository, dict)
@@ -1476,6 +1556,194 @@ def read_pending_adoption(target: Path) -> dict[str, object]:
             "from the original adoption or restart from a clean commit."
         )
     return payload
+
+
+def validate_pending_manual_merges(
+    target: Path,
+    pending: Mapping[str, object],
+    answers: dict[str, object],
+    planned: Plan,
+    target_head: str,
+    baseline: Path,
+) -> tuple[str, ...]:
+    """Verify pending merge identities and require changed manual bytes."""
+    if pending.get("schema_version") != 2:
+        raise CliError(
+            "Pending adoption state predates manual-file fingerprints, so "
+            "CSARC cannot determine whether its manual merges were completed; "
+            "restore the original files and restart adoption from a clean "
+            "commit."
+        )
+    raw_files = pending.get("manual_files")
+    raw_merges = pending.get("manual_merge_files")
+    raw_fingerprints = pending.get("manual_file_git_oid")
+    if (
+        not isinstance(raw_files, list)
+        or not all(isinstance(value, str) for value in raw_files)
+        or not isinstance(raw_merges, list)
+        or not all(isinstance(value, str) for value in raw_merges)
+        or not isinstance(raw_fingerprints, dict)
+        or not all(
+            isinstance(name, str)
+            and isinstance(value, str)
+            and GIT_OBJECT_ID.fullmatch(value) is not None
+            for name, value in raw_fingerprints.items()
+        )
+        or tuple(raw_merges) != planned.manual
+        or tuple(raw_files) != (*planned.manual, *planned.unknown)
+        or set(raw_merges) != set(raw_fingerprints)
+    ):
+        raise CliError(
+            "Pending manual-file fingerprints are invalid; restore the "
+            "checkpoint or restart adoption from a clean commit."
+        )
+    fingerprints = cast(dict[str, str], raw_fingerprints)
+    forged = [
+        name
+        for name in cast(list[str], raw_merges)
+        if git_blob_oid(target, target_head, name) != fingerprints[name]
+    ]
+    if forged:
+        raise CliError(
+            "Pending manual-file fingerprints do not match the original "
+            "Git revision for: "
+            + ", ".join(sorted(forged))
+            + ". Restore the checkpoint or restart adoption from a clean "
+            "commit."
+        )
+    unchanged = [
+        name
+        for name in cast(list[str], raw_merges)
+        if git_worktree_file_oid(baseline, target, name) == fingerprints[name]
+    ]
+    if unchanged:
+        raise CliError(
+            "Manual merge is unfinished; these files have unchanged content "
+            "after Git normalization: "
+            + ", ".join(sorted(unchanged))
+            + ". Complete each listed merge, then rerun csarc adopt "
+            "--finalize."
+        )
+    if "typescript" in selected_languages(answers):
+        package_path = checked_destination(target, "package.json")
+        try:
+            package = json.loads(package_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise CliError(
+                "Manual package.json is invalid JSON; fix it, then rerun "
+                "csarc adopt --finalize."
+            ) from error
+        expected_name = answers.get("project_slug")
+        actual_name = package.get("name") if isinstance(package, dict) else None
+        if not isinstance(expected_name, str) or actual_name != expected_name:
+            raise CliError(
+                "Manual package.json name must match project_slug "
+                f"({expected_name!r}); found {actual_name!r}. Fix "
+                "package.json, "
+                "then rerun csarc adopt --finalize."
+            )
+    return tuple(cast(list[str], raw_files))
+
+
+def pending_adoption_target_head(
+    target: Path, pending: Mapping[str, object]
+) -> str:
+    """Recover and authenticate the pre-adoption commit from Git history."""
+    if pending.get("schema_version") != 2:
+        raise CliError(
+            "Pending adoption state predates manual-file fingerprints, so "
+            "CSARC cannot determine whether its manual merges were completed; "
+            "restore the original files and restart adoption from a clean "
+            "commit."
+        )
+    saved_head = pending.get("target_head")
+    if (
+        not isinstance(saved_head, str)
+        or FULL_SHA.fullmatch(saved_head) is None
+    ):
+        raise CliError(
+            "Pending adoption has no valid original Git revision; restore the "
+            "checkpoint or restart adoption from a clean commit."
+        )
+    committed = run_git(
+        [
+            "git",
+            "-C",
+            str(target),
+            "ls-tree",
+            "-z",
+            "--name-only",
+            "HEAD",
+            "--",
+            PENDING_ADOPTION_FILE.as_posix(),
+        ],
+        repository=target,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    if committed.returncode != 0:
+        detail = committed.stderr.strip()
+        raise CliError("Cannot inspect pending adoption Git history. " + detail)
+    if committed.stdout.rstrip("\0") == PENDING_ADOPTION_FILE.as_posix():
+        introduced = run_git(
+            [
+                "git",
+                "-C",
+                str(target),
+                "log",
+                "--diff-filter=A",
+                "--format=%H",
+                "-1",
+                "--",
+                PENDING_ADOPTION_FILE.as_posix(),
+            ],
+            repository=target,
+            capture=True,
+            check=False,
+            neutralize_filters=True,
+        )
+        introduction = introduced.stdout.strip()
+        if (
+            introduced.returncode != 0
+            or FULL_SHA.fullmatch(introduction) is None
+        ):
+            raise CliError(
+                "Cannot locate the pending adoption checkpoint in Git "
+                "history; restore it or restart adoption from a clean commit."
+            )
+        parent = run_git(
+            [
+                "git",
+                "-C",
+                str(target),
+                "rev-parse",
+                f"{introduction}^",
+            ],
+            repository=target,
+            capture=True,
+            check=False,
+            neutralize_filters=True,
+        )
+        observed_head = parent.stdout.strip()
+        if parent.returncode != 0 or FULL_SHA.fullmatch(observed_head) is None:
+            raise CliError(
+                "Cannot recover the repository revision before pending "
+                "adoption; restart adoption from a clean commit."
+            )
+    elif not committed.stdout:
+        observed_head, _ = git_target_state(target)
+    else:
+        raise CliError(
+            "Pending adoption path has an unexpected Git tree entry; restore "
+            "the checkpoint or restart adoption from a clean commit."
+        )
+    if observed_head.lower() != saved_head.lower():
+        raise CliError(
+            "Pending adoption does not match its original Git revision; "
+            "restore the checkpoint or restart adoption from a clean commit."
+        )
+    return saved_head
 
 
 def provenance_data(
@@ -3155,6 +3423,7 @@ def prepare_adoption_candidate(
     planned: Plan,
     generated_at: str,
     candidate: Path,
+    target_head: str,
     preserved_dirty_paths: tuple[str, ...] = (),
 ) -> tuple[Plan, dict[str, str], str, dict[str, object]]:
     """Build an exact preview candidate without executing package tooling."""
@@ -3181,7 +3450,9 @@ def prepare_adoption_candidate(
                     repository,
                     config_path(candidate),
                     pending_managed_paths(stage, planned),
-                    (*planned.manual, *planned.unknown),
+                    planned.manual,
+                    planned.unknown,
+                    target_head,
                 ),
             )
             verification = "deferred-manual-merge"
@@ -4747,12 +5018,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             )
         git_commit(source_path, sha)
 
-    raw_manual = pending.get("manual_files", [])
-    manual_files = (
-        tuple(value for value in raw_manual if isinstance(value, str))
-        if isinstance(raw_manual, list)
-        else ()
-    )
+    pending_target_head = pending_adoption_target_head(target, pending)
     with tempfile.TemporaryDirectory(prefix="csarc-finalize-") as temporary:
         temporary_root = Path(temporary)
         stage = temporary_root / "rendered"
@@ -4773,9 +5039,37 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         )
         baseline = temporary_root / "baseline"
         clone_target(target, baseline)
+        checkout = run_git(
+            [
+                "git",
+                "-C",
+                str(baseline),
+                "checkout",
+                "--quiet",
+                "--detach",
+                pending_target_head,
+            ],
+            repository=baseline,
+            capture=True,
+            check=False,
+            neutralize_filters=True,
+        )
+        if checkout.returncode != 0:
+            raise CliError(
+                checkout.stderr.strip()
+                or "Cannot reconstruct the pre-adoption repository state."
+            )
         merged = apply_adoption_policies(stage, baseline)
         planned = compare_stage(
             stage, baseline, adopt=True, merged_paths=merged
+        )
+        manual_files = validate_pending_manual_merges(
+            target,
+            pending,
+            answers,
+            planned,
+            pending_target_head,
+            baseline,
         )
         validate_pending_file_sets(
             target,
@@ -4866,9 +5160,29 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             adoption = cast(dict[str, object], plan.adoption)
             candidate_verification = str(adoption.get("verification"))
             if candidate_verification != "passed":
+                verify_path = managed_script(candidate, "verify").relative_to(
+                    candidate
+                )
+                raw_hook = adoption.get("project_verification_hook")
+                hook_reason = (
+                    raw_hook.get("reason")
+                    if isinstance(raw_hook, dict)
+                    else None
+                )
+                structured_detail = (
+                    f" Structured result: {hook_reason}."
+                    if isinstance(hook_reason, str)
+                    else ""
+                )
                 raise CliError(
-                    "Project verification failed; fix the reported failures, "
-                    "then rerun csarc adopt --finalize."
+                    "Project verification failed at "
+                    f"./{verify_path.as_posix()}: {candidate_verification}."
+                    + structured_detail
+                    + " Review the failed step or tool output above. Pending "
+                    "manual files: "
+                    + ", ".join(manual_files)
+                    + ". Fix the related merge or verification failure, then "
+                    "rerun csarc adopt --finalize."
                 )
             effects = cast(Plan, plan.files)
             raw_artifacts = adoption.get("artifacts")
@@ -5016,6 +5330,7 @@ def build_adoption_plan(
             planned,
             generated_at,
             candidate,
+            head,
             preserved_dirty_paths,
         )
     owner = code_owner_verification(repository, answers.get("code_owner"))
