@@ -2096,8 +2096,17 @@ def require_trusted_verification(
     ]
     if len(matching_jobs) != 1:
         raise RuntimeError("Trusted verify check has no unique Actions job")
+    job = matching_jobs[0]
+    annotations = (
+        github.pages(
+            repo,
+            f"check-runs/{check_run['id']}/annotations?per_page=100",
+        )
+        if verification_evidence.needs_route_annotations(job)
+        else []
+    )
     source_evidence = None
-    source_ids = verification_evidence.evidence_source_ids(matching_jobs[0])
+    source_ids = verification_evidence.evidence_source_ids(job, annotations)
     if source_ids is not None:
         source_kind, source_run_id, source_job_id, source_check_id = source_ids
         source_check = github.get(repo, f"check-runs/{source_check_id}")
@@ -2143,6 +2152,7 @@ def require_trusted_verification(
             raise RuntimeError(
                 "Trusted verification reuse source has no unique Actions job"
             )
+        source_job = matching_sources[0]
         source_commit = (
             commit
             if source_head == head_sha
@@ -2163,13 +2173,13 @@ def require_trusted_verification(
         source_evidence = (
             source_check,
             source_run,
-            matching_sources[0],
+            source_job,
             source_tree_sha,
         )
     evidence = verification_evidence.validate_verification_job(
         check_run,
         workflow_run,
-        matching_jobs[0],
+        job,
         repo=repo,
         head_sha=head_sha,
         tree_sha=tree_sha,
@@ -2177,6 +2187,7 @@ def require_trusted_verification(
         max_age_hours=max_age_hours,
         required_tier=required_tier,
         source_evidence=source_evidence,
+        annotations=annotations,
         full_command=(
             "./.csarc/scripts/verify-template.sh"
             if Path(".csarc/scripts/verify-template.sh").is_file()
@@ -3005,6 +3016,11 @@ def revalidate_release_candidate(
     pr_number = int(lease["pull_request"])
     head_sha = str(lease["head_sha"])
     require_lease(github, lease, repo, pr_number, head_sha)
+    if head_ref.startswith("sync/main-to-"):
+        pull = live_pull(github, repo, pr_number, head_sha)
+        if require_routine_route(github, repo, lease, pull) != "sync":
+            raise RuntimeError("Release bypass requires a formal sync route")
+        return ""
     if promotion is not None:
         source_sha = run(["git", "-C", str(root), "rev-parse", f"{head_sha}^1"])
         return run(

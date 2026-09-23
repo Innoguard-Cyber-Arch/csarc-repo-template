@@ -7,6 +7,31 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.25.5] - 2026-09-24
+
+### Bug Fixes
+
+* fix(release): keep beta ahead of stable (f0ab57f)
+
+## [0.25.4] - 2026-09-24
+
+### Bug Fixes
+
+* fix(governance): keep delivery sync compatible (4018341)
+
+## [0.25.3] - 2026-09-23
+
+### Bug Fixes
+
+* fix(ci): isolate package smoke wheel (5e1f6d1)
+
+## [0.25.2] - 2026-09-23
+
+### Bug Fixes
+
+* fix(ci): preserve reused verification evidence (fcd93fe)
+* fix(ci): bind clean sync evidence (6d7656f)
+
 ## [0.25.1] - 2026-09-23
 
 ### Bug Fixes
