@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.26.5</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.27.0-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.26.5<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.27.0-beta.1<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -472,6 +472,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - `fast`：2026-09-01 同機暖快取下，只碰 source 的 scope 約 59 秒，同時碰 policy／template 的 scope 約 99 秒；整條 PR feedback window 約 1–4 分鐘（#428）。
 - docs-only 仍是 `fast`，但只跑共同安全檢查與 docs scope owner，不啟動產品語言工具鏈。
 - `full`：#940 的 2026-09-23 候選在本機為 919 秒，hosted 為 400 秒；hosted 的 Regression tests 佔 387 秒，其餘六階段合計 13 秒。#955 因此移除 hosted 模式的本機＋hosted 重複執行，但七個階段與測試集合不變。
+- 成本變化：hosted run 的摘要會列出 pytest 總時間、最慢案例與 `large` 測試數量相對 PR base 的變化；`full` 比 checked-in 基準高出超過 15% 只發警告，不設硬性秒數門檻。新增 `large` 測試要在 PR 說明取代關係或不可替代的理由（#999）。
 {{< /disclosure >}}
 
 {{< config-guidance track="contract" >}}
@@ -609,7 +610,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 ### 我們的選擇
 
 - **版本意圖：**PR title 只回答這次改動是 major、minor、patch 或 no-release，不預約精確版本號。
-- **公開版本：**每張 Milestone work Issue 進入 `dev/m*` 後發 `X.Y.Z-beta.N`；Milestone promotion、standalone 與 hotfix 發不帶後綴的 stable。RC 不另立階段。
+- **公開版本：**Milestone work 進入 `dev/m*` 後發 `X.Y.Z-beta.N`；tracker 事前宣告 checkpoints 時，只有各 checkpoint 的 terminal Issue 發一次 beta，其餘 work 延後到該 checkpoint；Milestone promotion、standalone 與 hotfix 發不帶後綴的 stable。RC 不另立階段。
 - **發版與結案：**已物化候選的 PR 合併並通過驗證後，系統建立不可變 tag、GitHub Release、成品、checksum 與 SBOM；promotion 發布成功才關 tracker 與 Milestone，失敗維持 open。
 - **交付：**合併到 `main` 代表 repository delivery。每張 release-worthy 工作 PR 都承載受審版本候選；Milestone promotion PR 承載整批最後的 stable 候選。
 - **獨立工作：**能單獨審查與驗證、沒有共同期限或跨 Issue 相依時，不必加入里程碑；PR 可直接進 `main`。

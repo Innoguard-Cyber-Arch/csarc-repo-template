@@ -137,6 +137,10 @@ case "$*" in
       '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}, commit: {verification: {verified: true, reason: "valid"}}}]]'
     exit 0
     ;;
+  *"--slurp"*"/pulls/"*"/files?per_page=100"*)
+    printf '%s\n' "${PR_CHANGED_FILES_JSON:-[[]]}"
+    exit 0
+    ;;
   *"/pulls/"*"/files?per_page=100"*)
     printf '%s\n' "${PR_CHANGED_FILES:-CHANGELOG.md}"
     exit 0
@@ -1252,6 +1256,37 @@ if PR_DOCUMENTATION_REVIEW_REQUIRED="true" \
   PR_ISSUE_TITLE="Add verified report workflow" \
     "$validator" >/dev/null 2>&1; then
   echo "PR policy accepted a documentation review for a stale head."
+  exit 1
+fi
+
+large_files_json='[[{"filename":"tests/test_report.py","status":"modified","patch":"@@ -1,2 +1,4 @@\n+@pytest.mark.large\n+def test_real_copier_update():"}]]'
+case_count=$((case_count + 1))
+if PR_CHANGED_FILES_JSON="$large_files_json" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add verified report workflow" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a new large test without a justification."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if ! PR_CHANGED_FILES_JSON="$large_files_json" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY=$'Closes #42\n\nLarge test justification: replaces the two unit fixtures that could not reach the real Copier update.' \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add verified report workflow" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy rejected a justified new large test."
   exit 1
 fi
 

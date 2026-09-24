@@ -61,6 +61,13 @@ _RELEASE_VERSION = re.compile(
     re.IGNORECASE,
 )
 _BATCH_MARKER = "release-level-work-items"
+CHECKPOINT_HEADING = "Checkpoints"
+CHECKPOINT_ROLES = ("none", "terminal", "deferred")
+_CHECKPOINT = re.compile(
+    r"- Checkpoint (?P<name>[A-Za-z0-9][A-Za-z0-9-]*) \(beta\): "
+    r"(?P<issues>#[1-9][0-9]*(?:, #[1-9][0-9]*)*); "
+    r"terminal #(?P<terminal>[1-9][0-9]*)"
+)
 
 
 class GitHubReader(Protocol):
@@ -172,6 +179,54 @@ def declared_level(body: object) -> str | None:
     return value
 
 
+def _checkpoint_line(line: str) -> tuple[str, list[int], int]:
+    """Parse one checkpoint declaration into its name, Issues, and terminal."""
+    match = _CHECKPOINT.fullmatch(line)
+    if match is None:
+        raise ValueError(f"Invalid checkpoint declaration: {line}")
+    issues = [int(number) for number in re.findall(r"#(\d+)", match["issues"])]
+    terminal = int(match["terminal"])
+    if len(set(issues)) != len(issues) or terminal not in issues:
+        raise ValueError(
+            f"Checkpoint {match['name']} must list unique Issues "
+            "including its terminal Issue"
+        )
+    return match["name"], issues, terminal
+
+
+def declared_checkpoints(body: object) -> dict[int, str] | None:
+    """Map each declared checkpoint Issue to its role, or None if undeclared.
+
+    A tracker opts into checkpoint releases with a `Checkpoints` subsection
+    whose every line reads `- Checkpoint A (beta): #1, #2; terminal #2`.
+    Only the terminal Issue materializes and publishes the beta; the other
+    Issues defer their release to that checkpoint.
+    """
+    if not isinstance(body, str):
+        return None
+    section = _section(body, CHECKPOINT_HEADING)
+    if section is None:
+        return None
+    roles: dict[int, str] = {}
+    names: set[str] = set()
+    for line in (raw.strip() for raw in section.splitlines()):
+        if not line:
+            continue
+        name, issues, terminal = _checkpoint_line(line)
+        if name in names:
+            raise ValueError(f"Checkpoint {name} is declared twice")
+        names.add(name)
+        for number in issues:
+            if number in roles:
+                raise ValueError(
+                    f"Issue #{number} belongs to more than one checkpoint"
+                )
+            roles[number] = "terminal" if number == terminal else "deferred"
+    if not roles:
+        raise ValueError("Checkpoints section declares no checkpoint")
+    return roles
+
+
 def stronger_suite(first: str, second: str) -> str:
     """Return the stronger of two verification suites."""
     first = LEGACY_SUITE_ALIASES.get(first, first)
@@ -233,7 +288,15 @@ def release_batch(
         if _release_pull_level(pull) is not None:
             continue
         milestone = pull.get("milestone")
-        if isinstance(milestone, dict) and type(milestone.get("number")) is int:
+        base = pull.get("base")
+        base_ref = str(base.get("ref") or "") if isinstance(base, dict) else ""
+        # A promotion lists its whole Milestone; delivery work lists only its
+        # own Issue, so a checkpoint names just the work since the last tag.
+        if (
+            isinstance(milestone, dict)
+            and type(milestone.get("number")) is int
+            and not base_ref.startswith(("dev/m", "dev/i"))
+        ):
             milestone_number = int(milestone["number"])
             tracker = _tracker_for(github, repo, milestone_number)
             for issue in github.pages(
@@ -517,6 +580,64 @@ def resolve_pull(
     return resolve_issue(github, repo, issue, settings)
 
 
+def checkpoint_role(
+    github: GitHubReader, repo: str, pull: dict[str, Any]
+) -> str:
+    """Return whether one delivery pull request releases its checkpoint.
+
+    `none` keeps the per-Issue beta route for Milestones without declared
+    checkpoints, `terminal` materializes and publishes the checkpoint beta,
+    and `deferred` leaves the release to a later checkpoint or promotion.
+    """
+    base = pull.get("base")
+    base_ref = str(base.get("ref") or "") if isinstance(base, dict) else ""
+    if not base_ref.startswith("dev/m"):
+        return "none"
+    numbers = sorted(
+        {
+            int(match.group(1))
+            for match in _CLOSING_ISSUE.finditer(str(pull.get("body") or ""))
+        }
+    )
+    if len(numbers) != 1:
+        return "none"
+    issue = github.get(repo, f"issues/{numbers[0]}")
+    if not isinstance(issue, dict) or issue.get("pull_request") is not None:
+        raise RuntimeError(f"Closing reference #{numbers[0]} is not an Issue")
+    milestone = issue.get("milestone")
+    if (
+        not isinstance(milestone, dict)
+        or type(milestone.get("number")) is not int
+    ):
+        return "none"
+    tracker = _tracker_for(github, repo, int(milestone["number"]))
+    roles = declared_checkpoints(tracker.get("body"))
+    if roles is None:
+        return "none"
+    return roles.get(numbers[0], "deferred")
+
+
+def checkpoint_role_for_commit(
+    github: GitHubReader, repo: str, sha: str, base_branch: str
+) -> str:
+    """Resolve the checkpoint role of the pull request merged as `sha`."""
+    payload = github.get(repo, f"commits/{sha}/pulls")
+    if not isinstance(payload, list):
+        raise RuntimeError("GitHub returned invalid commit pull requests")
+    merged = [
+        pull
+        for pull in payload
+        if isinstance(pull, dict)
+        and pull.get("merged_at") is not None
+        and pull.get("merge_commit_sha") == sha
+        and isinstance(pull.get("base"), dict)
+        and pull["base"].get("ref") == base_branch
+    ]
+    if len(merged) != 1:
+        return "none"
+    return checkpoint_role(github, repo, merged[0])
+
+
 def resolve_pr(
     github: GitHubReader,
     repo: str,
@@ -770,6 +891,12 @@ def _write_batch_outputs(
             handle.write("CSARC_RELEASE_LEVELS_EOF\n")
 
 
+def _write_role_output(key: str, role: str, github_output: Path | None) -> None:
+    if github_output is not None:
+        with github_output.open("a", encoding="utf-8") as handle:
+            handle.write(f"{key}={role}\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Resolve a work item for local tools and GitHub Actions."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -791,6 +918,11 @@ def main(argv: list[str] | None = None) -> int:
     batch_parser.add_argument("--root", type=Path, default=Path.cwd())
     batch_parser.add_argument("--markdown-output", type=Path)
     batch_parser.add_argument("--github-output", type=Path)
+    role_parser = subparsers.add_parser("checkpoint-role")
+    role_parser.add_argument("--repo", required=True)
+    role_parser.add_argument("--sha", required=True)
+    role_parser.add_argument("--base-branch", required=True)
+    role_parser.add_argument("--github-output", type=Path)
     annotate_pr = subparsers.add_parser("annotate-pr")
     annotate_pr.add_argument("--repo", required=True)
     annotate_pr.add_argument("--pr", required=True, type=int)
@@ -820,6 +952,13 @@ def main(argv: list[str] | None = None) -> int:
             )
             sys.stdout.write(json.dumps(batch, sort_keys=True) + "\n")
             return 0
+        if args.command == "checkpoint-role":
+            role = checkpoint_role_for_commit(
+                github, args.repo, args.sha, args.base_branch
+            )
+            _write_role_output("role", role, args.github_output)
+            sys.stdout.write(json.dumps({"role": role}) + "\n")
+            return 0
         if args.command == "annotate-pr":
             url = annotate_pull_request(
                 github,
@@ -838,6 +977,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.body_file.read_text(encoding="utf-8"),
             )
             return 0
+        role = "none"
         if args.command == "resolve-issue":
             issue = github.get(args.repo, f"issues/{args.issue}")
             if not isinstance(issue, dict):
@@ -845,11 +985,18 @@ def main(argv: list[str] | None = None) -> int:
             decision = resolve_issue(github, args.repo, issue, settings)
             path_tier = None
         else:
-            decision = resolve_pr(github, args.repo, args.pr, settings)
+            pull = github.get(args.repo, f"pulls/{args.pr}")
+            if not isinstance(pull, dict):
+                raise RuntimeError("GitHub returned invalid pull-request data")
+            decision = resolve_pull(github, args.repo, pull, settings)
             path_tier = args.path_tier
+            role = checkpoint_role(github, args.repo, pull)
         payload = _write_outputs(
             decision, path_tier, settings, args.github_output
         )
+        if args.command == "resolve-pr":
+            payload["checkpoint"] = role
+            _write_role_output("checkpoint", role, args.github_output)
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
         sys.stderr.write(f"release-level resolution failed closed: {error}\n")
         return 1

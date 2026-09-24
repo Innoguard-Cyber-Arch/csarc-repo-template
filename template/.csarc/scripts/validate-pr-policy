@@ -100,6 +100,30 @@ validate_documentation_review() {
   fi
 }
 
+validate_large_test_justification() {
+  # A net new @pytest.mark.large test must state what it replaces or why a
+  # smaller test cannot cover it; see .csarc/docs/ci-policy.md's verification-cost
+  # section (#999). Like the checklist gate, it applies once not a draft.
+  if [[ "${PR_DRAFT:-false}" == "true" || "${promotion:-false}" == "true" ]]; then
+    return 0
+  fi
+  local files_json
+  if [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]]; then
+    [[ "${PR_CHANGED_FILES_JSON+x}" == "x" ]] || return 0
+    files_json="$PR_CHANGED_FILES_JSON"
+  elif ! files_json="$(
+    gh api --paginate --slurp \
+      "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100"
+  )"; then
+    echo "Cannot read the pull request file list for the large-test check."
+    exit 1
+  fi
+  if ! PR_BODY="${PR_BODY:-}" python3 "$script_dir/verification_cost.py" \
+    check-large-justification --files-json - <<<"$files_json"; then
+    exit 1
+  fi
+}
+
 # Delivery routing is derived from trusted Issue and Milestone metadata.
 branch_strategy="delivery"
 release_ownership="${PR_RELEASE_OWNERSHIP:-}"
@@ -299,6 +323,7 @@ if [[ "$pr_draft" != "true" ]] && grep -Eq "$unchecked_task_pattern" <<<"${PR_BO
   echo "Complete every pull request checklist item before using a closing keyword."
   exit 1
 fi
+validate_large_test_justification
 
 if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
   issue_state="$PR_ISSUE_STATE"

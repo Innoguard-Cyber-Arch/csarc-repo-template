@@ -814,15 +814,16 @@ def test_reusable_selector_uses_only_an_original_identical_route(
 class MergeSourceGitHub:
     """Serve the exact source and tree identity needed by release reuse."""
 
-    def __init__(self, source_tree: str = TREE) -> None:
+    def __init__(self, source_tree: str = TREE, base: str = "main") -> None:
         self.source_tree = source_tree
+        self.base = base
 
     def pages(self, _repo: str, _path: str) -> list[dict[str, Any]]:
         return [
             {
                 "merged_at": NOW.isoformat(),
                 "merge_commit_sha": "c" * 40,
-                "base": {"ref": "main"},
+                "base": {"ref": self.base},
                 "head": {"sha": HEAD},
             }
         ]
@@ -845,3 +846,14 @@ def test_release_reuse_requires_the_exact_merged_tree() -> None:
         resolve_merge_source(
             MergeSourceGitHub("d" * 40), "owner/repo", "c" * 40
         )
+
+
+def test_release_reuse_accepts_the_actual_delivery_branch() -> None:
+    """A delivery-branch release reuses its own source PR, not only main's."""
+    github = MergeSourceGitHub(base="dev/m17-cost")
+    assert (
+        resolve_merge_source(github, "owner/repo", "c" * 40, "dev/m17-cost")
+        == HEAD
+    )
+    with pytest.raises(RuntimeError, match="merged-main source PR"):
+        resolve_merge_source(github, "owner/repo", "c" * 40)

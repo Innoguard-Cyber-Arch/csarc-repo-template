@@ -85,8 +85,10 @@ def find_reusable_evidence(
     return max(matches, key=lambda item: int(item["check_run_id"]))
 
 
-def resolve_merge_source(github: GitHub, repo: str, commit: str) -> str:
-    """Resolve one merged main commit to its unique source PR head."""
+def resolve_merge_source(
+    github: GitHub, repo: str, commit: str, branch: str = "main"
+) -> str:
+    """Resolve one merged commit on `branch` to its unique source PR head."""
     pulls = github.pages(repo, f"commits/{commit}/pulls?per_page=100")
     matches: list[dict[str, Any]] = []
     for pull in pulls:
@@ -95,12 +97,12 @@ def resolve_merge_source(github: GitHub, repo: str, commit: str) -> str:
             pull.get("merged_at")
             and pull.get("merge_commit_sha") == commit
             and isinstance(base, dict)
-            and base.get("ref") == "main"
+            and base.get("ref") == branch
         ):
             matches.append(pull)
     if len(matches) != 1:
         raise RuntimeError(
-            "Pushed commit does not have one exact merged-main source PR"
+            f"Pushed commit does not have one exact merged-{branch} source PR"
         )
     head = matches[0].get("head")
     head_sha = head.get("sha") if isinstance(head, dict) else None
@@ -120,7 +122,7 @@ def resolve_merge_source(github: GitHub, repo: str, commit: str) -> str:
         or merge_tree.get("sha") != source_tree.get("sha")
     ):
         raise RuntimeError(
-            "Merged main tree does not match the verified source PR tree"
+            f"Merged {branch} tree does not match the verified source PR tree"
         )
     return head_sha
 
@@ -131,6 +133,7 @@ def main() -> None:
     parser.add_argument("commit")
     parser.add_argument("--github-repo", required=True)
     parser.add_argument("--resolve-merge-source", action="store_true")
+    parser.add_argument("--merge-branch", default="main")
     parser.add_argument("--find-reusable", action="store_true")
     parser.add_argument("--max-age-hours", type=float, default=24.0)
     parser.add_argument("--required-tier", choices=("docs", "fast", "full"))
@@ -146,7 +149,9 @@ def main() -> None:
     args = parser.parse_args()
     github = GitHub()
     head_sha = (
-        resolve_merge_source(github, args.github_repo, args.commit)
+        resolve_merge_source(
+            github, args.github_repo, args.commit, args.merge_branch
+        )
         if args.resolve_merge_source
         else args.commit
     )
@@ -198,6 +203,12 @@ def main() -> None:
         max_age_hours=args.max_age_hours,
         required_tier=args.required_tier,
     )
+    # Reused evidence must come from a pull request into this exact branch.
+    if args.resolve_merge_source and evidence.get("base") != args.merge_branch:
+        raise RuntimeError(
+            f"Trusted evidence targets {evidence.get('base')!r}, "
+            f"not {args.merge_branch!r}"
+        )
     sys.stdout.write(json.dumps(evidence, sort_keys=True) + "\n")
 
 

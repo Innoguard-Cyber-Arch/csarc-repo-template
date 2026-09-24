@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.26.5</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.27.0-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.26.5<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.27.0-beta.1<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -474,6 +474,7 @@ These numbers come from `docs/ci-policy.md`'s most recent measurement. They set 
 - `fast`: on 2026-09-01, with a warm cache on the same machine, a source-only scope took about 59 seconds and a scope also touching policy/template files took about 99 seconds; the full PR feedback window runs about 1-4 minutes (#428).
 - Documentation-only work is still `fast`, but it runs only shared safety checks and docs-scope owners without starting product-language toolchains.
 - `full`: on #940's 2026-09-23 candidate, local execution took 919 seconds and hosted execution took 400 seconds. Hosted Regression tests accounted for 387 seconds and the other six stages for 13 seconds. #955 therefore removes the duplicate local-plus-hosted run in hosted mode without changing the seven stages or their test set.
+- Cost changes: the hosted run summary lists the pytest total, the slowest cases, and the change in `large` tests versus the PR base; a `full` total more than 15% above the checked-in baseline only raises a warning, with no hard seconds gate. A new `large` test needs a stated replacement or irreplaceable reason in the PR (#999).
 {{< /disclosure >}}
 
 {{< config-guidance track="contract" >}}
@@ -611,7 +612,7 @@ Routine updates and security checks run automatically. People step in only for u
 ### Our choice
 
 - **Version intent:** a PR title states major, minor, patch, or no-release impact without reserving an exact number.
-- **Public versions:** each Milestone work Issue publishes `X.Y.Z-beta.N` after landing on `dev/m*`; Milestone promotion, standalone work, and hotfixes publish unsuffixed stable releases. RC is not a separate stage.
+- **Public versions:** Milestone work publishes `X.Y.Z-beta.N` after landing on `dev/m*`; when the tracker declares checkpoints up front, only each checkpoint's terminal Issue publishes one beta and other work defers to it; Milestone promotion, standalone work, and hotfixes publish unsuffixed stable releases. RC is not a separate stage.
 - **Release and closure:** after a materialized PR merges and verification passes, the system creates the immutable tag, GitHub Release, explicit artifacts, checksums, and SBOM. Only successful promotion publication closes the tracker and Milestone; failure leaves both open.
 - **Delivery:** merging to `main` is repository delivery. Every release-worthy work PR carries its reviewed version candidate; a Milestone promotion PR carries the final stable batch candidate.
 - **Standalone work:** when one Issue can be reviewed and verified independently and has no shared deadline or cross-Issue dependency, it needs no Milestone and may target `main` directly.

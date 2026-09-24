@@ -6027,13 +6027,200 @@ def test_update_reinstall_fails_closed_when_project_verification_fails(
     assert not (project / "new-feature.txt").exists()
 
 
+STABLE_RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
+TEMPLATE_VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?")
+
+
+def previous_stable_release_tag(tags: list[str], current_version: str) -> str:
+    """Select the newest stable vX.Y.Z tag strictly older than the version.
+
+    Only the numeric core of the current version is compared, so a
+    prerelease such as 0.27.0-beta.1 selects v0.26.x and never v0.27.0.
+    Prerelease tags are never a starting point for the routine canary.
+    """
+    match = TEMPLATE_VERSION.fullmatch(current_version.strip())
+    if match is None:
+        raise ValueError(
+            f"Unrecognized current template version {current_version!r}."
+        )
+    current = tuple(int(part) for part in match.groups())
+    candidates: list[tuple[tuple[int, ...], str]] = []
+    for tag in tags:
+        tag_match = STABLE_RELEASE_TAG.fullmatch(tag.strip())
+        if tag_match is None:
+            continue
+        core = tuple(int(part) for part in tag_match.groups())
+        if core < current:
+            candidates.append((core, tag.strip()))
+    if not candidates:
+        raise LookupError(
+            f"No stable vX.Y.Z tag older than {current_version} was found."
+        )
+    return max(candidates)[1]
+
+
+def previous_release_start() -> tuple[str, str]:
+    """Resolve the routine canary start point from local Git tags only."""
+    current_version = (ROOT / "version.txt").read_text(encoding="utf-8")
+    tags = git(ROOT, "tag", "--merged", "HEAD", "--list", "v*").splitlines()
+    try:
+        tag = previous_stable_release_tag(tags, current_version)
+    except LookupError as error:
+        shallow = git(ROOT, "rev-parse", "--is-shallow-repository")
+        pytest.fail(
+            f"{error} The previous-release canary needs the stable release "
+            "tags reachable from HEAD; run `git fetch --tags` or use a "
+            f"full-history checkout (shallow={shallow}).",
+            pytrace=False,
+        )
+    return tag, git(ROOT, "rev-parse", f"{tag}^{{commit}}")
+
+
+def managed_script_names(revision: str) -> set[str]:
+    """List the rendered .csarc/scripts names one template revision ships."""
+    prefix = "template/.csarc/scripts/"
+    listed = git(
+        ROOT, "ls-tree", "-r", "--name-only", revision, prefix
+    ).splitlines()
+    return {
+        name.removeprefix("template/").removesuffix(".jinja")
+        for name in listed
+        if "{{" not in name and "{%" not in name
+    }
+
+
+def test_previous_stable_release_tag_is_a_deterministic_rule() -> None:
+    """Pick the newest older stable tag; never a prerelease or the current."""
+    tags = [
+        "v0.25.8",
+        "v0.26.4",
+        "v0.26.5",
+        "v0.27.0-beta.1",
+        "v0.9.9",
+        "0.26.3",
+        "v0.27.0",
+    ]
+    assert previous_stable_release_tag(tags, "0.26.5\n") == "v0.26.4"
+    assert previous_stable_release_tag(tags, "0.27.0-beta.2") == "v0.26.5"
+    assert previous_stable_release_tag(tags, "0.27.0") == "v0.26.5"
+    assert previous_stable_release_tag(tags, "1.0.0") == "v0.27.0"
+    with pytest.raises(LookupError, match=r"No stable vX\.Y\.Z tag older"):
+        previous_stable_release_tag(tags, "0.9.9")
+    with pytest.raises(LookupError, match=r"No stable vX\.Y\.Z tag older"):
+        previous_stable_release_tag([], "0.26.5")
+    with pytest.raises(ValueError, match="Unrecognized current template"):
+        previous_stable_release_tag(tags, "next")
+
+
+def test_v0_15_6_generated_layout_migration_contract(tmp_path: Path) -> None:
+    """Pin the historical v0.15.6 layout migration without a full update.
+
+    The paths mirror what v0.15.6 generated for a new CI-only project. The
+    destinations must still exist in the current template, so this narrow
+    contract fails if either side of the one-time move drifts.
+    """
+    moved = {
+        ".copier-answers.yml": ".csarc/config.yml",
+        ".release-please-manifest.json": (
+            ".csarc/release-please-manifest.json"
+        ),
+        "CLAUDE.md": ".claude/CLAUDE.md",
+        "docs/ci-policy.md": ".csarc/docs/ci-policy.md",
+        "docs/milestone-description.md": (
+            ".csarc/docs/milestone-description.md"
+        ),
+        "policies/actions.json": ".csarc/policies/actions.json",
+        "policies/capability-matrix.json": (
+            ".csarc/policies/capability-matrix.json"
+        ),
+        "release-please-config.json": ".csarc/release-please-config.json",
+        "scripts/ci_tier.py": ".csarc/scripts/ci_tier.py",
+        "scripts/release_policy.py": ".csarc/scripts/release_policy.py",
+        "scripts/verify": ".csarc/scripts/verify",
+        "site/README.md": ".csarc/site/README.md",
+        "site/content/_index.en.md": "docs/site/content/_index.en.md",
+        "site/version.json": ".csarc/site/version.json",
+        "version.txt": ".csarc/version.txt",
+    }
+    for destination in moved.values():
+        if destination == ".csarc/config.yml":
+            continue
+        rendered = ROOT / "template" / destination
+        assert (
+            rendered.is_file()
+            or rendered.with_name(rendered.name + ".jinja").is_file()
+        ), destination
+    retired = "scripts/release_assets.py"
+    assert not (ROOT / "template" / ".csarc" / retired).exists()
+
+    stage = tmp_path / "stage"
+    target = tmp_path / "target"
+    for relative in (*moved.values(), "SECURITY.md", ".github/SECURITY.md"):
+        path = stage / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"current {relative}\n", encoding="utf-8")
+    legacy = {old: f"v0.15.6 {old}\n" for old in moved}
+    legacy[retired] = "v0.15.6 retired release assets\n"
+    legacy["SECURITY.md"] = "# Security Policy\n\nv0.15.6 disclosure\n"
+    legacy["product-owned.txt"] = "keep this product content\n"
+    legacy["scripts/product-tool"] = "project owned tool\n"
+    for relative, content in legacy.items():
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    moves = cli.legacy_layout_pairs(stage, target)
+    plan = cli.update_file_plan(
+        cli.compare_stage(stage, target, adopt=False), moves
+    )
+
+    assert set(moves) == set(moved.items())
+    assert set(plan.move) == {f"{old} -> {new}" for old, new in moved.items()}
+    # The retired generated file stays at its legacy path so Copier's
+    # old-to-new comparison, not a guessed move, removes it.
+    assert not any(move.startswith(retired) for move in plan.move)
+    assert retired in plan.preserve
+    # v0.15.6 kept the disclosure policy at root; a new project receives
+    # the scanner policy there and the disclosure policy under .github/.
+    assert "SECURITY.md" in plan.overwrite
+    assert ".github/SECURITY.md" in plan.add
+    assert "product-owned.txt" in plan.preserve
+    assert "scripts/product-tool" in plan.preserve
+
+    cli.apply_layout_moves(target, moves)
+    for old, new in moved.items():
+        assert not (target / old).exists(), old
+        assert (target / new).read_text(encoding="utf-8") == (
+            f"v0.15.6 {old}\n"
+        )
+    assert (target / retired).read_text(encoding="utf-8") == (
+        "v0.15.6 retired release assets\n"
+    )
+    assert not (target / ".csarc" / retired).exists()
+    assert (target / "product-owned.txt").read_text(encoding="utf-8") == (
+        "keep this product content\n"
+    )
+    assert (target / "scripts/product-tool").read_text(encoding="utf-8") == (
+        "project owned tool\n"
+    )
+    assert not (target / "policies").exists()
+    assert not (target / "site").exists()
+
+
 @pytest.mark.large
 def test_previous_release_to_current_managed_file_migration(
     tmp_path: Path,
 ) -> None:
-    """Deliver current managed files to one untouched previous release."""
-    from_sha = "488f874342c64d0c7c08782b86db71f9e20efcb6"
+    """Deliver current managed files to the previous stable release.
+
+    The start point is a rolling, deterministic rule instead of a pinned
+    historical SHA: the newest stable vX.Y.Z tag reachable from HEAD that is
+    strictly older than version.txt. Long-distance historical migrations are
+    pinned by narrow layout contracts instead of a full real update.
+    """
+    from_tag, from_sha = previous_release_start()
     to_sha = git(ROOT, "rev-parse", "HEAD")
+    assert from_sha != to_sha, from_tag
     project = tmp_path / "previous-release-project"
     assert (
         main(
@@ -6059,8 +6246,8 @@ def test_previous_release_to_current_managed_file_migration(
         )
         == 0
     )
-    retired = project / "scripts" / "release_assets.py"
-    assert retired.is_file()
+    config = project / ".csarc" / "config.yml"
+    assert f"_commit: {from_sha}" in config.read_text(encoding="utf-8")
     product_file = project / "product-owned.txt"
     product_file.write_text("keep this product content\n", encoding="utf-8")
     git(project, "init", "-b", "main")
@@ -6082,7 +6269,33 @@ def test_previous_release_to_current_managed_file_migration(
         )
         == 0
     )
-    assert not retired.exists()
+
+    # Managed scripts the previous release shipped but the current template
+    # retired are removed; every remaining managed script is current.
+    current_scripts = managed_script_names(to_sha)
+    retired_scripts = managed_script_names(from_sha) - current_scripts
+    for name in sorted(retired_scripts):
+        assert not (project / name).exists(), name
+    delivered = {
+        name
+        for name in cli.project_files(project)
+        if name.startswith(".csarc/scripts/")
+    }
+    assert ".csarc/scripts/verify" in delivered
+    assert delivered <= current_scripts, sorted(delivered - current_scripts)
+    for name in sorted(delivered):
+        template_path = f"template/{name}"
+        listed = git(ROOT, "ls-tree", "--name-only", to_sha, template_path)
+        if listed != template_path:
+            continue  # Rendered from a .jinja source; content is answer-bound.
+        expected = subprocess.run(  # noqa: S603
+            ["git", "show", f"{to_sha}:{template_path}"],  # noqa: S607
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout
+        assert (project / name).read_bytes() == expected, name
+
     assert (
         (project / "SECURITY.md")
         .read_text(encoding="utf-8")
@@ -6097,9 +6310,7 @@ def test_previous_release_to_current_managed_file_migration(
         "keep this product content\n"
     )
     assert not list(project.rglob("*.rej"))
-    assert f"_commit: {to_sha}" in (
-        project / ".csarc" / "config.yml"
-    ).read_text(encoding="utf-8")
+    assert f"_commit: {to_sha}" in config.read_text(encoding="utf-8")
 
 
 @pytest.mark.large

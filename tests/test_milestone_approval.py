@@ -156,6 +156,48 @@ def test_tracker_accepts_enhancement_fallback_without_native_type() -> None:
     assert tracker_errors(value) == []
 
 
+def _declare_checkpoints(value: dict[str, Any], lines: str) -> None:
+    tracker = value["issues"][0]
+    tracker["body"] = tracker["body"].replace(
+        "Ship the reviewed batch.\n",
+        f"Ship the reviewed batch.\n\n### Checkpoints\n\n{lines}\n",
+    )
+
+
+def test_tracker_validates_declared_checkpoints() -> None:
+    """Checkpoints must be well formed and name this Milestone's work."""
+    value = snapshot()
+    value["issues"].append(
+        {"number": 81, "title": "Work", "milestone": {"number": 8}}
+    )
+    _declare_checkpoints(value, "- Checkpoint A (beta): #81; terminal #81")
+    assert tracker_errors(value) == []
+
+    _declare_checkpoints(value, "- Checkpoint B (beta): #99; terminal #99")
+    assert tracker_errors(value) == [
+        "Checkpoint Issue #99 is not a work Issue in this Milestone"
+    ]
+
+    malformed = snapshot()
+    _declare_checkpoints(malformed, "- Checkpoint A: #81")
+    assert tracker_errors(malformed) == [
+        "Invalid checkpoint declaration: - Checkpoint A: #81"
+    ]
+
+
+def test_changing_checkpoints_after_approval_requires_reapproval() -> None:
+    """A checkpoint edit bumps the tracker and invalidates prior approval."""
+    approve = comment(1, "reviewer", "/milestone approve")
+    approve["created_at"] = "2026-09-24T08:00:00Z"
+    approve["updated_at"] = "2026-09-24T08:00:00Z"
+    before = snapshot(approve, tracker_updated_at="2026-09-24T08:00:00Z")
+    assert approval_decision(before).allowed
+
+    edited = snapshot(approve, tracker_updated_at="2026-09-24T09:00:00Z")
+    _declare_checkpoints(edited, "- Checkpoint A (beta): #81; terminal #81")
+    assert not approval_decision(edited).allowed
+
+
 def test_non_proposer_approval_opens_the_gate() -> None:
     """One human other than the proposer is sufficient."""
     result = approval_decision(

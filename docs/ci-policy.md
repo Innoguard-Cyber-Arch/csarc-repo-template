@@ -524,6 +524,37 @@ command substitution，這段文字從未被執行，但掃描器分不出「描
 仍然成立。這不是本節唯一的例外——`canonical_scanner_helper` 對
 `pr_lifecycle.py` 自身的例外也適用同一條通則，往後新增例外一律比照辦理。
 
+### Milestone checkpoint beta（#996）
+
+Milestone tracker 可以在核准前用 `### Checkpoints` 宣告 beta checkpoints（格式見
+`docs/milestone-description.md`）。宣告後，發布次數由 checkpoint 數量決定，不再跟
+work Issue 數量綁在一起：
+
+- `scripts/release_level.py resolve-pr` 額外輸出 `checkpoint=none|terminal|deferred`。
+  CI 的「Validate same-PR release materialization」把它傳給
+  `release_policy.py verify-delivery-version --checkpoint-role`：`terminal` 與 `none`
+  照舊要求 final release-only commit；`deferred` 要求版本 manifest 與 base 相同，
+  物化了版本反而 fail closed。`pr_lifecycle.py merge` 在 lease 下用同一個 live role
+  重新驗證。
+- `release.yml` 在 `dev/m*` 先執行 `release_level.py checkpoint-role`，再把 role 傳給
+  `release_policy.py plan`。`deferred` merge 的 plan status 是 `deferred`：記錄在 step
+  summary 後結束，不偵測發布能力、不準備工具鏈、不重跑驗證、不建立 tag 或 Release。
+  Deferred 卻已物化版本時，plan fail closed。
+- Checkpoint terminal 的 release 從上一個 tag 起算，所以一次聚合上次 checkpoint 之後的
+  所有 work 與 CHANGELOG；`release-batch` 對 delivery branch 上的 work PR 只列出各自
+  關閉的 Issue，不再每次展開整個 Milestone。
+- 沒有宣告 checkpoints 的 Milestone、`main` 與 promotion 路由，role 一律是 `none`，
+  行為不變。
+
+同一次變更也修正 delivery branch 的 evidence 重用與 fallback：
+`check-trusted-verification --resolve-merge-source --merge-branch <branch>` 接受實際
+目標 branch 的 merged source PR，並要求重用的 hosted evidence 記錄的 `base` 等於該
+branch；repository、head／tree、tier、scopes、command、toolchain、runner、結果與
+freshness 的綁定不變。沒有可信 evidence 時才 fallback，而且 fallback 的
+`CSARC_CI_BASE` 先用 push event 的 `before`；dispatch 沒有 `before` 時改用 merged
+commit 的第一個 parent（真實 pre-merge base），不再退回 default branch，避免 `dev/m*`
+把累積的 `main..dev/m*` 當成變更範圍。
+
 ### 不屬於里程碑的工作
 
 一張 Issue 若能獨立審查、驗證與交付，且沒有共同期限、跨 Issue 相依、整批驗收或
@@ -1453,6 +1484,33 @@ time；執行超過 60 秒時每 60 秒輸出 heartbeat；失敗時先指出第�
 顯示頻率，不改變命令、重試或 pass/fail 語意。Root 的 fast／full pytest 另用 verbose
 node ID 顯示目前案例，結束時列出最慢 20 個案例；沒有自動 retry。
 
+#### 驗證成本摘要與成長警示（#999）
+
+`scripts/verify-fast` 與 `scripts/verify-stage-regression-tests` 讓原本那一次 pytest 多寫一份
+`--junitxml`，再交給 `scripts/verification_cost.py report` 讀取；不另跑測試，也不另做
+`--collect-only`。`tests/conftest.py` 在收集階段替帶 `large` 標記的案例加上
+`csarc_marker=large` 的 JUnit property，所以「本次實際執行了幾個 `large`」也來自同一份報告。
+摘要失敗只印出非阻斷訊息，不改變驗證結果。
+
+- **本機**：只印本次 pytest 總時間、測試數、實際執行的 `large` 數與最慢 10 個案例；不讀
+  baseline，不拿本機秒數跟 GitHub runner 比較。
+- **Hosted**（`GITHUB_ACTIONS=true` 且有 `$GITHUB_STEP_SUMMARY`）：在 step summary 另外列出
+  `@pytest.mark.large` 標記數量相對 PR base 的變化，以及最慢案例表。標記數量用 `git grep`
+  分別靜態計算 `CSARC_CI_BASE` 與 HEAD 的 merge base 及候選工作樹，不跑測試。
+- **成長警示**：只和同類基準比較。基準是 checked-in 的
+  `tests/verification-cost-baseline.json`，目前只有 `full`（完整 regression suite，含
+  coverage）一類，數值取自上一次可信 hosted run 的 pytest 總時間，並記錄來源 run。
+  報告優先讀 merge base 上的這個檔案，候選 PR 改不動自己的比較基準；base 還沒有這個檔案時才
+  退回候選版本。總時間比基準高出超過 15% 只發 `::warning::`，沒有硬性秒數 gate。
+  `fast` 的 bounded 子集依 scope 而變，沒有可比的同類基準，因此只顯示摘要、不發警示。
+  不新增 artifact、外部存放區或常駐 telemetry；基準在 Milestone promotion 時由維護者依最近
+  一次可信 hosted run 的摘要數字更新。
+- **新增 `large` 測試的理由**：`scripts/validate-pr-policy` 在 PR 不是 draft、也不是
+  promotion 時，讀 PR files API 的 patch，計算 `.py` 檔中新增減去刪除的
+  `@pytest.mark.large`（或 `pytestmark = ... pytest.mark.large`）。淨增加時，PR body 必須有一行
+  `Large test justification: <取代哪個測試，或為何無法用較小的測試涵蓋>`；空白、`N/A`、
+  `TBD` 之類的佔位字不算。GitHub 沒回傳 patch 的 `.py` 檔也視為需要說明。
+
 #### 逐階段耗時量測（#465）
 
 上表只記錄涵蓋範圍與取捨依據，沒有留下逐階段秒數；聚合器本身每次執行都會印出
@@ -1554,9 +1612,9 @@ Journey 08 與本文件既有規則決定。
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
 | --- | --- | --- | --- | --- |
 | 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
-| 精確版本與 CHANGELOG | 原 Milestone work PR 的 final release-only commit materialize 下一個 beta | promotion bridge materialize stable 與 CHANGELOG | standalone／hotfix 原 PR materialize stable | manual 只重跑同一流程，不另開版本來源 |
+| 精確版本與 CHANGELOG | 原 Milestone work PR 的 final release-only commit materialize 下一個 beta；宣告 checkpoints 時只有 terminal Issue 的 PR materialize | promotion bridge materialize stable 與 CHANGELOG | standalone／hotfix 原 PR materialize stable | manual 只重跑同一流程，不另開版本來源 |
 | CI | beta 的最低組合是 fast，路徑風險可升 full | stable 一律 full | release workflow 重用 exact candidate 的可信證據，缺少時只補跑所需 tier | 不重複已具備且仍有效的 routine suite |
-| 成品／checksum／SBOM | 合併進 `dev/m*` 後從精確 commit 發 beta prerelease | 合併後從精確 main commit 發 stable | stable 候選合併後從精確 commit建立 | draft Release 先上傳、下載重驗，成功才公開 |
+| 成品／checksum／SBOM | 合併進 `dev/m*` 後從精確 commit 發 beta prerelease；deferred checkpoint work 不發布 | 合併後從精確 main commit 發 stable | stable 候選合併後從精確 commit建立 | draft Release 先上傳、下載重驗，成功才公開 |
 | tag／GitHub Release | `X.Y.Z-beta.N` | `X.Y.Z`；成功才關 tracker 與 Milestone | `X.Y.Z` | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
 | attestation／registry | 不建立 | 不建立 | 不自動啟用 | #439 已移除設定面（零 active 消費者），非留待選配 |
 | deployment | 不適用 | 不適用 | 不適用 | 由有真實 runtime target 的產品 repo 定義 |
