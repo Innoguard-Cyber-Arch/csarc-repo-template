@@ -6,7 +6,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.26.2<!-- x-release-please-version --> |
+| 公版版本 | v0.26.4<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
@@ -166,7 +166,7 @@ Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 re
 
 ## 設定與密鑰
 
-GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./.csarc/scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗；`GITHUB_TOKEN` 無法讀取的管理員欄位、Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud）、組織政策限制或缺少 GitHub Advanced Security，則明確標為 `DEGRADED`，不會誤稱為 drift 或 compliant。生成 repo 預設由 `.github/workflows/governance-drift.yml` 每天重跑同一個 `check`，只在可修正的偏離出現或內容改變時開立或更新唯一追蹤 Issue；可用 `enable_governance_drift_check: false` 關閉。本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。hosted 模式的非 draft PR 會從 repository 當下具有 `maintain`／`admin` 權限且不是作者的協作者中 best-effort 選一位 reviewer；local 模式不產生此 workflow。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見 [repo-site 附錄](docs/index.html)「先辨識 GitHub 方案」章節。
+GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./.csarc/scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗；`GITHUB_TOKEN` 無法讀取的管理員欄位、Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud）、組織政策限制或缺少 GitHub Advanced Security，則明確標為 `DEGRADED`，不會誤稱為 drift 或 compliant。GitHub Pages 的 `enabled` 是維護者的 desired-state 選擇：public repository 在 GitHub Free 可以發布，但不代表必須發布；`enabled=false` 是明確 opt-out，live 仍已發布時 `plan` 顯示 DISABLE、`check` 回報 drift。生成 repo 預設由 `.github/workflows/governance-drift.yml` 每天重跑同一個 `check`，只在可修正的偏離出現或內容改變時開立或更新唯一追蹤 Issue；可用 `enable_governance_drift_check: false` 關閉。本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。hosted 模式的非 draft PR 會從 repository 當下具有 `maintain`／`admin` 權限且不是作者的協作者中 best-effort 選一位 reviewer；local 模式不產生此 workflow。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見 [repo-site 附錄](docs/index.html)「先辨識 GitHub 方案」章節。
 
 `admin_bypass` 決定管理員可否以 exact-head 授權自審：預設 `off`，也可限於 beta 或明確設為 `always`；`copilot_review: allowed` 則允許乾淨的 exact-head Copilot review 作為證據。Copilot 授權與額度是即時能力，不由 Free／Team 等方案名稱推定；不可用、舊 head、有意見或未解 thread 時回到同行核准或設定允許的管理員授權。詳見 [`docs/ci-policy.md`](docs/ci-policy.md)「Copilot 審核模式（#752）」。
 

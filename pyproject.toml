@@ -1,6 +1,6 @@
 [project]
 name = "csarc-repo-template"
-version = "0.26.2"
+version = "0.26.4"
 description = "Prompt-ready lifecycle CLI for the CSARC repository template"
 readme = "README.md"
 license = "LicenseRef-Proprietary"

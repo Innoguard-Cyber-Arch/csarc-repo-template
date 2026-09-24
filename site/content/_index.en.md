@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.26.2</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.26.4</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.26.2<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.26.4<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -770,7 +770,7 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Project choice | `repository_url`, `project_slug` | derived from `code_owner`/`project_name` unless overridden | repo-site's clone instructions |
 | Project choice | `enable_governance_drift_check` | `true` by default, generating the daily scheduled Action; set `false` to disable it | `true` generates `governance-drift.yml` and the drift checker; `false` generates neither |
 
-The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Plan, billing, Copilot entitlement, token permissions, and Pages availability are live `allowed`/`blocked`/`unknown` observations, not settings. Low-frequency GitHub details stay in native repository settings or `policies/` instead of expanding the CSARC schema.
+The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Plan, billing, Copilot entitlement, token permissions, and Pages availability are live `allowed`/`blocked`/`unknown` observations, not settings. Conversely, `enabled` in `policies/pages.json` is the maintainer's desired-state choice: public on GitHub Free means Pages can publish, not that it must, and `enabled=false` is an explicit opt-out that check and apply still reconcile. Low-frequency GitHub details stay in native repository settings or `policies/` instead of expanding the CSARC schema.
 
 A generated project using `documentation_mode: template-and-content` runs the same rendering engine and components as this template repository's own root site (Issue #681), just with much leaner content. It resolves explicit `[[key]]` tokens only from the keys listed above, straight from `.csarc/config.yml`; an unknown key stops the build, so the site cannot invent a second settings schema. Project content and theme choices stay under `docs/site/content/` and `docs/site/theme.css`, owned by the consuming project. See `docs/documentation-policy.md` for the complete ownership and migration contract.
 {{< /disclosure >}}
