@@ -524,6 +524,37 @@ command substitution，這段文字從未被執行，但掃描器分不出「描
 仍然成立。這不是本節唯一的例外——`canonical_scanner_helper` 對
 `pr_lifecycle.py` 自身的例外也適用同一條通則，往後新增例外一律比照辦理。
 
+### Milestone checkpoint beta（#996）
+
+Milestone tracker 可以在核准前用 `### Checkpoints` 宣告 beta checkpoints（格式見
+`docs/milestone-description.md`）。宣告後，發布次數由 checkpoint 數量決定，不再跟
+work Issue 數量綁在一起：
+
+- `scripts/release_level.py resolve-pr` 額外輸出 `checkpoint=none|terminal|deferred`。
+  CI 的「Validate same-PR release materialization」把它傳給
+  `release_policy.py verify-delivery-version --checkpoint-role`：`terminal` 與 `none`
+  照舊要求 final release-only commit；`deferred` 要求版本 manifest 與 base 相同，
+  物化了版本反而 fail closed。`pr_lifecycle.py merge` 在 lease 下用同一個 live role
+  重新驗證。
+- `release.yml` 在 `dev/m*` 先執行 `release_level.py checkpoint-role`，再把 role 傳給
+  `release_policy.py plan`。`deferred` merge 的 plan status 是 `deferred`：記錄在 step
+  summary 後結束，不偵測發布能力、不準備工具鏈、不重跑驗證、不建立 tag 或 Release。
+  Deferred 卻已物化版本時，plan fail closed。
+- Checkpoint terminal 的 release 從上一個 tag 起算，所以一次聚合上次 checkpoint 之後的
+  所有 work 與 CHANGELOG；`release-batch` 對 delivery branch 上的 work PR 只列出各自
+  關閉的 Issue，不再每次展開整個 Milestone。
+- 沒有宣告 checkpoints 的 Milestone、`main` 與 promotion 路由，role 一律是 `none`，
+  行為不變。
+
+同一次變更也修正 delivery branch 的 evidence 重用與 fallback：
+`check-trusted-verification --resolve-merge-source --merge-branch <branch>` 接受實際
+目標 branch 的 merged source PR，並要求重用的 hosted evidence 記錄的 `base` 等於該
+branch；repository、head／tree、tier、scopes、command、toolchain、runner、結果與
+freshness 的綁定不變。沒有可信 evidence 時才 fallback，而且 fallback 的
+`CSARC_CI_BASE` 先用 push event 的 `before`；dispatch 沒有 `before` 時改用 merged
+commit 的第一個 parent（真實 pre-merge base），不再退回 default branch，避免 `dev/m*`
+把累積的 `main..dev/m*` 當成變更範圍。
+
 ### 不屬於里程碑的工作
 
 一張 Issue 若能獨立審查、驗證與交付，且沒有共同期限、跨 Issue 相依、整批驗收或
@@ -1581,9 +1612,9 @@ Journey 08 與本文件既有規則決定。
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
 | --- | --- | --- | --- | --- |
 | 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
-| 精確版本與 CHANGELOG | 原 Milestone work PR 的 final release-only commit materialize 下一個 beta | promotion bridge materialize stable 與 CHANGELOG | standalone／hotfix 原 PR materialize stable | manual 只重跑同一流程，不另開版本來源 |
+| 精確版本與 CHANGELOG | 原 Milestone work PR 的 final release-only commit materialize 下一個 beta；宣告 checkpoints 時只有 terminal Issue 的 PR materialize | promotion bridge materialize stable 與 CHANGELOG | standalone／hotfix 原 PR materialize stable | manual 只重跑同一流程，不另開版本來源 |
 | CI | beta 的最低組合是 fast，路徑風險可升 full | stable 一律 full | release workflow 重用 exact candidate 的可信證據，缺少時只補跑所需 tier | 不重複已具備且仍有效的 routine suite |
-| 成品／checksum／SBOM | 合併進 `dev/m*` 後從精確 commit 發 beta prerelease | 合併後從精確 main commit 發 stable | stable 候選合併後從精確 commit建立 | draft Release 先上傳、下載重驗，成功才公開 |
+| 成品／checksum／SBOM | 合併進 `dev/m*` 後從精確 commit 發 beta prerelease；deferred checkpoint work 不發布 | 合併後從精確 main commit 發 stable | stable 候選合併後從精確 commit建立 | draft Release 先上傳、下載重驗，成功才公開 |
 | tag／GitHub Release | `X.Y.Z-beta.N` | `X.Y.Z`；成功才關 tracker 與 Milestone | `X.Y.Z` | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
 | attestation／registry | 不建立 | 不建立 | 不自動啟用 | #439 已移除設定面（零 active 消費者），非留待選配 |
 | deployment | 不適用 | 不適用 | 不適用 | 由有真實 runtime target 的產品 repo 定義 |

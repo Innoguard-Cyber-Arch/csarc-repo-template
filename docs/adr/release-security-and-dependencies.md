@@ -2,8 +2,8 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-01
-- **備註：**#430 candidate 實作；#871 將 Milestone 版本候選併入 promotion PR；#918 以 beta／stable 雙通道與獨立專案成熟度取代四層版本模型；#925 將所有 CSARC-owned 版本候選移入原交付 PR
-- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)、[#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918)、[#925](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/925)
+- **備註：**#430 candidate 實作；#871 將 Milestone 版本候選併入 promotion PR；#918 以 beta／stable 雙通道與獨立專案成熟度取代四層版本模型；#925 將所有 CSARC-owned 版本候選移入原交付 PR；#996 以事前宣告的 Milestone checkpoint 取代逐件 beta
+- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)、[#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918)、[#925](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/925)、[#996](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/996)
 - **實作 PRs：**[#448](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/448)、[#463](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/463)、[#471](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/471)
 
 ## 問題與限制
@@ -38,6 +38,13 @@ CSARC 過去在版本、發版與供應鏈責任上有多套並存或半途而�
 - #871 的 Milestone promotion 同 PR 決策擴充到 standalone、hotfix 與每張 Milestone work PR；#817 的 current-base freshness、#589 的共用 publisher、#918 的 beta／stable channel 與 exact-head lease 都保留。舊 Release Please／`release/v*` verifier 只作既有在途候選的相容入口，不是新工作的正常路徑。
 
 這項決定 supersede 下方早期「standalone 在 merge 後另開 Automatic／Guided 版本 PR」的操作描述；歷史段落保留作決策脈絡時，以本節為準。
+
+### 2026-09-24：Milestone beta 改為事前宣告的 checkpoint（#996）
+
+- Milestone tracker 可以在核准前用 `### Checkpoints` 宣告 beta checkpoints；只有每個 checkpoint 的 terminal Issue 在原 PR 物化並發布 beta，其他 work 以 `deferred` 合併，不建立版本、tag 或 Release。發布次數因此由 checkpoint 決定，不再跟 work Issue 數量綁在一起。沒有宣告時維持每張 work Issue 各自發 beta。
+- #183 的「在邊界批次發版」原則以 Milestone checkpoint 的形式部分恢復；它原本依賴的專屬 promotion workflow 仍不恢復。
+- #918「Milestone 工作逐件在 delivery branch 發 beta」由 checkpoint 模型部分取代；beta／stable channel、單一 publisher、exact-candidate、#925 的同 PR 物化、required checks、供應鏈與 fail-closed 原則全部保留。
+- Release 在 `dev/m*` 重用來源 PR 的可信 evidence，並要求 evidence 的 `base` 等於實際目標 branch；fallback 用 push `before` 或 merged commit 的第一個 parent，不再退回 default branch（延伸 #940）。
 
 CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑：
 
@@ -153,7 +160,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | [#104](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/104) Verify attestations at artifact consumption | preserved（conditional） | 原問題仍存在（消費端要驗證 provenance），但尚無真實消費者採用，因此 `scripts/verify_release_consumption.py` 與其測試保留為 conditional 契約而非 active workflow——不取得 attestation／`id-token` 權限直到 #439 或真實消費者確認 owner。fail closed：無 evidence 時判定失敗，不預設信任。 |
 | [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123) Select release behavior from GitHub Actions policy capabilities | preserved | 核心機制（依 organization policy／repository setting／token permission 分開回報並選擇 Automatic 或 Guided）直接是本 ADR 決策第 3–4 點的基礎，由 capability probe 延續實作，非重寫。 |
 | [#142](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/142) Synchronize release metadata and repair historical records | one-time evidence | 「repair historical records」是針對當時既有資料的一次性回補，不是常駐能力；往後的版本／CHANGELOG 一致性改由 `release_policy.py` 在每次執行時即時計算，不需要重跑歷史修復。 |
-| [#183](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/183) Batch releases at promotion boundaries | superseded | 「在 promotion 邊界批次發版」的前提（存在專屬 `promotion.yml`）已不成立：promotion 專用 workflow 判定不恢復（見 Archive disposition），現行模型是 #429 的 standalone／main-only 路徑加 #400 的 Milestone 交付批次，批次責任已轉移，不再需要獨立批次發版邊界。 |
+| [#183](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/183) Batch releases at promotion boundaries | superseded | 「在 promotion 邊界批次發版」的前提（存在專屬 `promotion.yml`）已不成立：promotion 專用 workflow 判定不恢復（見 Archive disposition），現行模型是 #429 的 standalone／main-only 路徑加 #400 的 Milestone 交付批次，批次責任已轉移，不再需要獨立批次發版邊界。2026-09-24 #996 以 Milestone checkpoint 形式部分恢復批次發版原則，但不恢復專屬 workflow。 |
 | [#321](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/321) Complete the missing release after promotion | one-time evidence | 是針對舊 `promotion.yml` 特定事故的一次性補救；該 workflow 本身已退役，問題不會再以同一形式發生，不是需要常駐防範的能力。 |
 | [#322](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/322) Enforce dependency cooldown and release SBOM evidence | superseded（部分） | GitHub 狀態為 `NOT_PLANNED`。SBOM 半部已由 #341 實作並保留（見下）；「dependency cooldown」半部從未實作且目前沒有 owner 認領，也沒有已知事故證明其必要性，維持 not planned，不在本次候選新增推測性能力。 |
 | [#341](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/341) Generate release SBOMs with pinned Syft | preserved | 直接對應 current-state 契約「checksum／SBOM／release evidence」列，由 `scripts/release_bundle.py`＋pinned Syft 實作，`tests/test_release_bundle.py` 驗證缺檔／竄改／重跑。 |
