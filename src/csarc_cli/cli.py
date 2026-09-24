@@ -47,7 +47,7 @@ ADOPTION_PLAN_BASENAME = "csarc-adoption-plan.json"
 # Version of the adoption report's own Markdown template, independent from
 # the CLI package version. Bump this when the report's structure or field
 # set changes; README.md displays the same value (#530).
-ADOPTION_REPORT_TEMPLATE_VERSION = "1.0.0"
+ADOPTION_REPORT_TEMPLATE_VERSION = "1.1.0"
 AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -62,6 +62,48 @@ GITHUB_REPOSITORY_URL = re.compile(
 )
 REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
+REPORT_SETTING_KEYS = frozenset(
+    {
+        "actions_fallback",
+        "admin_bypass",
+        "code_owner",
+        "copilot_review",
+        "copyright_holder",
+        "coverage_mode",
+        "coverage_threshold",
+        "default_release_level",
+        "documentation_mode",
+        "enable_codeql",
+        "enable_governance_drift_check",
+        "enable_precommit",
+        "enable_template_update_notifications",
+        "features",
+        "governance_mode",
+        "i18n",
+        "language",
+        "languages",
+        "lifecycle",
+        "package_name",
+        "primary_language",
+        "project_description",
+        "project_license",
+        "project_maturity",
+        "project_mode",
+        "project_name",
+        "project_run_command",
+        "project_slug",
+        "project_verification_hook",
+        "project_visibility",
+        "python_min_version",
+        "python_support_mode",
+        "release_ownership",
+        "release_trigger",
+        "repository_url",
+        "review",
+        "security_reporting_channel",
+        "verification_mode",
+    }
+)
 RELEASE_WRITER_MARKERS = (
     "gh release create",
     "gh release edit",
@@ -2245,40 +2287,10 @@ def markdown_code(value: object) -> str:
 
 def report_settings(data: dict[str, object]) -> str:
     """Return known non-secret settings used for rendering."""
-    allowed = {
-        "actions_fallback",
-        "verification_mode",
-        "code_owner",
-        "copilot_review",
-        "coverage_mode",
-        "coverage_threshold",
-        "default_release_level",
-        "enable_codeql",
-        "enable_governance_drift_check",
-        "enable_precommit",
-        "enable_template_update_notifications",
-        "features",
-        "governance_mode",
-        "language",
-        "languages",
-        "lifecycle",
-        "package_name",
-        "project_description",
-        "project_mode",
-        "project_name",
-        "project_slug",
-        "project_verification_hook",
-        "project_visibility",
-        "python_min_version",
-        "python_support_mode",
-        "release_ownership",
-        "release_trigger",
-        "review",
-    }
     return ", ".join(
         f"`{key}={markdown_code(value)}`"
         for key, value in sorted(data.items())
-        if key in allowed
+        if key in REPORT_SETTING_KEYS
     )
 
 

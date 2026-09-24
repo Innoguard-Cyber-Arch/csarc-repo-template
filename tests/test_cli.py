@@ -2856,6 +2856,107 @@ def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     assert "secret" not in settings
 
 
+def test_adoption_outputs_share_all_resolved_settings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Show resolved settings consistently in every review surface."""
+    target = tmp_path / "target"
+    stage = tmp_path / "stage"
+    target.mkdir()
+    stage.mkdir()
+    (target / "LICENSE").write_text("MIT\n", encoding="utf-8")
+    (target / "package.json").write_text(
+        '{"license":"MIT"}\n', encoding="utf-8"
+    )
+    (stage / "LICENSE").write_text(
+        "Copyright Example Organization\nAll rights reserved.\n",
+        encoding="utf-8",
+    )
+    (stage / "package.json").write_text(
+        '{"license":"UNLICENSED"}\n', encoding="utf-8"
+    )
+    expected = {
+        "admin_bypass": "off",
+        "copyright_holder": "Example Organization",
+        "documentation_mode": "off",
+        "enable_codeql": False,
+        "i18n": "off",
+        "primary_language": "en",
+        "project_license": "proprietary",
+        "project_maturity": "early",
+        "project_run_command": "pnpm run build",
+        "repository_url": "https://github.com/example/product",
+        "security_reporting_channel": "Open a private security report.",
+    }
+    answers = cli.resolve_release_answers(
+        target,
+        {
+            **expected,
+            "language": "typescript",
+            "languages": ["typescript"],
+            "project_mode": "existing",
+        },
+    )
+    files = cli.compare_stage(stage, target, adopt=True)
+    assert files.manual == ("LICENSE", "package.json")
+    revision = cli.Revision(
+        "v1.0.0", "a" * 40, "https://example.invalid/template.git"
+    )
+    repository = cli.RepositoryContext(
+        "example/product",
+        "example",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+    plan = cli.ResolvedPlan(
+        mode="adopt",
+        target=target,
+        revision=revision,
+        repository=repository,
+        answers=answers,
+        capabilities={},
+        files=files,
+    )
+
+    assert plan.as_dict()["answers"] == dict(sorted(answers.items()))
+    cli.print_plan(plan)
+    terminal = capsys.readouterr().out
+    report = cli.adoption_report_markdown(
+        target,
+        revision,
+        repository,
+        {**answers, "unknown_secret": "do-not-report"},
+        files,
+        "2026-09-24T00:00:00+00:00",
+    )
+
+    for key, value in expected.items():
+        assert f"  {key}={value}" in terminal
+        assert f"`{key}={value}`" in report
+    assert "`LICENSE` - template and repository contain different" in report
+    assert (
+        "`package.json` - template and repository contain different" in report
+    )
+    assert "unknown_secret" not in report
+    assert "do-not-report" not in report
+
+
+def test_report_settings_cover_every_public_copier_question() -> None:
+    """Require each persisted Copier question to be reviewed explicitly."""
+    copier_config = yaml.safe_load(
+        (ROOT / "copier.yml").read_text(encoding="utf-8")
+    )
+    question_names = {
+        key
+        for key in copier_config
+        if isinstance(key, str) and not key.startswith("_")
+    }
+
+    assert question_names <= cli.REPORT_SETTING_KEYS
+
+
 def test_dangling_reusable_workflow_option_stays_removed() -> None:
     """Issue #495: leave no trace of the caller-less reusable-workflow option.
 
@@ -2979,25 +3080,26 @@ def test_adoption_readme_prerequisite_is_documented_bilingually() -> None:
         assert "--data documentation_mode=off" in content
 
 
-def test_readme_displays_adoption_report_template_version() -> None:
-    """Keep README's displayed report version in sync with the constant."""
+def test_readmes_display_adoption_report_template_version() -> None:
+    """Keep both READMEs' displayed report version in sync."""
     marker = "ADOPTION_REPORT_TEMPLATE_VERSION"
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    lines_mentioning_constant = [
-        line for line in readme.splitlines() if marker in line
-    ]
-    assert lines_mentioning_constant, (
-        f"README.md should reference {marker} so a template version bump "
-        "is caught here."
-    )
-    assert any(
-        cli.ADOPTION_REPORT_TEMPLATE_VERSION in line
-        for line in lines_mentioning_constant
-    ), (
-        "README.md's displayed adoption report template version "
-        f"({lines_mentioning_constant}) does not match {marker} "
-        f"({cli.ADOPTION_REPORT_TEMPLATE_VERSION})."
-    )
+    for name in ("README.md", "README.en.md"):
+        readme = (ROOT / name).read_text(encoding="utf-8")
+        lines_mentioning_constant = [
+            line for line in readme.splitlines() if marker in line
+        ]
+        assert lines_mentioning_constant, (
+            f"{name} should reference {marker} so a template version bump "
+            "is caught here."
+        )
+        assert any(
+            cli.ADOPTION_REPORT_TEMPLATE_VERSION in line
+            for line in lines_mentioning_constant
+        ), (
+            f"{name}'s displayed adoption report template version "
+            f"({lines_mentioning_constant}) does not match {marker} "
+            f"({cli.ADOPTION_REPORT_TEMPLATE_VERSION})."
+        )
 
 
 def test_adoption_report_computes_new_edited_removed_counts(

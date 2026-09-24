@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.25.13-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(adopt): report resolved settings (7836f72)
+
 ## [0.25.12-beta.1] - 2026-09-24
 
 ### Bug Fixes
