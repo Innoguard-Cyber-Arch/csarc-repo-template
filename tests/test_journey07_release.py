@@ -232,8 +232,20 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
         _, plan = by_name["Plan the next version from repository history"]
         assert route_index == 1
         assert level_index == route_index + 1
+        source_index, source = by_name[
+            "Resolve a squash-merged promotion source"
+        ]
         assert checkpoint_index == level_index + 1
-        assert plan_index == checkpoint_index + 1
+        assert source_index == checkpoint_index + 1
+        assert plan_index == source_index + 1
+        # Only the stable main route can be a squash-merged promotion.
+        assert source["if"] == "${{ steps.route.outputs.channel == 'stable' }}"
+        assert 'startswith(\\"promote/m\\")' in source["run"]
+        assert '.merge_commit_sha == \\"$GITHUB_SHA\\"' in source["run"]
+        assert "more than one promotion source" in source["run"]
+        assert plan["env"]["SOURCE_SHA"] == "${{ steps.source.outputs.sha }}"
+        assert 'source_args=(--source-sha "$SOURCE_SHA")' in plan["run"]
+        assert '"${source_args[@]}"' in plan["run"]
         assert deferred_index == plan_index + 1
         # Only delivery branches resolve a checkpoint; main keeps role none.
         assert checkpoint["if"] == (

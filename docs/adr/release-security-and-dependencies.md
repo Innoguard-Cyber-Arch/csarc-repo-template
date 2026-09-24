@@ -53,6 +53,11 @@ CSARC 過去在版本、發版與供應鏈責任上有多套並存或半途而�
 - Promotion bridge 的 hosted `verify-promotion-version` 改以 bridge head 計算 notes（第二個 parent 讓 `main` 的上一個 stable 可達），與本機在 bridge 上執行的 `prepare-candidate --sha HEAD --phase stable` 相同。Merge commit 只取其 parents 的歷史與第一個 parent 的日期，因此 bridge amend 後 id 與 committer date 改變也不影響結果；一般 release-only commit 仍以其 parent 計算。
 - 起因：原規則在 hosted 以 delivery source 計算、本機以 bridge 計算，M15 promotion（PR #989）照文件操作被 hosted `verify` 擋下，而 hosted 產生的 `0.26.6` 段落是空的。經維護者同意，`CHANGELOG.md` 已發布的 `0.26.6` 段落依新規則以 bridge `4049a81` 重新產生並回補（10 個 fix 與 10 個 beta）；GitHub Release 本身維持 immutable 不變。
 
+### 2026-09-25：squash 合併的 promotion 以 bridge 計算版本（#1027）
+
+- Promotion 以 squash 合併後，main commit 追不到 delivery branch 的 beta tag；beta core 高於 main 的 stable 時，從 main HEAD 算出的版本會低於 bridge 物化的版本，Release 因此被擋（M17 PR #1024 的 run 36032783769）。
+- `release.yml` 在 stable route 找出唯一的 `promote/m*` 來源 PR，以它的 head 執行 `release_policy.py plan --source-sha`；bridge tree 必須與合併後的 tree 完全相同，否則 fail closed。沒有 promotion 來源時行為不變，#1018 的 CHANGELOG 規則、exact-candidate 與供應鏈驗證都不變。
+
 CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑：
 
 1. 工作 PR 以 Conventional Commits 表達 major／minor／patch／no-release 意圖。
