@@ -42,6 +42,8 @@ if [[ "$1" == "issue" && "$2" == "list" ]]; then
   printf '%s\\n' "${GH_STUB_EXISTING_ISSUE:-}"
 elif [[ "$1" == "issue" && "$2" == "create" ]]; then
   printf '%s\\n' "https://github.com/example/project/issues/42"
+elif [[ "$1" == "api" && "$2" == repos/example/project/issues/* ]]; then
+  printf '{"number":%s}\\n' "${2##*/}"
 fi
 """
 
@@ -57,9 +59,8 @@ def _run_checker(
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     """Run the real check-template-update script against stubbed tools."""
     project = tmp_path / "project"
-    project.mkdir()
+    shutil.copytree(ROOT / "template/.csarc/scripts", project)
     script = project / "check-template-update"
-    shutil.copy2(ROOT / "template/.csarc/scripts/check-template-update", script)
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
     bin_dir = tmp_path / "bin"

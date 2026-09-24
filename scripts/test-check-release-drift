@@ -121,6 +121,10 @@ case "$1" in
         exit 1
       fi
       fixture="$MOCK_ROOT/issue-comments.json"
+    elif [[ "$path" == repos/*/issues/[0-9]* ]]; then
+      issue_number="${path##*/}"
+      printf '{"number":%s}\n' "$issue_number"
+      exit 0
     else
       echo "mock gh: unexpected api path: $path" >&2
       exit 2

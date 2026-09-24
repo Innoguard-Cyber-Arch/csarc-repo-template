@@ -132,11 +132,11 @@ marker_prefix="Release-publish-record:"
 
 normalize_tracking_issue() {
   local number="$1"
-  if gh issue edit "$number" --repo "$repo" --type Bug >/dev/null 2>&1; then
-    gh issue edit "$number" --repo "$repo" --remove-label bug >/dev/null
+  if python3 "$repo_root/.csarc/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --type Bug >/dev/null 2>&1; then
+    python3 "$repo_root/.csarc/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --remove-label bug >/dev/null
     echo "Normalized release drift tracking Issue #$number to native Type Bug."
   else
-    gh issue edit "$number" --repo "$repo" --add-label bug >/dev/null
+    python3 "$repo_root/.csarc/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --add-label bug >/dev/null
     echo "::notice::Native Issue Types are unavailable; the bug label remains authoritative for Issue #$number."
   fi
 }
@@ -581,7 +581,7 @@ issue_body_file="$work_dir/issue-body.md"
 python3 -c 'import json,sys; sys.stdout.write(json.load(open(sys.argv[1], encoding="utf-8"))["issue_body"])' "$result_file" >"$issue_body_file"
 
 if [[ -n "$issue_number" ]]; then
-  gh issue edit "$issue_number" --repo "$repo" --body-file "$issue_body_file" >/dev/null
+  python3 "$repo_root/.csarc/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$issue_number" --body-file "$issue_body_file" >/dev/null
   echo "Updated release drift tracking Issue #$issue_number."
 else
   create_args=(--repo "$repo" --title "$title" --label bug --body-file "$issue_body_file")

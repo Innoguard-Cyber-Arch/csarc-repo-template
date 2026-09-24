@@ -67,9 +67,8 @@ def run_governance_drift_check(
     """Run the drift wrapper with deterministic checker and GitHub responses."""
     fixture = tmp_path / "drift-fixture"
     scripts = fixture / "scripts"
-    scripts.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(ROOT / "scripts", scripts, dirs_exist_ok=True)
     drift_script = scripts / "check-governance-drift"
-    shutil.copy2(ROOT / "scripts/check-governance-drift", drift_script)
     settings_script = scripts / "apply-repository-settings.sh"
     settings_script.write_text(
         '#!/usr/bin/env bash\nprintf "%s\\n" "$CHECK_OUTPUT"\n'
@@ -88,6 +87,9 @@ printf '%s\n' "$*" >>"$GH_CAPTURE"
 case "$1 $2" in
   "issue list") printf '%s\n' "$GH_ISSUE_NUMBER" ;;
   "issue view") cat "$GH_BODY_STORE" ;;
+  "api repos/example/project/issues/"*)
+    printf '{"number":%s}\n' "${2##*/}"
+    ;;
   "issue create"|"issue edit")
     action="$2"
     printf 'https://github.com/example/project/issues/6\n'

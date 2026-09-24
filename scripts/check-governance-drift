@@ -26,11 +26,11 @@ repo="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner
 
 normalize_tracking_issue() {
   local number="$1"
-  if gh issue edit "$number" --repo "$repo" --type Bug >/dev/null 2>&1; then
-    gh issue edit "$number" --repo "$repo" --remove-label bug >/dev/null
+  if python3 "$repo_root/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --type Bug >/dev/null 2>&1; then
+    python3 "$repo_root/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --remove-label bug >/dev/null
     echo "Normalized governance drift tracking Issue #$number to native Type Bug."
   else
-    gh issue edit "$number" --repo "$repo" --add-label bug >/dev/null
+    python3 "$repo_root/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --add-label bug >/dev/null
     echo "::notice::Native Issue Types are unavailable; the bug label remains authoritative for Issue #$number."
   fi
 }
@@ -70,7 +70,7 @@ if [[ -n "$issue_number" ]]; then
   if [[ "$existing_body" == "$(<"$body_file")" ]]; then
     echo "Governance drift is unchanged; tracking Issue #$issue_number was not updated."
   else
-    gh issue edit "$issue_number" --repo "$repo" --body-file "$body_file" >/dev/null
+    python3 "$repo_root/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$issue_number" --body-file "$body_file" >/dev/null
     echo "Updated governance drift tracking Issue #$issue_number."
   fi
 else

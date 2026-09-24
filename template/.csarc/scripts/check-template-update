@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 set +e
 copier check-update --quiet
 check_exit=$?
@@ -34,11 +36,11 @@ repo="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner
 
 normalize_tracking_issue() {
   local number="$1"
-  if gh issue edit "$number" --repo "$repo" --type Task >/dev/null 2>&1; then
-    gh issue edit "$number" --repo "$repo" --remove-label enhancement >/dev/null
+  if python3 "$script_dir/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --type Task >/dev/null 2>&1; then
+    python3 "$script_dir/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --remove-label enhancement >/dev/null
     echo "Normalized template update Issue #$number to native Type Task."
   else
-    gh issue edit "$number" --repo "$repo" --add-label enhancement >/dev/null
+    python3 "$script_dir/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --add-label enhancement >/dev/null
     echo "::notice::Native Issue Types are unavailable; the enhancement label remains authoritative for Issue #$number."
   fi
 }
@@ -72,7 +74,7 @@ issue_number="$(
     head -n 1
 )"
 if [[ -n "$issue_number" ]]; then
-  gh issue edit "$issue_number" --repo "$repo" --body-file "$body_file" >/dev/null
+  python3 "$script_dir/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$issue_number" --body-file "$body_file" >/dev/null
   echo "Updated template notification Issue #$issue_number."
 else
   create_args=(--repo "$repo" --title "$title" --label enhancement --body-file "$body_file")
