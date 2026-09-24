@@ -274,6 +274,9 @@ features:
     Repository site: repo-site
     Docker: docker
   default: [repo-site]
+documentation_mode:
+  type: str
+  default: 'off'
 project_verification_hook:
   type: str
   default: ''
@@ -436,9 +439,22 @@ def initialize_installed_project(tmp_path: Path) -> tuple[Path, Path, str]:
     return source, project, first_sha
 
 
-def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
+def initialize_pending_adoption(
+    tmp_path: Path,
+    *,
+    complete_manual_merge: bool = True,
+    language: str = "ci",
+    existing_lockfile: str | None = None,
+    manual_eol_crlf: bool = False,
+) -> tuple[Path, Path]:
     """Start a minimal adoption that requires a manual manifest merge."""
     source, first_sha = make_template(tmp_path)
+    if language == "typescript":
+        (source / "template" / "package.json").write_text(
+            '{"devDependencies":{"typescript":"^5.9.0"}}\n',
+            encoding="utf-8",
+        )
+        first_sha = commit(source, "test: add TypeScript manifest")
     project = tmp_path / "pending-product"
     project.mkdir()
     write_executable(
@@ -447,14 +463,34 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
             encoding="utf-8"
         ),
     )
-    (project / "pyproject.toml").write_text(
-        '[project]\nname = "pending-product"\nversion = "0.1.0"\n',
+    manifest = project / (
+        "package.json" if language == "typescript" else "pyproject.toml"
+    )
+    manifest.write_text(
+        (
+            '{"name":"pending-product","version":"0.1.0"}\n'
+            if language == "typescript"
+            else '[project]\nname = "pending-product"\nversion = "0.1.0"\n'
+        ),
         encoding="utf-8",
     )
+    if existing_lockfile is not None:
+        (project / existing_lockfile).write_text(
+            "existing lock\n", encoding="utf-8"
+        )
+    if manual_eol_crlf:
+        (project / ".gitattributes").write_text(
+            "*.toml text eol=crlf\n", encoding="utf-8"
+        )
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
     commit(project, "test: pending product")
+    if manual_eol_crlf:
+        manifest.write_bytes(manifest.read_bytes().replace(b"\n", b"\r\n"))
+        git(project, "add", "--", manifest.name)
+        assert b"\r\n" in manifest.read_bytes()
+        assert git(project, "status", "--porcelain") == ""
     arguments = [
         "adopt",
         str(project),
@@ -464,7 +500,7 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
         first_sha,
         "--allow-unreleased",
         "--data",
-        "language=ci",
+        f"language={language}",
     ]
     assert main(arguments) == 0
     plan = (
@@ -486,6 +522,17 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
         )
         == 1
     )
+    if complete_manual_merge:
+        if language == "typescript":
+            package = json.loads(manifest.read_text(encoding="utf-8"))
+            package["devDependencies"] = {"typescript": "^5.9.0"}
+            manifest.write_text(json.dumps(package) + "\n", encoding="utf-8")
+        else:
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8")
+                + 'requires-python = ">=3.14"\n',
+                encoding="utf-8",
+            )
     return source, project
 
 
@@ -770,6 +817,11 @@ def test_adoption_copier_tasks_wait_for_each_approval(
         "task rendered\n"
     )
     marker.unlink()
+    manifest = project / "pyproject.toml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8") + 'requires-python = ">=3.14"\n',
+        encoding="utf-8",
+    )
 
     assert replay_finalize(project, "--dry-run") == 0
     finalize_plan = finalize_plan_path(project)
@@ -2076,6 +2128,11 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     assert (project / ".copier-answers.yml").is_file()
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8")
+        + "# manually reconciled with the template\n",
+        encoding="utf-8",
+    )
     pending_payload = json.loads(
         (project / cli.PENDING_ADOPTION_FILE).read_text(encoding="utf-8")
     )
@@ -2141,6 +2198,177 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     assert (project / "uv.lock").is_file()
     assert (project / cli.PROVENANCE_FILE).is_file()
     assert not (project / cli.PENDING_ADOPTION_FILE).exists()
+
+
+@pytest.mark.large
+def test_adopt_finalize_accepts_committed_pending_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finalize the same pending bytes after the user commits them."""
+    _, project = initialize_pending_adoption(tmp_path)
+    commit(project, "test: commit pending adoption")
+    head = git(project, "rev-parse", "HEAD")
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 0
+    payload = json.loads(
+        finalize_plan_path(project).read_text(encoding="utf-8")
+    )
+    assert payload["adoption"]["phase"] == "complete"
+    assert git(project, "rev-parse", "HEAD") == head
+    assert git(project, "status", "--porcelain") == ""
+    assert "returned non-zero exit status" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("commit_pending", [False, True])
+@pytest.mark.large
+def test_adopt_finalize_reports_unchanged_manual_merges(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    commit_pending: bool,
+) -> None:
+    """Reject an untouched manual file regardless of its Git state."""
+    _, project = initialize_pending_adoption(
+        tmp_path, complete_manual_merge=False
+    )
+    checkpoint_path = project / cli.PENDING_ADOPTION_FILE
+    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    assert checkpoint["schema_version"] == 2
+    assert checkpoint["manual_merge_files"] == ["pyproject.toml"]
+    assert checkpoint["manual_file_git_oid"]["pyproject.toml"] == (
+        git(project, "rev-parse", "HEAD:pyproject.toml")
+    )
+    if commit_pending:
+        commit(project, "test: commit untouched pending adoption")
+    before_status = git(project, "status", "--porcelain")
+    before_report = finalize_plan_path(project).read_bytes()
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 2
+
+    error = capsys.readouterr().err
+    assert "unchanged content after Git normalization" in error
+    assert "pyproject.toml" in error
+    assert "rerun csarc adopt --finalize" in error
+    assert git(project, "status", "--porcelain") == before_status
+    assert finalize_plan_path(project).read_bytes() == before_report
+    assert checkpoint_path.is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.large
+def test_adopt_finalize_rejects_legacy_manual_checkpoint(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Fail closed when an old checkpoint cannot prove manual work changed."""
+    _, project = initialize_pending_adoption(tmp_path)
+    checkpoint_path = project / cli.PENDING_ADOPTION_FILE
+    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    checkpoint["schema_version"] = 1
+    checkpoint.pop("manual_file_git_oid")
+    checkpoint.pop("manual_merge_files")
+    checkpoint_path.write_text(
+        json.dumps(checkpoint, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 2
+
+    error = capsys.readouterr().err
+    assert "predates manual-file fingerprints" in error
+    assert "cannot determine whether its manual merges were completed" in error
+    assert checkpoint_path.is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected"),
+    [
+        ("empty-manual-set", "fingerprints are invalid"),
+        ("forged-digest", "do not match the original Git revision"),
+    ],
+)
+@pytest.mark.large
+def test_adopt_finalize_rejects_tampered_manual_evidence(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    tamper: str,
+    expected: str,
+) -> None:
+    """Re-derive manual merge evidence instead of trusting the checkpoint."""
+    _, project = initialize_pending_adoption(tmp_path)
+    checkpoint_path = project / cli.PENDING_ADOPTION_FILE
+    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    if tamper == "empty-manual-set":
+        checkpoint["manual_merge_files"] = []
+        checkpoint["manual_file_git_oid"] = {}
+    else:
+        checkpoint["manual_file_git_oid"]["pyproject.toml"] = "0" * 40
+    checkpoint_path.write_text(
+        json.dumps(checkpoint, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    before = cli.target_file_snapshot(project)
+    before_status = git(project, "status", "--porcelain")
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 2
+
+    assert expected in capsys.readouterr().err
+    assert cli.target_file_snapshot(project) == before
+    assert git(project, "status", "--porcelain") == before_status
+    assert checkpoint_path.is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.large
+def test_adopt_finalize_rejects_untouched_crlf_manual_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Compare manual content with the same Git checkout normalization."""
+    _, project = initialize_pending_adoption(
+        tmp_path,
+        complete_manual_merge=False,
+        manual_eol_crlf=True,
+    )
+    manifest = project / "pyproject.toml"
+    before = cli.target_file_snapshot(project)
+    before_status = git(project, "status", "--porcelain")
+    assert b"\r\n" in manifest.read_bytes()
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 2
+
+    error = capsys.readouterr().err
+    assert "unchanged content after Git normalization" in error
+    assert "pyproject.toml" in error
+    assert cli.target_file_snapshot(project) == before
+    assert git(project, "status", "--porcelain") == before_status
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.large
+def test_adopt_finalize_rejects_mismatched_typescript_package_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Explain a merged package name mismatch before project verification."""
+    _, project = initialize_pending_adoption(tmp_path, language="typescript")
+    package_path = project / "package.json"
+    package = json.loads(package_path.read_text(encoding="utf-8"))
+    package["name"] = "wrong-package"
+    package_path.write_text(json.dumps(package) + "\n", encoding="utf-8")
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 2
+
+    error = capsys.readouterr().err
+    assert "package.json name must match project_slug" in error
+    assert "'pending-product'" in error
+    assert "'wrong-package'" in error
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
 
 
 @pytest.mark.large
@@ -2333,16 +2561,26 @@ def test_adopt_finalize_failure_keeps_actionable_pending_state(
 ) -> None:
     """Keep the checkpoint and explain how to retry a failed verification."""
     _, project = initialize_pending_adoption(tmp_path)
-    monkeypatch.setattr(
-        cli,
-        "verify_project",
-        lambda _: (_ for _ in ()).throw(CliError("fixture failure")),
-    )
-
     assert replay_finalize(project, "--dry-run") == 0
     plan = finalize_plan_path(project)
     payload = json.loads(plan.read_text(encoding="utf-8"))
     assert payload["adoption"]["verification"] == "pending-authorization"
+    before = cli.target_file_snapshot(project)
+    before_status = git(project, "status", "--porcelain")
+    monkeypatch.setattr(
+        cli,
+        "verify_project",
+        lambda _: (_ for _ in ()).throw(
+            cli.ProjectVerificationError(
+                "TypeScript package verification failed with pnpm.",
+                {
+                    "path": "scripts/verify-product",
+                    "reason": "pnpm failed",
+                    "result": "failed",
+                },
+            )
+        ),
+    )
     assert (
         replay_finalize(
             project,
@@ -2353,7 +2591,14 @@ def test_adopt_finalize_failure_keeps_actionable_pending_state(
         )
         == 2
     )
-    assert "rerun csarc adopt --finalize" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "TypeScript package verification failed with pnpm" in error
+    assert "Project verification failed at ./scripts/verify" in error
+    assert "Structured result: pnpm failed" in error
+    assert "Pending manual files: pyproject.toml" in error
+    assert "rerun csarc adopt --finalize" in error
+    assert cli.target_file_snapshot(project) == before
+    assert git(project, "status", "--porcelain") == before_status
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
 
@@ -2432,6 +2677,79 @@ def test_adopt_finalize_rejects_unexpected_worktree_state(
         capsys.readouterr().err
     )
     assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.parametrize(
+    ("language", "lock_name", "existing"),
+    [
+        ("python", "uv.lock", False),
+        ("python", "uv.lock", True),
+        ("typescript", "pnpm-lock.yaml", False),
+        ("typescript", "pnpm-lock.yaml", True),
+    ],
+)
+@pytest.mark.large
+def test_adopt_finalize_accepts_pending_lockfile_updates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    language: str,
+    lock_name: str,
+    existing: bool,
+) -> None:
+    """Allow only the selected dependency lockfile while adoption is pending."""
+    _, project = initialize_pending_adoption(
+        tmp_path,
+        language=language,
+        existing_lockfile=lock_name if existing else None,
+    )
+    manifest = project / (
+        "package.json" if language == "typescript" else "pyproject.toml"
+    )
+    manifest.write_text(
+        (
+            '{"name":"pending-product","version":"0.1.0",'
+            '"devDependencies":{"typescript":"^5.9.0"}}\n'
+            if language == "typescript"
+            else manifest.read_text(encoding="utf-8")
+            + '[dependency-groups]\ndev = ["pytest"]\n'
+        ),
+        encoding="utf-8",
+    )
+    lockfile = project / lock_name
+    lockfile.write_text("resolved lock\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "create_adoption_lockfiles", lambda *_: None)
+
+    assert replay_finalize(project, "--dry-run") == 0
+    plan = finalize_plan_path(project)
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert lock_name in payload["files"]["overwrite"]
+    assert (
+        replay_finalize(
+            project,
+            "--apply-plan",
+            str(plan),
+            "--yes",
+            "--non-interactive",
+        )
+        == 0
+    )
+    assert lockfile.read_text(encoding="utf-8") == "resolved lock\n"
+    assert not (project / cli.PENDING_ADOPTION_FILE).exists()
+
+
+@pytest.mark.large
+def test_adopt_finalize_rejects_unselected_pending_lockfile(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keep lockfiles for unselected languages outside the allowlist."""
+    _, project = initialize_pending_adoption(tmp_path, language="typescript")
+    (project / "uv.lock").write_text("unexpected lock\n", encoding="utf-8")
+
+    assert replay_finalize(project, "--dry-run") == 2
+    assert (
+        "Pending adoption contains unexpected working-tree changes: uv.lock"
+        in capsys.readouterr().err
+    )
 
 
 @pytest.mark.large
@@ -2600,6 +2918,96 @@ def test_authorized_dependency_tooling_cannot_widen_the_plan() -> None:
     cli.validate_authorized_candidate_effects(
         planned, planned, {"language": "python"}
     )
+
+
+@pytest.mark.parametrize(
+    ("documentation_mode", "readme_kind", "expected_status"),
+    [
+        (None, "missing", 2),
+        (None, "symlink", 2),
+        ("off", "missing", 0),
+        (None, "regular", 0),
+    ],
+)
+@pytest.mark.large
+def test_real_typescript_adoption_requires_product_readme_when_documented(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    documentation_mode: str | None,
+    readme_kind: str,
+    expected_status: int,
+) -> None:
+    """Reject a missing product README before an existing repo is changed."""
+    revision = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "existing-typescript"
+    (project / "src").mkdir(parents=True)
+    (project / "package.json").write_text(
+        '{"name":"existing-typescript","version":"0.1.0"}\n',
+        encoding="utf-8",
+    )
+    (project / "tsconfig.json").write_text("{}\n", encoding="utf-8")
+    (project / "src" / "index.ts").write_text(
+        "export const existing = true;\n", encoding="utf-8"
+    )
+    readme = project / "README.md"
+    if readme_kind == "regular":
+        readme.write_text("# Existing TypeScript product\n", encoding="utf-8")
+    elif readme_kind == "symlink":
+        readme.symlink_to(tmp_path / "outside-readme.md")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: existing TypeScript product")
+    before_head = git(project, "rev-parse", "HEAD")
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(ROOT),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--data",
+        "languages=typescript",
+        "--data",
+        "project_name=Existing TypeScript",
+        "--data",
+        "project_slug=existing-typescript",
+        "--data",
+        "project_description=Existing TypeScript product.",
+        "--data",
+        "security_reporting_channel=Use the private security contact.",
+        "--json",
+    ]
+    if documentation_mode is not None:
+        arguments.extend(["--data", f"documentation_mode={documentation_mode}"])
+
+    assert main(arguments) == expected_status
+
+    output = capsys.readouterr()
+    assert git(project, "rev-parse", "HEAD") == before_head
+    assert git(project, "status", "--porcelain") == ""
+    assert not (project / cli.CONFIG_FILE).exists()
+    assert not (project / cli.PENDING_ADOPTION_FILE).exists()
+    if expected_status == 2:
+        assert not (
+            tmp_path
+            / "existing-typescript-csarc-adoption-report"
+            / cli.ADOPTION_PLAN_BASENAME
+        ).exists()
+        error = json.loads(output.out)["error"]
+        assert "product-owned regular README.md" in error
+        assert "Create and commit README.md" in error
+        assert "--data documentation_mode=off" in error
+        return
+
+    payload = json.loads(output.out)
+    file_plan = payload["files"]
+    if readme_kind == "regular":
+        assert readme.read_bytes() == b"# Existing TypeScript product\n"
+        assert "README.md" in file_plan["preserve"]
+    else:
+        assert all("README.md" not in paths for paths in file_plan.values())
 
 
 @pytest.mark.large
@@ -2956,6 +3364,107 @@ def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     assert "secret" not in settings
 
 
+def test_adoption_outputs_share_all_resolved_settings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Show resolved settings consistently in every review surface."""
+    target = tmp_path / "target"
+    stage = tmp_path / "stage"
+    target.mkdir()
+    stage.mkdir()
+    (target / "LICENSE").write_text("MIT\n", encoding="utf-8")
+    (target / "package.json").write_text(
+        '{"license":"MIT"}\n', encoding="utf-8"
+    )
+    (stage / "LICENSE").write_text(
+        "Copyright Example Organization\nAll rights reserved.\n",
+        encoding="utf-8",
+    )
+    (stage / "package.json").write_text(
+        '{"license":"UNLICENSED"}\n', encoding="utf-8"
+    )
+    expected = {
+        "admin_bypass": "off",
+        "copyright_holder": "Example Organization",
+        "documentation_mode": "off",
+        "enable_codeql": False,
+        "i18n": "off",
+        "primary_language": "en",
+        "project_license": "proprietary",
+        "project_maturity": "early",
+        "project_run_command": "pnpm run build",
+        "repository_url": "https://github.com/example/product",
+        "security_reporting_channel": "Open a private security report.",
+    }
+    answers = cli.resolve_release_answers(
+        target,
+        {
+            **expected,
+            "language": "typescript",
+            "languages": ["typescript"],
+            "project_mode": "existing",
+        },
+    )
+    files = cli.compare_stage(stage, target, adopt=True)
+    assert files.manual == ("LICENSE", "package.json")
+    revision = cli.Revision(
+        "v1.0.0", "a" * 40, "https://example.invalid/template.git"
+    )
+    repository = cli.RepositoryContext(
+        "example/product",
+        "example",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+    plan = cli.ResolvedPlan(
+        mode="adopt",
+        target=target,
+        revision=revision,
+        repository=repository,
+        answers=answers,
+        capabilities={},
+        files=files,
+    )
+
+    assert plan.as_dict()["answers"] == dict(sorted(answers.items()))
+    cli.print_plan(plan)
+    terminal = capsys.readouterr().out
+    report = cli.adoption_report_markdown(
+        target,
+        revision,
+        repository,
+        {**answers, "unknown_secret": "do-not-report"},
+        files,
+        "2026-09-24T00:00:00+00:00",
+    )
+
+    for key, value in expected.items():
+        assert f"  {key}={value}" in terminal
+        assert f"`{key}={value}`" in report
+    assert "`LICENSE` - template and repository contain different" in report
+    assert (
+        "`package.json` - template and repository contain different" in report
+    )
+    assert "unknown_secret" not in report
+    assert "do-not-report" not in report
+
+
+def test_report_settings_cover_every_public_copier_question() -> None:
+    """Require each persisted Copier question to be reviewed explicitly."""
+    copier_config = yaml.safe_load(
+        (ROOT / "copier.yml").read_text(encoding="utf-8")
+    )
+    question_names = {
+        key
+        for key in copier_config
+        if isinstance(key, str) and not key.startswith("_")
+    }
+
+    assert question_names <= cli.REPORT_SETTING_KEYS
+
+
 def test_dangling_reusable_workflow_option_stays_removed() -> None:
     """Issue #495: leave no trace of the caller-less reusable-workflow option.
 
@@ -3063,6 +3572,20 @@ def test_adoption_report_records_template_version(tmp_path: Path) -> None:
         f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
         in report
     )
+
+
+def test_adoption_readme_prerequisite_is_documented_bilingually() -> None:
+    """Keep the README prerequisite and explicit opt-out discoverable."""
+    traditional = (ROOT / "README.md").read_text(encoding="utf-8")
+    english = (ROOT / "README.en.md").read_text(encoding="utf-8")
+    agent_contract = (ROOT / "docs/agent-install.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "由產品自行維護的 regular `README.md`" in traditional
+    assert "regular, product-owned `README.md`" in english
+    for content in (traditional, english, agent_contract):
+        assert "--data documentation_mode=off" in content
 
 
 @pytest.mark.parametrize("readme_name", ["README.md", "README.en.md"])
@@ -3532,6 +4055,23 @@ def test_git_candidate_staging_ignores_caller_hooks(
         "changed\n"
     )
     assert not marker.exists()
+
+
+def test_clone_working_tree_accepts_clean_repository(tmp_path: Path) -> None:
+    """Reuse the cloned HEAD when there are no working-tree bytes to commit."""
+    project = tmp_path / "clean-project"
+    project.mkdir()
+    (project / "tracked.txt").write_text("baseline\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    head = commit(project, "test: baseline")
+
+    candidate = tmp_path / "candidate"
+    cli.clone_working_tree(project, candidate)
+
+    assert git(candidate, "rev-parse", "HEAD") == head
+    assert git(candidate, "status", "--porcelain") == ""
 
 
 @pytest.mark.large
@@ -5670,13 +6210,15 @@ def test_code_owner_verification_distinguishes_team_states(
         "github",
         True,
     )
-    monkeypatch.setattr(
-        cli,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(
-            args[0], 0, stdout="arch\n", stderr=""
-        ),
-    )
+
+    def team_run(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        assert command[-2] == "--jq"
+        output = "" if '"missing"' in command[-1] else "push\n"
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
+
+    monkeypatch.setattr(cli, "run", team_run)
     assert (
         cli.code_owner_verification(repository, "@Innoguard-Cyber-Arch/arch")[
             "state"
@@ -5689,6 +6231,45 @@ def test_code_owner_verification_distinguishes_team_states(
         )["state"]
         == "blocked"
     )
+    external_repository = cli.RepositoryContext(
+        "outside-org/product",
+        "outside-org",
+        "organization",
+        "private",
+        "github",
+        True,
+    )
+    assert (
+        cli.code_owner_verification(external_repository, "@outside-org/arch")[
+            "state"
+        ]
+        == "verified"
+    )
+    mismatch = cli.code_owner_verification(
+        external_repository, "@Innoguard-Cyber-Arch/arch"
+    )
+    assert mismatch["state"] == "blocked"
+    assert "@Innoguard-Cyber-Arch" in mismatch["reason"]
+    assert "@outside-org" in mismatch["reason"]
+
+    for permission in ("read", "triage"):
+        monkeypatch.setattr(
+            cli,
+            "run",
+            lambda *args, permission=permission, **kwargs: (
+                subprocess.CompletedProcess(
+                    args[0], 0, stdout=f"{permission}\n", stderr=""
+                )
+            ),
+        )
+        insufficient = cli.code_owner_verification(
+            repository, "@Innoguard-Cyber-Arch/arch"
+        )
+        assert insufficient == {
+            "reason": "Team lacks repository write access.",
+            "state": "blocked",
+            "value": "@Innoguard-Cyber-Arch/arch",
+        }
 
     monkeypatch.setattr(
         cli,
@@ -5702,6 +6283,235 @@ def test_code_owner_verification_distinguishes_team_states(
     )
     assert unknown["state"] == "unknown"
     assert unknown["reason"] == "not authorized"
+
+
+def test_code_owner_verification_supports_personal_repositories(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify a personal CODEOWNER through repository collaborator access."""
+    repository = cli.RepositoryContext(
+        "outside-user/product",
+        "outside-user",
+        "user",
+        "private",
+        "github",
+        True,
+    )
+    permission = "write"
+
+    def fake_run(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        assert command == [
+            "gh",
+            "api",
+            "repos/outside-user/product/collaborators/outside-user/permission",
+            "--jq",
+            ".permission",
+        ]
+        return subprocess.CompletedProcess(
+            command, 0, stdout=f"{permission}\n", stderr=""
+        )
+
+    monkeypatch.setattr(cli, "run", fake_run)
+    assert (
+        cli.code_owner_verification(repository, "@outside-user")["state"]
+        == "verified"
+    )
+
+    permission = "read"
+    blocked = cli.code_owner_verification(repository, "@outside-user")
+    assert blocked == {
+        "reason": "User lacks repository write access.",
+        "state": "blocked",
+        "value": "@outside-user",
+    }
+
+
+def test_code_owner_verification_handles_no_remote_and_empty_owner() -> None:
+    """Keep local-first adoption reviewable and an omitted owner intentional."""
+    repository = cli.RepositoryContext(
+        None,
+        None,
+        None,
+        "private",
+        "safe-default",
+        False,
+        "No GitHub origin or GH_REPO was found.",
+    )
+
+    assert cli.code_owner_verification(repository, "")["state"] == (
+        "not-configured"
+    )
+    unknown = cli.code_owner_verification(repository, "@outside-user")
+    assert unknown["state"] == "unknown"
+    assert "after the repository is pushed" in unknown["reason"]
+
+
+@pytest.mark.parametrize(
+    ("repository", "repository_url", "expected_url"),
+    [
+        (None, None, None),
+        (None, "https://github.com//product", None),
+        (
+            None,
+            "https://github.com/outside-user/product",
+            "https://github.com/outside-user/product",
+        ),
+        (
+            "outside-user/product",
+            None,
+            "https://github.com/outside-user/product",
+        ),
+    ],
+)
+def test_cli_requires_repository_identity_for_ownerless_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    repository: str | None,
+    repository_url: str | None,
+    expected_url: str | None,
+) -> None:
+    """Require an explicit or remote identity before entering Copier."""
+    revision = cli.Revision("development", "a" * 40, str(tmp_path))
+    monkeypatch.setattr(
+        cli, "resolve_revision", lambda *args, **kwargs: revision
+    )
+    monkeypatch.setattr(
+        cli,
+        "repository_context",
+        lambda *args, **kwargs: cli.RepositoryContext(
+            repository,
+            "outside-user" if repository else None,
+            "user" if repository else None,
+            "private",
+            "github" if repository else "safe-default",
+            repository is not None,
+        ),
+    )
+    received: dict[str, object] = {}
+
+    def capture_copy(
+        source: str,
+        resolved: cli.Revision,
+        destination: Path,
+        data: dict[str, object],
+        *,
+        skip_tasks: bool,
+    ) -> None:
+        del source, resolved, destination, skip_tasks
+        received.update(data)
+        raise CliError("stop after pre-Copier validation")
+
+    monkeypatch.setattr(cli, "copier_copy", capture_copy)
+    arguments = [
+        "init",
+        str(tmp_path / "new-project"),
+        "--data",
+        "code_owner=",
+        "--data",
+        "documentation_mode=off",
+        "--dry-run",
+    ]
+    if repository_url is not None:
+        arguments.extend(["--data", f"repository_url={repository_url}"])
+    assert main(arguments) == 2
+
+    if expected_url is None:
+        error = capsys.readouterr().err
+        assert "repository_url=https://github.com/owner/repository" in error
+        assert "Traceback" not in error
+        assert received == {}
+    else:
+        assert received["repository_url"] == expected_url
+        assert received["code_owner"] == ""
+        assert received["documentation_mode"] == "off"
+
+
+@pytest.mark.large
+def test_adopt_ownerless_repository_without_remote_uses_explicit_url(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Carry an explicit repository identity through a real adoption plan."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "ownerless-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: ownerless product")
+    monkeypatch.delenv("GH_REPO", raising=False)
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--dry-run",
+                "--data",
+                "code_owner=",
+                "--data",
+                "repository_url=https://github.com/outside-user/product",
+                "--data",
+                "documentation_mode=off",
+            ]
+        )
+        == 0
+    )
+    plan = json.loads(
+        (
+            tmp_path
+            / "ownerless-product-csarc-adoption-report"
+            / cli.ADOPTION_PLAN_BASENAME
+        ).read_text(encoding="utf-8")
+    )
+    assert plan["answers"]["code_owner"] == ""
+    assert plan["answers"]["repository_url"] == (
+        "https://github.com/outside-user/product"
+    )
+    assert plan["adoption"]["code_owner"]["state"] == "not-configured"
+
+
+@pytest.mark.parametrize(
+    "code_owner",
+    ["outside-user", "@bad_user", "@bad.user", "@bad--user", "@bad-"],
+)
+def test_cli_rejects_malformed_code_owner_without_copier_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    code_owner: str,
+) -> None:
+    """Validate a Copier override before starting the renderer."""
+    revision = cli.Revision("development", "a" * 40, str(tmp_path))
+    monkeypatch.setattr(
+        cli, "resolve_revision", lambda *args, **kwargs: revision
+    )
+    monkeypatch.delenv("GH_REPO", raising=False)
+
+    assert (
+        main(
+            [
+                "init",
+                str(tmp_path / "new-project"),
+                "--data",
+                f"code_owner={code_owner}",
+                "--dry-run",
+            ]
+        )
+        == 2
+    )
+    error = capsys.readouterr().err
+    assert "csarc: code_owner must use an @user" in error
+    assert "Traceback" not in error
 
 
 @pytest.mark.large
@@ -6650,6 +7460,50 @@ def test_update_hook_failure_leaves_target_unchanged(
 
 
 @pytest.mark.large
+def test_update_verification_failure_does_not_claim_candidate_preserved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Report candidate cleanup honestly when update verification fails."""
+    source, project, _ = initialize_project(tmp_path)
+    capsys.readouterr()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    base = commit(project, "test: generated project")
+    before_files = cli.target_file_snapshot(project)
+
+    (source / "template" / "managed.txt").unlink()
+    revision = commit(source, "test: remove required managed file")
+    temporary_root = tmp_path / "temporary"
+    temporary_root.mkdir()
+    monkeypatch.setattr(cli.tempfile, "tempdir", str(temporary_root))
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    error = capsys.readouterr().err
+    assert "Project verification failed." in error
+    assert "preserved" not in error.lower()
+    assert list(temporary_root.iterdir()) == []
+    assert git(project, "rev-parse", "HEAD") == base
+    assert git(project, "status", "--porcelain") == ""
+    assert cli.target_file_snapshot(project) == before_files
+
+
+@pytest.mark.large
 def test_update_rechecks_committed_head_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -6901,6 +7755,103 @@ def test_update_migrates_documentation_language_and_license_settings() -> None:
     assert migrated["i18n"] == "en-zh-tw"
     assert migrated["project_license"] == "proprietary"
     assert migrated["copyright_holder"] == "Legacy Project"
+
+
+@pytest.mark.large
+def test_same_revision_update_ignores_derived_release_answers(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keep derived release evidence without treating it as an answer change."""
+    revision = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "current-root-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "project_mode=new",
+                "--data",
+                "language=ci",
+                "--data",
+                "project_visibility=private",
+                "--data",
+                "project_verification_hook=",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: current root template")
+
+    assert (
+        main(
+            [
+                "status",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    status = json.loads(capsys.readouterr().out)
+    assert status["state"] == "current"
+    assert status["update_status"]["update_available"] is False
+
+    update_arguments = [
+        "update",
+        str(project),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--check",
+        "--json",
+    ]
+    assert main(update_arguments) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "current"
+    assert payload["update_available"] is False
+    assert payload["answers_changed"] is False
+    derived_release_answers = {
+        "release_immutable_releases": "immutable_releases",
+        "release_ownership_reason": "reason",
+        "release_required_inputs": "required_inputs",
+        "release_settings_owner": "settings_owner",
+        "release_workflow": "selected_workflow",
+    }
+    saved_answers = cli.read_copier_answers(cli.config_path(project))
+    for answer_key, release_key in derived_release_answers.items():
+        assert answer_key not in saved_answers
+        assert payload["answers"][answer_key] == payload["release"][release_key]
+
+    assert (
+        main(
+            [
+                *update_arguments,
+                "--data",
+                "project_description=Changed by test",
+            ]
+        )
+        == 1
+    )
+    changed = json.loads(capsys.readouterr().out)
+    assert changed["status"] == "outdated"
+    assert changed["update_available"] is True
+    assert changed["answers_changed"] is True
+    assert changed["answers"]["project_description"] == "Changed by test"
 
 
 @pytest.mark.large
@@ -7337,6 +8288,129 @@ def test_install_state_does_not_detect_adopt_once_csarc_managed(
     assert result["state"] != cli.INSTALL_STATE_ADOPT
 
 
+@pytest.mark.large
+def test_status_reports_staged_or_unstaged_pending_adoption(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Report finalize before release, policy, Copier, or project checks."""
+    _source, project = initialize_pending_adoption(tmp_path)
+    (project / "uv.lock").write_text("pending lock update\n", encoding="utf-8")
+    capsys.readouterr()
+
+    def reject_execution(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("pending status reached a later verification")
+
+    monkeypatch.setattr(cli, "update_status", reject_execution)
+    monkeypatch.setattr(cli, "trusted_policy_settings_check", reject_execution)
+    monkeypatch.setattr(cli, "copier_copy", reject_execution)
+    monkeypatch.setattr(cli, "verify_project", reject_execution)
+
+    for staged in (False, True):
+        if staged:
+            git(project, "add", "--all")
+        before = git(project, "status", "--porcelain=v1")
+
+        assert main(["status", str(project), "--json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["state"] == cli.INSTALL_STATE_ADOPTION_PENDING
+        assert payload["next_command"] == "csarc adopt <path> --finalize"
+
+        assert main(["status", str(project)]) == 0
+        output = capsys.readouterr().out
+        assert "Install state: adoption-pending" in output
+        assert "Next: csarc adopt <path> --finalize" in output
+        assert git(project, "status", "--porcelain=v1") == before
+
+
+@pytest.mark.large
+def test_status_fails_closed_for_invalid_pending_identity(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Reject malformed, linked, or wrong-history pending checkpoints."""
+    _source, project = initialize_pending_adoption(tmp_path)
+    checkpoint = project / cli.PENDING_ADOPTION_FILE
+    original = checkpoint.read_bytes()
+    capsys.readouterr()
+
+    checkpoint.write_text("{\n", encoding="utf-8")
+    assert main(["status", str(project), "--json"]) == 2
+    assert "unreadable" in json.loads(capsys.readouterr().out)["error"]
+
+    outside = tmp_path / "outside-pending.json"
+    outside.write_bytes(original)
+    checkpoint.unlink()
+    checkpoint.symlink_to(outside)
+    assert main(["status", str(project), "--json"]) == 2
+    assert "not a regular file" in json.loads(capsys.readouterr().out)["error"]
+
+    checkpoint.unlink()
+    checkpoint.write_bytes(original)
+    payload = json.loads(original)
+    payload["repository"]["repository"] = "owner/other"
+    checkpoint.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    assert main(["status", str(project), "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert "Repository origin or visibility changed" in error
+
+    checkpoint.write_bytes(original)
+    git(project, "commit", "--allow-empty", "-m", "test: unrelated history")
+    assert main(["status", str(project), "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert "original Git revision" in error
+
+
+@pytest.mark.large
+def test_status_returns_to_current_and_update_after_finalize(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Resume ordinary install-state classification after finalize."""
+    source, project = initialize_pending_adoption(tmp_path)
+    current_sha = git(source, "rev-parse", "HEAD")
+    capsys.readouterr()
+
+    assert replay_finalize(project, "--dry-run") == 0
+    plan = finalize_plan_path(project)
+    assert (
+        replay_finalize(
+            project,
+            "--apply-plan",
+            str(plan),
+            "--yes",
+            "--non-interactive",
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    status_args = [
+        "status",
+        str(project),
+        "--allow-unreleased",
+        "--to",
+        current_sha,
+        "--expected-sha",
+        current_sha,
+        "--json",
+    ]
+    assert main(status_args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == cli.INSTALL_STATE_CURRENT
+
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    next_sha = commit(source, "test: template version two")
+    status_args[status_args.index(current_sha)] = next_sha
+    status_args[status_args.index(current_sha)] = next_sha
+    assert main(status_args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == cli.INSTALL_STATE_UPDATE
+
+
 def test_install_state_detects_update_when_revision_is_behind(
     tmp_path: Path,
 ) -> None:
@@ -7510,6 +8584,18 @@ def test_status_command_reports_create_without_writes(
     payload = json.loads(capsys.readouterr().out)
     assert payload["state"] == cli.INSTALL_STATE_CREATE
     assert not target.exists()
+
+
+def test_status_help_lists_all_install_states(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Keep the public command summary aligned with install states."""
+    with pytest.raises(SystemExit) as error:
+        cli.parser().parse_args(["--help"])
+    assert error.value.code == 0
+    help_text = capsys.readouterr().out
+    assert "adoption-pending" in help_text
+    assert "policy-only-update" in help_text
 
 
 def test_status_command_reports_adopt_in_human_readable_form(
@@ -8270,6 +9356,179 @@ def test_provenance_validation_and_legacy_migration(tmp_path: Path) -> None:
     )
     assert migrated.verified
     assert prior is not None and prior["verification"] == "legacy-unverified"
+
+
+@pytest.mark.parametrize(
+    ("commit", "kind"),
+    [
+        ("v1.2.3", "release tag"),
+        ("b" * 7, "short commit SHA"),
+        ("not-a-revision", "unsupported revision"),
+    ],
+)
+def test_legacy_copier_revision_error_is_actionable(
+    tmp_path: Path, commit: str, kind: str
+) -> None:
+    """Describe the malformed value, expected SHA, and a safe next step."""
+    with pytest.raises(CliError) as error:
+        cli.current_revision(
+            tmp_path,
+            cli.CANONICAL_SOURCE,
+            commit,
+            allow_unreleased=False,
+            accept_legacy=False,
+            from_release=None,
+            client=FakeReleaseClient(),
+        )
+
+    message = str(error.value)
+    assert repr(commit) in message
+    assert kind in message
+    assert "full 40-character commit SHA" in message
+    assert "csarc " in message
+
+
+@pytest.mark.parametrize("commit", ["v1.2.3", "b" * 7, "b" * 40])
+def test_legacy_copier_revision_migrates_through_verified_release(
+    tmp_path: Path, commit: str
+) -> None:
+    """Bind legacy tags, short SHAs, and gh: sources to a verified release."""
+    config = tmp_path / cli.CONFIG_FILE
+    config.parent.mkdir()
+    config.write_text(
+        f"_commit: {commit}\n_src_path: gh:{cli.CANONICAL_REPOSITORY}\n",
+        encoding="utf-8",
+    )
+    client = FakeReleaseClient()
+    client.tag_results *= 2
+
+    status, migrated, target, prior = cli.update_status(
+        tmp_path,
+        "v1.2.3",
+        allow_unreleased=False,
+        accept_legacy=True,
+        from_release="v1.2.3",
+        client=client,
+    )
+
+    assert migrated.verified
+    assert migrated.source == cli.CANONICAL_SOURCE
+    assert target == migrated
+    assert status["source"] == cli.CANONICAL_SOURCE
+    assert prior is not None
+    assert prior["commit_sha"] == "b" * 40
+    assert prior["verification"] == "legacy-unverified"
+
+
+def test_legacy_copier_revision_rejects_wrong_release(
+    tmp_path: Path,
+) -> None:
+    """Do not let explicit migration detach a short SHA from its release."""
+    with pytest.raises(CliError, match="does not match verified release"):
+        cli.current_revision(
+            tmp_path,
+            cli.CANONICAL_SOURCE,
+            "a" * 7,
+            allow_unreleased=False,
+            accept_legacy=True,
+            from_release="v1.2.3",
+            client=FakeReleaseClient(),
+        )
+
+
+def test_legacy_copier_revision_cannot_override_verified_provenance(
+    tmp_path: Path,
+) -> None:
+    """Treat malformed answers beside verified provenance as tampering."""
+    revision = cli.resolve_revision(
+        cli.CANONICAL_SOURCE,
+        "v1.2.3",
+        client=FakeReleaseClient(),
+    )
+    cli.write_provenance(tmp_path, revision)
+
+    with pytest.raises(CliError, match="prevents legacy migration"):
+        cli.current_revision(
+            tmp_path,
+            cli.CANONICAL_SOURCE,
+            "v1.2.3",
+            allow_unreleased=False,
+            accept_legacy=True,
+            from_release="v1.2.3",
+            client=FakeReleaseClient(),
+        )
+
+
+def test_status_classifies_legacy_copier_revision_as_migrate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Return a migration state instead of a low-level revision error."""
+    project = tmp_path / "legacy-copier-project"
+    (project / ".csarc").mkdir(parents=True)
+    (project / cli.CONFIG_FILE).write_text(
+        f"_commit: v1.2.3\n_src_path: gh:{cli.CANONICAL_REPOSITORY}\n",
+        encoding="utf-8",
+    )
+    git(project, "init", "-b", "main")
+
+    assert main(["status", str(project), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["state"] == cli.INSTALL_STATE_MIGRATE
+    assert result["next_command"].endswith(
+        "--accept-legacy --from-release v1.2.3"
+    )
+    assert "release tag" in result["reason"]
+
+
+@pytest.mark.large
+def test_update_check_migrates_direct_copier_answers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Exercise the CLI path for tag answers and a gh: source alias."""
+    source, project, revision = initialize_installed_project(tmp_path)
+    answers_path = project / cli.CONFIG_FILE
+    answers = cli.read_copier_answers(answers_path)
+    answers.update(
+        {
+            "_commit": "v1.2.3",
+            "_src_path": f"gh:{cli.CANONICAL_REPOSITORY}",
+        }
+    )
+    answers_path.write_text(
+        yaml.safe_dump(answers, sort_keys=False), encoding="utf-8"
+    )
+    (project / cli.PROVENANCE_FILE).unlink(missing_ok=True)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: legacy Copier answers")
+    client = FakeReleaseClient()
+    resolution = cli.TagResolution(revision, revision)
+    client.tag_results = [resolution] * 8
+    monkeypatch.setattr(cli, "CANONICAL_SOURCE", str(source))
+    monkeypatch.setattr(cli, "GhReleaseClient", lambda: client)
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--check",
+                "--json",
+                "--accept-legacy",
+                "--from-release",
+                "v1.2.3",
+                "--to",
+                "v1.2.3",
+            ]
+        )
+        == 1
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["answers_changed"] is True
+    assert result["source"] == str(source)
 
 
 def write_lifecycle_state(

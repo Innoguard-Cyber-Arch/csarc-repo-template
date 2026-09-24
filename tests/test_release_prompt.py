@@ -30,6 +30,7 @@ def test_render_uses_one_release_identity_and_existing_setup_contract() -> None:
     assert "逐項客製" in prompt
     assert "--data" in prompt
     assert "dry-run JSON" in prompt
+    assert "adoption-pending 時依 next_command 繼續 finalize" in prompt
     assert "current 時只回報不需動作" in prompt
     assert "policy-only-update" in prompt
     assert ".csarc/scripts/apply-repository-settings.sh plan" in prompt

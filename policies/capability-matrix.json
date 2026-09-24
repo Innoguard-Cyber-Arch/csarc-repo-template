@@ -57,20 +57,20 @@
         "zh-tw": "CODEOWNERS review 強制"
       },
       "behavior": {
-        "en": "The Ruleset's `require_code_owner_review` only actually blocks merge when the `.github/CODEOWNERS` team (`@org/team`) exists and has write-or-above access, and this repository can inspect that team's permission.",
-        "zh-tw": "Ruleset 的 `require_code_owner_review` 只有在 `.github/CODEOWNERS` 指定的 team（`@org/team`）確實存在且具備 write 以上權限，且這個 repository 能查驗該權限時，才會真正擋下合併。"
+        "en": "When `.github/CODEOWNERS` configures an `@user` or `@organization/team`, the Ruleset's `require_code_owner_review` only actually blocks merge when that owner exists, has write-or-above access, and this repository can inspect the permission. Omitting CODEOWNERS leaves this optional control disabled.",
+        "zh-tw": "`.github/CODEOWNERS` 設定 `@user` 或 `@organization/team` 時，Ruleset 的 `require_code_owner_review` 只有在該 owner 確實存在、具備 write 以上權限，且這個 repository 能查驗權限時，才會真正擋下合併；未設定 CODEOWNERS 代表不啟用這項可選管制。"
       },
       "requirement": {
-        "en": "Depends on `ruleset_enforcement`; additionally the CODEOWNERS team must exist with write-or-above access, readable via `GET /repos/{owner}/{repo}/teams` (needs organization read, effectively an admin-scope token).",
-        "zh-tw": "依賴 `ruleset_enforcement`；此外 CODEOWNERS 指定的 team 必須存在且具備 write 以上權限，並可透過 `GET /repos/{owner}/{repo}/teams` 讀取（需要 organization read，實務上即 admin 等級的 token）。"
+        "en": "When configured, depends on `ruleset_enforcement`; the CODEOWNER user or team must have write-or-above access, readable through the repository collaborator or team API.",
+        "zh-tw": "有設定時依賴 `ruleset_enforcement`；CODEOWNER 指定的使用者或 team 必須具備 write 以上權限，且可由 repository collaborator 或 team API 查驗。"
       },
       "detection": {
-        "en": "Live probe: parse `.github/CODEOWNERS`'s configured `@org/team`, then look it up in `GET /repos/{owner}/{repo}/teams` and check its `permission`.",
-        "zh-tw": "即時探測：解析 `.github/CODEOWNERS` 設定的 `@org/team`，於 `GET /repos/{owner}/{repo}/teams` 查找並檢查其 `permission`。"
+        "en": "Live probe: parse `.github/CODEOWNERS`; check `@user` with `GET /repos/{owner}/{repo}/collaborators/{user}/permission`, or find `@organization/team` in `GET /repos/{owner}/{repo}/teams`.",
+        "zh-tw": "即時探測：解析 `.github/CODEOWNERS`；`@user` 透過 `GET /repos/{owner}/{repo}/collaborators/{user}/permission` 查驗，`@organization/team` 則在 `GET /repos/{owner}/{repo}/teams` 中查找。"
       },
       "workaround": {
-        "en": "Existing DEGRADED marker: \"DEGRADED CODEOWNERS inspection\" when the token cannot validate owners at all; when the team is genuinely missing or not writable, create or fix `@org/team`'s repository access, or fall back to manually assigning a reviewer with `scripts/request-reviewer` until the team is in place.",
-        "zh-tw": "既有 DEGRADED 標記：token 完全無法驗證 owners 時印出「DEGRADED CODEOWNERS inspection」；若 team 確實不存在或權限不足，建立或修正 `@org/team` 的 repository 存取權，或在 team 到位前改用 `scripts/request-reviewer` 手動指派 reviewer。"
+        "en": "Existing DEGRADED marker: \"DEGRADED CODEOWNERS inspection\" when the token cannot validate owners at all; when the user or team is genuinely missing or not writable, fix that owner's repository access, leave `code_owner` empty to omit this optional control, or assign a reviewer manually with `scripts/request-reviewer`.",
+        "zh-tw": "既有 DEGRADED 標記：token 完全無法驗證 owner 時印出「DEGRADED CODEOWNERS inspection」；若使用者或 team 確實不存在或權限不足，修正該 owner 的 repository 存取權、將 `code_owner` 留空以省略這項可選管制，或用 `scripts/request-reviewer` 手動指派 reviewer。"
       },
       "related_degraded_marker": "DEGRADED CODEOWNERS inspection"
     },

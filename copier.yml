@@ -413,7 +413,7 @@ code_owner:
   type: str
   help: Optional GitHub user or team used by CODEOWNERS
   default: "@Innoguard-Cyber-Arch/arch"
-  validator: "{% if code_owner and not code_owner | regex_search('^@[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?$') %}Use an @user or @organization/team value, or leave it empty.{% endif %}"
+  validator: "{% if code_owner and not code_owner | regex_search('^@(?:(?![A-Za-z0-9-]*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$') %}Use an @user or @organization/team value, or leave it empty.{% endif %}"
 
 project_run_command:
   type: str

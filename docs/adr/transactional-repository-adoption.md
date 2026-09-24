@@ -30,6 +30,8 @@ Machine plan 與 pending checkpoint 只保存可比對資料，不承載新的�
 
 需要人工合併時，第一份 plan 只建立 resumable checkpoint。人工完成清單後，`adopt --finalize --dry-run` 會從已驗證 template 重新推導 managed／manual 集合，在隔離 clone 建立靜態完成態候選，再把 checkpoint、人工結果、完整允許 working-tree state 與預期 artifacts 綁入新的 repo 外 plan。正式 finalize 只接受該 plan，並在核准後才執行候選驗證；直接 finalize、驗證失敗、非預期檔案或確認前後的任何漂移都停止。
 
+Pending checkpoint schema v2 另外保存導入前的 Git revision 與 manual-file Git blob OID；finalize 會從 Git history 驗證該 revision、重讀原始 blob，並以該 revision 的 path attributes 對 working-tree 檔案套用相同 clean-filter 語意，再以重新 render 的 `planned.manual`／`planned.unknown` 比對 checkpoint 清單。這讓未提交、已 stage 或與 checkpoint 一起提交的人工合併都能跨 LF／CRLF checkout 使用同一內容判斷，同時避免靠修改 checkpoint 清單或 OID 略過人工處理。舊 schema 沒有足夠證據可重建原始內容，因此一律 fail closed；恢復方式是還原 checkpoint 與原始檔案，從乾淨 commit 重新執行 adoption。候選驗證失敗時，錯誤必須保留實際 verification path 與失敗 step／tool，並列出 pending manual files 供人工判斷關聯；target 不得被寫入。
+
 固定 ownership policy 如下：
 
 - `README.md`、`CHANGELOG.md` 由產品擁有，existing mode 不產生同名檔案。
