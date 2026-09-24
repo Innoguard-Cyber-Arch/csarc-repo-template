@@ -1,6 +1,7 @@
 name: Documentation｜文件工作
 description: 修改文件、範例或使用說明，不改產品行為
 title: ""
+# Documentation remains an orthogonal label for the native Task Type.
 labels: ["documentation"]
 type: "Task"
 body:

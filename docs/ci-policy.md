@@ -547,7 +547,8 @@ branch 時關閉該 PR，因此 PR policy 保持唯讀、只回報這項限制�
 
 Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優先通道：
 
-1. 建立沒有里程碑的 Bug Issue，標上 `bug` 與 `hotfix`；若內容尚不能公開，改用
+1. 建立沒有里程碑的 Bug Issue，Issue 只標 `hotfix`；PR 才使用由 Bug Type 推導的 `bug`
+   與 `hotfix`。若內容尚不能公開，改用
    GitHub Security Advisory 的私密協作流程。
 2. 從最新 `main` 建立 `fix/<Issue>-<slug>`，PR 使用 `fix(scope): summary` 並直接 target
    `main`。它仍須正常 review，且 CI 一律執行 full；不得以緊急為由跳過。

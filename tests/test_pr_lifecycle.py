@@ -1033,11 +1033,59 @@ def test_issue_label_helper_rejects_a_pull_request(
                 add_label=["bug"],
                 remove_label=[],
                 add_assignee=[],
+                body_file=None,
                 issue_type=None,
                 remove_type=False,
             ),
             github,
         )
+
+
+def test_issue_helper_updates_a_standalone_issue_body(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Route automated Issue body changes through the guarded helper."""
+    github = FakeGitHub("a" * 40)
+    monkeypatch.setattr(
+        github,
+        "get",
+        lambda _repo, _path: {"number": 42},
+    )
+    body_file = tmp_path / "issue.md"
+    body_file.write_text("Updated body\n", encoding="utf-8")
+    calls: list[list[str]] = []
+    monkeypatch.setitem(
+        edit_standalone_issue.__globals__,
+        "run",
+        lambda command, **_kwargs: calls.append(command) or "",
+    )
+
+    edit_standalone_issue(
+        SimpleNamespace(
+            repo="owner/repo",
+            issue_number=42,
+            add_label=[],
+            remove_label=[],
+            add_assignee=[],
+            body_file=body_file,
+            issue_type=None,
+            remove_type=False,
+        ),
+        github,
+    )
+
+    assert calls == [
+        [
+            "gh",
+            "issue",
+            "edit",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--body-file",
+            str(body_file),
+        ]
+    ]
 
 
 def test_writer_scanner_requires_the_managed_pr_creation_path() -> None:

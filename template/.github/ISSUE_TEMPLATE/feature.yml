@@ -1,6 +1,7 @@
 name: Feature｜共同成果
 description: 定義需要多張可獨立交付工作才能完成的共同成果
 title: ""
+# Portable fallback; lifecycle removes it when native Issue Types work.
 labels: ["enhancement"]
 type: "Feature"
 body:
