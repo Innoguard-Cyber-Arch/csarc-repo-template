@@ -1373,6 +1373,114 @@ def test_promotion_version_is_materialized_in_the_delivery_pr(
     assert result["materialized"] is True
 
 
+def test_local_promotion_prep_matches_hosted_verify_after_beta(
+    tmp_path: Path,
+) -> None:
+    """Issue #1018: the documented bridge command yields the verified tree.
+
+    Hosted verify cuts the stable notes from the delivery source (the
+    bridge's first parent), whose latest tag is a beta; preparing from the
+    bridge itself also walks current main's side and writes different notes.
+    """
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps({"release-type": "simple", "packages": {".": {}}}),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    git(tmp_path, "checkout", "-b", "dev/m1-demo")
+    (tmp_path / "feature").write_text("fixed\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "fix: repair milestone behavior")
+    prepare_release_candidate(tmp_path, "HEAD", phase="beta")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(dev): release 0.1.1-beta.1")
+    git(tmp_path, "tag", "v0.1.1-beta.1")
+    source_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "checkout", "main")
+    (tmp_path / "main-only").write_text("current main\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "fix: standalone main repair")
+    git(tmp_path, "checkout", "-b", "promote/m1-demo", "dev/m1-demo")
+    git(tmp_path, "merge", "--no-ff", "main", "-m", "chore: promotion bridge")
+    bridge_sha = git(tmp_path, "rev-parse", "HEAD")
+    planned = release_plan(tmp_path, bridge_sha, phase="stable")
+    assert planned is not None
+    version = planned[1]
+
+    def stable_section() -> str:
+        changelog = (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+        return changelog.split(f"## [{version}]")[1].split("\n## ")[0]
+
+    # The pre-#1018 instruction (no promotion source) cuts notes from the
+    # bridge, which also reaches current main's side, and diverges from the
+    # hosted rule.
+    prepare_release_candidate(tmp_path, "HEAD", phase="stable")
+    assert "fix: standalone main repair" in stable_section()
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "--amend", "--no-edit")
+    with pytest.raises(ValueError, match="materialization is not exact"):
+        verify_promotion_version(
+            tmp_path,
+            source_sha,
+            git(tmp_path, "rev-parse", "HEAD"),
+            phase="stable",
+        )
+
+    git(tmp_path, "reset", "--hard", bridge_sha)
+    with pytest.raises(SystemExit, match="first parent"):
+        main(
+            [
+                "prepare-candidate",
+                "--root",
+                str(tmp_path),
+                "--sha",
+                "HEAD",
+                "--phase",
+                "stable",
+                "--promotion-source",
+                "HEAD^2",
+            ]
+        )
+    assert (
+        main(
+            [
+                "prepare-candidate",
+                "--root",
+                str(tmp_path),
+                "--sha",
+                "HEAD",
+                "--phase",
+                "stable",
+                "--promotion-source",
+                "HEAD^1",
+            ]
+        )
+        == 0
+    )
+    # Current hosted semantics: notes run from the delivery source's latest
+    # beta tag to the source, so this stable section carries no entries.
+    assert "###" not in stable_section()
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "--amend", "--no-edit")
+
+    result = verify_promotion_version(
+        tmp_path,
+        source_sha,
+        git(tmp_path, "rev-parse", "HEAD"),
+        phase="stable",
+    )
+
+    assert result["status"] == "candidate"
+    assert result["version"] == version
+    assert result["materialized"] is True
+
+
 def test_promotion_version_rejects_non_release_changes(tmp_path: Path) -> None:
     """Version materialization cannot hide unrelated edits in promotion."""
     git(tmp_path, "init", "-b", "main")

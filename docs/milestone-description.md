@@ -180,7 +180,15 @@ Reconciliation 仍 fresh 時才允許同一 release candidate 重跑，不把一
 建立 promotion bridge 的雙親 merge commit 後，先以 tracker 宣告的發布層級執行
 `python3 scripts/release_policy.py plan --sha HEAD --phase <level>`；結果若為 `pending`，在
 同一個 checkout 執行 `python3 scripts/release_policy.py prepare-candidate --sha HEAD
---phase <level>`，將產生的版本檔與 CHANGELOG amend 回該 bridge commit，再 push／開 PR。
+--phase <level> --promotion-source HEAD^1`，將產生的版本檔與 CHANGELOG amend 回該 bridge
+commit，再 push／開 PR。`--promotion-source` 必須是 bridge 的第一個 parent（delivery
+source），否則指令直接失敗；它讓 CHANGELOG 與 hosted `verify-promotion-version` 一樣以
+delivery source 為準，而不是以 bridge 本身為準（#1018）。省略它時，notes 會連 current
+`main` 那一側的 commit 一起算進去，產生的 tree 無法通過 hosted `verify`。目前的行為是：
+stable 段落只列 delivery source 最新 beta tag 之後的 release-worthy commit；若最後一個
+beta 之後沒有新的 fix／feature，stable 段落就只有版本標題、沒有條目，各項修正留在各自
+的 beta 段落，不會彙整進 stable。這是 hosted 規則的現況，不是新的決定；要改成彙整 beta
+notes，需另開 Issue 同時調整 hosted 規則與本地指令。
 若 plan 為 `no-release`，bridge tree 必須與 deterministic pre-release baseline 完全相同：
 雙親可乾淨合併時使用 delivery source 與 current `main` 的 merge tree；雙親衝突時沿用
 source-preserving bridge 的 delivery source tree。Hosted `verify` 會重建同一 baseline，

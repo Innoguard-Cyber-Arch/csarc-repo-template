@@ -1762,6 +1762,26 @@ def prepare_release_candidate(
     }
 
 
+def promotion_changelog_source(root: Path, sha: str, source: str) -> str:
+    """Return the delivery source a promotion bridge's notes are cut from.
+
+    Hosted ``verify-promotion-version`` rebuilds the candidate with the
+    bridge's first parent as ``changelog_sha`` (Issue #1018), so local
+    preparation must name that same commit instead of the bridge itself.
+    """
+    source_sha = git_output(
+        ["rev-parse", "--verify", f"{source}^{{commit}}"], root
+    )
+    parents = git_output(
+        ["rev-list", "--parents", "-n", "1", sha], root
+    ).split()
+    if len(parents) < 2 or parents[1] != source_sha:
+        raise ValueError(
+            "promotion source must be the first parent of the promotion head"
+        )
+    return source_sha
+
+
 def _promotion_baseline_tree(root: Path, source_sha: str, head_sha: str) -> str:
     """Return the deterministic pre-release tree for a promotion head."""
     source_tree = git_output(["rev-parse", f"{source_sha}^{{tree}}"], root)
@@ -2201,6 +2221,14 @@ def parser() -> argparse.ArgumentParser:
     candidate.add_argument(
         "--phase", choices=release_phase.PHASES, default=None
     )
+    candidate.add_argument(
+        "--promotion-source",
+        default=None,
+        help=(
+            "Milestone promotion bridge only: its first parent (HEAD^1), so "
+            "CHANGELOG notes match hosted verify-promotion-version."
+        ),
+    )
     verify = subparsers.add_parser("verify-version")
     verify.add_argument("--tag")
     verify.add_argument("--root", type=Path, default=Path.cwd())
@@ -2319,8 +2347,16 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         return 0
     if args.command == "prepare-candidate":
         try:
+            root = args.root.resolve()
+            changelog_sha = (
+                promotion_changelog_source(
+                    root, args.sha, args.promotion_source
+                )
+                if args.promotion_source is not None
+                else None
+            )
             payload = prepare_release_candidate(
-                args.root.resolve(), args.sha, phase=args.phase
+                root, args.sha, phase=args.phase, changelog_sha=changelog_sha
             )
         except (ValueError, json.JSONDecodeError) as error:
             raise SystemExit(str(error)) from error
