@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.25.8</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.26.0</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.25.8<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.26.0<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -806,7 +806,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 - `template/` 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理與 dogfood 設定，配對檔案由 `scripts/sync-paired-files.sh` 從 root 產生 `template/` 副本。
 - `.csarc/config.yml` 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。
 - 新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自元件（模組），不建立組合專屬流程。
-- 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan；dry-run 不執行 target-owned helper 或 product hook。人核准同一份未漂移的 plan 後，CLI 才在隔離候選執行驗證，通過後寫入；第一張 PR 再由人核對來源、plan、diff 與本機結果。
+- 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan；dry-run 不執行 target-owned helper 或 product hook，並唯讀盤點 GitHub Issue Types 與 labels。報告以 `Bug`／`Feature`／`Task` 作為 Issue 工作類型，以小寫 `bug`／`enhancement`／`documentation` 作為 PR 分類與 fallback，列出可安全整批接受的對應和需要逐項確認的自訂項目，但不會改動遠端 metadata。人核准同一份未漂移的 plan 後，CLI 才在隔離候選執行驗證，通過後寫入；第一張 PR 再由人核對來源、plan、diff 與本機結果。
 - 第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先用 dry-run 預覽，候選內容與衝突全部驗證完成才修改 target，若有衝突就保持 repo 不變，修正後重跑，再由一般 PR 與 trusted-base checks 審查。
 - 可選的更新通知每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。
 

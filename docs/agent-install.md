@@ -64,6 +64,18 @@ attestation verification.
    saved `.csarc/config.yml` answers and ask only about newly introduced
    questions or changes the user explicitly requests.
 
+   For `adopt`, also read `adoption.work_item_mapping` from that same plan.
+   Explain that native `Bug`／`Feature`／`Task` are Issue Types, while lowercase
+   `bug`／`enhancement`／`documentation` are PR classification labels and the
+   fallback when Issue Types are unavailable. Offer to accept the listed safe
+   mappings as one group or review them individually. Rerun the dry-run with
+   `--data work_item_mapping_review=accept-safe` for the first choice, or only
+   pass `review-individually` after reviewing every proposal. Treat every
+   `decision-required` entry as custom intent and preserve it unless the user
+   explicitly chooses a later repository-settings change. This is guidance
+   only: do not rename, delete, or relabel remote metadata during adoption, and
+   do not introduce another question schema.
+
    Before `init` or `adopt`, confirm the project description, shortest working
    product command, and security reporting channel. For an existing
    repository, separately confirm an optional repository-relative executable
@@ -81,8 +93,8 @@ attestation verification.
    overwrite, preserve, automatic merge, manual merge, or unable to determine.
    Review the generated Markdown report (its own new/edited/removed file
    counts, impact analysis, and items requiring a decision) and machine
-   plan, including the exact project verification hook path and its initial
-   `not-run` state, then report
+   plan, including the work-item mapping suggestions, exact project
+   verification hook path, and its initial `not-run` state, then report
    the terminal's separate Milestone
    description classifications: upgrade, current, or manual review. Neither
    source guarantees the absence of semantic or runtime conflicts. Unknown

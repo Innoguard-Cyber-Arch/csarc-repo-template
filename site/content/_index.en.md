@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.25.8</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.26.0</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.25.8<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.26.0<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -814,7 +814,7 @@ Three places each own something different: `template/` is the single source of w
 - `template/` is the only delivered source; root keeps the template repository's own GitHub governance and dogfood configuration only because that is how GitHub reads it, and `scripts/sync-paired-files.sh` generates root's paired-file copies under `template/`.
 - `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.
 - A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent components (modules); it never builds a combination-specific pipeline.
-- A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan; the dry-run never executes a target-owned helper or product hook. Once a person approves that same undrifted plan, the CLI verifies an isolated candidate before writing it, and the first PR then reviews the source, plan, diff, and local results.
+- A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan; the dry-run never executes a target-owned helper or product hook and read-only inventories GitHub Issue Types and labels. The report uses `Bug`／`Feature`／`Task` for Issue work types and lowercase `bug`／`enhancement`／`documentation` for PR classification and fallback, listing safe mappings that can be accepted together and custom items that need individual review without changing remote metadata. Once a person approves that same undrifted plan, the CLI verifies an isolated candidate before writing it, and the first PR then reviews the source, plan, diff, and local results.
 - After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a dry-run preview, and only apply to the target once the candidate content and conflicts are fully verified; a conflict leaves the repository unchanged so it can be corrected, rerun, and reviewed by a normal PR and trusted-base checks.
 - The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.
 
