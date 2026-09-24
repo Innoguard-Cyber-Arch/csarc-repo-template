@@ -27,6 +27,7 @@ class FakeGitHub:
         self.objects: dict[str, object] = {}
         self.collections: dict[str, list[dict[str, Any]]] = {}
         self.writes: list[tuple[str, str, str]] = []
+        self.fields: list[dict[str, object] | None] = []
 
     def get(self, repo: str, path: str) -> object:
         del repo
@@ -41,9 +42,17 @@ class FakeGitHub:
         del repo
         return self.collections[path]
 
-    def write(self, repo: str, method: str, path: str, body: str) -> object:
+    def write(
+        self,
+        repo: str,
+        method: str,
+        path: str,
+        body: str,
+        fields: dict[str, object] | None = None,
+    ) -> object:
         del repo
         self.writes.append((method, path, body))
+        self.fields.append(fields)
         return {"html_url": "https://github.com/o/r/pull/9#issuecomment-1"}
 
 
@@ -442,16 +451,22 @@ def test_release_pull_annotation_is_idempotent_for_the_same_actor() -> None:
 
 def test_release_annotation_preserves_notes_and_replaces_evidence() -> None:
     github = FakeGitHub()
-    github.objects["releases/tags/v1.2.3"] = {
-        "id": 55,
-        "draft": True,
-        "immutable": False,
-        "body": (
-            "Existing notes\n\n"
-            "<!-- release-level-work-items:start -->\nold\n"
-            "<!-- release-level-work-items:end -->\n"
-        ),
-    }
+    github.collections["releases?per_page=100"] = [
+        {"id": 54, "tag_name": "v1.2.2", "draft": False, "immutable": True},
+        {
+            "id": 55,
+            "tag_name": "v1.2.3",
+            "draft": True,
+            "immutable": False,
+            "body": (
+                "Existing notes\n\n"
+                "<!-- release-level-work-items:start -->\nold\n"
+                "<!-- release-level-work-items:end -->\n"
+            ),
+        },
+    ]
+    # The by-tag endpoint returns 404 for drafts; it must not be consulted.
+    github.objects["releases/tags/v1.2.3"] = RuntimeError("HTTP 404")
     details = (
         "<!-- release-level-work-items:start -->\nnew\n"
         "<!-- release-level-work-items:end -->\n"
@@ -466,6 +481,33 @@ def test_release_annotation_preserves_notes_and_replaces_evidence() -> None:
             "Existing notes\n\n" + details,
         )
     ]
+    # Omitting tag_name makes GitHub detach the draft from its tag.
+    assert github.fields == [{"tag_name": "v1.2.3", "draft": True}]
+
+
+@pytest.mark.parametrize(
+    "releases",
+    [
+        [],
+        [{"id": 55, "tag_name": "v1.2.3", "draft": False, "immutable": True}],
+        [{"id": 55, "tag_name": "v1.2.3", "draft": True, "immutable": True}],
+        [
+            {"id": 55, "tag_name": "v1.2.3", "draft": True, "immutable": False},
+            {"id": 56, "tag_name": "v1.2.3", "draft": True, "immutable": False},
+        ],
+    ],
+    ids=["missing", "published", "immutable", "ambiguous"],
+)
+def test_release_annotation_fails_closed_without_one_mutable_draft(
+    releases: list[dict[str, Any]],
+) -> None:
+    github = FakeGitHub()
+    github.collections["releases?per_page=100"] = releases
+
+    with pytest.raises(RuntimeError, match="one mutable draft Release"):
+        levels.annotate_release(github, "o/r", "v1.2.3", "details")
+
+    assert github.writes == []
 
 
 def test_root_and_template_release_level_modules_match() -> None:

@@ -214,24 +214,29 @@ promotion_evidence:
     repository: Innoguard-Cyber-Arch/ai-guardrail
     profile: ci
     result: docs/pilot-adoption.md
+  language_module_lifecycle:
+    status: satisfied
+    method: shared_representative_canaries
+    evidence:
+      - tests/test_cli.py::test_real_existing_adoption_uses_fixed_ownership_policies
+      - tests/test_cli.py::test_previous_release_to_current_managed_file_migration
   python:
     status: satisfied
-    method: executable_template_lifecycle
+    method: generated_native_verification
     evidence:
-      - tests/test_cli.py::test_real_template_adoption_resumes_after_manifest_merge
+      - tests/test_language_profiles.py::test_representative_generated_project_runs_full_verifier
       - scripts/verify-template.sh
   typescript:
     status: satisfied
-    method: executable_template_lifecycle
+    method: generated_native_verification
     evidence:
-      - tests/test_cli.py::test_real_template_adoption_resumes_after_manifest_merge
+      - tests/test_language_profiles.py::test_representative_generated_project_runs_full_verifier
       - scripts/verify-template.sh
   rust:
     status: satisfied
-    method: executable_template_lifecycle
+    method: generated_native_verification
     evidence:
-      - tests/test_cli.py::test_real_template_adoption_resumes_after_manifest_merge
-      - tests/test_language_profiles.py::test_generated_language_module_runs_its_own_verifier
+      - tests/test_language_profiles.py::test_representative_generated_project_runs_full_verifier
       - scripts/verify-template.sh
   container_delivery:
     status: pilot_candidate_identified

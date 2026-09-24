@@ -126,9 +126,13 @@ gate 實際接上合併流程；沒有宣告的 work PR（現況的絕大多數�
 - 連結來源 spec、使用者研究或導入盤點；若沒有候選，記錄 bounded search 範圍。
 ```
 
-只掛入直接推進 acceptance criteria 的 leaf Issues 與其 pull requests；Feature parent
-不掛 Milestone，避免 parent、subissue、PR 三重計算。Milestone 必須代表有真實期限
-的 delivery／release；沒有排程就不要建立 Milestone，也不要把它當 release label。
+所有直接屬於 delivery scope 的 Issue 與其 pull requests 都掛入 Milestone；研究或 Feature
+擴展成這個 delivery 時，原始 Feature parent 也必須掛入，不能因為報表會同時列出 parent、
+subissue 與 PR 就排除真實成員。Milestone 必須代表有真實期限的 delivery／release；沒有
+排程就不要建立 Milestone，也不要把它當 release label。
+`sync_milestone_state.py preflight` 與 lifecycle reconciliation 會以 GitHub 原生
+`parent_issue_url` 驗證這項關係；Milestone 內的 sub-issue 若找不到同一 Milestone 的
+Feature parent，會直接回報錯誤。
 
 已評估（Issue #555）改用 GitHub 原生 sub-issues（`parent`／`subIssuesSummary` 欄位與對應新增
 ／移除 sub-issue REST 端點）取代上方純文字 `References` 列點，讓 tracker 直接掛住底下 work

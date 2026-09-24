@@ -33,8 +33,8 @@
             "en": "Four entry points are provided: Feature, Task, Bug, and Documentation; all require a problem statement and acceptance criteria, and blank Issues are disabled."
           },
           "code": {
-            "zh-tw": "Feature       -> Type: Feature; label: enhancement\nTask          -> Type: Task; label: enhancement\nBug           -> Type: Bug; label: bug\nDocumentation -> Type: Task; label: documentation\n\nRequired fields:\n  - problem\n  - acceptance\n\n# config.yml\nblank_issues_enabled: false\ncontact_links: []",
-            "en": "Feature       -> Type: Feature; label: enhancement\nTask          -> Type: Task; label: enhancement\nBug           -> Type: Bug; label: bug\nDocumentation -> Type: Task; label: documentation\n\nRequired fields:\n  - problem\n  - acceptance\n\n# config.yml\nblank_issues_enabled: false\ncontact_links: []"
+            "zh-tw": "Feature       -> Issue Type: Feature\nTask          -> Issue Type: Task\nBug           -> Issue Type: Bug\nDocumentation -> Issue Type: Task + documentation label\n\nPR label      -> lowercase, derived from Issue Type\nFallback      -> lowercase label when Issue Types are unavailable\n\nRequired fields:\n  - problem\n  - acceptance\n\n# config.yml\nblank_issues_enabled: false\ncontact_links: []",
+            "en": "Feature       -> Issue Type: Feature\nTask          -> Issue Type: Task\nBug           -> Issue Type: Bug\nDocumentation -> Issue Type: Task + documentation label\n\nPR label      -> lowercase, derived from Issue Type\nFallback      -> lowercase label when Issue Types are unavailable\n\nRequired fields:\n  - problem\n  - acceptance\n\n# config.yml\nblank_issues_enabled: false\ncontact_links: []"
           },
           "summary": {
             "zh-tw": "問題與完成條件必填，空白 Issue 關閉；這些是公版工作契約，不提供停用開關。",
@@ -47,8 +47,8 @@
             "en": ".github/ISSUE_TEMPLATE/*.yml＋AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md"
           },
           "title": {
-            "zh-tw": "固定基線｜標題、Label、負責人與工作層級",
-            "en": "Fixed baseline | Title, label, assignee, and work hierarchy"
+            "zh-tw": "固定基線｜標題、Type、Label、負責人與工作層級",
+            "en": "Fixed baseline | Title, Type, label, assignee, and work hierarchy"
           },
           "goal": {
             "zh-tw": "標題使用 12–80 個英文 ASCII 字元及至少三個詞；建立者自我指派，agent／CLI 使用 @me。",
@@ -59,8 +59,8 @@
             "en": "Title: 12-80 ASCII characters; at least 3 words\nAssignee: creator; agent/CLI uses @me\n\nOther classifications:\n  documentation -> Task + documentation label\n  duplicate     -> duplicate close reason\n  hotfix        -> Bug + hotfix label + fix/<Issue>-* -> main\n  promotion     -> delivery tracking only\n\nParent     -> shared outcome still incomplete\nDependency -> actual execution order"
           },
           "summary": {
-            "zh-tw": "標題、分類與工作關係採同一套規則；組織若要改契約，應由公版政策變更而不是各 repo 自行關閉。",
-            "en": "Title, classification, and work-item relationships follow one shared rule set; an organization that wants to change the contract should change the template policy, not disable the rule in individual repositories."
+            "zh-tw": "Issue Type 表達工作種類，Label 只保留額外分類與相容 fallback；組織若要改契約，應由公版政策變更而不是各 repo 自行關閉。",
+            "en": "Issue Type expresses the work kind, while labels carry only extra classifications and the compatibility fallback; an organization that wants to change the contract should change the template policy, not disable the rule in individual repositories."
           }
         },
         {
@@ -357,8 +357,8 @@
             "en": "title: feat(scope): English summary\nbranch: feat/123-short-slug\nbody: Closes #123\nlabel: enhancement\nassignee: PR author\nmilestone: same as Issue #123"
           },
           "summary": {
-            "zh-tw": "標題與目的分支符合規則；分類 Label 與里程碑必須和 Issue 相同，PR 作者必須列為 Assignee，內文使用 Closes #N 連回同號未結案 Issue。",
-            "en": "The title and base branch must follow the rules; the classification label and Milestone must match the Issue, the PR author must be listed as Assignee, and the body must use `Closes #N` to link back to the matching open Issue."
+            "zh-tw": "標題與目的分支符合規則；PR 分類 Label 由 Issue Type 或 fallback Label 推導，里程碑必須和 Issue 相同，PR 作者必須列為 Assignee，內文使用 Closes #N 連回同號未結案 Issue。",
+            "en": "The title and base branch must follow the rules; the PR classification label is derived from the Issue Type or fallback label, the Milestone must match the Issue, the PR author must be listed as Assignee, and the body must use `Closes #N` to link back to the matching open Issue."
           }
         },
         {

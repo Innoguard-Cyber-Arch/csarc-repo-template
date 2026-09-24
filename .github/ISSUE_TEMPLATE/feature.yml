@@ -1,6 +1,7 @@
 name: Feature｜共同成果
 description: 定義需要多張可獨立交付工作才能完成的共同成果
 title: ""
+# Portable fallback; lifecycle removes it when native Issue Types work.
 labels: ["enhancement"]
 type: "Feature"
 body:
@@ -12,7 +13,8 @@ body:
         建立前先依 AGENTS.md 搜尋相關 open／closed Issues，並在「補充」記錄沿用、
         取代或駁回的既有決策。Feature 是尚未完整達成的 parent；可獨立交付的工作
         另開 Task／Bug Sub-issue。UI 建立者請把自己設為 Assignee；agent／CLI 建立時
-        明確使用 `--assignee @me`。若這張 Issue 沒有掛 Milestone（standalone 或
+        明確使用 `--assignee @me`。若研究或 Feature 後來擴展為有期限的 Milestone，
+        這張 Feature Issue 本身也要掛入同一 Milestone。若這張 Issue 沒有掛 Milestone（standalone 或
         hotfix）固定走 stable；掛在 Milestone 的工作固定走 beta。是否允許 admin 以
         `Admin-approve: <理由>` 自核，由 repository 的 `admin_bypass` 設定決定。
   - type: textarea

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 set +e
 copier check-update --quiet
 check_exit=$?
@@ -30,6 +32,19 @@ PY
 )"
 
 title="Update repository from Copier template"
+repo="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
+
+normalize_tracking_issue() {
+  local number="$1"
+  if python3 "$script_dir/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --type Task >/dev/null 2>&1; then
+    python3 "$script_dir/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --remove-label enhancement >/dev/null
+    echo "Normalized template update Issue #$number to native Type Task."
+  else
+    python3 "$script_dir/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --add-label enhancement >/dev/null
+    echo "::notice::Native Issue Types are unavailable; the enhancement label remains authoritative for Issue #$number."
+  fi
+}
+
 body_file="$(mktemp)"
 trap 'rm -f "$body_file"' EXIT
 # These values are assigned by the validated Python output above.
@@ -54,18 +69,24 @@ Copier template 有可用更新。目前版本：\`$current_version\`；最新�
 EOF
 
 issue_number="$(
-  gh issue list --state open --limit 100 --json number,title \
+  gh issue list --repo "$repo" --state open --limit 100 --json number,title \
     --jq '.[] | select(.title == "Update repository from Copier template") | .number' |
     head -n 1
 )"
 if [[ -n "$issue_number" ]]; then
-  gh issue edit "$issue_number" --body-file "$body_file" >/dev/null
+  python3 "$script_dir/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$issue_number" --body-file "$body_file" >/dev/null
   echo "Updated template notification Issue #$issue_number."
 else
-  gh issue create \
-    --title "$title" \
-    --label enhancement \
-    --type Task \
-    --assignee @me \
-    --body-file "$body_file"
+  create_args=(--repo "$repo" --title "$title" --label enhancement --body-file "$body_file")
+  if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
+    create_args+=(--assignee @me)
+  fi
+  issue_url="$(gh issue create "${create_args[@]}")"
+  issue_number="${issue_url##*/}"
+  [[ "$issue_number" =~ ^[0-9]+$ ]] || {
+    echo "check-template-update: created Issue number could not be determined" >&2
+    exit 1
+  }
+  echo "$issue_url"
 fi
+normalize_tracking_issue "$issue_number"

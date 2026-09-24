@@ -305,7 +305,8 @@ if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
   issue_title="${PR_ISSUE_TITLE:-}"
   issue_body="${PR_ISSUE_BODY:-}"
   issue_milestone_number="${PR_ISSUE_MILESTONE_NUMBER:-0}"
-  issue_labels="${PR_ISSUE_LABELS:-$PR_LABELS}"
+  issue_labels="${PR_ISSUE_LABELS-$PR_LABELS}"
+  issue_type="${PR_ISSUE_TYPE:-}"
   issue_has_unchecked=false
   if grep -Eq "$unchecked_task_pattern" <<<"$issue_body"; then
     issue_has_unchecked=true
@@ -313,12 +314,14 @@ if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
 else
   issue_payload="$(
     gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
-      --jq 'select(.pull_request | not) | [.state, .title, ((.body // "") | test("(?m)^\\s*-\\s+\\[\\s*\\]")), (.milestone.number // 0), ([.labels[].name] | join(","))] | @tsv' \
+      --jq 'select(.pull_request | not) | [.state, .title, ((.body // "") | test("(?m)^\\s*-\\s+\\[\\s*\\]")), (.milestone.number // 0), (([.labels[].name] | join(",")) | if . == "" then "-" else . end), (.type.name // "-")] | @tsv' \
       2>/dev/null || true
   )"
   IFS=$'\t' read -r issue_state issue_title issue_has_unchecked \
-    issue_milestone_number issue_labels \
+    issue_milestone_number issue_labels issue_type \
     <<<"$issue_payload"
+  [[ "$issue_labels" == "-" ]] && issue_labels=""
+  [[ "$issue_type" == "-" ]] && issue_type=""
   if [[ "${tracker_promotion:-false}" == "true" ]]; then
     issue_body="$(
       gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
@@ -376,7 +379,7 @@ if [[ "$pr_milestone_number" == "0" && "$issue_milestone_number" == "0" && "${PR
       reminder_body="${reminder_marker}
 Neither this pull request nor Issue #${issue_number} has a Milestone, and exactly one Milestone is currently open: #${hint_number} ${hint_title}.
 
-If this work belongs to it, attach the Milestone to the Issue (see docs/ci-policy.md, section \"Milestone 掛勾安全網\", for the closed-Milestone REST API workaround) and to this pull request. Otherwise no action is needed -- many Issues and pull requests are not tied to any Milestone."
+If this work belongs to it, attach the Milestone to the Issue (see docs/ci-policy.md, section \"Milestone 掛勾與持續同步\", for the closed-Milestone REST API workaround) and to this pull request. Otherwise no action is needed -- many Issues and pull requests are not tied to any Milestone."
       if ! gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
         --body "$reminder_body" >/dev/null 2>&1; then
         echo "::notice::Could not post the Milestone safeguard reminder (non-blocking, Issue #551)."
@@ -392,8 +395,33 @@ for label in bug enhancement documentation; do
     issue_selected_count=$((issue_selected_count + 1))
   fi
 done
-if (( issue_selected_count != 1 )) || [[ "$selected_label" != "$issue_selected_label" ]]; then
-  echo "The pull request classification label must match Issue #${issue_number}."
+if (( issue_selected_count > 1 )); then
+  echo "Issue #${issue_number} has conflicting classification labels."
+  exit 1
+fi
+issue_expected_label=""
+case "$issue_type" in
+  Bug) issue_expected_label="bug" ;;
+  Feature) issue_expected_label="enhancement" ;;
+  Task)
+    if [[ "$issue_selected_label" == "documentation" ]]; then
+      issue_expected_label="documentation"
+    else
+      issue_expected_label="enhancement"
+    fi
+    ;;
+  "") issue_expected_label="$issue_selected_label" ;;
+  *)
+    echo "Issue #${issue_number} has an unsupported native Type."
+    exit 1
+    ;;
+esac
+if [[ -n "$issue_type" && -n "$issue_selected_label" && "$issue_selected_label" != "documentation" ]]; then
+  echo "Issue #${issue_number} must not duplicate its native Type with a work-kind label."
+  exit 1
+fi
+if [[ -z "$issue_expected_label" || "$selected_label" != "$issue_expected_label" ]]; then
+  echo "The pull request classification label must match Issue #${issue_number}'s Type or fallback label."
   exit 1
 fi
 development_cutover_pr="${PR_DEVELOPMENT_CUTOVER_PR:-1}"

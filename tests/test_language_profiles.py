@@ -18,6 +18,18 @@ from csarc_cli import cli
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _resolve_pytest_evidence(
+    root: Path, node_ids: list[str]
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", *node_ids],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
 def test_languages_are_independent_modules() -> None:
     """Offer language modules instead of enumerating combinations."""
     config = yaml.safe_load((ROOT / "copier.yml").read_text(encoding="utf-8"))
@@ -50,12 +62,62 @@ def test_supported_language_modules_have_executable_beta_evidence() -> None:
     assert catalog["compositions"]["language_modules"]["stage"] == "beta"
     assert "real_consuming_repository" in requirements["shared_lifecycle"]
     assert "real_consuming_repository" not in requirements["language_module"]
+    promotion_evidence = catalog["promotion_evidence"]
+    lifecycle = promotion_evidence["language_module_lifecycle"]
+    assert lifecycle == {
+        "status": "satisfied",
+        "method": "shared_representative_canaries",
+        "evidence": [
+            "tests/test_cli.py::test_real_existing_adoption_uses_fixed_ownership_policies",
+            "tests/test_cli.py::test_previous_release_to_current_managed_file_migration",
+        ],
+    }
     for language in ("python", "rust", "typescript"):
         assert catalog["profiles"][language]["stage"] == "beta"
-        evidence = catalog["promotion_evidence"][language]
+        evidence = promotion_evidence[language]
         assert evidence["status"] == "satisfied"
-        assert evidence["method"] == "executable_template_lifecycle"
-        assert evidence["evidence"]
+        assert evidence["method"] == "generated_native_verification"
+        assert evidence["evidence"] == [
+            "tests/test_language_profiles.py::test_representative_generated_project_runs_full_verifier",
+            "scripts/verify-template.sh",
+        ]
+
+    assert catalog["profiles"]["go"]["stage"] == "future"
+    assert "go" not in promotion_evidence
+
+    repository_evidence = {
+        reference
+        for item in promotion_evidence.values()
+        if isinstance(item, dict)
+        for reference in item.get("evidence", [])
+        if isinstance(reference, str) and "://" not in reference
+    }
+    for reference in repository_evidence:
+        assert (ROOT / reference.partition("::")[0]).is_file()
+    pytest_nodes = sorted(
+        reference for reference in repository_evidence if "::" in reference
+    )
+    resolved = _resolve_pytest_evidence(ROOT, pytest_nodes)
+    assert resolved.returncode == 0, resolved.stdout + resolved.stderr
+
+
+def test_promotion_evidence_resolver_rejects_stale_pytest_nodes(
+    tmp_path: Path,
+) -> None:
+    """Fail when catalog evidence names a missing pytest node."""
+    (tmp_path / "test_evidence.py").write_text(
+        "def test_current():\n    pass\n", encoding="utf-8"
+    )
+
+    current = _resolve_pytest_evidence(
+        tmp_path, ["test_evidence.py::test_current"]
+    )
+    stale = _resolve_pytest_evidence(
+        tmp_path, ["test_evidence.py::test_removed"]
+    )
+
+    assert current.returncode == 0, current.stdout + current.stderr
+    assert stale.returncode != 0
 
 
 def test_detect_languages_composes_selected_modules(
@@ -702,6 +764,78 @@ def test_optional_features_render_independently(
     assert (
         project / ".github/workflows/docker-build-scan.yml"
     ).exists() is docker_enabled
+
+
+@pytest.mark.parametrize(
+    ("project_mode", "documentation_mode", "content_enabled"),
+    [
+        ("new", "off", False),
+        ("existing", "off", False),
+        ("new", "content-only", True),
+    ],
+)
+def test_documentation_guidance_matches_rendered_content(
+    tmp_path: Path,
+    project_mode: str,
+    documentation_mode: str,
+    content_enabled: bool,
+) -> None:
+    """Point operational guidance only at documentation that exists."""
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "documentation-guidance"
+    if project_mode == "existing":
+        project.mkdir()
+        (project / "package.json").write_text(
+            '{"name": "documentation-guidance", "private": true}\n',
+            encoding="utf-8",
+        )
+
+    run_copy(
+        str(source),
+        project,
+        data={
+            "project_mode": project_mode,
+            "languages": ["typescript"],
+            "project_name": "Documentation Guidance",
+            "project_slug": "documentation-guidance",
+            "project_description": "Exercises mode-specific guidance.",
+            "repository_url": "https://github.com/example/documentation-guidance",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "private",
+            "documentation_mode": documentation_mode,
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+    )
+
+    assert (project / "README.md").exists() is content_enabled
+    assert (project / "docs/README.md").exists() is content_enabled
+
+    security = (project / "SECURITY.md").read_text(encoding="utf-8")
+    workflow = (project / ".csarc/docs/agent-workflow.md").read_text(
+        encoding="utf-8"
+    )
+    lifecycle = (project / ".csarc/docs/csarc.md").read_text(encoding="utf-8")
+    assert "Read `README.md` when present." in security
+
+    if content_enabled:
+        assert "`docs/README.md` maps durable project memory" in workflow
+        assert "專案自己的 `README.md` 為準" in lifecycle
+    else:
+        assert "`docs/README.md` maps durable project memory" not in workflow
+        assert "`docs/specs/` SDD contract" not in workflow
+        assert (
+            "`.csarc/docs/csarc.md` is the stable operations entry point"
+            in workflow
+        )
+        assert "專案自己的 `README.md` 為準" not in lifecycle
+        assert "既有專案導入 CSARC" not in lifecycle
+        assert "root `AGENTS.md`" in lifecycle
+        assert "`.csarc/config.yml`" in lifecycle
 
 
 @pytest.mark.parametrize(

@@ -103,6 +103,22 @@ jobs:
           ISSUE_TYPE: ${{ github.event.issue.type.name }}
         run: ./scripts/validate-issue-policy
 
+      # -- Issue metadata: keep linked open pull requests on the same Milestone --
+      - name: "Issue metadata: synchronize linked pull requests"
+        if: >-
+          !cancelled() &&
+          true &&
+          github.event_name == 'issues' &&
+          github.event.issue.pull_request == null &&
+          contains(fromJSON('["milestoned","demilestoned"]'), github.event.action)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: >-
+          python3 scripts/sync_work_item_metadata.py
+          --repo "$GITHUB_REPOSITORY"
+          --issue "$ISSUE_NUMBER"
+
       # -- Milestone lifecycle: reconcile the current Milestone --
       - name: "Milestone lifecycle: reconcile lifecycle and refresh PR checks"
         if: >-

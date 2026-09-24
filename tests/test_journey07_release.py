@@ -602,7 +602,7 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
     assert 'len(fields["command"]) <= 512' in script
     assert "audit evidence is unavailable" in script
     assert "gh issue create" in script
-    assert "gh issue edit" in script
+    assert 'scripts/pr_lifecycle.py" issue-edit' in script
     assert (
         "Release publish drift detected; publishing the tracking Issue."
         in script
@@ -645,7 +645,7 @@ def test_release_drift_check_ships_with_release_ownership() -> None:
         "RELEASE_DRIFT_HOURS",
         "Release-publish-record",
         "gh issue create",
-        "gh issue edit",
+        'pr_lifecycle.py" issue-edit',
     ):
         assert marker in template_script
         assert marker in root_script

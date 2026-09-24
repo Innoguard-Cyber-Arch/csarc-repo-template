@@ -1,5 +1,6 @@
 """Tests for native GitHub work-item forms and PR templates."""
 
+import json
 import runpy
 import subprocess
 from pathlib import Path
@@ -18,6 +19,18 @@ FORM_POLICY = {
 TRACKER_FORM_NAME = "milestone-tracker.yml"
 
 
+def test_repository_label_policy_uses_canonical_lowercase_names() -> None:
+    """Prevent Type-like case variants from entering the shared policy."""
+    labels = json.loads(
+        (REPO_ROOT / "policies" / "labels.json").read_text(encoding="utf-8")
+    )
+    names = [item["name"] for item in labels]
+
+    assert {"bug", "enhancement", "documentation"} <= set(names)
+    assert all(name == name.casefold() for name in names)
+    assert len(names) == len({name.casefold() for name in names})
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     """Load one mapping-only YAML document."""
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -26,10 +39,10 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize(("filename", "expected"), FORM_POLICY.items())
-def test_forms_set_native_type_and_one_classification(
+def test_forms_seed_native_type_and_portable_fallback(
     filename: str, expected: tuple[str, str]
 ) -> None:
-    """Keep native metadata fixed at the entry point without an Action."""
+    """Seed a fallback that lifecycle removes when native Types work."""
     root_path = REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / filename
     template_path = REPO_ROOT / "template" / root_path.relative_to(REPO_ROOT)
     root_form = load_yaml(root_path)
