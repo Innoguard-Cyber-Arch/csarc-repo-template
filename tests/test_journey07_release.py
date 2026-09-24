@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -412,6 +414,67 @@ def test_csarc_owned_ordinary_work_materializes_the_release_in_one_pr() -> None:
         assert "steps.sync.outputs.route == 'ordinary'" in source
 
 
+def test_materialization_gate_forwards_a_checkpoint_role_only_when_reported(
+    tmp_path: Path,
+) -> None:
+    """The default-branch gate stays compatible with bases lacking roles."""
+    root = yaml.safe_load(
+        (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+    steps = [
+        step
+        for job in root["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("name") == "Validate same-PR release materialization"
+    ]
+    assert len(steps) == 1
+    step = steps[0]
+    assert step["env"]["CHECKPOINT_ROLE"] == (
+        "${{ steps.level.outputs.checkpoint }}"
+    )
+    template = (ROOT / "template/.github/workflows/ci.yml.jinja").read_text(
+        encoding="utf-8"
+    )
+    for line in (
+        "CHECKPOINT_ROLE: {% raw %}${{ steps.level.outputs.checkpoint }}"
+        "{% endraw %}",
+        'checkpoint_args=(--checkpoint-role "$CHECKPOINT_ROLE")',
+        '"${checkpoint_args[@]}"',
+    ):
+        assert line in template
+
+    script = step["run"].replace(
+        '"$RUNNER_TEMP/trusted-verification/release_policy.py"',
+        '"$FAKE_POLICY"',
+    )
+    fake = tmp_path / "policy.py"
+    fake.write_text(
+        "import json, sys\nprint(json.dumps(sys.argv[1:]))\n", encoding="utf-8"
+    )
+    for role, expected in (
+        ("", []),
+        ("deferred", ["--checkpoint-role", "deferred"]),
+    ):
+        result = subprocess.run(  # noqa: S603
+            ["bash", "-e", "-c", script],  # noqa: S607
+            check=True,
+            capture_output=True,
+            text=True,
+            env={
+                "PATH": os.environ["PATH"],
+                "FAKE_POLICY": str(fake),
+                "GITHUB_WORKSPACE": str(tmp_path),
+                "BASE_SHA": "b" * 40,
+                "HEAD_SHA": "h" * 40,
+                "RELEASE_LEVEL": "beta",
+                "CHECKPOINT_ROLE": role,
+            },
+        )
+        arguments = json.loads(result.stdout)
+        assert arguments[-2:] == (expected or ["--phase", "beta"])
+        assert ("--checkpoint-role" in arguments) is bool(role)
+
+
 def test_one_issue_milestone_uses_only_work_and_promotion_prs() -> None:
     """No post-promotion version PR is needed for a CSARC-owned Milestone."""
     release = (ROOT / ".github/workflows/release.yml").read_text(
@@ -602,7 +665,7 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
     assert 'len(fields["command"]) <= 512' in script
     assert "audit evidence is unavailable" in script
     assert "gh issue create" in script
-    assert "gh issue edit" in script
+    assert 'scripts/pr_lifecycle.py" issue-edit' in script
     assert (
         "Release publish drift detected; publishing the tracking Issue."
         in script
@@ -645,7 +708,7 @@ def test_release_drift_check_ships_with_release_ownership() -> None:
         "RELEASE_DRIFT_HOURS",
         "Release-publish-record",
         "gh issue create",
-        "gh issue edit",
+        'pr_lifecycle.py" issue-edit',
     ):
         assert marker in template_script
         assert marker in root_script

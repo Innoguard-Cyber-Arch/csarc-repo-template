@@ -176,14 +176,23 @@ jobs:
         env:
           BASE_SHA: {% raw %}${{ github.event.pull_request.base.sha }}{% endraw %}
           HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha }}{% endraw %}
+          CHECKPOINT_ROLE: {% raw %}${{ steps.level.outputs.checkpoint }}{% endraw %}
           RELEASE_LEVEL: {% raw %}${{ steps.level.outputs.level }}{% endraw %}
         run: |
+          # This workflow always comes from the default branch, while the
+          # trusted scripts come from the PR base; pass a checkpoint role only
+          # when that base reports one so older bases keep their interface.
+          checkpoint_args=()
+          if [[ -n "$CHECKPOINT_ROLE" ]]; then
+            checkpoint_args=(--checkpoint-role "$CHECKPOINT_ROLE")
+          fi
           python3 "$RUNNER_TEMP/trusted-verification/release_policy.py" \
             verify-delivery-version \
             --root "$GITHUB_WORKSPACE" \
             --base-sha "$BASE_SHA" \
             --head-sha "$HEAD_SHA" \
-            --phase "$RELEASE_LEVEL"
+            --phase "$RELEASE_LEVEL" \
+            "${checkpoint_args[@]}"
       - name: Validate Milestone promotion version materialization
         if: {% raw %}${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'promote/m') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
         env:

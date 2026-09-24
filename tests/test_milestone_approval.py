@@ -87,7 +87,8 @@ def snapshot(
             "## Promotion\n\n<!-- Fill when ready to promote. -->\n"
         ),
         "user": {"login": "proposer", "type": "User"},
-        "labels": [{"name": "enhancement"}],
+        "labels": [],
+        "type": {"name": "Feature"},
         "updated_at": tracker_updated_at,
     }
     return {
@@ -124,6 +125,35 @@ def comment(
         "created_at": created_at,
         "updated_at": updated_at,
     }
+
+
+def test_feature_parent_must_share_the_sub_issue_milestone() -> None:
+    """A delivery cannot omit the Feature that its work Issue belongs to."""
+    value = snapshot()
+    value["issues"].append(
+        {
+            "number": 82,
+            "title": "Deliver one part",
+            "parent_issue_url": "https://api.github.com/repos/acme/project/issues/81",
+        }
+    )
+
+    assert tracker_errors(value) == [
+        "Feature parent #81 must share Milestone 8 with sub-issue(s) #82"
+    ]
+
+    value["issues"].append({"number": 81, "title": "Parent Feature"})
+    assert tracker_errors(value) == []
+
+
+def test_tracker_accepts_enhancement_fallback_without_native_type() -> None:
+    """Repositories without native Issue Types retain the portable label."""
+    value = snapshot()
+    item = value["issues"][0]
+    item["type"] = None
+    item["labels"] = [{"name": "enhancement"}]
+
+    assert tracker_errors(value) == []
 
 
 def test_non_proposer_approval_opens_the_gate() -> None:
@@ -372,7 +402,9 @@ def test_unresolved_objection_closes_the_gate() -> None:
     ("change", "message"),
     [
         ("title", "Create exactly one Issue titled"),
-        ("label", "enhancement label"),
+        ("type", "Feature type"),
+        ("duplicate-label", "work-kind label"),
+        ("fallback-label", "enhancement label"),
         ("proposal", "Proposal section"),
         ("link", "Lifecycle Issue"),
         ("due-date", "real due date"),
@@ -384,7 +416,12 @@ def test_tracker_contract_is_fail_closed(change: str, message: str) -> None:
     item = state["issues"][0]
     if change == "title":
         item["title"] = "Milestone 8: Wrong title"
-    elif change == "label":
+    elif change == "type":
+        item["type"] = {"name": "Task"}
+    elif change == "duplicate-label":
+        item["labels"] = [{"name": "enhancement"}]
+    elif change == "fallback-label":
+        item["type"] = None
         item["labels"] = []
     elif change == "proposal":
         item["body"] = item["body"].replace(
@@ -751,7 +788,9 @@ def test_preflight_passes_a_correctly_created_milestone(
     ("change", "message"),
     [
         ("title", "Create exactly one Issue titled"),
-        ("label", "enhancement label"),
+        ("type", "Feature type"),
+        ("duplicate-label", "work-kind label"),
+        ("fallback-label", "enhancement label"),
         ("proposal", "Proposal section"),
         ("link", "Lifecycle Issue"),
         ("due-date", "real due date"),
@@ -767,7 +806,12 @@ def test_preflight_fails_closed_on_the_same_contract_a_pr_would(
     item = state["issues"][0]
     if change == "title":
         item["title"] = "Milestone 8: Wrong title"
-    elif change == "label":
+    elif change == "type":
+        item["type"] = {"name": "Task"}
+    elif change == "duplicate-label":
+        item["labels"] = [{"name": "enhancement"}]
+    elif change == "fallback-label":
+        item["type"] = None
         item["labels"] = []
     elif change == "proposal":
         item["body"] = item["body"].replace(

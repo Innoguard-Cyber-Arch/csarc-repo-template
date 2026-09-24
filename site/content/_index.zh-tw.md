@@ -367,6 +367,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **整體：** 先把需求整理成一張可獨立完成與驗證的 Issue。
 - **工作分支：** 開始實作時，每張 Issue 建立一個 `type/<Issue>-short-slug` 短期分支，不混入其他工作。
 - **里程碑：** 多張工作有共同目標、期限或交付批次時才建立，並配一張生命週期追蹤 Issue。
+  - 研究或 Feature 擴展成這個交付時，原始 Feature、leaf Issues 與其 PR 都掛入同一個里程碑。
   - 標題使用 `Milestone <編號>: <里程碑名稱>`；冒號後須與里程碑名稱完全相同。
   - 核准、反駁與提前終止寫在內文或留言，不放進標題。
   - 至少一位非提案者同意，且沒有尚未解決的反駁，才開始執行。
@@ -580,7 +581,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< disclosure key="pr-version-intent" title="PR 標題、分支與例外" >}}
 - 工作分支使用 `type/<Issue>-short-slug`，並連回同號未結案 Issue。
 - PR 標題使用 Angular／Conventional Commits 格式：`type(scope)!: English summary`。type 可用 `feat` 新功能、`fix` 修錯、`docs` 文件、`refactor` 重構、`test` 測試、`build` 建置／相依、`ci` 自動化、`chore` 維護、`revert` 撤回；scope 與 `!` 可省略。版本意圖為 `feat`＝minor、`fix`／`revert`＝patch、`!`＝breaking／major，其餘不主動升版。
-- 工作 Label 與里程碑要和 Issue 一致；PR 作者必須列為負責人。
+- PR 使用一個由 Issue Type（或 Type 不可用時的 fallback Label）推導的小寫工作 Label；里程碑要和 Issue 一致，PR 作者必須列為負責人。
 - 里程碑工作進 `dev/m<里程碑>-*`；一般獨立工作直接進 `main`。
 - Milestone 的 Promotion PR 以精確雙親 bridge 同時納入 delivery source 與最新 main，不另開 final sync PR；`sync/main-to-*` 只保留給明列的提前相依與 `dev/i*` canary，不對所有分支 fan-out。
 - 只有明確標示的 standalone hotfix 可直接進 main；誰能合併由「規則治理」決定。
@@ -642,7 +643,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI、npm、GHCR 與 artifac
 {{< /disclosure >}}
 
 {{< disclosure key="hotfix-delivery" title="Hotfix 的審查、驗證與證據" >}}
-Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<Issue>-*` 與 `fix(scope): summary`，直接對 `main` 開 PR，且仍須 full verification。beta 以上若無法等候同儕，緊急路徑要求 Issue 提案者、exact-head 授權者與 merge actor 是同一位即時具有 admin 權限的人，並留下理由；合併後系統自動建立 `needs-manual-review` Issue。其他 PR 不得使用此例外。未公開的安全問題改用 GitHub Security Advisory 私密處理。
+Hotfix 建立不屬於里程碑的 Bug Issue，Issue 只加 `hotfix`，PR 使用 `bug`＋`hotfix`、`fix/<Issue>-*` 與 `fix(scope): summary`，直接對 `main` 開 PR，且仍須 full verification。beta 以上若無法等候同儕，緊急路徑要求 Issue 提案者、exact-head 授權者與 merge actor 是同一位即時具有 admin 權限的人，並留下理由；合併後系統自動建立 `needs-manual-review` Issue。其他 PR 不得使用此例外。未公開的安全問題改用 GitHub Security Advisory 私密處理。
 {{< /disclosure >}}
 
 {{< disclosure key="manual-release-boundary" title="自動發版的責任邊界" >}}
@@ -809,7 +810,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 - `template/` 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理與 dogfood 設定，配對檔案由 `scripts/sync-paired-files.sh` 從 root 產生 `template/` 副本。
 - `.csarc/config.yml` 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。
 - 新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自元件（模組），不建立組合專屬流程。
-- 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan；dry-run 不執行 target-owned helper 或 product hook。人核准同一份未漂移的 plan 後，CLI 才在隔離候選執行驗證，通過後寫入；第一張 PR 再由人核對來源、plan、diff 與本機結果。
+- 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan；dry-run 不執行 target-owned helper 或 product hook，並唯讀盤點 GitHub Issue Types 與 labels。報告以 `Bug`／`Feature`／`Task` 作為 Issue 工作類型，以小寫 `bug`／`enhancement`／`documentation` 作為 PR 分類與 fallback，列出可安全整批接受的對應和需要逐項確認的自訂項目，但不會改動遠端 metadata。人核准同一份未漂移的 plan 後，CLI 才在隔離候選執行驗證，通過後寫入；第一張 PR 再由人核對來源、plan、diff 與本機結果。
 - 第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先用 dry-run 預覽，候選內容與衝突全部驗證完成才修改 target，若有衝突就保持 repo 不變，修正後重跑，再由一般 PR 與 trusted-base checks 審查。
 - 若既有 repo 是直接由 Copier 建立，`_commit` 可能仍是 release tag 或短 SHA，`csarc status` 會分類為 `migrate` 並指出目前值與格式；維護者核對後以 `update --check --accept-legacy --from-release <tag>` 將它綁回經 immutability、attestation 與 signature 驗證的完整 SHA。已標示為 verified 卻不一致的 provenance 仍會 fail closed。
 - 可選的更新通知每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。

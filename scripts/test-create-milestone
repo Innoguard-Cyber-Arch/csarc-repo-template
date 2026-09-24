@@ -7,8 +7,9 @@ set -euo pipefail
 # --proposal-file, and a --description-file that does not exist; (2) on a
 # valid run, creates the Milestone with a real due date, derives the
 # tracker Issue title from the Milestone number GitHub itself returns
-# (never a hand-typed number), carries the required `enhancement` label
-# and a `Lifecycle Issue: #<N>` link in the Milestone description, and
+# (never a hand-typed number), carries the native Feature Type without a
+# redundant work-kind label and a `Lifecycle Issue: #<N>` link in the
+# Milestone description, and
 # reports the final `sync_milestone_state.py preflight` success; and
 # (3) when the created objects would still fail that same contract (e.g.
 # an empty Proposal section), reports the failure and manual-cleanup
@@ -226,7 +227,7 @@ def issue_create(argv: list[str]) -> int:
         "labels": [{"name": label}] if label else [],
         "user": {"login": (assignee or "tester").lstrip("@"), "type": "User"},
         "assignee": assignee,
-        "type": issue_type,
+        "type": {"name": issue_type} if issue_type else None,
         "state": "open",
         "state_reason": None,
         "milestone_number": milestone_number,
@@ -323,10 +324,23 @@ set -e
 grep -Fq -- '--description-file does not exist' <<<"$out"
 assert_no_gh_call
 
-# Case 5: a valid run with only required flags creates a Milestone with a
+# Case 5: a non-Feature tracker type is rejected before any GitHub write.
+new_state
+set +e
+out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
+  --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" \
+  --type Task 2>&1)"
+status=$?
+set -e
+[[ "$status" -eq 2 ]]
+grep -Fq -- '--type must be Feature' <<<"$out"
+assert_no_gh_call
+
+# Case 6: a valid run with only required flags creates a Milestone with a
 # real due date, a tracker Issue titled from the number GitHub returned
 # and attached to that same Milestone (Issue #741 bug 1), the required
-# `enhancement` label and default Feature type/@me assignee, a
+# default native Feature type without a duplicate work-kind label, the
+# @me assignee, a
 # `Lifecycle Issue: #<N>` link plus a placeholder Acceptance criteria
 # section (no --description-file given), and reports preflight success --
 # which is only reachable at all because the tracker carries the
@@ -349,18 +363,19 @@ grep -Fq 'Milestone #100 (due 2026-12-01) is ready: https://github.com/acme/proj
 [[ "$(state_field '.issues["900"].body')" == *'## Completion evidence'* ]]
 [[ "$(state_field '.issues["900"].body')" == *'## Early termination'* ]]
 [[ "$(state_field '.issues["900"].body')" == *'## Promotion'* ]]
-[[ "$(state_field '.issues["900"].labels[0].name')" == "enhancement" ]]
-[[ "$(state_field '.issues["900"].type')" == "Feature" ]]
+[[ "$(state_field '.issues["900"].labels | length')" == "0" ]]
+[[ "$(state_field '.issues["900"].type.name')" == "Feature" ]]
 [[ "$(state_field '.issues["900"].assignee')" == "@me" ]]
 
-# Case 6: --description-file, --assignee, and --type are honored, and the
+# Case 7: --description-file, --assignee, and an explicit Feature type are
+# honored, and the
 # placeholder Acceptance criteria reminder is not printed once a real
 # description is supplied.
 new_state
 out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
   --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" \
   --description-file "$fixture_root/description.txt" \
-  --assignee reviewer --type Task 2>&1)"
+  --assignee reviewer --type Feature 2>&1)"
 if grep -Fq 'No --description-file given' <<<"$out"; then
   echo "expected no placeholder reminder when --description-file is given" >&2
   exit 1
@@ -369,9 +384,9 @@ grep -Fq 'Milestone metadata is ready for work' <<<"$out"
 [[ "$(state_field '.milestones["100"].description')" == *'Lifecycle Issue: #900'* ]]
 [[ "$(state_field '.milestones["100"].description')" == *'Sample problem text.'* ]]
 [[ "$(state_field '.issues["900"].assignee')" == "reviewer" ]]
-[[ "$(state_field '.issues["900"].type')" == "Task" ]]
+[[ "$(state_field '.issues["900"].type.name')" == "Feature" ]]
 
-# Case 7: when the created tracker still fails
+# Case 8: when the created tracker still fails
 # sync_milestone_state.py's own contract (here: a comment-only, non-
 # meaningful Proposal section), the script reports that failure and
 # manual-cleanup guidance -- never a success -- even though the Milestone
@@ -391,7 +406,7 @@ grep -Fq 'gh issue delete 900 --repo acme/project' <<<"$out"
 grep -Fq 'gh api --method DELETE repos/acme/project/milestones/100' <<<"$out"
 [[ "$(state_field '.milestones["100"].due_on')" == "2026-12-01T12:00:00Z" ]]
 
-# Case 8: GitHub silently stores a due date one day earlier than requested
+# Case 9: GitHub silently stores a due date one day earlier than requested
 # (Issue #741 bug 2, reproduced here by the fake `gh`'s FAKE_GH_DUE_ON_BUG
 # toggle regardless of the send-at-noon mitigation) -- create-milestone's
 # post-write readback must catch the mismatch, fail closed, print both the
@@ -416,7 +431,7 @@ if grep -Fq 'is ready:' <<<"$out"; then
 fi
 [[ "$(state_field '.issues | length')" == "0" ]]
 
-# Case 9: a Milestone already exists sharing the requested --title before
+# Case 10: a Milestone already exists sharing the requested --title before
 # this run starts (e.g. an orphan left over from an earlier failed run --
 # exactly the scenario the cleanup guidance added above now warns about).
 # --milestone "$title" on the tracker's `gh issue create` then matches
@@ -444,7 +459,7 @@ fi
 [[ "$(state_field '.issues | length')" == "0" ]]
 [[ "$(state_field '.milestones | length')" == "2" ]]
 
-# Case 10: `gh issue create --milestone NAME` reports success, but (via
+# Case 11: `gh issue create --milestone NAME` reports success, but (via
 # FAKE_GH_WRONG_MILESTONE_ATTACH) actually attaches a different Milestone
 # number than the one NAME uniquely matched -- an edge case real gh has
 # not been observed to produce, but create-milestone's post-creation
@@ -469,4 +484,4 @@ if grep -Fq 'is ready:' <<<"$out"; then
   exit 1
 fi
 
-echo "create-milestone cases passed: 10"
+echo "create-milestone cases passed: 11"

@@ -1,6 +1,7 @@
 name: Milestone tracker｜里程碑生命週期追蹤
 description: 建立單一 Milestone 的生命週期追蹤 Issue（Proposal／Completion evidence／Early termination／Promotion 四段式格式）
 title: ""
+# Portable fallback; lifecycle removes it when native Issue Types work.
 labels: ["enhancement"]
 type: "Feature"
 body:

@@ -67,9 +67,8 @@ def run_governance_drift_check(
     """Run the drift wrapper with deterministic checker and GitHub responses."""
     fixture = tmp_path / "drift-fixture"
     scripts = fixture / "scripts"
-    scripts.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(ROOT / "scripts", scripts, dirs_exist_ok=True)
     drift_script = scripts / "check-governance-drift"
-    shutil.copy2(ROOT / "scripts/check-governance-drift", drift_script)
     settings_script = scripts / "apply-repository-settings.sh"
     settings_script.write_text(
         '#!/usr/bin/env bash\nprintf "%s\\n" "$CHECK_OUTPUT"\n'
@@ -88,8 +87,12 @@ printf '%s\n' "$*" >>"$GH_CAPTURE"
 case "$1 $2" in
   "issue list") printf '%s\n' "$GH_ISSUE_NUMBER" ;;
   "issue view") cat "$GH_BODY_STORE" ;;
+  "api repos/example/project/issues/"*)
+    printf '{"number":%s}\n' "${2##*/}"
+    ;;
   "issue create"|"issue edit")
     action="$2"
+    printf 'https://github.com/example/project/issues/6\n'
     shift 2
     while [[ $# -gt 0 ]]; do
       if [[ "$1" == "--body-file" ]]; then
@@ -98,7 +101,9 @@ case "$1 $2" in
       fi
       shift
     done
-    [[ "$action" == "edit" ]] && : >"$GH_EDIT_MARKER"
+    if [[ "$action" == "edit" ]]; then
+      : >"$GH_EDIT_MARKER"
+    fi
     ;;
   *) exit 1 ;;
 esac
@@ -116,6 +121,7 @@ esac
         "GH_EDIT_MARKER": str(tmp_path / "issue-edited"),
         "GH_ISSUE_NUMBER": issue_number,
         "GITHUB_ACTIONS": "true",
+        "GITHUB_REPOSITORY": "example/project",
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
     }
     result = subprocess.run(  # noqa: S603
@@ -246,7 +252,8 @@ def test_governance_drift_issue_is_created_once_and_only_updated_on_change(
     first_calls = first_capture.read_text(encoding="utf-8")
     assert "issue create" in first_calls
     assert "--assignee" not in first_calls
-    assert "--type" not in first_calls
+    assert "--type Bug" in first_calls
+    assert "--remove-label bug" in first_calls
 
     second, second_capture = run_governance_drift_check(
         tmp_path,
@@ -257,7 +264,7 @@ def test_governance_drift_issue_is_created_once_and_only_updated_on_change(
     )
     assert second.returncode == 1
     assert "Governance drift is unchanged" in second.stdout
-    assert "issue edit" not in second_capture.read_text(encoding="utf-8")
+    assert "--body-file" not in second_capture.read_text(encoding="utf-8")
 
     third, third_capture = run_governance_drift_check(
         tmp_path,
@@ -268,7 +275,7 @@ def test_governance_drift_issue_is_created_once_and_only_updated_on_change(
     )
     assert third.returncode == 1
     third_calls = third_capture.read_text(encoding="utf-8")
-    assert "issue edit" in third_calls
+    assert "--body-file" in third_calls
     assert "issue create" not in third_calls
 
 
