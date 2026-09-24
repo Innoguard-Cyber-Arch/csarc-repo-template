@@ -212,7 +212,13 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
 
 
 def test_ci_skips_non_actionable_pr_events_before_runner() -> None:
-    """Keep draft and unrelated-label churn out of the verify runner."""
+    """Skip Draft churn but keep every ready label event reporting `verify`.
+
+    Issue #1019: a skipped job left the newest CI run on the head without a
+    `verify` check, so GitHub reported the required check as expected even
+    though an earlier run on the same head had passed. A non-tier label now
+    runs the job, which reuses the same-head evidence.
+    """
     root_source = (REPO_ROOT / ".github/workflows/ci.yml").read_text(
         encoding="utf-8"
     )
@@ -235,29 +241,22 @@ def test_ci_skips_non_actionable_pr_events_before_runner() -> None:
         "${{ github.event_name != 'pull_request_target' || "
         "github.event.action == 'ready_for_review' || "
         "(github.event.action != 'converted_to_draft' && "
-        "github.event.pull_request.draft != true && "
-        "((github.event.action != 'labeled' && "
-        "github.event.action != 'unlabeled') || "
-        "github.event.label.name == '' || "
-        'contains(fromJSON(\'["promotion","hotfix",'
-        '"release-recovery"]\'), github.event.label.name))) }}'
-    )
-    expected_name = (
-        "${{ github.event_name == 'pull_request_target' && "
-        "(github.event.action == 'labeled' || "
-        "github.event.action == 'unlabeled') && "
-        "github.event.label.name != '' && "
-        '!contains(fromJSON(\'["promotion","hotfix",'
-        '"release-recovery"]\'), github.event.label.name) && '
-        "'ignored non-tier label' || 'verify' }}"
+        "github.event.pull_request.draft != true) }}"
     )
 
     for source in (root_source, rendered_template):
         workflow = yaml.safe_load(source)
+        triggers = workflow.get("on", workflow.get(True))
+        assert {"labeled", "unlabeled"} <= set(
+            triggers["pull_request_target"]["types"]
+        )
         job = workflow["jobs"]["verify"]
-        condition = " ".join(job["if"].split())
-        assert condition == expected
-        assert " ".join(job["name"].split()) == expected_name
+        assert job["name"] == "verify"
+        assert " ".join(job["if"].split()) == expected
+        assert "label.name" not in job["if"]
+        reuse = next(step for step in job["steps"] if step.get("id") == "reuse")
+        # Label events take the same-head reuse path instead of rerunning.
+        assert "edited|labeled|unlabeled|" in reuse["run"]
 
 
 def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
