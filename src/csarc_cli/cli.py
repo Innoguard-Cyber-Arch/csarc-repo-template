@@ -13,7 +13,7 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -5468,6 +5468,27 @@ def predicted_adoption_effects(target: Path, planned: Plan) -> Plan:
     )
 
 
+def preservable_dirty_paths(
+    changes: Sequence[str],
+    dirty_paths: Sequence[str],
+    preserve: Sequence[str],
+) -> tuple[str, ...]:
+    """Return dirty paths an adoption may carry through unchanged.
+
+    Only tracked, unstaged content modifications (porcelain " M") of files
+    the plan already preserves qualify. Any staged, untracked, deleted, or
+    type-changed entry, or a dirty path outside the preserve set, disables
+    the exception for the whole working tree.
+    """
+    if (
+        dirty_paths
+        and all(change[:2] == " M" for change in changes)
+        and set(dirty_paths).issubset(preserve)
+    ):
+        return tuple(dirty_paths)
+    return ()
+
+
 def build_adoption_plan(
     stage: Path,
     candidate: Path,
@@ -5488,12 +5509,8 @@ def build_adoption_plan(
     dirty_paths = tuple(sorted(git_changed_paths(target))) if changes else ()
     merged = apply_adoption_policies(stage, target)
     planned = compare_stage(stage, target, adopt=True, merged_paths=merged)
-    preserved_dirty_paths = (
-        dirty_paths
-        if dirty_paths
-        and all(change[:2] == " M" for change in changes)
-        and set(dirty_paths).issubset(planned.preserve)
-        else ()
+    preserved_dirty_paths = preservable_dirty_paths(
+        changes, dirty_paths, planned.preserve
     )
     candidate_allowed = not changes or bool(preserved_dirty_paths)
     artifacts: dict[str, str] = {}

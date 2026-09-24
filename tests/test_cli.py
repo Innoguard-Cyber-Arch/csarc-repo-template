@@ -2106,9 +2106,10 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     finalize_report = finalize_plan_path(project).with_name(
         cli.ADOPTION_REPORT_BASENAME + ".md"
     )
-    assert "## Work-item mapping guidance" in finalize_report.read_text(
-        encoding="utf-8"
-    )
+    finalize_markdown = finalize_report.read_text(encoding="utf-8")
+    assert "## Work-item mapping guidance" in finalize_markdown
+    assert "Adoption applied: `false`" in finalize_markdown
+    assert "## Adoption applied" not in finalize_markdown
     assert git(project, "status", "--porcelain") == pending_status
     assert (
         main(
@@ -2141,146 +2142,153 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     assert (project / "uv.lock").is_file()
     assert (project / cli.PROVENANCE_FILE).is_file()
     assert not (project / cli.PENDING_ADOPTION_FILE).exists()
+    # Finalize records the post-adoption state in the same report file
+    # (formerly a separate pending-adoption run; merged by Issue #998).
+    after_markdown = finalize_report.read_text(encoding="utf-8")
+    assert "Decision: Adopted" in after_markdown
+    assert "Adoption applied: `true`" in after_markdown
+    assert "## Adoption applied" in after_markdown
+    applied = json.loads(
+        finalize_plan_path(project).read_text(encoding="utf-8")
+    )
+    assert applied["adoption"]["applied"] is True
+    assert isinstance(applied["adoption"]["applied_at"], str)
 
 
 @pytest.mark.large
-def test_adopt_finalize_rejects_answer_drift(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_adopt_finalize_dry_run_rejects_each_checkpoint_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Never complete an adoption whose saved Copier answers changed."""
-    _, project = initialize_pending_adoption(tmp_path)
-    answers = project / ".copier-answers.yml"
-    answers.write_text(
-        answers.read_text(encoding="utf-8") + "# unexpected edit\n",
-        encoding="utf-8",
-    )
+    """Reject every drift from the pending checkpoint and keep it resumable.
 
-    assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--finalize",
-                "--dry-run",
-                *replay_authorization(project / cli.PENDING_ADOPTION_FILE),
-            ]
-        )
-        == 2
-    )
-    assert "Copier answers changed" in capsys.readouterr().err
-    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
-    assert not (project / cli.PROVENANCE_FILE).exists()
-
-
-@pytest.mark.large
-def test_adopt_finalize_rejects_source_and_managed_file_drift(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Require the original source and every copied managed file."""
+    Issue #998 collapsed five runs that each built the same pending
+    adoption to inject one drift. Each drift below is applied alone to the
+    one shared checkpoint, rejected by a real `adopt --finalize --dry-run`,
+    and then restored byte-for-byte so the next case sees only its own
+    drift. Every rejection must leave the checkpoint in place and write no
+    provenance.
+    """
     source, project = initialize_pending_adoption(tmp_path)
+    pending = project / cli.PENDING_ADOPTION_FILE
+
+    def rejected(expected: str) -> None:
+        capsys.readouterr()
+        assert replay_finalize(project, "--dry-run") == 2
+        assert expected in capsys.readouterr().err
+        assert pending.is_file()
+        assert not (project / cli.PROVENANCE_FILE).exists()
+
+    # Saved Copier answers changed.
+    answers = project / ".copier-answers.yml"
+    original_answers = answers.read_bytes()
+    answers.write_bytes(original_answers + b"# unexpected edit\n")
+    rejected("Copier answers changed")
+    answers.write_bytes(original_answers)
+
+    # The original unreleased template source is gone.
     unavailable_source = tmp_path / "template-source-moved"
     source.rename(unavailable_source)
-
-    assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--finalize",
-                "--dry-run",
-                *replay_authorization(project / cli.PENDING_ADOPTION_FILE),
-            ]
-        )
-        == 2
-    )
-    assert "template source is unavailable" in capsys.readouterr().err
+    rejected("template source is unavailable")
     unavailable_source.rename(source)
-    (project / "managed.txt").write_text(
-        "unexpected managed edit\n", encoding="utf-8"
-    )
 
-    assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--finalize",
-                "--dry-run",
-                *replay_authorization(project / cli.PENDING_ADOPTION_FILE),
-            ]
+    # A copied managed file changed.
+    managed = project / "managed.txt"
+    original_managed = managed.read_bytes()
+    managed.write_text("unexpected managed edit\n", encoding="utf-8")
+    rejected("Managed adoption file drifted")
+    managed.write_bytes(original_managed)
+
+    # A template-managed file adoption preserved changed.
+    verify = project / "scripts" / "verify"
+    original_verify = verify.read_bytes()
+    verify.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    rejected("Managed adoption file drifted: scripts/verify")
+    verify.write_bytes(original_verify)
+
+    # The live GitHub repository context differs from the checkpoint.
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            cli,
+            "repository_context",
+            lambda *args, **kwargs: cli.RepositoryContext(
+                "different/repository",
+                "different",
+                "organization",
+                "private",
+                "github",
+                True,
+            ),
         )
-        == 2
-    )
-    assert "Managed adoption file drifted" in capsys.readouterr().err
-    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
-    assert not (project / cli.PROVENANCE_FILE).exists()
+        rejected("origin or visibility changed")
+
+    # Live work-item metadata differs from the checkpoint.
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            cli,
+            "inspect_work_item_mapping",
+            lambda *_: {
+                "defaults": [],
+                "issue_type_state": "available",
+                "issue_types": [],
+                "label_state": "available",
+                "labels": [],
+                "mutation": "none",
+                "reason": "Different live metadata.",
+                "review": "accept-safe",
+                "state": "available",
+            },
+        )
+        rejected("work-item metadata drifted")
+
+    # With every drift restored, the same checkpoint is still resumable.
+    capsys.readouterr()
+    assert replay_finalize(project, "--dry-run") == 0
 
 
 @pytest.mark.large
-def test_adopt_finalize_rejects_preserved_managed_file_drift(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Fingerprint template-managed files that adoption preserved."""
-    _, project = initialize_pending_adoption(tmp_path)
-    write_executable(
-        project / "scripts" / "verify",
-        "#!/usr/bin/env bash\nexit 0\n",
-    )
-
-    assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--finalize",
-                "--dry-run",
-                *replay_authorization(project / cli.PENDING_ADOPTION_FILE),
-            ]
-        )
-        == 2
-    )
-    assert "Managed adoption file drifted: scripts/verify" in (
-        capsys.readouterr().err
-    )
-    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
-    assert not (project / cli.PROVENANCE_FILE).exists()
-
-
-@pytest.mark.large
-def test_adopt_finalize_rejects_repository_drift(
+def test_adopt_finalize_apply_rechecks_state_before_write(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Do not finalize against a different GitHub repository context."""
-    _, project = initialize_pending_adoption(tmp_path)
-    monkeypatch.setattr(
-        cli,
-        "repository_context",
-        lambda *args, **kwargs: cli.RepositoryContext(
-            "different/repository",
-            "different",
-            "organization",
-            "private",
-            "github",
-            True,
-        ),
-    )
+    """Reject every finalize apply race and keep an actionable checkpoint.
 
-    assert replay_finalize(project, "--dry-run") == 2
-    assert "origin or visibility changed" in capsys.readouterr().err
-    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    Issue #998 collapsed four runs that each built the same pending
+    adoption and second-stage plan to inject one apply-time failure. The
+    shared plan is replayed once per case below; every case must fail
+    closed, keep the checkpoint, and write no provenance, so the next case
+    replays the same untouched state:
 
-
-@pytest.mark.large
-def test_adopt_finalize_rechecks_repository_context_after_confirmation(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Reject repository context drift while finalize waits for approval."""
+    1. an unexpected worktree file outside the pending allowlist;
+    2. repository context drift while confirmation is pending;
+    3. live work-item metadata drift immediately before the write;
+    4. a failed candidate verification, which must explain how to retry.
+    """
     _, project = initialize_pending_adoption(tmp_path)
     assert replay_finalize(project, "--dry-run") == 0
+    plan = finalize_plan_path(project)
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["verification"] == "pending-authorization"
+    apply_plan = ["--apply-plan", str(plan)]
+
+    def assert_pending_kept(expected: str) -> None:
+        assert expected in capsys.readouterr().err
+        assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+        assert not (project / cli.PROVENANCE_FILE).exists()
+
+    # 1. A file outside the complete pending adoption allowlist.
+    unexpected = project / "unexpected.txt"
+    unexpected.write_text("not reviewed\n", encoding="utf-8")
+    capsys.readouterr()
+    assert (
+        replay_finalize(project, *apply_plan, "--yes", "--non-interactive") == 2
+    )
+    assert_pending_kept("Repository changed after the plan was created")
+    unexpected.unlink()
+
+    # 2. Repository context drift while finalize waits for approval.
     stable = cli.RepositoryContext(
         None,
         None,
@@ -2291,9 +2299,6 @@ def test_adopt_finalize_rechecks_repository_context_after_confirmation(
         "No GitHub origin or GH_REPO was found.",
     )
     current = [stable]
-    monkeypatch.setattr(
-        cli, "repository_context", lambda *args, **kwargs: current[0]
-    )
 
     def drift_during_confirmation(_: str) -> str:
         current[0] = cli.RepositoryContext(
@@ -2306,56 +2311,54 @@ def test_adopt_finalize_rechecks_repository_context_after_confirmation(
         )
         return "yes"
 
-    monkeypatch.setattr("builtins.input", drift_during_confirmation)
-    assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--finalize",
-                "--apply-plan",
-                str(finalize_plan_path(project)),
-                *replay_authorization(finalize_plan_path(project)),
-            ]
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            cli, "repository_context", lambda *args, **kwargs: current[0]
         )
-        == 2
+        patch.setattr("builtins.input", drift_during_confirmation)
+        assert replay_finalize(project, *apply_plan) == 2
+    assert_pending_kept("Repository context changed")
+
+    # 3. Live mapping metadata drifts between confirmation and the write.
+    pending = json.loads(
+        (project / cli.PENDING_ADOPTION_FILE).read_text(encoding="utf-8")
     )
-    assert "Repository context changed" in capsys.readouterr().err
-    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
-    assert not (project / cli.PROVENANCE_FILE).exists()
+    observed = pending["work_item_mapping"]
+    inspections = 0
 
+    def inspect(*_: object) -> dict[str, object]:
+        nonlocal inspections
+        inspections += 1
+        result = json.loads(json.dumps(observed))
+        if inspections == 2:
+            result["reason"] = "Metadata changed after confirmation."
+        return result
 
-@pytest.mark.large
-def test_adopt_finalize_failure_keeps_actionable_pending_state(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Keep the checkpoint and explain how to retry a failed verification."""
-    _, project = initialize_pending_adoption(tmp_path)
-    monkeypatch.setattr(
-        cli,
-        "verify_project",
-        lambda _: (_ for _ in ()).throw(CliError("fixture failure")),
-    )
-
-    assert replay_finalize(project, "--dry-run") == 0
-    plan = finalize_plan_path(project)
-    payload = json.loads(plan.read_text(encoding="utf-8"))
-    assert payload["adoption"]["verification"] == "pending-authorization"
-    assert (
-        replay_finalize(
-            project,
-            "--apply-plan",
-            str(plan),
-            "--yes",
-            "--non-interactive",
+    with monkeypatch.context() as patch:
+        patch.setattr(cli, "inspect_work_item_mapping", inspect)
+        assert (
+            replay_finalize(project, *apply_plan, "--yes", "--non-interactive")
+            == 2
         )
-        == 2
-    )
-    assert "rerun csarc adopt --finalize" in capsys.readouterr().err
-    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
-    assert not (project / cli.PROVENANCE_FILE).exists()
+    assert inspections == 2
+    assert_pending_kept("metadata drifted during finalize")
+
+    # 4. Candidate verification fails; the checkpoint explains the retry.
+    verified: list[Path] = []
+
+    def failing_verification(target: Path) -> dict[str, object]:
+        verified.append(target)
+        raise CliError("fixture failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(cli, "verify_project", failing_verification)
+        assert (
+            replay_finalize(project, *apply_plan, "--yes", "--non-interactive")
+            == 2
+        )
+    # Reaching verification proves the earlier cases left no drift behind.
+    assert len(verified) == 1
+    assert_pending_kept("rerun csarc adopt --finalize")
 
 
 @pytest.mark.large
@@ -2401,36 +2404,6 @@ def test_adopt_finalize_requires_matching_second_stage_plan(
     )
     assert manifest.read_bytes() != reviewed
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
-    assert not (project / cli.PROVENANCE_FILE).exists()
-
-
-@pytest.mark.large
-def test_adopt_finalize_rejects_unexpected_worktree_state(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Reject files outside the complete pending adoption allowlist."""
-    _, project = initialize_pending_adoption(tmp_path)
-    assert replay_finalize(project, "--dry-run") == 0
-    (project / "unexpected.txt").write_text("not reviewed\n", encoding="utf-8")
-
-    assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--finalize",
-                "--apply-plan",
-                str(finalize_plan_path(project)),
-                *replay_authorization(finalize_plan_path(project)),
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 2
-    )
-    assert "Repository changed after the plan was created" in (
-        capsys.readouterr().err
-    )
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
@@ -3745,61 +3718,100 @@ def test_adopt_blocks_hook_mutation_of_preserved_dirty_file(
     assert components.read_text(encoding="utf-8") == "authorized: dirty\n"
 
 
-@pytest.mark.large
-def test_adopt_rejects_staged_preserved_file(tmp_path: Path) -> None:
-    """Do not authorize staged state through the dirty-preserve exception."""
-    source, first_sha = make_template(tmp_path)
-    project = tmp_path / "staged-product"
+@pytest.mark.parametrize(
+    ("dirty_state", "expected_status", "preserved"),
+    [
+        ("modified", " M product.txt", ("product.txt",)),
+        ("staged", "M  product.txt", ()),
+        ("untracked", "?? extra.txt", ()),
+        ("deleted", " D product.txt", ()),
+        ("type", " T product.txt", ()),
+        ("outside-preserve", " M managed.txt", ()),
+    ],
+)
+def test_only_unstaged_modification_of_preserved_file_is_preservable(
+    tmp_path: Path,
+    dirty_state: str,
+    expected_status: str,
+    preserved: tuple[str, ...],
+) -> None:
+    """Classify each real Git dirty state through the adoption preserve rule.
+
+    Issue #998 moved these permutations off full Copier dry-runs: the
+    render proves nothing about which porcelain states qualify, so this
+    drives the real git_target_state/git_changed_paths readers into the
+    same preservable_dirty_paths rule build_adoption_plan uses. The
+    Copier-backed wiring (not-run-dirty, hook never runs) stays owned by
+    test_adopt_rejects_non_modified_dirty_state_without_running_hook.
+    """
+    project = tmp_path / f"dirty-{dirty_state}"
     project.mkdir()
     product = project / "product.txt"
-    product.write_text("clean\n", encoding="utf-8")
+    product.write_text("product\n", encoding="utf-8")
+    (project / "managed.txt").write_text("managed\n", encoding="utf-8")
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
     commit(project, "test: baseline")
-    product.write_text("staged\n", encoding="utf-8")
-    git(project, "add", "product.txt")
+    if dirty_state == "modified":
+        product.write_text("dirty\n", encoding="utf-8")
+    elif dirty_state == "staged":
+        product.write_text("staged\n", encoding="utf-8")
+        git(project, "add", "product.txt")
+    elif dirty_state == "untracked":
+        (project / "extra.txt").write_text("extra\n", encoding="utf-8")
+    elif dirty_state == "outside-preserve":
+        (project / "managed.txt").write_text("dirty\n", encoding="utf-8")
+    else:
+        product.unlink()
+        if dirty_state == "type":
+            product.symlink_to("other.txt")
 
+    _, changes = cli.git_target_state(project)
+    dirty_paths = tuple(sorted(cli.git_changed_paths(project)))
+
+    assert changes == (expected_status,)
+    # product.txt is the only path an adoption plan would preserve here;
+    # managed.txt stands in for a template-managed collision.
     assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--source",
-                str(source),
-                "--to",
-                first_sha,
-                "--allow-unreleased",
-                "--dry-run",
-            ]
+        cli.preservable_dirty_paths(changes, dirty_paths, ("product.txt",))
+        == preserved
+    )
+
+
+def test_preservable_dirty_paths_requires_every_change_to_qualify() -> None:
+    """One disqualifying entry disables the exception for the whole tree."""
+    assert cli.preservable_dirty_paths((), (), ("a.txt",)) == ()
+    assert cli.preservable_dirty_paths(
+        (" M a.txt", " M b.txt"), ("a.txt", "b.txt"), ("a.txt", "b.txt")
+    ) == ("a.txt", "b.txt")
+    assert (
+        cli.preservable_dirty_paths(
+            (" M a.txt", "?? b.txt"), ("a.txt", "b.txt"), ("a.txt", "b.txt")
         )
-        == 0
+        == ()
     )
-    plan = (
-        tmp_path
-        / "staged-product-csarc-adoption-report"
-        / cli.ADOPTION_PLAN_BASENAME
+    assert (
+        cli.preservable_dirty_paths(
+            (" M a.txt", " M b.txt"), ("a.txt", "b.txt"), ("a.txt",)
+        )
+        == ()
     )
-    payload = json.loads(plan.read_text(encoding="utf-8"))
-    assert payload["adoption"]["applicable"] is False
-    assert payload["adoption"]["verification"] == "not-run-dirty"
-    assert payload["adoption"]["preserved_dirty_paths"] == []
-    assert "product.txt" in payload["files"]["preserve"]
 
 
-@pytest.mark.parametrize(
-    ("dirty_state", "expected_status"),
-    [
-        ("untracked", "?? extra.txt"),
-        ("deleted", " D product.txt"),
-        ("type", " T product.txt"),
-    ],
-)
 @pytest.mark.large
-def test_adopt_rejects_non_modified_dirty_states_without_running_hook(
-    tmp_path: Path, dirty_state: str, expected_status: str
+def test_adopt_rejects_non_modified_dirty_state_without_running_hook(
+    tmp_path: Path,
 ) -> None:
-    """Only tracked unstaged modifications may use the preserve exception."""
+    """Only tracked unstaged modifications may use the preserve exception.
+
+    The single Copier-backed owner: an untracked file keeps the plan
+    review-only and the explicit hook never runs. The staged, deleted,
+    and type-change permutations are classified by
+    test_only_unstaged_modification_of_preserved_file_is_preservable.
+    """
+    dirty_state = "untracked"
+    expected_status = "?? extra.txt"
     source, first_sha = make_template(tmp_path)
     project = tmp_path / f"dirty-{dirty_state}"
     project.mkdir()
@@ -3815,12 +3827,7 @@ def test_adopt_rejects_non_modified_dirty_states_without_running_hook(
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
     commit(project, "test: baseline")
-    if dirty_state == "untracked":
-        (project / "extra.txt").write_text("extra\n", encoding="utf-8")
-    else:
-        product.unlink()
-        if dirty_state == "type":
-            product.symlink_to("other.txt")
+    (project / "extra.txt").write_text("extra\n", encoding="utf-8")
 
     assert (
         main(
@@ -3855,11 +3862,51 @@ def test_adopt_rejects_non_modified_dirty_states_without_running_hook(
 
 
 @pytest.mark.parametrize("drift", ["content", "mode", "path"])
+def test_target_snapshot_rejects_dirty_content_mode_and_path_drift(
+    tmp_path: Path, drift: str
+) -> None:
+    """Bind authorized dirty content, mode, and path state to one snapshot.
+
+    Issue #998 moved the mode and path permutations off full Copier
+    adoption runs: the apply-plan replay rejects them through this same
+    validate_target_snapshot call, so the render adds no evidence. The
+    Copier-backed wiring stays owned by
+    test_adopt_rejects_preserved_dirty_file_drift.
+    """
+    project = tmp_path / f"snapshot-{drift}"
+    project.mkdir()
+    product = project / "product.txt"
+    product.write_text("clean\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    product.write_text("reviewed dirty bytes\n", encoding="utf-8")
+    head, changes = cli.git_target_state(project)
+    expected = {
+        "target_head": head,
+        "target_changes": list(changes),
+        "target_files": cli.target_file_snapshot(project),
+    }
+    cli.validate_target_snapshot(project, expected)
+
+    if drift == "content":
+        product.write_text("drifted after review\n", encoding="utf-8")
+    elif drift == "mode":
+        product.chmod(product.stat().st_mode | stat.S_IXUSR)
+    else:
+        (project / "extra.txt").write_text("unexpected\n", encoding="utf-8")
+
+    with pytest.raises(CliError, match="changed after the plan was created"):
+        cli.validate_target_snapshot(project, expected)
+
+
 @pytest.mark.large
 def test_adopt_rejects_preserved_dirty_file_drift(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], drift: str
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Bind authorized dirty content, mode, and path state to the plan."""
+    """Bind authorized dirty bytes to the plan through a real replay."""
+    drift = "content"
     source, first_sha = make_template(tmp_path)
     project = tmp_path / f"dirty-{drift}-drift"
     project.mkdir()
@@ -3891,12 +3938,7 @@ def test_adopt_rejects_preserved_dirty_file_drift(
         / f"dirty-{drift}-drift-csarc-adoption-report"
         / cli.ADOPTION_PLAN_BASENAME
     )
-    if drift == "content":
-        product.write_text("drifted after review\n", encoding="utf-8")
-    elif drift == "mode":
-        product.chmod(product.stat().st_mode | stat.S_IXUSR)
-    else:
-        (project / "extra.txt").write_text("unexpected\n", encoding="utf-8")
+    product.write_text("drifted after review\n", encoding="utf-8")
 
     assert (
         main(
@@ -3971,10 +4013,19 @@ def test_adopt_rejects_race_between_comparison_and_snapshot(
 
 
 @pytest.mark.large
-def test_adopt_infers_unicode_repository_and_applies_exact_plan(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_adopt_apply_plan_updates_report_to_applied_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Infer the Git root and count provenance in a portable exact plan."""
+    """Infer a Unicode Git root, apply the exact plan, and update its report.
+
+    Issue #998 merged the Unicode/nested-directory target inference run
+    into this one: both built the same clean single-file product and
+    applied the same first-stage plan, so one real adoption now proves
+    target inference from a nested non-ASCII working directory, provenance
+    in the exact plan, lockfile creation only after approval, and the
+    in-place report update.
+    """
     source, revision = make_template(tmp_path)
     project = tmp_path / "product with space-測試"
     nested = project / "nested folder" / "子目錄"
@@ -3983,59 +4034,8 @@ def test_adopt_infers_unicode_repository_and_applies_exact_plan(
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
     (project / "product.txt").write_text("product\n", encoding="utf-8")
-    commit(project, "test: unicode product")
+    commit(project, "test: applied unicode product")
     monkeypatch.chdir(nested)
-
-    arguments = [
-        "adopt",
-        "--source",
-        str(source),
-        "--to",
-        revision,
-        "--allow-unreleased",
-        "--dry-run",
-    ]
-    assert main(arguments) == 0
-    plan_path = (
-        project.parent
-        / f"{project.name}-csarc-adoption-report"
-        / cli.ADOPTION_PLAN_BASENAME
-    )
-    payload = json.loads(plan_path.read_text(encoding="utf-8"))
-    assert payload["target"] == str(project)
-    assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
-    assert payload["adoption"]["artifacts"][cli.PROVENANCE_FILE.as_posix()]
-
-    assert (
-        main(
-            [
-                "adopt",
-                "--apply-plan",
-                str(plan_path),
-                *replay_authorization(plan_path),
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 0
-    )
-    assert (project / cli.PROVENANCE_FILE).is_file()
-
-
-@pytest.mark.large
-def test_adopt_apply_plan_updates_report_to_applied_state(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Update the same dry-run report in place once adoption is applied."""
-    source, revision = make_template(tmp_path)
-    project = tmp_path / "applied-product"
-    project.mkdir()
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    (project / "product.txt").write_text("product\n", encoding="utf-8")
-    commit(project, "test: applied product")
     lockfile_calls: list[Path] = []
 
     def create_lockfile(target: Path, _answers: dict[str, object]) -> None:
@@ -4046,7 +4046,6 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
 
     arguments = [
         "adopt",
-        str(project),
         "--source",
         str(source),
         "--to",
@@ -4058,7 +4057,7 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     ]
     assert main(arguments) == 0
     assert lockfile_calls == []
-    report_dir = tmp_path / "applied-product-csarc-adoption-report"
+    report_dir = project.parent / f"{project.name}-csarc-adoption-report"
     markdown_path = report_dir / "csarc-adoption-dry-run.md"
     plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
     before_markdown = markdown_path.read_text(encoding="utf-8")
@@ -4067,6 +4066,11 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     assert "## If you approve" in before_markdown
     assert "## Adoption applied" not in before_markdown
     before_payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert before_payload["target"] == str(project)
+    assert cli.PROVENANCE_FILE.as_posix() in before_payload["files"]["add"]
+    assert before_payload["adoption"]["artifacts"][
+        cli.PROVENANCE_FILE.as_posix()
+    ]
     assert "applied" not in before_payload["adoption"]
     assert "uv.lock" in before_payload["files"]["add"]
 
@@ -4074,7 +4078,6 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
         main(
             [
                 "adopt",
-                str(project),
                 "--apply-plan",
                 str(plan_path),
                 *replay_authorization(plan_path),
@@ -4086,6 +4089,7 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     )
     assert len(lockfile_calls) == 1
     assert (project / "uv.lock").read_text(encoding="utf-8") == "approved\n"
+    assert (project / cli.PROVENANCE_FILE).is_file()
 
     after_markdown = markdown_path.read_text(encoding="utf-8")
     assert "Decision: Adopted" in after_markdown
@@ -4170,47 +4174,6 @@ def test_adopt_rejects_mapping_drift_during_task_bearing_render(
         capsys.readouterr().err
     )
     assert not (project / ".copier-answers.yml").exists()
-
-
-@pytest.mark.large
-def test_adopt_finalize_apply_updates_report_to_applied_state(
-    tmp_path: Path,
-) -> None:
-    """Finalize records the post-adoption state in the same report file."""
-    _, project = initialize_pending_adoption(tmp_path)
-    report_dir = tmp_path / "pending-product-csarc-adoption-report"
-    markdown_path = report_dir / "csarc-adoption-dry-run.md"
-
-    assert replay_finalize(project, "--dry-run") == 0
-    before_markdown = markdown_path.read_text(encoding="utf-8")
-    assert "Adoption applied: `false`" in before_markdown
-    assert "## Adoption applied" not in before_markdown
-
-    assert (
-        main(
-            [
-                "adopt",
-                str(project),
-                "--finalize",
-                "--apply-plan",
-                str(finalize_plan_path(project)),
-                *replay_authorization(finalize_plan_path(project)),
-                "--non-interactive",
-                "--yes",
-            ]
-        )
-        == 0
-    )
-
-    after_markdown = markdown_path.read_text(encoding="utf-8")
-    assert "Decision: Adopted" in after_markdown
-    assert "Adoption applied: `true`" in after_markdown
-    assert "## Adoption applied" in after_markdown
-    payload = json.loads(
-        (report_dir / cli.ADOPTION_PLAN_BASENAME).read_text(encoding="utf-8")
-    )
-    assert payload["adoption"]["applied"] is True
-    assert isinstance(payload["adoption"]["applied_at"], str)
 
 
 @pytest.mark.large
@@ -5107,79 +5070,6 @@ def test_adoption_records_and_replays_explicit_project_hook(
     assert update["answers"]["project_verification_hook"] == (
         "scripts/verify-other"
     )
-
-
-@pytest.mark.large
-def test_adopt_finalize_rejects_work_item_mapping_drift(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Reject live GitHub metadata that differs from the pending checkpoint."""
-    _, project = initialize_pending_adoption(tmp_path)
-    capsys.readouterr()
-    monkeypatch.setattr(
-        cli,
-        "inspect_work_item_mapping",
-        lambda *_: {
-            "defaults": [],
-            "issue_type_state": "available",
-            "issue_types": [],
-            "label_state": "available",
-            "labels": [],
-            "mutation": "none",
-            "reason": "Different live metadata.",
-            "review": "accept-safe",
-            "state": "available",
-        },
-    )
-
-    assert replay_finalize(project, "--dry-run") == 2
-    assert "work-item metadata drifted" in capsys.readouterr().err
-    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
-
-
-@pytest.mark.large
-def test_adopt_finalize_rechecks_mapping_immediately_before_write(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Close the confirmation-to-write race for live mapping metadata."""
-    _, project = initialize_pending_adoption(tmp_path)
-    assert replay_finalize(project, "--dry-run") == 0
-    plan_path = finalize_plan_path(project)
-    pending = json.loads(
-        (project / cli.PENDING_ADOPTION_FILE).read_text(encoding="utf-8")
-    )
-    observed = pending["work_item_mapping"]
-    inspections = 0
-
-    def inspect(*_: object) -> dict[str, object]:
-        nonlocal inspections
-        inspections += 1
-        result = json.loads(json.dumps(observed))
-        if inspections == 2:
-            result["reason"] = "Metadata changed after confirmation."
-        return result
-
-    monkeypatch.setattr(cli, "inspect_work_item_mapping", inspect)
-    capsys.readouterr()
-
-    assert (
-        replay_finalize(
-            project,
-            "--apply-plan",
-            str(plan_path),
-            "--yes",
-            "--non-interactive",
-        )
-        == 2
-    )
-    assert inspections == 2
-    assert "metadata drifted during finalize" in capsys.readouterr().err
-    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
-    assert not (project / cli.PROVENANCE_FILE).is_file()
 
 
 def test_explicit_project_hook_runs_once_without_using_run_command(
@@ -6503,58 +6393,31 @@ def test_update_reinstall_honors_an_explicit_to_target_over_latest(
 
 
 @pytest.mark.large
-def test_update_migrates_legacy_copier_answers_to_single_config(
+def test_update_migrates_complete_legacy_layout_in_one_patch(
     tmp_path: Path,
 ) -> None:
-    """Move legacy Copier tracking into the canonical repository config."""
-    source, project, _ = initialize_project(tmp_path)
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    commit(project, "test: generated legacy project")
+    """Migrate one realistic legacy repository through a single real update.
 
-    copier_config = source / "copier.yml"
-    copier_config.write_text(
-        copier_config.read_text(encoding="utf-8").replace(
-            "_answers_file: .copier-answers.yml",
-            "_answers_file: .csarc/config.yml",
-        ),
-        encoding="utf-8",
-    )
-    verify = source / "template/scripts/verify"
-    verify.write_text(
-        verify.read_text(encoding="utf-8").replace(
-            ".copier-answers.yml", ".csarc/config.yml"
-        ),
-        encoding="utf-8",
-    )
-    second_sha = commit(source, "test: use one repository config")
+    This is the one Copier-backed owner of the legacy layout migration
+    (Issue #998 collapsed three runs that each exercised one slice of the
+    same legacy fixture). The pure move and retirement planning
+    permutations stay in
+    test_update_moves_legacy_generated_layout_without_overwriting; this run
+    proves the wiring those helpers cannot:
 
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                second_sha,
-                "--allow-unreleased",
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 0
-    )
-    config = project / ".csarc/config.yml"
-    assert config.is_file()
-    assert f"_commit: {second_sha}" in config.read_text(encoding="utf-8")
-    assert not (project / ".copier-answers.yml").exists()
-
-
-@pytest.mark.large
-def test_update_migrates_legacy_generated_scripts_in_one_patch(
-    tmp_path: Path,
-) -> None:
-    """Move legacy managed scripts while preserving product tools."""
+    - legacy Copier tracking (.copier-answers.yml) becomes the canonical
+      .csarc/config.yml pinned to the new commit;
+    - that answers move is seeded *before* the target template's own
+      finalize tasks run inside the same `copier update` subprocess. The
+      fixture task fails unless .csarc/config.yml already exists, which is
+      exactly what scripts/render_site.py needs in the real template; a
+      rename after the subprocess returns would fail mid-update;
+    - legacy generated scripts move into .csarc/scripts while a product
+      tool under scripts/ is preserved;
+    - retired generated configs and the unused .csarc/profile.json (every
+      field it held already lives in the unified answers) are removed in
+      the same patch.
+    """
     source, project, _ = initialize_project(tmp_path)
     product_tool = project / "scripts/product-tool"
     product_tool.write_text("project owned\n", encoding="utf-8")
@@ -6562,65 +6425,6 @@ def test_update_migrates_legacy_generated_scripts_in_one_patch(
         (project / name).write_text(
             "legacy generated config\n", encoding="utf-8"
         )
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    commit(project, "test: legacy generated project")
-
-    generated_scripts = source / "template/.csarc/scripts"
-    generated_scripts.mkdir(parents=True)
-    for name in ("verify", "apply-repository-settings.sh"):
-        legacy = source / "template/scripts" / name
-        legacy.replace(generated_scripts / name)
-    second_sha = commit(source, "test: consolidate generated scripts")
-
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                second_sha,
-                "--allow-unreleased",
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 0
-    )
-    assert (project / ".csarc/scripts/verify").is_file()
-    assert (project / ".csarc/scripts/apply-repository-settings.sh").is_file()
-    assert not (project / "scripts/verify").exists()
-    assert not (project / ".gitleaks.toml").exists()
-    assert not (project / ".pre-commit-config.yaml").exists()
-    assert not (project / "zizmor.yml").exists()
-    assert product_tool.read_text(encoding="utf-8") == "project owned\n"
-
-
-@pytest.mark.large
-def test_update_migrates_legacy_profile_json_before_finalize_tasks(
-    tmp_path: Path,
-) -> None:
-    """Seed the new config path before Copier's own finalize tasks run.
-
-    A repository adopted before .csarc/config.yml existed has both a
-    .copier-answers.yml (Copier's own tracking) and a .csarc/profile.json
-    (an older, now-unused derivative of a subset of those same answers:
-    branch strategy, language modules, a since-removed container feature).
-    Every field profile.json held is already part of the unified answers
-    file, so migrating it is a matter of retiring it, not reading it.
-
-    The real failure this reproduces is a timing bug, not a missing
-    rename: the target template version's own finalize tasks run inside
-    the same `copier update` subprocess call and read .csarc/config.yml
-    directly (this is exactly what scripts/render_site.py does in the
-    real template). If the answers file is renamed only *after* that
-    subprocess returns, those tasks fail mid-update on a legacy
-    repository that still only has .copier-answers.yml. This template
-    fixture adds an equivalent finalize task to prove the seeding now
-    happens early enough for it to see the migrated file.
-    """
-    source, project, _ = initialize_project(tmp_path)
     (project / ".csarc/profile.json").write_text(
         json.dumps(
             {
@@ -6641,7 +6445,7 @@ def test_update_migrates_legacy_profile_json_before_finalize_tasks(
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
-    commit(project, "test: generated legacy project with profile.json")
+    commit(project, "test: generated legacy project")
 
     copier_config = source / "copier.yml"
     config = yaml.safe_load(copier_config.read_text(encoding="utf-8"))
@@ -6660,14 +6464,19 @@ def test_update_migrates_legacy_profile_json_before_finalize_tasks(
     copier_config.write_text(
         yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
     )
-    verify = source / "template/scripts/verify"
+    generated_scripts = source / "template/.csarc/scripts"
+    generated_scripts.mkdir(parents=True)
+    for name in ("verify", "apply-repository-settings.sh"):
+        legacy = source / "template/scripts" / name
+        legacy.replace(generated_scripts / name)
+    verify = generated_scripts / "verify"
     verify.write_text(
         verify.read_text(encoding="utf-8").replace(
             ".copier-answers.yml", ".csarc/config.yml"
         ),
         encoding="utf-8",
     )
-    second_sha = commit(source, "test: require config.yml during finalize")
+    second_sha = commit(source, "test: consolidate the legacy layout")
 
     assert (
         main(
@@ -6688,13 +6497,20 @@ def test_update_migrates_legacy_profile_json_before_finalize_tasks(
     assert f"_commit: {second_sha}" in config_path.read_text(encoding="utf-8")
     assert not (project / ".copier-answers.yml").exists()
     assert not (project / ".csarc/profile.json").exists()
+    assert (project / ".csarc/scripts/verify").is_file()
+    assert (project / ".csarc/scripts/apply-repository-settings.sh").is_file()
+    assert not (project / "scripts/verify").exists()
+    assert not (project / ".gitleaks.toml").exists()
+    assert not (project / ".pre-commit-config.yaml").exists()
+    assert not (project / "zizmor.yml").exists()
+    assert product_tool.read_text(encoding="utf-8") == "project owned\n"
 
 
 @pytest.mark.large
 def test_update_check_validates_hook_without_running_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Validate the configured update hook while keeping check read-only."""
+    """Validate valid and unsafe update hooks while keeping check read-only."""
     source, project, _ = initialize_project(tmp_path)
     capsys.readouterr()
     answers = project / ".copier-answers.yml"
@@ -6748,43 +6564,21 @@ def test_update_check_validates_hook_without_running_it(
     assert not (project / "hook-ran").exists()
     assert git(project, "status", "--porcelain") == ""
 
-
-@pytest.mark.parametrize(
-    ("hook_path", "error"),
-    [
-        ("scripts/missing", "does not exist"),
-        ("../verify", "safe repository-relative"),
-    ],
-)
-@pytest.mark.large
-def test_update_check_rejects_invalid_hook_without_writes(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    hook_path: str,
-    error: str,
-) -> None:
-    """Reject missing or unsafe hooks during the read-only update check."""
-    source, project, _ = initialize_project(tmp_path)
-    capsys.readouterr()
-    answers = project / ".copier-answers.yml"
+    # The same read-only check must reject an unsafe hook without writes.
+    # Every unsafe/unusable path shape is owned by the direct validator
+    # test test_project_hook_rejects_unsafe_or_unusable_paths; this run
+    # only proves the update-check wiring fails closed (Issue #998).
     answers.write_text(
         re.sub(
             r"^project_verification_hook:.*$",
-            f"project_verification_hook: {hook_path}",
+            "project_verification_hook: ../verify",
             answers.read_text(encoding="utf-8"),
             flags=re.M,
         ),
         encoding="utf-8",
     )
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
     base = commit(project, "test: invalid update hook")
     before_files = cli.target_file_snapshot(project)
-    (source / "template" / "managed.txt").write_text(
-        "template version two\n", encoding="utf-8"
-    )
-    revision = commit(source, "test: template version two")
 
     assert (
         main(
@@ -6801,7 +6595,7 @@ def test_update_check_rejects_invalid_hook_without_writes(
         == 2
     )
     captured = capsys.readouterr()
-    assert error in captured.out + captured.err
+    assert "safe repository-relative" in captured.out + captured.err
     assert git(project, "rev-parse", "HEAD") == base
     assert git(project, "status", "--porcelain") == ""
     assert cli.target_file_snapshot(project) == before_files
@@ -6861,63 +6655,36 @@ def test_update_hook_failure_leaves_target_unchanged(
 
 
 @pytest.mark.large
-def test_update_rechecks_committed_head_after_confirmation(
+def test_update_rechecks_target_and_context_before_writing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Reject a clean committed target change made during confirmation."""
+    """Reject every target or context race between planning and writing.
+
+    Issue #998 collapsed three runs that each built the same generated
+    project and template revision to inject one race. Each race below
+    runs a real `csarc update` against that shared fixture; every one must
+    fail closed before Copier writes, so the next case starts from an
+    untouched managed file:
+
+    1. repository origin/visibility drifts while confirmation is pending;
+    2. a clean committed product change lands during confirmation;
+    3. the target changes while repository context is being refreshed
+       (the snapshot must be rechecked *after* the context query).
+    """
     source, project, _ = initialize_project(tmp_path)
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
-    (project / "product.txt").write_text("before\n", encoding="utf-8")
+    product = project / "product.txt"
+    product.write_text("before\n", encoding="utf-8")
     commit(project, "test: generated project")
     (source / "template" / "managed.txt").write_text(
         "template version two\n", encoding="utf-8"
     )
     revision = commit(source, "test: template version two")
-
-    def drift_during_confirmation(_: str) -> str:
-        (project / "product.txt").write_text("after\n", encoding="utf-8")
-        commit(project, "test: concurrent product change")
-        return "yes"
-
-    monkeypatch.setattr("builtins.input", drift_during_confirmation)
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                revision,
-                "--allow-unreleased",
-            ]
-        )
-        == 2
-    )
-    assert "Repository changed" in capsys.readouterr().err
-    assert (project / "managed.txt").read_text(encoding="utf-8") == (
-        "template version one\n"
-    )
-
-
-@pytest.mark.large
-def test_update_rechecks_repository_context_after_confirmation(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Reject repository origin or visibility drift before Copier writes."""
-    source, project, _ = initialize_project(tmp_path)
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    commit(project, "test: generated project")
-    (source / "template" / "managed.txt").write_text(
-        "template version two\n", encoding="utf-8"
-    )
-    revision = commit(source, "test: template version two")
+    update = ["update", str(project), "--to", revision, "--allow-unreleased"]
     stable = cli.RepositoryContext(
         "owner/repository",
         "owner",
@@ -6926,12 +6693,20 @@ def test_update_rechecks_repository_context_after_confirmation(
         "github",
         True,
     )
+
+    def assert_untouched(expected: str) -> None:
+        assert expected in capsys.readouterr().err
+        assert (project / "managed.txt").read_text(encoding="utf-8") == (
+            "template version one\n"
+        )
+
+    # 1. Repository context drift during confirmation.
     current = [stable]
     monkeypatch.setattr(
         cli, "repository_context", lambda *args, **kwargs: current[0]
     )
 
-    def drift_during_confirmation(_: str) -> str:
+    def context_drift_during_confirmation(_: str) -> str:
         current[0] = cli.RepositoryContext(
             "different/repository",
             "different",
@@ -6942,23 +6717,38 @@ def test_update_rechecks_repository_context_after_confirmation(
         )
         return "yes"
 
-    monkeypatch.setattr("builtins.input", drift_during_confirmation)
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                revision,
-                "--allow-unreleased",
-            ]
-        )
-        == 2
-    )
-    assert "Repository context changed" in capsys.readouterr().err
-    assert (project / "managed.txt").read_text(encoding="utf-8") == (
-        "template version one\n"
-    )
+    monkeypatch.setattr("builtins.input", context_drift_during_confirmation)
+    capsys.readouterr()
+    assert main(update) == 2
+    assert_untouched("Repository context changed")
+
+    # 2. Committed HEAD drift during confirmation.
+    current[0] = stable
+
+    def head_drift_during_confirmation(_: str) -> str:
+        product.write_text("during confirmation\n", encoding="utf-8")
+        commit(project, "test: concurrent product change")
+        return "yes"
+
+    monkeypatch.setattr("builtins.input", head_drift_during_confirmation)
+    assert main(update) == 2
+    assert_untouched("Repository changed")
+
+    # 3. Target drift introduced by the repository-context refresh itself.
+    calls = 0
+
+    def context_with_target_drift(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            product.write_text("during context query\n", encoding="utf-8")
+            commit(project, "test: context-query product change")
+        return stable
+
+    monkeypatch.setattr(cli, "repository_context", context_with_target_drift)
+    assert main([*update, "--yes", "--non-interactive"]) == 2
+    assert calls == 2
+    assert_untouched("Repository changed")
 
 
 @pytest.mark.parametrize(
@@ -7170,64 +6960,6 @@ def test_update_check_tolerates_pre_schema_existing_adoption(
     status = json.loads(output)
     assert exit_code == 1
     assert status["status"] == "outdated"
-
-
-@pytest.mark.large
-def test_update_rechecks_snapshot_after_repository_context(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Reject target drift introduced while repository context is refreshed."""
-    source, project, _ = initialize_project(tmp_path)
-    git(project, "init", "-b", "main")
-    git(project, "config", "user.name", "CLI Test")
-    git(project, "config", "user.email", "cli-test@example.invalid")
-    product = project / "product.txt"
-    product.write_text("before\n", encoding="utf-8")
-    commit(project, "test: generated project")
-    (source / "template" / "managed.txt").write_text(
-        "template version two\n", encoding="utf-8"
-    )
-    revision = commit(source, "test: template version two")
-    stable = cli.RepositoryContext(
-        "owner/repository",
-        "owner",
-        "organization",
-        "private",
-        "github",
-        True,
-    )
-    calls = 0
-
-    def context_with_target_drift(*args: object, **kwargs: object) -> object:
-        nonlocal calls
-        calls += 1
-        if calls == 2:
-            product.write_text("after\n", encoding="utf-8")
-            commit(project, "test: context-query product change")
-        return stable
-
-    monkeypatch.setattr(cli, "repository_context", context_with_target_drift)
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                revision,
-                "--allow-unreleased",
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 2
-    )
-    assert calls == 2
-    assert "Repository changed" in capsys.readouterr().err
-    assert (project / "managed.txt").read_text(encoding="utf-8") == (
-        "template version one\n"
-    )
 
 
 @pytest.mark.large
