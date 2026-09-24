@@ -1324,7 +1324,10 @@ def _closing_pull_requests(
 
 
 def _delivery_row(
-    issue: dict[str, Any], pulls: list[dict[str, Any]]
+    issue: dict[str, Any],
+    pulls: list[dict[str, Any]],
+    status: str,
+    children: list[int],
 ) -> tuple[str, str]:
     """Return one reconciliation table row and its delivery status."""
     number = issue.get("number")
@@ -1334,12 +1337,77 @@ def _delivery_row(
     chosen = merged_pulls[0] if merged_pulls else (pulls[0] if pulls else None)
     pr_cell = f"#{chosen['number']}" if chosen else "(none found)"
     merged = chosen is not None and _merged_at(chosen) is not None
-    status = _delivery_status(issue, pulls)
+    if children and not pulls:
+        pr_cell = "sub-issues " + ", ".join(f"#{child}" for child in children)
     row = (
         f"| #{number} {title} | {state} | {pr_cell} | "
         f"{'yes' if merged else 'no'} | {status} |"
     )
     return row, status
+
+
+def _parent_number(issue: dict[str, Any]) -> int | None:
+    match = re.search(
+        r"/issues/([0-9]+)$", str(issue.get("parent_issue_url") or "")
+    )
+    return int(match.group(1)) if match else None
+
+
+def _parent_status(issue: dict[str, Any], sub_statuses: list[str]) -> str:
+    """Return a Feature parent's status from its sub-issues and checklist."""
+    if issue.get("state") != "closed":
+        return "Pending"
+    if issue.get("state_reason") == "not_planned":
+        return NOT_PLANNED_STATUS
+    if any(status not in SETTLED_STATUSES for status in sub_statuses):
+        return "Sub-issues not settled"
+    if not checklist_complete(str(issue.get("body") or "")):
+        return "Acceptance incomplete or missing"
+    return "Delivered"
+
+
+def _delivery_statuses(
+    snapshot: dict[str, Any], tracker_number: int
+) -> tuple[dict[int, str], dict[int, list[int]]]:
+    """Return every linked Issue's delivery status and its sub-issues.
+
+    A Feature parent never has its own delivering pull request (#962 keeps
+    it in the Milestone; a promotion may not close it). It is delivered once
+    every sub-issue in this Milestone is settled and its own acceptance
+    checklist is complete (#1026). Leaf work keeps the strict per-Issue
+    closing pull request evidence required since #816.
+    """
+    items = {
+        int(issue["number"]): issue
+        for issue in _linked_work_items(snapshot, tracker_number)
+        if type(issue.get("number")) is int
+    }
+    children: dict[int, list[int]] = {}
+    for number, issue in items.items():
+        parent = _parent_number(issue)
+        if parent in items:
+            children.setdefault(parent, []).append(number)
+    closing = _closing_pull_requests(snapshot)
+    statuses: dict[int, str] = {}
+
+    def status_of(number: int, seen: frozenset[int]) -> str:
+        if number in statuses:
+            return statuses[number]
+        issue = items[number]
+        pulls = closing.get(number, [])
+        kids = sorted(children.get(number, []))
+        if not kids or pulls or number in seen:
+            result = _delivery_status(issue, pulls)
+        else:
+            result = _parent_status(
+                issue, [status_of(kid, seen | {number}) for kid in kids]
+            )
+        statuses[number] = result
+        return result
+
+    for number in items:
+        status_of(number, frozenset())
+    return statuses, {parent: sorted(kids) for parent, kids in children.items()}
 
 
 def _delivery_status(issue: dict[str, Any], pulls: list[dict[str, Any]]) -> str:
@@ -1409,6 +1477,7 @@ def regenerate_reconciliation(snapshot: dict[str, Any]) -> str:
         key=lambda issue: issue.get("number", 0),
     )
     closing = _closing_pull_requests(snapshot)
+    statuses, children = _delivery_statuses(snapshot, item["number"])
     lines = [
         f"<!-- reconciliation-fingerprint: {fingerprint} -->",
         (
@@ -1423,7 +1492,13 @@ def regenerate_reconciliation(snapshot: dict[str, Any]) -> str:
     ]
     delivered = 0
     for issue in items:
-        row, status = _delivery_row(issue, closing.get(issue.get("number"), []))
+        number = int(issue["number"])
+        row, status = _delivery_row(
+            issue,
+            closing.get(number, []),
+            statuses[number],
+            children.get(number, []),
+        )
         lines.append(row)
         if status == "Delivered":
             delivered += 1
@@ -1463,10 +1538,10 @@ def _completed_closure(
     snapshot: dict[str, Any], tracker_number: int, body: str
 ) -> Decision:
     """Validate the completed-closure evidence chain for one tracker."""
-    closing = _closing_pull_requests(snapshot)
+    statuses, _ = _delivery_statuses(snapshot, tracker_number)
     undelivered = []
     for issue in _linked_work_items(snapshot, tracker_number):
-        status = _delivery_status(issue, closing.get(issue.get("number"), []))
+        status = statuses.get(int(issue["number"]), "Pending")
         if status not in SETTLED_STATUSES:
             undelivered.append(f"#{issue['number']} ({status})")
     if undelivered:

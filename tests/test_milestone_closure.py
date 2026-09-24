@@ -246,6 +246,91 @@ def test_reconciliation_and_completed_closure_reject_undelivered_work(
     assert f"#42 ({status})" in result.summary
 
 
+def _with_feature_parent(
+    *, parent_state: str = "closed", parent_body: str | None = None
+) -> dict[str, Any]:
+    """Add a Feature parent #40 whose only sub-issue is delivered #42."""
+    state = _base_snapshot()
+    state["issues"][0]["parent_issue_url"] = (
+        "https://api.github.com/repos/acme/project/issues/40"
+    )
+    state["issues"].insert(
+        0,
+        {
+            "number": 40,
+            "title": "Feature parent",
+            "state": parent_state,
+            "state_reason": "completed" if parent_state == "closed" else None,
+            "body": parent_body or "## Acceptance criteria\n\n- [x] Shipped\n",
+            "type": {"name": "Feature"},
+            "user": {"login": "worker", "type": "User"},
+        },
+    )
+    tracker_issue = next(i for i in state["issues"] if i["number"] == 80)
+    tracker_issue["body"] = regenerate_reconciliation(state)
+    return state
+
+
+def test_feature_parent_is_delivered_through_its_sub_issues() -> None:
+    """Issue #1026: a Feature parent needs no closing PR of its own."""
+    state = _with_feature_parent()
+    body = next(i for i in state["issues"] if i["number"] == 80)["body"]
+
+    assert (
+        "| #40 Feature parent | closed | sub-issues #42 | no | Delivered |"
+        in body
+    )
+    assert "2 linked work Issue(s); 2 delivered." in body
+    assert closure_decision(state).allowed
+
+
+@pytest.mark.parametrize(
+    ("gap", "status"),
+    [
+        ("sub-issue", "Sub-issues not settled"),
+        ("acceptance", "Acceptance incomplete or missing"),
+        ("open", "Pending"),
+    ],
+)
+def test_feature_parent_waits_for_sub_issues_and_its_own_acceptance(
+    gap: str, status: str
+) -> None:
+    """A parent is not delivered while any condition is still missing."""
+    state = _with_feature_parent(
+        parent_state="open" if gap == "open" else "closed",
+        parent_body=(
+            "## Acceptance criteria\n\n- [ ] Shipped\n"
+            if gap == "acceptance"
+            else None
+        ),
+    )
+    if gap == "sub-issue":
+        next(i for i in state["issues"] if i["number"] == 42)["state"] = "open"
+    tracker_issue = next(i for i in state["issues"] if i["number"] == 80)
+    tracker_issue["body"] = regenerate_reconciliation(state)
+
+    result = closure_decision(state)
+
+    assert not result.allowed
+    assert f"#40 ({status})" in result.summary
+
+
+def test_leaf_work_still_requires_its_own_merged_pull_request() -> None:
+    """Only Issues with sub-issues use the parent rule; leaves stay strict."""
+    state = _with_feature_parent()
+    next(i for i in state["issues"] if i["number"] == 99)["pull_request"][
+        "merged_at"
+    ] = None
+    tracker_issue = next(i for i in state["issues"] if i["number"] == 80)
+    tracker_issue["body"] = regenerate_reconciliation(state)
+
+    result = closure_decision(state)
+
+    assert not result.allowed
+    assert "#42 (Closed without a merged PR)" in result.summary
+    assert "#40 (Sub-issues not settled)" in result.summary
+
+
 def test_not_planned_work_does_not_block_completed_closure() -> None:
     """Cancelled work is shown as not planned instead of undelivered."""
     state = _base_snapshot()

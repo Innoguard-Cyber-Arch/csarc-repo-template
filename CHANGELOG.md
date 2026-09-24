@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.28.2] - 2026-09-25
+
+### Bug Fixes
+
+* fix(governance): settle Feature parents through their sub-issues (e8b2a02)
+
 ## [0.28.1] - 2026-09-25
 
 ### Included prereleases
