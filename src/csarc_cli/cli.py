@@ -1449,6 +1449,7 @@ def pending_adoption_data(
     answers_path: Path,
     managed_files: tuple[str, ...],
     manual_files: tuple[str, ...],
+    work_item_mapping: dict[str, object],
 ) -> dict[str, object]:
     """Build the checkpoint needed to resume one exact adoption."""
     return {
@@ -1470,6 +1471,7 @@ def pending_adoption_data(
                 "verified" if revision.verified else "development-unreleased"
             ),
         },
+        "work_item_mapping": work_item_mapping,
     }
 
 
@@ -1505,6 +1507,9 @@ def read_pending_adoption(target: Path) -> dict[str, object]:
     managed = (
         payload.get("managed_files") if isinstance(payload, dict) else None
     )
+    work_item_mapping = (
+        payload.get("work_item_mapping") if isinstance(payload, dict) else None
+    )
     if (
         not isinstance(payload, dict)
         or payload.get("schema_version") != 1
@@ -1512,6 +1517,10 @@ def read_pending_adoption(target: Path) -> dict[str, object]:
         or not isinstance(template, dict)
         or not isinstance(repository, dict)
         or not isinstance(managed, list)
+        or (
+            work_item_mapping is not None
+            and not isinstance(work_item_mapping, dict)
+        )
         or not all(
             isinstance(item, dict)
             and isinstance(item.get("path"), str)
@@ -1876,6 +1885,12 @@ def plan_status(
             "Formal adoption completed; this report now records the "
             "post-adoption state.",
         )
+    if adoption is not None and adoption.get("mapping_reviewed") is False:
+        return (
+            "Review required",
+            "Confirm the work-item mapping suggestions before applying this "
+            "plan.",
+        )
     if adoption is not None and adoption.get("applicable") is not True:
         return (
             "Not ready to adopt",
@@ -1906,13 +1921,31 @@ def printable(value: object) -> str:
 
 
 def markdown_code(value: object) -> str:
-    """Return a safe inline Markdown code value."""
+    """Return a CommonMark code span using a non-conflicting delimiter."""
+    rendered = printable(value)
+    longest = max(
+        (len(match.group()) for match in re.finditer(r"`+", rendered)),
+        default=0,
+    )
+    delimiter = "`" * (longest + 1)
+    padding = (
+        " "
+        if rendered.startswith("`")
+        or rendered.endswith("`")
+        or (rendered.strip() and rendered != rendered.strip())
+        else ""
+    )
+    return f"{delimiter}{padding}{rendered}{padding}{delimiter}"
+
+
+def markdown_text(value: object) -> str:
+    """Escape backticks that appear in plain Markdown text."""
     return printable(value).replace("`", r"\`")
 
 
 def markdown_table_code(value: object) -> str:
-    """Return a safe inline code value for a Markdown table cell."""
-    return markdown_code(value).replace("|", r"\|")
+    """Return a safe CommonMark code span for a table cell."""
+    return markdown_code(printable(value).replace("|", r"\|"))
 
 
 def report_settings(data: dict[str, object]) -> str:
@@ -1946,9 +1979,10 @@ def report_settings(data: dict[str, object]) -> str:
         "release_ownership",
         "release_trigger",
         "review",
+        "work_item_mapping_review",
     }
     return ", ".join(
-        f"`{key}={markdown_code(value)}`"
+        markdown_code(f"{key}={printable(value)}")
         for key, value in sorted(data.items())
         if key in allowed
     )
@@ -2009,69 +2043,69 @@ def adoption_report_markdown(  # noqa: C901
         )
         applied = adoption.get("applied") is True
 
-    snapshot = ["## Snapshot", "", f"- Target: `{markdown_code(target)}`"]
+    snapshot = ["## Snapshot", "", f"- Target: {markdown_code(target)}"]
     if adoption is not None:
         snapshot.append(
-            f"- Target HEAD: `{markdown_code(adoption.get('target_head'))}`"
+            f"- Target HEAD: {markdown_code(adoption.get('target_head'))}"
         )
         snapshot.append(f"- Working tree: {working_tree}")
     snapshot.append(
-        f"- Repository: `{markdown_code(repository.repository or '(none)')}`"
+        f"- Repository: {markdown_code(repository.repository or '(none)')}"
     )
     snapshot.append(
-        "- Repository visibility: `"
-        f"{markdown_code(repository.visibility)}` "
-        f"(`{markdown_code(repository.source)}`)"
+        f"- Repository visibility: {markdown_code(repository.visibility)} "
+        f"({markdown_code(repository.source)})"
     )
     if adoption is not None:
         changes = adoption.get("target_changes")
         if isinstance(changes, list) and changes:
             snapshot.append(
                 "- Working-tree entries: "
-                + ", ".join(f"`{markdown_code(value)}`" for value in changes)
+                + ", ".join(markdown_code(value) for value in changes)
             )
     snapshot.extend(
         [
-            f"- Template source: `{markdown_code(revision.source)}`",
-            f"- Template: `{markdown_code(revision.label)}` / `{revision.sha}`",
+            f"- Template source: {markdown_code(revision.source)}",
+            f"- Template: {markdown_code(revision.label)} / "
+            f"{markdown_code(revision.sha)}",
             "- Release verification: "
             + (
                 "verified immutable release"
                 if revision.verified
                 else "UNVERIFIED"
             ),
-            f"- Release ownership: `{release['ownership']}`",
-            f"- Selected release workflow: `{workflow}`",
-            f"- Required release inputs: `{inputs}`",
+            f"- Release ownership: {markdown_code(release['ownership'])}",
+            f"- Selected release workflow: {markdown_code(workflow)}",
+            f"- Required release inputs: {markdown_code(inputs)}",
             f"- Release ownership reason: {release['reason']}",
             "- Release repository settings: "
-            f"`{release['settings_owner']}` / immutable Releases "
-            f"`{release['immutable_releases']}`",
+            f"{markdown_code(release['settings_owner'])} / immutable Releases "
+            f"{markdown_code(release['immutable_releases'])}",
         ]
     )
     if adoption is not None:
         snapshot.extend(
             [
-                f"- CODEOWNER verification: `{markdown_code(owner_state)}`",
-                "- Project verification hook: `"
-                f"{markdown_code(hook.get('path') or '(none)')}`",
-                "- Project verification hook configured: `"
-                f"{str(hook.get('configured') is True).lower()}`",
-                "- Project verification result: `"
-                f"{markdown_code(hook.get('result'))}`",
-                "- Project verification reason: `"
-                f"{markdown_code(hook.get('reason'))}`",
-                "- Candidate verification: `"
-                f"{markdown_code(adoption.get('verification'))}`",
-                f"- Adoption applied: `{str(applied).lower()}`",
+                f"- CODEOWNER verification: {markdown_code(owner_state)}",
+                "- Project verification hook: "
+                f"{markdown_code(hook.get('path') or '(none)')}",
+                "- Project verification hook configured: "
+                f"{markdown_code(str(hook.get('configured') is True).lower())}",
+                "- Project verification result: "
+                f"{markdown_code(hook.get('result'))}",
+                "- Project verification reason: "
+                f"{markdown_code(hook.get('reason'))}",
+                "- Candidate verification: "
+                f"{markdown_code(adoption.get('verification'))}",
+                f"- Adoption applied: {markdown_code(str(applied).lower())}",
             ]
         )
         if applied:
             snapshot.append(
-                f"- Adopted at: `{markdown_code(adoption.get('applied_at'))}`"
+                f"- Adopted at: {markdown_code(adoption.get('applied_at'))}"
             )
     snapshot.append(f"- Settings: {report_settings(data)}")
-    snapshot.append(f"- Generated: `{generated_at}`")
+    snapshot.append(f"- Generated: {markdown_code(generated_at)}")
 
     summary_lines = [
         "## Summary of file changes",
@@ -2096,19 +2130,19 @@ def adoption_report_markdown(  # noqa: C901
         "## Impact analysis",
         "",
         f"- This plan changes {new_count + edited_count + removed_count} "
-        f"file(s) in `{markdown_code(target)}`: {new_count} new, "
+        f"file(s) in {markdown_code(target)}: {new_count} new, "
         f"{edited_count} edited, {removed_count} removed; "
         f"{len(plan.preserve)} file(s) stay preserved.",
-        f"- Release ownership is `{release['ownership']}` using workflow "
-        f"`{workflow}`; {release['reason']}",
+        f"- Release ownership is {markdown_code(release['ownership'])} using "
+        f"workflow {markdown_code(workflow)}; {release['reason']}",
     ]
     if adoption is not None:
         impact_lines.extend(
             [
                 f"- Working tree before adoption: {working_tree}.",
-                f"- CODEOWNER verification: `{markdown_code(owner_state)}`.",
-                "- Candidate verification: `"
-                f"{markdown_code(adoption.get('verification'))}`.",
+                f"- CODEOWNER verification: {markdown_code(owner_state)}.",
+                "- Candidate verification: "
+                f"{markdown_code(adoption.get('verification'))}.",
             ]
         )
 
@@ -2135,23 +2169,23 @@ def adoption_report_markdown(  # noqa: C901
                     continue
                 issue_label = item.get("issue_label") or "(none)"
                 mapping_lines.append(
-                    "| `"
-                    f"{markdown_table_code(item.get('kind'))}` | `"
-                    f"{markdown_table_code(item.get('issue_type'))}` | `"
-                    f"{markdown_table_code(issue_label)}` "
-                    "| `"
-                    f"{markdown_table_code(item.get('pr_label'))}` |"
+                    f"| {markdown_table_code(item.get('kind'))} | "
+                    f"{markdown_table_code(item.get('issue_type'))} | "
+                    f"{markdown_table_code(issue_label)} | "
+                    f"{markdown_table_code(item.get('pr_label'))} |"
                 )
         mapping_lines.extend(
             (
                 "",
-                "Inspection: `"
-                f"{markdown_code(mapping.get('state', 'unknown'))}` — "
-                f"{
-                    markdown_code(
-                        mapping.get('reason', 'No details available.')
-                    )
-                }",
+                "Inspection: "
+                f"{markdown_code(mapping.get('state', 'unknown'))} — "
+                + markdown_text(mapping.get("reason", "No details available.")),
+                "Issue Types: "
+                f"{markdown_code(mapping.get('issue_type_state', 'unknown'))}; "
+                "labels: "
+                f"{markdown_code(mapping.get('label_state', 'unknown'))}.",
+                "Review choice: "
+                f"{markdown_code(mapping.get('review', 'pending'))}.",
             )
         )
         issue_types = mapping.get("issue_types")
@@ -2161,18 +2195,24 @@ def adoption_report_markdown(  # noqa: C901
                     "",
                     "### Existing Issue Types",
                     "",
-                    "| Existing | Suggestion | Target |",
-                    "| --- | --- | --- |",
+                    "| Existing | Enabled | Color | Description | Suggestion | "
+                    "Target |",
+                    "| --- | --- | --- | --- | --- | --- |",
                 )
             )
             for item in issue_types:
                 if not isinstance(item, dict):
                     continue
+                color = item.get("color") or "(none)"
+                description = item.get("description") or "(none)"
+                enabled = str(item.get("enabled") is True).lower()
                 mapping_lines.append(
-                    "| `"
-                    f"{markdown_table_code(item.get('source'))}` | `"
-                    f"{markdown_table_code(item.get('action'))}` | `"
-                    f"{markdown_table_code(item.get('target') or '(none)')}` |"
+                    f"| {markdown_table_code(item.get('source'))} | "
+                    f"{markdown_table_code(enabled)} | "
+                    f"{markdown_table_code(color)} | "
+                    f"{markdown_table_code(description)} | "
+                    f"{markdown_table_code(item.get('action'))} | "
+                    f"{markdown_table_code(item.get('target') or '(none)')} |"
                 )
         labels = mapping.get("labels")
         if isinstance(labels, list) and labels:
@@ -2193,28 +2233,32 @@ def adoption_report_markdown(  # noqa: C901
                 description = item.get("description") or "(none)"
                 issue_type = item.get("issue_type") or "(none)"
                 mapping_lines.append(
-                    "| `"
-                    f"{markdown_table_code(item.get('source'))}` | `"
-                    f"{markdown_table_code(color)}` | `"
-                    f"{markdown_table_code(description)}` | `"
-                    f"{markdown_table_code(item.get('action'))}` | `"
-                    f"{markdown_table_code(issue_type)}` "
-                    "| `"
-                    f"{markdown_table_code(item.get('target') or '(none)')}` |"
+                    f"| {markdown_table_code(item.get('source'))} | "
+                    f"{markdown_table_code(color)} | "
+                    f"{markdown_table_code(description)} | "
+                    f"{markdown_table_code(item.get('action'))} | "
+                    f"{markdown_table_code(issue_type)} | "
+                    f"{markdown_table_code(item.get('target') or '(none)')} |"
                 )
 
     decision_items: list[str] = []
+    if adoption is not None and adoption.get("mapping_reviewed") is False:
+        decision_items.append(
+            "- Work-item mapping suggestions are pending review; rerun the "
+            "dry-run with `--data work_item_mapping_review=accept-safe` or "
+            "`review-individually`."
+        )
     if adoption is not None and owner_state in {"blocked", "unknown"}:
         decision_items.append(
-            f"- CODEOWNER `{markdown_code(owner.get('value', 'unknown'))}` "
-            f"verification is `{markdown_code(owner_state)}` - "
-            f"{markdown_code(owner.get('reason', 'No details available.'))}."
+            f"- CODEOWNER {markdown_code(owner.get('value', 'unknown'))} "
+            f"verification is {markdown_code(owner_state)} - "
+            f"{markdown_text(owner.get('reason', 'No details available.'))}."
         )
     if adoption is not None and hook.get("result") == "failed":
         decision_items.append(
-            "- Project verification hook `"
-            f"{markdown_code(hook.get('path') or '(none)')}` failed - "
-            f"{markdown_code(hook.get('reason', 'No details available.'))}."
+            "- Project verification hook "
+            f"{markdown_code(hook.get('path') or '(none)')} failed - "
+            f"{markdown_text(hook.get('reason', 'No details available.'))}."
         )
     for group, item_kind in (
         (mapping.get("issue_types"), "Issue Type"),
@@ -2224,7 +2268,7 @@ def adoption_report_markdown(  # noqa: C901
             continue
         decision_items.extend(
             "- Existing "
-            f"{item_kind} `{markdown_code(item.get('source'))}` has no safe "
+            f"{item_kind} {markdown_code(item.get('source'))} has no safe "
             "automatic mapping; preserve it unless you explicitly choose a "
             "target."
             for item in group
@@ -2245,7 +2289,7 @@ def adoption_report_markdown(  # noqa: C901
         for path in plan.unknown
     )
     decision_items.extend(
-        f"- `{markdown_code(path)}` - {item_reason}."
+        f"- {markdown_code(path)} - {item_reason}."
         for path, item_reason in (*attention, *unknown)
     )
     decision_lines = ["## Items requiring your decision", ""]
@@ -2283,7 +2327,7 @@ def adoption_report_markdown(  # noqa: C901
                 "## Automatic merges",
                 "",
                 *(
-                    f"- `{markdown_code(path)}` - fixed CSARC adoption policy."
+                    f"- {markdown_code(path)} - fixed CSARC adoption policy."
                     for path in plan.merge
                 ),
             )
@@ -2294,8 +2338,8 @@ def adoption_report_markdown(  # noqa: C901
                 "",
                 "## Adoption applied",
                 "",
-                "Formal adoption completed at `"
-                f"{markdown_code(adoption.get('applied_at'))}`. This report "
+                "Formal adoption completed at "
+                f"{markdown_code(adoption.get('applied_at'))}. This report "
                 "was updated in place to record the post-adoption state; no "
                 "plan remains to apply.",
                 "",
@@ -3301,6 +3345,7 @@ def prepare_adoption_candidate(
     planned: Plan,
     generated_at: str,
     candidate: Path,
+    work_item_mapping: dict[str, object],
     preserved_dirty_paths: tuple[str, ...] = (),
 ) -> tuple[Plan, dict[str, str], str, dict[str, object]]:
     """Build an exact preview candidate without executing package tooling."""
@@ -3328,6 +3373,7 @@ def prepare_adoption_candidate(
                     config_path(candidate),
                     pending_managed_paths(stage, planned),
                     (*planned.manual, *planned.unknown),
+                    work_item_mapping,
                 ),
             )
             verification = "deferred-manual-merge"
@@ -3737,7 +3783,9 @@ def authorize_adoption_candidate(
     owner_blocked = isinstance(owner, dict) and owner.get("state") == "blocked"
     updated = {
         **adoption,
-        "applicable": verification == "passed" and not owner_blocked,
+        "applicable": verification == "passed"
+        and not owner_blocked
+        and adoption.get("mapping_reviewed") is not False,
         "artifacts": artifacts,
         "project_verification_hook": hook,
         "verification": verification,
@@ -3989,13 +4037,22 @@ def repository_context(  # noqa: C901
 
 def inspect_work_item_mapping(  # noqa: C901
     repository: RepositoryContext,
+    review: str = "accept-safe",
 ) -> dict[str, object]:
     """Suggest a conservative mapping from existing GitHub metadata."""
+    if review not in {"accept-safe", "pending", "review-individually"}:
+        raise CliError(
+            "work_item_mapping_review must be accept-safe, pending, or "
+            "review-individually."
+        )
     result: dict[str, object] = {
         "defaults": [dict(item) for item in WORK_ITEM_DEFAULTS],
+        "issue_type_state": "unknown",
         "issue_types": [],
+        "label_state": "unknown",
         "labels": [],
         "mutation": "none",
+        "review": review,
     }
     if not repository.verified or repository.repository is None:
         result.update(
@@ -4007,82 +4064,167 @@ def inspect_work_item_mapping(  # noqa: C901
         )
         return result
 
-    commands = {
-        "labels": [
-            "gh",
-            "label",
-            "list",
-            "--repo",
-            repository.repository,
-            "--limit",
-            "1000",
-            "--json",
-            "name,color,description",
-        ],
-        "issues": [
-            "gh",
-            "issue",
-            "list",
-            "--repo",
-            repository.repository,
-            "--state",
-            "all",
-            "--limit",
-            "1000",
-            "--json",
-            "issueType",
-        ],
-    }
-    payloads: dict[str, list[object]] = {}
-    for name, command in commands.items():
+    labels: list[object] = []
+    label_problem = ""
+    try:
+        label_response = run(
+            [
+                "gh",
+                "label",
+                "list",
+                "--repo",
+                repository.repository,
+                "--limit",
+                "1000",
+                "--json",
+                "name,color,description",
+            ],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        label_response = subprocess.CompletedProcess(
+            [], 1, "", "GitHub CLI is unavailable"
+        )
+    if label_response.returncode != 0:
+        label_state = "unavailable"
+        label_problem = (
+            "GitHub permissions or connectivity prevented live label "
+            "inspection."
+        )
+    else:
         try:
-            response = run(command, capture=True, check=False)
+            raw_labels = json.loads(label_response.stdout)
+        except json.JSONDecodeError:
+            raw_labels = None
+        if isinstance(raw_labels, list):
+            labels = raw_labels
+            label_state = "available" if labels else "empty"
+        else:
+            label_state = "unavailable"
+            label_problem = "GitHub returned invalid label metadata."
+    result["label_state"] = label_state
+
+    issue_type_nodes: list[object] = []
+    owner_type = (repository.owner_type or "").casefold()
+    if owner_type != "organization" or repository.owner is None:
+        issue_type_state = "unsupported"
+        issue_type_problem = (
+            "Native Issue Types are unsupported for non-organization "
+            "repositories; defaults remain fallback."
+        )
+    else:
+        query = (
+            "query($owner:String!){organization(login:$owner){"
+            "issueTypes(first:100){nodes{color description isEnabled name}}}}"
+        )
+        try:
+            response = run(
+                [
+                    "gh",
+                    "api",
+                    "graphql",
+                    "-f",
+                    f"query={query}",
+                    "-F",
+                    f"owner={repository.owner}",
+                ],
+                capture=True,
+                check=False,
+            )
         except FileNotFoundError:
-            result.update(
-                state="unknown",
-                reason=(
-                    "GitHub CLI is unavailable; live work-item metadata was "
-                    "not inspected."
-                ),
-            )
-            return result
-        if response.returncode != 0:
-            result.update(
-                state="unknown",
-                reason=(
-                    "GitHub permissions or connectivity prevented live "
-                    "work-item inspection."
-                ),
-            )
-            return result
+            response = subprocess.CompletedProcess([], 1, "", "gh missing")
         try:
             payload = json.loads(response.stdout)
         except json.JSONDecodeError:
             payload = None
-        if not isinstance(payload, list):
-            result.update(
-                state="unknown",
-                reason="GitHub returned invalid work-item metadata.",
+        organization = (
+            payload.get("data", {}).get("organization")
+            if isinstance(payload, dict)
+            and isinstance(payload.get("data"), dict)
+            else None
+        )
+        issue_types = (
+            organization.get("issueTypes")
+            if isinstance(organization, dict)
+            else None
+        )
+        nodes = (
+            issue_types.get("nodes") if isinstance(issue_types, dict) else None
+        )
+        valid_nodes = isinstance(nodes, list) and all(
+            isinstance(item, dict)
+            and isinstance(item.get("name"), str)
+            and isinstance(item.get("isEnabled"), bool)
+            and (
+                item.get("color") is None or isinstance(item.get("color"), str)
             )
-            return result
-        payloads[name] = payload
+            and (
+                item.get("description") is None
+                or isinstance(item.get("description"), str)
+            )
+            for item in nodes or []
+        )
+        if response.returncode != 0:
+            issue_type_state = "unavailable"
+            issue_type_problem = (
+                "GitHub permissions or connectivity prevented Issue Type "
+                "inspection; defaults remain fallback."
+            )
+        elif not valid_nodes:
+            issue_type_state = "unavailable"
+            issue_type_problem = (
+                "GitHub returned invalid Issue Type metadata; defaults "
+                "remain fallback."
+            )
+        elif not nodes:
+            issue_type_state = "empty"
+            issue_type_problem = (
+                "The organization defines no Issue Types; defaults remain "
+                "fallback."
+            )
+        else:
+            issue_type_nodes = nodes
+            issue_type_state = "available"
+            issue_type_problem = ""
+
+    if label_state != "unavailable" and issue_type_state == "available":
+        state = "available"
+        reason = (
+            "Read-only GitHub inspection completed; suggestions do not "
+            "rename or delete labels."
+        )
+    elif label_state != "unavailable":
+        state = "degraded"
+        reason = f"Labels were inspected, but {issue_type_problem}"
+    elif issue_type_state in {"available", "empty"}:
+        state = "degraded"
+        reason = f"Issue Types were inspected, but {label_problem}"
+    else:
+        state = "unknown"
+        reason = f"{label_problem} {issue_type_problem}".strip()
 
     observed_types = sorted(
-        {
-            str(issue_type["name"])
-            for item in payloads["issues"]
+        (
+            {
+                "color": item.get("color"),
+                "description": item.get("description"),
+                "enabled": item.get("isEnabled"),
+                "source": str(item["name"]),
+            }
+            for item in issue_type_nodes
             if isinstance(item, dict)
-            and isinstance((issue_type := item.get("issueType")), dict)
-            and isinstance(issue_type.get("name"), str)
-        },
-        key=str.casefold,
+        ),
+        key=lambda item: str(item["source"]).casefold(),
     )
     type_suggestions = []
     canonical_types = {"bug": "Bug", "feature": "Feature", "task": "Task"}
-    for name in observed_types:
+    for observed in observed_types:
+        name = str(observed["source"])
         target = canonical_types.get(name.casefold())
         type_suggestions.append(
             {
+                **observed,
                 "action": (
                     "preserve"
                     if name in canonical_types.values()
@@ -4090,7 +4232,6 @@ def inspect_work_item_mapping(  # noqa: C901
                     if target is not None
                     else "decision-required"
                 ),
-                "source": name,
                 "target": target,
             }
         )
@@ -4110,7 +4251,7 @@ def inspect_work_item_mapping(  # noqa: C901
                 ),
                 "source": str(item["name"]),
             }
-            for item in payloads["labels"]
+            for item in labels
             if isinstance(item, dict) and isinstance(item.get("name"), str)
         ),
         key=lambda item: str(item["source"]).casefold(),
@@ -4150,11 +4291,9 @@ def inspect_work_item_mapping(  # noqa: C901
         label_suggestions.append(suggestion)
 
     result.update(
-        state="available",
-        reason=(
-            "Read-only GitHub inspection completed; suggestions do not "
-            "rename or delete labels."
-        ),
+        state=state,
+        reason=reason,
+        issue_type_state=issue_type_state,
         issue_types=type_suggestions,
         labels=label_suggestions,
     )
@@ -5031,6 +5170,21 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "restore it or restart adoption from a clean commit."
         )
 
+    review = answers.get("work_item_mapping_review", "accept-safe")
+    if not isinstance(review, str):
+        raise CliError("work_item_mapping_review must be a string.")
+    current_mapping = inspect_work_item_mapping(repository, review)
+    raw_work_item_mapping = pending.get("work_item_mapping")
+    if isinstance(raw_work_item_mapping, dict):
+        if current_mapping != raw_work_item_mapping:
+            raise CliError(
+                "GitHub work-item metadata drifted after adoption started; "
+                "restart adoption with a new dry-run plan."
+            )
+        work_item_mapping = raw_work_item_mapping
+    else:
+        work_item_mapping = current_mapping
+
     milestone_plan: MilestoneDescriptionPlan | None = None
     if saved is not None:
         raw_saved_adoption = saved.get("adoption")
@@ -5155,6 +5309,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "delete_paths": [PENDING_ADOPTION_FILE.as_posix()],
             "generated_at": generated_at,
             "manual_results": manual_results,
+            "mapping_reviewed": review != "pending",
             "phase": "complete",
             "project_verification_hook": hook,
             "target_changes": list(changes),
@@ -5162,7 +5317,11 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "target_head": head,
             "target_status_sha256": status_sha256,
             "verification": candidate_verification,
+            "work_item_mapping": work_item_mapping,
         }
+        adoption["applicable"] = bool(
+            adoption["applicable"] and adoption["mapping_reviewed"]
+        )
         plan = ResolvedPlan(
             mode="adopt-finalize",
             target=target,
@@ -5308,6 +5467,10 @@ def build_adoption_plan(
     generated_at: str,
 ) -> ResolvedPlan:
     """Build one locked adoption plan and its isolated candidate."""
+    review = answers.get("work_item_mapping_review", "accept-safe")
+    if not isinstance(review, str):
+        raise CliError("work_item_mapping_review must be a string.")
+    work_item_mapping = inspect_work_item_mapping(repository, review)
     head, changes, status_sha256 = target_state(target)
     target_files = target_file_snapshot(target)
     dirty_paths = tuple(sorted(git_changed_paths(target))) if changes else ()
@@ -5335,6 +5498,7 @@ def build_adoption_plan(
             planned,
             generated_at,
             candidate,
+            work_item_mapping,
             preserved_dirty_paths,
         )
     owner = code_owner_verification(repository, answers.get("code_owner"))
@@ -5351,6 +5515,7 @@ def build_adoption_plan(
         and verification
         in {"passed", "deferred-manual-merge", "pending-authorization"}
         and owner["state"] != "blocked",
+        "mapping_reviewed": review != "pending",
         "artifacts": artifacts,
         "clean": not changes,
         "code_owner": owner,
@@ -5365,8 +5530,11 @@ def build_adoption_plan(
         "target_head": head,
         "target_status_sha256": status_sha256,
         "verification": verification,
-        "work_item_mapping": inspect_work_item_mapping(repository),
+        "work_item_mapping": work_item_mapping,
     }
+    adoption["applicable"] = bool(
+        adoption["applicable"] and adoption["mapping_reviewed"]
+    )
     validate_target_snapshot(target, adoption)
     return ResolvedPlan(
         mode="adopt",
@@ -5538,6 +5706,25 @@ def command_apply_adoption_plan(  # noqa: C901
             generated_at,
         )
         fresh_adoption = fresh.adoption
+        fresh_mapping = (
+            fresh_adoption.get("work_item_mapping")
+            if fresh_adoption is not None
+            else None
+        )
+        saved_mapping = raw_adoption.get("work_item_mapping")
+        if fresh_mapping != saved_mapping:
+            differences = json_differences(
+                saved_mapping,
+                fresh_mapping,
+                "$.adoption.work_item_mapping",
+            )
+            detail = "; ".join(differences[:10])
+            if len(differences) > 10:
+                detail += f"; ... and {len(differences) - 10} more"
+            raise CliError(
+                "GitHub work-item metadata drifted during the approved "
+                f"task-bearing render. Differing fields: {detail}"
+            )
         fresh = authorize_adoption_candidate(fresh, candidate)
         fresh_adoption = fresh.adoption
         if fresh_adoption is None or fresh_adoption.get("verification") not in {

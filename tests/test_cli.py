@@ -1165,12 +1165,35 @@ def test_work_item_mapping_suggests_only_conservative_aliases(
                 },
             ]
         else:
-            payload = [
-                {"issueType": {"name": "bug"}},
-                {"issueType": {"name": "Feature"}},
-                {"issueType": {"name": "Chore"}},
-                {"issueType": None},
-            ]
+            assert command[1:3] == ["api", "graphql"]
+            payload = {
+                "data": {
+                    "organization": {
+                        "issueTypes": {
+                            "nodes": [
+                                {
+                                    "name": "bug",
+                                    "color": "RED",
+                                    "description": "Defects",
+                                    "isEnabled": True,
+                                },
+                                {
+                                    "name": "Feature",
+                                    "color": "BLUE",
+                                    "description": "Features",
+                                    "isEnabled": True,
+                                },
+                                {
+                                    "name": "Chore",
+                                    "color": "GRAY",
+                                    "description": "Maintenance",
+                                    "isEnabled": False,
+                                },
+                            ]
+                        }
+                    }
+                }
+            }
         return subprocess.CompletedProcess(
             command, 0, stdout=json.dumps(payload), stderr=""
         )
@@ -1180,11 +1203,35 @@ def test_work_item_mapping_suggests_only_conservative_aliases(
     mapping = cli.inspect_work_item_mapping(repository)
 
     assert mapping["state"] == "available"
+    assert mapping["issue_type_state"] == "available"
+    assert mapping["label_state"] == "available"
+    assert mapping["review"] == "accept-safe"
     assert mapping["mutation"] == "none"
     assert mapping["issue_types"] == [
-        {"action": "map", "source": "bug", "target": "Bug"},
-        {"action": "decision-required", "source": "Chore", "target": None},
-        {"action": "preserve", "source": "Feature", "target": "Feature"},
+        {
+            "action": "map",
+            "color": "RED",
+            "description": "Defects",
+            "enabled": True,
+            "source": "bug",
+            "target": "Bug",
+        },
+        {
+            "action": "decision-required",
+            "color": "GRAY",
+            "description": "Maintenance",
+            "enabled": False,
+            "source": "Chore",
+            "target": None,
+        },
+        {
+            "action": "preserve",
+            "color": "BLUE",
+            "description": "Features",
+            "enabled": True,
+            "source": "Feature",
+            "target": "Feature",
+        },
     ]
     assert mapping["labels"] == [
         {
@@ -1292,6 +1339,210 @@ def test_work_item_mapping_reports_unavailable_github_metadata(
     assert "permissions or connectivity" in str(mapping["reason"])
     assert mapping["issue_types"] == []
     assert mapping["labels"] == []
+
+
+def test_work_item_mapping_keeps_issue_types_when_labels_are_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep independent Issue Type evidence when label inspection fails."""
+    repository = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+
+    def fake_run(
+        command: list[str], **_: object
+    ) -> subprocess.CompletedProcess[str]:
+        if command[1:3] == ["label", "list"]:
+            return subprocess.CompletedProcess(
+                command, 1, stdout="", stderr="permission denied"
+            )
+        payload = {
+            "data": {
+                "organization": {
+                    "issueTypes": {
+                        "nodes": [
+                            {
+                                "name": "Task",
+                                "color": "GRAY",
+                                "description": "Work",
+                                "isEnabled": True,
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    mapping = cli.inspect_work_item_mapping(repository)
+
+    assert mapping["state"] == "degraded"
+    assert mapping["issue_type_state"] == "available"
+    assert mapping["label_state"] == "unavailable"
+    assert mapping["issue_types"] == [
+        {
+            "action": "preserve",
+            "color": "GRAY",
+            "description": "Work",
+            "enabled": True,
+            "source": "Task",
+            "target": "Task",
+        }
+    ]
+    assert mapping["labels"] == []
+
+
+@pytest.mark.parametrize(
+    ("owner_type", "graphql_status", "graphql_nodes", "expected_state"),
+    [
+        ("User", None, None, "unsupported"),
+        ("Organization", 1, None, "unavailable"),
+        ("Organization", 0, [], "empty"),
+    ],
+)
+def test_work_item_mapping_distinguishes_issue_type_fallbacks(
+    monkeypatch: pytest.MonkeyPatch,
+    owner_type: str,
+    graphql_status: int | None,
+    graphql_nodes: list[object] | None,
+    expected_state: str,
+) -> None:
+    """Keep label evidence when native Issue Types cannot supply defaults."""
+    repository = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        owner_type,
+        "private",
+        "github",
+        True,
+    )
+
+    def fake_run(
+        command: list[str], **_: object
+    ) -> subprocess.CompletedProcess[str]:
+        if command[1:3] == ["label", "list"]:
+            payload: object = [
+                {"name": "bug", "color": "D73A4A", "description": "Bug"}
+            ]
+            return subprocess.CompletedProcess(
+                command, 0, stdout=json.dumps(payload), stderr=""
+            )
+        assert graphql_status is not None
+        payload = {
+            "data": {"organization": {"issueTypes": {"nodes": graphql_nodes}}}
+        }
+        return subprocess.CompletedProcess(
+            command,
+            graphql_status,
+            stdout=json.dumps(payload),
+            stderr="denied" if graphql_status else "",
+        )
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    mapping = cli.inspect_work_item_mapping(repository)
+
+    assert mapping["state"] == "degraded"
+    assert mapping["issue_type_state"] == expected_state
+    assert mapping["label_state"] == "available"
+    assert mapping["issue_types"] == []
+    assert mapping["labels"] == [
+        {
+            "action": "preserve",
+            "color": "D73A4A",
+            "description": "Bug",
+            "issue_type": "Bug",
+            "pr_label": "bug",
+            "source": "bug",
+            "target": "bug",
+        }
+    ]
+
+
+def test_work_item_mapping_review_uses_the_copier_question_path() -> None:
+    """Keep mapping approval in the existing flat Copier answer schema."""
+    config = yaml.safe_load((ROOT / "copier.yml").read_text(encoding="utf-8"))
+    question = config["work_item_mapping_review"]
+
+    assert question["default"] == "pending"
+    assert set(question["choices"].values()) == {
+        "pending",
+        "accept-safe",
+        "review-individually",
+    }
+    assert question["when"] == "{{ project_mode == 'existing' }}"
+
+
+@pytest.mark.large
+def test_adopt_requires_the_copier_work_item_mapping_review_choice(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keep a default dry-run review-only until its Copier answer changes."""
+    source, _ = make_template(tmp_path)
+    config_path = source / "copier.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["work_item_mapping_review"] = {
+        "type": "str",
+        "choices": {
+            "Review before applying adoption": "pending",
+            "Accept safe suggestions": "accept-safe",
+            "Review every suggestion": "review-individually",
+        },
+        "default": "pending",
+        "when": "{{ project_mode == 'existing' }}",
+    }
+    config_path.write_text(
+        yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+    )
+    revision = commit(source, "test: add mapping review question")
+    project = tmp_path / "mapping-review-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: mapping review product")
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--dry-run",
+        "--json",
+    ]
+
+    assert main(arguments) == 0
+    pending = json.loads(capsys.readouterr().out)
+    assert pending["answers"]["work_item_mapping_review"] == "pending"
+    assert pending["adoption"]["mapping_reviewed"] is False
+    assert pending["adoption"]["applicable"] is False
+
+    assert (
+        main(
+            [
+                *arguments,
+                "--data",
+                "work_item_mapping_review=accept-safe",
+            ]
+        )
+        == 0
+    )
+    accepted = json.loads(capsys.readouterr().out)
+    assert accepted["answers"]["work_item_mapping_review"] == "accept-safe"
+    assert accepted["adoption"]["mapping_reviewed"] is True
+    assert accepted["adoption"]["applicable"] is True
 
 
 def write_product_release_workflow(
@@ -1763,6 +2014,13 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     assert (project / ".copier-answers.yml").is_file()
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
+    pending_payload = json.loads(
+        (project / cli.PENDING_ADOPTION_FILE).read_text(encoding="utf-8")
+    )
+    assert (
+        pending_payload["work_item_mapping"]
+        == saved_plan["adoption"]["work_item_mapping"]
+    )
     pending_status = git(project, "status", "--porcelain")
     assert (
         main(
@@ -1775,6 +2033,19 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
             ]
         )
         == 0
+    )
+    finalize_payload = json.loads(
+        finalize_plan_path(project).read_text(encoding="utf-8")
+    )
+    assert (
+        finalize_payload["adoption"]["work_item_mapping"]
+        == (pending_payload["work_item_mapping"])
+    )
+    finalize_report = finalize_plan_path(project).with_name(
+        cli.ADOPTION_REPORT_BASENAME + ".md"
+    )
+    assert "## Work-item mapping guidance" in finalize_report.read_text(
+        encoding="utf-8"
     )
     assert git(project, "status", "--porcelain") == pending_status
     assert (
@@ -2328,6 +2599,8 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "project_verification_hook=scripts/verify-skills",
         "--data",
         "features=[]",
+        "--data",
+        "work_item_mapping_review=accept-safe",
     ]
 
     assert main(arguments) == 0
@@ -2838,14 +3111,23 @@ def test_adoption_report_guides_work_item_mapping(tmp_path: Path) -> None:
     """Render safe defaults and surface custom metadata for a decision."""
     mapping = {
         "defaults": [dict(item) for item in cli.WORK_ITEM_DEFAULTS],
+        "issue_type_state": "available",
         "issue_types": [
-            {"action": "preserve", "source": "Bug", "target": "Bug"},
+            {
+                "action": "preserve",
+                "color": "RED",
+                "description": "An unexpected `problem`",
+                "enabled": True,
+                "source": "Bug",
+                "target": "Bug",
+            },
             {
                 "action": "decision-required",
                 "source": "Chore",
                 "target": None,
             },
         ],
+        "label_state": "available",
         "labels": [
             {
                 "action": "map",
@@ -2858,7 +3140,7 @@ def test_adoption_report_guides_work_item_mapping(tmp_path: Path) -> None:
             {
                 "action": "decision-required",
                 "color": "123456",
-                "description": "Backend|routing\nrule",
+                "description": "Backend `owner`|routing\nrule",
                 "issue_type": None,
                 "source": "team|backend",
                 "target": None,
@@ -2866,6 +3148,7 @@ def test_adoption_report_guides_work_item_mapping(tmp_path: Path) -> None:
         ],
         "mutation": "none",
         "reason": "Read-only inspection completed.",
+        "review": "review-individually",
         "state": "available",
     }
     report = cli.adoption_report_markdown(
@@ -2889,13 +3172,24 @@ def test_adoption_report_guides_work_item_mapping(tmp_path: Path) -> None:
 
     assert "## Work-item mapping guidance" in report
     assert "| `Bug` | `Bug` | `(none)` | `bug` |" in report
+    assert "Review choice: `review-individually`." in report
+    assert "`` An unexpected `problem` ``" in report
     assert "| `Bug` | `D73A4A` | `Project defects` | `map`" in report
     assert "| `team\\|backend` | `123456` |" in report
-    assert "`Backend\\|routing\\nrule` | `decision-required`" in report
+    assert (
+        "``Backend `owner`\\|routing\\nrule`` | `decision-required`" in report
+    )
     assert "Existing Issue Type `Chore` has no safe automatic mapping" in report
     assert (
         "Existing label `team|backend` has no safe automatic mapping" in report
     )
+
+
+def test_markdown_code_preserves_backticks_and_spaces() -> None:
+    """Choose a CommonMark delimiter without changing meaningful spaces."""
+    assert cli.markdown_code("`value`") == "`` `value` ``"
+    assert cli.markdown_code(" value ") == "`  value  `"
+    assert cli.markdown_code(" ") == "` `"
 
 
 def test_work_item_mapping_metadata_stays_in_plan_drift_binding() -> None:
@@ -2930,6 +3224,30 @@ def test_work_item_mapping_metadata_stays_in_plan_drift_binding() -> None:
         "saved='D73A4A', rebuilt='000000'",
         "$.adoption.work_item_mapping.labels[0].description: "
         "saved='Project defects', rebuilt='Different meaning'",
+    )
+
+
+def test_work_item_mapping_review_choice_stays_in_plan_drift_binding() -> None:
+    """Bind the user's Copier-question choice to the approved plan."""
+    saved: dict[str, object] = {
+        "answers": {"work_item_mapping_review": "accept-safe"},
+        "adoption": {"work_item_mapping": {"review": "accept-safe"}},
+    }
+    fresh: dict[str, object] = {
+        "answers": {"work_item_mapping_review": "review-individually"},
+        "adoption": {"work_item_mapping": {"review": "review-individually"}},
+    }
+
+    differences = cli.json_differences(
+        cli.pre_verification_binding(saved),
+        cli.pre_verification_binding(fresh),
+    )
+
+    assert differences == (
+        "$.adoption.work_item_mapping.review: saved='accept-safe', "
+        "rebuilt='review-individually'",
+        "$.answers.work_item_mapping_review: saved='accept-safe', "
+        "rebuilt='review-individually'",
     )
 
 
@@ -3711,6 +4029,80 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     assert after_payload["adoption"]["applied"] is True
     assert isinstance(after_payload["adoption"]["applied_at"], str)
     assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
+
+
+@pytest.mark.large
+def test_adopt_rejects_mapping_drift_during_task_bearing_render(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Recheck live mapping after Copier tasks and before target writes."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "mapping-drift-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: mapping drift product")
+    observed = {
+        "defaults": [],
+        "issue_type_state": "available",
+        "issue_types": [],
+        "label_state": "available",
+        "labels": [{"color": "D73A4A", "source": "bug"}],
+        "mutation": "none",
+        "reason": "Read-only inspection completed.",
+        "review": "accept-safe",
+        "state": "available",
+    }
+    inspections = 0
+
+    def inspect(*_: object) -> dict[str, object]:
+        nonlocal inspections
+        inspections += 1
+        result = json.loads(json.dumps(observed))
+        if inspections == 3:
+            result["labels"][0]["color"] = "000000"
+        return result
+
+    monkeypatch.setattr(cli, "inspect_work_item_mapping", inspect)
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--dry-run",
+    ]
+
+    assert main(arguments) == 0
+    plan = (
+        tmp_path
+        / "mapping-drift-product-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                *replay_authorization(plan),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    assert "drifted during the approved task-bearing render" in (
+        capsys.readouterr().err
+    )
+    assert not (project / ".copier-answers.yml").exists()
 
 
 @pytest.mark.large
@@ -4602,6 +4994,7 @@ def test_adoption_records_and_replays_explicit_project_hook(
         "after plan approval.`" in markdown
     )
     assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
+
     assert not hook_runs.exists()
 
     assert (
@@ -4647,6 +5040,36 @@ def test_adoption_records_and_replays_explicit_project_hook(
     assert update["answers"]["project_verification_hook"] == (
         "scripts/verify-other"
     )
+
+
+@pytest.mark.large
+def test_adopt_finalize_rejects_work_item_mapping_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reject live GitHub metadata that differs from the pending checkpoint."""
+    _, project = initialize_pending_adoption(tmp_path)
+    capsys.readouterr()
+    monkeypatch.setattr(
+        cli,
+        "inspect_work_item_mapping",
+        lambda *_: {
+            "defaults": [],
+            "issue_type_state": "available",
+            "issue_types": [],
+            "label_state": "available",
+            "labels": [],
+            "mutation": "none",
+            "reason": "Different live metadata.",
+            "review": "accept-safe",
+            "state": "available",
+        },
+    )
+
+    assert replay_finalize(project, "--dry-run") == 2
+    assert "work-item metadata drifted" in capsys.readouterr().err
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
 
 
 def test_explicit_project_hook_runs_once_without_using_run_command(
