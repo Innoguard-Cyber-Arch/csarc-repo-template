@@ -4134,6 +4134,11 @@ def test_revalidation_rebuilds_an_ordinary_same_pr_release(
     monkeypatch.setitem(
         revalidate_release_candidate.__globals__, "run", fake_run
     )
+    monkeypatch.setitem(
+        revalidate_release_candidate.__globals__,
+        "live_pull",
+        lambda *_: {"base": {"ref": "main"}, "body": "Closes #925"},
+    )
 
     result = revalidate_release_candidate(
         FakeGitHub("a" * 40),
@@ -4145,14 +4150,53 @@ def test_revalidation_rebuilds_an_ordinary_same_pr_release(
     assert result == "delivery version is exact"
     assert len(commands) == 1
     assert "verify-delivery-version" in commands[0]
-    assert commands[0][-6:] == [
+    assert commands[0][-8:] == [
         "--base-sha",
         "b" * 40,
         "--head-sha",
         "a" * 40,
         "--phase",
         "stable",
+        "--checkpoint-role",
+        "none",
     ]
+
+
+def test_revalidation_passes_the_live_checkpoint_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deferred checkpoint work is rechecked as deferred at merge time."""
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        MODULE["csarc_config"],
+        "load_config",
+        lambda *_: {"release_ownership": "csarc-owned"},
+    )
+    globals_ = revalidate_release_candidate.__globals__
+    monkeypatch.setitem(globals_, "require_lease", lambda *_: None)
+    monkeypatch.setitem(
+        globals_,
+        "run",
+        lambda command, **_: commands.append(command) or "deferred",
+    )
+    monkeypatch.setitem(
+        globals_,
+        "live_pull",
+        lambda *_: {"base": {"ref": "dev/m17-x"}, "body": "Closes #997"},
+    )
+    monkeypatch.setattr(
+        globals_["release_level"],
+        "checkpoint_role",
+        lambda _github, _repo, pull: (
+            "deferred" if pull["body"] == "Closes #997" else "none"
+        ),
+    )
+
+    revalidate_release_candidate(
+        FakeGitHub("a" * 40), lease_fixture(), "feat/997-canary", "beta"
+    )
+
+    assert commands[0][-2:] == ["--checkpoint-role", "deferred"]
 
 
 def test_revalidation_skips_a_formal_delivery_sync(

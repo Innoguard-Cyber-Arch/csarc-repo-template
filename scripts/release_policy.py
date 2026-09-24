@@ -38,6 +38,7 @@ STATES = {"allowed", "blocked", "unknown"}
 # #918: beta/stable channels with one exact migration bridge) instead of a local
 # plain-triplet pattern.
 PEP440_SURFACES = {"pyproject.toml", "uv.lock"}
+CHECKPOINT_ROLES = ("none", "terminal", "deferred")
 
 
 def _is_pep440_surface(relative_path: str) -> bool:
@@ -1429,7 +1430,11 @@ def release_plan(  # noqa: C901
 
 
 def release_plan_report(
-    root: Path, sha: str, *, phase: str | None = None
+    root: Path,
+    sha: str,
+    *,
+    phase: str | None = None,
+    checkpoint_role: str = "none",
 ) -> dict[str, object]:
     """Describe the one local release decision without changing the repo."""
     planned = release_plan(root, sha, phase=phase)
@@ -1453,6 +1458,13 @@ def release_plan_report(
             if materialized
             else "version and CHANGELOG candidate must be prepared"
         )
+        if checkpoint_role == "deferred":
+            if materialized:
+                raise ValueError(
+                    "deferred checkpoint work must not materialize a version"
+                )
+            status = "deferred"
+            reason = "checkpoint work defers its release to the terminal Issue"
     return {
         "status": status,
         "tag": tag,
@@ -1895,14 +1907,44 @@ def verify_promotion_version(
     }
 
 
+def _manifest_version(root: Path, revision: str) -> object:
+    manifest = json.loads(
+        git_output(["show", f"{revision}:.release-please-manifest.json"], root)
+    )
+    return manifest.get(".") if isinstance(manifest, dict) else None
+
+
 def verify_delivery_version(
-    root: Path, base_sha: str, head_sha: str, *, phase: str
+    root: Path,
+    base_sha: str,
+    head_sha: str,
+    *,
+    phase: str,
+    checkpoint_role: str = "none",
 ) -> dict[str, object]:
-    """Require release-worthy work to end in one exact release-only commit."""
+    """Require release-worthy work to end in one exact release-only commit.
+
+    Deferred checkpoint work is the exception: it must leave the version
+    untouched so only the checkpoint's terminal Issue publishes the beta.
+    """
     planned = release_plan(root, head_sha, phase=phase)
     if planned is None:
         return {
             "status": "no-release",
+            "materialized": False,
+            "base_sha": base_sha,
+            "head_sha": head_sha,
+        }
+    if checkpoint_role == "deferred":
+        if _manifest_version(root, head_sha) != _manifest_version(
+            root, base_sha
+        ):
+            raise ValueError(
+                "deferred checkpoint work must not materialize a version; "
+                "only the checkpoint's terminal Issue releases the beta"
+            )
+        return {
+            "status": "deferred",
             "materialized": False,
             "base_sha": base_sha,
             "head_sha": head_sha,
@@ -2195,6 +2237,9 @@ def parser() -> argparse.ArgumentParser:
             "(beta/stable, Issue #918); omit it to report the bare core."
         ),
     )
+    plan.add_argument(
+        "--checkpoint-role", choices=CHECKPOINT_ROLES, default="none"
+    )
     candidate = subparsers.add_parser("prepare-candidate")
     candidate.add_argument("--sha", default="HEAD")
     candidate.add_argument("--root", type=Path, default=Path.cwd())
@@ -2216,6 +2261,9 @@ def parser() -> argparse.ArgumentParser:
     )
     delivery_version.add_argument("--phase", choices=release_phase.PHASES)
     delivery_version.add_argument("--tag")
+    verify_delivery.add_argument(
+        "--checkpoint-role", choices=CHECKPOINT_ROLES, default="none"
+    )
     verify_promotion = subparsers.add_parser("verify-promotion-version")
     verify_promotion.add_argument("--source-sha", required=True)
     verify_promotion.add_argument("--head-sha", required=True)
@@ -2311,7 +2359,10 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
     if args.command == "plan":
         try:
             payload = release_plan_report(
-                args.root.resolve(), args.sha, phase=args.phase
+                args.root.resolve(),
+                args.sha,
+                phase=args.phase,
+                checkpoint_role=args.checkpoint_role,
             )
         except (ValueError, json.JSONDecodeError) as error:
             raise SystemExit(str(error)) from error
@@ -2372,6 +2423,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
                     args.base_sha,
                     args.head_sha,
                     phase=phase,
+                    checkpoint_role=args.checkpoint_role,
                 )
             else:
                 payload = verify_promotion_version(

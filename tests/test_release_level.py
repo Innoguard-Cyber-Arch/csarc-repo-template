@@ -510,6 +510,152 @@ def test_release_annotation_fails_closed_without_one_mutable_draft(
     assert github.writes == []
 
 
+CHECKPOINT_TRACKER = (
+    "## Proposal\n\n### Checkpoints\n\n"
+    "- Checkpoint A (beta): #996; terminal #996\n"
+    "- Checkpoint B (beta): #997, #998; terminal #998\n\n"
+    "### Outcome\n\nDone.\n"
+)
+
+
+def test_declared_checkpoints_map_terminal_and_deferred_issues() -> None:
+    assert levels.declared_checkpoints(CHECKPOINT_TRACKER) == {
+        996: "terminal",
+        997: "deferred",
+        998: "terminal",
+    }
+    assert (
+        levels.declared_checkpoints("## Proposal\n\nNo checkpoints.\n") is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ("- Checkpoint A (stable): #1; terminal #1", "Invalid checkpoint"),
+        ("- Checkpoint A (beta): #1, #2; terminal #3", "terminal Issue"),
+        ("- Checkpoint A (beta): #1, #1; terminal #1", "unique Issues"),
+        ("Checkpoint A covers #1", "Invalid checkpoint"),
+    ],
+)
+def test_declared_checkpoints_reject_malformed_lines(
+    line: str, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        levels.declared_checkpoints(f"### Checkpoints\n\n{line}\n")
+
+
+def test_declared_checkpoints_reject_shared_issues_and_names() -> None:
+    with pytest.raises(ValueError, match="more than one checkpoint"):
+        levels.declared_checkpoints(
+            "### Checkpoints\n\n"
+            "- Checkpoint A (beta): #1; terminal #1\n"
+            "- Checkpoint B (beta): #1, #2; terminal #2\n"
+        )
+    with pytest.raises(ValueError, match="declared twice"):
+        levels.declared_checkpoints(
+            "### Checkpoints\n\n"
+            "- Checkpoint A (beta): #1; terminal #1\n"
+            "- Checkpoint A (beta): #2; terminal #2\n"
+        )
+
+
+def checkpoint_github() -> FakeGitHub:
+    """Serve Milestone 17 with one tracker that declares checkpoints."""
+    github = FakeGitHub()
+    tracker = issue(994, None, milestone=17)
+    tracker["title"] = "Milestone 17: Checkpoints"
+    tracker["body"] = CHECKPOINT_TRACKER
+    github.objects["milestones/17"] = {"number": 17, "title": "Checkpoints"}
+    github.collections["issues?milestone=17&state=all&per_page=100"] = [tracker]
+    for number in (996, 997, 998, 999):
+        github.objects[f"issues/{number}"] = issue(number, None, milestone=17)
+    return github
+
+
+def delivery_pull(
+    issue_number: int, base: str = "dev/m17-cost"
+) -> dict[str, Any]:
+    """Build a merged delivery pull request closing one Issue."""
+    return {
+        "number": issue_number + 1000,
+        "body": f"Closes #{issue_number}",
+        "base": {"ref": base},
+        "merged_at": "2026-09-24T00:00:00Z",
+        "merge_commit_sha": "c" * 40,
+    }
+
+
+@pytest.mark.parametrize(
+    ("issue_number", "base", "role"),
+    [
+        (996, "dev/m17-cost", "terminal"),
+        (997, "dev/m17-cost", "deferred"),
+        (998, "dev/m17-cost", "terminal"),
+        # Undeclared work waits for the next checkpoint or promotion.
+        (999, "dev/m17-cost", "deferred"),
+        (996, "main", "none"),
+    ],
+)
+def test_checkpoint_role_follows_the_tracker_declaration(
+    issue_number: int, base: str, role: str
+) -> None:
+    github = checkpoint_github()
+
+    assert (
+        levels.checkpoint_role(github, "o/r", delivery_pull(issue_number, base))
+        == role
+    )
+
+
+def test_checkpoint_role_keeps_per_issue_betas_without_declarations() -> None:
+    github = checkpoint_github()
+    tracker = github.collections["issues?milestone=17&state=all&per_page=100"][
+        0
+    ]
+    tracker["body"] = "## Proposal\n\nPer-Issue betas.\n"
+
+    assert levels.checkpoint_role(github, "o/r", delivery_pull(997)) == "none"
+
+
+def test_checkpoint_role_for_commit_uses_the_exact_merged_pull() -> None:
+    github = checkpoint_github()
+    github.objects["commits/" + "c" * 40 + "/pulls"] = [
+        delivery_pull(997),
+        {**delivery_pull(996), "merge_commit_sha": "d" * 40},
+    ]
+
+    assert (
+        levels.checkpoint_role_for_commit(
+            github, "o/r", "c" * 40, "dev/m17-cost"
+        )
+        == "deferred"
+    )
+    assert (
+        levels.checkpoint_role_for_commit(github, "o/r", "c" * 40, "main")
+        == "none"
+    )
+
+
+def test_release_batch_lists_only_delivery_work_since_the_last_tag() -> None:
+    github = checkpoint_github()
+    trust(github, "worker")
+    pulls = [
+        {**delivery_pull(997), "milestone": {"number": 17}, "title": "Canary"},
+        {**delivery_pull(998), "milestone": {"number": 17}, "title": "Dedupe"},
+    ]
+    for pull in pulls:
+        pull["user"] = {"login": "worker"}
+        pull["head"] = {"ref": "feat/x", "repo": {"full_name": "o/r"}}
+
+    batch = levels.release_batch(github, "o/r", pulls, settings())
+
+    assert [(item["kind"], item["number"]) for item in batch["items"]] == [
+        ("Issue", 997),
+        ("Issue", 998),
+    ]
+
+
 def test_root_and_template_release_level_modules_match() -> None:
     assert (ROOT / "scripts/release_level.py").read_bytes() == (
         ROOT / "template/.csarc/scripts/release_level.py"
