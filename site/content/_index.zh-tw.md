@@ -762,7 +762,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 專案選擇 | `repository_url`、`project_slug` | 未覆寫時由 `code_owner`／`project_name` 推導 | repo-site 的複製（clone）指引 |
 | 專案選配 | `enable_governance_drift_check` | 預設 `true`，產生每日排程 Action；可設為 `false` 關閉 | `true` 生成 `governance-drift.yml` 與 drift checker；`false` 兩者皆不產生 |
 
-公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。方案、帳務、Copilot entitlement、token 權限與 Pages 可用性不是設定值，而是 `allowed`／`blocked`／`unknown` 的即時偵測結果。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
+公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。方案、帳務、Copilot entitlement、token 權限與 Pages 可用性不是設定值，而是 `allowed`／`blocked`／`unknown` 的即時偵測結果。反過來，`policies/pages.json` 的 `enabled` 是維護者的 desired-state 選擇：public／Free 表示可以發布，不代表必須發布，`enabled=false` 是會被檢查與收斂的明確 opt-out。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
 
 `documentation_mode: template-and-content` 的生成專案與這個公版根網站使用同一套渲染引擎與元件（Issue #681），只是內容精簡許多；只從上表 key 讀取明確的 `[[key]]` token，直接對照 `.csarc/config.yml`，未知 key 會讓建置直接失敗，因此網站不會另建第二份設定 schema。專案文字與樣式選擇留在 `docs/site/content/` 與 `docs/site/theme.css`，由專案自行維護；完整責任與遷移規則見 `docs/documentation-policy.md`。
 {{< /disclosure >}}

@@ -40,6 +40,10 @@ caught here without mocking the full `gh` CLI surface that
       `policies/repository.json`/`policies/releases.json`/
       `policies/rulesets.json`) that compares the selected Pages build type
       and optional source against `GET /repos/{owner}/{repo}/pages`.
+   c. The desired/live reconciliation (Issue #985): `enabled` is the
+      maintainer's desired-state choice, so `enabled=false` is an explicit
+      opt-out that still yields a DISABLE action when a site is live, and an
+      unclassifiable live read stays `unknown` instead of passing.
 
 3. The `apply` mode's `issueCreationPolicy` GraphQL mutation (Issue #757).
    GitHub's schema declares this field's input type as `IssueCreationPolicy`
@@ -103,9 +107,13 @@ PAGES_AVAILABILITY_SOURCE = _extract(
 )
 
 PAGES_DRIFT_SOURCE = _extract(
-    'elif ! pages_drift="$(python3 - "$pages_policy" "$pages_state" '
-    "2>&1 <<'PY'\n",
+    'python3 - "$pages_policy" "$pages_state" 2>&1 <<\'PY\'\n',
     "\nPY\n",
+)
+
+PAGES_RECONCILE_SOURCE = _extract(
+    '# classified stays "unknown" so it never passes as compliant.\n',
+    '\n\nif [[ "$mode" == "check" ]]; then\n',
 )
 
 # `_extract` excludes both markers from its result, but this block needs its
@@ -219,6 +227,66 @@ def run_pages_drift(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
+    )
+
+
+def run_pages_reconcile(
+    enabled: str,
+    available: str,
+    live: str,
+    tmp_path: Path,
+    live_settings: Mapping[str, object] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run the shipped Pages inspection and decision against a stub `gh`.
+
+    `live` selects the stubbed `GET repos/{repo}/pages` outcome: a published
+    site, GitHub's 404 for an unpublished one, a non-404 error, or `forbid`,
+    which fails the test if the script inspects Pages at all. The harness
+    prints `<live_state> <action>` so each desired/live pair is asserted
+    against the same bash the script ships.
+    """
+    policy = tmp_path / "pages.json"
+    policy.write_text(
+        json.dumps({"enabled": enabled == "true", "build_type": "workflow"}),
+        encoding="utf-8",
+    )
+    live_path = tmp_path / "live.json"
+    live_path.write_text(
+        json.dumps(
+            live_settings or {"build_type": "workflow", "status": "built"}
+        ),
+        encoding="utf-8",
+    )
+    script = (
+        'pages_policy="$1"\n'
+        'pages_policy_enabled="$2"\n'
+        'pages_enforcement_available="$3"\n'
+        'repo="Test-Org/test-repo"\n'
+        "gh() {\n"
+        '  case "$STUB_PAGES" in\n'
+        '    published) cat "$STUB_LIVE" ;;\n'
+        "    missing)\n"
+        '      echo \'{"message":"Not Found","status":"404"}\'\n'
+        "      echo 'gh: Not Found (HTTP 404)' >&2\n"
+        "      return 1 ;;\n"
+        "    error) echo 'gh: Server Error (HTTP 500)' >&2; return 1 ;;\n"
+        "    *) echo 'unexpected Pages inspection' >&2; exit 99 ;;\n"
+        "  esac\n"
+        "}\n"
+        f"{PAGES_RECONCILE_SOURCE}\n"
+        'echo "$pages_live_state $pages_action"\n'
+    )
+    return subprocess.run(  # noqa: S603
+        [BASH, "-c", script, "bash", str(policy), enabled, available],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        env={
+            **os.environ,
+            "STUB_PAGES": live,
+            "STUB_LIVE": str(live_path),
+        },
     )
 
 
@@ -723,6 +791,82 @@ def test_missing_live_source_is_reported(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert "source.branch: desired 'main', live None" in result.stdout
     assert "source.path: desired '/docs', live None" in result.stdout
+
+
+# -- Desired/live reconciliation (Issue #985) --
+
+
+@pytest.mark.parametrize(
+    ("enabled", "available", "live", "expected"),
+    [
+        # Public repository on GitHub Free: capability available.
+        ("true", "true", "missing", "unpublished enable"),
+        ("true", "true", "published", "published noop"),
+        ("false", "true", "published", "published disable"),
+        ("false", "true", "missing", "unpublished noop"),
+        # A non-404 read error never passes as published or compliant.
+        ("true", "true", "error", "unknown unknown"),
+        ("false", "true", "error", "unknown unknown"),
+        # Capability blocked (private without Enterprise): no live probe.
+        ("true", "false", "forbid", "not-inspected degraded"),
+        ("false", "false", "forbid", "not-inspected noop"),
+    ],
+)
+def test_pages_reconcile_action_matrix(
+    enabled: str, available: str, live: str, expected: str, tmp_path: Path
+) -> None:
+    """Each desired state maps to one reviewable action per live state.
+
+    `enabled=false` is an explicit opt-out, so a published site must yield
+    DISABLE rather than being skipped; public/Free capability alone never
+    forces `enable`.
+    """
+    result = run_pages_reconcile(enabled, available, live, tmp_path)
+
+    assert result.returncode == 0, result.stdout
+    assert result.stdout.strip() == expected
+
+
+def test_pages_reconcile_reports_settings_drift_as_update(
+    tmp_path: Path,
+) -> None:
+    """A published site with the wrong build type is an UPDATE, not a no-op."""
+    result = run_pages_reconcile(
+        "true",
+        "true",
+        "published",
+        tmp_path,
+        live_settings={"build_type": "legacy", "status": "built"},
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert result.stdout.strip() == "published update"
+
+
+def test_pages_actions_are_wired_into_plan_check_and_apply() -> None:
+    """Every reconciliation action has plan, check, and apply handling."""
+    plan = SCRIPT_SOURCE[SCRIPT_SOURCE.index('echo "Deployment plan:"') :]
+    for label in (
+        "NO-OP",
+        "ENABLE",
+        "UPDATE",
+        "DISABLE",
+        "DEGRADED",
+        "BLOCKED",
+    ):
+        assert f'echo "- {label} policies/pages.json' in plan
+    assert (
+        "Pages settings drift: GitHub Pages is published for $repo; "
+        "policies/pages.json requests enabled=false (explicit opt-out)."
+    ) in SCRIPT_SOURCE
+    assert 'gh api --method DELETE "repos/$repo/pages"' in SCRIPT_SOURCE
+    unknown_guard = SCRIPT_SOURCE.index(
+        'if [[ "$pages_action" == "unknown" ]]; then'
+    )
+    first_mutation = SCRIPT_SOURCE.index(
+        'gh api --method PATCH "repos/$repo" --input'
+    )
+    assert unknown_guard < first_mutation
 
 
 COPILOT_RULE = {

@@ -144,6 +144,10 @@ esac
 
 pages_policy="$repo_root/.csarc/policies/pages.json"
 pages_policy_enabled="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["enabled"]))' "$pages_policy")"
+if [[ "$pages_policy_enabled" != "true" && "$pages_policy_enabled" != "false" ]]; then
+  echo "Invalid enabled in .csarc/policies/pages.json: $pages_policy_enabled (expected true or false)." >&2
+  exit 1
+fi
 # GitHub Pages is free for public repositories on every plan; a private
 # repository requires GitHub Enterprise Cloud regardless of Ruleset
 # enforcement availability, so this is computed independently of
@@ -347,6 +351,77 @@ else
   )"
 fi
 
+# GitHub Pages reconciliation (Issue #985). `enabled` in .csarc/policies/pages.json is the
+# maintainer's desired-state choice, not a capability claim: true asks for a
+# published site, and false is an explicit opt-out that plan, check, and apply
+# still manage by keeping the live site unpublished. Visibility/plan capability
+# stays separate in pages_enforcement_available, and a live read that cannot be
+# classified stays "unknown" so it never passes as compliant.
+pages_settings_drift() {
+  python3 - "$pages_policy" "$pages_state" 2>&1 <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))
+actual = json.loads(sys.argv[2])
+drift = [
+    f"{key}: desired {desired[key]!r}, live {actual.get(key)!r}"
+    for key in ("build_type",)
+    if key in desired and actual.get(key) != desired[key]
+]
+desired_source = desired.get("source")
+actual_source = actual.get("source", {})
+if isinstance(desired_source, dict):
+    drift.extend(
+        f"source.{key}: desired {value!r}, live {actual_source.get(key)!r}"
+        for key, value in desired_source.items()
+        if actual_source.get(key) != value
+    )
+if drift:
+    raise SystemExit("; ".join(drift))
+PY
+}
+
+pages_reconcile_action() {
+  local enabled="$1" available="$2" live_state="$3" drift="$4"
+  if [[ "$available" != true ]]; then
+    if [[ "$enabled" == "true" ]]; then
+      echo degraded
+    else
+      echo noop
+    fi
+  elif [[ "$live_state" == "unknown" ]]; then
+    echo unknown
+  elif [[ "$enabled" == "true" ]]; then
+    if [[ "$live_state" != "published" ]]; then
+      echo enable
+    elif [[ -n "$drift" ]]; then
+      echo update
+    else
+      echo noop
+    fi
+  elif [[ "$live_state" == "published" ]]; then
+    echo disable
+  else
+    echo noop
+  fi
+}
+
+pages_state=""
+pages_drift=""
+pages_live_state="not-inspected"
+if [[ "$pages_enforcement_available" == true ]]; then
+  if pages_state="$(gh api "repos/$repo/pages" 2>&1)"; then
+    pages_live_state="published"
+    pages_drift="$(pages_settings_drift)" || true
+  elif [[ "$pages_state" == *"Not Found"* ]]; then
+    pages_live_state="unpublished"
+  else
+    pages_live_state="unknown"
+  fi
+fi
+pages_action="$(pages_reconcile_action "$pages_policy_enabled" "$pages_enforcement_available" "$pages_live_state" "$pages_drift")"
+
 if [[ "$mode" == "check" ]]; then
   check_errors=0
   check_degraded=0
@@ -526,50 +601,40 @@ PY
     echo "Immutable Releases match .csarc/policies/releases.json."
   fi
 
-  if [[ "$pages_policy_enabled" != "true" ]]; then
-    echo "Pages policy disabled: .csarc/policies/pages.json requests enabled=false; no live GitHub Pages check performed."
-  elif [[ "$pages_enforcement_available" != true ]]; then
-    [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
-      echo "::warning title=GitHub Pages degraded::GitHub Pages is unavailable for this private repository on $plan_label."
-    echo "DEGRADED GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. .csarc/policies/pages.json stays enabled=true for when this repository is public or the account upgrades; the template must keep working on every GitHub plan and visibility, so this account-plan and visibility limitation does not fail closed."
-    check_degraded=$((check_degraded + 1))
-  elif ! pages_state="$(gh api "repos/$repo/pages" 2>&1)"; then
-    if [[ "$pages_state" == *"Not Found"* ]]; then
+  case "$pages_action" in
+    noop)
+      if [[ "$pages_policy_enabled" == "true" ]]; then
+        echo "Pages settings match .csarc/policies/pages.json."
+      elif [[ "$pages_live_state" == "unpublished" ]]; then
+        echo "Pages opt-out matches .csarc/policies/pages.json: enabled=false and GitHub Pages is not published for $repo."
+      else
+        echo "Pages opt-out matches .csarc/policies/pages.json: enabled=false and $plan_label cannot publish GitHub Pages while $repo is private."
+      fi
+      ;;
+    degraded)
+      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+        echo "::warning title=GitHub Pages degraded::GitHub Pages is unavailable for this private repository on $plan_label."
+      echo "DEGRADED GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. .csarc/policies/pages.json stays enabled=true for when this repository is public or the account upgrades; the template must keep working on every GitHub plan and visibility, so this account-plan and visibility limitation does not fail closed."
+      check_degraded=$((check_degraded + 1))
+      ;;
+    enable)
       echo "Pages settings drift: GitHub Pages is not enabled for $repo; .csarc/policies/pages.json requests enabled=true." >&2
       check_errors=$((check_errors + 1))
-    else
+      ;;
+    update)
+      echo "Pages settings drift: $pages_drift" >&2
+      check_errors=$((check_errors + 1))
+      ;;
+    disable)
+      echo "Pages settings drift: GitHub Pages is published for $repo; .csarc/policies/pages.json requests enabled=false (explicit opt-out)." >&2
+      check_errors=$((check_errors + 1))
+      ;;
+    *)
       echo "Cannot inspect GitHub Pages settings for $repo." >&2
       echo "$pages_state" >&2
       check_errors=$((check_errors + 1))
-    fi
-  elif ! pages_drift="$(python3 - "$pages_policy" "$pages_state" 2>&1 <<'PY'
-import json
-import sys
-
-desired = json.load(open(sys.argv[1], encoding="utf-8"))
-actual = json.loads(sys.argv[2])
-drift = [
-    f"{key}: desired {desired[key]!r}, live {actual.get(key)!r}"
-    for key in ("build_type",)
-    if key in desired and actual.get(key) != desired[key]
-]
-desired_source = desired.get("source")
-actual_source = actual.get("source", {})
-if isinstance(desired_source, dict):
-    drift.extend(
-        f"source.{key}: desired {value!r}, live {actual_source.get(key)!r}"
-        for key, value in desired_source.items()
-        if actual_source.get(key) != value
-    )
-if drift:
-    raise SystemExit("; ".join(drift))
-PY
-  )"; then
-    echo "Pages settings drift: $pages_drift" >&2
-    check_errors=$((check_errors + 1))
-  else
-    echo "Pages settings match .csarc/policies/pages.json."
-  fi
+      ;;
+  esac
 
   if [[ "$policy_actions_permissions" != "true" ]]; then
     echo "SKIPPED .csarc/policies/actions.json (governance_mode=observe in .csarc/config.yml)."
@@ -824,13 +889,20 @@ if [[ "$apply_release_policy" == "true" ]]; then
 else
   echo "- SKIP .csarc/policies/releases.json (release_immutable_releases=$release_immutable_releases; not required by this release ownership)"
 fi
-if [[ "$pages_policy_enabled" != "true" ]]; then
-  echo "- SKIP .csarc/policies/pages.json (enabled=false)"
-elif [[ "$pages_enforcement_available" == true ]]; then
-  echo "- APPLY .csarc/policies/pages.json (GitHub Pages)"
-else
-  echo "- DEGRADED .csarc/policies/pages.json: GitHub Pages requires GitHub Enterprise Cloud for a private repository on $plan_label"
-fi
+case "$pages_action" in
+  noop)
+    if [[ "$pages_policy_enabled" == "true" ]]; then
+      echo "- NO-OP .csarc/policies/pages.json (enabled=true; GitHub Pages already published and matching)"
+    else
+      echo "- NO-OP .csarc/policies/pages.json (enabled=false; GitHub Pages is not published)"
+    fi
+    ;;
+  enable) echo "- ENABLE .csarc/policies/pages.json (enabled=true; create the GitHub Pages site)" ;;
+  update) echo "- UPDATE .csarc/policies/pages.json (enabled=true; $pages_drift)" ;;
+  disable) echo "- DISABLE .csarc/policies/pages.json (enabled=false; unpublish the live GitHub Pages site)" ;;
+  degraded) echo "- DEGRADED .csarc/policies/pages.json: GitHub Pages requires GitHub Enterprise Cloud for a private repository on $plan_label" ;;
+  *) echo "- BLOCKED .csarc/policies/pages.json: cannot inspect live GitHub Pages state; apply fails closed before any change" ;;
+esac
 if [[ "$policy_actions_permissions" == "true" ]]; then
   echo "- APPLY .csarc/policies/actions.json when account policy permits it"
 else
@@ -893,6 +965,11 @@ if [[ "$mode" == "plan" ]]; then
   echo "No changes applied. Re-run with 'apply' after review."
   exit 0
 fi
+if [[ "$pages_action" == "unknown" ]]; then
+  echo "Cannot inspect GitHub Pages settings for $repo; refusing to apply repository settings." >&2
+  echo "$pages_state" >&2
+  exit 1
+fi
 if [[ "$policy_repository_settings" == "true" ]]; then
   gh api --method PATCH "repos/$repo" --input "$repo_root/.csarc/policies/repository.json" >/dev/null
 fi
@@ -927,25 +1004,33 @@ if [[ "$apply_release_policy" == "true" ]]; then
   fi
 fi
 pages_policy_applied=true
-if [[ "$pages_policy_enabled" == "true" ]]; then
-  if [[ "$pages_enforcement_available" != true ]]; then
+case "$pages_action" in
+  degraded)
     pages_policy_applied=false
     echo "DEGRADED GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. .csarc/policies/pages.json stays enabled=true for when this repository is public or the account upgrades."
-  else
+    ;;
+  enable | update)
     pages_apply_payload="$(python3 -c 'import json,sys; policy=json.load(open(sys.argv[1], encoding="utf-8")); policy.pop("enabled", None); print(json.dumps(policy))' "$pages_policy")"
-    if gh api "repos/$repo/pages" >/dev/null 2>&1; then
-      if ! pages_policy_error="$(echo "$pages_apply_payload" | gh api --method PUT "repos/$repo/pages" --input - 2>&1)"; then
-        echo "Cannot update GitHub Pages settings for $repo." >&2
-        echo "$pages_policy_error" >&2
-        exit 1
-      fi
-    elif ! pages_policy_error="$(echo "$pages_apply_payload" | gh api --method POST "repos/$repo/pages" --input - 2>&1)"; then
-      echo "Cannot enable GitHub Pages for $repo." >&2
+    pages_apply_method=PUT
+    pages_apply_verb=update
+    if [[ "$pages_action" == "enable" ]]; then
+      pages_apply_method=POST
+      pages_apply_verb=enable
+    fi
+    if ! pages_policy_error="$(echo "$pages_apply_payload" | gh api --method "$pages_apply_method" "repos/$repo/pages" --input - 2>&1)"; then
+      echo "Cannot $pages_apply_verb GitHub Pages for $repo." >&2
       echo "$pages_policy_error" >&2
       exit 1
     fi
-  fi
-fi
+    ;;
+  disable)
+    if ! pages_policy_error="$(gh api --method DELETE "repos/$repo/pages" 2>&1)"; then
+      echo "Cannot disable GitHub Pages for $repo." >&2
+      echo "$pages_policy_error" >&2
+      exit 1
+    fi
+    ;;
+esac
 actions_policy_applied=true
 if [[ "$policy_actions_permissions" == "true" ]]; then
   if ! actions_policy_error="$(
