@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.26.8] - 2026-09-24
+
+### Bug Fixes
+
+* fix: treat work closed before #816 as historical (2d8429d)
+
 ## [0.26.7] - 2026-09-24
 
 ### Bug Fixes
