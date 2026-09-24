@@ -6954,6 +6954,103 @@ def test_update_migrates_documentation_language_and_license_settings() -> None:
 
 
 @pytest.mark.large
+def test_same_revision_update_ignores_derived_release_answers(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keep derived release evidence without treating it as an answer change."""
+    revision = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "current-root-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "project_mode=new",
+                "--data",
+                "language=ci",
+                "--data",
+                "project_visibility=private",
+                "--data",
+                "project_verification_hook=",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: current root template")
+
+    assert (
+        main(
+            [
+                "status",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    status = json.loads(capsys.readouterr().out)
+    assert status["state"] == "current"
+    assert status["update_status"]["update_available"] is False
+
+    update_arguments = [
+        "update",
+        str(project),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--check",
+        "--json",
+    ]
+    assert main(update_arguments) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "current"
+    assert payload["update_available"] is False
+    assert payload["answers_changed"] is False
+    derived_release_answers = {
+        "release_immutable_releases": "immutable_releases",
+        "release_ownership_reason": "reason",
+        "release_required_inputs": "required_inputs",
+        "release_settings_owner": "settings_owner",
+        "release_workflow": "selected_workflow",
+    }
+    saved_answers = cli.read_copier_answers(cli.config_path(project))
+    for answer_key, release_key in derived_release_answers.items():
+        assert answer_key not in saved_answers
+        assert payload["answers"][answer_key] == payload["release"][release_key]
+
+    assert (
+        main(
+            [
+                *update_arguments,
+                "--data",
+                "project_description=Changed by test",
+            ]
+        )
+        == 1
+    )
+    changed = json.loads(capsys.readouterr().out)
+    assert changed["status"] == "outdated"
+    assert changed["update_available"] is True
+    assert changed["answers_changed"] is True
+    assert changed["answers"]["project_description"] == "Changed by test"
+
+
+@pytest.mark.large
 def test_update_check_tolerates_pre_schema_existing_adoption(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
