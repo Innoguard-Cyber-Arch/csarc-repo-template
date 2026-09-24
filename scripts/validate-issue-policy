@@ -54,37 +54,19 @@ case "$issue_class" in
     ;;
 esac
 
-issue_label="$issue_class"
-case "$issue_class" in
-  feature|task) issue_label="enhancement" ;;
-esac
-for label in bug enhancement documentation duplicate; do
-  [[ "$label" == "$issue_label" ]] && continue
-  python3 scripts/pr_lifecycle.py issue-edit \
-    --repo "$GITHUB_REPOSITORY" \
-    --issue-number "$ISSUE_NUMBER" \
-    --remove-label "$label" >/dev/null 2>&1 || true
-done
-python3 scripts/pr_lifecycle.py issue-edit \
-  --repo "$GITHUB_REPOSITORY" \
-  --issue-number "$ISSUE_NUMBER" \
-  --add-assignee "$ISSUE_AUTHOR"
-python3 scripts/pr_lifecycle.py issue-edit \
-  --repo "$GITHUB_REPOSITORY" \
-  --issue-number "$ISSUE_NUMBER" \
-  --add-label "$issue_label"
-
 native_type=""
 case "$issue_class" in
   bug) native_type="Bug" ;;
   feature|enhancement) native_type="Feature" ;;
   task|documentation) native_type="Task" ;;
 esac
+native_type_available=false
 if [[ -n "$native_type" ]]; then
-  if ! python3 scripts/pr_lifecycle.py issue-edit \
+  if python3 scripts/pr_lifecycle.py issue-edit \
     --repo "$GITHUB_REPOSITORY" \
-    --issue-number "$ISSUE_NUMBER" \
-    --type "$native_type" >/dev/null 2>&1; then
+    --issue-number "$ISSUE_NUMBER" --type "$native_type" >/dev/null 2>&1; then
+    native_type_available=true
+  else
     echo "::notice::Native Issue Types are unavailable; the ${issue_class} label remains authoritative."
   fi
 elif ! python3 scripts/pr_lifecycle.py issue-edit \
@@ -92,4 +74,35 @@ elif ! python3 scripts/pr_lifecycle.py issue-edit \
   --issue-number "$ISSUE_NUMBER" \
   --remove-type >/dev/null 2>&1; then
   echo "::notice::Native Issue Types are unavailable; the duplicate label remains authoritative."
+fi
+
+# A native Type owns the Issue's work kind. Keep only labels that add
+# information (documentation and duplicate), or the portable fallback when
+# native Issue Types are unavailable. Pull requests still receive one
+# lowercase classification label from sync_work_item_metadata.py.
+issue_label="$issue_class"
+case "$issue_class" in
+  feature|task) issue_label="enhancement" ;;
+esac
+if [[ "$native_type_available" == "true" && "$issue_class" != "documentation" ]]; then
+  issue_label=""
+fi
+for label in bug enhancement documentation duplicate; do
+  [[ -n "$issue_label" && "$label" == "$issue_label" ]] && continue
+  python3 scripts/pr_lifecycle.py issue-edit \
+    --repo "$GITHUB_REPOSITORY" \
+    --issue-number "$ISSUE_NUMBER" \
+    --remove-label "$label" >/dev/null 2>&1 || true
+done
+if [[ -n "${ISSUE_AUTHOR:-}" ]]; then
+  python3 scripts/pr_lifecycle.py issue-edit \
+    --repo "$GITHUB_REPOSITORY" \
+    --issue-number "$ISSUE_NUMBER" \
+    --add-assignee "$ISSUE_AUTHOR"
+fi
+if [[ -n "$issue_label" ]]; then
+  python3 scripts/pr_lifecycle.py issue-edit \
+    --repo "$GITHUB_REPOSITORY" \
+    --issue-number "$ISSUE_NUMBER" \
+    --add-label "$issue_label"
 fi

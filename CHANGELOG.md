@@ -7,6 +7,25 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.26.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix: align docs-off operational guidance (5efdda9)
+* fix: keep docs-off lifecycle wording neutral (0bef2a3)
+
+## [0.26.0] - 2026-09-24
+
+### Features
+
+* feat(adoption): suggest work item mappings (78389d6)
+
+### Bug Fixes
+
+* fix(adoption): preserve observed label metadata (249c729)
+* fix(adoption): bind reviewed work item mappings (8faaa94)
+* fix(adoption): close mapping confirmation gaps (99c47ab)
+
 ## [0.25.14-beta.1] - 2026-09-24
 
 ### Bug Fixes
@@ -43,17 +62,36 @@ CHANGELOG 的 tag。
 
 * fix(adopt): detect unfinished manual merges (8777208)
 
+## [0.25.8] - 2026-09-24
+
+### Bug Fixes
+
+* fix(governance): keep milestone metadata aligned (6fbc7e0)
+
 ## [0.25.8-beta.1] - 2026-09-24
 
 ### Bug Fixes
 
 * fix(adopt): allow pending lockfile updates (a71f2a5)
 
+## [0.25.7] - 2026-09-24
+
+### Bug Fixes
+
+* fix: repair language promotion evidence (5c798ff)
+
 ## [0.25.7-beta.1] - 2026-09-24
 
 ### Bug Fixes
 
 * fix(cli): migrate legacy Copier revisions (c34be2f)
+
+## [0.25.6] - 2026-09-24
+
+### Bug Fixes
+
+* fix(governance): normalize work item labels (904510c)
+* fix(governance): guard automated issue edits (0531082)
 
 ## [0.25.6-beta.1] - 2026-09-24
 

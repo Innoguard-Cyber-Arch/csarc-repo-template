@@ -1,6 +1,7 @@
 name: Task｜獨立工作
 description: 定義一項能獨立完成、驗證與交付的預定工作
 title: ""
+# Portable fallback; lifecycle removes it when native Issue Types work.
 labels: ["enhancement"]
 type: "Task"
 body:

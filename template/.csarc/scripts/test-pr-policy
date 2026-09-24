@@ -606,6 +606,35 @@ if PR_BRANCH_STRATEGY="main" \
 fi
 
 case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="main" \
+PR_NUMBER="41" \
+PR_TITLE="fix(api): repair typed issue" \
+PR_LABELS="bug" \
+PR_BASE="main" \
+PR_HEAD="fix/301-typed-issue" \
+PR_BODY="Closes #301" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_LABELS="" \
+PR_ISSUE_TYPE="Bug" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="main" \
+  PR_NUMBER="41" \
+  PR_TITLE="fix(api): reject duplicate classification" \
+  PR_LABELS="bug" \
+  PR_BASE="main" \
+  PR_HEAD="fix/301-duplicate-classification" \
+  PR_BODY="Closes #301" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_LABELS="bug" \
+  PR_ISSUE_TYPE="Bug" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a redundant Issue work-kind label."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="main" \
   PR_TITLE="feat(api): add wrong milestone report" \
   PR_LABELS="enhancement" \

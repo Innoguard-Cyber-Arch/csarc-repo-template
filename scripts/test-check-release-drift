@@ -68,10 +68,16 @@ case "$1" in
           echo "mock gh: Issue update failure" >&2
           exit 1
         fi
+        if [[ "${MOCK_FAIL_TYPE:-0}" == "1" && " $* " == *" --type Bug "* ]]; then
+          echo "mock gh: native Issue Types unavailable" >&2
+          exit 1
+        fi
         issue_number="$3"
         body_file="$(find_flag_value --body-file "$@")"
-        echo "edit $issue_number" >>"$MOCK_ROOT/issue-calls.log"
-        cp "$body_file" "$MOCK_ROOT/last-issue-body.md"
+        echo "edit $issue_number $*" >>"$MOCK_ROOT/issue-calls.log"
+        if [[ -n "$body_file" ]]; then
+          cp "$body_file" "$MOCK_ROOT/last-issue-body.md"
+        fi
         ;;
       create)
         if [[ "${MOCK_FAIL_ISSUE:-0}" == "1" ]]; then
@@ -79,8 +85,9 @@ case "$1" in
           exit 1
         fi
         body_file="$(find_flag_value --body-file "$@")"
-        echo "create" >>"$MOCK_ROOT/issue-calls.log"
+        echo "create $*" >>"$MOCK_ROOT/issue-calls.log"
         cp "$body_file" "$MOCK_ROOT/last-issue-body.md"
+        printf 'https://github.com/%s/issues/88\n' "$MOCK_REPO"
         ;;
       *)
         echo "mock gh: unexpected issue subcommand: $*" >&2
@@ -114,6 +121,10 @@ case "$1" in
         exit 1
       fi
       fixture="$MOCK_ROOT/issue-comments.json"
+    elif [[ "$path" == repos/*/issues/[0-9]* ]]; then
+      issue_number="${path##*/}"
+      printf '{"number":%s}\n' "$issue_number"
+      exit 0
     else
       echo "mock gh: unexpected api path: $path" >&2
       exit 2
@@ -137,7 +148,8 @@ export MOCK_ROOT="$fixture_root"
 export MOCK_REPO="$mock_repo"
 
 run_mocked() {
-  PATH="$fixture_root/bin:$PATH" "$script_path" --now "2026-09-04T12:00:00Z" "$@"
+  GITHUB_ACTIONS=true PATH="$fixture_root/bin:$PATH" \
+    "$script_path" --now "2026-09-04T12:00:00Z" "$@"
 }
 
 reset_fixtures() {
@@ -319,6 +331,12 @@ set -e
 [[ "$drift_status" -eq 0 ]]
 grep -Fq "DRIFT DETECTED" <<<"$drift_output"
 grep -Fq "create" "$fixture_root/issue-calls.log"
+grep -Fq -- "--type Bug" "$fixture_root/issue-calls.log"
+grep -Fq -- "--remove-label bug" "$fixture_root/issue-calls.log"
+if grep -Fq -- "--assignee" "$fixture_root/issue-calls.log"; then
+  echo "Release drift automation attempted unsupported self-assignment."
+  exit 1
+fi
 grep -Fq "已經前進" "$fixture_root/last-issue-body.md"
 
 # Case 9: same stale state, but a tracking Issue is already open -- update
@@ -341,7 +359,23 @@ set -e
 grep -Fq "from tracking Issue comment" <<<"$update_output"
 grep -Fq "DRIFT DETECTED" <<<"$update_output"
 grep -Fq "edit 77" "$fixture_root/issue-calls.log"
+grep -Fq -- "--type Bug" "$fixture_root/issue-calls.log"
+grep -Fq -- "--remove-label bug" "$fixture_root/issue-calls.log"
 [[ "$(cat "$fixture_root/issue-calls.log")" != *create* ]]
+
+# Case 9b: repositories without native Issue Types keep the lowercase
+# fallback label instead of losing all work-kind classification.
+reset_fixtures
+cat >"$fixture_root/open-issues.json" <<'JSON'
+[{"number": 77, "title": "Release publish drift detected"}]
+JSON
+set +e
+fallback_output="$(MOCK_FAIL_TYPE=1 run_mocked 2>&1)"
+fallback_status=$?
+set -e
+[[ "$fallback_status" -eq 0 ]]
+grep -Fq "Native Issue Types are unavailable" <<<"$fallback_output"
+grep -Fq -- "--add-label bug" "$fixture_root/issue-calls.log"
 
 # Case 10: a recent commit-message publish record is audit text and cannot
 # suppress drift when no authoritative release state exists.
@@ -440,4 +474,4 @@ set -e
 [[ "$no_gh_status" -ne 0 ]]
 grep -Fiq "gh" <<<"$no_gh_output"
 
-echo "Release drift check cases passed: 17"
+echo "Release drift check cases passed: 18"

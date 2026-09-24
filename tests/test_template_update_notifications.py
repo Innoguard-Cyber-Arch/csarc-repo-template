@@ -40,6 +40,10 @@ set -euo pipefail
 printf '%s\\n' "$*" >> "$GH_LOG"
 if [[ "$1" == "issue" && "$2" == "list" ]]; then
   printf '%s\\n' "${GH_STUB_EXISTING_ISSUE:-}"
+elif [[ "$1" == "issue" && "$2" == "create" ]]; then
+  printf '%s\\n' "https://github.com/example/project/issues/42"
+elif [[ "$1" == "api" && "$2" == repos/example/project/issues/* ]]; then
+  printf '{"number":%s}\\n' "${2##*/}"
 fi
 """
 
@@ -55,9 +59,8 @@ def _run_checker(
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     """Run the real check-template-update script against stubbed tools."""
     project = tmp_path / "project"
-    project.mkdir()
+    shutil.copytree(ROOT / "template/.csarc/scripts", project)
     script = project / "check-template-update"
-    shutil.copy2(ROOT / "template/.csarc/scripts/check-template-update", script)
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
     bin_dir = tmp_path / "bin"
@@ -71,6 +74,8 @@ def _run_checker(
     env["COPIER_STUB_EXIT"] = str(copier_exit)
     env["GH_STUB_EXISTING_ISSUE"] = existing_issue
     env["GH_LOG"] = str(gh_log)
+    env["GITHUB_ACTIONS"] = "true"
+    env["GITHUB_REPOSITORY"] = "example/project"
 
     result = subprocess.run(  # noqa: S603
         [str(script)],
@@ -93,15 +98,9 @@ def test_check_template_update_is_a_noop_when_already_current(
     assert not gh_log.exists()
 
 
-@pytest.mark.parametrize(
-    ("existing_issue", "expected", "unexpected"),
-    [
-        ("", "issue create", "issue edit"),
-        ("42", "issue edit 42", "issue create"),
-    ],
-)
+@pytest.mark.parametrize("existing_issue", ["", "42"])
 def test_check_template_update_maintains_one_notice_issue(
-    tmp_path: Path, existing_issue: str, expected: str, unexpected: str
+    tmp_path: Path, existing_issue: str
 ) -> None:
     """A real update creates one Issue, or refreshes the existing one."""
     result, gh_log = _run_checker(
@@ -109,8 +108,15 @@ def test_check_template_update_maintains_one_notice_issue(
     )
     assert result.returncode == 0
     log = gh_log.read_text(encoding="utf-8")
-    assert expected in log
-    assert unexpected not in log
+    if existing_issue:
+        assert "issue edit 42" in log
+        assert "--body-file" in log
+        assert "issue create" not in log
+    else:
+        assert "issue create" in log
+    assert "--assignee" not in log
+    assert "--type Task" in log
+    assert "--remove-label enhancement" in log
 
 
 def test_check_template_update_fails_closed_on_check_error(
