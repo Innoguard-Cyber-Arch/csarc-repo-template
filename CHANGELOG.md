@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.26.5] - 2026-09-24
+
+### Bug Fixes
+
+* fix: accept CRLF merge authorization comments (ba9ae61)
+
 ## [0.26.4] - 2026-09-24
 
 ### Bug Fixes
