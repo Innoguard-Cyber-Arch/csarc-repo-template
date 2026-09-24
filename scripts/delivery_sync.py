@@ -564,7 +564,12 @@ def lifecycle_command(arguments: list[str]) -> None:
 
 
 def label_sync_pr(repo: str, number: int, head_sha: str) -> None:
-    """Label a newly created sync PR while holding its exact remote lease."""
+    """Label a new Draft sync PR, then mark it Ready, under one lease.
+
+    The PR is created as Draft so the CI job guard skips its `opened`
+    event; hosted `verify` first runs on `ready_for_review`, after the
+    `enhancement` label that `validate_sync_route()` requires exists.
+    """
     owner = (
         "github-actions/"
         f"{os.environ.get('GITHUB_RUN_ID', 'local')}/"
@@ -603,6 +608,18 @@ def label_sync_pr(repo: str, number: int, head_sha: str) -> None:
                     str(evidence),
                     "--add-label",
                     "enhancement",
+                ]
+            )
+            lifecycle_command(
+                [
+                    "state",
+                    *common,
+                    "--head-sha",
+                    head_sha,
+                    "--lease",
+                    str(evidence),
+                    "--state",
+                    "ready",
                 ]
             )
         finally:
@@ -698,6 +715,7 @@ def create_sync_pr(
             "head": sync_branch,
             "base": delivery_branch,
             "body": body,
+            "draft": True,
         },
     )
     pull = require_response(status, payload, "create sync PR")
