@@ -87,13 +87,15 @@ work PR 上，會把同一個 self-lock 複製到每一張 work PR，而且沒�
   料，不另外解析 Milestone body 的 `Plan` 條列文字），列出它目前是否關閉、宣告
   `Closes #N` 的 PR 是否已合併（`_closing_pull_requests()`／`_merged_at()`，直接讀
   GitHub REST `issues` 端點回傳的 `pull_request.merged_at` 欄位，不需要額外呼叫），並
-  標成 `Delivered`／`Closed without a merged PR`／`Pending`／`Acceptance incomplete or
-  missing` 四種狀態之一。`#816` 起，只有 Issue 已關閉、closing PR 已合併，且 Issue body
+  標成 `Delivered`／`Not planned`／`Closed without a merged PR`／`Pending`／`Acceptance
+  incomplete or missing` 五種狀態之一（`Not planned` 為 `#1005` 新增，代表以
+  `not_planned` 關閉的已取消／被取代工作，不阻擋 completed closure）。`#816` 起，只有 Issue 已關閉、closing PR 已合併，且 Issue body
   既有 checklist 存在並全部完成時才是 `Delivered`。
 - 這是一張給人核對用的結構化清單，不嘗試自動比對 Milestone acceptance criteria 文字與
   交付內容的語意——`#552` 已確認那種語意分類目前不現實。客觀 delivery 狀態則由同一個
   shared decision 同時提供表格與 completed closure 使用；`#816` 起，只要任一 leaf Issue
-  不是 `Delivered`，completed closure 就列出 Issue 編號與狀態並 fail closed。
+  不是 `Delivered`（`#1005` 起 `Not planned` 除外），completed closure 就列出 Issue 編號與
+  狀態並 fail closed。
 - **Staleness 偵測：**段落開頭嵌入 `<!-- reconciliation-fingerprint: <hash> -->`，
   `<hash>` 是「tracker body 扣掉 Reconciliation 段落本身」內容的 SHA-256
   短雜湊（`_fingerprint()`／`_remove_section()`）。`regenerate_reconciliation()` 只改寫

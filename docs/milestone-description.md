@@ -149,7 +149,11 @@ parent。退而求其次只掛「未被 Feature 收編」的頂層 leaf Issue，
 workflow 會讓未完成的 story 保持開啟。
 背景 lifecycle reconcile 只在 tracker Issue 的事件／留言、Milestone 事件，以及 Issue
 移入、移出或改掛 Milestone 時同步狀態與刷新 PR check；一般 work Issue 的編輯、label 或
-留言會成功 no-op。tracker 尚未核准、核准失效或有未解反駁屬於正常治理狀態：背景 run 以
+留言會成功 no-op；Milestone 已關閉時，work Issue 只有被 reopen 或移入／移出 Milestone
+才會重新評估（#1005）。已關閉的 Milestone 若沒有未完成的 work Issue、tracker 也已關閉
+（或是沒有 tracker 的早期 Milestone），而只剩 tracker 缺漏、label／Type、due date、
+Feature parent 等 metadata 規則不符，背景 run 以 notice 回報並保留關閉，不回溯 reopen。
+tracker 尚未核准、核准失效或有未解反駁屬於正常治理狀態：背景 run 以
 notice 呈現並成功結束，但 PR 上的核准 check 仍維持失敗。tracker 缺漏／格式錯誤、API 或
 狀態寫入錯誤才讓背景 run 失敗。
 tracker 的 `Promotion` 段落只能描述合併前可驗證的條件（例如：其餘 Milestone Issue
@@ -187,8 +191,9 @@ source-preserving bridge 的 delivery source tree。Hosted `verify` 會重建同
 `Reconciliation`。這個段落不在建立 tracker 時要求存在——它只能在第一次執行
 regenerate-reconciliation 之後才會出現——而是自動重新產生：逐列列出這個 Milestone
 底下每一張非 tracker Issue 目前是否已關閉、其宣告 `Closes #N` 的 PR 是否已合併，以及
-Issue acceptance checklist 是否存在且全部完成。只有三者都成立才標成 `Delivered`；其餘
-依序標成 `Pending`、`Closed without a merged PR` 或 `Acceptance incomplete or missing`。
+Issue acceptance checklist 是否存在且全部完成。只有三者都成立才標成 `Delivered`；以
+`not_planned` 關閉的 Issue 標成 `Not planned`（已取消或被取代，不宣稱交付）；其餘依序
+標成 `Pending`、`Closed without a merged PR` 或 `Acceptance incomplete or missing`。
 這是給人核對用的真實交付清單，不只是「Milestone acceptance criteria checkbox 是否
 打勾」的形式檢查。段落
 開頭嵌入一個內容雜湊 marker；只要 tracker body 其他部分（`Proposal`／`Completion
@@ -196,7 +201,8 @@ evidence`／`Early termination`／`Promotion` 任何一段）事後被編輯過�
 上，`closure_decision()` 會回報 `Reconciliation: stale, regenerate before closing`
 並拒絕把 Milestone 收尾為 completed，直到重新執行 regenerate-reconciliation 為止。
 即使表格新鮮，`closure_decision()` 仍以同一份 live delivery decision 重新檢查所有 leaf
-Issue；只要任一列不是 `Delivered`，就列出 Issue 編號與狀態並拒絕 completed 收尾；
+Issue；只要任一列不是 `Delivered` 或 `Not planned`，就列出 Issue 編號與狀態並拒絕
+completed 收尾（以 `completed` 關閉卻沒有 merged PR 或 acceptance 未完成的 Issue 仍然阻擋）；
 `not_planned`（提前終止）收尾路徑不受影響，因為那條路徑本來就不宣稱交付完成。
 
 建立前須閱讀相關 open／closed Issues 的內文、comments 與 linked pull requests；

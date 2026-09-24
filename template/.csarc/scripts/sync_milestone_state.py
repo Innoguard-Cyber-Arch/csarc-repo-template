@@ -44,6 +44,13 @@ SCOPE_SENTINEL = "Tracker scope: expanded"
 # `regenerate-reconciliation` run, so requiring it at tracker-creation time
 # would make a tracker permanently uncreatable.
 RECONCILIATION_HEADING = "Reconciliation"
+# A work Issue closed as not planned was cancelled or superseded, not
+# delivered; it is shown as such and does not block a completed closure.
+NOT_PLANNED_STATUS = "Not planned"
+SETTLED_STATUSES = {"Delivered", NOT_PLANNED_STATUS}
+# Work Issue actions that can change a closed Milestone's delivery facts.
+# Every other work Issue event (labels, edits, comments) leaves it alone.
+_CLOSED_MILESTONE_ACTIONS = {"milestoned", "demilestoned", "reopened"}
 _FINGERPRINT_COMMENT = re.compile(
     r"<!--\s*reconciliation-fingerprint:\s*([0-9a-f]+)\s*-->"
 )
@@ -1310,6 +1317,8 @@ def _delivery_status(issue: dict[str, Any], pulls: list[dict[str, Any]]) -> str:
     """Return the shared delivery decision for one Milestone work Issue."""
     if issue.get("state") != "closed":
         return "Pending"
+    if issue.get("state_reason") == "not_planned":
+        return NOT_PLANNED_STATUS
     if not any(_merged_at(pull) for pull in pulls):
         return "Closed without a merged PR"
     body = issue.get("body")
@@ -1424,7 +1433,7 @@ def _completed_closure(
     undelivered = []
     for issue in _linked_work_items(snapshot, tracker_number):
         status = _delivery_status(issue, closing.get(issue.get("number"), []))
-        if status != "Delivered":
+        if status not in SETTLED_STATUSES:
             undelivered.append(f"#{issue['number']} ({status})")
     if undelivered:
         return Decision(
@@ -1858,6 +1867,51 @@ def preflight(repo: str, number: int) -> Decision:
     return Decision(not errors, f"{base} | {hygiene}")
 
 
+def _unchanged_lifecycle(
+    snapshot: dict[str, Any],
+    item: dict[str, Any] | None,
+    errors: list[str],
+    event_issue: int | None,
+    event_action: str | None,
+) -> Decision | None:
+    """Return a no-op decision when an event cannot change the lifecycle."""
+    closed = snapshot["milestone"].get("state") == "closed"
+    work_event = event_issue not in {None, 0} and (
+        item is None or item.get("number") != event_issue
+    )
+    if work_event and (
+        (closed and event_action not in _CLOSED_MILESTONE_ACTIONS)
+        or (
+            event_action not in {"milestoned", "demilestoned"}
+            and not errors
+            and item is not None
+        )
+    ):
+        return Decision(
+            True,
+            f"Work Issue #{event_issue} does not change Milestone lifecycle",
+        )
+    open_work = any(
+        issue.get("state") == "open"
+        and "pull_request" not in issue
+        and (item is None or issue.get("number") != item.get("number"))
+        for issue in snapshot["issues"]
+    )
+    if (
+        not closed
+        or not errors
+        or open_work
+        or (item is not None and item.get("state") != "closed")
+    ):
+        return None
+    # A finished Milestone that only fails rules adopted after it closed
+    # keeps its closure; report the gaps instead of reopening history.
+    summary = "; ".join(errors)
+    notice = summary.replace("%", "%25").replace("\n", "%0A")
+    print(f"::notice title=Closed Milestone governance gaps::{notice}")  # noqa: T201
+    return Decision(True, f"Closed Milestone keeps its closure: {summary}")
+
+
 def reconcile(
     repo: str,
     number: int,
@@ -1870,17 +1924,11 @@ def reconcile(
     milestone = snapshot["milestone"]
     item = tracker(snapshot)
     errors = tracker_errors(snapshot)
-    if (
-        event_issue not in {None, 0}
-        and event_action not in {"milestoned", "demilestoned"}
-        and not errors
-        and item is not None
-        and item.get("number") != event_issue
-    ):
-        return Decision(
-            True,
-            f"Work Issue #{event_issue} does not change Milestone lifecycle",
-        )
+    skipped = _unchanged_lifecycle(
+        snapshot, item, errors, event_issue, event_action
+    )
+    if skipped is not None:
+        return skipped
     if item is None:
         if milestone.get("state") == "closed":
             _set_milestone_state(repo, number, "open")
