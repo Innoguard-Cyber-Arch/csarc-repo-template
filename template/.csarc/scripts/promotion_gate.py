@@ -1062,6 +1062,19 @@ def write_summary(path: Path | None, lines: list[str]) -> None:
         summary.write("\n".join(lines) + "\n")
 
 
+def normalized_comment_body(body: object) -> str | None:
+    """Return a comment body with line endings and outer whitespace normalized.
+
+    GitHub stores a comment pasted through the web UI with CRLF line endings
+    (Issue #1000, same rule as #991), so an otherwise exact fallback statement
+    is compared after normalizing CRLF to LF and stripping surrounding
+    whitespace.
+    """
+    if not isinstance(body, str):
+        return None
+    return body.replace("\r\n", "\n").strip()
+
+
 def require_comment_url(
     url: str, repo: str, pr_number: int, expected_body: str, token: str
 ) -> dict[str, Any]:
@@ -1084,7 +1097,8 @@ def require_comment_url(
         or comment.get("html_url") != url
         or comment.get("issue_url")
         != f"https://api.github.com/repos/{repo}/issues/{pr_number}"
-        or comment.get("body") != expected_body
+        or normalized_comment_body(comment.get("body"))
+        != normalized_comment_body(expected_body)
         or comment.get("author_association") not in MAINTAINER_ASSOCIATIONS
         or not isinstance(user, dict)
         or user.get("type") != "User"
