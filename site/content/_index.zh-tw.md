@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.26.5</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.26.6</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.26.5<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.26.6<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -95,13 +95,13 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="install" parity="supplemental" eyebrow="安裝說明" title="一句話貼給 agent，自動判斷目前該做什麼" subtitle="`csarc status` 讀 `.csarc/config.yml`、Copier 版本與 policies/ 現況，決定結果、不靠 agent 自由判斷。" class="dense" legacy="false" >}}
+{{< slide key="install" parity="supplemental" eyebrow="安裝說明" title="一句話貼給 agent，自動判斷目前該做什麼" subtitle="`csarc status` 先讀 adoption checkpoint，再讀 `.csarc/config.yml`、Copier 版本與 policies/ 現況，決定結果、不靠 agent 自由判斷。" class="dense" legacy="false" >}}
 不管是新 repo、舊 repo 還是已經導入過公版的 repo，判斷方式都一樣：不用自己記指令，把下面這段話直接貼給你的 coding agent（Claude Code、Copilot 等），它會自己執行、自己判斷。
 
 {{< standard key="install-mode-standard" title="貼給 agent 的一句話" >}}
-<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>貼上</h3><p>把下面這段完整指令貼給你的 coding agent，不用自己記指令。</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI 判斷</h3><p>Agent 執行 <code>csarc status</code>，由 CLI（不是 agent 自由判斷）自動分類這是新建、既有導入、有更新，還是只是政策變動。</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>先預覽</h3><p>不管哪一種結果，agent 都會先讓你看過計畫，確認後才真的動手。</p></article></div>
+<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>貼上</h3><p>把下面這段完整指令貼給你的 coding agent，不用自己記指令。</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI 判斷</h3><p>Agent 執行 <code>csarc status</code>，由 CLI（不是 agent 自由判斷）自動分類這是新建、既有導入、待完成導入、有更新，還是只是政策變動。</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>先預覽</h3><p>不管哪一種結果，agent 都會先讓你看過計畫，確認後才真的動手。</p></article></div>
 
-結果會是以下其中一種：**建立**新專案、**導入**既有專案、套用可用**更新**、**已是最新**不用做事，或**只有政策設定**要補套用；不論哪一種，agent 都會先讓你確認才動手。
+結果會是以下其中一種：**建立**新專案、**導入**既有專案、**完成待處理導入**、套用可用**更新**、**已是最新**不用做事，或**只有政策設定**要補套用；不論哪一種，agent 都會先讓你確認才動手。
 
 <p class="install-promise"><strong>這一步的承諾：</strong>這一步只檢查目前狀態並提出計畫；在你確認前，不修改檔案、不變更 GitHub 設定，也不會建立 PR。</p>
 
@@ -123,6 +123,8 @@ csarc status <path> --json
 | --- | --- | --- |
 | `create`（新 repo 建立） | 目標路徑不存在，或存在但是空目錄 | `csarc init <path>`：先 `--dry-run` 預覽，確認後加 `--yes --non-interactive` |
 | `adopt`（舊 repo 導入） | 目標已存在內容，但沒有 `.csarc/config.yml` | `csarc adopt <path>`：先寫出 dry-run 計畫，審查後用 `--apply-plan` 套用 |
+| `adoption-pending`（導入待完成） | 本機 adoption checkpoint 通過 identity 驗證，但導入尚未完成 | `csarc adopt <path> --finalize`：先預覽並完成既有 finalize 流程 |
+| `migrate`（舊版答案遷移） | `.csarc/config.yml` 的 `_commit` 不是完整 SHA，且沒有可信的 verified provenance | tag／短 SHA 先核對來源與版本，再依 `next_command` 綁回已驗證 Release；其他格式先還原正確 SHA |
 | `update`（有可用更新） | 已有 `.csarc/config.yml`，其中記錄的 Copier revision 落後目前可用版本 | `csarc update <path> --check` 預覽差異，確認後執行 `csarc update <path>` |
 | `current`（已是最新，不用做事） | Copier revision 已是最新，且 `policies/` 與 GitHub 上實際設定一致 | 不需要動作 |
 | `policy-only-update`（已是最新，但政策設定變了） | Copier revision 已是最新，但 `policies/`（例如允不允許 workaround）與 GitHub 上實際設定不一致 | `.csarc/scripts/apply-repository-settings.sh plan` 預覽，確認後 `apply`；**不必**重新走一次完整 adopt／update |
@@ -138,7 +140,7 @@ csarc status <path> --json
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-capabilities" title="搞清楚這個 repo 實際能啟用什麼" >}}
-「規則治理」（Step 08）的方案能力表回答的是「這個帳號的 GitHub *方案* 允許什麼」；這是必要條件，但不夠：organization 政策、CODEOWNERS team 是否真的存在、token 權限範圍，都可能在方案本身支援的情況下仍然擋住某項能力。除了上述方案探測，`policies/capability-matrix.json` 列出這個模板依賴的每一項能力、各自的最低需求與已記錄的 workaround；`scripts/check-repo-capabilities` 會即時對照這個 repo 與 token 本身實際具備什麼：
+「規則治理」（Step 08）的方案能力表回答的是「這個帳號的 GitHub *方案* 允許什麼」；這是必要條件，但不夠：organization 政策、CODEOWNER user／team 是否真的存在、token 權限範圍，都可能在方案本身支援的情況下仍然擋住某項能力。除了上述方案探測，`policies/capability-matrix.json` 列出這個模板依賴的每一項能力、各自的最低需求與已記錄的 workaround；`scripts/check-repo-capabilities` 會即時對照這個 repo 與 token 本身實際具備什麼：
 
 ```bash
 ./scripts/check-repo-capabilities        # 人類可讀報告
@@ -149,12 +151,14 @@ csarc status <path> --json
 | --- | --- | --- | --- |
 | `repository_admin` | 以下每一項能力的前提 | 目前 token 的 `permissions.admin == true` | 請 owner／admin 執行 `apply`，或申請 Admin 角色 |
 | `ruleset_enforcement` | 預設分支的 Ruleset 分支保護 | public repository（任何方案），或 private 且 Pro／Team 以上 | DEGRADED 標記；`policies/rulesets.json` 保留為 desired state |
-| `codeowners_enforcement` | CODEOWNERS review 真的能擋下合併 | 需先具備上一項，且 `@org/team` 具寫入權限 | DEGRADED 標記；修正 team，或先用 `scripts/request-reviewer` |
+| `codeowners_enforcement` | CODEOWNERS review 真的能擋下合併 | 有設定時需先具備上一項，且 `@user` 或 `@organization/team` 具寫入權限 | DEGRADED 標記；修正 owner、留空省略，或先用 `scripts/request-reviewer` |
 | `actions_pr_approval` | Actions 能自動核准 PR（例如 Dependabot auto-merge） | organization 允許 `can_approve_pull_request_reviews` | DEGRADED 標記；降級為人工核准 |
 | `security_and_analysis` | secret scanning、push protection、Dependabot security updates | public repository，或 private 且具備 GitHub Advanced Security | DEGRADED 標記；改用本機 `scripts/scan-secrets` |
 | `github_pages` | 將 `docs/index.html` 發布成 hosted 網站 | public repository，或 private 且為 GitHub Enterprise Cloud | DEGRADED 標記；改分享 commit 進 repo 的 HTML 檔案 |
 | `repository_settings_inspection` | `check` 模式能比對即時的管理員專屬欄位 | 與 `repository_admin` 相同 | DEGRADED 標記；改在具 admin 身分的可信環境執行 `check` |
 | `immutable_releases` | GitHub 用來為每個已發布 Release 簽發 attestation 的 repository 設定 | admin 透過 `apply-repository-settings.sh apply` 開啟一次；`GITHUB_TOKEN` 仍無法直接讀取 | 不再 pre-flight 卡關（#770）；`scripts/publish-release` post-hoc 驗證簽發的 attestation，缺少時 fail closed |
+
+本機 repo 尚未設定 remote 時，有值的 CODEOWNER 可以先標為 `unknown`；若用 `--data code_owner=` 省略 CODEOWNERS，則必須同時傳入合法的 `--data repository_url=https://github.com/<owner>/<repository>`。這個 repository 身分在關閉文件功能時仍會被其他設定與套件 metadata 使用，不能從空 owner 猜測。
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="怎麼解讀 check-repo-capabilities 的結果" >}}
@@ -762,7 +766,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 專案選擇 | `repository_url`、`project_slug` | 未覆寫時由 `code_owner`／`project_name` 推導 | repo-site 的複製（clone）指引 |
 | 專案選配 | `enable_governance_drift_check` | 預設 `true`，產生每日排程 Action；可設為 `false` 關閉 | `true` 生成 `governance-drift.yml` 與 drift checker；`false` 兩者皆不產生 |
 
-公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。方案、帳務、Copilot entitlement、token 權限與 Pages 可用性不是設定值，而是 `allowed`／`blocked`／`unknown` 的即時偵測結果。反過來，`policies/pages.json` 的 `enabled` 是維護者的 desired-state 選擇：public／Free 表示可以發布，不代表必須發布，`enabled=false` 是會被檢查與收斂的明確 opt-out。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
+公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。方案、帳務、Copilot entitlement、token 權限與 Pages 可用性不是設定值，而是 `allowed`／`blocked`／`unknown` 的即時偵測結果。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
 
 `documentation_mode: template-and-content` 的生成專案與這個公版根網站使用同一套渲染引擎與元件（Issue #681），只是內容精簡許多；只從上表 key 讀取明確的 `[[key]]` token，直接對照 `.csarc/config.yml`，未知 key 會讓建置直接失敗，因此網站不會另建第二份設定 schema。專案文字與樣式選擇留在 `docs/site/content/` 與 `docs/site/theme.css`，由專案自行維護；完整責任與遷移規則見 `docs/documentation-policy.md`。
 {{< /disclosure >}}
@@ -808,6 +812,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 - 新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自元件（模組），不建立組合專屬流程。
 - 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan；dry-run 不執行 target-owned helper 或 product hook，並唯讀盤點 GitHub Issue Types 與 labels。報告以 `Bug`／`Feature`／`Task` 作為 Issue 工作類型，以小寫 `bug`／`enhancement`／`documentation` 作為 PR 分類與 fallback，列出可安全整批接受的對應和需要逐項確認的自訂項目，但不會改動遠端 metadata。人核准同一份未漂移的 plan 後，CLI 才在隔離候選執行驗證，通過後寫入；第一張 PR 再由人核對來源、plan、diff 與本機結果。
 - 第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先用 dry-run 預覽，候選內容與衝突全部驗證完成才修改 target，若有衝突就保持 repo 不變，修正後重跑，再由一般 PR 與 trusted-base checks 審查。
+- 若既有 repo 是直接由 Copier 建立，`_commit` 可能仍是 release tag 或短 SHA，`csarc status` 會分類為 `migrate` 並指出目前值與格式；維護者核對後以 `update --check --accept-legacy --from-release <tag>` 將它綁回經 immutability、attestation 與 signature 驗證的完整 SHA。已標示為 verified 卻不一致的 provenance 仍會 fail closed。
 - 可選的更新通知每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。
 
 {{< disclosure key="copier-update" title="Copier＋root dogfood＋建立／導入／更新回歸" >}}

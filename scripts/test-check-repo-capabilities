@@ -107,4 +107,58 @@ missing_status=$?
 set -e
 [[ "$missing_status" -ne 0 ]]
 
+# Case 8: the live collector accepts a personal CODEOWNER with write access
+# and rejects the same user when GitHub reports only read access.
+live_root="$fixture_root/live"
+mkdir -p "$live_root/scripts" "$live_root/policies" "$live_root/.github" "$live_root/bin"
+cp "$script_path" "$live_root/scripts/check-repo-capabilities"
+cp "$(dirname "$script_path")/repo_capabilities.py" "$live_root/scripts/repo_capabilities.py"
+cp "$(dirname "$script_path")/../policies/capability-matrix.json" "$live_root/policies/capability-matrix.json"
+cat >"$live_root/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "api repos/outside-user/product")
+    printf '%s\n' '{"owner":{"login":"outside-user","type":"User"},"visibility":"public","private":false,"permissions":{"admin":true}}'
+    ;;
+  *"repos/outside-user/product/collaborators/outside-user/permission"*)
+    printf '{"permission":"%s"}\n' "${USER_PERMISSION:-admin}"
+    ;;
+  *"users/outside-user"*) printf '%s\n' free ;;
+  *"repos/outside-user/product/rulesets"*) printf '%s\n' '[]' ;;
+  *"repos/outside-user/product/actions/permissions/workflow"*)
+    printf '%s\n' '{"can_approve_pull_request_reviews":true}'
+    ;;
+  *)
+    printf 'unexpected gh invocation: %s\n' "$*" >&2
+    exit 1
+    ;;
+esac
+EOF
+chmod +x "$live_root/bin/gh"
+printf '* @outside-user\n' >"$live_root/.github/CODEOWNERS"
+out_json="$(cd "$live_root" && PATH="$live_root/bin:$PATH" GH_REPO=outside-user/product USER_PERMISSION=write ./scripts/check-repo-capabilities --json)"
+echo "$out_json" | jq -e '.capabilities[] | select(.id == "codeowners_enforcement") | .status == "allowed"' >/dev/null
+out_json="$(cd "$live_root" && PATH="$live_root/bin:$PATH" GH_REPO=outside-user/product USER_PERMISSION=read ./scripts/check-repo-capabilities --json)"
+echo "$out_json" | jq -e '.capabilities[] | select(.id == "codeowners_enforcement") | .status == "blocked"' >/dev/null
+
+# Case 9: an organization/team owner must belong to the repository's actual
+# organization; a same-named team elsewhere cannot satisfy the contract.
+printf '* @other-org/arch\n' >"$live_root/.github/CODEOWNERS"
+out_json="$(cd "$live_root" && PATH="$live_root/bin:$PATH" GH_REPO=outside-user/product ./scripts/check-repo-capabilities --json)"
+echo "$out_json" | jq -e '.capabilities[] | select(.id == "codeowners_enforcement") | .status == "blocked" and (.detail | contains("does not match repository owner"))' >/dev/null
+
+# Case 10: omitting the optional CODEOWNER is explicit, not a malformed owner.
+: >"$live_root/.github/CODEOWNERS"
+out_json="$(cd "$live_root" && PATH="$live_root/bin:$PATH" GH_REPO=outside-user/product ./scripts/check-repo-capabilities --json)"
+echo "$out_json" | jq -e '.capabilities[] | select(.id == "codeowners_enforcement") | .status == "allowed"' >/dev/null
+
+# Case 11: invalid personal-login characters and hyphen placement fail closed
+# before a collaborator API request.
+for invalid_owner in '@bad_user' '@bad.user' '@bad--user' '@bad-'; do
+  printf '* %s\n' "$invalid_owner" >"$live_root/.github/CODEOWNERS"
+  out_json="$(cd "$live_root" && PATH="$live_root/bin:$PATH" GH_REPO=outside-user/product ./scripts/check-repo-capabilities --json)"
+  echo "$out_json" | jq -e '.capabilities[] | select(.id == "codeowners_enforcement") | .status == "blocked"' >/dev/null
+done
+
 echo "test-check-repo-capabilities: all permission-combination cases passed."

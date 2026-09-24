@@ -32,6 +32,8 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 `adopt` 預設為 dry-run，只產生 repo 外的 Markdown 導入報告與 machine-readable plan，不修改 repo；確認後才用 `--apply-plan` 套用。
 
+目標在其他組織時，以 `--data code_owner=@<organization>/<team>` 指定該 repo 的 team；個人 repo 則用 `--data code_owner=@<user>`，不需要 CODEOWNERS 時留空。尚未設定 remote 的本機 repo 會把有值的 owner 標成 `unknown`，允許先審查導入計畫；若 owner 留空，需同時傳入合法的 `--data repository_url=https://github.com/<owner>/<repository>`，即使文件模式關閉也不能省略。push 後再依序執行產生的 repository settings `plan`／`apply`／`check`。檢查不會自動授予 user／team 權限，owner 不存在或沒有 write 以上權限時會停止。
+
 ## 更新已導入的 repo
 
 ```bash
@@ -41,7 +43,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ## 不確定目前狀態時
 
-先用「自動判斷」：`csarc status` 只讀本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，判斷屬於 `create`／`adopt`／`update`／`current`／`policy-only-update` 五種狀態之一，再依回傳的 `next_command` 走對應流程。固定版本的完整 agent 安裝契約見 [`docs/agent-install.md`](agent-install.md)。
+先用「自動判斷」：`csarc status` 只讀本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，判斷屬於 `create`／`adopt`／`adoption-pending`／`migrate`／`update`／`current`／`policy-only-update` 七種狀態之一，再依回傳的 `next_command` 走對應流程。`adoption-pending` 表示本機 checkpoint 有效但導入尚未完成，下一步是 `csarc adopt <path> --finalize`；`migrate` 表示既有 Copier answers 使用 release tag 或短 SHA，需依指示核對並綁回已驗證 Release 的完整 SHA。固定版本的完整 agent 安裝契約見 [`docs/agent-install.md`](agent-install.md)。
 
 ## 完整細節
 
