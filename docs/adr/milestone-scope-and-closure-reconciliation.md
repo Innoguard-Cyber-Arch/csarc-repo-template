@@ -87,13 +87,16 @@ work PR 上，會把同一個 self-lock 複製到每一張 work PR，而且沒�
   料，不另外解析 Milestone body 的 `Plan` 條列文字），列出它目前是否關閉、宣告
   `Closes #N` 的 PR 是否已合併（`_closing_pull_requests()`／`_merged_at()`，直接讀
   GitHub REST `issues` 端點回傳的 `pull_request.merged_at` 欄位，不需要額外呼叫），並
-  標成 `Delivered`／`Closed without a merged PR`／`Pending`／`Acceptance incomplete or
-  missing` 四種狀態之一。`#816` 起，只有 Issue 已關閉、closing PR 已合併，且 Issue body
+  標成 `Delivered`／`Not planned`／`Closed before #816`／`Closed without a merged PR`／
+  `Pending`／`Acceptance incomplete or missing` 六種狀態之一（`Not planned` 為 `#1005`
+  新增，代表以 `not_planned` 關閉的已取消／被取代工作；`Closed before #816` 為 `#1012`
+  新增，見下方 `#1012` 段落；兩者都不阻擋 completed closure）。`#816` 起，只有 Issue 已關閉、closing PR 已合併，且 Issue body
   既有 checklist 存在並全部完成時才是 `Delivered`。
 - 這是一張給人核對用的結構化清單，不嘗試自動比對 Milestone acceptance criteria 文字與
   交付內容的語意——`#552` 已確認那種語意分類目前不現實。客觀 delivery 狀態則由同一個
   shared decision 同時提供表格與 completed closure 使用；`#816` 起，只要任一 leaf Issue
-  不是 `Delivered`，completed closure 就列出 Issue 編號與狀態並 fail closed。
+  不是 `Delivered`（`#1005` 起 `Not planned`、`#1012` 起 `Closed before #816` 除外），completed closure 就列出 Issue 編號與
+  狀態並 fail closed。
 - **Staleness 偵測：**段落開頭嵌入 `<!-- reconciliation-fingerprint: <hash> -->`，
   `<hash>` 是「tracker body 扣掉 Reconciliation 段落本身」內容的 SHA-256
   短雜湊（`_fingerprint()`／`_remove_section()`）。`regenerate_reconciliation()` 只改寫
@@ -293,3 +296,36 @@ Milestone work Issue 一律繼承 tracker 層級；子 Issue 若自行宣告不�
 這只取代 #745 的「公版 root 預設啟用分層且採 beta」選擇，不刪除四層模組，也不改變
 新生成專案與既有專案導入的預設。#877 的引導式安裝沿用同一份 Copier questions，讓安裝者
 決定是否啟用分層、預設層級及各層 review／verification；不新增第二份 schema 或 gate。
+
+## `#1012`：嚴格 delivery 規則生效前關閉的 work Issue 視為歷史紀錄
+
+- **狀態：**Accepted
+- **日期：**2026-09-24
+- **來源 Issue：**[#1012](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1012)
+
+`#816` 要求 completed closure 的每張 leaf Issue 都是 `Delivered`（已關閉、closing PR
+已合併、acceptance checklist 全勾）。這條規則不追溯套用：在它生效前就已關閉的 work
+Issue 視為歷史紀錄，依當時規則的結案處置為準。
+
+- **截止點：**`#816` 的 PR #818 merge commit `057b83e35a`，merge 時間
+  `2026-09-19T19:06:52Z`（`STRICT_DELIVERY_CUTOFF`）。
+- **適用範圍：**只看 work Issue 自己的 `closed_at` 嚴格早於截止點，而且依現行規則會是
+  `Closed without a merged PR` 或 `Acceptance incomplete or missing` 的列。這些列在
+  Reconciliation 表標成 `Closed before #816`，不阻擋 completed closure。
+- **不適用：**截止點當下或之後關閉的 Issue、仍開啟的 Issue（`Pending`），以及 tracker
+  層級的 Milestone acceptance criteria、Promotion、approval、Completion evidence 與
+  Reconciliation 新鮮度檢查，全部維持原規則。Issue 事後被 reopen 再關閉時，`closed_at`
+  會更新成新的時間，自然回到現行規則。
+- **動機：**Milestone 8 的交付已由 PR #542 promotion 進 main（tree 與 candidate 相同），
+  2026-09-19T12:57:57Z 在當時規則下完成收尾；被 `#1005` 的 reconcile 缺陷 reopen 後，
+  現行規則以 21 張在截止點前關閉的 Issue（9 張沒有 merged PR、12 張 acceptance 未全勾）
+  拒絕重新收尾。回頭補證據或改寫這些歷史 Issue 都會失真。使用者於 2026-09-24 決定不
+  追溯套用。
+- **優先順序：**歷史 Issue 的內容若已被之後的 Issue 或 PR 推翻、取代或改寫，一律以後面的
+  決定為準；該歷史項目不補證據、不另拆新 Issue，在原 Issue 註明「已被 #N 取代」並附連結
+  即視為已處理。只有後續完全沒有碰過、仍然有效的未完成項目，才拆成新的 Issue 追蹤。
+  這條優先順序只決定歷史內容如何解讀，不改變上面的截止點判斷（例：#681 的決定 F 六項
+  由 #689 取代，見 #681／#1011）。
+- **下游專案：**`template/.csarc/scripts/` 使用同一個截止時間。下游 repo 實際開始套用
+  `#816` 的時間取決於它何時 Copier update，截止點之後、更新之前關閉的 Issue 仍會被現行
+  規則判定；這是保守方向（不會放寬更多），因此不為每個下游 repo 另設截止點。

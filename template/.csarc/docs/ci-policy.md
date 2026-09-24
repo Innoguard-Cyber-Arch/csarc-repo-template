@@ -145,6 +145,26 @@ live bypass actor 清單精確等於 repo 宣告值時使用；其他 bypass 形
 這條路徑會在最後一次 merge snapshot 前自動留下 `bypass-trace:`。沒有獨立 review 的
 admin self-merge 仍必須使用取得 lease 後的 exact-head maintainer 授權留言。
 
+### Lease 續租不作廢既有授權（#1017）
+
+admin-bypass 與 emergency hotfix 的授權留言必須晚於 lease 的授權起點。一般 `acquire`
+的起點就是它自己的 `acquired_at`，所以先 `release` 再重新 `acquire` 一定需要新的授權留言；
+此時 `acquire` 會在 stderr 警告已存在的 exact-head 授權不再有效。lease TTL 最多兩小時，
+hosted full `verify` 加上重跑可能更久，因此要保住授權時，改用明確續租：
+
+```bash
+python3 .csarc/scripts/pr_lifecycle.py acquire --repo <owner/repo> --pr-number <N> \
+  --head-sha <sha> --owner <owner> --renew <lease.json> --output <lease.json>
+```
+
+續租只接受仍有效、由同一 owner／actor／capability 持有、PR head、base 與目的地都未漂移的
+lease，並以 CAS 把兩個 lease ref 從舊 lease commit 換到新 commit。新 lease 的 `renews`
+欄位記錄被取代的 commit，公開稽核留言標為 `PR lifecycle lease renewed`。merge／check 會沿
+`renews` 鏈逐一重驗前一個 lease commit：必須是 canonical lease、身分欄位完全相同，且在被
+取代時尚未過期；通過後授權起點才回到鏈上第一個 lease 的 `acquired_at`。任何斷鏈、過期、
+換 owner 或換 head 都 fail closed，早於該 head 第一個 lease 的授權永遠不算數。續租不改變
+exact-head 與 actor 綁定。續租條件不成立時工具會拒絕，並說明需要新的 exact-head 授權。
+
 ### Copilot 審核模式（#752）
 
 `.csarc/config.yml` 用兩個互不重疊的選項描述審核意圖：`admin_bypass` 可選

@@ -163,7 +163,10 @@ codeowners_inspection_available=false
 if [[ -z "$code_owner" ]]; then
   codeowners_inspection_available=true
 elif [[ "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
-  if ! codeowners_state="$(gh api "repos/$repo/teams" --paginate --slurp 2>&1)"; then
+  codeowner_org="${BASH_REMATCH[1]}"
+  if [[ "$(tr '[:upper:]' '[:lower:]' <<<"$codeowner_org")" != "$(tr '[:upper:]' '[:lower:]' <<<"$owner")" ]]; then
+    codeowners_validation="CODEOWNER organization @$codeowner_org does not match repository owner @$owner."
+  elif ! codeowners_state="$(gh api "repos/$repo/teams" --paginate --slurp 2>&1)"; then
     codeowners_inspection_error="$codeowners_state"
   elif ! codeowners_validation="$(python3 - "$code_owner" "$codeowners_state" 2>&1 <<'PY'
 import json
@@ -195,7 +198,9 @@ PY
   fi
 elif [[ "$code_owner" =~ ^@([A-Za-z0-9][A-Za-z0-9-]{0,38})$ ]]; then
   codeowner_user="${BASH_REMATCH[1]}"
-  if ! codeowners_state="$(gh api "repos/$repo/collaborators/$codeowner_user/permission" 2>&1)"; then
+  if [[ "$codeowner_user" == *--* || "$codeowner_user" == *- ]]; then
+    codeowners_validation="CODEOWNERS must use @user or @organization/team."
+  elif ! codeowners_state="$(gh api "repos/$repo/collaborators/$codeowner_user/permission" 2>&1)"; then
     codeowners_inspection_error="$codeowners_state"
   elif ! codeowners_validation="$(python3 - "$code_owner" "$codeowners_state" 2>&1 <<'PY'
 import json
@@ -203,7 +208,7 @@ import sys
 
 owner = sys.argv[1]
 state = json.loads(sys.argv[2])
-if state.get("permission") not in {"push", "maintain", "admin"}:
+if state.get("permission") not in {"write", "push", "maintain", "admin"}:
     print(f"{owner} lacks repository write access.")
 PY
 )"; then

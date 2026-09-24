@@ -51,8 +51,60 @@ ADOPTION_REPORT_TEMPLATE_VERSION = "1.1.0"
 AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
+GIT_OBJECT_ID = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
+CODE_OWNER_USER = re.compile(
+    r"^@(?![A-Za-z0-9-]*--)([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}"
+    r"[A-Za-z0-9])?)$"
+)
+CODE_OWNER_TEAM = re.compile(r"^@([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$")
+GITHUB_REPOSITORY_URL = re.compile(
+    r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+)
 REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
+REPORT_SETTING_KEYS = frozenset(
+    {
+        "actions_fallback",
+        "admin_bypass",
+        "code_owner",
+        "copilot_review",
+        "copyright_holder",
+        "coverage_mode",
+        "coverage_threshold",
+        "default_release_level",
+        "documentation_mode",
+        "enable_codeql",
+        "enable_governance_drift_check",
+        "enable_precommit",
+        "enable_template_update_notifications",
+        "features",
+        "governance_mode",
+        "i18n",
+        "language",
+        "languages",
+        "lifecycle",
+        "package_name",
+        "primary_language",
+        "project_description",
+        "project_license",
+        "project_maturity",
+        "project_mode",
+        "project_name",
+        "project_run_command",
+        "project_slug",
+        "project_verification_hook",
+        "project_visibility",
+        "python_min_version",
+        "python_support_mode",
+        "release_ownership",
+        "release_trigger",
+        "repository_url",
+        "review",
+        "security_reporting_channel",
+        "verification_mode",
+        "work_item_mapping_review",
+    }
+)
 WORK_ITEM_DEFAULTS = (
     {
         "kind": "Bug",
@@ -113,6 +165,8 @@ RELEASE_WRITER_MARKERS = (
 )
 INSTALL_STATE_CREATE = "create"
 INSTALL_STATE_ADOPT = "adopt"
+INSTALL_STATE_ADOPTION_PENDING = "adoption-pending"
+INSTALL_STATE_MIGRATE = "migrate"
 INSTALL_STATE_UPDATE = "update"
 INSTALL_STATE_CURRENT = "current"
 INSTALL_STATE_POLICY_ONLY = "policy-only-update"
@@ -124,6 +178,7 @@ INSTALL_STATE_NEXT_COMMAND = {
         "csarc adopt <path> to write a dry-run plan, review it, then "
         "csarc adopt <path> --apply-plan <plan>"
     ),
+    INSTALL_STATE_ADOPTION_PENDING: "csarc adopt <path> --finalize",
     INSTALL_STATE_UPDATE: (
         "csarc update <path> --check to preview, then csarc update <path>"
     ),
@@ -1442,6 +1497,77 @@ def file_fingerprint(path: Path) -> str:
     return digest.hexdigest()
 
 
+def git_blob_oid(target: Path, revision: str, relative_name: str) -> str:
+    """Return one file's blob identity at a trusted revision."""
+    checked_destination(target, relative_name)
+    result = run_git(
+        [
+            "git",
+            "-C",
+            str(target),
+            "rev-parse",
+            "--verify",
+            f"{revision}:{relative_name}",
+        ],
+        repository=target,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    oid = result.stdout.strip()
+    if result.returncode != 0 or GIT_OBJECT_ID.fullmatch(oid) is None:
+        detail = result.stderr.strip()
+        raise CliError(
+            f"Cannot recover the original manual file {relative_name} from "
+            f"Git history. {detail}"
+        )
+    kind = run_git(
+        ["git", "-C", str(target), "cat-file", "-t", oid],
+        repository=target,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    if kind.returncode != 0 or kind.stdout.strip() != "blob":
+        raise CliError(f"Original manual path is not a file: {relative_name}.")
+    return oid.lower()
+
+
+def git_worktree_file_oid(
+    attributes_repo: Path, target: Path, relative_name: str
+) -> str:
+    """Hash working-tree bytes through trusted Git path attributes."""
+    path = checked_destination(target, relative_name)
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError as error:
+        raise CliError(f"Manual adoption file is missing: {path}") from error
+    if not stat.S_ISREG(mode):
+        raise CliError(f"Manual adoption file is not a regular file: {path}")
+    result = run_git(
+        [
+            "git",
+            "-C",
+            str(attributes_repo),
+            "hash-object",
+            f"--path={relative_name}",
+            str(path),
+        ],
+        repository=attributes_repo,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    oid = result.stdout.strip()
+    if result.returncode != 0 or GIT_OBJECT_ID.fullmatch(oid) is None:
+        detail = result.stderr.strip()
+        raise CliError(
+            f"Cannot hash manual adoption file {relative_name} with Git path "
+            f"attributes. {detail}"
+        )
+    return oid.lower()
+
+
 def pending_adoption_data(
     target: Path,
     revision: Revision,
@@ -1449,6 +1575,8 @@ def pending_adoption_data(
     answers_path: Path,
     managed_files: tuple[str, ...],
     manual_files: tuple[str, ...],
+    unknown_files: tuple[str, ...],
+    target_head: str,
     work_item_mapping: dict[str, object],
 ) -> dict[str, object]:
     """Build the checkpoint needed to resume one exact adoption."""
@@ -1460,9 +1588,15 @@ def pending_adoption_data(
             if name
             not in {CONFIG_FILE.as_posix(), LEGACY_ANSWERS_FILE.as_posix()}
         ],
-        "manual_files": list(manual_files),
+        "manual_file_git_oid": {
+            name: git_blob_oid(target, target_head, name)
+            for name in manual_files
+        },
+        "manual_files": list((*manual_files, *unknown_files)),
+        "manual_merge_files": list(manual_files),
         "repository": repository.as_dict(),
-        "schema_version": 1,
+        "schema_version": 2,
+        "target_head": target_head,
         "template": {
             "release": revision.label,
             "sha": revision.sha,
@@ -1488,10 +1622,17 @@ def write_pending_adoption(target: Path, payload: dict[str, object]) -> None:
 def read_pending_adoption(target: Path) -> dict[str, object]:
     """Read and minimally validate an adoption checkpoint."""
     path = checked_destination(target, PENDING_ADOPTION_FILE.as_posix())
-    if path.is_symlink() or not path.is_file():
+    try:
+        mode = path.lstat().st_mode
+    except (FileNotFoundError, NotADirectoryError) as error:
         raise CliError(
             "No pending adoption exists; run csarc adopt first or use "
             "csarc update for a completed adoption."
+        ) from error
+    if not stat.S_ISREG(mode):
+        raise CliError(
+            "Pending adoption state is not a regular file; restore the "
+            "checkpoint or restart adoption from a clean commit."
         )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -1512,7 +1653,7 @@ def read_pending_adoption(target: Path) -> dict[str, object]:
     )
     if (
         not isinstance(payload, dict)
-        or payload.get("schema_version") != 1
+        or payload.get("schema_version") not in {1, 2}
         or not isinstance(payload.get("answers_sha256"), str)
         or not isinstance(template, dict)
         or not isinstance(repository, dict)
@@ -1533,6 +1674,290 @@ def read_pending_adoption(target: Path) -> dict[str, object]:
             "from the original adoption or restart from a clean commit."
         )
     return payload
+
+
+def validate_pending_manual_merges(
+    target: Path,
+    pending: Mapping[str, object],
+    answers: dict[str, object],
+    planned: Plan,
+    target_head: str,
+    baseline: Path,
+) -> tuple[str, ...]:
+    """Verify pending merge identities and require changed manual bytes."""
+    if pending.get("schema_version") != 2:
+        raise CliError(
+            "Pending adoption state predates manual-file fingerprints, so "
+            "CSARC cannot determine whether its manual merges were completed; "
+            "restore the original files and restart adoption from a clean "
+            "commit."
+        )
+    raw_files = pending.get("manual_files")
+    raw_merges = pending.get("manual_merge_files")
+    raw_fingerprints = pending.get("manual_file_git_oid")
+    if (
+        not isinstance(raw_files, list)
+        or not all(isinstance(value, str) for value in raw_files)
+        or not isinstance(raw_merges, list)
+        or not all(isinstance(value, str) for value in raw_merges)
+        or not isinstance(raw_fingerprints, dict)
+        or not all(
+            isinstance(name, str)
+            and isinstance(value, str)
+            and GIT_OBJECT_ID.fullmatch(value) is not None
+            for name, value in raw_fingerprints.items()
+        )
+        or tuple(raw_merges) != planned.manual
+        or tuple(raw_files) != (*planned.manual, *planned.unknown)
+        or set(raw_merges) != set(raw_fingerprints)
+    ):
+        raise CliError(
+            "Pending manual-file fingerprints are invalid; restore the "
+            "checkpoint or restart adoption from a clean commit."
+        )
+    fingerprints = cast(dict[str, str], raw_fingerprints)
+    forged = [
+        name
+        for name in cast(list[str], raw_merges)
+        if git_blob_oid(target, target_head, name) != fingerprints[name]
+    ]
+    if forged:
+        raise CliError(
+            "Pending manual-file fingerprints do not match the original "
+            "Git revision for: "
+            + ", ".join(sorted(forged))
+            + ". Restore the checkpoint or restart adoption from a clean "
+            "commit."
+        )
+    unchanged = [
+        name
+        for name in cast(list[str], raw_merges)
+        if git_worktree_file_oid(baseline, target, name) == fingerprints[name]
+    ]
+    if unchanged:
+        raise CliError(
+            "Manual merge is unfinished; these files have unchanged content "
+            "after Git normalization: "
+            + ", ".join(sorted(unchanged))
+            + ". Complete each listed merge, then rerun csarc adopt "
+            "--finalize."
+        )
+    if "typescript" in selected_languages(answers):
+        package_path = checked_destination(target, "package.json")
+        try:
+            package = json.loads(package_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise CliError(
+                "Manual package.json is invalid JSON; fix it, then rerun "
+                "csarc adopt --finalize."
+            ) from error
+        expected_name = answers.get("project_slug")
+        actual_name = package.get("name") if isinstance(package, dict) else None
+        if not isinstance(expected_name, str) or actual_name != expected_name:
+            raise CliError(
+                "Manual package.json name must match project_slug "
+                f"({expected_name!r}); found {actual_name!r}. Fix "
+                "package.json, "
+                "then rerun csarc adopt --finalize."
+            )
+    return tuple(cast(list[str], raw_files))
+
+
+def pending_adoption_target_head(
+    target: Path, pending: Mapping[str, object]
+) -> str:
+    """Recover and authenticate the pre-adoption commit from Git history."""
+    if pending.get("schema_version") != 2:
+        raise CliError(
+            "Pending adoption state predates manual-file fingerprints, so "
+            "CSARC cannot determine whether its manual merges were completed; "
+            "restore the original files and restart adoption from a clean "
+            "commit."
+        )
+    saved_head = pending.get("target_head")
+    if (
+        not isinstance(saved_head, str)
+        or FULL_SHA.fullmatch(saved_head) is None
+    ):
+        raise CliError(
+            "Pending adoption has no valid original Git revision; restore the "
+            "checkpoint or restart adoption from a clean commit."
+        )
+    committed = run_git(
+        [
+            "git",
+            "-C",
+            str(target),
+            "ls-tree",
+            "-z",
+            "--name-only",
+            "HEAD",
+            "--",
+            PENDING_ADOPTION_FILE.as_posix(),
+        ],
+        repository=target,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    if committed.returncode != 0:
+        detail = committed.stderr.strip()
+        raise CliError("Cannot inspect pending adoption Git history. " + detail)
+    if committed.stdout.rstrip("\0") == PENDING_ADOPTION_FILE.as_posix():
+        introduced = run_git(
+            [
+                "git",
+                "-C",
+                str(target),
+                "log",
+                "--diff-filter=A",
+                "--format=%H",
+                "-1",
+                "--",
+                PENDING_ADOPTION_FILE.as_posix(),
+            ],
+            repository=target,
+            capture=True,
+            check=False,
+            neutralize_filters=True,
+        )
+        introduction = introduced.stdout.strip()
+        if (
+            introduced.returncode != 0
+            or FULL_SHA.fullmatch(introduction) is None
+        ):
+            raise CliError(
+                "Cannot locate the pending adoption checkpoint in Git "
+                "history; restore it or restart adoption from a clean commit."
+            )
+        parent = run_git(
+            [
+                "git",
+                "-C",
+                str(target),
+                "rev-parse",
+                f"{introduction}^",
+            ],
+            repository=target,
+            capture=True,
+            check=False,
+            neutralize_filters=True,
+        )
+        observed_head = parent.stdout.strip()
+        if parent.returncode != 0 or FULL_SHA.fullmatch(observed_head) is None:
+            raise CliError(
+                "Cannot recover the repository revision before pending "
+                "adoption; restart adoption from a clean commit."
+            )
+    elif not committed.stdout:
+        observed_head, _ = git_target_state(target)
+    else:
+        raise CliError(
+            "Pending adoption path has an unexpected Git tree entry; restore "
+            "the checkpoint or restart adoption from a clean commit."
+        )
+    if observed_head.lower() != saved_head.lower():
+        raise CliError(
+            "Pending adoption does not match its original Git revision; "
+            "restore the checkpoint or restart adoption from a clean commit."
+        )
+    return saved_head
+
+
+def validate_pending_adoption_identity(  # noqa: C901
+    target: Path,
+) -> tuple[dict[str, object], Path, str]:
+    """Validate only the local identity of one pending adoption."""
+    pending = read_pending_adoption(target)
+    raw_template = pending["template"]
+    raw_repository = pending["repository"]
+    raw_managed = pending["managed_files"]
+    if (
+        not isinstance(raw_template, dict)
+        or not isinstance(raw_repository, dict)
+        or not isinstance(raw_managed, list)
+    ):
+        raise CliError("Pending adoption state is invalid.")
+    source = raw_template.get("source")
+    release = raw_template.get("release")
+    sha = raw_template.get("sha")
+    verification = raw_template.get("verification")
+    if (
+        not isinstance(source, str)
+        or not source
+        or not isinstance(release, str)
+        or not release
+        or not isinstance(sha, str)
+        or FULL_SHA.fullmatch(sha) is None
+        or verification not in {"verified", "development-unreleased"}
+    ):
+        raise CliError(
+            "Pending template identity is invalid; restore the checkpoint or "
+            "restart adoption from a clean commit."
+        )
+
+    answers_path = checked_destination(
+        target, config_path(target).relative_to(target).as_posix()
+    )
+    if answers_path.is_symlink() or not answers_path.is_file():
+        raise CliError(
+            "Pending adoption is missing the CSARC configuration; restore the "
+            "managed file, then rerun csarc adopt --finalize."
+        )
+    actual_answers_hash = hashlib.sha256(answers_path.read_bytes()).hexdigest()
+    if actual_answers_hash != pending["answers_sha256"]:
+        raise CliError(
+            "Copier answers changed after adoption started; restore "
+            "configuration or restart adoption from a clean commit."
+        )
+    if read_answer(answers_path, "_src_path") != source:
+        raise CliError(
+            "Copier source drifted after adoption started; restore the saved "
+            "answers or restart adoption from a clean commit."
+        )
+    if read_answer(answers_path, "_commit").lower() != sha.lower():
+        raise CliError(
+            "Copier commit drifted after adoption started; restore the saved "
+            "answers or restart adoption from a clean commit."
+        )
+    saved_repository = raw_repository.get("repository")
+    saved_visibility = raw_repository.get("visibility")
+    current_repository = target_repository(target)
+    repository_matches = (
+        saved_repository is None and current_repository is None
+    ) or (
+        isinstance(saved_repository, str)
+        and current_repository is not None
+        and current_repository.casefold() == saved_repository.casefold()
+    )
+    if (
+        not repository_matches
+        or saved_visibility not in REPOSITORY_VISIBILITIES
+        or read_answer(answers_path, "project_visibility") != saved_visibility
+    ):
+        raise CliError(
+            "Repository origin or visibility changed after adoption started; "
+            "restore it or restart adoption from a clean commit."
+        )
+
+    for item in raw_managed:
+        if not isinstance(item, dict):
+            raise CliError("Pending managed-file state is invalid.")
+        name = item.get("path")
+        expected = item.get("fingerprint")
+        if not isinstance(name, str) or not isinstance(expected, str):
+            raise CliError("Pending managed-file state is invalid.")
+        relative_path = Path(name)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise CliError("Pending managed-file path is invalid.")
+        path = checked_destination(target, name)
+        if file_fingerprint(path) != expected:
+            raise CliError(
+                f"Managed adoption file drifted: {name}. Restore it from the "
+                "pending template revision, then rerun csarc adopt --finalize."
+            )
+
+    return pending, answers_path, pending_adoption_target_head(target, pending)
 
 
 def provenance_data(
@@ -1950,41 +2375,10 @@ def markdown_table_code(value: object) -> str:
 
 def report_settings(data: dict[str, object]) -> str:
     """Return known non-secret settings used for rendering."""
-    allowed = {
-        "actions_fallback",
-        "verification_mode",
-        "code_owner",
-        "copilot_review",
-        "coverage_mode",
-        "coverage_threshold",
-        "default_release_level",
-        "enable_codeql",
-        "enable_governance_drift_check",
-        "enable_precommit",
-        "enable_template_update_notifications",
-        "features",
-        "governance_mode",
-        "language",
-        "languages",
-        "lifecycle",
-        "package_name",
-        "project_description",
-        "project_mode",
-        "project_name",
-        "project_slug",
-        "project_verification_hook",
-        "project_visibility",
-        "python_min_version",
-        "python_support_mode",
-        "release_ownership",
-        "release_trigger",
-        "review",
-        "work_item_mapping_review",
-    }
     return ", ".join(
         markdown_code(f"{key}={printable(value)}")
         for key, value in sorted(data.items())
-        if key in allowed
+        if key in REPORT_SETTING_KEYS
     )
 
 
@@ -2663,25 +3057,88 @@ def target_state(target: Path) -> tuple[str, tuple[str, ...], str]:
     return head, changes, digest
 
 
-def code_owner_verification(
+def code_owner_verification(  # noqa: C901
     repository: RepositoryContext, code_owner: object
 ) -> dict[str, str]:
-    """Verify a team CODEOWNER when the GitHub API can enumerate access."""
-    value = str(code_owner)
-    match = re.fullmatch(r"@([^/]+)/([^/]+)", value)
-    if repository.repository is None or match is None:
+    """Verify one optional user or team CODEOWNER against its repository."""
+    value = "" if code_owner is None else str(code_owner)
+    if not value:
         return {
-            "reason": "Repository or team owner is unavailable.",
+            "reason": "No CODEOWNER is configured.",
+            "state": "not-configured",
+            "value": value,
+        }
+    user_match = CODE_OWNER_USER.fullmatch(value)
+    team_match = CODE_OWNER_TEAM.fullmatch(value)
+    if user_match is None and team_match is None:
+        return {
+            "reason": "Use an @user or @organization/team CODEOWNER.",
+            "state": "blocked",
+            "value": value,
+        }
+    if repository.repository is None:
+        return {
+            "reason": (
+                "No GitHub origin or GH_REPO is available; verify the "
+                "CODEOWNER after the repository is pushed."
+            ),
             "state": "unknown",
             "value": value,
         }
-    organization, team = match.groups()
+    if user_match is not None:
+        user = user_match.group(1)
+        try:
+            result = run(
+                [
+                    "gh",
+                    "api",
+                    f"repos/{repository.repository}/collaborators/"
+                    f"{user}/permission",
+                    "--jq",
+                    ".permission",
+                ],
+                capture=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return {
+                "reason": "GitHub CLI is unavailable.",
+                "state": "unknown",
+                "value": value,
+            }
+        if result.returncode != 0:
+            return {
+                "reason": result.stderr.strip() or "User access is unreadable.",
+                "state": "unknown",
+                "value": value,
+            }
+        if result.stdout.strip() not in {
+            "write",
+            "push",
+            "maintain",
+            "admin",
+        }:
+            return {
+                "reason": "User lacks repository write access.",
+                "state": "blocked",
+                "value": value,
+            }
+        return {
+            "reason": "User has repository write access.",
+            "state": "verified",
+            "value": value,
+        }
+
+    organization, team = cast(re.Match[str], team_match).groups()
     if (
         repository.owner is None
         or organization.casefold() != repository.owner.casefold()
     ):
         return {
-            "reason": "CODEOWNER organization does not match the repository.",
+            "reason": (
+                f"CODEOWNER organization @{organization} does not match "
+                f"repository owner @{repository.owner or '(unknown)'}."
+            ),
             "state": "blocked",
             "value": value,
         }
@@ -2693,7 +3150,8 @@ def code_owner_verification(
                 "--paginate",
                 f"repos/{repository.repository}/teams",
                 "--jq",
-                ".[].slug",
+                ".[] | select((.slug | ascii_downcase) == "
+                f'"{team.casefold()}") | .permission',
             ],
             capture=True,
             check=False,
@@ -2710,10 +3168,16 @@ def code_owner_verification(
             "state": "unknown",
             "value": value,
         }
-    teams = {line.strip().casefold() for line in result.stdout.splitlines()}
-    if team.casefold() not in teams:
+    permissions = {line.strip() for line in result.stdout.splitlines()}
+    if not permissions:
         return {
             "reason": "Team is not attached to the target repository.",
+            "state": "blocked",
+            "value": value,
+        }
+    if not permissions.intersection({"push", "maintain", "admin"}):
+        return {
+            "reason": "Team lacks repository write access.",
             "state": "blocked",
             "value": value,
         }
@@ -3101,6 +3565,7 @@ def validate_pending_file_sets(
     pending: Mapping[str, object],
     stage: Path,
     planned: Plan,
+    answers: dict[str, object],
     *,
     task_outputs_available: bool,
 ) -> None:
@@ -3148,6 +3613,7 @@ def validate_pending_file_sets(
     allowed = (
         managed
         | manual
+        | set(adoption_lockfiles(answers))
         | {
             CONFIG_FILE.as_posix(),
             LEGACY_ANSWERS_FILE.as_posix(),
@@ -3316,6 +3782,19 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
         repository=candidate,
         neutralize_filters=True,
     )
+    staged = run_git(
+        ["git", "-C", str(candidate), "diff", "--cached", "--quiet"],
+        repository=candidate,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    if staged.returncode == 0:
+        return
+    if staged.returncode != 1:
+        raise CliError(
+            staged.stderr.strip() or "Cannot inspect staged adoption work."
+        )
     run_git(
         [
             "git",
@@ -3345,6 +3824,7 @@ def prepare_adoption_candidate(
     planned: Plan,
     generated_at: str,
     candidate: Path,
+    target_head: str,
     work_item_mapping: dict[str, object],
     preserved_dirty_paths: tuple[str, ...] = (),
 ) -> tuple[Plan, dict[str, str], str, dict[str, object]]:
@@ -3372,7 +3852,9 @@ def prepare_adoption_candidate(
                     repository,
                     config_path(candidate),
                     pending_managed_paths(stage, planned),
-                    (*planned.manual, *planned.unknown),
+                    planned.manual,
+                    planned.unknown,
+                    target_head,
                     work_item_mapping,
                 ),
             )
@@ -3873,8 +4355,7 @@ def verify_project(target: Path) -> dict[str, object]:
             "Canonical project verification failed before the hook ran.",
         )
         raise ProjectVerificationError(
-            "Project verification failed; generated differences were "
-            "preserved for review.",
+            "Project verification failed.",
             hook,
         )
     if project_hook is not None:
@@ -4927,6 +5408,16 @@ def base_data(
     if mode == "adopt":
         data["coverage_mode"] = "diff"
     data.update(values)
+    code_owner = data.get("code_owner")
+    if not isinstance(code_owner, str) or (
+        code_owner
+        and CODE_OWNER_USER.fullmatch(code_owner) is None
+        and CODE_OWNER_TEAM.fullmatch(code_owner) is None
+    ):
+        raise CliError(
+            "code_owner must use an @user or @organization/team value, "
+            "or be empty."
+        )
     if "languages" in values:
         data["languages"] = parse_languages(values["languages"])
     if "language" in values and "languages" not in values:
@@ -5064,81 +5555,21 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
                 "Finalize plan does not match this target repository."
             )
 
-    pending = read_pending_adoption(target)
-    raw_template = pending["template"]
-    raw_repository = pending["repository"]
-    raw_managed = pending["managed_files"]
-    if (
-        not isinstance(raw_template, dict)
-        or not isinstance(raw_repository, dict)
-        or not isinstance(raw_managed, list)
-    ):
-        raise CliError("Pending adoption state is invalid.")
-    source = raw_template.get("source")
-    release = raw_template.get("release")
-    sha = raw_template.get("sha")
-    verification = raw_template.get("verification")
-    if (
-        not isinstance(source, str)
-        or not source
-        or not isinstance(release, str)
-        or not release
-        or not isinstance(sha, str)
-        or FULL_SHA.fullmatch(sha) is None
-        or verification not in {"verified", "development-unreleased"}
-    ):
-        raise CliError(
-            "Pending template identity is invalid; restore the checkpoint or "
-            "restart adoption from a clean commit."
-        )
-
-    answers_path = checked_destination(
-        target, config_path(target).relative_to(target).as_posix()
+    pending, answers_path, pending_target_head = (
+        validate_pending_adoption_identity(target)
     )
-    if answers_path.is_symlink() or not answers_path.is_file():
-        raise CliError(
-            "Pending adoption is missing the CSARC configuration; restore the "
-            "managed file, then rerun csarc adopt --finalize."
-        )
-    actual_answers_hash = hashlib.sha256(answers_path.read_bytes()).hexdigest()
-    if actual_answers_hash != pending["answers_sha256"]:
-        raise CliError(
-            "Copier answers changed after adoption started; restore "
-            "configuration or restart adoption from a clean commit."
-        )
-    if read_answer(answers_path, "_src_path") != source:
-        raise CliError(
-            "Copier source drifted after adoption started; restore the saved "
-            "answers or restart adoption from a clean commit."
-        )
-    if read_answer(answers_path, "_commit").lower() != sha.lower():
-        raise CliError(
-            "Copier commit drifted after adoption started; restore the saved "
-            "answers or restart adoption from a clean commit."
-        )
+    raw_template = cast(dict[str, object], pending["template"])
+    raw_repository = cast(dict[str, object], pending["repository"])
+    source = cast(str, raw_template.get("source"))
+    release = cast(str, raw_template.get("release"))
+    sha = cast(str, raw_template.get("sha"))
+    verification = cast(str, raw_template.get("verification"))
     allow_unreleased = require_replay_authorization(
         args,
         source=source,
         sha=sha,
         verification=verification,
     )
-
-    for item in raw_managed:
-        if not isinstance(item, dict):
-            raise CliError("Pending managed-file state is invalid.")
-        name = item.get("path")
-        expected = item.get("fingerprint")
-        if not isinstance(name, str) or not isinstance(expected, str):
-            raise CliError("Pending managed-file state is invalid.")
-        relative_path = Path(name)
-        if relative_path.is_absolute() or ".." in relative_path.parts:
-            raise CliError("Pending managed-file path is invalid.")
-        path = target / relative_path
-        if file_fingerprint(path) != expected:
-            raise CliError(
-                f"Managed adoption file drifted: {name}. Restore it from the "
-                "pending template revision, then rerun csarc adopt --finalize."
-            )
 
     answers = resolve_release_answers(target, read_copier_answers(answers_path))
     saved_visibility = answers.get("project_visibility")
@@ -5228,12 +5659,6 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             )
         git_commit(source_path, sha)
 
-    raw_manual = pending.get("manual_files", [])
-    manual_files = (
-        tuple(value for value in raw_manual if isinstance(value, str))
-        if isinstance(raw_manual, list)
-        else ()
-    )
     with tempfile.TemporaryDirectory(prefix="csarc-finalize-") as temporary:
         temporary_root = Path(temporary)
         stage = temporary_root / "rendered"
@@ -5254,15 +5679,44 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         )
         baseline = temporary_root / "baseline"
         clone_target(target, baseline)
+        checkout = run_git(
+            [
+                "git",
+                "-C",
+                str(baseline),
+                "checkout",
+                "--quiet",
+                "--detach",
+                pending_target_head,
+            ],
+            repository=baseline,
+            capture=True,
+            check=False,
+            neutralize_filters=True,
+        )
+        if checkout.returncode != 0:
+            raise CliError(
+                checkout.stderr.strip()
+                or "Cannot reconstruct the pre-adoption repository state."
+            )
         merged = apply_adoption_policies(stage, baseline)
         planned = compare_stage(
             stage, baseline, adopt=True, merged_paths=merged
+        )
+        manual_files = validate_pending_manual_merges(
+            target,
+            pending,
+            answers,
+            planned,
+            pending_target_head,
+            baseline,
         )
         validate_pending_file_sets(
             target,
             pending,
             stage,
             planned,
+            answers,
             task_outputs_available=False,
         )
 
@@ -5351,9 +5805,29 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             adoption = cast(dict[str, object], plan.adoption)
             candidate_verification = str(adoption.get("verification"))
             if candidate_verification != "passed":
+                verify_path = managed_script(candidate, "verify").relative_to(
+                    candidate
+                )
+                raw_hook = adoption.get("project_verification_hook")
+                hook_reason = (
+                    raw_hook.get("reason")
+                    if isinstance(raw_hook, dict)
+                    else None
+                )
+                structured_detail = (
+                    f" Structured result: {hook_reason}."
+                    if isinstance(hook_reason, str)
+                    else ""
+                )
                 raise CliError(
-                    "Project verification failed; fix the reported failures, "
-                    "then rerun csarc adopt --finalize."
+                    "Project verification failed at "
+                    f"./{verify_path.as_posix()}: {candidate_verification}."
+                    + structured_detail
+                    + " Review the failed step or tool output above. Pending "
+                    "manual files: "
+                    + ", ".join(manual_files)
+                    + ". Fix the related merge or verification failure, then "
+                    "rerun csarc adopt --finalize."
                 )
             effects = cast(Plan, plan.files)
             raw_artifacts = adoption.get("artifacts")
@@ -5417,6 +5891,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             pending,
             stage,
             task_planned,
+            answers,
             task_outputs_available=True,
         )
         latest_mapping = inspect_work_item_mapping(repository, review)
@@ -5500,6 +5975,15 @@ def build_adoption_plan(
     generated_at: str,
 ) -> ResolvedPlan:
     """Build one locked adoption plan and its isolated candidate."""
+    if answers.get("documentation_mode") != "off" and not is_regular_file(
+        target / "README.md"
+    ):
+        raise CliError(
+            "Existing repositories with documentation enabled require a "
+            "product-owned regular README.md before adoption. Create and "
+            "commit README.md, then rerun csarc adopt, or explicitly choose "
+            "--data documentation_mode=off."
+        )
     review = answers.get("work_item_mapping_review", "pending")
     if not isinstance(review, str):
         raise CliError("work_item_mapping_review must be a string.")
@@ -5527,6 +6011,7 @@ def build_adoption_plan(
             planned,
             generated_at,
             candidate,
+            head,
             work_item_mapping,
             preserved_dirty_paths,
         )
@@ -5848,6 +6333,19 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     repository = repository_context(
         target, explicit_data.get("project_visibility")
     )
+    if (
+        repository.repository is None
+        and explicit_data.get("code_owner", DEFAULT_OWNER) == ""
+        and GITHUB_REPOSITORY_URL.fullmatch(
+            explicit_data.get("repository_url", "")
+        )
+        is None
+    ):
+        raise CliError(
+            "code_owner is empty and no GitHub origin or GH_REPO is "
+            "available; also pass --data "
+            "repository_url=https://github.com/owner/repository."
+        )
     data = base_data(target, mode, explicit_data)
     data["project_visibility"] = repository.visibility
     if repository.repository is not None:
@@ -6033,6 +6531,105 @@ def require_legacy_migration_flags(saved: dict[str, object] | None) -> NoReturn:
     )
 
 
+def legacy_commit_kind(commit: str) -> str:
+    """Classify a non-full Copier revision for actionable diagnostics."""
+    if release_phase.is_valid_version(commit):
+        return "release tag"
+    if re.fullmatch(r"[0-9a-fA-F]{7,39}", commit):
+        return "short commit SHA"
+    return "unsupported revision"
+
+
+def legacy_commit_migration_command(commit: str) -> str:
+    """Return the explicit verified-release migration command."""
+    if legacy_commit_kind(commit) == "unsupported revision":
+        return (
+            "restore _commit to the full SHA from an immutable release, "
+            "then run csarc status <path> --json"
+        )
+    release = commit if release_phase.is_valid_version(commit) else "<tag>"
+    return (
+        f"csarc update <path> --check --accept-legacy --from-release {release}"
+    )
+
+
+def legacy_commit_error(commit: str) -> str:
+    """Explain a malformed Copier revision and its safe migration path."""
+    kind = legacy_commit_kind(commit)
+    if kind == "unsupported revision":
+        command = legacy_commit_migration_command(commit)
+        return (
+            f"Copier answer _commit is {commit!r} ({kind}); expected a full "
+            f"40-character commit SHA. {command}."
+        )
+    command = legacy_commit_migration_command(commit)
+    return (
+        f"Copier answer _commit is {commit!r} ({kind}); expected a full "
+        "40-character commit SHA. Review the recorded template source and "
+        f"revision, then run `{command}` to verify and migrate it."
+    )
+
+
+def legacy_commit_matches_release(commit: str, revision: Revision) -> bool:
+    """Bind a legacy tag or abbreviated SHA to one verified release."""
+    if release_phase.is_valid_version(commit):
+        return release_phase.normalize(commit) == release_phase.normalize(
+            revision.label
+        )
+    return bool(
+        re.fullmatch(r"[0-9a-fA-F]{7,39}", commit)
+        and revision.sha.startswith(commit.lower())
+    )
+
+
+def legacy_migration_source(
+    source: str, accept_legacy: bool, from_release: str | None
+) -> str:
+    """Normalize a canonical GitHub alias only for explicit migration."""
+    if (
+        accept_legacy
+        and from_release is not None
+        and github_repository(source) == CANONICAL_REPOSITORY
+    ):
+        return CANONICAL_SOURCE
+    return source
+
+
+def migrate_legacy_commit(
+    source: str,
+    commit: str,
+    saved: dict[str, object] | None,
+    accept_legacy: bool,
+    from_release: str | None,
+    client: ReleaseClient | None,
+) -> tuple[Revision, dict[str, object]]:
+    """Verify and replace one legacy tag or abbreviated commit answer."""
+    if saved is not None and saved.get("verification") == "verified":
+        raise CliError(
+            f"{legacy_commit_error(commit)} Saved verified provenance "
+            "prevents legacy migration; restore _commit to its recorded "
+            "commit_sha instead."
+        )
+    if (
+        not accept_legacy
+        or from_release is None
+        or legacy_commit_kind(commit) == "unsupported revision"
+    ):
+        raise CliError(legacy_commit_error(commit))
+    revision = resolve_revision(source, from_release, client=client)
+    if not legacy_commit_matches_release(commit, revision):
+        raise CliError(
+            f"Copier answer _commit {commit!r} does not match verified "
+            f"release {from_release!r} at {revision.sha}."
+        )
+    return revision, {
+        "commit_sha": revision.sha,
+        "release_tag": from_release,
+        "repository": revision.source,
+        "verification": "legacy-unverified",
+    }
+
+
 def current_revision(
     target: Path,
     source: str,
@@ -6044,9 +6641,17 @@ def current_revision(
     client: ReleaseClient | None = None,
 ) -> tuple[Revision, dict[str, object] | None]:
     """Verify saved provenance or explicitly migrate a legacy installation."""
-    if FULL_SHA.fullmatch(commit) is None:
-        raise CliError("Copier answers do not contain a full commit SHA.")
     saved = read_provenance(target)
+    source = legacy_migration_source(source, accept_legacy, from_release)
+    if FULL_SHA.fullmatch(commit) is None:
+        return migrate_legacy_commit(
+            source,
+            commit,
+            saved,
+            accept_legacy,
+            from_release,
+            client,
+        )
     if allow_unreleased:
         revision = resolve_revision(
             source,
@@ -6133,6 +6738,7 @@ def update_status(
         from_release=from_release,
         client=client,
     )
+    source = previous_revision.source
     target_revision = resolve_revision(
         source,
         requested,
@@ -6263,23 +6869,44 @@ def detect_install_state(
         Callable[[Path], subprocess.CompletedProcess[str]] | None
     ) = None,
 ) -> dict[str, object]:
-    """Deterministically classify a target into one of five install states.
+    """Deterministically classify a target into one of seven install states.
 
-    Reads only `.csarc/config.yml` (or legacy Copier answers), the pinned
-    Copier revision, and `.csarc/policies/` drift; it never infers a state from
-    free-form judgment, so repeated runs against unchanged repository state
-    always return the same classification. The five states are: `create`
+    Reads the local adoption checkpoint first, then `.csarc/config.yml` (or
+    legacy Copier answers), the pinned Copier revision, and `.csarc/policies/`
+    drift; it never infers a state from free-form judgment, so repeated runs
+    against unchanged repository state always return the same classification.
+    The seven states are: `create`
     (no target yet, or an empty directory), `adopt` (an existing repository
-    without CSARC configuration), `update` (a pinned Copier revision behind
-    the resolved target release), `current` (revision and policy settings
-    both match), and `policy-only-update` (revision matches but the live
-    repository policy settings have drifted from `.csarc/policies/`).
+    without CSARC configuration), `adoption-pending` (a locally authenticated
+    checkpoint still needs finalize), `migrate` (legacy Copier answers need
+    an explicit verified-release migration), `update` (a pinned Copier
+    revision behind the resolved target release), `current` (revision and
+    policy settings both match), and `policy-only-update` (revision matches
+    but the live repository policy settings have drifted from
+    `.csarc/policies/`).
     """
     if repository_target_is_new(target):
         return {
             "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_CREATE],
             "reason": f"{target} does not exist or is an empty directory.",
             "state": INSTALL_STATE_CREATE,
+        }
+    pending_path = checked_destination(target, PENDING_ADOPTION_FILE.as_posix())
+    try:
+        pending_path.lstat()
+    except FileNotFoundError, NotADirectoryError:
+        pass
+    else:
+        validate_pending_adoption_identity(target)
+        return {
+            "next_command": INSTALL_STATE_NEXT_COMMAND[
+                INSTALL_STATE_ADOPTION_PENDING
+            ],
+            "reason": (
+                "A valid adoption checkpoint is present; adoption is not "
+                "complete."
+            ),
+            "state": INSTALL_STATE_ADOPTION_PENDING,
         }
     answers_path = config_path(target)
     if not answers_path.is_file():
@@ -6289,6 +6916,16 @@ def detect_install_state(
                 f"{target} has no {CONFIG_FILE}; it is not yet CSARC-managed."
             ),
             "state": INSTALL_STATE_ADOPT,
+        }
+    current = read_answer(answers_path, "_commit")
+    saved = read_provenance(target)
+    if FULL_SHA.fullmatch(current) is None and (
+        saved is None or saved.get("verification") != "verified"
+    ):
+        return {
+            "next_command": legacy_commit_migration_command(current),
+            "reason": legacy_commit_error(current),
+            "state": INSTALL_STATE_MIGRATE,
         }
     status, current_revision, _target_revision, _previous = update_status(
         target,
@@ -6947,7 +7584,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     target_capabilities = dict(preflight)
     current_capabilities.pop("observed_at", None)
     target_capabilities.pop("observed_at", None)
-    answers_changed = answers != saved_answers
+    answers_changed = answers != current_answers
     capabilities_changed = target_capabilities != current_capabilities
     update_available = bool(status["update_available"]) or any(
         (answers_changed, capabilities_changed)
@@ -7295,8 +7932,8 @@ def parser() -> argparse.ArgumentParser:
     status = subparsers.add_parser(
         "status",
         help=(
-            "the one-prompt entry point: deterministically classify a "
-            "repository as create/adopt/update/current/policy-only-update"
+            "classify repository state as adoption-pending, create, adopt, "
+            "migrate, update, current, or policy-only-update"
         ),
     )
     status.add_argument("path", nargs="?", type=Path, default=Path.cwd())

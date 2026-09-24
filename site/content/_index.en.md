@@ -95,13 +95,13 @@ The template promises only capabilities that are implemented and tested. Go, gen
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="install" parity="supplemental" eyebrow="Install guide" title="Paste one prompt to your agent; it figures out what happens next" subtitle="`csarc status` reads `.csarc/config.yml`, the Copier revision, and policies/ drift; the result never depends on agent judgment." class="dense" legacy="false" >}}
+{{< slide key="install" parity="supplemental" eyebrow="Install guide" title="Paste one prompt to your agent; it figures out what happens next" subtitle="`csarc status` checks the adoption checkpoint first, then `.csarc/config.yml`, the Copier revision, and policies/ drift; the result never depends on agent judgment." class="dense" legacy="false" >}}
 Whether the repository is brand new, an existing one, or already CSARC-managed, the way you find out is the same: you do not need to remember a command yourself -- paste the text below straight to your coding agent (Claude Code, Copilot, and the like) and let it run and judge for you.
 
 {{< standard key="install-mode-standard" title="The prompt to paste to your agent" >}}
-<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Paste it</h3><p>Paste the full prompt below to your coding agent -- no command to remember.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI decides</h3><p>The agent runs <code>csarc status</code>; the CLI itself (not the agent's own judgment) classifies create, adopt, update, or a policy-only change.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Preview first</h3><p>Whatever the result, the agent shows you the plan and waits for confirmation before doing anything.</p></article></div>
+<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Paste it</h3><p>Paste the full prompt below to your coding agent -- no command to remember.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI decides</h3><p>The agent runs <code>csarc status</code>; the CLI itself (not the agent's own judgment) classifies create, adopt, pending adoption, update, or a policy-only change.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Preview first</h3><p>Whatever the result, the agent shows you the plan and waits for confirmation before doing anything.</p></article></div>
 
-The result will be one of: **create** a new project, **adopt** an existing one, apply an available **update**, find it **already current** with nothing to do, or apply **policy-only** settings -- whichever it is, the agent always shows you the plan before touching anything.
+The result will be one of: **create** a new project, **adopt** an existing one, **finish a pending adoption**, apply an available **update**, find it **already current** with nothing to do, or apply **policy-only** settings -- whichever it is, the agent always shows you the plan before touching anything.
 
 <p class="install-promise"><strong>The promise at this step:</strong> this step only checks the current state and proposes a plan; nothing is modified, no GitHub setting changes, and no PR opens until you confirm.</p>
 
@@ -123,6 +123,8 @@ It only reads local files plus, once a repository is already managed, the resolv
 | --- | --- | --- |
 | `create` (new repository) | The target path does not exist, or exists but is an empty directory | `csarc init <path>`: preview with `--dry-run`, then confirm with `--yes --non-interactive` |
 | `adopt` (existing repository) | The target already has content but no `.csarc/config.yml` | `csarc adopt <path>`: write a dry-run plan, review it, then apply with `--apply-plan` |
+| `adoption-pending` (adoption incomplete) | The local adoption checkpoint passes identity validation, but adoption is not complete | `csarc adopt <path> --finalize`: preview and continue the existing finalize flow |
+| `migrate` (legacy answers) | `.csarc/config.yml` has a non-full `_commit` and no trusted verified provenance | Review a tag or short SHA and follow `next_command` to bind it to a verified Release; restore the correct SHA for any other format |
 | `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | `csarc update <path> --check` to preview, then `csarc update <path>` |
 | `current` (nothing to do) | The Copier revision is current, and `policies/` matches the repository's live GitHub settings | No action needed |
 | `policy-only-update` (policy settings changed) | The Copier revision is current, but `policies/` (for example, whether workarounds are allowed) no longer matches the live GitHub settings | `.csarc/scripts/apply-repository-settings.sh plan` to preview, then `apply`; this **skips** a full adopt or update run |
@@ -138,7 +140,7 @@ The full machine-readable contract lives in [`docs/agent-install.md`](https://gi
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-capabilities" title="Know what this specific repository can actually enable" >}}
-The Governance step's plan table (Step 08) answers "what does the account's GitHub *plan* allow." That is necessary but not sufficient: organization policy, CODEOWNERS team membership, and token scope can still block a capability on a plan that would otherwise support it. Beyond that plan probing, `policies/capability-matrix.json` names every capability this template relies on, its minimum requirement, and a documented workaround; `scripts/check-repo-capabilities` evaluates it against what this repository and token actually have, live:
+The Governance step's plan table (Step 08) answers "what does the account's GitHub *plan* allow." That is necessary but not sufficient: organization policy, CODEOWNER user or team access, and token scope can still block a capability on a plan that would otherwise support it. Beyond that plan probing, `policies/capability-matrix.json` names every capability this template relies on, its minimum requirement, and a documented workaround; `scripts/check-repo-capabilities` evaluates it against what this repository and token actually have, live:
 
 ```bash
 ./scripts/check-repo-capabilities        # human-readable report
@@ -149,12 +151,14 @@ The Governance step's plan table (Step 08) answers "what does the account's GitH
 | --- | --- | --- | --- |
 | `repository_admin` | Prerequisite for every row below | `permissions.admin == true` for the acting token | Ask an owner/admin to run `apply`, or request the Admin role |
 | `ruleset_enforcement` | Branch protection Ruleset on the default branch | Public repository (any plan), or private on Pro/Team or above | DEGRADED marker; desired Ruleset stays declarative in `policies/rulesets.json` |
-| `codeowners_enforcement` | CODEOWNERS review actually blocks merge | Ruleset above, plus a `@org/team` with write access | DEGRADED marker; fix the team, or use `scripts/request-reviewer` meanwhile |
+| `codeowners_enforcement` | CODEOWNERS review actually blocks merge | When configured, the Ruleset above plus an `@user` or `@organization/team` with write access | DEGRADED marker; fix the owner, omit it, or use `scripts/request-reviewer` meanwhile |
 | `actions_pr_approval` | Actions can auto-approve pull requests (for example Dependabot auto-merge) | Organization allows `can_approve_pull_request_reviews` | DEGRADED marker; fall back to manual human approval |
 | `security_and_analysis` | Secret scanning, push protection, Dependabot security updates | Public repository, or GitHub Advanced Security if private | DEGRADED marker; rely on local `scripts/scan-secrets` instead |
 | `github_pages` | Hosts `docs/index.html` as a live site | Public repository, or GitHub Enterprise Cloud if private | DEGRADED marker; distribute the committed HTML file instead |
 | `repository_settings_inspection` | `check` mode can compare live admin-only fields | Same as `repository_admin` | DEGRADED marker; run `check` from a trusted admin checkout |
 | `immutable_releases` | Repository setting GitHub uses to sign each published Release's attestation | An admin enables it once via `apply-repository-settings.sh apply`; `GITHUB_TOKEN` still can't read it directly | No longer pre-flight-blocking (#770); `scripts/publish-release` verifies the signed attestation post-hoc and fails closed if it's missing |
+
+For a local repository without a remote, a configured CODEOWNER may first be reported as `unknown`. If CODEOWNERS is omitted with `--data code_owner=`, also pass a valid `--data repository_url=https://github.com/<owner>/<repository>`. Other configuration and package metadata still use this repository identity when documentation is disabled, so it cannot be guessed from an empty owner.
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="How to read a check-repo-capabilities result" >}}
@@ -771,7 +775,7 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Project choice | `repository_url`, `project_slug` | derived from `code_owner`/`project_name` unless overridden | repo-site's clone instructions |
 | Project choice | `enable_governance_drift_check` | `true` by default, generating the daily scheduled Action; set `false` to disable it | `true` generates `governance-drift.yml` and the drift checker; `false` generates neither |
 
-The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Plan, billing, Copilot entitlement, token permissions, and Pages availability are live `allowed`/`blocked`/`unknown` observations, not settings. Conversely, `enabled` in `policies/pages.json` is the maintainer's desired-state choice: public on GitHub Free means Pages can publish, not that it must, and `enabled=false` is an explicit opt-out that check and apply still reconcile. Low-frequency GitHub details stay in native repository settings or `policies/` instead of expanding the CSARC schema.
+The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Plan, billing, Copilot entitlement, token permissions, and Pages availability are live `allowed`/`blocked`/`unknown` observations, not settings. Low-frequency GitHub details stay in native repository settings or `policies/` instead of expanding the CSARC schema.
 
 A generated project using `documentation_mode: template-and-content` runs the same rendering engine and components as this template repository's own root site (Issue #681), just with much leaner content. It resolves explicit `[[key]]` tokens only from the keys listed above, straight from `.csarc/config.yml`; an unknown key stops the build, so the site cannot invent a second settings schema. Project content and theme choices stay under `docs/site/content/` and `docs/site/theme.css`, owned by the consuming project. See `docs/documentation-policy.md` for the complete ownership and migration contract.
 {{< /disclosure >}}
@@ -817,6 +821,7 @@ Three places each own something different: `template/` is the single source of w
 - A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent components (modules); it never builds a combination-specific pipeline.
 - A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan; the dry-run never executes a target-owned helper or product hook and read-only inventories GitHub Issue Types and labels. The report uses `Bug`／`Feature`／`Task` for Issue work types and lowercase `bug`／`enhancement`／`documentation` for PR classification and fallback, listing safe mappings that can be accepted together and custom items that need individual review without changing remote metadata. Once a person approves that same undrifted plan, the CLI verifies an isolated candidate before writing it, and the first PR then reviews the source, plan, diff, and local results.
 - After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a dry-run preview, and only apply to the target once the candidate content and conflicts are fully verified; a conflict leaves the repository unchanged so it can be corrected, rerun, and reviewed by a normal PR and trusted-base checks.
+- If an existing repository was created directly by Copier, `_commit` may still be a release tag or short SHA. `csarc status` classifies it as `migrate` and reports the current value and format; after reviewing it, the maintainer runs `update --check --accept-legacy --from-release <tag>` to bind it to the immutable, attested, signature-verified Release's full SHA. Provenance that already claims to be verified but disagrees still fails closed.
 - The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.
 
 {{< disclosure key="copier-update" title="Copier + root dogfood + create/adopt/update regression" >}}

@@ -27,9 +27,10 @@ attestation verification.
    installation or edit a shell profile or global environment. Before doing
    anything else, run `csarc status <path> --json` (append `csarc` to the
    `uvx` invocation above). It deterministically classifies the repository
-   into exactly one of five states — `create`, `adopt`, `update`, `current`,
-   or `policy-only-update` — from `.csarc/config.yml`, the pinned Copier
-   revision, and `policies/` drift. Policy inspection renders the complete
+   into exactly one of seven states — `create`, `adopt`, `adoption-pending`,
+   `migrate`, `update`, `current`, or `policy-only-update` — from the local
+   adoption checkpoint, `.csarc/config.yml`, the pinned Copier revision, and
+   `policies/` drift. Policy inspection renders the complete
    helper closure from the verified Release and treats the target checkout
    only as data; it never executes the target's helper. An unverified source
    makes policy inspection unavailable rather than trusted. The classification logic lives entirely
@@ -37,7 +38,13 @@ attestation verification.
    judgment, and running it again against unchanged repository state always
    returns the same answer. Follow the returned `next_command`: for
    `create`, `adopt`, or `update`, run the matching `csarc init`, `adopt`, or
-   `update` command as a dry-run first; `adopt` and `adopt --finalize`
+   `update` command as a dry-run first. `adoption-pending` means the local
+   checkpoint is valid but adoption is not complete; run the returned `csarc
+   adopt <path> --finalize` command. `migrate` means `_commit` came from
+   Copier rather than this CLI as a release tag or short SHA; review the saved
+   source and revision, then run the returned `update --check --accept-legacy
+   --from-release <tag>` command. This verifies an immutable release and binds
+   the legacy value to its full SHA before any write. `adopt` and `adopt --finalize`
    default to dry-run when no `--apply-plan` is supplied. `current` needs no
    action. `policy-only-update` means the Copier revision is already current
    but live repository settings have drifted from `policies/`; skip Copier
@@ -80,7 +87,11 @@ attestation verification.
    product command, and security reporting channel. For an existing
    repository, separately confirm an optional repository-relative executable
    `project_verification_hook`; the product run command is never a verification
-   hook. The hook must not resolve to or re-enter canonical `scripts/verify`;
+   hook. If `documentation_mode` is not `off`, also require an existing,
+   committed, regular `README.md` that remains product-owned; otherwise create
+   and commit it before adoption, or explicitly pass
+   `--data documentation_mode=off`. The hook must not resolve to or re-enter
+   canonical `scripts/verify`;
    update checks validate it before any target write. The default channel is
    the repository's public GitHub Issues page; warn users never to post
    secrets, credentials, personal data, or other sensitive details there.
@@ -101,15 +112,23 @@ attestation verification.
    capabilities are resolved by the runtime workflow and never treated as
    allowed.
 5. Stop and wait for explicit confirmation before changing files.
-   Treat an unverified `code_owner` as unknown and call it out before accepting
-   the plan; a confirmed missing team is blocking.
+   Treat an unverified configured `code_owner` as unknown and call it out
+   before accepting the plan. An empty value intentionally omits CODEOWNERS;
+   without a GitHub origin or `GH_REPO`, it must be paired with an explicit,
+   valid `repository_url` even when documentation is disabled. A confirmed
+   missing or unwritable `@user` or `@organization/team` is blocking. A local
+   repository without a remote may defer that live lookup, but after push the
+   generated repository-settings `plan`/`apply`/`check` must verify the owner
+   and never grant access automatically.
 6. After confirmation, apply an adoption only with the exact machine plan
    emitted by dry-run and `--yes --non-interactive`. Only after this approval
    may the CLI run the target-owned project hook in the isolated candidate;
    verification must pass before the target is written. For init or update,
    reuse the resolved tag and full SHA explicitly. Report the
    `./scripts/verify` result. If adoption creates a resumable manual-merge checkpoint, complete
-   only the listed merges, run `adopt --finalize --dry-run`, review its new
+   only the listed merges; the checkpoint and completed merges may be committed
+   before finalize, and the same bytes are accepted committed or uncommitted.
+   Run `adopt --finalize --dry-run`, review its new
    external plan, wait for confirmation again, then use `adopt --finalize
    --apply-plan PATH`. Direct finalize and any unplanned working-tree or manual
    result drift must stop.
