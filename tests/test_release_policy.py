@@ -1267,6 +1267,67 @@ def test_delivery_version_rejects_a_stale_release_worthy_branch(
         )
 
 
+def test_deferred_checkpoint_work_merges_without_a_version(
+    tmp_path: Path,
+) -> None:
+    """Only the checkpoint terminal Issue may materialize the beta."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {"release-type": "simple", "packages": {".": {"component": "demo"}}}
+        ),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    base_sha = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "tag", "v0.1.0")
+    git(tmp_path, "checkout", "-b", "dev/m1-demo")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: deferred checkpoint work")
+    feature_sha = git(tmp_path, "rev-parse", "HEAD")
+
+    deferred = verify_delivery_version(
+        tmp_path,
+        base_sha,
+        feature_sha,
+        phase="beta",
+        checkpoint_role="deferred",
+    )
+    assert deferred["status"] == "deferred"
+    assert deferred["materialized"] is False
+    report = release_plan_report(
+        tmp_path, feature_sha, phase="beta", checkpoint_role="deferred"
+    )
+    assert report["status"] == "deferred"
+    # Without a checkpoint role the same unmaterialized work stays pending.
+    assert (
+        release_plan_report(tmp_path, feature_sha, phase="beta")["status"]
+        == "pending"
+    )
+
+    prepare_release_candidate(tmp_path, feature_sha, phase="beta")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: materialize beta")
+    head_sha = git(tmp_path, "rev-parse", "HEAD")
+    with pytest.raises(ValueError, match="must not materialize a version"):
+        verify_delivery_version(
+            tmp_path,
+            base_sha,
+            head_sha,
+            phase="beta",
+            checkpoint_role="deferred",
+        )
+    with pytest.raises(ValueError, match="must not materialize a version"):
+        release_plan_report(
+            tmp_path, head_sha, phase="beta", checkpoint_role="deferred"
+        )
+
+
 def test_delivery_version_allows_non_release_work_without_materialization(
     tmp_path: Path,
 ) -> None:

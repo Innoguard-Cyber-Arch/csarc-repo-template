@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.26.5</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.27.0-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.26.5<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.27.0-beta.1<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -611,7 +611,7 @@ Routine updates and security checks run automatically. People step in only for u
 ### Our choice
 
 - **Version intent:** a PR title states major, minor, patch, or no-release impact without reserving an exact number.
-- **Public versions:** each Milestone work Issue publishes `X.Y.Z-beta.N` after landing on `dev/m*`; Milestone promotion, standalone work, and hotfixes publish unsuffixed stable releases. RC is not a separate stage.
+- **Public versions:** Milestone work publishes `X.Y.Z-beta.N` after landing on `dev/m*`; when the tracker declares checkpoints up front, only each checkpoint's terminal Issue publishes one beta and other work defers to it; Milestone promotion, standalone work, and hotfixes publish unsuffixed stable releases. RC is not a separate stage.
 - **Release and closure:** after a materialized PR merges and verification passes, the system creates the immutable tag, GitHub Release, explicit artifacts, checksums, and SBOM. Only successful promotion publication closes the tracker and Milestone; failure leaves both open.
 - **Delivery:** merging to `main` is repository delivery. Every release-worthy work PR carries its reviewed version candidate; a Milestone promotion PR carries the final stable batch candidate.
 - **Standalone work:** when one Issue can be reviewed and verified independently and has no shared deadline or cross-Issue dependency, it needs no Milestone and may target `main` directly.
