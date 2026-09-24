@@ -27,9 +27,17 @@ export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 cd "$repo_root"
 source "$repo_root/scripts/verification-step"
 
+cost_root="$(mktemp -d)"
+trap 'rm -rf "$cost_root"' EXIT
 verification_step "Python regression suite" \
-  uv run pytest -vv --durations=20 \
+  uv run pytest -vv --durations=20 --junitxml="$cost_root/pytest.xml" \
   --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
+# Cost summary from the same pytest run's JUnit XML; never blocks verification.
+if [[ -s "$cost_root/pytest.xml" ]]; then
+  python3 scripts/verification_cost.py report --junit "$cost_root/pytest.xml" \
+    --label "Python regression suite (full)" --suite full ||
+    echo "Verification cost summary unavailable (non-blocking)." >&2
+fi
 verification_step "Issue-triage self-test" ./scripts/test-issue-triage
 verification_step "Worktree-cleanup self-test" ./scripts/test-worktree-cleanup
 verification_step "PR-policy self-test" ./scripts/test-pr-policy
