@@ -709,6 +709,56 @@ test "$(basename "$2")" = csarc_repo_template-0.24.2-py3-none-any.whl
     assert not wheel_log.exists()
 
 
+def test_verification_step_never_runs_the_callers_exit_trap() -> None:
+    """Stopping the heartbeat must not delete the caller's artifacts (#1014).
+
+    The forked heartbeat briefly inherits the caller's EXIT trap; bash 5.2
+    runs it on SIGTERM, so a fast step followed by `kill` could `rm -rf` the
+    wheel the next step needs. The loop reproduces that on bash 5.2, and the
+    source assertion keeps the uncatchable signal on newer bash where the
+    window does not open.
+    """
+    for helper in (
+        REPO_ROOT / "scripts" / "verification-step",
+        REPO_ROOT / "template" / ".csarc" / "scripts" / "verification-step",
+    ):
+        source = helper.read_text(encoding="utf-8")
+        assert 'kill -KILL "$heartbeat_pid"' in source
+        assert 'kill "$heartbeat_pid"' not in source
+
+    script = """
+source "$1"
+gone=0
+for _ in $(seq 100); do
+  if ! (
+    d="$(mktemp -d)"
+    trap 'rm -rf "$d"' EXIT
+    touch "$d/wheel"
+    verification_step "Locate" test -f "$d/wheel" >/dev/null
+    test -f "$d/wheel"
+  ); then
+    gone=$((gone + 1))
+  fi
+done
+echo "gone=$gone"
+"""
+    bash = shutil.which("bash")
+    assert bash is not None
+    result = subprocess.run(  # noqa: S603 - test-owned helper and script
+        [
+            bash,
+            "-c",
+            script,
+            "bash",
+            str(REPO_ROOT / "scripts" / "verification-step"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout.strip() == "gone=0"
+
+
 def test_verification_entry_points_use_shared_step_reporting() -> None:
     """Keep every long local verification path observable."""
     entries = (
