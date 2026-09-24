@@ -7,6 +7,13 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.26.11] - 2026-09-24
+
+### Bug Fixes
+
+* fix: align local promotion release prep with hosted verify (010931b)
+* fix: aggregate stable CHANGELOG since the previous stable (929ad91)
+
 ## [0.26.10] - 2026-09-24
 
 ### Bug Fixes
