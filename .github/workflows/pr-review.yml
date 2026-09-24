@@ -19,9 +19,31 @@ on:
   merge_group:
     types: [checks_requested]
 
+# Issue #1015: never cancel an in-progress publication. A cancelled
+# `publish review decision` job stays on the pull request head as its latest
+# result (mergeable_state `unstable`), and the superseding run cannot replace
+# it when it is an `issue_comment` run, whose check runs attach to the default
+# branch instead of the pull request head. Publishing runs for one pull
+# request therefore queue in one group: the in-progress run finishes, a
+# superseded pending run is dropped before it creates any job, and the newest
+# queued run re-reads the live head, so the last publication still reflects
+# the newest event. Runs that will not publish (ordinary comments, draft
+# events, merge queue) get a run-scoped group so they can never displace a
+# queued publication. The publishing predicate mirrors `jobs.publish.if`.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
-  cancel-in-progress: true
+  group: >-
+    ${{ github.workflow }}-${{
+      (
+        (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        startsWith(github.event.comment.body, 'PR lifecycle merge authorization')) ||
+        (github.event_name != 'issue_comment' &&
+        github.event_name != 'merge_group' &&
+        github.event.pull_request.draft == false)
+      ) && format('publish-{0}', github.event.pull_request.number || github.event.issue.number) ||
+      format('run-{0}', github.run_id)
+    }}
+  cancel-in-progress: false
 
 permissions: {}
 
