@@ -1600,6 +1600,32 @@ def test_renewal_refuses_another_owner_and_states_reauthorization(
     release_refs(first)
 
 
+def test_renewal_refuses_another_github_actor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same task owner under a different GitHub actor cannot renew."""
+    github, arguments, _work = git_lease_fixture(tmp_path, monkeypatch)
+    acquire(arguments, github)
+    first = read_lease(arguments.output)
+    publish_lease_commit(github, first)
+    github.authenticated_actor = "someone-else"
+    with pytest.raises(RuntimeError, match="actor changed"):
+        acquire(
+            SimpleNamespace(
+                **{
+                    **vars(arguments),
+                    "actor": "",
+                    "renew": arguments.output,
+                    "output": tmp_path / "other-actor.json",
+                }
+            ),
+            github,
+        )
+    for ref in first["refs"]:
+        assert remote_ref(ref) == first["lease_commit"]
+    release_refs(first)
+
+
 def test_fresh_lease_warns_that_an_earlier_authorization_is_stranded(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
