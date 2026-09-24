@@ -14,10 +14,10 @@ In the CSARC template repository, the relevant implementation includes
 project-owned source plus `.csarc/scripts/`, `.csarc/policies/`, and
 `.github/workflows/`. Only paths that actually exist are applicable.
 
-Read `README.md`, language manifests, `.csarc/config.yml` when present, and
-`AGENTS.md` before selecting commands or inferring runtime behavior. Do not
-infer deployed services, data classifications, identities, or protocols that
-the repository does not define.
+Read `README.md` when present. Before selecting commands or inferring runtime
+behavior, read `AGENTS.md`, `.csarc/config.yml` when present, and the language
+manifests that exist. Do not infer deployed services, data classifications,
+identities, or protocols that the repository does not define.
 
 ## Threat Model and Trust Boundaries
 

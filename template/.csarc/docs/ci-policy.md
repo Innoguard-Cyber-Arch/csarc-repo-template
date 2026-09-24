@@ -47,27 +47,30 @@ tracker 的 `Completion evidence` 段落（見 #512）；#400 與 #401 的自動
 blocked gap。
 delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
 
-## Milestone 掛勾安全網（#551）
+## Milestone 掛勾與持續同步（#551／#962）
 
-Milestone 8 收尾階段 #546–#550 五張 Issue／PR 全部沒有掛 Milestone，且沒有任何工具或
-檢查會提醒——純粹是開 Issue 時忘記加 `--milestone`。#551 為此補上兩層非阻擋性提醒，
-刻意不要求強制 fail-closed：許多 Issue／PR 本來就與任何 Milestone 無關（見 Issue #551
-的「邊界」段落）。
+Milestone 8 收尾階段 #546–#550 五張 Issue／PR 全部沒有掛 Milestone；#551 先補上兩層
+非阻擋性提醒。#962 進一步修正 M16 的 Feature #939 漏掛，並補齊 linked Issue 的
+Milestone 後續變更不會同步既有 open PR 的缺口。許多 Issue／PR 本來就與任何 Milestone
+無關，因此只有明確的 Issue→PR 關係會自動同步，不從標題或目前有哪些 Milestone 猜測。
+Milestone preflight 與 lifecycle reconciliation 另以原生 `parent_issue_url` 驗證
+Feature parent 與 sub-issues 位於同一個 delivery bucket，防止 #939 類型的遺漏復發。
 
 - `.csarc/scripts/gh-issue-create`：本機開 Issue 當下，若沒有帶 `--milestone`／`-m`，且
   `.csarc/scripts/detect-open-milestone` 判定目前恰好只有一個 open Milestone，會印出提示；
   互動式終端機（`stdin` 是 tty）額外詢問是否要帶入該 Milestone，非互動環境
   （agent／CI／腳本呼叫）只印出提醒，不阻擋 Issue 建立。
 - `.csarc/scripts/sync_work_item_metadata.py`（CI 端：可信任 default branch 定義的
-  `pr-policy-writes.yml` `metadata` job）：PR 與其 linked Issue 兩邊都沒有掛任何 Milestone、
-  且同樣恰好有一個 open Milestone 時，於 PR 留言一次性提醒（內嵌 HTML comment marker
-  避免重複留言）；`pr-policy.yml` 的候選 workflow 維持唯讀，留言失敗（例如暫時性 API
-  錯誤）只印 `::notice::`，不影響 policy 結果。
+  `pr-policy-writes.yml` `metadata` job）：PR 事件發生時，從唯一 linked Issue 同步
+  classification、assignee 與 Milestone；Issue 收到 `milestoned`／`demilestoned` 事件時，
+  `work-item-lifecycle.yml` 反向尋找並同步所有 linked open PR。若 PR 指向多張 Issue，會
+  fail closed，不猜測哪張才是 metadata 來源。只有 PR 與 linked Issue 兩邊都沒有
+  Milestone 時，才沿用 #551 的一次性提醒。
 - 兩者共用同一支 `.csarc/scripts/detect-open-milestone` 判斷式：0 個或 2 個以上 open
   Milestone 都視為「無法判斷」，一律不提醒——避免在多 Milestone 並行時猜錯、誤導。
-- 這兩個安全網只在**建立／驗證當下**新增這層提醒。既有的「Issue 已掛 Milestone 但 PR
-  沒有（或反之、或兩者不同）」仍由 `.csarc/scripts/validate-pr-policy` 既有的 fail-closed 比對
-  規則擋下（見下方 PR policy 逐 step 判讀一節），未被本次變更影響或放寬。
+- 建立／驗證當下的提醒不負責推測 Issue 所屬批次；但一旦 Issue 已明確選定 Milestone，
+  既有 open PR 會持續同步。任何剩餘的 Issue／PR Milestone 不一致仍由
+  `.csarc/scripts/validate-pr-policy` fail closed（見下方 PR policy 逐 step 判讀一節）。
 
 **Milestone 一旦關閉，事後補掛不能用 `gh issue edit --milestone <name>`**——它只用
 名稱查找 open milestone，Milestone 關閉後查不到，會誤以為沒有這個 Milestone、或誤報
@@ -528,7 +531,8 @@ branch 時關閉該 PR，因此 PR policy 保持唯讀、只回報這項限制�
 
 Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優先通道：
 
-1. 建立沒有里程碑的 Bug Issue，標上 `bug` 與 `hotfix`；若內容尚不能公開，改用
+1. 建立沒有里程碑的 Bug Issue，Issue 只標 `hotfix`；PR 才使用由 Bug Type 推導的 `bug`
+   與 `hotfix`。若內容尚不能公開，改用
    GitHub Security Advisory 的私密協作流程。
 2. 從最新 `main` 建立 `fix/<Issue>-<slug>`，PR 使用 `fix(scope): summary` 並直接 target
    `main`。它仍須正常 review，且 CI 一律執行 full；不得以緊急為由跳過。
@@ -788,7 +792,7 @@ path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成�
 
 `local` 模式不產生 `ci.yml`、`pr-policy.yml`、`pr-policy-writes.yml`、`pr-review.yml`、reviewer assignment、spec sync、work-item lifecycle、Pages、OSV、CodeQL、Docker scan、Dependabot auto-merge、release 或 release-drift workflow，required-checks Ruleset 與 Pages policy 也保持 disabled，因此不會建立永遠等不到的 check、在 `main` 重跑完整驗證或製造無意義告警。Issue／PR／Milestone 操作改用既有本機 wrapper；外部協作者若直接在 GitHub UI 修改 metadata，local mode 不會即時自動修正，只能由人工或可選的低頻 governance drift check 發現。repo-local 發版工具仍保留，需要可信 release provenance 或 Pages deployment 時先切換成 `hosted` 再更新模板。fast／full 成功後只做常數時間的 metadata 寫入：已 commit 且 clean 的候選會把 exact head/tree、base、tier、scopes、command、success 與 24 小時 freshness 綁到 Git metadata；尚未建立 commit 或仍有未提交修改時，測試結果維持成功但不產生可合併的證明。`pr_lifecycle.py` 在 merge 前重新讀取 GitHub metadata、review、lease 與這份證明，執行既有 PR policy checker，並留下清楚標為 `self-attested-local` 的 trace，再使用受控 admin bypass。
 
-hosted 模式仍保留 required `verify`／`title`／`review`。實作中與一般 push 前只跑變更 owner 的 focused checks；`verify-fast` 是可選的廣泛診斷，不因 trusted plan 選到 `full` 就再於本機跑一次 aggregate suite。required `verify` 在 exact candidate 執行所選 fast／full，並提供唯一的正常 merge evidence；本機 full 只留給本文件明定的 Actions／發布 fallback 或明確診斷，且不會在 fallback 邊界外取代 hosted evidence。Draft 的 CI、policy、review 與 reviewer assignment 都在 runner 前略過；`PR policy writes` 只接續上游 `success`／`failure`，不為 `skipped`／`cancelled` 開 runner。Pages 只在 `documentation_mode: template-and-content` 時產生，採 Actions deployment，僅回應 `docs/**` 變更或手動 dispatch。`release_trigger: manual` 完全不註冊 push trigger；本模板 root 採此設定。
+hosted 模式仍保留 required `verify`／`title`／`review`。實作中與一般 push 前只跑變更 owner 的 focused checks；`verify-fast` 是可選的廣泛診斷，不因 trusted plan 選到 `full` 就再於本機跑一次 aggregate suite。required `verify` 在 exact candidate 執行所選 fast／full，並提供唯一的正常 merge evidence；本機 full 只留給本文件明定的 Actions／發布 fallback 或明確診斷，且不會在 fallback 邊界外取代 hosted evidence。Draft 的 CI、policy、review 與 reviewer assignment 都在 runner 前略過；`PR policy writes` 只接續上游 `success`／`failure`，不為 `skipped`／`cancelled` 開 runner。Pages 只在 `documentation_mode: template-and-content` 時產生，採 Actions deployment，僅回應 `docs/**` 變更或手動 dispatch。`.csarc/policies/pages.json` 的 `enabled` 是維護者的 desired-state 選擇，不是能力判定：public repository 在 GitHub Free 可以發布 Pages，但不代表必須發布；`enabled=true` 時 `plan` 顯示 ENABLE／UPDATE／NO-OP，`enabled=false` 是明確 opt-out，live 仍已發布時顯示 DISABLE，`check` 雙向比對 desired 與 live，`apply` 依同一動作建立、更新或停用站台後再以 `check` 讀回（#985）。private repository 缺少 GitHub Enterprise Cloud 時仍回報 `DEGRADED`，無法判讀的 Pages API 錯誤一律失敗，不視為已發布或 compliant。`release_trigger: manual` 完全不註冊 push trigger；本模板 root 採此設定。
 
 這份本機證明能防止誤拿舊結果、錯誤 branch／base、測完又改檔或跑錯 tier，但不能防止有寫入權限的人偽造 JSON，也不能證明 GitHub event／權限、第三方服務、實際部署、遠端 runner 或 release provenance。local mode 不把這些項目標成成功；需要這些信任性質時，改成 `verification_mode: hosted`，更新模板並重新套用 repository settings。切換到 hosted 後，下節 #834／#835 的規則完整生效。
 

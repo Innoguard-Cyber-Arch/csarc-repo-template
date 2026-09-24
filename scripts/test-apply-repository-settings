@@ -16,10 +16,13 @@ set -euo pipefail
 #
 # The stubbed repository is public (see the `@tsv` case below), so the
 # GitHub Pages check added by Issue #571 is always enforcement-available
-# here; the `pages` endpoint stub below reports live settings that match
-# policies/pages.json so the "fully matching fixture" case (Case 1) reports
-# no drift. Pages' own drift/DEGRADED/enforcement-availability behavior is
-# covered independently in tests/test_apply_repository_settings.py.
+# here; by default the `pages` endpoint stub below reports a live state that
+# matches the declared `enabled` choice (a published, matching site for
+# enabled=true, GitHub's 404 for enabled=false), so the "fully matching
+# fixture" case (Case 1) reports no drift. LIVE_PAGES overrides that live state
+# for the Issue #985 desired/live reconciliation cases at the end.
+# Pages' own drift/DEGRADED/enforcement-availability behavior is covered
+# independently in tests/test_apply_repository_settings.py.
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
@@ -88,6 +91,25 @@ PY
     cat "\$repo_root/policies/releases.json"
     ;;
   "api repos/\$test_repo/pages")
+    case "\${LIVE_PAGES:-default}" in
+      published) ;;
+      unpublished)
+        echo '{"message":"Not Found","status":"404"}'
+        echo 'gh: Not Found (HTTP 404)' >&2
+        exit 1
+        ;;
+      error)
+        echo 'gh: Server Error (HTTP 500)' >&2
+        exit 1
+        ;;
+      default)
+        if [[ "\$(python3 -c 'import json, os; print(json.load(open(os.path.join(os.environ["REPO_ROOT"], "policies/pages.json"), encoding="utf-8"))["enabled"])')" != "True" ]]; then
+          echo '{"message":"Not Found","status":"404"}'
+          echo 'gh: Not Found (HTTP 404)' >&2
+          exit 1
+        fi
+        ;;
+    esac
     python3 - <<'PY'
 import json
 import os
@@ -143,7 +165,7 @@ grep -qF "Repository settings match policies/repository.json." <<<"$output"
 if [[ "$pages_policy_enabled" == "true" ]]; then
   grep -qF "Pages settings match policies/pages.json." <<<"$output"
 else
-  grep -qF "Pages policy disabled: policies/pages.json requests enabled=false; no live GitHub Pages check performed." <<<"$output"
+  grep -qF "Pages opt-out matches policies/pages.json: enabled=false and GitHub Pages is not published for $test_repo." <<<"$output"
 fi
 
 # Case 2: issue_creation_policy drift (REST cannot see this field at all, so
@@ -250,5 +272,33 @@ if [[ "$status" == 0 ]]; then
   exit 1
 fi
 grep -qF "@outside-user lacks repository write access." <<<"$output"
+
+# Case 8 (Issue #985): the live Pages state disagrees with the declared
+# `enabled` choice. enabled=true needs a published site; enabled=false is an
+# explicit opt-out, so a published site is drift rather than a skipped check.
+case_count=$((case_count + 1))
+if [[ "$pages_policy_enabled" == "true" ]]; then
+  LIVE_PAGES="unpublished" run_check
+  expected_pages_drift="Pages settings drift: GitHub Pages is not enabled for $test_repo; policies/pages.json requests enabled=true."
+else
+  LIVE_PAGES="published" run_check
+  expected_pages_drift="Pages settings drift: GitHub Pages is published for $test_repo; policies/pages.json requests enabled=false (explicit opt-out)."
+fi
+if [[ "$status" == 0 ]]; then
+  echo "check passed despite GitHub Pages desired/live drift."
+  exit 1
+fi
+grep -qF "$expected_pages_drift" <<<"$output"
+
+# Case 9 (Issue #985): a non-404 Pages read error is never treated as
+# published, unpublished, or compliant.
+case_count=$((case_count + 1))
+LIVE_PAGES="error" run_check
+if [[ "$status" == 0 ]]; then
+  echo "check passed despite an uninspectable GitHub Pages state."
+  exit 1
+fi
+grep -qF "Cannot inspect GitHub Pages settings for $test_repo." <<<"$output"
+grep -qF "gh: Server Error (HTTP 500)" <<<"$output"
 
 echo "apply-repository-settings check cases passed: $case_count"

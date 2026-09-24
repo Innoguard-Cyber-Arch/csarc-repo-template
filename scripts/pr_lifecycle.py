@@ -955,7 +955,7 @@ def authorization(
         )
         or not isinstance(user.get("login"), str)
         or user.get("type") != "User"
-        or body != expected_body
+        or normalized_comment_body(body) != expected_body
     ):
         raise RuntimeError("Authorization is not an exact maintainer statement")
     permission = github.get(
@@ -1004,7 +1004,7 @@ def find_exact_head_authorization(
             continue
         user = payload.get("user") or {}
         if (
-            payload.get("body") != expected_body
+            normalized_comment_body(payload.get("body")) != expected_body
             or not isinstance(user.get("login"), str)
             or user.get("type") != "User"
         ):
@@ -1034,6 +1034,18 @@ def find_exact_head_authorization(
         candidates,
         key=lambda item: parse_time(item.get("created_at"), "Authorization"),
     )
+
+
+def normalized_comment_body(body: object) -> str | None:
+    """Return a comment body with web-UI line endings and padding removed.
+
+    GitHub stores a comment pasted through the web UI with CRLF line
+    endings (Issue #991), so the exact statement is compared after
+    normalizing CRLF to LF and stripping surrounding whitespace.
+    """
+    if not isinstance(body, str):
+        return None
+    return body.replace("\r\n", "\n").strip()
 
 
 def authorization_statement(repo: str, pr_number: int, head_sha: str) -> str:
@@ -3225,8 +3237,17 @@ def authorization_template(args: argparse.Namespace, github: GitHub) -> None:
     )
 
 
+def issue_body_arguments(body_file: Path | None) -> list[str]:
+    """Validate and return the optional GitHub CLI body arguments."""
+    if body_file is None:
+        return []
+    if not body_file.is_file():
+        raise RuntimeError("Issue body file does not exist")
+    return ["--body-file", str(body_file)]
+
+
 def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
-    """Edit metadata only after proving the target is an Issue, not a PR."""
+    """Edit an Issue only after proving the target is not a pull request."""
     values = [
         *args.add_label,
         *args.remove_label,
@@ -3235,7 +3256,7 @@ def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
     ]
     if REPOSITORY.fullmatch(args.repo) is None or args.issue_number < 1:
         raise RuntimeError("Issue identity is invalid")
-    if (not values and not args.remove_type) or any(
+    if (not values and not args.remove_type and args.body_file is None) or any(
         not value or "\n" in value for value in values
     ):
         raise RuntimeError(
@@ -3262,6 +3283,7 @@ def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
         command.extend(("--remove-label", label))
     for assignee in args.add_assignee:
         command.extend(("--add-assignee", assignee))
+    command.extend(issue_body_arguments(args.body_file))
     if args.issue_type:
         command.extend(("--type", args.issue_type))
     elif args.remove_type:
@@ -3869,6 +3891,7 @@ def parser() -> argparse.ArgumentParser:
     issue_edit.add_argument("--add-label", action="append", default=[])
     issue_edit.add_argument("--remove-label", action="append", default=[])
     issue_edit.add_argument("--add-assignee", action="append", default=[])
+    issue_edit.add_argument("--body-file", type=Path)
     issue_type = issue_edit.add_mutually_exclusive_group()
     issue_type.add_argument("--type", dest="issue_type")
     issue_type.add_argument("--remove-type", action="store_true")

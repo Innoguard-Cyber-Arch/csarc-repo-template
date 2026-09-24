@@ -428,6 +428,16 @@ project_verification_hook:
   when: "{{ project_mode == 'existing' }}"
   validator: "{% set hook = project_verification_hook | default('', true) | trim %}{% if hook and (hook != project_verification_hook or hook.startswith('/') or '..' in hook.split('/') or not (hook | regex_search('^[A-Za-z0-9._/-]+$'))) %}Use a safe repository-relative executable path without spaces, shell syntax, or parent traversal.{% endif %}"
 
+work_item_mapping_review:
+  type: str
+  help: Confirm how the observed Issue Type and label suggestions were reviewed
+  choices:
+    Review before applying adoption: pending
+    Accept safe suggestions and preserve ambiguous items: accept-safe
+    Confirm every suggestion was reviewed individually: review-individually
+  default: pending
+  when: "{{ project_mode == 'existing' }}"
+
 repository_url:
   type: str
   help: Canonical GitHub repository URL used by badges and package metadata

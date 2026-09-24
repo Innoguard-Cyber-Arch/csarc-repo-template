@@ -367,6 +367,7 @@ Only tools this template directly integrates, executes, or produces into the rep
 - **Overall:** turn the request into one Issue that can be completed and verified independently.
 - **Work branch:** when implementation starts, create one short-lived `type/<Issue>-short-slug` branch per Issue and do not mix unrelated work into it.
 - **Milestone:** create one only when several Issues share an outcome, deadline, or delivery batch, and give it one lifecycle tracking Issue.
+  - When research or a Feature expands into that delivery, attach the originating Feature, its leaf Issues, and their PRs to the same Milestone.
   - Title it `Milestone <number>: <Milestone title>`; the text after the colon must exactly match the Milestone title.
   - Keep approvals, objections, and early termination in the body or comments, not the title.
   - Work may start only after at least one person other than the proposer agrees and no objection remains unresolved.
@@ -582,7 +583,7 @@ Routine updates and security checks run automatically. People step in only for u
 {{< disclosure key="pr-version-intent" title="PR titles, branches, and exceptions" >}}
 - Work branches use `type/<Issue>-short-slug`, and the PR links the matching open Issue.
 - PR titles use the Angular / Conventional Commits form `type(scope)!: English summary`: `feat` adds a feature, `fix` corrects behavior, `docs` changes documentation, `refactor` restructures code, `test` changes tests, `build` changes builds or dependencies, `ci` changes automation, `chore` performs maintenance, and `revert` undoes a change. Scope and `!` are optional. Release intent is minor for `feat`, patch for `fix` / `revert`, major for `!`, and no release for the other types.
-- The classification label and Milestone match the linked Issue; the PR author must be an assignee.
+- The PR carries one lowercase work label derived from the Issue Type (or its fallback label when Types are unavailable); its Milestone matches the Issue, and the PR author must be an assignee.
 - Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work targets `main` directly.
 - A Milestone Promotion PR uses an exact two-parent bridge to include both its delivery source and current main, with no final sync PR. `sync/main-to-*` remains only for an owner-recorded early dependency or a `dev/i*` canary; it never fans out to every branch.
 - Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.
@@ -644,7 +645,7 @@ GitHub Release is the portable baseline for every profile. Registry publishing a
 {{< /disclosure >}}
 
 {{< disclosure key="hotfix-delivery" title="Hotfix review, verification, and evidence" >}}
-A hotfix uses a Bug Issue without a Milestone, the `bug` and `hotfix` labels, `fix/<Issue>-*`, and a `fix(scope): summary` PR directly to `main`; full verification still applies. At beta or above, the emergency path requires one live admin to be the Issue proposer, exact-head authorizer, and merge actor, with a recorded reason; it then opens a `needs-manual-review` Issue automatically. No other PR may use this exception. Undisclosed security defects use a GitHub Security Advisory instead.
+A hotfix uses a Bug Issue without a Milestone and adds only `hotfix` to the Issue. Its PR carries `bug` and `hotfix`, uses `fix/<Issue>-*` and `fix(scope): summary`, and targets `main`; full verification still applies. At beta or above, the emergency path requires one live admin to be the Issue proposer, exact-head authorizer, and merge actor, with a recorded reason; it then opens a `needs-manual-review` Issue automatically. No other PR may use this exception. Undisclosed security defects use a GitHub Security Advisory instead.
 {{< /disclosure >}}
 
 {{< disclosure key="manual-release-boundary" title="Automatic-release ownership" >}}
@@ -817,7 +818,7 @@ Three places each own something different: `template/` is the single source of w
 - `template/` is the only delivered source; root keeps the template repository's own GitHub governance and dogfood configuration only because that is how GitHub reads it, and `scripts/sync-paired-files.sh` generates root's paired-file copies under `template/`.
 - `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.
 - A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent components (modules); it never builds a combination-specific pipeline.
-- A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan; the dry-run never executes a target-owned helper or product hook. Once a person approves that same undrifted plan, the CLI verifies an isolated candidate before writing it, and the first PR then reviews the source, plan, diff, and local results.
+- A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan; the dry-run never executes a target-owned helper or product hook and read-only inventories GitHub Issue Types and labels. The report uses `Bug`／`Feature`／`Task` for Issue work types and lowercase `bug`／`enhancement`／`documentation` for PR classification and fallback, listing safe mappings that can be accepted together and custom items that need individual review without changing remote metadata. Once a person approves that same undrifted plan, the CLI verifies an isolated candidate before writing it, and the first PR then reviews the source, plan, diff, and local results.
 - After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a dry-run preview, and only apply to the target once the candidate content and conflicts are fully verified; a conflict leaves the repository unchanged so it can be corrected, rerun, and reviewed by a normal PR and trusted-base checks.
 - If an existing repository was created directly by Copier, `_commit` may still be a release tag or short SHA. `csarc status` classifies it as `migrate` and reports the current value and format; after reviewing it, the maintainer runs `update --check --accept-legacy --from-release <tag>` to bind it to the immutable, attested, signature-verified Release's full SHA. Provenance that already claims to be verified but disagrees still fails closed.
 - The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.

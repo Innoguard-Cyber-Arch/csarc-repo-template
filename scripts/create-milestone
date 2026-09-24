@@ -48,11 +48,13 @@ Optional:
                        a reminder is printed -- fill in the rest by hand
                        (e.g. `gh milestone edit`) before closing.
   --assignee          Tracker Issue assignee (default: @me)
-  --type              Tracker Issue native Type (default: Feature)
+  --type              Tracker Issue native Type (must be Feature; default:
+                       Feature)
 
-The tracker Issue always carries the `enhancement` label:
-scripts/sync_milestone_state.py hard-requires it, so it is not
-configurable here.
+The tracker Issue uses the native `Feature` Type by default. Repositories
+without native Issue Types may maintain an existing tracker with the
+portable `enhancement` label fallback; this creator fails closed instead
+of silently dropping the requested native Type.
 
 On success, prints the new Milestone number, its due date, and the
 tracker Issue URL. If the due-date readback, the tracker Issue creation
@@ -128,6 +130,10 @@ if [[ ! "$due_on" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
 fi
 if [[ -z "$proposal_file" || ! -s "$proposal_file" ]]; then
   echo "Provide --proposal-file pointing at a non-empty file." >&2
+  exit 2
+fi
+if [[ "$issue_type" != "Feature" ]]; then
+  echo "--type must be Feature for a Milestone lifecycle Issue." >&2
   exit 2
 fi
 if [[ -n "$description_file" && ! -f "$description_file" ]]; then
@@ -228,7 +234,6 @@ if ! tracker_cmd_output="$(
   gh issue create --repo "$repo" \
     --title "$tracker_title" \
     --body "$tracker_body" \
-    --label enhancement \
     --assignee "$assignee" \
     --type "$issue_type" \
     --milestone "$title" 2>&1

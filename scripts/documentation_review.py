@@ -9,7 +9,7 @@ import re
 import sys
 
 FIELD = re.compile(
-    r"(?im)^\s*-?\s*(Status|Reviewed head|Reason):\s*`?([^`\n]+?)`?\s*$"
+    r"(?im)^[ \t]*-?[ \t]*(Status|Reviewed head|Reason):[ \t]*(.+?)[ \t]*$"
 )
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 PASSING = {"aligned", "not-applicable"}
@@ -19,9 +19,16 @@ BLOCKING = {"drift", "inconclusive"}
 def parse_review(body: str) -> dict[str, str]:
     """Return normalized documentation-review fields from a PR body."""
     return {
-        name.casefold().replace(" ", "_"): value.strip()
+        name.casefold().replace(" ", "_"): unquote(value.strip())
         for name, value in FIELD.findall(body)
     }
+
+
+def unquote(value: str) -> str:
+    """Drop one backtick pair that wraps the whole value, if present."""
+    if value.count("`") == 2 and value[0] == value[-1] == "`":
+        return value[1:-1].strip()
+    return value
 
 
 def validate_review(body: str, head_sha: str, mode: str) -> str:

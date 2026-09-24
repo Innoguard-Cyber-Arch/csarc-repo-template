@@ -582,6 +582,34 @@ def test_alpha_sync_requires_exact_head_authorization(
     assert "no exact-head maintainer authorization comment" in result["reason"]
 
 
+def test_admin_bypass_accepts_a_web_ui_crlf_authorization(
+    copilot_config: Path,
+) -> None:
+    """Issue #991: PR #988's CRLF + trailing-newline comment is found."""
+    github = alpha_github()
+    comment = alpha_authorization_comment()
+    comment["body"] = comment["body"].replace("\n", "\r\n") + "\n"
+    github.issue_comments = [comment]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["passed"]
+    assert result["source"] == "admin-bypass"
+
+
+def test_admin_bypass_rejects_a_crlf_authorization_for_another_head(
+    copilot_config: Path,
+) -> None:
+    """Issue #991: a CRLF body for a different head is still ignored."""
+    github = alpha_github()
+    comment = alpha_authorization_comment()
+    comment["body"] = pr_lifecycle.authorization_statement(
+        "o/r", 7, "c" * 40
+    ).replace("\n", "\r\n")
+    github.issue_comments = [comment]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert not result["passed"]
+    assert "no exact-head maintainer authorization comment" in result["reason"]
+
+
 def test_admin_bypass_ignores_author_association(
     copilot_config: Path,
 ) -> None:

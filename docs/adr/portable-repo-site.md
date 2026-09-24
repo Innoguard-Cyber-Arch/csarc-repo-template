@@ -170,6 +170,14 @@ Issue #681 使用者要求：Standard／Ops 分層、雙語鉤稽、簡報式構
 
 本 ADR 的 portable、離線、雙語、可重現與 project-owned 內容保護契約全部保留；取代「每個生成專案都一定產生網站」的決定。`features` 包含 `repo-site` 時才產生 renderer、內容、theme、`docs/index*.html`、驗證與 Pages desired policy；未包含時不產生網站能力包，Pages desired policy 明確為 disabled。既有網站內容不因更新時未選 feature 而被靜默刪除。
 
+## 2026-09-24 Pages desired／live 雙向收斂（Issue #985）
+
+排程 governance drift 偵測到本 repository 的 `policies/pages.json` 宣告 `enabled=true`，但 live Pages API 回傳 404、`has_pages=false`。維護者確認 live 關閉是非預期漂移，本 repository 的明確選擇是**發布** Pages，因此保留 `enabled=true`，合併後由管理員執行 `apply` 恢復站台，再以 Pages API、`has_pages` 與公開網址讀回。
+
+本次同時釐清能力與意圖的分工：public repository 在任何 GitHub 方案（含 Free）都「可以」發布 Pages，但這只是能力，不代表「必須」發布。`enabled` 是維護者的 desired-state 選擇：`true` 要求已發布且設定一致的站台；`false` 是明確 opt-out。這部分取代 #571 在 `enabled=false` 時「完全不做 live check／apply」的行為：opt-out 現在同樣可規劃、可檢查、可套用，live 仍已發布時 `plan` 顯示 DISABLE、`check` 回報 drift、`apply` 停用站台。private repository 缺少 GitHub Enterprise Cloud 時維持 `DEGRADED`（`enabled=false` 則因無法發布而視為一致）；Pages API 回傳 404 以外的錯誤時狀態為 unknown，`check` 失敗、`apply` 在任何變更前 fail closed，不會冒充已發布或 compliant。
+
+#900 的「使用者設定、live capability 與實際狀態分離」與本 ADR「`docs/index.html` 可離線開啟、不依賴 Pages」的核心保證不變；desired 設定不代表 live 已發布，是否已發布只以 live readback 為準。
+
 ## 2026-09-06 12pt 字級下限與 Ops 模式內容瘦身（Issue #681 決定 Q）
 
 使用者依實測螢幕（1512×982，deck 依 `min(innerWidth/1600, innerHeight/900)` 縮放，換算比例約 0.945）要求：桌面版任何顯示文字（除引用／註腳外）渲染後不得小於 12pt，並授權「該精簡的流暢精簡，該放在懸浮說明文字中的放在懸浮中」。12pt＝16px 實際尺寸；換算縮放後 CSS 原始字級下限抓 **18px**（18×0.945≈17px≈12.7pt，有安全餘裕，也是站上最常用的內文字級）。

@@ -79,7 +79,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | 項目 | 一般 standalone | Hotfix |
 | --- | --- | --- |
 | 適用條件 | 一張 Issue 可獨立審查、驗證與交付，沒有共同期限、批次驗收、跨 Issue 相依或獨立環境 | `main` 上的缺陷必須立即修正；不是一般工作的插隊標籤 |
-| 提出 | 無里程碑的一般 Issue | 無里程碑 Bug Issue＋`bug`／`hotfix`；未公開安全問題改用 GitHub Security Advisory |
+| 提出 | 無里程碑的一般 Issue | 無里程碑 Bug Issue＋`hotfix`；PR 使用 `bug`／`hotfix`，未公開安全問題改用 GitHub Security Advisory |
 | Branch／PR | 從最新 `main` 建立 `type/<Issue>-*`，PR target `main` | 從最新 `main` 建立 `fix/<Issue>-*`，PR target `main` |
 | 審查與驗證 | 正常 review；CI 依風險選 fast／full | 另一人 review 且一律 full；緊急不能略過必要檢查 |
 | 合併與證據 | closing keyword 關 Issue，保留 PR 與精確 head evidence | 另保留 rollback 說明與是否立即發版的決策 |

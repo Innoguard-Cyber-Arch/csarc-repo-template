@@ -78,8 +78,15 @@ class GitHubReader(Protocol):
 class GitHubWriter(GitHubReader, Protocol):
     """The narrow authenticated write surface used by release annotations."""
 
-    def write(self, repo: str, method: str, path: str, body: str) -> object:
-        """Write one GitHub resource body."""
+    def write(
+        self,
+        repo: str,
+        method: str,
+        path: str,
+        body: str,
+        fields: dict[str, object] | None = None,
+    ) -> object:
+        """Write one GitHub resource body with optional extra fields."""
         ...
 
 
@@ -556,12 +563,19 @@ class GitHubCLI:
             raise RuntimeError("GitHub returned an invalid collection item")
         return items
 
-    def write(self, repo: str, method: str, path: str, body: str) -> object:
+    def write(
+        self,
+        repo: str,
+        method: str,
+        path: str,
+        body: str,
+        fields: dict[str, object] | None = None,
+    ) -> object:
         """Write one JSON body through the authenticated GitHub CLI."""
         endpoint = f"repos/{repo}/{path}"
         result = subprocess.run(  # noqa: S603
             ["gh", "api", "--method", method, endpoint, "--input", "-"],  # noqa: S607
-            input=json.dumps({"body": body}),
+            input=json.dumps({**(fields or {}), "body": body}),
             check=False,
             capture_output=True,
             text=True,
@@ -689,8 +703,14 @@ def annotate_release(
     details: str,
 ) -> None:
     """Append deterministic work-level evidence to one mutable draft Release."""
-    encoded_tag = urllib.parse.quote(tag, safe="")
-    payload = github.get(repo, f"releases/tags/{encoded_tag}")
+    # GitHub's releases/tags/{tag} endpoint never returns draft Releases, so
+    # the draft must be located by exact tag name in the Release collection.
+    matches = [
+        item
+        for item in github.pages(repo, "releases?per_page=100")
+        if item.get("tag_name") == tag
+    ]
+    payload = matches[0] if len(matches) == 1 else None
     if (
         not isinstance(payload, dict)
         or payload.get("draft") is not True
@@ -707,7 +727,15 @@ def annotate_release(
     )
     cleaned = pattern.sub("", body).rstrip()
     updated = f"{cleaned}\n\n{details}" if cleaned else details
-    github.write(repo, "PATCH", f"releases/{payload['id']}", updated)
+    # GitHub resets a draft's tag_name to "untagged-*" when an update omits
+    # it, so the draft must keep its tag in the same write.
+    github.write(
+        repo,
+        "PATCH",
+        f"releases/{payload['id']}",
+        updated,
+        {"tag_name": tag, "draft": True},
+    )
 
 
 def _write_outputs(
