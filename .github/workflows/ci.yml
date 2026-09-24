@@ -20,26 +20,15 @@ permissions:
 
 jobs:
   verify:
-    name: >-
-      ${{
-        github.event_name == 'pull_request_target' &&
-        (github.event.action == 'labeled' ||
-        github.event.action == 'unlabeled') &&
-        github.event.label.name != '' &&
-        !contains(fromJSON('["promotion","hotfix","release-recovery"]'), github.event.label.name) &&
-        'ignored non-tier label' ||
-        'verify'
-      }}
+    # Every label event on a ready PR reports `verify`: a non-tier label reuses
+    # the same-head evidence instead of leaving a newer CI run without it.
+    name: verify
     if: >-
       ${{
         github.event_name != 'pull_request_target' ||
         github.event.action == 'ready_for_review' ||
         (github.event.action != 'converted_to_draft' &&
-        github.event.pull_request.draft != true &&
-        ((github.event.action != 'labeled' &&
-        github.event.action != 'unlabeled') ||
-        github.event.label.name == '' ||
-        contains(fromJSON('["promotion","hotfix","release-recovery"]'), github.event.label.name)))
+        github.event.pull_request.draft != true)
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
