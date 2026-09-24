@@ -53,6 +53,27 @@ def test_policy_validators_use_generated_csarc_entrypoints() -> None:
         assert "./scripts/" not in generated
 
 
+def test_capability_checks_support_personal_codeowners_in_both_layers() -> None:
+    """Keep root and generated CODEOWNER probes aligned for personal repos."""
+    for relative_path in (
+        "scripts/check-repo-capabilities",
+        "template/.csarc/scripts/check-repo-capabilities",
+    ):
+        source = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert "collaborators/$codeowner_user/permission" in source
+        assert "CODEOWNERS is not configured" in source
+        assert "write|push|maintain|admin" in source
+
+    for relative_path in (
+        "scripts/apply-repository-settings.sh",
+        "template/.csarc/scripts/apply-repository-settings.sh",
+    ):
+        source = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert "CODEOWNER organization @$codeowner_org does not match" in source
+        assert '"$codeowner_user" == *--*' in source
+        assert '{"write", "push", "maintain", "admin"}' in source
+
+
 def test_workflows_are_thin_trusted_wrappers() -> None:
     """Actions keep decisions read-only and isolate trusted writes."""
     issue_workflow = (

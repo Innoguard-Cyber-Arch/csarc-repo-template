@@ -25,6 +25,7 @@ ADMIN_BYPASS_MARKER = MODULE["ADMIN_BYPASS_MARKER"]
 acquire = MODULE["acquire"]
 audit_message = MODULE["audit_message"]
 authorization = MODULE["authorization"]
+authorization_anchor = MODULE["authorization_anchor"]
 authorization_statement = MODULE["authorization_statement"]
 authorization_template = MODULE["authorization_template"]
 base_lane_ref = MODULE["base_lane_ref"]
@@ -42,6 +43,8 @@ LEASE_CORE_FIELDS = MODULE["LEASE_CORE_FIELDS"]
 lease_message = MODULE["lease_message"]
 merge = MODULE["merge"]
 merge_snapshot = MODULE["merge_snapshot"]
+parse_time = MODULE["parse_time"]
+remote_ref = MODULE["remote_ref"]
 read_lease = MODULE["read_lease"]
 require_lease = MODULE["require_lease"]
 require_successful_checks = MODULE["require_successful_checks"]
@@ -1475,6 +1478,256 @@ def test_remote_audit_comment_is_refetched(
     github.get = edited_comment  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="audit comment"):
         require_lease(github, canonical, "owner/repo", 42, "a" * 40)
+
+
+def git_lease_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[FakeGitHub, SimpleNamespace, Path]:
+    """Return a real bare origin with one head and acquire arguments."""
+    remote = tmp_path / "remote.git"
+    work = tmp_path / "work"
+    git(tmp_path, "init", "--bare", str(remote))
+    git(tmp_path, "init", str(work))
+    git(work, "config", "user.name", "Lease Test")
+    git(work, "config", "user.email", "lease@example.invalid")
+    (work / "README.md").write_text("fixture\n", encoding="utf-8")
+    git(work, "add", "README.md")
+    git(work, "commit", "-m", "test: create fixture")
+    head = git(work, "rev-parse", "HEAD")
+    git(work, "remote", "add", "origin", str(remote))
+    git(work, "push", "origin", f"{head}:refs/heads/main")
+    monkeypatch.chdir(work)
+    monkeypatch.setitem(
+        acquire.__globals__, "remote_repository", lambda _url: "owner/repo"
+    )
+    github = FakeGitHub(head)
+    github.commit_payloads[f"git/commits/{head}"] = {
+        "sha": head,
+        "tree": {"sha": git(work, "rev-parse", f"{head}^{{tree}}")},
+    }
+    arguments = SimpleNamespace(
+        repo="owner/repo",
+        pr_number=42,
+        head_sha=head,
+        owner="task/merge",
+        ttl_seconds=600,
+        output=tmp_path / "lease.json",
+        renew=None,
+    )
+    return github, arguments, work
+
+
+def publish_lease_commit(github: FakeGitHub, lease: dict[str, Any]) -> None:
+    """Serve one acquired lease commit and its audit comment remotely."""
+    github.commit_payloads[f"git/commits/{lease['lease_commit']}"] = {
+        "sha": lease["lease_commit"],
+        "message": lease_message(lease),
+        "parents": [{"sha": lease["head_sha"]}],
+        "tree": {"sha": lease["head_tree"]},
+    }
+    github.canonical_lease = lease
+
+
+def test_renewal_keeps_an_exact_head_authorization_valid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #1017: an explicit renewal preserves the authorization anchor."""
+    github, arguments, _work = git_lease_fixture(tmp_path, monkeypatch)
+    acquire(arguments, github)
+    first = read_lease(arguments.output)
+    publish_lease_commit(github, first)
+    renewed_path = tmp_path / "renewed.json"
+    acquire(
+        SimpleNamespace(
+            **{
+                **vars(arguments),
+                "renew": arguments.output,
+                "output": renewed_path,
+            }
+        ),
+        github,
+    )
+    renewed = read_lease(renewed_path)
+    assert renewed["renews"] == first["lease_commit"]
+    assert renewed["capability"] == first["capability"]
+    assert renewed["reclaimed_commits"] == []
+    assert parse_time(renewed["acquired_at"], "Lease") > parse_time(
+        first["acquired_at"], "Lease"
+    )
+    assert github.audit_comments[-1].startswith("PR lifecycle lease renewed")
+    assert first["lease_commit"] in github.audit_comments[-1]
+    for ref in renewed["refs"]:
+        assert remote_ref(ref) == renewed["lease_commit"]
+    first_acquired = parse_time(first["acquired_at"], "Lease")
+    assert authorization_anchor(github, renewed) == first_acquired
+    release_refs(renewed)
+
+
+def test_renewal_refuses_another_owner_and_states_reauthorization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the exact lease holder may renew; others must reauthorize."""
+    github, arguments, _work = git_lease_fixture(tmp_path, monkeypatch)
+    acquire(arguments, github)
+    first = read_lease(arguments.output)
+    publish_lease_commit(github, first)
+    with pytest.raises(RuntimeError, match="does not hold"):
+        acquire(
+            SimpleNamespace(
+                **{
+                    **vars(arguments),
+                    "owner": "task/other",
+                    "renew": arguments.output,
+                    "output": tmp_path / "other.json",
+                }
+            ),
+            github,
+        )
+    github.destination_sha = "9" * 40
+    with pytest.raises(RuntimeError, match="new exact-head authorization"):
+        acquire(
+            SimpleNamespace(
+                **{
+                    **vars(arguments),
+                    "renew": arguments.output,
+                    "output": tmp_path / "drifted.json",
+                }
+            ),
+            github,
+        )
+    for ref in first["refs"]:
+        assert remote_ref(ref) == first["lease_commit"]
+    release_refs(first)
+
+
+def test_renewal_refuses_another_github_actor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same task owner under a different GitHub actor cannot renew."""
+    github, arguments, _work = git_lease_fixture(tmp_path, monkeypatch)
+    acquire(arguments, github)
+    first = read_lease(arguments.output)
+    publish_lease_commit(github, first)
+    github.authenticated_actor = "someone-else"
+    with pytest.raises(RuntimeError, match="actor changed"):
+        acquire(
+            SimpleNamespace(
+                **{
+                    **vars(arguments),
+                    "actor": "",
+                    "renew": arguments.output,
+                    "output": tmp_path / "other-actor.json",
+                }
+            ),
+            github,
+        )
+    for ref in first["refs"]:
+        assert remote_ref(ref) == first["lease_commit"]
+    release_refs(first)
+
+
+def test_fresh_lease_warns_that_an_earlier_authorization_is_stranded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Re-acquiring after release says a new authorization is required."""
+    github, arguments, _work = git_lease_fixture(tmp_path, monkeypatch)
+    github.comments = [
+        {
+            "html_url": "https://github.com/owner/repo/pull/42#issuecomment-99",
+            "user": {"login": "maintainer", "type": "User"},
+            "created_at": "2026-08-25T01:01:00Z",
+            "body": authorization_statement(
+                "owner/repo", 42, arguments.head_sha
+            ),
+        }
+    ]
+    acquire(arguments, github)
+    error = capsys.readouterr().err
+    assert "issuecomment-99" in error
+    assert "a new authorization is required" in error
+    release_refs(read_lease(arguments.output))
+
+
+def renewal_chain(
+    lease: dict[str, object], github: FakeGitHub
+) -> dict[str, object]:
+    """Make `lease` an explicit renewal of a served still-live predecessor."""
+    predecessor = {
+        **lease,
+        "acquired_at": "2026-08-25T00:30:00Z",
+        "expires_at": "2026-08-25T01:30:00Z",
+    }
+    github.commit_payloads[f"git/commits/{'9' * 40}"] = {
+        "sha": "9" * 40,
+        "message": lease_message(predecessor),
+        "parents": [{"sha": lease["head_sha"]}],
+        "tree": {"sha": lease["head_tree"]},
+    }
+    github.commit_payloads.setdefault(
+        f"git/commits/{lease['head_sha']}",
+        {"sha": lease["head_sha"], "tree": {"sha": lease["head_tree"]}},
+    )
+    lease["acquired_at"] = "2026-08-25T01:10:00Z"
+    lease["renews"] = "9" * 40
+    return predecessor
+
+
+def test_merge_accepts_an_authorization_across_an_explicit_renewal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #1017: renewal after authorization keeps the merge authorized."""
+    bind_remote_lease(monkeypatch)
+    github, lease, _note_url = alpha_quota_snapshot_fixture(sync=True)
+    github.required_review_count = 0
+    github.required_status_checks = [
+        {"context": "verify", "integration_id": 15368},
+        {"context": "review", "integration_id": 15368},
+    ]
+    github.additional_check_runs = []
+    url = "https://github.com/owner/repo/pull/42#issuecomment-99"
+    github.authorization_created_at = "2026-08-25T01:05:00Z"
+    lease["acquired_at"] = "2026-08-25T01:10:00Z"
+    with pytest.raises(RuntimeError, match="predates the active"):
+        merge_snapshot(github, lease, url)
+    renewal_chain(lease, github)
+    snapshot = merge_snapshot(github, lease, url)
+    assert snapshot["authorization_source"] == "comment"
+    github.authorization_created_at = "2026-08-25T00:20:00Z"
+    with pytest.raises(RuntimeError, match="predates the active"):
+        merge_snapshot(github, lease, url)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("owner", "task/other", "changed head, base, owner"),
+        ("head_sha", "8" * 40, "changed head, base, owner"),
+        ("expires_at", "2026-08-25T01:05:00Z", "not contiguous"),
+    ],
+)
+def test_renewal_chain_rejects_a_broken_predecessor(
+    field: str, value: str, message: str
+) -> None:
+    """A different, released, or expired predecessor cannot move the anchor."""
+    github = FakeGitHub("a" * 40)
+    lease = lease_fixture()
+    predecessor = renewal_chain(lease, github)
+    predecessor[field] = value
+    github.commit_payloads[f"git/commits/{'9' * 40}"]["message"] = (
+        lease_message(predecessor)
+    )
+    if field == "head_sha":
+        github.commit_payloads[f"git/commits/{'9' * 40}"]["parents"] = [
+            {"sha": value}
+        ]
+        github.commit_payloads[f"git/commits/{value}"] = {
+            "sha": value,
+            "tree": {"sha": lease["head_tree"]},
+        }
+    with pytest.raises(RuntimeError, match=message):
+        authorization_anchor(github, lease)
 
 
 def test_audit_response_must_match_the_declared_actor() -> None:

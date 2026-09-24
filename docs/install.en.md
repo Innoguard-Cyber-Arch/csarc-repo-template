@@ -41,7 +41,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ## Not sure of the current state?
 
-Start with auto-detection: `csarc status` reads only local files and, if already adopted, the template version and repository settings on GitHub, then classifies the repository into one of `create`/`adopt`/`update`/`current`/`policy-only-update`, and follows the returned `next_command`. The pinned agent install contract lives at [`docs/agent-install.md`](agent-install.md).
+Start with auto-detection: `csarc status` reads only local files and, if already adopted, the template version and repository settings on GitHub, then classifies the repository into one of seven states: `create`/`adopt`/`adoption-pending`/`migrate`/`update`/`current`/`policy-only-update`. Follow the returned `next_command`. `adoption-pending` means the local checkpoint is valid but adoption still needs `csarc adopt <path> --finalize`; `migrate` means existing Copier answers use a release tag or short SHA and must be reviewed and bound to a verified Release's full SHA. The pinned agent install contract lives at [`docs/agent-install.md`](agent-install.md).
 
 ## Full detail
 

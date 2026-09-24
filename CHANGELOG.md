@@ -19,6 +19,65 @@ CHANGELOG 的 tag。
 
 * feat(release): publish Milestone betas at declared checkpoints (ac14c3b)
 
+## [0.26.11] - 2026-09-24
+
+### Bug Fixes
+
+* fix: align local promotion release prep with hosted verify (010931b)
+* fix: aggregate stable CHANGELOG since the previous stable (929ad91)
+
+## [0.26.10] - 2026-09-24
+
+### Bug Fixes
+
+* fix: keep merge authorization valid across lease renewal (aa1455c)
+
+## [0.26.9] - 2026-09-24
+
+### Bug Fixes
+
+* fix: open delivery sync PRs as Draft until labelled (1e2d644)
+
+## [0.26.8] - 2026-09-24
+
+### Bug Fixes
+
+* fix: treat work closed before #816 as historical (2d8429d)
+
+## [0.26.7] - 2026-09-24
+
+### Bug Fixes
+
+* fix: keep closed Milestones closed on metadata-only events (abd4317)
+
+## [0.26.6] - 2026-09-24
+
+### Included prereleases
+
+* v0.24.1-beta.1
+* v0.25.6-beta.1
+* v0.25.7-beta.1
+* v0.25.8-beta.1
+* v0.25.9-beta.1
+* v0.25.10-beta.1
+* v0.25.11-beta.1
+* v0.25.12-beta.1
+* v0.25.13-beta.1
+* v0.25.14-beta.1
+
+### Bug Fixes
+
+* fix(cli): report discarded update candidate (bcdb7e3)
+* fix: allow committed adoption finalize (5516cc7)
+* fix(cli): guide legacy Copier answer migration (f3cbe99)
+* fix(adopt): allow pending lockfile updates (3b568e2)
+* fix(adopt): detect unfinished manual merges (55c9949)
+* fix(status): report pending adoption (cd9735f)
+* fix(adoption): support external code owners (e21d43d)
+* fix(adopt): require README before adoption (1629d1a)
+* fix(adopt): report all resolved settings (5988df3)
+* fix(update): ignore derived answer drift (5c31e2f)
+
 ## [0.26.5] - 2026-09-24
 
 ### Bug Fixes
@@ -62,11 +121,53 @@ CHANGELOG 的 tag。
 * fix(adoption): bind reviewed work item mappings (8faaa94)
 * fix(adoption): close mapping confirmation gaps (99c47ab)
 
+## [0.25.14-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(update): ignore derived answer drift (4d4346a)
+
+## [0.25.13-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(adopt): report resolved settings (7836f72)
+
+## [0.25.12-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(adopt): require README before adoption (1ed5a99)
+
+## [0.25.11-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(adoption): support external code owners (7ea4f7b)
+
+## [0.25.10-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(status): report pending adoption (89d247b)
+
+## [0.25.9-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(adopt): detect unfinished manual merges (8777208)
+
 ## [0.25.8] - 2026-09-24
 
 ### Bug Fixes
 
 * fix(governance): keep milestone metadata aligned (6fbc7e0)
+
+## [0.25.8-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(adopt): allow pending lockfile updates (a71f2a5)
 
 ## [0.25.7] - 2026-09-24
 
@@ -74,12 +175,24 @@ CHANGELOG 的 tag。
 
 * fix: repair language promotion evidence (5c798ff)
 
+## [0.25.7-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix(cli): migrate legacy Copier revisions (c34be2f)
+
 ## [0.25.6] - 2026-09-24
 
 ### Bug Fixes
 
 * fix(governance): normalize work item labels (904510c)
 * fix(governance): guard automated issue edits (0531082)
+
+## [0.25.6-beta.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix: allow committed adoption finalize (0d5ed60)
 
 ## [0.25.5] - 2026-09-24
 
@@ -129,6 +242,12 @@ CHANGELOG 的 tag。
 ### Bug Fixes
 
 * fix(governance): prevent invalid work branches (b2b506b)
+
+## [0.24.1-beta.1] - 2026-09-23
+
+### Bug Fixes
+
+* fix(cli): report discarded update candidate (b59ff71)
 
 ## [0.24.0] - 2026-09-23
 

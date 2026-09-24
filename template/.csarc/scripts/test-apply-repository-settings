@@ -33,8 +33,8 @@ trap 'rm -rf "$fixture_root"' EXIT
 mkdir -p "$fixture_root/bin"
 case_count=0
 
-test_repo="Test-Org/test-repo"
-test_owner="Test-Org"
+test_repo="Innoguard-Cyber-Arch/test-repo"
+test_owner="Innoguard-Cyber-Arch"
 test_branch="main"
 
 cat >"$fixture_root/bin/gh" <<EOF
@@ -56,6 +56,9 @@ case "\$args" in
     ;;
   *"/teams"*)
     printf '[[{"slug": "arch", "permission": "push"}]]\n'
+    ;;
+  *"/collaborators/outside-user/permission"*)
+    printf '{"permission":"%s"}\n' "\${USER_PERMISSION:-write}"
     ;;
   *"issueCreationPolicy"*)
     python3 -c 'import json, os; print(json.dumps({"data": {"repository": {"issueCreationPolicy": os.environ.get("LIVE_ISSUE_CREATION_POLICY", "COLLABORATORS_ONLY")}}}))'
@@ -125,6 +128,9 @@ desired = json.load(open(os.path.join(os.environ["REPO_ROOT"], ".csarc/policies/
 desired["can_approve_pull_request_reviews"] = os.environ.get("LIVE_CAN_APPROVE_PR", "true") == "true"
 print(json.dumps(desired))
 PY
+    ;;
+  "label list --repo \$test_repo --limit 1000 --json name --jq .[].name")
+    jq -r '.[].name' "\$repo_root/.csarc/policies/labels.json"
     ;;
   "label list --repo \$test_repo --limit 1000 --json name,color,description")
     cat "\$repo_root/.csarc/policies/labels.json"
@@ -226,7 +232,48 @@ if [[ "$status" == 0 ]]; then
 fi
 grep -qF "security_and_analysis drift: dependabot_security_updates desired enabled, live restricted." <<<"$output"
 
-# Case 6 (Issue #985): the live Pages state disagrees with the declared
+# Case 6 (#887): a CODEOWNERS team from another organization is invalid even
+# when the target organization exposes a team with the same slug.
+case_count=$((case_count + 1))
+mismatch_root="$fixture_root/org-mismatch"
+mkdir -p "$mismatch_root/.csarc/scripts" "$mismatch_root/.csarc/policies" "$mismatch_root/.github"
+cp "$script_path" "$mismatch_root/.csarc/scripts/apply-repository-settings.sh"
+cp -R "$repo_root/.csarc/policies/." "$mismatch_root/.csarc/policies/"
+cp "$repo_root/.csarc/config.yml" "$mismatch_root/.csarc/config.yml"
+printf '* @Other-Org/arch\n' >"$mismatch_root/.github/CODEOWNERS"
+status=0
+output="$(PATH="$fixture_root/bin:$PATH" GH_REPO="$test_repo" "$mismatch_root/.csarc/scripts/apply-repository-settings.sh" plan 2>&1)" || status=$?
+if [[ "$status" == 0 ]]; then
+  echo "plan accepted a CODEOWNERS team from another organization."
+  exit 1
+fi
+grep -qF "CODEOWNER organization @Other-Org does not match repository owner @$test_owner." <<<"$output"
+
+# Case 7 (#887): GitHub's collaborator endpoint reports ordinary repository
+# write access as `write`; read-only access remains blocking.
+case_count=$((case_count + 1))
+personal_root="$fixture_root/personal-owner"
+mkdir -p "$personal_root/.csarc/scripts" "$personal_root/.csarc/policies" "$personal_root/.github"
+cp "$script_path" "$personal_root/.csarc/scripts/apply-repository-settings.sh"
+cp -R "$repo_root/.csarc/policies/." "$personal_root/.csarc/policies/"
+cp "$repo_root/.csarc/config.yml" "$personal_root/.csarc/config.yml"
+printf '* @outside-user\n' >"$personal_root/.github/CODEOWNERS"
+status=0
+output="$(PATH="$fixture_root/bin:$PATH" GH_REPO="$test_repo" USER_PERMISSION=write "$personal_root/.csarc/scripts/apply-repository-settings.sh" plan 2>&1)" || status=$?
+if [[ "$status" != 0 ]]; then
+  echo "plan rejected a personal CODEOWNER with write access."
+  printf '%s\n' "$output"
+  exit 1
+fi
+status=0
+output="$(PATH="$fixture_root/bin:$PATH" GH_REPO="$test_repo" USER_PERMISSION=read "$personal_root/.csarc/scripts/apply-repository-settings.sh" plan 2>&1)" || status=$?
+if [[ "$status" == 0 ]]; then
+  echo "plan accepted a read-only personal CODEOWNER."
+  exit 1
+fi
+grep -qF "@outside-user lacks repository write access." <<<"$output"
+
+# Case 8 (Issue #985): the live Pages state disagrees with the declared
 # `enabled` choice. enabled=true needs a published site; enabled=false is an
 # explicit opt-out, so a published site is drift rather than a skipped check.
 case_count=$((case_count + 1))
@@ -243,7 +290,7 @@ if [[ "$status" == 0 ]]; then
 fi
 grep -qF "$expected_pages_drift" <<<"$output"
 
-# Case 7 (Issue #985): a non-404 Pages read error is never treated as
+# Case 9 (Issue #985): a non-404 Pages read error is never treated as
 # published, unpublished, or compliant.
 case_count=$((case_count + 1))
 LIVE_PAGES="error" run_check

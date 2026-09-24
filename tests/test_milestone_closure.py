@@ -246,6 +246,59 @@ def test_reconciliation_and_completed_closure_reject_undelivered_work(
     assert f"#42 ({status})" in result.summary
 
 
+def test_not_planned_work_does_not_block_completed_closure() -> None:
+    """Cancelled work is shown as not planned instead of undelivered."""
+    state = _base_snapshot()
+    state["issues"].insert(
+        1,
+        {
+            "number": 43,
+            "title": "Superseded work",
+            "state": "closed",
+            "state_reason": "not_planned",
+            "body": "## Acceptance criteria\n\n- [ ] Superseded\n",
+            "labels": [{"name": "enhancement"}],
+            "user": {"login": "worker", "type": "User"},
+        },
+    )
+    body = regenerate_reconciliation(state)
+    state["issues"][2]["body"] = body
+
+    assert (
+        "| #43 Superseded work | closed | (none found) | no | Not planned |"
+        in body
+    )
+    assert closure_decision(state).allowed
+
+
+@pytest.mark.parametrize("gap", ["unchecked", "unmerged"])
+@pytest.mark.parametrize(
+    ("closed_at", "historical"),
+    [
+        ("2026-09-19T19:06:51Z", True),
+        ("2026-09-19T19:06:52Z", False),
+        (None, False),
+    ],
+)
+def test_work_closed_before_strict_delivery_is_historical(
+    gap: str, closed_at: str | None, historical: bool
+) -> None:
+    """#816 applies to work closed after it took effect, not retroactively."""
+    state = _base_snapshot()
+    work_issue = state["issues"][0]
+    work_issue["closed_at"] = closed_at
+    if gap == "unchecked":
+        work_issue["body"] = "## Acceptance criteria\n\n- [ ] Done\n"
+    else:
+        state["issues"][2]["pull_request"]["merged_at"] = None
+
+    body = regenerate_reconciliation(state)
+    state["issues"][1]["body"] = body
+
+    assert ("Closed before #816" in body) is historical
+    assert closure_decision(state).allowed is historical
+
+
 def test_reconciliation_is_fresh_immediately_after_regeneration() -> None:
     """A just-regenerated section is never considered stale."""
     state = _base_snapshot()
@@ -832,6 +885,112 @@ def test_invalid_tracker_is_not_hidden_by_a_work_issue_event(
 
     assert not result.allowed
     assert "enhancement label" in result.summary
+
+
+def _record_state_writes(
+    monkeypatch: pytest.MonkeyPatch, state: dict[str, Any]
+) -> list[tuple[str, int, str]]:
+    """Serve one snapshot to reconcile and capture every state write."""
+    writes: list[tuple[str, int, str]] = []
+    monkeypatch.setitem(
+        reconcile.__globals__, "load_snapshot", lambda *_: state
+    )
+    monkeypatch.setitem(
+        reconcile.__globals__,
+        "_set_issue_state",
+        lambda _repo, number, value: writes.append(("issue", number, value)),
+    )
+    monkeypatch.setitem(
+        reconcile.__globals__,
+        "_set_milestone_state",
+        lambda _repo, number, value: writes.append(
+            ("milestone", number, value)
+        ),
+    )
+    monkeypatch.setitem(reconcile.__globals__, "refresh_pr_checks", lambda _: 0)
+    return writes
+
+
+@pytest.mark.parametrize("event_action", ["labeled", "unlabeled", "edited"])
+def test_work_metadata_events_leave_a_closed_milestone_closed(
+    monkeypatch: pytest.MonkeyPatch, event_action: str
+) -> None:
+    """Label cleanup on old work never reopens a finished Milestone."""
+    state = snapshot()
+    state["milestone"]["state"] = "closed"
+    state["issues"][1]["labels"] = []
+    writes = _record_state_writes(monkeypatch, state)
+
+    result = reconcile(
+        "acme/project", 8, event_issue=42, event_action=event_action
+    )
+
+    assert result.allowed
+    assert writes == []
+
+
+@pytest.mark.parametrize("event_issue", [None, 0, 80])
+def test_rules_adopted_later_do_not_reopen_a_closed_milestone(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    event_issue: int | None,
+) -> None:
+    """Metadata-only gaps on finished work are a notice, not a reopen."""
+    state = snapshot()
+    state["milestone"]["state"] = "closed"
+    state["issues"][1]["labels"] = []
+    writes = _record_state_writes(monkeypatch, state)
+
+    result = reconcile(
+        "acme/project", 8, event_issue=event_issue, event_action="closed"
+    )
+
+    assert result.allowed
+    assert "keeps its closure" in result.summary
+    assert writes == []
+    assert "::notice title=Closed Milestone governance gaps::" in (
+        capsys.readouterr().out
+    )
+
+
+def test_closed_milestone_without_tracker_stays_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pre-tracker Milestone with only finished work keeps its closure."""
+    state = snapshot()
+    state["milestone"]["state"] = "closed"
+    del state["issues"][1]
+    writes = _record_state_writes(monkeypatch, state)
+
+    result = reconcile("acme/project", 8, event_action="closed")
+
+    assert result.allowed
+    assert writes == []
+
+
+@pytest.mark.parametrize("has_tracker", [True, False])
+def test_reopened_work_still_reopens_a_closed_milestone(
+    monkeypatch: pytest.MonkeyPatch, has_tracker: bool
+) -> None:
+    """Reopened work changes delivery facts, so closure is revisited."""
+    state = snapshot()
+    state["milestone"]["state"] = "closed"
+    state["issues"][0]["state"] = "open"
+    if has_tracker:
+        state["issues"][1]["labels"] = []
+    else:
+        del state["issues"][1]
+    writes = _record_state_writes(monkeypatch, state)
+
+    result = reconcile(
+        "acme/project", 8, event_issue=42, event_action="reopened"
+    )
+
+    assert not result.allowed
+    expected = [("milestone", 8, "open")]
+    if has_tracker:
+        expected.insert(0, ("issue", 80, "open"))
+    assert writes == expected
 
 
 def test_reconcile_api_and_write_errors_remain_failures(
