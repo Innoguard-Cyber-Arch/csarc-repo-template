@@ -27,6 +27,7 @@ class FakeGitHub:
         self.objects: dict[str, object] = {}
         self.collections: dict[str, list[dict[str, Any]]] = {}
         self.writes: list[tuple[str, str, str]] = []
+        self.fields: list[dict[str, object] | None] = []
 
     def get(self, repo: str, path: str) -> object:
         del repo
@@ -41,9 +42,17 @@ class FakeGitHub:
         del repo
         return self.collections[path]
 
-    def write(self, repo: str, method: str, path: str, body: str) -> object:
+    def write(
+        self,
+        repo: str,
+        method: str,
+        path: str,
+        body: str,
+        fields: dict[str, object] | None = None,
+    ) -> object:
         del repo
         self.writes.append((method, path, body))
+        self.fields.append(fields)
         return {"html_url": "https://github.com/o/r/pull/9#issuecomment-1"}
 
 
@@ -472,6 +481,8 @@ def test_release_annotation_preserves_notes_and_replaces_evidence() -> None:
             "Existing notes\n\n" + details,
         )
     ]
+    # Omitting tag_name makes GitHub detach the draft from its tag.
+    assert github.fields == [{"tag_name": "v1.2.3", "draft": True}]
 
 
 @pytest.mark.parametrize(
