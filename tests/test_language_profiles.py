@@ -767,6 +767,78 @@ def test_optional_features_render_independently(
 
 
 @pytest.mark.parametrize(
+    ("project_mode", "documentation_mode", "content_enabled"),
+    [
+        ("new", "off", False),
+        ("existing", "off", False),
+        ("new", "content-only", True),
+    ],
+)
+def test_documentation_guidance_matches_rendered_content(
+    tmp_path: Path,
+    project_mode: str,
+    documentation_mode: str,
+    content_enabled: bool,
+) -> None:
+    """Point operational guidance only at documentation that exists."""
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "documentation-guidance"
+    if project_mode == "existing":
+        project.mkdir()
+        (project / "package.json").write_text(
+            '{"name": "documentation-guidance", "private": true}\n',
+            encoding="utf-8",
+        )
+
+    run_copy(
+        str(source),
+        project,
+        data={
+            "project_mode": project_mode,
+            "languages": ["typescript"],
+            "project_name": "Documentation Guidance",
+            "project_slug": "documentation-guidance",
+            "project_description": "Exercises mode-specific guidance.",
+            "repository_url": "https://github.com/example/documentation-guidance",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "private",
+            "documentation_mode": documentation_mode,
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+    )
+
+    assert (project / "README.md").exists() is content_enabled
+    assert (project / "docs/README.md").exists() is content_enabled
+
+    security = (project / "SECURITY.md").read_text(encoding="utf-8")
+    workflow = (project / ".csarc/docs/agent-workflow.md").read_text(
+        encoding="utf-8"
+    )
+    lifecycle = (project / ".csarc/docs/csarc.md").read_text(encoding="utf-8")
+    assert "Read `README.md` when present." in security
+
+    if content_enabled:
+        assert "`docs/README.md` maps durable project memory" in workflow
+        assert "專案自己的 `README.md` 為準" in lifecycle
+    else:
+        assert "`docs/README.md` maps durable project memory" not in workflow
+        assert "`docs/specs/` SDD contract" not in workflow
+        assert (
+            "`.csarc/docs/csarc.md` is the stable operations entry point"
+            in workflow
+        )
+        assert "專案自己的 `README.md` 為準" not in lifecycle
+        assert "既有專案導入 CSARC" not in lifecycle
+        assert "root `AGENTS.md`" in lifecycle
+        assert "`.csarc/config.yml`" in lifecycle
+
+
+@pytest.mark.parametrize(
     ("primary_language", "i18n", "project_license"),
     [
         ("zh-tw", "en-zh-tw", "proprietary"),

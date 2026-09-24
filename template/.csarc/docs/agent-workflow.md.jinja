@@ -15,7 +15,11 @@
 
 - This file applies repository-wide. A nearer `AGENTS.md` may add subtree-specific guidance.
 - `.csarc/config.yml` is the template-managed source for enabled language and repository modules.
+{% if documentation_mode == 'off' -%}
+- Use the linked Issue for scope; `.csarc/docs/csarc.md` is the stable operations entry point because project documentation is disabled.
+{% else -%}
 - Use the linked Issue or `docs/specs/` SDD contract for scope; `docs/README.md` maps durable project memory.
+{% endif -%}
 - Follow [`.csarc/docs/documentation-policy.md`](.csarc/docs/documentation-policy.md) for the template/content boundary, i18n, README, and licensing. Before a non-Draft pull request is delivered, compare changed behavior and configuration with project-owned documentation, then record `aligned` or reasoned `not-applicable` against the exact head; `drift` and `inconclusive` block delivery.
 - Root `SECURITY.md` is repository-wide scanner policy; `.github/SECURITY.md` is the human vulnerability-disclosure policy. See [`.csarc/docs/security-scanner-readiness.md`](.csarc/docs/security-scanner-readiness.md) for provider capabilities, exact validation commands, scope, cost, and offline boundaries.
 - Use `docs/adr/` for decisions. On updated projects, also search project-owned `docs/decisions/`; never move or overwrite it automatically.

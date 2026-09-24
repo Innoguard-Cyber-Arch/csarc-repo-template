@@ -7,6 +7,13 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.26.1] - 2026-09-24
+
+### Bug Fixes
+
+* fix: align docs-off operational guidance (5efdda9)
+* fix: keep docs-off lifecycle wording neutral (0bef2a3)
+
 ## [0.26.0] - 2026-09-24
 
 ### Features
