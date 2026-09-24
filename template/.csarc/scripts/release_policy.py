@@ -1638,6 +1638,54 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
         )
 
 
+def _changelog_boundary(
+    root: Path, tags: list[str], version: str
+) -> tuple[str, list[str]]:
+    """Return the notes' starting tag and any prereleases a stable covers.
+
+    A prerelease section starts at the latest tag of any kind. A stable
+    section starts at the previous stable tag and so aggregates every beta
+    since then (Issue #1018). Included prereleases are chosen by Git
+    reachability, not version precedence: a Milestone beta can carry a lower
+    version than a stable that main published meanwhile.
+    """
+    valid = [tag for tag in tags if release_phase.is_valid_version(tag)]
+    if release_phase.parse_version(version).is_prerelease:
+        ordered = release_phase.sort_by_precedence(valid)
+        return (ordered[-1] if ordered else ""), []
+    stables = release_phase.sort_by_precedence(
+        tag
+        for tag in valid
+        if not release_phase.parse_version(tag).is_prerelease
+    )
+    latest = stables[-1] if stables else ""
+    covered = (
+        set(git_output(["tag", "--merged", latest], root).splitlines())
+        if latest
+        else set()
+    )
+    included = release_phase.sort_by_precedence(
+        tag
+        for tag in valid
+        if tag not in covered and release_phase.parse_version(tag).is_prerelease
+    )
+    return latest, included
+
+
+def _changelog_heads(root: Path, sha: str) -> list[str]:
+    """Return the commits whose history the notes for ``sha`` describe.
+
+    A promotion bridge is a merge that is amended in place with its own
+    candidate, so its id and committer date differ between local preparation
+    and hosted verification. Its parents are stable across that amend, so a
+    merge contributes its parents' history and its first parent's date.
+    """
+    parents = git_output(
+        ["rev-list", "--parents", "-n", "1", sha], root
+    ).split()[1:]
+    return parents if len(parents) > 1 else [sha]
+
+
 def _write_changelog(root: Path, sha: str, version: str) -> None:
     """Prepend deterministic notes for the same commits used by planning."""
     changelog = root / "CHANGELOG.md"
@@ -1645,13 +1693,11 @@ def _write_changelog(root: Path, sha: str, version: str) -> None:
     if re.search(rf"(?m)^## (?:\[)?v?{re.escape(version)}(?:\]|\s|\()", source):
         return
     tags = git_output(["tag", "--merged", sha], root).splitlines()
-    ordered = release_phase.sort_by_precedence(
-        tag for tag in tags if release_phase.is_valid_version(tag)
-    )
-    latest = ordered[-1] if ordered else ""
-    revision = f"{latest}..{sha}" if latest else sha
+    latest, included = _changelog_boundary(root, tags, version)
+    heads = _changelog_heads(root, sha)
+    revision = [*heads, f"^{latest}"] if latest else heads
     raw = git_output(
-        ["log", "--reverse", "--format=%h%x1f%s%x1e", revision], root
+        ["log", "--reverse", "--format=%h%x1f%s%x1e", *revision], root
     )
     notes: dict[str, list[str]] = {
         "Breaking Changes": [],
@@ -1670,8 +1716,12 @@ def _write_changelog(root: Path, sha: str, version: str) -> None:
         }.get(intent)
         if heading:
             notes[heading].append(f"* {subject} ({short_sha})")
-    date = git_output(["show", "-s", "--format=%cs", sha], root)
+    date = git_output(["show", "-s", "--format=%cs", heads[0]], root)
     sections = [f"## [{version}] - {date}"]
+    if included:
+        sections.extend(
+            ["", "### Included prereleases", "", *(f"* {t}" for t in included)]
+        )
     for heading, entries in notes.items():
         if entries:
             sections.extend(["", f"### {heading}", "", *entries])
@@ -1710,26 +1760,6 @@ def prepare_release_candidate(
         "branch": f"release/v{version}",
         "title": f"chore(main): release {version}",
     }
-
-
-def promotion_changelog_source(root: Path, sha: str, source: str) -> str:
-    """Return the delivery source a promotion bridge's notes are cut from.
-
-    Hosted ``verify-promotion-version`` rebuilds the candidate with the
-    bridge's first parent as ``changelog_sha`` (Issue #1018), so local
-    preparation must name that same commit instead of the bridge itself.
-    """
-    source_sha = git_output(
-        ["rev-parse", "--verify", f"{source}^{{commit}}"], root
-    )
-    parents = git_output(
-        ["rev-list", "--parents", "-n", "1", sha], root
-    ).split()
-    if len(parents) < 2 or parents[1] != source_sha:
-        raise ValueError(
-            "promotion source must be the first parent of the promotion head"
-        )
-    return source_sha
 
 
 def _promotion_baseline_tree(root: Path, source_sha: str, head_sha: str) -> str:
@@ -1774,6 +1804,13 @@ def verify_promotion_version(
     """Require a release tree to equal its deterministic candidate."""
     baseline_tree = _promotion_baseline_tree(root, source_sha, head_sha)
     head_tree = git_output(["rev-parse", f"{head_sha}^{{tree}}"], root)
+    # A release-only commit was prepared on its parent (the source). A
+    # promotion bridge was prepared on the bridge itself, whose second parent
+    # brings main's previous stable tag into reach (Issue #1018).
+    head_parents = git_output(
+        ["rev-list", "--parents", "-n", "1", head_sha], root
+    ).split()
+    changelog_sha = head_sha if len(head_parents) > 2 else source_sha
     planned = release_plan(root, head_sha, phase=phase)
     if planned is None:
         if head_tree != baseline_tree:
@@ -1820,7 +1857,7 @@ def verify_promotion_version(
                 worktree,
                 head_sha,
                 phase=phase,
-                changelog_sha=source_sha,
+                changelog_sha=changelog_sha,
             )
             subprocess.run(  # noqa: S603
                 [executable, "add", "--all"],
@@ -2174,14 +2211,6 @@ def parser() -> argparse.ArgumentParser:
     candidate.add_argument(
         "--phase", choices=release_phase.PHASES, default=None
     )
-    candidate.add_argument(
-        "--promotion-source",
-        default=None,
-        help=(
-            "Milestone promotion bridge only: its first parent (HEAD^1), so "
-            "CHANGELOG notes match hosted verify-promotion-version."
-        ),
-    )
     verify = subparsers.add_parser("verify-version")
     verify.add_argument("--tag")
     verify.add_argument("--root", type=Path, default=Path.cwd())
@@ -2300,16 +2329,8 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         return 0
     if args.command == "prepare-candidate":
         try:
-            root = args.root.resolve()
-            changelog_sha = (
-                promotion_changelog_source(
-                    root, args.sha, args.promotion_source
-                )
-                if args.promotion_source is not None
-                else None
-            )
             payload = prepare_release_candidate(
-                root, args.sha, phase=args.phase, changelog_sha=changelog_sha
+                args.root.resolve(), args.sha, phase=args.phase
             )
         except (ValueError, json.JSONDecodeError) as error:
             raise SystemExit(str(error)) from error

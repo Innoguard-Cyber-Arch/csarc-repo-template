@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import runpy
 import subprocess
@@ -1373,101 +1374,80 @@ def test_promotion_version_is_materialized_in_the_delivery_pr(
     assert result["materialized"] is True
 
 
-def test_local_promotion_prep_matches_hosted_verify_after_beta(
-    tmp_path: Path,
-) -> None:
-    """Issue #1018: the documented bridge command yields the verified tree.
-
-    Hosted verify cuts the stable notes from the delivery source (the
-    bridge's first parent), whose latest tag is a beta; preparing from the
-    bridge itself also walks current main's side and writes different notes.
-    """
-    git(tmp_path, "init", "-b", "main")
-    git(tmp_path, "config", "user.name", "Release Test")
-    git(tmp_path, "config", "user.email", "release@example.invalid")
-    write_release_surfaces(tmp_path, "0.1.0")
-    (tmp_path / "release-please-config.json").write_text(
+def init_changelog_repo(root: Path) -> None:
+    """Create a repository whose v0.1.0 stable is the previous release."""
+    git(root, "init", "-b", "main")
+    git(root, "config", "user.name", "Release Test")
+    git(root, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(root, "0.1.0")
+    (root / "release-please-config.json").write_text(
         json.dumps({"release-type": "simple", "packages": {".": {}}}),
         encoding="utf-8",
     )
-    git(tmp_path, "add", ".")
-    git(tmp_path, "commit", "-m", "chore: baseline")
-    git(tmp_path, "tag", "v0.1.0")
+    git(root, "add", ".")
+    git(root, "commit", "-m", "chore: baseline")
+    git(root, "tag", "v0.1.0")
+
+
+def commit_file(root: Path, name: str, subject: str) -> None:
+    (root / name).write_text(f"{subject}\n", encoding="utf-8")
+    git(root, "add", ".")
+    git(root, "commit", "-m", subject)
+
+
+def changelog_section(root: Path, version: str) -> str:
+    changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+    return changelog.split(f"## [{version}]")[1].split("\n## ")[0]
+
+
+def test_promotion_bridge_stable_notes_aggregate_milestone_betas(
+    tmp_path: Path,
+) -> None:
+    """Issue #1018: local bridge prep and hosted verify agree on full notes.
+
+    The delivery source reaches only beta tags, and main published a higher
+    stable meanwhile, so a Milestone beta sorts below the previous stable.
+    The stable section still starts at that previous stable, lists every
+    Milestone fix, and inventories the betas by reachability.
+    """
+    init_changelog_repo(tmp_path)
     git(tmp_path, "checkout", "-b", "dev/m1-demo")
-    (tmp_path / "feature").write_text("fixed\n", encoding="utf-8")
-    git(tmp_path, "add", ".")
-    git(tmp_path, "commit", "-m", "fix: repair milestone behavior")
-    prepare_release_candidate(tmp_path, "HEAD", phase="beta")
-    git(tmp_path, "add", ".")
-    git(tmp_path, "commit", "-m", "chore(dev): release 0.1.1-beta.1")
+    commit_file(tmp_path, "a", "fix: repair milestone alpha")
     git(tmp_path, "tag", "v0.1.1-beta.1")
+    commit_file(tmp_path, "b", "fix: repair milestone beta")
+    git(tmp_path, "tag", "v0.1.1-beta.2")
     source_sha = git(tmp_path, "rev-parse", "HEAD")
     git(tmp_path, "checkout", "main")
-    (tmp_path / "main-only").write_text("current main\n", encoding="utf-8")
-    git(tmp_path, "add", ".")
-    git(tmp_path, "commit", "-m", "fix: standalone main repair")
+    commit_file(tmp_path, "main", "feat: main capability")
+    git(tmp_path, "tag", "v0.2.0")
     git(tmp_path, "checkout", "-b", "promote/m1-demo", "dev/m1-demo")
-    git(tmp_path, "merge", "--no-ff", "main", "-m", "chore: promotion bridge")
-    bridge_sha = git(tmp_path, "rev-parse", "HEAD")
-    planned = release_plan(tmp_path, bridge_sha, phase="stable")
-    assert planned is not None
-    version = planned[1]
+    git(tmp_path, "merge", "--no-ff", "main", "-m", "fix: promote milestone 1")
 
-    def stable_section() -> str:
-        changelog = (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
-        return changelog.split(f"## [{version}]")[1].split("\n## ")[0]
+    payload = prepare_release_candidate(tmp_path, "HEAD", phase="stable")
+    version = str(payload["version"])
+    section = changelog_section(tmp_path, version)
 
-    # The pre-#1018 instruction (no promotion source) cuts notes from the
-    # bridge, which also reaches current main's side, and diverges from the
-    # hosted rule.
-    prepare_release_candidate(tmp_path, "HEAD", phase="stable")
-    assert "fix: standalone main repair" in stable_section()
-    git(tmp_path, "add", ".")
-    git(tmp_path, "commit", "--amend", "--no-edit")
-    with pytest.raises(ValueError, match="materialization is not exact"):
-        verify_promotion_version(
-            tmp_path,
-            source_sha,
-            git(tmp_path, "rev-parse", "HEAD"),
-            phase="stable",
-        )
-
-    git(tmp_path, "reset", "--hard", bridge_sha)
-    with pytest.raises(SystemExit, match="first parent"):
-        main(
-            [
-                "prepare-candidate",
-                "--root",
-                str(tmp_path),
-                "--sha",
-                "HEAD",
-                "--phase",
-                "stable",
-                "--promotion-source",
-                "HEAD^2",
-            ]
-        )
+    assert "fix: repair milestone alpha" in section
+    assert "fix: repair milestone beta" in section
+    assert "feat: main capability" not in section
+    assert "promote milestone 1" not in section
     assert (
-        main(
-            [
-                "prepare-candidate",
-                "--root",
-                str(tmp_path),
-                "--sha",
-                "HEAD",
-                "--phase",
-                "stable",
-                "--promotion-source",
-                "HEAD^1",
-            ]
-        )
-        == 0
+        "### Included prereleases\n\n* v0.1.1-beta.1\n* v0.1.1-beta.2\n"
+        in section
     )
-    # Current hosted semantics: notes run from the delivery source's latest
-    # beta tag to the source, so this stable section carries no entries.
-    assert "###" not in stable_section()
+    # Amend on a later day: the bridge id and committer date change, yet
+    # hosted verify must rebuild the same notes from the amended head.
     git(tmp_path, "add", ".")
-    git(tmp_path, "commit", "--amend", "--no-edit")
+    subprocess.run(
+        ["git", "commit", "--amend", "--no-edit"],  # noqa: S607
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env={
+            **os.environ,
+            "GIT_COMMITTER_DATE": "2099-01-02T00:00:00Z",
+        },
+    )
 
     result = verify_promotion_version(
         tmp_path,
@@ -1479,6 +1459,50 @@ def test_local_promotion_prep_matches_hosted_verify_after_beta(
     assert result["status"] == "candidate"
     assert result["version"] == version
     assert result["materialized"] is True
+
+
+def test_stable_notes_start_at_previous_stable_past_newer_beta(
+    tmp_path: Path,
+) -> None:
+    """A higher-precedence beta never truncates a stable section."""
+    init_changelog_repo(tmp_path)
+    commit_file(tmp_path, "a", "fix: shipped in beta")
+    git(tmp_path, "tag", "v0.1.1-beta.1")
+    commit_file(tmp_path, "b", "fix: after the beta")
+
+    payload = prepare_release_candidate(tmp_path, "HEAD", phase="stable")
+    section = changelog_section(tmp_path, str(payload["version"]))
+
+    assert "fix: shipped in beta" in section
+    assert "fix: after the beta" in section
+    assert "### Included prereleases\n\n* v0.1.1-beta.1\n" in section
+
+
+def test_stable_notes_without_betas_omit_included_prereleases(
+    tmp_path: Path,
+) -> None:
+    init_changelog_repo(tmp_path)
+    commit_file(tmp_path, "a", "fix: direct stable repair")
+
+    payload = prepare_release_candidate(tmp_path, "HEAD", phase="stable")
+    section = changelog_section(tmp_path, str(payload["version"]))
+
+    assert "fix: direct stable repair" in section
+    assert "Included prereleases" not in section
+
+
+def test_beta_notes_start_at_latest_tag_of_any_kind(tmp_path: Path) -> None:
+    init_changelog_repo(tmp_path)
+    commit_file(tmp_path, "a", "fix: shipped in beta")
+    git(tmp_path, "tag", "v0.1.1-beta.1")
+    commit_file(tmp_path, "b", "fix: after the beta")
+
+    payload = prepare_release_candidate(tmp_path, "HEAD", phase="beta")
+    section = changelog_section(tmp_path, str(payload["version"]))
+
+    assert "fix: after the beta" in section
+    assert "fix: shipped in beta" not in section
+    assert "Included prereleases" not in section
 
 
 def test_promotion_version_rejects_non_release_changes(tmp_path: Path) -> None:
