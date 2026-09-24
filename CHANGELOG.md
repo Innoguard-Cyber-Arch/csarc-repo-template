@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.26.9] - 2026-09-24
+
+### Bug Fixes
+
+* fix: open delivery sync PRs as Draft until labelled (1e2d644)
+
 ## [0.26.8] - 2026-09-24
 
 ### Bug Fixes
