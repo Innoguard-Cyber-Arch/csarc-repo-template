@@ -4221,12 +4221,15 @@ def inspect_work_item_mapping(  # noqa: C901
     canonical_types = {"bug": "Bug", "feature": "Feature", "task": "Task"}
     for observed in observed_types:
         name = str(observed["source"])
-        target = canonical_types.get(name.casefold())
+        enabled = observed.get("enabled") is True
+        target = canonical_types.get(name.casefold()) if enabled else None
         type_suggestions.append(
             {
                 **observed,
                 "action": (
-                    "preserve"
+                    "decision-required"
+                    if not enabled
+                    else "preserve"
                     if name in canonical_types.values()
                     else "map"
                     if target is not None
@@ -5170,11 +5173,14 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "restore it or restart adoption from a clean commit."
         )
 
-    review = answers.get("work_item_mapping_review", "accept-safe")
+    raw_work_item_mapping = pending.get("work_item_mapping")
+    review = answers.get(
+        "work_item_mapping_review",
+        "accept-safe" if raw_work_item_mapping is None else "pending",
+    )
     if not isinstance(review, str):
         raise CliError("work_item_mapping_review must be a string.")
     current_mapping = inspect_work_item_mapping(repository, review)
-    raw_work_item_mapping = pending.get("work_item_mapping")
     if isinstance(raw_work_item_mapping, dict):
         if current_mapping != raw_work_item_mapping:
             raise CliError(
@@ -5413,6 +5419,12 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             task_planned,
             task_outputs_available=True,
         )
+        latest_mapping = inspect_work_item_mapping(repository, review)
+        if latest_mapping != work_item_mapping:
+            raise CliError(
+                "GitHub work-item metadata drifted during finalize; restart "
+                "adoption with a new dry-run plan."
+            )
         write_candidate_patch(
             candidate,
             target,
@@ -5467,7 +5479,7 @@ def build_adoption_plan(
     generated_at: str,
 ) -> ResolvedPlan:
     """Build one locked adoption plan and its isolated candidate."""
-    review = answers.get("work_item_mapping_review", "accept-safe")
+    review = answers.get("work_item_mapping_review", "pending")
     if not isinstance(review, str):
         raise CliError("work_item_mapping_review must be a string.")
     work_item_mapping = inspect_work_item_mapping(repository, review)

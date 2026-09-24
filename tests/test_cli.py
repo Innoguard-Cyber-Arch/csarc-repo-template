@@ -258,6 +258,9 @@ actions_fallback:
 review:
   type: str
   default: peer
+work_item_mapping_review:
+  type: str
+  default: accept-safe
 copilot_review:
   type: str
   default: 'off'
@@ -1189,6 +1192,12 @@ def test_work_item_mapping_suggests_only_conservative_aliases(
                                     "description": "Maintenance",
                                     "isEnabled": False,
                                 },
+                                {
+                                    "name": "Task",
+                                    "color": "YELLOW",
+                                    "description": "Disabled task type",
+                                    "isEnabled": False,
+                                },
                             ]
                         }
                     }
@@ -1231,6 +1240,14 @@ def test_work_item_mapping_suggests_only_conservative_aliases(
             "enabled": True,
             "source": "Feature",
             "target": "Feature",
+        },
+        {
+            "action": "decision-required",
+            "color": "YELLOW",
+            "description": "Disabled task type",
+            "enabled": False,
+            "source": "Task",
+            "target": None,
         },
     ]
     assert mapping["labels"] == [
@@ -1529,20 +1546,65 @@ def test_adopt_requires_the_copier_work_item_mapping_review_choice(
     assert pending["adoption"]["mapping_reviewed"] is False
     assert pending["adoption"]["applicable"] is False
 
+    for review in ("accept-safe", "review-individually"):
+        assert (
+            main(
+                [
+                    *arguments,
+                    "--data",
+                    f"work_item_mapping_review={review}",
+                ]
+            )
+            == 0
+        )
+        accepted = json.loads(capsys.readouterr().out)
+        assert accepted["answers"]["work_item_mapping_review"] == review
+        assert accepted["adoption"]["mapping_reviewed"] is True
+        assert accepted["adoption"]["applicable"] is True
+
+
+@pytest.mark.large
+def test_adopt_without_a_mapping_question_stays_review_only(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Do not treat a template that lacks the new question as confirmation."""
+    source, _ = make_template(tmp_path)
+    config_path = source / "copier.yml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    del config["work_item_mapping_review"]
+    config_path.write_text(
+        yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+    )
+    revision = commit(source, "test: omit mapping review question")
+    project = tmp_path / "legacy-mapping-review-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: legacy mapping review product")
+
     assert (
         main(
             [
-                *arguments,
-                "--data",
-                "work_item_mapping_review=accept-safe",
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--dry-run",
+                "--json",
             ]
         )
         == 0
     )
-    accepted = json.loads(capsys.readouterr().out)
-    assert accepted["answers"]["work_item_mapping_review"] == "accept-safe"
-    assert accepted["adoption"]["mapping_reviewed"] is True
-    assert accepted["adoption"]["applicable"] is True
+    plan = json.loads(capsys.readouterr().out)
+    assert "work_item_mapping_review" not in plan["answers"]
+    assert plan["adoption"]["work_item_mapping"]["review"] == "pending"
+    assert plan["adoption"]["mapping_reviewed"] is False
+    assert plan["adoption"]["applicable"] is False
 
 
 def write_product_release_workflow(
@@ -3003,15 +3065,18 @@ def test_adoption_report_records_template_version(tmp_path: Path) -> None:
     )
 
 
-def test_readme_displays_adoption_report_template_version() -> None:
-    """Keep README's displayed report version in sync with the constant."""
+@pytest.mark.parametrize("readme_name", ["README.md", "README.en.md"])
+def test_readmes_describe_mapping_and_display_report_template_version(
+    readme_name: str,
+) -> None:
+    """Keep both READMEs aligned with the mapping and report contracts."""
     marker = "ADOPTION_REPORT_TEMPLATE_VERSION"
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme = (ROOT / readme_name).read_text(encoding="utf-8")
     lines_mentioning_constant = [
         line for line in readme.splitlines() if marker in line
     ]
     assert lines_mentioning_constant, (
-        f"README.md should reference {marker} so a template version bump "
+        f"{readme_name} should reference {marker} so a template version bump "
         "is caught here."
     )
     assert any(
@@ -3022,6 +3087,8 @@ def test_readme_displays_adoption_report_template_version() -> None:
         f"({lines_mentioning_constant}) does not match {marker} "
         f"({cli.ADOPTION_REPORT_TEMPLATE_VERSION})."
     )
+    assert "work_item_mapping_review=accept-safe" in readme
+    assert "review-individually" in readme
 
 
 def test_adoption_report_computes_new_edited_removed_counts(
@@ -5070,6 +5137,49 @@ def test_adopt_finalize_rejects_work_item_mapping_drift(
     assert replay_finalize(project, "--dry-run") == 2
     assert "work-item metadata drifted" in capsys.readouterr().err
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+
+
+@pytest.mark.large
+def test_adopt_finalize_rechecks_mapping_immediately_before_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Close the confirmation-to-write race for live mapping metadata."""
+    _, project = initialize_pending_adoption(tmp_path)
+    assert replay_finalize(project, "--dry-run") == 0
+    plan_path = finalize_plan_path(project)
+    pending = json.loads(
+        (project / cli.PENDING_ADOPTION_FILE).read_text(encoding="utf-8")
+    )
+    observed = pending["work_item_mapping"]
+    inspections = 0
+
+    def inspect(*_: object) -> dict[str, object]:
+        nonlocal inspections
+        inspections += 1
+        result = json.loads(json.dumps(observed))
+        if inspections == 2:
+            result["reason"] = "Metadata changed after confirmation."
+        return result
+
+    monkeypatch.setattr(cli, "inspect_work_item_mapping", inspect)
+    capsys.readouterr()
+
+    assert (
+        replay_finalize(
+            project,
+            "--apply-plan",
+            str(plan_path),
+            "--yes",
+            "--non-interactive",
+        )
+        == 2
+    )
+    assert inspections == 2
+    assert "metadata drifted during finalize" in capsys.readouterr().err
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).is_file()
 
 
 def test_explicit_project_hook_runs_once_without_using_run_command(
