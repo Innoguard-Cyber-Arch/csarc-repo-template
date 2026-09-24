@@ -955,7 +955,7 @@ def authorization(
         )
         or not isinstance(user.get("login"), str)
         or user.get("type") != "User"
-        or body != expected_body
+        or normalized_comment_body(body) != expected_body
     ):
         raise RuntimeError("Authorization is not an exact maintainer statement")
     permission = github.get(
@@ -1004,7 +1004,7 @@ def find_exact_head_authorization(
             continue
         user = payload.get("user") or {}
         if (
-            payload.get("body") != expected_body
+            normalized_comment_body(payload.get("body")) != expected_body
             or not isinstance(user.get("login"), str)
             or user.get("type") != "User"
         ):
@@ -1034,6 +1034,18 @@ def find_exact_head_authorization(
         candidates,
         key=lambda item: parse_time(item.get("created_at"), "Authorization"),
     )
+
+
+def normalized_comment_body(body: object) -> str | None:
+    """Return a comment body with web-UI line endings and padding removed.
+
+    GitHub stores a comment pasted through the web UI with CRLF line
+    endings (Issue #991), so the exact statement is compared after
+    normalizing CRLF to LF and stripping surrounding whitespace.
+    """
+    if not isinstance(body, str):
+        return None
+    return body.replace("\r\n", "\n").strip()
 
 
 def authorization_statement(repo: str, pr_number: int, head_sha: str) -> str:

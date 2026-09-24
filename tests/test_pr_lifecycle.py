@@ -1529,6 +1529,41 @@ def test_authorization_requires_an_exact_affirmative_human_statement(
         )
 
 
+def test_authorization_accepts_a_web_ui_crlf_body() -> None:
+    """Issue #991: a template pasted through the web UI still authorizes."""
+    github = FakeGitHub("a" * 40)
+    github.authorization_body = (
+        authorization_statement("owner/repo", 42, "a" * 40).replace(
+            "\n", "\r\n"
+        )
+        + "\n"
+    )
+    payload = authorization(
+        github,
+        "owner/repo",
+        42,
+        "a" * 40,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert payload["body"] == github.authorization_body
+
+
+def test_authorization_rejects_a_crlf_body_for_another_head() -> None:
+    """Issue #991: line-ending tolerance never relaxes the head binding."""
+    github = FakeGitHub("a" * 40)
+    github.authorization_body = authorization_statement(
+        "owner/repo", 42, "b" * 40
+    ).replace("\n", "\r\n")
+    with pytest.raises(RuntimeError, match="exact maintainer statement"):
+        authorization(
+            github,
+            "owner/repo",
+            42,
+            "a" * 40,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
+
+
 def test_authorization_template_outputs_the_exact_accepted_body(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

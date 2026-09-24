@@ -56,6 +56,28 @@ def test_not_applicable_requires_a_concrete_reason() -> None:
         )
 
 
+def test_reason_with_inline_code_is_parsed() -> None:
+    """Issue #991: inline backticks inside a reason must not hide it."""
+    assert "not-applicable" in validate_review(
+        review_body(
+            "not-applicable",
+            reason="Only `scripts/pr_lifecycle.py` matching changed.",
+        ),
+        HEAD,
+        "content-only",
+    )
+
+
+def test_wrapped_reason_placeholder_is_still_rejected() -> None:
+    """A fully backtick-wrapped placeholder keeps failing as before."""
+    with pytest.raises(ValueError, match="concrete reason"):
+        validate_review(
+            review_body("not-applicable", reason="`TODO`"),
+            HEAD,
+            "content-only",
+        )
+
+
 def test_off_mode_needs_no_review_record() -> None:
     """Disabled documentation management creates no review requirement."""
     assert "skipped" in validate_review("", "", "off")
