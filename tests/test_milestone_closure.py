@@ -271,6 +271,34 @@ def test_not_planned_work_does_not_block_completed_closure() -> None:
     assert closure_decision(state).allowed
 
 
+@pytest.mark.parametrize("gap", ["unchecked", "unmerged"])
+@pytest.mark.parametrize(
+    ("closed_at", "historical"),
+    [
+        ("2026-09-19T19:06:51Z", True),
+        ("2026-09-19T19:06:52Z", False),
+        (None, False),
+    ],
+)
+def test_work_closed_before_strict_delivery_is_historical(
+    gap: str, closed_at: str | None, historical: bool
+) -> None:
+    """#816 applies to work closed after it took effect, not retroactively."""
+    state = _base_snapshot()
+    work_issue = state["issues"][0]
+    work_issue["closed_at"] = closed_at
+    if gap == "unchecked":
+        work_issue["body"] = "## Acceptance criteria\n\n- [ ] Done\n"
+    else:
+        state["issues"][2]["pull_request"]["merged_at"] = None
+
+    body = regenerate_reconciliation(state)
+    state["issues"][1]["body"] = body
+
+    assert ("Closed before #816" in body) is historical
+    assert closure_decision(state).allowed is historical
+
+
 def test_reconciliation_is_fresh_immediately_after_regeneration() -> None:
     """A just-regenerated section is never considered stale."""
     state = _base_snapshot()

@@ -47,7 +47,12 @@ RECONCILIATION_HEADING = "Reconciliation"
 # A work Issue closed as not planned was cancelled or superseded, not
 # delivered; it is shown as such and does not block a completed closure.
 NOT_PLANNED_STATUS = "Not planned"
-SETTLED_STATUSES = {"Delivered", NOT_PLANNED_STATUS}
+# Strict per-Issue delivery evidence took effect with #816 (merge commit
+# 057b83e35a). Work Issues closed before then are historical records: they
+# are labelled as such instead of being judged retroactively (#1012).
+STRICT_DELIVERY_CUTOFF = "2026-09-19T19:06:52Z"
+HISTORICAL_STATUS = "Closed before #816"
+SETTLED_STATUSES = {"Delivered", NOT_PLANNED_STATUS, HISTORICAL_STATUS}
 # Work Issue actions that can change a closed Milestone's delivery facts.
 # Every other work Issue event (labels, edits, comments) leaves it alone.
 _CLOSED_MILESTONE_ACTIONS = {"milestoned", "demilestoned", "reopened"}
@@ -1319,12 +1324,17 @@ def _delivery_status(issue: dict[str, Any], pulls: list[dict[str, Any]]) -> str:
         return "Pending"
     if issue.get("state_reason") == "not_planned":
         return NOT_PLANNED_STATUS
-    if not any(_merged_at(pull) for pull in pulls):
-        return "Closed without a merged PR"
     body = issue.get("body")
-    if not isinstance(body, str) or not checklist_complete(body):
-        return "Acceptance incomplete or missing"
-    return "Delivered"
+    if not any(_merged_at(pull) for pull in pulls):
+        status = "Closed without a merged PR"
+    elif not isinstance(body, str) or not checklist_complete(body):
+        status = "Acceptance incomplete or missing"
+    else:
+        return "Delivered"
+    closed_at = issue.get("closed_at")
+    if isinstance(closed_at, str) and closed_at < STRICT_DELIVERY_CUTOFF:
+        return HISTORICAL_STATUS
+    return status
 
 
 def reconciliation_status(body: str) -> Decision:

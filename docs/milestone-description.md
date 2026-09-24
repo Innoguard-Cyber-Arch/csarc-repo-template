@@ -193,7 +193,9 @@ regenerate-reconciliation 之後才會出現——而是自動重新產生：逐
 底下每一張非 tracker Issue 目前是否已關閉、其宣告 `Closes #N` 的 PR 是否已合併，以及
 Issue acceptance checklist 是否存在且全部完成。只有三者都成立才標成 `Delivered`；以
 `not_planned` 關閉的 Issue 標成 `Not planned`（已取消或被取代，不宣稱交付）；其餘依序
-標成 `Pending`、`Closed without a merged PR` 或 `Acceptance incomplete or missing`。
+標成 `Pending`、`Closed without a merged PR` 或 `Acceptance incomplete or missing`；
+其中在 `#816` 生效（`2026-09-19T19:06:52Z`）前就已關閉的列改標成 `Closed before #816`，
+視為歷史紀錄、不追溯套用（見 `docs/adr/milestone-scope-and-closure-reconciliation.md`）。
 這是給人核對用的真實交付清單，不只是「Milestone acceptance criteria checkbox 是否
 打勾」的形式檢查。段落
 開頭嵌入一個內容雜湊 marker；只要 tracker body 其他部分（`Proposal`／`Completion
@@ -201,8 +203,9 @@ evidence`／`Early termination`／`Promotion` 任何一段）事後被編輯過�
 上，`closure_decision()` 會回報 `Reconciliation: stale, regenerate before closing`
 並拒絕把 Milestone 收尾為 completed，直到重新執行 regenerate-reconciliation 為止。
 即使表格新鮮，`closure_decision()` 仍以同一份 live delivery decision 重新檢查所有 leaf
-Issue；只要任一列不是 `Delivered` 或 `Not planned`，就列出 Issue 編號與狀態並拒絕
-completed 收尾（以 `completed` 關閉卻沒有 merged PR 或 acceptance 未完成的 Issue 仍然阻擋）；
+Issue；只要任一列不是 `Delivered`、`Not planned` 或 `Closed before #816`，就列出 Issue
+編號與狀態並拒絕 completed 收尾（截止點後以 `completed` 關閉卻沒有 merged PR 或
+acceptance 未完成的 Issue 仍然阻擋）；
 `not_planned`（提前終止）收尾路徑不受影響，因為那條路徑本來就不宣稱交付完成。
 
 建立前須閱讀相關 open／closed Issues 的內文、comments 與 linked pull requests；

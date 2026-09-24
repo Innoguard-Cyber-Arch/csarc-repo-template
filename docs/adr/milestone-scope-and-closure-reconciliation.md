@@ -295,3 +295,31 @@ Milestone work Issue 一律繼承 tracker 層級；子 Issue 若自行宣告不�
 這只取代 #745 的「公版 root 預設啟用分層且採 beta」選擇，不刪除四層模組，也不改變
 新生成專案與既有專案導入的預設。#877 的引導式安裝沿用同一份 Copier questions，讓安裝者
 決定是否啟用分層、預設層級及各層 review／verification；不新增第二份 schema 或 gate。
+
+## `#1012`：嚴格 delivery 規則生效前關閉的 work Issue 視為歷史紀錄
+
+- **狀態：**Accepted
+- **日期：**2026-09-24
+- **來源 Issue：**[#1012](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1012)
+
+`#816` 要求 completed closure 的每張 leaf Issue 都是 `Delivered`（已關閉、closing PR
+已合併、acceptance checklist 全勾）。這條規則不追溯套用：在它生效前就已關閉的 work
+Issue 視為歷史紀錄，依當時規則的結案處置為準。
+
+- **截止點：**`#816` 的 PR #818 merge commit `057b83e35a`，merge 時間
+  `2026-09-19T19:06:52Z`（`STRICT_DELIVERY_CUTOFF`）。
+- **適用範圍：**只看 work Issue 自己的 `closed_at` 嚴格早於截止點，而且依現行規則會是
+  `Closed without a merged PR` 或 `Acceptance incomplete or missing` 的列。這些列在
+  Reconciliation 表標成 `Closed before #816`，不阻擋 completed closure。
+- **不適用：**截止點當下或之後關閉的 Issue、仍開啟的 Issue（`Pending`），以及 tracker
+  層級的 Milestone acceptance criteria、Promotion、approval、Completion evidence 與
+  Reconciliation 新鮮度檢查，全部維持原規則。Issue 事後被 reopen 再關閉時，`closed_at`
+  會更新成新的時間，自然回到現行規則。
+- **動機：**Milestone 8 的交付已由 PR #542 promotion 進 main（tree 與 candidate 相同），
+  2026-09-19T12:57:57Z 在當時規則下完成收尾；被 `#1005` 的 reconcile 缺陷 reopen 後，
+  現行規則以 21 張在截止點前關閉的 Issue（9 張沒有 merged PR、12 張 acceptance 未全勾）
+  拒絕重新收尾。回頭補證據或改寫這些歷史 Issue 都會失真。使用者於 2026-09-24 決定不
+  追溯套用。
+- **下游專案：**`template/.csarc/scripts/` 使用同一個截止時間。下游 repo 實際開始套用
+  `#816` 的時間取決於它何時 Copier update，截止點之後、更新之前關閉的 Issue 仍會被現行
+  規則判定；這是保守方向（不會放寬更多），因此不為每個下游 repo 另設截止點。
