@@ -49,7 +49,13 @@ verification_step() {
     status=$?
   fi
 
-  kill "$heartbeat_pid" 2>/dev/null || true
+  # Stop the heartbeat with SIGKILL, not SIGTERM (#1014). The forked
+  # subshell briefly inherits the caller's EXIT trap before bash resets it,
+  # and bash 5.2 runs that trap when a SIGTERM lands inside that window. A
+  # fast step such as `test -f` hits the window, so the caller's cleanup
+  # (for example `rm -rf` of a build directory) could delete an artifact the
+  # next step needs. SIGKILL cannot be caught, so no inherited trap can run.
+  kill -KILL "$heartbeat_pid" 2>/dev/null || true
   wait "$heartbeat_pid" 2>/dev/null || true
 
   if [[ "$status" -eq 0 ]]; then
