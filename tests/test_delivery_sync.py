@@ -486,6 +486,23 @@ def test_sync_route_requires_the_recorded_authorized_request() -> None:
             HEAD_SHA,
         )
 
+    # Issue #1016: an unlabelled sync PR still fails closed.
+    sync["body"] = (
+        "Requested from PR #42 for `explicit-dependency`. Created by "
+        "the delivery sync workflow; normal review applies."
+    )
+    sync["labels"] = []
+    with pytest.raises(RuntimeError, match="route is not authorized"):
+        validate_sync_route(
+            FakeAPI([(200, sync)]),
+            "acme/repo",
+            99,
+            base,
+            BASE_SHA,
+            head,
+            HEAD_SHA,
+        )
+
 
 def test_explicit_dependency_sync_requires_the_requesting_pr_owner() -> None:
     """Early sync is limited to an owner PR with a declared dependency."""
@@ -871,6 +888,41 @@ def test_new_sync_pr_labels_only_through_the_lifecycle_lease(
     )
     assert labelled == [("acme/repo", 17, "a" * 40)]
     assert not any("/labels" in path for _, path, _ in api.calls)
+    created = [
+        body
+        for method, path, body in api.calls
+        if method == "POST" and path == "repos/acme/repo/pulls"
+    ]
+    # Issue #1016: the CI job guard skips Draft `opened` activity, so the
+    # first hosted verify cannot read the PR before it is labelled.
+    assert created[0] is not None
+    assert created[0]["draft"] is True
+
+
+def test_sync_pr_is_labelled_before_it_becomes_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The first verify-starting event already sees `enhancement` (#1016)."""
+    commands: list[list[str]] = []
+    monkeypatch.setitem(
+        label_sync_pr.__globals__, "lifecycle_command", commands.append
+    )
+    label_sync_pr("acme/repo", 17, "a" * 40)
+    assert [arguments[0] for arguments in commands] == [
+        "acquire",
+        "edit",
+        "state",
+        "release",
+    ]
+    edit, ready = commands[1], commands[2]
+    assert edit[edit.index("--add-label") + 1] == "enhancement"
+    assert ready[ready.index("--state") + 1] == "ready"
+    assert ready[ready.index("--head-sha") + 1] == "a" * 40
+    ci = (Path(__file__).parents[1] / ".github/workflows/ci.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "github.event.action == 'ready_for_review' ||" in ci
+    assert "github.event.pull_request.draft != true &&" in ci
 
 
 def test_lifecycle_label_always_releases_its_exact_evidence(
@@ -892,6 +944,7 @@ def test_lifecycle_label_always_releases_its_exact_evidence(
         "edit",
         "release",
     ]
+    # An unlabelled sync PR stays Draft instead of starting verify.
 
 
 def test_reconcile_handles_only_the_requested_delivery() -> None:
