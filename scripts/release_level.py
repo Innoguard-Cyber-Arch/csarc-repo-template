@@ -689,8 +689,14 @@ def annotate_release(
     details: str,
 ) -> None:
     """Append deterministic work-level evidence to one mutable draft Release."""
-    encoded_tag = urllib.parse.quote(tag, safe="")
-    payload = github.get(repo, f"releases/tags/{encoded_tag}")
+    # GitHub's releases/tags/{tag} endpoint never returns draft Releases, so
+    # the draft must be located by exact tag name in the Release collection.
+    matches = [
+        item
+        for item in github.pages(repo, "releases?per_page=100")
+        if item.get("tag_name") == tag
+    ]
+    payload = matches[0] if len(matches) == 1 else None
     if (
         not isinstance(payload, dict)
         or payload.get("draft") is not True
