@@ -7,6 +7,13 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.26.11] - 2026-09-24
+
+### Bug Fixes
+
+* fix: align local promotion release prep with hosted verify (010931b)
+* fix: aggregate stable CHANGELOG since the previous stable (929ad91)
+
 ## [0.26.10] - 2026-09-24
 
 ### Bug Fixes
@@ -32,6 +39,32 @@ CHANGELOG 的 tag。
 * fix: keep closed Milestones closed on metadata-only events (abd4317)
 
 ## [0.26.6] - 2026-09-24
+
+### Included prereleases
+
+* v0.24.1-beta.1
+* v0.25.6-beta.1
+* v0.25.7-beta.1
+* v0.25.8-beta.1
+* v0.25.9-beta.1
+* v0.25.10-beta.1
+* v0.25.11-beta.1
+* v0.25.12-beta.1
+* v0.25.13-beta.1
+* v0.25.14-beta.1
+
+### Bug Fixes
+
+* fix(cli): report discarded update candidate (bcdb7e3)
+* fix: allow committed adoption finalize (5516cc7)
+* fix(cli): guide legacy Copier answer migration (f3cbe99)
+* fix(adopt): allow pending lockfile updates (3b568e2)
+* fix(adopt): detect unfinished manual merges (55c9949)
+* fix(status): report pending adoption (cd9735f)
+* fix(adoption): support external code owners (e21d43d)
+* fix(adopt): require README before adoption (1629d1a)
+* fix(adopt): report all resolved settings (5988df3)
+* fix(update): ignore derived answer drift (5c31e2f)
 
 ## [0.26.5] - 2026-09-24
 

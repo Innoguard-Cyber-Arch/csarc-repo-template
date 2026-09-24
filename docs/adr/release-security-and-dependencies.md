@@ -39,6 +39,13 @@ CSARC 過去在版本、發版與供應鏈責任上有多套並存或半途而�
 
 這項決定 supersede 下方早期「standalone 在 merge 後另開 Automatic／Guided 版本 PR」的操作描述；歷史段落保留作決策脈絡時，以本節為準。
 
+### 2026-09-24：stable CHANGELOG 彙整上一個 stable 之後的全部內容（#1018）
+
+- Stable 版本段落涵蓋「candidate 可達的最高 stable tag 之後」到 candidate 的所有 release-worthy commit，跨越期間所有 beta 彙整列出；不會因為 beta 段落已列過就留空。Beta 段落維持原規則：從可達的最新任一 tag 開始。
+- Stable 段落另列 `Included prereleases`：candidate 可達、但上一個 stable 不可達的 beta tag，依版本先後排序；沒有時省略。以 Git 可達性而非版本大小挑選，因為 Milestone beta 的版本可能低於期間 `main` 已發布的 stable（例如 M15 的 `v0.24.1-beta.1`…`v0.25.14-beta.1` 對上一個 stable `v0.26.5`）。
+- Promotion bridge 的 hosted `verify-promotion-version` 改以 bridge head 計算 notes（第二個 parent 讓 `main` 的上一個 stable 可達），與本機在 bridge 上執行的 `prepare-candidate --sha HEAD --phase stable` 相同。Merge commit 只取其 parents 的歷史與第一個 parent 的日期，因此 bridge amend 後 id 與 committer date 改變也不影響結果；一般 release-only commit 仍以其 parent 計算。
+- 起因：原規則在 hosted 以 delivery source 計算、本機以 bridge 計算，M15 promotion（PR #989）照文件操作被 hosted `verify` 擋下，而 hosted 產生的 `0.26.6` 段落是空的。經維護者同意，`CHANGELOG.md` 已發布的 `0.26.6` 段落依新規則以 bridge `4049a81` 重新產生並回補（10 個 fix 與 10 個 beta）；GitHub Release 本身維持 immutable 不變。
+
 CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑：
 
 1. 工作 PR 以 Conventional Commits 表達 major／minor／patch／no-release 意圖。

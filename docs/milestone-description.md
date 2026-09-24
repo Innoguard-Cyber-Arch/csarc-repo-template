@@ -181,6 +181,11 @@ Reconciliation 仍 fresh 時才允許同一 release candidate 重跑，不把一
 `python3 scripts/release_policy.py plan --sha HEAD --phase <level>`；結果若為 `pending`，在
 同一個 checkout 執行 `python3 scripts/release_policy.py prepare-candidate --sha HEAD
 --phase <level>`，將產生的版本檔與 CHANGELOG amend 回該 bridge commit，再 push／開 PR。
+Hosted `verify` 同樣以 bridge head 計算 CHANGELOG，並只取 bridge 雙親的歷史與第一個
+parent 的日期，因此 amend 不會讓兩邊結果分歧（#1018）。Stable 段落從 bridge 可達的
+上一個 stable tag 開始，彙整整個 Milestone 的修正，不因 beta 段落已列過而留空；並以
+`Included prereleases` 列出 bridge 可達、上一個 stable 不可達的 beta tag（依版本排序，
+沒有時省略）。Beta 段落仍從可達的最新任一 tag 開始。
 若 plan 為 `no-release`，bridge tree 必須與 deterministic pre-release baseline 完全相同：
 雙親可乾淨合併時使用 delivery source 與 current `main` 的 merge tree；雙親衝突時沿用
 source-preserving bridge 的 delivery source tree。Hosted `verify` 會重建同一 baseline，
