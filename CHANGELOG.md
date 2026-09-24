@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.26.7] - 2026-09-24
+
+### Bug Fixes
+
+* fix: keep closed Milestones closed on metadata-only events (abd4317)
+
 ## [0.26.6] - 2026-09-24
 
 ## [0.26.5] - 2026-09-24
