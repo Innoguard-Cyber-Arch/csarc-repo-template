@@ -41,6 +41,7 @@ EXPECTED_TRIGGERS = {
 EXPECTED_STEP_NAMES = [
     "Checkout",
     "Issue triage: assign author and apply issue classification",
+    "Issue metadata: synchronize linked pull requests",
     "Milestone lifecycle: reconcile lifecycle and refresh PR checks",
     "Milestone lifecycle: refresh standalone Issue PR check",
     "Milestone lifecycle: reconcile the previous Milestone",
@@ -149,6 +150,10 @@ def test_lifecycle_selection_gates_each_automation_family(
     )
     assert (
         milestone_value
+        in by_name["Issue metadata: synchronize linked pull requests"]["if"]
+    )
+    assert (
+        milestone_value
         in by_name[
             "Milestone lifecycle: reconcile lifecycle and refresh PR checks"
         ]["if"]
@@ -224,6 +229,25 @@ def test_work_item_lifecycle_delegates_to_repository_scripts() -> None:
     assert "record-promotion-evidence" not in source
     assert "scripts/pr_lifecycle.py close-work" in source
     assert "scripts/sync_milestone_state.py refresh-issue-pr-checks" in source
+    assert "scripts/sync_work_item_metadata.py" in source
+
+
+def test_issue_milestone_changes_resynchronize_linked_pull_requests() -> None:
+    """Issue Milestone edits must propagate to already-open work PRs."""
+    workflow = load_yaml(REPO_ROOT / ".github" / "workflows" / WORKFLOW)
+    steps = workflow["jobs"]["process"]["steps"]
+    step = next(
+        step
+        for step in steps
+        if step["name"] == "Issue metadata: synchronize linked pull requests"
+    )
+
+    condition = step["if"]
+    assert "github.event_name == 'issues'" in condition
+    assert "github.event.issue.pull_request == null" in condition
+    assert 'fromJSON(\'["milestoned","demilestoned"]\')' in condition
+    assert "scripts/sync_work_item_metadata.py" in step["run"]
+    assert "--issue" in step["run"]
 
 
 def test_milestone_reconcile_steps_receive_issue_event_context() -> None:

@@ -6,7 +6,7 @@ Cyber-Arch's updatable repository foundation: creating a new project, adopting a
 
 | Item | Current status |
 | --- | --- |
-| Template version | v0.25.7<!-- x-release-please-version --> |
+| Template version | v0.25.8<!-- x-release-please-version --> |
 | Supported languages | Python, Rust, TypeScript (independently multi-selectable; choosing none uses only the common workflow) |
 | repo-site presentation template version | 1.1.0 |
 | repo-site render engine version | 1.1.0 |
@@ -133,7 +133,7 @@ This template's Durable Project Memory supports SDD, ADR, Test-Driven Developmen
 
 ## Development and verification
 
-The work model is "SDD → Feature parent → Task/Bug subissues → their own PRs"; leaf Issues and their PRs go into a Milestone with a due date only at delivery time. A leaf Issue maps to one native Development branch and one PR, merged only once CI and human review both pass. GitHub Projects stays disabled by default. [`AGENTS.md`](AGENTS.md) is the single authoritative source for the full ruleset (Issue/PR body format, title conventions, relationships, branch and worktree use, closing-keyword restrictions, etc.); it is not duplicated here.
+The work model is "SDD → Feature parent → Task/Bug subissues → their own PRs." When research or a Feature expands into a dated delivery, its Feature parent, leaf Issues, and their PRs all belong to the same Milestone. A leaf Issue maps to one native Development branch and one PR, merged only once CI and human review both pass. GitHub Projects stays disabled by default. [`AGENTS.md`](AGENTS.md) is the single authoritative source for the full ruleset (Issue/PR body format, title conventions, relationships, branch and worktree use, closing-keyword restrictions, etc.); it is not duplicated here.
 
 This repo uses delivery mode: `main` is the only permanent branch; each Milestone uses a short-lived `dev/m*`, and an ordinary standalone Issue creates a topic branch from the latest `main` and merges straight back to `main` via PR. Only a documented, genuinely standalone soak/canary uses a one-off `dev/i<issue-number>-<slug>` promotion; an explicit hotfix also targets `main` directly. CI is the portable integration-test layer; an external test environment is the canary layer.
 

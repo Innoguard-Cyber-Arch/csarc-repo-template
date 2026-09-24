@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.25.7</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.25.8</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.25.7<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.25.8<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -363,6 +363,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **整體：** 先把需求整理成一張可獨立完成與驗證的 Issue。
 - **工作分支：** 開始實作時，每張 Issue 建立一個 `type/<Issue>-short-slug` 短期分支，不混入其他工作。
 - **里程碑：** 多張工作有共同目標、期限或交付批次時才建立，並配一張生命週期追蹤 Issue。
+  - 研究或 Feature 擴展成這個交付時，原始 Feature、leaf Issues 與其 PR 都掛入同一個里程碑。
   - 標題使用 `Milestone <編號>: <里程碑名稱>`；冒號後須與里程碑名稱完全相同。
   - 核准、反駁與提前終止寫在內文或留言，不放進標題。
   - 至少一位非提案者同意，且沒有尚未解決的反駁，才開始執行。
