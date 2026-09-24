@@ -474,6 +474,7 @@ These numbers come from `docs/ci-policy.md`'s most recent measurement. They set 
 - `fast`: on 2026-09-01, with a warm cache on the same machine, a source-only scope took about 59 seconds and a scope also touching policy/template files took about 99 seconds; the full PR feedback window runs about 1-4 minutes (#428).
 - Documentation-only work is still `fast`, but it runs only shared safety checks and docs-scope owners without starting product-language toolchains.
 - `full`: on #940's 2026-09-23 candidate, local execution took 919 seconds and hosted execution took 400 seconds. Hosted Regression tests accounted for 387 seconds and the other six stages for 13 seconds. #955 therefore removes the duplicate local-plus-hosted run in hosted mode without changing the seven stages or their test set.
+- Cost changes: the hosted run summary lists the pytest total, the slowest cases, and the change in `large` tests versus the PR base; a `full` total more than 15% above the checked-in baseline only raises a warning, with no hard seconds gate. A new `large` test needs a stated replacement or irreplaceable reason in the PR (#999).
 {{< /disclosure >}}
 
 {{< config-guidance track="contract" >}}

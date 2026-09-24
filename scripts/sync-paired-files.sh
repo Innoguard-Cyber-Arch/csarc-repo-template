@@ -32,6 +32,7 @@ paired_files=(
   "scripts/test-finalization-queue|template/.csarc/scripts/test-finalization-queue"
   "scripts/validate-issue-title|template/.csarc/scripts/validate-issue-title"
   "scripts/verification-step|template/.csarc/scripts/verification-step"
+  "scripts/verification_cost.py|template/.csarc/scripts/verification_cost.py"
   "scripts/verify_release_consumption.py|template/.csarc/scripts/verify_release_consumption.py"
   "policies/actions.json|template/.csarc/policies/actions.json"
   "policies/issue-creation.json|template/.csarc/policies/issue-creation.json"

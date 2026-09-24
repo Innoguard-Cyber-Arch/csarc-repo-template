@@ -472,6 +472,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - `fast`：2026-09-01 同機暖快取下，只碰 source 的 scope 約 59 秒，同時碰 policy／template 的 scope 約 99 秒；整條 PR feedback window 約 1–4 分鐘（#428）。
 - docs-only 仍是 `fast`，但只跑共同安全檢查與 docs scope owner，不啟動產品語言工具鏈。
 - `full`：#940 的 2026-09-23 候選在本機為 919 秒，hosted 為 400 秒；hosted 的 Regression tests 佔 387 秒，其餘六階段合計 13 秒。#955 因此移除 hosted 模式的本機＋hosted 重複執行，但七個階段與測試集合不變。
+- 成本變化：hosted run 的摘要會列出 pytest 總時間、最慢案例與 `large` 測試數量相對 PR base 的變化；`full` 比 checked-in 基準高出超過 15% 只發警告，不設硬性秒數門檻。新增 `large` 測試要在 PR 說明取代關係或不可替代的理由（#999）。
 {{< /disclosure >}}
 
 {{< config-guidance track="contract" >}}

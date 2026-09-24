@@ -1433,6 +1433,14 @@ time；執行超過 60 秒時每 60 秒輸出 heartbeat；失敗時先指出第�
 顯示頻率，不改變命令、重試或 pass/fail 語意。Root 的 fast／full pytest 另用 verbose
 node ID 顯示目前案例，結束時列出最慢 20 個案例；沒有自動 retry。
 
+#### 新增 `large` 測試的理由（#999）
+
+`.csarc/scripts/validate-pr-policy` 在 PR 不是 draft、也不是 promotion 時，讀 PR files API
+的 patch，計算 `.py` 檔中新增減去刪除的 `@pytest.mark.large`（或
+`pytestmark = ... pytest.mark.large`）。淨增加時，PR body 必須有一行
+`Large test justification: <取代哪個測試，或為何無法用較小的測試涵蓋>`；空白、`N/A`、
+`TBD` 之類的佔位字不算。沒有使用 `large` 標記的專案不受影響。
+
 #### 逐階段耗時量測（#465）
 
 上表只記錄涵蓋範圍與取捨依據，沒有留下逐階段秒數；聚合器本身每次執行都會印出

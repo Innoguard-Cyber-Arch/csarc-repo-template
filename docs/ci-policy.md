@@ -1484,6 +1484,33 @@ time；執行超過 60 秒時每 60 秒輸出 heartbeat；失敗時先指出第�
 顯示頻率，不改變命令、重試或 pass/fail 語意。Root 的 fast／full pytest 另用 verbose
 node ID 顯示目前案例，結束時列出最慢 20 個案例；沒有自動 retry。
 
+#### 驗證成本摘要與成長警示（#999）
+
+`scripts/verify-fast` 與 `scripts/verify-stage-regression-tests` 讓原本那一次 pytest 多寫一份
+`--junitxml`，再交給 `scripts/verification_cost.py report` 讀取；不另跑測試，也不另做
+`--collect-only`。`tests/conftest.py` 在收集階段替帶 `large` 標記的案例加上
+`csarc_marker=large` 的 JUnit property，所以「本次實際執行了幾個 `large`」也來自同一份報告。
+摘要失敗只印出非阻斷訊息，不改變驗證結果。
+
+- **本機**：只印本次 pytest 總時間、測試數、實際執行的 `large` 數與最慢 10 個案例；不讀
+  baseline，不拿本機秒數跟 GitHub runner 比較。
+- **Hosted**（`GITHUB_ACTIONS=true` 且有 `$GITHUB_STEP_SUMMARY`）：在 step summary 另外列出
+  `@pytest.mark.large` 標記數量相對 PR base 的變化，以及最慢案例表。標記數量用 `git grep`
+  分別靜態計算 `CSARC_CI_BASE` 與 HEAD 的 merge base 及候選工作樹，不跑測試。
+- **成長警示**：只和同類基準比較。基準是 checked-in 的
+  `tests/verification-cost-baseline.json`，目前只有 `full`（完整 regression suite，含
+  coverage）一類，數值取自上一次可信 hosted run 的 pytest 總時間，並記錄來源 run。
+  報告優先讀 merge base 上的這個檔案，候選 PR 改不動自己的比較基準；base 還沒有這個檔案時才
+  退回候選版本。總時間比基準高出超過 15% 只發 `::warning::`，沒有硬性秒數 gate。
+  `fast` 的 bounded 子集依 scope 而變，沒有可比的同類基準，因此只顯示摘要、不發警示。
+  不新增 artifact、外部存放區或常駐 telemetry；基準在 Milestone promotion 時由維護者依最近
+  一次可信 hosted run 的摘要數字更新。
+- **新增 `large` 測試的理由**：`scripts/validate-pr-policy` 在 PR 不是 draft、也不是
+  promotion 時，讀 PR files API 的 patch，計算 `.py` 檔中新增減去刪除的
+  `@pytest.mark.large`（或 `pytestmark = ... pytest.mark.large`）。淨增加時，PR body 必須有一行
+  `Large test justification: <取代哪個測試，或為何無法用較小的測試涵蓋>`；空白、`N/A`、
+  `TBD` 之類的佔位字不算。GitHub 沒回傳 patch 的 `.py` 檔也視為需要說明。
+
 #### 逐階段耗時量測（#465）
 
 上表只記錄涵蓋範圍與取捨依據，沒有留下逐階段秒數；聚合器本身每次執行都會印出
