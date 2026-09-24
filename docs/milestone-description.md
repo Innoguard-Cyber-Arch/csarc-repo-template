@@ -25,8 +25,8 @@ Milestone 物件與追蹤 Issue 兩步：一次呼叫建立兩者，追蹤 Issue
 `Milestone 8: Interactive docs and policy alignment`。冒號後的文字必須與 GitHub
 Milestone 名稱完全相同；本文依序掛 `Proposal`／`Completion evidence`／
 `Early termination`／`Promotion` 四個 H2 段落，核准、反駁與提前終止等狀態只寫在
-Issue 內文與留言。Tracker 的 promotion 固定發布 stable；底下每張 work Issue 合併進
-`dev/m*` 後各自發布 beta。是否可由提案者自核不由版本成熟度決定，而由
+Issue 內文與留言。Tracker 的 promotion 固定發布 stable；底下的 work Issue 預設在合併進
+`dev/m*` 後各自發布 beta，除非 tracker 宣告了下述 beta checkpoints。是否可由提案者自核不由版本成熟度決定，而由
 `.csarc/config.yml` 的 `admin_bypass` 決定。本 repo 設為 `always`，因此具有 `admin`
 collaborator 權限的提案者可留言 `/milestone admin-approve: <理由>` 自核；設定不允許時
 必須由非提案者留言 `/milestone approve`。自核理由必填，且會在 approval 紀錄與 summary 上明確標成
@@ -35,6 +35,28 @@ collaborator 權限的提案者可留言 `/milestone admin-approve: <理由>` �
 而非留言的 `author_association` 欄位——後者的值會受該帳號的 organization membership
 公開／私密設定影響，若成員關係設為私密，workflow 自己的 `GITHUB_TOKEN` 可能看不到正確
 關係，導致這項檢查不穩定；repo collaborator 權限不受此影響。
+
+Tracker 可以在核准前於 `Proposal` 加一個 `### Checkpoints` 子段落，把 beta 發布改為
+事前宣告的 checkpoint（#996）。每一行固定寫成：
+
+```markdown
+### Checkpoints
+
+- Checkpoint A (beta): #101; terminal #101
+- Checkpoint B (beta): #102, #103; terminal #103
+```
+
+名稱只能用英數與連字號，channel 固定是 `beta`，每張 Issue 只能屬於一個 checkpoint，而且
+terminal Issue 必須列在同一行的 Issue 清單裡。`tracker_errors()` 會擋下格式錯誤或不屬於
+這個 Milestone 的 Issue。宣告後：
+
+- terminal Issue 的 PR 照常在同一張 PR 物化 beta 版本與 CHANGELOG。`release_policy.py`
+  從上一個 tag 起算，所以這一版會聚合上次 checkpoint 之後所有已合併的 work，只發布一次。
+- 其他 work Issue（包含沒有列在任何 checkpoint 的 Issue）是 `deferred`：PR 不執行
+  `prepare-candidate`，也不得改動版本檔；Release workflow 對這次 merge 回報
+  `deferred`，不建立版本、tag 或 Release。
+- 沒有 `### Checkpoints` 的 Milestone 維持每張 work Issue 各自發 beta 的既有行為。
+- 核准後修改 checkpoints 等同修改 tracker body，會讓既有核准過期，必須重新核准。
 
 建立追蹤 Issue 時使用 `.github/ISSUE_TEMPLATE/milestone-tracker.yml`（Issue #555）：表單已
 預先帶入 `Proposal`／`Completion evidence`／`Early termination`／`Promotion` 四個 H2 段落骨架

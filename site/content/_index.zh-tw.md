@@ -609,7 +609,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 ### 我們的選擇
 
 - **版本意圖：**PR title 只回答這次改動是 major、minor、patch 或 no-release，不預約精確版本號。
-- **公開版本：**每張 Milestone work Issue 進入 `dev/m*` 後發 `X.Y.Z-beta.N`；Milestone promotion、standalone 與 hotfix 發不帶後綴的 stable。RC 不另立階段。
+- **公開版本：**Milestone work 進入 `dev/m*` 後發 `X.Y.Z-beta.N`；tracker 事前宣告 checkpoints 時，只有各 checkpoint 的 terminal Issue 發一次 beta，其餘 work 延後到該 checkpoint；Milestone promotion、standalone 與 hotfix 發不帶後綴的 stable。RC 不另立階段。
 - **發版與結案：**已物化候選的 PR 合併並通過驗證後，系統建立不可變 tag、GitHub Release、成品、checksum 與 SBOM；promotion 發布成功才關 tracker 與 Milestone，失敗維持 open。
 - **交付：**合併到 `main` 代表 repository delivery。每張 release-worthy 工作 PR 都承載受審版本候選；Milestone promotion PR 承載整批最後的 stable 候選。
 - **獨立工作：**能單獨審查與驗證、沒有共同期限或跨 Issue 相依時，不必加入里程碑；PR 可直接進 `main`。

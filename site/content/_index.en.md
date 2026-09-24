@@ -611,7 +611,7 @@ Routine updates and security checks run automatically. People step in only for u
 ### Our choice
 
 - **Version intent:** a PR title states major, minor, patch, or no-release impact without reserving an exact number.
-- **Public versions:** each Milestone work Issue publishes `X.Y.Z-beta.N` after landing on `dev/m*`; Milestone promotion, standalone work, and hotfixes publish unsuffixed stable releases. RC is not a separate stage.
+- **Public versions:** Milestone work publishes `X.Y.Z-beta.N` after landing on `dev/m*`; when the tracker declares checkpoints up front, only each checkpoint's terminal Issue publishes one beta and other work defers to it; Milestone promotion, standalone work, and hotfixes publish unsuffixed stable releases. RC is not a separate stage.
 - **Release and closure:** after a materialized PR merges and verification passes, the system creates the immutable tag, GitHub Release, explicit artifacts, checksums, and SBOM. Only successful promotion publication closes the tracker and Milestone; failure leaves both open.
 - **Delivery:** merging to `main` is repository delivery. Every release-worthy work PR carries its reviewed version candidate; a Milestone promotion PR carries the final stable batch candidate.
 - **Standalone work:** when one Issue can be reviewed and verified independently and has no shared deadline or cross-Issue dependency, it needs no Milestone and may target `main` directly.
