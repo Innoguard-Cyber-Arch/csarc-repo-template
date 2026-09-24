@@ -484,6 +484,29 @@ def _tracker_classification_errors(item: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _checkpoint_errors(
+    body: str, issues: list[dict[str, Any]], milestone_number: int
+) -> list[str]:
+    """Validate optional beta checkpoints declared in the tracker Proposal."""
+    try:
+        roles = release_level.declared_checkpoints(body)
+    except ValueError as error:
+        return [str(error)]
+    if roles is None:
+        return []
+    members = {
+        item.get("number")
+        for item in issues
+        if item.get("pull_request") is None
+        and (item.get("milestone") or {}).get("number") == milestone_number
+    }
+    return [
+        f"Checkpoint Issue #{number} is not a work Issue in this Milestone"
+        for number in sorted(roles)
+        if number not in members
+    ]
+
+
 def tracker_errors(snapshot: dict[str, Any]) -> list[str]:
     """Validate the lifecycle Issue identity and stable body contract."""
     milestone = snapshot.get("milestone")
@@ -514,6 +537,7 @@ def tracker_errors(snapshot: dict[str, Any]) -> list[str]:
         for heading in TRACKER_SECTIONS[1:]:
             if _section(body, heading) is None:
                 errors.append(f"The lifecycle Issue needs a {heading} section")
+        errors.extend(_checkpoint_errors(body, snapshot["issues"], number))
     if (
         not isinstance(description, str)
         or re.search(

@@ -53,15 +53,32 @@ jobs:
             --markdown-output "$RUNNER_TEMP/release-levels.md" \
             --github-output "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/release-levels.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Resolve the checkpoint role of the merged work
+        id: checkpoint
+        if: ${{ steps.route.outputs.channel == 'beta' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/release_level.py checkpoint-role \
+            --repo "$GITHUB_REPOSITORY" \
+            --sha "$GITHUB_SHA" \
+            --base-branch "$GITHUB_REF_NAME" \
+            --github-output "$GITHUB_OUTPUT"
       - name: Plan the next version from repository history
         id: plan
         env:
+          CHECKPOINT_ROLE: ${{ steps.checkpoint.outputs.role || 'none' }}
           RELEASE_LEVEL: ${{ steps.route.outputs.channel }}
         run: |
           python3 scripts/release_policy.py plan \
             --sha "$GITHUB_SHA" \
             --phase "$RELEASE_LEVEL" \
+            --checkpoint-role "$CHECKPOINT_ROLE" \
             --github-output "$GITHUB_OUTPUT"
+      - name: Record deferred checkpoint work
+        if: ${{ steps.plan.outputs.status == 'deferred' }}
+        run: |
+          echo "Checkpoint work merged without a release; the checkpoint's terminal Issue publishes the beta." | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Reject an unmaterialized merged delivery
         if: ${{ steps.plan.outputs.status == 'pending' }}
         run: |
@@ -69,7 +86,7 @@ jobs:
           exit 1
       - name: Detect the available release path
         id: capability
-        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -87,13 +104,14 @@ jobs:
           exit 1
       - name: Reuse the source PR's trusted verification evidence
         id: verification
-        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) }}
         env:
           GH_TOKEN: ${{ github.token }}
           REQUIRED_TIER: ${{ steps.route.outputs.required_tier }}
         run: |
           if ./scripts/check-trusted-verification "$GITHUB_SHA" \
             --resolve-merge-source --github-repo "$GITHUB_REPOSITORY" \
+            --merge-branch "$GITHUB_REF_NAME" \
             --required-tier "$REQUIRED_TIER"; then
             echo "reused=true" >> "$GITHUB_OUTPUT"
           else
@@ -101,39 +119,42 @@ jobs:
           fi
       - name: Set up Python 3.14
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) }}
         with:
           python-version: "3.14"
       - name: Set up uv 0.12.15
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
-        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) }}
         with:
           enable-cache: false
           version: "0.12.15"
       - name: Set up pnpm 11.22.0
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) }}
         with:
           version: "11.22.0"
           run_install: false
       - name: Set up Node.js 24
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) }}
         with:
           node-version: "24"
           package-manager-cache: false
       - name: Install the pinned Rust toolchain
-        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) }}
         run: |
           rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
           rustup default 1.98.0
       - name: Re-verify the exact release tree when reuse is unavailable
-        if: ${{ steps.plan.outputs.status != 'no-release' && steps.verification.outputs.reused != 'true' }}
+        if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) && steps.verification.outputs.reused != 'true' }}
         env:
-          CSARC_CI_BASE: ${{ github.event.before || github.event.repository.default_branch }}
+          CSARC_CI_BASE: ${{ github.event.before }}
           CSARC_CI_SCOPES: dependency,docs,governance,shell,source,template,workflow
           CSARC_CI_TIER: ${{ steps.route.outputs.required_tier }}
         run: |
+          # A dispatched run has no push base; the merged commit's first parent
+          # is the real pre-merge base, never the accumulated default branch.
+          export CSARC_CI_BASE="${CSARC_CI_BASE:-$(git rev-parse "$GITHUB_SHA^1")}"
           if [[ "$CSARC_CI_TIER" == full ]]; then
             ./scripts/verify-template.sh
           else
@@ -152,7 +173,7 @@ jobs:
             --tag "$RELEASE_TAG" --branch "$GITHUB_REF_NAME"
       - name: Resolve the exact release state
         id: state
-        if: ${{ steps.plan.outputs.status != 'no-release' }}
+        if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.stage.outputs.tag }}

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "suites": {
+    "full": {
+      "command": "uv run pytest -vv --durations=20 --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80",
+      "pytest_seconds": 418.82,
+      "tests": 1720,
+      "source": "GitHub-hosted CI run 35975630713 (ubuntu-latest, 2026-09-24)"
+    }
+  }
+}

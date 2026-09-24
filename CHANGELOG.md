@@ -7,6 +7,34 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.28.1] - 2026-09-25
+
+### Included prereleases
+
+* v0.27.0-beta.1
+* v0.28.0-beta.1
+
+### Features
+
+* feat(release): publish Milestone betas at declared checkpoints (076ac6d)
+* feat(ci): report verification cost growth (53207ff)
+
+### Bug Fixes
+
+* fix(ci): keep label events from hiding a passed verify (df2a43a)
+
+## [0.28.0-beta.1] - 2026-09-24
+
+### Features
+
+* feat(ci): report verification cost growth (53207ff)
+
+## [0.27.0-beta.1] - 2026-09-24
+
+### Features
+
+* feat(release): publish Milestone betas at declared checkpoints (ac14c3b)
+
 ## [0.26.11] - 2026-09-24
 
 ### Bug Fixes

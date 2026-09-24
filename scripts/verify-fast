@@ -237,7 +237,14 @@ if $run_python_suite; then
     exit 2
   fi
   verification_step "Bounded Python regression suite" \
-    uv run pytest -vv --durations=20 -m "not large" "${pytest_paths[@]}"
+    uv run pytest -vv --durations=20 --junitxml="$plan_root/pytest.xml" \
+    -m "not large" "${pytest_paths[@]}"
+  # Cost summary from the same pytest run's JUnit XML; never blocks verification.
+  if [[ -s "$plan_root/pytest.xml" ]]; then
+    python3 scripts/verification_cost.py report --junit "$plan_root/pytest.xml" \
+      --label "Bounded Python regression suite (fast)" --suite fast ||
+      echo "Verification cost summary unavailable (non-blocking)." >&2
+  fi
 fi
 
 if [[ "$scopes" == *,workflow,* ]]; then

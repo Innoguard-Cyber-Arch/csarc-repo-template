@@ -922,7 +922,7 @@ def test_sync_pr_is_labelled_before_it_becomes_ready(
         encoding="utf-8"
     )
     assert "github.event.action == 'ready_for_review' ||" in ci
-    assert "github.event.pull_request.draft != true &&" in ci
+    assert "github.event.pull_request.draft != true" in ci
 
 
 def test_lifecycle_label_always_releases_its_exact_evidence(

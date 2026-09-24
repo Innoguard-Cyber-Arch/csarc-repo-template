@@ -183,7 +183,10 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
     rendered_template = environment.from_string(template_source).render(
         languages=["python", "typescript", "rust"], release_trigger="main"
     )
-    no_release_guard = "${{ steps.plan.outputs.status != 'no-release' }}"
+    no_release_guard = (
+        '${{ !contains(fromJSON(\'["no-release","deferred"]\'), '
+        "steps.plan.outputs.status) }}"
+    )
 
     for source in (root_source, rendered_template):
         steps = yaml.safe_load(source)["jobs"]["release"]["steps"]
@@ -222,18 +225,40 @@ def test_release_preflight_short_circuits_before_toolchain_setup() -> None:
 
         route_index, _ = by_name["Resolve release route"]
         level_index, _ = by_name["Resolve included work and release level"]
+        checkpoint_index, checkpoint = by_name[
+            "Resolve the checkpoint role of the merged work"
+        ]
+        deferred_index, deferred = by_name["Record deferred checkpoint work"]
+        _, plan = by_name["Plan the next version from repository history"]
         assert route_index == 1
         assert level_index == route_index + 1
-        assert plan_index == level_index + 1
+        assert checkpoint_index == level_index + 1
+        assert plan_index == checkpoint_index + 1
+        assert deferred_index == plan_index + 1
+        # Only delivery branches resolve a checkpoint; main keeps role none.
+        assert checkpoint["if"] == (
+            "${{ steps.route.outputs.channel == 'beta' }}"
+        )
+        assert plan["env"]["CHECKPOINT_ROLE"] == (
+            "${{ steps.checkpoint.outputs.role || 'none' }}"
+        )
+        assert '--checkpoint-role "$CHECKPOINT_ROLE"' in plan["run"]
+        assert deferred["if"] == (
+            "${{ steps.plan.outputs.status == 'deferred' }}"
+        )
         assert plan_index < capability_index < blocked_index
         assert blocked_index < attestation_index
         assert attestation_index < min(index for index, _ in toolchain_steps)
         assert capability["if"] == no_release_guard
         assert attestation["if"] == no_release_guard
-        assert fallback["env"]["CSARC_CI_BASE"] == (
-            "${{ github.event.before || "
-            "github.event.repository.default_branch }}"
+        # Fallback verifies against the real pre-merge base, never the
+        # accumulated default branch of a dispatched delivery release.
+        assert fallback["env"]["CSARC_CI_BASE"] == "${{ github.event.before }}"
+        assert (
+            'CSARC_CI_BASE="${CSARC_CI_BASE:-$(git rev-parse "$GITHUB_SHA^1")}"'
+            in fallback["run"]
         )
+        assert '--merge-branch "$GITHUB_REF_NAME"' in attestation["run"]
         assert resolve["if"] == no_release_guard
         assert all(
             step["if"] == no_release_guard for _, step in toolchain_steps

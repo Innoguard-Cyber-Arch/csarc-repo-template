@@ -3232,6 +3232,8 @@ def revalidate_release_candidate(
             ]
         )
     if not release_candidate:
+        pull = live_pull(github, repo, pr_number, head_sha)
+        role = release_level.checkpoint_role(github, repo, pull)
         return run(
             [
                 sys.executable,
@@ -3245,6 +3247,8 @@ def revalidate_release_candidate(
                 head_sha,
                 "--phase",
                 release_phase_name,
+                "--checkpoint-role",
+                role,
             ]
         )
     with tempfile.TemporaryDirectory(
