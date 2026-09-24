@@ -78,8 +78,15 @@ class GitHubReader(Protocol):
 class GitHubWriter(GitHubReader, Protocol):
     """The narrow authenticated write surface used by release annotations."""
 
-    def write(self, repo: str, method: str, path: str, body: str) -> object:
-        """Write one GitHub resource body."""
+    def write(
+        self,
+        repo: str,
+        method: str,
+        path: str,
+        body: str,
+        fields: dict[str, object] | None = None,
+    ) -> object:
+        """Write one GitHub resource body with optional extra fields."""
         ...
 
 
@@ -556,12 +563,19 @@ class GitHubCLI:
             raise RuntimeError("GitHub returned an invalid collection item")
         return items
 
-    def write(self, repo: str, method: str, path: str, body: str) -> object:
+    def write(
+        self,
+        repo: str,
+        method: str,
+        path: str,
+        body: str,
+        fields: dict[str, object] | None = None,
+    ) -> object:
         """Write one JSON body through the authenticated GitHub CLI."""
         endpoint = f"repos/{repo}/{path}"
         result = subprocess.run(  # noqa: S603
             ["gh", "api", "--method", method, endpoint, "--input", "-"],  # noqa: S607
-            input=json.dumps({"body": body}),
+            input=json.dumps({**(fields or {}), "body": body}),
             check=False,
             capture_output=True,
             text=True,
@@ -713,7 +727,15 @@ def annotate_release(
     )
     cleaned = pattern.sub("", body).rstrip()
     updated = f"{cleaned}\n\n{details}" if cleaned else details
-    github.write(repo, "PATCH", f"releases/{payload['id']}", updated)
+    # GitHub resets a draft's tag_name to "untagged-*" when an update omits
+    # it, so the draft must keep its tag in the same write.
+    github.write(
+        repo,
+        "PATCH",
+        f"releases/{payload['id']}",
+        updated,
+        {"tag_name": tag, "draft": True},
+    )
 
 
 def _write_outputs(
