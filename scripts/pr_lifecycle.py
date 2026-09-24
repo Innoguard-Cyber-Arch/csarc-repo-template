@@ -131,6 +131,12 @@ LEASE_CORE_FIELDS = (
     "refs",
     "reclaimed_commits",
 )
+# Optional core field naming the still-live lease commit an explicit renewal
+# replaced (Issue #1017). Its presence is what lets an exact-head
+# authorization posted under the first lease of an unbroken renewal chain
+# stay valid; an ordinary acquire never carries it.
+RENEWAL_FIELD = "renews"
+MAX_RENEWAL_CHAIN = 64
 
 
 def canonical_json(value: object) -> str:
@@ -525,13 +531,18 @@ def read_lease(path: Path) -> dict[str, Any]:
         or payload["pull_request"] < 1
     ):
         raise RuntimeError("Lease evidence has invalid identity fields")
-    if set(payload) != {
+    if set(payload) - {RENEWAL_FIELD} != {
         *LEASE_CORE_FIELDS,
         "capability",
         "lease_commit",
         "audit_url",
     }:
         raise RuntimeError("Lease evidence contains unexpected fields")
+    if RENEWAL_FIELD in payload and (
+        not isinstance(payload[RENEWAL_FIELD], str)
+        or SHA.fullmatch(payload[RENEWAL_FIELD]) is None
+    ):
+        raise RuntimeError("Lease renewal evidence is invalid")
     if (
         hashlib.sha256(payload["capability"].encode()).hexdigest()
         != payload["capability_digest"]
@@ -602,7 +613,10 @@ def validate_audit_comment(lease: dict[str, Any], comment: object) -> None:
 
 def lease_core(lease: dict[str, Any]) -> dict[str, object]:
     """Return the exact fields committed as immutable lease evidence."""
-    return {field: lease[field] for field in LEASE_CORE_FIELDS}
+    core = {field: lease[field] for field in LEASE_CORE_FIELDS}
+    if RENEWAL_FIELD in lease:
+        core[RENEWAL_FIELD] = lease[RENEWAL_FIELD]
+    return core
 
 
 def lease_message(lease: dict[str, Any]) -> str:
@@ -616,9 +630,19 @@ def lease_message(lease: dict[str, Any]) -> str:
 def audit_message(lease: dict[str, Any]) -> str:
     """Return public lease evidence without the raw capability."""
     public = {**lease_core(lease), "lease_commit": lease["lease_commit"]}
+    renewal = (
+        f"This explicitly renews still-live lease commit "
+        f"{lease[RENEWAL_FIELD]} for the same head, owner, actor, and "
+        "capability; exact-head authorizations posted since the first "
+        "lease of this renewal chain remain valid.\n\n"
+        if RENEWAL_FIELD in lease
+        else ""
+    )
     return (
-        "PR lifecycle lease acquired\n\n"
+        "PR lifecycle lease "
+        f"{'renewed' if RENEWAL_FIELD in lease else 'acquired'}\n\n"
         f"`{canonical_json(public)}`\n\n"
+        f"{renewal}"
         "All automated Ready, Draft, authorization, metadata, and merge "
         "writes for this PR are serialized by the refs above."
     )
@@ -758,6 +782,16 @@ def expired_remote_lease(
     github: GitHub, repo: str, commit_sha: str, held_ref: str
 ) -> dict[str, Any]:
     """Validate one canonical expired lease before an atomic reclaim."""
+    core = canonical_remote_lease(github, repo, commit_sha, held_ref)
+    if parse_time(core["expires_at"], "Existing lease") > datetime.now(UTC):
+        raise RuntimeError("Another owner already holds the PR lifecycle lease")
+    return core
+
+
+def canonical_remote_lease(
+    github: GitHub, repo: str, commit_sha: str, held_ref: str
+) -> dict[str, Any]:
+    """Validate one remote lease commit's canonical message, parent, tree."""
     payload = github.get(repo, f"git/commits/{commit_sha}")
     if not isinstance(payload, dict) or payload.get("sha") != commit_sha:
         raise RuntimeError("Existing lease commit is unavailable")
@@ -771,7 +805,11 @@ def expired_remote_lease(
         raise RuntimeError("Existing lease commit is not canonical") from error
     if (
         not isinstance(core, dict)
-        or set(core) != set(LEASE_CORE_FIELDS)
+        or set(core) - {RENEWAL_FIELD} != set(LEASE_CORE_FIELDS)
+        or (
+            RENEWAL_FIELD in core
+            and SHA.fullmatch(str(core[RENEWAL_FIELD])) is None
+        )
         or core.get("schema_version") != LEASE_SCHEMA
         or str(core.get("repository", "")).casefold() != repo.casefold()
         or not isinstance(core.get("pull_request"), int)
@@ -813,13 +851,98 @@ def expired_remote_lease(
         or (head.get("tree") or {}).get("sha") != core["head_tree"]
     ):
         raise RuntimeError("Existing lease commit parent or tree is invalid")
-    if expires_at > datetime.now(UTC):
-        raise RuntimeError("Another owner already holds the PR lifecycle lease")
     return core
 
 
+RENEWAL_IDENTITY_FIELDS = (
+    "repository",
+    "pull_request",
+    "head_sha",
+    "head_tree",
+    "base_ref",
+    "base_sha",
+    "default_branch",
+    "owner",
+    "actor",
+    "capability_digest",
+    "refs",
+)
+
+
+def authorization_anchor(github: GitHub, lease: dict[str, Any]) -> datetime:
+    """Return the earliest time an exact-head authorization may carry.
+
+    An ordinary lease anchors at its own `acquired_at`. An explicit renewal
+    (Issue #1017) walks its `renews` chain and anchors at the first lease,
+    but only while every predecessor is a canonical remote lease commit with
+    the identical repository, PR, head, base, owner, actor, and capability
+    digest, and was still live when its successor replaced it. A released,
+    expired, or differently owned lease breaks the chain, so an
+    authorization posted before every lease on this exact head never counts.
+    """
+    anchor = parse_time(lease["acquired_at"], "Lease")
+    current: dict[str, Any] = lease
+    for _ in range(MAX_RENEWAL_CHAIN):
+        predecessor_sha = current.get(RENEWAL_FIELD)
+        if predecessor_sha is None:
+            return anchor
+        predecessor = canonical_remote_lease(
+            github,
+            str(lease["repository"]),
+            str(predecessor_sha),
+            pr_ref(int(lease["pull_request"])),
+        )
+        if any(
+            predecessor.get(field) != lease[field]
+            for field in RENEWAL_IDENTITY_FIELDS
+        ):
+            raise RuntimeError(
+                "Lease renewal chain changed head, base, owner, actor, "
+                "or capability"
+            )
+        renewed_at = parse_time(current["acquired_at"], "Lease")
+        started_at = parse_time(predecessor["acquired_at"], "Renewed lease")
+        ended_at = parse_time(predecessor["expires_at"], "Renewed lease")
+        if not started_at < renewed_at <= ended_at:
+            raise RuntimeError(
+                "Lease renewal chain is not contiguous; a renewal must "
+                "replace a still-live lease"
+            )
+        anchor = started_at
+        current = predecessor
+    raise RuntimeError("Lease renewal chain is too long")
+
+
+def renewable_lease(
+    args: argparse.Namespace, github: GitHub
+) -> dict[str, Any] | None:
+    """Return the still-live lease an explicit `--renew` replaces, if any.
+
+    Renewal (Issue #1017) is only for the caller that already holds the
+    exact lease: same evidence capability, owner, actor, PR, and head, with
+    the remote refs, base, and destination still unchanged and the lease not
+    yet expired. Anything else must release and acquire a fresh lease, which
+    requires a new exact-head authorization.
+    """
+    path = getattr(args, "renew", None)
+    if path is None:
+        return None
+    previous = read_lease(path)
+    require_caller(previous, args.owner, getattr(args, "actor", ""), github)
+    try:
+        require_lease(
+            github, previous, args.repo, args.pr_number, args.head_sha
+        )
+    except RuntimeError as error:
+        raise RuntimeError(
+            f"Lease cannot be renewed ({error}); release it and acquire a "
+            "fresh lease, which requires a new exact-head authorization"
+        ) from error
+    return previous
+
+
 def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
-    """Atomically acquire the PR and destination-lane refs."""
+    """Atomically acquire, or explicitly renew, the PR and lane refs."""
     if SHA.fullmatch(args.head_sha) is None:
         raise RuntimeError(
             "Head SHA must be 40 lowercase hexadecimal characters"
@@ -831,6 +954,7 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
             f"Lease TTL must be between 60 and {MAX_TTL_SECONDS} seconds"
         )
     require_origin(args.repo)
+    previous = renewable_lease(args, github)
     pull = live_pull(github, args.repo, args.pr_number, args.head_sha)
     repository = github.get(args.repo, "")
     if not isinstance(repository, dict) or not isinstance(
@@ -849,12 +973,23 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
             "Pull request base does not match its destination ref"
         )
     observed = {ref: remote_ref(ref) for ref in refs}
-    for ref, existing in observed.items():
-        if existing is not None:
-            expired_remote_lease(github, args.repo, existing, ref)
+    if previous is not None:
+        if refs != previous["refs"] or any(
+            existing != previous["lease_commit"]
+            for existing in observed.values()
+        ):
+            raise RuntimeError("Lease ownership changed before renewal")
+    else:
+        for ref, existing in observed.items():
+            if existing is not None:
+                expired_remote_lease(github, args.repo, existing, ref)
     acquired = datetime.now(UTC)
     tree = run(["git", "rev-parse", f"{args.head_sha}^{{tree}}"])
-    capability = secrets.token_hex(32)
+    capability = (
+        str(previous["capability"])
+        if previous is not None
+        else secrets.token_hex(32)
+    )
     core: dict[str, object] = {
         "schema_version": LEASE_SCHEMA,
         "repository": args.repo,
@@ -872,10 +1007,20 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         .isoformat()
         .replace("+00:00", "Z"),
         "refs": refs,
-        "reclaimed_commits": sorted(
+        "reclaimed_commits": []
+        if previous is not None
+        else sorted(
             {commit for commit in observed.values() if commit is not None}
         ),
     }
+    if previous is not None:
+        if any(
+            core[field] != previous[field] for field in RENEWAL_IDENTITY_FIELDS
+        ):
+            raise RuntimeError(
+                "Lease renewal cannot change head, base, owner, or actor"
+            )
+        core[RENEWAL_FIELD] = previous["lease_commit"]
     commit_env = os.environ.copy()
     commit_env.update(
         {
@@ -914,8 +1059,46 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         validate_audit_comment(evidence, comment)
         write_json(args.output, evidence)
     except Exception:
-        release_refs(evidence)
+        if previous is None:
+            release_refs(evidence)
+        else:
+            # Restore the still-live lease rather than dropping it.
+            create_refs(
+                str(previous["lease_commit"]),
+                refs,
+                {ref: commit for ref in refs},
+            )
         raise
+    if previous is None:
+        warn_prior_authorization(github, evidence)
+
+
+def warn_prior_authorization(github: GitHub, lease: dict[str, Any]) -> None:
+    """Say when a fresh lease strands an earlier exact-head authorization."""
+    try:
+        prior = find_exact_head_authorization(
+            github,
+            str(lease["repository"]),
+            int(lease["pull_request"]),
+            str(lease["head_sha"]),
+        )
+    except RuntimeError as error:
+        sys.stderr.write(
+            "PR lifecycle notice: could not check earlier authorizations: "
+            f"{error}\n"
+        )
+        return
+    if prior is None or parse_time(
+        prior.get("created_at"), "Authorization"
+    ) >= parse_time(lease["acquired_at"], "Lease"):
+        return
+    sys.stderr.write(
+        "PR lifecycle warning: exact-head authorization "
+        f"{prior.get('html_url') or 'comment'} predates this fresh lease and "
+        "will not be accepted; a new authorization is required. To keep an "
+        "authorization valid, renew a still-live lease with "
+        "`acquire --renew <lease.json>` instead of releasing it.\n"
+    )
 
 
 def authorization(
@@ -2595,10 +2778,12 @@ def merge_snapshot(  # noqa: C901
         auth = authorization(
             github, repo, pr_number, head_sha, authorization_url
         )
-        acquired_at = parse_time(lease["acquired_at"], "Lease")
-        if parse_time(auth.get("created_at"), "Authorization") < acquired_at:
+        if parse_time(
+            auth.get("created_at"), "Authorization"
+        ) < authorization_anchor(github, lease):
             raise RuntimeError(
-                "Authorization predates the active lifecycle lease"
+                "Authorization predates the active lifecycle lease; renew a "
+                "live lease with `acquire --renew` to keep an authorization"
             )
         auth_actor = str((auth.get("user") or {}).get("login") or "")
         if auth_actor.casefold() != actor:
@@ -2633,8 +2818,9 @@ def merge_snapshot(  # noqa: C901
         auth = authorization(
             github, repo, pr_number, head_sha, authorization_url
         )
-        acquired_at = parse_time(lease["acquired_at"], "Lease")
-        if parse_time(auth.get("created_at"), "Authorization") < acquired_at:
+        if parse_time(
+            auth.get("created_at"), "Authorization"
+        ) < authorization_anchor(github, lease):
             raise RuntimeError(
                 "Emergency hotfix authorization predates the active lease"
             )
@@ -3874,6 +4060,11 @@ def parser() -> argparse.ArgumentParser:
     acquire_command.add_argument("--actor", default="")
     acquire_command.add_argument("--ttl-seconds", type=int, default=3600)
     acquire_command.add_argument("--output", type=Path, required=True)
+    acquire_command.add_argument(
+        "--renew",
+        type=Path,
+        help="still-live lease evidence to renew for the same head and owner",
+    )
     acquire_command.set_defaults(handler=acquire)
     scan_command = commands.add_parser("scan-writers")
     scan_command.add_argument("--root", type=Path, default=Path.cwd())
