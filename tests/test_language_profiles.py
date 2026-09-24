@@ -833,6 +833,7 @@ def test_documentation_guidance_matches_rendered_content(
             in workflow
         )
         assert "專案自己的 `README.md` 為準" not in lifecycle
+        assert "既有專案導入 CSARC" not in lifecycle
         assert "root `AGENTS.md`" in lifecycle
         assert "`.csarc/config.yml`" in lifecycle
 
