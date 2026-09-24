@@ -1144,12 +1144,25 @@ def test_work_item_mapping_suggests_only_conservative_aliases(
     ) -> subprocess.CompletedProcess[str]:
         payload: object
         if command[1:3] == ["label", "list"]:
+            assert command[-1] == "name,color,description"
             payload = [
-                {"name": "Bug"},
-                {"name": "docs"},
-                {"name": "enhancement"},
-                {"name": "hotfix"},
-                {"name": "team/backend"},
+                {
+                    "name": "Bug",
+                    "color": "D73A4A",
+                    "description": "Project defects",
+                },
+                {"name": "docs", "color": "0075CA", "description": None},
+                {
+                    "name": "enhancement",
+                    "color": "A2EEEF",
+                    "description": "New feature or improvement",
+                },
+                {"name": "hotfix", "color": "B60205", "description": "Urgent"},
+                {
+                    "name": "team/backend",
+                    "color": "123456",
+                    "description": "Bug handling team",
+                },
             ]
         else:
             payload = [
@@ -1176,6 +1189,8 @@ def test_work_item_mapping_suggests_only_conservative_aliases(
     assert mapping["labels"] == [
         {
             "action": "map",
+            "color": "D73A4A",
+            "description": "Project defects",
             "issue_type": "Bug",
             "pr_label": "bug",
             "source": "Bug",
@@ -1183,6 +1198,8 @@ def test_work_item_mapping_suggests_only_conservative_aliases(
         },
         {
             "action": "map",
+            "color": "0075CA",
+            "description": None,
             "issue_type": "Task",
             "pr_label": "documentation",
             "source": "docs",
@@ -1190,6 +1207,8 @@ def test_work_item_mapping_suggests_only_conservative_aliases(
         },
         {
             "action": "preserve",
+            "color": "A2EEEF",
+            "description": "New feature or improvement",
             "issue_type": None,
             "pr_label": "enhancement",
             "source": "enhancement",
@@ -1197,6 +1216,8 @@ def test_work_item_mapping_suggests_only_conservative_aliases(
         },
         {
             "action": "preserve",
+            "color": "B60205",
+            "description": "Urgent",
             "issue_type": None,
             "pr_label": "hotfix",
             "source": "hotfix",
@@ -1204,6 +1225,8 @@ def test_work_item_mapping_suggests_only_conservative_aliases(
         },
         {
             "action": "decision-required",
+            "color": "123456",
+            "description": "Bug handling team",
             "issue_type": None,
             "pr_label": None,
             "source": "team/backend",
@@ -2826,12 +2849,16 @@ def test_adoption_report_guides_work_item_mapping(tmp_path: Path) -> None:
         "labels": [
             {
                 "action": "map",
+                "color": "D73A4A",
+                "description": "Project defects",
                 "issue_type": "Bug",
                 "source": "Bug",
                 "target": "bug",
             },
             {
                 "action": "decision-required",
+                "color": "123456",
+                "description": "Backend|routing\nrule",
                 "issue_type": None,
                 "source": "team|backend",
                 "target": None,
@@ -2862,11 +2889,47 @@ def test_adoption_report_guides_work_item_mapping(tmp_path: Path) -> None:
 
     assert "## Work-item mapping guidance" in report
     assert "| `Bug` | `Bug` | `(none)` | `bug` |" in report
-    assert "| `Bug` | `map` | `Bug` | `bug` |" in report
-    assert "| `team\\|backend` | `decision-required`" in report
+    assert "| `Bug` | `D73A4A` | `Project defects` | `map`" in report
+    assert "| `team\\|backend` | `123456` |" in report
+    assert "`Backend\\|routing\\nrule` | `decision-required`" in report
     assert "Existing Issue Type `Chore` has no safe automatic mapping" in report
     assert (
         "Existing label `team|backend` has no safe automatic mapping" in report
+    )
+
+
+def test_work_item_mapping_metadata_stays_in_plan_drift_binding() -> None:
+    """Treat observed label presentation as part of the approved plan."""
+    saved: dict[str, object] = {
+        "adoption": {
+            "verification": "not-run",
+            "work_item_mapping": {
+                "labels": [
+                    {
+                        "color": "D73A4A",
+                        "description": "Project defects",
+                        "source": "bug",
+                    }
+                ]
+            },
+        }
+    }
+    fresh = json.loads(json.dumps(saved))
+    fresh["adoption"]["work_item_mapping"]["labels"][0]["color"] = "000000"
+    fresh["adoption"]["work_item_mapping"]["labels"][0]["description"] = (
+        "Different meaning"
+    )
+
+    differences = cli.json_differences(
+        cli.pre_verification_binding(saved),
+        cli.pre_verification_binding(fresh),
+    )
+
+    assert differences == (
+        "$.adoption.work_item_mapping.labels[0].color: "
+        "saved='D73A4A', rebuilt='000000'",
+        "$.adoption.work_item_mapping.labels[0].description: "
+        "saved='Project defects', rebuilt='Different meaning'",
     )
 
 

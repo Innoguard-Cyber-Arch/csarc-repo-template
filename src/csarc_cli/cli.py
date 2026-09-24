@@ -2181,17 +2181,22 @@ def adoption_report_markdown(  # noqa: C901
                     "",
                     "### Existing labels",
                     "",
-                    "| Existing | Suggestion | Issue Type | Canonical label |",
-                    "| --- | --- | --- | --- |",
+                    "| Existing | Color | Description | Suggestion | "
+                    "Issue Type | Canonical label |",
+                    "| --- | --- | --- | --- | --- | --- |",
                 )
             )
             for item in labels:
                 if not isinstance(item, dict):
                     continue
+                color = item.get("color") or "(none)"
+                description = item.get("description") or "(none)"
                 issue_type = item.get("issue_type") or "(none)"
                 mapping_lines.append(
                     "| `"
                     f"{markdown_table_code(item.get('source'))}` | `"
+                    f"{markdown_table_code(color)}` | `"
+                    f"{markdown_table_code(description)}` | `"
                     f"{markdown_table_code(item.get('action'))}` | `"
                     f"{markdown_table_code(issue_type)}` "
                     "| `"
@@ -4012,7 +4017,7 @@ def inspect_work_item_mapping(  # noqa: C901
             "--limit",
             "1000",
             "--json",
-            "name",
+            "name,color,description",
         ],
         "issues": [
             "gh",
@@ -4091,42 +4096,55 @@ def inspect_work_item_mapping(  # noqa: C901
         )
 
     observed_labels = sorted(
-        {
-            str(item["name"])
+        (
+            {
+                "color": (
+                    item.get("color")
+                    if isinstance(item.get("color"), str)
+                    else None
+                ),
+                "description": (
+                    item.get("description")
+                    if isinstance(item.get("description"), str)
+                    else None
+                ),
+                "source": str(item["name"]),
+            }
             for item in payloads["labels"]
             if isinstance(item, dict) and isinstance(item.get("name"), str)
-        },
-        key=str.casefold,
+        ),
+        key=lambda item: str(item["source"]).casefold(),
     )
     label_suggestions = []
-    for name in observed_labels:
+    for observed in observed_labels:
+        name = str(observed["source"])
         normalized = re.sub(r"[ _-]+", " ", name.strip().casefold())
         alias = WORK_ITEM_LABEL_ALIASES.get(normalized)
         canonical = name.casefold()
         if canonical in WORK_ITEM_ORTHOGONAL_LABELS:
             suggestion = {
+                **observed,
                 "action": "preserve" if name == canonical else "map",
                 "issue_type": None,
                 "pr_label": canonical,
-                "source": name,
                 "target": canonical,
             }
         elif alias is not None:
             issue_type, pr_label = alias
             canonical_name = pr_label
             suggestion = {
+                **observed,
                 "action": ("preserve" if name == canonical_name else "map"),
                 "issue_type": issue_type,
                 "pr_label": pr_label,
-                "source": name,
                 "target": canonical_name,
             }
         else:
             suggestion = {
+                **observed,
                 "action": "decision-required",
                 "issue_type": None,
                 "pr_label": None,
-                "source": name,
                 "target": None,
             }
         label_suggestions.append(suggestion)
