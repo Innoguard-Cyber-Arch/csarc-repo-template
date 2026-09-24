@@ -64,16 +64,40 @@ jobs:
             --sha "$GITHUB_SHA" \
             --base-branch "$GITHUB_REF_NAME" \
             --github-output "$GITHUB_OUTPUT"
+      - name: Resolve a squash-merged promotion source
+        id: source
+        if: ${{ steps.route.outputs.channel == 'stable' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A squash merge cannot reach the delivery-branch beta tags, so a
+          # promotion is planned from its exact reviewed bridge head (#1027).
+          sources="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+            --jq ".[] | select(.merged_at != null and .base.ref == \"main\" and .merge_commit_sha == \"$GITHUB_SHA\" and (.head.ref | startswith(\"promote/m\"))) | .head.sha")"
+          if [[ "$(grep -c . <<<"$sources")" -gt 1 ]]; then
+            echo "Merged commit maps to more than one promotion source." >&2
+            exit 1
+          fi
+          if [[ -n "$sources" ]]; then
+            git fetch --no-tags origin "$sources"
+          fi
+          echo "sha=$sources" >> "$GITHUB_OUTPUT"
       - name: Plan the next version from repository history
         id: plan
         env:
           CHECKPOINT_ROLE: ${{ steps.checkpoint.outputs.role || 'none' }}
           RELEASE_LEVEL: ${{ steps.route.outputs.channel }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
+          source_args=()
+          if [[ -n "$SOURCE_SHA" ]]; then
+            source_args=(--source-sha "$SOURCE_SHA")
+          fi
           python3 scripts/release_policy.py plan \
             --sha "$GITHUB_SHA" \
             --phase "$RELEASE_LEVEL" \
             --checkpoint-role "$CHECKPOINT_ROLE" \
+            "${source_args[@]}" \
             --github-output "$GITHUB_OUTPUT"
       - name: Record deferred checkpoint work
         if: ${{ steps.plan.outputs.status == 'deferred' }}

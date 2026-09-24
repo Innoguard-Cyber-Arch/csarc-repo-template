@@ -208,6 +208,10 @@ parent 的日期，因此 amend 不會讓兩邊結果分歧（#1018）。Stable 
 上一個 stable tag 開始，彙整整個 Milestone 的修正，不因 beta 段落已列過而留空；並以
 `Included prereleases` 列出 bridge 可達、上一個 stable 不可達的 beta tag（依版本排序，
 沒有時省略）。Beta 段落仍從可達的最新任一 tag 開始。
+Promotion 由 `pr_lifecycle.py merge` 以 squash 合併進 `main`，合併後的 commit 只有一個 parent，
+追不到 delivery branch 上的 beta tag。因此 `release.yml` 在 stable route 先找出這個 commit 的
+promotion 來源 PR，以它的 bridge head 執行 `release_policy.py plan --source-sha`，並要求 bridge
+與合併後的 tree 完全相同；非 promotion 的 main commit 維持原本從 HEAD 計算（#1027）。
 若 plan 為 `no-release`，bridge tree 必須與 deterministic pre-release baseline 完全相同：
 雙親可乾淨合併時使用 delivery source 與 current `main` 的 merge tree；雙親衝突時沿用
 source-preserving bridge 的 delivery source tree。Hosted `verify` 會重建同一 baseline，

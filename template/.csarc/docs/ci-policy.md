@@ -45,6 +45,9 @@ CHANGELOG；Milestone work 使用 beta，promotion、standalone 與 hotfix 使�
 的 `process` job（`record-promotion-evidence` step）在合併後自動把 merge commit 網址回填進
 tracker 的 `Completion evidence` 段落（見 #512）；#400 與 #401 的自動結案契約不再是
 blocked gap。
+Promotion 以 squash 合併後，`main` 追不到 delivery branch 的 beta tag，所以 `release.yml` 在
+stable route 會以唯一 `promote/m*` 來源 PR 的 head 計算版本（`release_policy.py plan
+--source-sha`），並要求它與合併後的 tree 完全相同。
 delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
 
 ## Milestone 掛勾與持續同步（#551／#962）

@@ -1435,9 +1435,24 @@ def release_plan_report(
     *,
     phase: str | None = None,
     checkpoint_role: str = "none",
+    source_sha: str | None = None,
 ) -> dict[str, object]:
-    """Describe the one local release decision without changing the repo."""
-    planned = release_plan(root, sha, phase=phase)
+    """Describe the one local release decision without changing the repo.
+
+    A squash-merged Milestone promotion cannot reach the delivery-branch beta
+    tags from `sha`, so the version is planned from its exact source bridge
+    instead, which must carry the same tree (#1027).
+    """
+    if source_sha:
+        trees = {
+            git_output(["rev-parse", f"{revision}^{{tree}}"], root)
+            for revision in (sha, source_sha)
+        }
+        if len(trees) != 1:
+            raise ValueError(
+                "promotion source tree does not match the merged commit"
+            )
+    planned = release_plan(root, source_sha or sha, phase=phase)
     if planned is None:
         return {
             "status": "no-release",
@@ -2298,6 +2313,10 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument(
         "--checkpoint-role", choices=CHECKPOINT_ROLES, default="none"
     )
+    plan.add_argument(
+        "--source-sha",
+        help="Exact source bridge of a squash-merged Milestone promotion.",
+    )
     candidate = subparsers.add_parser("prepare-candidate")
     candidate.add_argument("--sha", default="HEAD")
     candidate.add_argument("--root", type=Path, default=Path.cwd())
@@ -2421,6 +2440,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
                 args.sha,
                 phase=args.phase,
                 checkpoint_role=args.checkpoint_role,
+                source_sha=args.source_sha,
             )
         except (ValueError, json.JSONDecodeError) as error:
             raise SystemExit(str(error)) from error

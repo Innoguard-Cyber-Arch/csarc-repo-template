@@ -1329,6 +1329,86 @@ def test_deferred_checkpoint_work_merges_without_a_version(
         )
 
 
+def test_squashed_promotion_is_planned_from_its_bridge(
+    tmp_path: Path,
+) -> None:
+    """Issue #1027: main cannot reach delivery betas after a squash merge."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {"release-type": "simple", "packages": {".": {"component": "demo"}}}
+        ),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    main_sha = git(tmp_path, "rev-parse", "HEAD")
+
+    # A Milestone beta whose core is above main's stable, then more work.
+    git(tmp_path, "checkout", "-b", "dev/m1-demo")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: checkpoint work")
+    prepare_release_candidate(tmp_path, "HEAD", phase="beta")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(main): release 0.2.0-beta.1")
+    git(tmp_path, "tag", "v0.2.0-beta.1")
+    (tmp_path / "fix").write_text("fixed\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "fix: deferred work")
+    delivery = git(tmp_path, "rev-parse", "HEAD")
+
+    # Source-preserving bridge [delivery, main] with the stable candidate.
+    bridge = git(
+        tmp_path,
+        "commit-tree",
+        f"{delivery}^{{tree}}",
+        "-p",
+        delivery,
+        "-p",
+        main_sha,
+        "-m",
+        "chore: promote Milestone 1",
+    )
+    git(tmp_path, "checkout", "--detach", bridge)
+    prepared = prepare_release_candidate(tmp_path, "HEAD", phase="stable")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "--amend", "--no-edit")
+    bridge = git(tmp_path, "rev-parse", "HEAD")
+
+    # The promotion lands on main as a single-parent squash commit.
+    squash = git(
+        tmp_path,
+        "commit-tree",
+        f"{bridge}^{{tree}}",
+        "-p",
+        main_sha,
+        "-m",
+        "feat: promote Milestone 1",
+    )
+    git(tmp_path, "checkout", "--detach", squash)
+
+    blind = release_plan_report(tmp_path, squash, phase="stable")
+    assert blind["status"] == "pending"
+    assert blind["tag"] != prepared["tag"]
+
+    report = release_plan_report(
+        tmp_path, squash, phase="stable", source_sha=bridge
+    )
+    assert report["status"] == "candidate"
+    assert report["tag"] == prepared["tag"] == "v0.2.1"
+    assert report["materialized"] is True
+
+    with pytest.raises(ValueError, match="source tree does not match"):
+        release_plan_report(
+            tmp_path, squash, phase="stable", source_sha=delivery
+        )
+
+
 def test_delivery_version_allows_non_release_work_without_materialization(
     tmp_path: Path,
 ) -> None:
