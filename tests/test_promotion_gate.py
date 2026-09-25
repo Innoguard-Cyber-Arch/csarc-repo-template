@@ -2205,6 +2205,61 @@ def test_quota_comment_url_must_reference_the_same_pull_request() -> None:
         )
 
 
+def _fallback_comment(body: str) -> dict[str, object]:
+    return {
+        "html_url": "https://github.com/owner/repo/pull/42#issuecomment-100",
+        "issue_url": "https://api.github.com/repos/owner/repo/issues/42",
+        "body": body,
+        "author_association": "OWNER",
+        "user": {"login": "maintainer", "type": "User"},
+    }
+
+
+def test_quota_comment_url_accepts_a_web_ui_crlf_statement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A statement pasted through the web UI is stored with CRLF (#1000)."""
+    expected = "Actions quota fallback authorization\n\n`{}`\n\nI authorize."
+    stored = expected.replace("\n", "\r\n") + "\r\n"
+    monkeypatch.setitem(
+        MODULE["require_comment_url"].__globals__,
+        "github_get",
+        lambda *_: _fallback_comment(stored),
+    )
+
+    comment = MODULE["require_comment_url"](
+        "https://github.com/owner/repo/pull/42#issuecomment-100",
+        "owner/repo",
+        42,
+        expected,
+        "token",
+    )
+
+    assert comment["body"] == stored
+
+
+def test_quota_comment_url_rejects_a_different_crlf_statement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Line-ending tolerance never accepts a statement bound elsewhere."""
+    expected = 'Actions quota fallback authorization\n\n`{"head":"a"}`'
+    stored = 'Actions quota fallback authorization\r\n\r\n`{"head":"b"}`\r\n'
+    monkeypatch.setitem(
+        MODULE["require_comment_url"].__globals__,
+        "github_get",
+        lambda *_: _fallback_comment(stored),
+    )
+
+    with pytest.raises(RuntimeError, match="exact maintainer statement"):
+        MODULE["require_comment_url"](
+            "https://github.com/owner/repo/pull/42#issuecomment-100",
+            "owner/repo",
+            42,
+            expected,
+            "token",
+        )
+
+
 def test_verify_main_rejects_a_different_tree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
