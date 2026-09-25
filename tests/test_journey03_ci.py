@@ -2,6 +2,7 @@
 
 import os
 import re
+import runpy
 import shlex
 import shutil
 import subprocess
@@ -366,6 +367,36 @@ def test_hosted_setup_skips_unowned_language_toolchains() -> None:
     rust_condition = generated["Set up Rust 1.98.0"]["if"]
     assert "steps.plan.outputs.run_project == 'true'" in rust_condition
     assert "steps.plan.outputs.run_osv" not in rust_condition
+
+
+def test_root_full_tier_prepares_go_without_changing_evidence() -> None:
+    """Bootstrap Go on main before a delivery branch can require it."""
+    steps = ci_steps(
+        (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+    names = [str(step.get("name", "")) for step in steps]
+    go = steps[names.index("Set up Go 1.27.1")]
+    execute = next(
+        index
+        for index, name in enumerate(names)
+        if name.startswith("Execute trusted verification tier=")
+    )
+
+    assert names.index("Set up Go 1.27.1") < execute
+    assert re.fullmatch(r"actions/setup-go@[0-9a-f]{40}", str(go["uses"])), go[
+        "uses"
+    ]
+    assert go["with"] == {"go-version": "1.27.1", "cache": False}
+    assert go["if"] == steps[names.index("Set up Rust 1.98.0")]["if"]
+    assert "steps.effective.outputs.suite == 'full'" in go["if"]
+    assert steps[execute]["env"]["GOTOOLCHAIN"] == "local"
+
+    for path in (
+        "scripts/verification_evidence.py",
+        "template/.csarc/scripts/verification_evidence.py",
+    ):
+        module = runpy.run_path(str(REPO_ROOT / path))
+        assert module["toolchain_token"]("Set up Go 1.27.1") is None
 
 
 def test_reused_release_validation_installs_only_owned_package_tools() -> None:

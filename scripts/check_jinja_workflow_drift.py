@@ -147,6 +147,27 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
     },
 }
 
+# Issue #1036: pull_request_target always runs the workflow YAML from main,
+# so a toolchain a delivery branch will require must be prepared on main
+# before the template can offer that language. Each entry is one exact,
+# contiguous run of stripped root lines with no rendered counterpart; it is
+# consumed at most once per file, so it cannot hide any other drift.
+# Milestone 16 (#944) adds the Go block to the template and removes these.
+ROOT_ONLY_BLOCKS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "ci.yml.jinja": (
+        (
+            "- name: Set up Go 1.27.1",
+            _ROOT_FULL,
+            "uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e"
+            " # v7.0.0",
+            "with:",
+            'go-version: "1.27.1"',
+            "cache: false",
+        ),
+        ("GOTOOLCHAIN: local",),
+    ),
+}
+
 # Issue #742 moved generated-project internals under .csarc/ while the
 # template repository intentionally keeps its own tools and release metadata
 # at the root. Normalize only those two established ownership boundaries;
@@ -305,10 +326,26 @@ def _subtract_allowed_pairs(
     return remaining_removed, remaining_added
 
 
+def _subtract_root_only_blocks(
+    removed: list[str], blocks: list[tuple[str, ...]]
+) -> list[str]:
+    """Remove each still-unused declared root-only block from one hunk."""
+    remaining = list(removed)
+    for block in list(blocks):
+        width = len(block)
+        for start in range(len(remaining) - width + 1):
+            if tuple(remaining[start : start + width]) == block:
+                del remaining[start : start + width]
+                blocks.remove(block)
+                break
+    return remaining
+
+
 def find_drift(
     root_text: str,
     rendered_text: str,
     allowed: set[tuple[str, str]] | None = None,
+    root_only: tuple[tuple[str, ...], ...] = (),
 ) -> list[str]:
     """Return one formatted message per undeclared difference.
 
@@ -322,6 +359,7 @@ def find_drift(
     import difflib
 
     allowed = allowed or set()
+    unused_root_only = list(root_only)
     root_lines = _relevant_lines(root_text)
     rendered_lines = _normalize_template_paths(_relevant_lines(rendered_text))
     matcher = difflib.SequenceMatcher(
@@ -335,6 +373,9 @@ def find_drift(
         added = [line.strip() for line in rendered_lines[j1:j2]]
         remaining_removed, remaining_added = _subtract_allowed_pairs(
             removed, added, allowed
+        )
+        remaining_removed = _subtract_root_only_blocks(
+            remaining_removed, unused_root_only
         )
         if not remaining_removed and not remaining_added:
             continue
@@ -409,6 +450,7 @@ def check(root: Path) -> list[str]:
                 root_workflow.read_text(encoding="utf-8"),
                 rendered_path.read_text(encoding="utf-8"),
                 allowed,
+                ROOT_ONLY_BLOCKS.get(jinja_path.name, ()),
             )
             if diffs:
                 errors.append(
