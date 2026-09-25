@@ -101,6 +101,37 @@ def test_supported_language_modules_have_executable_beta_evidence() -> None:
     assert resolved.returncode == 0, resolved.stdout + resolved.stderr
 
 
+def test_go_profile_contract_uses_native_toolchain_only() -> None:
+    """Pin the reviewed Go contract while the profile is a candidate."""
+    catalog = yaml.safe_load(
+        (ROOT / "profiles/catalog.yaml").read_text(encoding="utf-8")
+    )
+    go = catalog["profiles"]["go"]
+
+    assert go["stage"] == "future"
+    assert go["candidate"].endswith("/issues/941")
+    assert "reason" not in go
+    assert go["latest_reviewed_stable"] == "1.27.1"
+    assert go["minimum"] == "1.27"
+    assert go["go_directive"] == f"{go['minimum']}.0"
+    assert go["latest_reviewed_stable"].startswith(f"{go['minimum']}.")
+    assert go["toolchain_directive"] == "none"
+    assert go["toolchain_download"] == "disabled"
+    assert go["package_manager"] == "go_modules"
+    assert go["lockfile_policy"] == "only_when_dependencies_exist"
+    assert go["tools"] == {
+        "format": "gofmt",
+        "lint": "go_vet",
+        "test": "go_test",
+        "build": "go_build",
+    }
+    assert go["release_type"] == "simple"
+    assert go["version_in_go_mod"] is False
+    assert go["distribution"] == "github_release_source_archive"
+    modules = catalog["compositions"]["language_modules"]
+    assert "go" not in modules["selectable_profiles"]
+
+
 def test_promotion_evidence_resolver_rejects_stale_pytest_nodes(
     tmp_path: Path,
 ) -> None:

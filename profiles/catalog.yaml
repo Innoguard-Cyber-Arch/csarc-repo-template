@@ -139,7 +139,32 @@ profiles:
 
   go:
     stage: future
-    reason: Add only after a real consuming repository defines its stable toolchain and compatibility policy, then passes create and update tests.
+    candidate: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/941
+    latest_reviewed_stable: "1.27.1"
+    stable_channel: go_stable
+    stable_release_source: https://go.dev/dl/?mode=json
+    stable_release_observation_days: 14
+    minimum: "1.27"
+    go_directive: "1.27.0"
+    toolchain_directive: none
+    toolchain_download: disabled
+    package_manager: go_modules
+    configuration:
+      - go.mod
+    lockfile: go.sum
+    lockfile_policy: only_when_dependencies_exist
+    source_directories:
+      - cmd/<project_slug>
+      - internal
+    verification: ./scripts/verify
+    tools:
+      format: gofmt
+      lint: go_vet
+      test: go_test
+      build: go_build
+    release_type: simple
+    version_in_go_mod: false
+    distribution: github_release_source_archive
 
   rust:
     stage: beta
