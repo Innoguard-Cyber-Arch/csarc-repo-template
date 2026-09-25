@@ -177,6 +177,40 @@ def test_pr_policy_writes_run_only_from_the_trusted_revision() -> None:
     assert source.count("--publish-only") == 2
 
 
+def test_pr_review_supersession_never_cancels_a_publication() -> None:
+    """Issue #1015: a newer event must not leave a cancelled head result.
+
+    An authorization comment arriving while the `ready_for_review` run was
+    publishing cancelled that run; the cancelled `publish review decision`
+    check stayed on the pull request head because the superseding
+    `issue_comment` run's checks attach to the default branch instead.
+    Publishing runs must queue instead of cancelling each other, and runs
+    that will not publish must never share (and displace) that queue.
+    """
+
+    def compact(text: str) -> str:
+        return "".join(text.split())
+
+    for path in (
+        REPO_ROOT / ".github/workflows/pr-review.yml",
+        REPO_ROOT / "template/.github/workflows/pr-review.yml",
+    ):
+        workflow = load_yaml(path)
+        concurrency = workflow["concurrency"]
+        assert concurrency["cancel-in-progress"] is False
+        group = compact(concurrency["group"])
+        publishes = compact(workflow["jobs"]["publish"]["if"])
+        assert publishes.startswith("${{") and publishes.endswith("}}")
+        predicate = publishes[3:-2]
+        # Publishing runs share one per-pull-request queue.
+        assert (
+            f"({predicate})&&format('publish-{{0}}',"
+            "github.event.pull_request.number||github.event.issue.number)"
+        ) in group
+        # Everything else is run-scoped, so it cannot replace a queued run.
+        assert group.endswith("||format('run-{0}',github.run_id)}}")
+
+
 def test_pr_review_skips_draft_and_conversion_churn() -> None:
     """Defer draft review churn while retaining merge authorization."""
     root_path = REPO_ROOT / ".github/workflows/pr-review.yml"
