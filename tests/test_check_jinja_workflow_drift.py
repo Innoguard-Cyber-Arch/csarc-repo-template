@@ -149,6 +149,21 @@ def test_adjacent_unrelated_change_does_not_break_a_declared_pair() -> None:
     assert "verify-script-name substitution declared below" in errors[0]
 
 
+def test_root_only_block_is_consumed_once_and_exactly() -> None:
+    """A declared root-only bootstrap block cannot hide other drift."""
+    block = ("- name: bootstrap", "run: prepare")
+    rendered = "steps:\n  - name: shared\n"
+    root = "steps:\n  - name: shared\n  - name: bootstrap\n    run: prepare\n"
+    twice = root + "  - name: bootstrap\n    run: prepare\n"
+    changed = "steps:\n  - name: shared\n  - name: bootstrap\n    run: other\n"
+
+    find_drift = check_jinja_workflow_drift.find_drift
+    assert find_drift(root, rendered, root_only=(block,)) == []
+    assert len(find_drift(twice, rendered, root_only=(block,))) == 1
+    assert len(find_drift(changed, rendered, root_only=(block,))) == 1
+    assert len(find_drift(root, rendered)) == 1
+
+
 def test_diagnostic_output_is_already_stripped() -> None:
     """The printed lines must be pasteable straight into the allowlist.
 
