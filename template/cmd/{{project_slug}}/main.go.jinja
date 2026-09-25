@@ -1,0 +1,12 @@
+// Command {{ project_slug }} runs {{ project_name }}.
+package main
+
+import (
+	"fmt"
+
+	"{{ repository_url | replace("https://", "") }}/internal/{{ package_name }}"
+)
+
+func main() {
+	fmt.Println({{ package_name }}.Name())
+}

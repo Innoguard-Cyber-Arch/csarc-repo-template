@@ -39,7 +39,7 @@ fit = "符合畫面"
       <div class="language-contract" aria-label="程式語言與公版設定">
         <p class="language-card"><strong>建立／導入時選擇程式語言</strong>Python、Rust、TypeScript 需要哪些就勾哪些；都不選時只準備共通工作流程。</p>
         <p class="language-card shared"><strong>一份公版設定</strong>模板把語言、分支與選用能力記在 <code>.csarc/config.yml</code>；更新時由公版維護，不必分散找設定。</p>
-        <p class="language-card future"><strong>目前支援版本</strong>Python 3.14、Rust 1.98、TypeScript 使用 Node 24 長期支援版。Go 尚未支援，因此不產生空設定。</p>
+        <p class="language-card future"><strong>目前支援版本</strong>Python 3.14、Rust 1.98、TypeScript 使用 Node 24 長期支援版。Go 是 Milestone 16 的候選模組：選了才產生 Go 檔案與驗證，hosted CI 與供應鏈整合完成前仍屬 future，不宣稱正式支援。</p>
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="公版提供的能力">

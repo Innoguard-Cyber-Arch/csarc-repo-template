@@ -44,6 +44,7 @@ ROOT_TOOLCHAIN = {
     "pnpm-11.22.0",
     "node-24",
     "rust-1.98.0",
+    "go-1.27.1",
 }
 
 
@@ -162,6 +163,7 @@ def evidence(
         "Set up pnpm 11.22.0",
         "Set up Node.js 24",
         "Set up Rust 1.98.0",
+        "Set up Go 1.27.1",
         evidence_step,
     ]
     job = {
@@ -223,6 +225,7 @@ def test_valid_trusted_execution_binds_all_claims(
         "pnpm-11.22.0",
         "node-24",
         "rust-1.98.0",
+        "go-1.27.1",
     ]
 
 

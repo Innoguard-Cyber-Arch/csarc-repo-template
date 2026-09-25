@@ -27,6 +27,12 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 RUN cargo build --release --locked
+{% endif -%}
+{% if 'go' in languages %}
+FROM golang:1.27.1 AS go-build
+WORKDIR /app
+COPY . .
+RUN mkdir -p /out && CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=readonly go build -o /out/ ./...
 {% endif %}
 {% if 'python' in languages -%}
 FROM python:{{ python_target }}-slim AS runtime
@@ -42,9 +48,17 @@ COPY --from=typescript-build /app /app
 FROM debian:trixie-slim AS runtime
 WORKDIR /app
 COPY --from=rust-build /app/target/release/{{ project_slug }} /usr/local/bin/{{ project_slug }}
+{% elif 'go' in languages -%}
+FROM debian:trixie-slim AS runtime
+WORKDIR /app
+COPY --from=go-build /out/ /usr/local/bin/
 {% else -%}
 FROM debian:trixie-slim AS runtime
 WORKDIR /app
 COPY . .
 {% endif -%}
+{% if languages == ['go'] -%}
+CMD ["{{ project_slug }}"]
+{% else -%}
 CMD {{ project_run_command }}
+{% endif -%}

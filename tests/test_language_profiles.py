@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from copier import run_copy
+from copier import run_copy, run_update
 
 from csarc_cli import cli
 
@@ -36,7 +36,12 @@ def test_languages_are_independent_modules() -> None:
     question = config["languages"]
 
     assert question["multiselect"] is True
-    assert set(question["choices"].values()) == {"python", "typescript", "rust"}
+    assert list(question["choices"].values()) == [
+        "go",
+        "python",
+        "rust",
+        "typescript",
+    ]
     assert config["language"]["when"] is False
 
 
@@ -129,7 +134,23 @@ def test_go_profile_contract_uses_native_toolchain_only() -> None:
     assert go["version_in_go_mod"] is False
     assert go["distribution"] == "github_release_source_archive"
     modules = catalog["compositions"]["language_modules"]
-    assert "go" not in modules["selectable_profiles"]
+    assert "go" in modules["selectable_profiles"]
+
+
+def test_selectable_languages_are_beta_or_milestone_candidates() -> None:
+    """Offer a future profile only while its Milestone delivers it."""
+    catalog = yaml.safe_load(
+        (ROOT / "profiles/catalog.yaml").read_text(encoding="utf-8")
+    )
+    config = yaml.safe_load((ROOT / "copier.yml").read_text(encoding="utf-8"))
+    selectable = catalog["compositions"]["language_modules"][
+        "selectable_profiles"
+    ]
+
+    assert selectable == list(config["languages"]["choices"].values())
+    for language in selectable:
+        profile = catalog["profiles"][language]
+        assert profile["stage"] == "beta" or "candidate" in profile
 
 
 def test_promotion_evidence_resolver_rejects_stale_pytest_nodes(
@@ -163,6 +184,14 @@ def test_detect_languages_composes_selected_modules(
 
     (tmp_path / "package.json").touch()
     assert cli.detect_languages(tmp_path) == ["python", "rust", "typescript"]
+
+    (tmp_path / "go.mod").touch()
+    assert cli.detect_languages(tmp_path) == [
+        "go",
+        "python",
+        "rust",
+        "typescript",
+    ]
 
 
 def test_update_language_selection_stays_a_list() -> None:
@@ -235,8 +264,9 @@ def test_generated_detector_uses_copier_language_order(tmp_path: Path) -> None:
     )
     detector.chmod(detector.stat().st_mode | 0o100)
     (config_dir / "config.yml").write_text(
-        "languages:\n- rust\n- typescript\n", encoding="utf-8"
+        "languages:\n- go\n- rust\n- typescript\n", encoding="utf-8"
     )
+    (tmp_path / "go.mod").touch()
     (tmp_path / "Cargo.toml").touch()
     (tmp_path / "package.json").touch()
 
@@ -244,7 +274,7 @@ def test_generated_detector_uses_copier_language_order(tmp_path: Path) -> None:
         [detector], cwd=tmp_path, check=True, capture_output=True, text=True
     ).stdout.strip()
 
-    assert detected == "language modules: rust,typescript"
+    assert detected == "language modules: go,rust,typescript"
 
 
 @pytest.mark.large
@@ -253,7 +283,7 @@ def test_representative_generated_project_runs_full_verifier(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Run one mixed generated project through the complete verifier once."""
-    required_tools = ("uv", "node", "pnpm", "cargo", "rustc")
+    required_tools = ("uv", "node", "pnpm", "cargo", "rustc", "go")
     missing = [tool for tool in required_tools if shutil.which(tool) is None]
     if missing:
         pytest.skip(
@@ -289,7 +319,7 @@ def test_representative_generated_project_runs_full_verifier(
         revision,
         "--allow-unreleased",
         "--data",
-        "languages=python,typescript,rust",
+        "languages=go,python,typescript,rust",
         "--data",
         "project_name=Representative Fixture",
         "--data",
@@ -322,7 +352,7 @@ def test_representative_generated_project_runs_full_verifier(
     config = yaml.safe_load(
         (project / ".csarc/config.yml").read_text(encoding="utf-8")
     )
-    assert config["languages"] == ["python", "rust", "typescript"]
+    assert config["languages"] == ["go", "python", "rust", "typescript"]
     assert not (project / ".copier-answers.yml").exists()
     assert not (project / ".csarc/profile.json").exists()
     assert not (project / ".csarc/gitleaks.toml").exists()
@@ -336,7 +366,12 @@ def test_representative_generated_project_runs_full_verifier(
     assert "trap 'rm -f" in secret_adapter
     assert all(
         (project / manifest).is_file()
-        for manifest in ("pyproject.toml", "package.json", "Cargo.toml")
+        for manifest in (
+            "go.mod",
+            "pyproject.toml",
+            "package.json",
+            "Cargo.toml",
+        )
     )
     assert {path.name for path in project.iterdir()} == {
         ".coverage",
@@ -358,9 +393,12 @@ def test_representative_generated_project_runs_full_verifier(
         "README.md",
         "SECURITY.md",
         "biome.json",
+        "cmd",
         "coverage",
         "dist",
         "docs",
+        "go.mod",
+        "internal",
         "node_modules",
         "package.json",
         "pnpm-lock.yaml",
@@ -392,6 +430,144 @@ def test_representative_generated_project_runs_full_verifier(
     subprocess.run(  # noqa: S603
         [project / ".csarc/scripts/scan-secrets"], cwd=project, check=True
     )
+
+
+def _git_template_source(tmp_path: Path) -> Path:
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    for command in (
+        ["git", "init", "-b", "main"],
+        ["git", "config", "user.name", "Go Test"],
+        ["git", "config", "user.email", "go@example.invalid"],
+        ["git", "add", "."],
+        ["git", "commit", "-m", "test: template"],
+    ):
+        cli.run(command, cwd=source, capture=True)
+    return source
+
+
+GO_DATA = {
+    "project_name": "Go Fixture",
+    "project_slug": "go-fixture",
+    "project_description": "Exercises the Go module.",
+    "repository_url": "https://github.com/example/go-fixture",
+    "security_reporting_channel": "Use the private security contact.",
+}
+
+
+@pytest.mark.large
+def test_go_selection_controls_generated_go_files(tmp_path: Path) -> None:
+    """Create Go files only for Go and keep mixed run commands composable."""
+    source = _git_template_source(tmp_path)
+    rendered: dict[str, Path] = {}
+    for name, languages in (
+        ("go-only", ["go"]),
+        ("go-python", ["go", "python"]),
+        ("no-go", ["python"]),
+    ):
+        target = tmp_path / name
+        run_copy(
+            str(source),
+            target,
+            data={**GO_DATA, "languages": languages},
+            defaults=True,
+            unsafe=True,
+            skip_tasks=True,
+            vcs_ref="HEAD",
+        )
+        rendered[name] = target
+
+    go_only = rendered["go-only"]
+    assert (go_only / "go.mod").read_text(encoding="utf-8") == (
+        "module github.com/example/go-fixture\n\ngo 1.27.0\n"
+    )
+    assert (go_only / "cmd/go-fixture/main.go").is_file()
+    assert (go_only / "internal/go_fixture/go_fixture_test.go").is_file()
+    assert not (go_only / "go.sum").exists()
+    assert "toolchain" not in (go_only / "go.mod").read_text(encoding="utf-8")
+    go_only_answers = yaml.safe_load(
+        (go_only / ".csarc/config.yml").read_text(encoding="utf-8")
+    )
+    assert go_only_answers["project_run_command"] == "go build ./..."
+    mixed_answers = yaml.safe_load(
+        (rendered["go-python"] / ".csarc/config.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert mixed_answers["project_run_command"] == (
+        "uv run python -c 'import go_fixture' && go build ./..."
+    )
+    no_go = rendered["no-go"]
+    assert not any(
+        (no_go / path).exists()
+        for path in ("go.mod", "go.sum", "cmd", "internal")
+    )
+    assert "verify_go=false" in (no_go / ".csarc/scripts/verify").read_text(
+        encoding="utf-8"
+    )
+
+
+@pytest.mark.large
+def test_existing_go_adoption_and_update_preserve_product_module(
+    tmp_path: Path,
+) -> None:
+    """Keep product go.mod, source, and no go.sum through adopt and update."""
+    source = _git_template_source(tmp_path)
+    project = tmp_path / "existing-go"
+    (project / "app").mkdir(parents=True)
+    product_mod = "module example.com/product\n\ngo 1.27.0\n"
+    product_main = 'package main\n\nfunc main() { println("product") }\n'
+    (project / "go.mod").write_text(product_mod, encoding="utf-8")
+    (project / "app/main.go").write_text(product_main, encoding="utf-8")
+    for command in (
+        ["git", "init", "-b", "main"],
+        ["git", "config", "user.name", "Go Test"],
+        ["git", "config", "user.email", "go@example.invalid"],
+        ["git", "add", "."],
+        ["git", "commit", "-m", "test: product"],
+    ):
+        cli.run(command, cwd=project, capture=True)
+    assert cli.detect_languages(project) == ["go"]
+
+    run_copy(
+        str(source),
+        project,
+        data={**GO_DATA, "languages": ["go"], "project_mode": "existing"},
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+        overwrite=True,
+        vcs_ref="HEAD",
+    )
+
+    assert (project / "go.mod").read_text(encoding="utf-8") == product_mod
+    assert (project / "app/main.go").read_text(encoding="utf-8") == product_main
+    assert not (project / "go.sum").exists()
+    assert not (project / "cmd").exists()
+    assert not (project / "internal").exists()
+
+    cli.run(["git", "add", "."], cwd=project, capture=True)
+    cli.run(["git", "commit", "-m", "test: adopt"], cwd=project, capture=True)
+    notice = source / "template/.csarc/go-update-probe.txt"
+    notice.write_text("template-owned\n", encoding="utf-8")
+    cli.run(["git", "add", "."], cwd=source, capture=True)
+    cli.run(["git", "commit", "-m", "test: update"], cwd=source, capture=True)
+    run_update(
+        project,
+        answers_file=".csarc/config.yml",
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+        overwrite=True,
+        vcs_ref="HEAD",
+    )
+
+    assert (project / ".csarc/go-update-probe.txt").is_file()
+    assert (project / "go.mod").read_text(encoding="utf-8") == product_mod
+    assert (project / "app/main.go").read_text(encoding="utf-8") == product_main
+    assert not (project / "go.sum").exists()
 
 
 @pytest.mark.large

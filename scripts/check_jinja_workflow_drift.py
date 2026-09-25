@@ -166,6 +166,19 @@ ROOT_ONLY_BLOCKS: dict[str, tuple[tuple[str, ...], ...]] = {
         ),
         ("GOTOOLCHAIN: local",),
     ),
+    "release.yml.jinja": (
+        (
+            "- name: Set up Go 1.27.1",
+            "uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e"
+            " # v7.0.0",
+            'if: ${{ !contains(fromJSON(\'["no-release","deferred"]\'),'
+            " steps.plan.outputs.status) }}",
+            "with:",
+            'go-version: "1.27.1"',
+            "cache: false",
+        ),
+        ("GOTOOLCHAIN: local",),
+    ),
 }
 
 # Issue #742 moved generated-project internals under .csarc/ while the

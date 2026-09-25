@@ -2413,7 +2413,7 @@ def require_template_toolchain(
     expected = {"python-3.14", "uv-0.12.15"}
     # A clean sync cites one full source execution and inherits its toolchain.
     if evidence["tier"] == "full" or evidence.get("sync_main_sha"):
-        expected.update({"pnpm-11.22.0", "node-24", "rust-1.98.0"})
+        expected.update({"pnpm-11.22.0", "node-24", "rust-1.98.0", "go-1.27.1"})
     toolchain = evidence.get("toolchain")
     if not isinstance(toolchain, list) or set(toolchain) != expected:
         raise RuntimeError("Trusted verification toolchain evidence is invalid")

@@ -1093,6 +1093,7 @@ def slugify(value: str) -> str:
 def detect_languages(target: Path) -> list[str]:
     """Return enabled language modules in their canonical order."""
     manifests = (
+        ("go", "go.mod"),
         ("python", "pyproject.toml"),
         ("rust", "Cargo.toml"),
         ("typescript", "package.json"),
@@ -5097,7 +5098,7 @@ def parse_languages(value: str) -> list[str]:
         isinstance(item, str) for item in parsed
     ):
         raise CliError("languages must be a JSON list or comma-separated list.")
-    unknown = sorted(set(parsed) - {"python", "typescript", "rust"})
+    unknown = sorted(set(parsed) - {"go", "python", "typescript", "rust"})
     if unknown:
         raise CliError(f"Unsupported language modules: {', '.join(unknown)}")
     return list(dict.fromkeys(parsed))
