@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.28.6] - 2026-09-25
+
+### Bug Fixes
+
+* fix(ci): queue superseded review publications instead of cancelling (94d72cc)
+
 ## [0.28.5] - 2026-09-25
 
 ### Bug Fixes
