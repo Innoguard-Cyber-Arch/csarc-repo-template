@@ -138,8 +138,7 @@ profiles:
       test_and_coverage: vitest
 
   go:
-    stage: future
-    candidate: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/941
+    stage: beta
     latest_reviewed_stable: "1.27.1"
     stable_channel: go_stable
     stable_release_source: https://go.dev/dl/?mode=json
@@ -256,6 +255,15 @@ promotion_evidence:
     method: generated_native_verification
     evidence:
       - tests/test_language_profiles.py::test_representative_generated_project_runs_full_verifier
+      - scripts/verify-template.sh
+  go:
+    status: satisfied
+    method: generated_native_verification
+    evidence:
+      - tests/test_language_profiles.py::test_representative_generated_project_runs_full_verifier
+      - tests/test_language_profiles.py::test_go_selection_controls_generated_go_files
+      - tests/test_language_profiles.py::test_existing_go_adoption_and_update_preserve_product_module
+      - tests/test_journey03_ci.py::test_generated_delivery_prepares_go_only_when_selected
       - scripts/verify-template.sh
   rust:
     status: satisfied

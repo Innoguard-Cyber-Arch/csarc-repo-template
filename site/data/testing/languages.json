@@ -18,11 +18,11 @@
       "purpose": {
         "zh-tw": {
           "title": "設定與實際檔案一致",
-          "description": "公版設定列出的語言必須和 repo 內的 Python、Rust、TypeScript 專案檔一致。"
+          "description": "公版設定列出的語言必須和 repo 內的 Python、Rust、TypeScript、Go 專案檔一致。"
         },
         "en": {
           "title": "Configuration matches repository files",
-          "description": "Languages listed by the template configuration must match the Python, Rust, and TypeScript project files in the repository."
+          "description": "Languages listed by the template configuration must match the Python, Rust, TypeScript, and Go project files in the repository."
         }
       },
       "shared": {
@@ -76,11 +76,11 @@
       "purpose": {
         "zh-tw": {
           "title": "各語言使用自己的檢查",
-          "description": "Python、Rust、TypeScript 各自執行格式、靜態檢查、測試與必要的建置；共通規則只跑一次。"
+          "description": "Python、Rust、TypeScript、Go 各自執行格式、靜態檢查、測試與必要的建置；共通規則只跑一次。"
         },
         "en": {
           "title": "Each language runs its native checks",
-          "description": "Python, Rust, and TypeScript each run their own formatting, static checks, tests, and required builds while shared rules run once."
+          "description": "Python, Rust, TypeScript, and Go each run their own formatting, static checks, tests, and required builds while shared rules run once."
         }
       },
       "shared": {

@@ -2,12 +2,12 @@
 
 [English](README.en.md)
 
-Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。
+Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript、Go。
 
 | 項目 | 目前狀態 |
 | --- | --- |
 | 公版版本 | v0.29.0-beta.1<!-- x-release-please-version --> |
-| 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
+| 支援語言 | Python、Rust、TypeScript、Go（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
 
@@ -16,7 +16,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 可以直接選擇 | 目前提供的正式能力 |
 | --- | --- |
-| 程式語言 | Python、Rust、TypeScript 可獨立複選；都不選時只使用共通工作流程 |
+| 程式語言 | Python、Rust、TypeScript、Go 可獨立複選；都不選時只使用共通工作流程 |
 | 分支做法 | 每個交付批次有自己的開發分支、所有修改直接進 `main`，或先集中到 `dev` |
 | 公版設定 | 建立／導入時把選項寫入 `.csarc/config.yml`；之後由公版更新，不必到不同檔案重複設定 |
 | 共用能力 | 工作單（Issue）與變更提案（PR）表單、AI 工作規範、自動驗證、依賴安全、版本記錄與公版更新 |
@@ -42,11 +42,11 @@ README 是 [repo-site](docs/index.html) 的濃縮入口；兩者維持相同的�
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證。`documentation_mode` 可選完整文件模板加內容、只管理內容或完全關閉；`primary_language` 與 `i18n` 決定英文／繁中入口，`features` 只保留 Docker 等非文件能力。同 PR 版本物化、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會分開回報帳戶方案與實際 API 能力。
+目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript、Go 語言模組，以及 Issue／spec、PR checks 與驗證。`documentation_mode` 可選完整文件模板加內容、只管理內容或完全關閉；`primary_language` 與 `i18n` 決定英文／繁中入口，`features` 只保留 Docker 等非文件能力。同 PR 版本物化、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會分開回報帳戶方案與實際 API 能力。
 
 ## 快速開始
 
-共同需求是 Git、GitHub CLI 2.93.0 以上與 uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11；三個語言模組都不選（`language: ci`）則不需要額外語言工具鏈。CSARC 交付的是 CI/CD 範本與治理流程，Python 只用來執行 init／adopt／update 的薄 CLI；`uvx --python 3.14` 會按次取得隔離 runtime，不要求使用者預先安裝或維護全域 Python。Windows 請在 WSL2 執行。逐項 macOS／Windows 安裝指令，以及「使用者安裝專案」與「模板貢獻者」兩種情境的完整工具清單，見下方[前置需求](#前置需求)。
+共同需求是 Git、GitHub CLI 2.93.0 以上與 uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11，選 Go 另需固定版本的 Go 工具鏈；四個語言模組都不選（`language: ci`）則不需要額外語言工具鏈。CSARC 交付的是 CI/CD 範本與治理流程，Python 只用來執行 init／adopt／update 的薄 CLI；`uvx --python 3.14` 會按次取得隔離 runtime，不要求使用者預先安裝或維護全域 Python。Windows 請在 WSL2 執行。逐項 macOS／Windows 安裝指令，以及「使用者安裝專案」與「模板貢獻者」兩種情境的完整工具清單，見下方[前置需求](#前置需求)。
 
 `scripts/resolve-cache-root` 預設就會指向使用者層級、跨 worktree 共用的快取位置（macOS 為 `~/Library/Caches/csarc`；Linux／WSL2 依 XDG Base Directory 慣例，優先讀 `$XDG_CACHE_HOME`，沒設定則用 `~/.cache/csarc`），讓 `uv`、`pnpm`，以及透過 `scripts/resolve-cache-root` 取得快取位置的固定版本工具安裝腳本（`scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner`／`install-hugo`）不需要額外設定，就能跨 worktree、跨 `csarc adopt --finalize` 產生的臨時候選目錄共用已驗證的下載內容。這個共用位置找不到或無法寫入時會 fail-safe 退回 repo-local 的 `.cache/`；這純粹是本機效能最佳化，不論退回與否，驗證正確性與結果都完全不受影響，只是不共用快取時需要各自重新下載，速度較慢。想改用團隊約定的其他持久路徑，仍可在自己 shell 的 profile 檔（例如 `~/.zshrc`、`~/.bashrc`、`~/.config/fish/config.fish`，依實際使用的 shell 而定）加入 `export CSARC_CACHE_ROOT="<路徑>"` 明確覆寫。
 
@@ -60,7 +60,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 `<approved-full-commit-sha>` 由核准 GitHub Release 的 pinned prompt 提供，不可直接輸入預留字樣。`init`／`adopt` 會要求 `project_description`、`project_run_command` 與 `security_reporting_channel`；前兩項可接受顯示的專案實值預設，安全通報管道預設使用該 repository 的公開 GitHub Issues。公開 Issue 不得張貼 secrets、credentials、personal data 或其他敏感內容，也不得猜測 email 或回應 SLA。GitHub origin 可辨識時，CLI 會用實際 repository URL 產生 badge、clone 指令與 package metadata。`project_run_command` 只是產品啟動方式，不會被當成驗證指令；既有 repo 可用 `project_verification_hook=scripts/verify-skills` 指定一個 repository-relative executable，未指定時才相容沿用 `scripts/verify-product`。
 
-建立或導入時選擇 Python、Rust、TypeScript 的任意組合；結果與分支、驗證、發布等公版選項都保存在 `.csarc/config.yml`。這是每個 repo 唯一的公版設定來源；生成 repo 也在同一檔案保存 Copier 的來源與版本。請用 `csarc update --data languages=python,rust` 等更新命令調整生成 repo，不要再建立另一份 profile 設定。
+建立或導入時選擇 Python、Rust、TypeScript、Go 的任意組合；結果與分支、驗證、發布等公版選項都保存在 `.csarc/config.yml`。這是每個 repo 唯一的公版設定來源；生成 repo 也在同一檔案保存 Copier 的來源與版本。請用 `csarc update --data languages=python,rust` 等更新命令調整生成 repo，不要再建立另一份 profile 設定。
 
 CLI 固定驗證 canonical repository numeric ID、immutable stable Release、release attestation、tag 指向與 commit signature，再把 GitHub Release 解析成完整 commit SHA 並顯示計畫；任何不一致都會在 Copier 寫檔前停止。互動模式等使用者確認，CI 或 agent 則要同時明確給 `--yes --non-interactive`。範本來源目前是 public repo，但 CLI 仍透過 GitHub API 驗證 Release 身分，因此執行前需安裝 GitHub CLI 2.93.0 以上並完成 `gh auth login`；root CLI 不發布到 PyPI。
 
@@ -80,14 +80,15 @@ CSARC 有兩種完全不同的情境，各自需要的工具不同：**使用 cs
 | Node.js 24+ | 只有選 `typescript` 語言模組時需要 | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` | `curl -fsSL https://deb.nodesource.com/setup_24.x \| sudo -E bash -` 後 `sudo apt install -y nodejs` |
 | pnpm 11 | 只有選 `typescript` 語言模組時需要 | `brew install pnpm` | `winget install -e --id pnpm.pnpm` | `sudo npm install -g pnpm@11` |
 | rustup／Cargo | 只有選 `rust` 語言模組時需要；**Linux／WSL2 上另需 `build-essential`（系統 C linker）** | `brew install rustup`（keg-only；該 formula 已不再提供 `rustup-init`，只需把 `$(brew --prefix rustup)/bin` 加入 `PATH` 即完成安裝）；或官方腳本 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` | `sudo apt install -y build-essential` 後 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Go 1.27.1 | 只有選 `go` 語言模組時需要；生成專案的驗證器要求精確的 go1.27.1 | 從 [Go 官方下載頁](https://go.dev/dl/) 安裝 `go1.27.1` 的 macOS `.pkg`；不要用 `brew install go`，它會安裝最新版而非固定版本 | 請在 WSL2 內使用「Linux／WSL2」欄位 | 依 [Go 官方安裝說明](https://go.dev/doc/install)：`curl -LO https://go.dev/dl/go1.27.1.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.27.1.linux-amd64.tar.gz`，再把 `/usr/local/go/bin` 加入 `PATH` |
 
-Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表「Windows（原生，winget／Chocolatey）」欄位供在原生 Windows 單獨安裝個別工具時使用（例如先裝 `git`／`gh` 再進 WSL2），winget 裝的 rustup 進入 WSL2 的 Ubuntu shell 後用不上——WSL2 內請改用「Linux／WSL2（Ubuntu，apt）」欄位。WSL2 內的 `gh` 必須從 GitHub 官方 apt repository 安裝，並以 `gh --version` 確認至少為 2.93.0；Ubuntu 內建套件版本過舊，不支援必要的 Release 驗證。選 `rust` 時，Linux／WSL2 上除了 `rustup` 還需要 `build-essential`（系統 C linker）；即使是純 Rust、不呼叫 C 函式庫的專案也一樣，否則編譯階段的 `cargo test` 會報 `error: linker 'cc' not found`。macOS／WSL2 內的 Ubuntu 完整導引腳本見 [repo-site 附錄](docs/index.html)。
+Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表「Windows（原生，winget／Chocolatey）」欄位供在原生 Windows 單獨安裝個別工具時使用（例如先裝 `git`／`gh` 再進 WSL2），winget 裝的 rustup 進入 WSL2 的 Ubuntu shell 後用不上——WSL2 內請改用「Linux／WSL2（Ubuntu，apt）」欄位。Go 只在 WSL2 內安裝，不提供原生 Windows 路徑。WSL2 內的 `gh` 必須從 GitHub 官方 apt repository 安裝，並以 `gh --version` 確認至少為 2.93.0；Ubuntu 內建套件版本過舊，不支援必要的 Release 驗證。選 `rust` 時，Linux／WSL2 上除了 `rustup` 還需要 `build-essential`（系統 C linker）；即使是純 Rust、不呼叫 C 函式庫的專案也一樣，否則編譯階段的 `cargo test` 會報 `error: linker 'cc' not found`。macOS／WSL2 內的 Ubuntu 完整導引腳本見 [repo-site 附錄](docs/index.html)。
 
 ### 開發／貢獻 `csarc-repo-template` 本身
 
 除了上表的 `uv`、`gh` 外，另需要：
 
-- **pnpm 11、rustup／Cargo**：完整跑 `./scripts/verify-template.sh` 會依序產生並驗證 Python、TypeScript、Rust 三種語言模組各自的原生驗證器（見 `tests/test_language_profiles.py`），三者都要具備；只跑日常 PR gate `./scripts/verify-fast` 通常不需要 rustup／Cargo，除非變更觸發模板 smoke test。安裝指令同上表。
+- **pnpm 11、rustup／Cargo、Go 1.27.1**：完整跑 `./scripts/verify-template.sh` 會依序產生並驗證 Python、TypeScript、Rust、Go 四種語言模組各自的原生驗證器（見 `tests/test_language_profiles.py`），代表性組合測試需要四者都具備；只跑日常 PR gate `./scripts/verify-fast` 通常不需要 rustup／Cargo 或 Go，除非變更觸發模板 smoke test。安裝指令同上表。
 - **repo-site 建置不需要額外工具。** `scripts/build-repo-site` 背後的 `scripts/build_repo_site.py` 是純 stdlib Python（見該檔案開頭註解），不再依賴 Hugo 或任何外部渲染器；只要有上表的 `uv`（或系統 `python3`）即可重建 `docs/index.html`／`docs/index.en.html`。
 - **gitleaks、actionlint、ShellCheck、OSV-Scanner：不需要手動安裝。** `scripts/verify-template.sh`／`scripts/verify-fast` 呼叫的 `scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner` 會在 macOS／Linux（含 WSL2）上自動下載、驗證 checksum 並快取固定版本，第一次執行只需要網路存取。以下指令僅供想在編輯器或本機獨立使用這些工具時參考：
 
@@ -109,9 +110,10 @@ Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表「W
 - 不選 `python`：不產生 `pyproject.toml`、`.python-version`、`src/<package_name>/`、`tests/`，不需要 Python 專案工具鏈。
 - 不選 `typescript`：不產生 `package.json`、`.node-version`、`pnpm-workspace.yaml`、`biome.json`、`tsconfig*.json`、`vitest.config.ts`、`typescript/`，不需要 Node／pnpm。
 - 不選 `rust`：不產生 `Cargo.toml`、`rust-toolchain.toml`、`src/lib.rs`，不需要 rustup／Cargo。
-- 三者都不選（即 `ci`）：生成專案的 `./scripts/verify` 只執行共通檢查（secret 掃描、依賴檢查、workflow lint、policy JSON 驗證、spec 驗證等），全程只用 `uv run --no-project python` 執行既有 Python 工具腳本；不需要任何 Python／Node／Rust 專案套件工具鏈，但仍需要 `uv` 本身，因為這些檢查腳本用 Python 撰寫。
+- 不選 `go`：不產生 `go.mod`、`cmd/`、`internal/`，不需要 Go 工具鏈。
+- 四者都不選（即 `ci`）：生成專案的 `./scripts/verify` 只執行共通檢查（secret 掃描、依賴檢查、workflow lint、policy JSON 驗證、spec 驗證等），全程只用 `uv run --no-project python` 執行既有 Python 工具腳本；不需要任何 Python／Node／Rust／Go 專案套件工具鏈，但仍需要 `uv` 本身，因為這些檢查腳本用 Python 撰寫。
 
-這與「開發本模板 repo 自己需要哪些工具」是兩件事：使用者安裝並使用 csarc 產生的專案時可以只選 `ci`，前置需求極簡（見上表）；但貢獻本模板 repo 時，因為 `tests/test_language_profiles.py` 要對 python／typescript／rust 三種 profile 各自產生專案並跑其原生驗證器，完整 `./scripts/verify-template.sh` 仍需要三種語言工具鏈都具備。
+這與「開發本模板 repo 自己需要哪些工具」是兩件事：使用者安裝並使用 csarc 產生的專案時可以只選 `ci`，前置需求極簡（見上表）；但貢獻本模板 repo 時，因為 `tests/test_language_profiles.py` 要對 python／typescript／rust／go 四種 profile 各自產生專案並跑其原生驗證器，完整 `./scripts/verify-template.sh` 仍需要四種語言工具鏈都具備。
 
 ## 技術與目錄
 
@@ -127,7 +129,7 @@ Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表「W
 | `site/`、`scripts/build-repo-site` | repo-site 內容、純 Python 渲染引擎、樣式與可重現的單檔建置入口 |
 | `docs/index.html`、`docs/index.en.html` | 可離線交付的中英文生成簡報；目前只有 `noindex`／`robots.txt` 臨時防護，尚無實際存取控制 |
 
-Python 目前以 3.14、uv、Ruff、ty、pytest 與 src layout 為基線；CI 會同時驗證精確下界 3.14.0 與最新 3.14.x。生成專案若選 minimum 模式，會驗證所選版本的 `.0` 下界，以及一路到 3.14 的每個 feature release 最新 patch；目前刻意不宣告 3.11 支援。Rust 以 1.98、Cargo.lock、rustfmt、Clippy、cargo test 與 release build 為基線。TypeScript 以 Node 24、pnpm 11、Biome、strict TypeScript 與 Vitest 為基線。
+Python 目前以 3.14、uv、Ruff、ty、pytest 與 src layout 為基線；CI 會同時驗證精確下界 3.14.0 與最新 3.14.x。生成專案若選 minimum 模式，會驗證所選版本的 `.0` 下界，以及一路到 3.14 的每個 feature release 最新 patch；目前刻意不宣告 3.11 支援。Rust 以 1.98、Cargo.lock、rustfmt、Clippy、cargo test 與 release build 為基線。TypeScript 以 Node 24、pnpm 11、Biome、strict TypeScript 與 Vitest 為基線。Go 以最低 Go 1.27（`go.mod` 寫入 `go 1.27.0`，不寫 `toolchain`）、開發與驗證 Go 1.27.1、Go modules、gofmt、`go vet`、`go test` 與 `go build` 為基線；只有實際有依賴時才產生 `go.sum`。
 
 模板的 Durable Project Memory 同時支援 SDD、ADR、Test-Driven Development（TDD）的回歸證據與 Behavior-Driven Development（BDD）的必要行為情境；完整分工與導航見 [`docs/README.md`](docs/README.md)。
 
@@ -195,14 +197,14 @@ CSARC-owned 的 release-worthy 工作都在原本的交付 PR 內完成精確版
 | checksum／SBOM | Candidate | `release_bundle.py` 在同一次 run 建立、下載並重驗 exact-tag 成品；待 live run |
 | production-side attestation | Removed | [#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439) 判定零 active 消費者並移除設定面，非留待選配 |
 | 消費端 attestation 驗證 | Conditional | 與上列產出端設定無關；消費端仍使用既有驗證契約 |
-| PyPI／npm／GHCR | Not applicable | root 不發布 registry；生成專案只發布 GitHub Release 成品，不要求長效 token |
+| PyPI／npm／GHCR／Go module proxy | Not applicable | root 不發布 registry；生成專案只發布 GitHub Release 成品，不要求長效 token；Go 不發布到 module proxy，也不附預先編譯的 binary |
 | production deployment | Not applicable | 由 consuming product 定義環境、健康檢查、核准與復原 |
 
 完整 current-state、歷史 Action disposition、最佳實踐來源與重新啟用門檻見 [`docs/adr/release-security-and-dependencies.md`](docs/adr/release-security-and-dependencies.md)。
 
 ## 公版更新
 
-真實導入的可重複步驟、驗收證據與已知平台限制整理在 [`docs/pilot-adoption.md`](docs/pilot-adoption.md)。第一個 consuming repo `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 更新，證明共用導入、更新與線上 CI 路徑；Python、Rust、TypeScript 則各以可重現的建立、既有 repo 導入、更新與原生工具鏈驗證取得 beta。同時選取多個模組不會形成另一種 profile。
+真實導入的可重複步驟、驗收證據與已知平台限制整理在 [`docs/pilot-adoption.md`](docs/pilot-adoption.md)。第一個 consuming repo `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 更新，證明共用導入、更新與線上 CI 路徑；Python、Rust、TypeScript 則各以可重現的建立、既有 repo 導入、更新與原生工具鏈驗證取得 beta；Go 以同樣可重現的建立、導入、更新、原生與 hosted 驗證證據取得 beta，尚未有專屬的 consuming repo。同時選取多個模組不會形成另一種 profile。
 
 以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效；公開版本只有 stable `X.Y.Z` 與 beta `X.Y.Z-beta.N`，預設只選最新 stable，明確加上 `--channel beta` 才選 beta。`early`／`formal` 是專案層級的宣告，不是版本後綴。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併／無法判定清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
 

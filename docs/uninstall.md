@@ -15,14 +15,14 @@ repository owner 自己審閱後的手動操作，這份文件只負責讓判斷
 
 ```bash
 grep '^project_mode:' .csarc/config.yml
-grep '^languages:' -A3 .csarc/config.yml
+grep '^languages:' -A4 .csarc/config.yml
 ```
 
 - `project_mode: new` — repository 是 CSARC `init` 建立的，本頁列出的所有路徑都是 CSARC
   管理的內容，可以直接刪除。
 - `project_mode: existing`（`csarc adopt` 到既有 repository）— `README.md`、
-  `SECURITY.md`、`CHANGELOG.md`、`pyproject.toml`、`package.json`、`Cargo.toml`
-  這幾個檔案在既有專案上是**產品自己的檔案**，CSARC 只做選擇性合併、從不整檔覆寫或整檔
+  `SECURITY.md`、`CHANGELOG.md`、`pyproject.toml`、`package.json`、`Cargo.toml`、
+  `go.mod` 這幾個檔案在既有專案上是**產品自己的檔案**，CSARC 只做選擇性合併、從不整檔覆寫或整檔
   刪除；見下方「產品自己的檔案：只移除 CSARC 加的部分」。
 
 `languages:` 決定下面第 3 節裡哪些語言專屬路徑真的存在於這個 repository。
@@ -101,7 +101,7 @@ SECURITY.md
 .csarc/scripts/*（CSARC adapter，見下方清單）
 .csarc/site/*（網站引擎與共用資產）
 .csarc/tests/*（公版自測）
-.csarc/version.txt（無語言模組時的版本面）
+.csarc/version.txt（無語言模組或只選 Go 時的版本面）
 .gitignore
 AGENTS.md（自動探索入口）
 docs/README.md（CSARC 專案記憶地圖那一份；跟產品自己的頂層 README.md 是不同檔案）
@@ -165,10 +165,14 @@ repository 是用 `adopt` 導入、且這三個檔案存在，代表它們是產
   `project_mode: new` 時另外建立 `package.json`、`pnpm-lock.yaml`。
 - **rust**：`rust-toolchain.toml`、`src/lib.rs`；`project_mode: new` 時另外建立
   `Cargo.toml`、`Cargo.lock`。
-- 完全沒有語言模組（`language=ci`）：`.csarc/version.txt` 是 CSARC 建立的，可以刪。
+- **go**：`project_mode: new` 時建立 `go.mod`、`cmd/<project_slug>/`、
+  `internal/<package_name>/`；`go.sum` 只在實際有依賴時才存在。`project_mode: existing`
+  時保留產品原有的 `go.mod` 與 Go 原始碼，不新增範例程式。
+- 完全沒有語言模組（`language=ci`），或只選 Go：`.csarc/version.txt` 是 CSARC 建立的
+  版本面（Go 不把版本寫進 `go.mod`），可以刪。
 
-`project_mode: existing` 時，`pyproject.toml`／`package.json`／`Cargo.toml` 是產品自己
-的檔案，CSARC 只合併必要欄位進去，見下一節。
+`project_mode: existing` 時，`pyproject.toml`／`package.json`／`Cargo.toml`／`go.mod` 是
+產品自己的檔案；CSARC 只合併必要欄位進前三者，`go.mod` 則原樣保留，見下一節。
 
 ## 5. 產品自己的檔案：只移除 CSARC 加的部分，不要整檔刪
 
@@ -181,6 +185,7 @@ CSARC 建立的，直接刪沒問題。
 - `pyproject.toml`／`package.json`／`Cargo.toml` — CSARC 只合併了它需要的欄位／依賴／
   script（例如 lint、type-check 相關的 dev dependency）。整檔刪除會連產品自己的設定一起
   刪掉；改成手動比對、只移除明顯是 CSARC 加入的區塊或依賴。
+- `go.mod` 與 `cmd/`、`internal/` 下的產品 Go 程式 — CSARC 不改寫，也不需要移除。
 
 ## 6. 確認移除乾淨
 
