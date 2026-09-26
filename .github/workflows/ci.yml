@@ -351,10 +351,17 @@ jobs:
         run: |
           rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
           rustup default 1.98.0
+      - name: Set up Go 1.27.1
+        if: ${{ steps.reuse.outputs.reuse != 'true' && steps.sync.outputs.clean != 'true' && steps.effective.outputs.suite == 'full' }}
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
       - name: Execute trusted verification tier=${{ steps.effective.outputs.suite }} scopes=${{ steps.plan.outputs.scopes }} tree=${{ steps.identity.outputs.tree }} command=${{ steps.identity.outputs.command }} base=${{ steps.identity.outputs.base }} base-sha=${{ steps.identity.outputs.base_sha }} labels=${{ steps.identity.outputs.labels }} release=${{ steps.identity.outputs.release }}
         if: ${{ steps.reuse.outputs.reuse != 'true' && steps.sync.outputs.clean != 'true' }}
         env:
           CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
+          GOTOOLCHAIN: local
           CSARC_CI_TIER: ${{ steps.effective.outputs.suite }}
           CSARC_CI_BASE: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}
           CSARC_CI_DRAFT: ${{ github.event.pull_request.draft || false }}

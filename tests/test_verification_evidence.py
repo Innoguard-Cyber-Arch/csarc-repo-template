@@ -603,6 +603,56 @@ def test_clean_sync_uses_one_direct_full_source_execution() -> None:
     assert result["source_run_id"] == 200
 
 
+@pytest.mark.parametrize(
+    ("main_tree", "accepted"),
+    [(TREE, True), ("d" * 40, False), (None, False)],
+)
+def test_clean_sync_accepts_only_a_tree_equal_squash_source(
+    main_tree: str | None, accepted: bool
+) -> None:
+    """Cite the squash-merged source PR only when main has its exact tree."""
+    source_head = "9" * 40
+    source = evidence(
+        tier="full",
+        command="./scripts/verify-template.sh",
+        run_id=200,
+        check_id=7,
+        head=source_head,
+    )
+    current = evidence(
+        run_id=300,
+        check_id=8,
+        sync=("e" * 40, 200, 7, 7),
+    )
+    requested: list[str] = []
+
+    def commit_tree(sha: str) -> str | None:
+        requested.append(sha)
+        return main_tree
+
+    def validate(**changes: object) -> dict[str, object]:
+        return validate_verification_job(
+            *current,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            source_evidence=(*source, TREE),
+            **changes,
+        )
+
+    with pytest.raises(RuntimeError, match="main does not match"):
+        validate()
+    if accepted:
+        result = validate(commit_tree=commit_tree)
+        assert result["sync_main_sha"] == "e" * 40
+        assert result["source_run_id"] == 200
+    else:
+        with pytest.raises(RuntimeError, match="main does not match"):
+            validate(commit_tree=commit_tree)
+    assert requested == ["e" * 40]
+
+
 def test_fixed_sync_step_reads_structured_annotation() -> None:
     """A clean sync reads its main and source identities from one annotation."""
     source = evidence(

@@ -5092,3 +5092,24 @@ def test_copilot_merge_leaves_a_review_trace(
         f"head={'a' * 40} actor=agent",
     ]
     assert github.merged
+
+
+def test_clean_sync_evidence_uses_the_full_source_toolchain(
+    tmp_path: Path,
+) -> None:
+    """Bind a clean sync to the full execution it cites."""
+    marker = tmp_path / "verify-template.sh"
+    marker.touch()
+    require = MODULE["require_template_toolchain"]
+    fast = ["python-3.14", "uv-0.12.15"]
+    full = [*fast, "pnpm-11.22.0", "node-24", "rust-1.98.0"]
+    sync = {"tier": "fast", "sync_main_sha": "e" * 40}
+
+    require({**sync, "toolchain": full}, marker)
+    require({"tier": "fast", "sync_main_sha": None, "toolchain": fast}, marker)
+    for evidence in (
+        {**sync, "toolchain": fast},
+        {"tier": "fast", "toolchain": full},
+    ):
+        with pytest.raises(RuntimeError, match="toolchain evidence"):
+            require(evidence, marker)
