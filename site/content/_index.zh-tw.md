@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.28.8</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.29.0-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -39,7 +39,7 @@ fit = "符合畫面"
       <div class="language-contract" aria-label="程式語言與公版設定">
         <p class="language-card"><strong>建立／導入時選擇程式語言</strong>Python、Rust、TypeScript 需要哪些就勾哪些；都不選時只準備共通工作流程。</p>
         <p class="language-card shared"><strong>一份公版設定</strong>模板把語言、分支與選用能力記在 <code>.csarc/config.yml</code>；更新時由公版維護，不必分散找設定。</p>
-        <p class="language-card future"><strong>目前支援版本</strong>Python 3.14、Rust 1.98、TypeScript 使用 Node 24 長期支援版。Go 尚未支援，因此不產生空設定。</p>
+        <p class="language-card future"><strong>目前支援版本</strong>Python 3.14、Rust 1.98、TypeScript 使用 Node 24 長期支援版。Go 是 Milestone 16 的候選模組：選了才產生 Go 檔案與驗證，hosted CI 與供應鏈整合完成前仍屬 future，不宣稱正式支援。</p>
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="公版提供的能力">
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.28.8<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.29.0-beta.1<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |

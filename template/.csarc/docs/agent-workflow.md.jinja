@@ -59,12 +59,14 @@ Existing-repository history changes start read-only: propose semantic story grou
 {% if "python" in languages %}- Python setup: `uv sync --locked`.
 {% endif %}{% if "typescript" in languages %}- TypeScript setup: `corepack enable && pnpm install --frozen-lockfile`.
 {% endif %}{% if "rust" in languages %}- Rust setup: `rustup show && cargo fetch --locked`. On Linux/WSL2, compiling this project also needs a system C linker -- install `build-essential` (or the equivalent toolchain) first; a machine with only `rustup` fails with `error: linker 'cc' not found`.
+{% endif %}{% if "go" in languages %}- Go setup: install Go 1.27.1, keep `GOTOOLCHAIN=local`, and run `go mod download`.
 {% endif %}{% if not languages %}- Environment setup: no language toolchain install is required.
 {% endif %}- Site source check: `./.csarc/scripts/build-repo-site --check`.
 - Security smoke: `./.csarc/scripts/security-smoke` selects four existing offline owner self-tests; it is not an AI security scan and is not part of every routine gate. See `.csarc/docs/security-scanner-readiness.md` for the exact command inventory and limits.
 {% if "python" in languages %}- Python iteration: `uv run ruff check <paths>`, `uv run ty check`, and `uv run pytest <test-path>`.
 {% endif %}{% if "typescript" in languages %}- TypeScript iteration: `pnpm exec biome check <paths>`, `pnpm exec tsc --noEmit`, and `pnpm exec vitest run <test-path>`.
 {% endif %}{% if "rust" in languages %}- Rust iteration: `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, and `cargo test --locked`.
+{% endif %}{% if "go" in languages %}- Go iteration: `gofmt -l <paths>`, `go vet ./...`, and `go test ./...`.
 {% endif %}- Focused local checks: run the narrow owner checks for touched paths before an ordinary push.
 - Final verification: {% if verification_mode == 'local' %}run `./.csarc/scripts/verify-fast` once after committing; its existing router promotes full-risk work to `./.csarc/scripts/verify` and records the local evidence without another suite invocation.{% else %}hosted CI runs the selected risk-owned tier once on the exact candidate; use `./.csarc/scripts/verify-fast` locally only as an optional broad diagnostic, and run `./.csarc/scripts/verify` locally only for a full-tier delivery boundary.{% endif %}
 {% if verification_mode == 'hosted' %}- Inspect trusted hosted evidence after a run: `./.csarc/scripts/check-trusted-verification <head-sha> --github-repo <owner/repo>`.
@@ -76,7 +78,7 @@ Existing-repository history changes start read-only: propose semantic story grou
 ## Editing boundaries
 
 {% if not languages %}- This profile does not create a product language module. New product code requires an intentional profile change before language-specific CI is claimed.
-{% else %}- Product code under {% if "python" in languages %}`src/{{ package_name }}/` and `tests/`{% endif %}{% if "typescript" in languages %}{% if "python" in languages %}, plus {% endif %}`typescript/src/` and `typescript/tests/`{% endif %}{% if "rust" in languages %}{% if "python" in languages or "typescript" in languages %}, plus {% endif %}`src/lib.rs`{% endif %} belongs to this project. Copier updates must not overwrite it.
+{% else %}- Product code under {% if "python" in languages %}`src/{{ package_name }}/` and `tests/`{% endif %}{% if "typescript" in languages %}{% if "python" in languages %}, plus {% endif %}`typescript/src/` and `typescript/tests/`{% endif %}{% if "rust" in languages %}{% if "python" in languages or "typescript" in languages %}, plus {% endif %}`src/lib.rs`{% endif %}{% if "go" in languages %}{% if "python" in languages or "typescript" in languages or "rust" in languages %}, plus {% endif %}`go.mod`, `go.sum`, and every Go package{% endif %} belongs to this project. Copier updates must not overwrite it.
 - Do not hand-edit generated lockfiles. Use the selected language package manager so integrity metadata stays valid.
 {% endif %}
 - Keep third-party GitHub Actions pinned to full commit SHAs.

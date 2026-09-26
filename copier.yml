@@ -50,6 +50,9 @@ _exclude:
   - "{% if documentation_mode != 'off' %}__keep_docs_map__{% else %}docs/README.md{% endif %}"
   - "{% if documentation_mode != 'off' %}__keep_docs_specs__{% else %}docs/specs{% endif %}"
   - "{% if documentation_mode != 'off' %}__keep_docs_decisions__{% else %}docs/adr{% endif %}"
+  - "{% if 'go' in languages %}__keep_go_module__{% else %}go.mod{% endif %}"
+  - "{% if 'go' in languages and project_mode == 'new' %}__keep_go_command__{% else %}/cmd{% endif %}"
+  - "{% if 'go' in languages and project_mode == 'new' %}__keep_go_internal__{% else %}/internal{% endif %}"
   - "{% if 'python' in languages %}__keep_python_version__{% else %}.python-version{% endif %}"
   - "{% if 'python' in languages %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
   - "{% if 'python' in languages %}__keep_python_source__{% else %}/src/{{package_name}}{% endif %}"
@@ -72,6 +75,8 @@ _skip_if_exists:
   - "tests/**/*.py"
   - "typescript/src/**/*.ts"
   - "typescript/tests/**/*.ts"
+  - "cmd/**/*.go"
+  - "internal/**/*.go"
   - "docs/specs/**/*.md"
   - "docs/adr/**/*.md"
   - "docs/site-content.md"
@@ -84,6 +89,7 @@ _skip_if_exists:
   - "{% if project_mode == 'existing' %}/LICENSE{% else %}__overwrite_license__{% endif %}"
   - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_scanner_policy__{% endif %}"
   - "{% if project_mode == 'existing' %}/.github/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
+  - "{% if project_mode == 'existing' %}go.mod{% else %}__overwrite_go_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}Cargo.toml{% else %}__overwrite_rust_manifest__{% endif %}"
@@ -331,6 +337,7 @@ languages:
   help: Select each programming language used by the project; leave all unchecked for the CI/CD baseline only
   multiselect: true
   choices:
+    Go: go
     Python: python
     Rust: rust
     TypeScript: typescript
@@ -418,7 +425,13 @@ code_owner:
 project_run_command:
   type: str
   help: Shortest command that successfully starts or invokes the product
-  default: "{% if languages %}{% if 'python' in languages %}uv run python -c 'import {{ package_name }}'{% endif %}{% if 'python' in languages and ('typescript' in languages or 'rust' in languages) %} && {% endif %}{% if 'typescript' in languages %}pnpm run build{% endif %}{% if 'typescript' in languages and 'rust' in languages %} && {% endif %}{% if 'rust' in languages %}cargo test --locked{% endif %}{% else %}./.csarc/scripts/verify{% endif %}"
+  default: >-
+    {% set commands = [] -%}
+    {% if 'python' in languages %}{% set _ = commands.append("uv run python -c 'import " ~ package_name ~ "'") %}{% endif -%}
+    {% if 'typescript' in languages %}{% set _ = commands.append('pnpm run build') %}{% endif -%}
+    {% if 'rust' in languages %}{% set _ = commands.append('cargo test --locked') %}{% endif -%}
+    {% if 'go' in languages %}{% set _ = commands.append('go build ./...') %}{% endif -%}
+    {{ commands | join(' && ') if commands else './.csarc/scripts/verify' }}
   validator: "{% if not project_run_command | default('', true) | trim or project_run_command | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
 
 project_verification_hook:

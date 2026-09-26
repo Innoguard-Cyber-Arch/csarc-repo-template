@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.29.0-beta.1] - 2026-09-26
+
+### Features
+
+* feat(go): add Go template lifecycle support (92603db)
+
 ## [0.28.8] - 2026-09-26
 
 ### Bug Fixes

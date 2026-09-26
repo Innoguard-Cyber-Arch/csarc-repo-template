@@ -169,12 +169,19 @@ jobs:
         run: |
           rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
           rustup default 1.98.0
+      - name: Set up Go 1.27.1
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) }}
+        with:
+          go-version: "1.27.1"
+          cache: false
       - name: Re-verify the exact release tree when reuse is unavailable
         if: ${{ !contains(fromJSON('["no-release","deferred"]'), steps.plan.outputs.status) && steps.verification.outputs.reused != 'true' }}
         env:
           CSARC_CI_BASE: ${{ github.event.before }}
           CSARC_CI_SCOPES: dependency,docs,governance,shell,source,template,workflow
           CSARC_CI_TIER: ${{ steps.route.outputs.required_tier }}
+          GOTOOLCHAIN: local
         run: |
           # A dispatched run has no push base; the merged commit's first parent
           # is the real pre-merge base, never the accumulated default branch.

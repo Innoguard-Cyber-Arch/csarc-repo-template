@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">3 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.28.8</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.29.0-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -39,7 +39,7 @@ fit = "Fit"
       <div class="language-contract" aria-label="Languages and template settings">
         <p class="language-card"><strong>Choose languages at creation or adoption</strong>Check whichever of Python, Rust, and TypeScript you need; select none for the shared workflow only.</p>
         <p class="language-card shared"><strong>One template configuration</strong>Languages, branching, and optional capabilities live in <code>.csarc/config.yml</code>, kept current by template updates.</p>
-        <p class="language-card future"><strong>Currently supported versions</strong>Python 3.14, Rust 1.98, TypeScript on Node 24 LTS. Go is not supported yet, so it generates no empty config.</p>
+        <p class="language-card future"><strong>Currently supported versions</strong>Python 3.14, Rust 1.98, TypeScript on Node 24 LTS. Go is a Milestone 16 candidate: it generates Go files and checks only when selected, and stays future, not officially supported, until hosted CI and supply-chain integration land.</p>
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="What the template provides">
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.28.8<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.29.0-beta.1<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |

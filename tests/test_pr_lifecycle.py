@@ -5102,7 +5102,7 @@ def test_clean_sync_evidence_uses_the_full_source_toolchain(
     marker.touch()
     require = MODULE["require_template_toolchain"]
     fast = ["python-3.14", "uv-0.12.15"]
-    full = [*fast, "pnpm-11.22.0", "node-24", "rust-1.98.0"]
+    full = [*fast, "pnpm-11.22.0", "node-24", "rust-1.98.0", "go-1.27.1"]
     sync = {"tier": "fast", "sync_main_sha": "e" * 40}
 
     require({**sync, "toolchain": full}, marker)
@@ -5113,3 +5113,17 @@ def test_clean_sync_evidence_uses_the_full_source_toolchain(
     ):
         with pytest.raises(RuntimeError, match="toolchain evidence"):
             require(evidence, marker)
+
+
+def test_template_full_tier_requires_the_go_toolchain(tmp_path: Path) -> None:
+    """Bind Go to full-tier evidence only in the template repository."""
+    marker = tmp_path / "verify-template.sh"
+    marker.touch()
+    require = MODULE["require_template_toolchain"]
+    base = ["python-3.14", "uv-0.12.15"]
+    full = [*base, "pnpm-11.22.0", "node-24", "rust-1.98.0", "go-1.27.1"]
+
+    require({"tier": "fast", "toolchain": base}, marker)
+    require({"tier": "full", "toolchain": full}, marker)
+    with pytest.raises(RuntimeError, match="toolchain evidence"):
+        require({"tier": "full", "toolchain": full[:-1]}, marker)

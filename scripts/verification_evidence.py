@@ -57,7 +57,7 @@ SYNC_STEP = re.compile(
 )
 TOOLCHAIN_STEP = re.compile(
     r"^Set up (Python 3\.[0-9]+|uv 0\.12\.15|pnpm 11\.22\.0|"
-    r"Node\.js 24|Rust 1\.98\.0)$"
+    r"Node\.js 24|Rust 1\.98\.0|Go 1\.27\.1)$"
 )
 
 

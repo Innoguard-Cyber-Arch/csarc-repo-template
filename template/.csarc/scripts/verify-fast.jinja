@@ -2,6 +2,7 @@
 {% set has_python = "python" in languages -%}
 {% set has_typescript = "typescript" in languages -%}
 {% set has_rust = "rust" in languages -%}
+{% set has_go = "go" in languages -%}
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -77,7 +78,7 @@ python3 .csarc/scripts/ci_tier.py \
 
 plan_tier="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
 scope_csv="$(python3 -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))["scopes"]))' "$plan_json")"
-{% if has_python or has_typescript or has_rust -%}
+{% if has_python or has_typescript or has_rust or has_go -%}
 run_project="$(python3 -c 'import json, sys; print(str(json.load(open(sys.argv[1]))["run_project"]).lower())' "$plan_json")"
 {% endif -%}
 scopes=",$scope_csv,"
@@ -130,7 +131,7 @@ if [[ "$scopes" == *,workflow,* || "$scopes" == *,template,* ]]; then
     python3 .csarc/scripts/check_action_pins.py --root .
 fi
 
-{% if has_python or has_typescript or has_rust -%}
+{% if has_python or has_typescript or has_rust or has_go -%}
 run_project_checks="$run_project"
 {% endif -%}
 
@@ -165,6 +166,15 @@ if $run_project_checks; then
     cargo clippy --locked --all-targets --all-features -- -D warnings
 fi
 {% endif -%}
+{% if has_go -%}
+if $run_project_checks; then
+  export GOTOOLCHAIN=local
+  export GOFLAGS=-mod=readonly
+  unformatted_go="$(go list -f '{% raw %}{{.Dir}}{% endraw %}' ./... | xargs gofmt -l)"
+  verification_step "Go formatting" test -z "$unformatted_go"
+  verification_step "Go vet" go vet ./...
+fi
+{% endif -%}
 
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
   verification_step "Dependency scan" ./.csarc/scripts/verify-dependencies
@@ -183,6 +193,11 @@ fi
 {% if has_rust -%}
 if $run_project_checks; then
   verification_step "Rust tests" cargo test --locked --all-features
+fi
+{% endif -%}
+{% if has_go -%}
+if $run_project_checks; then
+  verification_step "Go tests" go test ./...
 fi
 {% endif -%}
 

@@ -369,8 +369,8 @@ def test_hosted_setup_skips_unowned_language_toolchains() -> None:
     assert "steps.plan.outputs.run_osv" not in rust_condition
 
 
-def test_root_full_tier_prepares_go_without_changing_evidence() -> None:
-    """Bootstrap Go on main before a delivery branch can require it."""
+def test_root_full_tier_prepares_go_as_trusted_evidence() -> None:
+    """Prepare Go before full verification and bind it as evidence."""
     steps = ci_steps(
         (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     )
@@ -396,7 +396,7 @@ def test_root_full_tier_prepares_go_without_changing_evidence() -> None:
         "template/.csarc/scripts/verification_evidence.py",
     ):
         module = runpy.run_path(str(REPO_ROOT / path))
-        assert module["toolchain_token"]("Set up Go 1.27.1") is None
+        assert module["toolchain_token"]("Set up Go 1.27.1") == "go-1.27.1"
 
 
 def test_reused_release_validation_installs_only_owned_package_tools() -> None:
