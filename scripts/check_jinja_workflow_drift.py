@@ -49,7 +49,7 @@ from jinja2 import Environment, StrictUndefined, TemplateError
 # also needs it directly: REPRESENTATIVE_ANSWERS must keep exercising
 # every conditional branch either paired workflow template has, and that
 # check reads this list to prove it.
-REPRESENTATIVE_LANGUAGES: list[str] = ["python", "rust", "typescript"]
+REPRESENTATIVE_LANGUAGES: list[str] = ["go", "python", "rust", "typescript"]
 
 REPRESENTATIVE_ANSWERS: dict[str, object] = {
     "languages": REPRESENTATIVE_LANGUAGES,
@@ -152,34 +152,8 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
 # before the template can offer that language. Each entry is one exact,
 # contiguous run of stripped root lines with no rendered counterpart; it is
 # consumed at most once per file, so it cannot hide any other drift.
-# Milestone 16 (#944) adds the Go block to the template and removes these.
-ROOT_ONLY_BLOCKS: dict[str, tuple[tuple[str, ...], ...]] = {
-    "ci.yml.jinja": (
-        (
-            "- name: Set up Go 1.27.1",
-            _ROOT_FULL,
-            "uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e"
-            " # v7.0.0",
-            "with:",
-            'go-version: "1.27.1"',
-            "cache: false",
-        ),
-        ("GOTOOLCHAIN: local",),
-    ),
-    "release.yml.jinja": (
-        (
-            "- name: Set up Go 1.27.1",
-            "uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e"
-            " # v7.0.0",
-            'if: ${{ !contains(fromJSON(\'["no-release","deferred"]\'),'
-            " steps.plan.outputs.status) }}",
-            "with:",
-            'go-version: "1.27.1"',
-            "cache: false",
-        ),
-        ("GOTOOLCHAIN: local",),
-    ),
-}
+# No block is declared today: #944 gave the template its own Go setup.
+ROOT_ONLY_BLOCKS: dict[str, tuple[tuple[str, ...], ...]] = {}
 
 # Issue #742 moved generated-project internals under .csarc/ while the
 # template repository intentionally keeps its own tools and release metadata

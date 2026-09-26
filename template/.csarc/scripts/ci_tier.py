@@ -78,6 +78,9 @@ def scope_for(path: str) -> str:
         in {
             "Cargo.lock",
             "Cargo.toml",
+            "go.mod",
+            "go.sum",
+            "go.work",
             "package.json",
             "package-lock.json",
             "pnpm-lock.yaml",

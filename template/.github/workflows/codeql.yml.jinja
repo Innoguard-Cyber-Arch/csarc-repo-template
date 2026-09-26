@@ -1,5 +1,6 @@
 {% set has_python = "python" in languages -%}
 {% set has_typescript = "typescript" in languages -%}
+{% set has_go = "go" in languages -%}
 name: CodeQL
 
 on:
@@ -20,13 +21,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [{% if has_python %}"python"{% endif %}{% if has_python and has_typescript %}, {% endif %}{% if has_typescript %}"javascript-typescript"{% endif %}]
+        language: [{% if has_go %}"go"{% endif %}{% if has_go and (has_python or has_typescript) %}, {% endif %}{% if has_python %}"python"{% endif %}{% if has_python and has_typescript %}, {% endif %}{% if has_typescript %}"javascript-typescript"{% endif %}]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+{%- if has_go %}
+      - if: {% raw %}${{ matrix.language == 'go' }}{% endraw %}
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+{%- endif %}
       - uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           languages: {% raw %}${{ matrix.language }}{% endraw %}
-          build-mode: none
+          build-mode: {% if has_go %}{% raw %}${{ matrix.language == 'go' && 'autobuild' || 'none' }}{% endraw %}{% else %}none{% endif %}
       - uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9

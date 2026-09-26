@@ -68,7 +68,7 @@ _exclude:
   - "{% if 'rust' in languages %}__keep_rust_toolchain__{% else %}rust-toolchain.toml{% endif %}"
   - "{% if 'rust' in languages %}__keep_rust_manifest__{% else %}Cargo.toml{% endif %}"
   - "{% if 'rust' in languages %}__keep_rust_source__{% else %}/src/lib.rs{% endif %}"
-  - "{% if not languages %}__keep_ci_version__{% else %}.csarc/version.txt{% endif %}"
+  - "{% if not ('python' in languages or 'rust' in languages or 'typescript' in languages) %}__keep_ci_version__{% else %}.csarc/version.txt{% endif %}"
   - "{% if code_owner %}__keep_codeowners__{% else %}.github/CODEOWNERS{% endif %}"
 _skip_if_exists:
   - "src/**/*.py"
@@ -518,8 +518,8 @@ project_visibility:
 enable_codeql:
   type: bool
   help: Enable CodeQL SAST on public repositories or private/internal repositories licensed for GitHub Code Security
-  default: "{{ project_visibility == 'public' and ('python' in languages or 'typescript' in languages) }}"
-  when: "{{ 'python' in languages or 'typescript' in languages }}"
+  default: "{{ project_visibility == 'public' and ('go' in languages or 'python' in languages or 'typescript' in languages) }}"
+  when: "{{ 'go' in languages or 'python' in languages or 'typescript' in languages }}"
 
 enable_governance_drift_check:
   type: bool

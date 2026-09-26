@@ -219,6 +219,37 @@ def test_update_language_selection_stays_a_list() -> None:
     assert update_data["languages"] == ["typescript", "rust"]
 
 
+@pytest.mark.parametrize(
+    ("languages", "enabled"),
+    [(["go"], True), (["rust"], False), (["python", "rust"], True)],
+)
+def test_public_visibility_enables_codeql_only_for_analyzed_modules(
+    languages: list[str], enabled: bool
+) -> None:
+    """Match copier.yml so a Rust-only project never gets an empty matrix."""
+    repository = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "Organization",
+        "public",
+        "github",
+        True,
+    )
+
+    _answers, update_data = cli.update_plan_answers(
+        {
+            "languages": languages,
+            "project_mode": "new",
+            "project_visibility": "private",
+            "enable_codeql": False,
+        },
+        {},
+        repository,
+    )
+
+    assert update_data["enable_codeql"] == str(enabled).lower()
+
+
 def test_config_supports_ci_only_and_extension_settings(tmp_path: Path) -> None:
     """Keep an empty language list and derived-template settings readable."""
     config_dir = tmp_path / ".csarc"
@@ -487,6 +518,14 @@ def test_go_selection_controls_generated_go_files(tmp_path: Path) -> None:
     assert (go_only / "internal/go_fixture/go_fixture_test.go").is_file()
     assert not (go_only / "go.sum").exists()
     assert "toolchain" not in (go_only / "go.mod").read_text(encoding="utf-8")
+    release_config = json.loads(
+        (go_only / ".csarc/release-please-config.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert release_config["release-type"] == "simple"
+    assert (go_only / ".csarc/version.txt").is_file()
+    assert not (rendered["go-python"] / ".csarc/version.txt").exists()
     go_only_answers = yaml.safe_load(
         (go_only / ".csarc/config.yml").read_text(encoding="utf-8")
     )
