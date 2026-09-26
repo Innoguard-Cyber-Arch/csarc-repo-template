@@ -2380,6 +2380,7 @@ def require_trusted_verification(
         required_tier=required_tier,
         source_evidence=source_evidence,
         annotations=annotations,
+        commit_tree=lambda sha: commit_tree_sha(github, repo, sha),
         full_command=(
             "./scripts/verify-template.sh"
             if Path("scripts/verify-template.sh").is_file()
@@ -2388,6 +2389,14 @@ def require_trusted_verification(
     )
     require_template_toolchain(evidence, Path("scripts/verify-template.sh"))
     return evidence
+
+
+def commit_tree_sha(github: GitHub, repo: str, sha: str) -> str | None:
+    """Return one commit's tree SHA, or None when GitHub cannot show it."""
+    commit = github.get(repo, f"git/commits/{urllib.parse.quote(sha)}")
+    tree = commit.get("tree") if isinstance(commit, dict) else None
+    tree_sha = tree.get("sha") if isinstance(tree, dict) else None
+    return tree_sha if isinstance(tree_sha, str) else None
 
 
 def require_template_toolchain(

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -297,8 +298,14 @@ def validate_verification_job(  # noqa: C901
     source_evidence: tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]
     | None = None,
     annotations: list[dict[str, Any]] | None = None,
+    commit_tree: Callable[[str], str | None] | None = None,
 ) -> dict[str, object]:
-    """Validate exact-tree, toolchain, result, runner, and freshness claims."""
+    """Validate exact-tree, toolchain, result, runner, and freshness claims.
+
+    A clean sync may cite the full execution of the pull request whose
+    squash merge produced main; `commit_tree` then proves that main commit
+    has exactly the verified source tree.
+    """
     if max_age_hours <= 0 or max_clock_skew_minutes < 0:
         raise RuntimeError("Trusted verification freshness bounds are invalid")
     if (
@@ -467,7 +474,14 @@ def validate_verification_job(  # noqa: C901
             raise RuntimeError(
                 "Trusted verification reuse route does not match its source"
             )
-        if sync and source["head_sha"] != match.group(9):
+        if (
+            sync
+            and source["head_sha"] != match.group(9)
+            and (
+                commit_tree is None
+                or commit_tree(match.group(9)) != source["tree_sha"]
+            )
+        ):
             raise RuntimeError(
                 "Trusted verification sync main does not match its source"
             )
