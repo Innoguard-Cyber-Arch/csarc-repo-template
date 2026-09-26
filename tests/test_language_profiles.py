@@ -87,8 +87,22 @@ def test_supported_language_modules_have_executable_beta_evidence() -> None:
             "scripts/verify-template.sh",
         ]
 
-    assert catalog["profiles"]["go"]["stage"] == "future"
-    assert "go" not in promotion_evidence
+    assert catalog["profiles"]["go"]["stage"] == "beta"
+    go_evidence = promotion_evidence["go"]
+    assert go_evidence["status"] == "satisfied"
+    assert go_evidence["method"] == "generated_native_verification"
+    assert set(requirements["language_module"]) <= {
+        "copier_create_test",
+        "existing_repository_adoption_test",
+        "copier_update_test",
+        "native_toolchain_verification",
+        "included_in_full_template_verification",
+    }
+    assert {
+        "tests/test_language_profiles.py::test_representative_generated_project_runs_full_verifier",
+        "tests/test_language_profiles.py::test_existing_go_adoption_and_update_preserve_product_module",
+        "scripts/verify-template.sh",
+    } <= set(go_evidence["evidence"])
 
     repository_evidence = {
         reference
@@ -107,14 +121,14 @@ def test_supported_language_modules_have_executable_beta_evidence() -> None:
 
 
 def test_go_profile_contract_uses_native_toolchain_only() -> None:
-    """Pin the reviewed Go contract while the profile is a candidate."""
+    """Pin the reviewed Go contract for the beta profile."""
     catalog = yaml.safe_load(
         (ROOT / "profiles/catalog.yaml").read_text(encoding="utf-8")
     )
     go = catalog["profiles"]["go"]
 
-    assert go["stage"] == "future"
-    assert go["candidate"].endswith("/issues/941")
+    assert go["stage"] == "beta"
+    assert "candidate" not in go
     assert "reason" not in go
     assert go["latest_reviewed_stable"] == "1.27.1"
     assert go["minimum"] == "1.27"

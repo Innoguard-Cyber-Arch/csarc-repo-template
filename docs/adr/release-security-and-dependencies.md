@@ -126,7 +126,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | 版本意圖 | Active | PR policy／Conventional Commits | PR title regression |
 | 版本與 CHANGELOG | Candidate | `release_policy.py`＋Release Please config／manifest | 原交付 PR 直接 materialize；CI 與 lifecycle 重建 exact tree |
 | tag／GitHub Release | Candidate | `scripts/publish-release`（由 workflow 或維護者呼叫） | 同 PR 候選合併後建立；發布驗證成功後才關 Milestone。待 default branch live run 才能標 Active；hosted／本機都以 post-hoc attestation fail closed（#770） |
-| source／語言成品 | Candidate | `scripts/release_bundle.py` | 選到的 Python、TypeScript、Rust 原生 package 加 source archive |
+| source／語言成品 | Candidate | `scripts/release_bundle.py` | 選到的 Python、TypeScript、Rust 原生 package 加 source archive；Go 只有 source archive，不發布到 Go module proxy、不附預先編譯的 binary，版本不寫入 `go.mod` |
 | checksum／SBOM／release evidence | Candidate | `scripts/release_bundle.py`＋Syft | 缺檔、竄改、錯 tag、錯 commit 與重跑測試；待 live run |
 | agent setup prompt | Candidate | `scripts/render_release_prompt.py`＋`scripts/publish-release` | 單一 status-first prompt 綁定同一 tag／commit、安裝指南與 Copier schema，並由 checksum／release evidence 涵蓋 |
 | registry publishing／production-side attestation | Removed | #439 | `container_mode`、`enable_release_attestations`、`enable_pypi_publishing`、`enable_npm_publishing` 已由 #439 移除設定面：零 active workflow 消費這些值，不留下承諾不了結果的選項；需要真實 registry 或 attestation 時另開 Issue 明列 owner、權限與執行者 |

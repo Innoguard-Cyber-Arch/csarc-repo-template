@@ -23,23 +23,23 @@ fit = "Fit"
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
         <p class="subtitle lead-question">How does this template get every change -- human or AI -- defined, verified, reviewed, and evidenced?</p>
-        <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --></p>
+        <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, TypeScript, and Go independently.<!-- csarc-readme-preamble-tagline:end --></p>
         <p class="subtitle flow-line"><strong>Result:</strong> every change, human or AI, is scoped, checked, and reviewed before it merges -- leaving evidence behind.</p>
         <p class="subtitle">Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Maintenance mode adds configuration files, code, and technical rationale. See the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a> for quick-start commands.</p>
         <p class="subtitle"><strong>Public status:</strong> this repository and its GitHub Pages repo-site are publicly readable; <code>noindex</code>/<code>robots.txt</code> only reduce indexing and do not restrict reading or sharing. The pending hosting/access-control decision remains in <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425" target="_blank" rel="noreferrer">Issue #425</a>.</p>
         <div class="package-badges" aria-label="Package status">
           <span class="package-badge beta">beta</span>
-          <span class="package-badge python">3 language modules</span>
+          <span class="package-badge python">4 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.29.0-beta.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.30.0-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
       </header>
       <div class="language-contract" aria-label="Languages and template settings">
-        <p class="language-card"><strong>Choose languages at creation or adoption</strong>Check whichever of Python, Rust, and TypeScript you need; select none for the shared workflow only.</p>
+        <p class="language-card"><strong>Choose languages at creation or adoption</strong>Check whichever of Python, Rust, TypeScript, and Go you need; select none for the shared workflow only.</p>
         <p class="language-card shared"><strong>One template configuration</strong>Languages, branching, and optional capabilities live in <code>.csarc/config.yml</code>, kept current by template updates.</p>
-        <p class="language-card future"><strong>Currently supported versions</strong>Python 3.14, Rust 1.98, TypeScript on Node 24 LTS. Go is a Milestone 16 candidate: it generates Go files and checks only when selected, and stays future, not officially supported, until hosted CI and supply-chain integration land.</p>
+        <p class="language-card future"><strong>Currently supported versions</strong>Python 3.14, Rust 1.98, TypeScript on Node 24 LTS, and Go 1.27 minimum (developed and verified on 1.27.1).</p>
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="What the template provides">
@@ -57,7 +57,7 @@ fit = "Fit"
         </section>
       </div>
       <div class="prerequisite-line product-prerequisites">
-        <p><strong>Install before you start</strong>Git, GitHub CLI, and uv; see the full list, including optional Rust/TypeScript tooling, in Maintenance mode.</p>
+        <p><strong>Install before you start</strong>Git, GitHub CLI, and uv; see the full list, including optional Rust/TypeScript/Go tooling, in Maintenance mode.</p>
         <button class="setup-trigger" type="button" data-setup="mac" aria-expanded="false">macOS setup</button>
         <button class="setup-trigger" type="button" data-setup="windows" aria-expanded="false">Windows setup</button>
       </div>
@@ -65,13 +65,13 @@ fit = "Fit"
 {{< /legacy >}}
 
 {{< basic >}}
-<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, and TypeScript independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
+<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, TypeScript, and Go independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.29.0-beta.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.30.0-beta.1<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
-| Supported languages | Python, Rust, and TypeScript (select independently; select none for the shared workflow only) |
+| Supported languages | Python, Rust, TypeScript, and Go (select independently; select none for the shared workflow only) |
 | repo-site template version | [[site_template_version]] |
 | repo-site render engine version | [[site_engine_version]] |
 
@@ -79,7 +79,7 @@ fit = "Fit"
 
 | Choice | Production capability available today |
 | --- | --- |
-| Programming languages | Select Python, Rust, and TypeScript independently; select none for the shared workflow only |
+| Programming languages | Select Python, Rust, TypeScript, and Go independently; select none for the shared workflow only |
 | Branch approach | One development branch per delivery batch, all changes directly into `main`, or one shared `dev` branch |
 | Template settings | Creation or adoption writes choices to `.csarc/config.yml`; template updates maintain this single repository configuration |
 | Shared capability | Work-item (Issue) and change-proposal (PR) forms, AI working rules, automated checks, dependency safety, version records, and template updates |
@@ -88,9 +88,9 @@ fit = "Fit"
 - **New repository:** choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.
 - **Existing repository:** the template detects current languages and creates `.csarc/config.yml`, then previews the adoption diff while preserving product content.
 - **Repository already using the template:** change options or upgrade through `csarc update`; the template updates the configuration and managed files together.
-- **Prerequisites:** Git, GitHub CLI, and uv; Rust needs rustup, while TypeScript needs Node 24+ and pnpm 11. Local verification needs no token.
+- **Prerequisites:** Git, GitHub CLI, and uv; Rust needs rustup, TypeScript needs Node 24+ and pnpm 11, and Go needs Go 1.27.1. Local verification needs no token.
 
-The template promises only capabilities that are implemented and tested. Go, generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.
+The template promises only capabilities that are implemented and tested. Generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.
 {{< /disclosure >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -204,7 +204,7 @@ CSARC gives agents a friendly way in, but never lets an agent guess at repositor
 
 ### Repo-local, not another platform to run
 
-CSARC does not require standing up a developer portal, a long-lived PAT, an extra GitHub App, or a dedicated hosted service first. Policy, verification, documentation, and decision evidence all stay inside the repository, where they go through PR review, version control, and can be read offline. It does not replace Backstage, Minder, or a language's own native tooling -- it composes Copier, GitHub, uv, Cargo, pnpm, OSV, Syft, and Release Please into one repository lifecycle with clear ownership and clear failure boundaries.
+CSARC does not require standing up a developer portal, a long-lived PAT, an extra GitHub App, or a dedicated hosted service first. Policy, verification, documentation, and decision evidence all stay inside the repository, where they go through PR review, version control, and can be read offline. It does not replace Backstage, Minder, or a language's own native tooling -- it composes Copier, GitHub, uv, Cargo, pnpm, the Go toolchain, OSV, Syft, and Release Please into one repository lifecycle with clear ownership and clear failure boundaries.
 
 ### Who this fits
 
@@ -303,7 +303,7 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 {{< standard key="files-mode-standard" title="Update flow and integrated tools" >}}
 Where a file lives matters less than who can change it. Every file falls into one of three ownership categories: **template-led** (a template update may change it; avoid editing it directly after generation), **shared** (you can edit it directly, but the next template update may ask you to merge in a diff), or **project-owned** (entirely yours -- the template never overwrites it).
 
-<div class="capability-map"><div class="capability-node"><h3>Template settings <span class="ownership-tag shared">Shared</span></h3><p><code>.csarc/config.yml</code> and <code>policies/</code> keep only governance, review, release, optional-feature, and owner intent; plan and live capability are detected separately.</p></div><div class="capability-node"><h3>GitHub workflow <span class="ownership-tag template">Template-led</span></h3><p><code>.github/</code>: Issue/PR forms and automated checks.</p></div><div class="capability-node"><h3>Agent rules <span class="ownership-tag shared">Shared</span></h3><p><code>AGENTS.md</code>: how an agent works in this repository.</p></div><div class="capability-node"><h3>Project docs <span class="ownership-tag shared">Shared</span></h3><p><code>README.md</code>, <code>docs/</code>, <code>site/</code>: docs for people, and the site you're reading right now.</p></div><div class="capability-node"><h3>Product code <span class="ownership-tag project">Project-owned</span></h3><p><code>src/</code>: the actual product code, tests, and specs.</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>Template settings <span class="ownership-tag shared">Shared</span></h3><p><code>.csarc/config.yml</code> and <code>policies/</code> keep only governance, review, release, optional-feature, and owner intent; plan and live capability are detected separately.</p></div><div class="capability-node"><h3>GitHub workflow <span class="ownership-tag template">Template-led</span></h3><p><code>.github/</code>: Issue/PR forms and automated checks.</p></div><div class="capability-node"><h3>Agent rules <span class="ownership-tag shared">Shared</span></h3><p><code>AGENTS.md</code>: how an agent works in this repository.</p></div><div class="capability-node"><h3>Project docs <span class="ownership-tag shared">Shared</span></h3><p><code>README.md</code>, <code>docs/</code>, <code>site/</code>: docs for people, and the site you're reading right now.</p></div><div class="capability-node"><h3>Product code <span class="ownership-tag project">Project-owned</span></h3><p><code>src/</code> (plus <code>go.mod</code>, <code>cmd/</code>, and <code>internal/</code> when Go is selected): the actual product code, tests, and specs.</p></div></div>
 
 Switch to Maintenance mode for the full file tree and each file's owner.
 
@@ -334,7 +334,7 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 {{< /disclosure >}}
 
 {{< disclosure key="files-tools" title="Tools actually used" >}}
-Only tools this template directly integrates, executes, or produces into the repository. External alternatives stay on the Similar tools comparison; language toolchains (`uv`, `ty`, `pnpm`, `rustfmt`, `Clippy`, `Cargo`) stay on the Languages slide. Current versions live in `uv.lock`, the pinned Action SHA, or the install script named below; this table never restates them.
+Only tools this template directly integrates, executes, or produces into the repository. External alternatives stay on the Similar tools comparison; language toolchains (`uv`, `ty`, `pnpm`, `rustfmt`, `Clippy`, `Cargo`, `gofmt`, `go vet`) stay on the Languages slide. Current versions live in `uv.lock`, the pinned Action SHA, or the install script named below; this table never restates them.
 
 | Tool | Purpose | Where it appears | Scope | License |
 | --- | --- | --- | --- | --- |
@@ -493,7 +493,7 @@ These numbers come from `docs/ci-policy.md`'s most recent measurement. They set 
       </header>
       <p class="context-line"><strong>What the template does｜</strong>you only select the languages this repo actually uses; the template wires up each language's native checks, while everything still flows through the same PR pipeline.</p>
       <p class="context-line"><strong>The shared pipeline｜</strong>select a language → generate its matching tooling and lockfile → run format/lint/test/package → hand the result to the same verification entry point (see "Verify / CI").</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>Python</h3><p>Checks formatting, types, tests, and the installable package.</p></div><div class="capability-node"><h3>Rust</h3><p>Checks formatting, common mistakes, tests, and whether the release build packages.</p></div><div class="capability-node"><h3>TypeScript</h3><p>Checks formatting, types, tests, and the installable package.</p></div></div>
+      <div class="capability-map"><div class="capability-node"><h3>Python</h3><p>Checks formatting, types, tests, and the installable package.</p></div><div class="capability-node"><h3>Rust</h3><p>Checks formatting, common mistakes, tests, and whether the release build packages.</p></div><div class="capability-node"><h3>TypeScript</h3><p>Checks formatting, types, tests, and the installable package.</p></div><div class="capability-node"><h3>Go</h3><p>Checks formatting, common mistakes, tests, and whether the module builds.</p></div></div>
       <p class="context-line"><strong>Next step｜</strong>just check the languages you need at creation or adoption; several at once combine checks and a shared item still runs once; other approaches are covered in Maintenance mode.</p>
 {{< /legacy >}}
 
@@ -506,8 +506,9 @@ Choose a project language and the template prepares the matching checks:
 - **Python:** checks formatting, types, tests, and the installable package.
 - **Rust:** checks formatting, common mistakes, tests, the release build, and the installable package.
 - **TypeScript:** checks formatting, types, tests, and the installable package.
+- **Go:** checks formatting, common mistakes, tests, and the build.
 
-Each language is its own independent component (module), selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations. Version sources and lockfiles stay independent too: Python reads `pyproject.toml`/`uv.lock`, Rust reads `Cargo.toml`/`Cargo.lock`, and TypeScript reads `package.json`/`pnpm-lock.yaml`; after a change, just run the single verification entry point listed below under "Fixed baseline | One entry point verifies and packages."
+Each language is its own independent component (module), selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations. Version sources and lockfiles stay independent too: Python reads `pyproject.toml`/`uv.lock`, Rust reads `Cargo.toml`/`Cargo.lock`, TypeScript reads `package.json`/`pnpm-lock.yaml`, and Go reads `go.mod` (plus `go.sum` when it has dependencies); after a change, just run the single verification entry point listed below under "Fixed baseline | One entry point verifies and packages."
 
 ### Other common approaches
 
@@ -1011,10 +1012,10 @@ GitHub plan, repository visibility, organization policy, and token identity all 
           <tr><td>Plan and <code>main</code> protection</td><td>Free private applies baseline settings and preserves Ruleset policy, but the public API cannot create a Ruleset, so <code>main</code> is still not enforced; upgrading to Team plus a CODEOWNERS team, or an approved switch to public, is what turns approval and required checks into a real merge gate.</td></tr>
           <tr><td>Work scope and ownership</td><td>Issue-first; a title is a 12-80 character English summary of the outcome, the body may be written in any language; the opener becomes the default owner. New requirements beyond the acceptance criteria get a separate Issue.</td></tr>
           <tr><td>Template update boundary</td><td><code>template/</code> is the delivery source, and root lets the template govern itself; Copier updates policy while protecting product code and specs, and paired verification scripts prevent drift.</td></tr>
-          <tr><td>Language and code quality</td><td>Python, Rust, and TypeScript are independent modules, selectable in any combination; Python uses uv, Ruff, ty, and pytest, Rust uses Rust 1.98, rustfmt, Clippy, and Cargo, and TypeScript uses Node 24, pnpm, Biome, and Vitest.</td></tr>
+          <tr><td>Language and code quality</td><td>Python, Rust, TypeScript, and Go are independent modules, selectable in any combination; Python uses uv, Ruff, ty, and pytest, Rust uses Rust 1.98, rustfmt, Clippy, and Cargo, TypeScript uses Node 24, pnpm, Biome, and Vitest, and Go uses Go 1.27, gofmt, go vet, go test, and go build.</td></tr>
           <tr><td>CI, versioning, and delivery</td><td>Local and CI share <code>scripts/verify</code>; PR-policy regression cases prove a wrong route is rejected. Day-to-day work runs fast, promotion runs full, and Release Please maintains one SemVer only at verified delivery boundaries.</td></tr>
           <tr><td>Dependencies and supply chain</td><td>A three-day observation window watches for an unknown malicious release; OSV checks disclosed vulnerabilities; hashes verify content consistency; an SBOM lists an artifact's packages; and the resolver separately proves the version range is installable — none of the five substitutes for another.</td></tr>
-          <tr><td>AI, documentation, and future capability</td><td><code>AGENTS.md</code> is the AI rulebook; the README and repo site serve people. Hugo/hosted login, deployment, monitoring, RAG, and Go all need an owner, a real use case, and verification before adoption.</td></tr>
+          <tr><td>AI, documentation, and future capability</td><td><code>AGENTS.md</code> is the AI rulebook; the README and repo site serve people. Hugo/hosted login, deployment, monitoring, and RAG all need an owner, a real use case, and verification before adoption.</td></tr>
           <tr><td>Verification and test resources</td><td>"Done" requires files and tests; verification only uses a local scratch project or this repository's own Issues, branches, PRs, and Actions — never a separate GitHub repository created only for testing.</td></tr>
         </tbody>
       </table>
@@ -1026,7 +1027,7 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 | `main` protection on Free private | Preserve Ruleset policy and report `DEGRADED`; never claim an enforced merge gate |
 | Work scope | Issue-first; open a separate Issue for requirements outside acceptance criteria |
 | Template update boundary | `template/` delivers infrastructure; Copier preserves product code and specs |
-| Language quality | Python uses src layout, uv, Ruff, ty, and pytest; Rust uses rustfmt, Clippy, and Cargo; TypeScript uses Node 24, pnpm 11, Biome, and Vitest |
+| Language quality | Python uses src layout, uv, Ruff, ty, and pytest; Rust uses rustfmt, Clippy, and Cargo; TypeScript uses Node 24, pnpm 11, Biome, and Vitest; Go uses Go 1.27, gofmt, go vet, go test, and go build |
 | CI and versioning | Local and CI share entry points; daily fast, promotion full, one SemVer |
 | Supply chain | Delay, OSV, hashes, SBOM, and resolver checks address different risks |
 | AI and docs | `AGENTS.md` is the working contract; README and the site serve people |
@@ -1058,7 +1059,7 @@ Agents do not save raw conversations. Only a user-confirmed durable architecture
           <tr><td>OSV reusable workflow + <a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">permission propagation</a></td><td><span class="tier-chip best">Corrected</span></td><td>A caller's permissions can only stay the same or shrink, never top up a called workflow; after <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> restored the required permission, the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">live run on main</a> succeeded.</td></tr>
           <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a> + <a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip partial">Product extension</span></td><td>The template's current shared baseline is an immutable GitHub Release, checksums, an SBOM, and consumer-side verification; a product that needs a registry or artifact attestation should build a real publisher, OIDC trust, and verification of its own rather than get a setting toggle with no one actually running it.</td></tr>
           <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> security baseline</td><td><span class="tier-chip optional">Plan-aware</span></td><td>Pinned Actions, OSV, <code>SECURITY.md</code>, full Git history, and working-tree secret scanning already exist; a public repository enables CodeQL by default, while private/internal opts in explicitly once GitHub Code Security is licensed.</td></tr>
-          <tr><td>Real consuming repository and adoption evidence</td><td><span class="tier-chip best">Shared lifecycle proven</span></td><td><code>ai-guardrail</code> completed v0.2.4 adoption, kept its product customization, ran a v0.3.1 Copier update, and passed two full live checks across two PRs and one Issue; Python, Rust, and TypeScript each carry their own executable beta acceptance evidence. → <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a> / <a href="pilot-adoption.md">evidence</a></td></tr>
+          <tr><td>Real consuming repository and adoption evidence</td><td><span class="tier-chip best">Shared lifecycle proven</span></td><td><code>ai-guardrail</code> completed v0.2.4 adoption, kept its product customization, ran a v0.3.1 Copier update, and passed two full live checks across two PRs and one Issue; Python, Rust, TypeScript, and Go each carry their own executable beta acceptance evidence. → <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a> / <a href="pilot-adoption.md">evidence</a></td></tr>
         </tbody>
       </table>
 {{< /legacy >}}
