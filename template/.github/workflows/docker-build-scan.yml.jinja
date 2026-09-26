@@ -34,6 +34,11 @@ on:
 {%- if has_src %}
       - "src/**"
 {%- endif %}
+{%- if "go" in languages %}
+      - "go.mod"
+      - "go.sum"
+      - "**/*.go"
+{%- endif %}
   workflow_dispatch:
 
 concurrency:

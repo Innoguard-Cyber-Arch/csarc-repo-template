@@ -973,3 +973,115 @@ def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:
     assert "uv run pytest -vv --durations=20" in release_entry
     assert "--cov=csarc_cli" in release_entry
     assert "pytest.mark.large" not in ai_contract
+
+
+def _render_generated(path: str, languages: list[str]) -> str:
+    source = (REPO_ROOT / path).read_text(encoding="utf-8")
+    return (
+        Environment(
+            autoescape=False,  # noqa: S701 - trusted local YAML template
+            undefined=StrictUndefined,
+        )
+        .from_string(source)
+        .render(
+            languages=languages,
+            python_support_mode="latest",
+            python_min_version="3.12",
+            release_trigger="manual",
+            release_ownership="csarc-owned",
+            project_slug="go-fixture",
+        )
+    )
+
+
+def test_generated_delivery_prepares_go_only_when_selected() -> None:
+    """Give Go projects pinned setup, CodeQL, Dependabot, and scan paths."""
+    pin = "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e"
+    for languages in (["go"], ["go", "python"], ["python"]):
+        has_go = "go" in languages
+        steps = ci_steps(
+            _render_generated(
+                "template/.github/workflows/ci.yml.jinja", languages
+            )
+        )
+        names = [str(step.get("name", "")) for step in steps]
+        assert ("Set up Go 1.27.1" in names) is has_go
+        execute = next(
+            index
+            for index, name in enumerate(names)
+            if name.startswith("Execute trusted verification tier=")
+        )
+        env = steps[execute]["env"]
+        assert (env.get("GOTOOLCHAIN") == "local") is has_go
+        if has_go:
+            go = steps[names.index("Set up Go 1.27.1")]
+            assert names.index("Set up Go 1.27.1") < execute
+            assert str(go["uses"]).startswith(pin)
+            assert go["with"] == {"go-version": "1.27.1", "cache": False}
+            assert "steps.plan.outputs.run_project == 'true'" in go["if"]
+            assert "run_osv" not in go["if"]
+
+        release = yaml.safe_load(
+            _render_generated(
+                "template/.github/workflows/release.yml.jinja", languages
+            )
+        )
+        release_steps = [
+            step for job in release["jobs"].values() for step in job["steps"]
+        ]
+        assert (
+            any(
+                str(step.get("uses", "")).startswith(pin)
+                for step in release_steps
+            )
+            is has_go
+        )
+
+        codeql = yaml.safe_load(
+            _render_generated(
+                "template/.github/workflows/codeql.yml.jinja", languages
+            )
+        )
+        analyze = codeql["jobs"]["analyze"]
+        matrix = analyze["strategy"]["matrix"]["language"]
+        assert ("go" in matrix) is has_go
+        assert ("python" in matrix) is ("python" in languages)
+        init = next(
+            step
+            for step in analyze["steps"]
+            if "codeql-action/init@" in str(step.get("uses", ""))
+        )
+        assert (init["with"]["build-mode"] == "none") is (not has_go)
+        assert (
+            any(
+                str(step.get("uses", "")).startswith(pin)
+                for step in analyze["steps"]
+            )
+            is has_go
+        )
+
+        dependabot = yaml.safe_load(
+            _render_generated(
+                "template/.github/dependabot.yml.jinja", languages
+            )
+        )
+        ecosystems = [
+            update["package-ecosystem"] for update in dependabot["updates"]
+        ]
+        assert ("gomod" in ecosystems) is has_go
+
+        docker = yaml.safe_load(
+            _render_generated(
+                "template/.github/workflows/docker-build-scan.yml.jinja",
+                languages,
+            )
+        )
+        paths = docker[True]["pull_request"]["paths"]
+        assert ("**/*.go" in paths and "go.mod" in paths) is has_go
+
+    template_evidence = runpy.run_path(
+        str(REPO_ROOT / "template/.csarc/scripts/verification_evidence.py")
+    )
+    assert template_evidence["toolchain_token"]("Set up Go 1.27.1") == (
+        "go-1.27.1"
+    )

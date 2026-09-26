@@ -69,3 +69,21 @@ updates:
       prefix-development: build
 {%- endif %}
 {%- endif %}
+{%- if "go" in languages %}
+  - package-ecosystem: gomod
+    directory: /
+    target-branch: main
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    labels: [enhancement]
+    groups:
+      routine-updates:
+        patterns: ["*"]
+        update-types: [minor, patch]
+{%- if release_ownership == 'csarc-owned' %}
+    commit-message:
+      prefix: fix
+{%- endif %}
+{%- endif %}

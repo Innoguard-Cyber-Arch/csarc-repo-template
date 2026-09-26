@@ -2,6 +2,7 @@
 {% set has_python = "python" in languages -%}
 {% set has_typescript = "typescript" in languages -%}
 {% set has_rust = "rust" in languages -%}
+{% set has_go = "go" in languages -%}
 name: CI
 
 on:
@@ -360,11 +361,21 @@ jobs:
         run: |
           rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
           rustup default 1.98.0
+{% endif %}{% if has_go %}
+      - name: Set up Go 1.27.1
+        if: {% raw %}${{ steps.sync.outputs.clean != 'true' && ((steps.reuse.outputs.reuse != 'true' && (steps.effective.outputs.suite == 'full' || steps.plan.outputs.run_project == 'true')) || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned')) }}{% endraw %}
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
 {% endif %}
       - name: Execute trusted verification tier={% raw %}${{ steps.effective.outputs.suite }}{% endraw %} scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} tree={% raw %}${{ steps.identity.outputs.tree }}{% endraw %} command={% raw %}${{ steps.identity.outputs.command }}{% endraw %} base={% raw %}${{ steps.identity.outputs.base }}{% endraw %} base-sha={% raw %}${{ steps.identity.outputs.base_sha }}{% endraw %} labels={% raw %}${{ steps.identity.outputs.labels }}{% endraw %} release={% raw %}${{ steps.identity.outputs.release }}{% endraw %}
         if: {% raw %}${{ steps.reuse.outputs.reuse != 'true' && steps.sync.outputs.clean != 'true' }}{% endraw %}
         env:
           CSARC_CI_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
+{%- if has_go %}
+          GOTOOLCHAIN: local
+{%- endif %}
           CSARC_CI_TIER: {% raw %}${{ steps.effective.outputs.suite }}{% endraw %}
           CSARC_CI_BASE: {% raw %}${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}{% endraw %}
           CSARC_CI_DRAFT: {% raw %}${{ github.event.pull_request.draft || false }}{% endraw %}
