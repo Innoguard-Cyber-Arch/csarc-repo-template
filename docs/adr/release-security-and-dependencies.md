@@ -228,6 +228,21 @@ workflow 先以唯讀提示避免過早取得 lease；真正的安全判定由 `
 workflow／event，以及全部 required checks，最後用 lease 與 REST `sha` expected head 合併。任何 head／author／
 source／check／lease drift 都 fail closed；不再留下 persistent native auto-merge 狀態。
 
+### Dependabot template 同步在同一張 PR 物化 stable（#1052，2026-09-27）
+
+#1032／#1049 證明上述路徑走不完：`merge-eligible` 因 `sync-template` 的 skipped 狀態遞移而永遠被 skip，
+Jinja workflow 收不到 Actions pin，且 #755 的 `fix(deps)` 同步 commit 讓 PR 變成會發版，卻無法滿足之後加入的
+同 PR 版本物化規則。維護者比較「同步改為 no-release」「有 template 變更就改走人工」「bot 自行物化 stable」三案後，
+選擇最後一案：保留 #755「會改到 template 分發內容的更新要發版」與 #830 的 trust boundary，但發版改由可信 base 的
+`release_policy.py prepare-candidate --phase stable` 在同一張 PR 物化，而不是等下一次發版。
+
+寫入 job 依序執行可信 base 的 paired 同步、`scripts/sync_template_action_pins.py`（每個 action 只接受唯一的新舊
+pin）、`fix(deps)` 同步 commit、stable release-only commit，並在 push 前執行 `verify-delivery-version`；Dependabot
+commit 必須直接建在目前 base 上。Authentication 對 release → sync → Dependabot 三代 head 以可信 code 重建兩個
+tree 才產生 eligibility，舊的一代 sync child 不再被接受。`release_level.py` 只對含這個同步 commit 的 Dependabot
+PR 判為 stable；stable 的 review 與 suite 要求不低於 beta，所以這個判定不會放寬任何 gate。Eligibility 另改為逐一
+檢查 `updated-dependencies-json`，任何 major 或缺少 update-type 的依賴都不自動合併。
+
 ## 發版不依賴 Actions 健康度的本機 fallback（#589，2026-09-03）
 
 2026-09-03 的實際事故（#587）證明「發版」目前完全綁在 `release.yml` 這一支 workflow 是否能在

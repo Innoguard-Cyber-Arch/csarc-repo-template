@@ -24,6 +24,10 @@ else:
 
 LEVELS = ("beta", "stable")
 LEVEL_RANK = {level: rank for rank, level in enumerate(LEVELS)}
+# Must equal authenticate_dependabot_head.DEPENDABOT_SYNC_COMMIT_MESSAGE.
+DEPENDABOT_SYNC_COMMIT_MESSAGE = (
+    "fix(deps): sync template copies of this dependency bump (#755)"
+)
 SUITES = ("fast", "full")
 SUITE_RANK = {suite: rank for rank, suite in enumerate(SUITES)}
 LEGACY_SUITE_ALIASES = {"baseline": "fast", "docs": "fast"}
@@ -529,12 +533,27 @@ def resolve_pull(
         and isinstance(head_repo_name, str)
         and head_repo_name.casefold() == repo.casefold()
     ):
-        level = "beta"
+        # Issue #1052: a trusted template sync makes the bump release-worthy
+        # on main, so the same pull request materializes a stable candidate.
+        # The commit message only selects the stricter level; authentication
+        # and exact materialization are enforced elsewhere.
+        number = pull.get("number")
+        synced = isinstance(number, int) and any(
+            (item.get("commit") or {}).get("message")
+            == DEPENDABOT_SYNC_COMMIT_MESSAGE
+            for item in github.pages(
+                repo, f"pulls/{number}/commits?per_page=100"
+            )
+            if isinstance(item, dict)
+        )
+        level = "stable" if synced else "beta"
         return Decision(
             level,
             settings.reviews[level],
             settings.suites[level],
-            "allowlisted dependency bot",
+            "allowlisted dependency bot template sync"
+            if synced
+            else "allowlisted dependency bot",
         )
     base = pull.get("base")
     base_ref = str(base.get("ref") or "") if isinstance(base, dict) else ""

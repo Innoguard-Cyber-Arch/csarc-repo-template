@@ -6,6 +6,7 @@ import ast
 import json
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ import yaml
 REPO_ROOT = Path(__file__).parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/dependabot-auto-merge.yml"
 MERGE_WORKFLOW_PATH = REPO_ROOT / ".github/workflows/dependabot-merge.yml"
+SYNC_STEP = "Sync template files, materialize stable, and push on drift"
 GENERATED_WORKFLOW_PATH = (
     REPO_ROOT / "template/.github/workflows/dependabot-auto-merge.yml"
 )
@@ -149,9 +151,7 @@ def test_writer_jobs_revalidate_the_exact_live_pull_request() -> None:
 
     for step in (
         classify_steps["Flag major updates for manual review"],
-        sync_steps[
-            "Sync paired template files and push if this bump drifted them"
-        ],
+        sync_steps[SYNC_STEP],
     ):
         assert step["env"]["BASE_SHA"] == (
             "${{ needs.authenticate.outputs.base_sha }}"
@@ -185,17 +185,104 @@ def test_fetch_metadata_action_is_pinned_to_a_full_commit_sha() -> None:
     assert match.group(2).startswith("v")
 
 
-def test_minor_and_patch_updates_publish_exact_head_eligibility() -> None:
+def _eligibility_filter(workflow: dict) -> str:
+    run = _steps_by_name(workflow)[
+        "Require every updated dependency to be patch or minor"
+    ]["run"]
+    match = re.search(r"jq -e \\\n\s*'([^']+)'", run)
+    assert match is not None
+    return match.group(1)
+
+
+@pytest.mark.parametrize("path", [WORKFLOW_PATH, GENERATED_WORKFLOW_PATH])
+def test_minor_and_patch_updates_publish_exact_head_eligibility(
+    path: Path,
+) -> None:
     """Only authenticated minor and patch heads get merge eligibility."""
-    _, workflow = _load_workflow()
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
     job = workflow["jobs"]["merge-eligible"]
+    classify = workflow["jobs"]["classify-update"]
 
     assert job["name"] == "dependabot-merge-eligible"
-    condition = job["if"]
-    assert "version-update:semver-patch" in condition
-    assert "version-update:semver-minor" in condition
-    assert "version-update:semver-major" not in condition
     assert job["needs"] == "classify-update"
+    condition = " ".join(job["if"].split())
+    assert "always()" in condition
+    assert "needs.classify-update.result == 'success'" in condition
+    assert "needs.classify-update.outputs.merge_eligible == 'true'" in condition
+    assert classify["outputs"]["merge_eligible"] == (
+        "${{ steps.eligibility.outputs.merge_eligible }}"
+    )
+    step = _steps_by_name(workflow)[
+        "Require every updated dependency to be patch or minor"
+    ]
+    assert step["env"]["UPDATED_DEPENDENCIES"] == (
+        "${{ steps.metadata.outputs.updated-dependencies-json }}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("dependencies", "eligible"),
+    [
+        # Issue #1052: PR #1049's group -- one minor plus one patch.
+        (
+            [
+                {"updateType": "version-update:semver-minor"},
+                {"updateType": "version-update:semver-patch"},
+            ],
+            True,
+        ),
+        ([{"updateType": "version-update:semver-patch"}], True),
+        (
+            [
+                {"updateType": "version-update:semver-minor"},
+                {"updateType": "version-update:semver-major"},
+            ],
+            False,
+        ),
+        (
+            [
+                {"updateType": "version-update:semver-minor"},
+                {"updateType": ""},
+            ],
+            False,
+        ),
+        ([{"updateType": "version-update:semver-minor"}, {}], False),
+        ([], False),
+        ({}, False),
+    ],
+)
+def test_group_eligibility_requires_every_dependency_patch_or_minor(
+    dependencies: object, eligible: bool
+) -> None:
+    """A group is eligible only when no entry is major or unknown."""
+    jq = shutil.which("jq")
+    if jq is None:
+        pytest.skip("jq is required to evaluate the workflow filter")
+    _, workflow = _load_workflow()
+    result = subprocess.run(  # noqa: S603
+        [jq, "-e", _eligibility_filter(workflow)],
+        input=json.dumps(dependencies),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert (result.returncode == 0) is eligible
+
+
+def test_eligibility_survives_a_skipped_template_sync() -> None:
+    """Issue #1052: a skipped sync-template must not skip eligibility.
+
+    GitHub skips a job whose transitive dependency was skipped unless its
+    condition uses a status function, which blocked every uv update.
+    """
+    _, workflow = _load_workflow()
+    classify = workflow["jobs"]["classify-update"]
+    eligible = workflow["jobs"]["merge-eligible"]
+
+    assert "sync-template" in classify["needs"]
+    condition = eligible["if"].split("${{", 1)[1]
+    assert condition.split("&&", 1)[0].strip() == "always()"
 
 
 def test_major_updates_are_flagged_instead_of_merged() -> None:
@@ -272,31 +359,48 @@ def test_authentication_uses_only_the_trusted_base_revision() -> None:
 
 
 def test_authentication_reconstructs_a_trusted_sync_child() -> None:
-    """A reopened generated head is accepted only after exact tree replay."""
+    """A generated head is accepted only after exact replay of both commits."""
     _, workflow = _load_workflow()
     job = workflow["jobs"]["authenticate"]
     steps = _auth_steps_by_name(workflow)
-    reconstruct = steps["Reconstruct the candidate sync child"]["run"]
+    reconstruct = steps["Reconstruct the candidate sync child"]
+    run = reconstruct["run"]
+    classify = steps["Classify the current Dependabot head"]["run"]
 
     assert job["outputs"]["sync_complete"] == (
         "${{ steps.authenticate.outputs.sync_complete }}"
     )
+    assert "grandparent-commit.json" in classify
+    assert "grandparent-comparison.json" in classify
+    assert "--parent-comparison-json" not in classify
+    checkout = steps["Check out the candidate sync child"]["with"]
+    assert checkout["ref"] == "${{ steps.classify.outputs.head_sha }}"
+    assert checkout["fetch-depth"] == 0
+    assert checkout["persist-credentials"] is False
+    assert reconstruct["env"]["SYNC_SHA"] == (
+        "${{ steps.classify.outputs.sync_sha }}"
+    )
+    assert reconstruct["env"]["DEPENDABOT_SHA"] == (
+        "${{ steps.classify.outputs.dependabot_sha }}"
+    )
+    # Only the trusted base checkout at the workspace root supplies code.
+    assert 'trusted="$GITHUB_WORKSPACE/scripts"' in run
     assert (
-        steps["Check out the trusted synchronizer for a sync child"]["with"][
-            "ref"
-        ]
-        == "${{ steps.classify.outputs.source_base_sha }}"
+        '[[ "$(git -C "$child" rev-parse "$HEAD_SHA^")" == "$SYNC_SHA" ]]'
+        in run
     )
     assert (
-        steps["Check out the authenticated Dependabot parent"]["with"]["ref"]
-        == "${{ steps.classify.outputs.parent_sha }}"
+        '[[ "$(git -C "$child" rev-parse "$DEPENDABOT_SHA^")" == '
+        '"$BASE_SHA" ]]' in run
     )
-    assert steps["Check out the candidate sync child"]["with"]["ref"] == (
-        "${{ steps.classify.outputs.head_sha }}"
+    assert '"$trusted/release_policy.py" verify-delivery-version' in run
+    assert "--phase stable" in run
+    assert 'cp "$trusted/sync-paired-files.sh"' in run
+    assert '"$trusted/sync_template_action_pins.py"' in run
+    assert (
+        '[[ "$(git write-tree)" == "$(git rev-parse "$SYNC_SHA^{tree}")" ]]'
+        in run
     )
-    assert "auth-sync-base/scripts/sync-paired-files.sh" in reconstruct
-    assert "git write-tree" in reconstruct
-    assert '[[ "$expected_tree" == "$child_tree" ]]' in reconstruct
     publish = steps["Publish authenticated head"]["run"]
     assert "sync_complete=true" in publish
 
@@ -316,15 +420,14 @@ def test_sync_template_job_runs_only_the_base_synchronizer() -> None:
     """Never execute the synchronizer selected by the pull request head."""
     _, workflow = _load_workflow()
     steps = _sync_steps_by_name(workflow)
-    run = steps[
-        "Sync paired template files and push if this bump drifted them"
-    ]["run"]
+    run = steps[SYNC_STEP]["run"]
 
-    assert (
-        'cp "$GITHUB_WORKSPACE/trusted-base/scripts/sync-paired-files.sh"'
-        in run
-    )
+    assert 'trusted="$GITHUB_WORKSPACE/trusted-base/scripts"' in run
+    assert 'cp "$trusted/sync-paired-files.sh"' in run
     assert r"^template/\.github/workflows/[^/]+\.ya?ml$" in run
+    assert r"^template/\.github/workflows/[^/]+\.(ya?ml|jinja)$" in run
+    assert 'python3 "$trusted/sync_template_action_pins.py"' in run
+    assert '--base-rev "$HEAD_SHA^" --head-rev "$HEAD_SHA"' in run
     assert 'git cat-file -e "$BASE_SHA^{commit}"' in run
     assert "if [[ $diff_status -ne 1 ]]" in run
     assert 'git add -- "${synced_paths[@]}"' in run
@@ -334,9 +437,7 @@ def test_sync_template_push_is_bound_to_the_authenticated_bot_ref() -> None:
     """The write fails if the authenticated head moved before the push."""
     _, workflow = _load_workflow()
     steps = _sync_steps_by_name(workflow)
-    run = steps[
-        "Sync paired template files and push if this bump drifted them"
-    ]["run"]
+    run = steps[SYNC_STEP]["run"]
 
     assert '--force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA"' in run
     assert 'origin "HEAD:refs/heads/$HEAD_REF"' in run
@@ -347,9 +448,7 @@ def test_eligibility_waits_for_the_final_authenticated_sync_head() -> None:
     _, workflow = _load_workflow()
     classify = workflow["jobs"]["classify-update"]
     sync_template = workflow["jobs"]["sync-template"]
-    sync = _sync_steps_by_name(workflow)[
-        "Sync paired template files and push if this bump drifted them"
-    ]
+    sync = _sync_steps_by_name(workflow)[SYNC_STEP]
 
     assert classify["needs"] == ["authenticate", "sync-template"]
     assert sync_template["needs"] == "authenticate"
@@ -373,9 +472,7 @@ def test_sync_template_job_is_a_no_op_without_drift() -> None:
     """A bump that never touches a paired file must not push an empty commit."""
     _, workflow = _load_workflow()
     steps = _sync_steps_by_name(workflow)
-    run = steps[
-        "Sync paired template files and push if this bump drifted them"
-    ]["run"]
+    run = steps[SYNC_STEP]["run"]
 
     assert "git status --porcelain" in run
     assert "exit 0" in run
@@ -393,11 +490,26 @@ def test_sync_template_commit_is_a_release_triggering_fix() -> None:
     """
     _, workflow = _load_workflow()
     steps = _sync_steps_by_name(workflow)
-    run = steps[
-        "Sync paired template files and push if this bump drifted them"
-    ]["run"]
+    run = steps[SYNC_STEP]["run"]
 
     assert re.search(r"git commit -m \"fix(\(deps\))?:", run) is not None
+
+
+def test_sync_template_materializes_a_stable_release_commit() -> None:
+    """Issue #1052: the synced PR carries its own exact stable candidate."""
+    _, workflow = _load_workflow()
+    run = _sync_steps_by_name(workflow)[SYNC_STEP]["run"]
+
+    base_check = run.index('"$(git rev-parse "$HEAD_SHA^")" != "$BASE_SHA"')
+    fix = run.index('git commit -m "fix(deps): sync template copies')
+    prepare = run.index('"$trusted/release_policy.py" prepare-candidate')
+    release = run.index('git commit -m "$title"')
+    verify = run.index('"$trusted/release_policy.py" verify-delivery-version')
+    push = run.index("git push")
+    assert base_check < fix < prepare < release < verify < push
+    assert "--phase stable" in run[prepare:release]
+    assert r"^chore\(main\):\ release\ [0-9]+\.[0-9]+\.[0-9]+$" in run
+    assert "git add --update" in run
 
 
 def test_exact_merge_wakes_only_from_trusted_completed_workflows() -> None:

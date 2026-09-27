@@ -2185,28 +2185,42 @@ def require_trusted_dependabot_head(
     )
     kind = "direct"
     if not direct:
-        parents = commit.get("parents")
-        parent_sha = (
-            (parents[0] or {}).get("sha")
-            if isinstance(parents, list) and len(parents) == 1
-            else ""
-        )
-        if not isinstance(parent_sha, str) or SHA.fullmatch(parent_sha) is None:
-            raise RuntimeError(
-                "Dependabot head is not authenticated: " + direct_reason
+        # Issue #1052: a synced head is release -> sync -> Dependabot.
+        chain: list[dict[str, Any]] = []
+        current = commit
+        for _ in range(2):
+            parents = current.get("parents")
+            parent_sha = (
+                (parents[0] or {}).get("sha")
+                if isinstance(parents, list) and len(parents) == 1
+                else ""
             )
-        parent_commit = github.get(repo, f"commits/{parent_sha}")
-        parent_comparison = github.get(
-            repo, f"compare/{base_sha}...{parent_sha}"
+            if (
+                not isinstance(parent_sha, str)
+                or SHA.fullmatch(parent_sha) is None
+            ):
+                raise RuntimeError(
+                    "Dependabot head is not authenticated: " + direct_reason
+                )
+            parent = github.get(repo, f"commits/{parent_sha}")
+            current = parent if isinstance(parent, dict) else {}
+            chain.append(current)
+        dependabot_sha = chain[1].get("sha")
+        dependabot_comparison = (
+            github.get(repo, f"compare/{base_sha}...{dependabot_sha}")
+            if isinstance(dependabot_sha, str)
+            and SHA.fullmatch(dependabot_sha) is not None
+            else {}
         )
         child, child_reason, _, _ = (
             dependabot_auth.trusted_sync_child_candidate(
                 pull,
                 commit,
-                parent_commit if isinstance(parent_commit, dict) else {},
+                chain[0],
+                chain[1],
                 (
-                    parent_comparison
-                    if isinstance(parent_comparison, dict)
+                    dependabot_comparison
+                    if isinstance(dependabot_comparison, dict)
                     else {}
                 ),
                 repo,

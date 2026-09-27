@@ -366,7 +366,8 @@ repository 共用的階段開關。Milestone 工作一律繼承 tracker 的層�
 `.csarc/config.yml` 可開關此模組、設預設層級，也可調整各層的 review
 與 verification 要求。公版 root 關閉一般工作的分層宣告、預設採 `alpha`，並把所有層級
 都映射為 `self`／`fast`；新生成專案預設啟用分層且採 `alpha`，既有專案
-adopt 時預設採 `beta`，兩者都可在導入時改選。Dependabot 固定當作 `beta`。發版批次由
+adopt 時預設採 `beta`，兩者都可在導入時改選。Dependabot 固定當作 `beta`；唯一例外是 root 的可信 template
+同步：PR 內含固定訊息的 `fix(deps)` 同步 commit 時判為 `stable`（#1052）。發版批次由
 `.csarc/scripts/release_level.py release-batch` 列出上次版本以來的工作，取最高
 層級交給版本規則，並寫入版本 PR 與 GitHub Release 說明。
 
@@ -1000,10 +1001,12 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
    與觸發事件的可信 base SHA 完全相同，再驗證 opener、同 repo branch 前綴、GitHub API 對 commit 的
    `dependabot[bot]` author、`web-flow` committer、有效 GitHub 簽章、
    單一 head commit 全部成立，並只允許 `main` 上 `dependabot/github_actions/main/*` 分支修改 root
-   `.github/workflows/` 內既有 YAML。同步後 PR 若關閉再重開，current head 會是 unsigned
-   `github-actions[bot]` child；這個例外不靠顯示名稱放行，而是先驗證其 parent 為上述 Dependabot commit，再
-   用 parent 原始 base 的 trusted synchronizer 重建完整 Git tree，tree hash 完全相同才通過。任一條件不符就
-   不啟動寫入 job。
+   `.github/workflows/` 內既有 YAML。同步後的 current head 是兩個 unsigned `github-actions[bot]` commit
+   （#1052）：release commit → `fix(deps)` 同步 commit → 上述 Dependabot commit，且 Dependabot commit 必須直接
+   建在可信 base 上。這個例外不靠顯示名稱放行：可信 base 的 `.csarc/scripts/release_policy.py verify-delivery-version
+   --phase stable` 先證明 release commit 等於同步 commit 的確定性 stable 候選，再以 trusted synchronizer 從
+   Dependabot commit 重建同步 commit 的完整 Git tree，tree hash 完全相同才通過；#1052 之前的一代 sync child
+   不再被接受。任一條件不符就不啟動寫入 job。
 
    寫入 job 只執行 base checkout 內的 `.csarc/scripts/sync-paired-files.sh`，同步結果只能是本次已驗證 root workflow
    對應的 `template/.github/workflows/` 檔；其他 staged 或 untracked path 一律失敗。push 使用已驗證的 bot ref 與
@@ -1027,6 +1030,23 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
    這裡只在 `sync-paired-files.sh` 真的找到 drift（代表這次 bump 確實改到 `copier update` 會下發的內容）時
    才 commit，所以是精準只對「真的動到 template 分發內容」的那次 bump 觸發發版，不會連帶讓每一張跟 template
    無關的 Dependabot commit 都被迫升版號。
+
+   **#1052 修正**（2026-09-27，#1032／#1049 實例）：
+
+   - `merge-eligible` 原本沒有 `always()`，GitHub 會把 `sync-template` 的 skipped 狀態遞移傳下去，所有不需
+     同步的更新（全部 uv 更新）都拿不到 eligibility。現在只要 `classify-update` 成功就評估，且改由
+     `updated-dependencies-json` 逐一判斷：每個依賴都是 patch 或 minor 才 eligible；缺少 update-type、空清單或
+     任何 major 都不 eligible（`fetch-metadata` 的 `update-type` 只取群組最高層級，並忽略缺值的依賴）。
+   - 寫入 job 在 paired 同步之後執行可信 base 的 `scripts/sync_template_action_pins.py`（僅公版 root）：只讀 Dependabot commit
+     本身在 root workflow 的改動，每個 action 必須只有一組舊 pin 與新 pin，才把 `template/.github/workflows/`
+     （含 `.jinja` 與未配對副本）中使用該舊 pin 的行改成新 pin；不唯一就失敗，不猜測。
+   - 同 PR 版本物化規則要求會發版的 PR 自帶版本面，所以 #755 的「`fix(deps)` 等下一次發版」改為：同步 commit
+     之後，寫入 job 以可信 base 的 `release_policy.py prepare-candidate --phase stable` 物化 stable，最後一個
+     commit 只含版本面與 CHANGELOG，並在 push 前自行執行 `verify-delivery-version`。Dependabot commit 不是直接
+     建在目前 base 上時不物化並明確失敗，需要請 Dependabot rebase。`release_level.py` 看到這個同步 commit 就把
+     PR 判為 `stable`，hosted `verify` 因此以 stable 驗證同一份候選；合併後 `dependabot-merge.yml` dispatch 的
+     `release.yml` 發布這個已審核的候選。
+   - 生成專案的 `dependabot-auto-merge.yml` 沒有 `sync-template`，只套用逐依賴 eligibility。
 2. 新增 `.csarc/scripts/check_action_pins.py`（root 與 `template/.csarc/scripts/check_action_pins.py` 逐位元組同步）：掃
    `.github/workflows/`、`template/.github/workflows/` 底下所有 `.yml`／`.yaml`／`.jinja` 檔案的
    `uses: owner/repo@sha` pin，同一個 action 在整個 repo 裡的 pin 必須完全一致，不一致就 fail closed 並點名
@@ -1041,6 +1061,8 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
 CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.py` 逐位元組同步）。`sync-template`
 的 trust boundary 由 `.csarc/tests/test_authenticate_dependabot_head.py` 驗證 head 身分、簽章與 changed-path allowlist，並由
 `tests/test_dependabot_auto_merge.py` 驗證 base-code checkout、authenticated head checkout 與 exact-ref push。
+#1052 另由 `tests/test_sync_template_action_pins.py` 驗證 Jinja pin 替換與歧義拒絕，並由上述兩檔與
+`tests/test_release_level.py`、`tests/test_pr_lifecycle.py` 驗證逐依賴 eligibility、三代 sync child 與 stable 判定。
 實際 GitHub push 行為仍待合併後第一張真的改到 paired workflow 的 Dependabot PR 驗證並回填證據。
 
 ## Current automation

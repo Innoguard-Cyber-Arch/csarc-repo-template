@@ -56,14 +56,11 @@ jobs:
           fi
           gh api "repos/$BASE_REPO/commits/$head_sha" > "$RUNNER_TEMP/head-commit.json"
           gh api "repos/$BASE_REPO/compare/$base_sha...$head_sha" > "$RUNNER_TEMP/comparison.json"
-          parent_sha="$(jq -r 'if (.parents | length) == 1 then .parents[0].sha else empty end' "$RUNNER_TEMP/head-commit.json")"
-          if [[ "$parent_sha" =~ ^[0-9a-f]{40}$ ]]; then
-            gh api "repos/$BASE_REPO/commits/$parent_sha" > "$RUNNER_TEMP/parent-commit.json"
-            gh api "repos/$BASE_REPO/compare/$base_sha...$parent_sha" > "$RUNNER_TEMP/parent-comparison.json"
-          else
-            echo '{}' > "$RUNNER_TEMP/parent-commit.json"
-            echo '{}' > "$RUNNER_TEMP/parent-comparison.json"
-          fi
+          # Generated projects never push a template sync child, so only
+          # the direct signed Dependabot head can be authenticated here.
+          echo '{}' > "$RUNNER_TEMP/parent-commit.json"
+          echo '{}' > "$RUNNER_TEMP/grandparent-commit.json"
+          echo '{}' > "$RUNNER_TEMP/grandparent-comparison.json"
           python3 .csarc/scripts/authenticate_dependabot_head.py \
             --base-repo "$BASE_REPO" \
             --expected-base-sha "$EXPECTED_BASE_SHA" \
@@ -71,7 +68,8 @@ jobs:
             --commit-json "$RUNNER_TEMP/head-commit.json" \
             --comparison-json "$RUNNER_TEMP/comparison.json" \
             --parent-commit-json "$RUNNER_TEMP/parent-commit.json" \
-            --parent-comparison-json "$RUNNER_TEMP/parent-comparison.json" \
+            --grandparent-commit-json "$RUNNER_TEMP/grandparent-commit.json" \
+            --grandparent-comparison-json "$RUNNER_TEMP/grandparent-comparison.json" \
             --github-output "$GITHUB_OUTPUT"
       - name: Publish authenticated head
         id: authenticate
@@ -110,12 +108,30 @@ jobs:
       pull-requests: write
     outputs:
       update_type: ${{ steps.metadata.outputs.update-type }}
+      merge_eligible: ${{ steps.eligibility.outputs.merge_eligible }}
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ github.token }}
+      - name: Require every updated dependency to be patch or minor
+        id: eligibility
+        env:
+          UPDATED_DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
+        run: |
+          # update-type is only the highest level present and ignores a
+          # dependency without one, so a group is judged per entry.
+          if jq -e \
+            'type == "array" and length > 0 and
+             all(.[]; .updateType == "version-update:semver-patch" or
+                      .updateType == "version-update:semver-minor")' \
+            <<<"$UPDATED_DEPENDENCIES" > /dev/null; then
+            echo "merge_eligible=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "merge_eligible=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Not every updated dependency is a patch or minor update."
+          fi
       - name: Flag major updates for manual review
         if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-major' }}
         env:
@@ -149,8 +165,9 @@ jobs:
     needs: classify-update
     if: >-
       ${{
-        needs.classify-update.outputs.update_type == 'version-update:semver-patch' ||
-        needs.classify-update.outputs.update_type == 'version-update:semver-minor'
+        always() &&
+        needs.classify-update.result == 'success' &&
+        needs.classify-update.outputs.merge_eligible == 'true'
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
