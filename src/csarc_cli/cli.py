@@ -1090,9 +1090,14 @@ def slugify(value: str) -> str:
     return slug or "csarc-project"
 
 
+# CodeQL-analyzed modules; copier.yml's enable_codeql uses the same set.
+CODEQL_LANGUAGES = frozenset({"go", "python", "typescript"})
+
+
 def detect_languages(target: Path) -> list[str]:
     """Return enabled language modules in their canonical order."""
     manifests = (
+        ("go", "go.mod"),
         ("python", "pyproject.toml"),
         ("rust", "Cargo.toml"),
         ("typescript", "package.json"),
@@ -5097,7 +5102,7 @@ def parse_languages(value: str) -> list[str]:
         isinstance(item, str) for item in parsed
     ):
         raise CliError("languages must be a JSON list or comma-separated list.")
-    unknown = sorted(set(parsed) - {"python", "typescript", "rust"})
+    unknown = sorted(set(parsed) - {"go", "python", "typescript", "rust"})
     if unknown:
         raise CliError(f"Unsupported language modules: {', '.join(unknown)}")
     return list(dict.fromkeys(parsed))
@@ -7186,7 +7191,7 @@ def update_plan_answers(  # noqa: C901
             )
     if saved_visibility != repository.visibility:
         enabled = repository.visibility == "public" and bool(
-            selected_languages(answers)
+            selected_languages(answers) & CODEQL_LANGUAGES
         )
         if "enable_codeql" in answers and "enable_codeql" not in explicit_data:
             update_data["enable_codeql"] = str(enabled).lower()

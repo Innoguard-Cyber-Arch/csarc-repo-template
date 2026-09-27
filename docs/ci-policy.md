@@ -921,7 +921,7 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
 evidence DAG。路由只使用既有 `ci_tier.py` scopes：docs-only 不啟動 Python environment／regression；dependency-only
 只跑鎖檔與 OSV owner；workflow／shell／template 直接跑 workflow 與 shell lint，workflow／template 另驗 action
 pins；source、template、governance、shell、workflow 與 unknown 維持 Python safety floor。所有真正的 Copier
-create／adopt／update subprocess 與代表性 Rust native 驗證只在 full suite 執行；fast 保留不需真 render 的
+create／adopt／update subprocess 與代表性 Rust 與 Go native 驗證只在 full suite 執行；fast 保留不需真 render 的
 安全、狀態與資料保全回歸。
 
 root `verify-fast` 直接重用 plan 已算出的 scopes，不另判斷 tier。它一定納入本次直接修改的 `tests/test_*.py`
@@ -963,7 +963,7 @@ main full Execute；manual/conflict 路徑則不借用 tree 證據。
 stages 合計約 14 秒。重複 real-template 工作主要來自 #739 update 66.27 秒、#744 update 55.43 秒、legacy
 two-file update 55.10 秒、#743 update 53.57 秒、Python／TypeScript／Rust adoption 42.66／40.76／30.69 秒、
 representative generated full 31.99 秒與 fixed-ownership adopt 23.42 秒。#812 以 generic previous-release update、
-代表 create（含 Rust）與代表 adopt 收斂成功 lifecycle canary；不為 #742 增加語言 × lifecycle 矩陣。
+代表 create（含 Rust 與 Go）與代表 adopt 收斂成功 lifecycle canary；不為 #742 增加語言 × lifecycle 矩陣。
 
 回歸測試集中在 `tests/test_verification_evidence.py`、`tests/test_pr_lifecycle.py`、
 `tests/test_journey03_ci.py`、`tests/test_journey07_release.py` 與 `tests/test_promotion_gate.py`；涵蓋偽造 trailer
@@ -1027,7 +1027,8 @@ check 清單對得上。
 CSARC 接管發版的下游專案是被 `uv sync --locked` 消費的一般服務／應用，`uv.lock` 對它們是真的有效力的鎖定，
 runtime 依賴觸發 patch 發版的既有邏輯繼續適用——`release_ownership == 'csarc-owned'` 時，`uv`／`npm`／
 `cargo` 三個 ecosystem 區塊各自加上 `commit-message: {prefix: fix, prefix-development: build}`（Dependabot
-原生欄位，依它自己對「這個依賴是不是 development dependency」的判斷選前綴，不需要額外邏輯）；
+原生欄位，依它自己對「這個依賴是不是 development dependency」的判斷選前綴，不需要額外邏輯），第四個
+`gomod` 區塊因 Go modules 沒有 development dependency 的區分，只加 `commit-message: {prefix: fix}`；
 `product-owned`／`verification-only` 不加這段，維持 Dependabot 預設的 Conventional Commits 偵測。
 `github-actions` 區塊完全不受影響，維持不觸發發版。
 
@@ -1211,7 +1212,7 @@ before／after 紀錄）。
 | 組合 | 最低層級 | 入口與累加測試集合 | 實測 |
 | --- | --- | --- | --- |
 | fast | beta | 共同 hygiene／secret，加上變更 scope 的 owner checks；docs-only 不啟動產品語言工具鏈，dependency 只做鎖檔與 OSV；路徑風險仍可升為 full | 目標三次 warm-cache 中位數不超過 75 秒（#812／#918） |
-| full | stable | fast owners ＋ `large` 的代表 create／adopt／previous-release update（create 含 Rust native）與 coverage | 目標三次 warm-cache 中位數不超過 15 分鐘（#812／#918） |
+| full | stable | fast owners ＋ `large` 的代表 create／adopt／previous-release update（create 含 Rust 與 Go native）與 coverage | 目標三次 warm-cache 中位數不超過 15 分鐘（#812／#918） |
 
 #812 的固定 clean-tree 基準是 #815 合併後 PR #853 的 exact tree：hosted `verify-fast`
 收集 1,530 個 pytest cases、排除 49 個 `large`、執行 1,481 個，pytest／regression stage／
@@ -1486,10 +1487,10 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
   Copier lifecycle；只由 root 的 fast／full 入口執行。`template/tests/` 只下發生成產品本身
   的 smoke test，不再帶 root 治理模組、marker policy hook 或其 SBOM fixtures。
 - **Generated-project contract checks：**代表組合實際經 Copier render，檢查 config、
-  manifest 與三種語言專屬檔案；Python 相容性入口只跑 `runtime and not large` 的最小 smoke、
+  manifest 與四種語言專屬檔案；Python 相容性入口只跑 `runtime and not large` 的最小 smoke、
   建置 wheel 並從隔離環境 import。
-- **One representative end-to-end profile：**full regression 只挑一個 Python＋TypeScript＋Rust 組合；
-  生成 repo 用 `scripts/verify full` 一次涵蓋三種真實原生工具鏈，不再按語言重跑
+- **One representative end-to-end profile：**full regression 只挑一個 Python＋TypeScript＋Rust＋Go 組合；
+  生成 repo 用 `scripts/verify full` 一次涵蓋四種真實原生工具鏈，不再按語言重跑
   repository-wide checks。create／adopt／update 的保存契約
   則繼續由 root 的 `large` regression 提供，不用每種單語言 profile 再跑一次完整 verifier。
 
@@ -1862,7 +1863,7 @@ capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能�
 
 `release.yml` 仍在每次 `main` push 上執行，但只在 checkout 後先用 runner 內建的 Python／Git
 完成 release plan；`no-release` 直接結束，不探測 capability、不驗證 attestation，也不安裝
-Python 3.14、uv、pnpm、Node 或 Rust。需要發版時才探測 capability；若 publication
+Python 3.14、uv、pnpm、Node、Rust 或 Go。需要發版時才探測 capability；若 publication
 為 `blocked`（現在只可能來自 `contents`／`release`），維持 #123 的
 fail-closed 結果並在工具鏈 setup 前停止。只有未被擋下的實際 release 路徑才先嘗試重用來源 PR
 的可信 hosted verification；來源與 main tree 不同、證據過期或查證失敗時，改在 release workflow

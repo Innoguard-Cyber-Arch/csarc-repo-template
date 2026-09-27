@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 config_file="$repo_root/.csarc/config.yml"
 
 detected_languages=()
+[[ -f "$repo_root/go.mod" ]] && detected_languages+=(go)
 [[ -f "$repo_root/pyproject.toml" ]] && detected_languages+=(python)
 [[ -f "$repo_root/Cargo.toml" ]] && detected_languages+=(rust)
 [[ -f "$repo_root/package.json" ]] && detected_languages+=(typescript)

@@ -30,10 +30,10 @@ record_project_verification_status() {
 record_project_verification_status not-run
 
 mode="${1:-full}"
-if [[ "$mode" != "full" && "$mode" != "python" &&
+if [[ "$mode" != "full" && "$mode" != "go" && "$mode" != "python" &&
   "$mode" != "python-compatibility" &&
   "$mode" != "typescript" && "$mode" != "rust" ]]; then
-  echo "Usage: $0 [full|python|python-compatibility|typescript|rust]" >&2
+  echo "Usage: $0 [full|go|python|python-compatibility|typescript|rust]" >&2
   exit 2
 fi
 {% if verification_mode == "local" -%}
@@ -52,6 +52,7 @@ done
 verify_python={{ "true" if "python" in languages else "false" }}
 verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if "typescript" in languages else "false" }}}"
 verify_rust={{ "true" if "rust" in languages else "false" }}
+verify_go={{ "true" if "go" in languages else "false" }}
 temporary_paths=()
 cleanup() {
   local path
@@ -107,6 +108,26 @@ verify_rust_module() {
   verification_step "Rust tests" cargo test --locked --all-features
   verification_step "Rust release build" cargo build --release --locked
   verification_step "Rust package" cargo package --locked --allow-dirty
+}
+
+verify_go_formatting() {
+  local unformatted
+  unformatted="$(go list -f '{% raw %}{{.Dir}}{% endraw %}' ./... | xargs gofmt -l)"
+  if [[ -n "$unformatted" ]]; then
+    printf 'Go files need gofmt:\n%s\n' "$unformatted" >&2
+    return 1
+  fi
+}
+
+verify_go_module() {
+  export GOTOOLCHAIN=local
+  export GOFLAGS=-mod=readonly
+  verification_step "Go availability" command -v go
+  verification_step "Go version" test "$(go env GOVERSION)" = "go1.27.1"
+  verification_step "Go formatting" verify_go_formatting
+  verification_step "Go vet" go vet ./...
+  verification_step "Go tests" go test ./...
+  verification_step "Go build" go build ./...
 }
 
 {% if verification_mode == "local" and "docker" in features -%}
@@ -210,6 +231,15 @@ if [[ "$mode" == "typescript" ]]; then
   exit 0
 fi
 
+if [[ "$mode" == "go" ]]; then
+  if ! $verify_go; then
+    echo "Go verification is unavailable for this language profile." >&2
+    exit 2
+  fi
+  verify_go_module
+  exit 0
+fi
+
 if [[ "$mode" == "rust" ]]; then
   if ! $verify_rust; then
     echo "Rust verification is unavailable for this language profile." >&2
@@ -247,6 +277,10 @@ fi
 
 if $verify_rust; then
   verify_rust_module
+fi
+
+if $verify_go; then
+  verify_go_module
 fi
 {% if verification_mode == "local" and "docker" in features %}
 verify_container

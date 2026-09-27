@@ -67,4 +67,4 @@
 
 ## 成熟度結論
 
-共用治理與 CI/CD-only 基線已具備一個真實 consuming repo、owner、導入、更新及完整線上驗證證據，維持 beta。這份真實試行驗證共用生命週期，不要求為每種語言另外維護專用測試 repo。Python、TypeScript 與 Rust 各自具備可執行的建立、既有 repo 導入、Copier 更新、鎖檔、測試、建置與封裝驗證，因此語言模組也升為 beta。真實產品採用仍會累積營運證據，但不是重複驗證模板機制的第二道 beta 門檻；同時選取多個模組不形成另一種 composition。
+共用治理與 CI/CD-only 基線已具備一個真實 consuming repo、owner、導入、更新及完整線上驗證證據，維持 beta。這份真實試行驗證共用生命週期，不要求為每種語言另外維護專用測試 repo。Python、TypeScript 與 Rust 各自具備可執行的建立、既有 repo 導入、Copier 更新、鎖檔、測試、建置與封裝驗證，因此語言模組也升為 beta。Go 以可重現的建立、既有 repo 導入、Copier 更新、原生工具鏈（gofmt、`go vet`、`go test`、`go build`）與 hosted 驗證證據同樣升為 beta；Go 發版只附 source archive。真實產品採用仍會累積營運證據，但不是重複驗證模板機制的第二道 beta 門檻；同時選取多個模組不形成另一種 composition。

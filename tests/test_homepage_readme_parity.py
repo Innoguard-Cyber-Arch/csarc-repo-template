@@ -47,7 +47,7 @@ SHARED_CAPABILITY_TABLE = "\n".join(
         "| 可以直接選擇 | 目前提供的正式能力 |",
         "| --- | --- |",
         (
-            "| 程式語言 | Python、Rust、TypeScript "
+            "| 程式語言 | Python、Rust、TypeScript、Go "
             "可獨立複選；都不選時只使用共通工作流程 |"
         ),
         (
@@ -186,7 +186,7 @@ def test_required_facts_appear_in_readme_and_both_home_slides() -> None:
         )
         assert repo_version in text, f"{label} is missing the repo/CLI version"
 
-    assert "Python, Rust, and TypeScript" in en
+    assert "Python, Rust, TypeScript, and Go" in en
     assert repo_version in en
 
     # Site template / render engine versions: README states them as plain

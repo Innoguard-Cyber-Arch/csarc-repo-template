@@ -342,19 +342,19 @@
       "key": "generatedProjectVerification",
       "title": {"zh-tw": "模板產物由誰驗證", "en": "Who verifies generated projects"},
       "description": {"zh-tw": "比較只測產生器、測輸出快照，或真的建立／導入／更新候選 repo 再執行驗證。", "en": "Compares testing only the generator, snapshotting output, and creating, adopting, or updating candidate repositories before running their checks."},
-      "csarc": {"zh-tw": "一般 repo 只測自己的產品；repo-template 的 full 入口執行完整 pytest，實際涵蓋 Python／Rust／TypeScript 的生成與既有 repo 導入，不維護整棵輸出的 snapshot。", "en": "A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python, Rust, and TypeScript generation plus existing-repository adoption without maintaining whole-tree snapshots."}
+      "csarc": {"zh-tw": "一般 repo 只測自己的產品；repo-template 的 full 入口執行完整 pytest，實際涵蓋 Python／Rust／TypeScript／Go 的生成與既有 repo 導入，不維護整棵輸出的 snapshot。", "en": "A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python, Rust, TypeScript, and Go generation plus existing-repository adoption without maintaining whole-tree snapshots."}
     },
     {
       "key": "languageSelection",
       "title": {"zh-tw": "建立時如何選擇程式語言", "en": "How languages are selected at creation"},
       "description": {"zh-tw": "比較固定專案類型、可複選語言模組，以及完全交由使用者事後設定。", "en": "Compares fixed project types, independently selectable language modules, and leaving all setup to users after creation."},
-      "csarc": {"zh-tw": "建立或導入時可獨立選擇 Python、Rust、TypeScript；沒有選取的語言不產生相關檔案或 CI 步驟。", "en": "Creation and adoption select Python, Rust, and TypeScript independently. Unselected languages produce neither files nor CI steps."}
+      "csarc": {"zh-tw": "建立或導入時可獨立選擇 Python、Rust、TypeScript、Go；沒有選取的語言不產生相關檔案或 CI 步驟。", "en": "Creation and adoption select Python, Rust, TypeScript, and Go independently. Unselected languages produce neither files nor CI steps."}
     },
     {
       "key": "nativeLanguageChecks",
       "title": {"zh-tw": "各語言具體檢查什麼", "en": "What each language actually checks"},
       "description": {"zh-tw": "比較共用抽象工具與各生態圈原生的格式、型別、測試、建置及打包工具。", "en": "Compares one abstract tool with each ecosystem's native formatting, type, test, build, and packaging tools."},
-      "csarc": {"zh-tw": "Python 使用 uv、Ruff、ty、pytest 與 wheel；Rust 使用 rustfmt、Clippy、cargo test、release build 與 Cargo package；TypeScript 使用 Biome、TypeScript、Vitest 與 npm package。", "en": "Python uses uv, Ruff, ty, pytest, and wheel; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package; TypeScript uses Biome, TypeScript, Vitest, and npm package."}
+      "csarc": {"zh-tw": "Python 使用 uv、Ruff、ty、pytest 與 wheel；Rust 使用 rustfmt、Clippy、cargo test、release build 與 Cargo package；TypeScript 使用 Biome、TypeScript、Vitest 與 npm package；Go 使用 gofmt、go vet、go test 與 go build。", "en": "Python uses uv, Ruff, ty, pytest, and wheel; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package; TypeScript uses Biome, TypeScript, Vitest, and npm package; Go uses gofmt, go vet, go test, and go build."}
     },
     {
       "key": "composableLanguageModules",
@@ -378,7 +378,7 @@
       "key": "lockedDependencyResolution",
       "title": {"zh-tw": "安裝時如何固定套件", "en": "How installs pin the package set"},
       "description": {"zh-tw": "比較最新版、lockfile 與 resolver 限制。", "en": "Compares latest versions, lockfiles, and resolver policies."},
-      "csarc": {"zh-tw": "Python、Rust、TypeScript 都依 lockfile 安裝；pnpm 另拒絕未滿三天或 publisher trust 降級的版本。本機與 CI 都執行。", "en": "Python, Rust, and TypeScript install from lockfiles. pnpm also rejects releases younger than three days or publisher-trust downgrades. Local and CI runs both enforce it."}
+      "csarc": {"zh-tw": "Python、Rust、TypeScript 都依 lockfile 安裝，Go 以 -mod=readonly 依 go.mod／go.sum 驗證；pnpm 另拒絕未滿三天或 publisher trust 降級的版本。本機與 CI 都執行。", "en": "Python, Rust, and TypeScript install from lockfiles, and Go verifies against go.mod/go.sum with -mod=readonly. pnpm also rejects releases younger than three days or publisher-trust downgrades. Local and CI runs both enforce it."}
     },
     {
       "key": "knownVulnerabilityDetection",
@@ -827,7 +827,7 @@
       "stars": "116,688",
       "coverage": {"full": [], "partial": ["04", "05"]},
       "position": {"zh-tw": "Rust 官方工具鏈：Cargo 統一專案描述、相依解析、測試、建置與打包，rustfmt／Clippy 負責品質檢查。", "en": "The official Rust toolchain: Cargo unifies project metadata, dependency resolution, tests, builds, and packaging, while rustfmt and Clippy check quality."},
-      "difference": {"zh-tw": ["Rust／Cargo 完整處理單一語言，但不決定 repo 的 Issue、PR 或其他語言流程。", "CSARC 固定經審查的 Rust 工具鏈，並讓它與 Python、TypeScript 及共通治理並存。"], "en": ["Rust and Cargo cover one language completely but do not define repository Issues, PRs, or other language workflows.", "CSARC pins a reviewed Rust toolchain and composes it with Python, TypeScript, and shared governance."]},
+      "difference": {"zh-tw": ["Rust／Cargo 完整處理單一語言，但不決定 repo 的 Issue、PR 或其他語言流程。", "CSARC 固定經審查的 Rust 工具鏈，並讓它與 Python、TypeScript、Go 及共通治理並存。"], "en": ["Rust and Cargo cover one language completely but do not define repository Issues, PRs, or other language workflows.", "CSARC pins a reviewed Rust toolchain and composes it with Python, TypeScript, Go, and shared governance."]},
       "comparisons": [
         {"key": "nativeLanguageChecks", "feature": "cargo fmt / clippy / test / build / package", "docs": "https://doc.rust-lang.org/cargo/commands/index.html", "description": {"zh-tw": "同一個官方工具鏈完成格式、常見錯誤、測試、正式建置與套件驗證。", "en": "One official toolchain handles formatting, common mistakes, tests, release builds, and package verification."}},
         {"key": "languageConfiguration", "feature": "rust-toolchain.toml + Cargo.toml", "docs": "https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file", "description": {"zh-tw": "工具鏈檔固定 Rust 版本，Cargo.toml 描述套件；CSARC 再從單一公版設定決定是否產生這組檔案。", "en": "The toolchain file pins Rust and Cargo.toml describes the package; CSARC's single template configuration decides whether to generate this pair."}},

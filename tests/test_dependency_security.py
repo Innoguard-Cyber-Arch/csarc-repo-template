@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).parents[1]
 SUPPORTED_LOCKFILES = (
     "uv.lock",
@@ -17,6 +19,7 @@ SUPPORTED_LOCKFILES = (
     "package-lock.json",
     "yarn.lock",
     "Cargo.lock",
+    "go.mod",
 )
 
 
@@ -94,13 +97,16 @@ def test_local_scan_calls_the_pinned_tool_contract(tmp_path: Path) -> None:
     assert log.read_text(encoding="utf-8").splitlines() == expected
 
 
-def test_local_scan_includes_rust_lockfile(tmp_path: Path) -> None:
-    """Scan Cargo.lock even when a Rust project has no other lockfile."""
+@pytest.mark.parametrize("lockfile", ["Cargo.lock", "go.mod"])
+def test_local_scan_includes_single_module_lockfile(
+    tmp_path: Path, lockfile: str
+) -> None:
+    """Scan a Rust or Go module even when it has no other lockfile."""
     project = tmp_path / "project"
     scripts = project / "scripts"
     scripts.mkdir(parents=True)
     shutil.copy2(REPO_ROOT / "scripts/verify-dependencies", scripts)
-    (project / "Cargo.lock").touch()
+    (project / lockfile).touch()
 
     log = tmp_path / "arguments"
     scanner = tmp_path / "osv-scanner"
@@ -120,7 +126,7 @@ def test_local_scan_includes_rust_lockfile(tmp_path: Path) -> None:
         "scan",
         "source",
         "--lockfile",
-        "Cargo.lock",
+        lockfile,
     ]
 
 

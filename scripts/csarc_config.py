@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 CONFIG_FILE = Path(".csarc/config.yml")
-LANGUAGES = {"python", "rust", "typescript"}
+LANGUAGES = {"go", "python", "rust", "typescript"}
 FEATURES = {"docker"}
 DOCUMENTATION_MODES = {"template-and-content", "content-only", "off"}
 PRIMARY_LANGUAGES = {"en", "zh-tw"}

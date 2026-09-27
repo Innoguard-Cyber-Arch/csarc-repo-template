@@ -138,8 +138,32 @@ profiles:
       test_and_coverage: vitest
 
   go:
-    stage: future
-    reason: Add only after a real consuming repository defines its stable toolchain and compatibility policy, then passes create and update tests.
+    stage: beta
+    latest_reviewed_stable: "1.27.1"
+    stable_channel: go_stable
+    stable_release_source: https://go.dev/dl/?mode=json
+    stable_release_observation_days: 14
+    minimum: "1.27"
+    go_directive: "1.27.0"
+    toolchain_directive: none
+    toolchain_download: disabled
+    package_manager: go_modules
+    configuration:
+      - go.mod
+    lockfile: go.sum
+    lockfile_policy: only_when_dependencies_exist
+    source_directories:
+      - cmd/<project_slug>
+      - internal
+    verification: ./scripts/verify
+    tools:
+      format: gofmt
+      lint: go_vet
+      test: go_test
+      build: go_build
+    release_type: simple
+    version_in_go_mod: false
+    distribution: github_release_source_archive
 
   rust:
     stage: beta
@@ -169,7 +193,7 @@ compositions:
 
   language_modules:
     stage: beta
-    selectable_profiles: [python, rust, typescript]
+    selectable_profiles: [go, python, rust, typescript]
     selection: any_subset
     verification: selected_modules_plus_shared_checks_once
 
@@ -231,6 +255,15 @@ promotion_evidence:
     method: generated_native_verification
     evidence:
       - tests/test_language_profiles.py::test_representative_generated_project_runs_full_verifier
+      - scripts/verify-template.sh
+  go:
+    status: satisfied
+    method: generated_native_verification
+    evidence:
+      - tests/test_language_profiles.py::test_representative_generated_project_runs_full_verifier
+      - tests/test_language_profiles.py::test_go_selection_controls_generated_go_files
+      - tests/test_language_profiles.py::test_existing_go_adoption_and_update_preserve_product_module
+      - tests/test_journey03_ci.py::test_generated_delivery_prepares_go_only_when_selected
       - scripts/verify-template.sh
   rust:
     status: satisfied

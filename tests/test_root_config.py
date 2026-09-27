@@ -103,7 +103,7 @@ def test_root_public_identity_claims_are_consistent() -> None:
         ("i18n: all\n", "Invalid i18n"),
         ("project_license: unknown\n", "Invalid project_license"),
         ("copyright_holder: ''\n", "Invalid copyright_holder"),
-        ("languages:\n- go\n", "Invalid languages"),
+        ("languages:\n- java\n", "Invalid languages"),
         ("languages:\n- python\n- python\n", "Duplicate languages"),
         ("coverage_threshold: 0\n", "Invalid coverage_threshold"),
         ("release_ownership: somebody\n", "Invalid release_ownership"),
