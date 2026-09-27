@@ -23,23 +23,23 @@ fit = "符合畫面"
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
         <p class="subtitle lead-question">這套公版如何讓人和 AI 的每次修改，都經過定義、驗證、審查並留下證據？</p>
-        <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript。<!-- csarc-readme-preamble-tagline:end --></p>
+        <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。可以只使用共通流程，或獨立選擇 Python、Rust、TypeScript、Go。<!-- csarc-readme-preamble-tagline:end --></p>
         <p class="subtitle flow-line"><strong>結果：</strong>不論是人或 AI 提出的修改，都要先說清楚要做什麼、通過檢查、再經人工審查，才會真的合併，並留下當時的證據。</p>
         <p class="subtitle">標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；維運模式才補充設定檔、程式與技術理由。快速導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
         <p class="subtitle"><strong>公開狀態：</strong>本 repository 與 GitHub Pages repo-site 目前均為公開可讀；<code>noindex</code>／<code>robots.txt</code> 只降低索引，不限制讀取或分享。後續 hosting／access-control 決策留在 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425" target="_blank" rel="noreferrer">Issue #425</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
           <span class="package-badge beta">beta</span>
-          <span class="package-badge python">三個語言模組</span>
+          <span class="package-badge python">四個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.29.0-beta.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.30.0-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
       </header>
       <div class="language-contract" aria-label="程式語言與公版設定">
-        <p class="language-card"><strong>建立／導入時選擇程式語言</strong>Python、Rust、TypeScript 需要哪些就勾哪些；都不選時只準備共通工作流程。</p>
+        <p class="language-card"><strong>建立／導入時選擇程式語言</strong>Python、Rust、TypeScript、Go 需要哪些就勾哪些；都不選時只準備共通工作流程。</p>
         <p class="language-card shared"><strong>一份公版設定</strong>模板把語言、分支與選用能力記在 <code>.csarc/config.yml</code>；更新時由公版維護，不必分散找設定。</p>
-        <p class="language-card future"><strong>目前支援版本</strong>Python 3.14、Rust 1.98、TypeScript 使用 Node 24 長期支援版。Go 是 Milestone 16 的候選模組：選了才產生 Go 檔案與驗證，hosted CI 與供應鏈整合完成前仍屬 future，不宣稱正式支援。</p>
+        <p class="language-card future"><strong>目前支援版本</strong>Python 3.14、Rust 1.98、TypeScript 使用 Node 24 長期支援版、Go 最低 1.27（開發與驗證使用 1.27.1）。</p>
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="公版提供的能力">
@@ -57,7 +57,7 @@ fit = "符合畫面"
         </section>
       </div>
       <div class="prerequisite-line product-prerequisites">
-        <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；完整清單（含 Rust／TypeScript 選用工具）請切換「維運」模式查看。</p>
+        <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；完整清單（含 Rust／TypeScript／Go 選用工具）請切換「維運」模式查看。</p>
         <button class="setup-trigger" type="button" data-setup="mac" aria-expanded="false">macOS 安裝</button>
         <button class="setup-trigger" type="button" data-setup="windows" aria-expanded="false">Windows 安裝</button>
       </div>
@@ -67,11 +67,11 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.29.0-beta.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.30.0-beta.1<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 支援語言 | Python、Rust、TypeScript（可獨立複選；都不選時只使用共通流程） |
+| 支援語言 | Python、Rust、TypeScript、Go（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | [[site_template_version]] |
 | repo-site 渲染引擎版本 | [[site_engine_version]] |
 
@@ -79,7 +79,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 可以直接選擇 | 目前提供的正式能力 |
 | --- | --- |
-| 程式語言 | Python、Rust、TypeScript 可獨立複選；都不選時只使用共通工作流程 |
+| 程式語言 | Python、Rust、TypeScript、Go 可獨立複選；都不選時只使用共通工作流程 |
 | 分支做法 | 每個交付批次有自己的開發分支、所有修改直接進 `main`，或先集中到 `dev` |
 | 公版設定 | 建立／導入時把選項寫入 `.csarc/config.yml`；之後由公版更新，不必到不同檔案重複設定 |
 | 共用能力 | 工作單（Issue）與變更提案（PR）表單、AI 工作規範、自動驗證、依賴安全、版本記錄與公版更新 |
@@ -88,9 +88,9 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 - **新 repo：** 選專案種類與分支做法；大型成果才拆成主要工作與可獨立驗收的子工作。
 - **既有 repo：** 公版先偵測現有語言並產生 `.csarc/config.yml`，再預覽導入差異、保留產品內容。
 - **已使用公版：** 透過 `csarc update` 調整選項或升級；公版同步設定與必要檔案，只審查這次差異。
-- **開始前必裝：** Git、GitHub CLI、uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11。純本機驗證不需要 token。
+- **開始前必裝：** Git、GitHub CLI、uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11，選 Go 另需 Go 1.27.1。純本機驗證不需要 token。
 
-公版只承諾已經實作並測試的能力。Go、通用部署、監控、AI 知識檢索與網站託管仍是未來或選配項目。
+公版只承諾已經實作並測試的能力。通用部署、監控、AI 知識檢索與網站託管仍是未來或選配項目。
 {{< /disclosure >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -204,7 +204,7 @@ CSARC 提供 agent-friendly 的操作入口，但不讓 agent 自由猜測 repos
 
 ### Repo-local，而不是另一座平台
 
-CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或專用 hosted service。政策、驗證、文件與決策證據都留在 repository 內，可以接受 PR 審查、版本控制與離線閱讀。它不取代 Backstage、Minder 或各語言原生工具，而是把 Copier、GitHub、uv、Cargo、pnpm、OSV、Syft 與 Release Please 等能力組成一套有明確 ownership 和失敗邊界的 repository lifecycle。
+CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或專用 hosted service。政策、驗證、文件與決策證據都留在 repository 內，可以接受 PR 審查、版本控制與離線閱讀。它不取代 Backstage、Minder 或各語言原生工具，而是把 Copier、GitHub、uv、Cargo、pnpm、Go 工具鏈、OSV、Syft 與 Release Please 等能力組成一套有明確 ownership 和失敗邊界的 repository lifecycle。
 
 ### 適合哪些團隊
 
@@ -303,7 +303,7 @@ CSARC 不要求先維護 developer portal、長效 PAT、額外 GitHub App 或�
 {{< standard key="files-mode-standard" title="更新流程與已整合工具" >}}
 檔案放在哪裡不是重點；誰能改它才是。每個檔案屬於三種歸屬之一：**公版主導**（模板更新時可能改動，通常不要在生成後直接改）、**共同維護**（你可以直接改，但下次公版更新可能要你合併差異）、**專案持有**（完全由你決定，公版永遠不會覆寫）。
 
-<div class="capability-map"><div class="capability-node"><h3>公版設定 <span class="ownership-tag shared">共同維護</span></h3><p><code>.csarc/config.yml</code>、<code>policies/</code>：只保存治理、審查、發版、選配功能與 owner 意圖；方案與即時能力另行偵測。</p></div><div class="capability-node"><h3>GitHub 工作流程 <span class="ownership-tag template">公版主導</span></h3><p><code>.github/</code>：Issue／PR 表單與自動檢查流程。</p></div><div class="capability-node"><h3>Agent 規範 <span class="ownership-tag shared">共同維護</span></h3><p><code>AGENTS.md</code>：agent 在這個 repo 裡怎麼做事。</p></div><div class="capability-node"><h3>專案文件 <span class="ownership-tag shared">共同維護</span></h3><p><code>README.md</code>、<code>docs/</code>、<code>site/</code>：給人看的說明，以及你正在看的這個網站。</p></div><div class="capability-node"><h3>產品程式 <span class="ownership-tag project">專案持有</span></h3><p><code>src/</code>：真正的產品程式碼、測試與規格。</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>公版設定 <span class="ownership-tag shared">共同維護</span></h3><p><code>.csarc/config.yml</code>、<code>policies/</code>：只保存治理、審查、發版、選配功能與 owner 意圖；方案與即時能力另行偵測。</p></div><div class="capability-node"><h3>GitHub 工作流程 <span class="ownership-tag template">公版主導</span></h3><p><code>.github/</code>：Issue／PR 表單與自動檢查流程。</p></div><div class="capability-node"><h3>Agent 規範 <span class="ownership-tag shared">共同維護</span></h3><p><code>AGENTS.md</code>：agent 在這個 repo 裡怎麼做事。</p></div><div class="capability-node"><h3>專案文件 <span class="ownership-tag shared">共同維護</span></h3><p><code>README.md</code>、<code>docs/</code>、<code>site/</code>：給人看的說明，以及你正在看的這個網站。</p></div><div class="capability-node"><h3>產品程式 <span class="ownership-tag project">專案持有</span></h3><p><code>src/</code>（選 Go 時另有 <code>go.mod</code>、<code>cmd/</code>、<code>internal/</code>）：真正的產品程式碼、測試與規格。</p></div></div>
 
 完整檔案樹與每個檔案的責任歸屬，請切換「維運」模式查看。
 
@@ -334,7 +334,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /disclosure >}}
 
 {{< disclosure key="files-tools" title="實際使用的工具" >}}
-只列這個模板直接整合、實際執行或會產生到 repository 的工具；外部方案比較留在「相似工具」，語言工具鏈（`uv`、`ty`、`pnpm`、`rustfmt`、`Clippy`、`Cargo`）留在「程式語言」頁。目前版本以 `uv.lock`、已固定的 Action SHA 或下方安裝腳本為準，這裡不重複標註。
+只列這個模板直接整合、實際執行或會產生到 repository 的工具；外部方案比較留在「相似工具」，語言工具鏈（`uv`、`ty`、`pnpm`、`rustfmt`、`Clippy`、`Cargo`、`gofmt`、`go vet`）留在「程式語言」頁。目前版本以 `uv.lock`、已固定的 Action SHA 或下方安裝腳本為準，這裡不重複標註。
 
 | 工具 | 用途 | 出現／設定位置 | 適用範圍 | 授權 |
 | --- | --- | --- | --- | --- |
@@ -491,7 +491,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
       </header>
       <p class="context-line"><strong>模板的作用｜</strong>使用者只選 repo 真正使用的語言；模板替每種語言接上原生檢查，但整體仍走同一條 PR 流程。</p>
       <p class="context-line"><strong>共通流程｜</strong>選擇語言 → 產生對應工具與鎖檔 → 執行格式／靜態檢查／測試／打包 → 結果交給同一個驗證入口（見「驗證／CI」）。</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>Python</h3><p>檢查程式格式、型別、測試，以及能否製作安裝包。</p></div><div class="capability-node"><h3>Rust</h3><p>檢查程式格式、常見錯誤、測試，以及正式版本能否建置與打包。</p></div><div class="capability-node"><h3>TypeScript</h3><p>檢查程式格式、型別、測試，以及能否製作安裝包。</p></div></div>
+      <div class="capability-map"><div class="capability-node"><h3>Python</h3><p>檢查程式格式、型別、測試，以及能否製作安裝包。</p></div><div class="capability-node"><h3>Rust</h3><p>檢查程式格式、常見錯誤、測試，以及正式版本能否建置與打包。</p></div><div class="capability-node"><h3>TypeScript</h3><p>檢查程式格式、型別、測試，以及能否製作安裝包。</p></div><div class="capability-node"><h3>Go</h3><p>檢查程式格式、常見錯誤、測試，以及能否建置。</p></div></div>
       <p class="context-line"><strong>下一步｜</strong>建立或導入時勾選需要的語言即可，同時使用多種語言時共通項目只跑一次；其他做法的比較請切換「維運」模式查看。</p>
 {{< /legacy >}}
 
@@ -504,8 +504,9 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **Python：**檢查格式、型別、測試及安裝包。
 - **Rust：**檢查格式、常見錯誤、測試、正式建置及安裝包。
 - **TypeScript：**檢查格式、型別、測試及安裝包。
+- **Go：**檢查格式、常見錯誤、測試及建置。
 
-每種語言是各自獨立的元件（模組），同一項共通檢查只跑一次；語言可以同時勾選，但不另外建立或說明每一種排列組合。版本來源與鎖檔各自獨立：Python 讀 `pyproject.toml`／`uv.lock`，Rust 讀 `Cargo.toml`／`Cargo.lock`，TypeScript 讀 `package.json`／`pnpm-lock.yaml`；改動後執行下方「固定基線｜一個入口驗證與打包」列出的單一驗證入口即可。
+每種語言是各自獨立的元件（模組），同一項共通檢查只跑一次；語言可以同時勾選，但不另外建立或說明每一種排列組合。版本來源與鎖檔各自獨立：Python 讀 `pyproject.toml`／`uv.lock`，Rust 讀 `Cargo.toml`／`Cargo.lock`，TypeScript 讀 `package.json`／`pnpm-lock.yaml`，Go 讀 `go.mod`（有依賴時另有 `go.sum`）；改動後執行下方「固定基線｜一個入口驗證與打包」列出的單一驗證入口即可。
 
 ### 其他常見做法
 
@@ -1003,10 +1004,10 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
           <tr><td>方案與 <code>main</code> 保護</td><td>Free private 會套基本設定並保存 Ruleset policy，但公開 API 無法建立 Ruleset，<code>main</code> 仍未受強制保護；至少升 Team 並建立 CODEOWNERS team，或經核准改為 public，核准與必要檢查才成為 merge gate。</td></tr>
           <tr><td>工作範圍與責任</td><td>Issue-first；標題用 12–80 字元英文摘要成果，內文可用中文；開單者自動成為負責人。新增需求超出完成條件就另開 Issue。</td></tr>
           <tr><td>公版更新邊界</td><td><code>template/</code> 是下發來源，root 讓公版自我治理；Copier 更新政策但保護產品程式與規格，成對設定由驗證腳本防止漂移。</td></tr>
-          <tr><td>語言與程式品質</td><td>Python、Rust、TypeScript 為獨立模組，可任意複選；Python 採 uv、Ruff、ty、pytest，Rust 採 Rust 1.98、rustfmt、Clippy 與 Cargo，TypeScript 採 Node 24、pnpm、Biome、Vitest。</td></tr>
+          <tr><td>語言與程式品質</td><td>Python、Rust、TypeScript、Go 為獨立模組，可任意複選；Python 採 uv、Ruff、ty、pytest，Rust 採 Rust 1.98、rustfmt、Clippy 與 Cargo，TypeScript 採 Node 24、pnpm、Biome、Vitest，Go 採 Go 1.27、gofmt、go vet、go test 與 go build。</td></tr>
           <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，PR policy 回歸案例證明錯誤 route 會被拒絕；日常 fast、promotion full，release-please 只在已驗證的批次邊界維護單一 SemVer。</td></tr>
           <tr><td>依賴與供應鏈</td><td>三天等待觀察未知惡意新版；OSV 查已公開漏洞；hash 驗內容一致；SBOM 列出成品套件；resolver 另證明版本上下界可安裝，五者互不取代。</td></tr>
-          <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 規範，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go 都要有 owner、使用情境與驗證後才導入。</td></tr>
+          <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 規範，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG 都要有 owner、使用情境與驗證後才導入。</td></tr>
           <tr><td>驗證與測試資源</td><td>「已完成」必須有檔案與測試；驗證只用本機暫存專案或本 repo 的 Issue、分支、PR、Actions，禁止為測試另開 GitHub repo。</td></tr>
         </tbody>
       </table>
@@ -1018,7 +1019,7 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 | Free private 的 `main` 保護 | 保存 Ruleset policy 並回報 `DEGRADED`，不宣稱已有 merge gate |
 | 工作範圍 | Issue-first；新增需求超出完成條件就另開 Issue |
 | 公版更新邊界 | `template/` 下發基礎設施；Copier 保護產品程式與規格 |
-| 語言品質 | Python 用 src layout、uv、Ruff、ty、pytest；Rust 用 rustfmt、Clippy、Cargo；TypeScript 用 Node 24、pnpm 11、Biome、Vitest |
+| 語言品質 | Python 用 src layout、uv、Ruff、ty、pytest；Rust 用 rustfmt、Clippy、Cargo；TypeScript 用 Node 24、pnpm 11、Biome、Vitest；Go 用 Go 1.27、gofmt、go vet、go test、go build |
 | CI 與版本 | 本機／CI 共用入口；一般工作依風險分級、Milestone／canary 交付 full；精確版本與 CHANGELOG 人工同步 |
 | 供應鏈 | 等待、OSV、hash、SBOM 與 resolver 各解決不同問題 |
 | AI 與文件 | `AGENTS.md` 是工作契約；README 與網站服務人類 |
@@ -1050,7 +1051,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
           <tr><td>OSV reusable workflow＋<a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">權限傳遞</a></td><td><span class="tier-chip best">已修正</span></td><td>呼叫端權限只能維持或縮小，不能替被呼叫 workflow 補權限；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> 補回必要權限後，<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">main 線上 run</a> 已成功。</td></tr>
           <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip partial">產品擴充</span></td><td>公版目前以 immutable GitHub Release、checksum、SBOM 與消費端驗證作共同基線；需要 registry 或 artifact attestation 的產品，應另案建立真實 publisher、OIDC 信任與驗證，不只提供無執行者的設定開關。</td></tr>
           <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip optional">方案感知</span></td><td>已有 pinned Actions、OSV、<code>SECURITY.md</code>、完整 Git 歷史與工作樹 secret scan；public repo 預設啟用 CodeQL，private／internal 則依 GitHub Code Security 授權明確 opt-in。</td></tr>
-          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">共用生命週期已證明</span></td><td><code>ai-guardrail</code> 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、Rust 與 TypeScript 另有各自可執行的 beta 驗收證據。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
+          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">共用生命週期已證明</span></td><td><code>ai-guardrail</code> 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、Rust、TypeScript 與 Go 另有各自可執行的 beta 驗收證據。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
         </tbody>
       </table>
 {{< /legacy >}}

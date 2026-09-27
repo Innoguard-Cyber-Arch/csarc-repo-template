@@ -18,11 +18,11 @@
       "purpose": {
         "zh-tw": {
           "title": "鎖定版本可重現安裝",
-          "description": "依 lockfile 安裝，拒絕未記錄的解析結果；TypeScript 另執行三天觀察期與發布者 trust policy。"
+          "description": "依 lockfile 安裝，拒絕未記錄的解析結果，Go 以 -mod=readonly 禁止改寫 go.mod／go.sum；TypeScript 另執行三天觀察期與發布者 trust policy。"
         },
         "en": {
           "title": "Reproduce the locked dependency set",
-          "description": "Install from the lockfile and reject unrecorded resolution. TypeScript also enforces a three-day observation window and publisher trust policy."
+          "description": "Install from the lockfile and reject unrecorded resolution; Go runs with -mod=readonly so go.mod/go.sum are never rewritten. TypeScript also enforces a three-day observation window and publisher trust policy."
         }
       },
       "shared": {

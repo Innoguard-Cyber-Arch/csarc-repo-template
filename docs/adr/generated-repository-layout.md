@@ -28,7 +28,7 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 | 情境 | root 允許內容 | CSARC／平台內容 | 行為 |
 | --- | --- | --- | --- |
 | 最小新專案 | README、CHANGELOG、AGENTS、SECURITY、`.gitignore`、`docs/`、空的 `src/` 與忽略的 `dist/` 建置目錄 | `.csarc/`、`.github/`、`.claude/` | 不產生 root `scripts/`、`policies/` 或 `site/` |
-| 完整新專案 | 最小集合加語言 manifest、lockfile、`src/`、`tests/`、`typescript/` 與選用容器檔 | 同上，加選用 workflow | root 白名單由所選語言與功能決定 |
+| 完整新專案 | 最小集合加語言 manifest、lockfile、`src/`、`tests/`、`typescript/`、Go 的 `go.mod`／`cmd/`／`internal/` 與選用容器檔 | 同上，加選用 workflow | root 白名單由所選語言與功能決定 |
 | 既有專案採用 | 原有產品檔、manifest、文件與驗證 hook 全數保留 | 僅新增已核准且無衝突的 CSARC／平台檔 | 同名文字差異需人工合併，特殊檔或目錄碰撞 fail closed |
 | 舊版專案更新 | 既有產品檔保持原位 | 已知舊 CSARC 路徑搬到新位置 | plan 明列 add／move／preserve／delete；不同內容的目的檔碰撞時不寫入 |
 
@@ -49,7 +49,7 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 
 ## Ownership 與驗證
 
-公版維護 `.csarc/`、managed workflows 與搬移映射；consuming repository 維護產品程式、manifest、`docs/adr/`、`docs/specs/`、`docs/site/content/` 與 `docs/site/theme.css`。最小與完整生成專案以 root allowlist 測試；舊版更新以搬移／碰撞回歸測試；代表性三語言專案執行完整 verifier。
+公版維護 `.csarc/`、managed workflows 與搬移映射；consuming repository 維護產品程式、manifest、`docs/adr/`、`docs/specs/`、`docs/site/content/` 與 `docs/site/theme.css`。最小與完整生成專案以 root allowlist 測試；舊版更新以搬移／碰撞回歸測試；代表性四語言專案執行完整 verifier。
 
 ## 重新評估條件
 

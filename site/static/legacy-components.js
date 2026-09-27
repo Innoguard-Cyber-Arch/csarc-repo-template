@@ -34,7 +34,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
         },
         mac: {
           title: 'macOS 本機需求',
-          goal: '共同安裝 Git、GitHub CLI 2.93.0 以上、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。執行 CLI 前先登入 GitHub。',
+          goal: '共同安裝 Git、GitHub CLI 2.93.0 以上、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo，選 Go 再從 go.dev 安裝固定版本的 Go。執行 CLI 前先登入 GitHub。',
           location: 'Terminal',
           code: `brew install git gh uv node pnpm
 
@@ -43,13 +43,20 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
+# Only if you picked Go: install the pinned go1.27.1 package from go.dev
+# ("brew install go" tracks the newest Go, not the pinned version).
+# Apple silicon shown; use go1.27.1.darwin-amd64.pkg on an Intel Mac.
+curl -LO https://go.dev/dl/go1.27.1.darwin-arm64.pkg
+sudo installer -pkg go1.27.1.darwin-arm64.pkg -target /
+go version
+
 # Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         },
         windows: {
           title: 'Windows 本機需求',
-          goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；從 GitHub 官方 apt repository 安裝 GitHub CLI 2.93.0 以上；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 build-essential（C linker）與 rustup。',
+          goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；從 GitHub 官方 apt repository 安裝 GitHub CLI 2.93.0 以上；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 build-essential（C linker）與 rustup，選 Go 再從 go.dev 安裝固定版本的 Go。',
           location: 'PowerShell（管理員）→ Ubuntu',
           code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
@@ -82,6 +89,13 @@ sudo npm install -g pnpm@11.22.0
 sudo apt install -y build-essential
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
+
+# Only if you picked Go: install the pinned go1.27.1 tarball from go.dev.
+curl -LO https://go.dev/dl/go1.27.1.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.27.1.linux-amd64.tar.gz
+echo 'export PATH="$PATH:/usr/local/go/bin"' >> "$HOME/.profile"
+export PATH="$PATH:/usr/local/go/bin"
+go version
 
 # Required before running the csarc CLI.
 gh auth login -h github.com
@@ -116,7 +130,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
         },
         mac: {
           title: 'macOS local requirements',
-          goal: 'Install Git, GitHub CLI 2.93.0 or newer, and uv either way; add Node and pnpm for TypeScript, or rustup and Cargo for Rust. Sign in to GitHub before running the CLI.',
+          goal: 'Install Git, GitHub CLI 2.93.0 or newer, and uv either way; add Node and pnpm for TypeScript, rustup and Cargo for Rust, or the pinned Go release from go.dev for Go. Sign in to GitHub before running the CLI.',
           location: 'Terminal',
           code: `brew install git gh uv node pnpm
 
@@ -125,13 +139,20 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
+# Only if you picked Go: install the pinned go1.27.1 package from go.dev
+# ("brew install go" tracks the newest Go, not the pinned version).
+# Apple silicon shown; use go1.27.1.darwin-amd64.pkg on an Intel Mac.
+curl -LO https://go.dev/dl/go1.27.1.darwin-arm64.pkg
+sudo installer -pkg go1.27.1.darwin-arm64.pkg -target /
+go version
+
 # Required before running the csarc CLI.
 gh auth login -h github.com
 gh auth status`
         },
         windows: {
           title: 'Windows local requirements',
-          goal: 'Use WSL2 (Ubuntu) and work in the repo from inside WSL; install GitHub CLI 2.93.0 or newer from GitHub\'s official apt repository; add Node 24 and pnpm 11 for TypeScript, or build-essential (a C linker) and rustup for Rust.',
+          goal: 'Use WSL2 (Ubuntu) and work in the repo from inside WSL; install GitHub CLI 2.93.0 or newer from GitHub\'s official apt repository; add Node 24 and pnpm 11 for TypeScript, build-essential (a C linker) and rustup for Rust, or the pinned Go release from go.dev for Go.',
           location: 'PowerShell (Administrator) -> Ubuntu',
           code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
@@ -164,6 +185,13 @@ sudo npm install -g pnpm@11.22.0
 sudo apt install -y build-essential
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
+
+# Only if you picked Go: install the pinned go1.27.1 tarball from go.dev.
+curl -LO https://go.dev/dl/go1.27.1.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.27.1.linux-amd64.tar.gz
+echo 'export PATH="$PATH:/usr/local/go/bin"' >> "$HOME/.profile"
+export PATH="$PATH:/usr/local/go/bin"
+go version
 
 # Required before running the csarc CLI.
 gh auth login -h github.com

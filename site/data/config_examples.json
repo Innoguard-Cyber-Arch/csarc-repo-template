@@ -282,8 +282,8 @@
             "en": "Copier writes the selection into the repository; the detector only flags when the actual files disagree with the declaration, and never changes the setting on its own."
           },
           "code": {
-            "zh-tw": "languages:\n- python\n- rust\n- typescript\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # minimum only\n./scripts/detect-language-profile --suggest\n./scripts/detect-language-profile",
-            "en": "languages:\n- python\n- rust\n- typescript\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # minimum only\n./scripts/detect-language-profile --suggest\n./scripts/detect-language-profile"
+            "zh-tw": "languages:\n- python\n- rust\n- typescript\n- go\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # minimum only\n./scripts/detect-language-profile --suggest\n./scripts/detect-language-profile",
+            "en": "languages:\n- python\n- rust\n- typescript\n- go\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # minimum only\n./scripts/detect-language-profile --suggest\n./scripts/detect-language-profile"
           },
           "summary": {
             "zh-tw": "`languages` 決定要產生哪些語言模組；Python 另可選最新穩定版或最低支援版本。",
@@ -304,12 +304,12 @@
             "en": "Shared governance does not mean forcing every language into the same toolchain; each language uses its mainstream tools, coordinated behind one verification entry point."
           },
           "code": {
-            "zh-tw": "# Python module\nuv sync --locked\nuv run ruff format --check .\nuv run ruff check .\nuv run ty check\nuv run pytest --cov --cov-fail-under=80\n\n# Rust module\ncargo fmt --all -- --check\ncargo clippy --locked --all-targets --all-features -- -D warnings\ncargo test --locked --all-features\ncargo build --release --locked\ncargo package --locked --allow-dirty\n\n# TypeScript module\npnpm install --frozen-lockfile --ignore-scripts\npnpm exec biome ci .\npnpm exec tsc --noEmit\npnpm exec vitest run --coverage",
-            "en": "# Python module\nuv sync --locked\nuv run ruff format --check .\nuv run ruff check .\nuv run ty check\nuv run pytest --cov --cov-fail-under=80\n\n# Rust module\ncargo fmt --all -- --check\ncargo clippy --locked --all-targets --all-features -- -D warnings\ncargo test --locked --all-features\ncargo build --release --locked\ncargo package --locked --allow-dirty\n\n# TypeScript module\npnpm install --frozen-lockfile --ignore-scripts\npnpm exec biome ci .\npnpm exec tsc --noEmit\npnpm exec vitest run --coverage"
+            "zh-tw": "# Python module\nuv sync --locked\nuv run ruff format --check .\nuv run ruff check .\nuv run ty check\nuv run pytest --cov --cov-fail-under=80\n\n# Rust module\ncargo fmt --all -- --check\ncargo clippy --locked --all-targets --all-features -- -D warnings\ncargo test --locked --all-features\ncargo build --release --locked\ncargo package --locked --allow-dirty\n\n# TypeScript module\npnpm install --frozen-lockfile --ignore-scripts\npnpm exec biome ci .\npnpm exec tsc --noEmit\npnpm exec vitest run --coverage\n\n# Go module\nexport GOTOOLCHAIN=local GOFLAGS=-mod=readonly\ntest \"$(go env GOVERSION)\" = go1.27.1\ntest -z \"$(go list -f '{{.Dir}}' ./... | xargs gofmt -l)\"\ngo vet ./...\ngo test ./...\ngo build ./...",
+            "en": "# Python module\nuv sync --locked\nuv run ruff format --check .\nuv run ruff check .\nuv run ty check\nuv run pytest --cov --cov-fail-under=80\n\n# Rust module\ncargo fmt --all -- --check\ncargo clippy --locked --all-targets --all-features -- -D warnings\ncargo test --locked --all-features\ncargo build --release --locked\ncargo package --locked --allow-dirty\n\n# TypeScript module\npnpm install --frozen-lockfile --ignore-scripts\npnpm exec biome ci .\npnpm exec tsc --noEmit\npnpm exec vitest run --coverage\n\n# Go module\nexport GOTOOLCHAIN=local GOFLAGS=-mod=readonly\ntest \"$(go env GOVERSION)\" = go1.27.1\ntest -z \"$(go list -f '{{.Dir}}' ./... | xargs gofmt -l)\"\ngo vet ./...\ngo test ./...\ngo build ./..."
           },
           "summary": {
-            "zh-tw": "Ruff／Biome／rustfmt 負責格式，Ruff／Biome／Clippy 負責 lint；ty／TypeScript 檢查型別，各語言再使用自己的測試與打包工具。",
-            "en": "Ruff, Biome, and rustfmt own formatting; Ruff, Biome, and Clippy own linting; ty and TypeScript check types; each language then uses its own testing and packaging tools."
+            "zh-tw": "Ruff／Biome／rustfmt／gofmt 負責格式，Ruff／Biome／Clippy／go vet 負責 lint；ty／TypeScript 檢查型別，各語言再使用自己的測試與打包工具；Go 以 go build 確認能建置。",
+            "en": "Ruff, Biome, rustfmt, and gofmt own formatting; Ruff, Biome, Clippy, and go vet own linting; ty and TypeScript check types; each language then uses its own testing and packaging tools, and Go confirms the module builds with go build."
           }
         },
         {
@@ -424,12 +424,12 @@
             "en": "First prove the committed package set is reproducible; a successful install is never mistaken for the absence of vulnerabilities."
           },
           "code": {
-            "zh-tw": "uv sync --locked\ncargo test --locked\npnpm install --frozen-lockfile --ignore-scripts\n\nminimumReleaseAge: 4320\nminimumReleaseAgeStrict: true\ntrustPolicy: no-downgrade",
-            "en": "uv sync --locked\ncargo test --locked\npnpm install --frozen-lockfile --ignore-scripts\n\nminimumReleaseAge: 4320\nminimumReleaseAgeStrict: true\ntrustPolicy: no-downgrade"
+            "zh-tw": "uv sync --locked\ncargo test --locked\npnpm install --frozen-lockfile --ignore-scripts\nGOTOOLCHAIN=local GOFLAGS=-mod=readonly go test ./...\n\nminimumReleaseAge: 4320\nminimumReleaseAgeStrict: true\ntrustPolicy: no-downgrade",
+            "en": "uv sync --locked\ncargo test --locked\npnpm install --frozen-lockfile --ignore-scripts\nGOTOOLCHAIN=local GOFLAGS=-mod=readonly go test ./...\n\nminimumReleaseAge: 4320\nminimumReleaseAgeStrict: true\ntrustPolicy: no-downgrade"
           },
           "summary": {
-            "zh-tw": "Python、Rust、TypeScript 都依 lockfile 重裝；pnpm 另拒絕發布未滿三天或 publisher trust 降級的版本。",
-            "en": "Python, Rust, and TypeScript all reinstall from their lockfile; pnpm additionally refuses a release published under three days ago or with a downgraded publisher trust level."
+            "zh-tw": "Python、Rust、TypeScript 都依 lockfile 重裝，Go 以 `-mod=readonly` 依 `go.mod`／`go.sum` 驗證、不改寫依賴；pnpm 另拒絕發布未滿三天或 publisher trust 降級的版本。",
+            "en": "Python, Rust, and TypeScript all reinstall from their lockfile, and Go verifies against `go.mod`/`go.sum` with `-mod=readonly` without rewriting dependencies; pnpm additionally refuses a release published under three days ago or with a downgraded publisher trust level."
           }
         },
         {
@@ -494,8 +494,8 @@
             "en": "project_visibility: public\nenable_codeql: true"
           },
           "summary": {
-            "zh-tw": "public repo 預設開啟；private／internal repo 先確認 GitHub Code Security 授權，未選 Python 或 TypeScript 時不產生。",
-            "en": "A public repository turns this on by default; a private or internal repository first confirms GitHub Code Security authorization, and nothing is generated unless Python or TypeScript is selected."
+            "zh-tw": "public repo 預設開啟；private／internal repo 先確認 GitHub Code Security 授權，未選 Go、Python 或 TypeScript 時不產生。",
+            "en": "A public repository turns this on by default; a private or internal repository first confirms GitHub Code Security authorization, and nothing is generated unless Go, Python, or TypeScript is selected."
           }
         },
         {
@@ -835,8 +835,8 @@
             "en": "Every beta-stage language must actually be created, adopted, updated, and run through its own native tools."
           },
           "code": {
-            "zh-tw": "./scripts/verify-template.sh\n\n# Covers global coverage, diff coverage, optional features,\n# reusable workflow and copier update.\n\nci: {stage: beta, profiles: []}\npython: {stage: beta}\ntypescript: {stage: beta}\ngo: {stage: future}\nrust: {stage: beta}",
-            "en": "./scripts/verify-template.sh\n\n# Covers global coverage, diff coverage, optional features,\n# reusable workflow and copier update.\n\nci: {stage: beta, profiles: []}\npython: {stage: beta}\ntypescript: {stage: beta}\ngo: {stage: future}\nrust: {stage: beta}"
+            "zh-tw": "./scripts/verify-template.sh\n\n# Covers global coverage, diff coverage, optional features,\n# reusable workflow and copier update.\n\nci: {stage: beta, profiles: []}\npython: {stage: beta}\ntypescript: {stage: beta}\ngo: {stage: beta}\nrust: {stage: beta}",
+            "en": "./scripts/verify-template.sh\n\n# Covers global coverage, diff coverage, optional features,\n# reusable workflow and copier update.\n\nci: {stage: beta, profiles: []}\npython: {stage: beta}\ntypescript: {stage: beta}\ngo: {stage: beta}\nrust: {stage: beta}"
           },
           "summary": {
             "zh-tw": "共通生命週期由真實 repo 證明；每個語言模組則用可重現測試驗收，同時選取時合併執行，不另外維護組合測試。",

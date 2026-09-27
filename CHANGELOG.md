@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.30.0-beta.1] - 2026-09-26
+
+### Features
+
+* feat(go): integrate Go delivery and security checks (dcb541b)
+
 ## [0.29.0-beta.1] - 2026-09-26
 
 ### Features
