@@ -24,6 +24,11 @@ DEPENDABOT_SYNC_PATH = re.compile(r"^\.github/workflows/[^/]+\.ya?ml$")
 DEPENDABOT_SYNC_COMMIT_MESSAGE = (
     "fix(deps): sync template copies of this dependency bump (#755)"
 )
+# Issue #1052: the trusted synchronizer ends every sync with one stable
+# release-only commit so the same pull request carries its own candidate.
+DEPENDABOT_RELEASE_COMMIT_MESSAGE = re.compile(
+    r"chore\(main\): release (?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+)
 DEPENDABOT_SYNC_COMMIT_IDENTITY = {
     "name": "github-actions[bot]",
     "email": "actions@github.com",
@@ -198,15 +203,49 @@ def dependabot_sync_eligibility(
     return True, "authenticated Dependabot Actions head is eligible for sync"
 
 
-def trusted_sync_child_candidate(  # noqa: C901
+def _github_actions_commit(
+    commit: dict[str, Any], role: str
+) -> tuple[bool, str, str]:
+    """Return the single parent of an exact github-actions[bot] commit."""
+    raw_commit = commit.get("commit") or {}
+    for identity_role in ("author", "committer"):
+        identity = raw_commit.get(identity_role) or {}
+        if any(
+            identity.get(field) != expected
+            for field, expected in DEPENDABOT_SYNC_COMMIT_IDENTITY.items()
+        ):
+            return False, f"{role} {identity_role} identity is unexpected", ""
+    parents = commit.get("parents")
+    if not isinstance(parents, list) or len(parents) != 1:
+        return False, f"{role} must have exactly one parent", ""
+    parent_sha = (parents[0] or {}).get("sha")
+    if (
+        not isinstance(parent_sha, str)
+        or re.fullmatch(r"[0-9a-f]{40}", parent_sha) is None
+    ):
+        return False, f"{role} parent SHA is invalid", ""
+    return True, "", parent_sha
+
+
+def trusted_sync_child_candidate(
     pull_request: dict[str, Any],
     commit: dict[str, Any],
-    parent_commit: dict[str, Any],
-    parent_comparison: dict[str, Any],
+    sync_commit: dict[str, Any],
+    dependabot_commit: dict[str, Any],
+    dependabot_comparison: dict[str, Any],
     base_repo: str,
     expected_base_sha: str,
 ) -> tuple[bool, str, str, str]:
-    """Recognize a sync child whose tree still needs trusted reconstruction."""
+    """Recognize a release -> sync -> Dependabot chain for reconstruction.
+
+    Issue #1052: the trusted synchronizer commits the template sync as a
+    release-worthy ``fix(deps)`` commit and then materializes the stable
+    candidate as a release-only commit, so the current head is the release
+    commit, its parent is the sync commit, and its grandparent is the signed
+    Dependabot commit built directly on the trusted base. Metadata only
+    selects this candidate; the workflow still has to reconstruct both trees
+    with trusted base code before anything is authorized.
+    """
     eligible, reason, base_sha, head_ref, head_sha = (
         validated_dependabot_snapshot(pull_request, base_repo)
     )
@@ -219,35 +258,35 @@ def trusted_sync_child_candidate(  # noqa: C901
     ):
         return False, "sync child coordinates are invalid", "", ""
 
-    parents = commit.get("parents")
-    if not isinstance(parents, list) or len(parents) != 1:
-        return False, "sync child must have exactly one parent", "", ""
-    parent_sha = (parents[0] or {}).get("sha")
-    if (
-        not isinstance(parent_sha, str)
-        or re.fullmatch(r"[0-9a-f]{40}", parent_sha) is None
-    ):
-        return False, "sync child parent SHA is invalid", "", ""
+    message = str((commit.get("commit") or {}).get("message") or "")
+    if DEPENDABOT_RELEASE_COMMIT_MESSAGE.fullmatch(message) is None:
+        return False, "sync child release commit message is unexpected", "", ""
+    ok, problem, sync_sha = _github_actions_commit(
+        commit, "sync child release commit"
+    )
+    if not ok:
+        return False, problem, "", ""
 
-    raw_commit = commit.get("commit") or {}
-    if raw_commit.get("message") != DEPENDABOT_SYNC_COMMIT_MESSAGE:
+    if sync_commit.get("sha") != sync_sha:
+        return False, "sync commit metadata does not match the chain", "", ""
+    if (sync_commit.get("commit") or {}).get(
+        "message"
+    ) != DEPENDABOT_SYNC_COMMIT_MESSAGE:
         return False, "sync child commit message is unexpected", "", ""
-    for role in ("author", "committer"):
-        identity = raw_commit.get(role) or {}
-        if any(
-            identity.get(field) != expected
-            for field, expected in DEPENDABOT_SYNC_COMMIT_IDENTITY.items()
-        ):
-            return False, f"sync child {role} identity is unexpected", "", ""
+    ok, problem, dependabot_sha = _github_actions_commit(
+        sync_commit, "sync commit"
+    )
+    if not ok:
+        return False, problem, "", ""
 
-    parent_pull_request = {
+    dependabot_pull_request = {
         **pull_request,
-        "head": {**pull_request["head"], "sha": parent_sha},
+        "head": {**pull_request["head"], "sha": dependabot_sha},
     }
     parent_eligible, parent_reason = dependabot_sync_eligibility(
-        parent_pull_request,
-        parent_commit,
-        parent_comparison,
+        dependabot_pull_request,
+        dependabot_commit,
+        dependabot_comparison,
         base_repo,
         expected_base_sha,
     )
@@ -258,21 +297,19 @@ def trusted_sync_child_candidate(  # noqa: C901
             "",
             "",
         )
-
-    parent_parents = parent_commit.get("parents")
-    if not isinstance(parent_parents, list) or len(parent_parents) != 1:
-        return False, "Dependabot parent must have exactly one parent", "", ""
-    source_base_sha = (parent_parents[0] or {}).get("sha")
-    if (
-        not isinstance(source_base_sha, str)
-        or re.fullmatch(r"[0-9a-f]{40}", source_base_sha) is None
-    ):
-        return False, "trusted synchronizer base SHA is invalid", "", ""
+    parents = dependabot_commit.get("parents") or []
+    if (parents[0] or {}).get("sha") != expected_base_sha:
+        return (
+            False,
+            "Dependabot commit is not built directly on the trusted base",
+            "",
+            "",
+        )
     return (
         True,
         "current head is a candidate trusted sync child",
-        parent_sha,
-        source_base_sha,
+        sync_sha,
+        dependabot_sha,
     )
 
 
@@ -293,7 +330,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--commit-json", required=True)
     parser.add_argument("--comparison-json", required=True)
     parser.add_argument("--parent-commit-json", required=True)
-    parser.add_argument("--parent-comparison-json", required=True)
+    parser.add_argument("--grandparent-commit-json", required=True)
+    parser.add_argument("--grandparent-comparison-json", required=True)
     parser.add_argument(
         "--github-output",
         required=True,
@@ -306,14 +344,15 @@ def main(argv: list[str] | None = None) -> int:
     base_sha = ""
     head_ref = ""
     head_sha = ""
-    parent_sha = ""
-    source_base_sha = ""
+    sync_sha = ""
+    dependabot_sha = ""
     try:
         pull_request = _load_json(args.pull_request_json)
         commit = _load_json(args.commit_json)
         comparison = _load_json(args.comparison_json)
         parent_commit = _load_json(args.parent_commit_json)
-        parent_comparison = _load_json(args.parent_comparison_json)
+        grandparent_commit = _load_json(args.grandparent_commit_json)
+        grandparent_comparison = _load_json(args.grandparent_comparison_json)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         parser.error(str(error))
     snapshot_valid, _, base_sha, head_ref, head_sha = (
@@ -335,13 +374,14 @@ def main(argv: list[str] | None = None) -> int:
         (
             sync_child_candidate,
             child_reason,
-            parent_sha,
-            source_base_sha,
+            sync_sha,
+            dependabot_sha,
         ) = trusted_sync_child_candidate(
             pull_request,
             commit,
             parent_commit,
-            parent_comparison,
+            grandparent_commit,
+            grandparent_comparison,
             args.base_repo,
             args.expected_base_sha,
         )
@@ -360,8 +400,8 @@ def main(argv: list[str] | None = None) -> int:
             "sync_child_candidate="
             f"{'true' if sync_child_candidate else 'false'}\n"
         )
-        handle.write(f"parent_sha={parent_sha}\n")
-        handle.write(f"source_base_sha={source_base_sha}\n")
+        handle.write(f"sync_sha={sync_sha}\n")
+        handle.write(f"dependabot_sha={dependabot_sha}\n")
     return 0
 
 

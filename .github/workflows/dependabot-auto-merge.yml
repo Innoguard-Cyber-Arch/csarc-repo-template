@@ -58,13 +58,19 @@ jobs:
           fi
           gh api "repos/$BASE_REPO/commits/$head_sha" > "$RUNNER_TEMP/head-commit.json"
           gh api "repos/$BASE_REPO/compare/$base_sha...$head_sha" > "$RUNNER_TEMP/comparison.json"
-          parent_sha="$(jq -r 'if (.parents | length) == 1 then .parents[0].sha else empty end' "$RUNNER_TEMP/head-commit.json")"
+          # Issue #1052: a synced head is release -> sync -> Dependabot.
+          echo '{}' > "$RUNNER_TEMP/parent-commit.json"
+          echo '{}' > "$RUNNER_TEMP/grandparent-commit.json"
+          echo '{}' > "$RUNNER_TEMP/grandparent-comparison.json"
+          single_parent='if (.parents | length) == 1 then .parents[0].sha else empty end'
+          parent_sha="$(jq -r "$single_parent" "$RUNNER_TEMP/head-commit.json")"
           if [[ "$parent_sha" =~ ^[0-9a-f]{40}$ ]]; then
             gh api "repos/$BASE_REPO/commits/$parent_sha" > "$RUNNER_TEMP/parent-commit.json"
-            gh api "repos/$BASE_REPO/compare/$base_sha...$parent_sha" > "$RUNNER_TEMP/parent-comparison.json"
-          else
-            echo '{}' > "$RUNNER_TEMP/parent-commit.json"
-            echo '{}' > "$RUNNER_TEMP/parent-comparison.json"
+            grandparent_sha="$(jq -r "$single_parent" "$RUNNER_TEMP/parent-commit.json")"
+            if [[ "$grandparent_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              gh api "repos/$BASE_REPO/commits/$grandparent_sha" > "$RUNNER_TEMP/grandparent-commit.json"
+              gh api "repos/$BASE_REPO/compare/$base_sha...$grandparent_sha" > "$RUNNER_TEMP/grandparent-comparison.json"
+            fi
           fi
           python3 scripts/authenticate_dependabot_head.py \
             --base-repo "$BASE_REPO" \
@@ -73,39 +79,47 @@ jobs:
             --commit-json "$RUNNER_TEMP/head-commit.json" \
             --comparison-json "$RUNNER_TEMP/comparison.json" \
             --parent-commit-json "$RUNNER_TEMP/parent-commit.json" \
-            --parent-comparison-json "$RUNNER_TEMP/parent-comparison.json" \
+            --grandparent-commit-json "$RUNNER_TEMP/grandparent-commit.json" \
+            --grandparent-comparison-json "$RUNNER_TEMP/grandparent-comparison.json" \
             --github-output "$GITHUB_OUTPUT"
-      - name: Check out the trusted synchronizer for a sync child
-        if: ${{ steps.classify.outputs.sync_child_candidate == 'true' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ steps.classify.outputs.source_base_sha }}
-          path: auth-sync-base
-          persist-credentials: false
-      - name: Check out the authenticated Dependabot parent
-        if: ${{ steps.classify.outputs.sync_child_candidate == 'true' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ steps.classify.outputs.parent_sha }}
-          path: auth-sync-parent
-          persist-credentials: false
       - name: Check out the candidate sync child
         if: ${{ steps.classify.outputs.sync_child_candidate == 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.classify.outputs.head_sha }}
           path: auth-sync-child
+          fetch-depth: 0
           persist-credentials: false
       - name: Reconstruct the candidate sync child
         id: reconstruct
         if: ${{ steps.classify.outputs.sync_child_candidate == 'true' }}
         env:
+          BASE_SHA: ${{ steps.classify.outputs.base_sha }}
+          DEPENDABOT_SHA: ${{ steps.classify.outputs.dependabot_sha }}
           HEAD_SHA: ${{ steps.classify.outputs.head_sha }}
+          SYNC_SHA: ${{ steps.classify.outputs.sync_sha }}
         run: |
-          cd "$GITHUB_WORKSPACE/auth-sync-parent"
-          cp "$GITHUB_WORKSPACE/auth-sync-base/scripts/sync-paired-files.sh" \
-            scripts/sync-paired-files.sh
+          # Issue #1052: only trusted base code (the workspace root checkout)
+          # runs here. The release commit must equal the deterministic stable
+          # candidate of the sync commit, and the sync commit must equal the
+          # trusted synchronizers applied to the signed Dependabot commit.
+          trusted="$GITHUB_WORKSPACE/scripts"
+          child="$GITHUB_WORKSPACE/auth-sync-child"
+          [[ "$(git -C "$child" rev-parse "$HEAD_SHA^")" == "$SYNC_SHA" ]]
+          [[ "$(git -C "$child" rev-parse "$SYNC_SHA^")" == "$DEPENDABOT_SHA" ]]
+          [[ "$(git -C "$child" rev-parse "$DEPENDABOT_SHA^")" == "$BASE_SHA" ]]
+          python3 "$trusted/release_policy.py" verify-delivery-version \
+            --root "$child" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --phase stable
+          rebuild="$RUNNER_TEMP/sync-rebuild"
+          git -C "$child" worktree add --detach "$rebuild" "$DEPENDABOT_SHA"
+          cd "$rebuild"
+          cp "$trusted/sync-paired-files.sh" scripts/sync-paired-files.sh
           ./scripts/sync-paired-files.sh
+          python3 "$trusted/sync_template_action_pins.py" \
+            --root . --base-rev "$BASE_SHA" --head-rev "$DEPENDABOT_SHA"
           mapfile -d '' synced_paths < <(git diff --name-only -z)
           if [[ ${#synced_paths[@]} -eq 0 ]] || \
             [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
@@ -113,15 +127,13 @@ jobs:
             exit 1
           fi
           for path in "${synced_paths[@]}"; do
-            if [[ ! "$path" =~ ^template/\.github/workflows/[^/]+\.ya?ml$ ]]; then
+            if [[ ! "$path" =~ ^template/\.github/workflows/[^/]+\.(ya?ml|jinja)$ ]]; then
               echo "Trusted reconstruction changed an unexpected path: $path" >&2
               exit 1
             fi
           done
           git add -- "${synced_paths[@]}"
-          expected_tree="$(git write-tree)"
-          child_tree="$(git -C "$GITHUB_WORKSPACE/auth-sync-child" rev-parse "$HEAD_SHA^{tree}")"
-          [[ "$expected_tree" == "$child_tree" ]]
+          [[ "$(git write-tree)" == "$(git rev-parse "$SYNC_SHA^{tree}")" ]]
           echo "eligible=true" >> "$GITHUB_OUTPUT"
       - name: Publish authenticated head
         id: authenticate
@@ -178,12 +190,30 @@ jobs:
       pull-requests: write
     outputs:
       update_type: ${{ steps.metadata.outputs.update-type }}
+      merge_eligible: ${{ steps.eligibility.outputs.merge_eligible }}
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ github.token }}
+      - name: Require every updated dependency to be patch or minor
+        id: eligibility
+        env:
+          UPDATED_DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
+        run: |
+          # Issue #1052: update-type is only the highest level present and
+          # ignores a dependency without one, so a group is judged per entry.
+          if jq -e \
+            'type == "array" and length > 0 and
+             all(.[]; .updateType == "version-update:semver-patch" or
+                      .updateType == "version-update:semver-minor")' \
+            <<<"$UPDATED_DEPENDENCIES" > /dev/null; then
+            echo "merge_eligible=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "merge_eligible=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Not every updated dependency is a patch or minor update."
+          fi
       - name: Flag major updates for manual review
         if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-major' }}
         env:
@@ -215,10 +245,13 @@ jobs:
   merge-eligible:
     name: dependabot-merge-eligible
     needs: classify-update
+    # Issue #1052: without always(), a skipped sync-template (every update
+    # that needs no template sync) transitively skips this job.
     if: >-
       ${{
-        needs.classify-update.outputs.update_type == 'version-update:semver-patch' ||
-        needs.classify-update.outputs.update_type == 'version-update:semver-minor'
+        always() &&
+        needs.classify-update.result == 'success' &&
+        needs.classify-update.outputs.merge_eligible == 'true'
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -237,18 +270,20 @@ jobs:
     # Issue #830: only the trusted base workflow authenticates the current
     # signed Dependabot head and its exact changed-path set. The write job
     # never executes a script selected by the pull request.
+    # Issue #1052: the same trusted job also carries the root pin change into
+    # templated workflows and materializes the stable release candidate, so
+    # the pull request satisfies same-PR release materialization on main.
     needs: authenticate
     if: ${{ needs.authenticate.outputs.sync_eligible == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # contents: write pushes the sync commit onto Dependabot's own
-      # branch. This step only ever runs scripts/sync-paired-files.sh's
-      # own byte-for-byte copy logic against paths that script already
-      # declares paired -- it never executes anything else from the
-      # checked-out PR content, and a Dependabot bump changes a version
-      # string or action SHA inside a paired file, never that script
-      # itself.
+      # contents: write pushes the sync and release commits onto
+      # Dependabot's own branch. This step only runs the trusted base's
+      # scripts/sync-paired-files.sh, scripts/sync_template_action_pins.py,
+      # and scripts/release_policy.py -- it never executes anything from
+      # the checked-out PR content, and a Dependabot Actions bump changes
+      # only an action SHA inside root workflows, never those scripts.
       contents: write
       pull-requests: read
     outputs:
@@ -266,7 +301,7 @@ jobs:
           ref: ${{ needs.authenticate.outputs.head_sha }}
           path: pull-request
           fetch-depth: 0
-      - name: Sync paired template files and push if this bump drifted them
+      - name: Sync template files, materialize stable, and push on drift
         id: sync
         env:
           BASE_REPO: ${{ github.repository }}
@@ -276,27 +311,21 @@ jobs:
           HEAD_SHA: ${{ needs.authenticate.outputs.head_sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          trusted="$GITHUB_WORKSPACE/trusted-base/scripts"
           cd "$GITHUB_WORKSPACE/pull-request"
-          cp "$GITHUB_WORKSPACE/trusted-base/scripts/sync-paired-files.sh" \
-            scripts/sync-paired-files.sh
-          ./scripts/sync-paired-files.sh
-          if [[ -z "$(git status --porcelain)" ]]; then
-            echo "::notice::No paired-file drift from this bump; nothing to sync."
-            echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          mapfile -d '' synced_paths < <(git diff --name-only -z)
-          if [[ ${#synced_paths[@]} -eq 0 ]] || \
-            [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
-            echo "Sync produced an unexpected working tree." >&2
-            exit 1
-          fi
           if ! git cat-file -e "$BASE_SHA^{commit}" || \
             ! git cat-file -e "$HEAD_SHA^{commit}"; then
             echo "Authenticated base or head commit is unavailable." >&2
             exit 1
           fi
-          for path in "${synced_paths[@]}"; do
+          cp "$trusted/sync-paired-files.sh" scripts/sync-paired-files.sh
+          ./scripts/sync-paired-files.sh
+          if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+            echo "Sync produced an unexpected working tree." >&2
+            exit 1
+          fi
+          mapfile -d '' paired_paths < <(git diff --name-only -z)
+          for path in "${paired_paths[@]}"; do
             source_path="${path#template/}"
             if [[ ! "$path" =~ ^template/\.github/workflows/[^/]+\.ya?ml$ ]]; then
               echo "Sync produced a change outside the authenticated workflow set: $path" >&2
@@ -313,16 +342,59 @@ jobs:
               fi
             fi
           done
+          # Issue #1052: templated (.jinja) and unpaired template workflows
+          # receive the same exact pin change the signed commit made in root.
+          python3 "$trusted/sync_template_action_pins.py" \
+            --root . --base-rev "$HEAD_SHA^" --head-rev "$HEAD_SHA"
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "::notice::No template drift from this bump; nothing to sync."
+            echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mapfile -d '' synced_paths < <(git diff --name-only -z)
+          if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+            echo "Sync produced an unexpected working tree." >&2
+            exit 1
+          fi
+          for path in "${synced_paths[@]}"; do
+            if [[ ! "$path" =~ ^template/\.github/workflows/[^/]+\.(ya?ml|jinja)$ ]]; then
+              echo "Sync produced a change outside the authenticated workflow set: $path" >&2
+              exit 1
+            fi
+          done
+          # Issue #1052: the same pull request must carry its own stable
+          # candidate, which is only exact when the bump sits on the base.
+          if [[ "$(git rev-parse "$HEAD_SHA^")" != "$BASE_SHA" ]]; then
+            echo "Dependabot head is not built on the current base; ask Dependabot to rebase before template sync." >&2
+            exit 1
+          fi
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
           git add -- "${synced_paths[@]}"
-          # Issue #755, completion condition 5: a `fix` commit here (not
-          # `chore`) is what lets this reach a release -- it only fires
-          # when scripts/sync-paired-files.sh actually found drift, i.e.
-          # exactly when this bump changed template/ content that
-          # `copier update` distributes downstream, not on every
-          # Dependabot commit regardless of what it touched.
+          # Issue #755: a `fix` commit (not `chore`) makes the template
+          # change release-worthy; it only exists when this bump changed
+          # content that `copier update` distributes downstream.
           git commit -m "fix(deps): sync template copies of this dependency bump (#755)"
+          # Issue #1052: materialize the stable candidate with trusted base
+          # code as the final release-only commit, then prove it is exact.
+          python3 "$trusted/release_policy.py" prepare-candidate \
+            --root . --sha HEAD --phase stable > "$RUNNER_TEMP/candidate.json"
+          title="$(jq -r '.title // empty' "$RUNNER_TEMP/candidate.json")"
+          if [[ ! "$title" =~ ^chore\(main\):\ release\ [0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Stable candidate title is unexpected: $title" >&2
+            exit 1
+          fi
+          if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+            echo "Stable candidate created an unexpected file." >&2
+            exit 1
+          fi
+          git add --update
+          git commit -m "$title"
+          python3 "$trusted/release_policy.py" verify-delivery-version \
+            --root . \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$(git rev-parse HEAD)" \
+            --phase stable
           synced_head_sha="$(git rev-parse HEAD)"
           gh api "repos/$BASE_REPO/pulls/$PR_NUMBER" > "$RUNNER_TEMP/current-pr.json"
           jq -e \

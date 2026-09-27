@@ -2174,38 +2174,50 @@ class DependabotGitHub(FakeGitHub):
 
 
 class DependabotSyncChildGitHub(DependabotGitHub):
-    """Serve the deterministic unsigned child of one signed Actions bump."""
+    """Serve the release -> sync -> signed Actions bump chain (#1052)."""
 
     def __init__(self) -> None:
         super().__init__()
         self.head = "c" * 40
+        self.sync_sha = "d" * 40
         self.head_ref = "dependabot/github_actions/main/actions-checkout-7"
         self.additional_check_runs[0]["head_sha"] = self.head
+        self.release_parent = self.sync_sha
+        self.head_message = "chore(main): release 0.30.3"
+
+    @staticmethod
+    def _actions_commit(sha: str, message: str, parent: str) -> dict:
+        identity = {
+            "name": "github-actions[bot]",
+            "email": "actions@github.com",
+        }
+        return {
+            "sha": sha,
+            "author": {"login": "github-actions[bot]", "type": "Bot"},
+            "committer": {"login": "github-actions[bot]", "type": "Bot"},
+            "commit": {
+                "message": message,
+                "author": identity,
+                "committer": identity,
+                "verification": {"verified": False, "reason": "unsigned"},
+            },
+            "parents": [{"sha": parent}],
+        }
 
     def get(self, _repo: str, path: str) -> object:
         if path == f"commits/{self.head}":
-            identity = {
-                "name": "github-actions[bot]",
-                "email": "actions@github.com",
-            }
-            return {
-                "sha": self.head,
-                "author": {"login": "github-actions[bot]", "type": "Bot"},
-                "committer": {
-                    "login": "github-actions[bot]",
-                    "type": "Bot",
-                },
-                "commit": {
-                    "message": (
-                        "fix(deps): sync template copies of this dependency "
-                        "bump (#755)"
-                    ),
-                    "author": identity,
-                    "committer": identity,
-                    "verification": {"verified": False, "reason": "unsigned"},
-                },
-                "parents": [{"sha": "a" * 40}],
-            }
+            return self._actions_commit(
+                self.head, self.head_message, self.release_parent
+            )
+        if path == f"commits/{self.sync_sha}":
+            return self._actions_commit(
+                self.sync_sha,
+                (
+                    "fix(deps): sync template copies of this dependency "
+                    "bump (#755)"
+                ),
+                "a" * 40,
+            )
         if path == f"commits/{'a' * 40}":
             return {
                 "sha": "a" * 40,
@@ -2255,6 +2267,20 @@ def test_dependabot_merge_accepts_a_reconstructed_sync_child() -> None:
         )
         == "sync-child"
     )
+
+
+def test_dependabot_merge_rejects_a_sync_child_without_its_release() -> None:
+    """The pre-#1052 single sync commit can no longer satisfy the merge."""
+    github = DependabotSyncChildGitHub()
+    github.head_message = (
+        "fix(deps): sync template copies of this dependency bump (#755)"
+    )
+    github.release_parent = "a" * 40
+
+    with pytest.raises(RuntimeError, match="release commit message"):
+        require_trusted_dependabot_head(
+            github, "owner/repo", github.pull(), github.head, github.base_sha
+        )
 
 
 def test_dependabot_merge_rejects_a_human_replacement_head() -> None:

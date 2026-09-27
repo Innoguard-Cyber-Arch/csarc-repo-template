@@ -183,6 +183,7 @@ if [[ "$scopes" == *,workflow,* ]]; then
     tests/test_authenticate_dependabot_head.py \
     tests/test_check_action_pins.py \
     tests/test_check_jinja_workflow_drift.py \
+    tests/test_sync_template_action_pins.py \
     tests/test_ci_tier.py \
     tests/test_delivery_sync.py \
     tests/test_dependabot_auto_merge.py \

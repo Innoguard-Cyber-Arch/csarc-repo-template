@@ -225,6 +225,53 @@ def test_dependabot_is_always_beta() -> None:
     assert result.level == "beta"
 
 
+def _dependabot_pull(number: int) -> dict[str, Any]:
+    return {
+        "number": number,
+        "user": {"login": "dependabot[bot]"},
+        "head": {
+            "ref": "dependabot/github_actions/main/setup-uv-10.2.0",
+            "repo": {"full_name": "o/r"},
+        },
+        "body": "",
+    }
+
+
+def test_dependabot_template_sync_is_stable() -> None:
+    """Issue #1052: a synced bump materializes stable on main."""
+    github = FakeGitHub()
+    github.collections["pulls/9/commits?per_page=100"] = [
+        {"commit": {"message": "build(deps): bump astral-sh/setup-uv"}},
+        {"commit": {"message": levels.DEPENDABOT_SYNC_COMMIT_MESSAGE}},
+        {"commit": {"message": "chore(main): release 0.30.3"}},
+    ]
+
+    result = levels.resolve_pull(github, "o/r", _dependabot_pull(9), settings())
+
+    assert result.level == "stable"
+    assert result.source == "allowlisted dependency bot template sync"
+
+
+def test_dependabot_without_template_sync_stays_beta() -> None:
+    github = FakeGitHub()
+    github.collections["pulls/9/commits?per_page=100"] = [
+        {"commit": {"message": "build(deps): bump astral-sh/setup-uv"}},
+    ]
+
+    result = levels.resolve_pull(github, "o/r", _dependabot_pull(9), settings())
+
+    assert result.level == "beta"
+
+
+def test_dependabot_sync_message_matches_the_authenticator() -> None:
+    dependabot_auth = importlib.import_module("authenticate_dependabot_head")
+
+    assert (
+        levels.DEPENDABOT_SYNC_COMMIT_MESSAGE
+        == dependabot_auth.DEPENDABOT_SYNC_COMMIT_MESSAGE
+    )
+
+
 @pytest.mark.parametrize(
     ("title", "expected"),
     [

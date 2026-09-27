@@ -16,6 +16,7 @@ REPO = "Innoguard-Cyber-Arch/csarc-repo-template"
 BASE_SHA = "a" * 40
 HEAD_SHA = "b" * 40
 SYNC_SHA = "c" * 40
+RELEASE_SHA = "d" * 40
 
 
 def _pull_request() -> dict:
@@ -55,22 +56,32 @@ def _comparison(path: str = ".github/workflows/ci.yml") -> dict:
     }
 
 
-def _sync_child() -> dict:
+def _actions_commit(sha: str, message: str, parent: str) -> dict:
     return {
-        "sha": SYNC_SHA,
+        "sha": sha,
         "commit": {
-            "message": dependabot_auth.DEPENDABOT_SYNC_COMMIT_MESSAGE,
+            "message": message,
             "author": dependabot_auth.DEPENDABOT_SYNC_COMMIT_IDENTITY,
             "committer": dependabot_auth.DEPENDABOT_SYNC_COMMIT_IDENTITY,
             "verification": {"verified": False, "reason": "unsigned"},
         },
-        "parents": [{"sha": HEAD_SHA}],
+        "parents": [{"sha": parent}],
     }
+
+
+def _sync_child() -> dict:
+    return _actions_commit(
+        SYNC_SHA, dependabot_auth.DEPENDABOT_SYNC_COMMIT_MESSAGE, HEAD_SHA
+    )
+
+
+def _release_child() -> dict:
+    return _actions_commit(RELEASE_SHA, "chore(main): release 0.30.3", SYNC_SHA)
 
 
 def _sync_child_pull_request() -> dict:
     pull_request = _pull_request()
-    pull_request["head"]["sha"] = SYNC_SHA
+    pull_request["head"]["sha"] = RELEASE_SHA
     return pull_request
 
 
@@ -240,10 +251,11 @@ def test_dependabot_sync_rejects_unsigned_or_non_github_commits() -> None:
 
 
 def test_trusted_sync_child_requires_an_authenticated_parent() -> None:
-    """A deterministic sync child may be reconstructed from its bot parent."""
-    eligible, reason, parent_sha, source_base_sha = (
+    """A release -> sync -> Dependabot chain is selected for reconstruction."""
+    eligible, reason, sync_sha, dependabot_sha = (
         dependabot_auth.trusted_sync_child_candidate(
             _sync_child_pull_request(),
+            _release_child(),
             _sync_child(),
             _commit(),
             _comparison(),
@@ -254,14 +266,15 @@ def test_trusted_sync_child_requires_an_authenticated_parent() -> None:
 
     assert eligible
     assert "candidate trusted sync child" in reason
-    assert parent_sha == HEAD_SHA
-    assert source_base_sha == BASE_SHA
+    assert sync_sha == SYNC_SHA
+    assert dependabot_sha == HEAD_SHA
 
 
 def test_trusted_sync_child_candidate_rejects_a_human_parent() -> None:
     """Spoofed sync metadata cannot replace the signed Dependabot parent."""
     eligible, reason, _, _ = dependabot_auth.trusted_sync_child_candidate(
         _sync_child_pull_request(),
+        _release_child(),
         _sync_child(),
         _commit(author="some-contributor"),
         _comparison(),
@@ -273,6 +286,73 @@ def test_trusted_sync_child_candidate_rejects_a_human_parent() -> None:
     assert "parent is not trusted" in reason
 
 
+def test_trusted_sync_child_requires_a_stable_release_head() -> None:
+    """A sync without its release commit, or a beta release, is rejected."""
+    legacy = _sync_child_pull_request()
+    legacy["head"]["sha"] = SYNC_SHA
+    eligible, reason, _, _ = dependabot_auth.trusted_sync_child_candidate(
+        legacy,
+        _sync_child(),
+        _commit(),
+        _commit(),
+        _comparison(),
+        REPO,
+        BASE_SHA,
+    )
+    assert not eligible
+    assert "release commit message" in reason
+
+    beta = _release_child()
+    beta["commit"]["message"] = "chore(main): release 0.30.3-beta.1"
+    eligible, reason, _, _ = dependabot_auth.trusted_sync_child_candidate(
+        _sync_child_pull_request(),
+        beta,
+        _sync_child(),
+        _commit(),
+        _comparison(),
+        REPO,
+        BASE_SHA,
+    )
+    assert not eligible
+    assert "release commit message" in reason
+
+
+def test_trusted_sync_child_rejects_a_mismatched_sync_parent() -> None:
+    """The sync commit metadata must be the release commit's real parent."""
+    other = _sync_child()
+    other["sha"] = "e" * 40
+    eligible, reason, _, _ = dependabot_auth.trusted_sync_child_candidate(
+        _sync_child_pull_request(),
+        _release_child(),
+        other,
+        _commit(),
+        _comparison(),
+        REPO,
+        BASE_SHA,
+    )
+
+    assert not eligible
+    assert "does not match the chain" in reason
+
+
+def test_trusted_sync_child_requires_the_bump_on_the_trusted_base() -> None:
+    """A Dependabot commit built on an older base cannot be materialized."""
+    stale = _commit()
+    stale["parents"] = [{"sha": "f" * 40}]
+    eligible, reason, _, _ = dependabot_auth.trusted_sync_child_candidate(
+        _sync_child_pull_request(),
+        _release_child(),
+        _sync_child(),
+        stale,
+        _comparison(),
+        REPO,
+        BASE_SHA,
+    )
+
+    assert not eligible
+    assert "directly on the trusted base" in reason
+
+
 def test_authenticated_cli_writes_only_validated_push_coordinates(
     tmp_path: Path,
 ) -> None:
@@ -281,13 +361,15 @@ def test_authenticated_cli_writes_only_validated_push_coordinates(
     commit_path = tmp_path / "commit.json"
     comparison_path = tmp_path / "comparison.json"
     parent_commit_path = tmp_path / "parent-commit.json"
-    parent_comparison_path = tmp_path / "parent-comparison.json"
+    grandparent_commit_path = tmp_path / "grandparent-commit.json"
+    grandparent_comparison_path = tmp_path / "grandparent-comparison.json"
     output = tmp_path / "github-output"
     pull_request_path.write_text(json.dumps(_pull_request()), encoding="utf-8")
     commit_path.write_text(json.dumps(_commit()), encoding="utf-8")
     comparison_path.write_text(json.dumps(_comparison()), encoding="utf-8")
     parent_commit_path.write_text("{}", encoding="utf-8")
-    parent_comparison_path.write_text("{}", encoding="utf-8")
+    grandparent_commit_path.write_text("{}", encoding="utf-8")
+    grandparent_comparison_path.write_text("{}", encoding="utf-8")
 
     exit_code = dependabot_auth.main(
         [
@@ -303,8 +385,10 @@ def test_authenticated_cli_writes_only_validated_push_coordinates(
             str(comparison_path),
             "--parent-commit-json",
             str(parent_commit_path),
-            "--parent-comparison-json",
-            str(parent_comparison_path),
+            "--grandparent-commit-json",
+            str(grandparent_commit_path),
+            "--grandparent-comparison-json",
+            str(grandparent_comparison_path),
             "--github-output",
             str(output),
         ]
@@ -319,8 +403,8 @@ def test_authenticated_cli_writes_only_validated_push_coordinates(
         "head_ref=dependabot/github_actions/main/actions-checkout-7\n"
         f"head_sha={HEAD_SHA}\n"
         "sync_child_candidate=false\n"
-        "parent_sha=\n"
-        "source_base_sha=\n"
+        "sync_sha=\n"
+        "dependabot_sha=\n"
     )
 
 
@@ -330,10 +414,11 @@ def test_cli_classifies_a_sync_child_for_trusted_reconstruction(
     """A reopened sync child is not trusted until its tree is reconstructed."""
     inputs = {
         "pull-request": _sync_child_pull_request(),
-        "commit": _sync_child(),
+        "commit": _release_child(),
         "comparison": _comparison(),
-        "parent-commit": _commit(),
-        "parent-comparison": _comparison(),
+        "parent-commit": _sync_child(),
+        "grandparent-commit": _commit(),
+        "grandparent-comparison": _comparison(),
     }
     paths = {}
     for name, value in inputs.items():
@@ -356,8 +441,10 @@ def test_cli_classifies_a_sync_child_for_trusted_reconstruction(
             str(paths["comparison"]),
             "--parent-commit-json",
             str(paths["parent-commit"]),
-            "--parent-comparison-json",
-            str(paths["parent-comparison"]),
+            "--grandparent-commit-json",
+            str(paths["grandparent-commit"]),
+            "--grandparent-comparison-json",
+            str(paths["grandparent-comparison"]),
             "--github-output",
             str(output),
         ]
@@ -370,10 +457,10 @@ def test_cli_classifies_a_sync_child_for_trusted_reconstruction(
         "sync_eligible=false\n"
         f"base_sha={BASE_SHA}\n"
         "head_ref=dependabot/github_actions/main/actions-checkout-7\n"
-        f"head_sha={SYNC_SHA}\n"
+        f"head_sha={RELEASE_SHA}\n"
         "sync_child_candidate=true\n"
-        f"parent_sha={HEAD_SHA}\n"
-        f"source_base_sha={BASE_SHA}\n"
+        f"sync_sha={SYNC_SHA}\n"
+        f"dependabot_sha={HEAD_SHA}\n"
     )
 
 
@@ -386,7 +473,8 @@ def test_cli_exports_exact_snapshot_for_an_unauthenticated_head(
         "commit": _commit(author="some-contributor"),
         "comparison": _comparison(),
         "parent-commit": {},
-        "parent-comparison": {},
+        "grandparent-commit": {},
+        "grandparent-comparison": {},
     }
     paths = {}
     for name, value in inputs.items():
@@ -409,8 +497,10 @@ def test_cli_exports_exact_snapshot_for_an_unauthenticated_head(
             str(paths["comparison"]),
             "--parent-commit-json",
             str(paths["parent-commit"]),
-            "--parent-comparison-json",
-            str(paths["parent-comparison"]),
+            "--grandparent-commit-json",
+            str(paths["grandparent-commit"]),
+            "--grandparent-comparison-json",
+            str(paths["grandparent-comparison"]),
             "--github-output",
             str(output),
         ]
