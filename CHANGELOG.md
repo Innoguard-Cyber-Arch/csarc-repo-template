@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.30.3] - 2026-09-27
+
+### Bug Fixes
+
+* fix(ci): unblock Dependabot eligibility and template pin sync (63b499f)
+
 ## [0.30.2] - 2026-09-27
 
 ### Bug Fixes
