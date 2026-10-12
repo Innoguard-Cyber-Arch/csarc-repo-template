@@ -1439,9 +1439,9 @@ def release_plan_report(
 ) -> dict[str, object]:
     """Describe the one local release decision without changing the repo.
 
-    A squash-merged Milestone promotion cannot reach the delivery-branch beta
-    tags from `sha`, so the version is planned from its exact source bridge
-    instead, which must carry the same tree (#1027).
+    A squash merge can hide the reviewed history that owns a materialized
+    version, so selected promotion or Dependabot sources are planned from
+    their exact head, which must carry the same tree (#1027, #1056).
     """
     if source_sha:
         trees = {
@@ -1450,7 +1450,7 @@ def release_plan_report(
         }
         if len(trees) != 1:
             raise ValueError(
-                "promotion source tree does not match the merged commit"
+                "release source tree does not match the merged commit"
             )
     planned = release_plan(root, source_sha or sha, phase=phase)
     if planned is None:
@@ -2315,7 +2315,7 @@ def parser() -> argparse.ArgumentParser:
     )
     plan.add_argument(
         "--source-sha",
-        help="Exact source bridge of a squash-merged Milestone promotion.",
+        help="Exact reviewed source head of a supported squash merge.",
     )
     candidate = subparsers.add_parser("prepare-candidate")
     candidate.add_argument("--sha", default="HEAD")

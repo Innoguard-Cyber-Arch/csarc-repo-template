@@ -30,6 +30,7 @@ CHECKER = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "check-trusted-verification")
 )
 resolve_merge_source = CHECKER["resolve_merge_source"]
+resolve_release_source = CHECKER["resolve_release_source"]
 find_reusable_evidence = CHECKER["find_reusable_evidence"]
 
 NOW = datetime(2026, 9, 20, 12, tzinfo=UTC)
@@ -867,17 +868,32 @@ def test_reusable_selector_uses_only_an_original_identical_route(
 class MergeSourceGitHub:
     """Serve the exact source and tree identity needed by release reuse."""
 
-    def __init__(self, source_tree: str = TREE, base: str = "main") -> None:
+    def __init__(
+        self,
+        source_tree: str = TREE,
+        base: str = "main",
+        head_ref: str = "fix/42-release",
+        author: str = "maintainer",
+        author_type: str = "User",
+    ) -> None:
         self.source_tree = source_tree
         self.base = base
+        self.head_ref = head_ref
+        self.author = author
+        self.author_type = author_type
 
     def pages(self, _repo: str, _path: str) -> list[dict[str, Any]]:
         return [
             {
                 "merged_at": NOW.isoformat(),
                 "merge_commit_sha": "c" * 40,
-                "base": {"ref": self.base},
-                "head": {"sha": HEAD},
+                "base": {"ref": self.base, "repo": {"full_name": "owner/repo"}},
+                "head": {
+                    "sha": HEAD,
+                    "ref": self.head_ref,
+                    "repo": {"full_name": "owner/repo"},
+                },
+                "user": {"login": self.author, "type": self.author_type},
             }
         ]
 
@@ -887,6 +903,11 @@ class MergeSourceGitHub:
         if path == f"git/commits/{HEAD}":
             return {"tree": {"sha": self.source_tree}}
         raise AssertionError(path)
+
+    def collection(
+        self, _repo: str, _path: str, _key: str
+    ) -> list[dict[str, Any]]:
+        return []
 
 
 def test_release_reuse_requires_the_exact_merged_tree() -> None:
@@ -910,3 +931,56 @@ def test_release_reuse_accepts_the_actual_delivery_branch() -> None:
     )
     with pytest.raises(RuntimeError, match="merged-main source PR"):
         resolve_merge_source(github, "owner/repo", "c" * 40)
+
+
+def test_release_source_selects_a_squash_merged_promotion() -> None:
+    """Promotion bridges keep using their reviewed pre-squash history."""
+    github = MergeSourceGitHub(head_ref="promote/m17-cost")
+
+    assert resolve_release_source(github, "owner/repo", "c" * 40) == HEAD
+
+
+def test_release_source_requires_exact_dependabot_eligibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A synced bot source is selected only through its trusted exact check."""
+    github = MergeSourceGitHub(
+        head_ref="dependabot/github_actions/main/actions-checkout-7",
+        author="dependabot[bot]",
+        author_type="Bot",
+    )
+    identity = ("dependabot-merge-eligible", 15368)
+
+    def trusted(*_args: object) -> tuple[dict[tuple[str, int], dict], dict]:
+        return (
+            {
+                identity: {
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+            },
+            {},
+        )
+
+    monkeypatch.setitem(
+        resolve_release_source.__globals__,
+        "trusted_required_check_runs",
+        trusted,
+    )
+    assert resolve_release_source(github, "owner/repo", "c" * 40) == HEAD
+
+    monkeypatch.setitem(
+        resolve_release_source.__globals__,
+        "trusted_required_check_runs",
+        lambda *_args: ({}, {}),
+    )
+    with pytest.raises(RuntimeError, match="trusted exact-head eligibility"):
+        resolve_release_source(github, "owner/repo", "c" * 40)
+
+
+def test_release_source_ignores_an_ordinary_squash_merge() -> None:
+    """Normal pull requests retain the squash commit's release intent."""
+    assert (
+        resolve_release_source(MergeSourceGitHub(), "owner/repo", "c" * 40)
+        == ""
+    )
