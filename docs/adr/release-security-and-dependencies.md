@@ -243,6 +243,14 @@ tree 才產生 eligibility，舊的一代 sync child 不再被接受。`release_
 PR 判為 stable；stable 的 review 與 suite 要求不低於 beta，所以這個判定不會放寬任何 gate。Eligibility 另改為逐一
 檢查 `updated-dependencies-json`，任何 major 或缺少 update-type 的依賴都不自動合併。
 
+### Squash 後以可信 Dependabot source 發布（#1056，2026-10-12）
+
+#1055 首次 live 驗證發現，三代 sync child 即使已物化 stable 並通過 exact-head gate，squash merge 仍會把
+來源的 `fix(deps)` 與 release commit 壓成 `build(deps)`，使 publisher 誤判 no-release。保留 #557 的 squash
+策略與 #1052 的同 PR 物化；沿用 #1027 的 source-head 模式，只讓 `promote/m*` 或具有 trusted exact-head
+`dependabot-merge-eligible` 的同 repo Dependabot PR 提供 release source。來源必須唯一，source tree 必須與
+merged tree 完全相同，版本面仍由原本的 materialization validator 檢查；普通 PR 不改用 pre-squash history。
+
 ## 發版不依賴 Actions 健康度的本機 fallback（#589，2026-09-03）
 
 2026-09-03 的實際事故（#587）證明「發版」目前完全綁在 `release.yml` 這一支 workflow 是否能在

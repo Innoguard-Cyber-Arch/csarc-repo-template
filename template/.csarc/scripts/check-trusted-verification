@@ -11,10 +11,13 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from authenticate_dependabot_head import dependabot_coordinates_eligible
 from pr_lifecycle import (
+    DEPENDABOT_ELIGIBILITY_CONTEXT,
     GITHUB_ACTIONS_APP_ID,
     GitHub,
     require_trusted_verification,
+    trusted_required_check_runs,
 )
 
 
@@ -85,10 +88,10 @@ def find_reusable_evidence(
     return max(matches, key=lambda item: int(item["check_run_id"]))
 
 
-def resolve_merge_source(
+def _merged_source(
     github: GitHub, repo: str, commit: str, branch: str = "main"
-) -> str:
-    """Resolve one merged commit on `branch` to its unique source PR head."""
+) -> tuple[dict[str, Any], str]:
+    """Return one merged commit's unique source PR and identical head tree."""
     pulls = github.pages(repo, f"commits/{commit}/pulls?per_page=100")
     matches: list[dict[str, Any]] = []
     for pull in pulls:
@@ -124,6 +127,57 @@ def resolve_merge_source(
         raise RuntimeError(
             f"Merged {branch} tree does not match the verified source PR tree"
         )
+    return matches[0], head_sha
+
+
+def resolve_merge_source(
+    github: GitHub, repo: str, commit: str, branch: str = "main"
+) -> str:
+    """Resolve one merged commit on `branch` to its unique source PR head."""
+    return _merged_source(github, repo, commit, branch)[1]
+
+
+def resolve_release_source(
+    github: GitHub, repo: str, commit: str, branch: str = "main"
+) -> str:
+    """Select a reviewed source whose pre-squash history owns the version."""
+    pull, head_sha = _merged_source(github, repo, commit, branch)
+    head = pull.get("head")
+    head_ref = head.get("ref") if isinstance(head, dict) else None
+    if isinstance(head_ref, str) and head_ref.startswith("promote/m"):
+        return head_sha
+
+    user = pull.get("user")
+    author = user.get("login") if isinstance(user, dict) else None
+    author_type = user.get("type") if isinstance(user, dict) else None
+    head_repo = head.get("repo") if isinstance(head, dict) else None
+    head_repo_name = (
+        head_repo.get("full_name") if isinstance(head_repo, dict) else None
+    )
+    eligible, _ = dependabot_coordinates_eligible(
+        str(author or ""), str(head_ref or ""), str(head_repo_name or ""), repo
+    )
+    if not eligible or author_type != "Bot":
+        return ""
+
+    identity = (DEPENDABOT_ELIGIBILITY_CONTEXT, GITHUB_ACTIONS_APP_ID)
+    checks = github.collection(
+        repo,
+        f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
+        "check_runs",
+    )
+    selected, _ = trusted_required_check_runs(
+        github, repo, head_sha, {identity}, checks
+    )
+    check = selected.get(identity)
+    if (
+        check is None
+        or check.get("status") != "completed"
+        or check.get("conclusion") != "success"
+    ):
+        raise RuntimeError(
+            "Dependabot release source has no trusted exact-head eligibility"
+        )
     return head_sha
 
 
@@ -132,9 +186,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("commit")
     parser.add_argument("--github-repo", required=True)
-    parser.add_argument("--resolve-merge-source", action="store_true")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--resolve-merge-source", action="store_true")
+    source.add_argument("--resolve-release-source", action="store_true")
+    source.add_argument("--find-reusable", action="store_true")
     parser.add_argument("--merge-branch", default="main")
-    parser.add_argument("--find-reusable", action="store_true")
     parser.add_argument("--max-age-hours", type=float, default=24.0)
     parser.add_argument("--required-tier", choices=("docs", "fast", "full"))
     parser.add_argument("--tier", choices=("docs", "fast", "full"))
@@ -148,6 +204,13 @@ def main() -> None:
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
     github = GitHub()
+    if args.resolve_release_source:
+        source_sha = resolve_release_source(
+            github, args.github_repo, args.commit, args.merge_branch
+        )
+        write_outputs(args.github_output, {"sha": source_sha})
+        sys.stdout.write(json.dumps({"sha": source_sha}) + "\n")
+        return
     head_sha = (
         resolve_merge_source(
             github, args.github_repo, args.commit, args.merge_branch

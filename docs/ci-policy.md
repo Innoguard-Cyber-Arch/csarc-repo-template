@@ -1094,6 +1094,11 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
      建在目前 base 上時不物化並明確失敗，需要請 Dependabot rebase。`release_level.py` 看到這個同步 commit 就把
      PR 判為 `stable`，hosted `verify` 因此以 stable 驗證同一份候選；合併後 `dependabot-merge.yml` dispatch 的
      `release.yml` 發布這個已審核的候選。
+   - **#1056 修正**：#1055 首次 live 驗證證明上述 sync、三代 authentication、full verify 與 merge eligibility
+     都成功，但 squash merge 只留下 `build(deps)` 標題，publisher 因而誤判 no-release。stable release 現在只對
+     `promote/m*`，或具備 trusted exact-head `dependabot-merge-eligible` 的同 repo Dependabot PR，取回唯一的
+     reviewed source head；`release_policy.py plan --source-sha` 仍要求 source tree 與 merged tree 完全相同，
+     materialization 不精確也會失敗。普通 PR 不改用 source history，未同步的 Dependabot 更新仍維持原本判定。
    - 生成專案的 `dependabot-auto-merge.yml` 沒有 `sync-template`，只套用逐依賴 eligibility。
 2. 新增 `scripts/check_action_pins.py`（root 與 `template/.csarc/scripts/check_action_pins.py` 逐位元組同步）：掃
    `.github/workflows/`、`template/.github/workflows/` 底下所有 `.yml`／`.yaml`／`.jinja` 檔案的
@@ -1111,7 +1116,7 @@ CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.p
 `tests/test_dependabot_auto_merge.py` 驗證 base-code checkout、authenticated head checkout 與 exact-ref push。
 #1052 另由 `tests/test_sync_template_action_pins.py` 驗證 Jinja pin 替換與歧義拒絕，並由上述兩檔與
 `tests/test_release_level.py`、`tests/test_pr_lifecycle.py` 驗證逐依賴 eligibility、三代 sync child 與 stable 判定。
-實際 GitHub push 行為仍待合併後第一張真的改到 paired workflow 的 Dependabot PR 驗證並回填證據。
+實際 GitHub push、sync 與 exact-head eligibility 已由 #1055 驗證；squash 後發布修正由 #1056 追蹤。
 
 ## Current automation
 
