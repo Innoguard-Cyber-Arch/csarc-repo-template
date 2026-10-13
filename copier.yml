@@ -383,7 +383,7 @@ admin_bypass:
     Never bypass human approval: 'off'
     Allow only beta work: beta-only
     Allow beta and stable work: always
-  default: 'off'
+  default: always
 
 copilot_review:
   type: str

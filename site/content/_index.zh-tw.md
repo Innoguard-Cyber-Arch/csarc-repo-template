@@ -754,7 +754,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | --- | --- | --- | --- |
 | 治理意圖 | `governance_mode`、`lifecycle`、`actions_fallback` | `managed`／`observe`；`issues`／`milestones`；fallback 預設 `off`、可選 `admin` | repository policy、工作項目 side effects 與經證明的 zero-step billing fallback |
 | 驗證信任 | `verification_mode` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted CI、PR 治理、Pages／release workflow；或 trusted GitHub-hosted checks |
-| 審查意圖 | `admin_bypass`、`copilot_review` | admin bypass 預設 `off`、可選 `beta-only`／`always`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到同行核准或設定允許的管理員授權 |
+| 審查意圖 | `admin_bypass`、`copilot_review` | admin bypass 新專案預設 `always`、可選 `beta-only`／`off`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到同行核准或設定允許的管理員授權 |
 | 發版意圖 | `release_ownership`、`release_trigger`、`project_maturity` | ownership 三選一；trigger 為 `main`／`manual`；成熟度預設 early | 公開 beta／stable 通道、固定 Conventional Commits 演算法與發版候選觸發 |
 | 文件治理 | `documentation_mode` | `template-and-content`／`content-only`／`off` | 文件模板與 project-owned 內容分層；Pages 只在 hosted＋完整模板時啟用，且只因 `docs/**` 或手動觸發 |
 | 文件語言 | `primary_language`、`i18n` | `en`／`zh-tw`；雙語並行或 `off` | README 與文件入口；雙語時維護另一語言版 |

@@ -21,7 +21,7 @@ governance_mode: managed       # managed | observe
 lifecycle: [issues, milestones]
 actions_fallback: off          # off | admin
 verification_mode: local       # local | hosted
-admin_bypass: off              # off | beta-only | always
+admin_bypass: always           # off | beta-only | always
 copilot_review: allowed        # allowed | off
 release_ownership: csarc-owned
 release_trigger: main          # main | manual
@@ -39,7 +39,7 @@ Copier 會把每個問題保存成頂層答案；既有無依賴 YAML reader 也
 
 - `governance_mode` 只描述 CSARC 管理或觀察政策；live capability 另回報 `allowed`／`blocked`／`unknown`。
 - `lifecycle` 只列 `issues`、`milestones` 能力；產生出的 workflow 在 runner 前固定判斷，且保留 #886 owner guard。
-- `admin_bypass` 預設 `off`，可明確選擇 `beta-only` 或 `always`；`copilot_review: allowed` 讓乾淨 exact-head Copilot review 可作為證據。不可用、額度不足、舊 head、有意見或未解 thread 時回到同行核准或設定允許的管理員授權。
+- `admin_bypass` 新專案預設 `always`（#1058 決定 1、#1064），可明確選擇 `beta-only` 或 `off`；`copilot_review: allowed` 讓乾淨 exact-head Copilot review 可作為證據。不可用、額度不足、舊 head、有意見或未解 thread 時回到同行核准或設定允許的管理員授權。
 - reviewer 從 live repository `maintain`／`admin` 權限 best-effort 選取，不保存靜態名單；`code_owner` 可省略，仍只表示 ownership。
 - branch route 由可信 Issue／Milestone metadata 推導，不再另設 `branch_strategy`。
 - `release_trigger: main` 在每次 main push 執行既有 Conventional Commit 判定；`manual` 完全不註冊 push trigger，只接受明確 dispatch 或本機入口。兩者共用 major／minor／patch／no-release、materialization、freshness、single-writer 與 immutable evidence。本模板 root 採 `manual`，避免每次主幹更新都建立無效發版 run。
@@ -52,7 +52,7 @@ Copier 會把每個問題保存成頂層答案；既有無依賴 YAML reader 也
 
 ## 遷移
 
-舊設定以明確規則轉換：全開／全關 `policy_*` 分別成 `managed`／`observe`，混合值要求使用者選擇；`enable_docker` 轉成 `features` membership；舊 `features: repo-site` 轉成 `documentation_mode: template-and-content`，沒有 repo-site 時轉成 `content-only`；`readme_primary_language` 轉成 `primary_language`；舊 `pr_review_mode` 轉成 `copilot_review`；舊 `review` 與 per-level review 轉成 `admin_bypass`，舊 `default_release_level` 轉成 `project_maturity`，verification 收斂為固定下限且路徑風險只能升級。既有發版行為遷移成 `release_trigger: main`。為避免更新時靜默降低既有保護，沒有 `verification_mode` 的 repository 一律遷移為 `hosted`；只有新建專案預設 `local`。舊 reviewer、branch、level cap、per-level 與 release 衍生答案不再持久化。
+舊設定以明確規則轉換：全開／全關 `policy_*` 分別成 `managed`／`observe`，混合值要求使用者選擇；`enable_docker` 轉成 `features` membership；舊 `features: repo-site` 轉成 `documentation_mode: template-and-content`，沒有 repo-site 時轉成 `content-only`；`readme_primary_language` 轉成 `primary_language`；舊 `pr_review_mode` 轉成 `copilot_review`（有 level cap 時收窄為 `off`）；已存或明確傳入的 `admin_bypass` 保留，缺值寫成 `always` 並在報告列為 `widened`，附舊 `review`／per-level review 的等價範圍與恢復指令；退役鍵列為 `retired`、承接鍵列為 `exact`，舊 `default_release_level` 轉成 `project_maturity`，verification 收斂為固定下限且路徑風險只能升級。既有發版行為遷移成 `release_trigger: main`。為避免更新時靜默降低既有保護，沒有 `verification_mode` 的 repository 一律遷移為 `hosted`；只有新建專案預設 `local`。舊 reviewer、branch、level cap、per-level 與 release 衍生答案不再持久化。
 
 ## 方案與能力邊界
 
