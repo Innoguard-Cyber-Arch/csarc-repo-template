@@ -56,3 +56,4 @@ Root configuration 驗證公版本身；`template/` 是 downstream contract。�
 - Distribution correction: [#195](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/195) was superseded by [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250); the CLI runs from the approved GitHub Release commit instead of an unpublished registry package.
 - Other follow-ups: [#196](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/196), [#197](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/197), [#198](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/198), [#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219)
 - [Template lifecycle and ownership ADR](../adr/template-lifecycle-and-ownership.md)
+- [SPEC-008 lifecycle report format](SPEC-008-lifecycle-report-format.md)

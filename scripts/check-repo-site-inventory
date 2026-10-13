@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Verify the repo-site slide list against its checked-in inventory.
+
+`site/data/slide_inventory.json` is the readable structural contract for the
+root presentation (Issue #1088): the ordered slide keys, plus each slide's
+`track` and `audience` when it declares one. It replaces the retired
+`site/legacy/index.html` byte snapshot, so the contract no longer depends on
+any frozen HTML.
+
+Every language source in `site/content/` must declare exactly the same
+ordered slides with the same `track`/`audience` values. With `--candidate`,
+each rendered page must also emit one slide section per inventory entry, in
+the same order and with the same `data-track`/`data-audience` attributes.
+Slide text is deliberately not compared: content keeps evolving, and only
+the structure is the contract. Adding, removing, reordering, or re-tracking
+a slide therefore requires updating the inventory in the same change.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import runpy
+import sys
+from pathlib import Path
+from typing import Final
+
+ROOT: Final = Path(__file__).resolve().parents[1]
+LANGUAGE_FILES: Final = ("_index.zh-tw.md", "_index.en.md")
+FIELDS: Final = ("key", "track", "audience")
+_BLOCKS: Final = runpy.run_path(
+    str(Path(__file__).resolve().parent / "repo_site_blocks.py")
+)
+_SECTION: Final = re.compile(r'<section class="slide\b[^"]*"[^>]*>')
+_HTML_ATTRIBUTE: Final = re.compile(r'([\w-]+)="([^"]*)"')
+
+type Entry = tuple[str, str | None, str | None]
+
+
+def load_inventory(path: Path) -> list[Entry]:
+    """Read the ordered inventory, rejecting unknown or duplicate entries."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    slides = data.get("slides")
+    if not isinstance(slides, list) or not slides:
+        raise ValueError(f"{path}: expected a non-empty 'slides' list")
+    entries: list[Entry] = []
+    for slide in slides:
+        if not isinstance(slide, dict) or set(slide) - set(FIELDS):
+            raise ValueError(f"{path}: invalid slide entry {slide!r}")
+        if not isinstance(slide.get("key"), str) or not slide["key"]:
+            raise ValueError(f"{path}: slide entry without key {slide!r}")
+        entries.append(
+            (slide["key"], slide.get("track"), slide.get("audience"))
+        )
+    keys = [entry[0] for entry in entries]
+    duplicates = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicates:
+        raise ValueError(f"{path}: duplicate slide keys {duplicates}")
+    return entries
+
+
+def source_slides(path: Path) -> list[Entry]:
+    """Return the ordered slides declared in one Markdown source."""
+    text = path.read_text(encoding="utf-8")
+    return [
+        (attrs.get("key", ""), attrs.get("track"), attrs.get("audience"))
+        for attrs, _body, _match in _BLOCKS["iter_containers"](text, "slide")
+    ]
+
+
+def rendered_slides(path: Path) -> list[Entry]:
+    """Return the ordered slide sections emitted in one rendered page."""
+    text = path.read_text(encoding="utf-8")
+    entries: list[Entry] = []
+    for match in _SECTION.finditer(text):
+        attrs = dict(_HTML_ATTRIBUTE.findall(match.group(0)))
+        entries.append(
+            (
+                attrs.get("data-content-key", ""),
+                attrs.get("data-track"),
+                attrs.get("data-audience"),
+            )
+        )
+    return entries
+
+
+def compare(
+    label: str, expected: list[Entry], actual: list[Entry]
+) -> list[str]:
+    """Describe every difference between the inventory and one slide list."""
+    if expected == actual:
+        return []
+    expected_keys = [entry[0] for entry in expected]
+    actual_keys = [entry[0] for entry in actual]
+    missing = [key for key in expected_keys if key not in actual_keys]
+    extra = [key for key in actual_keys if key not in expected_keys]
+    problems: list[str] = []
+    if missing or extra:
+        problems.append(f"{label}: missing={missing}, extra={extra}")
+    elif expected_keys != actual_keys:
+        problems.append(f"{label}: order differs; got {actual_keys}")
+    for want, got in zip(expected, actual, strict=False):
+        if want[0] == got[0] and want != got:
+            problems.append(
+                f"{label}: slide {want[0]!r} has track/audience "
+                f"{got[1:]!r}, inventory says {want[1:]!r}"
+            )
+    return problems or [f"{label}: slide list differs from the inventory"]
+
+
+def check(
+    inventory: Path, content_dir: Path, candidates: list[Path]
+) -> list[str]:
+    """Return every inventory violation across sources and candidates."""
+    expected = load_inventory(inventory)
+    problems: list[str] = []
+    for name in LANGUAGE_FILES:
+        path = content_dir / name
+        problems += compare(str(path), expected, source_slides(path))
+    for path in candidates:
+        problems += compare(str(path), expected, rendered_slides(path))
+    return problems
+
+
+def main() -> int:
+    """Check the inventory and report every drift."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--inventory",
+        type=Path,
+        default=ROOT / "site/data/slide_inventory.json",
+    )
+    parser.add_argument(
+        "--content-dir", type=Path, default=ROOT / "site/content"
+    )
+    parser.add_argument(
+        "--candidate",
+        type=Path,
+        action="append",
+        default=[],
+        help="rendered page to check as well (repeatable)",
+    )
+    args = parser.parse_args()
+    try:
+        problems = check(args.inventory, args.content_dir, args.candidate)
+        count = len(load_inventory(args.inventory))
+    except (OSError, UnicodeError, ValueError) as error:
+        sys.stderr.write(f"repo-site inventory check failed: {error}\n")
+        return 1
+    if problems:
+        sys.stderr.write(
+            "Repo-site slides drifted from site/data/slide_inventory.json; "
+            "update the inventory in the same change if this is intended:\n"
+        )
+        sys.stderr.write(
+            "\n".join(f"- {problem}" for problem in problems) + "\n"
+        )
+        return 1
+    sys.stdout.write(
+        f"Repo-site inventory: {count} slides match in "
+        f"{len(LANGUAGE_FILES)} sources and {len(args.candidate)} pages\n"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

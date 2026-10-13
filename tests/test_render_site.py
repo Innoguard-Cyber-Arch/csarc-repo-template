@@ -12,15 +12,11 @@ ROOT = Path(__file__).parents[1]
 SITE_MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "render_site.py")
 )
-PARITY_MODULE = runpy.run_path(
-    str(Path(__file__).parents[1] / "scripts" / "check-repo-site-parity")
-)
 BUILD_MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "build_repo_site.py")
 )
 BundleError = SITE_MODULE["BundleError"]
 render = SITE_MODULE["render"]
-parse_parity = PARITY_MODULE["parse"]
 load_site_data = BUILD_MODULE["load_site_data"]
 render_similar_tools = BUILD_MODULE["render_similar_tools"]
 render_testing = BUILD_MODULE["render_testing"]
@@ -1306,35 +1302,6 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             assert comparison["feature"]
             assert comparison["docs"].startswith("https://")
             assert set(comparison["description"]) == {"zh-tw", "en"}
-
-
-def test_parity_ignores_explicit_supplemental_slides(tmp_path: Path) -> None:
-    legacy = tmp_path / "legacy.html"
-    candidate = tmp_path / "candidate.html"
-    legacy.write_text(
-        '<section class="slide" data-track="journey">Shared copy</section>',
-        encoding="utf-8",
-    )
-    candidate.write_text(
-        """<section class="slide" id="journey">
-<div class="legacy-content">Shared copy</div>
-</section>
-<section class="slide" id="similar-tools" data-audience="maintainer">
-<div class="legacy-content">Supplemental maintainer copy</div>
-</section>
-<section class="slide" id="public-supplement" data-parity="supplemental">
-<div class="legacy-content">Supplemental public copy</div>
-</section>
-<section class="slide" id="new-without-predecessor" data-parity="new">
-<div class="legacy-content">Genuinely new copy</div>
-</section>
-""",
-        encoding="utf-8",
-    )
-
-    assert parse_parity(legacy, candidate=False) == parse_parity(
-        candidate, candidate=True
-    )
 
 
 _STEP_ORDER_KEYS = (

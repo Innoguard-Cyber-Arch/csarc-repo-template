@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250), [#714](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/714), [#715](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/715), [#716](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/716), [#831](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/831)
+- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250), [#714](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/714), [#715](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/715), [#716](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/716), [#831](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/831), [#1062](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1062)
 - **實作 PR：**[#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231)
 
 ## 問題與限制
@@ -17,7 +17,7 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 
 既有導入採兩階段流程：
 
-1. `adopt` 在沒有 `--apply-plan` 時預設為 dry-run，只讀目標 repo，並在 repo 外原子更新純 Markdown 導入報告（獨立版本號記錄在報告內，見 [#530](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/530)）與 machine-readable plan；明確的 `--dry-run` 仍相容。初始 plan 可從核准 Release 建立靜態候選，但不得執行 target-owned policy helper 或 product hook，驗證狀態明列為等待授權。只有未 staged 的 tracked modifications 且全由 plan 明列為 `preserve` 時，dirty paths 才可連同原始 bytes 建立候選並套用同一份 plan；其他 dirty tree 只產生 review-only plan。`adopt --finalize` 使用相同安全預設。
+1. `adopt` 在沒有 `--apply-plan` 時預設為 dry-run，只讀目標 repo，並在 repo 外原子更新 machine-readable plan 與 [SPEC-008](../specs/SPEC-008-lifecycle-report-format.md) 報告（report JSON 是唯一來源，Markdown 只由它 render；格式版本記錄在報告內，見 [#530](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/530)、[#1062](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1062)）。machine plan 的契約與 digest 不含報告狀態；套用成功後，報告寫回被重播的 plan 所在目錄並轉為 `applied`；明確的 `--dry-run` 仍相容。初始 plan 可從核准 Release 建立靜態候選，但不得執行 target-owned policy helper 或 product hook，驗證狀態明列為等待授權。只有未 staged 的 tracked modifications 且全由 plan 明列為 `preserve` 時，dirty paths 才可連同原始 bytes 建立候選並套用同一份 plan；其他 dirty tree 只產生 review-only plan。`adopt --finalize` 使用相同安全預設。
 2. `adopt --apply-plan` 先顯示保存的 plan 並取得確認，再重新驗證 Release、repo identity、HEAD、working tree、所有實際 render inputs（包含未寫入 Copier answers 的條件式衍生值）、檔案決策與 digest；在暫存 clone 產生完整候選，執行 `./scripts/verify` 與獨立的 `project_verification_hook`，再以通過 `git apply --check` 的同一份 patch 寫入目標。hook 只接受 repo 內存在、可執行的相對檔案，不透過 shell，且不得解析成或重新進入 canonical `scripts/verify`；未設定時才沿用 `scripts/verify-product`。路徑與來源綁入授權前 plan，執行結果與原因則在授權後產生；失敗不寫入 target。`update --check` 只驗證 hook 設定、不執行 hook，正式 update 也只套用已在暫存 clone 通過驗證的 patch。若靜態 binding 不同，錯誤會列出精確 JSON path 與前後值，同時維持 fail closed。
 
 `status` 與 `update --check` 的 policy／capability inspection 也不得執行 target checkout 內的 shell 或 Python。CLI 只從已驗證 Release 重新產生完整 helper closure，再把 target 當成資料與 GitHub context 檢查；unreleased 或無法驗證的來源回報 unavailable／unknown，不把 target helper 當成可信執行入口。
