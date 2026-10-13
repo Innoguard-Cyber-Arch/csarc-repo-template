@@ -32,7 +32,12 @@ CANONICAL_REPOSITORY = "Innoguard-Cyber-Arch/csarc-repo-template"
 CANONICAL_REPOSITORY_ID = 1_340_899_393
 MINIMUM_GH_VERSION = "2.93.0"
 GH_INSTALL_URL = "https://github.com/cli/cli#installation"
-DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
+# CODEOWNERS is opt-in: create and adopt never assume an organization or team
+# (#1061). LEGACY_DEFAULT_OWNER is the value earlier releases applied when no
+# owner was given; it is only used to preserve what an existing repository
+# already rendered when its saved answers predate the code_owner question.
+DEFAULT_OWNER = ""
+LEGACY_DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
 CONFIG_FILE = Path(".csarc/config.yml")
 LEGACY_ANSWERS_FILE = Path(".copier-answers.yml")
 # Pre-dates CONFIG_FILE: a derived projection of a subset of Copier's own
@@ -6338,20 +6343,20 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     repository = repository_context(
         target, explicit_data.get("project_visibility")
     )
+    data = base_data(target, mode, explicit_data)
+    # The repository URL comes only from the live repository identity or an
+    # explicit answer; it is never derived from code_owner (#1061).
     if (
         repository.repository is None
-        and explicit_data.get("code_owner", DEFAULT_OWNER) == ""
         and GITHUB_REPOSITORY_URL.fullmatch(
             explicit_data.get("repository_url", "")
         )
         is None
     ):
         raise CliError(
-            "code_owner is empty and no GitHub origin or GH_REPO is "
-            "available; also pass --data "
-            "repository_url=https://github.com/owner/repository."
+            "No GitHub origin or GH_REPO identifies this repository; pass "
+            "--data repository_url=https://github.com/owner/repository."
         )
-    data = base_data(target, mode, explicit_data)
     data["project_visibility"] = repository.visibility
     if repository.repository is not None:
         data["repository_url"] = f"https://github.com/{repository.repository}"
@@ -7173,6 +7178,12 @@ def update_plan_answers(  # noqa: C901
             "project_mode cannot change during update because it owns the "
             "release boundary."
         )
+    if "code_owner" not in answers and "code_owner" not in explicit_data:
+        # Saved answers that predate code_owner were rendered with the old
+        # organization default. Keep that rendered owner instead of letting
+        # the new empty default silently drop CODEOWNERS (#1061); a saved or
+        # explicit owner is always authoritative and never rewritten here.
+        update_data["code_owner"] = LEGACY_DEFAULT_OWNER
     saved_visibility = answers.get("project_visibility")
     update_data["project_visibility"] = repository.visibility
     if repository.repository is not None:
