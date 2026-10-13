@@ -34,6 +34,7 @@
 - [`SPEC-005-continuous-verification-evidence.md`](specs/SPEC-005-continuous-verification-evidence.md) — verification tiers、regressions 與 evidence
 - [`SPEC-006-trusted-release-provenance.md`](specs/SPEC-006-trusted-release-provenance.md) — release、security、dependencies 與 provenance
 - [`SPEC-007-portable-repo-site-documentation.md`](specs/SPEC-007-portable-repo-site-documentation.md) — canonical docs 與 portable presentation
+- [`SPEC-008-lifecycle-report-format.md`](specs/SPEC-008-lifecycle-report-format.md) — adopt／update 共用的 lifecycle report 格式
 
 `tracking: issue` 或預設值會同步 Task Issue；`tracking: story` 同步可容納 native subissues 的 Feature parent；`tracking: none` 用於已存在、仍需持續維護但不應新建 work item 的 current spec。Milestone 另作有 due date 的 delivery／release bucket，不再兼任 story identity。
 

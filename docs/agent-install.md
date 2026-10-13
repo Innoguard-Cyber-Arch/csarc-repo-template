@@ -102,9 +102,10 @@ attestation verification.
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
    overwrite, preserve, automatic merge, manual merge, or unable to determine.
-   Review the generated Markdown report (its own new/edited/removed file
-   counts, impact analysis, and items requiring a decision) and machine
-   plan, including the work-item mapping suggestions, exact project
+   Adopt and update write a SPEC-008 report outside the repository: read
+   its Markdown (file-change counts, impact analysis, and items requiring a
+   decision) but treat the report JSON beside it as authoritative, together
+   with the machine plan, including the work-item mapping suggestions, exact project
    verification hook path, and its initial `not-run` state, then report
    the terminal's separate Milestone
    description classifications: upgrade, current, or manual review. Neither
