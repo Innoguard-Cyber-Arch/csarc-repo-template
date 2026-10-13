@@ -72,6 +72,7 @@ class FakeGitHub:
         self.hotfix_comments: list[dict[str, Any]] = []
         self.labels: set[str] = set()
         self.permission = "maintain"
+        self.role_name: str | None = None
 
     def get(self, repo: str, path: str) -> object:
         """Return one REST fixture."""
@@ -125,6 +126,11 @@ class FakeGitHub:
         if match:
             return {
                 "permission": self.permission,
+                "role_name": (
+                    self.permission
+                    if self.role_name is None
+                    else self.role_name
+                ),
                 "user": {"login": match.group(1)},
             }
         raise AssertionError(path)
@@ -475,6 +481,7 @@ def alpha_github() -> FakeGitHub:
     """Return a Milestone-less, Issue-linked Alpha self-merge candidate."""
     github = FakeGitHub([])
     github.body = f"Closes #42\n\n{pr_lifecycle.ADMIN_BYPASS_MARKER}"
+    github.role_name = "admin"
     return github
 
 
@@ -487,6 +494,7 @@ def alpha_sync_github() -> FakeGitHub:
     )
     github.head_ref = sync_branch_name(github.base_ref, github.destination_sha)
     github.body = pr_lifecycle.ADMIN_BYPASS_MARKER
+    github.role_name = "admin"
     return github
 
 
@@ -496,6 +504,7 @@ def alpha_promotion_github() -> FakeGitHub:
     github.head_ref = "promote/m12-agent-workflow-contract"
     github.labels = {"enhancement", "promotion"}
     github.body = f"Refs #42\n\n{pr_lifecycle.ADMIN_BYPASS_MARKER}"
+    github.role_name = "admin"
     return github
 
 
@@ -505,7 +514,34 @@ def alpha_release_github() -> FakeGitHub:
     github.head_ref = "release/v0.21.0-beta.1"
     github.title = "chore(main): release 0.21.0-beta.1"
     github.body = f"Refs #42\n\n{pr_lifecycle.ADMIN_BYPASS_MARKER}"
+    github.role_name = "admin"
     return github
+
+
+@pytest.mark.parametrize(
+    ("permission", "role_name"),
+    [
+        # A maintainer is never an admin, even if an older or customized
+        # response reports a legacy `admin` permission.
+        ("admin", "maintain"),
+        ("maintain", "maintain"),
+        ("write", "write"),
+        # A missing role_name is unknown; the legacy field is not read.
+        ("admin", ""),
+    ],
+)
+def test_admin_bypass_requires_the_live_admin_role(
+    copilot_config: Path, permission: str, role_name: str
+) -> None:
+    """Issue #1064 AC5: only a live `role_name: admin` may bypass review."""
+    github = alpha_github()
+    github.permission = permission
+    github.role_name = role_name
+    github.issue_comments = [alpha_authorization_comment()]
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert not result["passed"]
+    assert result["source"] != "admin-bypass"
+    assert "from a live admin" in result["reason"]
 
 
 def test_admin_bypass_authorization_passes(copilot_config: Path) -> None:
@@ -617,8 +653,8 @@ def test_admin_bypass_ignores_author_association(
 
     Confirmed live on PR #782: a restricted `GITHUB_TOKEN` reports a real
     maintainer's comment as `COLLABORATOR` instead of `MEMBER`. The
-    `collaborators/{login}/permission` lookup `FakeGitHub.get` always
-    returns `"maintain"` for any login, so this only passes once
+    `collaborators/{login}/permission` lookup `FakeGitHub.get` returns the
+    live `role_name` `admin` for any login here, so this only passes once
     `find_exact_head_authorization` stops filtering on the association.
     """
     github = alpha_github()
@@ -801,16 +837,22 @@ def rules(
 
 @pytest.mark.large
 def test_new_project_defaults_to_local_verification(tmp_path: Path) -> None:
-    """A new project avoids hosted validation and requires audited bypass."""
+    """A new project avoids hosted validation and uses the E1 fallback.
+
+    #1058 decisions 1, 4, and 5: the new-project default is
+    `admin_bypass: always`, so a local project renders the E1 shape (zero
+    native approvals plus the one reviewed bypass actor).
+    """
     project = generate(tmp_path, {})
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
     assert "copilot_review: allowed" in config
-    assert "admin_bypass: 'off'" in config
+    assert "admin_bypass: always" in config
     assert "verification_mode: local" in config
     generated = rules(project)
     assert generated["copilot_code_review"]["review_on_push"] is True
-    assert generated["pull_request"]["required_approving_review_count"] == 1
-    assert generated["pull_request"]["require_last_push_approval"] is True
+    assert generated["pull_request"]["required_approving_review_count"] == 0
+    assert generated["pull_request"]["require_last_push_approval"] is False
+    assert generated["pull_request"]["dismiss_stale_reviews_on_push"]
     assert generated["pull_request"]["required_review_thread_resolution"]
     required = rules(project, "rulesets-required-checks.json")
     assert required == {}
@@ -836,7 +878,7 @@ def test_new_project_defaults_to_local_verification(tmp_path: Path) -> None:
     payload = json.loads(
         (project / ".csarc/policies/rulesets.json").read_text(encoding="utf-8")
     )
-    assert payload["bypass_actors"] == []
+    assert payload["bypass_actors"] == pr_lifecycle.REVIEWED_MERGE_BYPASS_ACTORS
 
 
 @pytest.mark.large

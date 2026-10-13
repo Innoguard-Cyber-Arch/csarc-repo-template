@@ -415,13 +415,15 @@ def _admin_bypass_authorization(
         return None, f"Admin bypass does not apply here: {error}"
     if not opted_in:
         return None, ""
+    # Only a live `role_name` of `admin` may replace peer approval; the
+    # legacy `permission` field never proves an admin (Issue #1064).
     authorization = lifecycle.find_exact_head_authorization(
-        github, repo, pr_number, head_sha
+        github, repo, pr_number, head_sha, require_admin=True
     )
     if authorization is None:
         return None, (
             "Admin bypass applies but no exact-head maintainer "
-            "authorization comment was found"
+            "authorization comment from a live admin was found"
         )
     return authorization, ""
 

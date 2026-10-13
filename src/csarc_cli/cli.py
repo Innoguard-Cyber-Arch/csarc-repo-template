@@ -31,6 +31,7 @@ import yaml  # type: ignore[import-untyped]
 
 from csarc_cli import (
     action_pin_preflight,
+    governance_migration,
     lifecycle_report,
     release_phase,
     update_plan,
@@ -2389,18 +2390,33 @@ def report_setting_rows(
     """Return allowlisted SPEC-008 setting rows with JSON-typed values.
 
     ``before`` is ``None`` for adoption: every resolved setting is new.
-    Keys outside ``REPORT_SETTING_KEYS`` never appear (#950).
+    Keys outside ``REPORT_SETTING_KEYS`` and the retired legacy keys never
+    appear (#950). An update classifies migrated governance keys and
+    retired legacy keys with the approved mapping (#1064).
     """
     previous = {} if before is None else before
+    migrated = (
+        {}
+        if before is None
+        else governance_migration.setting_classes(before, after, explicit)
+    )
+    reportable = REPORT_SETTING_KEYS | set(
+        governance_migration.RETIRED_SETTINGS
+    )
     keys = sorted(
-        key for key in set(previous) | set(after) if key in REPORT_SETTING_KEYS
+        key for key in set(previous) | set(after) if key in reportable
     )
     rows: list[dict[str, object]] = []
     for key in keys:
         old = previous.get(key)
         new = after.get(key)
         source = "explicit" if key in explicit else "derived"
-        if before is None or key not in previous:
+        note: str | None = None
+        if key in migrated:
+            setting_class, note = migrated[key]
+            if setting_class == "retired":
+                new = None
+        elif before is None or key not in previous:
             setting_class = "new"
         elif key not in after:
             setting_class = "retired"
@@ -2415,7 +2431,7 @@ def report_setting_rows(
                 "before": redact(old),
                 "class": setting_class,
                 "key": key,
-                "note": None,
+                "note": note,
                 "source": source,
             }
         )
@@ -2794,6 +2810,14 @@ def lifecycle_report_model(  # noqa: C901
     settings = report_setting_rows(
         plan.answers, before if operation == "update" else None, explicit
     )
+    if operation == "update":
+        violations = governance_migration.governance_row_violations(settings)
+        if violations:
+            raise CliError(
+                "Governance settings changed outside the approved migration "
+                "mapping (" + ", ".join(violations) + "); pass an explicit "
+                "--data value for each key and create a new plan."
+            )
     file_rows = report_file_rows(
         files,
         preserved_dirty,
@@ -7415,46 +7439,29 @@ def migrate_simplified_settings(
     """Map the former overlapping settings to the compact public schema."""
     migrated: dict[str, object] = {}
 
-    policy_keys = (
-        "policy_repository_settings",
-        "policy_actions_permissions",
-        "policy_labels",
-        "policy_branch_ruleset",
-    )
-    policy_values = [answers.get(key, True) for key in policy_keys]
-    if all(value is True for value in policy_values):
-        governance_mode = "managed"
-    elif all(value is False for value in policy_values):
-        governance_mode = "observe"
-    else:
-        raise CliError(
-            "Legacy policy_* settings are mixed. Pass one explicit "
-            "governance_mode=managed or governance_mode=observe choice."
-        )
-
-    legacy_reviews = {
-        level: answers.get(f"release_level_{level}_review", fallback)
-        for level, fallback in (
-            ("alpha", "self"),
-            ("beta", "peer"),
-            ("early", "peer"),
-            ("formal", "peer"),
-        )
-    }
-    stable_self = any(
-        legacy_reviews[level] == "self" for level in ("early", "formal")
-    )
-    beta_self = any(
-        legacy_reviews[level] == "self" for level in ("alpha", "beta")
-    )
-    admin_bypass = (
-        "always" if stable_self else "beta-only" if beta_self else "off"
-    )
-    project_maturity = (
-        "formal"
-        if answers.get("default_release_level") == "formal"
-        else "early"
-    )
+    # Governance keys follow the approved mapping (#1058 decision 1): saved
+    # or explicit values are kept, a missing admin_bypass becomes `always`
+    # (reported as widened), and every other key is equivalent or narrower.
+    governance: dict[str, object] = {}
+    if any(
+        key not in answers and key not in explicit_data
+        for key in governance_migration.GOVERNANCE_KEYS
+    ):
+        try:
+            governance = governance_migration.legacy_governance_values(answers)
+        except governance_migration.GovernanceMigrationError as error:
+            if (
+                "governance_mode" not in explicit_data
+                and "governance_mode" not in answers
+            ):
+                raise CliError(str(error)) from error
+            governance = governance_migration.legacy_governance_values(
+                {
+                    key: value
+                    for key, value in answers.items()
+                    if key not in governance_migration.POLICY_TOGGLES
+                }
+            )
     saved_features = answers.get("features")
     if isinstance(saved_features, list):
         legacy_features = [
@@ -7475,16 +7482,7 @@ def migrate_simplified_settings(
         migrated["features"] = legacy_features
 
     defaults: dict[str, object] = {
-        "governance_mode": governance_mode,
-        "lifecycle": ["issues", "milestones"],
-        "actions_fallback": "off",
-        "verification_mode": "hosted",
-        "admin_bypass": admin_bypass,
-        "project_maturity": project_maturity,
-        "copilot_review": (
-            "allowed" if answers.get("pr_review_mode") == "copilot" else "off"
-        ),
-        "release_trigger": "main",
+        **governance,
         "features": legacy_features,
         "documentation_mode": documentation_mode,
         "primary_language": answers.get("readme_primary_language", "zh-tw"),

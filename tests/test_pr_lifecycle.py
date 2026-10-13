@@ -133,6 +133,7 @@ class FakeGitHub:
         self.authorization_body: str | None = None
         self.authorization_association = "OWNER"
         self.permission = "admin"
+        self.role_name: str | None = None
         self.merged = False
         self.base_ref = "main"
         self.base_sha = "b" * 40
@@ -313,6 +314,11 @@ class FakeGitHub:
             login = urllib.parse.unquote(collaborator.group(1))
             return {
                 "permission": self.permission,
+                "role_name": (
+                    self.permission
+                    if self.role_name is None
+                    else self.role_name
+                ),
                 "user": {"login": login},
             }
         if path == f"rules/branches/{self.base_ref.replace('/', '%2F')}":
@@ -5153,3 +5159,269 @@ def test_template_full_tier_requires_the_go_toolchain(tmp_path: Path) -> None:
     require({"tier": "full", "toolchain": full}, marker)
     with pytest.raises(RuntimeError, match="toolchain evidence"):
         require({"tier": "full", "toolchain": full[:-1]}, marker)
+
+
+class ShapeGitHub:
+    """Serve one effective rule set and its Ruleset for shape checks."""
+
+    def __init__(
+        self,
+        pull_parameters: dict[str, object] | None,
+        bypass_actors: object,
+        *,
+        rules_error: bool = False,
+        ruleset_error: bool = False,
+    ) -> None:
+        self.pull_parameters = pull_parameters
+        self.bypass_actors = bypass_actors
+        self.rules_error = rules_error
+        self.ruleset_error = ruleset_error
+
+    def get(self, repo: str, path: str) -> object:
+        """Return the stubbed rules or Ruleset."""
+        if path.startswith("rules/branches/"):
+            if self.rules_error:
+                raise RuntimeError("HTTP 403: Resource not accessible")
+            if self.pull_parameters is None:
+                return [{"type": "pull_request", "ruleset_id": 7}]
+            return [
+                {
+                    "type": "pull_request",
+                    "ruleset_id": 7,
+                    "parameters": self.pull_parameters,
+                }
+            ]
+        if path == "rulesets/7":
+            if self.ruleset_error:
+                raise RuntimeError("HTTP 404: Not Found")
+            return {
+                "enforcement": "active",
+                "bypass_actors": self.bypass_actors,
+            }
+        raise AssertionError(path)
+
+
+def e1_parameters(**overrides: object) -> dict[str, object]:
+    """Return the rendered E1 pull-request rule parameters."""
+    parameters: dict[str, object] = {
+        "dismiss_stale_reviews_on_push": True,
+        "require_code_owner_review": False,
+        "require_last_push_approval": False,
+        "required_approving_review_count": 0,
+        "required_review_thread_resolution": True,
+    }
+    parameters.update(overrides)
+    return parameters
+
+
+def local_shape(
+    github: ShapeGitHub, *, local_fallback: bool
+) -> tuple[str, str, set[tuple[str, int]], bool, bool]:
+    """Evaluate one local-mode shape with an exact-head authorization."""
+    return MODULE["effective_protection"](
+        github,
+        "owner/repo",
+        "main",
+        True,
+        True,
+        False,
+        True,
+        local_fallback,
+    )
+
+
+def test_local_lifecycle_accepts_the_e1_fallback_shape() -> None:
+    """Issue #1064 AC4: local plus beta-only/always accepts the E1 shape."""
+    reviewed = MODULE["REVIEWED_MERGE_BYPASS_ACTORS"]
+    protection, _reason, contexts, bypass, _copilot = local_shape(
+        ShapeGitHub(e1_parameters(), reviewed), local_fallback=True
+    )
+    assert (protection, contexts, bypass) == ("enforced", set(), True)
+
+    # Without the configured fallback (admin_bypass: off) E1 is too wide.
+    assert (
+        local_shape(
+            ShapeGitHub(e1_parameters(), reviewed), local_fallback=False
+        )[0]
+        == "blocked"
+    )
+    # E1 always carries exactly the reviewed bypass actor.
+    other_role = {
+        "actor_type": "RepositoryRole",
+        "actor_id": 4,
+        "bypass_mode": "pull_request",
+    }
+    team = {"actor_type": "Team", "actor_id": 9, "bypass_mode": "always"}
+    for actors in ([], [other_role], [*reviewed, team]):
+        assert (
+            local_shape(
+                ShapeGitHub(e1_parameters(), actors), local_fallback=True
+            )[0]
+            == "blocked"
+        )
+    # Losing stale-review dismissal or thread resolution is not E1.
+    for weaker in (
+        e1_parameters(dismiss_stale_reviews_on_push=False),
+        e1_parameters(required_review_thread_resolution=False),
+    ):
+        assert (
+            local_shape(ShapeGitHub(weaker, reviewed), local_fallback=True)[0]
+            == "blocked"
+        )
+    # The C shape (one approval plus last-push approval) stays accepted.
+    shape_c = e1_parameters(
+        required_approving_review_count=1, require_last_push_approval=True
+    )
+    assert (
+        local_shape(ShapeGitHub(shape_c, []), local_fallback=True)[0]
+        == "enforced"
+    )
+
+
+@pytest.mark.parametrize(
+    "github",
+    [
+        ShapeGitHub(e1_parameters(), [], rules_error=True),
+        ShapeGitHub(None, []),
+        ShapeGitHub(e1_parameters(required_approving_review_count="0"), []),
+        ShapeGitHub(
+            e1_parameters(),
+            MODULE["REVIEWED_MERGE_BYPASS_ACTORS"],
+            ruleset_error=True,
+        ),
+    ],
+)
+def test_local_lifecycle_incomplete_read_is_inconclusive(
+    github: ShapeGitHub,
+) -> None:
+    """Issue #1064 AC4: an incomplete read never widens to E1."""
+    protection, _reason, contexts, bypass, _copilot = local_shape(
+        github, local_fallback=True
+    )
+    assert (protection, contexts, bypass) == ("inconclusive", set(), False)
+
+
+@pytest.mark.parametrize(
+    ("admin_bypass", "merge_mode"),
+    [("always", "agent"), ("beta-only", "agent"), ("off", "human-only")],
+)
+def test_local_merge_snapshot_uses_the_configured_e1_fallback(
+    monkeypatch: pytest.MonkeyPatch, admin_bypass: str, merge_mode: str
+) -> None:
+    """Only a configured beta-only/always scope lets lifecycle accept E1."""
+    bind_remote_lease(monkeypatch)
+    for name, value in (
+        ("configured_verification_mode", lambda: "local"),
+        ("configured_admin_bypass", lambda: admin_bypass),
+        ("require_local_pull_policy", lambda *_: None),
+    ):
+        monkeypatch.setitem(merge_snapshot.__globals__, name, value)
+    monkeypatch.setattr(
+        MODULE["local_verification"],
+        "require",
+        lambda **kwargs: {"trust": "self-attested-local"},
+    )
+    github = FakeGitHub("a" * 40)
+    github.required_status_checks = []
+    github.required_review_count = 0
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": MODULE["REVIEWED_MERGE_BYPASS_ACTORS"],
+    }
+
+    snapshot = merge_snapshot(github, lease_fixture())
+
+    assert snapshot["merge_mode"] == merge_mode
+
+
+class RoleGitHub:
+    """Return one stubbed collaborator permission response."""
+
+    def __init__(self, response: object) -> None:
+        self.response = response
+
+    def get(self, repo: str, path: str) -> object:
+        """Return the stub, or raise it when it is an exception."""
+        assert path == "collaborators/owner/permission"
+        if isinstance(self.response, Exception):
+            raise self.response
+        return self.response
+
+
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        (
+            {
+                "permission": "admin",
+                "role_name": "admin",
+                "user": {"login": "Owner"},
+            },
+            "admin",
+        ),
+        # A maintainer is never an admin, whatever the legacy field says.
+        (
+            {
+                "permission": "admin",
+                "role_name": "maintain",
+                "user": {"login": "owner"},
+            },
+            "maintain",
+        ),
+        # Missing role_name is unknown; the legacy permission is not read.
+        ({"permission": "admin", "user": {"login": "owner"}}, "unknown"),
+        (
+            {
+                "permission": "admin",
+                "role_name": "",
+                "user": {"login": "owner"},
+            },
+            "unknown",
+        ),
+        (
+            {
+                "permission": "admin",
+                "role_name": "admin",
+                "user": {"login": "someone-else"},
+            },
+            "unknown",
+        ),
+        ({"permission": "admin", "role_name": "admin"}, "unknown"),
+        ([], "unknown"),
+        (RuntimeError("HTTP 403"), "unknown"),
+    ],
+)
+def test_live_repository_role_reads_only_role_name(
+    response: object, expected: str
+) -> None:
+    """Issue #1064 AC5: only a live role_name identifies an admin."""
+    assert (
+        MODULE["live_repository_role"](RoleGitHub(response), "o/r", "owner")
+        == expected
+    )
+
+
+@pytest.mark.parametrize("role_name", ["maintain", "write", ""])
+def test_admin_bypass_merge_requires_the_live_admin_role(
+    monkeypatch: pytest.MonkeyPatch, role_name: str
+) -> None:
+    """Issue #1064 AC5: a legacy `admin` permission alone cannot bypass."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.reviews = []
+    github.required_review_count = 0
+    github.head_ref = "fix/42-lifecycle"
+    github.body = f"Closes #42\n\n{ADMIN_BYPASS_MARKER}"
+    github.authorization_actor = "agent"
+    github.permission = "admin"
+    github.role_name = role_name
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": MODULE["REVIEWED_MERGE_BYPASS_ACTORS"],
+    }
+    with pytest.raises(RuntimeError, match="live admin permission"):
+        merge_snapshot(
+            github,
+            lease_fixture(),
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
