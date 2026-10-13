@@ -34,8 +34,14 @@ EXECUTION_STEP = re.compile(
     r"command=(\./scripts/(?:verify-fast|verify-template\.sh|verify))"
     r"(?: base=([A-Za-z0-9._/-]+) base-sha=([0-9a-f]{40}) "
     r"labels=([0-9a-f]{64}) "
-    r"release=(beta|stable|none))?$"
+    r"release=(beta|stable|none)"
+    r"(?: executor=(trusted-base))?)?$"
 )
+# Issue #1086: an execution claim without `executor=trusted-base` ran the
+# candidate's own entry point (every run before the trusted executor, and any
+# run whose pull request base predates it).
+EXECUTOR_TRUSTED = "trusted-base"
+EXECUTOR_LEGACY = "candidate-legacy"
 REUSE_STEP = re.compile(
     r"^Reuse trusted verification tier=(docs|fast|full) "
     r"scopes=([a-z,-]+) tree=([0-9a-f]{40}) "
@@ -487,6 +493,7 @@ def validate_verification_job(  # noqa: C901
             )
         return {
             **common,
+            "executor": source["executor"],
             "toolchain": source["toolchain"],
             "completed_at": source["completed_at"],
             "reused": True,
@@ -512,6 +519,7 @@ def validate_verification_job(  # noqa: C901
         raise RuntimeError("Trusted verification toolchain evidence is invalid")
     return {
         **common,
+        "executor": match.group(9) or EXECUTOR_LEGACY,
         "toolchain": successful_toolchain,
         "completed_at": completed_at.isoformat(),
         "reused": False,

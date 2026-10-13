@@ -355,7 +355,7 @@ def test_local_verify_fast_escalates_only_in_local_mode() -> None:
         REPO_ROOT / "template" / ".csarc" / "scripts" / "verify-fast.jinja"
     ).read_text(encoding="utf-8")
     for source in (root, template):
-        assert "trusted_executor.py channel-floor" in source
+        assert "trusted_executor.py" in source and "channel-floor" in source
         assert (
             'if [[ "$channel_floor" == "full" && "$suite" != "full" ]]'
             in source

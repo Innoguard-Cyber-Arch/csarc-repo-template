@@ -7,8 +7,12 @@ set -Eeuo pipefail
 # without paying for the full run; aggregated in order by
 # scripts/verify-template.sh. See docs/ci-policy.md.
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cache_root="$("$repo_root/scripts/resolve-cache-root")"
+control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$control_root/scripts/verification-step"
+repo_root="$(verification_subject_root "$control_root")"
+# Checks below must not inherit the subject override into nested fixtures.
+unset CSARC_VERIFICATION_SUBJECT_ROOT
+cache_root="$("$control_root/scripts/resolve-cache-root")"
 if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
   export UV_CACHE_DIR="$cache_root/uv"
 else
@@ -16,7 +20,6 @@ else
 fi
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 cd "$repo_root"
-source "$repo_root/scripts/verification-step"
 
 verification_step "Python formatting" uv run ruff format --check src scripts tests
 verification_step "Python lint" uv run ruff check src scripts tests

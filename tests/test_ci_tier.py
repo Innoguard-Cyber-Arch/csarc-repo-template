@@ -211,7 +211,10 @@ def _run_stubbed_verify_fast(
         encoding="utf-8",
     )
     (scripts / "verification-step").write_text(
-        'verification_step() { printf "%s\\n" "$*" >> "$CSARC_TEST_LOG"; }\n',
+        'verification_step() { printf "%s\\n" "$*" >> "$CSARC_TEST_LOG"; }\n'
+        "verification_subject_root() {\n"
+        '  (cd "${CSARC_VERIFICATION_SUBJECT_ROOT:-$1}" && pwd)\n'
+        "}\n",
         encoding="utf-8",
     )
     for name in (
@@ -284,10 +287,14 @@ def test_local_verify_fast_computes_workflow_scope(tmp_path: Path) -> None:
     output, log = _run_stubbed_verify_fast(tmp_path, ".github/workflows/ci.yml")
     assert "suite=fast scopes=source,workflow" in output
     assert "Workflow and shell lint ./scripts/lint-workflows-shell" in log
+    # The audit stage belongs to the control set (Issue #1086): it runs from
+    # the entry point's own tree and receives the subject tree explicitly.
+    repo = (tmp_path / "repo").resolve()
     assert (
-        "GitHub Actions audit ./scripts/verify-stage-github-actions-audit"
-        in log
-    )
+        "GitHub Actions audit env "
+        f"CSARC_VERIFICATION_SUBJECT_ROOT={repo} "
+        f"{repo}/scripts/verify-stage-github-actions-audit"
+    ) in log
 
 
 @pytest.mark.parametrize("lockfile", ["uv.lock", "Cargo.lock"])

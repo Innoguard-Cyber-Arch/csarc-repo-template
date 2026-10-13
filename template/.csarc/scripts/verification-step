@@ -3,6 +3,22 @@
 # Shared step-level progress output for local verification entry points.
 # Source this file, then call verification_step "Label" command args...
 
+# Issue #1086: hosted CI stages the entry points from the trusted pull
+# request base and points them at the exact candidate tree. The control root
+# is where the entry point itself lives; the subject root is the tree whose
+# checks run. Without CSARC_VERIFICATION_SUBJECT_ROOT both are the same.
+verification_subject_root() {
+  local control_root=$1
+  local subject="${CSARC_VERIFICATION_SUBJECT_ROOT:-$control_root}"
+
+  if [[ "$subject" != /* || ! -d "$subject" ]]; then
+    printf 'CSARC_VERIFICATION_SUBJECT_ROOT must be an existing absolute directory: %s\n' \
+      "$subject" >&2
+    return 2
+  fi
+  (cd "$subject" && pwd)
+}
+
 verification_command_string() {
   local argument
   local rendered=""
