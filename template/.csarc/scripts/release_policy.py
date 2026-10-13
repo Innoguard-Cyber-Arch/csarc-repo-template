@@ -370,12 +370,54 @@ def _breaking_notes(body: str) -> str:
     return " ".join(match.group(1).split()) if match else ""
 
 
+MAIN_REFS = ("refs/remotes/origin/main", "refs/heads/main")
+
+
+def _main_ref(root: Path) -> str:
+    """Return the authoritative main ref, or "" when none is available."""
+    refs = set(
+        git_output(
+            ["for-each-ref", "--format=%(refname)", *MAIN_REFS], root
+        ).splitlines()
+    )
+    return next((ref for ref in MAIN_REFS if ref in refs), "")
+
+
 def project_maturity(root: Path) -> str | None:
-    """Return the declared ``project_maturity``, or None when undeclared."""
-    config_path = root / ".csarc/config.yml"
-    if not config_path.is_file():
+    """Return the ``project_maturity`` declared by current main.
+
+    The trusted base owns the bump rule, so a candidate cannot change its
+    own version policy by editing ``.csarc/config.yml`` (Issue #1085). A
+    main without the file declares no maturity. When main is unavailable
+    but the candidate declares a config, or main's config is unreadable,
+    planning fails closed instead of guessing a default.
+    """
+    main_ref = _main_ref(root)
+    if not main_ref:
+        if (root / ".csarc/config.yml").is_file():
+            raise ValueError(
+                "cannot determine the authoritative project_maturity: "
+                "origin/main and main are unavailable"
+            )
         return None
-    value = csarc_config.load_config(config_path).get("project_maturity")
+    listed = git_output(
+        ["ls-tree", "--name-only", main_ref, "--", ".csarc/config.yml"], root
+    )
+    if not listed:
+        return None
+    try:
+        text = git_output(["show", f"{main_ref}:.csarc/config.yml"], root)
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.yml"
+            config_path.write_text(text + "\n", encoding="utf-8")
+            value = csarc_config.load_config(config_path).get(
+                "project_maturity"
+            )
+    except (subprocess.CalledProcessError, ValueError) as error:
+        raise ValueError(
+            "cannot read the authoritative project_maturity from "
+            f"{main_ref}:.csarc/config.yml"
+        ) from error
     return None if value is None else str(value)
 
 
@@ -1257,7 +1299,8 @@ def release_plan(  # noqa: C901
 
     tags = git_output(["tag", "--merged", sha], root).splitlines()
     all_tags = git_output(["tag", "--list"], root).splitlines()
-    # Beta and stable apply one core-version policy for the same line.
+    # Beta and stable apply one core-version policy for the same line,
+    # and that policy comes from current main rather than the candidate.
     maturity = project_maturity(root)
     valid_tags = [tag for tag in tags if release_phase.is_valid_version(tag)]
     if valid_tags:
@@ -1326,28 +1369,7 @@ def release_plan(  # noqa: C901
     # when its matching tag is reachable there; the delivery tag above still
     # bounds the changelog and release-intent range.
     if phase == "beta":
-        refs = set(
-            git_output(
-                [
-                    "for-each-ref",
-                    "--format=%(refname)",
-                    "refs/remotes/origin/main",
-                    "refs/heads/main",
-                ],
-                root,
-            ).splitlines()
-        )
-        main_ref = next(
-            (
-                ref
-                for ref in (
-                    "refs/remotes/origin/main",
-                    "refs/heads/main",
-                )
-                if ref in refs
-            ),
-            "",
-        )
+        main_ref = _main_ref(root)
         if not main_ref:
             higher_stable_tags = [
                 tag

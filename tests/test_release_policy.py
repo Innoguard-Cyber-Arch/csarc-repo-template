@@ -2697,6 +2697,58 @@ def test_early_breaking_beta_recomputes_above_an_inserted_main_stable(
     )
 
 
+@pytest.mark.parametrize(
+    ("main_maturity", "candidate_maturity", "baseline", "expected"),
+    [
+        ("early", "formal", "0.4.2", "0.5.0-beta.1"),
+        ("formal", "early", "1.2.3", "2.0.0-beta.1"),
+    ],
+)
+def test_candidate_cannot_change_its_own_maturity_policy(
+    tmp_path: Path,
+    main_maturity: str,
+    candidate_maturity: str,
+    baseline: str,
+    expected: str,
+) -> None:
+    """Current main's project_maturity wins over the candidate's edit."""
+    init_maturity_repo(tmp_path, main_maturity, baseline)
+    git(tmp_path, "checkout", "-b", "delivery")
+    (tmp_path / ".csarc/config.yml").write_text(
+        f"project_maturity: {candidate_maturity}\n", encoding="utf-8"
+    )
+    commit_change(tmp_path, "cli", "feat!: drop the legacy layout")
+
+    assert release_plan(tmp_path, "HEAD", phase="beta") == (
+        f"v{expected}",
+        expected,
+    )
+
+
+def test_maturity_fails_closed_without_a_readable_main_policy(
+    tmp_path: Path,
+) -> None:
+    """Unreadable or unavailable main policy never falls back silently."""
+    init_maturity_repo(tmp_path, "early", "0.4.2")
+    git(tmp_path, "checkout", "-b", "delivery")
+    git(tmp_path, "checkout", "main")
+    (tmp_path / ".csarc/config.yml").write_text(
+        "- orphan list item\n", encoding="utf-8"
+    )
+    commit_change(tmp_path, "main", "chore: corrupt main policy")
+    git(tmp_path, "checkout", "delivery")
+    commit_change(tmp_path, "cli", "feat!: drop the legacy layout")
+
+    with pytest.raises(ValueError, match="authoritative project_maturity"):
+        release_plan(tmp_path, "HEAD", phase="beta")
+
+    git(tmp_path, "branch", "-D", "main")
+    with pytest.raises(
+        ValueError, match="origin/main and main are unavailable"
+    ):
+        release_plan(tmp_path, "HEAD", phase="stable")
+
+
 def test_breaking_candidate_writes_migration_notes(tmp_path: Path) -> None:
     """CHANGELOG lists breaking behavior, minimum version, and recovery."""
     init_maturity_repo(tmp_path, "early", "0.4.2")

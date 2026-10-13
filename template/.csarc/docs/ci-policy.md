@@ -336,7 +336,9 @@ tag；release intent 的 commit range 則維持從 delivery 可達的最新 tag 
 `early` 專案的 breaking 變更（`type!:` 或 `BREAKING CHANGE:` footer）從 `0.y.z`
 升為 `0.(y+1).0`，維持 0.x；`formal` 專案仍依 SemVer 升 MAJOR（Issue #1085）。
 beta 與 stable 對同一條 candidate line 使用同一規則，main 已插入較高 stable 時以它為
-基準重新計算，已發布的 core 與 `.N` 不重用也不倒退。含 breaking 變更的 CHANGELOG
+基準重新計算，已發布的 core 與 `.N` 不重用也不倒退。成熟度一律讀 current `main`
+（trusted base）的 `.csarc/config.yml`，candidate 不能改寫自己的 bump 規則；main
+無法取得或設定無法解析時直接失敗，不套用預設值。含 breaking 變更的 CHANGELOG
 另列 `Migration notes`：最低版本、回復方式，以及每個 commit 的 footer 說明。
 
 `admin_bypass: off|beta-only|always` 控制 admin 是否可用 exact-head 自我授權取代
