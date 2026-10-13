@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.30.5] - 2026-10-13
+
+### Bug Fixes
+
+* fix(cli): annotate the atomic directory context manager as Generator (385a141)
+
 ## [0.30.4] - 2026-10-08
 
 ### Bug Fixes
