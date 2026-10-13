@@ -6,5 +6,6 @@
   {"name": "hotfix", "color": "B60205", "description": "Urgent standalone change promoted directly to main"},
   {"name": "release-recovery", "color": "FBCA04", "description": "Audited direct-main recovery of a missing release"},
   {"name": "promotion", "color": "5319E7", "description": "Final delivery branch promotion to main"},
+  {"name": "governance-switch", "color": "0E8A16", "description": "Changes .csarc/scripts or relaxes a governance value; decided by the base"},
   {"name": "needs-manual-review", "color": "D93F0B", "description": "Requires human review before merge; not eligible for automated merge"}
 ]

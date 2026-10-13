@@ -91,6 +91,19 @@ def human_review_mode(monkeypatch: pytest.MonkeyPatch) -> None:
         "resolve_release_level",
         resolved_level,
     )
+    # Issue #1069: the trusted base route reads local Git objects; lifecycle
+    # tests use synthetic SHAs, so they pin an ordinary fast route. The
+    # route itself is covered by tests/test_base_policy.py.
+    monkeypatch.setitem(
+        MODULE["merge_snapshot"].__globals__,
+        "base_policy_decision",
+        lambda *_: {
+            "route": "ordinary",
+            "reasons": [],
+            "path_tier": "fast",
+            "self_test": [],
+        },
+    )
 
 
 class FakeGitHub:

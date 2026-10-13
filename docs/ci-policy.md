@@ -926,6 +926,37 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
 與一般 CI 相同，仍由 review、CODEOWNERS 與 required checks 防止惡意弱化。這個邊界不宣稱 candidate 自己的
 測試內容不可修改，只證明可信 runner 確實對該 exact tree 執行 workflow 指定的 command/toolchain 並成功。
 
+### Base-commit merge 與驗證政策（#1069）
+
+合併與驗證在 hosted 與 local 兩種模式都只依 trusted base 的政策決定。`scripts/trusted_executor.py`
+（generated project 為 `.csarc/scripts/trusted_executor.py`，兩份 byte-identical）是共用的 base policy：
+
+- **Local lifecycle**：`scripts/pr_lifecycle.py check`／`merge` 先以 lease 的 `base_sha` 建立 detached
+  trusted base checkout，再由那份 base 的 lifecycle 重新執行；gate、router（`ci_tier.py`）、config reader 與
+  `validate-pr-policy` 都來自 base，candidate checkout 只當作被驗的 exact head。輸出第一行記錄
+  `runs from trusted base <sha>`。啟動程式本身仍是操作者執行的 entry point；要完全不經 candidate 程式碼，
+  可先 `git worktree add --detach <path> <base_sha>`，再從 candidate worktree 以
+  `CSARC_TRUSTED_BASE_SHA=<base_sha> python3 <path>/scripts/pr_lifecycle.py merge ...` 執行。
+- **Governance-switch route**：改動 `.csarc/scripts/`、放寬治理值（`admin_bypass`、`verification_mode`、
+  `governance_mode`、`review`、`copilot_review`、`actions_fallback` 往寬鬆方向，關閉 `enable_codeql`／
+  `enable_governance_drift_check`，移除 `lifecycle` 項目，調低 `coverage_threshold`）、變更設定 schema，或無法
+  取得完整變更清單時，PR 必須帶 `governance-switch` label。hosted 由 trusted base 的 `validate-pr-policy`
+  經 API 讀取 candidate 設定與檔案清單判定，local 由 lifecycle 對 exact head 判定；兩者共用同一個
+  `route` 規則。這條 route 不放寬任何控制：required checks、exact-head 授權與 remote lease 照常要求，
+  也不能用 quota fallback 取代 required checks。`csarc update` PR 一律走這條 route。
+- **Next-schema reader**：base reader 讀 schema 1（現行，維持既有正規化）與 schema 2（next，只收使用者
+  意圖：退役鍵、未知 `_` metadata、缺少治理值都 fail closed）；其他 `schema_version` 直接失敗。它只讀不寫；
+  writer 要等 base 已能驗證新 schema 後才切換（Q1）。candidate 自己的 parser 與 route 只在 lifecycle 的
+  `policy_self_test` 以 non-authoritative 方式重播，差異只列在輸出，不改變 base 的決定。
+- **Release channel floor**：delivery branch（`dev/m*`、`dev/i*`）是 beta，floor 為 fast；其他 base
+  （standalone、hotfix、release recovery 指向 `main`）是 stable，floor 為 full；`hotfix`、`release-recovery`、
+  `promotion` label 也要求 full。`verify-fast` 取 floor 與 path tier 中較強者；`verification_mode: local`
+  時直接升級成 full，hosted mode 的本機執行只提示 floor，正式證據仍由 hosted `verify` 提供。local merge
+  要求的證據 tier 同樣是 release level 與 trusted router path tier 中較強者。
+
+限制：同 #1086，trusted base 防的是 candidate 改 gate 讓自己通過，不是對惡意測試碼的 sandbox；
+最終仍靠 required checks、read-only 權限與人工審查。
+
 ### Risk-owned execution 與有限證據沿用（#812）
 
 單一 `verify` required context 保持不變，不新增 path-filtered workflow、matrix runner、stage registry 或跨 commit

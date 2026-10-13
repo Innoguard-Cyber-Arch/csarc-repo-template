@@ -199,7 +199,12 @@ def _run_stubbed_verify_fast(
     repo = tmp_path / "repo"
     scripts = repo / "scripts"
     scripts.mkdir(parents=True)
-    for name in ("ci_tier.py", "verify-fast"):
+    for name in (
+        "ci_tier.py",
+        "csarc_config.py",
+        "trusted_executor.py",
+        "verify-fast",
+    ):
         shutil.copy2(REPO_ROOT / "scripts" / name, scripts / name)
     (scripts / "resolve-cache-root").write_text(
         '#!/usr/bin/env bash\nprintf "%s\\n" "$PWD/.cache"\n',
