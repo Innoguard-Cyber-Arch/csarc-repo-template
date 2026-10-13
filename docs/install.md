@@ -42,9 +42,11 @@ git switch -c chore/<issue-number>-update-repo-template
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
 ```
 
+更新入口只有 `csarc update`；`--check` 與套用使用同一份規劃，衝突與檔案動作相同。直接執行 `copier update` 不受支援。
+
 ## 不確定目前狀態時
 
-先用「自動判斷」：`csarc status` 只讀本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，判斷屬於 `create`／`adopt`／`adoption-pending`／`migrate`／`update`／`current`／`policy-only-update` 七種狀態之一，再依回傳的 `next_command` 走對應流程。`adoption-pending` 表示本機 checkpoint 有效但導入尚未完成，下一步是 `csarc adopt <path> --finalize`；`migrate` 表示既有 Copier answers 使用 release tag 或短 SHA，需依指示核對並綁回已驗證 Release 的完整 SHA。固定版本的完整 agent 安裝契約見 [`docs/agent-install.md`](agent-install.md)。
+先用「自動判斷」：`csarc status` 只讀本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，判斷屬於 `create`／`adopt`／`adoption-pending`／`migrate`／`update`／`current`／`policy-only-update` 七種狀態之一，再依回傳的 `next_command` 走對應流程。`adoption-pending` 表示本機 checkpoint 有效但導入尚未完成，下一步是 `csarc adopt <path> --finalize`；`migrate` 表示既有 Copier answers 使用 release tag 或短 SHA，需依指示核對並綁回已驗證 Release 的完整 SHA；偵測到直接執行過 `copier update`（answers 的 `_commit` 與 provenance 不符，或留下 `.rej`）時也回報 `migrate`，這只是偵測結果，不代表遷移完成，需還原後改用 `csarc update`。固定版本的完整 agent 安裝契約見 [`docs/agent-install.md`](agent-install.md)。
 
 ## 完整細節
 

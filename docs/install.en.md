@@ -40,9 +40,11 @@ git switch -c chore/<issue-number>-update-repo-template
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
 ```
 
+`csarc update` is the only update entry point; `--check` and apply share one plan, so they list the same conflicts and file actions. Running `copier update` directly is unsupported.
+
 ## Not sure of the current state?
 
-Start with auto-detection: `csarc status` reads only local files and, if already adopted, the template version and repository settings on GitHub, then classifies the repository into one of seven states: `create`/`adopt`/`adoption-pending`/`migrate`/`update`/`current`/`policy-only-update`. Follow the returned `next_command`. `adoption-pending` means the local checkpoint is valid but adoption still needs `csarc adopt <path> --finalize`; `migrate` means existing Copier answers use a release tag or short SHA and must be reviewed and bound to a verified Release's full SHA. The pinned agent install contract lives at [`docs/agent-install.md`](agent-install.md).
+Start with auto-detection: `csarc status` reads only local files and, if already adopted, the template version and repository settings on GitHub, then classifies the repository into one of seven states: `create`/`adopt`/`adoption-pending`/`migrate`/`update`/`current`/`policy-only-update`. Follow the returned `next_command`. `adoption-pending` means the local checkpoint is valid but adoption still needs `csarc adopt <path> --finalize`; `migrate` means existing Copier answers use a release tag or short SHA and must be reviewed and bound to a verified Release's full SHA. A raw `copier update` (answers `_commit` differs from provenance, or `.rej` files remain) is also reported as `migrate`; that is a detection, not a completed migration, so restore the files and use `csarc update`. The pinned agent install contract lives at [`docs/agent-install.md`](agent-install.md).
 
 ## Full detail
 
