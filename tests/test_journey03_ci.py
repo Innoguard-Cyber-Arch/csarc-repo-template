@@ -527,7 +527,11 @@ def test_documentation_tier_validates_the_generated_site() -> None:
 def test_local_verification_reuses_the_hosted_path_planner() -> None:
     """Local evidence is appended to the same planner and runner path."""
     for path, planner, recorder in (
-        ("scripts/verify-fast", "python3 scripts/ci_tier.py", None),
+        (
+            "scripts/verify-fast",
+            'python3 "$control_root/scripts/ci_tier.py"',
+            None,
+        ),
         (
             "template/.csarc/scripts/verify-fast.jinja",
             "python3 .csarc/scripts/ci_tier.py",
@@ -555,7 +559,9 @@ def test_workflow_scope_runs_the_actions_security_audit() -> None:
     ).read_text(encoding="utf-8")
 
     assert 'if [[ "$scopes" == *,workflow,* ]]; then' in root_fast
-    assert "./scripts/verify-stage-github-actions-audit" in root_fast
+    assert (
+        '"$control_root/scripts/verify-stage-github-actions-audit"' in root_fast
+    )
     assert (
         "python3 .csarc/scripts/check_action_pins.py --root ." in generated_fast
     )
@@ -567,7 +573,7 @@ def test_workflow_scope_runs_the_actions_security_audit() -> None:
 def test_full_dispatch_skips_redundant_fast_checks() -> None:
     """A local full request delegates before checks owned by full."""
     for path, full_command in (
-        ("scripts/verify-fast", "./scripts/verify-template.sh"),
+        ("scripts/verify-fast", '"$control_root/scripts/verify-template.sh"'),
         (
             "template/.csarc/scripts/verify-fast.jinja",
             "./.csarc/scripts/verify",
@@ -898,8 +904,10 @@ def test_full_verification_stages_are_independently_runnable_scripts() -> None:
         for line in source.splitlines()
         if line.strip().startswith('run_stage "')
     ]
+    # Stages resolve from the entry point's own (trusted) tree (#1086).
     assert calls == [
-        f'run_stage "{name}" ./{script}' for name, script in expected
+        f'run_stage "{name}" "$control_root"/{script}'
+        for name, script in expected
     ]
 
     for _, script in expected:

@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cache_root="$("$repo_root/scripts/resolve-cache-root")"
+# control_root holds this entry point, its router, and its stage gate;
+# repo_root is the tree under verification (Issue #1086).
+control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$control_root/scripts/verification-step"
+repo_root="$(verification_subject_root "$control_root")"
+# Pass the subject only to control-set children, never to nested fixtures.
+unset CSARC_VERIFICATION_SUBJECT_ROOT
+cache_root="$("$control_root/scripts/resolve-cache-root")"
 if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
   export UV_CACHE_DIR="$cache_root/uv"
 else
   export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
 fi
 cd "$repo_root"
-source "$repo_root/scripts/verification-step"
 
 plan_root="$(mktemp -d)"
 trap 'rm -rf "$plan_root"' EXIT
@@ -57,7 +62,7 @@ extra_scopes="${CSARC_CI_SCOPES:-}"
 if [[ "${CSARC_RUN_OSV:-false}" == "true" ]]; then
   extra_scopes="${extra_scopes:+$extra_scopes,}dependency"
 fi
-python3 scripts/ci_tier.py \
+python3 "$control_root/scripts/ci_tier.py" \
   --event pull_request \
   --base "$base" \
   --head "${branch:-HEAD}" \
@@ -98,7 +103,8 @@ export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 case "$suite" in
   fast) ;;
   full)
-    ./scripts/verify-template.sh
+    CSARC_VERIFICATION_SUBJECT_ROOT="$repo_root" \
+      "$control_root/scripts/verify-template.sh"
     exit 0
     ;;
   *)
@@ -225,7 +231,8 @@ fi
 
 if [[ "$scopes" == *,workflow,* ]]; then
   verification_step "GitHub Actions audit" \
-    ./scripts/verify-stage-github-actions-audit
+    env CSARC_VERIFICATION_SUBJECT_ROOT="$repo_root" \
+    "$control_root/scripts/verify-stage-github-actions-audit"
 fi
 
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
