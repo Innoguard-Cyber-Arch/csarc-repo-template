@@ -13,7 +13,7 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -2805,7 +2805,7 @@ def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
 @contextmanager
 def atomic_parent_directory(
     root: Path, relative_name: str
-) -> Iterator[tuple[int, str]]:
+) -> Generator[tuple[int, str]]:
     """Open a relative destination's parent without following symlinks."""
     destination = checked_destination(root, relative_name)
     relative = destination.relative_to(root)
