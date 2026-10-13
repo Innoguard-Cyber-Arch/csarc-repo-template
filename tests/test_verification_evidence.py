@@ -264,6 +264,87 @@ def test_release_requires_full_tier_evidence() -> None:
         )
 
 
+def with_executor(
+    built: tuple[dict[str, Any], dict[str, Any], dict[str, Any]], claim: str
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Append one executor claim to the execution step name."""
+    step = built[2]["steps"][-1]
+    step["name"] = f"{step['name']} executor={claim}"
+    return built
+
+
+def test_execution_binds_the_trusted_base_executor() -> None:
+    """Issue #1086: evidence records which tree supplied the entry point."""
+    trusted = validate_verification_job(
+        *with_executor(evidence(), "trusted-base"),
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+    )
+    legacy = validate_verification_job(
+        *evidence(),
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+    )
+
+    assert trusted["executor"] == "trusted-base"
+    assert legacy["executor"] == "candidate-legacy"
+
+
+@pytest.mark.parametrize("claim", ["candidate", "candidate-legacy", ""])
+def test_unknown_executor_claim_fails_closed(claim: str) -> None:
+    """Only the trusted executor may appear as an explicit claim."""
+    with pytest.raises(RuntimeError, match="evidence is malformed"):
+        validate_verification_job(
+            *with_executor(evidence(), claim),
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+        )
+
+
+def test_reuse_inherits_the_source_executor() -> None:
+    """A reused route reports the executor of its direct source run."""
+    source = with_executor(evidence(run_id=200, check_id=7), "trusted-base")
+    current = evidence(run_id=300, check_id=8, reuse=(200, 7, 7))
+
+    result = validate_verification_job(
+        *current,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        source_evidence=(*source, TREE),
+    )
+
+    assert result["reused"] is True
+    assert result["executor"] == "trusted-base"
+
+
+def test_template_evidence_reader_accepts_the_same_executor_claim() -> None:
+    """Root and generated readers keep one executor contract."""
+    check_run, workflow_run, job = evidence(
+        command="./.csarc/scripts/verify-fast"
+    )
+    job["steps"][-1]["name"] += " executor=trusted-base"
+
+    result = validate_template_verification_job(
+        check_run,
+        workflow_run,
+        job,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+    )
+
+    assert result["executor"] == "trusted-base"
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
