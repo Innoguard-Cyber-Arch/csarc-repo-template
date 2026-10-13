@@ -55,7 +55,7 @@ tracking: none
 - `summary`：`files` 依 action 計數、`settings` 依 class 計數（全部列出，包含 0）、`required_actions` 為 {`blocking`、`non_blocking`}；計數必須等於對應列的數量。
 - `settings`：每列 {`key`、`before`、`after`、`class`、`source`、`note`}，依 key 排序且不重複；只列出 `REPORT_SETTING_KEYS` 允許的鍵，值保留 JSON 型別。
 - `files`：每列 {`path`、`action`、`reason`、`from`、`decision`}，先依 action 順序、再依 path 排序；只有 `move` 有 `from`。
-- `product`：{`release_ownership`、`code_owner`、`work_item_mapping`、`release_writers`、`version_surfaces`、`action_pins`、`reviewer_rotation`、`behavior_changes`}；後五項保留給後續 Issue，2.0.0 為 `null`。
+- `product`：{`release_ownership`、`code_owner`、`work_item_mapping`、`release_writers`、`version_surfaces`、`action_pins`、`reviewer_rotation`、`behavior_changes`}；後五項保留給後續 Issue，尚未實作時為 `null`。`action_pins` 由 Issue #1065 填入：update（不含 reinstall）為產品 Action pin preflight 的列，每列 {`file`、`line`、`action`、`old_sha`、`new_sha`、`reason`}，`reason` 為 `template-pin-changed`（產品 pin 等於目前受管 workflow 的 pin）或 `product-pin-diverged`；沒有漂移時為 `[]`，adopt 為 `null`。每列另產生 blocking 的 `action-pin`，`subject` 為 `file:line`。
 - `required_actions`：每列 {`kind`、`subject`、`blocking`、`message`、`command`}。
 - `verification`：{`candidate`、`hook`、`render_parity`}；`render_parity` 只有 `state`。update（不含 reinstall）由 Issue #1063 的共用規劃器填入：以舊 template 實際詢問的答案與可信快照重建的舊側 render，與 target 逐檔相同為 `equal`，否則為 `diverged`；adopt 與 reinstall 為 `null`。
 - `next_steps`：每列 {`text`、`command`}，由 operation 與 status 算出。
