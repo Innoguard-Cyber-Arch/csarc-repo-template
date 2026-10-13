@@ -31,7 +31,7 @@ git switch -c chore/<issue-number>-adopt-csarc-template
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt
 ```
 
-`adopt` 預設為 dry-run，只產生 repo 外的 Markdown 導入報告與 machine-readable plan，不修改 repo；確認後才用 `--apply-plan` 套用。
+`adopt` 預設為 dry-run，只在 repo 外產生 machine-readable plan、作為唯一來源的 report JSON 與由它 render 的 Markdown 導入報告（[SPEC-008](specs/SPEC-008-lifecycle-report-format.md)），不修改 repo；確認後才用 `--apply-plan` 套用。
 
 `code_owner` 預設為空值（不產生 CODEOWNERS）；組織 repo 以 `--data code_owner=@<organization>/<team>` 指定 team，個人 repo 則用 `--data code_owner=@<user>`。`repository_url` 只取自 GitHub origin、`GH_REPO` 或明確傳入的值，不由 owner 推導。尚未設定 remote 的本機 repo 會把有值的 owner 標成 `unknown`，允許先審查導入計畫，但需傳入合法的 `--data repository_url=https://github.com/<owner>/<repository>`，即使文件模式關閉也不能省略。push 後再依序執行產生的 repository settings `plan`／`apply`／`check`。檢查不會自動授予 user／team 權限，owner 不存在或沒有 write 以上權限時會停止。
 

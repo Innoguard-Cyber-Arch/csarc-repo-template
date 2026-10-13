@@ -349,13 +349,87 @@ def release_follow_up_errors(  # noqa: C901
     return errors
 
 
-def bump_version(version: str, messages: list[str]) -> str | None:
+def _is_breaking(subject: str, body: str) -> bool:
+    """Return whether one commit declares a breaking change."""
+    return (
+        release_intent(subject) == "major"
+        or "BREAKING CHANGE:" in body
+        or "BREAKING-CHANGE:" in body
+    )
+
+
+def _breaking_notes(body: str) -> str:
+    """Return the migration text of a commit's BREAKING CHANGE footer."""
+    match = re.search(
+        r"BREAKING[ -]CHANGE:[ \t]*(.+?)(?:\n[ \t]*\n|\Z)", body, re.DOTALL
+    )
+    return " ".join(match.group(1).split()) if match else ""
+
+
+MAIN_REFS = ("refs/remotes/origin/main", "refs/heads/main")
+
+
+def _main_ref(root: Path) -> str:
+    """Return the authoritative main ref, or "" when none is available."""
+    refs = set(
+        git_output(
+            ["for-each-ref", "--format=%(refname)", *MAIN_REFS], root
+        ).splitlines()
+    )
+    return next((ref for ref in MAIN_REFS if ref in refs), "")
+
+
+def project_maturity(root: Path) -> str | None:
+    """Return the ``project_maturity`` declared by current main.
+
+    The trusted base owns the bump rule, so a candidate cannot change its
+    own version policy by editing ``.csarc/config.yml`` (Issue #1085). A
+    main without the file declares no maturity. When main is unavailable
+    but the candidate declares a config, or main's config is unreadable,
+    planning fails closed instead of guessing a default.
+    """
+    main_ref = _main_ref(root)
+    if not main_ref:
+        if (root / ".csarc/config.yml").is_file():
+            raise ValueError(
+                "cannot determine the authoritative project_maturity: "
+                "origin/main and main are unavailable"
+            )
+        return None
+    listed = git_output(
+        ["ls-tree", "--name-only", main_ref, "--", ".csarc/config.yml"], root
+    )
+    if not listed:
+        return None
+    try:
+        text = git_output(["show", f"{main_ref}:.csarc/config.yml"], root)
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.yml"
+            config_path.write_text(text + "\n", encoding="utf-8")
+            value = csarc_config.load_config(config_path).get(
+                "project_maturity"
+            )
+    except (subprocess.CalledProcessError, ValueError) as error:
+        raise ValueError(
+            "cannot read the authoritative project_maturity from "
+            f"{main_ref}:.csarc/config.yml"
+        ) from error
+    return None if value is None else str(value)
+
+
+def bump_version(
+    version: str, messages: list[str], *, maturity: str | None = None
+) -> str | None:
     """Calculate the next CORE version from merged Conventional Commits.
 
     ``version`` may carry a phase suffix (e.g. ``0.16.0-beta.1``); only its
     ``major.minor.patch`` core is used for the bump arithmetic, and the
     result is always a bare core version with no suffix -- callers apply
     the declared phase afterward via ``release_phase.phase_version``.
+
+    While ``maturity`` is ``early`` and the core is still ``0.y.z``, a
+    breaking change advances MINOR to ``0.(y+1).0`` instead of leaving 0.x
+    (Issue #1085). Every other maturity keeps the SemVer MAJOR bump.
     """
     try:
         parsed = release_phase.parse_version(version)
@@ -365,13 +439,15 @@ def bump_version(version: str, messages: list[str]) -> str | None:
     for message in messages:
         subject, _, body = message.partition("\n")
         intent = release_intent(subject)
-        if "BREAKING CHANGE:" in body or "BREAKING-CHANGE:" in body:
+        if _is_breaking(subject, body):
             intent = "major"
         if INTENT_RANK[intent] > INTENT_RANK[bump]:
             bump = intent
     if bump == "no-release":
         return None
     major, minor, patch = parsed.core
+    if bump == "major" and maturity == "early" and major == 0:
+        bump = "minor"
     if bump == "major":
         return f"{major + 1}.0.0"
     if bump == "minor":
@@ -1219,6 +1295,9 @@ def release_plan(  # noqa: C901
 
     tags = git_output(["tag", "--merged", sha], root).splitlines()
     all_tags = git_output(["tag", "--list"], root).splitlines()
+    # Beta and stable apply one core-version policy for the same line,
+    # and that policy comes from current main rather than the candidate.
+    maturity = project_maturity(root)
 
     # One exact bridge retires the final pre-#918 version spelling without
     # keeping a general alpha parser. Once v0.22.0 is published, ordinary
@@ -1299,7 +1378,10 @@ def release_plan(  # noqa: C901
                 parent_version
             ).core_string()
             base_core = release_phase.parse_version(base).core_string()
-            if bump_version(parent_core, parent_messages) == base_core:
+            if (
+                bump_version(parent_core, parent_messages, maturity=maturity)
+                == base_core
+            ):
                 return f"v{base}", base
     if base == "0.21.0-alpha.1":
         # Exact one-time bridge from the final retired public spelling.
@@ -1314,7 +1396,7 @@ def release_plan(  # noqa: C901
         for message in raw.split("\x1e")
         if message.strip("\n")
     ]
-    version = bump_version(base_core, messages)
+    version = bump_version(base_core, messages, maturity=maturity)
     if version is None:
         return None
 
@@ -1323,28 +1405,7 @@ def release_plan(  # noqa: C901
     # when its matching tag is reachable there; the delivery tag above still
     # bounds the changelog and release-intent range.
     if phase == "beta":
-        refs = set(
-            git_output(
-                [
-                    "for-each-ref",
-                    "--format=%(refname)",
-                    "refs/remotes/origin/main",
-                    "refs/heads/main",
-                ],
-                root,
-            ).splitlines()
-        )
-        main_ref = next(
-            (
-                ref
-                for ref in (
-                    "refs/remotes/origin/main",
-                    "refs/heads/main",
-                )
-                if ref in refs
-            ),
-            "",
-        )
+        main_ref = _main_ref(root)
         if not main_ref:
             higher_stable_tags = [
                 tag
@@ -1415,14 +1476,11 @@ def release_plan(  # noqa: C901
                     )
             elif stable.core > release_phase.parse_version(base_core).core:
                 base_core = stable.core_string()
-                version = bump_version(base_core, messages) or version
+                version = (
+                    bump_version(base_core, messages, maturity=maturity)
+                    or version
+                )
     if phase is not None:
-        config_path = root / ".csarc/config.yml"
-        maturity = (
-            str(csarc_config.load_config(config_path)["project_maturity"])
-            if config_path.is_file()
-            else None
-        )
         version = release_phase.phase_version(
             version, phase, existing=all_tags, maturity=maturity
         )
@@ -1760,6 +1818,45 @@ def _changelog_heads(root: Path, sha: str) -> list[str]:
     return parents if len(parents) > 1 else [sha]
 
 
+def _changelog_records(raw: str) -> list[tuple[str, str, str]]:
+    """Split ``%h%x1f%s%x1f%b%x1e`` log output into (sha, subject, body)."""
+    records: list[tuple[str, str, str]] = []
+    for record in raw.split("\x1e"):
+        if not record.strip():
+            continue
+        # Output stripping can drop an empty body's separator (\x1f is
+        # whitespace to str.strip), so pad the missing field.
+        fields = [*record.strip("\n").split("\x1f", 2), ""]
+        records.append((fields[0], fields[1], fields[2]))
+    return records
+
+
+def _migration_note(short_sha: str, body: str) -> str:
+    """Return one breaking commit's migration bullet."""
+    note = _breaking_notes(body) or (
+        "no BREAKING CHANGE footer was recorded; read the linked pull "
+        "request before upgrading"
+    )
+    return f"* {short_sha}: {note}"
+
+
+def _migration_section(
+    version: str, latest: str, migrations: list[str]
+) -> list[str]:
+    """Return the notes section that tells consumers how to cross a break."""
+    if not migrations:
+        return []
+    recovery = f"stay on or reinstall {latest}" if latest else "do not upgrade"
+    return [
+        "",
+        "### Migration notes",
+        "",
+        f"* Minimum version for the changed behavior: {version}; "
+        f"to recover, {recovery}.",
+        *migrations,
+    ]
+
+
 def _write_changelog(root: Path, sha: str, version: str) -> None:
     """Prepend deterministic notes for the same commits used by planning."""
     changelog = root / "CHANGELOG.md"
@@ -1775,18 +1872,19 @@ def _write_changelog(root: Path, sha: str, version: str) -> None:
     heads = _changelog_heads(root, sha)
     revision = [*heads, f"^{latest}"] if latest else heads
     raw = git_output(
-        ["log", "--reverse", "--format=%h%x1f%s%x1e", *revision], root
+        ["log", "--reverse", "--format=%h%x1f%s%x1f%b%x1e", *revision], root
     )
     notes: dict[str, list[str]] = {
         "Breaking Changes": [],
         "Features": [],
         "Bug Fixes": [],
     }
-    for record in raw.split("\x1e"):
-        if not record.strip():
-            continue
-        short_sha, subject = record.strip().split("\x1f", 1)
+    migrations: list[str] = []
+    for short_sha, subject, body in _changelog_records(raw):
         intent = release_intent(subject)
+        if _is_breaking(subject, body):
+            intent = "major"
+            migrations.append(_migration_note(short_sha, body))
         heading = {
             "major": "Breaking Changes",
             "minor": "Features",
@@ -1803,6 +1901,7 @@ def _write_changelog(root: Path, sha: str, version: str) -> None:
     for heading, entries in notes.items():
         if entries:
             sections.extend(["", f"### {heading}", "", *entries])
+    sections.extend(_migration_section(version, latest, migrations))
     entry = "\n".join(sections) + "\n\n"
     marker = source.find("\n## ")
     if marker == -1:

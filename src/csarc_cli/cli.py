@@ -13,7 +13,13 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Generator,
+    Mapping,
+    Sequence,
+)
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -23,7 +29,11 @@ from urllib.parse import quote
 
 import yaml  # type: ignore[import-untyped]
 
-from csarc_cli import release_phase
+from csarc_cli import lifecycle_report, release_phase
+from csarc_cli.lifecycle_report import (
+    LIFECYCLE_REPORT_FORMAT_VERSION,
+    redact,
+)
 
 CANONICAL_SOURCE = (
     "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git"
@@ -47,12 +57,14 @@ LEGACY_ANSWERS_FILE = Path(".copier-answers.yml")
 LEGACY_PROFILE_FILE = Path(".csarc/profile.json")
 PROVENANCE_FILE = Path(".csarc/provenance.json")
 PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
-ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
+# SPEC-008 report files. Each name below carries ``.json`` (the only
+# source) and ``.md`` (rendered from that JSON) beside the machine plan.
+ADOPTION_REPORT_BASENAME = "csarc-adoption-report"
 ADOPTION_PLAN_BASENAME = "csarc-adoption-plan.json"
-# Version of the adoption report's own Markdown template, independent from
-# the CLI package version. Bump this when the report's structure or field
-# set changes; README.md displays the same value (#530).
-ADOPTION_REPORT_TEMPLATE_VERSION = "1.1.0"
+UPDATE_REPORT_BASENAME = "csarc-update-report"
+UPDATE_PLAN_BASENAME = "csarc-update-plan.json"
+# The 1.1.0 Markdown-only report name, removed after the new set is written.
+LEGACY_ADOPTION_REPORT_NAME = "csarc-adoption-dry-run.md"
 AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -2350,446 +2362,646 @@ def plan_status(
     )
 
 
-def printable(value: object) -> str:
-    """Escape control characters without exposing file content."""
-    return str(value).replace("\n", r"\n").replace("\r", r"\r")
+def report_setting_rows(
+    after: Mapping[str, object],
+    before: Mapping[str, object] | None,
+    explicit: Collection[str] = (),
+) -> list[dict[str, object]]:
+    """Return allowlisted SPEC-008 setting rows with JSON-typed values.
 
-
-def markdown_code(value: object) -> str:
-    """Return a CommonMark code span using a non-conflicting delimiter."""
-    rendered = printable(value)
-    longest = max(
-        (len(match.group()) for match in re.finditer(r"`+", rendered)),
-        default=0,
-    )
-    delimiter = "`" * (longest + 1)
-    padding = (
-        " "
-        if rendered.startswith("`")
-        or rendered.endswith("`")
-        or (rendered.strip() and rendered != rendered.strip())
-        else ""
-    )
-    return f"{delimiter}{padding}{rendered}{padding}{delimiter}"
-
-
-def markdown_text(value: object) -> str:
-    """Escape backticks that appear in plain Markdown text."""
-    return printable(value).replace("`", r"\`")
-
-
-def markdown_table_code(value: object) -> str:
-    """Return a safe CommonMark code span for a table cell."""
-    return markdown_code(printable(value).replace("|", r"\|"))
-
-
-def report_settings(data: dict[str, object]) -> str:
-    """Return known non-secret settings used for rendering."""
-    return ", ".join(
-        markdown_code(f"{key}={printable(value)}")
-        for key, value in sorted(data.items())
-        if key in REPORT_SETTING_KEYS
-    )
-
-
-def adoption_report_markdown(  # noqa: C901
-    target: Path,
-    revision: Revision,
-    repository: RepositoryContext,
-    data: dict[str, object],
-    plan: Plan,
-    generated_at: str,
-    adoption: dict[str, object] | None = None,
-) -> str:
-    """Render the complete, shareable adoption decision report.
-
-    The report is pure Markdown (#530): no PDF or other binary artifact is
-    produced. Its own structure is versioned independently from the CLI
-    package through ``ADOPTION_REPORT_TEMPLATE_VERSION``, recorded in the
-    report itself and displayed in README.md.
+    ``before`` is ``None`` for adoption: every resolved setting is new.
+    Keys outside ``REPORT_SETTING_KEYS`` never appear (#950).
     """
-    status, reason = plan_status(plan, adoption)
-    release = release_contract(data)
-    workflow = release["selected_workflow"] or "(none)"
-    inputs = ", ".join(cast(list[str], release["required_inputs"])) or "(none)"
-    new_count = len(plan.add)
-    edited_count = len(plan.overwrite) + len(plan.merge)
-    removed_count = len(plan.remove)
-    detail_counts = (
-        ("Add", len(plan.add)),
-        ("Overwrite", len(plan.overwrite)),
-        ("Remove", len(plan.remove)),
-        ("Preserve", len(plan.preserve)),
-        ("Automatic merge", len(plan.merge)),
-        ("Manual merge", len(plan.manual)),
-        ("Unable to determine", len(plan.unknown)),
+    previous = {} if before is None else before
+    keys = sorted(
+        key for key in set(previous) | set(after) if key in REPORT_SETTING_KEYS
     )
-
-    owner: dict[str, object] = {}
-    owner_state = "unknown"
-    hook: dict[str, object] = {}
-    working_tree = "unknown"
-    applied = False
-    if adoption is not None:
-        raw_owner = adoption.get("code_owner")
-        owner = raw_owner if isinstance(raw_owner, dict) else {}
-        owner_state = str(owner.get("state", "unknown"))
-        raw_hook = adoption.get("project_verification_hook")
-        hook = raw_hook if isinstance(raw_hook, dict) else {}
-        working_tree = (
-            "clean"
-            if adoption.get("clean")
-            else (
-                "dirty; exact preserved state"
-                if adoption.get("applicable") is True
-                else "dirty; review only"
-            )
+    rows: list[dict[str, object]] = []
+    for key in keys:
+        old = previous.get(key)
+        new = after.get(key)
+        source = "explicit" if key in explicit else "derived"
+        if before is None or key not in previous:
+            setting_class = "new"
+        elif key not in after:
+            setting_class = "retired"
+        elif old == new:
+            setting_class = "unchanged"
+            source = "explicit" if key in explicit else "saved"
+        else:
+            setting_class = "decision"
+        rows.append(
+            {
+                "after": redact(new),
+                "before": redact(old),
+                "class": setting_class,
+                "key": key,
+                "note": None,
+                "source": source,
+            }
         )
-        applied = adoption.get("applied") is True
+    return rows
 
-    snapshot = ["## Snapshot", "", f"- Target: {markdown_code(target)}"]
-    if adoption is not None:
-        snapshot.append(
-            f"- Target HEAD: {markdown_code(adoption.get('target_head'))}"
-        )
-        snapshot.append(f"- Working tree: {working_tree}")
-    snapshot.append(
-        f"- Repository: {markdown_code(repository.repository or '(none)')}"
-    )
-    snapshot.append(
-        f"- Repository visibility: {markdown_code(repository.visibility)} "
-        f"({markdown_code(repository.source)})"
-    )
-    if adoption is not None:
-        changes = adoption.get("target_changes")
-        if isinstance(changes, list) and changes:
-            snapshot.append(
-                "- Working-tree entries: "
-                + ", ".join(markdown_code(value) for value in changes)
-            )
-    snapshot.extend(
-        [
-            f"- Template source: {markdown_code(revision.source)}",
-            f"- Template: {markdown_code(revision.label)} / "
-            f"{markdown_code(revision.sha)}",
-            "- Release verification: "
-            + (
-                "verified immutable release"
-                if revision.verified
-                else "UNVERIFIED"
-            ),
-            f"- Release ownership: {markdown_code(release['ownership'])}",
-            f"- Selected release workflow: {markdown_code(workflow)}",
-            f"- Required release inputs: {markdown_code(inputs)}",
-            f"- Release ownership reason: {release['reason']}",
-            "- Release repository settings: "
-            f"{markdown_code(release['settings_owner'])} / immutable Releases "
-            f"{markdown_code(release['immutable_releases'])}",
-        ]
-    )
-    if adoption is not None:
-        snapshot.extend(
-            [
-                f"- CODEOWNER verification: {markdown_code(owner_state)}",
-                "- Project verification hook: "
-                f"{markdown_code(hook.get('path') or '(none)')}",
-                "- Project verification hook configured: "
-                f"{markdown_code(str(hook.get('configured') is True).lower())}",
-                "- Project verification result: "
-                f"{markdown_code(hook.get('result'))}",
-                "- Project verification reason: "
-                f"{markdown_code(hook.get('reason'))}",
-                "- Candidate verification: "
-                f"{markdown_code(adoption.get('verification'))}",
-                f"- Adoption applied: {markdown_code(str(applied).lower())}",
-            ]
-        )
-        if applied:
-            snapshot.append(
-                f"- Adopted at: {markdown_code(adoption.get('applied_at'))}"
-            )
-    snapshot.append(f"- Settings: {report_settings(data)}")
-    snapshot.append(f"- Generated: {markdown_code(generated_at)}")
 
-    summary_lines = [
-        "## Summary of file changes",
-        "",
-        "| Change | Files |",
-        "| --- | ---: |",
-        f"| New files | {new_count} |",
-        f"| Edited files | {edited_count} |",
-        f"| Removed files | {removed_count} |",
-        f"| Preserved files | {len(plan.preserve)} |",
+def report_file_rows(
+    files: Plan, preserved_dirty: Collection[str] = ()
+) -> list[dict[str, object]]:
+    """Map one file plan onto the closed SPEC-008 action vocabulary."""
+    rows: list[tuple[str, str, str, str | None, str | None]] = []
+    rows.extend((path, "add", "template", None, None) for path in files.add)
+    rows.extend(
+        (path, "overwrite", "template", None, None) for path in files.overwrite
+    )
+    rows.extend(
+        (path, "overwrite", "automatic-merge", None, None)
+        for path in files.merge
+    )
+    for move in files.move:
+        source, _separator, destination = move.partition(" -> ")
+        rows.append((destination, "move", "layout-migration", source, None))
+    rows.extend(
+        (path, "retire", "obsolete-generated", None, None)
+        for path in files.remove
+    )
+    rows.extend(
+        (
+            path,
+            "preserve",
+            "dirty-preserved" if path in preserved_dirty else "untouched",
+            None,
+            None,
+        )
+        for path in files.preserve
+    )
+    rows.extend(
+        (path, "conflict", "manual-merge", None, "pending")
+        for path in files.manual
+    )
+    rows.extend(
+        (path, "conflict", "undetermined", None, "pending")
+        for path in files.unknown
+    )
+    order = list(lifecycle_report.FILE_ACTIONS)
+    return [
+        {
+            "action": action,
+            "decision": decision,
+            "from": source,
+            "path": path,
+            "reason": reason,
+        }
+        for path, action, reason, source, decision in sorted(
+            rows, key=lambda row: (order.index(row[1]), row[0])
+        )
     ]
 
-    detail_lines = [
-        "## Expected file effects",
-        "",
-        "| Effect | Files |",
-        "| --- | ---: |",
-        *(f"| {label} | {count} |" for label, count in detail_counts),
-    ]
 
-    impact_lines = [
-        "## Impact analysis",
-        "",
-        f"- This plan changes {new_count + edited_count + removed_count} "
-        f"file(s) in {markdown_code(target)}: {new_count} new, "
-        f"{edited_count} edited, {removed_count} removed; "
-        f"{len(plan.preserve)} file(s) stay preserved.",
-        f"- Release ownership is {markdown_code(release['ownership'])} using "
-        f"workflow {markdown_code(workflow)}; {release['reason']}",
-    ]
-    if adoption is not None:
-        impact_lines.extend(
-            [
-                f"- Working tree before adoption: {working_tree}.",
-                f"- CODEOWNER verification: {markdown_code(owner_state)}.",
-                "- Candidate verification: "
-                f"{markdown_code(adoption.get('verification'))}.",
-            ]
+def candidate_verification_state(value: object) -> dict[str, object]:
+    """Split the legacy candidate verification string into state and reason."""
+    text = str(value)
+    if text in {"passed", "pending-authorization", "deferred-manual-merge"}:
+        return {"reason": None, "state": text}
+    if text == "not-run-dirty":
+        return {
+            "reason": "The dirty working tree can only be reviewed.",
+            "state": "not-run",
+        }
+    if text.startswith("failed"):
+        reason = text.removeprefix("failed").removeprefix(":").strip()
+        return {"reason": reason or None, "state": "failed"}
+    return {
+        "reason": f"Unrecognized verification result: {text}",
+        "state": "failed",
+    }
+
+
+def adoption_required_actions(  # noqa: C901
+    plan: ResolvedPlan,
+) -> list[dict[str, object]]:
+    """Derive adopt required actions from the plan's target evidence."""
+    actions: list[dict[str, object]] = []
+    adoption = plan.adoption or {}
+
+    def add(
+        kind: str,
+        subject: str,
+        message: str,
+        *,
+        blocking: bool,
+        command: str | None = None,
+    ) -> None:
+        actions.append(
+            {
+                "blocking": blocking,
+                "command": command,
+                "kind": kind,
+                "message": message,
+                "subject": subject,
+            }
         )
 
-    mapping_lines: list[str] = []
-    mapping: dict[str, object] = {}
-    if adoption is not None:
-        raw_mapping = adoption.get("work_item_mapping")
-        mapping = raw_mapping if isinstance(raw_mapping, dict) else {}
-    if mapping:
-        mapping_lines = [
-            "## Work-item mapping guidance",
-            "",
-            "This is read-only guidance. Adoption does not rename or delete "
-            "GitHub labels. Review the safe suggestions interactively; keep "
-            "custom labels unless you explicitly decide otherwise.",
-            "",
-            "| Work kind | Issue Type | Issue label | PR / fallback label |",
-            "| --- | --- | --- | --- |",
-        ]
-        defaults = mapping.get("defaults")
-        if isinstance(defaults, list):
-            for item in defaults:
-                if not isinstance(item, dict):
-                    continue
-                issue_label = item.get("issue_label") or "(none)"
-                mapping_lines.append(
-                    f"| {markdown_table_code(item.get('kind'))} | "
-                    f"{markdown_table_code(item.get('issue_type'))} | "
-                    f"{markdown_table_code(issue_label)} | "
-                    f"{markdown_table_code(item.get('pr_label'))} |"
-                )
-        mapping_lines.extend(
-            (
-                "",
-                "Inspection: "
-                f"{markdown_code(mapping.get('state', 'unknown'))} — "
-                + markdown_text(mapping.get("reason", "No details available.")),
-                "Issue Types: "
-                f"{markdown_code(mapping.get('issue_type_state', 'unknown'))}; "
-                "labels: "
-                f"{markdown_code(mapping.get('label_state', 'unknown'))}.",
-                "Review choice: "
-                f"{markdown_code(mapping.get('review', 'pending'))}.",
-            )
+    if adoption.get("mapping_reviewed") is False:
+        add(
+            "mapping-review",
+            "work_item_mapping_review",
+            "Work-item mapping suggestions are pending review; plan again "
+            "with an explicit review choice (or review-individually).",
+            blocking=False,
+            command="csarc adopt --data work_item_mapping_review=accept-safe",
         )
-        issue_types = mapping.get("issue_types")
-        if isinstance(issue_types, list) and issue_types:
-            mapping_lines.extend(
-                (
-                    "",
-                    "### Existing Issue Types",
-                    "",
-                    "| Existing | Enabled | Color | Description | Suggestion | "
-                    "Target |",
-                    "| --- | --- | --- | --- | --- | --- |",
-                )
-            )
-            for item in issue_types:
-                if not isinstance(item, dict):
-                    continue
-                color = item.get("color") or "(none)"
-                description = item.get("description") or "(none)"
-                enabled = str(item.get("enabled") is True).lower()
-                mapping_lines.append(
-                    f"| {markdown_table_code(item.get('source'))} | "
-                    f"{markdown_table_code(enabled)} | "
-                    f"{markdown_table_code(color)} | "
-                    f"{markdown_table_code(description)} | "
-                    f"{markdown_table_code(item.get('action'))} | "
-                    f"{markdown_table_code(item.get('target') or '(none)')} |"
-                )
-        labels = mapping.get("labels")
-        if isinstance(labels, list) and labels:
-            mapping_lines.extend(
-                (
-                    "",
-                    "### Existing labels",
-                    "",
-                    "| Existing | Color | Description | Suggestion | "
-                    "Issue Type | Canonical label |",
-                    "| --- | --- | --- | --- | --- | --- |",
-                )
-            )
-            for item in labels:
-                if not isinstance(item, dict):
-                    continue
-                color = item.get("color") or "(none)"
-                description = item.get("description") or "(none)"
-                issue_type = item.get("issue_type") or "(none)"
-                mapping_lines.append(
-                    f"| {markdown_table_code(item.get('source'))} | "
-                    f"{markdown_table_code(color)} | "
-                    f"{markdown_table_code(description)} | "
-                    f"{markdown_table_code(item.get('action'))} | "
-                    f"{markdown_table_code(issue_type)} | "
-                    f"{markdown_table_code(item.get('target') or '(none)')} |"
-                )
-
-    decision_items: list[str] = []
-    if adoption is not None and adoption.get("mapping_reviewed") is False:
-        decision_items.append(
-            "- Work-item mapping suggestions are pending review; rerun the "
-            "dry-run with `--data work_item_mapping_review=accept-safe` or "
-            "`review-individually`."
-        )
-    if adoption is not None and owner_state in {"blocked", "unknown"}:
-        decision_items.append(
-            f"- CODEOWNER {markdown_code(owner.get('value', 'unknown'))} "
-            f"verification is {markdown_code(owner_state)} - "
-            f"{markdown_text(owner.get('reason', 'No details available.'))}."
-        )
-    if adoption is not None and hook.get("result") == "failed":
-        decision_items.append(
-            "- Project verification hook "
-            f"{markdown_code(hook.get('path') or '(none)')} failed - "
-            f"{markdown_text(hook.get('reason', 'No details available.'))}."
-        )
+    raw_mapping = adoption.get("work_item_mapping")
+    mapping = raw_mapping if isinstance(raw_mapping, dict) else {}
     for group, item_kind in (
         (mapping.get("issue_types"), "Issue Type"),
         (mapping.get("labels"), "label"),
     ):
         if not isinstance(group, list):
             continue
-        decision_items.extend(
-            "- Existing "
-            f"{item_kind} {markdown_code(item.get('source'))} has no safe "
-            "automatic mapping; preserve it unless you explicitly choose a "
-            "target."
-            for item in group
-            if isinstance(item, dict)
-            and item.get("action") == "decision-required"
+        for item in group:
+            if isinstance(item, dict) and (
+                item.get("action") == "decision-required"
+            ):
+                add(
+                    "mapping-decision",
+                    str(item.get("source")),
+                    f"Existing {item_kind} has no safe automatic mapping; "
+                    "preserve it unless you explicitly choose a target.",
+                    blocking=False,
+                )
+    raw_owner = adoption.get("code_owner")
+    owner = raw_owner if isinstance(raw_owner, dict) else {}
+    # An unverifiable (unknown) CODEOWNER is shown in Product state but is
+    # not a required action: no answer can resolve it before the push.
+    if owner.get("state") == "blocked":
+        add(
+            "code-owner",
+            str(owner.get("value") or "(none)"),
+            f"CODEOWNER verification is {owner.get('state')}: "
+            f"{owner.get('reason', 'No details available.')}",
+            blocking=True,
+            command="csarc adopt --data code_owner=<@user-or-@org/team>",
         )
-    attention = (
-        (path, "template and repository contain different UTF-8 text")
-        for path in plan.manual
-    )
-    unknown = (
-        (
+    raw_hook = adoption.get("project_verification_hook")
+    hook = raw_hook if isinstance(raw_hook, dict) else {}
+    if hook.get("result") == "failed":
+        add(
+            "verification",
+            str(hook.get("path") or "project verification hook"),
+            f"Project verification hook failed: {hook.get('reason')}",
+            blocking=True,
+        )
+    candidate = candidate_verification_state(adoption.get("verification"))
+    if plan.adoption is not None and candidate["state"] == "failed":
+        add(
+            "verification",
+            "candidate",
+            f"Candidate verification failed: {candidate['reason']}",
+            blocking=True,
+        )
+    if plan.adoption is not None and adoption.get("verification") == (
+        "not-run-dirty"
+    ):
+        add(
+            "working-tree",
+            str(plan.target),
+            "Only unstaged tracked modifications that the plan preserves can "
+            "be applied; commit, stash, or remove the other changes.",
+            blocking=True,
+        )
+    if (
+        plan.adoption is not None
+        and adoption.get("applicable") is not True
+        and adoption.get("mapping_reviewed") is not False
+        and not any(action["blocking"] for action in actions)
+    ):
+        add(
+            "verification",
+            "candidate",
+            "The machine plan is not applicable; candidate verification is "
+            f"{adoption.get('verification', 'unknown')}.",
+            blocking=True,
+        )
+    files = plan.files or Plan((), (), (), (), (), (), ())
+    for path in files.manual:
+        add(
+            "file-conflict",
             path,
-            "file type, executable bit, link target, or non-text content "
+            "Template and repository contain different UTF-8 text; merge "
+            "it manually.",
+            blocking=False,
+        )
+    for path in files.unknown:
+        add(
+            "file-conflict",
+            path,
+            "File type, executable bit, link target, or non-text content "
             "differs; a directory, ancestor, or special-file collision is "
-            "also possible",
+            "also possible.",
+            blocking=False,
         )
-        for path in plan.unknown
-    )
-    decision_items.extend(
-        f"- {markdown_code(path)} - {item_reason}."
-        for path, item_reason in (*attention, *unknown)
-    )
-    decision_lines = ["## Items requiring your decision", ""]
-    if decision_items:
-        decision_lines.extend(decision_items)
-    else:
-        decision_lines.append(
-            "- No known file conflicts. This does not guarantee semantic or "
-            "runtime compatibility."
-        )
+    return actions
 
-    lines = [
-        "# CSARC adoption dry-run",
-        "",
-        f"> **Decision: {status}.** {reason}",
-        "",
-        f"Report template version: `{ADOPTION_REPORT_TEMPLATE_VERSION}`",
-        "",
-        *snapshot,
-        "",
-        *summary_lines,
-        "",
-        *detail_lines,
-        "",
-        *impact_lines,
-        "",
-        *mapping_lines,
-        *(("",) if mapping_lines else ()),
-        *decision_lines,
+
+def update_required_actions(
+    files: Plan, settings: Sequence[Mapping[str, object]]
+) -> list[dict[str, object]]:
+    """Derive the update required actions this release can evaluate."""
+    actions: list[dict[str, object]] = [
+        {
+            "blocking": False,
+            "command": f"csarc update --data {row['key']}=<value>",
+            "kind": "setting-decision",
+            "message": "The saved value changes without an explicit choice; "
+            "confirm the new value or pass the one to keep.",
+            "subject": str(row["key"]),
+        }
+        for row in settings
+        if row["class"] == "decision" and row["source"] != "explicit"
     ]
-    if plan.merge:
-        lines.extend(
-            (
-                "",
-                "## Automatic merges",
-                "",
-                *(
-                    f"- {markdown_code(path)} - fixed CSARC adoption policy."
-                    for path in plan.merge
-                ),
-            )
+    actions.extend(
+        {
+            "blocking": False,
+            "command": None,
+            "kind": "file-conflict",
+            "message": "File type, link target, or a directory collision "
+            "differs from the new release; inspect it before updating.",
+            "subject": path,
+        }
+        for path in files.unknown
+    )
+    return actions
+
+
+APPLIED_NEXT_STEPS = (
+    {
+        "command": None,
+        "text": "No plan remains to apply. Review the repository changes, "
+        "then open a pull request.",
+    },
+)
+
+
+def lifecycle_next_steps(
+    operation: str,
+    status: str,
+    *,
+    applicable: bool,
+    plan: ResolvedPlan,
+    plan_path: Path | None,
+) -> list[dict[str, object]]:
+    """Return the next steps for one unapplied report status."""
+    if status == "current":
+        return [{"command": None, "text": "No update is available."}]
+    steps: list[dict[str, object]] = []
+    if status == "blocked":
+        return [
+            {
+                "command": None,
+                "text": "Do not apply this plan. Resolve the blocking items, "
+                "then create a new plan.",
+            }
+        ]
+    if status == "review-required":
+        steps.append(
+            {
+                "command": None,
+                "text": "Resolve each item under Items requiring your "
+                "decision; an answer given with --data needs a new plan.",
+            }
         )
-    if adoption is not None and adoption.get("applied") is True:
-        lines.extend(
-            (
-                "",
-                "## Adoption applied",
-                "",
-                "Formal adoption completed at "
-                f"{markdown_code(adoption.get('applied_at'))}. This report "
-                "was updated in place to record the post-adoption state; no "
-                "plan remains to apply.",
-                "",
-            )
+    if operation == "adopt" and applicable and plan_path is not None:
+        finalize = " --finalize" if plan.mode == "adopt-finalize" else ""
+        steps.append(
+            {
+                "command": f"csarc adopt{finalize} --apply-plan {plan_path}",
+                "text": "Apply exactly this reviewed machine plan:",
+            }
         )
-    elif adoption is not None and adoption.get("applicable") is not True:
-        lines.extend(
-            (
-                "",
-                "## Next step",
-                "",
-                "Do not apply this plan. Resolve the reported gate and create "
-                "a new dry-run plan.",
-                "",
-            )
+    elif operation == "update":
+        steps.append(
+            {
+                "command": f"csarc update {plan.target} --to "
+                f"{plan.revision.label} --expected-sha {plan.revision.sha}",
+                "text": "Apply the same reviewed release, repeating any "
+                "--data options used for this plan:",
+            }
         )
+    return steps
+
+
+def lifecycle_report_model(  # noqa: C901
+    plan: ResolvedPlan,
+    *,
+    operation: str,
+    plan_name: str,
+    plan_sha256: str,
+    generated_at: str,
+    plan_path: Path | None = None,
+    before: Mapping[str, object] | None = None,
+    explicit: Collection[str] = (),
+    previous: Revision | None = None,
+    target_head: str | None = None,
+    target_changes: Sequence[str] | None = None,
+) -> dict[str, object]:
+    """Build the single SPEC-008 report object for one adopt or update plan.
+
+    Every other report output (Markdown, terminal summaries) derives from
+    this object; it is validated before it is returned.
+    """
+    files = plan.files or Plan((), (), (), (), (), (), ())
+    adoption = plan.adoption
+    preserved_dirty: Collection[str] = ()
+    if adoption is not None:
+        raw_preserved = adoption.get("preserved_dirty_paths")
+        if isinstance(raw_preserved, list):
+            preserved_dirty = {str(path) for path in raw_preserved}
+    settings = report_setting_rows(
+        plan.answers, before if operation == "update" else None, explicit
+    )
+    file_rows = report_file_rows(files, preserved_dirty)
+    if operation == "adopt" or adoption is not None:
+        actions = adoption_required_actions(plan)
     else:
-        lines.extend(
-            (
-                "",
-                "## If you approve",
-                "",
-                "Apply only this machine plan with `csarc adopt --apply-plan`. "
-                "The CLI rebuilds and verifies the candidate before changing "
-                "the target. It does not apply settings, push, or open a pull "
-                "request.",
-                "",
-                "Review this report and the terminal plan before applying it.",
-                "",
+        actions = update_required_actions(files, settings)
+    if adoption is not None:
+        applicable = adoption.get("applicable") is True
+    else:
+        applicable = not any(action["blocking"] for action in actions)
+    has_changes = any(
+        row["action"] not in {"preserve"} for row in file_rows
+    ) or any(row["class"] != "unchanged" for row in settings)
+    if plan.update is not None:
+        has_changes = plan.update.get("update_available") is True
+    status = lifecycle_report.derive_status(
+        operation, actions, has_changes=has_changes
+    )
+    if status == "blocked":
+        applicable = False
+    reasons = {
+        "blocked": "At least one blocking item must be resolved before a "
+        "new plan can be applied.",
+        "current": "The repository already matches the selected release.",
+        "ready": "No known file conflicts; semantic and runtime conflicts "
+        "remain possible.",
+        "review-required": "Answer the listed decisions before relying on "
+        "this plan.",
+    }
+    head = target_head
+    changes: object = None if target_changes is None else list(target_changes)
+    working_tree: str | None = None
+    if adoption is not None:
+        head = cast(str | None, adoption.get("target_head"))
+        raw_changes = adoption.get("target_changes")
+        changes = list(raw_changes) if isinstance(raw_changes, list) else None
+        working_tree = (
+            "clean"
+            if adoption.get("clean")
+            else (
+                "dirty-preserved"
+                if adoption.get("applicable") is True
+                else "dirty-review-only"
             )
         )
-    return "\n".join(lines)
+    elif target_changes is not None:
+        working_tree = "clean" if not target_changes else "dirty-review-only"
+    owner: dict[str, object] | None = None
+    mapping: dict[str, object] | None = None
+    hook: dict[str, object] | None = None
+    candidate: dict[str, object] | None = None
+    if adoption is not None:
+        raw_owner = adoption.get("code_owner")
+        if isinstance(raw_owner, dict):
+            owner = {
+                key: raw_owner.get(key) for key in ("reason", "state", "value")
+            }
+        raw_mapping = adoption.get("work_item_mapping")
+        if isinstance(raw_mapping, dict) and raw_mapping:
+            mapping = dict(raw_mapping)
+        candidate = candidate_verification_state(adoption.get("verification"))
+        raw_hook = adoption.get("project_verification_hook")
+    else:
+        raw_hook = (plan.update or {}).get("project_verification_hook")
+    if isinstance(raw_hook, dict):
+        hook = {
+            key: raw_hook.get(key)
+            for key in ("configured", "path", "reason", "result")
+        }
+    report: dict[str, object] = {
+        "applicable": applicable,
+        "applied_at": None,
+        "files": file_rows,
+        "final_plan": None,
+        "generated_at": generated_at,
+        "next_steps": lifecycle_next_steps(
+            operation,
+            status,
+            applicable=applicable,
+            plan=plan,
+            plan_path=plan_path,
+        ),
+        "operation": operation,
+        "plan": {
+            "mode": plan.mode,
+            "path": plan_name,
+            "replayable": operation == "adopt",
+            "schema_version": plan.as_dict()["schema_version"],
+            "sha256": plan_sha256,
+        },
+        "product": {
+            "action_pins": None,
+            "behavior_changes": None,
+            "code_owner": owner,
+            "release_ownership": release_contract(plan.answers),
+            "release_writers": None,
+            "reviewer_rotation": None,
+            "version_surfaces": None,
+            "work_item_mapping": mapping,
+        },
+        "release": {
+            "from": None
+            if previous is None
+            else {
+                "sha": previous.sha,
+                "tag": previous.label,
+                "verification": "verified"
+                if previous.verified
+                else "unverified",
+            },
+            "source": plan.revision.source,
+            "to": {
+                "guide_url": plan.revision.guide_url,
+                "sha": plan.revision.sha,
+                "tag": plan.revision.label,
+                "verification": "verified"
+                if plan.revision.verified
+                else "unverified",
+            },
+        },
+        "report_format_version": LIFECYCLE_REPORT_FORMAT_VERSION,
+        "required_actions": actions,
+        "settings": settings,
+        "status": status,
+        "status_reason": reasons[status],
+        "summary": lifecycle_report.summary_counts(
+            settings, file_rows, actions
+        ),
+        "target": {
+            "changes": changes,
+            "head": head,
+            "path": str(plan.target),
+            "repository": plan.repository.repository,
+            "visibility": plan.repository.visibility,
+            "visibility_source": plan.repository.source,
+            "working_tree": working_tree,
+        },
+        "verification": {
+            "candidate": candidate,
+            "hook": hook,
+            "render_parity": None,
+        },
+    }
+    redacted = cast(dict[str, object], redact(report))
+    try:
+        lifecycle_report.validate_report(redacted)
+    except lifecycle_report.LifecycleReportError as error:
+        raise CliError(f"Lifecycle report is invalid: {error}") from error
+    return redacted
 
 
-def adoption_report_directory(target: Path, requested: Path | None) -> Path:
+def lifecycle_report_directory(
+    target: Path, requested: Path | None, operation: str
+) -> Path:
     """Resolve a report directory that cannot dirty the target repository."""
+    label = "adoption" if operation == "adopt" else "update"
     directory = (
         Path(os.path.abspath(requested.expanduser()))
         if requested is not None
-        else target.parent / f"{target.name}-csarc-adoption-report"
+        else target.parent / f"{target.name}-csarc-{label}-report"
     )
     if directory == target or target in directory.parents:
         raise CliError(
-            "Adoption reports must be written outside the target repo."
+            f"{label.capitalize()} reports must be written outside the "
+            "target repo."
         )
     return directory
+
+
+def adoption_report_directory(target: Path, requested: Path | None) -> Path:
+    """Resolve the adoption report directory outside the target."""
+    return lifecycle_report_directory(target, requested, "adopt")
+
+
+def applied_report_directory(
+    target: Path, plan_path: Path, requested: Path | None
+) -> Path:
+    """Return the replayed plan's directory for the applied report rewrite.
+
+    The applied report must replace the report the user reviewed beside the
+    plan, never a report in another directory.
+    """
+    directory = plan_path.parent
+    if (
+        requested is not None
+        and adoption_report_directory(target, requested).resolve() != directory
+    ):
+        raise CliError(
+            "--report-dir must match the directory of the applied plan; the "
+            "applied report is written beside that plan."
+        )
+    return directory
+
+
+def remove_legacy_adoption_report(root: Path, relative_directory: Path) -> None:
+    """Delete a 1.1.0 Markdown report so one directory holds one report.
+
+    Only a regular file is removed, through a no-follow directory
+    descriptor; a symlink or special file is kept and reported (#529, #716).
+    """
+    relative_name = (
+        relative_directory / LEGACY_ADOPTION_REPORT_NAME
+    ).as_posix()
+    with atomic_parent_directory(root, relative_name) as (directory_fd, name):
+        try:
+            mode = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        if not stat.S_ISREG(mode.st_mode):
+            print(
+                "Warning: kept non-regular legacy report "
+                f"{root / relative_name}.",
+                file=sys.stderr,
+            )
+            return
+        os.unlink(name, dir_fd=directory_fd)
+
+
+def write_lifecycle_reports(
+    directory: Path,
+    *,
+    operation: str,
+    plan_name: str,
+    plan_payload: Mapping[str, object] | None,
+    report: Mapping[str, object],
+    emit: bool,
+) -> tuple[Path, Path, Path]:
+    """Write the machine plan, report JSON, and Markdown outside the target.
+
+    The Markdown is rendered only from the serialized report JSON, after
+    both have been validated, so no partial or divergent set is written.
+    """
+    basename = (
+        ADOPTION_REPORT_BASENAME
+        if operation == "adopt"
+        else UPDATE_REPORT_BASENAME
+    )
+    try:
+        report_text = lifecycle_report.report_json(report)
+        markdown = lifecycle_report.render_markdown(json.loads(report_text))
+    except lifecycle_report.LifecycleReportError as error:
+        raise CliError(f"Lifecycle report is invalid: {error}") from error
+    filesystem_root = Path(directory.anchor)
+    relative_directory = directory.relative_to(filesystem_root)
+    plan_path = directory / plan_name
+    json_path = directory / f"{basename}.json"
+    markdown_path = directory / f"{basename}.md"
+    if plan_payload is not None:
+        atomic_replace_text(
+            filesystem_root,
+            (relative_directory / plan_name).as_posix(),
+            json.dumps(plan_payload, indent=2, sort_keys=True) + "\n",
+        )
+    atomic_replace_text(
+        filesystem_root,
+        (relative_directory / json_path.name).as_posix(),
+        report_text,
+    )
+    atomic_replace_text(
+        filesystem_root,
+        (relative_directory / markdown_path.name).as_posix(),
+        markdown,
+    )
+    if operation == "adopt":
+        remove_legacy_adoption_report(filesystem_root, relative_directory)
+    if emit:
+        print(f"Markdown report: {markdown_path}")
+        print(f"Report JSON: {json_path}")
+        print(f"Machine plan: {plan_path}")
+    return markdown_path, json_path, plan_path
+
+
+def applied_lifecycle_report(
+    report: Mapping[str, object], plan_sha256: str, applied_at: str
+) -> dict[str, object]:
+    """Mark a report applied while keeping it bound to the replayed plan."""
+    try:
+        return lifecycle_report.mark_applied(
+            report,
+            applied_at=applied_at,
+            plan_sha256=plan_sha256,
+            next_steps=APPLIED_NEXT_STEPS,
+        )
+    except lifecycle_report.LifecycleReportError as error:
+        raise CliError(f"Cannot mark the report applied: {error}") from error
 
 
 def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
@@ -3201,12 +3413,9 @@ def code_owner_verification(  # noqa: C901
 def mark_adoption_applied(plan: ResolvedPlan, applied_at: str) -> ResolvedPlan:
     """Return a copy of one adoption plan tagged with its applied state.
 
-    Formal adoption must update the same adoption report in place once it
-    completes, recording both the pre-adoption (dry-run) and post-adoption
-    state (#529). The report's detailed Markdown format is rendered by
-    ``adoption_report_markdown`` (#530); this only tags the existing plan
-    so that renderer can record that the plan was actually applied, and
-    when.
+    The rewritten machine plan keeps its existing ``adoption.applied``
+    contract (#529); the SPEC-008 report records the applied state itself,
+    bound to the approved plan digest (#1062).
     """
     if plan.adoption is None:
         raise CliError("Adoption report requires target state.")
@@ -3218,49 +3427,40 @@ def mark_adoption_applied(plan: ResolvedPlan, applied_at: str) -> ResolvedPlan:
 
 def write_adoption_reports(
     plan: ResolvedPlan,
-    requested_directory: Path | None,
+    directory: Path,
     *,
     emit: bool = True,
-) -> tuple[Path, Path]:
-    """Atomically replace the latest adoption Markdown report and plan.
+    approved_sha256: str | None = None,
+    applied_at: str | None = None,
+) -> tuple[Path, Path, Path]:
+    """Write the adoption plan and its SPEC-008 report set.
 
-    Dry-run and the post-apply update that follows (adopt --apply-plan,
-    adopt --finalize --apply-plan) both call this on the same report
-    directory and basename, so the applied state is recorded in place in
-    the same versioned Markdown file rather than a separate artifact
-    (#529, #530).
+    Dry-run writes the plan and an unapplied report. A successful
+    ``--apply-plan`` rewrites the same set in the replayed plan's directory,
+    marking the report applied and binding it to the approved plan digest.
     """
     if plan.files is None or plan.adoption is None:
         raise CliError("Adoption report requires file and target state.")
-    directory = adoption_report_directory(plan.target, requested_directory)
-    markdown_path = directory / f"{ADOPTION_REPORT_BASENAME}.md"
-    plan_path = directory / ADOPTION_PLAN_BASENAME
-    filesystem_root = Path(directory.anchor)
-    relative_directory = directory.relative_to(filesystem_root)
-    generated_at = str(plan.adoption["generated_at"])
-    atomic_replace_text(
-        filesystem_root,
-        (relative_directory / markdown_path.name).as_posix(),
-        adoption_report_markdown(
-            plan.target,
-            plan.revision,
-            plan.repository,
-            plan.answers,
-            plan.files,
-            generated_at,
-            plan.adoption,
-        ),
+    payload = adoption_plan_payload(plan)
+    plan_sha256 = approved_sha256 or str(payload["plan_sha256"])
+    report = lifecycle_report_model(
+        plan,
+        operation="adopt",
+        plan_name=ADOPTION_PLAN_BASENAME,
+        plan_sha256=plan_sha256,
+        generated_at=str(plan.adoption["generated_at"]),
+        plan_path=directory / ADOPTION_PLAN_BASENAME,
     )
-    atomic_replace_text(
-        filesystem_root,
-        (relative_directory / plan_path.name).as_posix(),
-        json.dumps(adoption_plan_payload(plan), indent=2, sort_keys=True)
-        + "\n",
+    if applied_at is not None:
+        report = applied_lifecycle_report(report, plan_sha256, applied_at)
+    return write_lifecycle_reports(
+        directory,
+        operation="adopt",
+        plan_name=ADOPTION_PLAN_BASENAME,
+        plan_payload=payload,
+        report=report,
+        emit=emit,
     )
-    if emit:
-        print(f"Markdown report: {markdown_path}")
-        print(f"Machine plan: {plan_path}")
-    return markdown_path, plan_path
 
 
 def print_group(title: str, paths: tuple[str, ...]) -> None:
@@ -5564,6 +5764,11 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             raise CliError(
                 "Finalize plan does not match this target repository."
             )
+        report_directory = applied_report_directory(
+            target, plan_path, args.report_dir
+        )
+    else:
+        report_directory = adoption_report_directory(target, args.report_dir)
 
     pending, answers_path, pending_target_head = (
         validate_pending_adoption_identity(target)
@@ -5867,7 +6072,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
                 target, emit=not args.json
             )
         if args.dry_run:
-            write_adoption_reports(plan, args.report_dir, emit=not args.json)
+            write_adoption_reports(plan, report_directory, emit=not args.json)
             return 0
         if saved is None and not confirm(args):
             return 0
@@ -5920,12 +6125,15 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         )
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
+    applied_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     write_adoption_reports(
-        mark_adoption_applied(
-            plan, datetime.now(UTC).replace(microsecond=0).isoformat()
-        ),
-        args.report_dir,
+        mark_adoption_applied(plan, applied_at),
+        report_directory,
         emit=not args.json,
+        approved_sha256=cast(
+            str, cast(dict[str, object], saved)["plan_sha256"]
+        ),
+        applied_at=applied_at,
     )
     print("Adoption complete.")
     return 0
@@ -6093,6 +6301,9 @@ def command_apply_adoption_plan(  # noqa: C901
     saved = read_adoption_plan(plan_path)
     if saved.get("mode") != "adopt" or saved.get("target") != str(target):
         raise CliError("Adoption plan does not match this target repository.")
+    report_directory = applied_report_directory(
+        target, plan_path, args.report_dir
+    )
     raw_adoption = saved.get("adoption")
     raw_template = saved.get("template")
     raw_answers = saved.get("answers")
@@ -6292,12 +6503,13 @@ def command_apply_adoption_plan(  # noqa: C901
         return 1
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
+    applied_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     write_adoption_reports(
-        mark_adoption_applied(
-            fresh, datetime.now(UTC).replace(microsecond=0).isoformat()
-        ),
-        args.report_dir,
+        mark_adoption_applied(fresh, applied_at),
+        report_directory,
         emit=not args.json,
+        approved_sha256=str(saved["plan_sha256"]),
+        applied_at=applied_at,
     )
     print("Adoption complete.")
     return 0
@@ -6414,7 +6626,11 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         else:
             print_plan(plan)
         if mode == "adopt" and args.dry_run:
-            write_adoption_reports(plan, args.report_dir, emit=not args.json)
+            write_adoption_reports(
+                plan,
+                adoption_report_directory(target, args.report_dir),
+                emit=not args.json,
+            )
         if mode == "adopt":
             milestone_description_plan(target, emit=not args.json)
         if args.dry_run or not confirm(args):
@@ -7394,6 +7610,27 @@ def command_update_reinstall(  # noqa: C901
         shutil.rmtree(preview_root, ignore_errors=True)
     if adoption is None:
         raise CliError("Reinstall plan has no adoption evidence.")
+    report_directory = lifecycle_report_directory(
+        target, args.report_dir, "update"
+    )
+    plan_payload = adoption_plan_payload(preview)
+    reinstall_report = lifecycle_report_model(
+        preview,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_sha256=str(plan_payload["plan_sha256"]),
+        generated_at=generated_at,
+        plan_path=report_directory / UPDATE_PLAN_BASENAME,
+        before=candidate_answers,
+    )
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=plan_payload,
+        report=reinstall_report,
+        emit=not args.json,
+    )
 
     if args.check:
         return 1
@@ -7475,6 +7712,18 @@ def command_update_reinstall(  # noqa: C901
         shutil.rmtree(apply_root, ignore_errors=True)
     write_provenance(target, fresh.revision, answers=candidate_answers)
     settings_plan(target)
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=None,
+        report=applied_lifecycle_report(
+            reinstall_report,
+            str(plan_payload["plan_sha256"]),
+            datetime.now(UTC).replace(microsecond=0).isoformat(),
+        ),
+        emit=True,
+    )
     print("Reinstall complete.")
     return 0
 
@@ -7641,6 +7890,29 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         files=files,
         update=status,
     )
+    if target_snapshot:
+        report_head = cast(str, target_snapshot["target_head"])
+        report_changes = cast(list[str], target_snapshot["target_changes"])
+    else:
+        report_head, report_changes_tuple, _digest = target_state(target)
+        report_changes = list(report_changes_tuple)
+    report_directory = lifecycle_report_directory(
+        target, args.report_dir, "update"
+    )
+    plan_payload = adoption_plan_payload(plan)
+    update_report = lifecycle_report_model(
+        plan,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_sha256=str(plan_payload["plan_sha256"]),
+        generated_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
+        plan_path=report_directory / UPDATE_PLAN_BASENAME,
+        before=current_answers,
+        explicit=tuple(explicit_data),
+        previous=current_revision,
+        target_head=report_head,
+        target_changes=report_changes,
+    )
     if args.check:
         if args.json:
             print(
@@ -7650,7 +7922,23 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             )
         else:
             print_plan(plan)
+        write_lifecycle_reports(
+            report_directory,
+            operation="update",
+            plan_name=UPDATE_PLAN_BASENAME,
+            plan_payload=plan_payload,
+            report=update_report,
+            emit=not args.json,
+        )
         return 1 if status["update_available"] else 0
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=plan_payload,
+        report=update_report,
+        emit=True,
+    )
 
     with tempfile.TemporaryDirectory(
         prefix="csarc-update-preview-"
@@ -7857,6 +8145,18 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         )
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=None,
+        report=applied_lifecycle_report(
+            update_report,
+            str(plan_payload["plan_sha256"]),
+            datetime.now(UTC).replace(microsecond=0).isoformat(),
+        ),
+        emit=True,
+    )
     return 0
 
 
@@ -7940,6 +8240,15 @@ def parser() -> argparse.ArgumentParser:
     update.add_argument("--allow-unreleased", action="store_true")
     update.add_argument("--check", action="store_true")
     update.add_argument("--json", action="store_true")
+    update.add_argument(
+        "--report-dir",
+        type=Path,
+        metavar="PATH",
+        help=(
+            "write the update plan and report outside the repo "
+            "(planned, then applied)"
+        ),
+    )
     update.add_argument(
         "--data", action="append", default=[], metavar="KEY=VALUE"
     )
