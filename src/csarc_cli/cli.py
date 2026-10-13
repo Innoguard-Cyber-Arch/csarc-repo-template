@@ -29,7 +29,7 @@ from urllib.parse import quote
 
 import yaml  # type: ignore[import-untyped]
 
-from csarc_cli import lifecycle_report, release_phase
+from csarc_cli import lifecycle_report, release_phase, update_plan
 from csarc_cli.lifecycle_report import (
     LIFECYCLE_REPORT_FORMAT_VERSION,
     redact,
@@ -343,6 +343,7 @@ class Plan:
     manual: tuple[str, ...]
     unknown: tuple[str, ...]
     move: tuple[str, ...] = ()
+    delete: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -416,6 +417,11 @@ class ResolvedPlan:
                 "remove": list(self.files.remove),
                 "unknown": list(self.files.unknown),
             }
+            if self.mode == "update":
+                # Template-deleted paths are an update-only effect; adopt
+                # plan bytes and digests stay unchanged.
+                files_payload = cast(dict[str, object], result["files"])
+                files_payload["delete"] = list(self.files.delete)
         if self.update is not None:
             result.update(self.update)
         if self.adoption is not None:
@@ -1237,8 +1243,14 @@ def copier_copy(
     data: Mapping[str, object],
     *,
     skip_tasks: bool,
+    persist_answers: bool = True,
 ) -> None:
-    """Render one immutable template revision into a staging directory."""
+    """Render one immutable template revision into a staging directory.
+
+    ``persist_answers=False`` keeps Copier's rendered answers file exactly
+    as the template recorded it, so the caller can read which questions the
+    template actually asked.
+    """
     command = [
         sys.executable,
         "-m",
@@ -1272,6 +1284,8 @@ def copier_copy(
                 or "unknown Copier error"
             )
         )
+    if not persist_answers:
+        return
     try:
         pin_answer_commit(stage, revision.sha)
         persist_release_answers(stage, data)
@@ -2404,9 +2418,16 @@ def report_setting_rows(
 
 
 def report_file_rows(
-    files: Plan, preserved_dirty: Collection[str] = ()
+    files: Plan,
+    preserved_dirty: Collection[str] = (),
+    *,
+    update: bool = False,
 ) -> list[dict[str, object]]:
-    """Map one file plan onto the closed SPEC-008 action vocabulary."""
+    """Map one file plan onto the closed SPEC-008 action vocabulary.
+
+    An update's three-way conflicts are ``update-conflict`` rows; adopt and
+    reinstall keep their two-way ``manual-merge`` rows.
+    """
     rows: list[tuple[str, str, str, str | None, str | None]] = []
     rows.extend((path, "add", "template", None, None) for path in files.add)
     rows.extend(
@@ -2424,6 +2445,10 @@ def report_file_rows(
         for path in files.remove
     )
     rows.extend(
+        (path, "remove", "template-deleted", None, None)
+        for path in files.delete
+    )
+    rows.extend(
         (
             path,
             "preserve",
@@ -2434,7 +2459,13 @@ def report_file_rows(
         for path in files.preserve
     )
     rows.extend(
-        (path, "conflict", "manual-merge", None, "pending")
+        (
+            path,
+            "conflict",
+            "update-conflict" if update else "manual-merge",
+            None,
+            "pending",
+        )
         for path in files.manual
     )
     rows.extend(
@@ -2620,6 +2651,18 @@ def update_required_actions(
     ]
     actions.extend(
         {
+            "blocking": True,
+            "command": None,
+            "kind": "file-conflict",
+            "message": "Template and repository changes overlap in the "
+            "three-way update; resolve the file in the target, then create "
+            "a new plan.",
+            "subject": path,
+        }
+        for path in files.manual
+    )
+    actions.extend(
+        {
             "blocking": False,
             "command": None,
             "kind": "file-conflict",
@@ -2718,7 +2761,11 @@ def lifecycle_report_model(  # noqa: C901
     settings = report_setting_rows(
         plan.answers, before if operation == "update" else None, explicit
     )
-    file_rows = report_file_rows(files, preserved_dirty)
+    file_rows = report_file_rows(
+        files,
+        preserved_dirty,
+        update=operation == "update" and adoption is None,
+    )
     if operation == "adopt" or adoption is not None:
         actions = adoption_required_actions(plan)
     else:
@@ -2786,6 +2833,10 @@ def lifecycle_report_model(  # noqa: C901
             key: raw_hook.get(key)
             for key in ("configured", "path", "reason", "result")
         }
+    render_parity: dict[str, object] | None = None
+    planning = (plan.update or {}).get("planning")
+    if isinstance(planning, dict):
+        render_parity = {"state": planning.get("render_parity")}
     report: dict[str, object] = {
         "applicable": applicable,
         "applied_at": None,
@@ -2857,7 +2908,7 @@ def lifecycle_report_model(  # noqa: C901
         "verification": {
             "candidate": candidate,
             "hook": hook,
-            "render_parity": None,
+            "render_parity": render_parity,
         },
     }
     redacted = cast(dict[str, object], redact(report))
@@ -6856,7 +6907,50 @@ def migrate_legacy_commit(
     }
 
 
-def current_revision(
+RAW_COPIER_UPDATE_NEXT_COMMAND = (
+    "restore the files the raw copier update changed (for example "
+    "git restore --source=HEAD --staged --worktree -- .), then run "
+    "csarc update <path> --check"
+)
+
+
+def raw_copier_update_detail(
+    target: Path, commit: str, saved: Mapping[str, object] | None
+) -> str | None:
+    """Detect a state only a raw `copier update` produces (#1058 d19).
+
+    Raw `copier update` is unsupported: it moves the Copier answers
+    ``_commit`` past the release CSARC recorded and can leave rejection
+    files. Detection is never reported as a successful migration; the only
+    supported entry point is ``csarc update``.
+    """
+    recorded = None if saved is None else saved.get("commit_sha")
+    if (
+        isinstance(recorded, str)
+        and FULL_SHA.fullmatch(recorded) is not None
+        and FULL_SHA.fullmatch(commit) is not None
+        and recorded.lower() != commit.lower()
+    ):
+        return (
+            "Detected an unsupported raw `copier update`: the Copier answers "
+            f"record _commit {commit}, but CSARC provenance records "
+            f"{recorded}. CSARC did not migrate or verify this state. "
+            f"Next: {RAW_COPIER_UPDATE_NEXT_COMMAND}."
+        )
+    rejections = sorted(
+        name for name in project_files(target) if name.endswith(".rej")
+    )
+    if rejections:
+        return (
+            "Detected Copier rejection files from an unsupported raw "
+            "`copier update` (" + ", ".join(rejections[:5]) + "). CSARC did "
+            "not migrate or verify this state. Next: "
+            f"{RAW_COPIER_UPDATE_NEXT_COMMAND}."
+        )
+    return None
+
+
+def current_revision(  # noqa: C901
     target: Path,
     source: str,
     commit: str,
@@ -6868,6 +6962,9 @@ def current_revision(
 ) -> tuple[Revision, dict[str, object] | None]:
     """Verify saved provenance or explicitly migrate a legacy installation."""
     saved = read_provenance(target)
+    raw_update = raw_copier_update_detail(target, commit, saved)
+    if raw_update is not None:
+        raise CliError(raw_update)
     source = legacy_migration_source(source, accept_legacy, from_release)
     if FULL_SHA.fullmatch(commit) is None:
         return migrate_legacy_commit(
@@ -7145,6 +7242,13 @@ def detect_install_state(
         }
     current = read_answer(answers_path, "_commit")
     saved = read_provenance(target)
+    raw_update = raw_copier_update_detail(target, current, saved)
+    if raw_update is not None:
+        return {
+            "next_command": RAW_COPIER_UPDATE_NEXT_COMMAND,
+            "reason": raw_update,
+            "state": INSTALL_STATE_MIGRATE,
+        }
     if FULL_SHA.fullmatch(current) is None and (
         saved is None or saved.get("verification") != "verified"
     ):
@@ -7728,6 +7832,419 @@ def command_update_reinstall(  # noqa: C901
     return 0
 
 
+OLD_SIDE_ANSWERS_HEADER = (
+    "# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY\n"
+)
+
+
+def read_raw_answers(path: Path) -> dict[str, object]:
+    """Read a Copier answers file including its ``_`` metadata keys."""
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise CliError(f"Cannot read Copier answers from {path}.") from error
+    if not isinstance(payload, dict):
+        raise CliError(f"Copier answers in {path} must be a mapping.")
+    return {str(key): value for key, value in payload.items()}
+
+
+def render_old_side(
+    source: str,
+    revision: Revision,
+    workdir: Path,
+    saved: Mapping[str, object],
+    provenance: Mapping[str, object] | None,
+    update_data: Mapping[str, object],
+) -> tuple[update_plan.OldSideInputs, dict[str, object], Path]:
+    """Rebuild the old template render from trusted inputs only (#1063).
+
+    The first render records which questions the old template actually
+    asks. The second render, the baseline the plan compares against, uses
+    exactly the reconstructed answers plus the new-side values Copier needs
+    to evaluate the new template's exclusions for keys the old template
+    never asks; no current default reaches an old question. A render
+    failure, or a question set that changes between the two renders, means
+    a required old input is missing or untrusted; it fails closed before
+    the target is touched. Returns the old-side inputs, the new-side data,
+    and the baseline render.
+    """
+
+    def render(stage: Path, data: Mapping[str, object]) -> frozenset[str]:
+        stage.mkdir()
+        try:
+            copier_copy(
+                source,
+                revision,
+                stage,
+                data,
+                skip_tasks=True,
+                persist_answers=False,
+            )
+        except CliError as error:
+            raise CliError(
+                f"The old template {revision.label} cannot be rebuilt from "
+                f"the saved answers and trusted provenance ({error}). The "
+                "target was not changed."
+            ) from error
+        return update_plan.asked_keys(read_copier_answers(config_path(stage)))
+
+    asked = render(workdir / "old-asked", saved)
+    reconstructed = update_plan.reconstruct_old_inputs(
+        saved, asked, update_plan.trusted_snapshot(provenance)
+    )
+    new_data = update_plan.new_side_data(saved, reconstructed, update_data)
+    old = reconstructed.with_context(new_data)
+    baseline = workdir / "old-baseline"
+    try:
+        update_plan.require_stable_old_inputs(
+            asked, render(baseline, old.copier_answers())
+        )
+    except update_plan.UpdatePlanningError as error:
+        raise CliError(str(error)) from error
+    return old, new_data, baseline
+
+
+def write_old_side_answers(
+    path: Path,
+    raw: Mapping[str, object],
+    old: update_plan.OldSideInputs,
+    *,
+    commit: str,
+    source: str,
+) -> None:
+    """Write the answers file Copier reads to rebuild the old side."""
+    payload: dict[str, object] = {
+        key: value for key, value in raw.items() if key.startswith("_")
+    }
+    payload["_commit"] = commit
+    payload["_src_path"] = source
+    payload.update(old.copier_answers())
+    path.write_text(
+        OLD_SIDE_ANSWERS_HEADER
+        + yaml.safe_dump(payload, allow_unicode=True, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def commit_candidate(candidate: Path, message: str) -> None:
+    """Commit every candidate change so Copier sees a clean destination."""
+    run_git(
+        ["git", "-C", str(candidate), "add", "-A"],
+        repository=candidate,
+        neutralize_filters=True,
+    )
+    run_git(
+        [
+            "git",
+            "-C",
+            str(candidate),
+            "-c",
+            "user.name=CSARC",
+            "-c",
+            "user.email=csarc@example.invalid",
+            "commit",
+            "--quiet",
+            "--no-gpg-sign",
+            "--allow-empty",
+            "-m",
+            message,
+        ],
+        repository=candidate,
+        neutralize_filters=True,
+    )
+
+
+def staged_name_status(candidate: Path, baseline: str) -> dict[str, str]:
+    """Stage the candidate and return each changed path's Git status."""
+    run_git(
+        ["git", "-C", str(candidate), "add", "-A"],
+        repository=candidate,
+        neutralize_filters=True,
+    )
+    output = run_git(
+        [
+            "git",
+            "-C",
+            str(candidate),
+            "diff",
+            "--cached",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--name-status",
+            "--no-renames",
+            "-z",
+            baseline,
+            "--",
+        ],
+        repository=candidate,
+        capture=True,
+        neutralize_filters=True,
+    ).stdout
+    tokens = [token for token in output.split("\0") if token]
+    pairs = zip(tokens[::2], tokens[1::2], strict=True)
+    return {path: status[:1] for status, path in pairs}
+
+
+@dataclass(frozen=True)
+class UpdateRun:
+    """One Copier three-way update executed in a disposable candidate."""
+
+    candidate: Path
+    baseline_head: str
+    returncode: int
+    conflicts: tuple[str, ...]
+    changes: dict[str, str]
+    output: str
+
+
+@dataclass(frozen=True)
+class UpdateRunInputs:
+    """Inputs shared verbatim by the planning run and the apply run."""
+
+    raw_answers: Mapping[str, object]
+    old_side: update_plan.OldSideInputs
+    new_data: Mapping[str, object]
+    old_commit: str
+    source: str
+    target_sha: str
+    layout_moves: tuple[tuple[str, str], ...]
+    retiring: tuple[str, ...]
+    target_uses_current_config: bool
+
+
+def run_update_candidate(
+    target: Path,
+    workdir: Path,
+    inputs: UpdateRunInputs,
+    *,
+    working_tree: bool,
+    skip_tasks: bool,
+) -> UpdateRun:
+    """Run the one shared three-way update in a disposable candidate.
+
+    Both ``update --check`` (``skip_tasks=True`` on a working-tree clone)
+    and the apply path (``skip_tasks=False`` on the committed target) run
+    this same function with the same :class:`UpdateRunInputs`. The old side
+    Copier rebuilds comes only from the reconstructed answers file this
+    function writes; current defaults and migrations reach the new side
+    through the data file.
+    """
+    candidate = workdir / "candidate"
+    if working_tree:
+        clone_working_tree(target, candidate)
+        if git_changed_paths(candidate):
+            commit_candidate(candidate, "chore: snapshot the working tree")
+    else:
+        clone_target(target, candidate)
+    baseline_head = run_git(
+        ["git", "-C", str(candidate), "rev-parse", "HEAD"],
+        repository=candidate,
+        capture=True,
+    ).stdout.strip()
+    candidate_config_path = config_path(candidate)
+    migrating_legacy_config = (
+        inputs.target_uses_current_config
+        and candidate_config_path == candidate / LEGACY_ANSWERS_FILE
+    )
+    early_layout_moves = tuple(
+        move
+        for move in inputs.layout_moves
+        if move[0] == LEGACY_ANSWERS_FILE.as_posix()
+    )
+    deferred_layout_moves = tuple(
+        move for move in inputs.layout_moves if move not in early_layout_moves
+    )
+    # Copier must see the legacy generated paths in their original
+    # locations so its old-to-new comparison can remove and add them
+    # cleanly. Only the answers file moves early because Copier and the
+    # target template's finalize tasks need the canonical config path.
+    apply_layout_moves(candidate, early_layout_moves)
+    if migrating_legacy_config:
+        candidate_config_path = candidate / CONFIG_FILE
+    write_old_side_answers(
+        candidate_config_path,
+        inputs.raw_answers,
+        inputs.old_side,
+        commit=inputs.old_commit,
+        source=inputs.source,
+    )
+    for name in inputs.retiring:
+        # The legacy profile is superseded by CONFIG_FILE. Tool-specific
+        # configs are now materialized by stable adapters at runtime.
+        (candidate / name).unlink()
+    if git_changed_paths(candidate):
+        # Copier's own `update` refuses to run against a dirty destination,
+        # so commit this filesystem-only migration first; HEAD moves back
+        # to the baseline afterward so the migration and Copier's changes
+        # form one diff against the repository's real prior state.
+        commit_candidate(
+            candidate, "chore: migrate legacy repository configuration"
+        )
+    data_file = workdir / "update-data.yml"
+    data_file.write_text(
+        yaml.safe_dump(dict(inputs.new_data), sort_keys=True),
+        encoding="utf-8",
+    )
+    command = [
+        sys.executable,
+        "-m",
+        "copier",
+        "update",
+        "--trust",
+        "--defaults",
+        "--conflict",
+        "inline",
+        "--vcs-ref",
+        inputs.target_sha,
+        "--answers-file",
+        candidate_config_path.relative_to(candidate).as_posix(),
+        "--data-file",
+        str(data_file),
+    ]
+    if skip_tasks:
+        command.append("--skip-tasks")
+    command.append(str(candidate))
+    result = run(command, capture=True, check=False)
+    output = (result.stderr or "").strip() or (result.stdout or "").strip()
+    conflicts = find_conflicts(candidate)
+    if result.returncode == 0 and not conflicts:
+        # Copier normally performs clean legacy deletions and additions
+        # itself. Any legacy source left behind is user-modified or
+        # otherwise outside that clean update, so finish the move only when
+        # it is safe and fail closed on a different destination.
+        apply_layout_moves(candidate, deferred_layout_moves)
+    head = run_git(
+        ["git", "-C", str(candidate), "rev-parse", "HEAD"],
+        repository=candidate,
+        capture=True,
+    ).stdout.strip()
+    if head != baseline_head or conflicts:
+        # Move HEAD (and an index Copier may have left with unmerged
+        # stages) back to the baseline without touching the working tree:
+        # the migration and Copier's changes form one diff against the
+        # repository's real prior state.
+        run_git(
+            [
+                "git",
+                "-C",
+                str(candidate),
+                "reset",
+                "--quiet",
+                "--mixed",
+                baseline_head,
+            ],
+            repository=candidate,
+        )
+    return UpdateRun(
+        candidate,
+        baseline_head,
+        result.returncode,
+        conflicts,
+        staged_name_status(candidate, baseline_head),
+        output,
+    )
+
+
+def update_conflict_error(conflicts: Sequence[str], detail: str = "") -> str:
+    """Return the one fail-closed message for an update conflict."""
+    summary = (
+        ", ".join(conflicts)
+        if conflicts
+        else detail or ("Copier exited non-zero")
+    )
+    return (
+        f"Update needs manual conflict resolution ({summary}); the target "
+        "was not changed. Resolve the listed files in the target or "
+        "template, then rerun the update."
+    )
+
+
+def plan_update(
+    target: Path,
+    workdir: Path,
+    inputs: UpdateRunInputs,
+    old_stage: Path,
+) -> update_plan.UpdatePlanning:
+    """Build the immutable planning result both check and apply review."""
+    run_result = run_update_candidate(
+        target, workdir, inputs, working_tree=True, skip_tasks=True
+    )
+    if run_result.returncode != 0 and not run_result.conflicts:
+        raise CliError(
+            "Copier could not plan the update ("
+            + (run_result.output or "unknown Copier error")
+            + "). The target was not changed."
+        )
+    answers_files = {CONFIG_FILE.as_posix(), LEGACY_ANSWERS_FILE.as_posix()}
+    old_files = project_files(old_stage)
+    target_files = project_files(target)
+    parity_paths = tuple(
+        sorted(
+            name
+            for name, path in old_files.items()
+            if name not in answers_files
+            and (
+                name not in target_files
+                or file_fingerprint(path)
+                != file_fingerprint(target_files[name])
+            )
+        )
+    )
+    customized = {
+        name
+        for name in parity_paths
+        if name in target_files and name not in answers_files
+    }
+    excluded = set(inputs.retiring)
+    for source_name, destination_name in inputs.layout_moves:
+        excluded.update((source_name, destination_name))
+    add, overwrite, merge, delete = update_plan.classify_changes(
+        run_result.changes,
+        conflicts=run_result.conflicts,
+        excluded=excluded,
+        customized=customized,
+    )
+    return update_plan.UpdatePlanning(
+        old_side=inputs.old_side,
+        new_data=dict(inputs.new_data),
+        add=add,
+        overwrite=overwrite,
+        merge=merge,
+        delete=delete,
+        conflicts=run_result.conflicts,
+        render_parity=(
+            update_plan.RENDER_PARITY_DIVERGED
+            if parity_paths
+            else update_plan.RENDER_PARITY_EQUAL
+        ),
+        parity_paths=parity_paths,
+    )
+
+
+def planned_update_files(
+    target: Path,
+    planning: update_plan.UpdatePlanning,
+    layout_moves: tuple[tuple[str, str], ...],
+    retiring: tuple[str, ...],
+) -> Plan:
+    """Project one planning result onto the shared file plan model."""
+    acted = set(planning.changed_paths()) | set(planning.conflicts)
+    acted.update(retiring)
+    for source_name, destination_name in layout_moves:
+        acted.update((source_name, destination_name))
+    return Plan(
+        planning.add,
+        planning.overwrite,
+        tuple(sorted(retiring)),
+        tuple(sorted(set(project_files(target)) - acted)),
+        planning.merge,
+        planning.conflicts,
+        (),
+        tuple(f"{old} -> {new}" for old, new in layout_moves),
+        planning.delete,
+    )
+
+
 def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     """Check or apply a Copier smart update."""
     target = resolve_repository_target(args.path)
@@ -7778,8 +8295,10 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     source = status.get("source")
     if not isinstance(source, str):
         raise CliError("Update source must be a string.")
+    raw_answers = read_raw_answers(answers_path)
     with tempfile.TemporaryDirectory(prefix="csarc-update-plan-") as temporary:
-        stage = Path(temporary) / "project"
+        workdir = Path(temporary).resolve()
+        stage = workdir / "project"
         stage.mkdir()
         copier_copy(
             source,
@@ -7800,18 +8319,27 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             target_revision,
             emit=False,
         )
-        current_stage = Path(temporary) / "current"
-        current_stage.mkdir()
-        current_answers = resolve_release_answers(target, saved_answers)
-        copier_copy(
+        # The old side is rebuilt only from answers the old template asked
+        # for plus a verified provenance snapshot (#1063); the derived
+        # release contract below is used for settings comparison only.
+        try:
+            current_answers = resolve_release_answers(target, saved_answers)
+        except CliError:
+            # A legacy repository whose saved answers cannot resolve one
+            # release owner (for example two legacy release writers) is
+            # compared from its saved values; the candidate side still
+            # fails closed unless an explicit owner was chosen.
+            current_answers = dict(saved_answers)
+        old_side, new_data, old_stage = render_old_side(
             source,
             current_revision,
-            current_stage,
-            current_answers,
-            skip_tasks=True,
+            workdir,
+            saved_answers,
+            previous,
+            update_data,
         )
         current_capabilities = capability_preflight(
-            managed_script(current_stage, "release_policy.py"),
+            managed_script(old_stage, "release_policy.py"),
             target,
             current_revision,
             emit=False,
@@ -7833,11 +8361,21 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             for name in retirement_candidates
             if (target / name).is_file() and not (target / name).is_symlink()
         )
-        files = update_file_plan(
-            compare_stage(stage, target, adopt=False),
-            layout_moves,
-            retiring,
+        run_inputs = UpdateRunInputs(
+            raw_answers=raw_answers,
+            old_side=old_side,
+            new_data=new_data,
+            old_commit=current_revision.sha,
+            source=source,
+            target_sha=str(status["target_sha"]),
+            layout_moves=layout_moves,
+            retiring=retiring,
+            target_uses_current_config=target_uses_current_config,
         )
+        planning_root = workdir / "planning"
+        planning_root.mkdir()
+        planning = plan_update(target, planning_root, run_inputs, old_stage)
+        files = planned_update_files(target, planning, layout_moves, retiring)
     hook_configuration = project_verification_configuration(target, answers)
     validated_project_verification_hook(target, hook_configuration)
     hook = project_verification_evidence(
@@ -7858,6 +8396,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         {
             "answers_changed": answers_changed,
             "capabilities_changed": capabilities_changed,
+            "planning": planning.as_dict(),
             "status": "outdated" if update_available else "current",
             "update_available": update_available,
             "project_verification_hook": hook,
@@ -7940,43 +8479,19 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         emit=True,
     )
 
-    with tempfile.TemporaryDirectory(
-        prefix="csarc-update-preview-"
-    ) as temporary:
-        data_file = Path(temporary) / "data.yml"
-        data_file.write_text(
-            yaml.safe_dump(update_data, sort_keys=True), encoding="utf-8"
-        )
-        preview = run(
-            [
-                sys.executable,
-                "-m",
-                "copier",
-                "update",
-                "--trust",
-                "--defaults",
-                "--pretend",
-                "--vcs-ref",
-                str(status["target_sha"]),
-                "--answers-file",
-                answers_path.relative_to(target).as_posix(),
-                "--data-file",
-                str(data_file),
-                str(target),
-            ],
-            capture=True,
-            check=False,
-        )
-    if preview.returncode != 0:
-        raise CliError(preview.stderr.strip() or preview.stdout.strip())
     print_plan(plan)
-    print("Copier smart-update preview:")
     print(
-        preview.stdout.strip()
-        or "  (Copier returned no preview details; files may still change.)"
+        "Update planning digest: "
+        f"{planning.digest()} (old side "
+        f"{old_side.as_dict()['answers_sha256']}, render parity "
+        f"{planning.render_parity})."
     )
     milestone_plan = milestone_description_plan(target)
-    if args.dry_run or not confirm(args):
+    if args.dry_run:
+        return 0
+    if planning.conflicts:
+        raise CliError(update_conflict_error(planning.conflicts))
+    if not confirm(args):
         return 0
 
     validate_repository_context(
@@ -7990,146 +8505,29 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     validate_target_snapshot(target, target_snapshot)
     with tempfile.TemporaryDirectory(prefix="csarc-update-") as temporary:
         temporary_root = Path(temporary).resolve()
-        candidate = temporary_root / "candidate"
-        clone_target(target, candidate)
-        baseline_head = run_git(
-            ["git", "-C", str(candidate), "rev-parse", "HEAD"],
-            repository=candidate,
-            capture=True,
-        ).stdout.strip()
-        candidate_config_path = config_path(candidate)
-        migrating_legacy_config = (
-            target_uses_current_config
-            and candidate_config_path == candidate / LEGACY_ANSWERS_FILE
+        # The apply run reuses the reviewed planning inputs verbatim; only
+        # template tasks, which the side-effect-free plan skips, differ.
+        applied = run_update_candidate(
+            target,
+            temporary_root,
+            run_inputs,
+            working_tree=False,
+            skip_tasks=False,
         )
-        early_layout_moves = tuple(
-            move
-            for move in layout_moves
-            if move[0] == LEGACY_ANSWERS_FILE.as_posix()
-        )
-        deferred_layout_moves = tuple(
-            move for move in layout_moves if move not in early_layout_moves
-        )
-        retiring_files = tuple(candidate / name for name in retiring)
-        # Copier must see the legacy generated paths in their original
-        # locations so its old-to-new comparison can remove and add them
-        # cleanly. Only the answers file moves early because Copier and the
-        # target template's finalize tasks need the canonical config path.
-        apply_layout_moves(candidate, early_layout_moves)
-        if migrating_legacy_config:
-            # apply_layout_moves() migrated the answers file before Copier's
-            # finalize tasks read the one canonical configuration path.
-            candidate_config_path = candidate / CONFIG_FILE
-        seeding_verification_mode = "verification_mode" not in saved_answers
-        if seeding_verification_mode:
-            # Copier reconstructs both revisions from the saved answers.
-            # Seed this new conditional answer before the three-way update
-            # so legacy projects retain their hosted workflow files.
-            source = candidate_config_path.read_text(encoding="utf-8")
-            separator = "" if source.endswith("\n") else "\n"
-            candidate_config_path.write_text(
-                source
-                + separator
-                + "verification_mode: "
-                + str(candidate_answers["verification_mode"])
-                + "\n",
-                encoding="utf-8",
-            )
-        for retiring_file in retiring_files:
-            # The legacy profile is superseded by CONFIG_FILE. Tool-specific
-            # configs are now materialized by stable adapters at runtime.
-            retiring_file.unlink()
-        if (
-            migrating_legacy_config
-            or retiring_files
-            or seeding_verification_mode
-        ):
-            # Copier's own `update` refuses to run against a dirty
-            # destination, so commit this filesystem-only migration before
-            # invoking it; HEAD is moved back afterward (see below) without
-            # touching the working tree or index, so the migration still
-            # ends up part of the same uncommitted diff
-            # candidate_patch_effects() computes against baseline_head,
-            # alongside whatever Copier itself changes, and reaches the
-            # real target in one patch.
-            run_git(
-                ["git", "-C", str(candidate), "add", "-A"],
-                repository=candidate,
-                neutralize_filters=True,
-            )
-            run_git(
-                [
-                    "git",
-                    "-C",
-                    str(candidate),
-                    "-c",
-                    "user.name=CSARC",
-                    "-c",
-                    "user.email=csarc@example.invalid",
-                    "commit",
-                    "--quiet",
-                    "--no-gpg-sign",
-                    "-m",
-                    "chore: migrate legacy repository configuration",
-                ],
-                repository=candidate,
-                neutralize_filters=True,
-            )
-        data_file = temporary_root / "data.yml"
-        data_file.write_text(
-            yaml.safe_dump(update_data, sort_keys=True), encoding="utf-8"
-        )
-        result = run(
-            [
-                sys.executable,
-                "-m",
-                "copier",
-                "update",
-                "--trust",
-                "--defaults",
-                "--conflict",
-                "inline",
-                "--vcs-ref",
-                str(status["target_sha"]),
-                "--answers-file",
-                candidate_config_path.relative_to(candidate).as_posix(),
-                "--data-file",
-                str(data_file),
-                str(candidate),
-            ],
-            check=False,
-        )
-        conflicts = find_conflicts(candidate)
-        if result.returncode != 0 or conflicts:
-            detail = (
-                ", ".join(conflicts) if conflicts else "Copier exited non-zero"
-            )
+        if applied.returncode != 0 or applied.conflicts:
             raise CliError(
-                f"Update needs manual conflict resolution ({detail}); "
-                "the target was not changed. Resolve the listed files in "
-                "the target or template, then rerun the update."
+                update_conflict_error(applied.conflicts, applied.output)
             )
-        # Copier normally performs clean legacy deletions and additions
-        # itself. Any legacy source left behind is user-modified or otherwise
-        # outside that clean update, so finish the move only when it is safe
-        # and fail closed on a different destination.
-        apply_layout_moves(candidate, deferred_layout_moves)
-        if migrating_legacy_config or retiring_files:
-            # Move HEAD back to the pre-migration commit without touching
-            # the working tree or index (see above): the migration and
-            # whatever Copier changed on top of it now both show up as one
-            # uncommitted diff against the repository's real prior state.
-            run_git(
-                [
-                    "git",
-                    "-C",
-                    str(candidate),
-                    "reset",
-                    "--soft",
-                    baseline_head,
-                ],
-                repository=candidate,
+        divergence = update_plan.realized_divergence(
+            planning, applied.changes, applied.conflicts
+        )
+        if divergence:
+            raise CliError(
+                "Update apply diverged from the reviewed plan ("
+                + "; ".join(divergence)
+                + "); the target was not changed. Create a new plan."
             )
+        candidate = applied.candidate
         pin_answer_commit(candidate, str(status["target_sha"]))
         persist_release_answers(candidate, answers)
         verify_project(candidate)

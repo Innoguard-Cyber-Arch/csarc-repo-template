@@ -57,7 +57,7 @@
 
 - 首次導入存在平台邊界：base 尚未有 checker，而 PR head 不受信任，不能拿它新增的 script 自我驗證。安全路徑是在 repo 外使用固定 Release／SHA 的 CLI 產生 machine plan、套用同一份未漂移 plan，再由人核對來源、diff 與本機證據；合併後才由 base 上的 policy gate 與唯讀 CI 分工。
 - 產品 evaluation container 固定非 root UID，Linux hosted runner 的 bind mount 原本不可寫。Pilot 將容器執行 UID 對齊 host，並只放寬模型 cache／report 目錄；兩次線上回歸都通過。
-- Copier `--pretend` 可能不輸出檔案明細，即使正式 update 仍會修改檔案。CLI 不再把空輸出宣稱為「no file changes」。
+- Copier `--pretend` 可能不輸出檔案明細，即使正式 update 仍會修改檔案。CLI 不再把空輸出宣稱為「no file changes」；Issue #1063 起改為在可丟棄的 clone 執行同一個三方 update 規劃，`--check` 與套用列出相同的衝突與檔案動作，不再呼叫 `--pretend`。
 
 ### 2026-09-01 `csarc-ai-setup` 首次導入邊界
 

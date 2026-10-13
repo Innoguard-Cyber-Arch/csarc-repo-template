@@ -57,7 +57,7 @@ tracking: none
 - `files`：每列 {`path`、`action`、`reason`、`from`、`decision`}，先依 action 順序、再依 path 排序；只有 `move` 有 `from`。
 - `product`：{`release_ownership`、`code_owner`、`work_item_mapping`、`release_writers`、`version_surfaces`、`action_pins`、`reviewer_rotation`、`behavior_changes`}；後五項保留給後續 Issue，2.0.0 為 `null`。
 - `required_actions`：每列 {`kind`、`subject`、`blocking`、`message`、`command`}。
-- `verification`：{`candidate`、`hook`、`render_parity`}；`render_parity` 在 2.0.0 為 `null`。
+- `verification`：{`candidate`、`hook`、`render_parity`}；`render_parity` 只有 `state`。update（不含 reinstall）由 Issue #1063 的共用規劃器填入：以舊 template 實際詢問的答案與可信快照重建的舊側 render，與 target 逐檔相同為 `equal`，否則為 `diverged`；adopt 與 reinstall 為 `null`。
 - `next_steps`：每列 {`text`、`command`}，由 operation 與 status 算出。
 
 ### 4. 封閉詞彙
@@ -96,6 +96,7 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - `current`：只用於 update，沒有變更也沒有 required action。
 - `applied`：只由成功套用後的改寫設定，必須綁定同一個 plan digest；`blocked` 或已 `applied` 的報告不能再轉為 `applied`。
 - 報告的 `status` 與 CLI exit code 是兩回事；`update --check` 的 exit code 不變。
+- update 的檔案列與衝突來自 `--check` 與套用共用的同一個三方 update 規劃（Issue #1063）：衝突為 `conflict`／`update-conflict`，並產生 blocking 的 `file-conflict`；template 刪除的路徑為 `remove`／`template-deleted`。
 
 設定分類（本 Issue 實作的通用規則；個別鍵的遷移分類由後續 Issue 補上）：adopt 的每列都是 `new`；update 前後相同為 `unchanged`、新出現為 `new`、消失為 `retired`、其他改變為 `decision`。來源不是 `explicit` 的 `decision` 產生非 blocking 的 `setting-decision`。
 
@@ -145,7 +146,8 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - [x] update 的 `--check`、`--dry-run`、確認前 plan 與 reinstall 寫出同一組三個檔案；套用成功後 report 轉為 `applied`，失敗或未套用時維持原狀態。
 - [x] 未知詞彙、缺鍵、計數不符與未遮蔽的憑證 fail closed。
 - [ ] 個別設定的遷移分類（`exact`、`narrowed`、`widened`、`retired` 承接列）由後續 migration Issue 填入。
-- [ ] update 的 final plan、render parity 與 product 保留欄位由後續 Issue 填入。
+- [x] update 的 render parity、三方衝突列與 template 刪除列由 Issue #1063 填入。
+- [ ] update 的 final plan 與 product 保留欄位由後續 Issue 填入。
 
 ## Out of scope
 

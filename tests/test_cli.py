@@ -6807,6 +6807,258 @@ def test_legacy_update_conflict_leaves_target_unchanged(
     assert cli.target_file_snapshot(project) == expected_files
 
 
+def committed_generated_project(tmp_path: Path) -> tuple[Path, Path]:
+    """Return a template source and a committed generated project."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    return source, project
+
+
+def update_check_plan(
+    project: Path,
+    target_sha: str,
+    report_dir: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Run one JSON update check and return its plan and report."""
+    exit_code = main(
+        [
+            "update",
+            str(project),
+            "--check",
+            "--json",
+            "--to",
+            target_sha,
+            "--allow-unreleased",
+            "--report-dir",
+            str(report_dir),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1, captured.out
+    plan = json.loads(captured.out.strip().splitlines()[-1])
+    report = json.loads(
+        (report_dir / "csarc-update-report.json").read_text(encoding="utf-8")
+    )
+    return plan, report
+
+
+@pytest.mark.large
+def test_update_check_and_apply_share_one_planning_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC2/AC3: check and apply report the same normalized diff and digest."""
+    source, project = committed_generated_project(tmp_path)
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: product file")
+    (source / "template" / "added.txt").write_text(
+        "new template file\n", encoding="utf-8"
+    )
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    target_sha = commit(source, "test: template version two")
+
+    checked, check_report = update_check_plan(
+        project, target_sha, tmp_path / "check-report", capsys
+    )
+    files = cast_mapping(checked["files"])
+    assert files["add"] == ["added.txt"]
+    assert "managed.txt" in files["overwrite"]
+    assert "product.txt" in files["preserve"]
+    assert files["manual_merge"] == []
+    planning = cast_mapping(checked["planning"])
+    assert planning["conflicts"] == []
+    assert planning["render_parity"] == "equal"
+    assert check_report["verification"]["render_parity"] == {"state": "equal"}
+
+    apply_dir = tmp_path / "apply-report"
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                target_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--report-dir",
+                str(apply_dir),
+            ]
+        )
+        == 0
+    )
+    applied_plan = json.loads(
+        (apply_dir / cli.UPDATE_PLAN_BASENAME).read_text(encoding="utf-8")
+    )
+    applied_report = json.loads(
+        (apply_dir / "csarc-update-report.json").read_text(encoding="utf-8")
+    )
+    assert applied_plan["planning"]["digest"] == planning["digest"]
+    assert applied_plan["files"] == checked["files"]
+    assert applied_report["status"] == "applied"
+    assert applied_report["files"] == check_report["files"]
+    assert (project / "added.txt").read_text(encoding="utf-8") == (
+        "new template file\n"
+    )
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "template version two\n"
+    )
+
+
+def cast_mapping(value: object) -> dict[str, object]:
+    """Narrow one JSON object for the assertions below."""
+    assert isinstance(value, dict)
+    return value
+
+
+@pytest.mark.large
+def test_update_check_reports_the_conflicts_apply_refuses(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC2/AC3: check lists the exact conflict set apply fails closed on."""
+    source, project = committed_generated_project(tmp_path)
+    (project / "managed.txt").write_text(
+        "project customization\n", encoding="utf-8"
+    )
+    commit(project, "test: customized managed file")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    target_sha = commit(source, "test: conflicting template update")
+
+    checked, report = update_check_plan(
+        project, target_sha, tmp_path / "check-report", capsys
+    )
+    assert cast_mapping(checked["planning"])["conflicts"] == ["managed.txt"]
+    assert cast_mapping(checked["files"])["manual_merge"] == ["managed.txt"]
+    assert report["status"] == "blocked"
+    assert report["applicable"] is False
+    conflict_rows = [
+        row for row in report["files"] if row["action"] == "conflict"
+    ]
+    assert conflict_rows == [
+        {
+            "action": "conflict",
+            "decision": "pending",
+            "from": None,
+            "path": "managed.txt",
+            "reason": "update-conflict",
+        }
+    ]
+    assert [
+        (action["kind"], action["subject"], action["blocking"])
+        for action in report["required_actions"]
+        if action["kind"] == "file-conflict"
+    ] == [("file-conflict", "managed.txt", True)]
+    expected_files = cli.target_file_snapshot(project)
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                target_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--report-dir",
+                str(tmp_path / "apply-report"),
+            ]
+        )
+        == 2
+    )
+    error = capsys.readouterr().err
+    assert "manual conflict resolution (managed.txt)" in error
+    assert "the target was not changed" in error
+    assert cli.target_file_snapshot(project) == expected_files
+
+
+def test_update_planning_fails_closed_without_trusted_old_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC3: an old render that cannot be rebuilt stops before any write."""
+
+    def broken_copy(*_args: object, **_kwargs: object) -> None:
+        raise CliError("Copier preview render failed: missing code_owner")
+
+    monkeypatch.setattr(cli, "copier_copy", broken_copy)
+    revision = cli.Revision(source="local", sha="a" * 40, label="v0.3.1")
+    with pytest.raises(CliError, match="cannot be rebuilt") as error:
+        cli.render_old_side("local", revision, tmp_path, {}, None, {})
+    assert "The target was not changed" in str(error.value)
+
+
+@pytest.mark.large
+def test_raw_copier_update_is_detected_not_migrated(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC5: a raw copier update is reported with the managed entry point."""
+    source, project = committed_generated_project(tmp_path)
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    target_sha = commit(source, "test: template version two")
+    answers = cli.config_path(project)
+    answers.write_text(
+        re.sub(
+            r"(?m)^_commit: .*$",
+            f"_commit: {target_sha}",
+            answers.read_text(encoding="utf-8"),
+        ),
+        encoding="utf-8",
+    )
+    commit(project, "test: raw copier update")
+
+    assert main(["status", str(project), "--json", "--allow-unreleased"]) == 0
+    output = capsys.readouterr().out
+    status = json.loads(output.strip().splitlines()[-1])
+    assert status["state"] == cli.INSTALL_STATE_MIGRATE
+    assert "unsupported raw `copier update`" in status["reason"]
+    assert "did not migrate" in status["reason"]
+    assert "csarc update" in status["next_command"]
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--check",
+                "--to",
+                target_sha,
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    error = capsys.readouterr().err
+    assert "unsupported raw `copier update`" in error
+    assert "csarc update <path> --check" in error
+
+
+def test_copier_rejection_files_are_detected_as_raw_update(
+    tmp_path: Path,
+) -> None:
+    """AC5: leftover .rej files are a raw copier update signature."""
+    (tmp_path / "managed.txt.rej").write_text("rejected\n", encoding="utf-8")
+    detail = cli.raw_copier_update_detail(tmp_path, "a" * 40, None)
+    assert detail is not None
+    assert "managed.txt.rej" in detail
+    assert "did not migrate" in detail
+    clean = tmp_path / "clean"
+    clean.mkdir()
+    assert cli.raw_copier_update_detail(clean, "a" * 40, None) is None
+    assert (
+        cli.raw_copier_update_detail(clean, "a" * 40, {"commit_sha": "A" * 40})
+        is None
+    )
+
+
 class LocalGitReleaseClient:
     """A ReleaseClient backed by real local git tags (Issue #744 tests).
 
