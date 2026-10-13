@@ -20,6 +20,7 @@ from typing import cast
 import jinja2
 import pytest
 import yaml
+from copier import run_copy
 
 from csarc_cli import cli
 from csarc_cli.cli import CliError
@@ -512,3 +513,64 @@ def test_status_inspection_carries_the_saved_owner(
         tmp_path, revision, {"project_mode": "existing"}
     )
     assert "release_ownership" not in seen[-1]
+
+
+@pytest.mark.parametrize(
+    ("data", "ownership", "writes"),
+    [
+        ({}, "csarc-owned", True),
+        ({"project_mode": "existing"}, "verification-only", False),
+        (
+            {"release_ownership": "verification-only"},
+            "verification-only",
+            False,
+        ),
+    ],
+)
+def test_raw_copier_render_records_an_explicit_owner(
+    tmp_path: Path,
+    data: dict[str, object],
+    ownership: str,
+    *,
+    writes: bool,
+) -> None:
+    """A default render passes its own fail-closed reader (#1068).
+
+    Copier never records the hidden release_ownership answer, so the
+    rendered answers file persists the owner resolved at render time.
+    """
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "project"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "project_name": "gen-smoke",
+            "repository_url": "https://github.com/example/gen-smoke",
+            **data,
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+        quiet=True,
+    )
+
+    saved = yaml.safe_load(
+        (project / ".csarc/config.yml").read_text(encoding="utf-8")
+    )
+    assert saved["release_ownership"] == ownership
+    result = subprocess.run(
+        [sys.executable, ".csarc/scripts/csarc_config.py", "release_ownership"],
+        cwd=project,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == f"{ownership}\n"
+    rendered = (project / ".github/workflows/release.yml").is_file()
+    hosted = saved.get("verification_mode") == "hosted"
+    assert rendered is (writes and hosted)
