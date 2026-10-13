@@ -122,7 +122,7 @@ def load_plan(path: Path) -> dict[str, object] | None:
     """Read one router plan, or None when the candidate produced none."""
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return None
     return value if isinstance(value, dict) else None
 
@@ -233,7 +233,7 @@ def run_candidate_gate(
             text=True,
             timeout=timeout,
         )
-    except OSError, subprocess.SubprocessError:
+    except (OSError, subprocess.SubprocessError):
         return plan, "unavailable"
     ownership = reader.stdout.strip() if reader.returncode == 0 else ""
     return plan, ownership or "unavailable"
@@ -308,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     try:
         router_args = read_router_args(args.router_args)
-    except OSError, ValueError:
+    except (OSError, ValueError):
         router_args = None
     if router_args is None:
         candidate_plan, candidate_ownership = None, "unavailable"
