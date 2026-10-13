@@ -448,6 +448,8 @@ def initialize_project(tmp_path: Path) -> tuple[Path, Path, str]:
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -549,6 +551,8 @@ def initialize_pending_adoption(
         "--allow-unreleased",
         "--data",
         f"language={language}",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
     ]
     assert main(arguments) == 0
     plan = (
@@ -693,6 +697,8 @@ def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     project = tmp_path / "new-project"
     arguments = [
         "init",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -727,6 +733,8 @@ def test_init_copier_tasks_wait_for_approval(
     project = tmp_path / "new-project"
     arguments = [
         "init",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -770,6 +778,8 @@ def test_init_revalidates_revision_after_confirmation(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -816,6 +826,8 @@ def test_adoption_copier_tasks_wait_for_each_approval(
     commit(project, "test: pending product")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -903,6 +915,8 @@ def test_failed_copier_task_does_not_create_init_target(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -949,6 +963,8 @@ def test_copier_task_cannot_rewrite_bound_configuration(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -1630,6 +1646,8 @@ def test_adopt_requires_the_copier_work_item_mapping_review_choice(
     commit(project, "test: mapping review product")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -1688,6 +1706,8 @@ def test_adopt_without_a_mapping_question_stays_review_only(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -1928,6 +1948,8 @@ def test_init_json_uses_one_complete_resolved_plan(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(target),
                 "--source",
                 str(source),
@@ -2119,6 +2141,8 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     commit(project, "test: legacy product")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -2984,6 +3008,8 @@ def test_real_typescript_adoption_requires_product_readme_when_documented(
     before_head = git(project, "rev-parse", "HEAD")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(ROOT),
@@ -3073,6 +3099,8 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     commit(project, "test: product collision fixture")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(ROOT),
@@ -3258,6 +3286,8 @@ def test_adoption_report_classifies_unknown_content(
     report_dir = tmp_path / "reports"
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -3340,6 +3370,8 @@ def test_adoption_reports_ignore_predictable_temporary_symlinks(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4142,6 +4174,8 @@ def test_adopt_applies_exact_plan_over_preserved_dirty_file(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4220,6 +4254,8 @@ def test_adopt_rejects_dirty_path_not_classified_as_preserve(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4284,6 +4320,8 @@ def test_adopt_blocks_hook_mutation_of_preserved_dirty_file(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4440,6 +4478,8 @@ def test_adopt_rejects_non_modified_dirty_state_without_running_hook(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4529,6 +4569,8 @@ def test_adopt_rejects_preserved_dirty_file_drift(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4600,6 +4642,8 @@ def test_adopt_rejects_race_between_comparison_and_snapshot(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4653,6 +4697,8 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
 
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         "--source",
         str(source),
         "--to",
@@ -4788,6 +4834,8 @@ def test_adopt_rejects_mapping_drift_during_task_bearing_render(
     monkeypatch.setattr(cli, "inspect_work_item_mapping", inspect)
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -4842,6 +4890,8 @@ def test_unreleased_replay_rejects_self_digested_authority_before_execution(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4924,6 +4974,8 @@ def test_unreleased_replay_decline_prevents_source_execution(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -5124,6 +5176,8 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
     commit(project, "test: baseline")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -5212,6 +5266,8 @@ def test_adopt_rechecks_target_after_confirmation(
     commit(project, "test: baseline")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -5265,6 +5321,8 @@ def test_adopt_rechecks_repository_context_after_confirmation(
     commit(project, "test: context drift product")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -5509,6 +5567,8 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -5582,6 +5642,8 @@ def test_invalid_project_hook_blocks_pending_adoption_without_writes(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -5637,6 +5699,8 @@ def test_adoption_records_and_replays_explicit_project_hook(
     commit(project, "test: explicit project hook")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -6117,6 +6181,8 @@ def test_adopt_reports_file_directory_collisions_without_writes(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -6167,6 +6233,8 @@ def test_adopt_dry_run_rejects_symlink_ancestor_without_writes(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -6424,6 +6492,105 @@ def test_cli_requires_repository_identity_for_ownerless_target(
         assert received["documentation_mode"] == "off"
 
 
+def test_create_and_adopt_defaults_carry_no_organization_owner(
+    tmp_path: Path,
+) -> None:
+    """Neither the CLI nor Copier assumes a template organization (#1061)."""
+    questions = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / "copier.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert questions["code_owner"]["default"] == ""
+    assert questions["repository_url"]["default"] == ""
+    assert "code_owner" not in questions["repository_url"]["default"]
+    assert cli.DEFAULT_OWNER == ""
+    for mode in ("init", "adopt"):
+        assert cli.base_data(tmp_path, mode, {})["code_owner"] == ""
+
+
+@pytest.mark.parametrize(
+    ("repository", "code_owner", "repository_url", "expected_url"),
+    [
+        # A live identity is authoritative whatever the owner says.
+        (
+            "outside-user/product",
+            "@another-org/team",
+            None,
+            "outside-user/product",
+        ),
+        ("another-org/product", "@outside-user", None, "another-org/product"),
+        ("another-org/product", "", None, "another-org/product"),
+        # Without a live identity only an explicit URL is used.
+        (None, "@another-org/team", "https://github.com/x/y", "x/y"),
+        # An owner alone never produces a URL.
+        (None, "@another-org/team", None, None),
+        (None, "@outside-user", None, None),
+    ],
+)
+def test_repository_url_is_never_derived_from_code_owner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    repository: str | None,
+    code_owner: str,
+    repository_url: str | None,
+    expected_url: str | None,
+) -> None:
+    """Changing code_owner never changes the planned repository URL."""
+    revision = cli.Revision("development", "a" * 40, str(tmp_path))
+    monkeypatch.setattr(
+        cli, "resolve_revision", lambda *args, **kwargs: revision
+    )
+    monkeypatch.setattr(
+        cli,
+        "repository_context",
+        lambda *args, **kwargs: cli.RepositoryContext(
+            repository,
+            repository.split("/")[0] if repository else None,
+            "Organization" if repository else None,
+            "private",
+            "github" if repository else "safe-default",
+            repository is not None,
+        ),
+    )
+    received: dict[str, object] = {}
+
+    def capture_copy(
+        source: str,
+        resolved: cli.Revision,
+        destination: Path,
+        data: dict[str, object],
+        *,
+        skip_tasks: bool,
+    ) -> None:
+        del source, resolved, destination, skip_tasks
+        received.update(data)
+        raise CliError("stop after pre-Copier validation")
+
+    monkeypatch.setattr(cli, "copier_copy", capture_copy)
+    arguments = [
+        "init",
+        str(tmp_path / "product"),
+        "--data",
+        f"code_owner={code_owner}",
+        "--dry-run",
+    ]
+    if repository_url is not None:
+        arguments.extend(["--data", f"repository_url={repository_url}"])
+    assert main(arguments) == 2
+
+    if expected_url is None:
+        error = capsys.readouterr().err
+        assert "repository_url=https://github.com/owner/repository" in error
+        assert received == {}
+    else:
+        assert (
+            received["repository_url"] == f"https://github.com/{expected_url}"
+        )
+        assert received["code_owner"] == code_owner
+
+
 @pytest.mark.large
 def test_adopt_ownerless_repository_without_remote_uses_explicit_url(
     tmp_path: Path,
@@ -6533,6 +6700,8 @@ def test_adoption_preserves_executable_and_checked_patch_symlink(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -6711,6 +6880,8 @@ def initialize_verified_project(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--to",
                 "v0.1.0",
@@ -7141,6 +7312,8 @@ def test_previous_release_to_current_managed_file_migration(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(ROOT),
@@ -7813,6 +7986,58 @@ def test_update_repository_rename_preserves_custom_security_channel(
         assert "security_reporting_channel" not in update_data
 
 
+@pytest.mark.parametrize(
+    "saved_owner",
+    [
+        "@outside-user",
+        "@another-org/maintainers",
+        "",
+        "@Innoguard-Cyber-Arch/arch",
+    ],
+)
+def test_update_preserves_saved_code_owner(saved_owner: str) -> None:
+    """Removing the create default never rewrites a saved owner (#1061)."""
+    repository = cli.RepositoryContext(
+        "another-org/product",
+        "another-org",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+    answers: dict[str, object] = {
+        "project_mode": "existing",
+        "project_visibility": "private",
+        "code_owner": saved_owner,
+    }
+
+    result, update_data = cli.update_plan_answers(answers, {}, repository)
+
+    assert result["code_owner"] == saved_owner
+    assert "code_owner" not in update_data
+
+
+def test_update_keeps_rendered_owner_for_answers_without_code_owner() -> None:
+    """Answers predating code_owner keep the owner they were rendered with."""
+    repository = cli.RepositoryContext(
+        None, None, None, "private", "saved", False
+    )
+    answers: dict[str, object] = {
+        "project_mode": "existing",
+        "project_visibility": "private",
+    }
+
+    result, update_data = cli.update_plan_answers(answers, {}, repository)
+    assert update_data["code_owner"] == cli.LEGACY_DEFAULT_OWNER
+    assert result["code_owner"] == cli.LEGACY_DEFAULT_OWNER
+
+    result, update_data = cli.update_plan_answers(
+        answers, {"code_owner": "@outside-user"}, repository
+    )
+    assert update_data["code_owner"] == "@outside-user"
+    assert result["code_owner"] == "@outside-user"
+
+
 def test_update_changes_release_ownership_without_project_mode_change() -> None:
     """Allow an explicit ownership choice while keeping project mode fixed."""
     repository = cli.RepositoryContext(
@@ -7917,6 +8142,8 @@ def test_same_revision_update_ignores_derived_release_answers(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(ROOT),
@@ -8074,6 +8301,8 @@ def test_update_recomputes_visibility_defaults_from_github(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -8970,6 +9199,8 @@ def test_copy_uses_resolved_canonical_source(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(tmp_path / "canonical-source"),
                 "--source",
                 source,
@@ -9782,6 +10013,8 @@ def test_adopt_dry_run_ignores_legacy_provenance_temporary_symlink(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -9825,6 +10058,8 @@ def test_adopt_dry_run_ignores_legacy_pending_temporary_symlink(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -9873,6 +10108,8 @@ def test_adopt_dry_run_rejects_report_directory_symlink_ancestor(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),

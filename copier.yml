@@ -419,7 +419,7 @@ package_name:
 code_owner:
   type: str
   help: Optional GitHub user or team used by CODEOWNERS
-  default: "@Innoguard-Cyber-Arch/arch"
+  default: ""
   validator: "{% if code_owner and not code_owner | regex_search('^@(?:(?![A-Za-z0-9-]*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$') %}Use an @user or @organization/team value, or leave it empty.{% endif %}"
 
 project_run_command:
@@ -454,7 +454,7 @@ work_item_mapping_review:
 repository_url:
   type: str
   help: Canonical GitHub repository URL used by badges and package metadata
-  default: "https://github.com/{{ code_owner.split('/')[0] | replace('@', '') }}/{{ project_slug }}"
+  default: ""
   validator: "{% if not repository_url | default('', true) | regex_search('^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') %}Use https://github.com/owner/repository without a trailing slash or .git suffix.{% endif %}"
 
 python_support_mode:

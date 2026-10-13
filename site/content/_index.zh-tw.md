@@ -158,7 +158,7 @@ csarc status <path> --json
 | `repository_settings_inspection` | `check` 模式能比對即時的管理員專屬欄位 | 與 `repository_admin` 相同 | DEGRADED 標記；改在具 admin 身分的可信環境執行 `check` |
 | `immutable_releases` | GitHub 用來為每個已發布 Release 簽發 attestation 的 repository 設定 | admin 透過 `apply-repository-settings.sh apply` 開啟一次；`GITHUB_TOKEN` 仍無法直接讀取 | 不再 pre-flight 卡關（#770）；`scripts/publish-release` post-hoc 驗證簽發的 attestation，缺少時 fail closed |
 
-本機 repo 尚未設定 remote 時，有值的 CODEOWNER 可以先標為 `unknown`；若用 `--data code_owner=` 省略 CODEOWNERS，則必須同時傳入合法的 `--data repository_url=https://github.com/<owner>/<repository>`。這個 repository 身分在關閉文件功能時仍會被其他設定與套件 metadata 使用，不能從空 owner 猜測。
+本機 repo 尚未設定 remote 時，有值的 CODEOWNER 可以先標為 `unknown`，而且必須傳入合法的 `--data repository_url=https://github.com/<owner>/<repository>`。這個 repository 身分在關閉文件功能時仍會被其他設定與套件 metadata 使用，不會從 `code_owner` 猜測。
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="怎麼解讀 check-repo-capabilities 的結果" >}}
@@ -760,12 +760,12 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 文件語言 | `primary_language`、`i18n` | `en`／`zh-tw`；雙語並行或 `off` | README 與文件入口；雙語時維護另一語言版 |
 | 授權 | `project_license`、`copyright_holder` | 預設 `proprietary`；也可選 `MIT`／`Apache-2.0` | `LICENSE`、README、套件 manifest 與 SBOM |
 | 選配產物 | `features` | 預設空白；目前可加入 `docker` | Docker starter 與 build scan 一起啟閉 |
-| 組織政策 | `code_owner` | 可省略的 `@user` 或 `@organization/team` | `.github/CODEOWNERS`；不作為 reviewer 名單 |
+| 組織政策 | `code_owner` | 預設空值；可選 `@user` 或 `@organization/team` | `.github/CODEOWNERS`；不作為 reviewer 名單 |
 | 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及 repo-site 的可見受眾欄位 |
 | 專案選擇 | `project_name` | 必填非空字串；預設 `CSARC Project` | repo-site 的標題與頁首 |
 | 專案選擇 | `project_description` | 必填一句話用途說明，拒絕佔位文字 | repo-site 的簡介段落 |
 | 專案選擇 | `languages` | 零到多個 `python`、`rust`、`typescript` | repo-site 的「使用語言」欄位 |
-| 專案選擇 | `repository_url`、`project_slug` | 未覆寫時由 `code_owner`／`project_name` 推導 | repo-site 的複製（clone）指引 |
+| 專案選擇 | `repository_url`、`project_slug` | `repository_url` 取自 GitHub origin／`GH_REPO` 或明確值；`project_slug` 未覆寫時由 `project_name` 推導 | repo-site 的複製（clone）指引 |
 | 專案選配 | `enable_governance_drift_check` | 預設 `true`，產生每日排程 Action；可設為 `false` 關閉 | `true` 生成 `governance-drift.yml` 與 drift checker；`false` 兩者皆不產生 |
 
 公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。方案、帳務、Copilot entitlement、token 權限與 Pages 可用性不是設定值，而是 `allowed`／`blocked`／`unknown` 的即時偵測結果。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。

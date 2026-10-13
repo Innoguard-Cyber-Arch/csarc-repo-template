@@ -158,7 +158,7 @@ The Governance step's plan table (Step 08) answers "what does the account's GitH
 | `repository_settings_inspection` | `check` mode can compare live admin-only fields | Same as `repository_admin` | DEGRADED marker; run `check` from a trusted admin checkout |
 | `immutable_releases` | Repository setting GitHub uses to sign each published Release's attestation | An admin enables it once via `apply-repository-settings.sh apply`; `GITHUB_TOKEN` still can't read it directly | No longer pre-flight-blocking (#770); `scripts/publish-release` verifies the signed attestation post-hoc and fails closed if it's missing |
 
-For a local repository without a remote, a configured CODEOWNER may first be reported as `unknown`. If CODEOWNERS is omitted with `--data code_owner=`, also pass a valid `--data repository_url=https://github.com/<owner>/<repository>`. Other configuration and package metadata still use this repository identity when documentation is disabled, so it cannot be guessed from an empty owner.
+For a local repository without a remote, a configured CODEOWNER may first be reported as `unknown`, and a valid `--data repository_url=https://github.com/<owner>/<repository>` is required. Other configuration and package metadata still use this repository identity when documentation is disabled, and it is never guessed from `code_owner`.
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="How to read a check-repo-capabilities result" >}}
@@ -768,12 +768,12 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Documentation languages | `primary_language`, `i18n` | `en`/`zh-tw`; bilingual or `off` | README and documentation entry points; bilingual mode maintains the counterpart |
 | License | `project_license`, `copyright_holder` | `proprietary` by default; `MIT` and `Apache-2.0` are available | `LICENSE`, README, package manifests, and SBOM |
 | Optional output | `features` | empty by default; currently accepts `docker` | Docker starter and build scan switch as one unit |
-| Organization policy | `code_owner` | optional `@user` or `@organization/team` | `.github/CODEOWNERS`; never a reviewer list |
+| Organization policy | `code_owner` | empty by default; optional `@user` or `@organization/team` | `.github/CODEOWNERS`; never a reviewer list |
 | Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection, optional security defaults, and the repo-site's visible-audience line |
 | Project choice | `project_name` | required non-empty string; defaults to `CSARC Project` | the repo-site's title and heading |
 | Project choice | `project_description` | required one-sentence purpose; rejects placeholder text | the repo-site's introduction paragraph |
 | Project choice | `languages` | zero or more of `python`, `rust`, `typescript` | repo-site's stated-languages line |
-| Project choice | `repository_url`, `project_slug` | derived from `code_owner`/`project_name` unless overridden | repo-site's clone instructions |
+| Project choice | `repository_url`, `project_slug` | GitHub origin/`GH_REPO` or an explicit value; `project_slug` derived from `project_name` unless overridden | repo-site's clone instructions |
 | Project choice | `enable_governance_drift_check` | `true` by default, generating the daily scheduled Action; set `false` to disable it | `true` generates `governance-drift.yml` and the drift checker; `false` generates neither |
 
 The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Plan, billing, Copilot entitlement, token permissions, and Pages availability are live `allowed`/`blocked`/`unknown` observations, not settings. Low-frequency GitHub details stay in native repository settings or `policies/` instead of expanding the CSARC schema.
