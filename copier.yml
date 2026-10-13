@@ -457,12 +457,6 @@ repository_url:
   default: "https://github.com/{{ code_owner.split('/')[0] | replace('@', '') }}/{{ project_slug }}"
   validator: "{% if not repository_url | default('', true) | regex_search('^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') %}Use https://github.com/owner/repository without a trailing slash or .git suffix.{% endif %}"
 
-security_reporting_channel:
-  type: str
-  help: Organization-approved vulnerability reporting instructions
-  default: "Open a GitHub Issue at {{ repository_url }}/issues/new; maintainers receive notifications for new Issues."
-  validator: "{% if not security_reporting_channel | default('', true) | trim or security_reporting_channel | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in security_reporting_channel %}Enter the approved reporting channel without placeholder text; do not invent an email address or SLA.{% endif %}"
-
 python_support_mode:
   type: str
   help: Use the reviewed latest stable Python release, or declare an older minimum supported release
@@ -514,6 +508,19 @@ project_visibility:
     Private: private
     Internal (GitHub Enterprise Cloud only): internal
   default: private
+
+# Issue #1084: a public repository must name a maintainer-approved private
+# reporting channel outside GitHub (an email address, a mailto: link, or a
+# non-GitHub https:// URL); GitHub Issues, Discussions, and GitHub private
+# vulnerability reporting are never assumed. The public default is empty so
+# an unanswered or dropped legacy answer fails closed in
+# template/.github/SECURITY.md.jinja. Private and internal repositories keep
+# the Issue instructions because those Issues are not world-readable.
+security_reporting_channel:
+  type: str
+  help: Maintainer-approved vulnerability reporting channel; a public repository needs a private channel outside GitHub (email address, mailto link, or non-GitHub https URL)
+  default: "{{ '' if project_visibility == 'public' else 'Open a GitHub Issue at ' ~ repository_url ~ '/issues/new; maintainers receive notifications for new Issues.' }}"
+  validator: '{% set channel = security_reporting_channel | default("", true) | trim %}{% if not channel or channel | lower in ["todo", "tbd", "placeholder"] or "<" in channel %}Enter the approved reporting channel without placeholder text; do not invent an email address or SLA.{% elif project_visibility == "public" and (channel | regex_search("(?i)^https?://(?:[^/?#]*[.@])?github[.]com(?:[:/?#]|$)") or not (channel | regex_search("^(?:mailto:)?[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:[.][A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*[.][A-Za-z]{2,}$") or channel | regex_search("^https://[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:[.][A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*[.][A-Za-z]{2,}(?::[0-9]{1,5})?(?:[/?#][^ <>]*)?$"))) %}A public repository needs one maintainer-approved private reporting channel outside GitHub: an email address, a mailto: link, or a non-GitHub https:// URL. GitHub Issues, Discussions, and other github.com routes are public or unverified and are rejected.{% endif %}'
 
 enable_codeql:
   type: bool

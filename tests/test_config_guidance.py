@@ -119,33 +119,23 @@ def test_governance_single_source_item_translation_is_accurate() -> None:
     assert item["code"]["zh-tw"] == item["code"]["en"]
 
 
-def test_app_js_rollout_track_only_serves_the_legacy_fixture() -> None:
-    """app.js only backs the frozen site/legacy/index.html parity fixture
-    (Issue #472 explicitly excludes site/legacy/index.html), and that fixture
-    still has a `data-track="rollout"` slide. So app.js's `rollout` entry is
-    not dead code in the context it actually runs in; this test locks in
-    that reasoning so a future change cannot silently orphan the fixture
-    instead.
+def test_retired_legacy_fixture_and_its_app_js_have_no_caller() -> None:
+    """Issue #1088 retired the frozen site/legacy/index.html snapshot.
 
-    Issue #586 later restored an equivalent `key="rollout"` slide to the
-    live, Markdown-driven content (as an `audience="archive"` appendix, once
-    it confirmed the original content had been dropped, not redistributed
-    elsewhere). That live slide is unrelated to app.js: the new engine
-    (`scripts/build_repo_site.py` / `scripts/render_site.py`) never
-    references app.js, so nothing in its output can run the fixture-only
-    script this test protects, regardless of which `data-track` values the
-    live content uses.
+    site/static/app.js only ever ran inside that snapshot (the Markdown
+    engine never referenced it), so it was retired with it. Neither file may
+    come back, and neither the engine, the bundler, nor the build entry
+    point may reference them or the removed parity comparison.
     """
-    app_js = (ROOT / "site/static/app.js").read_text(encoding="utf-8")
-    legacy_fixture = (ROOT / "site/legacy/index.html").read_text(
-        encoding="utf-8"
-    )
-    build_repo_site = (ROOT / "scripts/build_repo_site.py").read_text(
-        encoding="utf-8"
-    )
-    render_site = (ROOT / "scripts/render_site.py").read_text(encoding="utf-8")
-    assert "rollout:" in app_js
-    assert 'data-track="rollout"' in legacy_fixture
-    assert '<script src="app.js"></script>' in legacy_fixture
-    assert "app.js" not in build_repo_site
-    assert "app.js" not in render_site
+    assert not (ROOT / "site/legacy/index.html").exists()
+    assert not (ROOT / "site/static/app.js").exists()
+    assert not (ROOT / "scripts/check-repo-site-parity").exists()
+    for caller in (
+        "scripts/build_repo_site.py",
+        "scripts/render_site.py",
+        "scripts/build-repo-site",
+    ):
+        text = (ROOT / caller).read_text(encoding="utf-8")
+        assert "app.js" not in text
+        assert "site/legacy" not in text
+        assert "check-repo-site-parity" not in text

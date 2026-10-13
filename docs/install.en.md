@@ -31,7 +31,7 @@ git switch -c chore/<issue-number>-adopt-csarc-template
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt
 ```
 
-`adopt` defaults to a dry run: it only produces a Markdown adoption report and a machine-readable plan outside the repo, without modifying it. Apply with `--apply-plan` only after confirming.
+`adopt` defaults to a dry run: it only produces a machine-readable plan, the report JSON that is the only source, and the Markdown adoption report rendered from it ([SPEC-008](specs/SPEC-008-lifecycle-report-format.md)) outside the repo, without modifying it. Apply with `--apply-plan` only after confirming.
 
 ## Update an adopted repo
 
