@@ -169,7 +169,7 @@ def load_plan(path: Path) -> dict[str, object] | None:
     """Read one router plan, or None when the candidate produced none."""
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):  # fmt: skip
         return None
     return value if isinstance(value, dict) else None
 
@@ -281,7 +281,7 @@ def run_candidate_gate(
             text=True,
             timeout=timeout,
         )
-    except OSError, subprocess.SubprocessError:
+    except (OSError, subprocess.SubprocessError):  # fmt: skip
         return plan, "unavailable"
     ownership = reader.stdout.strip() if reader.returncode == 0 else ""
     return plan, ownership or "unavailable"
@@ -373,6 +373,9 @@ DELIVERY_BASE = re.compile(r"dev/[mi][1-9][0-9]*-[a-z0-9][a-z0-9-]*")
 TRUSTED_BASE_ENV = "CSARC_TRUSTED_BASE_SHA"
 SHA = re.compile(r"[0-9a-f]{40}")
 PULL_FILES_LIMIT = 3000
+# Hosted runners may parse this file before Python 3.14 is set up, so keep
+# multi-exception handlers in the pre-3.14 grammar.
+SELF_TEST_ERRORS = (OSError, subprocess.SubprocessError, json.JSONDecodeError)
 
 
 def _top_level_settings(text: str) -> dict[str, str]:
@@ -633,7 +636,7 @@ def read_pull_files(path: Path) -> list[str] | None:
     """
     try:
         pages = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):  # fmt: skip
         return None
     if not isinstance(pages, list):
         return None
@@ -710,7 +713,7 @@ def policy_self_test(
             timeout=timeout,
         )
         candidate = json.loads(result.stdout)
-    except OSError, subprocess.SubprocessError, json.JSONDecodeError:
+    except SELF_TEST_ERRORS:
         candidate = None
     if not isinstance(candidate, dict):
         lines.append("Candidate policy produced no readable route.")
@@ -858,7 +861,7 @@ def main(argv: list[str] | None = None) -> int:
         return policy_main(args)
     try:
         router_args = read_router_args(args.router_args)
-    except OSError, ValueError:
+    except (OSError, ValueError):  # fmt: skip
         router_args = None
     if router_args is None:
         candidate_plan, candidate_ownership = None, "unavailable"

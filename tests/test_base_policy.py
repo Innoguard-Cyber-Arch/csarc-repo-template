@@ -10,6 +10,7 @@ lifecycle alike.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -117,6 +118,12 @@ def write_config(path: Path, text: str) -> Path:
 def test_both_shipped_copies_are_identical() -> None:
     """Root and generated projects evaluate exactly the same policy."""
     assert COPIES["root"].read_bytes() == COPIES["template"].read_bytes()
+
+
+def test_trusted_policy_parses_before_python_setup() -> None:
+    """Hosted CI stages the policy with the runner's system Python."""
+    for path in (*COPIES.values(), REPO_ROOT / "scripts" / "csarc_config.py"):
+        ast.parse(path.read_text(encoding="utf-8"), feature_version=(3, 12))
 
 
 def test_layout_selects_the_matching_control_set(
