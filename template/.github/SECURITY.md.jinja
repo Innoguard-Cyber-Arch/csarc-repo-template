@@ -1,3 +1,12 @@
+{#- Issue #1084: fail the render instead of publishing a public repository
+    policy without a private reporting channel. The copier.yml validator
+    rejects public GitHub routes in supplied answers; this guard catches the
+    empty public default that Copier uses when an answer was never given or a
+    stored legacy answer failed validation. -#}
+{%- set channel = security_reporting_channel | default('', true) | trim -%}
+{%- if project_visibility == 'public' and not channel -%}
+{{ csarc_missing_private_security_reporting_channel | mandatory('A public repository needs security_reporting_channel set to a maintainer-approved private channel outside GitHub (email address, mailto: link, or non-GitHub https:// URL); GitHub Issues and Discussions are rejected.') }}
+{%- endif -%}
 # Security Policy
 
 ## Supported versions
@@ -8,19 +17,33 @@ branches.
 
 ## Reporting a vulnerability
 
-Use this organization-approved reporting channel:
+{% if project_visibility == 'public' -%}
+Report suspected vulnerabilities privately through this maintainer-approved
+channel:
 
 <!-- csarc-security-reporting-channel:start -->
-{{ security_reporting_channel }}
+{{ channel }}
 <!-- csarc-security-reporting-channel:end -->
 
-GitHub Issues are public. Do not post secrets, credentials, personal data, or
+This repository is public. Do not open a GitHub Issue, Discussion, or pull
+request for a suspected vulnerability, and do not post exploit details,
+secrets, credentials, personal data, or other sensitive information in any
+public channel.
+{%- else -%}
+Use this maintainer-approved reporting channel:
+
+<!-- csarc-security-reporting-channel:start -->
+{{ channel }}
+<!-- csarc-security-reporting-channel:end -->
+
+Issues in this {{ project_visibility }} repository are visible to everyone
+with repository access. Do not post secrets, credentials, personal data, or
 other sensitive details there. Provide only the non-sensitive information
 needed to describe the concern.
+{%- endif %}
 
 This policy does not promise an acknowledgement or resolution time. Follow
-the reporting channel for any response expectations approved by the
-organization.
+the reporting channel for any response expectations the maintainers approve.
 
 ## Scope
 

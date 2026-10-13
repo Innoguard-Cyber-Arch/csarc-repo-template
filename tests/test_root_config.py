@@ -68,10 +68,9 @@ def test_root_public_identity_claims_are_consistent() -> None:
     robots = (ROOT / "docs/robots.txt").read_text(encoding="utf-8")
 
     assert config["project_visibility"] == "public"
-    assert (
-        "public repository's GitHub Issues"
-        in config["security_reporting_channel"]
-    )
+    # Issue #1084 / #1058 decision 20: a public repository reports privately
+    # through the maintainer-approved channel outside GitHub.
+    assert config["security_reporting_channel"] == "justyn.jt.chen@tw.ey.com"
     assert pages == {"enabled": True, "build_type": "workflow"}
 
     for text in readmes + site_sources:

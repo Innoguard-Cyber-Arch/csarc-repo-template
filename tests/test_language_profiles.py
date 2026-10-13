@@ -690,7 +690,7 @@ def test_enable_codeql_generates_a_working_workflow(tmp_path: Path) -> None:
             "project_slug": "codeql-fixture",
             "project_description": "Exercises the CodeQL workflow generator.",
             "repository_url": "https://github.com/example/codeql-fixture",
-            "security_reporting_channel": "Use the private security contact.",
+            "security_reporting_channel": "security@example.com",
             "project_visibility": "public",
             "verification_mode": "hosted",
             "enable_codeql": True,

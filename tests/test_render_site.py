@@ -1519,7 +1519,7 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
                 "Exercises the shared repo-site engine through Copier."
             ),
             "repository_url": "https://github.com/example/generated-project",
-            "security_reporting_channel": "Use the private security contact.",
+            "security_reporting_channel": "security@example.com",
             "project_visibility": "public",
             "code_owner": "@Innoguard-Cyber-Arch/generated-project-team",
         },
