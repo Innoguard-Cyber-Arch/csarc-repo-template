@@ -97,6 +97,7 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - `applied`：只由成功套用後的改寫設定，必須綁定同一個 plan digest；`blocked` 或已 `applied` 的報告不能再轉為 `applied`。
 - 報告的 `status` 與 CLI exit code 是兩回事；`update --check` 的 exit code 不變。
 - update 的檔案列與衝突來自 `--check` 與套用共用的同一個三方 update 規劃（Issue #1063）：衝突為 `conflict`／`update-conflict`，並產生 blocking 的 `file-conflict`；template 刪除的路徑為 `remove`／`template-deleted`。
+- update 的檔案轉換只來自同一份核准 plan（Issue #1066）：不再 render 的 CSARC-owned 檔案只在與可信舊側 render byte-identical 時退役；修改過的檔案保留為 `conflict`／`retire-modified`（decision `keep-current`），並產生非 blocking 的 `retire-modified`。repository 已有的產品發版狀態（`.csarc/version.txt`、`.csarc/release-please-manifest.json`、`CHANGELOG.md`，以及搬移前的舊路徑）不被 template seed 或 update migration 改寫，列為 `preserve`／`product-owned`。套用前實際的新增、修改、搬移與刪除集合必須與核准 plan 相同，否則 fail closed；寫入以 transaction 進行，任一步失敗時 target 回到 byte-identical base。
 
 設定分類（本 Issue 實作的通用規則；個別鍵的遷移分類由後續 Issue 補上）：adopt 的每列都是 `new`；update 前後相同為 `unchanged`、新出現為 `new`、消失為 `retired`、其他改變為 `decision`。來源不是 `explicit` 的 `decision` 產生非 blocking 的 `setting-decision`。
 
@@ -147,7 +148,8 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - [x] 未知詞彙、缺鍵、計數不符與未遮蔽的憑證 fail closed。
 - [ ] 個別設定的遷移分類（`exact`、`narrowed`、`widened`、`retired` 承接列）由後續 migration Issue 填入。
 - [x] update 的 render parity、三方衝突列與 template 刪除列由 Issue #1063 填入。
-- [ ] update 的 final plan 與 product 保留欄位由後續 Issue 填入。
+- [x] update 的退役保留與 product 保留欄位由 Issue #1066 填入。
+- [ ] update 的 final plan 由後續 Issue 填入。
 
 ## Out of scope
 

@@ -75,6 +75,19 @@ resumable 流程。這是因為重新安裝沒有已驗證的舊版本可以重�
 覆寫或刪除」的既有原則（維持安全），但比一般 update 更容易需要人工確認
 （維持能力有限）；不預先假設之後會補上三方比對，需要時應開新 Issue 決定。
 
+## Update 只套用核准的檔案轉換（#1066，2026-10-14）
+
+一般 `update` 的新增、修改、搬移、刪除與退役都由同一份核准 plan 決定。Copier
+會刪除舊 render 有、新 render 沒有的檔案，不論專案是否改過它；CLI 因此在
+暫存 clone 內把這類刪除還原，只有內容與可信舊側 render byte-identical 時才
+退役，改過的檔案保留並以 `conflict`／`retire-modified` 列出。repository 已有的
+產品發版狀態（`.csarc/version.txt`、`.csarc/release-please-manifest.json`、
+`CHANGELOG.md` 與其搬移前的舊路徑）一律回到 target 的內容，template seed 與
+update migration 都不能改寫。寫入前，候選的實際檔案效果必須與核准集合完全
+相同；寫入以備份加逐檔原子替換的 transaction 進行，任一步失敗都還原成
+byte-identical base，不產生 `.rej` 或 conflict marker。adopt 與重新安裝仍使用
+上節的 `write_candidate_patch`。
+
 ## 評估過的替代方案
 
 - 在 README generic prompt 固定 path 或 SHA：path 無法跨 repo 重用，SHA 也無法在包含自身內容的 commit 中自我引用。

@@ -219,6 +219,10 @@ class UpdatePlanning:
     conflicts: tuple[str, ...]
     render_parity: str
     parity_paths: tuple[str, ...] = field(default=())
+    # Issue #1066: modified files kept instead of retired, and product
+    # release state the update restored instead of reseeding.
+    retained: tuple[str, ...] = field(default=())
+    product_owned: tuple[str, ...] = field(default=())
 
     def changed_paths(self) -> frozenset[str]:
         """Return every path the plan expects the update to change."""
@@ -239,7 +243,9 @@ class UpdatePlanning:
                 },
                 "new_data": dict(self.new_data),
                 "old_side": self.old_side.copier_answers(),
+                "product_owned": list(self.product_owned),
                 "render_parity": self.render_parity,
+                "retained": list(self.retained),
             }
         )
 
@@ -249,8 +255,10 @@ class UpdatePlanning:
             "conflicts": list(self.conflicts),
             "digest": self.digest(),
             "old_side": self.old_side.as_dict(),
+            "product_owned": list(self.product_owned),
             "render_parity": self.render_parity,
             "render_parity_paths": list(self.parity_paths),
+            "retained": list(self.retained),
         }
 
 
@@ -298,7 +306,9 @@ def realized_divergence(
 
     Template tasks only run at apply time, so the apply run may touch more
     paths than the plan; it must never leave a planned change out or find a
-    conflict the plan did not list.
+    conflict the plan did not list. The final candidate must still equal
+    the approved transitions exactly before anything is written (#1066,
+    ``file_transition.transition_divergence``).
     """
     problems: list[str] = []
     unexpected = sorted(set(realized_conflicts) - set(planning.conflicts))
