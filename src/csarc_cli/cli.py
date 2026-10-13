@@ -7621,6 +7621,15 @@ def _render_reinstall_plan(
         allow_unreleased=args.allow_unreleased,
         channel=args.channel,
     )
+    # The reinstall fallback is reachable from csarc update, so the same
+    # product pin preflight runs before each of its renders (#1065).
+    pins = update_action_pin_preflight(
+        target, revision.source, revision.sha, candidate_answers
+    )
+    if pins.items:
+        if not (args.check or args.dry_run):
+            raise CliError(action_pin_preflight.drift_error(pins))
+        print(action_pin_preflight.drift_error(pins), file=sys.stderr)
     temporary_root = Path(tempfile.mkdtemp(prefix=f"csarc-reinstall-{label}-"))
     stage = temporary_root / "rendered"
     stage.mkdir()

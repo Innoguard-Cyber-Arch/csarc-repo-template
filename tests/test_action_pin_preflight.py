@@ -446,7 +446,8 @@ def stub_update(
     """Stub every live fact before the preflight; record render attempts."""
     (target / ".csarc").mkdir()
     (target / ".csarc/config.yml").write_text(
-        "_commit: " + "c" * 40 + "\nproject_mode: new\n", encoding="utf-8"
+        f"_commit: {'c' * 40}\n_src_path: {source}\nproject_mode: new\n",
+        encoding="utf-8",
     )
     commit_all(target, "answers")
     events: list[str] = []
@@ -553,6 +554,52 @@ def test_update_check_runs_preflight_before_render(
     assert events == ["preflight", "render"]
     # --json reports errors as one JSON object on stdout.
     assert "stop at the first render" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("check", [False, True])
+def test_update_reinstall_fallback_runs_the_preflight_first(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    check: bool,
+) -> None:
+    """AC1/AC3: the reinstall fallback of csarc update is not a bypass."""
+    source, sha = make_source(tmp_path)
+    target = make_target(
+        tmp_path,
+        {
+            "ci.yml": workflow(f"actions/checkout@{OLD}"),
+            "product.yml": workflow(f"actions/checkout@{OLD}"),
+        },
+    )
+    events = stub_update(monkeypatch, target, str(source), sha)
+
+    def unusable_release(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise cli.ReleaseRecoveryError("Recorded release is unusable.")
+
+    monkeypatch.setattr(cli, "update_status", unusable_release)
+    monkeypatch.setattr(
+        cli,
+        "resolve_revision",
+        lambda *args, **kwargs: cli.Revision("development", sha, str(source)),
+    )
+    before = tree_digest(target)
+    head = git(target, "rev-parse", "HEAD")
+    arguments = ["update", str(target), "--yes", "--non-interactive"]
+    if check:
+        arguments.append("--check")
+
+    assert main(arguments) == 2
+
+    error = capsys.readouterr().err
+    assert "Attempting a reinstall" in error
+    assert ".github/workflows/product.yml:6" in error
+    # Apply stops before any render; a check reports drift, then renders.
+    assert events == (["preflight", "render"] if check else ["preflight"])
+    assert tree_digest(target) == before
+    assert git(target, "rev-parse", "HEAD") == head
+    assert git(target, "status", "--porcelain") == ""
 
 
 def test_update_with_unreachable_source_fails_closed(
