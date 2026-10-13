@@ -237,10 +237,14 @@ def test_update_language_selection_stays_a_list() -> None:
     ("languages", "enabled"),
     [(["go"], True), (["rust"], False), (["python", "rust"], True)],
 )
-def test_public_visibility_enables_codeql_only_for_analyzed_modules(
+def test_public_visibility_suggests_codeql_only_for_analyzed_modules(
     languages: list[str], enabled: bool
 ) -> None:
-    """Match copier.yml so a Rust-only project never gets an empty matrix."""
+    """Match copier.yml so a Rust-only project never gets an empty matrix.
+
+    A visibility change only lists the CodeQL choice; it never rewrites the
+    saved value (#1068, #1058 decision 15).
+    """
     repository = cli.RepositoryContext(
         "owner/repository",
         "owner",
@@ -250,18 +254,20 @@ def test_public_visibility_enables_codeql_only_for_analyzed_modules(
         True,
     )
 
-    _answers, update_data = cli.update_plan_answers(
-        {
-            "languages": languages,
-            "project_mode": "new",
-            "project_visibility": "private",
-            "enable_codeql": False,
-        },
-        {},
-        repository,
-    )
+    saved: dict[str, object] = {
+        "languages": languages,
+        "project_mode": "new",
+        "project_visibility": "private",
+        "enable_codeql": False,
+    }
+    answers, update_data = cli.update_plan_answers(saved, {}, repository)
 
-    assert update_data["enable_codeql"] == str(enabled).lower()
+    assert answers["enable_codeql"] is False
+    assert "enable_codeql" not in update_data
+    observed = cli.observed_setting_differences(saved, {}, repository)
+    assert ("enable_codeql" in observed) is enabled
+    if enabled:
+        assert observed["enable_codeql"] is True
 
 
 def test_config_supports_ci_only_and_extension_settings(tmp_path: Path) -> None:

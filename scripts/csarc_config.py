@@ -23,6 +23,8 @@ PROJECT_MATURITIES = {"early", "formal"}
 VERIFICATION_MODES = {"hosted", "local"}
 RELEASE_TRIGGERS = {"main", "manual"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
+# Stable prefix for fail-closed settings errors shared by every reader.
+SETTINGS_ERROR_PREFIX = "CSARC settings error"
 RELEASE_SETTINGS = {
     "csarc-owned": ("csarc-admin", "required"),
     "product-owned": ("product-admin", "product-defined"),
@@ -248,6 +250,52 @@ def load_config(path: Path = CONFIG_FILE) -> dict[str, object]:
     return result
 
 
+class SettingsError(ValueError):
+    """A saved setting is missing, unknown, or contradictory."""
+
+
+def resolve_release_ownership(
+    config: dict[str, object], path: Path = CONFIG_FILE
+) -> str:
+    """Return the single saved release owner or fail closed (Issue #1068).
+
+    The saved value is the only authority: a missing owner is never
+    re-derived from project_mode, live workflows, or Copier defaults, so
+    every reader (CLI, shell adapters, workflows) sees the same answer.
+    """
+    ownership = config.get("release_ownership")
+    if ownership is None:
+        raise SettingsError(
+            f"{SETTINGS_ERROR_PREFIX}: release_ownership is missing from "
+            f"{path}; run `csarc update --data release_ownership=<"
+            + "|".join(sorted(RELEASE_OWNERSHIPS))
+            + ">` to record the single release writer before any release "
+            "or settings write."
+        )
+    if not isinstance(ownership, str) or ownership not in RELEASE_OWNERSHIPS:
+        raise SettingsError(
+            f"{SETTINGS_ERROR_PREFIX}: release_ownership in {path} is "
+            f"{ownership!r}; expected "
+            + ", ".join(sorted(RELEASE_OWNERSHIPS))
+            + "."
+        )
+    if ownership == "product-owned" and config.get("project_mode") == "new":
+        raise SettingsError(
+            f"{SETTINGS_ERROR_PREFIX}: release_ownership product-owned "
+            f"contradicts project_mode new in {path}; a new project has no "
+            "product release writer. Run `csarc update --data "
+            "release_ownership=<csarc-owned|verification-only>`."
+        )
+    return ownership
+
+
+def renders_release_workflow(
+    config: dict[str, object], path: Path = CONFIG_FILE
+) -> bool:
+    """Return whether CSARC is the one Release writer for this project."""
+    return resolve_release_ownership(config, path) == "csarc-owned"
+
+
 def validate_release_config(config: dict[str, object]) -> None:
     """Validate ownership and any legacy persisted release observations."""
     ownership = config.get("release_ownership")
@@ -388,7 +436,12 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write("Usage: csarc_config.py <key>\n")
         return 2
     try:
-        value = load_config()[arguments[0]]
+        config = load_config()
+        value = (
+            resolve_release_ownership(config)
+            if arguments[0] == "release_ownership"
+            else config[arguments[0]]
+        )
     except (OSError, KeyError, ValueError) as error:
         sys.stderr.write(f"{error}\n")
         return 1

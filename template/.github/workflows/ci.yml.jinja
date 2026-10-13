@@ -57,7 +57,9 @@ jobs:
           ref: {% raw %}${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}{% endraw %}
       - name: Read release ownership
         id: release
-        run: echo "ownership=$(python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" release_ownership)" >> "$GITHUB_OUTPUT"
+        run: |
+          ownership="$(python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" release_ownership)"
+          echo "ownership=$ownership" >> "$GITHUB_OUTPUT"
       - name: Validate synchronization structure before verification
         id: sync
         env:

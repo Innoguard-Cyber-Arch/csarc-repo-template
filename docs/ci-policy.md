@@ -2036,4 +2036,4 @@ Release-publish-record: operator=<@handle> commit=<sha> command="<command>" resu
 API 或通知寫入本身失敗才回報 failure。Drift 事實由追蹤 Issue 承接，不以故意失敗的排程
 run 重複表達。
 
-**下發到 `template/`**：`.github/workflows/release-drift.yml` 與 `scripts/check-release-drift` 透過 `scripts/sync-paired-files.sh` 與 root 保持逐位元組同步，並在 `copier.yml` 重用既有 `.github/workflows/release.yml` 的 `project_mode == 'new'` exclude 條件，不新增第二個 Copier 選項——生成 repo 只要擁有 `release.yml`（`release_ownership == csarc-owned`）就會同時擁有這支漂移檢查，兩者不會分開存在。
+**下發到 `template/`**：`.github/workflows/release-drift.yml` 與 `scripts/check-release-drift` 透過 `scripts/sync-paired-files.sh` 與 root 保持逐位元組同步，並在 `copier.yml` 重用既有 `.github/workflows/release.yml` 的 `release_ownership == 'csarc-owned' and project_mode == 'new'` exclude 條件，不新增第二個 Copier 選項——生成 repo 只要擁有 `release.yml`（`release_ownership == csarc-owned`）就會同時擁有這支漂移檢查，兩者不會分開存在。

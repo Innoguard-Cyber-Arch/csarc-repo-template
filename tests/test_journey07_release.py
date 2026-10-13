@@ -711,19 +711,21 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
 def test_release_drift_check_ships_with_release_ownership() -> None:
     """Only a hosted repository that owns release.yml needs its drift check.
 
-    Reuses release.yml's project and verification mode conditions instead
-    of adding a second Copier option -- consistent with the
+    Reuses release.yml's ownership, project, and verification mode
+    conditions instead of adding a second Copier option -- consistent with the
     release-security-and-dependencies ADR's "本節也不新增 Copier 選項"
     principle for this same capability pairing.
     """
     copier = (ROOT / "copier.yml").read_text(encoding="utf-8")
     assert (
-        "{% if project_mode == 'new' and verification_mode == 'hosted' %}"
+        "{% if release_ownership == 'csarc-owned' and project_mode == 'new' "
+        "and verification_mode == 'hosted' %}"
         "__keep_release_drift_workflow__"
         "{% else %}.github/workflows/release-drift.yml{% endif %}" in copier
     )
     assert (
-        "{% if project_mode == 'new' and verification_mode == 'hosted' %}"
+        "{% if release_ownership == 'csarc-owned' and project_mode == 'new' "
+        "and verification_mode == 'hosted' %}"
         "__keep_release_drift_script__"
         "{% else %}.csarc/scripts/check-release-drift{% endif %}" in copier
     )
