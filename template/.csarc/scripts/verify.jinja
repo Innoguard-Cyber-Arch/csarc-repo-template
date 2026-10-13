@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cache_root="$("$repo_root/.csarc/scripts/resolve-cache-root")"
+# control_root holds this entry point and its configuration reader;
+# repo_root is the tree under verification (see verify-fast).
+control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$control_root/.csarc/scripts/verification-step"
+repo_root="$(verification_subject_root "$control_root")"
+unset CSARC_VERIFICATION_SUBJECT_ROOT
+cache_root="$("$control_root/.csarc/scripts/resolve-cache-root")"
 if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
   export UV_CACHE_DIR="$cache_root/uv"
 else
@@ -10,7 +15,6 @@ else
 fi
 pnpm_store_dir="$cache_root/pnpm/store"
 cd "$repo_root"
-source "$repo_root/.csarc/scripts/verification-step"
 
 if [[ -n "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}" ]]; then
   echo "Project verification hook must not invoke canonical .csarc/scripts/verify." >&2
@@ -387,8 +391,8 @@ verification_step "PR writer ownership" \
 
 test -f AGENTS.md
 test "$(cat .claude/CLAUDE.md)" = "@../AGENTS.md"
-template_mode="$("${platform_python[@]}" .csarc/scripts/csarc_config.py project_mode)"
-documentation_mode="$("${platform_python[@]}" .csarc/scripts/csarc_config.py documentation_mode)"
+template_mode="$("${platform_python[@]}" "$control_root/.csarc/scripts/csarc_config.py" project_mode)"
+documentation_mode="$("${platform_python[@]}" "$control_root/.csarc/scripts/csarc_config.py" documentation_mode)"
 if [[ "$template_mode" == "new" && "$documentation_mode" != "off" ]]; then
   test "$(wc -l < AGENTS.md)" -le 200
   required_readme_headings=(

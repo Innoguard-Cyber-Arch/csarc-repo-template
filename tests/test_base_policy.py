@@ -629,3 +629,75 @@ def test_trusted_base_checkout_ignores_candidate_worktree_edits(
         executor["trusted_base_checkout"](repo, "not-a-sha"),
     ):
         pass
+
+
+# Hosted workflow contract (root and generated)
+
+WORKFLOWS = {
+    "root": (REPO_ROOT / ".github/workflows/ci.yml", "scripts"),
+    "template": (
+        REPO_ROOT / "template/.github/workflows/ci.yml.jinja",
+        ".csarc/scripts",
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(WORKFLOWS))
+def test_hosted_workflow_runs_the_trusted_base_executor(name: str) -> None:
+    """Root and generated CI stage the gate from the base before checkout."""
+    path, scripts = WORKFLOWS[name]
+    source = path.read_text(encoding="utf-8")
+    prepare = source.index(f"python3 {scripts}/trusted_executor.py prepare")
+    candidate = source.index("- name: Check out the exact candidate")
+    assert prepare < candidate
+    assert "executor=trusted-base" in source
+    assert 'verify --destination "$entry_root"' in source
+    assert 'export CSARC_VERIFICATION_SUBJECT_ROOT="$GITHUB_WORKSPACE"' in (
+        source
+    )
+    assert f'"$entry_root/{scripts}/verify-fast"' in source
+    self_test = source.index(
+        "- name: Candidate gate self-test (non-authoritative)"
+    )
+    assert source.index("- name: Execute trusted verification") < self_test
+    assert "continue-on-error: true" in source[self_test : self_test + 800]
+    assert 'ownership="$(python3' in source
+
+
+def test_template_workflow_no_longer_declares_root_only_executor() -> None:
+    """The drift check compares the ported executor line by line."""
+    drift = runpy.run_path(
+        str(REPO_ROOT / "scripts" / "check_jinja_workflow_drift.py")
+    )
+    assert drift["ROOT_ONLY_BLOCKS"] == {}
+
+
+def test_generated_entry_points_run_against_the_subject_root() -> None:
+    """Generated verify entry points keep control and subject trees apart."""
+    for name in ("verify-fast.jinja", "verify.jinja"):
+        source = (REPO_ROOT / "template/.csarc/scripts" / name).read_text(
+            encoding="utf-8"
+        )
+        assert 'repo_root="$(verification_subject_root "$control_root")"' in (
+            source
+        )
+        assert "unset CSARC_VERIFICATION_SUBJECT_ROOT" in source
+
+
+def test_generated_prepare_ignores_a_tampered_candidate_gate(
+    executor: dict[str, Any], tmp_path: Path
+) -> None:
+    """A malicious generated candidate cannot replace the staged gate."""
+    base = tmp_path / "base"
+    scripts = base / ".csarc" / "scripts"
+    scripts.mkdir(parents=True)
+    for relative in executor["GENERATED_CONTROL_FILES"]:
+        (base / relative).write_text(f"trusted {relative}\n", "utf-8")
+    staged = tmp_path / "staged"
+    files = executor["prepare"](base, staged)
+    assert sorted(files) == sorted(executor["GENERATED_CONTROL_FILES"])
+    (scripts / "verify-fast").write_text("exit 0  # tampered\n", "utf-8")
+    executor["verify_manifest"](staged)
+    assert (staged / ".csarc/scripts/verify-fast").read_text(
+        encoding="utf-8"
+    ) == "trusted .csarc/scripts/verify-fast\n"

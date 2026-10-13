@@ -952,6 +952,11 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
 合併與驗證在 hosted 與 local 兩種模式都只依 trusted base 的政策決定。`scripts/trusted_executor.py`
 （generated project 為 `.csarc/scripts/trusted_executor.py`，兩份 byte-identical）是共用的 base policy：
 
+- **Hosted verify（template）**：generated `ci.yml` 已移植上節 #1086 的 trusted executor：prepare 依 layout
+  暫存 `.csarc/scripts` 的 `verify`／`verify-fast`、router、config reader、`verification-step` 與
+  `trusted_executor.py`，Execute 以 `CSARC_VERIFICATION_SUBJECT_ROOT` 對 exact candidate 執行，並加上
+  non-authoritative self-test；`scripts/check_jinja_workflow_drift.py` 不再宣告 root-only 區塊。
+
 - **Local lifecycle**：`scripts/pr_lifecycle.py check`／`merge` 先以 lease 的 `base_sha` 建立 detached
   trusted base checkout，再由那份 base 的 lifecycle 重新執行；gate、router（`ci_tier.py`）、config reader 與
   `validate-pr-policy` 都來自 base，candidate checkout 只當作被驗的 exact head。輸出第一行記錄

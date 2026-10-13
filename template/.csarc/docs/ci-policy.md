@@ -882,6 +882,11 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
 
 合併與驗證在 hosted 與 local 兩種模式都只依 trusted base 的政策決定，共用 `.csarc/scripts/trusted_executor.py`：
 
+- **Hosted verify**：checkout candidate 之前，`trusted_executor.py prepare` 從 trusted base 複製入口
+  `verify`／`verify-fast`、router、config reader 與 `verification-step`，Execute step 以
+  `CSARC_VERIFICATION_SUBJECT_ROOT` 指向 exact candidate 執行並記錄 `executor=trusted-base`；candidate 自己的
+  gate 只在結果確定後以 `continue-on-error` 做 non-authoritative self-test。
+
 - **Local lifecycle**：`.csarc/scripts/pr_lifecycle.py check`／`merge` 先以 lease 的 `base_sha` 建立 detached
   trusted base checkout，再由那份 base 的 lifecycle 重新執行；gate、router、config reader 與
   `validate-pr-policy` 都來自 base，candidate 只是被驗的 exact head。

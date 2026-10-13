@@ -116,107 +116,13 @@ _DOWNSTREAM_PRODUCT = (
 )
 
 
-# Issue #1086: the root hosted `verify` loads its entry point, stage gate,
-# router, and config reader from the trusted pull request base and records
-# `executor=trusted-base`. Generated projects keep their `.csarc/scripts`
-# entry points until #1069 (G2) ports the same executor to the template, so
-# these root lines are declared instead of rendered.
-_EXECUTE_NAME = (
-    "- name: Execute trusted verification "
-    "tier=${{ steps.effective.outputs.suite }} "
-    "scopes=${{ steps.plan.outputs.scopes }} "
-    "tree=${{ steps.identity.outputs.tree }} "
-    "command=${{ steps.identity.outputs.command }} "
-    "base=${{ steps.identity.outputs.base }} "
-    "base-sha=${{ steps.identity.outputs.base_sha }} "
-    "labels=${{ steps.identity.outputs.labels }} "
-    "release=${{ steps.identity.outputs.release }}"
-)
-_EXECUTOR_CLAIM = (
-    "${{ steps.trusted.outputs.executor == 'trusted-base' && "
-    "' executor=trusted-base' || '' }}"
-)
-_OWNERSHIP_READER = (
-    'python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" '
-    "release_ownership"
-)
-_TRUSTED_EXECUTOR_BLOCKS: tuple[tuple[str, ...], ...] = (
-    ("id: trusted",),
-    (
-        "# Issue #1086: the entry point, stage gate, router, and config",
-        "# reader that decide the required result come from this trusted",
-        "# base, never from the candidate checked out next.",
-        "if [[ -f scripts/trusted_executor.py ]]; then",
-        "python3 scripts/trusted_executor.py prepare \\",
-        '--source "$GITHUB_WORKSPACE" \\',
-        '--destination "$RUNNER_TEMP/trusted-executor"',
-        'echo "executor=trusted-base" >> "$GITHUB_OUTPUT"',
-        "else",
-        'echo "::warning title=Trusted verification executor::This pull '
-        "request base predates the trusted executor (Issue #1086); "
-        "verification runs the candidate entry point and is recorded as "
-        'candidate-legacy until the base is synchronized."',
-        'echo "executor=candidate-legacy" >> "$GITHUB_OUTPUT"',
-        "fi",
-    ),
-    (
-        f'ownership="$({_OWNERSHIP_READER})"',
-        'echo "ownership=$ownership" >> "$GITHUB_OUTPUT"',
-    ),
-    (
-        'cp ci-plan.json "$RUNNER_TEMP/trusted-ci-plan.json"',
-        "printf '%s\\0' --event \"$EVENT_NAME\" "
-        '--base "${PR_BASE#refs/heads/}" --head "${PR_HEAD#refs/heads/}" '
-        '--labels "$LABELS" --draft "$PR_DRAFT" --files-from "$files" '
-        '"${args[@]}" "${sync_args[@]}" > "$RUNNER_TEMP/trusted-router-args"',
-    ),
-    ("EXECUTOR: ${{ steps.trusted.outputs.executor }}",),
-    (
-        "# The authoritative entry point is the trusted-base copy staged",
-        "# before checkout; it runs the checks inside the exact candidate",
-        "# tree. Only a base that predates Issue #1086 falls back to the",
-        "# candidate entry point, and its evidence omits "
-        "executor=trusted-base.",
-        'entry_root="$GITHUB_WORKSPACE"',
-        'if [[ "$EXECUTOR" == "trusted-base" ]]; then',
-        'entry_root="$RUNNER_TEMP/trusted-executor"',
-        'python3 "$RUNNER_TEMP/trusted-verification/trusted_executor.py" \\',
-        'verify --destination "$entry_root"',
-        'export CSARC_VERIFICATION_SUBJECT_ROOT="$GITHUB_WORKSPACE"',
-        "fi",
-    ),
-    (
-        "- name: Candidate gate self-test (non-authoritative)",
-        "if: ${{ !cancelled() && "
-        "steps.trusted.outputs.executor == 'trusted-base' && "
-        "steps.plan.outcome == 'success' }}",
-        "continue-on-error: true",
-        "timeout-minutes: 5",
-        "env:",
-        "TRUSTED_OWNERSHIP: ${{ steps.release.outputs.ownership }}",
-        "run: |",
-        'python3 "$RUNNER_TEMP/trusted-verification/trusted_executor.py" '
-        "self-test \\",
-        '--candidate-root "$GITHUB_WORKSPACE" \\',
-        '--router-args "$RUNNER_TEMP/trusted-router-args" \\',
-        '--trusted-plan "$RUNNER_TEMP/trusted-ci-plan.json" \\',
-        '--trusted-ownership "$TRUSTED_OWNERSHIP" \\',
-        '--changed-files "$RUNNER_TEMP/changed-files" \\',
-        '--summary "$GITHUB_STEP_SUMMARY"',
-    ),
-)
-
-
 ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
     "ci.yml.jinja": {
-        # Issue #1086 (root only until #1069): the execution claim, the
-        # staged trusted entry points, and the fail-closed ownership read.
-        (_EXECUTE_NAME + _EXECUTOR_CLAIM, _EXECUTE_NAME),
-        ('"$entry_root/scripts/verify-template.sh"', "./scripts/verify"),
-        ('"$entry_root/scripts/verify-fast"', "./scripts/verify-fast"),
+        # Issue #1069 ported the #1086 trusted executor to generated
+        # projects; only the full entry point's name differs.
         (
-            "run: |",
-            f'run: echo "ownership=$({_OWNERSHIP_READER})" >> "$GITHUB_OUTPUT"',
+            '"$entry_root/scripts/verify-template.sh"',
+            '"$entry_root/scripts/verify"',
         ),
         # Downstream generated projects run their own, simpler
         # scripts/verify entry point; this repository verifies itself
@@ -252,11 +158,9 @@ ALLOWED_LINE_DIFFERENCES: dict[str, set[tuple[str, str]]] = {
 # before the template can offer that language. Each entry is one exact,
 # contiguous run of stripped root lines with no rendered counterpart; it is
 # consumed at most once per file, so it cannot hide any other drift.
-# #944 gave the template its own Go setup; #1086 declares the root-only
-# trusted-executor lines until #1069 ports them to generated projects.
-ROOT_ONLY_BLOCKS: dict[str, tuple[tuple[str, ...], ...]] = {
-    "ci.yml.jinja": _TRUSTED_EXECUTOR_BLOCKS,
-}
+# No block is declared today: #944 gave the template its own Go setup, and
+# #1069 ported the #1086 trusted executor to generated projects.
+ROOT_ONLY_BLOCKS: dict[str, tuple[tuple[str, ...], ...]] = {}
 
 # Issue #742 moved generated-project internals under .csarc/ while the
 # template repository intentionally keeps its own tools and release metadata
