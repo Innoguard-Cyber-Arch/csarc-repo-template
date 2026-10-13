@@ -333,6 +333,11 @@ tag；release intent 的 commit range 則維持從 delivery 可達的最新 tag 
 `.csarc/config.yml` 的 `project_maturity: early|formal` 只描述整個專案的成熟度。
 預設永遠是 `early`；只有一張明確宣告此變更的 standalone stable PR 才能改成
 `formal`。成熟度不改寫 beta/stable 通道，也不從版本號或 branch 自動推斷。
+`early` 專案的 breaking 變更（`type!:` 或 `BREAKING CHANGE:` footer）從 `0.y.z`
+升為 `0.(y+1).0`，維持 0.x；`formal` 專案仍依 SemVer 升 MAJOR（Issue #1085）。
+beta 與 stable 對同一條 candidate line 使用同一規則，main 已插入較高 stable 時以它為
+基準重新計算，已發布的 core 與 `.N` 不重用也不倒退。含 breaking 變更的 CHANGELOG
+另列 `Migration notes`：最低版本、回復方式，以及每個 commit 的 footer 說明。
 
 `admin_bypass: off|beta-only|always` 控制 admin 是否可用 exact-head 自我授權取代
 同行核准。生成專案預設 `off`，可明確選擇另外兩種模式。無論設定值為何，bypass
