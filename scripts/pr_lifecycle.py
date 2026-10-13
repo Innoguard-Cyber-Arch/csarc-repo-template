@@ -1101,6 +1101,35 @@ def warn_prior_authorization(github: GitHub, lease: dict[str, Any]) -> None:
     )
 
 
+def live_repository_role(github: GitHub, repo: str, login: str) -> str:
+    """Return the live repository `role_name` of one user, or `unknown`.
+
+    Admin-only paths trust only `role_name` (#1058 decision 6, Issue
+    #1064). The legacy `permission` field is never read: it folds roles
+    together, so it cannot prove an admin. A failed, incomplete, or
+    mismatched response is `unknown` and every admin check fails closed.
+    """
+    try:
+        permission = github.get(
+            repo,
+            f"collaborators/{urllib.parse.quote(login, safe='')}/permission",
+        )
+    except RuntimeError:
+        return "unknown"
+    if not isinstance(permission, dict):
+        return "unknown"
+    user = permission.get("user")
+    role = permission.get("role_name")
+    if (
+        not isinstance(user, dict)
+        or str(user.get("login") or "").casefold() != login.casefold()
+        or not isinstance(role, str)
+        or not role
+    ):
+        return "unknown"
+    return role
+
+
 def authorization(
     github: GitHub, repo: str, pr_number: int, head_sha: str, url: str
 ) -> dict[str, Any]:
@@ -1157,7 +1186,12 @@ def authorization(
 
 
 def find_exact_head_authorization(
-    github: GitHub, repo: str, pr_number: int, head_sha: str
+    github: GitHub,
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+    *,
+    require_admin: bool = False,
 ) -> dict[str, Any] | None:
     """Return the newest exact-head maintainer authorization, if one exists.
 
@@ -1178,6 +1212,8 @@ def find_exact_head_authorization(
     `collaborators/{login}/permission` lookup below is the authoritative,
     token-scope-independent check; requiring `admin`/`maintain` permission
     there is what actually enforces "a real maintainer wrote this."
+    With `require_admin`, used by the admin-bypass path of the `review`
+    check, only a live `role_name` of `admin` counts (Issue #1064).
     """
     expected_body = authorization_statement(repo, pr_number, head_sha)
     comments = github.pages(repo, f"issues/{pr_number}/comments?per_page=100")
@@ -1192,22 +1228,28 @@ def find_exact_head_authorization(
             or user.get("type") != "User"
         ):
             continue
-        permission = github.get(
-            repo,
-            "collaborators/"
-            f"{urllib.parse.quote(str(user['login']), safe='')}/permission",
-        )
-        permission_user = (
-            permission.get("user") if isinstance(permission, dict) else None
-        )
-        if (
-            not isinstance(permission, dict)
-            or permission.get("permission") not in MAINTAINER_PERMISSIONS
-            or not isinstance(permission_user, dict)
-            or str(permission_user.get("login", "")).casefold()
-            != str(user["login"]).casefold()
-        ):
-            continue
+        if require_admin:
+            if live_repository_role(github, repo, str(user["login"])) != (
+                "admin"
+            ):
+                continue
+        else:
+            permission = github.get(
+                repo,
+                "collaborators/"
+                f"{urllib.parse.quote(str(user['login']), safe='')}/permission",
+            )
+            permission_user = (
+                permission.get("user") if isinstance(permission, dict) else None
+            )
+            if (
+                not isinstance(permission, dict)
+                or permission.get("permission") not in MAINTAINER_PERMISSIONS
+                or not isinstance(permission_user, dict)
+                or str(permission_user.get("login", "")).casefold()
+                != str(user["login"]).casefold()
+            ):
+                continue
         if not isinstance(payload.get("created_at"), str):
             continue
         candidates.append(payload)
@@ -1292,16 +1334,7 @@ def hotfix_emergency_evidence(  # noqa: C901
         raise RuntimeError(
             "Emergency hotfix authorization must come from the Issue proposer"
         )
-    permission = github.get(
-        repo,
-        f"collaborators/{urllib.parse.quote(actor, safe='')}/permission",
-    )
-    if (
-        not isinstance(permission, dict)
-        or permission.get("permission") != "admin"
-        or str((permission.get("user") or {}).get("login") or "").casefold()
-        != actor.casefold()
-    ):
+    if live_repository_role(github, repo, actor) != "admin":
         raise RuntimeError(
             "Emergency hotfix authorization requires admin permission"
         )
@@ -1721,7 +1754,7 @@ def exact_head_approval(
     )
 
 
-def effective_protection(  # noqa: C901
+def effective_protection(
     github: GitHub,
     repo: str,
     branch: str,
@@ -1729,8 +1762,39 @@ def effective_protection(  # noqa: C901
     reviewed_merge: bool = False,
     copilot_mode: bool = False,
     local_mode: bool = False,
+    local_fallback: bool = False,
 ) -> tuple[str, str, set[tuple[str, int]], bool, bool]:
-    """Prove review and check enforcement for an exact-head merge."""
+    """Prove review and check enforcement for an exact-head merge.
+
+    In local mode an incomplete Ruleset read is `inconclusive` (Issue
+    #1064): it never proves the E1 fallback or any wider shape.
+    """
+    result = _effective_protection(
+        github,
+        repo,
+        branch,
+        admin_bypass,
+        reviewed_merge,
+        copilot_mode,
+        local_mode,
+        local_fallback,
+    )
+    if local_mode and result[0] == "unknown":
+        return "inconclusive", result[1], set(), False, False
+    return result
+
+
+def _effective_protection(  # noqa: C901
+    github: GitHub,
+    repo: str,
+    branch: str,
+    admin_bypass: bool,
+    reviewed_merge: bool,
+    copilot_mode: bool,
+    local_mode: bool,
+    local_fallback: bool,
+) -> tuple[str, str, set[tuple[str, int]], bool, bool]:
+    """Classify the effective Ruleset shape for `effective_protection`."""
     try:
         rules = github.get(
             repo, f"rules/branches/{urllib.parse.quote(branch, safe='')}"
@@ -1836,6 +1900,7 @@ def effective_protection(  # noqa: C901
             context == REVIEW_CHECK_CONTEXT for context, _ in required_contexts
         )
     )
+    local_e1_shape = False
     if local_mode:
         review_controls = (
             bool(pull)
@@ -1855,9 +1920,31 @@ def effective_protection(  # noqa: C901
                 for item in pull
             )
         )
+        # E1 fallback (#1058 decisions 4 and 5): local plus beta-only or
+        # always needs no native approval but keeps stale-review dismissal,
+        # thread resolution, and exactly the reviewed bypass actor below.
+        local_e1_shape = (
+            local_fallback
+            and not review_controls
+            and bool(pull)
+            and all(
+                item.get("required_approving_review_count") == 0
+                for item in pull
+            )
+            and any(
+                item.get("dismiss_stale_reviews_on_push") is True
+                for item in pull
+            )
+            and any(
+                item.get("required_review_thread_resolution") is True
+                for item in pull
+            )
+        )
+        review_controls = review_controls or local_e1_shape
         missing_reason = (
             "local mode needs native review, stale-review dismissal, "
             "last-push approval, and thread controls"
+            + (", or the E1 fallback shape" if local_fallback else "")
         )
     elif admin_bypass:
         review_controls = level_check_controls
@@ -1958,7 +2045,7 @@ def effective_protection(  # noqa: C901
                 False,
             )
         if local_mode:
-            if bypass_actors == []:
+            if bypass_actors == [] and not local_e1_shape:
                 continue
             if (
                 not reviewed_merge
@@ -2025,6 +2112,15 @@ def configured_verification_mode() -> str:
     return str(
         csarc_config.load_config(repository_root() / ".csarc/config.yml")[
             "verification_mode"
+        ]
+    )
+
+
+def configured_admin_bypass() -> str:
+    """Return the normalized configured admin bypass scope."""
+    return str(
+        csarc_config.load_config(repository_root() / ".csarc/config.yml")[
+            "admin_bypass"
         ]
     )
 
@@ -2814,16 +2910,7 @@ def merge_snapshot(  # noqa: C901
             raise RuntimeError(
                 "Admin-bypass authorization actor must be the merge actor"
             )
-        permission = github.get(
-            repo,
-            f"collaborators/{urllib.parse.quote(actor, safe='')}/permission",
-        )
-        if (
-            not isinstance(permission, dict)
-            or permission.get("permission") != "admin"
-            or str((permission.get("user") or {}).get("login") or "").casefold()
-            != actor
-        ):
+        if live_repository_role(github, repo, actor) != "admin":
             raise RuntimeError("Admin bypass requires live admin permission")
         authorization_source = "comment"
     elif copilot_verdict is not None and copilot_verdict.review is not None:
@@ -2913,6 +3000,8 @@ def merge_snapshot(  # noqa: C901
         in {"review", "copilot", "comment", "hotfix-emergency"},
         copilot_mode and level_decision.review == "self" and not admin_bypass,
         verification_mode == "local",
+        verification_mode == "local"
+        and configured_admin_bypass() in {"beta-only", "always"},
     )
     authorization_actor = str((auth.get("user") or {}).get("login", ""))
     mergeable_state = pull.get("mergeable_state")
@@ -2927,20 +3016,7 @@ def merge_snapshot(  # noqa: C901
             )
         )
         if reviewed_policy_block:
-            permission = github.get(
-                repo,
-                "collaborators/"
-                f"{urllib.parse.quote(actor, safe='')}/permission",
-            )
-            permission_user = (
-                permission.get("user") if isinstance(permission, dict) else None
-            )
-            if (
-                not isinstance(permission, dict)
-                or permission.get("permission") != "admin"
-                or not isinstance(permission_user, dict)
-                or str(permission_user.get("login", "")).casefold() != actor
-            ):
+            if live_repository_role(github, repo, actor) != "admin":
                 protection = "blocked"
                 reason = "The merge actor is not the live admin bypass actor"
             elif review_gate.unresolved_threads(repo, pr_number):

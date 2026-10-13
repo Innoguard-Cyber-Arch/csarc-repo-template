@@ -172,8 +172,9 @@ exact-head 與 actor 綁定。續租條件不成立時工具會拒絕，並說�
 
 `.csarc/config.yml` 用兩個互不重疊的選項描述審核意圖：`admin_bypass` 可選
 `off`、`beta-only` 或 `always`；`copilot_review` 可選 `allowed` 或 `off`。
-`allowed` 是明確 opt-in，不是 Copilot entitlement 或額度已存在的宣告。舊的
-`review`／per-level review 設定只在更新時轉成等價的 `admin_bypass`，不再是現行設定面。
+`allowed` 是明確 opt-in，不是 Copilot entitlement 或額度已存在的宣告。更新保留已存或
+明確傳入的 `admin_bypass`；缺值寫成 `always` 並在報告列為 `widened`（附恢復指令），
+舊 `review`／per-level review 等鍵列為 `retired`，其他治理值只會 `exact` 或 `narrowed`。
 
 - `admin_bypass: off` 要求獨立 maintainer approval；`beta-only` 只允許 beta；`always`
   同時允許 beta 與 stable。所有模式都不把靜態 reviewer 名單當作權限來源。
@@ -342,7 +343,7 @@ beta 與 stable 對同一條 candidate line 使用同一規則，main 已插入�
 另列 `Migration notes`：最低版本、回復方式，以及每個 commit 的 footer 說明。
 
 `admin_bypass: off|beta-only|always` 控制 admin 是否可用 exact-head 自我授權取代
-同行核准。生成專案預設 `off`，可明確選擇另外兩種模式。無論設定值為何，bypass
+同行核准。生成專案預設 `always`，可明確選擇另外兩種模式。無論設定值為何，bypass
 都不能略過 release-level/path-risk 選出的 suite、required checks、候選版本檢查、
 remote lease、即時 admin 身分或 exact-head 綁定。實際使用由 lifecycle 寫入：
 
@@ -352,7 +353,9 @@ bypass-trace: release_level=<beta|stable> route=<beta|stable|hotfix> actor=<gith
 
 GitHub 的 Ruleset bypass 是整個 ruleset 層級的能力，因此 required checks 保持在
 沒有 bypass actor 的獨立 Ruleset；review 規則才依 `admin_bypass` 決定是否包含 admin
-角色。`--admin` 不是直接操作捷徑，所有自動合併仍只經 lifecycle single-writer。
+角色。local 搭配 `beta-only`／`always` 採 E1 備援形狀（0 個原生核准、只有 admin 角色
+bypass actor）；Ruleset 讀取不完整時 lifecycle 判為 `inconclusive`，只能人工合併。admin
+專用檢查只接受即時 `role_name: admin`，不讀 legacy `permission`。`--admin` 不是直接操作捷徑，所有自動合併仍只經 lifecycle single-writer。
 
 ### 已取代：每件工作的四層發布模型（#745）
 
