@@ -22,6 +22,7 @@ from collections.abc import (
 )
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, NoReturn, Protocol, cast, overload
@@ -31,6 +32,7 @@ import yaml  # type: ignore[import-untyped]
 
 from csarc_cli import (
     action_pin_preflight,
+    file_transition,
     governance_migration,
     lifecycle_report,
     release_phase,
@@ -350,6 +352,10 @@ class Plan:
     unknown: tuple[str, ...]
     move: tuple[str, ...] = ()
     delete: tuple[str, ...] = ()
+    # Update only (#1066): modified files the new render no longer produces
+    # stay in place, and product release state is never rewritten.
+    retained: tuple[str, ...] = ()
+    product_owned: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -428,6 +434,8 @@ class ResolvedPlan:
                 # plan bytes and digests stay unchanged.
                 files_payload = cast(dict[str, object], result["files"])
                 files_payload["delete"] = list(self.files.delete)
+                files_payload["product_owned"] = list(self.files.product_owned)
+                files_payload["retained"] = list(self.files.retained)
         if self.update is not None:
             result.update(self.update)
         if self.adoption is not None:
@@ -2473,11 +2481,19 @@ def report_file_rows(
         (
             path,
             "preserve",
-            "dirty-preserved" if path in preserved_dirty else "untouched",
+            "dirty-preserved"
+            if path in preserved_dirty
+            else (
+                "product-owned" if path in files.product_owned else "untouched"
+            ),
             None,
             None,
         )
         for path in files.preserve
+    )
+    rows.extend(
+        (path, "conflict", "retire-modified", None, "keep-current")
+        for path in files.retained
     )
     rows.extend(
         (
@@ -2720,6 +2736,18 @@ def update_required_actions(
             "subject": f"{item['file']}:{item['line']}",
         }
         for item in pin_items
+    )
+    actions.extend(
+        {
+            "blocking": False,
+            "command": None,
+            "kind": "retire-modified",
+            "message": "The new release no longer renders this file, but it "
+            "differs from the trusted old render; it is kept. Delete it "
+            "yourself once its changes are no longer needed.",
+            "subject": path,
+        }
+        for path in files.retained
     )
     return actions
 
@@ -3709,6 +3737,8 @@ def print_plan(plan: ResolvedPlan) -> None:
         print_group("Remove", plan.files.remove)
         print_group("Move", plan.files.move)
         print_group("Preserve", plan.files.preserve)
+        print_group("Product release state (kept)", plan.files.product_owned)
+        print_group("Retained modified files", plan.files.retained)
         print_group("Automatic merge", plan.files.merge)
         print_group("Manual merge", plan.files.manual)
         print_group("Unable to determine", plan.files.unknown)
@@ -8039,6 +8069,8 @@ class UpdateRun:
     conflicts: tuple[str, ...]
     changes: dict[str, str]
     output: str
+    retained: tuple[str, ...] = ()
+    product_owned: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -8054,6 +8086,74 @@ class UpdateRunInputs:
     layout_moves: tuple[tuple[str, str], ...]
     retiring: tuple[str, ...]
     target_uses_current_config: bool
+    # Fingerprints of the trusted old render, keyed by path (#1066).
+    old_render: Mapping[str, str] = dataclass_field(default_factory=dict)
+
+
+def baseline_paths(candidate: Path, baseline: str) -> tuple[str, ...]:
+    """Return every path the candidate's baseline commit tracks."""
+    output = run_git(
+        [
+            "git",
+            "-C",
+            str(candidate),
+            "ls-tree",
+            "-r",
+            "-z",
+            "--name-only",
+            baseline,
+        ],
+        repository=candidate,
+        capture=True,
+    ).stdout
+    return tuple(sorted(name for name in output.split("\0") if name))
+
+
+def protect_candidate_transitions(
+    candidate: Path,
+    baseline: str,
+    inputs: UpdateRunInputs,
+    early_layout_moves: tuple[tuple[str, str], ...],
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[tuple[str, str], ...]]:
+    """Keep Copier inside the transitions an update may approve (#1066).
+
+    Product release state returns to its baseline content (relocated when
+    the layout migration moves it), and every Copier deletion the trusted
+    old render cannot justify is undone. Both the check and the apply run
+    call this with the same inputs. Returns the protected product paths,
+    the retained modified paths, and the layout moves already completed.
+    """
+    tracked = baseline_paths(candidate, baseline)
+
+    def restore(names: Sequence[str]) -> None:
+        run_git(
+            [
+                "git",
+                "-C",
+                str(candidate),
+                "checkout",
+                baseline,
+                "--",
+                *names,
+            ],
+            repository=candidate,
+            neutralize_filters=True,
+        )
+
+    product, completed = file_transition.protect_product_state(
+        candidate, tracked, inputs.layout_moves, restore
+    )
+    skip = {
+        CONFIG_FILE.as_posix(),
+        LEGACY_ANSWERS_FILE.as_posix(),
+        *inputs.retiring,
+        *(source for source, _destination in early_layout_moves),
+        *(source for source, _destination in completed),
+    }
+    retained = file_transition.protect_deletions(
+        candidate, tracked, inputs.old_render, skip, restore
+    )
+    return product, retained, completed
 
 
 def run_update_candidate(
@@ -8150,6 +8250,12 @@ def run_update_candidate(
     command.append(str(candidate))
     result = run(command, capture=True, check=False)
     output = (result.stderr or "").strip() or (result.stdout or "").strip()
+    product_owned, retained, completed_moves = protect_candidate_transitions(
+        candidate, baseline_head, inputs, early_layout_moves
+    )
+    deferred_layout_moves = tuple(
+        move for move in deferred_layout_moves if move not in completed_moves
+    )
     conflicts = find_conflicts(candidate)
     if result.returncode == 0 and not conflicts:
         # Copier normally performs clean legacy deletions and additions
@@ -8186,6 +8292,8 @@ def run_update_candidate(
         conflicts,
         staged_name_status(candidate, baseline_head),
         output,
+        retained,
+        product_owned,
     )
 
 
@@ -8233,8 +8341,13 @@ def plan_update(
     workdir: Path,
     inputs: UpdateRunInputs,
     old_stage: Path,
+    retained: Collection[str] = (),
 ) -> update_plan.UpdatePlanning:
-    """Build the immutable planning result both check and apply review."""
+    """Build the immutable planning result both check and apply review.
+
+    ``retained`` lists retirement candidates kept because they differ from
+    the trusted old render (#1066).
+    """
     run_result = run_update_candidate(
         target, workdir, inputs, working_tree=True, skip_tasks=True
     )
@@ -8287,6 +8400,14 @@ def plan_update(
             else update_plan.RENDER_PARITY_EQUAL
         ),
         parity_paths=parity_paths,
+        retained=tuple(sorted({*retained, *run_result.retained})),
+        product_owned=tuple(
+            sorted(
+                name
+                for name in run_result.product_owned
+                if name in target_files
+            )
+        ),
     )
 
 
@@ -8299,6 +8420,7 @@ def planned_update_files(
     """Project one planning result onto the shared file plan model."""
     acted = set(planning.changed_paths()) | set(planning.conflicts)
     acted.update(retiring)
+    acted.update(planning.retained)
     for source_name, destination_name in layout_moves:
         acted.update((source_name, destination_name))
     return Plan(
@@ -8311,7 +8433,73 @@ def planned_update_files(
         (),
         tuple(f"{old} -> {new}" for old, new in layout_moves),
         planning.delete,
+        planning.retained,
+        planning.product_owned,
     )
+
+
+def update_transitions(
+    target: Path,
+    planning: update_plan.UpdatePlanning,
+    layout_moves: tuple[tuple[str, str], ...],
+    retiring: tuple[str, ...],
+) -> file_transition.ApprovedTransitions:
+    """Return the exact file transitions one reviewed plan approves."""
+    return file_transition.approved_transitions(
+        add=planning.add,
+        overwrite=planning.overwrite,
+        merge=planning.merge,
+        delete=planning.delete,
+        retire=retiring,
+        moves=layout_moves,
+        target_files=project_files(target),
+        metadata=(
+            CONFIG_FILE.as_posix(),
+            LEGACY_ANSWERS_FILE.as_posix(),
+            PROVENANCE_FILE.as_posix(),
+        ),
+        protected=planning.product_owned,
+    )
+
+
+def apply_update_transitions(
+    target: Path,
+    candidate: Path,
+    transitions: file_transition.ApprovedTransitions,
+    artifacts: Mapping[str, str],
+    delete_paths: tuple[str, ...],
+    target_snapshot: Mapping[str, object],
+) -> None:
+    """Apply exactly the approved update transitions as one transaction.
+
+    The realized candidate effects must equal the approved create, modify,
+    and delete sets before anything is written (#1066); the write then
+    restores the byte-identical base on any failure.
+    """
+    problems = file_transition.transition_divergence(
+        transitions,
+        artifacts,
+        delete_paths,
+        cast(Mapping[str, str], target_snapshot["target_files"]),
+    )
+    if problems:
+        raise CliError(
+            "Update apply diverged from the approved file transitions ("
+            + "; ".join(problems)
+            + "); the target was not changed. Create a new plan."
+        )
+    for relative_name in (*artifacts, *delete_paths):
+        checked_destination(target, relative_name)
+    validate_target_snapshot(target, target_snapshot)
+    try:
+        file_transition.apply_transaction(
+            target, candidate, artifacts, delete_paths
+        )
+    except (OSError, file_transition.TransitionError) as error:
+        raise CliError(
+            f"Update apply failed ({error}); the target was restored to "
+            "its base. Create a new plan."
+        ) from error
 
 
 def command_update(args: argparse.Namespace) -> int:  # noqa: C901
@@ -8431,10 +8619,20 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             ".pre-commit-config.yaml",
             "zizmor.yml",
         )
-        retiring = tuple(
-            name
-            for name in retirement_candidates
-            if (target / name).is_file() and not (target / name).is_symlink()
+        old_render = file_transition.render_fingerprints(
+            project_files(old_stage)
+        )
+        # A legacy file retires only when it is byte-identical to the
+        # trusted old render; a modified one stays as a conflict (#1066).
+        retiring, retained = file_transition.split_retirements(
+            (
+                name
+                for name in retirement_candidates
+                if (target / name).is_file()
+                and not (target / name).is_symlink()
+            ),
+            target,
+            old_render,
         )
         run_inputs = UpdateRunInputs(
             raw_answers=raw_answers,
@@ -8446,11 +8644,17 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             layout_moves=layout_moves,
             retiring=retiring,
             target_uses_current_config=target_uses_current_config,
+            old_render=old_render,
         )
         planning_root = workdir / "planning"
         planning_root.mkdir()
-        planning = plan_update(target, planning_root, run_inputs, old_stage)
+        planning = plan_update(
+            target, planning_root, run_inputs, old_stage, retained
+        )
         files = planned_update_files(target, planning, layout_moves, retiring)
+        transitions = update_transitions(
+            target, planning, layout_moves, retiring
+        )
     hook_configuration = project_verification_configuration(target, answers)
     validated_project_verification_hook(target, hook_configuration)
     hook = project_verification_evidence(
@@ -8609,13 +8813,13 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         verify_project(candidate)
         write_provenance(candidate, target_revision, previous, answers=answers)
         artifacts, delete_paths = candidate_patch_effects(candidate)
-        write_candidate_patch(
-            candidate,
+        apply_update_transitions(
             target,
-            temporary_root / "update.patch",
-            artifacts=artifacts,
-            target_snapshot=target_snapshot,
-            delete_paths=delete_paths,
+            candidate,
+            transitions,
+            artifacts,
+            delete_paths,
+            target_snapshot,
         )
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)

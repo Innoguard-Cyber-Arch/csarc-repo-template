@@ -7758,15 +7758,14 @@ def test_update_migrates_complete_legacy_layout_in_one_patch(
       field it held already lives in the unified answers) are removed in
       the same patch.
     """
-    source, project, _ = initialize_project(tmp_path)
-    product_tool = project / "scripts/product-tool"
-    product_tool.write_text("project owned\n", encoding="utf-8")
-    for name in (".gitleaks.toml", ".pre-commit-config.yaml", "zizmor.yml"):
-        (project / name).write_text(
-            "legacy generated config\n", encoding="utf-8"
-        )
-    (project / ".csarc/profile.json").write_text(
-        json.dumps(
+    # The retired files are byte-identical to the old template's render,
+    # the only state in which an update may retire them (#1066).
+    source, _first_sha = make_template(tmp_path)
+    legacy_files = {
+        ".gitleaks.toml": "legacy generated config\n",
+        ".pre-commit-config.yaml": "legacy generated config\n",
+        "zizmor.yml": "legacy generated config\n",
+        ".csarc/profile.json": json.dumps(
             {
                 "schema_version": 1,
                 "template_mode": "existing",
@@ -7780,8 +7779,38 @@ def test_update_migrates_complete_legacy_layout_in_one_patch(
                 },
             }
         ),
-        encoding="utf-8",
+    }
+    for name, content in legacy_files.items():
+        path = source / "template" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    legacy_sha = commit(source, "test: legacy generated configs")
+    project = tmp_path / "new-project"
+    assert (
+        main(
+            [
+                "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                legacy_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "language=ci",
+            ]
+        )
+        == 0
     )
+    for name in legacy_files:
+        (source / "template" / name).unlink()
+    product_tool = project / "scripts/product-tool"
+    product_tool.parent.mkdir(parents=True, exist_ok=True)
+    product_tool.write_text("project owned\n", encoding="utf-8")
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
