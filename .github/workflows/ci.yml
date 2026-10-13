@@ -40,10 +40,23 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
       - name: Preserve the trusted verification policy
+        id: trusted
         run: |
           mkdir -p "$RUNNER_TEMP/trusted-verification"
           cp scripts/*.py scripts/check-trusted-verification \
             "$RUNNER_TEMP/trusted-verification/"
+          # Issue #1086: the entry point, stage gate, router, and config
+          # reader that decide the required result come from this trusted
+          # base, never from the candidate checked out next.
+          if [[ -f scripts/trusted_executor.py ]]; then
+            python3 scripts/trusted_executor.py prepare \
+              --source "$GITHUB_WORKSPACE" \
+              --destination "$RUNNER_TEMP/trusted-executor"
+            echo "executor=trusted-base" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Trusted verification executor::This pull request base predates the trusted executor (Issue #1086); verification runs the candidate entry point and is recorded as candidate-legacy until the base is synchronized."
+            echo "executor=candidate-legacy" >> "$GITHUB_OUTPUT"
+          fi
       - name: Check out the exact candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,7 +65,12 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
       - name: Read release ownership
         id: release
-        run: echo "ownership=$(python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" release_ownership)" >> "$GITHUB_OUTPUT"
+        # The trusted reader must accept the candidate configuration; a value
+        # or schema it does not understand fails this step instead of
+        # silently skipping the release checks below.
+        run: |
+          ownership="$(python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" release_ownership)"
+          echo "ownership=$ownership" >> "$GITHUB_OUTPUT"
       - name: Validate synchronization structure before verification
         id: sync
         env:
@@ -140,6 +158,8 @@ jobs:
             --summary "$GITHUB_STEP_SUMMARY" \
             "${args[@]}" \
             "${sync_args[@]}"
+          cp ci-plan.json "$RUNNER_TEMP/trusted-ci-plan.json"
+          printf '%s\0' --event "$EVENT_NAME" --base "${PR_BASE#refs/heads/}" --head "${PR_HEAD#refs/heads/}" --labels "$LABELS" --draft "$PR_DRAFT" --files-from "$files" "${args[@]}" "${sync_args[@]}" > "$RUNNER_TEMP/trusted-router-args"
       - name: Resolve release-level verification suite
         id: level
         env:
@@ -357,7 +377,7 @@ jobs:
         with:
           go-version: "1.27.1"
           cache: false
-      - name: Execute trusted verification tier=${{ steps.effective.outputs.suite }} scopes=${{ steps.plan.outputs.scopes }} tree=${{ steps.identity.outputs.tree }} command=${{ steps.identity.outputs.command }} base=${{ steps.identity.outputs.base }} base-sha=${{ steps.identity.outputs.base_sha }} labels=${{ steps.identity.outputs.labels }} release=${{ steps.identity.outputs.release }}
+      - name: Execute trusted verification tier=${{ steps.effective.outputs.suite }} scopes=${{ steps.plan.outputs.scopes }} tree=${{ steps.identity.outputs.tree }} command=${{ steps.identity.outputs.command }} base=${{ steps.identity.outputs.base }} base-sha=${{ steps.identity.outputs.base_sha }} labels=${{ steps.identity.outputs.labels }} release=${{ steps.identity.outputs.release }}${{ steps.trusted.outputs.executor == 'trusted-base' && ' executor=trusted-base' || '' }}
         if: ${{ steps.reuse.outputs.reuse != 'true' && steps.sync.outputs.clean != 'true' }}
         env:
           CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
@@ -366,11 +386,23 @@ jobs:
           CSARC_CI_BASE: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}
           CSARC_CI_DRAFT: ${{ github.event.pull_request.draft || false }}
           CSARC_VERIFICATION_SUITE: ${{ steps.effective.outputs.suite }}
+          EXECUTOR: ${{ steps.trusted.outputs.executor }}
         run: |
+          # The authoritative entry point is the trusted-base copy staged
+          # before checkout; it runs the checks inside the exact candidate
+          # tree. Only a base that predates Issue #1086 falls back to the
+          # candidate entry point, and its evidence omits executor=trusted-base.
+          entry_root="$GITHUB_WORKSPACE"
+          if [[ "$EXECUTOR" == "trusted-base" ]]; then
+            entry_root="$RUNNER_TEMP/trusted-executor"
+            python3 "$RUNNER_TEMP/trusted-verification/trusted_executor.py" \
+              verify --destination "$entry_root"
+            export CSARC_VERIFICATION_SUBJECT_ROOT="$GITHUB_WORKSPACE"
+          fi
           if [[ "$CSARC_CI_TIER" == "full" ]]; then
-            ./scripts/verify-template.sh
+            "$entry_root/scripts/verify-template.sh"
           else
-            ./scripts/verify-fast
+            "$entry_root/scripts/verify-fast"
           fi
       - name: Validate the guided release candidate
         if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}
@@ -390,6 +422,25 @@ jobs:
             '{number: $number, sha: $sha, headBranchName: $head, baseBranchName: $base}' \
             >"$RUNNER_TEMP/release-pr.json"
           ./scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
+      - name: Candidate gate self-test (non-authoritative)
+        # Runs after the required result is decided. The trusted helper
+        # replays the trusted router arguments through the candidate's own
+        # router and config reader, without tokens or file-command variables,
+        # and only reports differences; continue-on-error keeps it from
+        # deciding the job.
+        if: ${{ !cancelled() && steps.trusted.outputs.executor == 'trusted-base' && steps.plan.outcome == 'success' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          TRUSTED_OWNERSHIP: ${{ steps.release.outputs.ownership }}
+        run: |
+          python3 "$RUNNER_TEMP/trusted-verification/trusted_executor.py" self-test \
+            --candidate-root "$GITHUB_WORKSPACE" \
+            --router-args "$RUNNER_TEMP/trusted-router-args" \
+            --trusted-plan "$RUNNER_TEMP/trusted-ci-plan.json" \
+            --trusted-ownership "$TRUSTED_OWNERSHIP" \
+            --changed-files "$RUNNER_TEMP/changed-files" \
+            --summary "$GITHUB_STEP_SUMMARY"
       - name: Record result
         if: ${{ always() }}
         env:

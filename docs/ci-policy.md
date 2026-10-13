@@ -890,6 +890,27 @@ hosted 共用的驗證入口，但本機執行只提供開發回饋，不改寫 
 工具鏈，依可信 plan 實際執行 `scripts/verify-fast` 或 full verifier。Dependabot 與一般 contributor 共用同一路徑，
 不再有 bot 白名單。
 
+#1086 把同一個 trust boundary 延伸到入口本身。checkout candidate 之前，`scripts/trusted_executor.py prepare`
+從 trusted base 複製決定結果的 control set：入口 `scripts/verify-fast`、`scripts/verify-template.sh`，stage gate
+`scripts/verify-stage-*` 與 `scripts/verification-step`，router `scripts/ci_tier.py`，config reader
+`scripts/csarc_config.py`，以及 `scripts/resolve-cache-root`。這些副本設成唯讀並記下 SHA-256 manifest。Execute
+step 先比對 manifest，再以 `CSARC_VERIFICATION_SUBJECT_ROOT` 指向 exact candidate tree 執行 trusted 入口；candidate
+自己的測試、lint 與 scan 照常在 candidate tree 執行，但「要跑哪些檢查、怎麼彙總結果」只由 base 決定。入口解析完
+subject 後立即 unset 這個變數，nested fixture 不會繼承。candidate 改了 control set 時，trusted router 會把變更歸入
+shell／workflow scope 並升到對應 tier，新版 gate 要等合併進 base 後才生效。
+
+base 的 config reader 讀不懂 candidate 設定（未知值或 schema）時，「Read release ownership」直接失敗，不再因
+`echo "ownership=$(...)"` 吞掉錯誤而略過 release 檢查。authoritative 結果確定後，「Candidate gate self-test
+(non-authoritative)」以 `continue-on-error` 執行 candidate 自己的 router 與 config reader，把與 trusted 決策的差異
+及被改動的 control files 寫進 step summary；這個 step 不帶 token、名稱不屬於 evidence step，不能決定 required
+result。Execute step 名稱在 trusted executor 執行時附上 `executor=trusted-base`，`verification_evidence.py` 回傳
+`executor`；沒有這個 claim 的舊 run 或尚未同步 #1086 的 base 一律記為 `candidate-legacy`，並在 run 內發出 warning。
+
+限制：同一 job 內 candidate 測試碼仍與 trusted 入口共用 GitHub-hosted VM，trusted executor 防的是「改 gate 讓
+自己通過」，不是對惡意測試碼的 sandbox；保護仍靠 read-only `permissions`、不帶 secrets、`persist-credentials:
+false` 與人工審查。`release/v*` 的「Validate the guided release candidate」仍執行 candidate 的
+`scripts/verify-release-candidate`（read-only token），留待後續 Issue 處理。
+
 `verify` 的 job-level guard 在 runner 排程前只排除 Draft PR 活動。轉成 Ready、非 Draft 的新 head／`edited`、
 任何 `labeled`／`unlabeled`、merge queue 與手動執行都會啟動並回報名為 `verify` 的 check。這個 guard 只節省非必要
 runner，不產生可信成功證據，也不改變下方 exact-head 驗證條件。
@@ -1138,7 +1159,7 @@ CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.p
 
 | 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428／#812）；可信 hosted execution（#834）；runner guard（#901） | `pull_request_target`、`merge_group`、`workflow_dispatch`；Draft 活動由 job guard 在 runner 前排除，Ready、非 Draft code／edited 與所有 label 事件都回報 `verify`（非 tier label 走同-head reuse，#1019） | `actions`／`checks`／`contents`／Issues／PR read；30 分鐘；同一 PR 新 commit 取消舊 run | base-trusted `scripts/ci_tier.py` 分類後，在 GitHub-hosted `ubuntu-latest` 對 exact candidate 執行 risk-owned `scripts/verify-fast`／full verifier；同 head 的 `edited`／tier-label run 可單跳引用相同 route 的原始 Execute，且只有 `promotion`／`hotfix`／`release-recovery` 三種 label 會啟動 required `verify` 並納入 evidence identity；其他 label 的 skipped check 使用非 required 名稱，不能覆蓋既有 `verify` 結果；clean main-to-delivery sync 先做結構預檢再引用 current main 的 fresh full Execute；所有證據綁定 repository、head/tree、base、tier/scopes、command、toolchain、tier labels、release level、runner、result 與 24 小時 freshness | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py`；`tests/test_verification_evidence.py`；`tests/test_pr_lifecycle.py`；`tests/test_delivery_sync.py` | #834 hosted execution active；#812 risk-owned/reuse/sync route active；#901 guard 待首次 Ready／label 事件 live evidence |
+| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428／#812）；可信 hosted execution（#834）；trusted-base executor（#1086）；runner guard（#901） | `pull_request_target`、`merge_group`、`workflow_dispatch`；Draft 活動由 job guard 在 runner 前排除，Ready、非 Draft code／edited 與所有 label 事件都回報 `verify`（非 tier label 走同-head reuse，#1019） | `actions`／`checks`／`contents`／Issues／PR read；30 分鐘；同一 PR 新 commit 取消舊 run | base-trusted `scripts/ci_tier.py` 分類後，在 GitHub-hosted `ubuntu-latest` 以 trusted base 的入口與 stage gate 對 exact candidate 執行 risk-owned `scripts/verify-fast`／full verifier，candidate gate 只做 non-authoritative self-test；同 head 的 `edited`／tier-label run 可單跳引用相同 route 的原始 Execute，且只有 `promotion`／`hotfix`／`release-recovery` 三種 label 會啟動 required `verify` 並納入 evidence identity；其他 label 的 skipped check 使用非 required 名稱，不能覆蓋既有 `verify` 結果；clean main-to-delivery sync 先做結構預檢再引用 current main 的 fresh full Execute；所有證據綁定 repository、head/tree、base、tier/scopes、command、toolchain、tier labels、release level、runner、result 與 24 小時 freshness | `tests/test_ci_tier.py`；`tests/test_journey03_ci.py`；`tests/test_verification_evidence.py`；`tests/test_trusted_executor.py`；`tests/test_pr_lifecycle.py`；`tests/test_delivery_sync.py` | #834 hosted execution active；#1086 trusted executor 待合併後首次 hosted run 證據；#812 risk-owned/reuse/sync route active；#901 guard 待首次 Ready／label 事件 live evidence |
 | PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | `pull_request_target` PR metadata 事件（opened／edited／synchronize／labeled）、`merge_group` | `contents`／Issues／pull requests 只讀；固定 timeout | 單一 `title` job：draft 期間不啟動 runner，`ready_for_review` 後才完整驗證 Issue、route、review policy、promotion route 與 Milestone approval，以原生 job conclusion 回報結果 | `scripts/test-pr-policy`；`tests/test_journey05_workflows.py`；route classifier 見 `tests/test_promotion_gate.py` 的 `test_check_route_*` | 歷史 run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929) 證明既有 policy 判定；#876 合併後首張 PR 補 live consolidated-job evidence | 既有 policy：active；#876 consolidation：candidate |
 | PR policy writes | `.github/workflows/pr-policy-writes.yml` | PR metadata 與 Milestone check-run 寫入（#829／#886／#926／#933） | default branch 的 `workflow_run`，只接續 `success`／`failure` 的 `PR policy` run；`skipped`／`cancelled` 不啟動 runner，同 head 較新事件取消舊 writer | top-level 無權限；單一 trusted job 只取得其循序 steps 合計所需的 `checks`／`issues`／`pull-requests: write` 與 `contents: read`；10 分鐘 | 一次 checkout 後以完整 head identity 跨頁解析唯一 open PR、同步 metadata／#551 提醒，再發布 `Milestone approval` custom check；等待核可時 check 維持 pending，確定違規才 failure，而 publisher 成功寫入後本身通過；metadata step 失敗不會掩蓋後續 check publication；零筆或多筆都 fail closed，不執行 PR source 或 artifact | `tests/test_work_item_metadata.py`；`tests/test_milestone_approval.py`；`tests/test_journey05_workflows.py` | #829 trust boundary 已落地；#886 單一 job；#926 skipped writer guard 待 live evidence | candidate |
 | PR review（Copilot 審核模式，#752／#775／#826／#900／#926／#933） | `.github/workflows/pr-review.yml` | PR 審核授權 | `pull_request_target`（opened／synchronize／reopened／ready_for_review）、`pull_request_review`（submitted／dismissed）、`issue_comment`（created，篩選 PR 上以 `PR lifecycle merge authorization` 開頭的留言）、`merge_group` | publisher 取得 `checks: write` 與必要讀權限；10 分鐘；同 PR 新事件取消舊 run；draft PR 一般事件不啟動 runner | trusted publisher 呼叫 `scripts/review_gate.py publish`，把等待、通過與確定拒絕分別發布為 `review` 的 queued／success／failure；publisher 只有判定或 API 寫入失敗才失敗。merge queue 沿用已通過的 PR head review | `tests/test_review_gate.py`；`scripts/pr_lifecycle.py` 的授權來源與 custom check provenance 見 `tests/test_pr_lifecycle.py` | #900 candidate | candidate |

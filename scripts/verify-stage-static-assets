@@ -8,9 +8,12 @@ set -Eeuo pipefail
 # stage without paying for the full run; aggregated in order by
 # scripts/verify-template.sh. See docs/ci-policy.md.
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$control_root/scripts/verification-step"
+repo_root="$(verification_subject_root "$control_root")"
+# Checks below must not inherit the subject override into nested fixtures.
+unset CSARC_VERIFICATION_SUBJECT_ROOT
 cd "$repo_root"
-source "$repo_root/scripts/verification-step"
 
 verification_step "Repository site render" ./scripts/build-repo-site --check
 verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
