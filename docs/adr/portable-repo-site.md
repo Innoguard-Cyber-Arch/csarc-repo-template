@@ -39,7 +39,7 @@ Issue #436 盤點時發現：內部網站（`docs/site-content.md` 生成的手�
 
 Issue #205 以兩次真實 spike 重新檢查第 3 點。mdBook 的書本導覽與現有卡片式簡報衝突；Hugo 0.165.0 的自訂單頁 output format 則能保留既有視覺，並把輸出直接交給未修改的 `scripts/render_site.py`。因此只局部取代「不導入 Hugo」的限制，保留單檔、離線 `file://`、零外部 runtime asset 與 checked-in output 的全部契約。
 
-Issue #209 經維護者實際檢視後，Hugo source 收斂到通用的 `site/` 結構，正式取代手寫 `site/index.html`，並輸出 `docs/index.html` 與 `docs/index.en.html`。Hugo publish directory 固定在已忽略的 `dist/`，不會掃描或覆寫 `docs/adr/`、`docs/specs/` 與其他既有文件。舊頁移到 `site/legacy/index.html`，只作文字、圖片與視覺回歸基準；仍被基準頁引用的樣式、互動與資產保留在 `site/static/`，確認不再使用後才移除。
+Issue #209 經維護者實際檢視後，Hugo source 收斂到通用的 `site/` 結構，正式取代手寫 `site/index.html`，並輸出 `docs/index.html` 與 `docs/index.en.html`。Hugo publish directory 固定在已忽略的 `dist/`，不會掃描或覆寫 `docs/adr/`、`docs/specs/` 與其他既有文件。舊頁移到 `site/legacy/index.html`，只作文字、圖片與視覺回歸基準；仍被基準頁引用的樣式、互動與資產保留在 `site/static/`，確認不再使用後才移除。這份快照已由下方「2026-10-13 退役 legacy parity fixture」取代並刪除。
 
 ## 2026-09-03 移除 Hugo，改用純 Python 渲染引擎
 
@@ -212,6 +212,16 @@ Issue #919 把 Issue #900 的單一 `repo-site` feature 拆成明確的兩層契
 
 此決定保留 portable、離線、project-owned 內容不覆寫與可重建輸出的既有契約；取代 Issue #526 要求 README 與首頁內容逐字對齊，以及 Issue #900 以 `features: repo-site` 作為文件能力開關的部分。
 
+## 2026-10-13 退役 legacy parity fixture（Issue #1088）
+
+`site/legacy/index.html` 是 Hugo 移植前的只讀快照，`scripts/check-repo-site-parity --keys-only` 只拿它確認沒有 slide key 消失；Issue #590 已決定不比對文字。快照本身很大，又容易讓人把過去的呈現細節當成現行契約。真正要保護的是 slide 清單、雙語結構與 renderer 行為，因此本節取代「2026-08-25 Hugo 正式切換」中「舊頁作為文字、圖片與視覺回歸基準」的安排。
+
+**決定**：刪除 `site/legacy/index.html`、只服務該快照的 `scripts/check-repo-site-parity`，以及只在快照內執行的 `site/static/app.js`（Markdown 引擎從未引用它），並移除 `release-please-config.json` 中指向快照的 extra-files 項目。結構契約改由 checked-in、可直接閱讀的 `site/data/slide_inventory.json` 記錄：依序列出每張 slide 的 `key`，以及有宣告時的 `track` 與 `audience`。`scripts/check-repo-site-inventory` 確認 `site/content/_index.zh-tw.md` 與 `_index.en.md` 宣告的 slide 和 inventory 完全一致（含順序），也確認兩份渲染輸出的 slide section 依序對應；只比結構，不比文字，也不要求 HTML 逐位元組相同。新增、移除、重排或改 track 的 slide 必須在同一個變更更新 inventory。`./scripts/build-repo-site` 在 build 與 `--check` 都會執行這項檢查，取代原本的 keys-only parity。
+
+**沿用**：navigation 寬度、引擎／模板版本範圍、生成輸出逐位元組重建，以及既有的 accessibility／interaction 測試都不變。舊快照在 keys-only 模式要求的 slide（`capability` 已改名為 `index`）全部列在 inventory 中，`tests/test_repo_site_inventory.py` 會檢查這一點。content 中仍保留的 `parity="supplemental"`／`parity="new"` 屬性已沒有檢查程式使用，留待後續另開 Issue 決定是否清除。
+
+**驗證**：`tests/test_repo_site_inventory.py` 涵蓋真實來源與渲染輸出通過檢查、單一語言重排或改 track 時失敗、渲染輸出少 section 時失敗，以及 inventory 拒絕重複 key 與未知欄位；`tests/test_config_guidance.py` 確認快照、`app.js` 與舊比較程式都已移除，且 build 入口、引擎與 bundler 都沒有引用。
+
 ## 互動決策收納
 
 不自動保存聊天逐字稿。Agent 遇到 durable constraint 或 trade-off 時執行下列流程：
@@ -251,6 +261,7 @@ Issue #919 把 Issue #900 的單一 `repo-site` feature 拆成明確的兩層契
 後續 renderer 實作至少驗證：
 
 - 從 repository 來源重建 `docs/index.html` 後逐位元組一致。
+- 雙語 slide 的 key、track、audience 與順序符合 `site/data/slide_inventory.json`（Issue #1088）。
 - HTML 不含 runtime 外部 stylesheet、script、font 或 image；外部超連結可以存在。
 - `file://` 開啟時簡報內容、鍵盤操作與內嵌媒體可用。
 - 常用窄螢幕與簡報尺寸維持可讀；不為此先加入大型視覺測試平台。

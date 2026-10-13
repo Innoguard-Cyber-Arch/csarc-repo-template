@@ -38,10 +38,6 @@
         },
         {
           "type": "generic",
-          "path": "site/legacy/index.html"
-        },
-        {
-          "type": "generic",
           "path": "docs/index.html"
         },
         {
