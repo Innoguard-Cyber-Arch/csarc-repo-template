@@ -6,7 +6,6 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "build_repo_site.py"))
 RENDER_SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "render_site.py"))
-PARITY_MODULE = runpy.run_path(str(ROOT / "scripts" / "check-repo-site-parity"))
 AUDIT_TRAIL_GENERATOR_MODULE = runpy.run_path(
     str(ROOT / "scripts" / "generate_audit_trail.py")
 )
@@ -33,8 +32,6 @@ _substitute_version_tokens = SITE_MODULE["_substitute_version_tokens"]
 _substitute_config_tokens = SITE_MODULE["_substitute_config_tokens"]
 _load_downstream_config = SITE_MODULE["_load_downstream_config"]
 render = RENDER_SITE_MODULE["render"]
-parse_parity = PARITY_MODULE["parse"]
-compare_parity = PARITY_MODULE["compare"]
 
 
 def _empty_data(**overrides: object) -> object:
@@ -1784,16 +1781,3 @@ def test_real_content_slide_ids_match_navigation_items(tmp_path: Path) -> None:
     ids = set(re.findall(r'data-content-key="([^"]*)"', text))
     for item in data.navigation["items"]:
         assert item["key"] in ids
-
-
-def test_real_content_keeps_repo_site_key_parity(tmp_path: Path) -> None:
-    """No slide key silently vanishes or appears unacknowledged (Issue #586).
-
-    Only the key set is checked here (`keys_only=True`), matching what
-    `scripts/build-repo-site --check` wires into CI. The exact-text
-    comparison is not part of this regression; see Issue #590.
-    """
-    outputs = build(ROOT, tmp_path / "dist/repo-site")
-    legacy = parse_parity(ROOT / "site/legacy/index.html", candidate=False)
-    candidate = parse_parity(outputs["zh-tw"], candidate=True)
-    assert compare_parity(legacy, candidate, keys_only=True) == []
