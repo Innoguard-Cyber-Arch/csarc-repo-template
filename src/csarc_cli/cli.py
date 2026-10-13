@@ -30,6 +30,7 @@ from urllib.parse import quote
 import yaml  # type: ignore[import-untyped]
 
 from csarc_cli import (
+    action_pin_preflight,
     governance_migration,
     lifecycle_report,
     release_phase,
@@ -2653,8 +2654,23 @@ def adoption_required_actions(  # noqa: C901
     return actions
 
 
+def update_pin_items(
+    update: Mapping[str, object] | None,
+) -> list[dict[str, object]] | None:
+    """Return the preflight drift items recorded in an update plan."""
+    preflight = (update or {}).get("action_pin_preflight")
+    if not isinstance(preflight, dict):
+        return None
+    items = preflight.get("items")
+    if not isinstance(items, list):
+        return None
+    return [dict(item) for item in items if isinstance(item, dict)]
+
+
 def update_required_actions(
-    files: Plan, settings: Sequence[Mapping[str, object]]
+    files: Plan,
+    settings: Sequence[Mapping[str, object]],
+    pin_items: Sequence[Mapping[str, object]] = (),
 ) -> list[dict[str, object]]:
     """Derive the update required actions this release can evaluate."""
     actions: list[dict[str, object]] = [
@@ -2691,6 +2707,19 @@ def update_required_actions(
             "subject": path,
         }
         for path in files.unknown
+    )
+    actions.extend(
+        {
+            "blocking": True,
+            "command": None,
+            "kind": "action-pin",
+            "message": f"Product workflow pins {item['action']}@"
+            f"{item['old_sha']}; the new template pins {item['new_sha']} "
+            f"({item['reason']}). Commit that pin change, then create a "
+            "new plan.",
+            "subject": f"{item['file']}:{item['line']}",
+        }
+        for item in pin_items
     )
     return actions
 
@@ -2797,7 +2826,9 @@ def lifecycle_report_model(  # noqa: C901
     if operation == "adopt" or adoption is not None:
         actions = adoption_required_actions(plan)
     else:
-        actions = update_required_actions(files, settings)
+        actions = update_required_actions(
+            files, settings, update_pin_items(plan.update) or ()
+        )
     if adoption is not None:
         applicable = adoption.get("applicable") is True
     else:
@@ -2887,7 +2918,9 @@ def lifecycle_report_model(  # noqa: C901
             "sha256": plan_sha256,
         },
         "product": {
-            "action_pins": None,
+            "action_pins": update_pin_items(plan.update)
+            if operation == "update" and adoption is None
+            else None,
             "behavior_changes": None,
             "code_owner": owner,
             "release_ownership": release_contract(plan.answers),
@@ -7586,6 +7619,15 @@ def _render_reinstall_plan(
         allow_unreleased=args.allow_unreleased,
         channel=args.channel,
     )
+    # The reinstall fallback is reachable from csarc update, so the same
+    # product pin preflight runs before each of its renders (#1065).
+    pins = update_action_pin_preflight(
+        target, revision.source, revision.sha, candidate_answers
+    )
+    if pins.items:
+        if not (args.check or args.dry_run):
+            raise CliError(action_pin_preflight.drift_error(pins))
+        print(action_pin_preflight.drift_error(pins), file=sys.stderr)
     temporary_root = Path(tempfile.mkdtemp(prefix=f"csarc-reinstall-{label}-"))
     stage = temporary_root / "rendered"
     stage.mkdir()
@@ -8147,6 +8189,31 @@ def run_update_candidate(
     )
 
 
+def update_action_pin_preflight(
+    target: Path,
+    source: str,
+    sha: str,
+    answers: Mapping[str, object],
+) -> action_pin_preflight.PinPreflight:
+    """Run the read-only product pin preflight, failing closed (#1065)."""
+    try:
+        return action_pin_preflight.run_preflight(
+            target,
+            source,
+            sha,
+            answers,
+            lambda command: run_git(command, capture=True, check=False),
+        )
+    except action_pin_preflight.PinPreflightError as error:
+        raise CliError(
+            "Action pin preflight failed closed; the target was not "
+            f"changed. {error} Repair: make the template source reachable "
+            "at the reviewed commit (or pass a verified --to release) and "
+            "keep each .github/workflows file a regular UTF-8 file, then "
+            "rerun csarc update --check."
+        ) from error
+
+
 def update_conflict_error(conflicts: Sequence[str], detail: str = "") -> str:
     """Return the one fail-closed message for an update conflict."""
     summary = (
@@ -8297,6 +8364,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     source = status.get("source")
     if not isinstance(source, str):
         raise CliError("Update source must be a string.")
+    # Product action pin drift is known before any render, plan, or write.
+    pins = update_action_pin_preflight(
+        target, source, target_revision.sha, candidate_answers
+    )
+    if pins.items and not (args.check or args.dry_run):
+        raise CliError(action_pin_preflight.drift_error(pins))
     raw_answers = read_raw_answers(answers_path)
     with tempfile.TemporaryDirectory(prefix="csarc-update-plan-") as temporary:
         workdir = Path(temporary).resolve()
@@ -8396,6 +8469,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     )
     status.update(
         {
+            "action_pin_preflight": pins.as_dict(),
             "answers_changed": answers_changed,
             "capabilities_changed": capabilities_changed,
             "planning": planning.as_dict(),
