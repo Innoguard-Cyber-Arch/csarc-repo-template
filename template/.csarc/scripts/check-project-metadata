@@ -3,7 +3,7 @@ set -euo pipefail
 
 status=0
 documentation_mode="$(python3 .csarc/scripts/csarc_config.py documentation_mode)"
-required_files=(.github/SECURITY.md LICENSE)
+required_files=(.github/SECURITY.md)
 if [[ "$documentation_mode" != "off" ]]; then
   required_files+=(README.md)
 fi

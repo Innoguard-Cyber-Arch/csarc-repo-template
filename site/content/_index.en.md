@@ -121,7 +121,7 @@ It only reads local files plus, once a repository is already managed, the resolv
 
 | State (`state`) | How it is detected | Next step |
 | --- | --- | --- |
-| `create` (new repository) | The target path does not exist, or exists but is an empty directory | `csarc init <path>`: preview with `--dry-run`, then confirm with `--yes --non-interactive` |
+| `create` (new repository) | The target path does not exist, is an empty directory, or holds only `.git` with no commit or tracked file | `csarc init <path>`: preview with `--dry-run`, then confirm with `--yes --non-interactive` |
 | `adopt` (existing repository) | The target already has content but no `.csarc/config.yml` | `csarc adopt <path>`: write a dry-run plan, review it, then apply with `--apply-plan` |
 | `adoption-pending` (adoption incomplete) | The local adoption checkpoint passes identity validation, but adoption is not complete | `csarc adopt <path> --finalize`: preview and continue the existing finalize flow |
 | `migrate` (legacy answers) | `.csarc/config.yml` has a non-full `_commit` and no trusted verified provenance | Review a tag or short SHA and follow `next_command` to bind it to a verified Release; restore the correct SHA for any other format |

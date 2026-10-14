@@ -27,6 +27,7 @@ GitHub 方案只能提供能力線索，不能證明 repository visibility、org
 - `project_license` 與 `copyright_holder` 是 create／adopt 的一次性 seed，寫入 `LICENSE` 與 package manifest 後以 `LICENSE` 為準；未宣告時採 proprietary，不從 repository identity 推定開源授權。
 - `actions_fallback` 已退役（Issue #1071，#1058 決定 3）：quota fallback 入口一律拒絕，Actions 中斷改走 governance-switch 路線，required checks 照常要求。
 - `verification_mode: local` 是新專案預設值：沿用同一個 risk-owned fast／full router 與 runner，成功後只寫入 Git metadata 的 self-attested evidence；merge lifecycle 重驗 clean worktree、exact head/tree、base、tier、scope、freshness、review 與 remote lease，再走有 trace 的 admin bypass。它不產生 hosted CI、PR policy／writer、review／reviewer assignment、spec sync、work-item lifecycle、Pages 或 release workflow；這些操作改走既有本機 wrapper，平台 UI 的直接變更只由手動或低頻 drift check 發現。`hosted` 才保留 #834／#835 的 trusted Actions、Pages deployment 與可信 release provenance。
+- 設定問卷（Issue #1078，SPEC-009 §9）：init／adopt 只詢問沒有唯一來源的值，偵測與明確 `--data` 不再問；non-interactive 缺少必填輸入時在查詢 Release 與 render 前失敗。一題工作模式（`solo-local` 預設、`solo-hosted`、`team`、`custom`）只展開成可覆寫、照常保存的 intent，preset 名稱不保存，update 不展開（#1058 決定 14）。`admin_bypass: off` 與 `beta-only` 先做三態 approval route preflight（`route-observed`／`none-observed`／`inconclusive`）：只回報讀取當下的觀察、不宣稱證明；`none-observed` 阻擋，`inconclusive` 需要單次確認旗標，已存值不自動改寫（#1058 決定 7）。
 - `documentation_mode: template-and-content` 只負責產生可離線使用的 `docs/**`；只有同時選 `verification_mode: hosted` 才產生 Pages workflow 與 enabled policy。Pages 改用 `build_type: workflow`，只在 `docs/**` 變動或手動 dispatch 時部署。
 
 ## 遷移
@@ -54,6 +55,9 @@ Free／Pro／Team／Enterprise 與 public／private 的組合只影響 Ruleset�
 | 繼續提供每個政策與功能各一個布林值 | 不採用；產生重疊與矛盾狀態。 |
 | 增加 schedule 或手選 major／minor／patch | 不採用；沒有需求足以負擔第二套發版演算法。 |
 | 以 repository variable 即時切 lifecycle | 不採用；會建立第二份可在 UI 漂移的設定真相。 |
+| 分開詢問審核方式與驗證方式，或保存 preset 名稱 | 不採用；常見意圖只有四種工作模式，名稱保存後會和逐鍵覆寫的值矛盾。 |
+| `off` 觀察不到核准者時只給 WARNING | 不採用；使用者要到第一張 PR 才發現沒有日常合併路徑（#1058 決定 7）。 |
+| 以 collaborator API 宣稱只有一位核准者，或以 API、方案推斷 Copilot 授權 | 不採用；API 看不到 enterprise 與自訂角色，授權只接受明確確認（#814）。 |
 
 ## 重新評估條件
 

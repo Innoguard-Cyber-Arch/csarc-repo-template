@@ -121,7 +121,7 @@ csarc status <path> --json
 
 | 狀態（`state`） | 判斷依據 | 下一步 |
 | --- | --- | --- |
-| `create`（新 repo 建立） | 目標路徑不存在，或存在但是空目錄 | `csarc init <path>`：先 `--dry-run` 預覽，確認後加 `--yes --non-interactive` |
+| `create`（新 repo 建立） | 目標路徑不存在、是空目錄，或只有 `.git` 而沒有 commit 與 tracked 檔 | `csarc init <path>`：先 `--dry-run` 預覽，確認後加 `--yes --non-interactive` |
 | `adopt`（舊 repo 導入） | 目標已存在內容，但沒有 `.csarc/config.yml` | `csarc adopt <path>`：先寫出 dry-run 計畫，審查後用 `--apply-plan` 套用 |
 | `adoption-pending`（導入待完成） | 本機 adoption checkpoint 通過 identity 驗證，但導入尚未完成 | `csarc adopt <path> --finalize`：先預覽並完成既有 finalize 流程 |
 | `migrate`（舊版答案遷移） | `.csarc/config.yml` 的 `_commit` 不是完整 SHA，且沒有可信的 verified provenance | tag／短 SHA 先核對來源與版本，再依 `next_command` 綁回已驗證 Release；其他格式先還原正確 SHA |

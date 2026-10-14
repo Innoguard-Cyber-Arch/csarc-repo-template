@@ -53,25 +53,25 @@ attestation verification.
    update just to change a policy setting. For a release-specific request,
    pass both `--to` and `--expected-sha`.
 
-   For `create` or `adopt`, offer exactly two setup paths: accept the
-   recommended defaults, or customize the applicable questions. In the
-   customized path, read `copier.yml` from the same verified full SHA and use
-   its existing choices, defaults, help text, and conditions as the only
-   question schema. Group the applicable questions for conversation as:
-   identity/languages/run and verification; CODEOWNER; Copilot review, admin
-   bypass, project maturity, and verification mode; optional
-   coverage/CodeQL/container/scheduled checks; and governance mode for the
-   repository/Actions/labels/Ruleset policy. Keep `code_owner`,
-   `copilot_review`, `admin_bypass`, `project_maturity`, and
-   `verification_mode` as distinct decisions. Branch routes come from Issue
-   and Milestone metadata, and reviewers are chosen from live `maintain`/`admin`
-   collaborators, so neither is a question. Do not ask hidden, derived, or conditionally inapplicable
-   questions. Pass every confirmed override through the existing repeatable
-   `--data KEY=VALUE` option; do not create another schema or configuration
-   layer. Run the matching dry-run with `--json`, summarize its resolved
-   answers and plan, then wait for step 5 confirmation. For `update`, preserve
-   saved `.csarc/config.yml` answers and ask only about newly introduced
-   questions or changes the user explicitly requests.
+   For `create` or `adopt`, the CLI owns the setup questions (SPEC-009 §9,
+   Issue #1078): it asks only for values no repository fact decides and
+   never asks again for a detected or `--data` value. In a terminal, let the
+   user answer the CLI directly. As an agent, ask the user only for the
+   inputs a `--non-interactive` dry-run reports as missing (its one-line
+   `csarc:` error names every `--data KEY=`), plus the work mode: offer
+   `solo-local` (default), `solo-hosted`, `team`, or `custom` and pass it as
+   `--preset`; it only expands into overridable saved settings. Pass every
+   confirmed override through the repeatable `--data KEY=VALUE` option; do
+   not read `copier.yml` as a question schema or create another
+   configuration layer. When `admin_bypass` resolves to `off` or `beta-only`,
+   relay the approval-route result; pass `--confirm-second-approver` or
+   `--confirm-copilot-entitlement` only after the user confirms that fact.
+   Run the matching dry-run with `--json`, summarize its resolved answers,
+   setup warnings, and plan, then wait for step 5 confirmation. For `update`,
+   preserve saved `.csarc/config.yml` answers; it asks nothing and changes a
+   setting only through an explicit `--data`. Branch routes
+   come from Issue and Milestone metadata, and reviewers are chosen from
+   live `maintain`/`admin` collaborators, so neither is a question.
 
    For `adopt`, also read `adoption.work_item_mapping` from that same plan.
    Explain that native `Bug`／`Feature`／`Task` are Issue Types, while lowercase

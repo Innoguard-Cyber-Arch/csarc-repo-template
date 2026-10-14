@@ -45,4 +45,4 @@ The README is a compact entry point. Project documentation under `docs/` owns de
 
 ## License
 
-{% if project_license == 'proprietary' %}Proprietary software; see [LICENSE](LICENSE). All rights reserved. No use, copying, modification, or distribution is permitted without explicit authorization from {{ copyright_holder }}.{% else %}Licensed under [{{ project_license }}](LICENSE).{% endif %}
+{% if project_license == 'proprietary' %}Proprietary software; see [LICENSE](LICENSE). All rights reserved. No use, copying, modification, or distribution is permitted without explicit authorization from {{ copyright_holder }}.{% elif project_license == 'custom' %}The project manages its own license; CSARC does not render or interpret it.{% else %}Licensed under [{{ project_license }}](LICENSE).{% endif %}
