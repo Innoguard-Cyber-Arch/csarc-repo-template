@@ -80,11 +80,16 @@ MATRIX: dict[str, dict[str, object]] = {
     },
 }
 # Read-only operator diagnostics documented for maintainers; they have no
-# automated caller, so each one needs a reason here.
-OPERATOR_ENTRY_POINTS = {
-    # Read-only capability diagnostic (#531) documented in ci-policy.md.
-    "check-repo-capabilities": "documented capability diagnostic",
-}
+# automated caller, so each one needs a reason here. The capability
+# diagnostic (#531) had none and is no longer rendered (#1129 AC5); it stays
+# a template-repository tool under root `scripts/`.
+OPERATOR_ENTRY_POINTS: dict[str, str] = {}
+# Template-repository tools that no generated caller reaches (#1129).
+TEMPLATE_REPOSITORY_ONLY = (
+    ".csarc/scripts/check-repo-capabilities",
+    ".csarc/scripts/repo_capabilities.py",
+    ".csarc/policies/capability-matrix.json",
+)
 # A static reference whose step the workflow gates on the same option at
 # runtime, so it never executes when the script is not rendered.
 RUNTIME_GATED_REFERENCES = {
@@ -387,6 +392,16 @@ def test_render_stays_inside_the_adr_allowlist(
         for path in outside
         if not any(fnmatchcase(path, pattern) for pattern in patterns)
     ] == []
+
+
+@pytest.mark.parametrize("name", list(MATRIX))
+def test_template_repository_tools_are_never_rendered(
+    renders: dict[str, Path], name: str
+) -> None:
+    """#1129 AC5: an uncalled diagnostic stays in the template repository."""
+    for relative in TEMPLATE_REPOSITORY_ONLY:
+        assert not (renders[name] / relative).exists(), relative
+        assert (ROOT / relative.removeprefix(".csarc/")).is_file(), relative
 
 
 def test_existing_adopt_adds_no_product_starter(

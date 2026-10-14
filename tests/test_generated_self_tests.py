@@ -36,7 +36,6 @@ BASE_DATA = {
 # A self-test may add cases but never drop below its baseline.
 SELF_TEST_BASELINE: dict[str, list[int]] = {
     "test-apply-repository-settings": [11],
-    "test-check-repo-capabilities": [],
     "test-check-scope-gate": [7],
     "test-finalization-queue": [6],
     "test-issue-triage": [10, 12],

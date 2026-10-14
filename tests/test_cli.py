@@ -7476,9 +7476,7 @@ def test_v0_15_6_generated_layout_migration_contract(tmp_path: Path) -> None:
             ".csarc/docs/milestone-description.md"
         ),
         "policies/actions.json": ".csarc/policies/actions.json",
-        "policies/capability-matrix.json": (
-            ".csarc/policies/capability-matrix.json"
-        ),
+        "policies/labels.json": ".csarc/policies/labels.json",
         "release-please-config.json": ".csarc/release-please-config.json",
         "scripts/ci_tier.py": ".csarc/scripts/ci_tier.py",
         "scripts/release_policy.py": ".csarc/scripts/release_policy.py",

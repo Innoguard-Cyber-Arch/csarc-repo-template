@@ -1884,27 +1884,12 @@ branch（如 `dev/m9-decision-site-adoption`）沒有任何提醒機制，只能
 
 ### Repo 能力自我檢查與 workaround 對照（capability matrix，#531）
 
-`.csarc/scripts/apply-repository-settings.sh` 既有的 `DEGRADED` 機制回答的是「這個帳號的
-GitHub 方案允許什麼」；但同一個方案上，organization 政策、CODEOWNERS team 是否存在、
-token 權限範圍，仍可能個別擋住某一項能力——這一層目前沒有自動檢查，也沒有把 workaround
-集中寫清楚。`.csarc/policies/capability-matrix.json` 補上這份「repo 能力矩陣」：每一項能力
-（`repository_admin`、`ruleset_enforcement`、`codeowners_enforcement`、
-`actions_pr_approval`、`security_and_analysis`、`github_pages`、
-`repository_settings_inspection`、`immutable_releases`）各自對應最低權限／方案需求、
-偵測方式與已記錄的 workaround。`.csarc/scripts/repo_capabilities.py` 是純邏輯的 evaluator（三態
-`allowed`／`blocked`／`unknown`，與 `docs/adr/capability-aware-governance.md` 既有的
-三態慣例一致），`.csarc/scripts/check-repo-capabilities` 則是即時對這個 repo 探測、組成 facts
-再交給 evaluator 的唯讀入口——只回報，不寫入 GitHub，也不是新的合併關卡。
-
-刻意的邊界（Issue #531）：這套機制不重新設計 `apply-repository-settings.sh` 既有的
-`DEGRADED` 標記本身；矩陣裡每一列的 workaround，只要底層限制原本就有對應的
-`DEGRADED` 字樣（Ruleset、CODEOWNERS 檢查、Actions PR 政策、`security_and_analysis`、
-GitHub Pages 五項），就直接引用同一段既有訊息，而不是另建一套平行說法。`.csarc/policies/
-capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能力矩陣說明框
-（`docs/index.html#install`）互為單一來源：矩陣是機器可讀的權威內容，頁面是給人看的雙語呈現，兩者由
-`tests/test_advanced_install_content.py` 的每一個能力 id 都必須同時出現在雙語頁面這條
-規則機械式對齊。`immutable_releases` 一列例外：它無法單靠 repository 權限探測判斷，一律
-回報 `unknown`，並指向上面「hosted 發版路徑的已知限制」一節，而不是假裝可以自動判定。
+能力矩陣（`policies/capability-matrix.json`）與它的唯讀探測入口是模板 repository
+自己的維護工具：生成專案沒有任何 workflow、verifier 或 lifecycle 會呼叫它，因此不再
+render 到 `.csarc/`（#1129）。生成專案遇到方案或權限限制時，以
+`.csarc/scripts/apply-repository-settings.sh` 的 `plan`／`check` 與它印出的 `DEGRADED`
+說明為準；`immutable_releases` 這類無法單靠權限探測判斷的能力，見下面「hosted 發版路徑的
+已知限制」一節。
 
 ### Release 發版不依賴 Actions 健康度的 fallback（#589，2026-09-03）
 

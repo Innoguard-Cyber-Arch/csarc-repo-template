@@ -55,14 +55,14 @@ def test_policy_validators_use_generated_csarc_entrypoints() -> None:
 
 def test_capability_checks_support_personal_codeowners_in_both_layers() -> None:
     """Keep root and generated CODEOWNER probes aligned for personal repos."""
-    for relative_path in (
-        "scripts/check-repo-capabilities",
-        "template/.csarc/scripts/check-repo-capabilities",
-    ):
-        source = (ROOT / relative_path).read_text(encoding="utf-8")
-        assert "collaborators/$codeowner_user/permission" in source
-        assert "CODEOWNERS is not configured" in source
-        assert "write|push|maintain|admin" in source
+    # The capability diagnostic is a template-repository tool (#1129 AC5).
+    assert not (ROOT / "template/.csarc/scripts/check-repo-capabilities").exists()
+    source = (ROOT / "scripts/check-repo-capabilities").read_text(
+        encoding="utf-8"
+    )
+    assert "collaborators/$codeowner_user/permission" in source
+    assert "CODEOWNERS is not configured" in source
+    assert "write|push|maintain|admin" in source
 
     for relative_path in (
         "scripts/apply-repository-settings.sh",
