@@ -1026,7 +1026,8 @@ canonical payload 與 digest、summary 的保存方式與 Actions 資料到期�
 `csarc status`（`--json` 相同）推導 governance baseline（`resolved`、`confirmed`、`not-installed`、
 `inconclusive`），並分類 baseline 之後 default branch 的每個 first-parent 合併：`traced`、`untraced`（只提示）、
 `tree-mismatch`、`evidence-missing`、`evidence-digest-mismatch`、`trailer-invalid` 或讀不到 GitHub 的
-`inconclusive`；`inconclusive` baseline 與 `untraced` 以外的發現都是阻擋項目，status 以 1 結束。
+`inconclusive`；`untraced` 以外的合併發現是阻擋項目，status 以 1 結束；`inconclusive` baseline 沒有檢查任何合併，
+在 status 只是提示，只在 `merge_trace.py audit --strict` 阻擋。
 `inconclusive` baseline 以一次性的 `csarc status --confirm-governance-baseline <SHA>` 從輸出列出的候選中確認。
 發版路徑使用 `python3 scripts/merge_trace.py audit --strict`：`untraced` 也阻擋，`csarc-owned` 的發版可以
 fail closed（接入 publisher 由 #1074 負責）。本機證據的 `completed_at` 改成 `YYYY-MM-DDTHH:MM:SSZ`，讓合併可以

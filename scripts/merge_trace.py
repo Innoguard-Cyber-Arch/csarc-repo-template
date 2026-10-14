@@ -822,7 +822,12 @@ def audit(
     """Return the baseline, the merge findings, and whether either blocks."""
     baseline = governance_baseline(context, ref, confirm)
     merges = merge_audit(context, ref, baseline, strict=strict)
-    blocking = baseline["result"] == "inconclusive" or bool(merges["blocking"])
+    # An inconclusive baseline audits no merge, so it is a missing proof
+    # rather than a bad merge: a notice in `csarc status`, and blocking only
+    # on the strict release path.
+    blocking = (strict and baseline["result"] == "inconclusive") or bool(
+        merges["blocking"]
+    )
     return {"baseline": baseline, "merges": merges, "blocking": blocking}
 
 
