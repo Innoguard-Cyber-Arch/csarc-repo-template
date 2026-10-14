@@ -141,6 +141,16 @@ _OWNERSHIP_READER = (
     "release_ownership"
 )
 _TRUSTED_EXECUTOR_BLOCKS: tuple[tuple[str, ...], ...] = (
+    # Issue #1111: the root trusted steps run `python3 scripts/...` from the
+    # base before the toolchain setup, so root installs Python 3.14 first.
+    # Generated projects get the same need with #1069's executor port.
+    (
+        "- name: Set up Python 3.14 for the trusted verification policy",
+        "uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 "
+        "# v7.0.0",
+        "with:",
+        'python-version: "3.14"',
+    ),
     ("id: trusted",),
     (
         "# Issue #1086: the entry point, stage gate, router, and config",
