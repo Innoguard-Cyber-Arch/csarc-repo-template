@@ -8235,7 +8235,10 @@ def test_update_repository_rename_preserves_custom_security_channel(
     explicit_channel: str | None,
     expected_channel: str,
 ) -> None:
-    """Only move a repository-derived reporting channel to the new URL."""
+    """Only move a repository-derived reporting channel to the new URL.
+
+    The saved URL changes only through an explicit --data choice (#1068).
+    """
     answers: dict[str, object] = {
         "language": "python",
         "project_mode": "new",
@@ -8243,11 +8246,9 @@ def test_update_repository_rename_preserves_custom_security_channel(
         "repository_url": "https://github.com/old/repository",
         "security_reporting_channel": saved_channel,
     }
-    explicit_data = (
-        {"security_reporting_channel": explicit_channel}
-        if explicit_channel is not None
-        else {}
-    )
+    explicit_data = {"repository_url": "https://github.com/new/repository"}
+    if explicit_channel is not None:
+        explicit_data["security_reporting_channel"] = explicit_channel
     repository = cli.RepositoryContext(
         "new/repository",
         "new",
@@ -8570,12 +8571,12 @@ def test_update_check_tolerates_pre_schema_existing_adoption(
 
 
 @pytest.mark.large
-def test_update_recomputes_visibility_defaults_from_github(
+def test_update_keeps_saved_visibility_when_github_differs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Migrate stale private defaults when GitHub reports a public repo."""
+    """Report, never apply, a live visibility change (#1068)."""
     source, first_sha = make_template(tmp_path)
     project = tmp_path / "public-project"
     assert (
@@ -8631,11 +8632,29 @@ def test_update_recomputes_visibility_defaults_from_github(
         == 1
     )
     payload = json.loads(capsys.readouterr().out)
+    # The fixture template drops derived release keys, so the plan stays
+    # outdated; the live visibility itself changes no saved answer.
     assert payload["status"] == "outdated"
-    assert payload["update_available"] is True
-    assert payload["answers_changed"] is True
-    assert payload["answers"]["project_visibility"] == "public"
-    assert payload["answers"]["enable_codeql"] is True
+    assert payload["repository"]["visibility"] == "public"
+    assert payload["answers"]["project_visibility"] == "private"
+    assert payload["answers"]["enable_codeql"] is False
+    report = json.loads(
+        (
+            project.parent
+            / f"{project.name}-csarc-update-report"
+            / f"{cli.UPDATE_REPORT_BASENAME}.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert report["status"] == "review-required"
+    assert {
+        (action["kind"], action["subject"])
+        for action in report["required_actions"]
+    } >= {("setting-decision", "project_visibility")}
+    visibility_row = next(
+        row for row in report["settings"] if row["key"] == "project_visibility"
+    )
+    assert visibility_row["after"] == "private"
+    assert "Live GitHub facts suggest `public`" in visibility_row["note"]
 
 
 @pytest.mark.large

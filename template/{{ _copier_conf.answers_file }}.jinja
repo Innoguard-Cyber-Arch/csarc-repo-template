@@ -1,2 +1,4 @@
 # CSARC repository settings. Managed by Copier; change through csarc update.
-{{ _copier_answers|to_nice_yaml -}}
+{#- Copier never records the hidden release_ownership answer; persist the value resolved at render time so every reader sees one explicit owner (#1068). #}
+{{ dict(_copier_answers, release_ownership=release_ownership)|to_nice_yaml -}}
+

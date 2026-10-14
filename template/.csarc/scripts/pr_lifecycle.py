@@ -3488,7 +3488,12 @@ def revalidate_release_candidate(
     promotion = PROMOTION_BRANCH.fullmatch(head_ref)
     root = Path(__file__).resolve().parents[2]
     config = csarc_config.load_config(root / ".csarc/config.yml")
-    if config.get("release_ownership") != "csarc-owned":
+    try:
+        # One shared resolver decides the Release writer (#1068).
+        csarc_owned = csarc_config.renders_release_workflow(config)
+    except ValueError as error:
+        raise RuntimeError(str(error)) from error
+    if not csarc_owned:
         return ""
     repo = str(lease["repository"])
     pr_number = int(lease["pull_request"])

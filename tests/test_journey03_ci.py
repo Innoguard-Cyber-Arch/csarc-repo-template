@@ -22,6 +22,11 @@ def direct_regression_commands(path: str) -> set[str]:
     return set(re.findall(r"\./scripts/test-[A-Za-z0-9-]+", source))
 
 
+TRUSTED_POLICY_PYTHON_STEP = (
+    "Set up Python 3.14 for the trusted verification policy"
+)
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     """Load one mapping-only YAML document."""
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -298,12 +303,17 @@ def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
         toolchain = [
             (index, step)
             for index, step in enumerate(steps)
-            if str(step.get("uses", "")).startswith(
-                (
-                    "actions/setup-python@",
-                    "astral-sh/setup-uv@",
-                    "pnpm/action-setup@",
-                    "actions/setup-node@",
+            # Issue #1111: the root-only interpreter for the trusted policy
+            # steps is not a profile toolchain and must precede them.
+            if (
+                step.get("name") != TRUSTED_POLICY_PYTHON_STEP
+                and str(step.get("uses", "")).startswith(
+                    (
+                        "actions/setup-python@",
+                        "astral-sh/setup-uv@",
+                        "pnpm/action-setup@",
+                        "actions/setup-node@",
+                    )
                 )
             )
             or "rustup toolchain install" in str(step.get("run", ""))
@@ -440,8 +450,11 @@ def test_reused_release_validation_installs_only_owned_package_tools() -> None:
             for step in ci_steps(rendered)
             if str(step.get("name", "")).startswith("Set up ")
         }
+        # The trusted-policy Python setup always runs (Issue #1111/#1069).
         actual = {
-            name for name, step in setup.items() if candidate in step["if"]
+            name
+            for name, step in setup.items()
+            if candidate in step.get("if", "")
         }
         assert actual == expected
 
@@ -456,7 +469,7 @@ def test_ci_reuses_only_bound_same_head_evidence_after_sync_preflight() -> None:
     ).read_text(encoding="utf-8")
 
     preflight = source.index("Validate synchronization structure")
-    setup = source.index("Set up Python 3.14")
+    setup = source.index("- name: Set up Python 3.14\n")
     execute = source.index("Execute trusted verification tier=")
     assert preflight < setup < execute
     assert "--find-reusable" in source

@@ -208,6 +208,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$(python3 .csarc/scripts/csarc_config.py release_ownership)" == "csarc-owned" ]]; then
+          release_ownership="$(python3 .csarc/scripts/csarc_config.py release_ownership)"
+          if [[ "$release_ownership" == "csarc-owned" ]]; then
             gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
           fi
