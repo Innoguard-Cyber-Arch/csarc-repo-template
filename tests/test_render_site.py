@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 import pytest
+import settings_support
 from copier import run_copy
 
 ROOT = Path(__file__).parents[1]
@@ -103,15 +104,18 @@ def _write_markdown_site(
         (root / "scripts/csarc_config.py").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
-    (config / "config.yml").write_text(
-        f"project_name: {name}\n"
-        f"project_description: {description}\n"
-        f"project_visibility: {visibility}\n"
-        "languages:\n"
-        "- python\n"
-        "- rust\n",
+    settings_support.write_settings(
+        config / "config.yml", languages=["python", "rust"]
+    )
+    # Seeds come from the native manifest, never from the settings
+    # (SPEC-009, Issue #1071).
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\n"
+        f"name = {json.dumps(name)}\n"
+        f"description = {json.dumps(description)}\n",
         encoding="utf-8",
     )
+    del visibility
     (docs / "site-content.md").write_text(markdown, encoding="utf-8")
     source = site / "index.html"
     source.write_text(
@@ -197,30 +201,14 @@ def test_render_rejects_unknown_markdown_config_key(tmp_path: Path) -> None:
         render(source, root=tmp_path)
 
 
-def test_render_reflects_different_project_visibility_values(
-    tmp_path: Path,
-) -> None:
-    """The internal site's visible-audience line must change with the
-    Rules-governance-approved `project_visibility` key, not stay hardcoded."""
-    markdown = "# [[project_name]]\n\nVisibility: **[[project_visibility]]**\n"
-    private_root = tmp_path / "private"
-    public_root = tmp_path / "public"
-    private_root.mkdir()
-    public_root.mkdir()
-
-    private_source = _write_markdown_site(
-        private_root, markdown, visibility="private"
-    )
-    public_source = _write_markdown_site(
-        public_root, markdown, visibility="public"
+def test_render_rejects_live_visibility_token(tmp_path: Path) -> None:
+    """Visibility is a live fact, not a saved setting or site token."""
+    source = _write_markdown_site(
+        tmp_path, "# [[project_name]]\n\nVisibility: [[project_visibility]]\n"
     )
 
-    private_bundle = render(private_source, root=private_root)
-    public_bundle = render(public_source, root=public_root)
-
-    assert "Visibility: <strong>private</strong>" in private_bundle
-    assert "Visibility: <strong>public</strong>" in public_bundle
-    assert private_bundle != public_bundle
+    with pytest.raises(BundleError, match="Unknown site content setting"):
+        render(source, root=tmp_path)
 
 
 def test_render_reflects_different_project_name_values(tmp_path: Path) -> None:
@@ -302,7 +290,13 @@ def test_internal_site_keys_are_documented_once() -> None:
             assert key in governance_config
             assert key not in docs_site_access
         assert "project_visibility" in governance_config
-        for key in ("governance_mode", "lifecycle", "review", "features"):
+        for key in (
+            "governance_mode",
+            "lifecycle",
+            "admin_bypass",
+            "container",
+            "scheduled_checks",
+        ):
             assert key in governance_config
 
 
@@ -341,7 +335,8 @@ def test_generated_site_uses_project_owned_markdown() -> None:
     for content in (zh_tw, en):
         assert "[[project_name]]" in content
         assert "[[languages]]" in content
-        assert "[[project_visibility]]" in content
+        assert "[[documentation_languages]]" in content
+        assert "[[project_visibility]]" not in content
         assert "{{< slide" in content
     assert 'root / "docs/site/content"' in engine
     assert ".csarc/site/static/styles.css" in engine
@@ -1529,7 +1524,7 @@ def test_copier_generated_project_builds_its_own_bilingual_repo_site(
         assert "Generated Project" in html
         assert "Exercises the shared repo-site engine through Copier." in html
         assert "@Innoguard-Cyber-Arch/generated-project-team" in html
-        assert "admin_bypass" in html
+        assert "[[admin_bypass]]" not in html
         assert "https://github.com/example/generated-project" in html
         assert '<link rel="stylesheet"' not in html
         assert "<script src=" not in html

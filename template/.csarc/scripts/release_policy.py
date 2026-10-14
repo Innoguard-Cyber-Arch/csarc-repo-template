@@ -410,9 +410,19 @@ def project_maturity(root: Path) -> str | None:
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.yml"
             config_path.write_text(text + "\n", encoding="utf-8")
-            value = csarc_config.load_config(config_path).get(
-                "project_maturity"
-            )
+            declared = csarc_config.parse_settings_text(text, config_path)
+            if csarc_config.SCHEMA_KEY in declared:
+                value = csarc_config.load_config(config_path).get(
+                    "project_maturity"
+                )
+            else:
+                # A main that predates schema 2 (the update that migrates it
+                # is the candidate) still declares its maturity under the
+                # same key; nothing is defaulted from a legacy key, so a
+                # main without one fails closed (Issue #1071).
+                value = declared.get("project_maturity")
+                if value not in {"early", "formal"}:
+                    raise ValueError("legacy main declares no project_maturity")
     except (subprocess.CalledProcessError, ValueError) as error:
         raise ValueError(
             "cannot read the authoritative project_maturity from "

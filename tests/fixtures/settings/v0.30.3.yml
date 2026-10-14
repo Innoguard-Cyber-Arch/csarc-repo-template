@@ -1,0 +1,40 @@
+# Issue #1071 AC7 fixture: answers rendered by `copier copy --defaults` from release tag v0.30.3.
+# Real legacy keys are kept verbatim; only the migration registry may read them.
+_commit: v0.30.3
+_src_path: .
+actions_fallback: 'off'
+admin_bypass: 'off'
+code_owner: '@Innoguard-Cyber-Arch/arch'
+copilot_review: allowed
+copyright_holder: Fixture Product
+coverage_mode: global
+coverage_threshold: 80
+documentation_mode: template-and-content
+enable_codeql: false
+enable_governance_drift_check: true
+enable_precommit: false
+enable_template_update_notifications: false
+features: []
+governance_mode: managed
+i18n: en-zh-tw
+languages:
+- python
+lifecycle:
+- issues
+- milestones
+package_name: fixture_product
+primary_language: zh-tw
+project_description: Source code and delivery automation for Fixture Product.
+project_license: proprietary
+project_maturity: early
+project_mode: new
+project_name: Fixture Product
+project_run_command: uv run python -c 'import fixture_product'
+project_slug: fixture-product
+project_visibility: private
+python_support_mode: latest
+release_trigger: main
+repository_url: https://github.com/example/fixture-product
+security_reporting_channel: Open a GitHub Issue at https://github.com/example/fixture-product/issues/new;
+    maintainers receive notifications for new Issues.
+verification_mode: local

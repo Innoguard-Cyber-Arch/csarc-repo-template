@@ -144,7 +144,11 @@ def test_template_update_notification_is_opt_in(
         str(source),
         project,
         data={
-            "enable_template_update_notifications": enabled,
+            "scheduled_checks": (
+                ["governance-drift", "template-update"]
+                if enabled
+                else ["governance-drift"]
+            ),
             "languages": [],
             "project_description": "A generated update-notification fixture.",
             "project_name": "Update notification fixture",
@@ -166,7 +170,7 @@ def test_template_update_notification_is_opt_in(
     readme = (project / "README.md").read_text(encoding="utf-8")
     policy = (project / ".csarc/docs/ci-policy.md").read_text(encoding="utf-8")
     assert "每週一或手動執行 template update workflow" not in readme
-    assert "enable_template_update_notifications" in policy
+    assert "`scheduled_checks` 的 `template-update`" in policy
 
     if not enabled:
         return

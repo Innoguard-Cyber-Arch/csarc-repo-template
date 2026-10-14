@@ -133,9 +133,10 @@ def settings_from_mapping(config: dict[str, object]) -> Settings:
         raise ValueError(
             "default_release_level must be one of " + ", ".join(LEVELS)
         )
-    bypass = config.get("admin_bypass")
-    if bypass is None:
-        bypass = "always" if config.get("review") == "solo" else "off"
+    # Schema 2 always states admin_bypass (SPEC-009); only a repository
+    # without CSARC settings reaches the strictest default here. Retired
+    # review keys are never read (Issue #1071).
+    bypass = config.get("admin_bypass", "off")
     if bypass not in {"off", "beta-only", "always"}:
         raise ValueError("admin_bypass must be off, beta-only, or always")
     reviews = dict(DEFAULT_REVIEW)

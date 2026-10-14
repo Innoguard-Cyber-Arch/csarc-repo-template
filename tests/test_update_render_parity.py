@@ -342,6 +342,8 @@ def assert_parity(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     data: tuple[str, ...] = (),
+    *,
+    current_schema: bool = False,
 ) -> dict[str, object]:
     """AC4: equal render, zero false conflicts, and a deterministic check."""
     before = git(project, "status", "--porcelain")
@@ -367,13 +369,21 @@ def assert_parity(
     ]
     old_side = planning["old_side"]
     assert old_side["defaulted"] == []
-    assert old_side["snapshot"] == []
-    # Every saved answer is either old-side input or explicitly dropped as
-    # a question the old template never asked.
-    assert set(old_side["keys"]) | set(old_side["dropped"]) == (
-        saved_answer_keys(project)
-    )
-    assert not set(old_side["keys"]) & set(old_side["dropped"])
+    if current_schema:
+        # SPEC-009 (#1071): a schema 2 target replays its verified
+        # provenance context plus the saved intent; nothing is dropped.
+        saved = saved_answer_keys(project) - {"schema_version"}
+        assert saved <= set(old_side["keys"])
+        assert set(old_side["snapshot"]) == set(old_side["keys"])
+        assert old_side["dropped"] == []
+    else:
+        assert old_side["snapshot"] == []
+        # Every saved answer is either old-side input or explicitly dropped
+        # as a question the old template never asked.
+        assert set(old_side["keys"]) | set(old_side["dropped"]) == (
+            saved_answer_keys(project)
+        )
+        assert not set(old_side["keys"]) & set(old_side["dropped"])
     # The check never writes to the target.
     assert git(project, "status", "--porcelain") == before
     assert git(project, "rev-parse", "HEAD") == head
@@ -440,7 +450,7 @@ def test_current_schema_update_has_render_parity(
                 "--yes",
                 "--non-interactive",
                 "--data",
-                "language=ci",
+                "languages=[]",
                 "--data",
                 f"repository_url={REPOSITORY_URL}",
             ]
@@ -451,8 +461,13 @@ def test_current_schema_update_has_render_parity(
     commit_all(project, "test: current consumer")
     capsys.readouterr()
     planning = assert_parity(
-        project, template_source["following"], tmp_path, capsys
+        project,
+        template_source["following"],
+        tmp_path,
+        capsys,
+        current_schema=True,
     )
-    # release_ownership is persisted intent the template only asks for
-    # existing repositories; it reaches the new side, never the old side.
-    assert set(planning["old_side"]["dropped"]) <= {"release_ownership"}
+    # The verified render context reaches the old side (SPEC-009).
+    keys = set(planning["old_side"]["keys"])
+    assert {"project_mode", "project_name", "repository_url"} <= keys
+    assert "release_ownership" in keys

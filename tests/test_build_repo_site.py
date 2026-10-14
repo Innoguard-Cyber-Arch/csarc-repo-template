@@ -1,7 +1,11 @@
 import json
 import re
 import runpy
+import shutil
+import subprocess
 from pathlib import Path
+
+import settings_support
 
 ROOT = Path(__file__).parents[1]
 SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "build_repo_site.py"))
@@ -1067,14 +1071,20 @@ def test_substitute_config_tokens_resolves_known_keys_only() -> None:
     config = {
         "project_name": "Demo Project",
         "languages": ["python", "typescript"],
-        "project_visibility": "private",
+        "documentation_languages": "zh-tw+en",
     }
     text = _substitute_config_tokens(
-        "[[project_name]] uses [[languages]] ([[project_visibility]])",
+        "[[project_name]] uses [[languages]] ([[documentation_languages]])",
         config,
         lang="en",
     )
-    assert text == "Demo Project uses python, typescript (private)"
+    assert text == "Demo Project uses python, typescript (zh-tw+en)"
+    # Live facts and retired settings are not site tokens (SPEC-009).
+    for retired in ("project_visibility", "review", "features"):
+        assert (
+            _substitute_config_tokens(f"[[{retired}]]", config, lang="en")
+            == f"[[{retired}]]"
+        )
 
 
 def test_substitute_config_tokens_uses_zh_tw_list_separator() -> None:
@@ -1704,10 +1714,11 @@ def _write_minimal_downstream_fixture(root: Path) -> None:
             f'title="[[project_name]]" subtitle="[[project_description]]" '
             f'class="dense" legacy="false" >}}}}\n'
             f'{{{{< standard key="index-standard" title="s" >}}}}\n'
-            f"Languages: [[languages]]. Visibility: [[project_visibility]].\n"
+            f"Languages: [[languages]]. "
+            f"Docs: [[documentation_languages]].\n"
             f"{{{{< /standard >}}}}\n\n"
             f'{{{{< ops key="index-ops" title="o" >}}}}\n'
-            f"Owner: [[code_owner]]. Review: [[review]]. "
+            f"Owner: [[code_owner]]. Bypass: [[admin_bypass]]. "
             f"Lifecycle: [[lifecycle]]. "
             f"Clone: [[repository_url]].\n"
             f"{{{{< /ops >}}}}\n"
@@ -1722,15 +1733,17 @@ def _write_minimal_downstream_fixture(root: Path) -> None:
     )
     config_dir = root / ".csarc"
     config_dir.mkdir()
-    (config_dir / "config.yml").write_text(
-        "project_name: Demo Project\n"
-        "project_description: A demo downstream project.\n"
-        "languages: ['python', 'typescript']\n"
-        "lifecycle: ['issues', 'milestones']\n"
-        "review: peer\n"
-        "project_visibility: private\n"
-        "code_owner: '@example-org/demo-team'\n"
-        "repository_url: https://github.com/example-org/demo-project\n",
+    settings_support.write_settings(
+        config_dir / "config.yml",
+        languages=["python", "typescript"],
+        lifecycle=["issues", "milestones"],
+        admin_bypass="off",
+        code_owner="@example-org/demo-team",
+    )
+    # One-time seeds come from the native manifest (SPEC-009).
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "Demo Project"\n'
+        'description = "A demo downstream project."\n',
         encoding="utf-8",
     )
 
@@ -1739,12 +1752,28 @@ def test_minimal_downstream_fixture_builds_without_optional_data_files(
     tmp_path: Path,
 ) -> None:
     _write_minimal_downstream_fixture(tmp_path)
+    # The repository URL is read from the local origin remote (SPEC-009).
+    for command in (
+        ["init", "-q"],
+        [
+            "remote",
+            "add",
+            "origin",
+            "git@github.com:example-org/demo-project.git",
+        ],
+    ):
+        subprocess.run(  # noqa: S603
+            [shutil.which("git") or "git", "-C", str(tmp_path), *command],
+            check=True,
+            capture_output=True,
+        )
     outputs = build(
         tmp_path, tmp_path / "dist/repo-site", theme_href="docs/site-theme.css"
     )
     zh_tw = outputs["zh-tw"].read_text(encoding="utf-8")
     en = outputs["en"].read_text(encoding="utf-8")
 
+    assert "Clone: https://github.com/example-org/demo-project." in zh_tw
     assert "{{<" not in zh_tw
     assert "{{<" not in en
     assert '<link rel="stylesheet" href="../../docs/site-theme.css">' in zh_tw
@@ -1754,9 +1783,9 @@ def test_minimal_downstream_fixture_builds_without_optional_data_files(
     assert "Demo Project" in zh_tw
     assert "python、typescript" in zh_tw
     assert "python, typescript" in en
-    assert "private" in zh_tw
+    assert "zh-tw+en" in zh_tw
     assert "@example-org/demo-team" in zh_tw
-    assert "peer" in zh_tw
+    assert "Bypass: off" in zh_tw
     assert "issues、milestones" in zh_tw
     assert "https://github.com/example-org/demo-project" in zh_tw
 

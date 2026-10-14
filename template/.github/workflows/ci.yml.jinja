@@ -1,4 +1,4 @@
-{% set python_target = "3.14" if python_support_mode == "latest" else python_min_version -%}
+{% set python_target = "3.14" if python_floor == "latest" else python_floor -%}
 {% set has_python = "python" in languages -%}
 {% set has_typescript = "typescript" in languages -%}
 {% set has_rust = "rust" in languages -%}

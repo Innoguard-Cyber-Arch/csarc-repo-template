@@ -38,6 +38,7 @@ from csarc_cli import (
     lifecycle_report,
     merge_trace,
     release_phase,
+    settings_schema,
     update_plan,
 )
 from csarc_cli.lifecycle_report import (
@@ -89,47 +90,14 @@ GITHUB_REPOSITORY_URL = re.compile(
 )
 REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
+# SPEC-009 (Issue #1071): every resolved schema 2 intent plus the seeds,
+# live facts, derived context, and immutable project_mode a render consumed.
+# Retired keys are reported through governance_migration.RETIRED_SETTINGS.
 REPORT_SETTING_KEYS = frozenset(
     {
-        "actions_fallback",
-        "admin_bypass",
-        "code_owner",
-        "copilot_review",
-        "copyright_holder",
-        "coverage_mode",
-        "coverage_threshold",
-        "default_release_level",
-        "documentation_mode",
-        "enable_codeql",
-        "enable_governance_drift_check",
-        "enable_precommit",
-        "enable_template_update_notifications",
-        "features",
-        "governance_mode",
-        "i18n",
-        "language",
-        "languages",
-        "lifecycle",
-        "package_name",
-        "primary_language",
-        "project_description",
-        "project_license",
-        "project_maturity",
-        "project_mode",
-        "project_name",
-        "project_run_command",
-        "project_slug",
-        "project_verification_hook",
-        "project_visibility",
-        "python_min_version",
-        "python_support_mode",
-        "release_ownership",
-        "release_trigger",
-        "repository_url",
-        "review",
-        "security_reporting_channel",
-        "verification_mode",
-        "work_item_mapping_review",
+        *settings_schema.INTENT_SETTINGS,
+        *settings_schema.DECISION_SETTINGS,
+        *settings_schema.CONTEXT_KEYS,
     }
 )
 WORK_ITEM_DEFAULTS = (
@@ -1267,12 +1235,16 @@ def copier_copy(
     *,
     skip_tasks: bool,
     persist_answers: bool = True,
-) -> None:
+    decisions: Mapping[str, object] | None = None,
+) -> dict[str, object]:
     """Render one immutable template revision into a staging directory.
 
     ``persist_answers=False`` keeps Copier's rendered answers file exactly
     as the template recorded it, so the caller can read which questions the
-    template actually asked.
+    template actually asked. Otherwise the template's resolved render
+    context (SPEC-009 seeds, live facts, derived context, and project_mode)
+    is returned for provenance, and the settings file is rewritten in its
+    canonical schema with only explicit one-time ``decisions`` added.
     """
     command = [
         sys.executable,
@@ -1288,8 +1260,11 @@ def copier_copy(
     if skip_tasks:
         command.append("--skip-tasks")
     data_file = stage.parent / f".{stage.name}-copier-data.yml"
+    render_data = dict(data)
+    if persist_answers:
+        render_data[settings_schema.RENDER_CONTEXT_FLAG] = True
     data_file.write_text(
-        yaml.safe_dump(dict(data), sort_keys=True), encoding="utf-8"
+        yaml.safe_dump(render_data, sort_keys=True), encoding="utf-8"
     )
     command.extend(["--data-file", str(data_file)])
     command.extend([source, str(stage)])
@@ -1308,12 +1283,35 @@ def copier_copy(
             )
         )
     if not persist_answers:
-        return
+        return {}
     try:
+        context = take_render_context(stage)
         pin_answer_commit(stage, revision.sha)
-        persist_release_answers(stage, data)
+        persist_release_answers(stage, data, decisions)
     except CliError as error:
         raise CliError(f"Copier {phase} failed: {error}") from error
+    return context
+
+
+def take_render_context(stage: Path) -> dict[str, object]:
+    """Read and remove the render context a schema 2 template wrote.
+
+    A template that predates SPEC-009 writes none, which returns ``{}``.
+    """
+    path = stage / settings_schema.RENDER_CONTEXT_FILE
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CliError("The template render context is unreadable.") from error
+    finally:
+        path.unlink(missing_ok=True)
+    if not isinstance(payload, dict) or set(payload) - set(
+        settings_schema.CONTEXT_KEYS
+    ):
+        raise CliError("The template render context has an unknown shape.")
+    return {str(key): value for key, value in payload.items()}
 
 
 def pin_answer_commit(target: Path, commit: str) -> None:
@@ -1374,14 +1372,64 @@ def read_copier_answers(path: Path) -> dict[str, object]:
     return {
         str(key): value
         for key, value in payload.items()
-        if isinstance(key, str) and not key.startswith("_")
+        if isinstance(key, str)
+        and not key.startswith("_")
+        and key != settings_schema.SCHEMA_KEY
     }
 
 
-def persist_release_answers(
-    target: Path, answers: Mapping[str, object]
+def explicit_decisions(
+    explicit_data: Mapping[str, object],
+) -> dict[str, object]:
+    """Return the one-time derived decisions passed with ``--data``."""
+    return {
+        key: value
+        for key, value in explicit_data.items()
+        if key in settings_schema.DECISION_SETTINGS
+    }
+
+
+def parse_settings_data(values: list[str]) -> dict[str, str]:
+    """Parse ``--data``; retired keys are checked against the render."""
+    return parse_data(values)
+
+
+def reject_retired_data_for(
+    stage: Path, explicit_data: Mapping[str, object]
 ) -> None:
-    """Persist release answers in the rendered template's schema."""
+    """Refuse retired ``--data`` once a schema 2 render is known.
+
+    Runs right after the side-effect-free preview render and before any
+    target write; an older target template still asks legacy questions.
+    """
+    path = config_path(stage)
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except OSError, yaml.YAMLError:
+        return
+    if (
+        not isinstance(payload, dict)
+        or settings_schema.SCHEMA_KEY not in payload
+    ):
+        return
+    try:
+        settings_schema.reject_retired_data(explicit_data)
+    except settings_schema.SettingsSchemaError as error:
+        raise CliError(str(error)) from error
+
+
+def persist_release_answers(
+    target: Path,
+    answers: Mapping[str, object],
+    decisions: Mapping[str, object] | None = None,
+) -> None:
+    """Persist release answers in the rendered template's schema.
+
+    A schema 2 render (SPEC-009) is rewritten canonically: its persistent
+    intent, the resolved release owner (#1068), and only the explicit
+    one-time ``decisions`` for derived values; seeds and facts never land
+    in the settings file.
+    """
     path = safe_copier_config_path(target)
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -1389,6 +1437,23 @@ def persist_release_answers(
         raise CliError(f"Cannot read Copier answers from {path}.") from error
     if not isinstance(payload, dict):
         raise CliError(f"Copier answers in {path} must be a mapping.")
+    if settings_schema.SCHEMA_KEY in payload:
+        values = {str(key): value for key, value in payload.items()}
+        values["release_ownership"] = release_ownership(answers)
+        for key, value in (decisions or {}).items():
+            if key in settings_schema.DECISION_SETTINGS:
+                values[key] = value
+        try:
+            text = settings_schema.config_text(values)
+        except settings_schema.SettingsSchemaError as error:
+            raise CliError(str(error)) from error
+        atomic_replace_text(
+            target,
+            path.relative_to(target).as_posix(),
+            text,
+            mode=stat.S_IMODE(path.lstat().st_mode),
+        )
+        return
     config_reader = managed_script(target, "csarc_config.py")
     simplified_schema = config_reader.is_file() and (
         "ACTIONS_FALLBACK_MODES" in config_reader.read_text(encoding="utf-8")
@@ -1637,9 +1702,14 @@ def pending_adoption_data(
     unknown_files: tuple[str, ...],
     target_head: str,
     work_item_mapping: dict[str, object],
+    render_context: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    """Build the checkpoint needed to resume one exact adoption."""
-    return {
+    """Build the checkpoint needed to resume one exact adoption.
+
+    Schema 2 settings omit seeds and live facts (SPEC-009), so the
+    checkpoint carries the resolved render context finalize replays.
+    """
+    payload: dict[str, object] = {
         "answers_sha256": hashlib.sha256(answers_path.read_bytes()).hexdigest(),
         "managed_files": [
             {"fingerprint": file_fingerprint(target / name), "path": name}
@@ -1666,6 +1736,9 @@ def pending_adoption_data(
         },
         "work_item_mapping": work_item_mapping,
     }
+    if render_context:
+        payload["render_context"] = dict(sorted(render_context.items()))
+    return payload
 
 
 def write_pending_adoption(target: Path, payload: dict[str, object]) -> None:
@@ -2064,24 +2137,53 @@ def write_provenance(
     answers: Mapping[str, object] | None = None,
     final_plan_sha256: str | None = None,
 ) -> None:
-    """Atomically persist verified release provenance."""
+    """Atomically persist verified release provenance.
+
+    When the target holds schema 2 settings (SPEC-009), the record also
+    binds the immutable project_mode, the resolved render context taken
+    from ``answers``, and digests of both, so status and update detect a
+    hand edit or a missing record before any write (Issue #1071).
+    """
+    payload = provenance_data(
+        revision,
+        previous,
+        applied_at=applied_at,
+        answers=answers,
+        final_plan_sha256=final_plan_sha256,
+    )
+    config = target / CONFIG_FILE
+    if answers is not None and config.is_file():
+        config_bytes = config.read_bytes()
+        try:
+            raw = yaml.safe_load(config_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, yaml.YAMLError) as error:
+            raise CliError(f"Cannot read {CONFIG_FILE}.") from error
+        if isinstance(raw, dict) and settings_schema.SCHEMA_KEY in raw:
+            payload["settings"] = settings_schema.settings_record(
+                settings_schema.context_from(answers), config_bytes
+            )
     atomic_replace_text(
         target,
         PROVENANCE_FILE.as_posix(),
-        json.dumps(
-            provenance_data(
-                revision,
-                previous,
-                applied_at=applied_at,
-                answers=answers,
-                final_plan_sha256=final_plan_sha256,
-            ),
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
         mode=0o666,
     )
+
+
+def load_saved_settings(target: Path) -> settings_schema.SavedSettings:
+    """Read legacy answers or verified schema 2 settings before any write.
+
+    An unknown schema, a hand-edited settings file or provenance record, a
+    missing record, or a contradictory project_mode fails closed here
+    (Issue #1071 AC4/AC6) with one stable error.
+    """
+    path = config_path(target)
+    try:
+        return settings_schema.read_saved_settings(
+            path, read_provenance(target)
+        )
+    except settings_schema.SettingsSchemaError as error:
+        raise CliError(str(error)) from error
 
 
 def read_provenance(target: Path) -> dict[str, object] | None:
@@ -2427,9 +2529,12 @@ def report_setting_rows(
         if before is None
         else governance_migration.setting_classes(before, after, explicit)
     )
-    reportable = REPORT_SETTING_KEYS | set(
-        governance_migration.RETIRED_SETTINGS
-    )
+    # A retired key is reported only when the saved file still has it.
+    retired = (
+        set(governance_migration.RETIRED_SETTINGS)
+        - settings_schema.RELEASE_OBSERVATIONS
+    ) & set(previous)
+    reportable = REPORT_SETTING_KEYS | retired
     keys = sorted(
         key for key in set(previous) | set(after) if key in reportable
     )
@@ -4263,6 +4368,18 @@ def prepare_adoption_candidate(
                     planned.unknown,
                     target_head,
                     work_item_mapping,
+                    {
+                        **settings_schema.context_from(answers),
+                        **(
+                            {
+                                "work_item_mapping_review": answers[
+                                    "work_item_mapping_review"
+                                ]
+                            }
+                            if "work_item_mapping_review" in answers
+                            else {}
+                        ),
+                    },
                 ),
             )
             verification = "deferred-manual-merge"
@@ -5494,6 +5611,37 @@ def capability_preflight(
     return payload
 
 
+MULTI_SETTINGS = frozenset(
+    key
+    for key, (kind, _allowed) in settings_schema.INTENT_SETTINGS.items()
+    if kind == settings_schema.MULTI and key != "languages"
+)
+
+
+def parse_multi_setting(key: str, value: object) -> list[str]:
+    """Parse one multi-select schema 2 setting from saved or --data input."""
+    if isinstance(value, list):
+        parsed: object = value
+    else:
+        text = str(value).strip()
+        try:
+            parsed = json.loads(text) if text.startswith("[") else None
+        except json.JSONDecodeError:
+            parsed = None
+        if parsed is None:
+            parsed = [part.strip() for part in text.split(",") if part.strip()]
+    allowed = settings_schema.INTENT_SETTINGS[key][1]
+    if not isinstance(parsed, list) or any(
+        not isinstance(item, str) or item not in allowed for item in parsed
+    ):
+        raise CliError(
+            f"{key} must list only "
+            + ", ".join(allowed)
+            + " (comma-separated)."
+        )
+    return list(dict.fromkeys(parsed))
+
+
 def parse_languages(value: str) -> list[str]:
     """Parse a CLI language selection without defining combinations."""
     try:
@@ -5808,6 +5956,8 @@ def base_data(
         "project_name": target.name.replace("-", " ").replace("_", " ").title(),
         "project_slug": slug,
         "package_name": slug.replace("-", "_").replace(".", "_"),
+        # Older templates still ask the single legacy `language`; a schema 2
+        # template ignores it and never saves it (SPEC-009).
         "language": "-".join(detected_languages) or "ci",
         "languages": detected_languages,
         "code_owner": DEFAULT_OWNER,
@@ -5983,7 +6133,13 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         verification=verification,
     )
 
-    answers = resolve_release_answers(target, read_copier_answers(answers_path))
+    pending_context = pending.get("render_context")
+    finalize_answers = read_copier_answers(answers_path)
+    if isinstance(pending_context, dict):
+        # Schema 2 saves no seed or live fact; replay the checkpoint's
+        # resolved render context (SPEC-009, Issue #1071).
+        finalize_answers = {**pending_context, **finalize_answers}
+    answers = resolve_release_answers(target, finalize_answers)
     saved_visibility = answers.get("project_visibility")
     if not isinstance(saved_visibility, str):
         raise CliError("Copier answers are missing project_visibility.")
@@ -6748,7 +6904,10 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
             "immutability, attestation, and signature verification.",
             file=sys.stderr,
         )
-    explicit_data = parse_data(args.data)
+    explicit_data = parse_settings_data(args.data)
+    # Adoption replays its saved plan answers verbatim, so only init
+    # records explicit one-time decisions here (SPEC-009).
+    decisions = explicit_decisions(explicit_data) if mode == "init" else {}
     repository = repository_context(
         target, explicit_data.get("project_visibility")
     )
@@ -6773,19 +6932,22 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         temporary_root = Path(temporary)
         stage = temporary_root / "preview"
         stage.mkdir()
-        copier_copy(
+        context = copier_copy(
             revision.source,
             revision,
             stage,
             data,
             skip_tasks=True,
+            decisions=decisions,
         )
+        reject_retired_data_for(stage, explicit_data)
         preview_files = {
             name: file_fingerprint(path)
             for name, path in project_files(stage).items()
         }
         answers: dict[str, object] = dict(data)
         answers.update(read_copier_answers(config_path(stage)))
+        answers.update(context)
         capabilities = capability_preflight(
             managed_script(stage, "release_policy.py"),
             target,
@@ -6848,15 +7010,17 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
             validate_copy_target(target, mode, require_clean=True)
             shutil.rmtree(stage)
             stage.mkdir()
-            copier_copy(
+            rebound_context = copier_copy(
                 approved_revision.source,
                 approved_revision,
                 stage,
                 data,
                 skip_tasks=True,
+                decisions=decisions,
             )
             rebound_answers: dict[str, object] = dict(data)
             rebound_answers.update(read_copier_answers(config_path(stage)))
+            rebound_answers.update(rebound_context)
             rebound_plan = ResolvedPlan(
                 mode=mode,
                 target=target,
@@ -6887,6 +7051,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 stage,
                 data,
                 skip_tasks=False,
+                decisions=decisions,
             )
             if copier_config_binding(stage) != preview_config_binding:
                 raise CliError(
@@ -7408,6 +7573,9 @@ def detect_install_state(
             "reason": legacy_commit_error(current),
             "state": INSTALL_STATE_MIGRATE,
         }
+    # Schema 2 settings must match their provenance digests; an unknown
+    # schema or a hand edit stops status here (Issue #1071 AC4).
+    saved_settings = load_saved_settings(target)
     status, current_revision, _target_revision, _previous = update_status(
         target,
         requested,
@@ -7434,7 +7602,7 @@ def detect_install_state(
         else trusted_policy_settings_check(
             target,
             current_revision,
-            read_copier_answers(answers_path),
+            dict(saved_settings.answers),
         )
     )
     policy = classify_policy_check(check_result)
@@ -7620,15 +7788,18 @@ def governance_drift_update_recommendation(
     saved_answers: Mapping[str, object], explicit_data: Mapping[str, str]
 ) -> str | None:
     """Explain the new default without changing an existing saved choice."""
-    if (
-        saved_answers.get("enable_governance_drift_check") is False
-        and "enable_governance_drift_check" not in explicit_data
+    saved = saved_answers.get("scheduled_checks")
+    legacy_off = saved_answers.get("enable_governance_drift_check") is False
+    if "scheduled_checks" in explicit_data:
+        return None
+    if legacy_off or (
+        isinstance(saved, list) and "governance-drift" not in saved
     ):
         return (
-            "new projects now enable the daily governance drift check by "
-            "default; this update preserves the saved false value. Set "
-            "--data enable_governance_drift_check=true to add the scheduled "
-            "workflow and its read-only checker."
+            "new projects enable the daily governance drift check by "
+            "default; this update preserves the saved choice. Add "
+            "governance-drift with --data scheduled_checks=... to add the "
+            "scheduled workflow and its read-only checker."
         )
     return None
 
@@ -7685,13 +7856,32 @@ def migrate_simplified_settings(
         **governance,
         "features": legacy_features,
         "documentation_mode": documentation_mode,
-        "primary_language": answers.get("readme_primary_language", "zh-tw"),
-        "i18n": "en-zh-tw",
         "project_license": "proprietary",
         "copyright_holder": answers.get(
             "copyright_holder", answers.get("project_name", "")
         ),
     }
+    # SPEC-009 schema 2 successors of the retired keys (Issue #1071); a
+    # value without an exact equivalent stops before any write.
+    try:
+        defaults.update(settings_schema.migrated_intent(answers))
+    except settings_schema.MigrationDecisionError as error:
+        successors = {"python_floor", "documentation_languages"}
+        if not successors & set(explicit_data):
+            raise CliError(str(error)) from error
+        partial = {
+            key: value
+            for key, value in answers.items()
+            if key
+            not in {
+                "python_support_mode",
+                "python_min_version",
+                "primary_language",
+                "i18n",
+                "readme_primary_language",
+            }
+        }
+        defaults.update(settings_schema.migrated_intent(partial))
     for key, value in defaults.items():
         if key not in answers and key not in explicit_data:
             migrated[key] = value
@@ -7709,11 +7899,6 @@ def update_plan_answers(  # noqa: C901
     migrated_settings = migrate_simplified_settings(answers, explicit_data)
     result.update(migrated_settings)
     update_data.update(migrated_settings)
-    for level in ("alpha", "beta", "early", "formal"):
-        key = f"release_level_{level}_verification"
-        value = explicit_data.get(key, answers.get(key))
-        if isinstance(value, str) and value in {"baseline", "docs"}:
-            update_data[key] = "fast"
     release_ownership(answers)
     release_keys = {
         "release_ownership_reason",
@@ -7772,7 +7957,14 @@ def update_plan_answers(  # noqa: C901
     for key, value in update_data.items():
         previous_value = answers.get(key)
         if key == "languages":
-            result[key] = parse_languages(str(value))
+            result[key] = (
+                list(value)
+                if isinstance(value, list)
+                else parse_languages(str(value))
+            )
+            update_data[key] = result[key]
+        elif key in MULTI_SETTINGS:
+            result[key] = parse_multi_setting(key, value)
             update_data[key] = result[key]
         elif isinstance(previous_value, bool):
             normalized = str(value).casefold()
@@ -7789,6 +7981,15 @@ def update_plan_answers(  # noqa: C901
                 raise CliError(f"{key} must be an integer value.") from error
         else:
             result[key] = value
+    # Schema 2 stores no retired key; the old side still reads them from
+    # the saved answers (Issue #1071).
+    # One-time inputs such as the work-item mapping review stay available
+    # to a reinstall plan but are never saved.
+    for key in settings_schema.retired_keys(result):
+        if key in settings_schema.ONE_TIME_INPUTS:
+            continue
+        result.pop(key, None)
+        update_data.pop(key, None)
     return result, update_data
 
 
@@ -7885,12 +8086,16 @@ def _render_reinstall_plan(
     temporary_root = Path(tempfile.mkdtemp(prefix=f"csarc-reinstall-{label}-"))
     stage = temporary_root / "rendered"
     stage.mkdir()
-    copier_copy(
-        revision.source,
-        revision,
-        stage,
-        candidate_answers,
-        skip_tasks=label == "preview",
+    # The resolved render context joins the answers that provenance records
+    # after the reinstall applies (SPEC-009, Issue #1071).
+    candidate_answers.update(
+        copier_copy(
+            revision.source,
+            revision,
+            stage,
+            candidate_answers,
+            skip_tasks=label == "preview",
+        )
     )
     # The freshly rendered answers file legitimately differs from the
     # target's (new _commit/_src_path, possibly new answers) on every
@@ -8156,6 +8361,8 @@ def render_old_side(
     saved: Mapping[str, object],
     provenance: Mapping[str, object] | None,
     update_data: Mapping[str, object],
+    *,
+    complete: bool = False,
 ) -> tuple[update_plan.OldSideInputs, dict[str, object], Path]:
     """Rebuild the old template render from trusted inputs only (#1063).
 
@@ -8189,6 +8396,20 @@ def render_old_side(
             ) from error
         return update_plan.asked_keys(read_copier_answers(config_path(stage)))
 
+    if complete:
+        # A schema 2 target's verified provenance context plus its saved
+        # intent are exactly the answers the old render consumed (#1071);
+        # its intent-only settings file cannot list the asked seeds.
+        reconstructed = update_plan.OldSideInputs(
+            answers=dict(sorted(saved.items())),
+            sources=dict.fromkeys(saved, update_plan.OLD_SOURCE_SNAPSHOT),
+            dropped=(),
+        )
+        new_data = update_plan.new_side_data(saved, reconstructed, update_data)
+        old = reconstructed.with_context(new_data)
+        baseline = workdir / "old-baseline"
+        render(baseline, old.copier_answers())
+        return old, new_data, baseline
     asked = render(workdir / "old-asked", saved)
     reconstructed = update_plan.reconstruct_old_inputs(
         saved, asked, update_plan.trusted_snapshot(provenance)
@@ -9426,6 +9647,9 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
             "Adoption is pending; complete the manual merge and run "
             "csarc adopt --finalize before update."
         )
+    # Hand-edited or contradictory schema 2 settings stop before any write
+    # (SPEC-009, Issue #1071 AC4).
+    load_saved_settings(target)
     resolved, previous = require_recorded_live_facts(target, sealed)
     decisions = cast(dict[str, Any], sealed["decisions"])
     pins = decisions["action_pins"]
@@ -9475,7 +9699,29 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
             )
         candidate = applied.candidate
         pin_answer_commit(candidate, run_inputs.target_sha)
-        persist_release_answers(candidate, answers)
+        # One-time derived decisions come only from the saved schema 2 file
+        # and the plan's explicit --data, exactly as the check recorded them
+        # (SPEC-009, Issue #1071).
+        raw_answers = cast(dict[str, object], inputs["raw_answers"])
+        saved_decisions = (
+            {
+                key: raw_answers[key]
+                for key in settings_schema.DECISION_SETTINGS
+                if key in raw_answers
+            }
+            if settings_schema.SCHEMA_KEY in raw_answers
+            else {}
+        )
+        persist_release_answers(
+            candidate,
+            answers,
+            {
+                **saved_decisions,
+                **explicit_decisions(
+                    cast(dict[str, object], inputs["explicit_data"])
+                ),
+            },
+        )
         verify_project(candidate)
         write_provenance(
             candidate,
@@ -9535,8 +9781,15 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     answers_path = config_path(target)
     if not answers_path.is_file():
         raise CliError(f"Missing {CONFIG_FILE}; use csarc adopt first.")
-    saved_answers = read_copier_answers(answers_path)
-    explicit_data = parse_data(args.data)
+    # Unknown schemas and hand-edited or contradictory schema 2 settings
+    # stop here, before any render or write (Issue #1071 AC4/AC6).
+    saved_settings = load_saved_settings(target)
+    saved_answers = dict(saved_settings.answers)
+    explicit_data = parse_settings_data(args.data)
+    decisions = {
+        **saved_settings.decisions,
+        **explicit_decisions(explicit_data),
+    }
     saved_visibility = saved_answers.get("project_visibility")
     repository = repository_context(
         target,
@@ -9588,19 +9841,22 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         workdir = Path(temporary).resolve()
         stage = workdir / "project"
         stage.mkdir()
-        copier_copy(
+        render_context = copier_copy(
             source,
             target_revision,
             stage,
             candidate_answers,
             skip_tasks=True,
+            decisions=decisions,
         )
+        reject_retired_data_for(stage, explicit_data)
         target_uses_current_config = (stage / CONFIG_FILE).is_file()
         # The persisted file intentionally keeps only user-owned release
         # choices. Preserve the repository-derived release contract in the
         # in-memory plan that still needs it for evidence and reporting.
         answers = dict(candidate_answers)
         answers.update(read_copier_answers(config_path(stage)))
+        answers.update(render_context)
         preflight = capability_preflight(
             managed_script(stage, "release_policy.py"),
             target,
@@ -9625,6 +9881,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             saved_answers,
             previous,
             update_data,
+            complete=saved_settings.schema == settings_schema.SCHEMA_VERSION,
         )
         current_capabilities = capability_preflight(
             managed_script(old_stage, "release_policy.py"),
@@ -9871,7 +10128,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             )
         candidate = applied.candidate
         pin_answer_commit(candidate, str(status["target_sha"]))
-        persist_release_answers(candidate, answers)
+        persist_release_answers(candidate, answers, decisions)
         verify_project(candidate)
         write_provenance(candidate, target_revision, previous, answers=answers)
         artifacts, delete_paths = candidate_patch_effects(candidate)

@@ -1,201 +1,109 @@
-"""Read and normalize the template-managed CSARC configuration."""
+"""Read the current CSARC settings schema and native project facts.
+
+SPEC-009 (Issue #1071) is the closed classification this reader enforces.
+`.csarc/config.yml` stores only persistent intent: settings that change
+later behavior and cannot be safely reconstructed. One-time seeds, live
+repository facts, derived context, and machine metadata never live here;
+seeds are read from native sources (LICENSE and language manifests), live
+facts are observed by the pinned CLI, and the immutable project mode and
+resolved render context live in `.csarc/provenance.json`.
+
+This is a current-only parser. It never normalizes, defaults, or aliases a
+legacy setting: an older or unknown schema, a retired or unknown key, a
+missing intent, or an invalid value fails closed with one stable error that
+points to `csarc update`. Legacy settings are read only by the pinned
+CLI's migration registry, outside the repository.
+"""
 
 from __future__ import annotations
 
 import ast
+import json
+import re
+import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 CONFIG_FILE = Path(".csarc/config.yml")
-LANGUAGES = {"go", "python", "rust", "typescript"}
-FEATURES = {"docker"}
-DOCUMENTATION_MODES = {"template-and-content", "content-only", "off"}
-PRIMARY_LANGUAGES = {"en", "zh-tw"}
-I18N_MODES = {"en-zh-tw", "off"}
-PROJECT_LICENSES = {"Apache-2.0", "MIT", "proprietary"}
-GOVERNANCE_MODES = {"managed", "observe"}
-LIFECYCLE_CAPABILITIES = {"issues", "milestones"}
-HUMAN_REVIEW_MODES = {"peer", "solo"}
-COPILOT_REVIEW_MODES = {"allowed", "off"}
-ACTIONS_FALLBACK_MODES = {"admin", "off"}
-ADMIN_BYPASS_MODES = {"off", "beta-only", "always"}
-PROJECT_MATURITIES = {"early", "formal"}
-VERIFICATION_MODES = {"hosted", "local"}
-RELEASE_TRIGGERS = {"main", "manual"}
-RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
+SCHEMA_KEY = "schema_version"
+SCHEMA_VERSION = 2
+# Copier needs these two keys to locate the template source and revision;
+# they are the only machine metadata the settings file may carry.
+COPIER_METADATA_KEYS = frozenset({"_commit", "_src_path"})
 # Stable prefix for fail-closed settings errors shared by every reader.
 SETTINGS_ERROR_PREFIX = "CSARC settings error"
-RELEASE_SETTINGS = {
-    "csarc-owned": ("csarc-admin", "required"),
-    "product-owned": ("product-admin", "product-defined"),
-    "verification-only": ("none", "not-required"),
+MIGRATION_COMMAND = "csarc update"
+
+KIND_CHOICE = "choice"
+KIND_MULTI = "multi"
+KIND_BOOL = "bool"
+KIND_INT = "int"
+KIND_TEXT = "text"
+
+# Persistent intent (SPEC-009). Every key is required in schema 2.
+INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "languages": (KIND_MULTI, ("go", "python", "rust", "typescript")),
+    "python_floor": (KIND_CHOICE, ("latest", "3.12", "3.13", "3.14")),
+    "documentation_mode": (
+        KIND_CHOICE,
+        ("template-and-content", "content-only", "off"),
+    ),
+    "documentation_languages": (
+        KIND_CHOICE,
+        ("zh-tw", "en", "zh-tw+en", "en+zh-tw"),
+    ),
+    "verification_mode": (KIND_CHOICE, ("local", "hosted")),
+    "admin_bypass": (KIND_CHOICE, ("off", "beta-only", "always")),
+    "copilot_review": (KIND_CHOICE, ("allowed", "off")),
+    "governance_mode": (KIND_CHOICE, ("managed", "observe")),
+    "release_ownership": (
+        KIND_CHOICE,
+        ("csarc-owned", "product-owned", "verification-only"),
+    ),
+    "release_trigger": (KIND_CHOICE, ("main", "manual")),
+    "project_maturity": (KIND_CHOICE, ("early", "formal")),
+    "code_owner": (KIND_TEXT, ()),
+    "enable_codeql": (KIND_BOOL, ()),
+    "scheduled_checks": (KIND_MULTI, ("governance-drift", "template-update")),
+    "lifecycle": (KIND_MULTI, ("issues", "milestones")),
+    "coverage_mode": (KIND_CHOICE, ("global", "diff")),
+    "coverage_threshold": (KIND_INT, ()),
+    "security_reporting_channel": (KIND_TEXT, ()),
+    "container": (KIND_BOOL, ()),
+    "project_verification_hook": (KIND_TEXT, ()),
 }
-# One flat boolean per template-owned policy area a project can opt out of
-# (Issue #532). A key absent from .csarc/config.yml means "on" -- the
-# pre-toggle behavior -- so upgrading an older answers file never silently
-# drops coverage. Immutable Releases has no toggle here: it reuses the
-# existing release_immutable_releases contract instead of a duplicate key.
-POLICY_TOGGLES = (
-    "policy_repository_settings",
-    "policy_actions_permissions",
-    "policy_labels",
-    "policy_branch_ruleset",
+# Derived context that is saved only as a one-time user decision when no
+# native manifest resolves it uniquely (SPEC-009); otherwise it is absent.
+DECISION_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "package_name": (KIND_TEXT, ()),
+    "project_run_command": (KIND_TEXT, ()),
+}
+RELEASE_OWNERSHIPS = frozenset(INTENT_SETTINGS["release_ownership"][1])
+ALLOWED_KEYS = frozenset(
+    {SCHEMA_KEY, *COPIER_METADATA_KEYS, *INTENT_SETTINGS, *DECISION_SETTINGS}
 )
 
-# Issue #752: how a pull request earns merge approval. "copilot" accepts a
-# clean GitHub Copilot review of the exact head (or a maintainer approval);
-# "human" keeps the maintainer-approval-only Ruleset. A key absent from an
-# older answers file means "human", the behavior before this option existed.
-PR_REVIEW_MODES = {"copilot", "human"}
-COPILOT_REVIEW_MAX_LEVELS = {
-    "unlimited",
-    "alpha",
-    "beta",
-    "stable",
-    "early",
-    "release",
-}
-RELEASE_LEVELS = {"beta", "stable"}
-RELEASE_LEVEL_REVIEWS = {"self", "peer"}
-RELEASE_LEVEL_VERIFICATION = {"baseline", "fast", "docs", "full"}
-LEGACY_REVIEW_DEFAULTS = {
-    "alpha": "self",
-    "beta": "peer",
-    "early": "peer",
-    "formal": "peer",
-}
+CODE_OWNER = re.compile(
+    r"^@(?:(?![A-Za-z0-9-]*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?"
+    r"|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$"
+)
+PACKAGE_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
+HOOK_PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
+PLACEHOLDERS = frozenset({"todo", "tbd", "placeholder"})
 
 
-def _legacy_admin_bypass(config: dict[str, object]) -> str:
-    """Preserve the effective self-review scope of older configurations."""
-    review = config.get("review")
-    if review == "solo":
-        return "always"
-    if review == "peer":
-        return "off"
-    beta_reviews = {
-        config.get("release_level_alpha_review", "self"),
-        config.get("release_level_beta_review", "peer"),
-    }
-    stable_reviews = {
-        config.get("release_level_early_review", "peer"),
-        config.get("release_level_formal_review", "peer"),
-    }
-    if stable_reviews == {"self"}:
-        return "always"
-    if "self" in beta_reviews:
-        return "beta-only"
-    return "off"
+class SettingsError(ValueError):
+    """A saved setting is missing, unknown, retired, or contradictory."""
 
 
-def _list_setting(
-    config: dict[str, object], key: str, allowed: set[str], path: Path
-) -> None:
-    value = config.get(key)
-    if value is None:
-        return
-    if not isinstance(value, list) or any(
-        not isinstance(item, str) or item not in allowed for item in value
-    ):
-        expected = ", ".join(sorted(allowed))
-        raise ValueError(
-            f"Invalid {key} in {path}; expected a list containing only "
-            f"{expected}"
-        )
-    if len(value) != len(set(value)):
-        raise ValueError(f"Duplicate {key} in {path}")
-
-
-def _legacy_default(  # noqa: C901
-    config: dict[str, object], key: str
-) -> object:
-    """Return one new setting from a pre-#900 answers file."""
-    if key == "governance_mode":
-        values = [config.get(toggle, True) for toggle in POLICY_TOGGLES]
-        for toggle, value in zip(POLICY_TOGGLES, values, strict=True):
-            if not isinstance(value, bool):
-                raise ValueError(
-                    f"Invalid {toggle} in {CONFIG_FILE}: expected true or false"
-                )
-        if all(value is True for value in values):
-            return "managed"
-        if all(value is False for value in values):
-            return "observe"
-        raise ValueError(
-            "Legacy policy_* settings are mixed; choose governance_mode "
-            "explicitly before updating"
-        )
-    if key == "lifecycle":
-        return ["issues", "milestones"]
-    if key == "actions_fallback":
-        return "off"
-    if key == "admin_bypass":
-        return _legacy_admin_bypass(config)
-    if key == "project_maturity":
-        return (
-            "formal"
-            if config.get("default_release_level") == "formal"
-            else "early"
-        )
-    if key == "verification_mode":
-        return "hosted"
-    if key == "review":
-        reviews = [
-            config.get(
-                f"release_level_{level}_review",
-                LEGACY_REVIEW_DEFAULTS[level],
-            )
-            for level in LEGACY_REVIEW_DEFAULTS
-        ]
-        return "peer" if "peer" in reviews else "solo"
-    if key == "copilot_review":
-        return "allowed" if config.get("pr_review_mode") == "copilot" else "off"
-    if key == "release_trigger":
-        return "main"
-    if key == "features":
-        return ["docker"] if config.get("enable_docker") is True else []
-    if key == "documentation_mode":
-        features = config.get("features")
-        if isinstance(features, list) and "repo-site" not in features:
-            return "content-only"
-        return "template-and-content"
-    if key == "primary_language":
-        return config.get("readme_primary_language", "zh-tw")
-    if key == "i18n":
-        return "en-zh-tw"
-    if key == "project_license":
-        return "proprietary"
-    raise KeyError(key)
-
-
-def normalize_config(config: dict[str, object]) -> dict[str, object]:
-    """Add the small public schema to legacy Copier answers in memory."""
-    result = dict(config)
-    legacy_features = result.get("features")
-    if isinstance(legacy_features, list) and "repo-site" in legacy_features:
-        result.setdefault("documentation_mode", "template-and-content")
-        result["features"] = [
-            feature for feature in legacy_features if feature != "repo-site"
-        ]
-    for key in (
-        "governance_mode",
-        "lifecycle",
-        "actions_fallback",
-        "admin_bypass",
-        "project_maturity",
-        "verification_mode",
-        "review",
-        "copilot_review",
-        "release_trigger",
-        "documentation_mode",
-        "features",
-        "primary_language",
-        "i18n",
-        "project_license",
-    ):
-        if key not in result:
-            result[key] = _legacy_default(result, key)
-    return result
+def settings_error(path: Path, detail: str) -> SettingsError:
+    """Return one stable fail-closed error that names the recovery path."""
+    return SettingsError(
+        f"{SETTINGS_ERROR_PREFIX}: {detail} in {path}. Settings change only "
+        f"through `{MIGRATION_COMMAND} --data KEY=VALUE`; restore a hand "
+        f"edit with `git checkout -- {CONFIG_FILE}` first."
+    )
 
 
 def _scalar(value: str) -> object:
@@ -207,9 +115,7 @@ def _scalar(value: str) -> object:
     if value.startswith(("'", '"', "[")):
         try:
             return ast.literal_eval(value)
-        except SyntaxError:
-            pass
-        except ValueError:
+        except (SyntaxError, ValueError):
             pass
     try:
         return int(value)
@@ -217,11 +123,15 @@ def _scalar(value: str) -> object:
         return value
 
 
-def load_config(path: Path = CONFIG_FILE) -> dict[str, object]:
-    """Load Copier's flat scalar/list answers without a runtime dependency."""
+def parse_settings_text(text: str, path: Path) -> dict[str, object]:
+    """Parse the flat scalar/list YAML subset without validating it.
+
+    This is the shared tokenizer, not a settings reader: callers that need
+    a trusted value must use :func:`load_config`.
+    """
     result: dict[str, object] = {}
     active_key: str | None = None
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
+    for raw_line in text.splitlines():
         if not raw_line or raw_line.lstrip().startswith("#"):
             continue
         if raw_line.startswith("- "):
@@ -245,13 +155,136 @@ def load_config(path: Path = CONFIG_FILE) -> dict[str, object]:
         raw_value = raw_value.strip()
         result[key] = _scalar(raw_value) if raw_value else []
         active_key = key
-    result = normalize_config(result)
-    validate_config(result, path)
     return result
 
 
-class SettingsError(ValueError):
-    """A saved setting is missing, unknown, or contradictory."""
+def declared_schema(values: dict[str, object], path: Path) -> int:
+    """Return the declared schema or fail closed for a legacy file."""
+    if SCHEMA_KEY not in values:
+        raise SettingsError(
+            f"{SETTINGS_ERROR_PREFIX}: {path} has no {SCHEMA_KEY}; it uses a "
+            f"legacy settings schema. Run `{MIGRATION_COMMAND}` with the "
+            "pinned CLI to migrate it; repository scripts never read legacy "
+            "settings."
+        )
+    schema = values[SCHEMA_KEY]
+    if type(schema) is not int or schema != SCHEMA_VERSION:
+        raise SettingsError(
+            f"{SETTINGS_ERROR_PREFIX}: {path} declares {SCHEMA_KEY} "
+            f"{schema!r}; this reader accepts only schema {SCHEMA_VERSION}. "
+            "Use the CLI release that wrote it instead of rewriting it."
+        )
+    return schema
+
+
+def _validate_text(key: str, value: str, path: Path) -> None:
+    """Validate the free-text settings that still have a fixed shape."""
+    stripped = value.strip()
+    if key == "code_owner":
+        if value and CODE_OWNER.fullmatch(value) is None:
+            raise settings_error(
+                path, "code_owner must be '', @user, or @organization/team"
+            )
+    elif key == "security_reporting_channel":
+        if not stripped or stripped.lower() in PLACEHOLDERS or "<" in value:
+            raise settings_error(
+                path, "security_reporting_channel needs an approved channel"
+            )
+    elif key == "project_verification_hook":
+        if value and (
+            stripped != value
+            or value.startswith("/")
+            or ".." in value.split("/")
+            or HOOK_PATH.fullmatch(value) is None
+        ):
+            raise settings_error(
+                path,
+                "project_verification_hook must be a safe repository-"
+                "relative path",
+            )
+    elif key == "package_name":
+        if PACKAGE_NAME.fullmatch(value) is None:
+            raise settings_error(
+                path, "package_name must be a lowercase Python identifier"
+            )
+    elif key == "project_run_command" and (
+        not stripped or stripped.lower() in PLACEHOLDERS or "<" in value
+    ):
+        raise settings_error(
+            path, "project_run_command needs a working command"
+        )
+
+
+def _validate_value(  # noqa: C901
+    key: str, spec: tuple[str, tuple[str, ...]], value: object, path: Path
+) -> None:
+    """Validate one setting against its SPEC-009 kind and values."""
+    kind, allowed = spec
+    if kind == KIND_CHOICE:
+        if not isinstance(value, str) or value not in allowed:
+            raise settings_error(
+                path,
+                f"{key} is {value!r}; expected one of " + ", ".join(allowed),
+            )
+    elif kind == KIND_MULTI:
+        if not isinstance(value, list) or any(
+            not isinstance(item, str) or item not in allowed for item in value
+        ):
+            raise settings_error(
+                path,
+                f"{key} must be a list containing only " + ", ".join(allowed),
+            )
+        if len(value) != len(set(value)):
+            raise settings_error(path, f"{key} repeats a value")
+    elif kind == KIND_BOOL:
+        if not isinstance(value, bool):
+            raise settings_error(path, f"{key} must be true or false")
+    elif kind == KIND_INT:
+        if type(value) is not int or not 1 <= value <= 100:
+            raise settings_error(
+                path, f"{key} must be an integer from 1 to 100"
+            )
+    elif not isinstance(value, str):
+        raise settings_error(path, f"{key} must be a string")
+    else:
+        _validate_text(key, value, path)
+
+
+def validate_config(
+    config: dict[str, object], path: Path = CONFIG_FILE
+) -> None:
+    """Fail closed unless `config` is exactly a valid schema 2 file."""
+    declared_schema(config, path)
+    unknown = sorted(key for key in config if key not in ALLOWED_KEYS)
+    if unknown:
+        raise settings_error(
+            path,
+            "unknown or retired settings "
+            + ", ".join(unknown)
+            + f" are not part of schema {SCHEMA_VERSION}",
+        )
+    missing = sorted(key for key in INTENT_SETTINGS if key not in config)
+    if missing:
+        raise settings_error(
+            path, "missing persistent settings " + ", ".join(missing)
+        )
+    for key, spec in {**INTENT_SETTINGS, **DECISION_SETTINGS}.items():
+        if key in config:
+            _validate_value(key, spec, config[key], path)
+
+
+def load_config(path: Path = CONFIG_FILE) -> dict[str, object]:
+    """Load and validate the current settings schema without defaults."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise SettingsError(
+            f"{SETTINGS_ERROR_PREFIX}: cannot read {path} ({error}); run "
+            f"`{MIGRATION_COMMAND}` to restore the managed settings."
+        ) from error
+    config = parse_settings_text(text, path)
+    validate_config(config, path)
+    return config
 
 
 def resolve_release_ownership(
@@ -279,6 +312,8 @@ def resolve_release_ownership(
             + ", ".join(sorted(RELEASE_OWNERSHIPS))
             + "."
         )
+    # project_mode is provenance, not a setting; the CLI passes it when it
+    # checks a resolved render context.
     if ownership == "product-owned" and config.get("project_mode") == "new":
         raise SettingsError(
             f"{SETTINGS_ERROR_PREFIX}: release_ownership product-owned "
@@ -296,137 +331,149 @@ def renders_release_workflow(
     return resolve_release_ownership(config, path) == "csarc-owned"
 
 
-def validate_release_config(config: dict[str, object]) -> None:
-    """Validate ownership and any legacy persisted release observations."""
-    ownership = config.get("release_ownership")
-    if ownership is None:
-        return
-    if not isinstance(ownership, str) or ownership not in RELEASE_OWNERSHIPS:
-        raise ValueError(f"Invalid release_ownership: {ownership!r}")
-    legacy_keys = {
-        "release_workflow",
-        "release_required_inputs",
-        "release_ownership_reason",
-        "release_settings_owner",
-        "release_immutable_releases",
-    }
-    if not legacy_keys.intersection(config):
-        return
-    workflow = config.get("release_workflow")
-    inputs = config.get("release_required_inputs")
-    reason = config.get("release_ownership_reason")
-    settings = (
-        config.get("release_settings_owner"),
-        config.get("release_immutable_releases"),
+def documentation_language_pair(config: dict[str, object]) -> tuple[str, str]:
+    """Return the primary and optional secondary documentation language."""
+    value = str(config["documentation_languages"])
+    primary, _, secondary = value.partition("+")
+    return primary, secondary
+
+
+# ---------------------------------------------------------------------------
+# Native project facts (SPEC-009 one-time seeds and derived context).
+# ---------------------------------------------------------------------------
+
+LICENSE_PROPRIETARY = "proprietary"
+LICENSE_CUSTOM = "custom"
+_PROPRIETARY_LINE = re.compile(
+    r"^Copyright \(c\) (?P<holder>.+?)\. All rights reserved\.$"
+)
+_COPYRIGHT_LINE = re.compile(r"^\s*Copyright \(c\) (?P<holder>.+?)\s*$")
+
+
+def license_facts(root: Path) -> tuple[str, str]:
+    """Return the license and copyright holder declared by LICENSE.
+
+    LICENSE is the native source for both one-time seeds. A text that is
+    not one of the three CSARC starter licenses is ``custom``: it belongs to
+    the product and its holder is not inferred.
+    """
+    path = root / "LICENSE"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return LICENSE_CUSTOM, ""
+    lines = text.splitlines()
+    first = next((line.strip() for line in lines if line.strip()), "")
+    proprietary = _PROPRIETARY_LINE.fullmatch(first)
+    if proprietary is not None:
+        return LICENSE_PROPRIETARY, proprietary.group("holder")
+    if first == "MIT License":
+        identifier = "MIT"
+    elif first == "Apache License" and "Version 2.0, January 2004" in text:
+        identifier = "Apache-2.0"
+    else:
+        return LICENSE_CUSTOM, ""
+    holders = [
+        match.group("holder")
+        for line in lines
+        if (match := _COPYRIGHT_LINE.fullmatch(line)) is not None
+        and "{" not in match.group("holder")
+        and "[" not in match.group("holder")
+    ]
+    return identifier, holders[-1] if holders else ""
+
+
+_DESCRIPTION_BLOCK = re.compile(
+    r"<!-- csarc-project-description:start -->\n(?P<text>.*?)\n"
+    r"<!-- csarc-project-description:end -->",
+    re.DOTALL,
+)
+
+
+def _readme_identity(root: Path) -> tuple[str, str]:
+    """Return the human name and description the README seed recorded."""
+    try:
+        text = (root / "README.md").read_text(encoding="utf-8")
+    except (FileNotFoundError, NotADirectoryError):
+        return "", ""
+    title = next(
+        (
+            line[2:].strip()
+            for line in text.splitlines()
+            if line.startswith("# ")
+        ),
+        "",
     )
-    if ownership == "verification-only" and workflow:
-        raise ValueError(
-            "verification-only release ownership cannot select a workflow"
+    block = _DESCRIPTION_BLOCK.search(text)
+    return title, block.group("text").strip() if block else ""
+
+
+def _manifest_identity(root: Path) -> tuple[str, str]:
+    """Return the product name and description from its native manifest."""
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        project = tomllib.loads(pyproject.read_text(encoding="utf-8")).get(
+            "project", {}
         )
-    if ownership != "verification-only" and not workflow:
-        raise ValueError(f"{ownership} release ownership needs a workflow")
-    if not isinstance(reason, str) or not reason:
-        raise ValueError("release ownership needs a non-empty reason")
-    if not isinstance(inputs, list) or any(
-        not isinstance(item, str) or not item for item in inputs
-    ):
-        raise ValueError("release_required_inputs must contain strings")
-    if len(inputs) != len(set(inputs)):
-        raise ValueError("Duplicate release_required_inputs")
-    if settings != RELEASE_SETTINGS[ownership]:
-        raise ValueError("Release repository settings do not match ownership")
+        if isinstance(project, dict) and isinstance(project.get("name"), str):
+            return project["name"], str(project.get("description", ""))
+    package = root / "package.json"
+    if package.is_file():
+        payload = json.loads(package.read_text(encoding="utf-8"))
+        if isinstance(payload, dict) and isinstance(payload.get("name"), str):
+            return payload["name"], str(payload.get("description", ""))
+    cargo = root / "Cargo.toml"
+    if cargo.is_file():
+        crate = tomllib.loads(cargo.read_text(encoding="utf-8")).get(
+            "package", {}
+        )
+        if isinstance(crate, dict) and isinstance(crate.get("name"), str):
+            return crate["name"], str(crate.get("description", ""))
+    gomod = root / "go.mod"
+    if gomod.is_file():
+        for line in gomod.read_text(encoding="utf-8").splitlines():
+            if line.startswith("module "):
+                return line.split()[1].rsplit("/", 1)[-1], ""
+    return root.resolve().name, ""
 
 
-def validate_config(
-    config: dict[str, object], path: Path = CONFIG_FILE
-) -> None:
-    """Validate the managed settings consumed by repository automation."""
-    choices = {
-        "actions_fallback": ACTIONS_FALLBACK_MODES,
-        "admin_bypass": ADMIN_BYPASS_MODES,
-        "project_maturity": PROJECT_MATURITIES,
-        "verification_mode": VERIFICATION_MODES,
-        "branch_strategy": {"delivery", "main"},
-        "copilot_review": COPILOT_REVIEW_MODES,
-        "copilot_review_max_level": COPILOT_REVIEW_MAX_LEVELS,
-        "container_mode": {"none", "verify", "ghcr"},
-        "coverage_mode": {"diff", "global"},
-        "documentation_mode": DOCUMENTATION_MODES,
-        "default_release_level": {
-            "alpha",
-            "beta",
-            "early",
-            "formal",
-            "stable",
-        },
-        "governance_mode": GOVERNANCE_MODES,
-        "i18n": I18N_MODES,
-        "primary_language": PRIMARY_LANGUAGES,
-        "project_license": PROJECT_LICENSES,
-        "project_mode": {"existing", "new"},
-        "project_visibility": {"internal", "private", "public"},
-        "pr_review_mode": PR_REVIEW_MODES,
-        "python_support_mode": {"latest", "minimum"},
-        "release_trigger": RELEASE_TRIGGERS,
-        "release_ownership": RELEASE_OWNERSHIPS,
-        "review": HUMAN_REVIEW_MODES,
-        **{
-            f"release_level_{level}_review": RELEASE_LEVEL_REVIEWS
-            for level in RELEASE_LEVELS
-        },
-        **{
-            f"release_level_{level}_verification": RELEASE_LEVEL_VERIFICATION
-            for level in RELEASE_LEVELS
-        },
+def _origin_url(root: Path) -> str:
+    """Return the canonical GitHub URL of the local origin, if any."""
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", "-C", str(root), "config", "--get", "remote.origin.url"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return ""
+    match = re.fullmatch(
+        r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+        r"(?P<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?",
+        result.stdout.strip(),
+    )
+    return f"https://github.com/{match.group('slug')}" if match else ""
+
+
+def project_facts(root: Path) -> dict[str, object]:
+    """Return the one-time seeds and offline facts read from native sources.
+
+    Runtime never asks GitHub for these values (SPEC-009): the name and
+    description come from the README seed or the product manifest, legal
+    facts from LICENSE, and the repository URL from the local origin remote.
+    """
+    slug, manifest_description = _manifest_identity(root)
+    title, readme_description = _readme_identity(root)
+    project_license, holder = license_facts(root)
+    return {
+        "copyright_holder": holder,
+        "project_description": readme_description or manifest_description,
+        "project_license": project_license,
+        "project_name": title or slug,
+        "project_slug": slug,
+        "repository_url": _origin_url(root),
     }
-    for key, allowed in choices.items():
-        value = config.get(key)
-        if value is not None and value not in allowed:
-            expected = ", ".join(sorted(allowed))
-            raise ValueError(
-                f"Invalid {key} in {path}: {value!r}; expected {expected}"
-            )
-
-    _list_setting(config, "languages", LANGUAGES, path)
-    _list_setting(config, "features", FEATURES, path)
-    _list_setting(config, "lifecycle", LIFECYCLE_CAPABILITIES, path)
-
-    holder = config.get("copyright_holder")
-    if holder is not None and (
-        not isinstance(holder, str) or not holder.strip()
-    ):
-        raise ValueError(
-            f"Invalid copyright_holder in {path}; expected a non-empty string"
-        )
-
-    validate_release_config(config)
-
-    for toggle in POLICY_TOGGLES:
-        value = config.get(toggle)
-        if value is not None and not isinstance(value, bool):
-            raise ValueError(
-                f"Invalid {toggle} in {path}: {value!r}; expected true or false"
-            )
-
-    release_levels_enabled = config.get("release_levels_enabled")
-    if release_levels_enabled is not None and not isinstance(
-        release_levels_enabled, bool
-    ):
-        raise ValueError(
-            f"Invalid release_levels_enabled in {path}: "
-            f"{release_levels_enabled!r}; expected true or false"
-        )
-
-    threshold = config.get("coverage_threshold")
-    if threshold is not None and (
-        isinstance(threshold, bool)
-        or not isinstance(threshold, int)
-        or not 1 <= threshold <= 100
-    ):
-        raise ValueError(
-            f"Invalid coverage_threshold in {path}: {threshold!r}; "
-            "expected an integer from 1 to 100"
-        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -435,15 +482,21 @@ def main(argv: list[str] | None = None) -> int:
     if len(arguments) != 1:
         sys.stderr.write("Usage: csarc_config.py <key>\n")
         return 2
+    key = arguments[0]
     try:
         config = load_config()
-        value = (
-            resolve_release_ownership(config)
-            if arguments[0] == "release_ownership"
-            else config[arguments[0]]
-        )
+        if key == "release_ownership":
+            value: object = resolve_release_ownership(config)
+        elif key not in INTENT_SETTINGS and key not in DECISION_SETTINGS:
+            raise KeyError(
+                f"{key} is not a schema {SCHEMA_VERSION} setting; see "
+                "SPEC-009 for its native source"
+            )
+        else:
+            value = config.get(key)
     except (OSError, KeyError, ValueError) as error:
-        sys.stderr.write(f"{error}\n")
+        message = error.args[0] if isinstance(error, KeyError) else error
+        sys.stderr.write(f"{message}\n")
         return 1
     if isinstance(value, list):
         sys.stdout.write(",".join(str(item) for item in value) + "\n")

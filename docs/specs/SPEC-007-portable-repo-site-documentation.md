@@ -30,7 +30,7 @@ README、agent instructions、深入決策與簡報若各自重述同一件事�
 - [x] 聊天只在使用者確認後摘要進 work item／decision record；不保存完整逐字稿、敏感資訊或模型 chain-of-thought。
 - [x] Hugo 已由 Issue #524（Milestone 13）正式 cutover 為本機 Python 渲染引擎；i18n（雙語）與 `llms.txt`（AI-readable output）已隨同一批改動落地，不再是候選狀態。
 - [x] `documentation_mode` 是文件能力的唯一控制面；舊 `features: repo-site` 更新時遷移，不形成平行開關。
-- [x] `primary_language` 與 `i18n` 控制主要入口與英文／繁體中文 README，且不要求 README 與深度文件逐字一致。
+- [x] `documentation_languages`（Issue #1071 合併原本的 `primary_language` 與 `i18n`）控制主要入口與英文／繁體中文 README，且不要求 README 與深度文件逐字一致。
 - [x] 本機 AI review 以四態結果綁定 exact PR head，`drift`／`inconclusive` 阻擋交付，不新增 hosted AI job。
 - [x] `project_license` 預設 proprietary，並同步 `LICENSE`、README、manifest、package 與 SPDX SBOM 語意。
 

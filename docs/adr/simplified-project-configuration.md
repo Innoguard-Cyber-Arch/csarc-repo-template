@@ -14,28 +14,7 @@ GitHub 方案只能提供能力線索，不能證明 repository visibility、org
 
 ## 決定
 
-公開設定收斂為平面但按責任前綴分組的最小 schema：
-
-```yaml
-governance_mode: managed       # managed | observe
-lifecycle: [issues, milestones]
-actions_fallback: off          # off | admin
-verification_mode: local       # local | hosted
-admin_bypass: always           # off | beta-only | always
-copilot_review: allowed        # allowed | off
-release_ownership: csarc-owned
-release_trigger: main          # main | manual
-project_maturity: early        # early | formal
-documentation_mode: template-and-content
-primary_language: zh-tw
-i18n: en-zh-tw
-project_license: proprietary
-copyright_holder: Example Organization
-features: []                   # docker
-code_owner: "@organization/team" # optional
-```
-
-Copier 會把每個問題保存成頂層答案；既有無依賴 YAML reader 也只需 scalar／list，因此不增加巢狀 parser。概念邊界仍與 `governance`、`review`、`release`、`features`、`code_owner` 一致。
+公開設定收斂為平面、只含使用者意圖的最小 schema。精確的鍵、分類、儲存位置與退役對應以 [SPEC-009](../specs/SPEC-009-project-settings.md) 為準（Issue #1071 取代原本列在這裡的範例）：`.csarc/config.yml` 只保存無法安全重建的 persistent intent 與 Copier 必要 metadata；名稱、說明、授權與著作權人是一次性 seed，repository URL 與 visibility 是 live facts，`project_mode` 與 render context 寫在 `.csarc/provenance.json`。設定檔維持無依賴 YAML reader 只需的頂層 scalar／list，不增加巢狀 parser。
 
 - `governance_mode` 只描述 CSARC 管理或觀察政策；live capability 另回報 `allowed`／`blocked`／`unknown`。
 - `lifecycle` 只列 `issues`、`milestones` 能力；產生出的 workflow 在 runner 前固定判斷，且保留 #886 owner guard。
@@ -44,15 +23,15 @@ Copier 會把每個問題保存成頂層答案；既有無依賴 YAML reader 也
 - branch route 由可信 Issue／Milestone metadata 推導，不再另設 `branch_strategy`。
 - `release_trigger: main` 在每次 main push 執行既有 Conventional Commit 判定；`manual` 完全不註冊 push trigger，只接受明確 dispatch 或本機入口。兩者共用 major／minor／patch／no-release、materialization、freshness、single-writer 與 immutable evidence。本模板 root 採 `manual`，避免每次主幹更新都建立無效發版 run。
 - release workflow、required inputs、reason、settings owner 與 immutable setting 都是衍生或稽核輸出，不再是一般答案。
-- `documentation_mode` 是文件能力的唯一控制面，搭配 `primary_language` 與 `i18n`；`features` 只保留 Docker 等非文件選配。Issue #919 取代原本將 repo-site 放在 `features` 的決定。
-- `project_license` 與 `copyright_holder` 是封裝與文件共用的授權來源；未宣告時採 proprietary，不從 repository identity 推定開源授權。
-- `actions_fallback: admin` 是明確 opt-in，只適用於可證明的 zero-step GitHub billing gate，仍須 exact-head／base、review、適用本機 suite、remote lease 與 trace；失敗或未知狀態一律 fail closed。
+- `documentation_mode` 是文件能力的唯一控制面，搭配 `documentation_languages`（Issue #1071 合併原本的 `primary_language` 與 `i18n`）；Docker 選配是 `container`。Issue #919 取代原本將 repo-site 放在 `features` 的決定。
+- `project_license` 與 `copyright_holder` 是 create／adopt 的一次性 seed，寫入 `LICENSE` 與 package manifest 後以 `LICENSE` 為準；未宣告時採 proprietary，不從 repository identity 推定開源授權。
+- `actions_fallback` 已退役（Issue #1071，#1058 決定 3）：quota fallback 入口一律拒絕，Actions 中斷改走 governance-switch 路線，required checks 照常要求。
 - `verification_mode: local` 是新專案預設值：沿用同一個 risk-owned fast／full router 與 runner，成功後只寫入 Git metadata 的 self-attested evidence；merge lifecycle 重驗 clean worktree、exact head/tree、base、tier、scope、freshness、review 與 remote lease，再走有 trace 的 admin bypass。它不產生 hosted CI、PR policy／writer、review／reviewer assignment、spec sync、work-item lifecycle、Pages 或 release workflow；這些操作改走既有本機 wrapper，平台 UI 的直接變更只由手動或低頻 drift check 發現。`hosted` 才保留 #834／#835 的 trusted Actions、Pages deployment 與可信 release provenance。
 - `documentation_mode: template-and-content` 只負責產生可離線使用的 `docs/**`；只有同時選 `verification_mode: hosted` 才產生 Pages workflow 與 enabled policy。Pages 改用 `build_type: workflow`，只在 `docs/**` 變動或手動 dispatch 時部署。
 
 ## 遷移
 
-舊設定以明確規則轉換：全開／全關 `policy_*` 分別成 `managed`／`observe`，混合值要求使用者選擇；`enable_docker` 轉成 `features` membership；舊 `features: repo-site` 轉成 `documentation_mode: template-and-content`，沒有 repo-site 時轉成 `content-only`；`readme_primary_language` 轉成 `primary_language`；舊 `pr_review_mode` 轉成 `copilot_review`（有 level cap 時收窄為 `off`）；已存或明確傳入的 `admin_bypass` 保留，缺值寫成 `always` 並在報告列為 `widened`，附舊 `review`／per-level review 的等價範圍與恢復指令；退役鍵列為 `retired`、承接鍵列為 `exact`，舊 `default_release_level` 轉成 `project_maturity`，verification 收斂為固定下限且路徑風險只能升級。既有發版行為遷移成 `release_trigger: main`。為避免更新時靜默降低既有保護，沒有 `verification_mode` 的 repository 一律遷移為 `hosted`；只有新建專案預設 `local`。舊 reviewer、branch、level cap、per-level 與 release 衍生答案不再持久化。
+舊設定只由外部 pinned CLI 的 migration registry 唯讀轉換（SPEC-009），成功後只寫 schema 2：全開／全關 `policy_*` 分別成 `managed`／`observe`，混合值要求使用者選擇；`enable_docker` 與 `features: docker` 轉成 `container`；舊 `features: repo-site` 轉成 `documentation_mode: template-and-content`，沒有 repo-site 時轉成 `content-only`；`primary_language`＋`i18n`（或 `readme_primary_language`）轉成 `documentation_languages`；`python_support_mode`＋`python_min_version` 轉成 `python_floor`；兩個排程開關轉成 `scheduled_checks`；舊 `pr_review_mode` 轉成 `copilot_review`（有 level cap 時收窄為 `off`）；已存或明確傳入的 `admin_bypass` 保留，缺值寫成 `always` 並在報告列為 `widened`，附舊 `review`／per-level review 的等價範圍與恢復指令；退役鍵列為 `retired`、承接鍵列為 `exact`，舊 `default_release_level` 轉成 `project_maturity`，verification 收斂為固定下限且路徑風險只能升級。既有發版行為遷移成 `release_trigger: main`。為避免更新時靜默降低既有保護，沒有 `verification_mode` 的 repository 一律遷移為 `hosted`；只有新建專案預設 `local`。舊 reviewer、branch、level cap、per-level 與 release 衍生答案不再持久化。
 
 ## 方案與能力邊界
 

@@ -237,8 +237,8 @@
             "en": "An organization can adjust the shared coverage policy and pre-commit without editing every verification script."
           },
           "code": {
-            "zh-tw": "coverage_mode: global  # global | diff\ncoverage_threshold: 80  # 1..100\nenable_precommit: false",
-            "en": "coverage_mode: global  # global | diff\ncoverage_threshold: 80  # 1..100\nenable_precommit: false"
+            "zh-tw": "coverage_mode: global  # global | diff\ncoverage_threshold: 80  # 1..100",
+            "en": "coverage_mode: global  # global | diff\ncoverage_threshold: 80  # 1..100"
           },
           "summary": {
             "zh-tw": "覆蓋率可選全專案或只看本次差異，門檻預設 80%；pre-commit 預設關閉，CI 仍是必要證據。",
@@ -282,8 +282,8 @@
             "en": "Copier writes the selection into the repository; the detector only flags when the actual files disagree with the declaration, and never changes the setting on its own."
           },
           "code": {
-            "zh-tw": "languages:\n- python\n- rust\n- typescript\n- go\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # minimum only\n./scripts/detect-language-profile --suggest\n./scripts/detect-language-profile",
-            "en": "languages:\n- python\n- rust\n- typescript\n- go\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # minimum only\n./scripts/detect-language-profile --suggest\n./scripts/detect-language-profile"
+            "zh-tw": "languages:\n- python\n- rust\n- typescript\n- go\npython_floor: latest  # latest | 3.12 | 3.13 | 3.14\n./scripts/detect-language-profile --suggest\n./scripts/detect-language-profile",
+            "en": "languages:\n- python\n- rust\n- typescript\n- go\npython_floor: latest  # latest | 3.12 | 3.13 | 3.14\n./scripts/detect-language-profile --suggest\n./scripts/detect-language-profile"
           },
           "summary": {
             "zh-tw": "`languages` 決定要產生哪些語言模組；Python 另可選最新穩定版或最低支援版本。",
@@ -632,8 +632,8 @@
             "en": "The root, generated repositories, and derived templates share one public configuration; there is no separate profile or site-only settings file to maintain."
           },
           "code": {
-            "zh-tw": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nverification_mode: local    # local | hosted\nadmin_bypass: off           # off | beta-only | always\ncopilot_review: allowed     # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main       # main | manual\nproject_maturity: early     # early | formal\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []                # docker\ncode_owner: \"@organization/team\"  # optional",
-            "en": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nactions_fallback: off       # off | admin\nverification_mode: local    # local | hosted\nadmin_bypass: off           # off | beta-only | always\ncopilot_review: allowed     # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main       # main | manual\nproject_maturity: early     # early | formal\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []                # docker\ncode_owner: \"@organization/team\"  # optional"
+            "zh-tw": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nverification_mode: local    # local | hosted\nadmin_bypass: off           # off | beta-only | always\ncopilot_review: allowed     # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main       # main | manual\nproject_maturity: early     # early | formal\ndocumentation_mode: template-and-content\ndocumentation_languages: zh-tw+en  # zh-tw | en | zh-tw+en | en+zh-tw\ncontainer: false            # Docker starter\ncode_owner: \"@organization/team\"  # optional",
+            "en": "governance_mode: managed  # managed | observe\nlifecycle: [issues, milestones]\nverification_mode: local    # local | hosted\nadmin_bypass: off           # off | beta-only | always\ncopilot_review: allowed     # allowed | off\nrelease_ownership: csarc-owned\nrelease_trigger: main       # main | manual\nproject_maturity: early     # early | formal\ndocumentation_mode: template-and-content\ndocumentation_languages: zh-tw+en  # zh-tw | en | zh-tw+en | en+zh-tw\ncontainer: false            # Docker starter\ncode_owner: \"@organization/team\"  # optional"
           },
           "summary": {
             "zh-tw": "設定只保留治理、審查、發版、選配功能與 owner 的意圖；方案、帳務與即時能力是偵測結果。",
@@ -698,8 +698,8 @@
             "en": "A free private repository first keeps the same policy stored in the repository; public, Pro, Team, or Enterprise plans can enforce pull requests and required checks. One review check evaluates peer approval, the configured admin bypass, and optional Copilot evidence; CODEOWNERS is generated only when configured."
           },
           "code": {
-            "zh-tw": "# Intent stays portable; capability is checked live.\nadmin_bypass: off   # off | beta-only | always\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\nverification_mode: local # local | hosted\n\n# hosted 才啟用 required checks：verify、title、review",
-            "en": "# Intent stays portable; capability is checked live.\nadmin_bypass: off   # off | beta-only | always\ncopilot_review: allowed  # allowed | off\nactions_fallback: off    # off | admin\nverification_mode: local # local | hosted\n\n# Required checks (verify, title, review) are hosted-only."
+            "zh-tw": "# Intent stays portable; capability is checked live.\nadmin_bypass: off   # off | beta-only | always\ncopilot_review: allowed  # allowed | off\nverification_mode: local # local | hosted\n\n# hosted 才啟用 required checks：verify、title、review",
+            "en": "# Intent stays portable; capability is checked live.\nadmin_bypass: off   # off | beta-only | always\ncopilot_review: allowed  # allowed | off\nverification_mode: local # local | hosted\n\n# Required checks (verify, title, review) are hosted-only."
           },
           "summary": {
             "zh-tw": "Action 直接查詢 live repository collaborators，排除作者後從 maintain／admin 權限選一位 reviewer；不保存靜態名單。Copilot entitlement 與 Actions billing 只接受即時證據，不從方案名稱推測。Free private 無法強制 Ruleset 時仍明確標示 DEGRADED。",
@@ -720,8 +720,8 @@
             "en": "Both the local checkout and a generated repository reuse the same script; generated repositories default to the daily schedule, least-privilege permissions, a timeout, and deduplicated Issue notification, while retaining an explicit opt-out."
           },
           "code": {
-            "zh-tw": "./scripts/check-governance-drift\n\n# enable_governance_drift_check=true generates the daily workflow and\n# script together; false generates neither. This template's own source\n# repo keeps the script for local verification but does not schedule it.",
-            "en": "./scripts/check-governance-drift\n\n# enable_governance_drift_check=true generates the daily workflow and\n# script together; false generates neither. This template's own source\n# repo keeps the script for local verification but does not schedule it."
+            "zh-tw": "./scripts/check-governance-drift\n\n# scheduled_checks: [governance-drift] generates the daily workflow and\n# script together; an empty list generates neither. This template's own source\n# repo keeps the script for local verification but does not schedule it.",
+            "en": "./scripts/check-governance-drift\n\n# scheduled_checks: [governance-drift] generates the daily workflow and\n# script together; an empty list generates neither. This template's own source\n# repo keeps the script for local verification but does not schedule it."
           },
           "summary": {
             "zh-tw": "`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。生成 repo 預設由薄 Action 每日呼叫同一支程式，只在可修正偏離出現或內容改變時開立或更新唯一追蹤 Issue；本模板 source repo 不排程。",
@@ -769,8 +769,8 @@
             "en": "There is no switch to turn off type checking or secret scanning; the strict threshold is part of the template's contract."
           },
           "code": {
-            "zh-tw": "languages: [python]\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []  # add docker when needed\nadmin_bypass: off      # off | beta-only | always\ncopilot_review: allowed\nrelease_trigger: main  # main | manual\nproject_maturity: early\npython_support_mode: latest\ncoverage_mode: global\ncoverage_threshold: 80\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\"",
-            "en": "languages: [python]\ndocumentation_mode: template-and-content\nprimary_language: zh-tw\ni18n: en-zh-tw\nproject_license: proprietary\ncopyright_holder: Example Organization\nfeatures: []  # add docker when needed\nadmin_bypass: off      # off | beta-only | always\ncopilot_review: allowed\nrelease_trigger: main  # main | manual\nproject_maturity: early\npython_support_mode: latest\ncoverage_mode: global\ncoverage_threshold: 80\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\""
+            "zh-tw": "languages: [python]\ndocumentation_mode: template-and-content\ndocumentation_languages: zh-tw+en\ncontainer: false  # true adds the Docker starter\nadmin_bypass: off      # off | beta-only | always\ncopilot_review: allowed\nrelease_trigger: main  # main | manual\nproject_maturity: early\npython_floor: latest\ncoverage_mode: global\ncoverage_threshold: 80\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\"",
+            "en": "languages: [python]\ndocumentation_mode: template-and-content\ndocumentation_languages: zh-tw+en\ncontainer: false  # true adds the Docker starter\nadmin_bypass: off      # off | beta-only | always\ncopilot_review: allowed\nrelease_trigger: main  # main | manual\nproject_maturity: early\npython_floor: latest\ncoverage_mode: global\ncoverage_threshold: 80\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\""
           },
           "summary": {
             "zh-tw": "使用者只選語言、選配能力與少量治理意圖；分支路由由 Issue／Milestone 推導。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。",

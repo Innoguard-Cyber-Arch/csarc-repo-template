@@ -19,6 +19,7 @@ from typing import cast
 
 import jinja2
 import pytest
+import settings_support
 import yaml
 from copier import run_copy
 
@@ -46,6 +47,8 @@ VALID_OWNERSHIP = (
     ("existing", "verification-only", False),
 )
 MISSING_PREFIX = "CSARC settings error: release_ownership is missing"
+# The schema 2 reader names every missing intent (SPEC-009, Issue #1071).
+READER_MISSING = "missing persistent settings release_ownership"
 
 
 def load_reader(layout: str) -> dict[str, object]:
@@ -120,15 +123,20 @@ def test_missing_unknown_or_contradictory_owner_fails_closed(
 @pytest.mark.parametrize(
     ("config", "returncode", "stdout", "stderr"),
     [
-        ("project_mode: new\n", 1, "", MISSING_PREFIX),
         (
-            "project_mode: existing\nrelease_ownership: unknown\n",
+            settings_support.settings_text(release_ownership=None),
             1,
             "",
-            "Invalid release_ownership in .csarc/config.yml: 'unknown'",
+            READER_MISSING,
         ),
         (
-            "project_mode: existing\nrelease_ownership: product-owned\n",
+            settings_support.settings_text(release_ownership="unknown"),
+            1,
+            "",
+            "release_ownership is 'unknown'",
+        ),
+        (
+            settings_support.settings_text(release_ownership="product-owned"),
             0,
             "product-owned\n",
             "",
@@ -198,14 +206,17 @@ def logging_gh(tmp_path: Path) -> tuple[Path, Path]:
 @pytest.mark.parametrize(
     ("config", "message"),
     [
-        ("governance_mode: managed\n", MISSING_PREFIX),
         (
-            "governance_mode: managed\nrelease_ownership: someone\n",
-            "Invalid release_ownership",
+            settings_support.settings_text(release_ownership=None),
+            READER_MISSING,
         ),
         (
-            "governance_mode: shared\nrelease_ownership: csarc-owned\n",
-            "Invalid governance_mode",
+            settings_support.settings_text(release_ownership="someone"),
+            "release_ownership is 'someone'",
+        ),
+        (
+            settings_support.settings_text(governance_mode="shared"),
+            "governance_mode is 'shared'",
         ),
         (None, "CSARC settings error: .csarc/config.yml is missing"),
     ],
@@ -241,7 +252,12 @@ def test_pr_policy_does_not_derive_owner_from_project_mode(
     tmp_path: Path, layout: str, mode: str
 ) -> None:
     """The PR gate fails closed instead of re-deriving a release owner."""
-    repository = adapter_repository(tmp_path, layout, f"project_mode: {mode}\n")
+    # project_mode is provenance, never a setting (SPEC-009); the saved
+    # owner is missing in either mode.
+    del mode
+    repository = adapter_repository(
+        tmp_path, layout, settings_support.settings_text(release_ownership=None)
+    )
     scripts, _policies = LAYOUTS[layout]
     environment = {
         key: value
@@ -265,7 +281,7 @@ def test_pr_policy_does_not_derive_owner_from_project_mode(
         timeout=60,
     )
     assert result.returncode == 1, result.stdout + result.stderr
-    assert MISSING_PREFIX in result.stderr
+    assert READER_MISSING in result.stderr
     assert "CSARC release follow-up policy" not in result.stdout
 
 
@@ -475,8 +491,11 @@ def test_status_inspection_carries_the_saved_owner(
         (stage / ".csarc/scripts/apply-repository-settings.sh").write_text(
             "#!/usr/bin/env bash\n", encoding="utf-8"
         )
+        # The current template renders schema 2 intent; the hidden owner
+        # is added only from the saved value (#1068).
         (stage / ".csarc/config.yml").write_text(
-            "project_mode: existing\n", encoding="utf-8"
+            settings_support.settings_text(release_ownership=None),
+            encoding="utf-8",
         )
 
     def fake_check(

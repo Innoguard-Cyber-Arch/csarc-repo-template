@@ -1336,7 +1336,7 @@ if PR_CANDIDATE_CONFIG="$base_config_text" \
   exit 1
 fi
 case_count=$((case_count + 1))
-if PR_CANDIDATE_CONFIG="schema_version: 9"$'\n'"$base_config_text" \
+if PR_CANDIDATE_CONFIG="$base_config_text"$'\nschema_version: 9' \
   PR_LABELS="enhancement,governance-switch" governance_case; then
   echo "PR policy accepted a configuration schema the trusted base cannot read."
   exit 1

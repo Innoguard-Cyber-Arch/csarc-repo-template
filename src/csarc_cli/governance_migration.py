@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from collections.abc import Collection, Mapping
 
+from csarc_cli import settings_schema
+
 ADMIN_BYPASS_SCOPES = ("off", "beta-only", "always")
 MIGRATED_ADMIN_BYPASS = "always"
 POLICY_TOGGLES = (
@@ -28,36 +30,12 @@ LEGACY_LEVEL_REVIEWS = {
     "early": "peer",
     "formal": "peer",
 }
-# Legacy keys (v0.16.0 through v0.21.x) that the current schema no longer
-# asks, mapped to the current key that carries their intent, if any.
-# Derived release observations are excluded: they are recomputed from the
-# repository, not retired answers.
-RETIRED_SETTINGS: Mapping[str, str | None] = {
-    "branch_strategy": None,
-    "copilot_review_max_level": "copilot_review",
-    "default_release_level": "project_maturity",
-    "enable_docker": "features",
-    "policy_actions_permissions": "governance_mode",
-    "policy_branch_ruleset": "governance_mode",
-    "policy_labels": "governance_mode",
-    "policy_repository_settings": "governance_mode",
-    "pr_review_mode": "copilot_review",
-    "readme_primary_language": "primary_language",
-    "release_level_alpha_review": "admin_bypass",
-    "release_level_alpha_verification": None,
-    "release_level_beta_review": "admin_bypass",
-    "release_level_beta_verification": None,
-    "release_level_early_review": "admin_bypass",
-    "release_level_early_verification": None,
-    "release_level_formal_review": "admin_bypass",
-    "release_level_formal_verification": None,
-    "release_levels_enabled": None,
-    "review": "admin_bypass",
-    "reviewers": None,
-}
+# Every key the current schema no longer asks, mapped to the current key
+# that carries its intent, if any. SPEC-009's migration registry (Issue
+# #1071) is the single list; derived release observations are retired too.
+RETIRED_SETTINGS: Mapping[str, str | None] = settings_schema.RETIRED_SETTINGS
 GOVERNANCE_KEYS = frozenset(
     {
-        "actions_fallback",
         "admin_bypass",
         "copilot_review",
         "governance_mode",
@@ -130,7 +108,6 @@ def legacy_governance_values(
 ) -> dict[str, object]:
     """Return the approved current value for every governance key."""
     return {
-        "actions_fallback": "off",
         "admin_bypass": MIGRATED_ADMIN_BYPASS,
         "copilot_review": legacy_copilot_review(answers)[0],
         "governance_mode": legacy_governance_mode(answers),
@@ -200,7 +177,7 @@ def setting_classes(  # noqa: C901
     classes: dict[str, tuple[str, str | None]] = {}
     successors: set[str] = set()
     for key, successor in RETIRED_SETTINGS.items():
-        if key not in before:
+        if key not in before or key in settings_schema.RELEASE_OBSERVATIONS:
             continue
         note = (
             f"Retired; `{successor}` carries this intent."

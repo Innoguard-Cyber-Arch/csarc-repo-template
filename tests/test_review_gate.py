@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import settings_support
 import yaml
 from copier import run_copy
 
@@ -158,10 +159,8 @@ class FakeGitHub:
 
 
 def config(tmp_path: Path, text: str) -> Path:
-    """Write one answers file and return its path."""
-    path = tmp_path / "config.yml"
-    path.write_text(text, encoding="utf-8")
-    return path
+    """Write one complete schema 2 settings file and return its path."""
+    return settings_support.write_settings(tmp_path / "config.yml", text)
 
 
 @pytest.fixture
@@ -173,9 +172,15 @@ def copilot_config(tmp_path: Path) -> Path:
     )
 
 
-def test_missing_setting_means_human_mode(tmp_path: Path) -> None:
-    """An answers file predating #752 keeps maintainer-only review."""
-    assert review_gate.review_settings(config(tmp_path, "languages: []\n")) == (
+def test_legacy_settings_fail_closed_instead_of_human_mode(
+    tmp_path: Path,
+) -> None:
+    """A legacy answers file is migrated by the CLI, never guessed here."""
+    path = tmp_path / "config.yml"
+    path.write_text("languages: []\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="legacy settings schema"):
+        review_gate.review_settings(path)
+    assert review_gate.review_settings(tmp_path / "absent.yml") == (
         "human",
         "unlimited",
     )
@@ -243,7 +248,7 @@ def test_beta_hotfix_admin_authorization_passes_for_exact_head(
         7,
         config(
             tmp_path,
-            "copilot_review: off\nreview: peer\ndefault_release_level: beta\n",
+            "copilot_review: off\nadmin_bypass: off\n",
         ),
     )
 
@@ -267,7 +272,7 @@ def test_beta_non_hotfix_cannot_use_admin_authorization(tmp_path: Path) -> None:
     ]
 
     result = review_gate.evaluate(
-        github, "o/r", 7, config(tmp_path, "default_release_level: beta\n")
+        github, "o/r", 7, config(tmp_path, "admin_bypass: off\n")
     )
 
     assert not result["passed"]
@@ -428,10 +433,7 @@ def test_copilot_can_satisfy_every_release_level(
 ) -> None:
     """The simplified schema has no separate Copilot release-level cap."""
     allowed = config(
-        tmp_path,
-        "copilot_review: allowed\n"
-        "review: solo\n"
-        "default_release_level: formal\n",
+        tmp_path, "copilot_review: allowed\nadmin_bypass: always\n"
     )
     result = review_gate.evaluate(FakeGitHub([copilot()]), "o/r", 7, allowed)
     assert result["passed"]
@@ -444,7 +446,7 @@ def test_clean_copilot_can_satisfy_peer_review_mode(
     """An explicit Copilot allowance is valid in either human review mode."""
     beta = config(
         tmp_path,
-        "copilot_review: allowed\nreview: peer\ndefault_release_level: beta\n",
+        "copilot_review: allowed\nadmin_bypass: off\n",
     )
     result = review_gate.evaluate(FakeGitHub([copilot()]), "o/r", 7, beta)
     assert result["passed"]
