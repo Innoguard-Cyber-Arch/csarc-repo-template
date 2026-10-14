@@ -425,6 +425,35 @@ def git(*arguments: str, cwd: Path) -> str:
     ).stdout.strip()
 
 
+def schema2_settings(ownership: str | None) -> str:
+    """Return a complete schema 2 `.csarc/config.yml` for the fixture."""
+    lines = [
+        "schema_version: 2",
+        "admin_bypass: off",
+        "code_owner: '@acme'",
+        "container: false",
+        "copilot_review: off",
+        "coverage_mode: global",
+        "coverage_threshold: 80",
+        "documentation_languages: en",
+        "documentation_mode: off",
+        "enable_codeql: false",
+        "governance_mode: managed",
+        "languages: []",
+        "lifecycle: []",
+        "project_maturity: early",
+        "project_verification_hook: ''",
+        "python_floor: latest",
+        "release_trigger: manual",
+        "scheduled_checks: []",
+        "security_reporting_channel: security@example.com",
+        "verification_mode: local",
+    ]
+    if ownership is not None:
+        lines.append(f"release_ownership: {ownership}")
+    return "\n".join(lines) + "\n"
+
+
 def build_repo(
     tmp_path: Path, ownership: str = "csarc-owned"
 ) -> dict[str, str]:
@@ -485,11 +514,7 @@ def build_repo(
     (root / "version.txt").write_text("0.1.0\n", encoding="utf-8")
     (root / ".csarc").mkdir()
     (root / ".csarc" / "config.yml").write_text(
-        "project_slug: fixture\n"
-        "project_license: MIT\n"
-        "copyright_holder: Fixture Authors\n"
-        f"release_ownership: {ownership}\n",
-        encoding="utf-8",
+        schema2_settings(ownership), encoding="utf-8"
     )
     (root / "CHANGELOG.md").write_text(
         "# Changelog\n\n## [0.1.0] - 2026-01-01\n\n* initial\n",

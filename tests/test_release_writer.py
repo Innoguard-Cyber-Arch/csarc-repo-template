@@ -143,6 +143,35 @@ def commit(root: Path, message: str, name: str = "work.txt") -> str:
     return git(root, "rev-parse", "HEAD")
 
 
+def schema2_settings(ownership: str | None) -> str:
+    """Return a complete schema 2 `.csarc/config.yml` for the fixture."""
+    lines = [
+        "schema_version: 2",
+        "admin_bypass: off",
+        "code_owner: '@acme'",
+        "container: false",
+        "copilot_review: off",
+        "coverage_mode: global",
+        "coverage_threshold: 80",
+        "documentation_languages: en",
+        "documentation_mode: off",
+        "enable_codeql: false",
+        "governance_mode: managed",
+        "languages: []",
+        "lifecycle: []",
+        "project_maturity: early",
+        "project_verification_hook: ''",
+        "python_floor: latest",
+        "release_trigger: manual",
+        "scheduled_checks: []",
+        "security_reporting_channel: security@example.com",
+        "verification_mode: local",
+    ]
+    if ownership is not None:
+        lines.append(f"release_ownership: {ownership}")
+    return "\n".join(lines) + "\n"
+
+
 def project(tmp_path: Path, ownership: str = "csarc-owned") -> Path:
     """Build a template-source checkout whose first commit is the baseline."""
     root = tmp_path / "repo"
@@ -156,7 +185,7 @@ def project(tmp_path: Path, ownership: str = "csarc-owned") -> Path:
     )
     (root / ".csarc").mkdir()
     (root / ".csarc" / "config.yml").write_text(
-        f"release_ownership: {ownership}\n", encoding="utf-8"
+        schema2_settings(ownership), encoding="utf-8"
     )
     git(root, "init", "-q", "-b", "main")
     git(root, "config", "user.email", "test@example.com")
@@ -316,7 +345,7 @@ def test_verification_only_has_no_release_to_block(tmp_path: Path) -> None:
 def test_missing_ownership_fails_closed(tmp_path: Path) -> None:
     """No saved owner means no writer, never a guessed one."""
     root = project(tmp_path)
-    (root / ".csarc" / "config.yml").write_text("languages: []\n")
+    (root / ".csarc" / "config.yml").write_text(schema2_settings(None))
     sha = commit(root, "chore: drop ownership")
     gh = FakeGh()
     with pytest.raises(writer.WriterError, match="release_ownership"):
