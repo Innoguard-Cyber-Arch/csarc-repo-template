@@ -1325,6 +1325,23 @@ def test_concurrent_prs_cannot_acquire_the_same_destination_lane(
     release_refs(lease)
 
 
+def local_evidence_fixture() -> dict[str, object]:
+    """Return one complete self-attested local verification record."""
+    return {
+        "schema_version": 1,
+        "trust": "self-attested-local",
+        "success": True,
+        "head_sha": "a" * 40,
+        "tree_sha": "e" * 40,
+        "base_ref": "main",
+        "base_sha": "b" * 40,
+        "tier": "fast",
+        "scopes": ["source"],
+        "command": "./scripts/verify-fast",
+        "completed_at": "2026-10-14T00:00:00+00:00",
+    }
+
+
 def lease_fixture() -> dict[str, object]:
     """Return an unexpired in-memory lease."""
     acquired = datetime(2026, 8, 25, 1, 0, tzinfo=UTC)
@@ -2709,12 +2726,7 @@ def test_local_mode_uses_exact_local_evidence_without_hosted_checks(
         "require_local_pull_policy",
         lambda *_: None,
     )
-    evidence = {
-        "trust": "self-attested-local",
-        "tree_sha": "e" * 40,
-        "tier": "fast",
-        "scopes": ["source"],
-    }
+    evidence = local_evidence_fixture()
     monkeypatch.setattr(
         MODULE["local_verification"],
         "require",
@@ -2738,6 +2750,8 @@ def test_local_mode_uses_exact_local_evidence_without_hosted_checks(
     assert snapshot["merge_mode"] == "agent"
     assert snapshot["required_check_evidence"] == "local-self-attested"
     assert snapshot["local_verification"] == evidence
+    # The merge snapshot keeps the shared record with the local trust label.
+    assert snapshot["verification_record"] == evidence
 
 
 def test_exact_head_review_allows_the_known_alpha_ruleset_bypass(
@@ -5084,7 +5098,7 @@ def test_local_merge_snapshot_uses_the_configured_e1_fallback(
     monkeypatch.setattr(
         MODULE["local_verification"],
         "require",
-        lambda **kwargs: {"trust": "self-attested-local"},
+        lambda **kwargs: local_evidence_fixture(),
     )
     github = FakeGitHub("a" * 40)
     github.required_status_checks = []
@@ -5190,6 +5204,36 @@ def test_admin_bypass_merge_requires_the_live_admin_role(
             lease_fixture(),
             "https://github.com/owner/repo/pull/42#issuecomment-99",
         )
+
+
+def test_hosted_verify_evidence_uses_the_shared_record_contract() -> None:
+    """Hosted evidence fits the local record contract with its own label."""
+    github = FakeGitHub("a" * 40)
+    durable: dict[str, object] = {}
+
+    assert (
+        require_successful_checks(
+            github,
+            "owner/repo",
+            github.head,
+            {("verify", 15368)},
+            durable=durable,
+        )
+        == "success"
+    )
+
+    assert durable
+    records = MODULE["local_verification"]
+    hosted = records.normalized_record(durable, records.TRUST_HOSTED)
+    local = records.normalized_record(
+        local_evidence_fixture(), records.TRUST_LOCAL
+    )
+    assert set(hosted) == set(local) == records.RECORD_KEYS
+    assert hosted["trust"] == "github-hosted"
+    assert local["trust"] == "self-attested-local"
+    assert hosted["head_sha"] == github.head
+    with pytest.raises(RuntimeError, match="trust label"):
+        records.normalized_record(local, records.TRUST_HOSTED)
 
 
 # Issue #1073: merges bind to the verified tree and leave a durable trace.

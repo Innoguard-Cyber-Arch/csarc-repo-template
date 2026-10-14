@@ -142,7 +142,11 @@ def test_both_shipped_copies_are_identical() -> None:
 def test_generated_formatter_keeps_trusted_scripts_on_py312_grammar(
     tmp_path: Path, python_floor: str
 ) -> None:
-    """A generated project's own `ruff format` keeps 3.12-parseable excepts."""
+    """A generated project's own `ruff format` keeps 3.12-parseable excepts.
+
+    The product formatter never collects `.csarc/` (#1070), so it cannot
+    rewrite trusted scripts to a newer grammar whatever its target is.
+    """
     from jinja2 import Environment, StrictUndefined
 
     template = Environment(
@@ -171,6 +175,10 @@ def test_generated_formatter_keeps_trusted_scripts_on_py312_grammar(
         tmp_path / ".csarc" / "scripts",
         ignore=shutil.ignore_patterns("*.jinja", "__pycache__"),
     )
+    shutil.copy2(
+        REPO_ROOT / "template" / ".csarc" / ".ignore.jinja",
+        tmp_path / ".csarc" / ".ignore",
+    )
     result = subprocess.run(
         [
             sys.executable,
@@ -178,7 +186,7 @@ def test_generated_formatter_keeps_trusted_scripts_on_py312_grammar(
             "ruff",
             "format",
             "--check",
-            ".csarc/scripts",
+            ".",
         ],
         cwd=tmp_path,
         check=False,
@@ -276,6 +284,63 @@ def test_next_schema_requires_explicit_governance_values(
         ValueError, match="missing persistent settings verification_mode"
     ):
         executor["read_config"](path)
+
+
+def test_next_schema_does_not_require_the_retired_review_alias(
+    executor: dict[str, Any], tmp_path: Path
+) -> None:
+    """Issue #1071: schema 2 states admin_bypass, never the `review` alias.
+
+    The trusted base must read the final schema 2 file before the writer
+    switches, and the change is still routed as a governance switch.
+    """
+    base = write_config(tmp_path / "base.yml", config_text())
+    path = write_config(
+        tmp_path / "config.yml",
+        "schema_version: 2\n" + config_text(review=None),
+    )
+    candidate = executor["read_config"](path)
+    assert candidate["schema_version"] == 2
+    decision = executor["classify_route"](
+        [], executor["read_config"](base), candidate
+    )
+    assert decision.route == "governance-switch"
+    assert decision.reasons == ("changes schema_version: 1 -> 2",)
+
+
+def test_root_schema_two_settings_pass_the_trusted_base_reader(
+    executor: dict[str, Any], tmp_path: Path
+) -> None:
+    """The exact schema 2 root settings Q1 writes are readable here."""
+    path = write_config(
+        tmp_path / "config.yml",
+        "schema_version: 2\n"
+        "admin_bypass: always\n"
+        "code_owner: '@Innoguard-Cyber-Arch/arch'\n"
+        "container: false\n"
+        "copilot_review: allowed\n"
+        "coverage_mode: global\n"
+        "coverage_threshold: 80\n"
+        "documentation_languages: zh-tw+en\n"
+        "documentation_mode: template-and-content\n"
+        "enable_codeql: false\n"
+        "governance_mode: managed\n"
+        "languages:\n- python\n"
+        "lifecycle:\n- issues\n- milestones\n"
+        "package_name: csarc_cli\n"
+        "project_maturity: early\n"
+        "project_run_command: uv run csarc --help\n"
+        "project_verification_hook: ''\n"
+        "python_floor: latest\n"
+        "release_ownership: csarc-owned\n"
+        "release_trigger: manual\n"
+        "scheduled_checks: []\n"
+        "security_reporting_channel: security@example.com\n"
+        "verification_mode: hosted\n",
+    )
+    values = executor["read_config"](path)
+    assert values["verification_mode"] == "hosted"
+    assert values["admin_bypass"] == "always"
 
 
 # Governance switch

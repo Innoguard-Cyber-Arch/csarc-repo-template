@@ -1226,7 +1226,7 @@ timeout，只呼叫 `.csarc/scripts/check-template-update`）。公開模板來�
 secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
 `pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
 
-生成 repo 另有一個選用容器能力（Issue #554／#900 決定）：在 `features` 選入 `docker` 才產生
+生成 repo 另有一個選用容器能力（Issue #554／#900 決定）：設定 `container: true` 才產生
 `Dockerfile`、`docker-compose.yml` 兩份起始範本，以及
 `.github/workflows/docker-build-scan.yml`（`pull_request`，限 Dockerfile／
 docker-compose.yml／已選語言原始碼路徑變更，另加 `workflow_dispatch`；

@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-21
-- **來源 Issue：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)
+- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）
 - **實作 PR：**[#860](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/860)
 
 ## 問題與限制
@@ -22,6 +22,71 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 - 平台固定檔保留在 `.github/`；root `SECURITY.md` 提供 scanner discovery 所需的 repository-wide policy，與 `.github/SECURITY.md` 的人類通報流程分工；root `AGENTS.md` 只作自動探索入口，詳細規則放 `.csarc/docs/agent-workflow.md`，`.claude/CLAUDE.md` 只引用 root 入口。
 - 專案文件、ADR、spec 與網站內容屬於產品，保留在 `docs/`。網站來源固定在 `docs/site/`，產物仍是 `docs/index.html` 與 `docs/index.en.html`；renderer 與資產放 `.csarc/site/`。
 - 產品程式、測試與語言 manifest 留在慣用 root 路徑，不移入 `.csarc`。
+- 公版擁有的 runtime、fixture 與必要測試只放 `.csarc/`；`.csarc/` 以外只允許下方 allowlist 列出的 GitHub、scanner、agent 固定位置、語言工具設定與產品 starter。
+
+## Runtime 與產品工具邊界
+
+- 生成專案的 `.csarc/scripts/verify` 與 `verify-fast` 只驗證產品與自己的設定，不執行公版自測（`.csarc/scripts/test-*` 與 `.csarc/tests/`）。同一批案例由公版 CI 對代表性 render 執行，案例數不得減少；診斷改由 `csarc status` 提供。
+- 產品 lint、format、type check、test discovery 與 coverage 不收集 `.csarc/`。`.csarc/.ignore` 讓遵守 ignore 檔的工具（Ruff、ty 等）跳過控制層的 Python 檔，Git 照常追蹤這些檔案；pytest 預設不遞迴進入點開頭的目錄。產品 manifest（`pyproject.toml`、`package.json`、`Cargo.toml`、`go.mod`）不寫 `.csarc`，也不把它列入套件、workspace 或 coverage 來源，所以採用既有專案時不必修改產品 manifest。代價是 ripgrep 這類工具搜尋整個 repository 時也會略過 `.csarc` 的 Python 檔，需要時直接指定檔案路徑。
+- `.csarc/scripts` 的模組層 import 只載入入口必定需要的模組，其他 sibling 在命令第一次使用時才載入。合法 render 少了選用模組（例如 `documentation_mode` 不是 `template-and-content` 時的網站模組），其餘入口仍可獨立載入與執行。
+- 本機與 hosted 驗證證據使用同一個正規化 record（`local_verification.normalized_record`），欄位與驗證規則相同，只保留各自的 trust label：`self-attested-local` 或 `github-hosted`（與合併 evidence payload 同一個標籤）。
+
+## 固定位置 allowlist
+
+fresh render 在 `.csarc/` 以外只能產生下列路徑（`*` 代表專案名稱、套件名稱或檔名）。新增項目必須先修改本 ADR；`tests/test_generated_layout_allowlist.py` 拿模板來源與代表性 render 對照這份清單。
+
+```text
+# GitHub fixed locations
+.github/CODEOWNERS
+.github/ISSUE_TEMPLATE/*.yml
+.github/SECURITY.md
+.github/dependabot.yml
+.github/pull_request_template.md
+.github/workflows/*.yml
+# Scanner and agent discovery
+SECURITY.md
+AGENTS.md
+.claude/CLAUDE.md
+# Language tool settings, manifests, and lockfiles
+.gitignore
+.node-version
+.python-version
+Cargo.lock
+Cargo.toml
+Dockerfile
+biome.json
+docker-compose.yml
+go.mod
+package.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+pyproject.toml
+rust-toolchain.toml
+tsconfig.build.json
+tsconfig.json
+uv.lock
+vitest.config.ts
+# Product-owned starters and documentation
+CHANGELOG.md
+LICENSE
+README.md
+README.*.md
+cmd/*/main.go
+docs/README.md
+docs/adr/README.md
+docs/index.html
+docs/index.*.html
+docs/site/content/_index.*.md
+docs/site/data/navigation.json
+docs/site/theme.css
+docs/specs/SPEC-001-example.md
+internal/*/*.go
+src/*/__init__.py
+src/lib.rs
+tests/test_smoke.py
+typescript/src/index.ts
+typescript/tests/index.test.ts
+```
 
 ## 四種 inventory
 
@@ -49,7 +114,7 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 
 ## Ownership 與驗證
 
-公版維護 `.csarc/`、managed workflows 與搬移映射；consuming repository 維護產品程式、manifest、`docs/adr/`、`docs/specs/`、`docs/site/content/` 與 `docs/site/theme.css`。最小與完整生成專案以 root allowlist 測試；舊版更新以搬移／碰撞回歸測試；代表性四語言專案執行完整 verifier。
+公版維護 `.csarc/`、managed workflows 與搬移映射；consuming repository 維護產品程式、manifest、`docs/adr/`、`docs/specs/`、`docs/site/content/` 與 `docs/site/theme.css`。最小與完整生成專案以 root allowlist 測試；舊版更新以搬移／碰撞回歸測試；代表性四語言專案執行完整 verifier。`documentation_mode: off` 與代表性 lifecycle／release ownership render 由生成專案自己的 verifier 驗證；公版自測、import matrix，以及產品工具不收集 `.csarc/` 的負向測試留在公版 CI。
 
 ## 重新評估條件
 
