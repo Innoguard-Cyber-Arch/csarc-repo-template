@@ -878,6 +878,28 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
 與一般 CI 相同，仍由 review、CODEOWNERS 與 required checks 防止惡意弱化。這個邊界不宣稱 candidate 自己的
 測試內容不可修改，只證明可信 runner 確實對該 exact tree 執行 workflow 指定的 command/toolchain 並成功。
 
+### Base-commit merge 與驗證政策
+
+合併與驗證在 hosted 與 local 兩種模式都只依 trusted base 的政策決定，共用 `.csarc/scripts/trusted_executor.py`：
+
+- **Hosted verify**：checkout candidate 之前，`trusted_executor.py prepare` 從 trusted base 複製入口
+  `verify`／`verify-fast`、router、config reader 與 `verification-step`，Execute step 以
+  `CSARC_VERIFICATION_SUBJECT_ROOT` 指向 exact candidate 執行並記錄 `executor=trusted-base`；candidate 自己的
+  gate 只在結果確定後以 `continue-on-error` 做 non-authoritative self-test。
+
+- **Local lifecycle**：`.csarc/scripts/pr_lifecycle.py check`／`merge` 先以 lease 的 `base_sha` 建立 detached
+  trusted base checkout，再由那份 base 的 lifecycle 重新執行；gate、router、config reader 與
+  `validate-pr-policy` 都來自 base，candidate 只是被驗的 exact head。
+- **Governance-switch route**：改動 `.csarc/scripts/`、放寬治理值（例如 `admin_bypass`、
+  `verification_mode`、`governance_mode` 往寬鬆方向、關閉 `enable_codeql`、移除 `lifecycle` 項目、調低
+  `coverage_threshold`）或變更設定 schema 時，PR 必須帶 `governance-switch` label；hosted 與 local 共用同一
+  規則，required checks、exact-head 授權與 remote lease 照常要求。`csarc update` PR 一律走這條 route。
+- **Next-schema reader**：base reader 讀 schema 1 與 schema 2，其他 `schema_version` fail closed；只讀不寫，
+  candidate 的 parser 只做不影響結果的 self-test。
+- **Release channel floor**：`dev/m*`／`dev/i*` 為 beta（fast floor），指向 `main` 的 standalone、hotfix 與
+  release recovery 為 stable（full floor）。`verify-fast` 取 floor 與 path tier 中較強者；local mode 直接升級成
+  full。
+
 ### Risk-owned execution 與有限證據沿用（#812）
 
 單一 `verify` required context 保持不變，不新增 path-filtered workflow、matrix runner、stage registry 或跨 commit

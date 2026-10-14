@@ -97,6 +97,23 @@ for requested in "${CSARC_VERIFICATION_SUITE:-fast}" "${CSARC_CI_TIER:-}"; do
     suite="$requested"
   fi
 done
+# Issue #1069: the release channel sets a verification floor. Delivery
+# branches carry beta work; standalone, hotfix, and release-recovery work on
+# main is stable and needs full evidence. In local verification mode the
+# stronger of that floor and the path tier is the suite; hosted CI passes its
+# own resolved tier, and in hosted mode a local run stays a diagnostic.
+floor_plan="$(python3 "$control_root/scripts/trusted_executor.py" channel-floor \
+  --base "$base" --labels "${CSARC_CI_LABELS:-}" --path-tier "$plan_tier")"
+channel_floor="${floor_plan#*floor=}"
+channel_floor="${channel_floor%% *}"
+if [[ "$channel_floor" == "full" && "$suite" != "full" ]]; then
+  if [[ -z "${CSARC_CI_TIER:-}" &&
+    "$(python3 "$control_root/scripts/csarc_config.py" verification_mode)" == "local" ]]; then
+    suite=full
+  else
+    echo "Release channel floor for base $base is full; hosted verify supplies that evidence."
+  fi
+fi
 echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite scopes=${scope_csv:-none}"
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 

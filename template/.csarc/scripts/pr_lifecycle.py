@@ -17,6 +17,7 @@ import tempfile
 import urllib.parse
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 if __package__ in {None, ""}:
@@ -2116,6 +2117,168 @@ def configured_verification_mode() -> str:
     )
 
 
+def trusted_executor_module() -> ModuleType:
+    """Load the base-policy module beside this lifecycle (Issue #1069).
+
+    The import is lazy so commands that never decide a merge keep their
+    small import set.
+    """
+    if __package__ in {None, ""}:
+        return importlib.import_module("trusted_executor")
+    return importlib.import_module(f"{__package__}.trusted_executor")
+
+
+def subject_repository_root() -> Path:
+    """Return the Git checkout the operator runs the lifecycle from."""
+    return Path(run(["git", "rev-parse", "--show-toplevel"])).resolve()
+
+
+def run_from_trusted_base(args: argparse.Namespace) -> int | None:
+    """Re-execute a merge decision from the lease's trusted base commit.
+
+    Issue #1069: the gate, router, config reader, and entry point that
+    decide a local merge come from the lease-bound base commit, never from
+    the candidate checkout. The current process only bootstraps that base;
+    a process already running from it (marked by the environment) proceeds.
+    """
+    lease = read_lease(args.lease)
+    base_sha = str(lease["base_sha"])
+    executor = trusted_executor_module()
+    if os.environ.get(executor.TRUSTED_BASE_ENV) == base_sha:
+        return None
+    subject = subject_repository_root()
+    entry = Path(__file__).resolve().relative_to(repository_root())
+    with executor.trusted_base_checkout(subject, base_sha) as base:
+        script = base / entry
+        if not script.is_file():
+            raise RuntimeError(
+                "The trusted base has no PR lifecycle entry point"
+            )
+        sys.stdout.write(
+            f"PR lifecycle {args.handler_name} runs from trusted base "
+            f"{base_sha}.\n"
+        )
+        sys.stdout.flush()
+        return subprocess.run(  # noqa: S603 - trusted base entry point
+            [sys.executable, str(script), *sys.argv[1:]],
+            env={**os.environ, executor.TRUSTED_BASE_ENV: base_sha},
+            check=False,
+        ).returncode
+
+
+def bootstrap_trusted_base(args: argparse.Namespace) -> None:
+    """Hand merge decisions to the trusted base before they start."""
+    if getattr(args, "handler_name", "") not in {"check", "merge"}:
+        return
+    status = run_from_trusted_base(args)
+    if status is not None:
+        raise SystemExit(status)
+
+
+def print_policy_self_test(snapshot: dict[str, object]) -> None:
+    """Print the non-authoritative candidate policy comparison."""
+    lines = snapshot.get("policy_self_test")
+    if isinstance(lines, list):
+        sys.stdout.writelines(f"{line}\n" for line in lines)
+
+
+def base_policy_decision(
+    lease: dict[str, Any], pull: dict[str, Any], labels: set[str]
+) -> dict[str, Any]:
+    """Select the merge route and path tier from the trusted base (#1069)."""
+    executor = trusted_executor_module()
+    subject = subject_repository_root()
+    base_sha = str(lease["base_sha"])
+    head_sha = str(lease["head_sha"])
+    for sha in (base_sha, head_sha):
+        executor.ensure_commit(subject, sha)
+    git = ["git", "-C", str(subject)]
+    merge_base = run([*git, "merge-base", base_sha, head_sha])
+    listing = subprocess.run(  # noqa: S603 - fixed git arguments
+        [
+            *git,
+            "diff",
+            "--no-renames",
+            "--name-only",
+            "-z",
+            merge_base,
+            head_sha,
+        ],
+        capture_output=True,
+        check=False,
+    )
+    if listing.returncode:
+        raise RuntimeError("Cannot list the candidate's changed paths")
+    base_config = repository_root() / ".csarc/config.yml"
+    labels_csv = ",".join(sorted(labels))
+    with tempfile.TemporaryDirectory(prefix="csarc-base-policy-") as scratch:
+        candidate_config = Path(scratch) / "candidate-config.yml"
+        candidate_config.write_text(
+            run([*git, "show", f"{head_sha}:.csarc/config.yml"]) + "\n",
+            encoding="utf-8",
+        )
+        try:
+            decision = executor.classify_route(
+                [
+                    item.decode("utf-8", "surrogateescape")
+                    for item in listing.stdout.split(b"\0")
+                    if item
+                ],
+                executor.read_config(base_config),
+                executor.read_config(candidate_config),
+            )
+        except (OSError, ValueError) as error:
+            raise RuntimeError(
+                f"The trusted base cannot read the configuration: {error}"
+            ) from error
+        executor.require_route(decision, labels)
+        changed_files = Path(scratch) / "changed-files"
+        changed_files.write_bytes(listing.stdout)
+        plan = Path(scratch) / "ci-plan.json"
+        run(
+            [
+                sys.executable,
+                str(Path(__file__).resolve().with_name("ci_tier.py")),
+                "--event",
+                "pull_request",
+                "--base",
+                str(lease["base_ref"]),
+                "--head",
+                str((pull.get("head") or {}).get("ref") or ""),
+                "--labels",
+                labels_csv,
+                "--files-from",
+                str(changed_files),
+                "--output-json",
+                str(plan),
+                "--draft",
+                "false",
+            ]
+        )
+        path_tier = str(json.loads(plan.read_text(encoding="utf-8"))["tier"])
+        self_test = (
+            executor.policy_self_test(
+                subject,
+                base_config=base_config,
+                candidate_config=candidate_config,
+                changed_files=changed_files,
+                labels=labels_csv,
+                trusted=decision,
+            )
+            if run([*git, "rev-parse", "HEAD"]) == head_sha
+            else [
+                "Candidate policy self-test skipped: the current checkout "
+                "is not the candidate head."
+            ]
+        )
+    return {
+        "route": decision.route,
+        "reasons": list(decision.reasons),
+        "path_tier": path_tier,
+        "self_test": self_test,
+    }
+
+
 def configured_admin_bypass() -> str:
     """Return the normalized configured admin bypass scope."""
     return str(
@@ -2812,6 +2975,9 @@ def merge_snapshot(  # noqa: C901
         for label in pull.get("labels", [])
         if isinstance(label, dict)
     }
+    # Issue #1069: the trusted base selects the merge route and path tier;
+    # the candidate's own policy only runs as a non-authoritative self-test.
+    policy = base_policy_decision(lease, pull, label_names)
     admin_bypass = level_decision.review == "self" and admin_bypass_opt_in(
         github, repo, lease, pull
     )
@@ -3042,6 +3208,16 @@ def merge_snapshot(  # noqa: C901
         if quota_fallback_note_url
         else set()
     )
+    if quota_run_urls and policy["route"] != "ordinary":
+        raise RuntimeError(
+            "A governance switch keeps its required checks; quota fallback "
+            "cannot replace them"
+        )
+    # The release-channel floor and the trusted path tier both bind local
+    # evidence; the stronger one wins (Issue #1069).
+    required_tier = trusted_executor_module().stronger_suite(
+        level_decision.suite, policy["path_tier"]
+    )
     check_evidence = "not-enforced"
     local_evidence: dict[str, Any] | None = None
     if verification_mode == "local":
@@ -3052,7 +3228,7 @@ def merge_snapshot(  # noqa: C901
             tree_sha=str(lease["head_tree"]),
             base_ref=str(lease["base_ref"]),
             base_sha=str(lease["base_sha"]),
-            required_tier=level_decision.suite,
+            required_tier=required_tier,
         )
         check_evidence = "local-self-attested"
     elif protection == "enforced" or quota_run_urls:
@@ -3085,6 +3261,10 @@ def merge_snapshot(  # noqa: C901
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
         "local_verification": local_evidence,
+        "merge_route": policy["route"],
+        "merge_route_reasons": policy["reasons"],
+        "required_tier": required_tier,
+        "policy_self_test": policy["self_test"],
         "admin_bypass": admin_bypass,
         "dependabot_head": dependabot_head,
         "hotfix_evidence": hotfix_evidence,
@@ -3437,6 +3617,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
             f"review={snapshot['authorization_url']} "
             f"head={lease['head_sha']} actor={lease['actor']}",
         )
+    print_policy_self_test(snapshot)
     local_evidence = snapshot.get("local_verification")
     if isinstance(local_evidence, dict):
         github.comment(
@@ -4249,6 +4430,7 @@ def main() -> None:
     args = parser().parse_args()
     github = GitHub()
     try:
+        bootstrap_trusted_base(args)
         if hasattr(args, "scan_root"):
             scan_writers(args.root.resolve())
         elif hasattr(args, "handler"):

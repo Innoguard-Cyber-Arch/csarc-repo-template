@@ -15,6 +15,16 @@ scans) still exercise the candidate's code.
 candidate's own router and configuration reader with the trusted decision and
 labels every difference as non-authoritative; it always exits 0 so candidate
 code can never decide the required result through it.
+
+Issue #1069 (G2) extends the same boundary to merges and to generated
+projects. This file is byte-identical in the template repository
+(`scripts/`) and in generated projects (`.csarc/scripts/`), and it also owns
+the base-commit policy: a read-only, fail-closed reader for the current and
+next configuration schema, the governance-switch route for changes to
+`.csarc/scripts` or relaxed governance values, the release-channel
+verification floor, and the materialized trusted base the local lifecycle
+re-executes from. Candidate copies of these rules only ever run as a
+non-authoritative self-test.
 """
 
 from __future__ import annotations
@@ -22,14 +32,24 @@ from __future__ import annotations
 import argparse
 import contextlib
 import hashlib
+import importlib
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
+from collections.abc import Generator
+from dataclasses import dataclass
 from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    csarc_config = importlib.import_module("csarc_config")
+else:
+    csarc_config = importlib.import_module(f"{__package__}.csarc_config")
 
 EXECUTOR_TRUSTED = "trusted-base"
 EXECUTOR_LEGACY = "candidate-legacy"
@@ -37,16 +57,41 @@ CONTROL_FILES = (
     "scripts/ci_tier.py",
     "scripts/csarc_config.py",
     "scripts/resolve-cache-root",
+    "scripts/trusted_executor.py",
     "scripts/verification-step",
     "scripts/verify-fast",
     "scripts/verify-template.sh",
 )
 CONTROL_GLOBS = ("scripts/verify-stage-*",)
+# Generated projects keep the same control set under .csarc/scripts, with
+# `verify` as their full entry point (Issue #1069).
+GENERATED_SCRIPTS = ".csarc/scripts"
+GENERATED_CONTROL_FILES = (
+    ".csarc/scripts/ci_tier.py",
+    ".csarc/scripts/csarc_config.py",
+    ".csarc/scripts/resolve-cache-root",
+    ".csarc/scripts/trusted_executor.py",
+    ".csarc/scripts/verification-step",
+    ".csarc/scripts/verify",
+    ".csarc/scripts/verify-fast",
+)
 MANIFEST = "trusted-executor.json"
+
+
+def scripts_prefix(root: Path) -> str:
+    """Return the control-script directory for the repository layout."""
+    return (
+        GENERATED_SCRIPTS
+        if (root / GENERATED_SCRIPTS).is_dir()
+        and not (root / "scripts" / "verify-template.sh").is_file()
+        else "scripts"
+    )
 
 
 def control_paths(root: Path) -> list[str]:
     """Return the sorted relative control-set paths present under `root`."""
+    if scripts_prefix(root) == GENERATED_SCRIPTS:
+        return sorted(GENERATED_CONTROL_FILES)
     paths = set(CONTROL_FILES)
     for pattern in CONTROL_GLOBS:
         paths.update(
@@ -59,8 +104,10 @@ def control_paths(root: Path) -> list[str]:
 
 def is_control_path(path: str) -> bool:
     """Return whether one repository path belongs to the control set."""
-    return path in CONTROL_FILES or (
-        path.startswith("scripts/verify-stage-") and "/" not in path[8:]
+    return (
+        path in CONTROL_FILES
+        or path in GENERATED_CONTROL_FILES
+        or (path.startswith("scripts/verify-stage-") and "/" not in path[8:])
     )
 
 
@@ -201,13 +248,14 @@ def run_candidate_gate(
 ) -> tuple[dict[str, object] | None, str]:
     """Run the candidate's router and config reader without authority."""
     environment = candidate_environment()
+    prefix = scripts_prefix(candidate_root)
     with tempfile.TemporaryDirectory(prefix="candidate-gate-") as scratch:
         output = Path(scratch) / "plan.json"
         with contextlib.suppress(OSError, subprocess.SubprocessError):
             subprocess.run(  # noqa: S603 - candidate self-test, no authority
                 [
                     sys.executable,
-                    str(candidate_root / "scripts" / "ci_tier.py"),
+                    str(candidate_root / prefix / "ci_tier.py"),
                     *router_args,
                     "--output-json",
                     str(output),
@@ -223,7 +271,7 @@ def run_candidate_gate(
         reader = subprocess.run(  # noqa: S603 - candidate self-test
             [
                 sys.executable,
-                str(candidate_root / "scripts" / "csarc_config.py"),
+                str(candidate_root / prefix / "csarc_config.py"),
                 "release_ownership",
             ],
             cwd=candidate_root,
@@ -264,6 +312,486 @@ def read_changed_files(path: Path | None) -> list[str]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Issue #1069 (G2): base-commit policy shared by hosted and local gates.
+# ---------------------------------------------------------------------------
+
+SCHEMA_KEY = "schema_version"
+CURRENT_SCHEMA = 1
+NEXT_SCHEMA = 2
+SUPPORTED_SCHEMAS = (CURRENT_SCHEMA, NEXT_SCHEMA)
+# The next schema stores intent only (#1058 decision 3): it rejects legacy
+# aliases and retired settings instead of normalizing them, and it never
+# fills a governance value from a legacy default. Q1 owns the final key set
+# and must extend this reader in the trusted base before switching a writer.
+NEXT_SCHEMA_RETIRED_KEYS = frozenset(
+    {
+        "actions_fallback",
+        "copilot_review_max_level",
+        "default_release_level",
+        "enable_docker",
+        "pr_review_mode",
+        "readme_primary_language",
+        "release_immutable_releases",
+        "release_levels_enabled",
+        "release_ownership_reason",
+        "release_required_inputs",
+        "release_settings_owner",
+        "release_workflow",
+    }
+)
+NEXT_SCHEMA_RETIRED_PREFIXES = ("policy_", "release_level_")
+NEXT_SCHEMA_REQUIRED_KEYS = (
+    "admin_bypass",
+    "copilot_review",
+    "governance_mode",
+    "review",
+    "verification_mode",
+)
+NEXT_SCHEMA_METADATA_KEYS = frozenset({"_commit", "_src_path"})
+
+ROUTE_ORDINARY = "ordinary"
+ROUTE_GOVERNANCE_SWITCH = "governance-switch"
+GOVERNANCE_SWITCH_LABEL = "governance-switch"
+GOVERNED_SCRIPTS = GENERATED_SCRIPTS + "/"
+# Each tuple runs from the strictest to the most relaxed value.
+GOVERNANCE_ORDER: dict[str, tuple[str, ...]] = {
+    "actions_fallback": ("off", "admin"),
+    "admin_bypass": ("off", "beta-only", "always"),
+    "copilot_review": ("off", "allowed"),
+    "governance_mode": ("managed", "observe"),
+    "review": ("peer", "solo"),
+    "verification_mode": ("hosted", "local"),
+}
+GOVERNANCE_FLAGS = ("enable_codeql", "enable_governance_drift_check")
+GOVERNANCE_LISTS = ("lifecycle",)
+GOVERNANCE_MINIMUMS = ("coverage_threshold",)
+
+SUITE_RANK = {"fast": 0, "full": 1}
+FULL_FLOOR_LABELS = frozenset({"hotfix", "promotion", "release-recovery"})
+DELIVERY_BASE = re.compile(r"dev/[mi][1-9][0-9]*-[a-z0-9][a-z0-9-]*")
+TRUSTED_BASE_ENV = "CSARC_TRUSTED_BASE_SHA"
+SHA = re.compile(r"[0-9a-f]{40}")
+PULL_FILES_LIMIT = 3000
+
+
+def _top_level_settings(text: str) -> dict[str, str]:
+    """Return each top-level key with its raw scalar text."""
+    settings: dict[str, str] = {}
+    for line in text.splitlines():
+        if not line or line[0].isspace() or line.startswith(("#", "- ")):
+            continue
+        key, separator, value = line.partition(":")
+        if separator and key:
+            settings[key] = value.strip()
+    return settings
+
+
+def config_schema(path: Path) -> int:
+    """Return the declared configuration schema, failing closed if unknown."""
+    raw = _top_level_settings(path.read_text(encoding="utf-8"))
+    if SCHEMA_KEY not in raw:
+        return CURRENT_SCHEMA
+    value = raw[SCHEMA_KEY]
+    if re.fullmatch(r"[1-9][0-9]{0,3}", value) is None:
+        raise ValueError(f"Invalid {SCHEMA_KEY} in {path}: {value!r}")
+    schema = int(value)
+    if schema not in SUPPORTED_SCHEMAS:
+        raise ValueError(
+            f"Unsupported {SCHEMA_KEY} {schema} in {path}; this trusted base "
+            "reads schemas 1 and 2 only. Merge a base that reads the new "
+            "schema before changing the writer."
+        )
+    return schema
+
+
+def read_config(path: Path) -> dict[str, object]:
+    """Read the current or next configuration schema without writing.
+
+    Schema 1 keeps the existing normalizing reader. Schema 2 is the next,
+    intent-only shape: retired keys, unknown private keys, and missing
+    governance values fail closed instead of being normalized.
+    """
+    schema = config_schema(path)
+    if schema == NEXT_SCHEMA:
+        raw = _top_level_settings(path.read_text(encoding="utf-8"))
+        retired = sorted(
+            key
+            for key in raw
+            if key in NEXT_SCHEMA_RETIRED_KEYS
+            or key.startswith(NEXT_SCHEMA_RETIRED_PREFIXES)
+        )
+        if retired:
+            raise ValueError(
+                f"Schema {NEXT_SCHEMA} in {path} still contains retired "
+                f"settings: {', '.join(retired)}"
+            )
+        private = sorted(
+            key
+            for key in raw
+            if key.startswith("_") and key not in NEXT_SCHEMA_METADATA_KEYS
+        )
+        if private:
+            raise ValueError(
+                f"Schema {NEXT_SCHEMA} in {path} has unknown metadata: "
+                + ", ".join(private)
+            )
+        missing = [key for key in NEXT_SCHEMA_REQUIRED_KEYS if key not in raw]
+        if missing:
+            raise ValueError(
+                f"Schema {NEXT_SCHEMA} in {path} must state "
+                + ", ".join(missing)
+            )
+    values = csarc_config.load_config(path)
+    values[SCHEMA_KEY] = schema
+    return values
+
+
+def governance_relaxations(  # noqa: C901
+    base: dict[str, object], candidate: dict[str, object]
+) -> list[str]:
+    """List every governance value the candidate relaxes from its base."""
+    relaxed: list[str] = []
+    for key, order in GOVERNANCE_ORDER.items():
+        before, after = base.get(key), candidate.get(key)
+        if before == after:
+            continue
+        if before in order and after in order:
+            if order.index(str(after)) > order.index(str(before)):
+                relaxed.append(f"{key}: {before} -> {after}")
+        else:
+            # An unordered change (added, removed, or unknown) counts as a
+            # relaxation so it can only land through the reviewed route.
+            relaxed.append(f"{key}: {before} -> {after}")
+    for key in GOVERNANCE_FLAGS:
+        if base.get(key) is True and candidate.get(key) is not True:
+            relaxed.append(f"{key}: true -> {candidate.get(key)}")
+    for key in GOVERNANCE_LISTS:
+        before_items = base.get(key)
+        after_items = candidate.get(key)
+        removed = sorted(
+            {str(item) for item in before_items}
+            if isinstance(before_items, list)
+            else set()
+        )
+        if isinstance(after_items, list):
+            removed = [item for item in removed if item not in after_items]
+        if removed:
+            relaxed.append(f"{key}: removes {', '.join(removed)}")
+    for key in GOVERNANCE_MINIMUMS:
+        before, after = base.get(key), candidate.get(key)
+        if type(before) is int and (type(after) is not int or after < before):
+            relaxed.append(f"{key}: {before} -> {after}")
+    return relaxed
+
+
+@dataclass(frozen=True)
+class RouteDecision:
+    """One base-policy merge route and the reasons that selected it."""
+
+    route: str
+    reasons: tuple[str, ...]
+
+    def as_json(self) -> dict[str, object]:
+        """Return the stable machine-readable form."""
+        return {"route": self.route, "reasons": list(self.reasons)}
+
+
+def classify_route(
+    changed_files: list[str] | None,
+    base_config: dict[str, object],
+    candidate_config: dict[str, object],
+) -> RouteDecision:
+    """Select the merge route from base-owned rules only."""
+    reasons: list[str] = []
+    if changed_files is None:
+        reasons.append("changed paths are unavailable")
+    else:
+        governed = sorted(
+            path for path in changed_files if path.startswith(GOVERNED_SCRIPTS)
+        )
+        if governed:
+            shown = ", ".join(governed[:5])
+            extra = (
+                f" and {len(governed) - 5} more" if len(governed) > 5 else ""
+            )
+            reasons.append(f"changes {GOVERNED_SCRIPTS}: {shown}{extra}")
+    base_schema = base_config.get(SCHEMA_KEY, CURRENT_SCHEMA)
+    candidate_schema = candidate_config.get(SCHEMA_KEY, CURRENT_SCHEMA)
+    if base_schema != candidate_schema:
+        reasons.append(
+            f"changes {SCHEMA_KEY}: {base_schema} -> {candidate_schema}"
+        )
+    reasons.extend(
+        f"relaxes {item}"
+        for item in governance_relaxations(base_config, candidate_config)
+    )
+    route = ROUTE_GOVERNANCE_SWITCH if reasons else ROUTE_ORDINARY
+    return RouteDecision(route, tuple(reasons))
+
+
+def require_route(decision: RouteDecision, labels: set[str]) -> None:
+    """Fail closed when a governance switch is not declared on the PR."""
+    if (
+        decision.route == ROUTE_GOVERNANCE_SWITCH
+        and GOVERNANCE_SWITCH_LABEL not in labels
+    ):
+        raise RuntimeError(
+            "This pull request needs the governance-switch route ("
+            + "; ".join(decision.reasons)
+            + f"); add the {GOVERNANCE_SWITCH_LABEL} label. The route keeps "
+            "required checks, the exact head, and the remote lease."
+        )
+
+
+def stronger_suite(first: str, second: str) -> str:
+    """Return the stronger of two verification suites."""
+    aliases = {"baseline": "fast", "docs": "fast"}
+    first, second = aliases.get(first, first), aliases.get(second, second)
+    if first not in SUITE_RANK or second not in SUITE_RANK:
+        raise ValueError("unknown verification suite")
+    return max((first, second), key=SUITE_RANK.__getitem__)
+
+
+def channel_floor(base_ref: str, labels: set[str]) -> tuple[str, str]:
+    """Return the release channel and verification floor for one base.
+
+    Delivery branches carry beta work (fast floor). Every other base, which
+    covers standalone work, hotfixes, and release recovery on `main`, is a
+    stable route that needs full evidence; so do the tier labels.
+    """
+    base = base_ref.removeprefix("refs/heads/").removeprefix("origin/")
+    if labels & FULL_FLOOR_LABELS:
+        return "stable", "full"
+    if DELIVERY_BASE.fullmatch(base) is not None:
+        return "beta", "fast"
+    return "stable", "full"
+
+
+def _git(root: Path, *args: str, data: bytes | None = None) -> bytes:
+    """Run one Git command in `root`, failing closed with its error."""
+    result = subprocess.run(  # noqa: S603 - fixed git arguments
+        ["git", "-C", str(root), *args],  # noqa: S607
+        input=data,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        detail = result.stderr.decode("utf-8", "replace").strip()
+        raise RuntimeError(f"git {args[0]} failed: {detail}")
+    return result.stdout
+
+
+def ensure_commit(root: Path, sha: str) -> None:
+    """Make one exact commit available locally, fetching it if needed."""
+    if SHA.fullmatch(sha) is None:
+        raise RuntimeError("Trusted base commit identity is malformed")
+    try:
+        _git(root, "cat-file", "-e", f"{sha}^{{commit}}")
+    except RuntimeError:
+        _git(root, "fetch", "--no-tags", "--quiet", "origin", sha)
+        _git(root, "cat-file", "-e", f"{sha}^{{commit}}")
+
+
+@contextlib.contextmanager
+def trusted_base_checkout(root: Path, base_sha: str) -> Generator[Path]:
+    """Check out one exact trusted base commit beside the candidate.
+
+    The detached checkout shares the object store, so base scripts that read
+    history (release and promotion revalidation) keep working, while every
+    decision file comes from the base commit instead of the candidate tree.
+    """
+    ensure_commit(root, base_sha)
+    with tempfile.TemporaryDirectory(prefix="csarc-trusted-base-") as scratch:
+        checkout = Path(scratch) / "base"
+        _git(
+            root,
+            "worktree",
+            "add",
+            "--detach",
+            "--quiet",
+            str(checkout),
+            base_sha,
+        )
+        try:
+            actual = _git(checkout, "rev-parse", "HEAD").decode().strip()
+            if actual != base_sha:
+                raise RuntimeError(
+                    "Trusted base checkout is not the lease base"
+                )
+            yield checkout
+        finally:
+            with contextlib.suppress(RuntimeError):
+                _git(root, "worktree", "remove", "--force", str(checkout))
+
+
+def read_pull_files(path: Path) -> list[str] | None:
+    """Read a GitHub pull-request file listing, or None if incomplete.
+
+    The REST listing stops at 3,000 files, so a listing that reaches the cap
+    is treated as unavailable instead of as complete.
+    """
+    try:
+        pages = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(pages, list):
+        return None
+    items = (
+        [item for page in pages for item in page]
+        if all(isinstance(page, list) for page in pages)
+        else pages
+    )
+    files: list[str] = []
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(
+            item.get("filename"), str
+        ):
+            return None
+        files.append(item["filename"])
+        previous = item.get("previous_filename")
+        if isinstance(previous, str):
+            files.append(previous)
+    return None if len(items) >= PULL_FILES_LIMIT else files
+
+
+def read_changed_files_strict(path: Path) -> list[str]:
+    """Read a NUL-separated changed-file list, raising when unreadable."""
+    return [
+        item.decode("utf-8", "replace")
+        for item in path.read_bytes().split(b"\0")
+        if item
+    ]
+
+
+def policy_self_test(
+    candidate_root: Path,
+    *,
+    base_config: Path,
+    candidate_config: Path,
+    changed_files: Path | None,
+    labels: str,
+    trusted: RouteDecision,
+    timeout: float = 120.0,
+) -> list[str]:
+    """Replay the candidate's own route rules without any authority."""
+    lines = [
+        "Candidate policy self-test (non-authoritative): the trusted base "
+        f"already selected route {trusted.route}; nothing below changes it.",
+    ]
+    script = (
+        candidate_root / scripts_prefix(candidate_root) / "trusted_executor.py"
+    )
+    if not script.is_file():
+        lines.append("Candidate has no base-policy reader to compare.")
+        return lines
+    command = [
+        sys.executable,
+        str(script),
+        "route",
+        "--base-config",
+        str(base_config),
+        "--candidate-config",
+        str(candidate_config),
+        "--labels",
+        labels,
+        "--json",
+    ]
+    if changed_files is not None:
+        command.extend(["--changed-files", str(changed_files)])
+    try:
+        result = subprocess.run(  # noqa: S603 - candidate self-test only
+            command,
+            cwd=candidate_root,
+            env=candidate_environment(),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        candidate = json.loads(result.stdout)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        candidate = None
+    if not isinstance(candidate, dict):
+        lines.append("Candidate policy produced no readable route.")
+    elif candidate != trusted.as_json():
+        lines.append(
+            f"Route difference: trusted={trusted.as_json()!r} "
+            f"candidate={candidate!r}"
+        )
+    else:
+        lines.append("Candidate policy agrees with the trusted route.")
+    return lines
+
+
+def _route_command(args: argparse.Namespace) -> int:
+    """Print or enforce one base-policy route."""
+    try:
+        base = read_config(args.base_config)
+        candidate = read_config(args.candidate_config)
+    except (OSError, ValueError) as error:
+        sys.stderr.write(
+            f"Trusted base cannot read the configuration: {error}\n"
+        )
+        return 1
+    changed: list[str] | None = []
+    if args.pull_files is not None:
+        changed = read_pull_files(args.pull_files)
+    elif args.changed_files is not None:
+        try:
+            changed = read_changed_files_strict(args.changed_files)
+        except OSError:
+            changed = None
+    decision = classify_route(changed, base, candidate)
+    if args.json:
+        sys.stdout.write(json.dumps(decision.as_json(), sort_keys=True) + "\n")
+    else:
+        sys.stdout.write(f"Merge route: {decision.route}\n")
+        sys.stdout.writelines(f"- {reason}\n" for reason in decision.reasons)
+    if args.enforce:
+        try:
+            require_route(
+                decision, {label for label in args.labels.split(",") if label}
+            )
+        except RuntimeError as error:
+            sys.stderr.write(f"{error}\n")
+            return 1
+    return 0
+
+
+def policy_main(args: argparse.Namespace) -> int:
+    """Run one base-policy command (Issue #1069)."""
+    if args.command == "route":
+        return _route_command(args)
+    if args.command == "read-config":
+        try:
+            values = read_config(args.config)
+            value = values if args.key is None else values[args.key]
+        except (OSError, KeyError, ValueError) as error:
+            sys.stderr.write(f"{error}\n")
+            return 1
+        if isinstance(value, dict):
+            sys.stdout.write(json.dumps(value, sort_keys=True) + "\n")
+        elif isinstance(value, list):
+            sys.stdout.write(",".join(str(item) for item in value) + "\n")
+        elif isinstance(value, bool):
+            sys.stdout.write(f"{str(value).lower()}\n")
+        elif value is not None:
+            sys.stdout.write(f"{value}\n")
+        return 0
+    if args.command == "channel-floor":
+        labels = {label for label in args.labels.split(",") if label}
+        level, floor = channel_floor(args.base, labels)
+        try:
+            suite = stronger_suite(floor, args.path_tier)
+        except ValueError as error:
+            sys.stderr.write(f"{error}\n")
+            return 2
+        sys.stdout.write(f"level={level} floor={floor} suite={suite}\n")
+        return 0
+    return 2
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -282,6 +810,26 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     compare.add_argument("--trusted-ownership", default="")
     compare.add_argument("--changed-files", type=Path)
     compare.add_argument("--summary", type=Path)
+    reader = commands.add_parser(
+        "read-config", help="read any supported schema, failing closed"
+    )
+    reader.add_argument("--config", type=Path, required=True)
+    reader.add_argument("--key")
+    route = commands.add_parser("route", help="select the base-policy route")
+    route.add_argument("--base-config", type=Path, required=True)
+    route.add_argument("--candidate-config", type=Path, required=True)
+    changed = route.add_mutually_exclusive_group()
+    changed.add_argument("--changed-files", type=Path)
+    changed.add_argument("--pull-files", type=Path)
+    route.add_argument("--labels", default="")
+    route.add_argument("--json", action="store_true")
+    route.add_argument("--enforce", action="store_true")
+    floor = commands.add_parser(
+        "channel-floor", help="print the release-channel verification floor"
+    )
+    floor.add_argument("--base", required=True)
+    floor.add_argument("--labels", default="")
+    floor.add_argument("--path-tier", default="fast")
     return parser.parse_args(argv)
 
 
@@ -306,6 +854,8 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write(f"{error}\n")
             return 1
         return 0
+    if args.command in {"read-config", "route", "channel-floor"}:
+        return policy_main(args)
     try:
         router_args = read_router_args(args.router_args)
     except (OSError, ValueError):

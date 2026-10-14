@@ -33,6 +33,7 @@ paired_files=(
   "scripts/validate-issue-title|template/.csarc/scripts/validate-issue-title"
   "scripts/verification-step|template/.csarc/scripts/verification-step"
   "scripts/verification_cost.py|template/.csarc/scripts/verification_cost.py"
+  "scripts/trusted_executor.py|template/.csarc/scripts/trusted_executor.py"
   "scripts/verify_release_consumption.py|template/.csarc/scripts/verify_release_consumption.py"
   "policies/actions.json|template/.csarc/policies/actions.json"
   "policies/issue-creation.json|template/.csarc/policies/issue-creation.json"

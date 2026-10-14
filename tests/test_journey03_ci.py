@@ -450,8 +450,11 @@ def test_reused_release_validation_installs_only_owned_package_tools() -> None:
             for step in ci_steps(rendered)
             if str(step.get("name", "")).startswith("Set up ")
         }
+        # The trusted-policy Python setup always runs (Issue #1111/#1069).
         actual = {
-            name for name, step in setup.items() if candidate in step["if"]
+            name
+            for name, step in setup.items()
+            if candidate in step.get("if", "")
         }
         assert actual == expected
 
@@ -544,7 +547,7 @@ def test_local_verification_reuses_the_hosted_path_planner() -> None:
         ),
         (
             "template/.csarc/scripts/verify-fast.jinja",
-            "python3 .csarc/scripts/ci_tier.py",
+            'python3 "$control_root/.csarc/scripts/ci_tier.py"',
             "python3 .csarc/scripts/local_verification.py record",
         ),
     ):
@@ -586,7 +589,7 @@ def test_full_dispatch_skips_redundant_fast_checks() -> None:
         ("scripts/verify-fast", '"$control_root/scripts/verify-template.sh"'),
         (
             "template/.csarc/scripts/verify-fast.jinja",
-            "./.csarc/scripts/verify",
+            '"$control_root/.csarc/scripts/verify"',
         ),
     ):
         source = (REPO_ROOT / path).read_text(encoding="utf-8")
