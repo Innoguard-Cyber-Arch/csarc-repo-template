@@ -937,7 +937,9 @@ Jobs API，並重用 `scripts/pr_lifecycle.py` 的 required-check producer selec
    release level 相互一致，且 tree 等於 exact head 的 Git tree；
 5. check、run、job 與 execution step 都真正 `success`；`neutral`、`skipped`、zero-step 或同名 classic status
    均不能滿足 `verify`；
-6. 完成時間不超過 24 小時，且不能超前目前時間超過 5 分鐘。
+6. 完成時間不超過 24 小時（恰好 24 小時仍有效），且不能超前目前時間超過 5 分鐘；缺少或沒有時區的時間一律 fail
+   closed。local、hosted、merge、release、promotion 與 fallback 都只呼叫 `scripts/evidence_freshness.py` 的同一個
+   判定；期限是受信任 script 的常數，不寫入 evidence，呼叫端只能縮短不能放寬（#1075）；威脅模型與 24 小時理由見 [`docs/adr/verification-evidence-freshness.md`](adr/verification-evidence-freshness.md)。
 
 quota fallback 永遠不能替代缺少或失敗的 `verify`。新專案預設 `actions_fallback: off`；只有明確設為
 `admin`，且 exact head 已有上述可信成功證據時，其他確認為 GitHub billing zero-step 的 required check

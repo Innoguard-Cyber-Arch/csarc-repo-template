@@ -12,6 +12,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from authenticate_dependabot_head import dependabot_coordinates_eligible
+from evidence_freshness import policy_max_age_hours
 from pr_lifecycle import (
     DEPENDABOT_ELIGIBILITY_CONTEXT,
     GITHUB_ACTIONS_APP_ID,
@@ -44,7 +45,7 @@ def find_reusable_evidence(
     labels: str,
     release_level: str,
     exclude_run_id: int | None,
-    max_age_hours: float,
+    max_age_hours: float | None = None,
 ) -> dict[str, object] | None:
     """Find the newest same-head original execution for an identical route."""
     expected = {
@@ -191,7 +192,9 @@ def main() -> None:
     source.add_argument("--resolve-release-source", action="store_true")
     source.add_argument("--find-reusable", action="store_true")
     parser.add_argument("--merge-branch", default="main")
-    parser.add_argument("--max-age-hours", type=float, default=24.0)
+    # Issue #1075: the window is trusted policy; this flag may only tighten
+    # it, and a wider value fails closed in the shared freshness check.
+    parser.add_argument("--max-age-hours", type=float, default=None)
     parser.add_argument("--required-tier", choices=("docs", "fast", "full"))
     parser.add_argument("--tier", choices=("docs", "fast", "full"))
     parser.add_argument("--scopes", default="")
@@ -203,6 +206,7 @@ def main() -> None:
     parser.add_argument("--exclude-run-id", type=int)
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
+    args.max_age_hours = policy_max_age_hours(args.max_age_hours)
     github = GitHub()
     if args.resolve_release_source:
         source_sha = resolve_release_source(
