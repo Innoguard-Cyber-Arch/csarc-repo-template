@@ -323,7 +323,9 @@ SUPPORTED_SCHEMAS = (CURRENT_SCHEMA, NEXT_SCHEMA)
 # The next schema stores intent only (#1058 decision 3): it rejects legacy
 # aliases and retired settings instead of normalizing them, and it never
 # fills a governance value from a legacy default. Q1 owns the final key set
-# and must extend this reader in the trusted base before switching a writer.
+# and extends this reader in the trusted base before switching a writer
+# (Issue #1071): `review` is a retired alias of admin_bypass, so a schema 2
+# file never states it.
 NEXT_SCHEMA_RETIRED_KEYS = frozenset(
     {
         "actions_fallback",
@@ -345,7 +347,6 @@ NEXT_SCHEMA_REQUIRED_KEYS = (
     "admin_bypass",
     "copilot_review",
     "governance_mode",
-    "review",
     "verification_mode",
 )
 NEXT_SCHEMA_METADATA_KEYS = frozenset({"_commit", "_src_path"})
