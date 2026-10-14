@@ -1522,6 +1522,15 @@ repo 的 full 入口是單一 `scripts/verify`，沒有本模板這種多階段�
 --check` 與 `scripts/check-update-conflicts` 兩者都乾淨），並確認上游變更沒有觸及上方
 條件 4 列出的路徑。
 
+### Requirement evidence（SPEC-010）
+
+每張 work Issue 的「補充」帶 `#### 風險與控制` 區塊（`| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |`；M18 規劃格式的 6 欄表頭也接受），「完成條件」的頂層 checkbox 依序是 AC1…ACn。PR body 只有一節 `## Requirement evidence`：`Issue: #N`、`Coverage: sha256:…` 與 `| ID | 證據 |` 表，為每個 AC 與風險 ID 各填一列。證據只接受 head 上的 `path` 或 `path::name`、`check:<name>`（合併時要求 exact head 的 check 成功）、`manual: <https URL> <理由>`、只限風險的 `accepted: <理由>`，以及只限 `R0` 的 `scope:docs`。
+
+- 不完整時 PR 不能離開 Draft：`scripts/pr_lifecycle.py state --state ready` 預檢、base 的 `validate-pr-policy`（非 Draft 時執行 `scripts/pr_lifecycle.py trace`）與 `merge_snapshot` 用同一個 `risk_controls.py`；沒有寬限期與 opt-out，不新增 workflow 或 required check。
+- `R0` 只在 PR 全部變更都是 docs、而且沒有改到 `AGENTS.md`、`SECURITY.md`、`.github/SECURITY.md` 或 CI policy 時有效；`R0` 與 `accepted:` 在 Ready 與合併輸出各列一行，單人維護者可自行接受 `high` 但永遠可見。
+- Issue 的 AC 或風險控制在 Ready 後增刪、重排或改寫時 coverage digest 改變，合併前會被擋下；錯誤訊息列出新的 digest，重新對應證據後寫入。合併的 canonical evidence payload 保存 Issue body digest、coverage digest 與每個 ID 的證據。
+- release、sync、Dependabot／automation 與 promotion PR 不檢查本節。安裝 CSARC CLI 時，`csarc risk suggest --open` 列出缺少區塊的 open Issue，`csarc issue create` 在建立前引導，`csarc risk register` 唯讀產生登錄冊。
+
 ### Acceptance-checklist 驗證時機（#573）
 
 歷史案例 #430（PR #448）示範過一種重試風暴：作者在 13 小時內邊做邊 push、邊勾

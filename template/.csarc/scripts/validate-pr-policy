@@ -125,24 +125,13 @@ validate_large_test_justification() {
 }
 
 validate_requirement_trace() {
-  # SPEC-010 (Issue #1079): a Ready work pull request maps every acceptance
-  # criterion and risk of its Issue to exact-head evidence. The trusted
-  # base's lifecycle performs the read-only GitHub reads and the parse.
-  local required="${PR_REQUIREMENT_TRACE_REQUIRED:-true}"
-  if [[ "${PR_POLICY_FIXTURE:-false}" == "true" &&
-    -z "${PR_REQUIREMENT_TRACE_REQUIRED+x}" ]]; then
-    required=false
-  fi
-  if [[ "${PR_DRAFT:-false}" == "true" || "$required" != "true" ||
-    "${promotion:-false}" == "true" ]]; then
-    return 0
-  fi
-  if ! python3 "$script_dir/pr_lifecycle.py" trace \
-    --repo "$GITHUB_REPOSITORY" \
-    --pr-number "$PR_NUMBER" \
-    --head-sha "${PR_HEAD_SHA:-}"; then
-    exit 1
-  fi
+  # SPEC-010: the trusted lifecycle checks a Ready work pull request's trace.
+  local default=true
+  [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]] && default=false
+  [[ "${PR_DRAFT:-false}" != "true" && "${promotion:-false}" != "true" &&
+    "${PR_REQUIREMENT_TRACE_REQUIRED:-$default}" == "true" ]] || return 0
+  python3 "$script_dir/pr_lifecycle.py" trace --repo "$GITHUB_REPOSITORY" \
+    --pr-number "$PR_NUMBER" --head-sha "${PR_HEAD_SHA:-}" || exit 1
 }
 
 validate_governance_route() {

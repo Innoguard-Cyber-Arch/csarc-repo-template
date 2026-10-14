@@ -3015,6 +3015,30 @@ def lifecycle_next_steps(
     return steps
 
 
+RISK_CONTROLS_PATH = ".csarc/scripts/risk_controls.py"
+
+
+def risk_behavior_changes(files: Plan) -> list[dict[str, object]] | None:
+    """Report the SPEC-010 gate an update starts enforcing (#1079)."""
+    if RISK_CONTROLS_PATH not in files.add:
+        return None
+    return [
+        {
+            "subject": "risk-controls",
+            "before": "Ready pull requests are not checked for risk controls",
+            "after": (
+                "Ready pull requests require the linked Issue to carry a "
+                "valid risk-controls block and every acceptance criterion "
+                "and risk to map to exact-head evidence (SPEC-010)"
+            ),
+            "note": (
+                "Run csarc risk suggest --open to list open Issues without "
+                "one; there is no grace period."
+            ),
+        }
+    ]
+
+
 def lifecycle_report_model(  # noqa: C901
     plan: ResolvedPlan,
     *,
@@ -3162,7 +3186,9 @@ def lifecycle_report_model(  # noqa: C901
             "action_pins": update_pin_items(plan.update)
             if operation == "update" and adoption is None
             else None,
-            "behavior_changes": None,
+            "behavior_changes": risk_behavior_changes(files)
+            if operation == "update" and adoption is None
+            else None,
             "code_owner": owner,
             "release_ownership": release_contract(plan.answers),
             "release_writers": None,

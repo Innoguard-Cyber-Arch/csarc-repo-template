@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import ast
 import base64
+import contextlib
 import hashlib
 import importlib
 import importlib.util
@@ -450,11 +451,7 @@ class GitHub:
         body: str,
         assignee: str,
     ) -> dict[str, Any]:
-        """Create one governed post-review task through the create entry.
-
-        The template repository keeps its `gh-issue-create` wrapper; a
-        rendered project has none and uses `gh issue create` directly.
-        """
+        """Create one post-review task; a render has no gh-issue-create."""
         wrapper = Path(__file__).with_name("gh-issue-create")
         command = [
             *(
@@ -1563,18 +1560,14 @@ def ensure_hotfix_post_review(
         f"{risk_controls.LABEL}\n\n"
         "| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |\n"
         "| --- | --- | --- | --- | --- | --- | --- |\n"
-        "| R1 | security | high | Emergency hotfix merged before independent "
-        "review | A maintainer other than the merge actor reviews the merged "
-        f"head | Review of PR #{pr_number} | @{actor} |\n\n"
+        "| R1 | security | high | Hotfix merged before independent review | "
+        f"Another maintainer reviews it | PR #{pr_number} | @{actor} |\n\n"
         f"{marker}\n"
     )
     problems: list[str] = []
     risk_controls.parse_risks(body, problems)
-    risk_controls.parse_acs(body, problems)
-    if problems:
-        raise RuntimeError(
-            "Hotfix post-review Issue body is invalid: " + "; ".join(problems)
-        )
+    if problems or not risk_controls.parse_acs(body, problems):
+        raise RuntimeError("Hotfix post-review risk block is invalid")
     created = github.create_issue(repo, title, body, actor)
     url = created.get("html_url")
     if not isinstance(url, str):
@@ -3382,43 +3375,47 @@ def require_routine_quota_fallback(
 
 
 def requirement_trace(
-    github: GitHub, repo: str, pull: dict[str, Any], head_sha: str
+    github: GitHub, repo: str, pull: dict[str, Any], head: str, local: object
 ) -> dict[str, object] | None:
-    """Check the closing Issue's requirement evidence (SPEC-010, #1079)."""
-    base = str((pull.get("base") or {}).get("ref") or "")
-    head = str((pull.get("head") or {}).get("ref") or "")
+    """Check the closing Issue's trace; at merge also its `check:` runs."""
     body = str(pull.get("body") or "")
     numbers = sorted({int(value) for value in CLOSING_ISSUE.findall(body)})
-    if not numbers or not risk_controls.traced_route(base, head):
+    refs = [str((pull.get(key) or {}).get("ref")) for key in ("base", "head")]
+    if not numbers or not risk_controls.traced_route(*refs):
         return None
-    if len(numbers) != 1:
-        raise RuntimeError("A traced pull request closes exactly one Issue")
     issue = github.get(repo, f"issues/{numbers[0]}")
-    if not isinstance(issue, dict) or issue.get("pull_request") is not None:
-        raise RuntimeError(f"Closing reference #{numbers[0]} is not an Issue")
+    if len(numbers) != 1 or not isinstance(issue, dict):
+        raise RuntimeError("A traced pull request closes exactly one Issue")
     files = github.pages(repo, f"pulls/{pull['number']}/files?per_page=100")
     keys = ("filename", "previous_filename")
-    paths = sorted({str(f[key]) for f in files for key in keys if f.get(key)})
 
     def read(path: str) -> str | None:
         quoted = urllib.parse.quote(path)
-        try:
-            data = github.get(repo, f"contents/{quoted}?ref={head_sha}")
-        except RuntimeError:
-            return None
-        if not isinstance(data, dict) or data.get("type") != "file":
-            return None
-        content = base64.b64decode(str(data.get("content") or ""))
-        return content.decode("utf-8", "replace")
+        with contextlib.suppress(RuntimeError):
+            data = github.get(repo, f"contents/{quoted}?ref={head}")
+            if isinstance(data, dict) and data.get("type") == "file":
+                return base64.b64decode(str(data["content"])).decode()
+        return None
 
-    logins = [str(a.get("login") or "") for a in issue.get("assignees") or []]
+    logins = [str(a.get("login")) for a in issue.get("assignees") or []]
     trace, problems, notes = risk_controls.ready(
         (numbers[0], str(issue.get("body") or ""), logins),
         body,
-        paths,
+        sorted({str(f[key]) for f in files for key in keys if f.get(key)}),
         ci_tier.scope_for,
         read,
     )
+    evidence = trace.get("evidence", {}).values()
+    names = {v[6:] for v in evidence if v.startswith("check:")}
+    if local is not None and (
+        names := names - ({"verify"} if local else set())
+    ):
+        path = f"commits/{head}/check-runs?filter=latest&per_page=100"
+        runs = github.collection(repo, path, "check_runs")
+        passed = {
+            r.get("name") for r in runs if r.get("conclusion") == "success"
+        }
+        problems += [f"RK31 check did not pass: {n}" for n in names - passed]
     if problems:
         raise RuntimeError(
             "Requirement trace is incomplete (SPEC-010):\n"
@@ -3428,38 +3425,10 @@ def requirement_trace(
     return trace
 
 
-def require_trace_checks(
-    github: GitHub, repo: str, head_sha: str, trace: dict[str, Any], local: bool
-) -> None:
-    """Require each `check:` evidence to have succeeded on the exact head."""
-    evidence = trace.get("evidence") or {}
-    names = {v[6:] for v in evidence.values() if v.startswith("check:")}
-    if local:
-        names.discard("verify")
-    if not names:
-        return
-    runs = github.collection(
-        repo,
-        f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
-        "check_runs",
-    )
-    passed = {
-        str(run.get("name"))
-        for run in runs
-        if run.get("status") == "completed"
-        and run.get("conclusion") == "success"
-    }
-    if missing := sorted(names - passed):
-        raise RuntimeError(
-            "requirement-trace: check evidence has not succeeded on the "
-            "exact head: " + ", ".join(missing)
-        )
-
-
 def trace_command(args: argparse.Namespace, github: GitHub) -> None:
     """Run the Ready requirement-trace check for validate-pr-policy."""
     pull = live_pull(github, args.repo, args.pr_number, args.head_sha)
-    requirement_trace(github, args.repo, pull, args.head_sha)
+    requirement_trace(github, args.repo, pull, args.head_sha, None)
 
 
 def merge_snapshot(  # noqa: C901
@@ -3669,7 +3638,6 @@ def merge_snapshot(  # noqa: C901
             raise RuntimeError(
                 f"Issue #{issue_number} has an unchecked checklist item"
             )
-    trace = requirement_trace(github, repo, pull, str(head_sha))
 
     base = pull.get("base") or {}
     base_ref = base.get("ref")
@@ -3801,14 +3769,9 @@ def merge_snapshot(  # noqa: C901
             verification_record = local_verification.normalized_record(
                 hosted_evidence, local_verification.TRUST_HOSTED
             )
-    if trace is not None:
-        require_trace_checks(
-            github,
-            repo,
-            str(head_sha),
-            trace,
-            verification_mode == "local" and local_evidence is not None,
-        )
+    trace = requirement_trace(
+        github, repo, pull, str(head_sha), local_evidence is not None
+    )
     require_lease(github, lease, repo, pr_number, head_sha)
     head_ref = str((pull.get("head") or {}).get("ref") or "")
     return {
@@ -3885,8 +3848,7 @@ def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
     if current == desired:
         raise RuntimeError(f"Pull request is already {args.state}")
     if not desired:
-        # SPEC-010: an incomplete requirement trace keeps the PR in Draft.
-        requirement_trace(github, args.repo, pull, args.head_sha)
+        requirement_trace(github, args.repo, pull, args.head_sha, None)
     command = ["gh", "pr", "ready", str(args.pr_number), "--repo", args.repo]
     if desired:
         command.append("--undo")
@@ -4278,7 +4240,6 @@ def merge_evidence(
         )
     trace = snapshot.get("requirement_trace")
     if isinstance(trace, dict):
-        # K1 (SPEC-010): the payload digest also covers the requirement trace.
         payload = {**payload, "requirement_trace": trace}
     try:
         return merge_trace.canonical_bytes(payload), trust

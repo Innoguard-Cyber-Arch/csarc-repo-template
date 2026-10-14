@@ -5933,15 +5933,15 @@ def test_untraced_routes_and_body_without_issue_skip_the_trace() -> None:
     pull = github.pull()
     pull["body"] = "Closes #42"
     pull["head"]["ref"] = "release/v1.2.3"
-    assert trace(github, "owner/repo", pull, "a" * 40) is None
+    assert trace(github, "owner/repo", pull, "a" * 40, None) is None
     pull["head"]["ref"] = "promote/m18-x"
-    assert trace(github, "owner/repo", pull, "a" * 40) is None
+    assert trace(github, "owner/repo", pull, "a" * 40, None) is None
     pull["head"]["ref"] = "fix/42-x"
     pull["body"] = "No closing keyword"
-    assert trace(github, "owner/repo", pull, "a" * 40) is None
+    assert trace(github, "owner/repo", pull, "a" * 40, None) is None
     pull["body"] = "Closes #42\nCloses #43"
     with pytest.raises(RuntimeError, match="exactly one Issue"):
-        trace(github, "owner/repo", pull, "a" * 40)
+        trace(github, "owner/repo", pull, "a" * 40, None)
 
 
 def test_ready_preflight_keeps_an_incomplete_trace_in_draft(

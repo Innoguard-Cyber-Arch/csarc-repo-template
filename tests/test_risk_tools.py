@@ -371,3 +371,13 @@ def test_cli_routes_issue_and_risk_commands(
     assert cli.main(["risk", "register", "--repo", "o/r", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["repository"] == "o/r"
     assert cli.main(["risk", "backfill"]) == 2
+
+
+def test_update_reports_the_new_gate_as_a_behavior_change() -> None:
+    added = cli.Plan((cli.RISK_CONTROLS_PATH,), (), (), (), (), (), ())
+    rows = cli.risk_behavior_changes(added)
+    assert rows is not None
+    assert rows[0]["subject"] == "risk-controls"
+    assert "csarc risk suggest --open" in str(rows[0]["note"])
+    present = cli.Plan((), (cli.RISK_CONTROLS_PATH,), (), (), (), (), ())
+    assert cli.risk_behavior_changes(present) is None
