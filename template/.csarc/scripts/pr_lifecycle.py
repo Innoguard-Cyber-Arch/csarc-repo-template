@@ -7,6 +7,7 @@ import argparse
 import ast
 import hashlib
 import importlib
+import importlib.util
 import json
 import os
 import re
@@ -23,28 +24,87 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     csarc_config = importlib.import_module("csarc_config")
-    dependabot_auth = importlib.import_module("authenticate_dependabot_head")
-    local_verification = importlib.import_module("local_verification")
-    merge_trace = importlib.import_module("merge_trace")
-    promotion_gate = importlib.import_module("promotion_gate")
-    release_level = importlib.import_module("release_level")
-    review_gate = importlib.import_module("review_gate")
-    verification_evidence = importlib.import_module("verification_evidence")
 else:
     csarc_config = importlib.import_module(f"{__package__}.csarc_config")
-    dependabot_auth = importlib.import_module(
-        f"{__package__}.authenticate_dependabot_head"
-    )
-    local_verification = importlib.import_module(
-        f"{__package__}.local_verification"
-    )
-    merge_trace = importlib.import_module(f"{__package__}.merge_trace")
-    promotion_gate = importlib.import_module(f"{__package__}.promotion_gate")
-    release_level = importlib.import_module(f"{__package__}.release_level")
-    review_gate = importlib.import_module(f"{__package__}.review_gate")
-    verification_evidence = importlib.import_module(
-        f"{__package__}.verification_evidence"
-    )
+
+
+def _load_sibling(name: str) -> ModuleType:
+    """Load one script module that sits beside this file."""
+    path = Path(__file__).resolve().with_name(f"{name}.py")
+    cached = sys.modules.get(name)
+    cached_file = getattr(cached, "__file__", None)
+    if (
+        cached is not None
+        and cached_file
+        and Path(cached_file).resolve() == path
+    ):
+        return cached
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ModuleNotFoundError(f"Sibling module is unavailable: {path}")
+    module = importlib.util.module_from_spec(spec)
+    # Register a first load so nested imports share it; a same-named module
+    # from another directory keeps its registration.
+    if cached is None:
+        sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        if sys.modules.get(name) is module:
+            del sys.modules[name]
+        raise
+    return module
+
+
+class SiblingModule:
+    """Import one sibling script module only when a command first uses it.
+
+    A rendered command must not require modules that only other commands
+    use, so optional siblings stay unloaded until an attribute is read.
+    The sibling always comes from this file's own directory, as an eager
+    import beside it would, even if `sys.path` changed in the meantime.
+    Attribute writes and deletes reach the loaded module, which keeps
+    monkeypatching and module-level state on the real module.
+    """
+
+    def __init__(self, name: str) -> None:
+        """Remember the sibling module name without importing it."""
+        object.__setattr__(self, "_sibling_name", name)
+        object.__setattr__(self, "_sibling_module", None)
+
+    def _sibling(self) -> ModuleType:
+        module = object.__getattribute__(self, "_sibling_module")
+        if module is None:
+            name = object.__getattribute__(self, "_sibling_name")
+            if __package__ in {None, ""}:
+                module = _load_sibling(name)
+            else:
+                module = importlib.import_module(f"{__package__}.{name}")
+            object.__setattr__(self, "_sibling_module", module)
+        return module
+
+    def __getattr__(self, attribute: str) -> object:
+        """Load the sibling on first use and read one attribute."""
+        return getattr(self._sibling(), attribute)
+
+    def __setattr__(self, attribute: str, value: object) -> None:
+        """Write one attribute on the loaded sibling module."""
+        setattr(self._sibling(), attribute, value)
+
+    def __delattr__(self, attribute: str) -> None:
+        """Delete one attribute from the loaded sibling module."""
+        delattr(self._sibling(), attribute)
+
+
+# Only the configuration reader is eager; every other sibling loads when the
+# selected command first needs it.
+dependabot_auth: Any = SiblingModule("authenticate_dependabot_head")
+local_verification: Any = SiblingModule("local_verification")
+merge_trace: Any = SiblingModule("merge_trace")
+promotion_gate: Any = SiblingModule("promotion_gate")
+release_level: Any = SiblingModule("release_level")
+review_gate: Any = SiblingModule("review_gate")
+verification_evidence: Any = SiblingModule("verification_evidence")
 
 
 LEASE_SCHEMA = 2
@@ -3674,6 +3734,9 @@ def merge_snapshot(  # noqa: C901
     )
     check_evidence = "not-enforced"
     local_evidence: dict[str, Any] | None = None
+    # Local and hosted evidence share one normalized record; only its trust
+    # label differs.
+    verification_record: dict[str, Any] | None = None
     hosted_evidence: dict[str, Any] = {}
     if verification_mode == "local":
         if quota_run_urls:
@@ -3686,6 +3749,9 @@ def merge_snapshot(  # noqa: C901
             required_tier=required_tier,
         )
         check_evidence = "local-self-attested"
+        verification_record = local_verification.normalized_record(
+            local_evidence, local_verification.TRUST_LOCAL
+        )
     elif protection in AGENT_PROTECTIONS or quota_run_urls:
         check_evidence = require_successful_checks(
             github,
@@ -3695,6 +3761,10 @@ def merge_snapshot(  # noqa: C901
             quota_run_urls,
             hosted_evidence,
         )
+        if hosted_evidence:
+            verification_record = local_verification.normalized_record(
+                hosted_evidence, local_verification.TRUST_HOSTED
+            )
     require_lease(github, lease, repo, pr_number, head_sha)
     head_ref = str((pull.get("head") or {}).get("ref") or "")
     return {
@@ -3723,6 +3793,7 @@ def merge_snapshot(  # noqa: C901
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
         "local_verification": local_evidence,
+        "verification_record": verification_record,
         "hosted_verification": hosted_evidence or None,
         "trailer_route": trailer_route(
             str(lease["base_ref"]),

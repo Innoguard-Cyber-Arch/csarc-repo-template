@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib
+import importlib.util
 import json
 import re
 import shutil
@@ -15,17 +16,85 @@ import urllib.parse
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    stale_branch_detection = importlib.import_module("stale_branch_detection")
-    release_level = importlib.import_module("release_level")
-else:
-    stale_branch_detection = importlib.import_module(
-        f"{__package__}.stale_branch_detection"
-    )
-    release_level = importlib.import_module(f"{__package__}.release_level")
+
+
+def _load_sibling(name: str) -> ModuleType:
+    """Load one script module that sits beside this file."""
+    path = Path(__file__).resolve().with_name(f"{name}.py")
+    cached = sys.modules.get(name)
+    cached_file = getattr(cached, "__file__", None)
+    if (
+        cached is not None
+        and cached_file
+        and Path(cached_file).resolve() == path
+    ):
+        return cached
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ModuleNotFoundError(f"Sibling module is unavailable: {path}")
+    module = importlib.util.module_from_spec(spec)
+    # Register a first load so nested imports share it; a same-named module
+    # from another directory keeps its registration.
+    if cached is None:
+        sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        if sys.modules.get(name) is module:
+            del sys.modules[name]
+        raise
+    return module
+
+
+class SiblingModule:
+    """Import one sibling script module only when a command first uses it.
+
+    A rendered command must not require modules that only other commands
+    use, so optional siblings stay unloaded until an attribute is read.
+    The sibling always comes from this file's own directory, as an eager
+    import beside it would, even if `sys.path` changed in the meantime.
+    Attribute writes and deletes reach the loaded module, which keeps
+    monkeypatching and module-level state on the real module.
+    """
+
+    def __init__(self, name: str) -> None:
+        """Remember the sibling module name without importing it."""
+        object.__setattr__(self, "_sibling_name", name)
+        object.__setattr__(self, "_sibling_module", None)
+
+    def _sibling(self) -> ModuleType:
+        module = object.__getattribute__(self, "_sibling_module")
+        if module is None:
+            name = object.__getattribute__(self, "_sibling_name")
+            if __package__ in {None, ""}:
+                module = _load_sibling(name)
+            else:
+                module = importlib.import_module(f"{__package__}.{name}")
+            object.__setattr__(self, "_sibling_module", module)
+        return module
+
+    def __getattr__(self, attribute: str) -> object:
+        """Load the sibling on first use and read one attribute."""
+        return getattr(self._sibling(), attribute)
+
+    def __setattr__(self, attribute: str, value: object) -> None:
+        """Write one attribute on the loaded sibling module."""
+        setattr(self._sibling(), attribute, value)
+
+    def __delattr__(self, attribute: str) -> None:
+        """Delete one attribute from the loaded sibling module."""
+        delattr(self._sibling(), attribute)
+
+
+# Issue-body helpers such as gh-issue-edit import this module; the branch and
+# release siblings load only when a Milestone command first needs them.
+stale_branch_detection: Any = SiblingModule("stale_branch_detection")
+release_level: Any = SiblingModule("release_level")
 
 CHECK_NAME = "Milestone approval"
 TRACKER_SECTIONS = (

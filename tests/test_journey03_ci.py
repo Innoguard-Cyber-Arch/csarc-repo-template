@@ -969,9 +969,22 @@ def test_long_policy_regressions_run_only_in_full() -> None:
     assert expected <= direct_regression_commands(
         "scripts/verify-stage-regression-tests"
     )
-    assert expected <= direct_regression_commands(
-        "template/.csarc/scripts/verify.jinja"
-    )
+
+
+def test_generated_verification_runs_no_template_self_tests() -> None:
+    """Generated verify paths spend no time on template self-tests (#1070).
+
+    The same cases stay in the template's CI through
+    tests/test_generated_self_tests.py, which runs them against a render.
+    """
+    for path in (
+        "template/.csarc/scripts/verify-fast.jinja",
+        "template/.csarc/scripts/verify.jinja",
+    ):
+        source = (REPO_ROOT / path).read_text(encoding="utf-8")
+        assert direct_regression_commands(path) == set()
+        assert ".csarc/tests" not in source
+        assert "security-smoke" not in source
 
 
 def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:

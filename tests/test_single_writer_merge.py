@@ -273,8 +273,17 @@ def use_local_mode(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     ):
         monkeypatch.setitem(merge_snapshot.__globals__, name, value)
     evidence: dict[str, object] = {
+        "schema_version": 1,
         "trust": "self-attested-local",
+        "success": True,
+        "head_sha": "a" * 40,
         "tree_sha": "e" * 40,
+        "base_ref": "main",
+        "base_sha": "b" * 40,
+        "tier": "fast",
+        "scopes": ["source"],
+        "command": "./scripts/verify-fast",
+        "completed_at": "2026-10-14T00:00:00Z",
     }
     monkeypatch.setattr(
         MODULE["local_verification"], "require", lambda **_kwargs: evidence
