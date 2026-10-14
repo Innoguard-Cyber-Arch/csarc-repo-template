@@ -11,7 +11,7 @@ story；Milestone 只保留足以理解、排程與驗收一次 delivery／relea
 三者是否已經一致，不必等到第一張工作 Issue PR 卡在 `Validate Milestone
 approval` 才回頭發現——Milestone 13 就是在這裡出事：編號、due date、追蹤
 Issue 標題三者當時各自手打，沒有任何東西保證彼此一致（Issue #572）。本模板中央
-repo 另提供 `.csarc/scripts/create-milestone --repo <owner/repo> --title "<title>"
+repo 另提供 `scripts/create-milestone --repo <owner/repo> --title "<title>"
 --due-on <YYYY-MM-DD> --proposal-file <path>`，取代分開在 GitHub UI 手動建立
 Milestone 物件與追蹤 Issue 兩步：一次呼叫建立兩者，追蹤 Issue 標題直接用 GitHub
 回傳的 Milestone 編號動態組成，不接受人工另外打一個序號，建立完成後自動執行上述

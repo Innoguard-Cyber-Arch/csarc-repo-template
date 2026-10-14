@@ -10680,11 +10680,12 @@ def test_generated_project_only_ships_product_tests() -> None:
         for path in template_tests.rglob("*")
         if path.is_file()
     ) == ["test_smoke.py.jinja"]
-    csarc_tests = ROOT / "template/.csarc/tests"
+    # Template self-tests run only in template CI against renders (#1077).
+    assert not (ROOT / "template/.csarc/tests").exists()
+    assert not list((ROOT / "template/.csarc/scripts").glob("test-*"))
     assert sorted(
-        path.relative_to(csarc_tests).as_posix()
-        for path in csarc_tests.rglob("*")
-        if path.is_file()
+        path.name
+        for path in (ROOT / "tests/generated_self_tests/csarc_tests").iterdir()
     ) == [
         "test_authenticate_dependabot_head.py",
         "test_verification_evidence.py",

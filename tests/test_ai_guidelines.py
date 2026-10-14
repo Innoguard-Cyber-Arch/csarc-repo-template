@@ -39,6 +39,8 @@ def test_generated_guidance_has_one_source_and_real_commands(
         "documentation_mode": "template-and-content",
         "documentation_secondary_language": "en",
         "python_floor": "latest",
+        "lifecycle": ["issues", "milestones"],
+        "release_ownership": "csarc-owned",
     }
     entry = environment.from_string(TEMPLATE.read_text(encoding="utf-8"))
     workflow = environment.from_string(
@@ -73,6 +75,26 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert (
         "do not rerun the aggregate suite solely because" not in local_rendered
     )
+    # Issue #1077: guidance names only payload the selected options render.
+    narrow = workflow.render(
+        **{
+            **context,
+            "verification_mode": "local",
+            "documentation_mode": "off",
+            "lifecycle": [],
+            "release_ownership": "verification-only",
+        }
+    )
+    for absent in (
+        "milestone-description.md",
+        "documentation-policy.md",
+        "publish-release",
+        "build-repo-site",
+        "security-smoke",
+    ):
+        assert absent not in narrow, absent
+    assert "publish-release" in rendered
+    assert "milestone-description.md" in rendered
     assert ".csarc/scripts/gh-issue-develop" in rendered
     assert ".csarc/scripts/finalization-queue announce" in rendered
     assert "READY_TO_FINALIZE" in rendered
@@ -159,7 +181,7 @@ def test_security_scanner_policy_and_guidance_are_shared() -> None:
         "Claude / Anthropic",
         "unavailable / not established",
         "./scripts/security-smoke",
-        "./.csarc/scripts/security-smoke",
+        "template CI runs the same owner self-tests",
         "does not run an AI security scanner",
     ):
         assert required in readiness
