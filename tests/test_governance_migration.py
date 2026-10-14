@@ -167,7 +167,6 @@ def test_v0_16_0_maps_governance_and_retires_legacy_keys() -> None:
     assert "beta and stable work" in note
     assert "csarc update --data admin_bypass=beta-only" in note
     expected = {
-        "actions_fallback": "off",
         "copilot_review": "off",
         "governance_mode": "managed",
         "lifecycle": ["issues", "milestones"],
@@ -194,8 +193,10 @@ def test_v0_16_0_maps_governance_and_retires_legacy_keys() -> None:
         assert rows[key]["after"] is None, key
         assert rows[key]["before"] == V0_16_0[key], key
         assert rows[key]["note"], key
-    assert rows["features"]["class"] == "exact"
-    assert rows["primary_language"]["class"] == "exact"
+    # SPEC-009 successors of the retired keys (Issue #1071).
+    assert rows["container"]["class"] == "exact"
+    assert rows["documentation_languages"]["class"] == "exact"
+    assert answers["documentation_languages"] == "zh-tw+en"
     assert_rows_cover_changes(V0_16_0, answers, rows)
 
 

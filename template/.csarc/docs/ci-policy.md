@@ -23,7 +23,7 @@ branch，最後由一張受審查的交付 PR 送回 `main`。
 
 Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成
 repo 啟用；生成 repo 預設產生治理漂移排程（`governance-drift.yml`）並每日執行，
-可用 `enable_governance_drift_check: false` 關閉。本模板 source repo 保留同一支
+可從 `scheduled_checks` 移除 `governance-drift` 關閉。本模板 source repo 保留同一支
 `.csarc/scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
 
 `dev/i<Issue>-*` 只適用於 Issue 已寫明獨立環境、soak／canary 目標與停止條件的例外。
@@ -866,12 +866,11 @@ Jobs API，並重用 `.csarc/scripts/pr_lifecycle.py` 的 required-check produce
    closed。local、hosted、merge、release、promotion 與 fallback 都只呼叫 `.csarc/scripts/evidence_freshness.py` 的同一個
    判定；期限是受信任 script 的常數，不寫入 evidence，呼叫端只能縮短不能放寬（#1075）。
 
-quota fallback 永遠不能替代缺少或失敗的 `verify`。新專案預設 `actions_fallback: off`；只有明確設為
-`admin`，且 exact head 已有上述可信成功證據時，其他確認為 GitHub billing zero-step 的 required check
-才可沿用 quota fallback。真正執行失敗或狀態未知仍 fail closed。Ruleset 的 admin bypass 無法把來源 check
-改寫成成功結果，因此這是刻意保留的唯一預期紅燈例外，不得用合成綠燈掩蓋「實際上未執行」的事實。
-這項例外只在帳務失敗時有效，所以 lifecycle 必須重驗 exact head／base、review policy、適用本機 suite、
-remote lease 並留下 bypass trace。release 先解析唯一 merged-main source
+`actions_fallback` 與它開放的 routine quota fallback 已退役：`pr_lifecycle.py merge
+--quota-fallback-note-url` 與 `promotion_gate.py note-quota-fallback`／`finalize-quota-fallback` 一律在
+任何寫入前拒絕，GitHub billing zero-step 的 required check 不再有例外。Actions 中斷時改走 governance-switch
+路線，required checks、exact-head 授權與 remote lease 照常要求；Ruleset 的 admin bypass 也不能把來源 check
+改寫成成功結果。release 先解析唯一 merged-main source
 PR，且只有 main tree 與 source head tree 完全相同時才重用證據；來源不唯一、tree 漂移、證據過期或任何欄位
 無法驗證時，release workflow 對 exact main tree 重新執行 hosted full verification，而不是退回 unsigned
 trailer。
@@ -1220,14 +1219,14 @@ event、權限、環境與呼叫；分類與驗證規則留在本機可測的 sc
 只發布 merge 前已在原 PR 受審的候選，不需要也不允許 Actions 另建或自行核准版本 PR。
 
 上表只列本 repo 自己的 active automation。生成 repo 另有一個選用能力：開啟
-`enable_template_update_notifications` 才產生 `template-update.yml`
+`scheduled_checks` 的 `template-update` 才產生 `template-update.yml`
 （`schedule`／`workflow_dispatch`、`contents: read`＋`issues: write`、10 分鐘
 timeout，只呼叫 `.csarc/scripts/check-template-update`）。公開模板來源不需要 secret；
 來源為 private repository 時，才由唯讀的 `CSARC_TEMPLATE_READ_TOKEN` repository
 secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
 `pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
 
-生成 repo 另有一個選用容器能力（Issue #554／#900 決定）：在 `features` 選入 `docker` 才產生
+生成 repo 另有一個選用容器能力（Issue #554／#900 決定）：設定 `container: true` 才產生
 `Dockerfile`、`docker-compose.yml` 兩份起始範本，以及
 `.github/workflows/docker-build-scan.yml`（`pull_request`，限 Dockerfile／
 docker-compose.yml／已選語言原始碼路徑變更，另加 `workflow_dispatch`；

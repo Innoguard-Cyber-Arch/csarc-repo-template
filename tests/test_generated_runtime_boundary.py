@@ -196,14 +196,12 @@ def rendered_pyproject() -> str:
     """Render the generated Python manifest for one representative project."""
     return render_text(
         "pyproject.toml.jinja",
-        python_support_mode="latest",
-        python_min_version="3.14",
+        python_floor="latest",
         project_slug="gen-smoke",
         project_description="Generated smoke.",
         documentation_mode="content-only",
         project_license="MIT",
         repository_url="https://github.com/example/gen-smoke",
-        enable_precommit=False,
         package_name="gen_smoke",
         coverage_threshold=80,
     )

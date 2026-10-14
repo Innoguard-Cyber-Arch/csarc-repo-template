@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+import settings_support
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -38,7 +39,7 @@ def repository(tmp_path: Path, mode: str = "local") -> Path:
     config = tmp_path / ".csarc/config.yml"
     config.parent.mkdir()
     config.write_text(
-        f"languages: []\nverification_mode: {mode}\n",
+        settings_support.settings_text(verification_mode=mode),
         encoding="utf-8",
     )
     (tmp_path / "tracked.txt").write_text("base\n", encoding="utf-8")
@@ -163,7 +164,10 @@ def test_uncommitted_local_project_passes_without_merge_evidence(
     """Initial validation is useful before a repository has a first commit."""
     config = tmp_path / ".csarc/config.yml"
     config.parent.mkdir()
-    config.write_text("verification_mode: local\n", encoding="utf-8")
+    config.write_text(
+        settings_support.settings_text(verification_mode="local"),
+        encoding="utf-8",
+    )
     monkeypatch.chdir(tmp_path)
 
     assert local_verification.record("fast", ["source"], "main") is None

@@ -53,8 +53,7 @@ REPRESENTATIVE_LANGUAGES: list[str] = ["go", "python", "rust", "typescript"]
 
 REPRESENTATIVE_ANSWERS: dict[str, object] = {
     "languages": REPRESENTATIVE_LANGUAGES,
-    "python_support_mode": "latest",
-    "python_min_version": "3.12",
+    "python_floor": "latest",
     "project_slug": "jinja-workflow-drift-check",
     "package_name": "jinja_workflow_drift_check",
     "code_owner": "@Innoguard-Cyber-Arch/template-maintainers",

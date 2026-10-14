@@ -37,7 +37,8 @@ def test_generated_guidance_has_one_source_and_real_commands(
         "project_name": "Guidance fixture",
         "verification_mode": "hosted",
         "documentation_mode": "template-and-content",
-        "i18n": "en-zh-tw",
+        "documentation_secondary_language": "en",
+        "python_floor": "latest",
     }
     entry = environment.from_string(TEMPLATE.read_text(encoding="utf-8"))
     workflow = environment.from_string(
@@ -169,6 +170,7 @@ def test_security_scanner_policy_and_guidance_are_shared() -> None:
     assert ".csarc/docs/security-scanner-readiness.md" in (
         WORKFLOW_TEMPLATE.read_text(encoding="utf-8")
     )
-    assert "{% if project_mode == 'existing' %}/SECURITY.md" in (
-        ROOT / "copier.yml"
-    ).read_text(encoding="utf-8")
+    assert (
+        "{% if (project_mode | default('')) == 'existing' %}/SECURITY.md"
+        in (ROOT / "copier.yml").read_text(encoding="utf-8")
+    )

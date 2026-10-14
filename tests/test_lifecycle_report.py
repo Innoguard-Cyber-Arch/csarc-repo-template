@@ -450,8 +450,9 @@ def test_update_statuses_and_setting_classes(tmp_path: Path) -> None:
     assert rows["actions_fallback"]["class"] == "retired"
     assert rows["actions_fallback"]["after"] is None
     assert rows["enable_codeql"]["class"] == "new"
-    assert rows["language"]["class"] == "unchanged"
-    assert rows["language"]["source"] == "saved"
+    # SPEC-009 retired the single legacy `language` key (Issue #1071).
+    assert rows["language"]["class"] == "retired"
+    assert rows["language"]["after"] is None
     assert changed["status"] == "review-required"
     assert [
         action["kind"]

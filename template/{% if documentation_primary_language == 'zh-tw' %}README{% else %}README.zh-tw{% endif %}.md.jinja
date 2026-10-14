@@ -1,6 +1,6 @@
 # {{ project_name }}
 
-{% if i18n == 'en-zh-tw' %}[English]({{ 'README.md' if primary_language == 'en' else 'README.en.md' }})
+{% if documentation_secondary_language %}[English]({{ 'README.md' if documentation_primary_language == 'en' else 'README.en.md' }})
 
 {% endif %}<!-- csarc-project-description:start -->
 {{ project_description }}
@@ -31,7 +31,7 @@ cd {{ project_slug }}
 
 ## 文件
 
-{% if documentation_mode == 'template-and-content' %}- [專案文件](docs/{{ 'index.html' if primary_language == 'zh-tw' else 'index.zh-tw.html' }})
+{% if documentation_mode == 'template-and-content' %}- [專案文件](docs/{{ 'index.html' if documentation_primary_language == 'zh-tw' else 'index.zh-tw.html' }})
 {% else %}- [文件導覽](docs/README.md)
 {% endif %}- [變更紀錄](CHANGELOG.md)
 - [安全性回報](.github/SECURITY.md)

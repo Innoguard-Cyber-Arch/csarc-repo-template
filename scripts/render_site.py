@@ -80,13 +80,16 @@ def _load_config(root: Path) -> dict[str, object]:
     config_reader = root / "scripts/csarc_config.py"
     config_path = root / ".csarc/config.yml"
     try:
-        load_config = runpy.run_path(str(config_reader))["load_config"]
-        config = load_config(config_path)
+        reader = runpy.run_path(str(config_reader))
+        config = reader["load_config"](config_path)
+        # Seeds such as the project name are read from native sources,
+        # never from saved settings (SPEC-009, Issue #1071).
+        facts = reader["project_facts"](root)
     except (KeyError, OSError, SyntaxError, ValueError) as error:
         raise BundleError(f"Cannot read {config_path}: {error}") from error
     if not isinstance(config, dict):
         raise BundleError(f"Invalid configuration in {config_path}")
-    return config
+    return {**facts, **config}
 
 
 def _config_text(value: object) -> str:

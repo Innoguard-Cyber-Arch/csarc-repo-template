@@ -84,13 +84,10 @@ def review_settings(path: Path | None = None) -> tuple[str, str]:
     config_path = path or csarc_config.CONFIG_FILE
     if not config_path.exists():
         return "human", UNLIMITED
+    # Schema 2 always states copilot_review; legacy review keys are read
+    # only by the pinned CLI's migration registry (SPEC-009, Issue #1071).
     config = csarc_config.load_config(config_path)
-    configured = config.get("copilot_review")
-    if configured is None:
-        configured = (
-            "allowed" if config.get("pr_review_mode") == "copilot" else "off"
-        )
-    mode = "copilot" if configured == "allowed" else "human"
+    mode = "copilot" if config["copilot_review"] == "allowed" else "human"
     level = UNLIMITED
     return str(mode), str(level)
 

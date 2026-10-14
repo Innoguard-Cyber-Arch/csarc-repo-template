@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import settings_support
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -419,7 +420,10 @@ def test_unknown_candidate_configuration_fails_the_trusted_reader(
     """The trusted config reader fails closed on values it does not know."""
     config = tmp_path / ".csarc" / "config.yml"
     config.parent.mkdir()
-    config.write_text("release_ownership: future-owned\n", encoding="utf-8")
+    config.write_text(
+        settings_support.settings_text(release_ownership="future-owned"),
+        encoding="utf-8",
+    )
 
     result = subprocess.run(  # noqa: S603 - repository config reader
         [

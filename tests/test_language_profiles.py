@@ -10,6 +10,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+import settings_support
 import yaml
 from copier import run_copy, run_update
 
@@ -42,7 +43,8 @@ def test_languages_are_independent_modules() -> None:
         "rust",
         "typescript",
     ]
-    assert config["language"]["when"] is False
+    # SPEC-009 retired the single legacy `language` question (#1071).
+    assert "language" not in config
 
 
 def test_supported_language_modules_have_executable_beta_evidence() -> None:
@@ -282,24 +284,28 @@ def test_config_supports_ci_only_and_extension_settings(tmp_path: Path) -> None:
         ROOT / "template/.csarc/scripts/detect-language-profile", detector
     )
     detector.chmod(detector.stat().st_mode | 0o100)
-    (config_dir / "config.yml").write_text(
-        "languages: []\nacme_policy_mode: strict\n",
-        encoding="utf-8",
-    )
+    settings_support.write_settings(config_dir / "config.yml", languages=[])
 
     detected = subprocess.run(  # noqa: S603
         [detector], cwd=tmp_path, check=True, capture_output=True, text=True
     ).stdout.strip()
+    (config_dir / "config.yml").write_text(
+        settings_support.settings_text(languages=[])
+        + "acme_policy_mode: strict\n",
+        encoding="utf-8",
+    )
+    # Schema 2 is closed (SPEC-009): an unknown extension key fails closed.
     extension = subprocess.run(  # noqa: S603
-        [sys.executable, scripts_dir / "csarc_config.py", "acme_policy_mode"],
+        [sys.executable, scripts_dir / "csarc_config.py", "languages"],
         cwd=tmp_path,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
-    ).stdout.strip()
+    )
 
     assert detected == "language modules: ci"
-    assert extension == "strict"
+    assert extension.returncode == 1
+    assert "acme_policy_mode" in extension.stderr
 
 
 def test_generated_detector_uses_copier_language_order(tmp_path: Path) -> None:
@@ -314,8 +320,8 @@ def test_generated_detector_uses_copier_language_order(tmp_path: Path) -> None:
         ROOT / "template/.csarc/scripts/detect-language-profile", detector
     )
     detector.chmod(detector.stat().st_mode | 0o100)
-    (config_dir / "config.yml").write_text(
-        "languages:\n- go\n- rust\n- typescript\n", encoding="utf-8"
+    settings_support.write_settings(
+        config_dir / "config.yml", languages=["go", "rust", "typescript"]
     )
     (tmp_path / "go.mod").touch()
     (tmp_path / "Cargo.toml").touch()
@@ -522,7 +528,13 @@ def test_go_selection_controls_generated_go_files(tmp_path: Path) -> None:
         run_copy(
             str(source),
             target,
-            data={**GO_DATA, "languages": languages},
+            # The render context is the pinned CLI's provenance input;
+            # derived values are never saved settings (SPEC-009).
+            data={
+                **GO_DATA,
+                "languages": languages,
+                "csarc_render_context": True,
+            },
             defaults=True,
             unsafe=True,
             skip_tasks=True,
@@ -546,12 +558,15 @@ def test_go_selection_controls_generated_go_files(tmp_path: Path) -> None:
     assert release_config["release-type"] == "simple"
     assert (go_only / ".csarc/version.txt").is_file()
     assert not (rendered["go-python"] / ".csarc/version.txt").exists()
-    go_only_answers = yaml.safe_load(
-        (go_only / ".csarc/config.yml").read_text(encoding="utf-8")
+    go_only_answers = json.loads(
+        (go_only / ".csarc/render-context.json").read_text(encoding="utf-8")
     )
     assert go_only_answers["project_run_command"] == "go build ./..."
-    mixed_answers = yaml.safe_load(
-        (rendered["go-python"] / ".csarc/config.yml").read_text(
+    assert "project_run_command" not in yaml.safe_load(
+        (go_only / ".csarc/config.yml").read_text(encoding="utf-8")
+    )
+    mixed_answers = json.loads(
+        (rendered["go-python"] / ".csarc/render-context.json").read_text(
             encoding="utf-8"
         )
     )
@@ -607,15 +622,25 @@ def test_existing_go_adoption_and_update_preserve_product_module(
     assert not (project / "cmd").exists()
     assert not (project / "internal").exists()
 
+    # Schema 2 saves no seed or live fact (SPEC-009); raw Copier update is
+    # unsupported, so emulate the pinned CLI, which writes the complete old
+    # answers from provenance before it runs Copier.
+    config_path = project / ".csarc/config.yml"
+    old_answers = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    old_answers.update(GO_DATA, languages=["go"], project_mode="existing")
+    config_path.write_text(yaml.safe_dump(old_answers), encoding="utf-8")
     cli.run(["git", "add", "."], cwd=project, capture=True)
     cli.run(["git", "commit", "-m", "test: adopt"], cwd=project, capture=True)
     notice = source / "template/.csarc/go-update-probe.txt"
     notice.write_text("template-owned\n", encoding="utf-8")
     cli.run(["git", "add", "."], cwd=source, capture=True)
     cli.run(["git", "commit", "-m", "test: update"], cwd=source, capture=True)
+    # Seeds and live facts are not saved settings (SPEC-009); the pinned
+    # CLI passes them from provenance, and this raw update does the same.
     run_update(
         project,
         answers_file=".csarc/config.yml",
+        data={**GO_DATA, "languages": ["go"], "project_mode": "existing"},
         defaults=True,
         unsafe=True,
         skip_tasks=True,
@@ -629,43 +654,15 @@ def test_existing_go_adoption_and_update_preserve_product_module(
     assert not (project / "go.sum").exists()
 
 
-@pytest.mark.large
-def test_precommit_adapter_materializes_ephemeral_config(
-    tmp_path: Path,
-) -> None:
-    """Keep tool syntax behind the opt-in stable adapter."""
-    source = tmp_path / "source"
-    source.mkdir()
-    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
-    shutil.copytree(ROOT / "template", source / "template")
-    project = tmp_path / "precommit-fixture"
-    run_copy(
-        str(source),
-        project,
-        data={
-            "languages": ["python", "typescript"],
-            "project_name": "Precommit Fixture",
-            "project_slug": "precommit-fixture",
-            "project_description": "Exercises the pre-commit adapter.",
-            "repository_url": "https://github.com/example/precommit-fixture",
-            "security_reporting_channel": "Use the private security contact.",
-            "enable_precommit": True,
-        },
-        defaults=True,
-        unsafe=True,
-        skip_tasks=True,
+def test_precommit_adapter_is_retired() -> None:
+    """enable_precommit is retired; no template renders the adapter."""
+    copier = yaml.safe_load((ROOT / "copier.yml").read_text(encoding="utf-8"))
+    assert "enable_precommit" not in copier
+    assert not (ROOT / "template/.csarc/scripts/pre-commit.jinja").exists()
+    pyproject = (ROOT / "template/pyproject.toml.jinja").read_text(
+        encoding="utf-8"
     )
-
-    adapter = project / ".csarc/scripts/pre-commit"
-    source_text = adapter.read_text(encoding="utf-8")
-    assert adapter.is_file()
-    assert adapter.stat().st_mode & 0o111
-    assert "mktemp" in source_text
-    assert "trap 'rm -f" in source_text
-    assert "uv run ruff check" in source_text
-    assert "pnpm exec tsc --noEmit" in source_text
-    assert not (project / ".pre-commit-config.yaml").exists()
-    assert not (project / ".csarc/pre-commit-config.yaml").exists()
+    assert "pre-commit" not in pyproject
 
 
 @pytest.mark.large
@@ -823,7 +820,7 @@ def test_docker_feature_generates_container_starter_files(
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "private",
             "verification_mode": "hosted",
-            "features": ["docker"],
+            "container": True,
         },
         defaults=True,
         unsafe=True,
@@ -898,7 +895,7 @@ def test_local_docker_feature_reuses_full_verification(tmp_path: Path) -> None:
                 "https://github.com/example/local-container-fixture"
             ),
             "security_reporting_channel": "Use the private contact.",
-            "features": ["docker"],
+            "container": True,
             "verification_mode": "local",
         },
         defaults=True,
@@ -952,7 +949,7 @@ def test_disabling_docker_omits_container_files(tmp_path: Path) -> None:
             "repository_url": "https://github.com/example/no-docker-fixture",
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "private",
-            "features": [],
+            "container": False,
         },
         defaults=True,
         unsafe=True,
@@ -967,9 +964,9 @@ def test_disabling_docker_omits_container_files(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "documentation_mode", ["template-and-content", "content-only", "off"]
 )
-@pytest.mark.parametrize("features", [[], ["docker"]])
+@pytest.mark.parametrize("container", [False, True])
 def test_optional_features_render_independently(
-    tmp_path: Path, documentation_mode: str, features: list[str]
+    tmp_path: Path, documentation_mode: str, container: bool
 ) -> None:
     """Keep documentation modes and Docker selection independent."""
     source = tmp_path / "source"
@@ -990,7 +987,7 @@ def test_optional_features_render_independently(
             "project_visibility": "private",
             "verification_mode": "hosted",
             "documentation_mode": documentation_mode,
-            "features": features,
+            "container": container,
         },
         defaults=True,
         unsafe=True,
@@ -999,7 +996,7 @@ def test_optional_features_render_independently(
 
     site_enabled = documentation_mode == "template-and-content"
     content_enabled = documentation_mode != "off"
-    docker_enabled = "docker" in features
+    docker_enabled = container
     assert (project / ".csarc/site").exists() is site_enabled
     assert (project / "docs/site").exists() is site_enabled
     assert (project / ".csarc/scripts/build-repo-site").exists() is site_enabled
@@ -1105,17 +1102,16 @@ def test_documentation_guidance_matches_rendered_content(
 
 
 @pytest.mark.parametrize(
-    ("primary_language", "i18n", "project_license"),
+    ("documentation_languages", "project_license"),
     [
-        ("zh-tw", "en-zh-tw", "proprietary"),
-        ("en", "off", "MIT"),
-        ("zh-tw", "off", "Apache-2.0"),
+        ("zh-tw+en", "proprietary"),
+        ("en", "MIT"),
+        ("zh-tw", "Apache-2.0"),
     ],
 )
 def test_readme_i18n_and_license_metadata_are_synchronized(
     tmp_path: Path,
-    primary_language: str,
-    i18n: str,
+    documentation_languages: str,
     project_license: str,
 ) -> None:
     """Render README language and ecosystem license metadata from one source."""
@@ -1136,8 +1132,7 @@ def test_readme_i18n_and_license_metadata_are_synchronized(
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "private",
             "documentation_mode": "content-only",
-            "primary_language": primary_language,
-            "i18n": i18n,
+            "documentation_languages": documentation_languages,
             "project_license": project_license,
             "copyright_holder": "Example Owner",
         },
@@ -1146,6 +1141,7 @@ def test_readme_i18n_and_license_metadata_are_synchronized(
         skip_tasks=True,
     )
 
+    primary_language = documentation_languages.split("+")[0]
     readme = (project / "README.md").read_text(encoding="utf-8")
     assert ("## 特色" in readme) is (primary_language == "zh-tw")
     assert "## 目錄" not in readme
@@ -1154,7 +1150,7 @@ def test_readme_i18n_and_license_metadata_are_synchronized(
     secondary = project / (
         "README.en.md" if primary_language == "zh-tw" else "README.zh-tw.md"
     )
-    assert secondary.exists() is (i18n == "en-zh-tw")
+    assert secondary.exists() is ("+" in documentation_languages)
 
     license_text = (project / "LICENSE").read_text(encoding="utf-8")
     assert "Example Owner" in license_text
@@ -1206,8 +1202,7 @@ def test_single_language_site_uses_primary_language_at_index(
             "security_reporting_channel": "Use the private security contact.",
             "project_visibility": "private",
             "documentation_mode": "template-and-content",
-            "primary_language": "en",
-            "i18n": "off",
+            "documentation_languages": "en",
         },
         defaults=True,
         unsafe=True,
@@ -1238,7 +1233,9 @@ def test_single_language_site_uses_primary_language_at_index(
         text=True,
     )
     assert stale_check.returncode == 1
-    assert "stale for the selected i18n mode" in stale_check.stderr
+    assert (
+        "stale for the selected documentation languages" in stale_check.stderr
+    )
     subprocess.run(  # noqa: S603
         [site_builder],
         cwd=project,

@@ -18,7 +18,7 @@
 ## 驗證與發布
 
 - 唯一完整驗證入口是 `./.csarc/scripts/verify`；`project_run_command` 只負責啟動產品。產品額外檢查由 `project_verification_hook` 指定 repo 內的可執行檔案，未指定時才使用 project-owned `scripts/verify-product` fallback；公版驗證會在最後只呼叫一次。
-- `.csarc/config.yml` 是唯一由使用者維護的 CSARC 設定來源。`.csarc/policies/` 與 release-please manifest／config 是公版產生或工具維護的唯讀資料；`.csarc/scripts/` 會把選項轉成工具參數，Gitleaks／pre-commit 所需的專用格式只在執行期間產生並於結束時刪除。啟用 pre-commit 時使用 `./.csarc/scripts/pre-commit run --all-files`。
+- `.csarc/config.yml` 只保存會影響後續行為、又無法安全重建的使用者意圖（schema 2），只經 `csarc update --data KEY=VALUE` 變更；名稱、說明、授權與著作權人是一次性 seed，以產品 manifest 與 `LICENSE` 為準。`.csarc/provenance.json` 由 CLI 寫入不可變的 `project_mode`、render context 與 digest，手改會讓 `csarc status`／`csarc update` 在寫入前停止。`.csarc/policies/` 與 release-please manifest／config 是公版產生或工具維護的唯讀資料；`.csarc/scripts/` 會把選項轉成工具參數，Gitleaks 所需的專用格式只在執行期間產生並於結束時刪除。
 - 產品原有 release workflow 保留；CSARC 不產生第二支 release workflow，也不從檔名推測其 owner 或功能。
 - `.csarc/config.yml` 會記錄 `release_ownership`、明確選定的 `release_workflow`、必要 inputs、repository-settings owner、immutable Releases 要求與判定原因；`verification-only` 不會選取或 dispatch workflow。
 - Copier answers 與 `.csarc/provenance.json` 記錄已套用的 template Release 與完整 commit SHA。

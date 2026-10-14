@@ -23,7 +23,7 @@ branch，最後由一張受審查的交付 PR 送回 `main`。
 
 Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成
 repo 啟用；生成 repo 預設產生治理漂移排程（`governance-drift.yml`）並每日執行，
-可用 `enable_governance_drift_check: false` 關閉。本模板 source repo 保留同一支
+可從 `scheduled_checks` 移除 `governance-drift` 關閉。本模板 source repo 保留同一支
 `scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
 
 `dev/i<Issue>-*` 只適用於 Issue 已寫明獨立環境、soak／canary 目標與停止條件的例外。
@@ -941,12 +941,11 @@ Jobs API，並重用 `scripts/pr_lifecycle.py` 的 required-check producer selec
    closed。local、hosted、merge、release、promotion 與 fallback 都只呼叫 `scripts/evidence_freshness.py` 的同一個
    判定；期限是受信任 script 的常數，不寫入 evidence，呼叫端只能縮短不能放寬（#1075）；威脅模型與 24 小時理由見 [`docs/adr/verification-evidence-freshness.md`](adr/verification-evidence-freshness.md)。
 
-quota fallback 永遠不能替代缺少或失敗的 `verify`。新專案預設 `actions_fallback: off`；只有明確設為
-`admin`，且 exact head 已有上述可信成功證據時，其他確認為 GitHub billing zero-step 的 required check
-才可沿用 quota fallback。真正執行失敗或狀態未知仍 fail closed。Ruleset 的 admin bypass 無法把來源 check
-改寫成成功結果，因此這是刻意保留的唯一預期紅燈例外，不得用合成綠燈掩蓋「實際上未執行」的事實。
-這項例外只在帳務失敗時有效，所以 lifecycle 必須重驗 exact head／base、review policy、適用本機 suite、
-remote lease 並留下 bypass trace。release 先解析唯一 merged-main source
+`actions_fallback` 與它開放的 routine quota fallback 已退役（SPEC-009、Issue #1071、#1058 決定 3）：
+`pr_lifecycle.py merge --quota-fallback-note-url` 與 `promotion_gate.py note-quota-fallback`／
+`finalize-quota-fallback` 一律在任何寫入前拒絕，GitHub billing zero-step 的 required check 不再有例外。
+Actions 中斷時改走 governance-switch 路線，required checks、exact-head 授權與 remote lease 照常要求；
+Ruleset 的 admin bypass 也不能把來源 check 改寫成成功結果。release 先解析唯一 merged-main source
 PR，且只有 main tree 與 source head tree 完全相同時才重用證據；來源不唯一、tree 漂移、證據過期或任何欄位
 無法驗證時，release workflow 對 exact main tree 重新執行 hosted full verification，而不是退回 unsigned
 trailer。
@@ -972,15 +971,16 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
   可先 `git worktree add --detach <path> <base_sha>`，再從 candidate worktree 以
   `CSARC_TRUSTED_BASE_SHA=<base_sha> python3 <path>/scripts/pr_lifecycle.py merge ...` 執行。
 - **Governance-switch route**：改動 `.csarc/scripts/`、放寬治理值（`admin_bypass`、`verification_mode`、
-  `governance_mode`、`review`、`copilot_review`、`actions_fallback` 往寬鬆方向，關閉 `enable_codeql`／
-  `enable_governance_drift_check`，移除 `lifecycle` 項目，調低 `coverage_threshold`）、變更設定 schema，或無法
+  `governance_mode`、`copilot_review` 往寬鬆方向，關閉 `enable_codeql`，移除 `lifecycle` 或
+  `scheduled_checks` 項目，調低 `coverage_threshold`）、變更設定 schema，或無法
   取得完整變更清單時，PR 必須帶 `governance-switch` label。hosted 由 trusted base 的 `validate-pr-policy`
   經 API 讀取 candidate 設定與檔案清單判定，local 由 lifecycle 對 exact head 判定；兩者共用同一個
   `route` 規則。這條 route 不放寬任何控制：required checks、exact-head 授權與 remote lease 照常要求，
   也不能用 quota fallback 取代 required checks。`csarc update` PR 一律走這條 route。
-- **Next-schema reader**：base reader 讀 schema 1（現行，維持既有正規化）與 schema 2（next，只收使用者
-  意圖：退役鍵、未知 `_` metadata、缺少治理值都 fail closed）；其他 `schema_version` 直接失敗。它只讀不寫；
-  writer 要等 base 已能驗證新 schema 後才切換（Q1）。candidate 自己的 parser 與 route 只在 lifecycle 的
+- **Current-schema reader**：base reader 以共用的 current-only `csarc_config.py` 只讀 schema 2
+  （SPEC-009，Issue #1071）：legacy、未知 schema、退役或未知鍵、缺少的意圖一律 fail closed，不補預設；
+  legacy 設定只由外部 pinned CLI 的 migration registry 讀取。它只讀不寫；新的 schema 必須先由 trusted base
+  的 reader 支援，writer 才切換（#1058 決定 8）。candidate 自己的 parser 與 route 只在 lifecycle 的
   `policy_self_test` 以 non-authoritative 方式重播，差異只列在輸出，不改變 base 的決定。
 - **Release channel floor**：delivery branch（`dev/m*`、`dev/i*`）是 beta，floor 為 fast；其他 base
   （standalone、hotfix、release recovery 指向 `main`）是 stable，floor 為 full；`hotfix`、`release-recovery`、
@@ -1324,14 +1324,14 @@ event、權限、環境與呼叫；分類與驗證規則留在本機可測的 sc
 只發布 merge 前已在原 PR 受審的候選，不需要也不允許 Actions 另建或自行核准版本 PR。
 
 上表只列本 repo 自己的 active automation。生成 repo 另有一個選用能力：開啟
-`enable_template_update_notifications` 才產生 `template-update.yml`
+`scheduled_checks` 的 `template-update` 才產生 `template-update.yml`
 （`schedule`／`workflow_dispatch`、`contents: read`＋`issues: write`、10 分鐘
 timeout，只呼叫 `scripts/check-template-update`）。公開模板來源不需要 secret；
 來源為 private repository 時，才由唯讀的 `CSARC_TEMPLATE_READ_TOKEN` repository
 secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
 `pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
 
-生成 repo 另有一個選用容器能力（Issue #554／#900 決定）：在 `features` 選入 `docker` 才產生
+生成 repo 另有一個選用容器能力（Issue #554／#900 決定）：設定 `container: true` 才產生
 `Dockerfile`、`docker-compose.yml` 兩份起始範本，以及
 `.github/workflows/docker-build-scan.yml`（`pull_request`，限 Dockerfile／
 docker-compose.yml／已選語言原始碼路徑變更，另加 `workflow_dispatch`；
