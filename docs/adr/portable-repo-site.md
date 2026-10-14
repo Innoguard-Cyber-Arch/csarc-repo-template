@@ -33,6 +33,8 @@ Markdown 中的明確 `[[key]]` token 直接從 `.csarc/config.yml` 讀取；未
 
 Issue #436 盤點時發現：內部網站（`docs/site-content.md` 生成的手冊）已經在讀 `project_name`、`project_description`、`languages`、`repository_url`、`project_slug` 等 `.csarc/config.yml` key，但「規則治理」頁的 `governance-config` 核准清單只列出 `branch_strategy`、`code_owner`、`reviewers`、`project_visibility`、`enable_governance_drift_check`，兩邊已經走樣。Issue #474 把這些既有、已被消費、卻未核准登記的 key 一併補進同一份 `governance-config` 表格，不建立第二份平行 schema；`branch_strategy` 的 delivery／main 分流本來就已經切換手冊內容（標準／維運模式切換），只是先前沒有對應測試證明。
 
+> 2026-10-14（Issue #1091）：本段是歷史紀錄。`branch_strategy`、`reviewers` 與 `enable_governance_drift_check` 已在 Issue #1071 退役（branch route 改由 Issue／Milestone metadata 推導，reviewer 由 live collaborator 權限決定，排程改為 `scheduled_checks`），`docs/site-content.md` 也已退役；現行設定鍵見 [SPEC-009](../specs/SPEC-009-project-settings.md)。
+
 `project_visibility`（可見受眾）原本已核准卻完全沒被內部網站讀取；本次在 `template/docs/site-content.md.jinja` 的「責任邊界」段落加入 `[[project_visibility]]`，讓手冊明確標示目前設定的儲存庫可見度。「規則治理」與「內部網站」（`docs-site-access`）兩處說明過去各自重複列出同一批 key，現在只有 `governance-config` 表格是唯一列表，`docs-site-access` 改為指回該表格，避免兩份定義各自漂移；`tests/test_render_site.py` 的 `test_internal_site_keys_are_documented_once` 把這個「只定義一次」的要求變成可執行的回歸測試。
 
 ## 2026-08-25 Hugo 正式切換
@@ -206,7 +208,7 @@ Issue #919 把 Issue #900 的單一 `repo-site` feature 拆成明確的兩層契
 
 共同資訊架構只定義五種讀者任務：開始使用、日常使用、精確參考、理解與維運、專案生命週期。這些是內容角色，不是固定目錄；一個檔案可以涵蓋多個角色，沒有內容時不建立空頁。README 改成主流套件常見的短入口，不再複製完整治理或架構文件，也不要求與深度文件逐字對稱；只要求公開事實、命令、連結、支援狀態與授權不矛盾。
 
-語言由 `primary_language: en|zh-tw` 與 `i18n: off|en-zh-tw` 共同決定。雙語時 `README.md` 使用主要語言並維護另一份 `README.<lang>.md`；完整模板模式也保留雙語呈現入口。授權是同一層核心設定：`project_license` 未宣告時採 `proprietary`，以 `LICENSE` 的 all-rights-reserved 文字及各套件生態的封閉授權慣例同步，不能從帳號或 CODEOWNERS 推定 holder。開源選項限定為模板能內建完整法律文本並可驗證的 `MIT` 與 `Apache-2.0`；不接受任意 SPDX expression，避免產生無對應 `LICENSE` 或錯誤多重授權的宣告。
+語言當時由 `primary_language: en|zh-tw` 與 `i18n: off|en-zh-tw` 共同決定；Issue #1071 起合併為 `documentation_languages`（見 [SPEC-009](../specs/SPEC-009-project-settings.md)）。雙語時 `README.md` 使用主要語言並維護另一份 `README.<lang>.md`；完整模板模式也保留雙語呈現入口。授權是同一層核心設定：`project_license` 未宣告時採 `proprietary`，以 `LICENSE` 的 all-rights-reserved 文字及各套件生態的封閉授權慣例同步，不能從帳號或 CODEOWNERS 推定 holder。開源選項限定為模板能內建完整法律文本並可驗證的 `MIT` 與 `Apache-2.0`；不接受任意 SPDX expression，避免產生無對應 `LICENSE` 或錯誤多重授權的宣告。
 
 每個非 Draft 候選由本機 AI 比對 changed paths、specs、公開介面、設定、測試與文件，記錄 `aligned`、`not-applicable`、`drift` 或 `inconclusive` 並綁定 exact head；後兩者阻擋交付，`not-applicable` 必須說明理由。GitHub 只在既有 PR policy job 做確定性的欄位與 SHA 檢查，不新增 hosted AI job、workflow 或第二套測試矩陣；新的 push 會使舊紀錄失效。完整細節由 `docs/documentation-policy.md` 維護。
 

@@ -42,7 +42,7 @@ README 是 [repo-site](docs/index.html) 的濃縮入口；兩者維持相同的�
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript、Go 語言模組，以及 Issue／spec、PR checks 與驗證。`documentation_mode` 可選完整文件模板加內容、只管理內容或完全關閉；`primary_language` 與 `i18n` 決定英文／繁中入口，`features` 只保留 Docker 等非文件能力。同 PR 版本物化、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會分開回報帳戶方案與實際 API 能力。
+目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript、Go 語言模組，以及 Issue／spec、PR checks 與驗證。`documentation_mode` 可選完整文件模板加內容、只管理內容或完全關閉；`documentation_languages` 決定繁中／英文入口與主要語言，Docker starter 由 `container` 開關決定。同 PR 版本物化、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會分開回報帳戶方案與實際 API 能力。
 
 ## 快速開始
 
@@ -158,17 +158,17 @@ flowchart LR
 
 公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。新專案預設 `verification_mode: local`，fast／full 成功後寫入綁定 exact head/tree、base、tier 與 scopes 的 self-attested evidence，由 merge lifecycle 重驗後走有 trace 的 admin bypass；不產生 hosted CI、PR 治理、Pages 或 release workflow，也不宣稱 required checks／Pages 已啟用。需要獨立 runner、Pages 或 release provenance 時可改為 `hosted`，由 GitHub-hosted `verify` 執行相同入口。本 repo 本身維持 hosted。兩種模式共用同一個 risk-owned router 與 suite，不增加測試矩陣；本機證明不能取代第三方服務、部署或 release provenance。詳細邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
-Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 release workflow 已設定為候選，待預設分支實跑後才算啟用。專用 promotion、release handoff、registry publisher 與 deployment workflows 不恢復，歷史由 Git／Issue／PR 保存；Zizmor 由現役的本機驗證階段執行。Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成 repo 啟用；生成 repo 預設產生每日治理漂移排程（`governance-drift.yml`），可用 `enable_governance_drift_check: false` 關閉，本模板 source repo 則只保留同一支 `scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
+Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 release workflow 已設定為候選，待預設分支實跑後才算啟用。專用 promotion、release handoff、registry publisher 與 deployment workflows 不恢復，歷史由 Git／Issue／PR 保存；Zizmor 由現役的本機驗證階段執行。Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成 repo 啟用；生成 repo 預設產生每日治理漂移排程（`governance-drift.yml`），可從 `scheduled_checks` 移除 `governance-drift` 關閉，本模板 source repo 則只保留同一支 `scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
 
 ### Actions 額度耗盡的一次性驗證
 
-只有 GitHub Actions 的 zero-step billing block 被機械式確認，且同一 exact head 已有成功的可信 hosted `verify` 時，quota fallback 才能涵蓋其他 required checks；它永遠不能替代 `verify`。一般 Issue PR 留一則說明留言即可合併，不需要即時人工確認；Promotion 到 `main` 仍維持 human attestation/authorization 雙方確認，另須綁定 candidate tree、合併後核對 tree identity，且本機結果不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#failure-與-fallback)。
+原本的 routine quota fallback 已退役：GitHub Actions 的 zero-step billing block 不再讓任何 required check 例外放行。Actions 中斷時改走 governance-switch 路線，required checks、exact-head 授權與 remote lease 照常要求，本機結果也不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#failure-與-fallback)。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹，因此已刪除與尚未提交的機密都不會靜默略過；尚未 `git init` 的新專案仍可安全掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
 ## 設定與密鑰
 
-GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./.csarc/scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗；`GITHUB_TOKEN` 無法讀取的管理員欄位、Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud）、組織政策限制或缺少 GitHub Advanced Security，則明確標為 `DEGRADED`，不會誤稱為 drift 或 compliant。生成 repo 預設由 `.github/workflows/governance-drift.yml` 每天重跑同一個 `check`，只在可修正的偏離出現或內容改變時開立或更新唯一追蹤 Issue；可用 `enable_governance_drift_check: false` 關閉。本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。hosted 模式的非 draft PR 會從 repository 當下具有 `maintain`／`admin` 權限且不是作者的協作者中 best-effort 選一位 reviewer；local 模式不產生此 workflow。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見 [repo-site 附錄](docs/index.html)「先辨識 GitHub 方案」章節。
+GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./.csarc/scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository（含 Issue／PR 建立權限收斂為 collaborators-only）、immutable Releases、GitHub Pages、Actions、`security_and_analysis`（secret scanning、push protection、Dependabot security updates）、政策標籤與有效 Ruleset，可修正差異會失敗；`GITHUB_TOKEN` 無法讀取的管理員欄位、Free private Ruleset、私有 repo 的 GitHub Pages（需要 GitHub Enterprise Cloud）、組織政策限制或缺少 GitHub Advanced Security，則明確標為 `DEGRADED`，不會誤稱為 drift 或 compliant。生成 repo 預設由 `.github/workflows/governance-drift.yml` 每天重跑同一個 `check`，只在可修正的偏離出現或內容改變時開立或更新唯一追蹤 Issue；可從 `scheduled_checks` 移除 `governance-drift` 關閉。本模板 source repo 只保留同一支本機檢查程式，不另外啟用排程。hosted 模式的非 draft PR 會從 repository 當下具有 `maintain`／`admin` 權限且不是作者的協作者中 best-effort 選一位 reviewer；local 模式不產生此 workflow。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見 [repo-site 附錄](docs/index.html)「先辨識 GitHub 方案」章節。
 
 `admin_bypass` 決定管理員可否以 exact-head 授權自審：新專案預設 `always`（只取代同行核准），也可限於 `beta-only` 或設為 `off`；`copilot_review: allowed` 則允許乾淨的 exact-head Copilot review 作為證據。Copilot 授權與額度是即時能力，不由 Free／Team 等方案名稱推定；不可用、舊 head、有意見或未解 thread 時回到同行核准或設定允許的管理員授權。詳見 [`docs/ci-policy.md`](docs/ci-policy.md)「Copilot 審核模式（#752）」。
 
@@ -204,7 +204,7 @@ CSARC-owned 的 release-worthy 工作都在原本的交付 PR 內完成精確版
 
 ## 公版更新
 
-真實導入的可重複步驟、驗收證據與已知平台限制整理在 [`docs/pilot-adoption.md`](docs/pilot-adoption.md)。第一個 consuming repo `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 更新，證明共用導入、更新與線上 CI 路徑；Python、Rust、TypeScript 則各以可重現的建立、既有 repo 導入、更新與原生工具鏈驗證取得 beta；Go 以同樣可重現的建立、導入、更新、原生與 hosted 驗證證據取得 beta，尚未有專屬的 consuming repo。同時選取多個模組不會形成另一種 profile。
+真實導入的可重複步驟、驗收證據與已知平台限制整理在 [`docs/pilot-adoption.md`](docs/pilot-adoption.md)。既有的 private、CI-only consuming repo 已完成 v0.2.4 導入與 v0.3.1 更新，證明共用導入、更新與線上 CI 路徑；Python、Rust、TypeScript 則各以可重現的建立、既有 repo 導入、更新與原生工具鏈驗證取得 beta；Go 以同樣可重現的建立、導入、更新、原生與 hosted 驗證證據取得 beta，尚未有專屬的 consuming repo。同時選取多個模組不會形成另一種 profile。
 
 以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效；公開版本只有 stable `X.Y.Z` 與 beta `X.Y.Z-beta.N`，預設只選最新 stable，明確加上 `--channel beta` 才選 beta。`early`／`formal` 是專案層級的宣告，不是版本後綴。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併／無法判定清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
 
@@ -265,7 +265,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 開發用的 unreleased adoption 每次重播 machine plan 或 pending checkpoint 時，都必須在該次命令重新傳入相同的本機 `--source`、完整 `--expected-sha` 與 `--allow-unreleased`；plan 內保存的 source、SHA、digest 或 `verification=unverified` 只用來比對資料，不能代替本次授權。`--apply-plan` 會先顯示已保存的完整 plan 並取得確認，確認以前不會執行 Copier task、target policy script 或 product hook。正式 verified Release 重播不接受這三個開發旗標。
 
-若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance，或雖有 `.csarc/provenance.json` 但仍是舊版未驗證格式（例如 `verification` 不是 `verified`，常見於較早的 `--allow-unreleased` adopt）時，兩種情況都需要先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移；若 `_commit` 是直接使用 Copier 留下的 release tag 或短 SHA，`csarc status` 會回報 `migrate`，並給出同一條可先預覽的遷移指令。CLI 會把該值綁回經過 immutability、attestation 與 signature 驗證的 Release 完整 SHA，不會默認宣稱舊狀態已驗證，也不會把「格式過舊」與「欄位遭竄改」混為一談——已標示 `verified` 卻欄位對不上的記錄，即使加上 `--accept-legacy` 仍會被拒絕。仍在用舊檔名 `.copier-answers.yml`（或已停用的 `.csarc/profile.json`）的既有 repo，`update` 會在套用新版模板前把設定自動遷移到現行的 `.csarc/config.yml`；舊 `features: repo-site` 與 `readme_primary_language` 也會一次性轉為 `documentation_mode` 與 `primary_language`。`site/content/_index.zh-tw.md`、`_index.en.md` 與 `docs/site-theme.css` 由生成專案維護，Copier 更新版型時不會覆寫；portable `docs/index.html`／`docs/index.en.html` 則重新建置。已退役的 `docs/site-content.md` 不會自動搬移，`./scripts/build-repo-site` 會提示維護者先移植再刪除。完整規則見 [`docs/documentation-policy.md`](docs/documentation-policy.md)。
+若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance，或雖有 `.csarc/provenance.json` 但仍是舊版未驗證格式（例如 `verification` 不是 `verified`，常見於較早的 `--allow-unreleased` adopt）時，兩種情況都需要先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移；若 `_commit` 是直接使用 Copier 留下的 release tag 或短 SHA，`csarc status` 會回報 `migrate`，並給出同一條可先預覽的遷移指令。CLI 會把該值綁回經過 immutability、attestation 與 signature 驗證的 Release 完整 SHA，不會默認宣稱舊狀態已驗證，也不會把「格式過舊」與「欄位遭竄改」混為一談——已標示 `verified` 卻欄位對不上的記錄，即使加上 `--accept-legacy` 仍會被拒絕。仍在用舊檔名 `.copier-answers.yml`（或已停用的 `.csarc/profile.json`）的既有 repo，`update` 會在套用新版模板前把設定自動遷移到現行的 `.csarc/config.yml`；舊 `features: repo-site` 與 `primary_language`／`i18n`／`readme_primary_language` 也會一次性轉為 `documentation_mode` 與 `documentation_languages`，每個退役鍵的對應見 [SPEC-009](docs/specs/SPEC-009-project-settings.md)。`site/content/_index.zh-tw.md`、`_index.en.md` 與 `docs/site-theme.css` 由生成專案維護，Copier 更新版型時不會覆寫；portable `docs/index.html`／`docs/index.en.html` 則重新建置。已退役的 `docs/site-content.md` 不會自動搬移，`./scripts/build-repo-site` 會提示維護者先移植再刪除。完整規則見 [`docs/documentation-policy.md`](docs/documentation-policy.md)。
 
 ### 驗證邊界
 
