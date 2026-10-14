@@ -13,6 +13,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import tomllib
 from collections.abc import (
     Callable,
     Collection,
@@ -41,6 +42,7 @@ from csarc_cli import (
     repository_facts,
     risk_tools,
     settings_schema,
+    setup_plan,
     update_plan,
 )
 from csarc_cli.lifecycle_report import (
@@ -373,6 +375,9 @@ class ResolvedPlan:
     files: Plan | None = None
     update: dict[str, object] | None = None
     adoption: dict[str, object] | None = None
+    # Setup questions, work mode, warnings, and approval route (#1078);
+    # only init and adopt plans carry one.
+    setup: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return the stable machine-readable plan representation."""
@@ -423,6 +428,8 @@ class ResolvedPlan:
             result.update(self.update)
         if self.adoption is not None:
             result["adoption"] = self.adoption
+        if self.setup is not None:
+            result["setup"] = self.setup
         return result
 
 
@@ -2629,6 +2636,67 @@ def report_setting_rows(
     return rows
 
 
+def setup_setting_rows(
+    rows: Sequence[dict[str, object]], setup: Mapping[str, object]
+) -> list[dict[str, object]]:
+    """Give adopt rows the source and note the setup planner recorded.
+
+    A TTY answer or an explicit ``--data`` value is ``explicit``; a
+    detection, a work-mode expansion, or a suggested default stays
+    ``derived`` with a note naming where the value came from (#1078).
+    """
+    raw = setup.get("sources")
+    sources = raw if isinstance(raw, dict) else {}
+    result: list[dict[str, object]] = []
+    for row in rows:
+        entry = sources.get(row["key"])
+        updated = dict(row)
+        if isinstance(entry, dict) and entry.get("source") in {
+            "explicit",
+            "derived",
+        }:
+            updated["source"] = entry["source"]
+            note = entry.get("note")
+            if isinstance(note, str) and updated.get("note") is None:
+                updated["note"] = note
+        result.append(updated)
+    return result
+
+
+def setup_decision_actions(
+    setup: Mapping[str, object] | None, answers: Mapping[str, object]
+) -> list[dict[str, object]]:
+    """Return adopt's non-blocking decisions for suggested intent (#1078).
+
+    A non-interactive adopt takes the suggested value of an intent no
+    unique source decides; the report asks the reviewer to confirm it.
+    """
+    if setup is None:
+        return []
+    raw = setup.get("suggested")
+    suggested = raw if isinstance(raw, list) else []
+    actions: list[dict[str, object]] = []
+    for key in sorted(str(item) for item in suggested):
+        if key not in REPORT_SETTING_KEYS:
+            continue
+        value = answers.get(key)
+        shown = ", ".join(map(str, value)) if isinstance(value, list) else value
+        actions.append(
+            {
+                "blocking": False,
+                "command": f"csarc adopt --data {key}=<value>",
+                "kind": "setting-decision",
+                "message": (
+                    f"No unique source decides {key}; this plan uses the "
+                    f"suggested `{redact(shown)}`. Confirm it, or plan again "
+                    "with an explicit value."
+                ),
+                "subject": key,
+            }
+        )
+    return actions
+
+
 def report_file_rows(
     files: Plan,
     preserved_dirty: Collection[str] = (),
@@ -3072,6 +3140,9 @@ def lifecycle_report_model(  # noqa: C901
         explicit,
         observed if operation == "update" else None,
     )
+    setup = plan.setup if operation == "adopt" else None
+    if setup is not None:
+        settings = setup_setting_rows(settings, setup)
     if operation == "update":
         violations = governance_migration.governance_row_violations(settings)
         if violations:
@@ -3087,6 +3158,7 @@ def lifecycle_report_model(  # noqa: C901
     )
     if operation == "adopt" or adoption is not None:
         actions = adoption_required_actions(plan)
+        actions.extend(setup_decision_actions(setup, plan.answers))
     else:
         actions = update_required_actions(
             files,
@@ -3219,6 +3291,14 @@ def lifecycle_report_model(  # noqa: C901
         "report_format_version": LIFECYCLE_REPORT_FORMAT_VERSION,
         "required_actions": actions,
         "settings": settings,
+        "setup": None
+        if setup is None
+        else {
+            "approval_route": setup.get("approval_route"),
+            "questions": setup.get("questions", []),
+            "warnings": setup.get("warnings", []),
+            "work_mode": setup.get("work_mode"),
+        },
         "status": status,
         "status_reason": reasons[status],
         "summary": lifecycle_report.summary_counts(
@@ -3955,6 +4035,7 @@ def print_plan(plan: ResolvedPlan) -> None:
     print("Settings:")
     for key, value in sorted(plan.answers.items()):
         print(f"  {key}={value}")
+    print_setup(plan.setup)
     if plan.adoption is not None:
         owner = plan.adoption.get("code_owner")
         if isinstance(owner, dict):
@@ -3998,6 +4079,346 @@ def print_plan(plan: ResolvedPlan) -> None:
             "remain in place."
         )
     print_update_recommendation(plan.update)
+
+
+def print_setup(setup: Mapping[str, object] | None) -> None:
+    """Print the work mode, question count, approval route, and warnings."""
+    if setup is None:
+        return
+    questions = setup.get("questions")
+    asked = questions if isinstance(questions, list) else []
+    print(
+        f"Work mode: {setup.get('work_mode')} (expanded into the settings "
+        "above; the name is not saved)"
+    )
+    print(f"Setup questions asked: {len(asked)}")
+    suggested = setup.get("suggested")
+    if isinstance(suggested, list) and suggested:
+        print("Suggested defaults used: " + ", ".join(map(str, suggested)))
+    route = setup.get("approval_route")
+    if isinstance(route, dict):
+        confirmation = route.get("confirmation")
+        print(
+            f"Approval route: {route.get('state')} - {route.get('reason')}"
+            + (f" (confirmed: {confirmation})" if confirmation else "")
+        )
+    warnings = setup.get("warnings")
+    for row in warnings if isinstance(warnings, list) else []:
+        if isinstance(row, dict):
+            command = row.get("command")
+            print(
+                f"WARNING {row.get('code')} ({row.get('subject')}): "
+                f"{row.get('message')}"
+                + (f" Fix: {command}" if command else "")
+            )
+
+
+def setup_interactive(args: argparse.Namespace) -> bool:
+    """Ask setup questions only on a TTY without --non-interactive/--json."""
+    return (
+        sys.stdin.isatty()
+        and not getattr(args, "non_interactive", False)
+        and not getattr(args, "json", False)
+    )
+
+
+def manifest_description(target: Path) -> tuple[str, str] | None:
+    """Return the first product manifest description and its file."""
+    readers: tuple[tuple[str, Callable[[str], object]], ...] = (
+        (
+            "pyproject.toml",
+            lambda text: (
+                tomllib.loads(text).get("project", {}).get("description")
+            ),
+        ),
+        ("package.json", lambda text: json.loads(text).get("description")),
+        (
+            "Cargo.toml",
+            lambda text: (
+                tomllib.loads(text).get("package", {}).get("description")
+            ),
+        ),
+    )
+    for name, read in readers:
+        path = target / name
+        if not is_regular_file(path):
+            continue
+        try:
+            value = read(path.read_text(encoding="utf-8"))
+        except (
+            OSError,
+            UnicodeDecodeError,
+            ValueError,
+            AttributeError,
+        ):
+            continue
+        if isinstance(value, str) and value.strip():
+            return value.strip(), name
+    return None
+
+
+LICENSE_HOLDER = re.compile(
+    r"^\s*Copyright\s+\(c\)\s+(?:\d{4}(?:-\d{4})?\s+)?(?P<holder>.+?)"
+    r"(?:\.\s*All rights reserved\.)?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+DISCLOSURE_POLICIES = (".github/SECURITY.md", "SECURITY.md", "docs/SECURITY.md")
+
+
+def license_holder(target: Path) -> str | None:
+    """Return the `Copyright (c)` holder named by an existing LICENSE."""
+    path = target / "LICENSE"
+    if not is_regular_file(path):
+        return None
+    try:
+        match = LICENSE_HOLDER.search(path.read_text(encoding="utf-8"))
+    except OSError, UnicodeDecodeError:
+        return None
+    return match.group("holder").strip() if match else None
+
+
+def detected_disclosure_channel(target: Path) -> str | None:
+    """Return the one private channel the product's policy names, if any."""
+    texts: list[str] = []
+    for name in DISCLOSURE_POLICIES:
+        path = target / name
+        if is_regular_file(path):
+            with suppress(OSError, UnicodeDecodeError):
+                texts.append(path.read_text(encoding="utf-8"))
+    channels = setup_plan.disclosure_channels(texts)
+    return channels[0] if len(channels) == 1 else None
+
+
+LANGUAGE_MANIFESTS = repository_facts.LANGUAGE_MANIFESTS
+
+
+def adoption_detections(
+    target: Path, explicit: Mapping[str, str]
+) -> list[setup_plan.Detection]:
+    """Return what adopt can detect before asking (Issue #1072 rules).
+
+    Only values without a unique native source become questions: a missing
+    manifest description, a LICENSE the plan would create, and ambiguous
+    package or run-command derivations.
+    """
+    detections: list[setup_plan.Detection] = []
+    languages = detect_languages(target)
+    if "languages" in explicit:
+        languages = parse_languages(explicit["languages"])
+    elif "language" in explicit:
+        # The legacy single key an older template still asks (SPEC-009).
+        legacy = explicit["language"]
+        languages = [] if legacy == "ci" else legacy.split("-")
+    else:
+        detections.append(
+            setup_plan.Detection(
+                "languages",
+                languages,
+                "manifests: "
+                + (
+                    ", ".join(
+                        manifest
+                        for name, manifest in LANGUAGE_MANIFESTS
+                        if name in languages
+                    )
+                    or "none"
+                ),
+            )
+        )
+    description = manifest_description(target)
+    detections.append(
+        setup_plan.Detection(
+            "project_description", description[0], description[1]
+        )
+        if description is not None
+        else setup_plan.Detection(
+            "project_description", None, "no manifest description", "unknown"
+        )
+    )
+    if is_regular_file(target / "LICENSE"):
+        holder = license_holder(target)
+        if holder is not None:
+            detections.append(
+                setup_plan.Detection("copyright_holder", holder, "LICENSE")
+            )
+    else:
+        detections.append(
+            setup_plan.Detection(
+                "copyright_holder",
+                None,
+                "no LICENSE; the plan would create one",
+                "unknown",
+            )
+        )
+    selected = languages
+    # An ambiguous run command only follows an ambiguous package, so the
+    # package is the one question; the command derives from the answer.
+    entry = repository_facts.derive_context(target, selected).get(
+        "package_name"
+    )
+    if entry is not None and entry["state"] == repository_facts.AMBIGUOUS:
+        candidates = entry.get("candidates")
+        detections.append(
+            setup_plan.Detection(
+                "package_name",
+                None,
+                "native manifests",
+                "ambiguous",
+                tuple(map(str, candidates))
+                if isinstance(candidates, list)
+                else (),
+            )
+        )
+    return detections
+
+
+def plan_setup(
+    session: setup_plan.Session,
+    mode: str,
+    target: Path,
+    explicit: Mapping[str, str],
+    preset: str | None,
+) -> setup_plan.SetupResult:
+    """Ask the local setup questions, or fail on missing script input."""
+    try:
+        if mode == "init":
+            result = setup_plan.plan_init(session, explicit, preset)
+        else:
+            result = setup_plan.plan_adopt(
+                session,
+                explicit,
+                preset,
+                adoption_detections(target, explicit),
+                release_ownership=str(
+                    explicit.get("release_ownership", "product-owned")
+                ),
+                dockerfile=is_regular_file(target / "Dockerfile"),
+            )
+        session.require_complete(mode)
+    except setup_plan.SetupError as error:
+        raise CliError(str(error)) from error
+    return result
+
+
+def plan_repository_setup(
+    session: setup_plan.Session,
+    setup: setup_plan.SetupResult,
+    target: Path,
+    explicit: Mapping[str, str],
+    repository: RepositoryContext,
+    mode: str,
+) -> RepositoryContext:
+    """Ask for an unresolvable repository and a public reporting channel."""
+    try:
+        if session.interactive and repository.repository is None:
+            setup_plan.plan_repository(
+                session,
+                setup,
+                explicit,
+                resolved=False,
+                visibility_known=repository.source == "explicit",
+            )
+            asked = setup.values.get("project_visibility")
+            if isinstance(asked, str):
+                repository = repository_context(target, asked)
+        setup_plan.plan_security_channel(
+            session,
+            setup,
+            explicit,
+            visibility=repository.visibility,
+            detected=(
+                detected_disclosure_channel(target) if mode == "adopt" else None
+            ),
+        )
+        session.require_complete(mode)
+    except setup_plan.SetupError as error:
+        raise CliError(str(error)) from error
+    return repository
+
+
+def setup_inputs(
+    setup: setup_plan.SetupResult, explicit: Mapping[str, str]
+) -> dict[str, object]:
+    """Merge setup answers under explicit --data, in base_data's types."""
+    inputs: dict[str, object] = {
+        key: ",".join(map(str, value))
+        if key == "languages" and isinstance(value, list)
+        else value
+        for key, value in setup.values.items()
+    }
+    inputs.update(explicit)
+    return inputs
+
+
+def finish_setup(
+    session: setup_plan.Session,
+    setup: setup_plan.SetupResult,
+    data: Mapping[str, object],
+    explicit: Mapping[str, str],
+    repository: RepositoryContext,
+    mode: str,
+    args: argparse.Namespace,
+) -> dict[str, object]:
+    """Reject invalid combinations, run the approval preflight, and warn."""
+    errors = setup_plan.invalid_combinations(data, explicit, mode=mode)
+    if errors:
+        raise CliError(" ".join(errors) + " Nothing was rendered or written.")
+    approval: dict[str, object] | None = None
+    try:
+        if setup_plan.preflight_applies(data):
+            state, reason = setup_plan.approval_route(
+                detector_api, repository.repository, repository.owner_type
+            )
+            approval = setup_plan.resolve_approval(
+                session,
+                data,
+                state,
+                reason,
+                confirm_second=bool(
+                    getattr(args, "confirm_second_approver", False)
+                ),
+                confirm_copilot=bool(
+                    getattr(args, "confirm_copilot_entitlement", False)
+                ),
+            )
+    except setup_plan.SetupError as error:
+        raise CliError(str(error)) from error
+    facts = repository.facts
+    role_fact = facts.get("permissions", {})
+    plan_fact = facts.get("plan", {})
+    runner_role = (
+        str(role_fact.get("value"))
+        if role_fact.get("state") == repository_facts.KNOWN
+        else None
+    )
+    plan_name = (
+        str(plan_fact.get("value"))
+        if plan_fact.get("state") == repository_facts.KNOWN
+        else None
+    )
+    single_writer: bool | None = None
+    if (
+        data.get("project_visibility") == "private"
+        and plan_name == "free"
+        and data.get("release_ownership") == "csarc-owned"
+    ):
+        single_writer = setup_plan.single_writer_observed(
+            detector_api, repository.repository, repository.owner_type
+        )
+    warnings = setup_plan.setup_warnings(
+        data,
+        approval=approval,
+        runner_role=runner_role,
+        plan_name=plan_name,
+        single_writer=single_writer,
+    )
+    return setup_plan.setup_record(
+        setup,
+        session,
+        warnings=warnings,
+        approval=approval,
+        explicit=explicit,
+    )
 
 
 def confirm(args: argparse.Namespace) -> bool:
@@ -6059,7 +6480,7 @@ def resolve_release_answers(  # noqa: C901
 
 
 def base_data(
-    target: Path, mode: str, values: dict[str, str]
+    target: Path, mode: str, values: Mapping[str, object]
 ) -> dict[str, object]:
     """Build stable defaults while allowing explicit Copier answers."""
     slug = slugify(target.name)
@@ -6091,9 +6512,9 @@ def base_data(
             "or be empty."
         )
     if "languages" in values:
-        data["languages"] = parse_languages(values["languages"])
+        data["languages"] = parse_languages(str(values["languages"]))
     if "language" in values and "languages" not in values:
-        legacy = values["language"]
+        legacy = str(values["language"])
         data["languages"] = [] if legacy == "ci" else legacy.split("-")
     if "package_name" not in values:
         data["package_name"] = (
@@ -6105,7 +6526,7 @@ def base_data(
 
 
 def adoption_derived_context(
-    target: Path, data: Mapping[str, object], values: Mapping[str, str]
+    target: Path, data: Mapping[str, object], values: Mapping[str, object]
 ) -> dict[str, object]:
     """Return the derived context an adoption renders (Issue #1072).
 
@@ -6213,8 +6634,11 @@ def validate_copy_target(
     target: Path, mode: str, *, require_clean: bool = True
 ) -> None:
     """Validate an init or adopt destination before release resolution."""
-    if mode == "init" and target.exists() and any(target.iterdir()):
-        raise CliError("init target must not exist or must be empty.")
+    if mode == "init" and not repository_target_is_new(target):
+        raise CliError(
+            "init target must not exist, must be empty, or must be an empty "
+            "Git repository (only .git, no commit or tracked file)."
+        )
     if mode != "adopt":
         return
     if not target.is_dir():
@@ -6988,6 +7412,15 @@ def command_apply_adoption_plan(  # noqa: C901
                 f"task-bearing render. Differing fields: {detail}"
             )
         fresh = authorize_adoption_candidate(fresh, candidate)
+        # The reviewed setup record (questions, work mode, warnings, and
+        # approval route) is replayed as saved; nothing is asked again.
+        saved_setup = saved.get("setup")
+        fresh = replace(
+            fresh,
+            setup=cast(dict[str, object], saved_setup)
+            if isinstance(saved_setup, dict)
+            else None,
+        )
         fresh_adoption = fresh.adoption
         if fresh_adoption is None or fresh_adoption.get("verification") not in {
             "passed",
@@ -7064,6 +7497,13 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         raise CliError("--json requires --dry-run for init or adopt.")
     if args.json and mode == "adopt" and args.report_dir is not None:
         raise CliError("--report-dir cannot be combined with --json.")
+    explicit_data = parse_settings_data(args.data)
+    # Issue #1078: every question and every missing required input is
+    # settled before the release lookup, GitHub, or Copier runs.
+    session = setup_plan.Session(
+        interactive=setup_interactive(args), ask=input, emit=print
+    )
+    setup = plan_setup(session, mode, target, explicit_data, args.preset)
     source = args.source or CANONICAL_SOURCE
     revision = resolve_revision(
         source,
@@ -7078,16 +7518,19 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
             "immutability, attestation, and signature verification.",
             file=sys.stderr,
         )
-    explicit_data = parse_settings_data(args.data)
     repository = repository_context(
         target, explicit_data.get("project_visibility")
     )
-    data = base_data(target, mode, explicit_data)
+    repository = plan_repository_setup(
+        session, setup, target, explicit_data, repository, mode
+    )
+    inputs = setup_inputs(setup, explicit_data)
+    data = base_data(target, mode, inputs)
     # Init records every explicit one-time decision (SPEC-009); adoption
     # saves one only where the native manifests cannot decide (#1072), by
     # the same rule its apply and finalize steps replay.
     decisions = (
-        explicit_decisions(explicit_data)
+        explicit_decisions(inputs)
         if mode == "init"
         else adoption_decisions(target, data)
     )
@@ -7096,7 +7539,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     if (
         repository.repository is None
         and GITHUB_REPOSITORY_URL.fullmatch(
-            explicit_data.get("repository_url", "")
+            str(inputs.get("repository_url", ""))
         )
         is None
     ):
@@ -7107,6 +7550,9 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     data["project_visibility"] = repository.visibility
     if repository.repository is not None:
         data["repository_url"] = f"https://github.com/{repository.repository}"
+    setup_record = finish_setup(
+        session, setup, data, explicit_data, repository, mode, args
+    )
     with tempfile.TemporaryDirectory(prefix="csarc-plan-") as temporary:
         temporary_root = Path(temporary)
         stage = temporary_root / "preview"
@@ -7145,6 +7591,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 capabilities,
                 generated_at,
             )
+            plan = replace(plan, setup=setup_record)
         else:
             plan = ResolvedPlan(
                 mode=mode,
@@ -7154,6 +7601,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 answers=answers,
                 capabilities=capabilities,
                 files=compare_stage(stage, target, adopt=False),
+                setup=setup_record,
             )
         if args.json:
             print(
@@ -7208,6 +7656,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 answers=rebound_answers,
                 capabilities=capabilities,
                 files=compare_stage(stage, target, adopt=False),
+                setup=setup_record,
             )
             rebound_files = {
                 name: file_fingerprint(path)
@@ -7238,9 +7687,9 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                     "task-bearing render."
                 )
             validate_copy_target(target, mode, require_clean=True)
-            if target.exists():
-                target.rmdir()
-            shutil.copytree(stage, target, symlinks=True)
+            # An empty directory or an empty Git repository (only `.git`,
+            # no commit or tracked file) keeps its `.git` (Issue #1078).
+            shutil.copytree(stage, target, symlinks=True, dirs_exist_ok=True)
         else:
             raise CliError("Adoption requires a saved machine plan.")
 
@@ -7583,12 +8032,37 @@ def update_status(
 
 
 def repository_target_is_new(target: Path) -> bool:
-    """Return whether a target is unwritten: missing or an empty directory.
+    """Return whether a target is unwritten (Issue #1078 AC4).
 
-    Mirrors the `init` scope check in `validate_copy_target` so the two
+    A missing path, an empty directory, or a directory holding only an
+    empty Git repository (``.git`` with no commit and no tracked file) is
+    new. Mirrors the `init` scope check in `validate_copy_target` so the two
     functions never disagree about what counts as a brand-new project.
     """
-    return not target.exists() or not any(target.iterdir())
+    if not target.exists():
+        return True
+    if not target.is_dir():
+        return False
+    entries = [entry.name for entry in target.iterdir()]
+    if not entries:
+        return True
+    if entries != [".git"] or not (target / ".git").is_dir():
+        return False
+    head = run_git(
+        ["git", "-C", str(target), "rev-parse", "--verify", "--quiet", "HEAD"],
+        repository=target,
+        capture=True,
+        check=False,
+    )
+    if head.returncode == 0:
+        return False
+    tracked = run_git(
+        ["git", "-C", str(target), "ls-files", "-z"],
+        repository=target,
+        capture=True,
+        check=False,
+    )
+    return tracked.returncode == 0 and not tracked.stdout
 
 
 def run_policy_settings_check(
@@ -7706,7 +8180,10 @@ def detect_install_state(
     if repository_target_is_new(target):
         return {
             "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_CREATE],
-            "reason": f"{target} does not exist or is an empty directory.",
+            "reason": (
+                f"{target} does not exist, is an empty directory, or is an "
+                "empty Git repository."
+            ),
             "state": INSTALL_STATE_CREATE,
         }
     pending_path = checked_destination(target, PENDING_ADOPTION_FILE.as_posix())
@@ -10487,6 +10964,31 @@ def parser() -> argparse.ArgumentParser:
             "--data", action="append", default=[], metavar="KEY=VALUE"
         )
         subparser.add_argument("--json", action="store_true")
+        # Issue #1078: one-time setup inputs; none of them is saved.
+        subparser.add_argument(
+            "--preset",
+            choices=setup_plan.WORK_MODES,
+            help=(
+                "work mode to expand into saved settings (default "
+                f"{setup_plan.DEFAULT_WORK_MODE}); explicit --data wins"
+            ),
+        )
+        subparser.add_argument(
+            "--confirm-second-approver",
+            action="store_true",
+            help=(
+                "one-time: another maintainer can approve when the approval "
+                "route read is inconclusive"
+            ),
+        )
+        subparser.add_argument(
+            "--confirm-copilot-entitlement",
+            action="store_true",
+            help=(
+                "one-time: the repository has Copilot code review "
+                "entitlement for a Copilot-only approval route"
+            ),
+        )
         if name == "adopt":
             subparser.add_argument(
                 "--apply-plan",

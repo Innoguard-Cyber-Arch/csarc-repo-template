@@ -81,7 +81,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 
 <!-- csarc-settings-table:end -->
 
-`github_project_url` 由 #1080（K2）加入本表；本規格不預先保存未使用的鍵。題數、preset 展開與 transcript 由 #1078（Q3）定義，repository detector 與唯一推導規則見 §8（#1072，Q2），payload 由 #1077（P2）定義；它們都只能使用本表的分類。
+`github_project_url` 由 #1080（K2）加入本表；本規格不預先保存未使用的鍵。題數、preset 展開與 transcript 由 #1078（Q3）在 §9 定義，repository detector 與唯一推導規則見 §8（#1072，Q2），payload 由 #1077（P2）定義；它們都只能使用本表的分類。
 
 ### 3. 退役鍵
 
@@ -190,6 +190,82 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 - visibility、entitlement（`security` 顯示 `advanced_security`／`code_security` 未啟用）、模板或 preset 預設改變時，已存的 `enable_codeql`、`scheduled_checks`、`lifecycle`、`coverage_*` 與 `python_floor` 一律維持 `unchanged`；差異只寫在報告列的 note，不產生 required action。
 - 身分：update 在任何 render 或寫入前，比較 origin 識別的 repository 與設定／provenance 記錄的 `repository_url`，不一致就 fail closed。一次性 `--data repository_url=...` 只核准這一次 plan，而且仍須指向 origin 識別的 repository；它不是設定鍵，只進 render 與 provenance context。origin 為 `unknown` 時不比較。
 
+
+### 9. 設定問卷、工作模式與 approval route（#1078）
+
+`csarc init` 與 `csarc adopt`（`src/csarc_cli/setup_plan.py`）在查詢 Release、呼叫 GitHub 寫入、render 或寫檔之前完成問卷：先用 §8 的 detector 與本表的分類，只有未知、矛盾或沒有唯一來源的使用者意圖才成為問題（TTY）或必填輸入（non-interactive）。明確 `--data` 與偵測到的值不再詢問。`csarc update` 不提問，也不接受 `--preset`。
+
+- **提問條件**：stdin 是 TTY，而且沒有 `--non-interactive` 與 `--json`。只用標準輸入；不合法的回答在同一題重問，不增加題數。阻擋後的確認（approval route、偵測結果被拒）不算題目。
+- **Non-interactive**：缺少必填輸入時，在查詢 Release、render 或寫檔前以一行 `csarc: Missing required setup input (...)` 結束，列出每個 `--data KEY=`。必填：init 的 `project_description`、`languages`（可為空字串，表示只有 CI baseline）、`copyright_holder`；adopt 沒有 manifest description 時的 `project_description`、沒有 `LICENSE`（plan 會新建）時的 `copyright_holder`、`ambiguous` 的 `package_name`；public 而沒有偵測到揭露政策管道時的 `security_reporting_channel`（需要 live visibility，所以在唯讀 GitHub 讀取之後、render 之前檢查）。有建議值的題目（授權 `proprietary`、文件語言 `zh-tw`、`governance_mode: managed`、Dockerfile 時的 `container: false`、`team` 的 `copilot_review: allowed`、`release_trigger: main`）採用建議值；adopt 對其中沒有唯一來源的意圖各列一個非 blocking 的 `setting-decision`（SPEC-008 `2.1.0`）。repository 無法解析時 non-interactive 仍需要 `--data repository_url=`；visibility 依 §8 使用 safe default。
+- **新專案預設**（#1058 決定 14）：init 由 CLI 採用 `documentation_mode: content-only`、`documentation_languages: zh-tw`；`copier.yml` 的預設只供 raw Copier render。
+- **空 repository**：init 接受不存在的路徑、空資料夾，或只含 `.git`、沒有 commit 也沒有 tracked 檔的 repository（保留 `.git`）；`csarc status` 對後者回報 `create`。
+
+#### 工作模式（preset）
+
+一題決定工作模式；也可用 `--preset` 指定。preset 只展開成下表的 persistent intent，展開值可被明確 `--data` 逐鍵覆寫並照常保存；preset 名稱不寫入 `.csarc/config.yml` 或 provenance，只出現在 plan 與 adopt 報告的 `setup.work_mode`。non-interactive 採用 `solo-local`。preset 只在 init 與 adopt 展開，update 保留已存值。
+
+| preset | `verification_mode` | `admin_bypass` | `copilot_review` | 另外展開 |
+| --- | --- | --- | --- | --- |
+| `solo-local`（預設） | `local` | `always` | `allowed` | `lifecycle: []`、`scheduled_checks: []` |
+| `solo-hosted` | `hosted` | `always` | `allowed` | — |
+| `team` | `hosted` | `off` | 追加一題（建議 `allowed`） | — |
+| `custom` | 詢問（建議 `local`） | 詢問（建議 `always`） | 詢問（建議 `allowed`） | — |
+
+#### 題數（以 transcript 測試斷言，`tests/test_setup_questions.py`）
+
+init 的 6 題依序為 `project_description`、`languages`、`project_license`、`copyright_holder`、`documentation_languages`、工作模式。adopt 的 3 題為偵測結果確認（一個畫面，名稱、語言、說明、著作權人等；拒絕時不寫入並提示以 `--data` 修改）、`governance_mode`、工作模式。
+
+| 情境 | 題數 |
+| --- | --- |
+| init，private、local（`solo-local`），授權不是 `custom` | 6 |
+| public | ＋1（`security_reporting_channel`） |
+| hosted 且 `csarc-owned` | ＋1（`release_trigger`） |
+| `team` | ＋1（`copilot_review`） |
+| `custom` | ＋3（`verification_mode`、`admin_bypass`、`copilot_review`） |
+| repository 無法解析 | 最多＋2（`repository_url`、`project_visibility`） |
+| 授權選 `custom` | －1（略過 `copyright_holder`；init 的 `custom` 授權尚無 template 支援，見 Out of scope） |
+| adopt | 3；每個無法唯一偵測的值（沒有 manifest description、沒有 `LICENSE`、`ambiguous` package）＋1；public 而揭露政策沒有唯一的私密管道＋1；偵測到 `Dockerfile`＋1（`container`）；工作模式、`release_trigger` 與 repository 的追加題同 init |
+| update | 0 |
+
+#### Approval route preflight（#1058 決定 7）
+
+`admin_bypass` 最後解析為 `off`，或為 `beta-only`（stable 工作仍需同儕核准）時，plan 在 render 前讀取 collaborator 清單；`always` 不讀。同儕條件與合併 gate 相同：執行者以外、類型為 `User`、live `role_name` 屬於 `admin`／`maintain` 的帳號（#1058 決定 6；`scripts/pr_lifecycle.py` 的 `MAINTAINER_PERMISSIONS`，parity 測試固定）。結果是讀取當下的觀察，不是「只有一位寫入者」或「必然卡住」的證明：
+
+| 結果 | 條件 | 處理 |
+| --- | --- | --- |
+| `route-observed` | 至少一個符合同儕條件的帳號 | 通過 |
+| `none-observed` | 讀取完整，執行者以外沒有符合條件的帳號 | 阻擋；`--confirm-second-approver` 無效；修復：加入 maintainer 後重新規劃，或 `--data admin_bypass=always` |
+| `inconclusive` | repository 尚未在 GitHub、讀取失敗、帳號缺 `role_name`，或 organization 擁有而執行者不是 organization owner | 明確確認前阻擋：TTY 確認，或 `--confirm-second-approver`（記錄 `W03`） |
+
+Copilot 路徑只在 `copilot_review: allowed`、而且 render 的 Ruleset 原生必要核准數為 0（hosted，或 local 而 `admin_bypass` 不是 `off`）時成立；此時 TTY 確認或 `--confirm-copilot-entitlement` 可放行 `none-observed` 與 `inconclusive`（記錄 `W04`）。local＋`off` 或 `copilot_review: off` 帶這個旗標仍然阻擋並寫明原因。`governance_mode: observe` 不改變觸發條件，只給 `W09`。兩個確認旗標只作用於單次 plan，不是設定鍵；adopt 的 `--apply-plan` 重播 plan 內的紀錄，不再詢問。
+
+#### 設定警告（穩定代碼）
+
+WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup.warnings` 出現，不阻擋。代碼發布後不改；未列出的編號保留。
+
+| code | 條件 |
+| --- | --- |
+| `W01-admin-bypass-always` | `admin_bypass: always`：沒有第二個人審查，以證據與稽核補償 |
+| `W02-local-verification` | `verification_mode: local`：證據是自我聲明 |
+| `W03-second-approver-confirmed` | approval route `inconclusive`，使用者確認另有核准者 |
+| `W04-copilot-entitlement-confirmed` | 使用者確認 Copilot 授權，Copilot 可能是唯一合併路徑 |
+| `W05-copilot-reference-only` | local＋`off`＋`allowed`：原生核准仍必要，Copilot 只供參考 |
+| `W06-local-beta-only` | local＋`beta-only`：stable 限制只由 lifecycle 執行 |
+| `W07-runner-not-admin` | `admin_bypass` 不是 `off`，執行者的 live `role_name` 不是 `admin` |
+| `W08-no-ruleset-plan` | private repository 在 GitHub Free：Ruleset 不強制，合併採 `server_enforcement=none` |
+| `W09-governance-observe` | `governance_mode: observe`：不套用 Ruleset，只能人工合併 |
+| `W10-coverage-relaxed` | `coverage_mode: diff` 或 `coverage_threshold` 低於 80 |
+| `W11-public-proprietary` | public repository 使用 `proprietary` |
+| `W12-documentation-scope` | `documentation_mode: off`，或雙語 `documentation_languages` |
+| `W13-public-codeql-off` | public、有 CodeQL 支援的語言，明確設 `enable_codeql: false` |
+| `W15-local-actions-minutes` | local 而 `scheduled_checks` 不是空的或 `enable_codeql: true` |
+| `W20-ui-merge-without-approval` | local＋`beta-only`／`always`：0 個原生必要核准，任何寫入者都能在 UI 合併 |
+| `W21-single-writer-unobserved` | private、GitHub Free、`csarc-owned`，讀取沒有觀察到執行者是唯一寫入者（#1058 決定 27） |
+
+#### 不合法組合
+
+在 render 前以一行修復指令結束：new＋`rust`＋`container: true`（`--data container=false`）；`enable_codeql: true` 而沒有 `go`、`python` 或 `typescript`（`--data enable_codeql=false`）；明確 `release_trigger` 而不是 hosted＋`csarc-owned`（移除該 `--data`）；未知的 `--preset`。
+
 ## Acceptance criteria
 
 - [x] 本規格封閉列出 persistent intent、one-time seed、live facts、derived context 與 machine metadata，並列出每個退役鍵與承接鍵（#1071 AC1）。
@@ -197,10 +273,11 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 - [x] current parser 只接受 schema 2；legacy 設定只由 CLI migration registry 讀取並只寫 schema 2（#1071 AC3）。
 - [x] status／update 在寫入前驗證 provenance 與 digest，手改、缺漏、未知 schema 或矛盾時 fail closed（#1071 AC4）。
 - [x] conformance 測試讓本規格、`copier.yml`、CLI、root parser 與 generated parser 一致（#1071 AC7）。
+- [x] init／adopt 只詢問沒有唯一來源的輸入，preset 只展開成可覆寫的已存意圖，non-interactive 缺值在 render 前失敗，approval route preflight 為三態（#1078，§9）。
 
 ## Out of scope
 
-- 題數、preset 展開、WARNING 與 approval route preflight（#1078）。
+- init 選 `custom` 授權（不產生 LICENSE、manifest 不寫 license 欄位）需要 template 與 `check_license_metadata.py` 支援，另開 Issue；目前 init 只提供 `proprietary`、`MIT`、`Apache-2.0`。
 - 依選項縮減的 payload 與預設值調整（#1077）。
 - `github_project_url`（#1080）。
 - 網站 token 與 CLI hint 的全面清理（#1090）、文件中的過期說法（#1091）。
@@ -208,7 +285,7 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 ## Verification
 
 - `python3 scripts/spec_to_issue.py validate`
-- `uv run pytest tests/test_settings_spec.py tests/test_repository_facts.py`
+- `uv run pytest tests/test_settings_spec.py tests/test_repository_facts.py tests/test_setup_questions.py`
 - `uv run pytest tests/test_settings_migration.py tests/test_root_config.py tests/test_base_policy.py`
 
 ## References
@@ -217,6 +294,7 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 - [Simplified project configuration ADR](../adr/simplified-project-configuration.md)
 - [Issue #1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)
 - [Issue #1072](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1072) — repository detector 與唯一推導
+- [Issue #1078](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1078) — 設定問卷、工作模式與 approval route preflight
 - [Issue #1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058) — 決定 3、8、14–17、25
 - [Issue #900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900) — 平面、最少的設定
 - [Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919) — 文件模式與語言

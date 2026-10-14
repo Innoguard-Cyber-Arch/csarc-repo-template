@@ -7,10 +7,16 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+import settings_support
 from test_cli import commit, git, make_template
 
 from csarc_cli import cli, file_transition
-from csarc_cli.cli import main
+from csarc_cli.cli import main as cli_main
+
+
+def main(arguments: list[str] | None = None) -> int:
+    """Run the CLI with the explicit setup seeds a script passes (#1078)."""
+    return cli_main(settings_support.seeded_setup(arguments))
 
 
 def write(path: Path, content: str) -> None:

@@ -14,7 +14,14 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import cast
 
-LIFECYCLE_REPORT_FORMAT_VERSION = "2.0.0"
+LIFECYCLE_REPORT_FORMAT_VERSION = "2.1.0"
+# The 2.1.0 reader still validates a 2.0.0 report (for example one embedded
+# in an earlier final plan) by the 2.0.0 rules; the writer emits only 2.1.0.
+PREVIOUS_REPORT_FORMAT_VERSION = "2.0.0"
+READABLE_REPORT_FORMAT_VERSIONS = (
+    PREVIOUS_REPORT_FORMAT_VERSION,
+    LIFECYCLE_REPORT_FORMAT_VERSION,
+)
 OPERATIONS = ("adopt", "update")
 STATUSES = ("applied", "blocked", "review-required", "ready", "current")
 OPERATION_STATUSES = {
@@ -78,9 +85,9 @@ REQUIRED_ACTION_KINDS = (
     "version-surface",
     "working-tree",
 )
-# 2.0.0 keeps setting decisions update-only; only the planned 2.1.0 MINOR
-# bump may open them to adopt (SPEC-008 versioning rules).
-UPDATE_ONLY_ACTION_KINDS = frozenset({"setting-decision"})
+# 2.0.0 kept setting decisions update-only; the 2.1.0 MINOR bump opens them
+# to adopt for intent no unique source decides (Issue #1078).
+UPDATE_ONLY_ACTION_KINDS_2_0 = frozenset({"setting-decision"})
 WORKING_TREE_STATES = ("clean", "dirty-preserved", "dirty-review-only")
 CANDIDATE_STATES = (
     "pending-authorization",
@@ -131,6 +138,16 @@ REPORT_KEYS = frozenset(
         "verification",
     }
 )
+# 2.1.0 adds the init/adopt setup record (Issue #1078).
+REPORT_KEYS_2_0 = REPORT_KEYS
+REPORT_KEYS_2_1 = REPORT_KEYS | {"setup"}
+SETUP_KEYS = frozenset({"approval_route", "questions", "warnings", "work_mode"})
+WARNING_KEYS = frozenset({"code", "command", "message", "subject"})
+WARNING_CODE = re.compile(r"^W[0-9]{2}-[a-z][a-z-]*$")
+APPROVAL_ROUTE_KEYS = frozenset({"confirmation", "reason", "state"})
+APPROVAL_ROUTE_STATES = ("route-observed", "none-observed", "inconclusive")
+APPROVAL_CONFIRMATIONS = ("second-approver", "copilot-entitlement")
+WORK_MODES = ("solo-local", "solo-hosted", "team", "custom")
 PLAN_KEYS = frozenset(
     {"mode", "path", "replayable", "schema_version", "sha256"}
 )
@@ -321,10 +338,13 @@ def _validate_actions(
     report: Mapping[str, object], operation: str
 ) -> list[Mapping[str, object]]:
     rows = _rows(report["required_actions"], "$.required_actions")
+    previous = report["report_format_version"] == PREVIOUS_REPORT_FORMAT_VERSION
     allowed = [
         kind
         for kind in REQUIRED_ACTION_KINDS
-        if operation == "update" or kind not in UPDATE_ONLY_ACTION_KINDS
+        if operation == "update"
+        or not previous
+        or kind not in UPDATE_ONLY_ACTION_KINDS_2_0
     ]
     for index, row in enumerate(rows):
         path = f"$.required_actions[{index}]"
@@ -427,16 +447,72 @@ def _validate_sections(report: Mapping[str, object]) -> None:
         _optional_text(row["command"], f"$.next_steps[{index}].command")
 
 
+def _validate_setup(report: Mapping[str, object], operation: str) -> None:  # noqa: C901
+    """Validate the 2.1.0 setup record: adopt only, closed vocabulary."""
+    if report["setup"] is None:
+        return
+    if operation != "adopt":
+        raise _fail("$.setup", "only adopt carries a setup record")
+    setup = _mapping(report["setup"], "$.setup")
+    _exact_keys(setup, SETUP_KEYS, "$.setup")
+    _member(setup["work_mode"], WORK_MODES, "$.setup.work_mode")
+    questions = setup["questions"]
+    if not isinstance(questions, list) or not all(
+        isinstance(item, str) for item in cast(list[object], questions)
+    ):
+        raise _fail("$.setup.questions", "must be a list of keys")
+    for index, row in enumerate(_rows(setup["warnings"], "$.setup.warnings")):
+        path = f"$.setup.warnings[{index}]"
+        _exact_keys(row, WARNING_KEYS, path)
+        code = row["code"]
+        if not isinstance(code, str) or WARNING_CODE.fullmatch(code) is None:
+            raise _fail(f"{path}.code", f"unknown value {code!r}")
+        for key in ("subject", "message"):
+            if not isinstance(row[key], str):
+                raise _fail(f"{path}.{key}", "must be a string")
+        _optional_text(row["command"], f"{path}.command")
+    route = setup["approval_route"]
+    if route is not None:
+        route = _mapping(route, "$.setup.approval_route")
+        _exact_keys(route, APPROVAL_ROUTE_KEYS, "$.setup.approval_route")
+        _member(
+            route["state"],
+            APPROVAL_ROUTE_STATES,
+            "$.setup.approval_route.state",
+        )
+        if not isinstance(route["reason"], str):
+            raise _fail("$.setup.approval_route.reason", "must be a string")
+        if route["confirmation"] is not None:
+            _member(
+                route["confirmation"],
+                APPROVAL_CONFIRMATIONS,
+                "$.setup.approval_route.confirmation",
+            )
+
+
 def validate_report(report: object) -> Mapping[str, object]:
-    """Validate one report object and return it, failing closed."""
+    """Validate one report object and return it, failing closed.
+
+    A 2.1.0 reader reads 2.0.0 reports by the 2.0.0 rules (no ``setup``,
+    update-only ``setting-decision``); any other version fails closed.
+    """
     value = _mapping(report, "$")
-    _exact_keys(value, REPORT_KEYS, "$")
-    if value["report_format_version"] != LIFECYCLE_REPORT_FORMAT_VERSION:
+    version = value.get("report_format_version")
+    if version not in READABLE_REPORT_FORMAT_VERSIONS:
         raise _fail(
             "$.report_format_version",
-            f"unsupported version {value['report_format_version']!r}",
+            f"unsupported version {version!r}",
         )
+    _exact_keys(
+        value,
+        REPORT_KEYS_2_0
+        if version == PREVIOUS_REPORT_FORMAT_VERSION
+        else REPORT_KEYS_2_1,
+        "$",
+    )
     operation = _member(value["operation"], OPERATIONS, "$.operation")
+    if version == LIFECYCLE_REPORT_FORMAT_VERSION:
+        _validate_setup(value, operation)
     settings = _validate_settings(value)
     files = _validate_files(value)
     actions = _validate_actions(value, operation)
@@ -805,6 +881,33 @@ def _impact_lines(report: Mapping[str, object]) -> list[str]:
     lines.append(
         f"- Candidate verification: {code(_field(candidate, 'state'))}."
     )
+    setup = _optional_mapping(report.get("setup"))
+    if setup is not None:
+        questions = cast(list[object], setup["questions"])
+        route = _optional_mapping(setup["approval_route"])
+        lines.extend(
+            [
+                f"- Work mode: {code(setup['work_mode'])} (expanded into "
+                f"settings; not saved); setup questions asked: "
+                f"{len(questions)}.",
+                f"- Approval route: {code(_field(route, 'state'))}"
+                + (
+                    f" - {markdown_text(_field(route, 'reason'))}"
+                    if route is not None
+                    else ""
+                )
+                + (
+                    f" (confirmed {code(_field(route, 'confirmation'))})"
+                    if route is not None and route["confirmation"] is not None
+                    else ""
+                )
+                + ".",
+                "",
+                "### Warnings",
+                "",
+                *_table(setup["warnings"]),
+            ]
+        )
     return lines
 
 
