@@ -100,49 +100,65 @@ TARGETS: dict[str, dict[str, int | None]] = {
         "workflows": 11,
     },
 }
-# Measured at the #1077 head (bytes rounded up to 10 KB), plus K1's
-# (#1079) exact allowance per fixture: +1 file, +1 `.csarc/scripts`,
-# +400 script lines (`risk_controls.py` and its wiring). P2 left no room
-# to offset it, so the cut is a follow-up Issue; any other change may only
-# lower these. The gap to TARGETS stays open until the remaining cuts land
-# (#1058 kill criterion 4).
+# Recorded at the #1129 head, after K1 (#1079). A later change may only
+# lower these. Every met Target is the ceiling itself; a measure the
+# tracker leaves unbudgeted records this head. Bytes record this head
+# (rounded up to 10 KB): the documents still dominate them, and #1081
+# lowers the bytes ceilings to TARGETS when it replaces the generated
+# documents before beta.2. The solo fixtures still exceed their file,
+# script, and script-line Targets after every behaviour-preserving cut;
+# they record this head for the owner's #1058 kill criterion 4 decision.
 CEILINGS: dict[str, dict[str, int]] = {
     "solo-default": {
-        "files": 96,
-        "scripts": 57,
-        "script_lines": 28_817,
-        "bytes": 1_370_000,
+        "files": 91,
+        "scripts": 53,
+        "script_lines": 24_748,
+        "bytes": 1_200_000,
         "workflows": 0,
     },
     "solo-python": {
-        "files": 99,
-        "scripts": 57,
-        "script_lines": 28_834,
-        "bytes": 1_370_000,
+        "files": 94,
+        "scripts": 53,
+        "script_lines": 24_765,
+        "bytes": 1_200_000,
         "workflows": 0,
     },
     "hosted-csarc-owned-python": {
-        "files": 120,
-        "scripts": 63,
-        "script_lines": 30_180,
-        "bytes": 1_520_000,
+        "files": 137,
+        "scripts": 62,
+        "script_lines": 28_600,
+        "bytes": 1_380_000,
         "workflows": 13,
     },
     "consumer-a": {
-        "files": 106,
-        "scripts": 56,
-        "script_lines": 27_838,
-        "bytes": 1_420_000,
-        "workflows": 12,
+        "files": 121,
+        "scripts": 57,
+        "script_lines": 23_900,
+        "bytes": 1_210_000,
+        "workflows": 13,
     },
     "consumer-b": {
-        "files": 102,
-        "scripts": 54,
-        "script_lines": 27_655,
-        "bytes": 1_410_000,
-        "workflows": 10,
+        "files": 117,
+        "scripts": 55,
+        "script_lines": 23_700,
+        "bytes": 1_200_000,
+        "workflows": 11,
     },
 }
+# Ceilings still above their Target; every other ceiling equals or beats
+# it. Bytes close with #1081; the solo rows await the #1058 decision.
+OPEN_TARGET_GAPS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("solo-default", "files"),
+        ("solo-default", "scripts"),
+        ("solo-default", "script_lines"),
+        ("solo-default", "bytes"),
+        ("solo-python", "files"),
+        ("solo-python", "scripts"),
+        ("solo-python", "script_lines"),
+        ("solo-python", "bytes"),
+    }
+)
 DOC_TARGETS: dict[str, int] = {
     "solo_docs_lines": 600,
     "solo_docs_bytes": 60_000,
