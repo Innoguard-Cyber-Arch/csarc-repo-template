@@ -656,13 +656,30 @@ def install_fake_syft_installer(repo: Path, syft_path: Path) -> None:
     installer.chmod(0o755)
 
 
+# A hosted runner's own identity must not leak into the fixture: the
+# release lease names its holder from GITHUB_ACTIONS/GITHUB_RUN_ID (#1074).
+RUNNER_IDENTITY = frozenset(
+    {
+        "GITHUB_ACTIONS",
+        "GITHUB_ACTOR",
+        "GITHUB_OUTPUT",
+        "GITHUB_REPOSITORY",
+        "GITHUB_RUN_ATTEMPT",
+        "GITHUB_RUN_ID",
+        "GITHUB_SERVER_URL",
+        "GITHUB_STEP_SUMMARY",
+    }
+)
+
+
 def clean_environment() -> dict[str, str]:
-    """Keep fixture subprocesses out of the parent coverage session."""
+    """Keep fixture subprocesses out of the parent coverage and runner."""
     return {
         key: value
         for key, value in os.environ.items()
         if not key.startswith("COV_CORE_")
         and key not in {"COVERAGE_FILE", "COVERAGE_PROCESS_START"}
+        and key not in RUNNER_IDENTITY
     }
 
 
@@ -677,8 +694,12 @@ def run_publish_release(
     force_verify_fail: bool = False,
     force_attestation_digest_mismatch: bool = False,
     force_attestation_signer_mismatch: bool = False,
+    hosted_run_id: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the real scripts/publish-release with the fake `gh` in front.
+
+    The run is a local maintainer run unless `hosted_run_id` names the
+    simulated Actions run that holds the release lease.
 
     Pins a fresh RUNNER_TEMP per invocation under the test's own state
     directory instead of leaving it unset. On a real GitHub Actions
@@ -700,6 +721,9 @@ def run_publish_release(
     env["FIXTURE_REPOSITORY_ID"] = FIXTURE_REPOSITORY_ID
     env["CSARC_PUBLISH_CANDIDATE_STATUS"] = "false"
     env["GH_TOKEN"] = "fixture-token"  # noqa: S105 -- fixture value, not a secret
+    if hosted_run_id is not None:
+        env["GITHUB_ACTIONS"] = "true"
+        env["GITHUB_RUN_ID"] = hosted_run_id
     runner_temp = Path(tempfile.mkdtemp(dir=state.parent))
     env["RUNNER_TEMP"] = str(runner_temp)
     if force_verify_fail:
@@ -1468,7 +1492,11 @@ def stage_candidate(
 
 
 def stage(
-    fixture: dict[str, str], root: Path, state: Path, bindir: Path
+    fixture: dict[str, str],
+    root: Path,
+    state: Path,
+    bindir: Path,
+    hosted_run_id: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run `publish-release stage` for the fixture's candidate."""
     return run_publish_release(
@@ -1482,6 +1510,7 @@ def stage(
         repo=root,
         bindir=bindir,
         state=state,
+        hosted_run_id=hosted_run_id,
     )
 
 
@@ -1501,11 +1530,20 @@ def test_stage_writes_nothing_when_csarc_is_not_the_writer(
     assert not (state / "leases").exists()
 
 
-def test_stage_releases_its_lease_after_converging(tmp_path: Path) -> None:
-    """Issue #1074: the writer holds the lease only while it writes."""
+@pytest.mark.parametrize(
+    ("hosted_run_id", "holder"),
+    [(None, "local:fixture-maintainer"), ("4242", "actions:4242")],
+)
+def test_stage_releases_its_lease_after_converging(
+    tmp_path: Path, hosted_run_id: str | None, holder: str
+) -> None:
+    """Issue #1074: the writer holds the lease only while it writes.
+
+    A local maintainer and a hosted run carry distinct lease holders.
+    """
     fixture, root, state, bindir = stage_candidate(tmp_path)
 
-    result = stage(fixture, root, state, bindir)
+    result = stage(fixture, root, state, bindir, hosted_run_id)
 
     assert result.returncode == 0, result.stderr
     assert json.loads((state / "leases/refs.json").read_text()) == {}
@@ -1513,7 +1551,7 @@ def test_stage_releases_its_lease_after_converging(tmp_path: Path) -> None:
     assert len(commits) == 1
     lease = json.loads(commits[0].read_text())
     core = json.loads(lease["message"].split("\n\n", 1)[1])
-    assert core["holder"] == "local:fixture-maintainer"
+    assert core["holder"] == holder
     assert core["sha"] == fixture["candidate_sha"]
 
 
