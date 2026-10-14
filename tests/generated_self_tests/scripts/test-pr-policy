@@ -20,6 +20,9 @@ export PR_NUMBER="41"
 export PR_POLICY_FIXTURE=true
 export PR_FIXTURE_BASE_CONFIG="$repo_root/.csarc/config.yml"
 export PR_DOCUMENTATION_REVIEW_CUTOVER_PR=999999
+# SPEC-010 requirement-trace cases live in the root self-test; the
+# generated policy cases below exercise everything else without it.
+export PR_REQUIREMENT_TRACE_REQUIRED=false
 # Issue #551: .csarc/scripts/validate-pr-policy's non-blocking Milestone-safeguard
 # reminder calls `gh issue comment`; capture those calls here (append-mode,
 # cleared per case below) instead of the generic overwrite-based logging
