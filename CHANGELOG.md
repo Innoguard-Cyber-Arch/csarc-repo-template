@@ -7,6 +7,28 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.31.0-beta.1] - 2026-10-14
+
+### Features
+
+* feat(cli): share one SPEC-008 lifecycle report for adopt and update (61473fe)
+* feat(cli): preflight product action pin drift before update planning (8498b61)
+* feat(cli): replay update decisions through an immutable final plan (e989277)
+
+### Bug Fixes
+
+* fix(security): require private reporting for public repositories (a10a1d3)
+* fix(release): bump minor for early-maturity breaking changes (22ee184)
+* fix(template): remove organization owner defaults (4a5ce86)
+* fix(cli): rebuild legacy old side and share one update plan (9638488)
+* fix(cli): migrate legacy governance settings and default admin bypass to always (f1ab734)
+* fix(cli): apply only approved update file transitions (28501e4)
+* fix(cli): keep saved settings authoritative in update and runtime reads (bcbd264)
+* fix(ci): decide merges and verification from the trusted base policy (25302cb)
+* fix(lifecycle): bind merges to the verified tree and a durable trace (47f1923)
+* fix(ci): skip Dependabot exact merge when no open pull request matches (2fcd48d)
+* fix(lifecycle): keep an inconclusive governance baseline a status notice (1df16c8)
+
 ## [0.30.7] - 2026-10-14
 
 ### Bug Fixes

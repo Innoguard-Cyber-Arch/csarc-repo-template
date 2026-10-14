@@ -7955,6 +7955,8 @@ def test_update_check_validates_hook_without_running_it(
         (report_dir / cli.UPDATE_PLAN_BASENAME).read_text(encoding="utf-8")
     )
     assert saved_plan.pop("plan_sha256")
+    # The stage-1 plan is a preview only; the final plan replays (#1067).
+    assert saved_plan.pop("replayable") is False
     assert saved_plan == payload
     report = json.loads(
         (report_dir / "csarc-update-report.json").read_text(encoding="utf-8")

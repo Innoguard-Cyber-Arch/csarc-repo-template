@@ -21,11 +21,11 @@ from collections.abc import (
     Sequence,
 )
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from dataclasses import field as dataclass_field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, NoReturn, Protocol, cast, overload
+from typing import Any, Literal, NoReturn, Protocol, cast, overload
 from urllib.parse import quote
 
 import yaml  # type: ignore[import-untyped]
@@ -33,6 +33,7 @@ import yaml  # type: ignore[import-untyped]
 from csarc_cli import (
     action_pin_preflight,
     file_transition,
+    final_plan,
     governance_migration,
     lifecycle_report,
     merge_trace,
@@ -2024,6 +2025,7 @@ def provenance_data(
     *,
     applied_at: str | None = None,
     answers: Mapping[str, object] | None = None,
+    final_plan_sha256: str | None = None,
 ) -> dict[str, object]:
     """Build the auditable state recorded after a successful operation."""
     result: dict[str, object] = {
@@ -2047,6 +2049,9 @@ def provenance_data(
         result["previous"] = previous
     if answers is not None:
         result["release"] = release_contract(answers)
+    if final_plan_sha256 is not None:
+        # The replayed update final plan this state came from (#1067).
+        result["final_plan_sha256"] = final_plan_sha256
     return result
 
 
@@ -2057,6 +2062,7 @@ def write_provenance(
     *,
     applied_at: str | None = None,
     answers: Mapping[str, object] | None = None,
+    final_plan_sha256: str | None = None,
 ) -> None:
     """Atomically persist verified release provenance."""
     atomic_replace_text(
@@ -2068,6 +2074,7 @@ def write_provenance(
                 previous,
                 applied_at=applied_at,
                 answers=answers,
+                final_plan_sha256=final_plan_sha256,
             ),
             indent=2,
             sort_keys=True,
@@ -3169,7 +3176,11 @@ def write_lifecycle_reports(
 
 
 def applied_lifecycle_report(
-    report: Mapping[str, object], plan_sha256: str, applied_at: str
+    report: Mapping[str, object],
+    plan_sha256: str,
+    applied_at: str,
+    *,
+    final_plan_sha256: str | None = None,
 ) -> dict[str, object]:
     """Mark a report applied while keeping it bound to the replayed plan."""
     try:
@@ -3178,6 +3189,7 @@ def applied_lifecycle_report(
             applied_at=applied_at,
             plan_sha256=plan_sha256,
             next_steps=APPLIED_NEXT_STEPS,
+            final_plan_sha256=final_plan_sha256,
         )
     except lifecycle_report.LifecycleReportError as error:
         raise CliError(f"Cannot mark the report applied: {error}") from error
@@ -3186,6 +3198,10 @@ def applied_lifecycle_report(
 def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
     """Return a tamper-evident plan ready for persistence."""
     payload = plan.as_dict()
+    if plan.mode == "update":
+        # The update stage-1 plan is a preview whose conflicts still need
+        # decisions; only the final plan replays (#1067).
+        payload["replayable"] = False
     encoded = json.dumps(
         payload, sort_keys=True, separators=(",", ":")
     ).encode()
@@ -8374,8 +8390,13 @@ def run_update_candidate(
     *,
     working_tree: bool,
     skip_tasks: bool,
+    resolutions: Mapping[str, bytes | None] | None = None,
 ) -> UpdateRun:
     """Run the one shared three-way update in a disposable candidate.
+
+    ``resolutions`` are the conflict decisions a final plan recorded
+    (#1067): Copier must report exactly those conflicts, and each one is
+    replaced by its recorded bytes (or removed) before anything else runs.
 
     Both ``update --check`` (``skip_tasks=True`` on a working-tree clone)
     and the apply path (``skip_tasks=False`` on the committed target) run
@@ -8468,7 +8489,15 @@ def run_update_candidate(
         move for move in deferred_layout_moves if move not in completed_moves
     )
     conflicts = find_conflicts(candidate)
-    if result.returncode == 0 and not conflicts:
+    copier_succeeded = result.returncode == 0
+    if resolutions is not None:
+        # Copier reports the inline conflicts it left; once each one is
+        # resolved from the plan, the run continues as a clean update.
+        copier_succeeded = copier_succeeded or bool(conflicts)
+        conflicts = resolve_recorded_conflicts(
+            candidate, conflicts, resolutions
+        )
+    if copier_succeeded and not conflicts:
         # Copier normally performs clean legacy deletions and additions
         # itself. Any legacy source left behind is user-modified or
         # otherwise outside that clean update, so finish the move only when
@@ -8499,13 +8528,47 @@ def run_update_candidate(
     return UpdateRun(
         candidate,
         baseline_head,
-        result.returncode,
+        0 if copier_succeeded else result.returncode,
         conflicts,
         staged_name_status(candidate, baseline_head),
         output,
         retained,
         product_owned,
     )
+
+
+def resolve_recorded_conflicts(
+    candidate: Path,
+    conflicts: Sequence[str],
+    resolutions: Mapping[str, bytes | None],
+) -> tuple[str, ...]:
+    """Resolve exactly the planned conflicts; return any that remain."""
+    if set(conflicts) != set(resolutions):
+        raise CliError(
+            "Update conflicts differ from the final plan (planned: "
+            + (", ".join(sorted(resolutions)) or "none")
+            + "; realized: "
+            + (", ".join(conflicts) or "none")
+            + "); the target was not changed. Create a new plan."
+        )
+    apply_conflict_resolutions(candidate, resolutions)
+    return find_conflicts(candidate)
+
+
+def apply_conflict_resolutions(
+    candidate: Path, resolutions: Mapping[str, bytes | None]
+) -> None:
+    """Replace each conflicted candidate path with its recorded content."""
+    for name, content in sorted(resolutions.items()):
+        path = checked_destination(candidate, name)
+        if content is None:
+            if path.is_symlink() or path.exists():
+                path.unlink()
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_symlink():
+            path.unlink()
+        path.write_bytes(content)
 
 
 def update_action_pin_preflight(
@@ -8713,8 +8776,756 @@ def apply_update_transitions(
         ) from error
 
 
+FINAL_PLAN_ARGUMENTS = (
+    "accept_legacy",
+    "allow_unreleased",
+    "channel",
+    "expected_sha",
+    "from_release",
+    "to",
+)
+CONFLICT_MARKER = re.compile(rb"^(<{7}|={7}|>{7})( |$)", re.MULTILINE)
+
+
+def git_version() -> str:
+    """Return the Git version string that shapes clones and diffs."""
+    return run_git(["git", "--version"], capture=True).stdout.strip()
+
+
+def update_toolchain() -> dict[str, str]:
+    """Observe the exact-pinned toolchain, failing closed on drift."""
+    toolchain = final_plan.observe_toolchain(git_version)
+    try:
+        final_plan.require_pinned_toolchain(toolchain)
+    except final_plan.FinalPlanError as error:
+        raise CliError(f"{error} The target was not changed.") from error
+    return toolchain
+
+
+def repository_permissions(repository: RepositoryContext) -> object:
+    """Return the caller's live permissions on the GitHub repository."""
+    if not repository.verified or repository.repository is None:
+        return None
+    try:
+        result = run(
+            ["gh", "api", "--method", "GET", f"repos/{repository.repository}"],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return "unavailable"
+    if result.returncode != 0:
+        return "unavailable"
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return "unavailable"
+    permissions = (
+        payload.get("permissions") if isinstance(payload, dict) else None
+    )
+    if not isinstance(permissions, dict):
+        return "unavailable"
+    return {
+        str(key): value
+        for key, value in sorted(permissions.items())
+        if isinstance(value, bool)
+    }
+
+
+def update_live_facts(
+    target: Path,
+    repository: RepositoryContext,
+    *,
+    target_snapshot: Mapping[str, object],
+    current: Revision,
+    resolved: Revision,
+    previous: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """Return every live fact a final plan binds and apply re-observes."""
+    origin = run_git(
+        ["git", "-C", str(target), "remote", "get-url", "origin"],
+        repository=target,
+        capture=True,
+        check=False,
+    )
+    return {
+        "origin": origin.stdout.strip() if origin.returncode == 0 else None,
+        "permissions": repository_permissions(repository),
+        "release": {
+            "current": asdict(current),
+            "previous": None if previous is None else dict(previous),
+            "target": asdict(resolved),
+        },
+        "repository": repository.as_dict(),
+        "target": dict(sorted(target_snapshot.items())),
+    }
+
+
+def current_target_snapshot(target: Path) -> dict[str, object]:
+    """Return the target state an update plan binds."""
+    head, changes, status_sha256 = target_state(target)
+    return {
+        "target_changes": list(changes),
+        "target_files": target_file_snapshot(target),
+        "target_head": head,
+        "target_status_sha256": status_sha256,
+    }
+
+
+def decision_content(
+    target: Path,
+    name: str,
+    choice: str,
+    custom: Path | None,
+    new_side: Mapping[str, bytes | None],
+) -> bytes | None:
+    """Return the exact bytes one conflict decision resolves to."""
+    if choice == final_plan.DECISION_KEEP:
+        path = target / name
+        if path.is_symlink():
+            raise CliError(f"Cannot keep {name}: it is a symlink.")
+        content = path.read_bytes() if path.is_file() else None
+    elif choice == final_plan.DECISION_TAKE:
+        content = new_side.get(name)
+    else:
+        if custom is None:
+            raise CliError(f"The custom decision for {name} needs a FILE.")
+        resolved = Path(os.path.abspath(custom.expanduser()))
+        if resolved == target or target in resolved.parents:
+            raise CliError(
+                f"The custom resolution for {name} must live outside the "
+                "target repository."
+            )
+        if resolved.is_symlink() or not resolved.is_file():
+            raise CliError(
+                f"The custom resolution for {name} must be a regular file."
+            )
+        content = resolved.read_bytes()
+    if content is not None and CONFLICT_MARKER.search(content):
+        raise CliError(
+            f"The {choice} resolution for {name} still has conflict markers."
+        )
+    return content
+
+
+def resolution_transitions(
+    target: Path,
+    transitions: file_transition.ApprovedTransitions,
+    resolutions: Mapping[str, bytes | None],
+) -> file_transition.ApprovedTransitions:
+    """Add the file effects of the recorded decisions to the approval."""
+    create = set(transitions.create)
+    modify = set(transitions.modify)
+    delete = set(transitions.delete)
+    for name, content in resolutions.items():
+        path = target / name
+        exists = path.is_file() and not path.is_symlink()
+        if content is None:
+            if exists:
+                delete.add(name)
+        elif not exists:
+            create.add(name)
+        elif path.read_bytes() != content:
+            modify.add(name)
+    return file_transition.ApprovedTransitions(
+        frozenset(create),
+        frozenset(modify),
+        frozenset(delete),
+        transitions.optional,
+        transitions.protected,
+    )
+
+
+def replay_pin_decisions(
+    target: Path,
+    items: Sequence[Mapping[str, object]],
+    decisions: Sequence[Mapping[str, object]],
+    pin_commit: str,
+) -> list[dict[str, object]]:
+    """Read pin decisions back from the commit and reject extra changes."""
+
+    def git(command: list[str]) -> subprocess.CompletedProcess[str]:
+        return run_git(command, capture=True, check=False)
+
+    try:
+        accepted = action_pin_preflight.validate_pin_decisions(
+            items, decisions, git, target
+        )
+        unlisted = action_pin_preflight.unlisted_pin_changes(
+            items, git, target, pin_commit
+        )
+    except action_pin_preflight.PinPreflightError as error:
+        raise CliError(
+            f"Action pin decisions failed closed ({error}); the target was "
+            "not changed."
+        ) from error
+    if unlisted:
+        raise CliError(
+            "Pin commit changes more than the listed action pins ("
+            + ", ".join(unlisted)
+            + "); the target was not changed."
+        )
+    return accepted
+
+
+def final_pin_decisions(
+    target: Path,
+    stage1: Mapping[str, object],
+    pin_commit: str | None,
+) -> dict[str, object]:
+    """Accept the committed product pin decisions for the stage-1 items."""
+    items = update_pin_items(stage1) or []
+    if not items:
+        if pin_commit is not None:
+            raise CliError(
+                "--pin-commit was given, but the stage-1 plan lists no "
+                "action pin drift."
+            )
+        return {"commit": None, "decisions": [], "items": []}
+    if pin_commit is None:
+        raise CliError(
+            "The stage-1 plan lists action pin drift; commit the product "
+            "pin changes, then pass --pin-commit <full SHA>."
+        )
+    decisions = [dict(item, commit_sha=pin_commit) for item in items]
+    accepted = replay_pin_decisions(target, items, decisions, pin_commit)
+    return {"commit": pin_commit, "decisions": accepted, "items": items}
+
+
+def planning_record(planning: update_plan.UpdatePlanning) -> dict[str, object]:
+    """Return every field needed to rebuild one planning result exactly."""
+    return {
+        "add": list(planning.add),
+        "conflicts": list(planning.conflicts),
+        "delete": list(planning.delete),
+        "digest": planning.digest(),
+        "merge": list(planning.merge),
+        "overwrite": list(planning.overwrite),
+        "parity_paths": list(planning.parity_paths),
+        "product_owned": list(planning.product_owned),
+        "render_parity": planning.render_parity,
+        "retained": list(planning.retained),
+    }
+
+
+def final_report(
+    report: Mapping[str, object], digest: str
+) -> dict[str, object]:
+    """Return a finalized report that names its sealed final plan."""
+    try:
+        return lifecycle_report.with_final_plan(
+            report,
+            {
+                "mode": "update",
+                "path": final_plan.FINAL_PLAN_BASENAME,
+                "replayable": True,
+                "schema_version": final_plan.SCHEMA_VERSION,
+                "sha256": digest,
+            },
+        )
+    except lifecycle_report.LifecycleReportError as error:
+        raise CliError(f"Lifecycle report is invalid: {error}") from error
+
+
+@dataclass(frozen=True)
+class FinalPlanContext:
+    """Everything one ``update --finalize-plan`` run records."""
+
+    target: Path
+    report_directory: Path
+    plan: ResolvedPlan
+    planning: update_plan.UpdatePlanning
+    run_inputs: UpdateRunInputs
+    transitions: file_transition.ApprovedTransitions
+    update_report: Mapping[str, object]
+    target_snapshot: Mapping[str, object]
+    current: Revision
+    previous: Mapping[str, object] | None
+    explicit_data: Mapping[str, object]
+    new_side: Mapping[str, bytes | None]
+
+
+def final_plan_payload(
+    args: argparse.Namespace,
+    context: FinalPlanContext,
+    *,
+    toolchain: Mapping[str, str],
+    stage1_sha256: str,
+    file_choices: Mapping[str, tuple[str, Path | None]],
+    resolutions: Mapping[str, bytes | None],
+    approved: file_transition.ApprovedTransitions,
+    pins: Mapping[str, object],
+    report: Mapping[str, object],
+) -> dict[str, object]:
+    """Return the unsealed final plan body; every value is plain JSON."""
+    run_inputs = context.run_inputs
+    plan = context.plan
+    arguments = {name: getattr(args, name) for name in FINAL_PLAN_ARGUMENTS}
+    return {
+        "created_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+        "decisions": final_plan.exact_json(
+            {
+                "action_pins": dict(pins),
+                "files": [
+                    final_plan.resolution(name, file_choices[name][0], content)
+                    for name, content in sorted(resolutions.items())
+                ],
+                "settings": [
+                    dict(row)
+                    for row in cast(
+                        list[Mapping[str, object]], report["settings"]
+                    )
+                    if row["class"] != "unchanged"
+                ],
+            },
+            "Decisions",
+        ),
+        "derived": final_plan.exact_json(
+            {
+                "capabilities": plan.capabilities,
+                "layout_moves": [
+                    list(move) for move in run_inputs.layout_moves
+                ],
+                "old_render": dict(run_inputs.old_render),
+                "planning": planning_record(context.planning),
+                "retiring": list(run_inputs.retiring),
+                "transitions": approved.as_dict(),
+                "update": plan.update,
+            },
+            "Derived update context",
+        ),
+        "inputs": final_plan.exact_json(
+            {
+                "answers": plan.answers,
+                "arguments": arguments,
+                "explicit_data": dict(context.explicit_data),
+                "new_data": dict(run_inputs.new_data),
+                "old_commit": run_inputs.old_commit,
+                "old_side": {
+                    "answers": dict(run_inputs.old_side.answers),
+                    "context": dict(run_inputs.old_side.context),
+                    "dropped": list(run_inputs.old_side.dropped),
+                    "sources": dict(run_inputs.old_side.sources),
+                },
+                "raw_answers": dict(run_inputs.raw_answers),
+                "source": run_inputs.source,
+                "target_sha": run_inputs.target_sha,
+                "target_uses_current_config": (
+                    run_inputs.target_uses_current_config
+                ),
+            },
+            "Update inputs",
+        ),
+        "kind": final_plan.FINAL_PLAN_KIND,
+        "live_facts": final_plan.exact_json(
+            update_live_facts(
+                context.target,
+                plan.repository,
+                target_snapshot=context.target_snapshot,
+                current=context.current,
+                resolved=plan.revision,
+                previous=context.previous,
+            ),
+            "Live facts",
+        ),
+        "replayable": True,
+        "report": dict(report),
+        "schema_version": final_plan.SCHEMA_VERSION,
+        "stage1_plan": {
+            "path": UPDATE_PLAN_BASENAME,
+            "sha256": stage1_sha256,
+        },
+        "target": str(context.target),
+        "toolchain": dict(toolchain),
+    }
+
+
+def write_update_final_plan(
+    args: argparse.Namespace, context: FinalPlanContext
+) -> int:
+    """Record the human decisions as one immutable final plan (#1067)."""
+    target = context.target
+    report_directory = context.report_directory
+    planning = context.planning
+    stage1_path = report_directory / UPDATE_PLAN_BASENAME
+    final_path = report_directory / final_plan.FINAL_PLAN_BASENAME
+    if final_path.exists() or final_path.is_symlink():
+        raise CliError(
+            f"Final plan {final_path} already exists and is immutable; apply "
+            "it with csarc update --apply-plan, or remove it to decide again."
+        )
+    toolchain = update_toolchain()
+    try:
+        stage1 = final_plan.load_stage1(stage1_path)
+        file_choices = final_plan.parse_file_decisions(args.decision)
+        final_plan.require_complete_decisions(planning.conflicts, file_choices)
+    except final_plan.FinalPlanError as error:
+        raise CliError(str(error)) from error
+    stage1_planning = stage1.get("planning")
+    template = stage1.get("template")
+    if (
+        not isinstance(stage1_planning, dict)
+        or stage1_planning.get("digest") != planning.digest()
+        or not isinstance(template, dict)
+        or template.get("sha") != context.plan.revision.sha
+    ):
+        raise CliError(
+            "The stage-1 plan no longer matches the update planning (the "
+            "template, inputs, or conflicts changed); run csarc update "
+            "--check again and review it before deciding."
+        )
+    pins = final_pin_decisions(target, stage1, args.pin_commit)
+    resolutions = {
+        name: decision_content(target, name, choice, custom, context.new_side)
+        for name, (choice, custom) in sorted(file_choices.items())
+    }
+    approved = resolution_transitions(target, context.transitions, resolutions)
+    stage1_sha256 = str(stage1["plan_sha256"])
+    try:
+        report = lifecycle_report.finalize_update_report(
+            context.update_report,
+            decisions={
+                name: choice for name, (choice, _) in file_choices.items()
+            },
+            stage1_sha256=stage1_sha256,
+            next_steps=[
+                {
+                    "command": (
+                        f"csarc update {target} --apply-plan {final_path}"
+                    ),
+                    "text": "Apply the final plan exactly as recorded.",
+                }
+            ],
+        )
+        sealed = final_plan.seal(
+            final_plan_payload(
+                args,
+                context,
+                toolchain=toolchain,
+                stage1_sha256=stage1_sha256,
+                file_choices=file_choices,
+                resolutions=resolutions,
+                approved=approved,
+                pins=pins,
+                report=report,
+            )
+        )
+    except (
+        final_plan.FinalPlanError,
+        lifecycle_report.LifecycleReportError,
+    ) as error:
+        raise CliError(f"Cannot create the final plan: {error}") from error
+    digest = str(sealed["final_plan_sha256"])
+    filesystem_root = Path(report_directory.anchor)
+    atomic_replace_text(
+        filesystem_root,
+        final_path.relative_to(filesystem_root).as_posix(),
+        final_plan.plan_text(sealed),
+    )
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=None,
+        report=final_report(report, digest),
+        emit=True,
+    )
+    print(f"Final plan: {final_path} (sha256 {digest}).")
+    return 0
+
+
+def reject_apply_plan_arguments(args: argparse.Namespace) -> None:
+    """Reject options that would change a recorded final plan."""
+    conflicting = [
+        flag
+        for flag, active in (
+            ("--check", args.check),
+            ("--dry-run", args.dry_run),
+            ("--json", args.json),
+            ("--finalize-plan", args.finalize_plan),
+            ("--data", bool(args.data)),
+            ("--decision", bool(args.decision)),
+            ("--pin-commit", args.pin_commit is not None),
+            ("--to", args.to is not None),
+            ("--expected-sha", args.expected_sha is not None),
+            ("--from-release", args.from_release is not None),
+            ("--accept-legacy", args.accept_legacy),
+            ("--allow-unreleased", args.allow_unreleased),
+            ("--channel", args.channel != "stable"),
+        )
+        if active
+    ]
+    if conflicting:
+        raise CliError(
+            "--apply-plan uses only the values recorded in the final plan; "
+            "remove " + ", ".join(conflicting) + "."
+        )
+
+
+def recorded_run(
+    sealed: Mapping[str, object],
+) -> tuple[
+    UpdateRunInputs,
+    update_plan.UpdatePlanning,
+    file_transition.ApprovedTransitions,
+]:
+    """Rebuild the exact update inputs a final plan recorded."""
+    inputs = cast(dict[str, Any], sealed["inputs"])
+    derived = cast(dict[str, Any], sealed["derived"])
+    old = inputs["old_side"]
+    old_side = update_plan.OldSideInputs(
+        dict(old["answers"]),
+        dict(old["sources"]),
+        tuple(old["dropped"]),
+        dict(old["context"]),
+    )
+    run_inputs = UpdateRunInputs(
+        raw_answers=dict(inputs["raw_answers"]),
+        old_side=old_side,
+        new_data=dict(inputs["new_data"]),
+        old_commit=str(inputs["old_commit"]),
+        source=str(inputs["source"]),
+        target_sha=str(inputs["target_sha"]),
+        layout_moves=tuple(
+            (str(source), str(destination))
+            for source, destination in derived["layout_moves"]
+        ),
+        retiring=tuple(derived["retiring"]),
+        target_uses_current_config=bool(inputs["target_uses_current_config"]),
+        old_render=dict(derived["old_render"]),
+    )
+    recorded = derived["planning"]
+    planning = update_plan.UpdatePlanning(
+        old_side=old_side,
+        new_data=dict(inputs["new_data"]),
+        add=tuple(recorded["add"]),
+        overwrite=tuple(recorded["overwrite"]),
+        merge=tuple(recorded["merge"]),
+        delete=tuple(recorded["delete"]),
+        conflicts=tuple(recorded["conflicts"]),
+        render_parity=str(recorded["render_parity"]),
+        parity_paths=tuple(recorded["parity_paths"]),
+        retained=tuple(recorded["retained"]),
+        product_owned=tuple(recorded["product_owned"]),
+    )
+    if planning.digest() != recorded["digest"]:
+        raise CliError(
+            "The final plan's planning record does not match its digest; "
+            "the target was not changed."
+        )
+    approved = derived["transitions"]
+    transitions = file_transition.ApprovedTransitions(
+        frozenset(approved["create"]),
+        frozenset(approved["modify"]),
+        frozenset(approved["delete"]),
+        frozenset(approved["optional"]),
+        frozenset(approved["protected"]),
+    )
+    return run_inputs, planning, transitions
+
+
+def load_final_plan(
+    args: argparse.Namespace, target: Path
+) -> tuple[dict[str, object], Path]:
+    """Read and bind one final plan to this target and report directory."""
+    plan_path = Path(os.path.abspath(args.apply_plan.expanduser()))
+    try:
+        sealed = final_plan.load(plan_path)
+    except final_plan.FinalPlanError as error:
+        raise CliError(f"{error} The target was not changed.") from error
+    if sealed["target"] != str(target):
+        raise CliError(
+            f"The final plan was created for {sealed['target']}, not "
+            f"{target}; the target was not changed."
+        )
+    report_directory = lifecycle_report_directory(
+        target, plan_path.parent, "update"
+    )
+    if (
+        args.report_dir is not None
+        and lifecycle_report_directory(target, args.report_dir, "update")
+        != report_directory
+    ):
+        raise CliError(
+            "--report-dir must match the directory of the applied final "
+            "plan; the applied report is written beside that plan."
+        )
+    return sealed, report_directory
+
+
+def require_recorded_live_facts(
+    target: Path, sealed: Mapping[str, object]
+) -> tuple[Revision, dict[str, object] | None]:
+    """Re-observe the toolchain and live facts; any difference fails."""
+    toolchain = update_toolchain()
+    drift = final_plan.live_fact_differences(
+        cast(Mapping[str, object], sealed["toolchain"]), toolchain
+    )
+    if drift:
+        raise CliError(
+            "The toolchain differs from the final plan ("
+            + ", ".join(drift)
+            + "); the target was not changed. Use the recorded versions or "
+            "create a new plan."
+        )
+    inputs = cast(dict[str, Any], sealed["inputs"])
+    arguments = inputs["arguments"]
+    saved_visibility = inputs["raw_answers"].get("project_visibility")
+    repository = repository_context(
+        target,
+        inputs["explicit_data"].get("project_visibility"),
+        saved_visibility=(
+            saved_visibility if isinstance(saved_visibility, str) else None
+        ),
+    )
+    _status, current, resolved, previous = update_status(
+        target,
+        arguments["to"],
+        expected_sha=arguments["expected_sha"],
+        allow_unreleased=arguments["allow_unreleased"],
+        accept_legacy=arguments["accept_legacy"],
+        from_release=arguments["from_release"],
+        channel=arguments["channel"],
+    )
+    observed = update_live_facts(
+        target,
+        repository,
+        target_snapshot=current_target_snapshot(target),
+        current=current,
+        resolved=resolved,
+        previous=previous,
+    )
+    changed = final_plan.live_fact_differences(
+        cast(Mapping[str, object], sealed["live_facts"]), observed
+    )
+    if changed:
+        raise CliError(
+            "Live facts differ from the final plan ("
+            + ", ".join(changed)
+            + "); the target was not changed. Run csarc update --check "
+            "again to create a new plan."
+        )
+    return resolved, previous
+
+
+def command_update_apply_plan(args: argparse.Namespace) -> int:
+    """Apply one sealed final plan using only its recorded values."""
+    reject_apply_plan_arguments(args)
+    target = resolve_repository_target(args.path)
+    sealed, report_directory = load_final_plan(args, target)
+    digest = str(sealed["final_plan_sha256"])
+    provenance = read_provenance(target)
+    if provenance is not None and provenance.get("final_plan_sha256") == digest:
+        print(
+            f"Final plan {digest} is already applied to {target}; nothing "
+            "was changed."
+        )
+        return 0
+    if (target / PENDING_ADOPTION_FILE).is_file():
+        raise CliError(
+            "Adoption is pending; complete the manual merge and run "
+            "csarc adopt --finalize before update."
+        )
+    resolved, previous = require_recorded_live_facts(target, sealed)
+    decisions = cast(dict[str, Any], sealed["decisions"])
+    pins = decisions["action_pins"]
+    if pins["items"]:
+        replay_pin_decisions(
+            target, pins["items"], pins["decisions"], pins["commit"]
+        )
+    inputs = cast(dict[str, Any], sealed["inputs"])
+    answers = dict(inputs["answers"])
+    validated_project_verification_hook(
+        target, project_verification_configuration(target, answers)
+    )
+    run_inputs, planning, transitions = recorded_run(sealed)
+    try:
+        resolutions = {
+            str(entry["path"]): final_plan.resolution_content(entry)
+            for entry in decisions["files"]
+        }
+    except final_plan.FinalPlanError as error:
+        raise CliError(f"{error} The target was not changed.") from error
+    target_snapshot = cast(
+        dict[str, object], cast(dict[str, Any], sealed["live_facts"])["target"]
+    )
+    if not confirm(args):
+        return 0
+    with tempfile.TemporaryDirectory(prefix="csarc-update-") as temporary:
+        applied = run_update_candidate(
+            target,
+            Path(temporary).resolve(),
+            run_inputs,
+            working_tree=False,
+            skip_tasks=False,
+            resolutions=resolutions,
+        )
+        if applied.returncode != 0 or applied.conflicts:
+            raise CliError(
+                update_conflict_error(applied.conflicts, applied.output)
+            )
+        divergence = update_plan.realized_divergence(
+            planning, applied.changes, applied.conflicts
+        )
+        if divergence:
+            raise CliError(
+                "Update apply diverged from the final plan ("
+                + "; ".join(divergence)
+                + "); the target was not changed. Create a new plan."
+            )
+        candidate = applied.candidate
+        pin_answer_commit(candidate, run_inputs.target_sha)
+        persist_release_answers(candidate, answers)
+        verify_project(candidate)
+        write_provenance(
+            candidate,
+            resolved,
+            previous,
+            answers=answers,
+            final_plan_sha256=digest,
+        )
+        artifacts, delete_paths = candidate_patch_effects(candidate)
+        apply_update_transitions(
+            target,
+            candidate,
+            transitions,
+            artifacts,
+            delete_paths,
+            target_snapshot,
+        )
+    settings_plan(target)
+    apply_milestone_description_plan(milestone_description_plan(target))
+    stage1 = cast(dict[str, Any], sealed["stage1_plan"])
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=None,
+        report=applied_lifecycle_report(
+            final_report(cast(Mapping[str, object], sealed["report"]), digest),
+            str(stage1["sha256"]),
+            datetime.now(UTC).replace(microsecond=0).isoformat(),
+            final_plan_sha256=digest,
+        ),
+        emit=True,
+    )
+    print(f"Applied final plan {digest}.")
+    return 0
+
+
 def command_update(args: argparse.Namespace) -> int:  # noqa: C901
-    """Check or apply a Copier smart update."""
+    """Check, finalize, or apply a Copier smart update."""
+    if args.apply_plan is not None:
+        return command_update_apply_plan(args)
+    if (args.decision or args.pin_commit is not None) and not (
+        args.finalize_plan
+    ):
+        raise CliError("--decision and --pin-commit need --finalize-plan.")
+    if args.finalize_plan and (args.check or args.dry_run or args.json):
+        raise CliError(
+            "--finalize-plan cannot be combined with --check, --dry-run, "
+            "or --json."
+        )
     target = resolve_repository_target(args.path)
     if (target / PENDING_ADOPTION_FILE).is_file():
         raise CliError(
@@ -8879,6 +9690,13 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         transitions = update_transitions(
             target, planning, layout_moves, retiring
         )
+        # take-new decisions resolve to the reviewed new-side render.
+        new_side = {
+            name: (stage / name).read_bytes()
+            if (stage / name).is_file() and not (stage / name).is_symlink()
+            else None
+            for name in planning.conflicts
+        }
     hook_configuration = project_verification_configuration(target, answers)
     validated_project_verification_hook(target, hook_configuration)
     hook = project_verification_evidence(
@@ -8957,6 +9775,25 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         target_changes=report_changes,
         observed=observed,
     )
+    if args.finalize_plan:
+        print_plan(plan)
+        return write_update_final_plan(
+            args,
+            FinalPlanContext(
+                target=target,
+                report_directory=report_directory,
+                plan=plan,
+                planning=planning,
+                run_inputs=run_inputs,
+                transitions=transitions,
+                update_report=update_report,
+                target_snapshot=target_snapshot,
+                current=current_revision,
+                previous=previous,
+                explicit_data=explicit_data,
+                new_side=new_side,
+            ),
+        )
     if args.check:
         if args.json:
             print(
@@ -9154,6 +9991,32 @@ def parser() -> argparse.ArgumentParser:
     )
     update.add_argument(
         "--data", action="append", default=[], metavar="KEY=VALUE"
+    )
+    update.add_argument(
+        "--finalize-plan",
+        action="store_true",
+        help=(
+            "record conflict and pin decisions as the immutable final plan "
+            "beside the stage-1 plan"
+        ),
+    )
+    update.add_argument(
+        "--decision",
+        action="append",
+        default=[],
+        metavar="PATH=keep-current|take-new|custom:FILE",
+        help="decide one stage-1 conflict (with --finalize-plan)",
+    )
+    update.add_argument(
+        "--pin-commit",
+        metavar="FULL_SHA",
+        help="product commit that resolves the listed action pin drift",
+    )
+    update.add_argument(
+        "--apply-plan",
+        type=Path,
+        metavar="PATH",
+        help="apply one unchanged final plan from --finalize-plan",
     )
     add_write_options(update)
 
