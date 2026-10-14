@@ -104,6 +104,11 @@ def _write_markdown_site(
         (root / "scripts/csarc_config.py").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    # The configuration reader loads the shared detector beside it.
+    (scripts / "repository_facts.py").write_text(
+        (root / "scripts/repository_facts.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     settings_support.write_settings(
         config / "config.yml", languages=["python", "rust"]
     )
