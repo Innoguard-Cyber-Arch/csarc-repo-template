@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "description": "Fixed squash-commit trailers written and checked by pr_lifecycle.py merge, csarc status, and merge_trace.py audit (Issue #1073). Trailers are an audit record, never verification evidence. This file is also the governance-baseline writer marker.",
+  "order": [
+    "CSARC-Evidence",
+    "CSARC-Evidence-SHA256",
+    "CSARC-Evidence-Tree",
+    "CSARC-Trust",
+    "CSARC-Route",
+    "CSARC-Approval",
+    "CSARC-Authorization"
+  ],
+  "keys": {
+    "CSARC-Evidence": {"required": true, "value": "url"},
+    "CSARC-Evidence-SHA256": {"required": true, "value": "digest"},
+    "CSARC-Evidence-Tree": {"required": true, "value": "sha"},
+    "CSARC-Trust": {
+      "required": true,
+      "value": "enum",
+      "values": ["github-hosted", "self-attested-local"]
+    },
+    "CSARC-Route": {
+      "required": true,
+      "value": "enum",
+      "values": [
+        "dependabot",
+        "hotfix",
+        "isolated",
+        "issue",
+        "milestone",
+        "release-follow-up",
+        "release-recovery",
+        "sync"
+      ]
+    },
+    "CSARC-Approval": {
+      "required": true,
+      "value": "enum",
+      "values": ["comment", "copilot", "hotfix-emergency", "review"]
+    },
+    "CSARC-Authorization": {"required": true, "value": "url"}
+  }
+}

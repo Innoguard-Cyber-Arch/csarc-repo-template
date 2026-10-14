@@ -35,6 +35,7 @@ from csarc_cli import (
     file_transition,
     governance_migration,
     lifecycle_report,
+    merge_trace,
     release_phase,
     update_plan,
 )
@@ -7479,6 +7480,11 @@ def command_status(args: argparse.Namespace) -> int:
         channel=args.channel,
     )
     result["target"] = str(target)
+    governance = governance_audit(
+        target, getattr(args, "confirm_governance_baseline", None)
+    )
+    result["governance_baseline"] = governance["baseline"]
+    result["merge_audit"] = governance["merges"]
     if args.json:
         print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     else:
@@ -7486,7 +7492,112 @@ def command_status(args: argparse.Namespace) -> int:
         print(f"Install state: {result['state']}")
         print(f"Reason: {result['reason']}")
         print(f"Next: {result['next_command']}")
-    return 0
+        print_governance_audit(governance)
+    return 1 if governance["blocking"] else 0
+
+
+def governance_audit(  # noqa: C901
+    target: Path, confirm: str | None
+) -> dict[str, object]:
+    """Audit default-branch merges after the governance baseline (#1073)."""
+    head = run_git(
+        ["git", "-C", str(target), "rev-parse", "--verify", "HEAD^{commit}"],
+        repository=target,
+        capture=True,
+        check=False,
+    )
+    if head.returncode != 0:
+        if confirm:
+            raise CliError("No Git history exists to confirm a baseline in.")
+        return {
+            "baseline": {
+                "result": "not-installed",
+                "baseline": None,
+                "reason": "the target has no Git history",
+                "unresolved": [],
+                "candidates": [],
+            },
+            "merges": {"merges": [], "blocking": [], "untraced": []},
+            "blocking": False,
+        }
+
+    def git(arguments: list[str]) -> tuple[int, str]:
+        completed = run_git(
+            ["git", "-C", str(target), *arguments],
+            repository=target,
+            capture=True,
+            check=False,
+        )
+        return completed.returncode, completed.stdout
+
+    def api(endpoint: str) -> tuple[int, str]:
+        try:
+            completed = run(
+                ["gh", "api", "--method", "GET", endpoint],
+                capture=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return 1, "GitHub CLI is unavailable"
+        if completed.returncode != 0:
+            return completed.returncode, completed.stderr.strip()
+        return 0, completed.stdout
+
+    def identity() -> merge_trace.Identity | None:
+        code, remote = git(["remote", "get-url", "origin"])
+        name = github_repository(remote.strip()) if code == 0 else None
+        if name is None:
+            return None
+        code, text = api(f"repos/{name}")
+        try:
+            payload = json.loads(text) if code == 0 else None
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        full_name, repository_id = payload.get("full_name"), payload.get("id")
+        if not isinstance(full_name, str) or type(repository_id) is not int:
+            return None
+        return merge_trace.Identity(full_name, repository_id)
+
+    code, remote_head = git(
+        ["rev-parse", "--verify", "refs/remotes/origin/HEAD"]
+    )
+    ref = remote_head.strip() if code == 0 and remote_head.strip() else "HEAD"
+    context = merge_trace.AuditContext(
+        git,
+        api,
+        identity,
+    )
+    try:
+        return merge_trace.audit(context, ref, confirm)
+    except merge_trace.EvidenceError as error:
+        raise CliError(str(error)) from error
+
+
+def print_governance_audit(governance: Mapping[str, object]) -> None:
+    """Print the baseline and every merge finding that needs attention."""
+    baseline = cast(dict[str, object], governance["baseline"])
+    merges = cast(dict[str, object], governance["merges"])
+    print(
+        f"Governance baseline: {baseline['result']} "
+        f"{baseline.get('baseline') or '-'} ({baseline['reason']})"
+    )
+    for item in cast(list[dict[str, str]], baseline.get("unresolved") or []):
+        print(f"  unresolved {item['sha']}: {item['reason']}")
+    if baseline["result"] == "inconclusive":
+        print(
+            "  Blocking: confirm one candidate with "
+            "--confirm-governance-baseline <SHA>: "
+            + ", ".join(cast(list[str], baseline["candidates"]))
+        )
+    for item in cast(list[dict[str, str]], merges["merges"]):
+        if item["finding"] != "traced":
+            kind = "Notice" if item["finding"] == "untraced" else "Blocking"
+            print(
+                f"  {kind}: merge {item['sha']} is {item['finding']} "
+                f"({item['detail']})"
+            )
 
 
 def governance_drift_update_recommendation(
@@ -9066,6 +9177,14 @@ def parser() -> argparse.ArgumentParser:
     status.add_argument("--accept-legacy", action="store_true")
     status.add_argument("--allow-unreleased", action="store_true")
     status.add_argument("--json", action="store_true")
+    status.add_argument(
+        "--confirm-governance-baseline",
+        metavar="FULL_SHA",
+        help=(
+            "one-time: accept one listed candidate when the governance "
+            "baseline is inconclusive"
+        ),
+    )
     return result
 
 

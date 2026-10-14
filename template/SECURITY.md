@@ -50,6 +50,11 @@ Important boundaries are:
   result, and freshness. Hosted mode additionally requires the repository,
   toolchain, and trusted producer identity; local mode must remain explicitly
   self-attested and use the audited lifecycle/admin-bypass path.
+- A lifecycle merge must land the verified tree: the head must contain the
+  lease base, the merged tree must equal the evidence tree, and the squash
+  commit carries `CSARC-*` trailers that cite a durable, digest-bound
+  evidence record. Trailers are an audit record, never merge or release
+  evidence.
 - Template adoption and updates must preserve project-owned files, surface
   collisions, and fail closed on ambiguous ownership or drift.
 - Releases must bind the expected repository, tag, revision, artifact digest,
@@ -82,6 +87,13 @@ finding is unreachable.
   self-attested evidence. It protects against stale or accidental mismatch,
   not a malicious maintainer, and must never be presented as hosted or release
   provenance.
+- Each durable merge evidence record is one pull-request summary comment
+  that a repository writer can still edit or delete. The trailer digest on
+  the default branch
+  detects such a change; after GitHub Actions data expires, the digest proves
+  only that the record is unchanged since the merge, not the original API
+  facts. GitHub UI merges carry no trailers and `csarc status` reports them as
+  untraced.
 - No vulnerability class is otherwise broadly excluded.
 
 ## Known Limitations and Compensating Controls

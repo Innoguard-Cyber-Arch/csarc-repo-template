@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -176,3 +177,18 @@ def test_dirty_local_project_passes_without_merge_evidence(
     (repo / "tracked.txt").write_text("dirty\n", encoding="utf-8")
 
     assert local_verification.record("fast", ["source"], "main") is None
+
+
+def test_local_evidence_is_a_canonical_merge_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #1073: the merge hashes recorded local evidence unchanged."""
+    repo = repository(tmp_path)
+    monkeypatch.chdir(repo)
+    payload = local_verification.record("fast", ["source"], "main")
+    assert payload is not None
+    merge_trace = importlib.import_module("merge_trace")
+    data = merge_trace.canonical_bytes(payload)
+    assert merge_trace.parse_canonical(data) == payload
+    assert merge_trace.payload_schema(payload) == 1
+    assert str(payload["completed_at"]).endswith("Z")

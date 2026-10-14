@@ -1065,3 +1065,112 @@ def test_release_source_ignores_an_ordinary_squash_merge() -> None:
         resolve_release_source(MergeSourceGitHub(), "owner/repo", "c" * 40)
         == ""
     )
+
+
+# Issue #1073: one canonical payload and digest contract for both trusts.
+ROOT = Path(__file__).parents[1]
+MERGE_TRACE = runpy.run_path(str(ROOT / "scripts" / "merge_trace.py"))
+canonical_bytes = MERGE_TRACE["canonical_bytes"]
+parse_canonical = MERGE_TRACE["parse_canonical"]
+payload_digest = MERGE_TRACE["payload_digest"]
+EvidenceError = MERGE_TRACE["EvidenceError"]
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"b": "é", "a": 1}, b'{"a":1,"b":"\xc3\xa9"}'),
+        (
+            {"c": '\u0001\n\t"\\\u001f\u007f'},
+            b'{"c":"\\u0001\\n\\t\\"\\\\\\u001f\x7f"}',
+        ),
+        (
+            {"z": {"y": [1, {"b": None, "a": True}], "x": chr(0x2028)}},
+            b'{"z":{"x":"\xe2\x80\xa8","y":[1,{"a":true,"b":null}]}}',
+        ),
+        (
+            {"max": 9007199254740991, "min": -9007199254740991},
+            b'{"max":9007199254740991,"min":-9007199254740991}',
+        ),
+        (
+            {
+                "scopes": ["docs", "source"],
+                "started_at": "2026-10-14T00:00:00Z",
+            },
+            b'{"scopes":["docs","source"],"started_at":"2026-10-14T00:00:00Z"}',
+        ),
+    ],
+)
+def test_canonical_payload_matches_fixed_vectors(
+    payload: dict[str, Any], expected: bytes
+) -> None:
+    """The JCS subset is byte-exact and round-trips through the reader."""
+    assert canonical_bytes(payload) == expected
+    assert parse_canonical(expected) == payload
+    assert payload_digest(expected) == (
+        "sha256:" + __import__("hashlib").sha256(expected).hexdigest()
+    )
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"value": 1.0}, "floating-point"),
+        ({"value": 9007199254740992}, "safe integer"),
+        ({"value": -9007199254740992}, "safe integer"),
+        ({"value": "e" + chr(0x301)}, "NFC"),
+        ({"é": 1}, "non-ASCII key"),
+        ({"scopes": ["source", "docs"]}, "unsorted"),
+        ({"completed_at": "2026-10-14T00:00:00+00:00"}, "YYYY"),
+        ({"value": "\ud800"}, "valid Unicode"),
+    ],
+)
+def test_canonical_payload_rejects_values_outside_the_subset(
+    payload: dict[str, Any], message: str
+) -> None:
+    """The producer refuses instead of silently converting a value."""
+    with pytest.raises(EvidenceError, match=message):
+        canonical_bytes(payload)
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        (b'{"a":1,"a":1}', "repeats key"),
+        (b'{"a": 1}', "not canonical"),
+        (b'{"b":1,"a":1}', "not canonical"),
+        (b'\xef\xbb\xbf{"a":1}', "byte-order mark"),
+        (b'{"a":1.5}', "non-integer"),
+        (b'{"a":NaN}', "non-integer"),
+        (b'{"a":1e3}', "non-integer"),
+        (b"[1]", "not a JSON object"),
+    ],
+)
+def test_canonical_reader_requires_exact_stored_bytes(
+    data: bytes, message: str
+) -> None:
+    """Verification re-serializes the payload and needs identical bytes."""
+    with pytest.raises(EvidenceError, match=message):
+        parse_canonical(data)
+
+
+def test_merge_trace_copies_stay_byte_identical() -> None:
+    """Root, generated, and CLI copies share one contract implementation."""
+    root = (ROOT / "scripts/merge_trace.py").read_bytes()
+    assert (
+        root == (ROOT / "template/.csarc/scripts/merge_trace.py").read_bytes()
+    )
+    assert root == (ROOT / "src/csarc_cli/merge_trace.py").read_bytes()
+    assert (ROOT / "policies/merge-trailers.json").read_bytes() == (
+        ROOT / "template/.csarc/policies/merge-trailers.json"
+    ).read_bytes()
+    # Hosted workflows may run these scripts before Python 3.14 is set up.
+    for script in (
+        "merge_trace.py",
+        "pr_lifecycle.py",
+        "local_verification.py",
+    ):
+        __import__("ast").parse(
+            (ROOT / "scripts" / script).read_text(encoding="utf-8"),
+            feature_version=(3, 12),
+        )
