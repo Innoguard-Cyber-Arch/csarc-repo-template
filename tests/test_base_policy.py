@@ -120,6 +120,58 @@ def test_both_shipped_copies_are_identical() -> None:
     assert COPIES["root"].read_bytes() == COPIES["template"].read_bytes()
 
 
+@pytest.mark.parametrize("support_mode", ["latest", "minimum"])
+def test_generated_formatter_keeps_trusted_scripts_on_py312_grammar(
+    tmp_path: Path, support_mode: str
+) -> None:
+    """A generated project's own `ruff format` keeps 3.12-parseable excepts."""
+    from jinja2 import Environment, StrictUndefined
+
+    template = Environment(
+        autoescape=False,  # noqa: S701 - trusted local TOML template
+        undefined=StrictUndefined,
+        keep_trailing_newline=True,
+    ).from_string(
+        (REPO_ROOT / "template" / "pyproject.toml.jinja").read_text(
+            encoding="utf-8"
+        )
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        template.render(
+            python_support_mode=support_mode,
+            python_min_version="3.12",
+            project_slug="gen-smoke",
+            project_description="Generated smoke.",
+            documentation_mode="content-only",
+            project_license="MIT",
+            repository_url="https://github.com/example/gen-smoke",
+            enable_precommit=False,
+            package_name="gen_smoke",
+        ),
+        encoding="utf-8",
+    )
+    shutil.copytree(
+        REPO_ROOT / "template" / ".csarc" / "scripts",
+        tmp_path / ".csarc" / "scripts",
+        ignore=shutil.ignore_patterns("*.jinja", "__pycache__"),
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "ruff",
+            "format",
+            "--check",
+            ".csarc/scripts",
+        ],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_trusted_policy_parses_before_python_setup() -> None:
     """Hosted CI stages the policy with the runner's system Python."""
     for path in (*COPIES.values(), REPO_ROOT / "scripts" / "csarc_config.py"):
