@@ -30,6 +30,17 @@ set -euo pipefail
 # failure -- the existing revert_to_draft_on_failure trap keeps the Release
 # in draft rather than leaving a falsely-trusted mutable Release public.
 #
+# Issue #1074: this script is the one tree-bound Release writer for hosted
+# and local runs alike. Before `stage` or `publish` writes anything,
+# scripts/release_writer.py's `preflight` requires the exact candidate
+# checkout, applies the saved release_ownership (csarc-owned fails closed on
+# any blocking merge-trace finding after the governance baseline;
+# product-owned only reports drift; verification-only has no CSARC Release),
+# rejects a second Release-writing workflow, and stops on a tag, draft, or
+# Release that belongs to anything but this candidate. Every write then runs
+# under one remote release lease that is confirmed immediately before it, so
+# a hosted run and a local fallback can never both write.
+#
 # Usage:
 #   scripts/publish-release stage --repo OWNER/NAME --sha SHA --tag TAG \
 #       [--branch BRANCH]
@@ -44,13 +55,16 @@ set -euo pipefail
 #     same-PR materialization stage) already knows the tag; omit it to
 #     fall back to searching Git tags that point at SHA.
 #
-#   scripts/publish-release publish --repo OWNER/NAME --tag TAG
+#   scripts/publish-release publish --repo OWNER/NAME --tag TAG \
+#       [--included-work FILE]
 #     Given TAG is in state=draft (confirmed by `resolve` first): build
 #     release artifacts, generate the SPDX SBOM if one is not already
 #     staged, finalize and verify the bundle, upload it, mark the Release
 #     published, and wait for it to become immutable and verifiable. Reverts
 #     the Release back to draft on any failure so a partially published
-#     mutable Release is never left half-public.
+#     mutable Release is never left half-public. FILE, when given, is
+#     recorded in the draft Release body under the same lease first. A
+#     retry after the Release is already published runs rerun-verify.
 #
 #   scripts/publish-release rerun-verify --repo OWNER/NAME --tag TAG
 #     Given TAG is in state=published (a rerun of an already-successful
@@ -71,7 +85,7 @@ usage() {
 Usage:
   scripts/publish-release stage   --repo OWNER/NAME --sha SHA --tag TAG [--branch BRANCH]
   scripts/publish-release resolve --repo OWNER/NAME --sha SHA [--tag TAG] [--created true|false]
-  scripts/publish-release publish --repo OWNER/NAME --tag TAG
+  scripts/publish-release publish --repo OWNER/NAME --tag TAG [--included-work FILE]
   scripts/publish-release rerun-verify --repo OWNER/NAME --tag TAG
 EOF
   exit 2
@@ -87,6 +101,7 @@ tag=""
 created="false"
 output=""
 branch="main"
+included_work=""
 while (($#)); do
   case "$1" in
     --repo)
@@ -111,6 +126,10 @@ while (($#)); do
       ;;
     --branch)
       branch="$2"
+      shift 2
+      ;;
+    --included-work)
+      included_work="$2"
       shift 2
       ;;
     *)
@@ -138,6 +157,47 @@ write_output() {
     printf '%s\n' "$1" >>"$GITHUB_OUTPUT"
   fi
   printf '%s\n' "$1"
+}
+
+writer_script="$repo_root/scripts/release_writer.py"
+writer_decision=""
+lease=""
+lease_tag=""
+
+writer_preflight() {
+  # Print the preflight decision and return 0 to write, 3 when CSARC is
+  # not this project's Release writer, or non-zero to stop.
+  local purpose="$1"
+  local candidate="$2"
+  local status=0
+  writer_decision="$(python3 "$writer_script" preflight --root "$repo_root" \
+    --repo "$GITHUB_REPOSITORY" --sha "$candidate" --tag "$tag" \
+    --for "$purpose")" || status=$?
+  printf '%s\n' "$writer_decision" >&2
+  if [[ "$status" -eq 3 ]]; then
+    echo "CSARC is not this project's Release writer; nothing was written." >&2
+    write_output "writer=none"
+  fi
+  return "$status"
+}
+
+acquire_release_lease() {
+  lease="$(python3 "$writer_script" lease acquire --root "$repo_root" \
+    --repo "$GITHUB_REPOSITORY" --tag "$1" --sha "$2")"
+  lease_tag="$1"
+}
+
+confirm_release_lease() {
+  python3 "$writer_script" lease confirm --root "$repo_root" \
+    --repo "$GITHUB_REPOSITORY" --tag "$lease_tag" --lease "$lease"
+}
+
+release_release_lease() {
+  if [[ -n "$lease" ]]; then
+    python3 "$writer_script" lease release --root "$repo_root" \
+      --repo "$GITHUB_REPOSITORY" --tag "$lease_tag" --lease "$lease" || true
+    lease=""
+  fi
 }
 
 poll_immutable_and_verify() {
@@ -286,7 +346,19 @@ cmd_stage() {
     fi
   fi
   git -C "$repo_root" checkout --detach "$sha"
+  local status=0
+  writer_preflight stage "$sha" || status=$?
+  if [[ "$status" -eq 3 ]]; then
+    return 0
+  fi
+  [[ "$status" -eq 0 ]] || return "$status"
+  python3 "$repo_root/scripts/release_policy.py" verify-version \
+    --root "$repo_root" --tag "$tag"
+  trap release_release_lease EXIT
+  acquire_release_lease "$tag" "$sha"
+  confirm_release_lease
   "$repo_root/scripts/converge-release-tag" --repo "$GITHUB_REPOSITORY" --sha "$sha" --tag "$tag"
+  release_release_lease
   write_output "tag=$tag"
 }
 
@@ -329,16 +401,37 @@ cmd_resolve() {
 cmd_publish() {
   [[ -n "$tag" ]] || usage
   local assets="${output:-$RUNNER_TEMP/release-assets}"
+  local candidate
+  candidate="$(git -C "$repo_root" rev-parse HEAD)"
+  local status=0
+  writer_preflight publish "$candidate" || status=$?
+  if [[ "$status" -eq 3 ]]; then
+    return 0
+  fi
+  [[ "$status" -eq 0 ]] || return "$status"
+  if [[ "$(jq -r .release_state <<<"$writer_decision")" == published ]]; then
+    # An idempotent retry of an already-published candidate only verifies.
+    cmd_rerun_verify
+    return
+  fi
   revert_to_draft_on_failure() {
     local exit_code=$?
-    if [[ "$exit_code" -ne 0 ]]; then
+    # Only the lease holder may move its own draft back.
+    if [[ "$exit_code" -ne 0 && -n "$lease" ]]; then
       if [[ "$(gh release view "$tag" --json isImmutable --jq .isImmutable 2>/dev/null)" == false ]]; then
         gh release edit "$tag" --draft || true
       fi
     fi
+    release_release_lease
     return "$exit_code"
   }
   trap revert_to_draft_on_failure EXIT
+  acquire_release_lease "$tag" "$candidate"
+  if [[ -n "$included_work" ]]; then
+    confirm_release_lease
+    python3 "$repo_root/scripts/release_level.py" annotate-release \
+      --repo "$GITHUB_REPOSITORY" --tag "$tag" --body-file "$included_work"
+  fi
 
   # A hosted run already staged artifacts via its own "Prepare release
   # assets" step (a one-line call to release_bundle.py, so nothing to
@@ -375,6 +468,7 @@ cmd_publish() {
   # redundant, and both the list (GET .../releases/tags/{tag}) and delete
   # (DELETE .../releases/assets/{id}) REST endpoints are unreliable for a
   # draft release's assets regardless of which query method finds them.
+  confirm_release_lease
   gh release upload "$tag" "$assets"/* --clobber
   local downloaded
   downloaded="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
@@ -386,8 +480,10 @@ cmd_publish() {
   if [[ "$tag" =~ -beta\.[1-9][0-9]*$ ]]; then
     latest_flags=()
   fi
+  confirm_release_lease
   gh release edit "$tag" --draft=false "${latest_flags[@]}"
   poll_immutable_and_verify "$tag" "$downloaded"
+  release_release_lease
   complete_published_milestone "$tag"
 }
 

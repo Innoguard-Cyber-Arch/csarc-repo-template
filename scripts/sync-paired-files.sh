@@ -27,6 +27,7 @@ paired_files=(
   "scripts/merge_trace.py|template/.csarc/scripts/merge_trace.py"
   "scripts/release_level.py|template/.csarc/scripts/release_level.py"
   "scripts/release_phase.py|template/.csarc/scripts/release_phase.py"
+  "scripts/release_writer.py|template/.csarc/scripts/release_writer.py"
   "scripts/request-reviewer|template/.csarc/scripts/request-reviewer"
   "scripts/review_gate.py|template/.csarc/scripts/review_gate.py"
   "scripts/security-smoke|template/.csarc/scripts/security-smoke"

@@ -47,7 +47,9 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     assert "RELEASE_LEVEL: ${{ steps.route.outputs.channel }}" in source
     assert '--phase "$RELEASE_LEVEL"' in source
     assert "release_level.py annotate-pr" not in source
-    assert "release_level.py annotate-release" in source
+    # Issue #1074: the draft body is written by the one Release writer.
+    assert "release_level.py annotate-release" not in source
+    assert '--included-work "$RUNNER_TEMP/release-levels.md"' in source
     assert "release_policy.py detect" in source
     assert "mode == 'blocked'" in source
     assert "release_policy.py prepare-candidate" not in source
@@ -84,9 +86,7 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     assert names.index(
         "Reject an unmaterialized merged delivery"
     ) < names.index("Detect the available release path")
-    assert names.index(
-        "Record included work in the draft Release"
-    ) < names.index("Bind, upload, and publish the release")
+    assert "Record included work in the draft Release" not in names
 
     settings = (ROOT / "scripts/apply-repository-settings.sh").read_text(
         encoding="utf-8"
@@ -128,6 +128,8 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     assert '"$repo_root/scripts/converge-release-tag"' in publish
     assert '"$repo_root/scripts/verify-release-candidate"' in publish
     assert "scripts/install-syft" in publish
+    assert 'release_level.py" annotate-release' in publish
+    assert "release_writer.py" in publish
     # A shell double-quoted --jq argument must escape its own literal quotes,
     # so the merged-commit comparison reads as \"$sha\" in the script.
     assert r".merge_commit_sha == \"$sha\"" in publish

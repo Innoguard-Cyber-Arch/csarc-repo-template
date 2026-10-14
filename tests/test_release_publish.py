@@ -20,6 +20,7 @@ template both call this same script).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -58,6 +59,7 @@ if [[ "$1" == "api" ]]; then
       --jq) jq_filter="$2"; shift 2 ;;
       -f) fdata+=("$2"); shift 2 ;;
       -H) shift 2 ;;
+      --input) input_file="$2"; shift 2 ;;
       *)
         if [[ -z "$path" ]]; then path="$1"; fi
         shift
@@ -65,6 +67,77 @@ if [[ "$1" == "api" ]]; then
     esac
   done
   bare_path="${path%%\?*}"
+
+  if [[ "$bare_path" == user ]]; then
+    echo "fixture-maintainer"
+    exit 0
+  fi
+  # Issue #1074: the release lease lives in one branch ref per tag whose
+  # commits carry the lease; the store models atomic create, fast-forward
+  # only update, and delete.
+  if [[ "$bare_path" == */git/commits* || "$bare_path" == */git/ref/heads/* ||
+    "$bare_path" == */git/refs/heads/* ||
+    ("$method" == POST && "$bare_path" == */git/refs &&
+      -n "${input_file:-}") ]]; then
+    body=""
+    if [[ -n "${input_file:-}" ]]; then body="$(cat)"; fi
+    exec python3 - "$state" "$method" "$bare_path" "$body" <<'PY'
+import hashlib, json, os, sys
+state, method, path, body = sys.argv[1:5]
+root = os.path.join(state, "leases")
+os.makedirs(os.path.join(root, "commits"), exist_ok=True)
+refs_path = os.path.join(root, "refs.json")
+refs = json.load(open(refs_path)) if os.path.exists(refs_path) else {}
+def save():
+    json.dump(refs, open(refs_path, "w"))
+def fail(text):
+    sys.stderr.write(text + "\n")
+    raise SystemExit(1)
+data = json.loads(body) if body else {}
+if path.endswith("/git/commits") and method == "POST":
+    sha = hashlib.sha1(json.dumps(data, sort_keys=True).encode()).hexdigest()
+    commit = {
+        "sha": sha,
+        "message": data["message"],
+        "tree": {"sha": data["tree"]},
+        "parents": [{"sha": item} for item in data["parents"]],
+    }
+    json.dump(commit, open(os.path.join(root, "commits", sha), "w"))
+    print(json.dumps({"sha": sha}))
+    raise SystemExit(0)
+if "/git/commits/" in path:
+    name = os.path.join(root, "commits", path.rsplit("/", 1)[1])
+    if not os.path.exists(name):
+        fail("gh: Not Found (HTTP 404)")
+    print(open(name).read())
+    raise SystemExit(0)
+if method == "POST":
+    ref = data["ref"].removeprefix("refs/")
+    if ref in refs:
+        fail("gh: Reference already exists (HTTP 422)")
+    refs[ref] = data["sha"]
+    save()
+    raise SystemExit(0)
+ref = path.split("/git/ref/" if "/git/ref/" in path else "/git/refs/", 1)[1]
+if method == "GET":
+    if ref not in refs:
+        fail("gh: Not Found (HTTP 404)")
+    print(json.dumps({"ref": "refs/" + ref, "object": {"sha": refs[ref]}}))
+elif method == "PATCH":
+    current = refs.get(ref)
+    commit = json.load(open(os.path.join(root, "commits", data["sha"])))
+    parents = [item["sha"] for item in commit["parents"]]
+    if current is None or current not in parents:
+        fail("gh: Update is not a fast forward (HTTP 422)")
+    refs[ref] = data["sha"]
+    save()
+elif method == "DELETE":
+    if ref not in refs:
+        fail("gh: Reference does not exist (HTTP 422)")
+    del refs[ref]
+    save()
+PY
+  fi
 
   if [[ "$method" == "POST" && "$bare_path" == */git/refs ]]; then
     ref="" ; sha=""
@@ -82,7 +155,16 @@ if [[ "$1" == "api" ]]; then
   fi
   if [[ "$bare_path" == */git/ref/tags/* ]]; then
     tag="${bare_path##*/tags/}"
-    git -C "$repo_dir" rev-parse "refs/tags/$tag^{commit}"
+    if ! tagged="$(git -C "$repo_dir" rev-parse -q --verify \
+      "refs/tags/$tag^{commit}")"; then
+      echo "gh: Not Found (HTTP 404)" >&2
+      exit 1
+    fi
+    if [[ -n "$jq_filter" ]]; then
+      echo "$tagged"
+    else
+      echo "{\"object\": {\"sha\": \"$tagged\"}}"
+    fi
     exit 0
   fi
   if [[ "$bare_path" == */commits/*/pulls ]]; then
@@ -343,7 +425,9 @@ def git(*arguments: str, cwd: Path) -> str:
     ).stdout.strip()
 
 
-def build_repo(tmp_path: Path) -> dict[str, str]:
+def build_repo(
+    tmp_path: Path, ownership: str = "csarc-owned"
+) -> dict[str, str]:
     """Build a minimal real Git repo with a merged release candidate commit.
 
     Three commits: a tagged v0.1.0 release point, ordinary "feat" work on
@@ -372,6 +456,9 @@ def build_repo(tmp_path: Path) -> dict[str, str]:
         # Issue #770: publish-release's post-hoc attestation check reuses
         # this module's verify_consumption() rather than reimplementing it.
         "verify_release_consumption.py",
+        # Issue #1074: the one tree-bound writer's preflight and lease.
+        "release_writer.py",
+        "merge_trace.py",
     ):
         source = ROOT / "scripts" / name
         destination = root / "scripts" / name
@@ -396,6 +483,14 @@ def build_repo(tmp_path: Path) -> dict[str, str]:
         json.dumps({".": "0.1.0"}), encoding="utf-8"
     )
     (root / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    (root / ".csarc").mkdir()
+    (root / ".csarc" / "config.yml").write_text(
+        "project_slug: fixture\n"
+        "project_license: MIT\n"
+        "copyright_holder: Fixture Authors\n"
+        f"release_ownership: {ownership}\n",
+        encoding="utf-8",
+    )
     (root / "CHANGELOG.md").write_text(
         "# Changelog\n\n## [0.1.0] - 2026-01-01\n\n* initial\n",
         encoding="utf-8",
@@ -1352,3 +1447,142 @@ def test_rerun_verify_confirms_without_rebuilding_or_reuploading(
     assert (state / "upload-log").read_text().splitlines() == ["v0.2.0"]
     meta = json.loads((state / "releases/v0.2.0/meta.json").read_text())
     assert meta == {"isDraft": False, "isImmutable": True, "tagName": "v0.2.0"}
+
+
+def stage_candidate(
+    tmp_path: Path, ownership: str = "csarc-owned"
+) -> tuple[dict[str, str], Path, Path, Path]:
+    """Build the fixture with its merged pull request for `stage`."""
+    fixture = build_repo(tmp_path, ownership)
+    root = Path(fixture["root"])
+    state = tmp_path / "state"
+    state.mkdir()
+    write_pull_request_fixture(
+        state,
+        number=1,
+        repo="acme/fixture",
+        base_sha=fixture["base_sha"],
+        candidate_sha=fixture["candidate_sha"],
+    )
+    return fixture, root, state, fixture_bin(tmp_path)
+
+
+def stage(
+    fixture: dict[str, str], root: Path, state: Path, bindir: Path
+) -> subprocess.CompletedProcess[str]:
+    """Run `publish-release stage` for the fixture's candidate."""
+    return run_publish_release(
+        "stage",
+        "--repo",
+        "acme/fixture",
+        "--sha",
+        fixture["candidate_sha"],
+        "--tag",
+        "v0.2.0",
+        repo=root,
+        bindir=bindir,
+        state=state,
+    )
+
+
+@pytest.mark.parametrize("ownership", ["product-owned", "verification-only"])
+def test_stage_writes_nothing_when_csarc_is_not_the_writer(
+    tmp_path: Path, ownership: str
+) -> None:
+    """Issue #1074: only csarc-owned projects get a CSARC tag or Release."""
+    fixture, root, state, bindir = stage_candidate(tmp_path, ownership)
+
+    result = stage(fixture, root, state, bindir)
+
+    assert result.returncode == 0, result.stderr
+    assert "writer=none" in result.stdout
+    assert "v0.2.0" not in git("tag", "-l", cwd=root).splitlines()
+    assert not (state / "releases/v0.2.0").exists()
+    assert not (state / "leases").exists()
+
+
+def test_stage_releases_its_lease_after_converging(tmp_path: Path) -> None:
+    """Issue #1074: the writer holds the lease only while it writes."""
+    fixture, root, state, bindir = stage_candidate(tmp_path)
+
+    result = stage(fixture, root, state, bindir)
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads((state / "leases/refs.json").read_text()) == {}
+    commits = list((state / "leases/commits").iterdir())
+    assert len(commits) == 1
+    lease = json.loads(commits[0].read_text())
+    core = json.loads(lease["message"].split("\n\n", 1)[1])
+    assert core["holder"] == "local:fixture-maintainer"
+    assert core["sha"] == fixture["candidate_sha"]
+
+
+def test_stage_waits_for_another_writers_lease(tmp_path: Path) -> None:
+    """Issue #1074: a hosted run and a local fallback never both write."""
+    fixture, root, state, bindir = stage_candidate(tmp_path)
+    leases = state / "leases"
+    (leases / "commits").mkdir(parents=True)
+    core = {
+        "acquired_at": "2026-01-01T00:00:00Z",
+        "expires_at": "2999-01-01T00:00:00Z",
+        "holder": "actions:77",
+        "repository": "acme/fixture",
+        "schema_version": 1,
+        "sha": fixture["candidate_sha"],
+        "tag": "v0.2.0",
+        "tree": "0" * 40,
+    }
+    message = "csarc release lease\n\n" + json.dumps(
+        core, sort_keys=True, separators=(",", ":")
+    )
+    (leases / "commits" / ("e" * 40)).write_text(
+        json.dumps(
+            {"sha": "e" * 40, "message": message, "tree": {}, "parents": []}
+        )
+    )
+    digest = hashlib.sha256(b"v0.2.0").hexdigest()
+    (leases / "refs.json").write_text(
+        json.dumps({f"heads/csarc/leases/release-{digest}": "e" * 40})
+    )
+
+    result = stage(fixture, root, state, bindir)
+
+    assert result.returncode != 0
+    assert "held by actions:77" in result.stderr
+    assert "v0.2.0" not in git("tag", "-l", cwd=root).splitlines()
+
+
+def test_stage_never_moves_an_existing_tag(tmp_path: Path) -> None:
+    """Issue #1074: a tag on another commit stops the writer untouched."""
+    fixture, root, state, bindir = stage_candidate(tmp_path)
+    git("tag", "v0.2.0", fixture["base_sha"], cwd=root)
+
+    result = stage(fixture, root, state, bindir)
+
+    assert result.returncode != 0
+    assert "never moved" in result.stderr
+    assert git("rev-parse", "v0.2.0^{commit}", cwd=root) == fixture["base_sha"]
+    assert not (state / "releases/v0.2.0").exists()
+
+
+@pytest.mark.large
+def test_publish_retry_after_publication_only_verifies(tmp_path: Path) -> None:
+    """Issue #1074: rerunning publish for the same candidate is idempotent."""
+    fixture, root, state, bindir = stage_candidate(tmp_path)
+    install_fake_syft_installer(root, bindir / "syft")
+    assert stage(fixture, root, state, bindir).returncode == 0
+    arguments = ("publish", "--repo", "acme/fixture", "--tag", "v0.2.0")
+    first = run_publish_release(
+        *arguments, repo=root, bindir=bindir, state=state
+    )
+    assert first.returncode == 0, first.stderr
+    uploads = (state / "upload-log").read_text()
+
+    retry = run_publish_release(
+        *arguments, repo=root, bindir=bindir, state=state
+    )
+
+    assert retry.returncode == 0, retry.stderr
+    assert (state / "upload-log").read_text() == uploads
+    meta = json.loads((state / "releases/v0.2.0/meta.json").read_text())
+    assert meta["isImmutable"] is True
