@@ -145,7 +145,7 @@ Draft PR；不先建立 Ready PR 再切回 Draft，因此反覆修改不會啟�
 目前設定允許的 admin `pull_request` bypass 也只能由 lifecycle 在上述
 exact-head approval 成立、GitHub 回報 `mergeable_state=clean`、必要檢查逐項重驗成功，且
 live bypass actor 清單精確等於 repo 宣告值時使用；其他 bypass 形狀仍降級為 human-only。
-這條路徑會在最後一次 merge snapshot 前自動留下 `bypass-trace:`。沒有獨立 review 的
+這條路徑會在合併成功並讀回之後，把帶 `merge=<SHA> evidence=<locator>` 的 `bypass-trace:` 寫進 PR 唯一的 evidence summary。沒有獨立 review 的
 admin self-merge 仍必須使用取得 lease 後的 exact-head maintainer 授權留言。
 
 ### Lease 續租不作廢既有授權（#1017）
@@ -215,9 +215,9 @@ exact-head 與 actor 綁定。續租條件不成立時工具會拒絕，並說�
 3. 重複直到 `status` 回報 `copilot.state = clean`，`review` check 轉綠。
 4. 依上方 single-writer 規則取得 lease，`.csarc/scripts/pr_lifecycle.py merge` 以
    `authorization_source=copilot` 合併；lifecycle 在合併前重新驗證同一個 exact-head
-   Copilot 審核、required checks、Draft、checklist 與 lease，並自動留下
-   `copilot-review-trace: review=<URL> head=<SHA> actor=<login>`（admin bypass 另外留下
-   `bypass-trace: ... reason=exact-head-copilot-review`）。
+   Copilot 審核、required checks、Draft、checklist 與 lease，合併讀回後在 evidence summary 寫入
+   `copilot-review-trace: review=<URL> head=<SHA> actor=<login> merge=<SHA> evidence=<locator>`
+   （admin bypass 另外留下 `bypass-trace: ... reason=exact-head-copilot-review`）。
 
 自動合併由本機 agent 經 lifecycle 執行，不用 workflow 的 `GITHUB_TOKEN` 合併：
 `GITHUB_TOKEN` 的合併不會觸發後續 `push` workflow（例如 release），也會繞過 lease；
@@ -824,7 +824,7 @@ path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成�
 
 新專案預設 `verification_mode: local`；既有 repository 沒有此欄位時維持 `hosted`，避免更新時靜默降低保護。兩種模式共用同一個 `ci_tier.py` router，以及同一組 focused／fast／full 驗證入口；切換模式不增加第二套 runner、matrix 或測試清單。
 
-`local` 模式不產生 `ci.yml`、`pr-policy.yml`、`pr-policy-writes.yml`、`pr-review.yml`、reviewer assignment、spec sync、work-item lifecycle、Pages、OSV、CodeQL、Docker scan、Dependabot auto-merge、release 或 release-drift workflow，required-checks Ruleset 與 Pages policy 也保持 disabled，因此不會建立永遠等不到的 check、在 `main` 重跑完整驗證或製造無意義告警。Issue／PR／Milestone 操作改用既有本機 wrapper；外部協作者若直接在 GitHub UI 修改 metadata，local mode 不會即時自動修正，只能由人工或可選的低頻 governance drift check 發現。repo-local 發版工具仍保留，需要可信 release provenance 或 Pages deployment 時先切換成 `hosted` 再更新模板。fast／full 成功後只做常數時間的 metadata 寫入：已 commit 且 clean 的候選會把 exact head/tree、base、tier、scopes、command、success 與 24 小時 freshness 綁到 Git metadata；尚未建立 commit 或仍有未提交修改時，測試結果維持成功但不產生可合併的證明。`pr_lifecycle.py` 在 merge 前重新讀取 GitHub metadata、review、lease 與這份證明，執行既有 PR policy checker，並留下清楚標為 `self-attested-local` 的 trace，再使用受控 admin bypass。
+`local` 模式不產生 `ci.yml`、`pr-policy.yml`、`pr-policy-writes.yml`、`pr-review.yml`、reviewer assignment、spec sync、work-item lifecycle、Pages、OSV、CodeQL、Docker scan、Dependabot auto-merge、release 或 release-drift workflow，required-checks Ruleset 與 Pages policy 也保持 disabled，因此不會建立永遠等不到的 check、在 `main` 重跑完整驗證或製造無意義告警。Issue／PR／Milestone 操作改用既有本機 wrapper；外部協作者若直接在 GitHub UI 修改 metadata，local mode 不會即時自動修正，只能由人工或可選的低頻 governance drift check 發現。repo-local 發版工具仍保留，需要可信 release provenance 或 Pages deployment 時先切換成 `hosted` 再更新模板。fast／full 成功後只做常數時間的 metadata 寫入：已 commit 且 clean 的候選會把 exact head/tree、base、tier、scopes、command、success 與 24 小時 freshness 綁到 Git metadata；尚未建立 commit 或仍有未提交修改時，測試結果維持成功但不產生可合併的證明。`pr_lifecycle.py` 在 merge 前重新讀取 GitHub metadata、review、lease 與這份證明，執行既有 PR policy checker，再使用受控 admin bypass，合併讀回後留下清楚標為 `self-attested-local` 的 trace（#1073）。
 
 hosted 模式仍保留 required `verify`／`title`／`review`。實作中與一般 push 前只跑變更 owner 的 focused checks；`verify-fast` 是可選的廣泛診斷，不因 trusted plan 選到 `full` 就再於本機跑一次 aggregate suite。required `verify` 在 exact candidate 執行所選 fast／full，並提供唯一的正常 merge evidence；本機 full 只留給本文件明定的 Actions／發布 fallback 或明確診斷，且不會在 fallback 邊界外取代 hosted evidence。Draft 的 CI、policy、review 與 reviewer assignment 都在 runner 前略過；`PR policy writes` 只接續上游 `success`／`failure`，不為 `skipped`／`cancelled` 開 runner。Pages 只在 `documentation_mode: template-and-content` 時產生，採 Actions deployment，僅回應 `docs/**` 變更或手動 dispatch。`.csarc/policies/pages.json` 的 `enabled` 是維護者的 desired-state 選擇，不是能力判定：public repository 在 GitHub Free 可以發布 Pages，但不代表必須發布；`enabled=true` 時 `plan` 顯示 ENABLE／UPDATE／NO-OP，`enabled=false` 是明確 opt-out，live 仍已發布時顯示 DISABLE，`check` 雙向比對 desired 與 live，`apply` 依同一動作建立、更新或停用站台後再以 `check` 讀回（#985）。private repository 缺少 GitHub Enterprise Cloud 時仍回報 `DEGRADED`，無法判讀的 Pages API 錯誤一律失敗，不視為已發布或 compliant。`release_trigger: manual` 完全不註冊 push trigger；本模板 root 採此設定。
 
@@ -899,6 +899,36 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
 - **Release channel floor**：`dev/m*`／`dev/i*` 為 beta（fast floor），指向 `main` 的 standalone、hotfix 與
   release recovery 為 stable（full floor）。`verify-fast` 取 floor 與 path tier 中較強者；local mode 直接升級成
   full。
+
+### 合併綁定驗證 tree 與 durable trace
+
+`.csarc/scripts/pr_lifecycle.py merge`（所有合法 route、兩種 `verification_mode`）依序：
+
+1. 讀 `.csarc/policies/merge-trailers.json`，缺少或格式不符就拒絕合併。
+2. 確認 lease 的 `base_sha` 是 head 的祖先；head 落後 base 時拒絕，先合併最新 base 並重新取得證據
+   （hosted `verify` 在新 head 重跑，local 重跑 `verify-fast`）。接著讀回 head tree，必須等於證據綁定的 tree。
+3. 把證據 payload 以 canonical bytes 寫進每張 PR 唯一的 summary 留言（`csarc-merge-evidence: v1`、
+   `status: attempt`）；沒有就建立，仍是 `attempt` 就原地取代。這是合併前唯一的寫入。
+4. 以 squash 合併，message 保留 PR commits 的 `BREAKING CHANGE:` footer，再以空行接固定 trailer：
+   `CSARC-Evidence`（summary 留言 URL）、`CSARC-Evidence-SHA256`、`CSARC-Evidence-Tree`、`CSARC-Trust`
+   （`github-hosted`／`self-attested-local`）、`CSARC-Route`（`issue`、`sync`、`dependabot`、`release-recovery`、
+   `hotfix`、`release-follow-up`、`milestone`、`isolated`）、`CSARC-Approval`（`review`、`comment`、`copilot`、
+   `hotfix-emergency`）與 `CSARC-Authorization`。
+5. 讀回 merge commit：tree 或 trailer 不符時，summary 狀態改成 `tree-mismatch`／`trailer-mismatch` 並以非 0 結束。
+6. 成功時 summary 狀態改成 `merged`，狀態段寫入 `merge-trace`，以及適用的 bypass、Copilot、local trace；
+   之後 payload 不再改變。
+
+證據 payload 以 RFC 8785（JCS）子集序列化（UTF-8、鍵排序、無空白、只允許安全範圍整數、NFC 字串、
+`YYYY-MM-DDTHH:MM:SSZ` 時間、集合陣列先排序），帶自己的 `schema_version`，digest 為 `sha256:<hex>`。
+summary 留言可被有寫入權限的人編輯或刪除，trailer 的 digest 用來偵測；Actions 資料到期後，digest 只證明紀錄
+自合併以來沒有被改過。trailer 是稽核紀錄，不是證據。GitHub UI 合併與 `gh pr merge --admin` 例外不是合法
+route，沒有 trailer。
+
+`csarc status` 推導 governance baseline（`resolved`、`confirmed`、`not-installed`、`inconclusive`）並分類之後
+每個 first-parent 合併：`traced`、`untraced`（只提示）、`tree-mismatch`、`evidence-missing`、
+`evidence-digest-mismatch`、`trailer-invalid` 或 `inconclusive`；阻擋項目讓 status 以 1 結束，`inconclusive`
+baseline 以一次性的 `--confirm-governance-baseline <SHA>` 從候選中確認。發版路徑使用
+`python3 .csarc/scripts/merge_trace.py audit --strict`，`untraced` 也阻擋。
 
 ### Risk-owned execution 與有限證據沿用（#812）
 

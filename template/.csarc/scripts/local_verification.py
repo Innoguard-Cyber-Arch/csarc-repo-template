@@ -216,7 +216,9 @@ def record(
         "tier": tier,
         "scopes": normalized_scopes,
         "command": command,
-        "completed_at": datetime.now(UTC).isoformat(),
+        # The canonical evidence contract (#1073) allows only whole-second
+        # UTC times, so the merge can hash this payload unchanged.
+        "completed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     path = evidence_path(head_sha)
     path.parent.mkdir(parents=True, exist_ok=True)
