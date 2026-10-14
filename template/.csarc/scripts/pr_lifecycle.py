@@ -2179,6 +2179,43 @@ def merge_route(protection: str) -> str:
     return MERGE_ROUTES.get(protection, "blocked")
 
 
+def merge_identity(
+    github: GitHub,
+    repo: str,
+    actor: str,
+    protection: str,
+    authorization_source: str,
+) -> tuple[str, str]:
+    """Classify the merge actor; return a refusal reason when it is unfit.
+
+    #1058 decision 27 (Issue #1076) separates the merge actor from the
+    authorizer. On the ordinary Ruleset agent route (an exact-head review
+    or Copilot review authorizes) the actor must hold `write` and neither
+    `maintain` nor `admin`, read from the live `role_name`; anything else,
+    including an unknown role, is refused. A GitHub App actor holds
+    installation permissions, never a repository role. On the admin-bypass
+    and emergency-hotfix routes the actor is the live admin authorizer
+    itself, and the single-writer route runs as the sole maintainer.
+    """
+    if protection == "single-writer":
+        return "sole-maintainer", ""
+    if protection != "enforced":
+        return "none", ""
+    if authorization_source in {"comment", "hotfix-emergency"}:
+        return "admin-authorizer", ""
+    if actor.endswith("[bot]"):
+        return "app", ""
+    role = live_repository_role(github, repo, actor)
+    if role == "write":
+        return "agent-write", ""
+    return (
+        "agent-" + role,
+        f"the agent-route merge actor {actor} has role {role!r}; a Ruleset "
+        "route needs an independent write identity without maintain or "
+        "admin",
+    )
+
+
 def _writer_logins(
     collaborators: list[dict[str, Any]],
 ) -> tuple[set[str], str]:
@@ -3612,6 +3649,12 @@ def merge_snapshot(  # noqa: C901
             protection = "single-writer"
             if verification_mode != "local":
                 required_contexts = declared_required_contexts()
+    identity, identity_refusal = merge_identity(
+        github, repo, actor, protection, authorization_source
+    )
+    if identity_refusal:
+        protection = "blocked"
+        reason = identity_refusal
     quota_run_urls = (
         require_routine_quota_fallback(
             github, lease, pull, auth, quota_fallback_note_url
@@ -3676,6 +3719,7 @@ def merge_snapshot(  # noqa: C901
         ),
         "merge_permission": merge_route(protection),
         "server_enforcement": server_enforcement,
+        "merge_identity": identity,
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
         "local_verification": local_evidence,
@@ -4382,7 +4426,8 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         f"merge-trace: result={result_name} {suffix} tree={merged_tree} "
         f"expected_tree={lease['head_tree']} route={route} trust={trust} "
         f"actor={lease['actor']} server_enforcement="
-        f"{snapshot.get('server_enforcement') or 'ruleset'}"
+        f"{snapshot.get('server_enforcement') or 'ruleset'} "
+        f"identity={snapshot.get('merge_identity') or 'unknown'}"
     ]
     if status == "merged":
         lines.extend(trace_lines(snapshot, lease, suffix))

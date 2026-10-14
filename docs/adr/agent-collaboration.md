@@ -88,7 +88,9 @@ branch／lease、本機 worktree，以及 final report 後才能回報 `DONE`；
 觀察到恰好一個寫入者，而且就是合併者本人，lifecycle 才可合併；agent 以這位唯一維護者的身分執行，不另建
 write 帳號。另有寫入者為 `multiple-writers`，任何讀取不完整（權限不足、分頁不完整、team 成員不可見、缺
 `role_name`）為 `inconclusive`，兩者都只能人工合併並記為 untraced，`csarc-owned` 發版 fail closed。有 Ruleset
-強制時，agent 使用獨立 write 身分且不持有 maintain／admin。
+強制時，agent 使用獨立 write 身分且不持有 maintain／admin：一般 agent route 以即時 `role_name` 驗證合併者恰為
+`write`，其他或讀不到的角色都拒絕；admin bypass 與 emergency hotfix 的合併者是 live admin 授權者本人，
+維持允許，並在 trace 記為 `identity=admin-authorizer`，與獨立 agent 身分路線區分。
 
 這不是 Ruleset 的替代品：trace 明記 `server_enforcement=none` 與 trust，不宣稱伺服器曾經阻擋；exact-head
 授權、required checks、lease、verified tree 與 G4 durable trace 都不略過（#918、#908、#1073 保留）。上方

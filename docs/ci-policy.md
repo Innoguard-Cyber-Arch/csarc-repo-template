@@ -1039,11 +1039,19 @@ fail closed（接入 publisher 由 #1074 負責）。本機證據的 `completed_
 
 | 形狀 | `protection` | route | 說明 |
 | --- | --- | --- | --- |
-| A（hosted）、E1（local＋`beta-only`／`always`）、C（local＋`off`）的 Ruleset 完整讀回且相符 | `enforced` | allowed | `server_enforcement=ruleset`；agent 用獨立 write 身分，不需 maintain／admin；admin bypass 仍要求合併者是 live admin |
+| A（hosted）、E1（local＋`beta-only`／`always`）、C（local＋`off`）的 Ruleset 完整讀回且相符 | `enforced` | allowed | `server_enforcement=ruleset`；合併者身分見下方 |
 | 沒有任何 `pull_request`／`required_status_checks` 規則，API 完整讀回恰好一個寫入者，而且就是合併者 | `single-writer` | allowed | `server_enforcement=none`；agent 以唯一維護者身分執行，不另建 write 帳號 |
 | 沒有 Ruleset，另有寫入者（collaborator、可寫 team 成員或可寫 deploy key） | `multiple-writers` | manual-only | 人工在 GitHub 合併，記為 `untraced`，`csarc-owned` 發版 fail closed |
 | Ruleset 或寫入者讀取失敗、分頁不完整、team 成員不可見、缺 `role_name` 或未知角色 | `inconclusive`／`unknown` | manual-only | 同上；不猜測、不讀 legacy `permission` |
 | Ruleset 形狀不符、未生效、未驗證的 bypass，或沒有 Ruleset 時 `mergeable_state` 不是 `clean`（含 `unstable`） | `blocked` | blocked | 先修正條件，lifecycle 不合併 |
+
+合併者（執行 lifecycle 的身分）與授權者（留下 exact-head 授權或 approval 的人）分開判斷
+（#1058 決定 27）。有 Ruleset 的一般 agent route（獨立 maintainer approval 或 Copilot review 授權）要求合併者
+即時 `role_name` 恰為 `write`；`maintain`、`admin`、自訂角色或讀不到都改判 `blocked`，不合併。GitHub App
+合併者（例如 `github-actions[bot]`）只有 installation 權限、沒有 repository role，記為 `app`。admin bypass 與
+emergency hotfix route 的合併者就是 live admin 授權者本人（#918／#1064），照常允許並記為
+`admin-authorizer`，表示這不是獨立 agent 身分路線；single-writer route 記為 `sole-maintainer`。`check` 輸出
+`merge_identity`，`merge-trace` 帶 `identity=<agent-write|app|admin-authorizer|sole-maintainer>`。
 
 寫入者讀回包含 `collaborators?affiliation=all`（每一列都要有 `role_name`；`read`／`triage` 不算寫入者，
 `write`／`maintain`／`admin` 算，其他值為 `inconclusive`）、每個 deploy key 的 `read_only`，organization

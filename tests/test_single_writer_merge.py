@@ -385,23 +385,37 @@ def test_hosted_single_writer_still_requires_declared_checks(
         merge_snapshot(github, lease_fixture(), AUTHORIZATION_URL)
 
 
-def test_ruleset_agent_identity_needs_only_write(
+@pytest.mark.parametrize(
+    ("role", "identity", "mode"),
+    [
+        ("write", "agent-write", "agent"),
+        ("maintain", "agent-maintain", "human-only"),
+        ("admin", "agent-admin", "human-only"),
+        ("release-bot", "agent-release-bot", "human-only"),
+        (None, "agent-unknown", "human-only"),
+    ],
+)
+def test_ruleset_agent_route_actor_must_hold_only_write(
     monkeypatch: pytest.MonkeyPatch,
+    role: str | None,
+    identity: str,
+    mode: str,
 ) -> None:
-    """AC2: with a Ruleset a write-only agent merges an approved head."""
+    """AC2: the agent-route actor is write-only; unknown fails closed."""
     bind_remote_lease(monkeypatch)
     github = FakeGitHub("a" * 40)
-    roles = {"agent": "write", "reviewer": "admin"}
     original = github.get
 
     def role_get(repo: str, path: str) -> object:
-        for login, role in roles.items():
-            if path == f"collaborators/{login}/permission":
-                return {
-                    "permission": role,
-                    "role_name": role,
-                    "user": {"login": login},
-                }
+        if path == "collaborators/agent/permission":
+            # A missing role_name is unknown; the legacy field is ignored.
+            payload: dict[str, object] = {
+                "permission": "write",
+                "user": {"login": "agent"},
+            }
+            if role is not None:
+                payload["role_name"] = role
+            return payload
         return original(repo, path)
 
     monkeypatch.setattr(github, "get", role_get)
@@ -409,8 +423,63 @@ def test_ruleset_agent_identity_needs_only_write(
     snapshot = merge_snapshot(github, lease_fixture())
 
     assert snapshot["server_enforcement"] == "ruleset"
-    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["authorization_source"] == "review"
     assert snapshot["authorization_actor"] == "reviewer"
+    assert snapshot["merge_identity"] == identity
+    assert snapshot["merge_mode"] == mode
+    if mode != "agent":
+        assert snapshot["merge_permission"] == "blocked"
+        assert "independent write identity" in str(
+            snapshot["protection_reason"]
+        )
+
+
+def test_admin_bypass_route_runs_as_the_live_admin_authorizer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC2: admin bypass stays allowed and records its admin authorizer."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.reviews = []
+    github.required_review_count = 0
+    github.head_ref = "fix/42-lifecycle"
+    github.body = f"Closes #42\n\n{ADMIN_BYPASS_MARKER}"
+    github.authorization_actor = "agent"
+    github.permission = "admin"
+    github.ruleset_response = {
+        "enforcement": "active",
+        "bypass_actors": MODULE["REVIEWED_MERGE_BYPASS_ACTORS"],
+    }
+
+    snapshot = merge_snapshot(github, lease_fixture(), AUTHORIZATION_URL)
+
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["authorization_source"] == "comment"
+    assert snapshot["authorization_actor"] == "agent"
+    assert snapshot["merge_identity"] == "admin-authorizer"
+
+
+def test_app_actor_and_non_agent_routes_skip_the_role_read() -> None:
+    """AC2: an App has no repository role; refused states add no read."""
+
+    class NoReads:
+        def get(self, _repo: str, path: str) -> object:
+            raise AssertionError(path)
+
+    merge_identity = MODULE["merge_identity"]
+    assert merge_identity(
+        NoReads(), "o/r", "github-actions[bot]", "enforced", "review"
+    ) == ("app", "")
+    assert merge_identity(
+        NoReads(), "o/r", "owner", "enforced", "hotfix-emergency"
+    ) == ("admin-authorizer", "")
+    assert merge_identity(
+        NoReads(), "o/r", "owner", "single-writer", "comment"
+    ) == ("sole-maintainer", "")
+    assert merge_identity(NoReads(), "o/r", "a", "inconclusive", "review") == (
+        "none",
+        "",
+    )
 
 
 def test_every_protection_state_has_one_explicit_route() -> None:
@@ -466,11 +535,17 @@ def test_single_writer_merge_keeps_the_g4_trace(
     github = run_traced_merge(
         tmp_path,
         monkeypatch,
-        traced_snapshot(server_enforcement="none", merge_permission="allowed"),
+        traced_snapshot(
+            server_enforcement="none",
+            merge_permission="allowed",
+            merge_identity="sole-maintainer",
+        ),
     )
     summary = merge_trace.parse_summary(github.comment_edits[-1][1])
     assert summary.status == "merged"
-    assert summary.lines[0].endswith("actor=agent server_enforcement=none")
+    assert summary.lines[0].endswith(
+        "actor=agent server_enforcement=none identity=sole-maintainer"
+    )
     assert any(
         line.startswith(
             "single-writer-trace: writer=agent server_enforcement=none"
