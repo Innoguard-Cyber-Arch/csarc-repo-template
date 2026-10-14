@@ -899,6 +899,12 @@ step 先比對 manifest，再以 `CSARC_VERIFICATION_SUBJECT_ROOT` 指向 exact 
 subject 後立即 unset 這個變數，nested fixture 不會繼承。candidate 改了 control set 時，trusted router 會把變更歸入
 shell／workflow scope 並升到對應 tier，新版 gate 要等合併進 base 後才生效。
 
+這些 trusted step 用 `python3` 執行 base 的 scripts，所以 `verify` 在第一個 trusted step 之前就以固定版本的
+`actions/setup-python` 裝好 Python 3.14，不用 runner 內建的舊版直譯器（#1111）。其他 workflow 不一定先裝
+Python，因此 `scripts/` 與 `template/.csarc/scripts/` 仍須能被 Python 3.12 的語法解析：ruff 對這兩個目錄改用
+`py312` target，formatter 不會再把 `except (A, B):` 改回 3.14 才接受的寫法，`tests/test_workflow_python_runtime.py`
+另外逐檔檢查。
+
 base 的 config reader 讀不懂 candidate 設定（未知值或 schema）時，「Read release ownership」直接失敗，不再因
 `echo "ownership=$(...)"` 吞掉錯誤而略過 release 檢查。authoritative 結果確定後，「Candidate gate self-test
 (non-authoritative)」以 `continue-on-error` 執行 candidate 自己的 router 與 config reader，把與 trusted 決策的差異

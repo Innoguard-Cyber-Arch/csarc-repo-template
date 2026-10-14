@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.30.7] - 2026-10-14
+
+### Bug Fixes
+
+* fix(ci): run the trusted verification executor on a supported Python (bd32fa5)
+
 ## [0.30.6] - 2026-10-13
 
 ### Bug Fixes

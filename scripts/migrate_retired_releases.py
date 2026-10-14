@@ -265,7 +265,7 @@ def _verify_assets(
                     tag=tag,
                     commit=commit,
                 )
-        except OSError, VerificationError:
+        except (OSError, VerificationError):
             return False
     return True
 

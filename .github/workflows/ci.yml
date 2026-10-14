@@ -39,6 +39,13 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
+      # Issue #1111: every trusted step below runs `python3` on base scripts,
+      # so Python 3.14 must exist before the first one, not the runner's
+      # older system interpreter.
+      - name: Set up Python 3.14 for the trusted verification policy
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
       - name: Preserve the trusted verification policy
         id: trusted
         run: |
