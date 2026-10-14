@@ -217,6 +217,7 @@ if [[ "$scopes" == *,workflow,* ]]; then
     tests/test_journey07_release.py \
     tests/test_pr_lifecycle.py \
     tests/test_review_gate.py \
+    tests/test_evidence_freshness.py \
     tests/test_verification_evidence.py \
     tests/test_work_item_metadata.py
 fi

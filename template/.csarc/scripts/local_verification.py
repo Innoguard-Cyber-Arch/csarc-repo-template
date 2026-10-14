@@ -10,15 +10,19 @@ import os
 import re
 import subprocess
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     csarc_config = importlib.import_module("csarc_config")
+    evidence_freshness = importlib.import_module("evidence_freshness")
 else:
     csarc_config = importlib.import_module(f"{__package__}.csarc_config")
+    evidence_freshness = importlib.import_module(
+        f"{__package__}.evidence_freshness"
+    )
 
 SCHEMA_VERSION = 1
 SHA = re.compile(r"[0-9a-f]{40}")
@@ -235,7 +239,7 @@ def record(
     return payload
 
 
-def require(  # noqa: C901
+def require(
     *,
     head_sha: str,
     tree_sha: str,
@@ -243,9 +247,11 @@ def require(  # noqa: C901
     base_sha: str,
     required_tier: str,
     now: datetime | None = None,
-    max_age_hours: float = 24.0,
+    max_age_hours: float | None = None,
 ) -> dict[str, Any]:
     """Validate one exact local result without claiming trusted provenance."""
+    # Issue #1075: reject a widened window before reading candidate evidence.
+    max_age_hours = evidence_freshness.policy_max_age_hours(max_age_hours)
     if required_tier not in VALID_TIERS:
         raise RuntimeError("Required local verification tier is invalid")
     if any(
@@ -305,22 +311,12 @@ def require(  # noqa: C901
         raise RuntimeError(
             "Local verification evidence does not match the candidate"
         )
-    try:
-        completed_at = datetime.fromisoformat(str(payload["completed_at"]))
-    except ValueError as error:
-        raise RuntimeError(
-            "Local verification completion time is malformed"
-        ) from error
-    if completed_at.tzinfo is None:
-        raise RuntimeError("Local verification completion time has no timezone")
-    current = (now or datetime.now(UTC)).astimezone(UTC)
-    completed_at = completed_at.astimezone(UTC)
-    if completed_at > current + timedelta(minutes=5):
-        raise RuntimeError(
-            "Local verification completion time is in the future"
-        )
-    if completed_at < current - timedelta(hours=max_age_hours):
-        raise RuntimeError("Local verification evidence is stale")
+    evidence_freshness.require_fresh(
+        payload["completed_at"],
+        subject="Local verification",
+        now=now,
+        max_age_hours=max_age_hours,
+    )
     if (
         git("rev-parse", "HEAD") != head_sha
         or git("rev-parse", "HEAD^{tree}") != tree_sha

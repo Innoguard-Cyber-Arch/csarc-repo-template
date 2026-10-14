@@ -40,7 +40,7 @@ git switch -c chore/<issue-number>-update-repo-template
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
 ```
 
-`csarc update` is the only update entry point; `--check` and apply share one plan, so they list the same conflicts and file actions. Running `copier update` directly is unsupported.
+`csarc update` is the only update entry point; `--check` and apply share one plan, so they list the same conflicts and file actions. Running `copier update` directly is unsupported. When there are conflicts, `--finalize-plan --decision <path>=<decision>` writes the immutable `csarc-update-final-plan.json` beside the report, and `--apply-plan <final plan>` applies only the values it records.
 
 Before planning, `csarc update` compares product-owned workflow Action pins with the new template pins, read-only, and lists each drift item (file, line, action, old and new SHA, reason) in the plan's `action_pin_preflight` and the report's `product.action_pins`; no drift is an empty list. With drift, apply stops before any render and prints the repair instructions: commit those pin changes manually, then plan again. An unreachable or untrusted template source always stops without writing the target.
 

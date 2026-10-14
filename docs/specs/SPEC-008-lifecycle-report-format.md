@@ -37,7 +37,9 @@ tracking: none
 
 - `--report-dir PATH` 可改目錄；`adopt --apply-plan` 一律寫回被重播的 plan 所在的目錄，另外傳入不同的 `--report-dir` 時在寫入 target 前拒絕。
 - 寫入順序：machine plan、report JSON、Markdown。Markdown 只由 report JSON 的位元組解析後 render；report 驗證失敗時三個檔案都不寫。
-- adopt 的 machine plan 契約不變（`plan.as_dict()` 加 `plan_sha256`，`schema_version: 1`，可被 `--apply-plan` 重播，套用後照舊寫入 `adoption.applied`）。update 的 machine plan 是同一次 `update --check --json` 的 plan 加上 `plan_sha256`，`replayable: false`；可重播的 final plan 由後續 Issue 定義，`final_plan` 在 2.0.0 一律為 `null`。
+- adopt 的 machine plan 契約不變（`plan.as_dict()` 加 `plan_sha256`，`schema_version: 1`，可被 `--apply-plan` 重播，套用後照舊寫入 `adoption.applied`）。update 的 stage-1 machine plan 是同一次 `update --check --json` 的 plan 加上 `replayable: false` 與 `plan_sha256`，只供審閱，不能套用。
+- update 的 final plan（Issue #1067）：`update --finalize-plan` 在 stage-1 plan 所在的同一目錄寫出 `csarc-update-final-plan.json`（`schema_version: 1`、`replayable: true`）。它要求 stage-1 plan 的 digest 有效、規劃 digest 與 template SHA 仍相同，且每個 `update-conflict` 恰有一個 `--decision PATH=keep-current|take-new|custom:FILE`；action pin 漂移須以 `--pin-commit` 指名的產品 commit 讀回。plan 記錄 `toolchain`（Copier、Jinja2、Git、Python、csarc 版本）、`inputs`（新舊兩側 Copier answers、`--data` 與命令參數）、`live_facts`（repository 與 visibility、origin、權限、Release 與 target HEAD／status／檔案指紋）、`derived`（規劃結果、核准的檔案轉換、舊 render 指紋）、`decisions`（檔案決定與其確切內容、設定變更列、pin 決定）與內嵌報告，各區段有 digest，`final_plan_sha256` 綁定整份 plan。檔案已存在時拒絕覆寫。
+- `update --apply-plan <final plan>` 只用 plan 記錄的值 render 與套用，不接受 `--data`、`--to` 等會改變輸入的參數；套用前重新觀察工具版本與 live facts，任何不同都在寫入前停止。成功後 `.csarc/provenance.json` 記錄 `final_plan_sha256`，報告轉為 `applied` 並同時綁定 stage-1 與 final plan digest；對已套用的 plan 重跑時說明已套用並以 0 結束，不改任何檔案。
 - 1.1.0 的 `csarc-adoption-dry-run.md` 在新檔寫完後，以同一個 no-follow 目錄 descriptor 刪除；它是 symlink 或非一般檔案時保留並警告，讓每個目錄只有一份報告。
 
 ### 3. Report JSON
@@ -49,7 +51,7 @@ tracking: none
 - `status`、`status_reason`、`applicable`（機器的 apply 閘門）。
 - `generated_at`、`applied_at`：`applied_at` 只在 `status` 為 `applied` 時是字串。
 - `plan`：{`path`（檔名）、`sha256`、`schema_version`、`mode`、`replayable`}。`sha256` 是使用者審閱並重播的 plan digest；套用後即使 adopt 照舊改寫 plan 檔，報告仍保留核准時的 digest。
-- `final_plan`：與 `plan` 同形狀，只用於 update；2.0.0 為 `null`。
+- `final_plan`：與 `plan` 同形狀，只用於 update；`--finalize-plan` 之後與套用後的報告指向 final plan（`replayable: true`），其他情況為 `null`。決定後的 `update-conflict` 列帶 `keep-current`、`take-new` 或 `custom`，對應的 blocking `file-conflict` 不再列出。
 - `target`：{`path`、`head`、`working_tree`、`changes`、`repository`、`visibility`、`visibility_source`}。
 - `release`：{`source`、`from`、`to`}；`from` 為 {`tag`、`sha`、`verification`}，adopt 為 `null`；`to` 另含 `guide_url`。
 - `summary`：`files` 依 action 計數、`settings` 依 class 計數（全部列出，包含 0）、`required_actions` 為 {`blocking`、`non_blocking`}；計數必須等於對應列的數量。
@@ -149,11 +151,11 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - [ ] 個別設定的遷移分類（`exact`、`narrowed`、`widened`、`retired` 承接列）由後續 migration Issue 填入。
 - [x] update 的 render parity、三方衝突列與 template 刪除列由 Issue #1063 填入。
 - [x] update 的退役保留與 product 保留欄位由 Issue #1066 填入。
-- [ ] update 的 final plan 由後續 Issue 填入。
+- [x] update 的 final plan 由 Issue #1067 填入。
 
 ## Out of scope
 
-- legacy migration 規則、final conflict replay 與個別設定分類。
+- legacy migration 規則與個別設定分類。
 - `update --check` 的 exit code。
 - `init` 報告與報告標題在地化。
 - 移除 adopt 套用後在 plan 寫入 `adoption.applied` 的既有改寫。

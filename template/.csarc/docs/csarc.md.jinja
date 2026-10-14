@@ -25,6 +25,6 @@
 
 ## 公版更新
 
-使用 `csarc update --check --json` 先驗證既有 provenance 並查看候選 Release；確認顯示的完整 SHA 與 plan 後，才執行 `csarc update` 套用同一候選版本。若有衝突，CLI 只列出檔案，不會修改 repo；請調整衝突內容後重跑。
+使用 `csarc update --check --json` 先驗證既有 provenance 並查看候選 Release；確認顯示的完整 SHA 與 plan 後，才執行 `csarc update` 套用同一候選版本。`--check` 在 repo 外寫出 stage-1 plan（`csarc-update-plan.json`，不可重播）；若有衝突，CLI 只列出檔案，不會修改 repo。逐一決定衝突後執行 `csarc update --finalize-plan --decision <path>=keep-current|take-new|custom:<file>`（有 Action pin 漂移時先提交產品 pin 修正並加上 `--pin-commit <full SHA>`），在同一資料夾寫出不可變的 `csarc-update-final-plan.json`；最後以 `csarc update --apply-plan <final plan>` 只用 plan 記錄的值套用。套用前若 repository、visibility、origin、權限、工具版本或 target 狀態與 plan 不同，會停止且不改 repo；重跑已套用的 plan 不會再改動任何檔案。
 
 更新成功後，檢查 diff、執行 `./.csarc/scripts/verify-fast`（只有 full-tier 交付邊界才執行完整 `./.csarc/scripts/verify`），再用一般編號分支與 PR 交付。更新不會自行套用 repository settings、push 或合併；`docs/site/content/`、`docs/site/theme.css` 與其他 project-owned 內容遇到衝突時保留給維護者決定。

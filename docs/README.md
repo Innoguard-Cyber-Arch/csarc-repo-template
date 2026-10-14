@@ -44,6 +44,7 @@
 - [`template-lifecycle-and-ownership.md`](adr/template-lifecycle-and-ownership.md)
 - [`capability-aware-governance.md`](adr/capability-aware-governance.md)
 - [`staged-delivery-and-verification.md`](adr/staged-delivery-and-verification.md)
+- [`verification-evidence-freshness.md`](adr/verification-evidence-freshness.md)
 - [`release-security-and-dependencies.md`](adr/release-security-and-dependencies.md)
 - [`selective-ci-automation-adoption.md`](adr/selective-ci-automation-adoption.md)
 - [`spec-story-and-work-items.md`](adr/spec-story-and-work-items.md)

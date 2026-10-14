@@ -937,7 +937,9 @@ Jobs API，並重用 `scripts/pr_lifecycle.py` 的 required-check producer selec
    release level 相互一致，且 tree 等於 exact head 的 Git tree；
 5. check、run、job 與 execution step 都真正 `success`；`neutral`、`skipped`、zero-step 或同名 classic status
    均不能滿足 `verify`；
-6. 完成時間不超過 24 小時，且不能超前目前時間超過 5 分鐘。
+6. 完成時間不超過 24 小時（恰好 24 小時仍有效），且不能超前目前時間超過 5 分鐘；缺少或沒有時區的時間一律 fail
+   closed。local、hosted、merge、release、promotion 與 fallback 都只呼叫 `scripts/evidence_freshness.py` 的同一個
+   判定；期限是受信任 script 的常數，不寫入 evidence，呼叫端只能縮短不能放寬（#1075）；威脅模型與 24 小時理由見 [`docs/adr/verification-evidence-freshness.md`](adr/verification-evidence-freshness.md)。
 
 quota fallback 永遠不能替代缺少或失敗的 `verify`。新專案預設 `actions_fallback: off`；只有明確設為
 `admin`，且 exact head 已有上述可信成功證據時，其他確認為 GitHub billing zero-step 的 required check
@@ -1026,7 +1028,8 @@ canonical payload 與 digest、summary 的保存方式與 Actions 資料到期�
 `csarc status`（`--json` 相同）推導 governance baseline（`resolved`、`confirmed`、`not-installed`、
 `inconclusive`），並分類 baseline 之後 default branch 的每個 first-parent 合併：`traced`、`untraced`（只提示）、
 `tree-mismatch`、`evidence-missing`、`evidence-digest-mismatch`、`trailer-invalid` 或讀不到 GitHub 的
-`inconclusive`；`inconclusive` baseline 與 `untraced` 以外的發現都是阻擋項目，status 以 1 結束。
+`inconclusive`；`untraced` 以外的合併發現是阻擋項目，status 以 1 結束；`inconclusive` baseline 沒有檢查任何合併，
+在 status 只是提示，只在 `merge_trace.py audit --strict` 阻擋。
 `inconclusive` baseline 以一次性的 `csarc status --confirm-governance-baseline <SHA>` 從輸出列出的候選中確認。
 發版路徑使用 `python3 scripts/merge_trace.py audit --strict`：`untraced` 也阻擋，`csarc-owned` 的發版可以
 fail closed（接入 publisher 由 #1074 負責）。本機證據的 `completed_at` 改成 `YYYY-MM-DDTHH:MM:SSZ`，讓合併可以
@@ -1176,11 +1179,19 @@ check 清單對得上。
 ### Dependabot 依賴更新的發版與 template 同步（#755）
 
 **`uvx --from git+...@<sha>` 不吃 `uv.lock`（實測，2026-09-18）**：本機對 `git+file://` 本地來源、當下
-`pyproject.toml` 宣告 `copier>=9.17,<10`、`uv.lock` 鎖定 `copier==9.17.2` 的狀態實測
+`pyproject.toml` 宣告 `copier>=9.17,<10`、`uv.lock` 鎖定 `copier==9.17.2` 的狀態（#1067 前）實測
 `uvx --from "git+file://<repo>@<sha>" python -c "import copier; print(copier.__version__)"`，實際裝出
 `9.18.2`（範圍內當下最新版），不是 lock 檔鎖定的版本。結論：`uvx --from git+URL@<sha>` 安裝時直接依
 `pyproject.toml` 的版本範圍重新解析，不讀取目標 repo 的 `uv.lock`——`uv.lock` 只服務這個 repo 自己的
 `uv sync`／`uv run` 情境。
+
+**Copier 與 Jinja2 改為 exact pin（#1067）**：正因 `uvx --from git+URL@<sha>` 只看 `pyproject.toml`，
+同一個 CSARC Release 若宣告版本範圍，就可能在不同時間 render 出不同結果，`csarc update` 的 final plan 也
+無法重播。`pyproject.toml` 因此直接宣告 `copier==<版本>` 與 `jinja2==<版本>`，生成專案的
+`template-update.yml` 以 `uv tool install copier==<同一版本> --with jinja2==<同一版本>` 使用同一組
+pin；`tests/test_update_final_plan.py` 讀回 `pyproject.toml`、`uv.lock`、執行環境與 workflow 四處一致。
+這兩個依賴的 Dependabot bump 會改動 `pyproject.toml` 本身，適用下段「改動宣告的版本範圍」的情況；其餘
+runtime 依賴仍維持範圍宣告。
 
 因此 root 的 `.github/dependabot.yml` 的 `uv` 區段**維持現行 `build(deps)` 前綴，不區分 runtime／dev 依賴**：
 一般（非安全性）runtime 依賴的版本 bump，只要新版本仍落在既有範圍內，`uvx` 使用者下次執行就會自動拿到最新
@@ -1228,7 +1239,11 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
    `dependabot-merge-eligible` check；它不是 Ruleset required context，也不能單獨授權合併。
 
    `.github/workflows/dependabot-merge.yml` 從 default branch 接續 `CI`／`PR policy`／`PR review`／上述 eligibility
-   workflow 的 completed event。它先以唯讀 required-check 狀態避免提早取得 lease，再由
+   workflow 的 completed event。它先以唯讀 lookup（`authenticate_dependabot_head.py resolve-merge-candidate`，
+   讀完所有分頁，#1087）找出唯一符合 open、同 repo、`main` base、exact head 與 `dependabot[bot]` Bot 身分的 PR：
+   零個符合（含只剩 closed／merged 紀錄或 head 已移動）時以穩定 no-op reason 成功結束，不取 lease、不寫 merge
+   trace、不 merge 也不 dispatch release；多個候選、identity 不完整或狀態矛盾則 fail closed，不任選一張。
+   接著以唯讀 required-check 狀態避免提早取得 lease，再由
    `scripts/pr_lifecycle.py acquire → check → merge` 重新驗證 live PR、Bot account type、同 repo ref、current commit
    簽章（或 exact sync-child parent）、eligibility check 的 GitHub Actions App／workflow／event、review、Ruleset 與
    required checks；`check` 與 `merge` 都重新讀取同一份 mutable state，REST merge 另帶 exact `sha`。任何漂移都
