@@ -44,22 +44,28 @@ def digest(path: Path) -> str:
 
 
 def project_license_metadata(root: Path) -> tuple[str, str, str] | None:
-    """Return the explicit project package name, license, and copyright."""
-    config_path = root / ".csarc/config.yml"
-    if not config_path.is_file():
+    """Return the project package name, license, and copyright holder.
+
+    The values are one-time seeds read from native sources (SPEC-009): the
+    product manifest names the package and LICENSE declares the license and
+    holder. A product-owned (``custom``) LICENSE is not annotated.
+    """
+    if not (root / ".csarc/config.yml").is_file():
         return None
     config_script = root / "scripts/csarc_config.py"
     if not config_script.is_file():
         config_script = root / ".csarc/scripts/csarc_config.py"
-    load_config = runpy.run_path(str(config_script))["load_config"]
-    config = load_config(config_path)
-    declared = str(config["project_license"])
+    project_facts = runpy.run_path(str(config_script))["project_facts"]
+    facts = project_facts(root)
+    declared = str(facts["project_license"])
+    if declared == "custom":
+        return None
     if declared == "proprietary":
         declared = "LicenseRef-Proprietary"
     return (
-        str(config["project_slug"]),
+        str(facts["project_slug"]),
         declared,
-        str(config["copyright_holder"]),
+        str(facts["copyright_holder"]),
     )
 
 

@@ -1,6 +1,6 @@
 # {{ project_name }}
 
-{% if i18n == 'en-zh-tw' %}[繁體中文]({{ 'README.md' if primary_language == 'zh-tw' else 'README.zh-tw.md' }})
+{% if documentation_secondary_language %}[繁體中文]({{ 'README.md' if documentation_primary_language == 'zh-tw' else 'README.zh-tw.md' }})
 
 {% endif %}<!-- csarc-project-description:start -->
 {{ project_description }}
@@ -31,7 +31,7 @@ cd {{ project_slug }}
 
 ## Documentation
 
-{% if documentation_mode == 'template-and-content' %}- [Project documentation](docs/{{ 'index.html' if primary_language == 'en' else 'index.en.html' }})
+{% if documentation_mode == 'template-and-content' %}- [Project documentation](docs/{{ 'index.html' if documentation_primary_language == 'en' else 'index.en.html' }})
 {% else %}- [Documentation map](docs/README.md)
 {% endif %}- [Changelog](CHANGELOG.md)
 - [Security reporting](.github/SECURITY.md)

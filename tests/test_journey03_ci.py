@@ -239,8 +239,7 @@ def test_ci_skips_non_actionable_pr_events_before_runner() -> None:
         .from_string(template_source)
         .render(
             languages=["python", "typescript", "rust"],
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
         )
     )
     expected = (
@@ -280,13 +279,11 @@ def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
     rendered_templates = (
         template.render(
             languages=["python", "typescript", "rust"],
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
         ),
         template.render(
             languages=["typescript", "rust"],
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
         ),
     )
 
@@ -361,8 +358,7 @@ def test_hosted_setup_skips_unowned_language_toolchains() -> None:
         .from_string(template_source)
         .render(
             languages=["python", "typescript", "rust"],
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
         )
     )
     generated = {str(step.get("name")): step for step in ci_steps(rendered)}
@@ -442,8 +438,7 @@ def test_reused_release_validation_installs_only_owned_package_tools() -> None:
     ):
         rendered = template.render(
             languages=[language],
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
         )
         setup = {
             str(step.get("name")): step
@@ -1006,8 +1001,7 @@ def _render_generated(path: str, languages: list[str]) -> str:
         .from_string(source)
         .render(
             languages=languages,
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
             release_trigger="manual",
             release_ownership="csarc-owned",
             project_slug="go-fixture",

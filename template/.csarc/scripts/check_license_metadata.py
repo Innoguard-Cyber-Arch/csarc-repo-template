@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Check that project license declarations agree across package ecosystems."""
+"""Check that project license declarations agree across package ecosystems.
+
+LICENSE is the native source of the license and copyright holder (SPEC-009,
+Issue #1071): they are one-time seeds, never saved settings. A LICENSE that
+is not one of the CSARC starter texts is product-owned (``custom``), and only
+the starter licenses are compared with package manifests.
+"""
 
 from __future__ import annotations
 
@@ -41,7 +47,7 @@ def validate_python(path: Path, expected: str) -> None:
         return
     project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
     if project.get("license") != expected:
-        raise ValueError("pyproject.toml license does not match config")
+        raise ValueError("pyproject.toml license does not match LICENSE")
     if "LICENSE" not in project.get("license-files", []):
         raise ValueError("pyproject.toml must package LICENSE")
 
@@ -52,7 +58,7 @@ def validate_node(path: Path, expected: str, proprietary: bool) -> None:
         return
     package = json.loads(path.read_text(encoding="utf-8"))
     if package.get("license") != expected:
-        raise ValueError("package.json license does not match config")
+        raise ValueError("package.json license does not match LICENSE")
     if proprietary and package.get("private") is not True:
         raise ValueError("proprietary npm packages must set private=true")
 
@@ -66,21 +72,24 @@ def validate_cargo(path: Path, project_license: str) -> None:
         if package.get("license-file") != "LICENSE" or "license" in package:
             raise ValueError("Cargo.toml proprietary license is inconsistent")
     elif package.get("license") != project_license:
-        raise ValueError("Cargo.toml license does not match config")
+        raise ValueError("Cargo.toml license does not match LICENSE")
 
 
 def validate(root: Path) -> None:
     """Reject a missing or contradictory project license declaration."""
     script_dir = Path(__file__).resolve().parent
-    load_config = runpy.run_path(str(script_dir / "csarc_config.py"))[
-        "load_config"
+    license_facts = runpy.run_path(str(script_dir / "csarc_config.py"))[
+        "license_facts"
     ]
-    config = load_config(root / ".csarc/config.yml")
-    project_license = str(config["project_license"])
-    holder = config.get("copyright_holder")
-    if not isinstance(holder, str) or not holder.strip():
-        raise ValueError("copyright_holder must be declared")
     license_path = root / "LICENSE"
+    if not license_path.is_file():
+        raise ValueError("LICENSE is missing")
+    project_license, holder = license_facts(root)
+    if project_license == "custom":
+        # A product-owned license text: CSARC does not interpret it.
+        return
+    if not isinstance(holder, str) or not holder.strip():
+        raise ValueError("LICENSE does not name a copyright holder")
     validate_license_file(license_path, project_license, holder)
     spdx_license, npm_license = expected_identifiers(project_license)
     validate_python(root / "pyproject.toml", spdx_license)

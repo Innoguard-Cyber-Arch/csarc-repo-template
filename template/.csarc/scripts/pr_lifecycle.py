@@ -3280,7 +3280,7 @@ def actions_run_url(details_url: str, repo: str) -> str:
     return f"https://github.com/{repo}/actions/runs/{match.group(1)}"
 
 
-def require_routine_quota_fallback(  # noqa: C901
+def require_routine_quota_fallback(
     github: GitHub,
     lease: dict[str, Any],
     pull: dict[str, Any],
@@ -3288,83 +3288,11 @@ def require_routine_quota_fallback(  # noqa: C901
     note_url: str,
 ) -> set[str]:
     """Validate a canonical routine-PR quota note and every bound run."""
-    config_path = Path(__file__).resolve().parents[1] / "config.yml"
-    if (
-        not config_path.is_file()
-        or csarc_config.load_config(config_path).get("actions_fallback")
-        != "admin"
-    ):
-        raise RuntimeError(
-            "Actions billing fallback requires actions_fallback: admin"
-        )
-    repo = str(lease["repository"])
-    pr_number = int(lease["pull_request"])
-    head_sha = str(lease["head_sha"])
-    require_routine_route(github, repo, lease, pull)
-    parsed = urllib.parse.urlparse(note_url)
-    expected_path = f"/{repo}/pull/{pr_number}"
-    if (
-        parsed.scheme != "https"
-        or parsed.netloc.casefold() != "github.com"
-        or parsed.path.casefold() != expected_path.casefold()
-        or re.fullmatch(r"issuecomment-(\d+)", parsed.fragment) is None
-    ):
-        raise RuntimeError(
-            "Quota fallback URL must be a comment on this pull request"
-        )
-    comment_id = parsed.fragment.removeprefix("issuecomment-")
-    payload = github.get(repo, f"issues/comments/{comment_id}")
-    if (
-        not isinstance(payload, dict)
-        or payload.get("html_url") != note_url
-        or not str(payload.get("issue_url", "")).endswith(
-            f"/issues/{pr_number}"
-        )
-    ):
-        raise RuntimeError("Quota fallback comment response is invalid")
-    body = payload.get("body")
-    prefix = "Actions quota fallback note\n\n`"
-    if not isinstance(body, str) or not body.startswith(prefix):
-        raise RuntimeError("Quota fallback note is not canonical")
-    binding_end = body.find("`\n\n", len(prefix))
-    if binding_end < 0:
-        raise RuntimeError("Quota fallback note is not canonical")
-    binding = json.loads(body[len(prefix) : binding_end])
-    runs = binding.get("runs") if isinstance(binding, dict) else None
-    if (
-        not isinstance(runs, list)
-        or not runs
-        or not all(isinstance(item, str) for item in runs)
-        or len(set(runs)) != len(runs)
-        or body
-        != promotion_gate.quota_fallback_note(repo, pr_number, head_sha, runs)
-    ):
-        raise RuntimeError("Quota fallback note is not canonical")
-    note_created_at = parse_time(payload.get("created_at"), "Quota fallback")
-    authorized_at = parse_time(
-        authorization_payload.get("created_at"), "Authorization"
+    raise RuntimeError(
+        "The Actions quota fallback was retired with actions_fallback "
+        "(SPEC-009, Issue #1071); an Actions outage uses the "
+        "governance-switch route with its required checks"
     )
-    if note_created_at > authorized_at:
-        raise RuntimeError("Quota fallback note postdates merge authorization")
-    head_ref = (pull.get("head") or {}).get("ref")
-    if not isinstance(head_ref, str) or not head_ref:
-        raise RuntimeError("Pull request head branch is unavailable")
-
-    def get(request_repo: str, path: str, _token: str) -> object:
-        return github.get(request_repo, path)
-
-    for run_url in runs:
-        promotion_gate.require_run_url(run_url, repo)
-        promotion_gate.require_zero_step_run(
-            run_url,
-            repo,
-            pr_number,
-            head_ref,
-            head_sha,
-            "",
-            getter=get,
-        )
-    return set(runs)
 
 
 def merge_snapshot(  # noqa: C901

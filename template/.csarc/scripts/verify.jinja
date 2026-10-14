@@ -134,7 +134,7 @@ verify_go_module() {
   verification_step "Go build" go build ./...
 }
 
-{% if verification_mode == "local" and "docker" in features -%}
+{% if verification_mode == "local" and container -%}
 verify_container() {
   verification_step "Docker availability" command -v docker
   verification_step "Trivy availability" command -v trivy
@@ -286,7 +286,7 @@ fi
 if $verify_go; then
   verify_go_module
 fi
-{% if verification_mode == "local" and "docker" in features %}
+{% if verification_mode == "local" and container %}
 verify_container
 {% endif %}
 
@@ -317,14 +317,12 @@ config = load_config()
 expected_languages = set({{ languages | tojson }})
 if set(config.get("languages", [])) != expected_languages:
     raise SystemExit("Configured languages do not match the rendered template")
-if config.get("project_mode") not in {"new", "existing"}:
-    raise SystemExit("project_mode must be new or existing")
 if config.get("governance_mode") not in {"managed", "observe"}:
     raise SystemExit("governance_mode must be managed or observe")
 if set(config.get("lifecycle", [])) - {"issues", "milestones"}:
     raise SystemExit("lifecycle contains an unsupported capability")
-if set(config.get("features", [])) - {"docker"}:
-    raise SystemExit("features contains an unsupported capability")
+if config.get("container") is not {{ "True" if container else "False" }}:
+    raise SystemExit("Configured container does not match the rendered template")
 PY
 for json_file in \
   .csarc/policies/repository.json \
@@ -391,12 +389,13 @@ verification_step "PR writer ownership" \
 
 test -f AGENTS.md
 test "$(cat .claude/CLAUDE.md)" = "@../AGENTS.md"
-template_mode="$("${platform_python[@]}" "$control_root/.csarc/scripts/csarc_config.py" project_mode)"
+# project_mode is immutable provenance, rendered once (SPEC-009).
+template_mode="{{ project_mode }}"
 documentation_mode="$("${platform_python[@]}" "$control_root/.csarc/scripts/csarc_config.py" documentation_mode)"
 if [[ "$template_mode" == "new" && "$documentation_mode" != "off" ]]; then
   test "$(wc -l < AGENTS.md)" -le 200
   required_readme_headings=(
-{% if primary_language == 'zh-tw' -%}
+{% if documentation_primary_language == 'zh-tw' -%}
     "特色"
     "安裝"
     "快速開始"

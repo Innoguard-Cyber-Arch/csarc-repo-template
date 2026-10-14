@@ -82,15 +82,31 @@ def commit_all(root: Path, message: str) -> str:
 
 
 def config_text(**overrides: object) -> str:
-    """Return a schema-1 configuration with optional overrides."""
+    """Return a schema 2 configuration (SPEC-009) with overrides.
+
+    An override of ``None`` removes the key.
+    """
     values: dict[str, object] = {
+        "schema_version": 2,
         "admin_bypass": "off",
+        "code_owner": "",
+        "container": False,
         "copilot_review": "off",
+        "coverage_mode": "global",
         "coverage_threshold": 80,
+        "documentation_languages": "zh-tw",
+        "documentation_mode": "content-only",
         "enable_codeql": True,
         "governance_mode": "managed",
+        "languages": ["python"],
         "lifecycle": ["issues", "milestones"],
-        "review": "peer",
+        "project_maturity": "early",
+        "project_verification_hook": "",
+        "python_floor": "latest",
+        "release_ownership": "csarc-owned",
+        "release_trigger": "main",
+        "scheduled_checks": ["governance-drift"],
+        "security_reporting_channel": "security@example.com",
         "verification_mode": "hosted",
     }
     values.update(overrides)
@@ -99,10 +115,12 @@ def config_text(**overrides: object) -> str:
         if value is None:
             continue
         if isinstance(value, list):
-            lines.append(f"{key}:")
+            lines.append(f"{key}:" if value else f"{key}: []")
             lines.extend(f"- {item}" for item in value)
         elif isinstance(value, bool):
             lines.append(f"{key}: {str(value).lower()}")
+        elif value == "" or value == "off":
+            lines.append(f"{key}: '{value}'")
         else:
             lines.append(f"{key}: {value}")
     return "\n".join(lines) + "\n"
@@ -120,9 +138,9 @@ def test_both_shipped_copies_are_identical() -> None:
     assert COPIES["root"].read_bytes() == COPIES["template"].read_bytes()
 
 
-@pytest.mark.parametrize("support_mode", ["latest", "minimum"])
+@pytest.mark.parametrize("python_floor", ["latest", "3.12"])
 def test_generated_formatter_keeps_trusted_scripts_on_py312_grammar(
-    tmp_path: Path, support_mode: str
+    tmp_path: Path, python_floor: str
 ) -> None:
     """A generated project's own `ruff format` keeps 3.12-parseable excepts."""
     from jinja2 import Environment, StrictUndefined
@@ -138,14 +156,12 @@ def test_generated_formatter_keeps_trusted_scripts_on_py312_grammar(
     )
     (tmp_path / "pyproject.toml").write_text(
         template.render(
-            python_support_mode=support_mode,
-            python_min_version="3.12",
+            python_floor=python_floor,
             project_slug="gen-smoke",
             project_description="Generated smoke.",
             documentation_mode="content-only",
             project_license="MIT",
             repository_url="https://github.com/example/gen-smoke",
-            enable_precommit=False,
             package_name="gen_smoke",
         ),
         encoding="utf-8",
@@ -203,11 +219,11 @@ def test_layout_selects_the_matching_control_set(
 def test_current_schema_reads_without_writing(
     executor: dict[str, Any], tmp_path: Path
 ) -> None:
-    """The reader is read-only and keeps the current normalizing behavior."""
+    """The reader is read-only and never normalizes (SPEC-009)."""
     path = write_config(tmp_path / "config.yml", config_text())
     before = path.read_bytes()
     values = executor["read_config"](path)
-    assert values["schema_version"] == 1
+    assert values["schema_version"] == 2
     assert values["admin_bypass"] == "off"
     assert path.read_bytes() == before
 
@@ -218,7 +234,7 @@ def test_next_schema_is_read_strictly(
     """Schema 2 is accepted only in its intent-only shape."""
     path = write_config(
         tmp_path / "config.yml",
-        "schema_version: 2\n_src_path: gh:owner/template\n" + config_text(),
+        "_src_path: gh:owner/template\n" + config_text(),
     )
     before = path.read_bytes()
     assert executor["read_config"](path)["schema_version"] == 2
@@ -226,20 +242,25 @@ def test_next_schema_is_read_strictly(
 
 
 @pytest.mark.parametrize(
-    ("prefix", "message"),
+    ("overrides", "message"),
     [
-        ("schema_version: 9\n", "Unsupported schema_version 9"),
-        ("schema_version: two\n", "Invalid schema_version"),
-        ("schema_version: 2\npr_review_mode: human\n", "retired settings"),
-        ("schema_version: 2\npolicy_labels: true\n", "retired settings"),
-        ("schema_version: 2\n_secret: x\n", "unknown metadata"),
+        ({"schema_version": 9}, "reads schema 2 only"),
+        ({"schema_version": "two"}, "reads schema 2 only"),
+        ({"schema_version": None}, "legacy settings schema"),
+        ({"pr_review_mode": "human"}, "retired settings pr_review_mode"),
+        ({"policy_labels": True}, "retired settings policy_labels"),
+        ({"review": "solo"}, "retired settings review"),
+        ({"_secret": "x"}, "retired settings _secret"),
     ],
 )
 def test_unknown_or_invalid_schema_fails_closed(
-    executor: dict[str, Any], tmp_path: Path, prefix: str, message: str
+    executor: dict[str, Any],
+    tmp_path: Path,
+    overrides: dict[str, object],
+    message: str,
 ) -> None:
     """The trusted base never guesses at a schema it cannot read."""
-    path = write_config(tmp_path / "config.yml", prefix + config_text())
+    path = write_config(tmp_path / "config.yml", config_text(**overrides))
     with pytest.raises(ValueError, match=message):
         executor["read_config"](path)
 
@@ -249,10 +270,11 @@ def test_next_schema_requires_explicit_governance_values(
 ) -> None:
     """Schema 2 never fills a governance value from a legacy default."""
     path = write_config(
-        tmp_path / "config.yml",
-        "schema_version: 2\n" + config_text(verification_mode=None),
+        tmp_path / "config.yml", config_text(verification_mode=None)
     )
-    with pytest.raises(ValueError, match="must state verification_mode"):
+    with pytest.raises(
+        ValueError, match="missing persistent settings verification_mode"
+    ):
         executor["read_config"](path)
 
 
@@ -265,7 +287,10 @@ def test_next_schema_requires_explicit_governance_values(
         ({"admin_bypass": "always"}, "admin_bypass: off -> always"),
         ({"verification_mode": "local"}, "verification_mode: hosted -> local"),
         ({"governance_mode": "observe"}, "governance_mode: managed -> observe"),
-        ({"review": "solo"}, "review: peer -> solo"),
+        (
+            {"scheduled_checks": []},
+            "scheduled_checks: removes governance-drift",
+        ),
         ({"copilot_review": "allowed"}, "copilot_review: off -> allowed"),
         ({"enable_codeql": False}, "enable_codeql: true -> False"),
         ({"lifecycle": ["issues"]}, "lifecycle: removes milestones"),
@@ -319,11 +344,9 @@ def test_generated_script_and_schema_changes_need_the_switch(
     base = executor["read_config"](
         write_config(tmp_path / "base.yml", config_text())
     )
-    next_schema = executor["read_config"](
-        write_config(
-            tmp_path / "next.yml", "schema_version: 2\n" + config_text()
-        )
-    )
+    # A later schema is readable only after a trusted base adds it; the
+    # route still names the change.
+    next_schema = {**base, "schema_version": 3}
     scripts = executor["classify_route"](
         [".csarc/scripts/verify-fast"], base, base
     )
@@ -332,7 +355,7 @@ def test_generated_script_and_schema_changes_need_the_switch(
     assert scripts.reasons == (
         "changes .csarc/scripts/: .csarc/scripts/verify-fast",
     )
-    assert schema.reasons == ("changes schema_version: 1 -> 2",)
+    assert schema.reasons == ("changes schema_version: 2 -> 3",)
     assert unknown.reasons == ("changed paths are unavailable",)
 
 
@@ -567,8 +590,7 @@ def generated_repository(
         )
     elif candidate == "schema":
         write_config(
-            repo / ".csarc" / "config.yml",
-            "schema_version: 9\n" + config_text(),
+            repo / ".csarc" / "config.yml", config_text(schema_version=9)
         )
     else:
         (repo / "README.md").write_text("normal change\n", "utf-8")
@@ -590,7 +612,7 @@ def lifecycle_module_fixture() -> dict[str, Any]:
         ("scripts", {"governance-switch"}, "governance-switch", None),
         ("relax", set(), None, "relaxes admin_bypass"),
         ("relax", {"governance-switch"}, "governance-switch", None),
-        ("schema", {"governance-switch"}, None, "Unsupported schema_version 9"),
+        ("schema", {"governance-switch"}, None, "reads schema 2 only"),
     ],
 )
 def test_local_lifecycle_routes_from_the_trusted_base(

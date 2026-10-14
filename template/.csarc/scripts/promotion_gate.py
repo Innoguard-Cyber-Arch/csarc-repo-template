@@ -1980,191 +1980,20 @@ def finalize(args: argparse.Namespace) -> None:
 
 def note_quota_fallback(args: argparse.Namespace) -> None:
     """Print a routine PR's quota fallback note after proving zero-step."""
-    if csarc_config.load_config().get("actions_fallback") != "admin":
-        raise RuntimeError(
-            "Actions billing fallback requires actions_fallback: admin"
-        )
-    if not args.blocked_run_url:
-        raise RuntimeError("At least one blocked Actions run is required")
-    token = os.environ.get("GH_TOKEN", "")
-    pull = github_get(args.repo, f"pulls/{args.pr}", token)
-    base = pull.get("base") if isinstance(pull, dict) else None
-    head = pull.get("head") if isinstance(pull, dict) else None
-    if (
-        not isinstance(pull, dict)
-        or pull.get("number") != args.pr
-        or pull.get("state") != "open"
-        or pull.get("merged") is not False
-        or not isinstance(base, dict)
-        or not isinstance(head, dict)
-        or not same_repository(pull, args.repo)
-    ):
-        raise RuntimeError("Pull request identity could not be resolved")
-    head_sha = str(head.get("sha") or "")
-    head_ref = str(head.get("ref") or "")
-    if not head_sha or not head_ref:
-        raise RuntimeError("Pull request head is incomplete")
-    labels = {
-        item["name"]
-        for item in pull.get("labels", [])
-        if isinstance(item, dict) and isinstance(item.get("name"), str)
-    }
-    route = route_for(
-        str(base.get("ref") or ""),
-        str(head.get("ref") or ""),
-        labels,
-        args.branch_strategy,
-    )
-    base_ref = str(base.get("ref") or "")
-    if route.kind != "not-applicable" or (
-        base_ref == "main"
-        and (
-            MILESTONE_BRANCH.fullmatch(head_ref)
-            or PROMOTION_BRIDGE.fullmatch(head_ref)
-            or head_ref.startswith(("release-please--", "release/v"))
-            or bool(labels & {"promotion", "hotfix", "release-recovery"})
-        )
-    ):
-        raise RuntimeError(
-            "Routine quota fallback only applies to non-promotion pull requests"
-        )
-    if git_output("status", "--porcelain"):
-        raise RuntimeError("Routine quota fallback requires a clean worktree")
-    if git_output("rev-parse", "HEAD") != head_sha:
-        raise RuntimeError("Worktree HEAD must equal the pull request head")
-    blocked_run_urls = failed_pull_request_run_urls(args.repo, head_sha, token)
-    if set(args.blocked_run_url) != set(blocked_run_urls):
-        raise RuntimeError(
-            "Blocked run URLs must exactly match every live failed check"
-        )
-    for url in blocked_run_urls:
-        require_run_url(url, args.repo)
-        require_zero_step_run(
-            url, args.repo, args.pr, head_ref, head_sha, token
-        )
-    sys.stdout.write(
-        quota_fallback_note(
-            args.repo, args.pr, head_sha, sorted(args.blocked_run_url)
-        )
+    raise RuntimeError(
+        "The Actions quota fallback was retired with actions_fallback "
+        "(SPEC-009, Issue #1071); an Actions outage uses the "
+        "governance-switch route with its required checks"
     )
 
 
-def finalize_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
+def finalize_quota_fallback(args: argparse.Namespace) -> None:
     """Record a non-release promotion gate from exact local evidence."""
-    if csarc_config.load_config().get("actions_fallback") != "admin":
-        raise RuntimeError(
-            "Actions billing fallback requires actions_fallback: admin"
-        )
-    require_distinct_paths(args.input, args.output, args.archive)
-    evidence = json.loads(args.input.read_text(encoding="utf-8"))
-    required = (
-        "repository",
-        "pull_request",
-        "base_sha",
-        "head_sha",
-        "candidate_sha",
-        "candidate_tree",
-        "candidate_archive",
+    raise RuntimeError(
+        "The Actions quota fallback was retired with actions_fallback "
+        "(SPEC-009, Issue #1071); an Actions outage uses the "
+        "governance-switch route with its required checks"
     )
-    if any(not evidence.get(field) for field in required):
-        raise RuntimeError("Promotion preflight evidence is incomplete")
-    if (evidence.get("route") or {}).get("kind") not in {
-        "milestone",
-        "isolated",
-    }:
-        raise RuntimeError("Quota fallback only applies to a promotion gate")
-    if evidence["candidate_sha"] != evidence["head_sha"]:
-        raise RuntimeError("Local candidate must equal the pull request head")
-    if (evidence.get("canary") or {}).get("state") == "allowed":
-        raise RuntimeError("Quota fallback cannot replace a configured canary")
-    if evidence.get("gate") is not None:
-        raise RuntimeError("Quota fallback evidence was already finalized")
-    if git_output("status", "--porcelain"):
-        raise RuntimeError("Quota fallback requires a clean worktree")
-    if git_output("rev-parse", "HEAD") != evidence["head_sha"]:
-        raise RuntimeError("Worktree HEAD must equal the pull request head")
-
-    repo = str(evidence["repository"])
-    token = os.environ.get("GH_TOKEN", "")
-    current_main = github_get(repo, "git/ref/heads/main", token)
-    main_object = (
-        current_main.get("object") if isinstance(current_main, dict) else None
-    )
-    current_main_sha = (
-        main_object.get("sha") if isinstance(main_object, dict) else None
-    )
-    route_kind = (evidence.get("route") or {}).get("kind")
-    route_milestone = (evidence.get("route") or {}).get("milestone")
-    head_ref = evidence.get("head_ref")
-    bridge = (
-        promotion_bridge_source(
-            repo,
-            head_ref,
-            str(evidence["base_sha"]),
-            str(evidence["head_sha"]),
-            str(evidence["candidate_sha"]),
-            route_milestone if isinstance(route_milestone, int) else None,
-            token,
-        )
-        if isinstance(head_ref, str)
-        else None
-    )
-    if evidence.get("promotion_bridge") != bridge:
-        raise RuntimeError("Promotion bridge evidence changed after preflight")
-    delivery_branch = (
-        str(bridge["source_ref"])
-        if bridge is not None
-        else head_ref
-        if isinstance(head_ref, str) and route_kind in {"milestone", "isolated"}
-        else None
-    )
-    freshness_sha = promotion_freshness_sha(str(evidence["head_sha"]), bridge)
-    live_main_evidence = (
-        promotion_main_evidence(
-            promotion_api(repo, token),
-            repo,
-            current_main_sha,
-            str(evidence["base_sha"]),
-            delivery_branch,
-            freshness_sha,
-            contains_commit(str(evidence["base_sha"]), freshness_sha),
-        )
-        if isinstance(current_main_sha, str)
-        else None
-    )
-    if live_main_evidence is None:
-        raise RuntimeError("Promotion base or ancestry changed after preflight")
-    if args.attestation_url == args.authorization_url:
-        raise RuntimeError(
-            "Attestation and authorization must be separate comments"
-        )
-    if not args.blocked_run_url:
-        raise RuntimeError("At least one blocked Actions run is required")
-    token = os.environ.get("GH_TOKEN", "")
-    validate_quota_preflight(evidence, args, token, validate_comments=False)
-    attestation, authorization = validate_quota_preflight(evidence, args, token)
-    verification_command = require_trusted_verification(
-        repo, str(evidence["head_sha"])
-    )
-    validate_quota_preflight(evidence, args, token)
-
-    evidence["canary"]["result"] = "artifact-only"
-    evidence["full_check"] = {
-        "context": "verify",
-        "status": "trusted-hosted",
-        "commands": [" ".join(verification_command), PREFLIGHT_REFETCH],
-    }
-    evidence["quota_fallback"] = {
-        "attestation_url": args.attestation_url,
-        "authorization_url": args.authorization_url,
-        "attestation_author": attestation["user"]["login"],
-        "authorization_author": authorization["user"]["login"],
-        "blocked_run_urls": sorted(args.blocked_run_url),
-        "created_at": datetime.now(UTC).isoformat(),
-    }
-    evidence["gate"] = "quota-fallback"
-    evidence["release_eligible"] = False
-    write_evidence(args.output, evidence)
 
 
 def verify_main(args: argparse.Namespace) -> None:

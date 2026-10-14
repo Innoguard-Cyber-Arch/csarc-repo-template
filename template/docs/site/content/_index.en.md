@@ -21,7 +21,7 @@ fit = "Fit"
 {{< standard key="index-mode-standard" title="This repo's current governance setup" >}}
 This repo is created and kept up to date with [csarc-repo-template](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template), so its way of working can be versioned, verified, and upgraded like its code:
 
-<div class="capability-map"><div class="capability-node"><h3>Languages</h3><p>[[languages]]</p></div><div class="capability-node"><h3>Admin review bypass</h3><p>[[admin_bypass]]; Copilot [[copilot_review]]</p></div><div class="capability-node"><h3>Visibility</h3><p>[[project_visibility]]</p></div><div class="capability-node"><h3>Next step</h3><p>Switch to "Install" to get started, or "About" to see what this governance baseline does.</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>Languages</h3><p>[[languages]]</p></div><div class="capability-node"><h3>Admin review bypass</h3><p>[[admin_bypass]]; Copilot [[copilot_review]]</p></div><div class="capability-node"><h3>Documentation mode</h3><p>[[documentation_mode]]</p></div><div class="capability-node"><h3>Next step</h3><p>Switch to "Install" to get started, or "About" to see what this governance baseline does.</p></div></div>
 {{< /standard >}}
 
 {{< ops key="index-mode-ops" title="Where this configuration comes from" >}}
@@ -34,10 +34,9 @@ This repo's governance configuration lives in `.csarc/config.yml`, created and k
 | Work-item automation | `[[lifecycle]]` |
 | Release trigger | `[[release_trigger]]` |
 | Documentation mode | `[[documentation_mode]]` |
-| Documentation languages | `[[primary_language]]`; i18n `[[i18n]]` |
+| Documentation languages | `[[documentation_languages]]` |
 | License | `[[project_license]]` |
-| Optional features | `[[features]]` |
-| Visibility | `[[project_visibility]]` |
+| Container | `[[container]]` |
 | Languages | `[[languages]]` |
 
 Run `csarc status` to check whether this repo is current; when an update is available, it previews the diff before anything applies, so it never silently overwrites content already written here.

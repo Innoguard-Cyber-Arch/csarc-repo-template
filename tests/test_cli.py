@@ -16,7 +16,7 @@ import pytest
 import yaml
 
 import csarc_cli.cli as cli
-from csarc_cli import lifecycle_report
+from csarc_cli import lifecycle_report, settings_schema
 from csarc_cli.cli import CliError, main
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1601,18 +1601,16 @@ def test_work_item_mapping_distinguishes_issue_type_fallbacks(
     ]
 
 
-def test_work_item_mapping_review_uses_the_copier_question_path() -> None:
-    """Keep mapping approval in the existing flat Copier answer schema."""
+def test_work_item_mapping_review_is_a_one_time_adopt_input() -> None:
+    """SPEC-009: the mapping review is an adopt input, never a setting."""
     config = yaml.safe_load((ROOT / "copier.yml").read_text(encoding="utf-8"))
-    question = config["work_item_mapping_review"]
 
-    assert question["default"] == "pending"
-    assert set(question["choices"].values()) == {
-        "pending",
-        "accept-safe",
-        "review-individually",
-    }
-    assert question["when"] == "{{ project_mode == 'existing' }}"
+    assert "work_item_mapping_review" not in config
+    assert "work_item_mapping_review" in settings_schema.RETIRED_SETTINGS
+    # Adopt still accepts it as a one-time --data input.
+    assert cli.parse_settings_data(
+        ["work_item_mapping_review=accept-safe"]
+    ) == {"work_item_mapping_review": "accept-safe"}
 
 
 @pytest.mark.large
@@ -1782,8 +1780,12 @@ def test_release_ownership_matrix_uses_explicit_workflow_contracts(
     root_answers = yaml.safe_load(
         (ROOT / cli.CONFIG_FILE).read_text(encoding="utf-8")
     )
+    # project_mode is provenance, not a saved setting (SPEC-009); the
+    # template repository adopts its own baseline.
     root_contract = cli.release_contract(
-        cli.resolve_release_answers(ROOT, root_answers)
+        cli.resolve_release_answers(
+            ROOT, {**root_answers, "project_mode": "existing"}
+        )
     )
     assert root_contract["ownership"] == "csarc-owned"
     assert root_contract["immutable_releases"] == "required"
@@ -3108,7 +3110,7 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         revision,
         "--allow-unreleased",
         "--data",
-        "language=ci",
+        "languages=[]",
         "--data",
         "security_reporting_channel=Use the synthetic fixture's "
         "private reporting channel.",
@@ -3119,7 +3121,7 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "--data",
         "project_verification_hook=scripts/verify-skills",
         "--data",
-        "features=[]",
+        "container=false",
         "--data",
         "work_item_mapping_review=accept-safe",
     ]
@@ -3407,18 +3409,20 @@ def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     rows = cli.report_setting_rows(
         {
             "language": "python",
+            "languages": ["python"],
             "coverage_mode": "diff",
             "enable_pypi_publishing": True,
             "api_token": "secret",
         },
         None,
     )
-    assert [row["key"] for row in rows] == ["coverage_mode", "language"]
+    # Retired keys appear only as `retired` rows of a saved file (#1071).
+    assert [row["key"] for row in rows] == ["coverage_mode", "languages"]
     assert rows[1] == {
-        "after": "python",
+        "after": ["python"],
         "before": None,
         "class": "new",
-        "key": "language",
+        "key": "languages",
         "note": None,
         "source": "derived",
     }
@@ -3449,8 +3453,7 @@ def test_adoption_outputs_share_all_resolved_settings(
         "copyright_holder": "Example Organization",
         "documentation_mode": "off",
         "enable_codeql": False,
-        "i18n": "off",
-        "primary_language": "en",
+        "documentation_languages": "en",
         "project_license": "proprietary",
         "project_maturity": "early",
         "project_run_command": "pnpm run build",
@@ -3526,7 +3529,10 @@ def test_report_settings_cover_every_public_copier_question() -> None:
         if isinstance(key, str) and not key.startswith("_")
     }
 
-    assert question_names <= cli.REPORT_SETTING_KEYS
+    # Render-derived template variables are never resolved settings.
+    assert question_names - set(settings_schema.RENDER_KEYS) <= (
+        cli.REPORT_SETTING_KEYS
+    )
 
 
 def test_dangling_reusable_workflow_option_stays_removed() -> None:
@@ -6462,8 +6468,9 @@ def test_cli_requires_repository_identity_for_ownerless_target(
         data: dict[str, object],
         *,
         skip_tasks: bool,
+        decisions: object = None,
     ) -> None:
-        del source, resolved, destination, skip_tasks
+        del source, resolved, destination, skip_tasks, decisions
         received.update(data)
         raise CliError("stop after pre-Copier validation")
 
@@ -6563,8 +6570,9 @@ def test_repository_url_is_never_derived_from_code_owner(
         data: dict[str, object],
         *,
         skip_tasks: bool,
+        decisions: object = None,
     ) -> None:
-        del source, resolved, destination, skip_tasks
+        del source, resolved, destination, skip_tasks, decisions
         received.update(data)
         raise CliError("stop after pre-Copier validation")
 
@@ -8380,10 +8388,14 @@ def test_update_normalizes_retired_verification_suite_names() -> None:
 
     answers, update_data = cli.update_plan_answers(saved, {}, repository)
 
-    assert answers["release_level_alpha_verification"] == "fast"
-    assert answers["release_level_early_verification"] == "fast"
-    assert update_data["release_level_alpha_verification"] == "fast"
-    assert update_data["release_level_early_verification"] == "fast"
+    # SPEC-009 retires the per-level suites; schema 2 never stores them
+    # (Issue #1071), and the old side still reads the saved legacy values.
+    for key in (
+        "release_level_alpha_verification",
+        "release_level_early_verification",
+    ):
+        assert key not in answers
+        assert key not in update_data
     assert answers["verification_mode"] == "hosted"
     assert update_data["verification_mode"] == "hosted"
 
@@ -8407,10 +8419,11 @@ def test_update_migrates_documentation_language_and_license_settings() -> None:
         {},
     )
 
-    assert migrated["features"] == ["docker"]
+    assert migrated["container"] is True
     assert migrated["documentation_mode"] == "template-and-content"
-    assert migrated["primary_language"] == "en"
-    assert migrated["i18n"] == "en-zh-tw"
+    # SPEC-009: readme_primary_language + the old bilingual default.
+    assert migrated["documentation_languages"] == "en+zh-tw"
+    assert "primary_language" not in migrated
     assert migrated["project_license"] == "proprietary"
     assert migrated["copyright_holder"] == "Legacy Project"
 
@@ -8439,7 +8452,7 @@ def test_same_revision_update_ignores_derived_release_answers(
                 "--data",
                 "project_mode=new",
                 "--data",
-                "language=ci",
+                "languages=[]",
                 "--data",
                 "project_visibility=private",
                 "--data",

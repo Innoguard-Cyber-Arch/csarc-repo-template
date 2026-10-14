@@ -142,11 +142,11 @@ docs/site/content/*、docs/site/data/navigation.json、docs/site/theme.css
 
 ### 只在你開了對應功能時才存在，才需要一併刪
 
-- `.csarc/scripts/pre-commit` — 只在 `.csarc/config.yml` 的 `enable_precommit: true` 時存在；不持久保存 `.pre-commit-config.yaml`。
+- `.csarc/scripts/pre-commit` — 只在舊版 `enable_precommit: true` 時存在；設定已退役（SPEC-009），新版不再產生，不持久保存 `.pre-commit-config.yaml`。
 - `.github/workflows/template-update.yml`、`.csarc/scripts/check-template-update` — 只在
-  `enable_template_update_notifications: true` 時存在。
+  `scheduled_checks` 含 `template-update` 時存在。
 - `.github/workflows/governance-drift.yml`、`.csarc/scripts/check-governance-drift` — 只在
-  `enable_governance_drift_check: true` 時存在。
+  `scheduled_checks` 含 `governance-drift` 時存在。
 - `.github/workflows/codeql.yml` — 只在 `enable_codeql: true` 時存在。
 
 ### 只在 `project_mode: existing`（`csarc adopt` 到既有 repo）時，這幾個反而不存在

@@ -82,22 +82,25 @@ def _substitute_version_tokens(markdown: str, data: SiteData) -> str:
 # docs-site/governance slides use the literal string `` `[[key]]` `` as a
 # prose example) never matches this regex, so it is left untouched rather
 # than resolved or rejected.
+#
+# Issue #1071 (SPEC-009): the persistent tokens are schema 2 intent; the
+# project name, description, license, and repository URL are one-time seeds
+# resolved from native sources (manifest, LICENSE, local origin). Retired
+# settings and live GitHub facts are not tokens.
 _CONFIG_TOKENS: Final = (
     "project_name",
     "project_description",
     "documentation_mode",
-    "primary_language",
-    "i18n",
+    "documentation_languages",
     "project_license",
     "languages",
     "governance_mode",
     "lifecycle",
-    "project_visibility",
     "code_owner",
-    "review",
+    "admin_bypass",
     "copilot_review",
     "release_trigger",
-    "features",
+    "container",
     "repository_url",
 )
 _CONFIG_TOKEN: Final = re.compile(
@@ -1775,7 +1778,21 @@ def _load_downstream_config(root: Path) -> dict[str, Any] | None:
         return None
     config_module = runpy.run_path(str(root / "scripts/csarc_config.py"))
     load_config = config_module["load_config"]
-    return load_config(config_path)
+    facts = config_module["project_facts"](root)
+    # The template-managed glossary renders the seeds once per csarc update
+    # (a managed constant), so a site build gives the same result in any
+    # checkout, with or without a Git remote (SPEC-009, Issue #1071).
+    glossary_path = root / ".csarc/site/data/glossary.toml"
+    if glossary_path.is_file():
+        glossary = tomllib.loads(glossary_path.read_text(encoding="utf-8"))
+        facts["project_name"] = glossary.get("title", facts["project_name"])
+        facts["project_description"] = glossary.get(
+            "summary_en", facts["project_description"]
+        )
+        source_base = str(glossary.get("source_base", ""))
+        if source_base.endswith("/blob/main/"):
+            facts["repository_url"] = source_base.removesuffix("/blob/main/")
+    return {**facts, **load_config(config_path)}
 
 
 def build(

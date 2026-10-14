@@ -161,7 +161,9 @@ def test_root_policy_and_config_use_the_approved_private_channel() -> None:
     )
     policy = (ROOT / ".github/SECURITY.md").read_text(encoding="utf-8")
 
-    assert config["project_visibility"] == "public"
+    # Visibility is a live fact (SPEC-009); the saved channel is the
+    # public repository's private route.
+    assert "project_visibility" not in config
     assert config["security_reporting_channel"] == ROOT_CONTACT
     assert _validate(config["security_reporting_channel"], "public") == ""
     assert (
@@ -308,15 +310,21 @@ def test_legacy_public_issue_route_fails_closed_on_rerender(
     assert answers["security_reporting_channel"].startswith(
         "Open a GitHub Issue at"
     )
-    # A legacy public consumer stored the old Issue-routing default.
-    answers["project_visibility"] = "public"
-    config.write_text(yaml.safe_dump(answers), encoding="utf-8")
+    # A consumer that became public still stores the old Issue-routing
+    # default. Visibility and the repository URL are live facts the
+    # re-render receives, not saved settings (SPEC-009).
+    assert "project_visibility" not in answers
+    live = {
+        "project_visibility": "public",
+        "repository_url": "https://github.com/example/security-fixture",
+    }
     policy_path = project / ".github/SECURITY.md"
     before = policy_path.read_text(encoding="utf-8")
 
     with pytest.raises(Exception, match=MISSING_REJECTION):
         run_recopy(
             str(project),
+            data=live,
             defaults=True,
             unsafe=True,
             skip_tasks=True,
@@ -328,7 +336,7 @@ def test_legacy_public_issue_route_fails_closed_on_rerender(
 
     run_recopy(
         str(project),
-        data={"security_reporting_channel": "security@example.com"},
+        data={**live, "security_reporting_channel": "security@example.com"},
         defaults=True,
         unsafe=True,
         skip_tasks=True,

@@ -1,38 +1,30 @@
-# CSARC settings for the template repository itself.
+# CSARC settings for the template repository itself (SPEC-009 schema 2).
 # Copier source metadata belongs only to repositories generated from this source.
-actions_fallback: admin
+# The project name, description, license, and copyright holder are read from
+# pyproject.toml and LICENSE; visibility and the repository URL are live facts.
+schema_version: 2
 admin_bypass: always
-verification_mode: hosted
 code_owner: '@Innoguard-Cyber-Arch/arch'
+container: false
 copilot_review: allowed
-copyright_holder: Innoguard Cyber Arch
 coverage_mode: global
 coverage_threshold: 80
-enable_codeql: false
-enable_governance_drift_check: false
-enable_precommit: false
-enable_template_update_notifications: false
+documentation_languages: zh-tw+en
 documentation_mode: template-and-content
-features: []
+enable_codeql: false
 governance_mode: managed
-i18n: en-zh-tw
 languages:
 - python
 lifecycle:
 - issues
 - milestones
 package_name: csarc_cli
-project_description: Cyber-Arch cross-language repository template and governance baseline.
-project_license: proprietary
-project_mode: existing
 project_maturity: early
-project_name: CSARC Repository Template
 project_run_command: uv run csarc --help
-project_slug: csarc-repo-template
-project_visibility: public
-primary_language: zh-tw
-python_support_mode: latest
+project_verification_hook: ''
+python_floor: latest
 release_ownership: csarc-owned
 release_trigger: manual
-repository_url: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template
+scheduled_checks: []
 security_reporting_channel: justyn.jt.chen@tw.ey.com
+verification_mode: hosted

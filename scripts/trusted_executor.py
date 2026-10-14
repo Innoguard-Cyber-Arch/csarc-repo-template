@@ -19,8 +19,9 @@ code can never decide the required result through it.
 Issue #1069 (G2) extends the same boundary to merges and to generated
 projects. This file is byte-identical in the template repository
 (`scripts/`) and in generated projects (`.csarc/scripts/`), and it also owns
-the base-commit policy: a read-only, fail-closed reader for the current and
-next configuration schema, the governance-switch route for changes to
+the base-commit policy: a read-only, fail-closed reader for the current
+configuration schema (SPEC-009 schema 2, Issue #1071, through the shared
+current-only `csarc_config` parser), the governance-switch route for changes to
 `.csarc/scripts` or relaxed governance values, the release-channel
 verification floor, and the materialized trusted base the local lifecycle
 re-executes from. Candidate copies of these rules only ever run as a
@@ -316,39 +317,14 @@ def read_changed_files(path: Path | None) -> list[str]:
 # Issue #1069 (G2): base-commit policy shared by hosted and local gates.
 # ---------------------------------------------------------------------------
 
-SCHEMA_KEY = "schema_version"
-CURRENT_SCHEMA = 1
-NEXT_SCHEMA = 2
-SUPPORTED_SCHEMAS = (CURRENT_SCHEMA, NEXT_SCHEMA)
-# The next schema stores intent only (#1058 decision 3): it rejects legacy
-# aliases and retired settings instead of normalizing them, and it never
-# fills a governance value from a legacy default. Q1 owns the final key set
-# and must extend this reader in the trusted base before switching a writer.
-NEXT_SCHEMA_RETIRED_KEYS = frozenset(
-    {
-        "actions_fallback",
-        "copilot_review_max_level",
-        "default_release_level",
-        "enable_docker",
-        "pr_review_mode",
-        "readme_primary_language",
-        "release_immutable_releases",
-        "release_levels_enabled",
-        "release_ownership_reason",
-        "release_required_inputs",
-        "release_settings_owner",
-        "release_workflow",
-    }
-)
-NEXT_SCHEMA_RETIRED_PREFIXES = ("policy_", "release_level_")
-NEXT_SCHEMA_REQUIRED_KEYS = (
-    "admin_bypass",
-    "copilot_review",
-    "governance_mode",
-    "review",
-    "verification_mode",
-)
-NEXT_SCHEMA_METADATA_KEYS = frozenset({"_commit", "_src_path"})
+SCHEMA_KEY = csarc_config.SCHEMA_KEY
+# Issue #1071 (Q1) switched the writer to schema 2 only after this reader
+# could validate it. The reader is current-only: legacy schemas are read by
+# the pinned CLI's migration registry, never by repository scripts, and a
+# later schema must first be added here in a trusted base before any writer
+# emits it (#1058 decision 8).
+CURRENT_SCHEMA = csarc_config.SCHEMA_VERSION
+SUPPORTED_SCHEMAS = (CURRENT_SCHEMA,)
 
 ROUTE_ORDINARY = "ordinary"
 ROUTE_GOVERNANCE_SWITCH = "governance-switch"
@@ -356,15 +332,13 @@ GOVERNANCE_SWITCH_LABEL = "governance-switch"
 GOVERNED_SCRIPTS = GENERATED_SCRIPTS + "/"
 # Each tuple runs from the strictest to the most relaxed value.
 GOVERNANCE_ORDER: dict[str, tuple[str, ...]] = {
-    "actions_fallback": ("off", "admin"),
     "admin_bypass": ("off", "beta-only", "always"),
     "copilot_review": ("off", "allowed"),
     "governance_mode": ("managed", "observe"),
-    "review": ("peer", "solo"),
     "verification_mode": ("hosted", "local"),
 }
-GOVERNANCE_FLAGS = ("enable_codeql", "enable_governance_drift_check")
-GOVERNANCE_LISTS = ("lifecycle",)
+GOVERNANCE_FLAGS = ("enable_codeql",)
+GOVERNANCE_LISTS = ("lifecycle", "scheduled_checks")
 GOVERNANCE_MINIMUMS = ("coverage_threshold",)
 
 SUITE_RANK = {"fast": 0, "full": 1}
@@ -375,76 +349,28 @@ SHA = re.compile(r"[0-9a-f]{40}")
 PULL_FILES_LIMIT = 3000
 
 
-def _top_level_settings(text: str) -> dict[str, str]:
-    """Return each top-level key with its raw scalar text."""
-    settings: dict[str, str] = {}
-    for line in text.splitlines():
-        if not line or line[0].isspace() or line.startswith(("#", "- ")):
-            continue
-        key, separator, value = line.partition(":")
-        if separator and key:
-            settings[key] = value.strip()
-    return settings
-
-
 def config_schema(path: Path) -> int:
     """Return the declared configuration schema, failing closed if unknown."""
-    raw = _top_level_settings(path.read_text(encoding="utf-8"))
-    if SCHEMA_KEY not in raw:
-        return CURRENT_SCHEMA
-    value = raw[SCHEMA_KEY]
-    if re.fullmatch(r"[1-9][0-9]{0,3}", value) is None:
-        raise ValueError(f"Invalid {SCHEMA_KEY} in {path}: {value!r}")
-    schema = int(value)
-    if schema not in SUPPORTED_SCHEMAS:
+    values = csarc_config.parse_settings_text(
+        path.read_text(encoding="utf-8"), path
+    )
+    try:
+        return csarc_config.declared_schema(values, path)
+    except csarc_config.SettingsError as error:
         raise ValueError(
-            f"Unsupported {SCHEMA_KEY} {schema} in {path}; this trusted base "
-            "reads schemas 1 and 2 only. Merge a base that reads the new "
-            "schema before changing the writer."
-        )
-    return schema
+            f"{error} This trusted base reads schema {CURRENT_SCHEMA} only; "
+            "merge a base that reads a new schema before changing the writer."
+        ) from error
 
 
 def read_config(path: Path) -> dict[str, object]:
-    """Read the current or next configuration schema without writing.
+    """Read the current configuration schema without writing.
 
-    Schema 1 keeps the existing normalizing reader. Schema 2 is the next,
-    intent-only shape: retired keys, unknown private keys, and missing
-    governance values fail closed instead of being normalized.
+    Retired keys, unknown keys or metadata, missing intent, and any other
+    schema fail closed; nothing is normalized from legacy defaults.
     """
-    schema = config_schema(path)
-    if schema == NEXT_SCHEMA:
-        raw = _top_level_settings(path.read_text(encoding="utf-8"))
-        retired = sorted(
-            key
-            for key in raw
-            if key in NEXT_SCHEMA_RETIRED_KEYS
-            or key.startswith(NEXT_SCHEMA_RETIRED_PREFIXES)
-        )
-        if retired:
-            raise ValueError(
-                f"Schema {NEXT_SCHEMA} in {path} still contains retired "
-                f"settings: {', '.join(retired)}"
-            )
-        private = sorted(
-            key
-            for key in raw
-            if key.startswith("_") and key not in NEXT_SCHEMA_METADATA_KEYS
-        )
-        if private:
-            raise ValueError(
-                f"Schema {NEXT_SCHEMA} in {path} has unknown metadata: "
-                + ", ".join(private)
-            )
-        missing = [key for key in NEXT_SCHEMA_REQUIRED_KEYS if key not in raw]
-        if missing:
-            raise ValueError(
-                f"Schema {NEXT_SCHEMA} in {path} must state "
-                + ", ".join(missing)
-            )
-    values = csarc_config.load_config(path)
-    values[SCHEMA_KEY] = schema
-    return values
+    config_schema(path)
+    return csarc_config.load_config(path)
 
 
 def governance_relaxations(  # noqa: C901
