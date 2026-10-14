@@ -15,6 +15,9 @@ import yaml
 REPO_ROOT = Path(__file__).parents[1]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/dependabot-auto-merge.yml"
 MERGE_WORKFLOW_PATH = REPO_ROOT / ".github/workflows/dependabot-merge.yml"
+GENERATED_MERGE_WORKFLOW_PATH = (
+    REPO_ROOT / "template/.github/workflows/dependabot-merge.yml"
+)
 SYNC_STEP = "Sync template files, materialize stable, and push on drift"
 GENERATED_WORKFLOW_PATH = (
     REPO_ROOT / "template/.github/workflows/dependabot-auto-merge.yml"
@@ -533,9 +536,49 @@ def test_exact_merge_wakes_only_from_trusted_completed_workflows() -> None:
     resolve = workflow["jobs"]["resolve-pr"]
     assert "pull_request_target" in resolve["if"]
     assert "pull_request_review" in resolve["if"]
-    assert "--resolve-head-sha" in source
+    assert "resolve-merge-candidate" in source
     assert "ref: ${{ github.sha }}" in source
     assert "ref: ${{ github.event.workflow_run.head_sha }}" not in source
+
+
+@pytest.mark.parametrize(
+    "path", [MERGE_WORKFLOW_PATH, GENERATED_MERGE_WORKFLOW_PATH]
+)
+def test_exact_merge_no_match_is_a_read_only_successful_no_op(
+    path: Path,
+) -> None:
+    """Issue #1087: zero exact open PRs skip every merge and release write."""
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    resolve_job = workflow["jobs"]["resolve-pr"]
+    steps = {step["name"]: step for step in resolve_job["steps"]}
+    resolve = steps["Resolve the unique triggering pull request"]
+    identity = steps["Bind the exact live Dependabot identity"]
+    merge = workflow["jobs"]["merge"]
+
+    # The lookup job only reads; a no-op therefore writes nothing.
+    assert resolve_job["permissions"] == {
+        "contents": "read",
+        "pull-requests": "read",
+    }
+    assert resolve_job["outputs"]["outcome"] == (
+        "${{ steps.resolve.outputs.outcome }}"
+    )
+    assert (
+        "authenticate_dependabot_head.py resolve-merge-candidate"
+        in (resolve["run"])
+    )
+    assert "--paginate" in resolve["run"]
+    assert "--slurp" in resolve["run"]
+    assert "commits/$HEAD_SHA/pulls" in resolve["run"]
+    assert "--resolve-head-sha" not in resolve["run"]
+    assert "|| true" not in resolve["run"]
+    assert "continue-on-error" not in resolve
+    assert identity["if"] == "${{ steps.resolve.outputs.outcome == 'merge' }}"
+    # Every lease, merge-trace, merge, and release write sits in the merge
+    # job, which only runs for the single exact candidate.
+    assert "needs.resolve-pr.result == 'success'" in merge["if"]
+    assert "needs.resolve-pr.outputs.outcome == 'merge'" in merge["if"]
+    assert "continue-on-error" not in merge
 
 
 def test_exact_merge_rechecks_live_bot_coordinates_before_readiness() -> None:

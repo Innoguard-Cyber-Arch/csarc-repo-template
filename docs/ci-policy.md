@@ -1181,7 +1181,11 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
    `dependabot-merge-eligible` check；它不是 Ruleset required context，也不能單獨授權合併。
 
    `.github/workflows/dependabot-merge.yml` 從 default branch 接續 `CI`／`PR policy`／`PR review`／上述 eligibility
-   workflow 的 completed event。它先以唯讀 required-check 狀態避免提早取得 lease，再由
+   workflow 的 completed event。它先以唯讀 lookup（`authenticate_dependabot_head.py resolve-merge-candidate`，
+   讀完所有分頁，#1087）找出唯一符合 open、同 repo、`main` base、exact head 與 `dependabot[bot]` Bot 身分的 PR：
+   零個符合（含只剩 closed／merged 紀錄或 head 已移動）時以穩定 no-op reason 成功結束，不取 lease、不寫 merge
+   trace、不 merge 也不 dispatch release；多個候選、identity 不完整或狀態矛盾則 fail closed，不任選一張。
+   接著以唯讀 required-check 狀態避免提早取得 lease，再由
    `scripts/pr_lifecycle.py acquire → check → merge` 重新驗證 live PR、Bot account type、同 repo ref、current commit
    簽章（或 exact sync-child parent）、eligibility check 的 GitHub Actions App／workflow／event、review、Ruleset 與
    required checks；`check` 與 `merge` 都重新讀取同一份 mutable state，REST merge 另帶 exact `sha`。任何漂移都
