@@ -392,11 +392,16 @@ def test_update_keeps_saved_visibility_and_origin_settings() -> None:
     assert cli.observed_setting_differences(
         SAVED_PRIVATE, {}, GITHUB_PUBLIC_RENAMED
     ) == {
-        # CodeQL is listed for confirmation, never flipped (#1058 d15).
+        # CodeQL is noted, never flipped (#1058 d15).
         "enable_codeql": True,
         "project_visibility": "public",
-        "repository_url": "https://github.com/new-owner/renamed",
     }
+    # A different origin is not a reported difference: it fails closed
+    # before any write (Issue #1072 AC5).
+    with pytest.raises(CliError, match="the target was not changed"):
+        cli.require_repository_identity(
+            SAVED_PRIVATE, {}, GITHUB_PUBLIC_RENAMED
+        )
 
 
 def test_explicit_data_is_the_only_writer_for_live_differences() -> None:
@@ -462,13 +467,15 @@ def test_live_difference_is_a_reported_decision_not_a_write() -> None:
     actions = cli.update_required_actions(
         cli.Plan((), (), (), (), (), (), ()), rows, observed=observed
     )
+    # The saved CodeQL intent stays unchanged with only a note (#1072 AC4).
+    codeql = by_key["enable_codeql"]
+    assert codeql["class"] == "unchanged"
+    assert "saved intent stays unchanged" in str(codeql["note"])
     assert [
         (action["kind"], action["subject"], action["blocking"])
         for action in actions
     ] == [
-        ("setting-decision", "enable_codeql", False),
         ("setting-decision", "project_visibility", False),
-        ("setting-decision", "repository_url", False),
     ]
 
 

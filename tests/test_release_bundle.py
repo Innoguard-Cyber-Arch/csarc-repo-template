@@ -47,6 +47,7 @@ def repository(tmp_path: Path) -> Path:
     shutil.copy2(ROOT / "scripts/stale_branch_detection.py", root / "scripts")
     shutil.copy2(ROOT / "scripts/release_phase.py", root / "scripts")
     shutil.copy2(ROOT / "scripts/csarc_config.py", root / "scripts")
+    shutil.copy2(ROOT / "scripts/repository_facts.py", root / "scripts")
     (root / ".csarc").mkdir()
     (root / ".csarc/config.yml").write_text(
         "project_slug: fixture\n"

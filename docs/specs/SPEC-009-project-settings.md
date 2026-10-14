@@ -81,7 +81,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 
 <!-- csarc-settings-table:end -->
 
-`github_project_url` 由 #1080（K2）加入本表；本規格不預先保存未使用的鍵。題數、preset 展開與 transcript 由 #1078（Q3）定義，repository detector 與唯一推導規則由 #1072（Q2）定義，payload 由 #1077（P2）定義；它們都只能使用本表的分類。
+`github_project_url` 由 #1080（K2）加入本表；本規格不預先保存未使用的鍵。題數、preset 展開與 transcript 由 #1078（Q3）定義，repository detector 與唯一推導規則見 §8（#1072，Q2），payload 由 #1077（P2）定義；它們都只能使用本表的分類。
 
 ### 3. 退役鍵
 
@@ -161,7 +161,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 ### 6. 非互動與一次性輸入
 
 - non-interactive init／adopt 以 `--data` 傳齊 seed 時不提問（0 題）；seed 只進 render 與 provenance context，不進設定檔。
-- `package_name`、`project_run_command` 只有以 `--data` 明確決定時才寫入設定檔（init、update）；其餘時候是 derived context。
+- `package_name`、`project_run_command` 只有以 `--data` 明確決定時才寫入設定檔（init、update）；adopt 只在 native manifest 有多個候選，或明確值與 manifest 矛盾時保存（§8）；其餘時候是 derived context。
 - update 預設 0 題；seed 的修改只能用一次性 `--data`，列為 decision，結果只更新 provenance context。
 
 ### 7. Breaking change 與恢復
@@ -170,6 +170,25 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 - 升級：`csarc update` 以 migration registry 讀舊設定、在報告列出每個 `retired`／`exact` 列，並在同一次寫入改為 schema 2。失敗時 target 不變。
 - 既有 repository 的 product manifest、starter 與 lockfile 不被 seed（#1058 決定 25）。
 - `actions_fallback` 退役是行為變更：quota fallback 入口一律拒絕，Actions 中斷改走 governance-switch 路線，required checks 不變。
+
+### 8. Repository detector 與唯一推導（#1072）
+
+CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/repository_facts.py`）與 generated runtime（`.csarc/scripts/repository_facts.py`）執行逐位元組相同的 detector；它只讀不寫，Git 與 GitHub 讀取由呼叫端注入。每個 fact 的 `state` 是封閉詞彙：`known` 帶有此刻觀察到的 `value`；`unknown` 帶 `reason`、沒有值（離線、權限不足、沒有 GitHub origin），不以猜測或上次的結果冒充現況；`ambiguous` 列出 `candidates`，由使用者做一次明確決定。
+
+| fact | 來源 | `unknown` 的典型原因 |
+| --- | --- | --- |
+| `origin` | target 本身是 Git root 時的 `origin` remote；沒有 origin 時才用 `GH_REPO` | 不是 Git root、origin 不是 GitHub URL；沒有 origin 時其他 remote 一律不猜（多個為 `ambiguous`） |
+| `identity` | `GET repos/{owner}/{repo}` 的 `full_name`、`id`、owner | 離線、權限不足、回傳的 `full_name` 與 origin 不符 |
+| `visibility`、`default_branch` | 同一次 repository 讀取 | 回傳缺值 |
+| `permissions` | 同一次讀取的 `role_name`（#1058 決定 6） | 缺 `role_name` |
+| `security` | 同一次讀取的 `security_and_analysis` 狀態 | 需要 admin 權限才看得到 |
+| `plan` | organization 用 `GET orgs/{owner}`，個人帳號用 `GET user` | 只有 owner 本人看得到 |
+
+- live facts 不寫入 `.csarc/config.yml`。render 仍需要 visibility 時，CLI 用明確 `--data`、上次 render 記錄的值或 safe default，但 detector 的 fact 維持 `unknown`；runtime 的 `project_facts()` 只在 origin 為 `known` 時給出 repository URL，否則為空字串。
+- 唯一推導：`package_name` 在 `src/` 只有一個 package 時取它；有多個時，只有 `pyproject.toml` 的 `[project] name`（正規化為 identifier）選中其中一個才算唯一，否則為 `ambiguous`；沒有 `src/` package 時取正規化的 project name。`project_run_command` 依模板順序（python、typescript、rust、go）組合各語言指令，每個選取的語言都必須有 native manifest（`pyproject.toml`、`package.json`、`Cargo.toml`、`go.mod`），否則為 `unknown`；package 為 `ambiguous` 時它也是 `ambiguous`；沒有語言時為 `./.csarc/scripts/verify`。
+- 已保存或明確傳入的 decision 永遠優先。adopt：唯一推導取代 slug 預設；`ambiguous` 在任何寫入前 fail closed，要求 `--data KEY=...`；`unknown` 沿用模板預設。update：唯一推導只補上 provenance 沒有記錄的值；與記錄值矛盾或為 `ambiguous` 時保留記錄值，在報告列 note 與非阻擋的 `setting-decision`，直到傳入一次明確決定；沒有記錄值而 `ambiguous` 時 fail closed；`unknown` 沿用記錄值。
+- visibility、entitlement（`security` 顯示 `advanced_security`／`code_security` 未啟用）、模板或 preset 預設改變時，已存的 `enable_codeql`、`scheduled_checks`、`lifecycle`、`coverage_*` 與 `python_floor` 一律維持 `unchanged`；差異只寫在報告列的 note，不產生 required action。
+- 身分：update 在任何 render 或寫入前，比較 origin 識別的 repository 與設定／provenance 記錄的 `repository_url`，不一致就 fail closed。一次性 `--data repository_url=...` 只核准這一次 plan，而且仍須指向 origin 識別的 repository；它不是設定鍵，只進 render 與 provenance context。origin 為 `unknown` 時不比較。
 
 ## Acceptance criteria
 
@@ -182,7 +201,6 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 ## Out of scope
 
 - 題數、preset 展開、WARNING 與 approval route preflight（#1078）。
-- repository detector 與 package／run command 的唯一推導（#1072）。
 - 依選項縮減的 payload 與預設值調整（#1077）。
 - `github_project_url`（#1080）。
 - 網站 token 與 CLI hint 的全面清理（#1090）、文件中的過期說法（#1091）。
@@ -190,7 +208,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 ## Verification
 
 - `python3 scripts/spec_to_issue.py validate`
-- `uv run pytest tests/test_settings_spec.py`
+- `uv run pytest tests/test_settings_spec.py tests/test_repository_facts.py`
 - `uv run pytest tests/test_settings_migration.py tests/test_root_config.py tests/test_base_policy.py`
 
 ## References
@@ -198,6 +216,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 - [SPEC-008 lifecycle report format](SPEC-008-lifecycle-report-format.md)
 - [Simplified project configuration ADR](../adr/simplified-project-configuration.md)
 - [Issue #1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)
+- [Issue #1072](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1072) — repository detector 與唯一推導
 - [Issue #1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058) — 決定 3、8、14–17、25
 - [Issue #900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900) — 平面、最少的設定
 - [Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919) — 文件模式與語言

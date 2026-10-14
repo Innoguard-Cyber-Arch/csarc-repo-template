@@ -18,12 +18,13 @@ CLI's migration registry, outside the repository.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import re
-import subprocess
 import sys
 import tomllib
 from pathlib import Path
+from types import ModuleType
 
 CONFIG_FILE = Path(".csarc/config.yml")
 SCHEMA_KEY = "schema_version"
@@ -437,23 +438,27 @@ def _manifest_identity(root: Path) -> tuple[str, str]:
     return root.resolve().name, ""
 
 
+def _repository_facts() -> ModuleType:
+    """Load the shared repository detector shipped beside this reader."""
+    path = Path(__file__).with_name("repository_facts.py")
+    spec = importlib.util.spec_from_file_location("repository_facts", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _origin_url(root: Path) -> str:
-    """Return the canonical GitHub URL of the local origin, if any."""
-    try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "-C", str(root), "config", "--get", "remote.origin.url"],  # noqa: S607
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return ""
-    match = re.fullmatch(
-        r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
-        r"(?P<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?",
-        result.stdout.strip(),
-    )
-    return f"https://github.com/{match.group('slug')}" if match else ""
+    """Return the GitHub URL the shared detector observes for origin.
+
+    The URL is a live fact (SPEC-009, Issue #1072): it is read from local
+    Git every time and is empty whenever the detector reports it unknown or
+    ambiguous, never a guess or a value saved earlier.
+    """
+    detector = _repository_facts()
+    origin = detector.observe_origin(root, detector.git_runner(root))
+    return str(origin["value"]) if origin["state"] == detector.KNOWN else ""
 
 
 def project_facts(root: Path) -> dict[str, object]:
@@ -461,7 +466,8 @@ def project_facts(root: Path) -> dict[str, object]:
 
     Runtime never asks GitHub for these values (SPEC-009): the name and
     description come from the README seed or the product manifest, legal
-    facts from LICENSE, and the repository URL from the local origin remote.
+    facts from LICENSE, and the repository URL from the local origin remote
+    through the shared repository detector.
     """
     slug, manifest_description = _manifest_identity(root)
     title, readme_description = _readme_identity(root)
