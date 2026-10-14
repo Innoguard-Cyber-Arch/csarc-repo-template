@@ -1109,12 +1109,32 @@ def slugify(value: str) -> str:
     return slug or "csarc-project"
 
 
-# Files copier.yml renders only for a csarc-owned Release writer (#1068).
-CSARC_RELEASE_WRITER_FILES = (
-    ".github/workflows/release.yml",
-    ".github/workflows/release-drift.yml",
-    ".csarc/scripts/check-release-drift",
+# Namespaces whose files only CSARC renders. copier.yml `_exclude` decides
+# which of them a given set of options renders (#1077); an update retires a
+# byte-identical file the new options no longer render.
+CSARC_OWNED_PREFIXES = (
+    ".csarc/docs/",
+    ".csarc/policies/",
+    ".csarc/scripts/",
+    ".csarc/site/",
+    ".csarc/tests/",
+    ".github/ISSUE_TEMPLATE/",
+    ".github/workflows/",
 )
+
+
+def option_retirements(
+    old_render: Mapping[str, object], new_render: Mapping[str, object]
+) -> tuple[str, ...]:
+    """Return CSARC-owned old-render files the new options no longer render."""
+    return tuple(
+        sorted(
+            name
+            for name in old_render
+            if name.startswith(CSARC_OWNED_PREFIXES) and name not in new_render
+        )
+    )
+
 
 # CodeQL-analyzed modules; copier.yml's enable_codeql uses the same set.
 CODEQL_LANGUAGES = frozenset({"go", "python", "typescript"})
@@ -10146,16 +10166,15 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         old_render = file_transition.render_fingerprints(
             project_files(old_stage)
         )
-        if release_ownership(candidate_answers) != "csarc-owned":
-            # Only csarc-owned renders the CSARC Release writer (#1068).
-            # Copier never deletes a newly excluded file, so retire the
-            # writer the trusted old render produced; a product-owned
-            # workflow the old render never wrote is not a candidate.
-            retirement_candidates += tuple(
-                name
-                for name in CSARC_RELEASE_WRITER_FILES
-                if name in old_render
-            )
+        # Copier never deletes a file that a newly selected option excludes
+        # (for example the Release writer once ownership leaves csarc-owned,
+        # #1068), so retire every CSARC-owned file the trusted old render
+        # produced that the new render no longer contains (#1077). A
+        # product-owned workflow the old render never wrote is not a
+        # candidate, and a customized copy stays a conflict below.
+        retirement_candidates += option_retirements(
+            old_render, project_files(stage)
+        )
         # A legacy file retires only when it is byte-identical to the
         # trusted old render; a modified one stays as a conflict (#1066).
         retiring, retained = file_transition.split_retirements(

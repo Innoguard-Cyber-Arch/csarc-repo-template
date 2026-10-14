@@ -9,12 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_security_smoke_selects_existing_offline_owners() -> None:
     """Keep the smoke as one thin selector, not a provider-specific suite."""
     root_path = ROOT / "scripts/security-smoke"
-    generated_path = ROOT / "template/.csarc/scripts/security-smoke"
     source = root_path.read_text(encoding="utf-8")
 
-    assert source == generated_path.read_text(encoding="utf-8")
+    # Generated projects never ship the selector or its owner self-tests;
+    # template CI runs them against representative renders (#1077).
+    assert not (ROOT / "template/.csarc/scripts/security-smoke").exists()
     assert root_path.stat().st_mode & S_IXUSR
-    assert generated_path.stat().st_mode & S_IXUSR
     for owner in (
         "test-pr-policy",
         "test-apply-repository-settings",

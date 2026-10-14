@@ -477,6 +477,8 @@ def build_repo(
         "release_phase.py",
         "release_level.py",
         "csarc_config.py",
+        # csarc_config.py reads repository facts through this module (#1072).
+        "repository_facts.py",
         "sync_milestone_state.py",
         "render_release_prompt.py",
         "converge-release-tag",

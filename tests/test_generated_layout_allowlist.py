@@ -11,6 +11,10 @@ import re
 from fnmatch import fnmatchcase
 from pathlib import Path
 
+import yaml
+
+from csarc_cli.cli import option_retirements
+
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "template"
 ADR = ROOT / "docs/adr/generated-repository-layout.md"
@@ -82,3 +86,65 @@ def test_template_sources_outside_csarc_match_the_allowlist() -> None:
             if outside_control_layer(name, patterns)
         )
     assert violations == []
+
+
+def adr_payload_rules() -> dict[str, str]:
+    """Return the ADR's option-rendered `.csarc/` and `.github/` paths."""
+    text = ADR.read_text(encoding="utf-8")
+    section = text.split("## 依選項 render 的 payload", 1)[1]
+    block = re.search(r"```text\n(.*?)\n```", section, re.DOTALL)
+    assert block is not None
+    rules: dict[str, str] = {}
+    for line in block.group(1).splitlines():
+        if line.strip() and not line.startswith("#"):
+            path, _, condition = line.partition(" | ")
+            rules[path.strip()] = condition.strip()
+    return rules
+
+
+def copier_payload_rules() -> dict[str, str]:
+    """Return copier.yml's option-rendered `.csarc/` and `.github/` paths."""
+    config = yaml.safe_load((ROOT / "copier.yml").read_text(encoding="utf-8"))
+    rules: dict[str, str] = {}
+    for rule in config["_exclude"]:
+        match = re.fullmatch(
+            r"\{% if (.*?) %\}(.*?)\{% else %\}(.*?)\{% endif %\}", rule
+        )
+        if match is None:
+            continue
+        condition, kept, excluded = match.groups()
+        if not kept.startswith("__keep"):
+            condition, excluded = f"not ({condition})", kept
+        if excluded.startswith((".csarc/", ".github/")):
+            rules[excluded] = condition
+    return rules
+
+
+def test_adr_payload_table_matches_copier_exclusions() -> None:
+    """AC7 (#1077): the ADR and Copier list the same payload rules."""
+    assert adr_payload_rules() == copier_payload_rules()
+
+
+def test_template_ships_no_self_test_or_dead_module() -> None:
+    """AC1 (#1077): self-tests and caller-less modules never render."""
+    scripts = TEMPLATE / ".csarc/scripts"
+    assert not list(scripts.glob("test-*"))
+    for name in ("security-smoke", "release_phase_rulesets.py"):
+        assert not (scripts / name).exists(), name
+    assert not (TEMPLATE / ".csarc/tests").exists()
+
+
+def test_update_retires_only_csarc_files_the_new_options_drop() -> None:
+    """AC7 (#1077): the CLI retires by the same render difference."""
+    old = {
+        ".csarc/scripts/request-reviewer": "a",
+        ".csarc/scripts/verify": "b",
+        ".github/workflows/release.yml": "c",
+        "src/product/__init__.py": "d",
+        "README.md": "e",
+    }
+    new = {".csarc/scripts/verify": "b", "README.md": "e"}
+    assert option_retirements(old, new) == (
+        ".csarc/scripts/request-reviewer",
+        ".github/workflows/release.yml",
+    )

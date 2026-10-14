@@ -100,6 +100,29 @@ def render(
     return target
 
 
+SELF_TESTS = ROOT / "tests/generated_self_tests"
+
+
+def install_self_tests(project: Path) -> list[str]:
+    """Copy the template-owned self-tests into one rendered project."""
+    for script in (SELF_TESTS / "scripts").iterdir():
+        shutil.copy2(script, project / ".csarc/scripts" / script.name)
+    shutil.copytree(SELF_TESTS / "csarc_tests", project / ".csarc/tests")
+    git(project, "add", "-A")
+    git(
+        project,
+        "-c",
+        "user.name=Self Test",
+        "-c",
+        "user.email=self-test@example.invalid",
+        "commit",
+        "-q",
+        "-m",
+        "test: install template self-tests",
+    )
+    return sorted(path.name for path in (SELF_TESTS / "scripts").iterdir())
+
+
 def output_tail(result: subprocess.CompletedProcess[str]) -> str:
     """Return the end of one command's combined output for failures."""
     return (result.stdout + result.stderr)[-4000:]
@@ -108,11 +131,23 @@ def output_tail(result: subprocess.CompletedProcess[str]) -> str:
 def test_template_self_tests_keep_every_case_in_template_ci(
     template_source: Path, tmp_path: Path
 ) -> None:
-    """Run each shipped self-test on a default render; no case is lost."""
-    project = render(template_source, tmp_path / "default")
-    shipped = sorted(
-        path.name for path in (project / ".csarc/scripts").glob("test-*")
+    """Run each self-test against a full render; no case is lost.
+
+    Generated projects never ship these self-tests (#1077); template CI
+    installs them into a render whose options enable every script they
+    exercise.
+    """
+    project = render(
+        template_source,
+        tmp_path / "default",
+        verification_mode="hosted",
+        lifecycle=["issues", "milestones"],
+        release_ownership="csarc-owned",
     )
+    assert not list((project / ".csarc/scripts").glob("test-*"))
+    assert not (project / ".csarc/tests").exists()
+    assert not (project / ".csarc/scripts/security-smoke").exists()
+    shipped = install_self_tests(project)
     assert shipped == sorted(SELF_TEST_BASELINE)
 
     for name, minimums in SELF_TEST_BASELINE.items():
