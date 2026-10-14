@@ -1,13 +1,14 @@
 [project]
 name = "csarc-repo-template"
-version = "0.30.7"
+version = "0.31.0b1"
 description = "Prompt-ready lifecycle CLI for the CSARC repository template"
 readme = "README.md"
 license = "LicenseRef-Proprietary"
 license-files = ["LICENSE"]
 requires-python = ">=3.14,<3.15"
 dependencies = [
-    "copier>=9.17,<10",
+    "copier==9.18.2",
+    "jinja2==3.1.6",
     "pyyaml>=6.0.3,<7",
 ]
 

@@ -7955,6 +7955,8 @@ def test_update_check_validates_hook_without_running_it(
         (report_dir / cli.UPDATE_PLAN_BASENAME).read_text(encoding="utf-8")
     )
     assert saved_plan.pop("plan_sha256")
+    # The stage-1 plan is a preview only; the final plan replays (#1067).
+    assert saved_plan.pop("replayable") is False
     assert saved_plan == payload
     report = json.loads(
         (report_dir / "csarc-update-report.json").read_text(encoding="utf-8")
@@ -10683,3 +10685,440 @@ def test_generated_project_only_ships_product_tests() -> None:
         encoding="utf-8"
     )
     assert "pyyaml" not in pyproject.lower()
+
+
+# Issue #1073: governance baseline and merge-trailer audit in `csarc status`.
+TRAILER_CONTRACT = (ROOT / "policies/merge-trailers.json").read_text(
+    encoding="utf-8"
+)
+GENERATED_CONTRACT = ".csarc/policies/merge-trailers.json"
+AUDIT_REVIEW = "https://github.com/owner/repo/pull/7#pullrequestreview-1"
+
+
+def audit_repository(tmp_path: Path) -> Path:
+    """Create one empty repository with a fixed origin."""
+    repo = tmp_path / "audited"
+    repo.mkdir()
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.name", "Audit Test")
+    git(repo, "config", "user.email", "audit@example.invalid")
+    git(repo, "remote", "add", "origin", "https://github.com/owner/repo.git")
+    return repo
+
+
+def write_files(repo: Path, files: dict[str, str | None]) -> None:
+    """Write or delete fixture files relative to the repository."""
+    for name, content in files.items():
+        path = repo / name
+        if content is None:
+            path.unlink()
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+
+def answers(commit_sha: str | None) -> str:
+    """Render minimal answers with an optional `_commit`."""
+    head = f"_commit: {commit_sha}\n" if commit_sha else ""
+    return head + "verification_mode: hosted\n"
+
+
+def provenance(
+    commit_sha: str,
+    *,
+    verification: str = "verified",
+    tag: str = "v0.31.0-beta.1",
+) -> str:
+    """Render one saved installation provenance record."""
+    return json.dumps(
+        {
+            "commit_sha": commit_sha,
+            "release_tag": tag,
+            "repository": cli.CANONICAL_REPOSITORY,
+            "repository_id": cli.CANONICAL_REPOSITORY_ID,
+            "schema_version": 1,
+            "verification": verification,
+        }
+    )
+
+
+def stub_github(
+    monkeypatch: pytest.MonkeyPatch,
+    responses: dict[str, tuple[int, str]],
+) -> list[str]:
+    """Serve `gh api` reads from fixtures; Git keeps running for real."""
+    requested: list[str] = []
+    original = cli.run
+
+    def fake_run(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        if command[:4] != ["gh", "api", "--method", "GET"]:
+            return original(command, **kwargs)  # ty: ignore[invalid-argument-type]
+        requested.append(command[4])
+        code, text = responses.get(command[4], (1, "gh: Not Found (HTTP 404)"))
+        return subprocess.CompletedProcess(
+            command,
+            code,
+            stdout=text if code == 0 else "",
+            stderr="" if code == 0 else text,
+        )
+
+    monkeypatch.setattr(cli, "run", fake_run)
+    return requested
+
+
+SOURCE_A = "1" * 40
+SOURCE_B = "2" * 40
+
+
+def baseline_history(repo: Path, scenario: str) -> dict[str, str]:
+    """Build one first-parent history and return its named commits."""
+    shas: dict[str, str] = {}
+    write_files(repo, {"README.md": "legacy\n"})
+    shas["legacy"] = commit(repo, "chore: legacy history")
+    if scenario == "release-init":
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_A),
+                ".csarc/provenance.json": provenance(SOURCE_A),
+                GENERATED_CONTRACT: TRAILER_CONTRACT,
+            },
+        )
+        shas["baseline"] = commit(repo, "chore: csarc init")
+    elif scenario == "adopt-then-update":
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_A),
+                ".csarc/provenance.json": provenance(SOURCE_A),
+            },
+        )
+        shas["adopt"] = commit(repo, "chore: csarc adopt older release")
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_B),
+                ".csarc/provenance.json": provenance(SOURCE_B),
+                GENERATED_CONTRACT: TRAILER_CONTRACT,
+            },
+        )
+        shas["baseline"] = commit(repo, "chore: csarc update")
+    elif scenario == "legacy-without-provenance":
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_A),
+                GENERATED_CONTRACT: TRAILER_CONTRACT,
+            },
+        )
+        shas["unresolved"] = commit(repo, "chore: copy template files")
+    elif scenario == "raw-copier-update":
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_A),
+                ".csarc/provenance.json": provenance(SOURCE_A),
+            },
+        )
+        shas["install"] = commit(repo, "chore: csarc init older release")
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_B),
+                GENERATED_CONTRACT: TRAILER_CONTRACT,
+            },
+        )
+        shas["unresolved"] = commit(repo, "chore: raw copier update")
+        write_files(repo, {".csarc/provenance.json": provenance(SOURCE_B)})
+        shas["contains"] = commit(repo, "chore: csarc update repairs it")
+    elif scenario == "allow-unreleased":
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_A),
+                ".csarc/provenance.json": provenance(
+                    SOURCE_A, verification="development-unreleased"
+                ),
+                GENERATED_CONTRACT: TRAILER_CONTRACT,
+            },
+        )
+        shas["unresolved"] = commit(repo, "chore: csarc init unreleased")
+    elif scenario in {"template-source", "template-fork"}:
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(None),
+                "policies/merge-trailers.json": TRAILER_CONTRACT,
+            },
+        )
+        shas["baseline" if scenario == "template-source" else "unresolved"] = (
+            commit(repo, "feat: add the merge trailer writer")
+        )
+    elif scenario == "not-installed":
+        write_files(repo, {".csarc/config.yml": answers(SOURCE_A)})
+        commit(repo, "chore: config only")
+    return shas
+
+
+@pytest.mark.parametrize(
+    ("scenario", "identity", "expected"),
+    [
+        ("release-init", None, "resolved"),
+        ("adopt-then-update", None, "resolved"),
+        ("legacy-without-provenance", None, "inconclusive"),
+        ("raw-copier-update", None, "inconclusive"),
+        ("allow-unreleased", None, "inconclusive"),
+        ("template-source", cli.CANONICAL_REPOSITORY, "resolved"),
+        ("template-fork", "fork/csarc-repo-template", "inconclusive"),
+        ("not-installed", None, "not-installed"),
+    ],
+)
+def test_status_governance_baseline_rules(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scenario: str,
+    identity: str | None,
+    expected: str,
+) -> None:
+    """Each baseline rule and result comes from the first-parent history."""
+    repo = audit_repository(tmp_path)
+    shas = baseline_history(repo, scenario)
+    responses: dict[str, tuple[int, str]] = {}
+    if identity is not None:
+        responses["repos/owner/repo"] = (
+            0,
+            json.dumps(
+                {
+                    "full_name": identity,
+                    "id": cli.CANONICAL_REPOSITORY_ID
+                    if identity == cli.CANONICAL_REPOSITORY
+                    else 99,
+                }
+            ),
+        )
+    stub_github(monkeypatch, responses)
+    result = cli.governance_audit(repo, None)
+    baseline = result["baseline"]
+    assert isinstance(baseline, dict)
+    assert baseline["result"] == expected
+    # An inconclusive baseline audits no merge: a notice in status, and
+    # blocking only on the strict release path.
+    assert result["blocking"] is False
+    from csarc_cli import merge_trace
+
+    def fixture_git(arguments: list[str]) -> tuple[int, str]:
+        completed = subprocess.run(  # noqa: S603
+            ["git", "-C", str(repo), *arguments],  # noqa: S607
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return completed.returncode, completed.stdout
+
+    def fixture_api(endpoint: str) -> tuple[int, str]:
+        return responses.get(endpoint, (1, "gh: Not Found (HTTP 404)"))
+
+    def fixture_identity() -> object:
+        if identity is None:
+            return None
+        number = (
+            cli.CANONICAL_REPOSITORY_ID
+            if identity == cli.CANONICAL_REPOSITORY
+            else 99
+        )
+        return merge_trace.Identity(identity, number)
+
+    strict = merge_trace.audit(
+        merge_trace.AuditContext(fixture_git, fixture_api, fixture_identity),
+        "HEAD",
+        strict=True,
+    )
+    assert strict["blocking"] is (expected == "inconclusive")
+    monkeypatch.setattr(
+        cli,
+        "detect_install_state",
+        lambda *_args, **_kwargs: {
+            "state": "current",
+            "reason": "fixture",
+            "next_command": "none",
+        },
+    )
+    assert main(["status", str(repo), "--json"]) == 0
+    if expected == "resolved":
+        assert baseline["baseline"] == shas["baseline"]
+    if scenario == "raw-copier-update":
+        assert baseline["candidates"] == [shas["unresolved"], shas["contains"]]
+        assert "updated-outside-csarc" in baseline["unresolved"][0]["reason"]
+    if scenario == "allow-unreleased":
+        assert "development-unreleased" in baseline["unresolved"][0]["reason"]
+    if expected == "inconclusive":
+        candidate = baseline["candidates"][0]
+        confirmed = cli.governance_audit(repo, candidate)
+        assert confirmed["baseline"]["result"] == "confirmed"
+        assert confirmed["baseline"]["baseline"] == candidate
+        assert confirmed["blocking"] is False
+        with pytest.raises(CliError, match="not a candidate"):
+            cli.governance_audit(repo, shas["legacy"])
+
+
+def test_baseline_range_that_starts_after_a_contains_commit_is_resolved() -> (
+    None
+):
+    """A range whose start already contains the writer needs no search."""
+    from csarc_cli import merge_trace
+
+    derived = merge_trace.derive_baseline(
+        "contains", [("a" * 40, "unresolved", "later edit")]
+    )
+    assert derived["result"] == "resolved"
+    assert derived["baseline"] is None
+
+
+def traced_commit(
+    repo: Path,
+    name: str,
+    *,
+    locator: str,
+    tree_override: str | None = None,
+    drop: str = "",
+    payload_tree: str | None = None,
+) -> tuple[str, str]:
+    """Commit one squash-like change with trailers and its record body."""
+    from csarc_cli import merge_trace
+
+    write_files(repo, {f"{name}.txt": f"{name}\n"})
+    git(repo, "add", ".")
+    tree = git(repo, "write-tree")
+    payload = {
+        "trust": "github-hosted",
+        "head_sha": "a" * 40,
+        "schema_version": 1,
+        "tree_sha": payload_tree or tree,
+    }
+    data = merge_trace.canonical_bytes(payload)
+    record = merge_trace.envelope(data, trust="github-hosted", route="issue")
+    contract = merge_trace.validate_contract(json.loads(TRAILER_CONTRACT))
+    values = {
+        "CSARC-Evidence": locator,
+        "CSARC-Evidence-SHA256": record["digest"],
+        "CSARC-Evidence-Tree": tree_override or tree,
+        "CSARC-Trust": "github-hosted",
+        "CSARC-Route": "issue",
+        "CSARC-Approval": "review",
+        "CSARC-Authorization": AUDIT_REVIEW,
+    }
+    pairs = merge_trace.build_trailers(contract, values)
+    pairs = [pair for pair in pairs if pair[0] != drop]
+    message = f"fix: {name} (#7)\n\n" + merge_trace.squash_message([], pairs)
+    parent = git(repo, "rev-parse", "HEAD")
+    sha = git(repo, "commit-tree", tree, "-p", parent, "-m", message)
+    git(repo, "reset", "--hard", sha)
+    return sha, merge_trace.summary_comment(record, data, "merged")
+
+
+def test_status_classifies_merge_trailer_findings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every finding class is reported; only untraced is a notice."""
+    repo = audit_repository(tmp_path)
+    write_files(repo, {"README.md": "start\n"})
+    commit(repo, "chore: legacy history before adoption")
+    pre_baseline, _ = traced_commit(
+        repo,
+        "before",
+        locator="https://github.com/owner/repo/pull/7#issuecomment-9",
+    )
+    shas = baseline_history(repo, "release-init")
+
+    def comment(number: int) -> str:
+        return f"https://github.com/owner/repo/pull/7#issuecomment-{number}"
+
+    responses: dict[str, tuple[int, str]] = {}
+    expected: list[tuple[str, str]] = []
+
+    write_files(repo, {"plain.txt": "plain\n"})
+    expected.append((commit(repo, "fix: plain UI merge"), "untraced"))
+    sha, body = traced_commit(repo, "traced", locator=comment(101))
+    responses["repos/owner/repo/issues/comments/101"] = (
+        0,
+        json.dumps({"body": body}),
+    )
+    expected.append((sha, "traced"))
+    sha, _ = traced_commit(repo, "deleted", locator=comment(102))
+    expected.append((sha, "evidence-missing"))
+    sha, body = traced_commit(repo, "edited", locator=comment(103))
+    responses["repos/owner/repo/issues/comments/103"] = (
+        0,
+        json.dumps({"body": body.replace('"issue"', '"sync"')}),
+    )
+    expected.append((sha, "evidence-digest-mismatch"))
+    sha, body = traced_commit(
+        repo, "moved", locator=comment(104), tree_override="f" * 40
+    )
+    expected.append((sha, "tree-mismatch"))
+    sha, _ = traced_commit(
+        repo, "partial", locator=comment(105), drop="CSARC-Approval"
+    )
+    expected.append((sha, "trailer-invalid"))
+    sha, _ = traced_commit(repo, "offline", locator=comment(106))
+    responses["repos/owner/repo/issues/comments/106"] = (
+        1,
+        "gh: Server Error (HTTP 502)",
+    )
+    expected.append((sha, "inconclusive"))
+
+    stub_github(monkeypatch, responses)
+    result = cli.governance_audit(repo, None)
+    assert result["baseline"]["baseline"] == shas["baseline"]
+    merges = result["merges"]
+    assert [(item["sha"], item["finding"]) for item in merges["merges"]] == (
+        expected
+    )
+    assert pre_baseline not in {item["sha"] for item in merges["merges"]}
+    assert merges["untraced"] == [expected[0][0]]
+    assert [item["finding"] for item in merges["blocking"]] == [
+        "evidence-missing",
+        "evidence-digest-mismatch",
+        "tree-mismatch",
+        "trailer-invalid",
+        "inconclusive",
+    ]
+    assert result["blocking"] is True
+
+    monkeypatch.setattr(
+        cli,
+        "detect_install_state",
+        lambda *_args, **_kwargs: {
+            "state": "current",
+            "reason": "fixture",
+            "next_command": "none",
+        },
+    )
+    assert main(["status", str(repo), "--json"]) == 1
+
+    git(repo, "reset", "--hard", expected[0][0])
+    assert main(["status", str(repo), "--json"]) == 0
+
+
+def test_release_path_audit_fails_closed_on_untraced_merges(
+    tmp_path: Path,
+) -> None:
+    """`merge_trace.py audit --strict` blocks an untraced merge (#1073 AC5)."""
+    from csarc_cli import merge_trace
+
+    repo = audit_repository(tmp_path)
+    baseline_history(repo, "release-init")
+    assert merge_trace.main(["audit", "--root", str(repo), "--strict"]) == 0
+    write_files(repo, {"ui.txt": "merged in the GitHub UI\n"})
+    untraced = commit(repo, "fix: merged without the lifecycle")
+    context = merge_trace.local_context(repo)
+    relaxed = merge_trace.audit(context, "HEAD")
+    assert relaxed["blocking"] is False
+    assert relaxed["merges"]["untraced"] == [untraced]
+    strict = merge_trace.audit(context, "HEAD", strict=True)
+    assert strict["blocking"] is True
+    assert merge_trace.main(["audit", "--root", str(repo), "--strict"]) == 1
+    assert merge_trace.CANONICAL_REPOSITORY == cli.CANONICAL_REPOSITORY
+    assert merge_trace.CANONICAL_REPOSITORY_ID == cli.CANONICAL_REPOSITORY_ID

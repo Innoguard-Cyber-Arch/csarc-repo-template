@@ -147,6 +147,9 @@ class FakeGitHub:
         self.authorization_association = "OWNER"
         self.permission = "admin"
         self.role_name: str | None = None
+        # Issue #1076: the agent-route merge actor is an independent write
+        # identity; a self-authorizing actor keeps `permission`/`role_name`.
+        self.actor_role = "write"
         self.merged = False
         self.base_ref = "main"
         self.base_sha = "b" * 40
@@ -186,6 +189,14 @@ class FakeGitHub:
         self.quota_runner_id = 0
         self.quota_steps: list[dict[str, Any]] = []
         self.compare_status = "ahead"
+        self.pull_commits: list[dict[str, Any]] = [
+            {"commit": {"message": "fix(ci): serialize lifecycle writes"}}
+        ]
+        self.merge_message = ""
+        self.merge_title = ""
+        self.merged_tree = "e" * 40
+        self.rewrite_merge_message: str | None = None
+        self.comment_edits: list[tuple[int, str]] = []
         self.ruleset_response: dict[str, object] = {
             "enforcement": "active",
             "bypass_actors": [],
@@ -325,6 +336,15 @@ class FakeGitHub:
         collaborator = re.fullmatch(r"collaborators/([^/]+)/permission", path)
         if collaborator:
             login = urllib.parse.unquote(collaborator.group(1))
+            if (
+                login.casefold() == self.authenticated_actor.casefold()
+                and login.casefold() != self.authorization_actor.casefold()
+            ):
+                return {
+                    "permission": self.actor_role,
+                    "role_name": self.actor_role,
+                    "user": {"login": login},
+                }
             return {
                 "permission": self.permission,
                 "role_name": (
@@ -378,6 +398,12 @@ class FakeGitHub:
             return {
                 "sha": "d" * 40,
                 "parents": [{"sha": self.merge_parent}],
+                "tree": {"sha": self.merged_tree},
+                "message": (
+                    self.rewrite_merge_message
+                    if self.rewrite_merge_message is not None
+                    else f"{self.merge_title}\n\n{self.merge_message}"
+                ),
             }
         if path == "issues/comments/1" and self.canonical_lease:
             actor = str(self.canonical_lease["actor"])
@@ -453,6 +479,7 @@ class FakeGitHub:
                     "labels": ["ubuntu-latest"],
                     "runner_id": 9,
                     "runner_group_name": "GitHub Actions",
+                    "started_at": self.verification_completed_at,
                     "completed_at": self.verification_completed_at,
                     "steps": [
                         {
@@ -486,6 +513,8 @@ class FakeGitHub:
             return self.inline_comments
         if path.startswith("pulls/42/reviews"):
             return self.reviews
+        if path.startswith("pulls/42/commits"):
+            return self.pull_commits
         raise AssertionError(path)
 
     def comment(self, _repo: str, number: int, body: str) -> dict[str, Any]:
@@ -509,6 +538,16 @@ class FakeGitHub:
             "body": body,
         }
 
+    def edit_comment(
+        self, _repo: str, comment_id: int, body: str
+    ) -> dict[str, Any]:
+        """Record one in-place evidence summary update."""
+        self.comment_edits.append((comment_id, body))
+        for comment in self.comments:
+            if str(comment.get("html_url", "")).endswith(f"-{comment_id}"):
+                comment["body"] = body
+        return {"id": comment_id, "body": body}
+
     def create_issue(
         self,
         _repo: str,
@@ -527,11 +566,18 @@ class FakeGitHub:
         return issue
 
     def merge(
-        self, _repo: str, _number: int, head_sha: str, _title: str
+        self,
+        _repo: str,
+        _number: int,
+        head_sha: str,
+        title: str,
+        message: str = "",
     ) -> dict[str, Any]:
         """Record one synchronous exact-head merge."""
         assert head_sha == self.head
         self.merged = True
+        self.merge_title = title
+        self.merge_message = message
         return {"merged": True, "sha": "d" * 40}
 
 
@@ -1323,6 +1369,54 @@ def lease_fixture() -> dict[str, object]:
         ],
         "reclaimed_commits": [],
         "audit_url": "https://github.com/owner/repo/pull/42#issuecomment-1",
+    }
+
+
+REVIEW_URL = "https://github.com/owner/repo/pull/42#pullrequestreview-1"
+ATTEMPT_URL = "https://github.com/owner/repo/pull/42#issuecomment-1"
+
+
+def hosted_payload_fixture(head: str = "a" * 40) -> dict[str, Any]:
+    """Return one normalized hosted evidence payload for the lease head."""
+    return {
+        "schema_version": 1,
+        "trust": "github-hosted",
+        "success": True,
+        "conclusion": "success",
+        "repository": {"full_name": "owner/repo", "id": 7},
+        "head_sha": head,
+        "tree_sha": "e" * 40,
+        "base_ref": "main",
+        "base_sha": "b" * 40,
+        "tier": "fast",
+        "scopes": ["source"],
+        "command": "./scripts/verify-fast",
+        "toolchain": ["python-3.14", "uv-0.12.15"],
+        "runner_labels": ["ubuntu-latest"],
+        "executor": {
+            "kind": "github-hosted",
+            "id": "200/1",
+            "run_id": 200,
+            "run_attempt": 1,
+            "job_id": 7,
+            "check_run_id": 7,
+            "app_id": 15368,
+        },
+        "started_at": "2026-08-25T01:00:00Z",
+        "completed_at": "2026-08-25T01:05:00Z",
+    }
+
+
+def traced_snapshot(**overrides: object) -> dict[str, object]:
+    """Return a merge snapshot carrying hosted evidence and a route."""
+    return {
+        "merge_mode": "agent",
+        "title": "fix(ci): serialize lifecycle writes",
+        "authorization_source": "review",
+        "authorization_url": REVIEW_URL,
+        "hosted_verification": hosted_payload_fixture(),
+        "trailer_route": "issue",
+        **overrides,
     }
 
 
@@ -4259,7 +4353,11 @@ def test_merge_never_calls_gh_when_protection_is_degraded(
     monkeypatch.setitem(
         merge.__globals__,
         "merge_snapshot",
-        lambda *_: {"merge_mode": "human-only"},
+        lambda *_: {
+            "merge_mode": "human-only",
+            "merge_permission": "manual-only",
+            "protection_reason": "the writer readback is incomplete",
+        },
     )
     called = False
 
@@ -4295,13 +4393,11 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     monkeypatch.setitem(
         merge.__globals__,
         "merge_snapshot",
-        lambda *_: {
-            "merge_mode": "agent",
-            "title": "fix(ci): serialize lifecycle writes",
-            "reviewed_bypass": True,
-            "release_level": "stable",
-            "bypass_route": "stable",
-        },
+        lambda *_: traced_snapshot(
+            reviewed_bypass=True,
+            release_level="stable",
+            bypass_route="stable",
+        ),
     )
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
     monkeypatch.setitem(
@@ -4322,14 +4418,27 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     )
     github = FakeGitHub("a" * 40)
     original_merge = github.merge
+    original_comment = github.comment
 
     def record_merge(
-        repo: str, number: int, head_sha: str, title: str
+        repo: str, number: int, head_sha: str, title: str, message: str
     ) -> dict[str, Any]:
         mutations.append("merge-put")
-        return original_merge(repo, number, head_sha, title)
+        return original_merge(repo, number, head_sha, title, message)
+
+    def record_comment(repo: str, number: int, body: str) -> dict[str, Any]:
+        mutations.append("summary-create")
+        return original_comment(repo, number, body)
+
+    original_edit = github.edit_comment
+
+    def record_edit(repo: str, comment_id: int, body: str) -> dict[str, Any]:
+        mutations.append("summary-status")
+        return original_edit(repo, comment_id, body)
 
     monkeypatch.setattr(github, "merge", record_merge)
+    monkeypatch.setattr(github, "comment", record_comment)
+    monkeypatch.setattr(github, "edit_comment", record_edit)
     merge(
         SimpleNamespace(
             repo="owner/repo",
@@ -4343,11 +4452,25 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
         ),
         github,
     )
-    assert github.audit_comments == [
+    suffix = f"merge={'d' * 40} evidence={ATTEMPT_URL}"
+    summary = merge_trace.parse_summary(github.comment_edits[-1][1])
+    assert summary.status == "merged"
+    assert summary.lines == (
+        f"merge-trace: result=traced {suffix} tree={'e' * 40} "
+        f"expected_tree={'e' * 40} route=issue trust=github-hosted "
+        "actor=agent server_enforcement=ruleset identity=unknown",
         "bypass-trace: release_level=stable route=stable actor=agent "
-        "reason=exact-head-review"
+        f"reason=exact-head-review {suffix}",
+    )
+    # The one durable summary is the only write before the merge call;
+    # every trace waits for the read-back (Issue #1073).
+    assert mutations == [
+        "summary-create",
+        "lease-cas",
+        "merge-put",
+        "summary-status",
     ]
-    assert mutations == ["lease-cas", "merge-put"]
+    assert len(github.audit_comments) == 1
     assert github.merged
     assert released
 
@@ -4784,12 +4907,7 @@ def test_merge_does_not_release_a_lease_for_an_unconfirmed_result(
     lease_path = tmp_path / "lease.json"
     lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
     monkeypatch.setitem(
-        merge.__globals__,
-        "merge_snapshot",
-        lambda *_: {
-            "merge_mode": "agent",
-            "title": "fix(ci): serialize lifecycle writes",
-        },
+        merge.__globals__, "merge_snapshot", lambda *_: traced_snapshot()
     )
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
     monkeypatch.setitem(
@@ -5116,15 +5234,13 @@ def test_copilot_merge_leaves_a_review_trace(
     monkeypatch.setitem(
         merge.__globals__,
         "merge_snapshot",
-        lambda *_: {
-            "merge_mode": "agent",
-            "title": "fix(ci): serialize lifecycle writes",
-            "reviewed_bypass": True,
-            "authorization_source": "copilot",
-            "authorization_url": COPILOT_REVIEW_URL,
-            "release_level": "stable",
-            "bypass_route": "stable",
-        },
+        lambda *_: traced_snapshot(
+            reviewed_bypass=True,
+            authorization_source="copilot",
+            authorization_url=COPILOT_REVIEW_URL,
+            release_level="stable",
+            bypass_route="stable",
+        ),
     )
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
     monkeypatch.setitem(
@@ -5144,12 +5260,18 @@ def test_copilot_merge_leaves_a_review_trace(
         ),
         github,
     )
-    assert github.audit_comments == [
+    suffix = f"merge={'d' * 40} evidence={ATTEMPT_URL}"
+    summary = merge_trace.parse_summary(github.comment_edits[-1][1])
+    assert list(summary.lines[1:]) == [
         "bypass-trace: release_level=stable route=stable actor=agent "
-        "reason=exact-head-copilot-review",
+        f"reason=exact-head-copilot-review {suffix}",
         f"copilot-review-trace: review={COPILOT_REVIEW_URL} "
-        f"head={'a' * 40} actor=agent",
+        f"head={'a' * 40} actor=agent {suffix}",
     ]
+    assert (
+        f"CSARC-Approval: copilot\nCSARC-Authorization: {COPILOT_REVIEW_URL}"
+        in (github.merge_message)
+    )
     assert github.merged
 
 
@@ -5457,7 +5579,7 @@ def test_admin_bypass_merge_requires_the_live_admin_role(
 def test_hosted_verify_evidence_uses_the_shared_record_contract() -> None:
     """Hosted evidence fits the local record contract with its own label."""
     github = FakeGitHub("a" * 40)
-    sink: list[dict[str, object]] = []
+    durable: dict[str, object] = {}
 
     assert (
         require_successful_checks(
@@ -5465,20 +5587,591 @@ def test_hosted_verify_evidence_uses_the_shared_record_contract() -> None:
             "owner/repo",
             github.head,
             {("verify", 15368)},
-            evidence_sink=sink,
+            durable=durable,
         )
         == "success"
     )
 
-    assert len(sink) == 1
+    assert durable
     records = MODULE["local_verification"]
-    hosted = records.normalized_record(sink[0], records.TRUST_HOSTED)
+    hosted = records.normalized_record(durable, records.TRUST_HOSTED)
     local = records.normalized_record(
         local_evidence_fixture(), records.TRUST_LOCAL
     )
     assert set(hosted) == set(local) == records.RECORD_KEYS
-    assert hosted["trust"] == "trusted-hosted"
+    assert hosted["trust"] == "github-hosted"
     assert local["trust"] == "self-attested-local"
     assert hosted["head_sha"] == github.head
     with pytest.raises(RuntimeError, match="trust label"):
         records.normalized_record(local, records.TRUST_HOSTED)
+
+
+# Issue #1073: merges bind to the verified tree and leave a durable trace.
+SCRIPTS = Path(__file__).parents[1] / "scripts"
+merge_trace = MODULE["merge_trace"]
+trailer_route = MODULE["trailer_route"]
+CONTRACT = merge_trace.load_contract(
+    Path(__file__).parents[1] / "policies" / "merge-trailers.json"
+)
+
+
+def patch_merge_boundary(
+    monkeypatch: pytest.MonkeyPatch, snapshot: dict[str, object]
+) -> None:
+    """Hold every lease and release check constant around one merge."""
+    monkeypatch.setitem(
+        merge.__globals__, "merge_snapshot", lambda *_: dict(snapshot)
+    )
+    monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
+    monkeypatch.setitem(
+        merge.__globals__, "revalidate_release_candidate", lambda *_: ""
+    )
+    monkeypatch.setitem(merge.__globals__, "release_refs", lambda _lease: None)
+    monkeypatch.setitem(merge.__globals__, "confirm_refs", lambda _lease: None)
+
+
+def run_merge(
+    tmp_path: Path, github: FakeGitHub, lease: dict[str, object] | None = None
+) -> None:
+    """Merge the fixture pull request through the lifecycle entry point."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(
+        json.dumps(lease or lease_fixture()), encoding="utf-8"
+    )
+    merge(
+        SimpleNamespace(
+            repo="owner/repo",
+            pr_number=42,
+            head_sha=github.head,
+            owner="task/merge",
+            lease=lease_path,
+            authorization_url=REVIEW_URL,
+        ),
+        github,
+    )
+
+
+def test_merge_rejects_head_behind_base_and_reports_tree_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stale head never merges; a different merged tree fails loudly."""
+    patch_merge_boundary(monkeypatch, traced_snapshot())
+    behind = FakeGitHub("a" * 40)
+    behind.compare_status = "diverged"
+    with pytest.raises(RuntimeError, match="does not contain the current base"):
+        run_merge(tmp_path, behind)
+    assert not behind.merged
+    assert behind.audit_comments == []
+
+    moved_head = FakeGitHub("a" * 40)
+    moved_head.commit_payloads[f"git/commits/{'a' * 40}"] = {
+        "sha": "a" * 40,
+        "tree": {"sha": "9" * 40},
+    }
+    with pytest.raises(RuntimeError, match="tree-mismatch"):
+        run_merge(tmp_path, moved_head)
+    assert not moved_head.merged
+    assert moved_head.audit_comments == []
+
+    mismatched = FakeGitHub("a" * 40)
+    mismatched.merged_tree = "f" * 40
+    with pytest.raises(RuntimeError, match="tree-mismatch"):
+        run_merge(tmp_path, mismatched)
+    assert mismatched.merged
+    summary = merge_trace.parse_summary(mismatched.comment_edits[-1][1])
+    assert summary.status == "tree-mismatch"
+    assert summary.lines[0].startswith(
+        f"merge-trace: result=tree-mismatch merge={'d' * 40} "
+        f"evidence={ATTEMPT_URL} tree={'f' * 40}"
+    )
+    assert len(summary.lines) == 1
+
+    rewritten = FakeGitHub("a" * 40)
+    rewritten.rewrite_merge_message = "fix: rewritten\n\nCSARC-Route: issue"
+    with pytest.raises(RuntimeError, match="trailer-mismatch"):
+        run_merge(tmp_path, rewritten)
+    assert (
+        merge_trace.parse_summary(rewritten.comment_edits[-1][1]).status
+        == "trailer-mismatch"
+    )
+
+
+@pytest.mark.parametrize(
+    ("base_ref", "head_ref", "labels", "dependabot", "expected"),
+    [
+        ("dev/m18-upgrade", "fix/1073-trace", set(), False, "issue"),
+        ("main", "fix/42-standalone", set(), False, "issue"),
+        ("dev/m18-upgrade", "sync/main-to-m18", set(), False, "sync"),
+        ("main", "dependabot/uv/copier-9", set(), True, "dependabot"),
+        ("main", "dependabot/uv/copier-9", set(), False, "dependabot"),
+        (
+            "main",
+            "fix/1080-release-recovery",
+            {"release-recovery"},
+            False,
+            "release-recovery",
+        ),
+        ("main", "fix/42-urgent", {"hotfix"}, False, "hotfix"),
+        ("main", "release/v0.31.0", set(), False, "release-follow-up"),
+        (
+            "main",
+            "release-please--branches--main--components--demo",
+            set(),
+            False,
+            "release-follow-up",
+        ),
+        ("main", "dev/m18-upgrade", {"promotion"}, False, "milestone"),
+        ("main", "promote/m18-upgrade", {"promotion"}, False, "milestone"),
+        ("main", "dev/i1080-isolated", {"promotion"}, False, "isolated"),
+    ],
+)
+def test_every_merge_route_writes_csarc_trailers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    base_ref: str,
+    head_ref: str,
+    labels: set[str],
+    dependabot: bool,
+    expected: str,
+) -> None:
+    """Every legal route uses one merge call and one trailer contract."""
+    route = trailer_route(base_ref, head_ref, labels, dependabot)
+    assert route == expected
+    patch_merge_boundary(monkeypatch, traced_snapshot(trailer_route=route))
+    github = FakeGitHub("a" * 40)
+    calls: list[str] = []
+    original = github.merge
+
+    def single_merge(
+        repo: str, number: int, head_sha: str, title: str, message: str
+    ) -> dict[str, Any]:
+        calls.append("merge")
+        return original(repo, number, head_sha, title, message)
+
+    monkeypatch.setattr(github, "merge", single_merge)
+    run_merge(tmp_path, github)
+    assert calls == ["merge"]
+    pairs = merge_trace.parse_trailers(github.merge_message)
+    assert merge_trace.trailer_errors(CONTRACT, pairs) == []
+    trailers = merge_trace.trailer_map(pairs)
+    assert trailers["CSARC-Route"] == [expected]
+    assert trailers["CSARC-Evidence"] == [ATTEMPT_URL]
+    assert trailers["CSARC-Evidence-Tree"] == ["e" * 40]
+    assert trailers["CSARC-Trust"] == ["github-hosted"]
+    assert trailers["CSARC-Approval"] == ["review"]
+    assert trailers["CSARC-Authorization"] == [REVIEW_URL]
+    final = github.comment_edits[-1][1]
+    summary = merge_trace.parse_summary(final)
+    assert summary.record["route"] == expected
+    assert trailers["CSARC-Evidence-SHA256"] == [
+        merge_trace.payload_digest(summary.data)
+    ]
+    assert merge_trace.classify_merge(
+        "e" * 40, github.merge_message, CONTRACT, lambda _url: final
+    ) == ("traced", ATTEMPT_URL)
+
+
+@pytest.mark.parametrize(
+    ("drop", "duplicate", "error"),
+    [
+        ("CSARC-Approval", "", "missing key CSARC-Approval"),
+        ("", "CSARC-Route", "repeated key CSARC-Route"),
+        ("", "", ""),
+    ],
+)
+def test_trailer_contract_fails_closed_on_missing_or_repeated_keys(
+    drop: str, duplicate: str, error: str
+) -> None:
+    """Missing, repeated, or malformed trailers never classify as traced."""
+    pairs = merge_trace.build_trailers(
+        CONTRACT,
+        {
+            "CSARC-Evidence": ATTEMPT_URL,
+            "CSARC-Evidence-SHA256": "sha256:" + "0" * 64,
+            "CSARC-Evidence-Tree": "e" * 40,
+            "CSARC-Trust": "github-hosted",
+            "CSARC-Route": "issue",
+            "CSARC-Approval": "review",
+            "CSARC-Authorization": REVIEW_URL,
+        },
+    )
+    pairs = [pair for pair in pairs if pair[0] != drop]
+    pairs += [pair for pair in pairs if pair[0] == duplicate]
+    errors = merge_trace.trailer_errors(CONTRACT, pairs)
+    assert errors == ([error] if error else [])
+    with pytest.raises(merge_trace.EvidenceError, match="outside its domain"):
+        merge_trace.build_trailers(
+            CONTRACT,
+            {
+                "CSARC-Evidence": "https://example.com/forged",
+                "CSARC-Evidence-SHA256": "sha256:" + "0" * 64,
+                "CSARC-Evidence-Tree": "e" * 40,
+                "CSARC-Trust": "github-hosted",
+                "CSARC-Route": "issue",
+                "CSARC-Approval": "review",
+                "CSARC-Authorization": REVIEW_URL,
+            },
+        )
+
+
+def test_merge_refuses_without_the_trailer_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing contract file stops the lifecycle before any write."""
+    patch_merge_boundary(monkeypatch, traced_snapshot())
+    monkeypatch.setitem(
+        merge_trace.load_contract.__globals__,
+        "default_contract_path",
+        lambda: tmp_path / "missing.json",
+    )
+    github = FakeGitHub("a" * 40)
+    with pytest.raises(RuntimeError, match="contract"):
+        run_merge(tmp_path, github)
+    assert github.audit_comments == []
+    assert not github.merged
+
+
+def test_single_summary_is_replaced_before_and_frozen_after_merge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One marker comment per PR; a new attempt replaces it in place."""
+    patch_merge_boundary(monkeypatch, traced_snapshot())
+    github = FakeGitHub("a" * 40)
+    monkeypatch.setattr(
+        github, "merge", lambda *_: {"merged": False, "sha": None}
+    )
+    with pytest.raises(RuntimeError, match="synchronously merge"):
+        run_merge(tmp_path, github)
+    assert len(github.audit_comments) == 1
+    first = github.audit_comments[0]
+    assert merge_trace.parse_summary(first).status == "attempt"
+    github.comments = [
+        {"html_url": ATTEMPT_URL, "user": {"login": "agent"}, "body": first}
+    ]
+
+    # Retrying the same attempt reuses the summary without rewriting it.
+    with pytest.raises(RuntimeError, match="synchronously merge"):
+        run_merge(tmp_path, github)
+    assert github.audit_comments == [first]
+    assert github.comment_edits == []
+
+    # A newer attempt (fresh evidence) replaces the payload in place.
+    newer = hosted_payload_fixture()
+    newer["completed_at"] = "2026-08-25T02:00:00Z"
+    patch_merge_boundary(
+        monkeypatch, traced_snapshot(hosted_verification=newer)
+    )
+    with pytest.raises(RuntimeError, match="synchronously merge"):
+        run_merge(tmp_path, github)
+    assert github.audit_comments == [first]
+    replaced = merge_trace.parse_summary(github.comment_edits[-1][1])
+    assert replaced.status == "attempt"
+    assert b"2026-08-25T02:00:00Z" in replaced.data
+
+    # After a merge the summary payload is immutable.
+    record = merge_trace.parse_summary(first)
+    github.comments[0]["body"] = merge_trace.summary_comment(
+        record.record, record.data, "merged", ["merge-trace: result=traced"]
+    )
+    with pytest.raises(RuntimeError, match="immutable"):
+        run_merge(tmp_path, github)
+
+    github.comments.append(dict(github.comments[0]))
+    with pytest.raises(RuntimeError, match="More than one"):
+        run_merge(tmp_path, github)
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_payload_schema_versions_stay_readable_across_k1(version: int) -> None:
+    """A later payload version with extra fields still verifies by digest."""
+    payload: dict[str, Any] = {
+        **hosted_payload_fixture(),
+        "schema_version": version,
+    }
+    if version == 2:
+        payload["risks"] = [{"id": "R1", "status": "controlled"}]
+    data = merge_trace.canonical_bytes(payload)
+    record = merge_trace.envelope(data, trust="github-hosted", route="issue")
+    body = merge_trace.summary_comment(record, data, "merged")
+    trailers = {
+        "CSARC-Evidence-SHA256": [record["digest"]],
+        "CSARC-Trust": ["github-hosted"],
+        "CSARC-Route": ["issue"],
+        "CSARC-Evidence-Tree": ["e" * 40],
+    }
+    assert merge_trace.record_findings(trailers, body) == "traced"
+    unversioned = dict(payload)
+    del unversioned["schema_version"]
+    with pytest.raises(merge_trace.EvidenceError, match="schema_version"):
+        merge_trace.envelope(
+            merge_trace.canonical_bytes(unversioned),
+            trust="github-hosted",
+            route="issue",
+        )
+
+
+def test_hosted_evidence_is_normalized_into_a_canonical_payload() -> None:
+    """Derived hosted facts become one durable, digest-stable payload."""
+    github = FakeGitHub("a" * 40)
+    github.verification_completed_at = "2026-08-25T01:05:00.123456+00:00"
+    durable: dict[str, Any] = {}
+    MODULE["require_trusted_verification"](
+        github,
+        "owner/repo",
+        "a" * 40,
+        15368,
+        now=datetime(2026, 8, 25, 2, tzinfo=UTC),
+        durable=durable,
+    )
+    assert durable["trust"] == "github-hosted"
+    assert durable["tree_sha"] == "e" * 40
+    assert durable["completed_at"] == "2026-08-25T01:05:00Z"
+    assert durable["started_at"] == "2026-08-25T01:05:00Z"
+    assert durable["runner_labels"] == ["ubuntu-latest"]
+    assert durable["executor"] == {
+        "kind": "github-hosted",
+        "id": "200/1",
+        "run_id": 200,
+        "run_attempt": 1,
+        "job_id": 7,
+        "check_run_id": 7,
+        "app_id": 15368,
+    }
+    data = merge_trace.canonical_bytes(durable)
+    assert merge_trace.parse_canonical(data) == durable
+
+
+def _release_git(root: Path, *arguments: str) -> str:
+    return subprocess.run(  # noqa: S603
+        [GIT, *arguments],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _release_repository(root: Path) -> str:
+    _release_git(root, "init", "-b", "main")
+    _release_git(root, "config", "user.name", "Release Test")
+    _release_git(root, "config", "user.email", "release@example.invalid")
+    (root / ".release-please-manifest.json").write_text(
+        '{".": "0.1.0"}\n', encoding="utf-8"
+    )
+    (root / "version.txt").write_text("0.1.0\n", encoding="utf-8")
+    (root / "README.md").write_text(
+        "v0.1.0 <!-- x-release-please-version -->\n", encoding="utf-8"
+    )
+    (root / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## v0.1.0\n", encoding="utf-8"
+    )
+    (root / "release-please-config.json").write_text(
+        json.dumps(
+            {"release-type": "simple", "packages": {".": {"component": "demo"}}}
+        ),
+        encoding="utf-8",
+    )
+    _release_git(root, "add", ".")
+    _release_git(root, "commit", "-m", "chore: baseline")
+    _release_git(root, "tag", "v0.1.0")
+    return _release_git(root, "rev-parse", "HEAD")
+
+
+def test_squash_trailers_preserve_breaking_change_footers(
+    tmp_path: Path,
+) -> None:
+    """Adding trailers leaves the release bump and its notes unchanged."""
+    release_policy = runpy.run_path(str(SCRIPTS / "release_policy.py"))
+    main_sha = _release_repository(tmp_path)
+    (tmp_path / "api").write_text("v2\n", encoding="utf-8")
+    _release_git(tmp_path, "add", ".")
+    commit_messages = [
+        "feat(api): replace the endpoint\n\nBREAKING CHANGE: clients must "
+        "call /v2\nRefs: #1",
+        "fix: follow-up\n\nBREAKING-CHANGE: the old flag is gone",
+    ]
+    tree = _release_git(tmp_path, "write-tree")
+    footers = merge_trace.breaking_footers(commit_messages)
+    assert footers == [
+        "BREAKING CHANGE: clients must call /v2",
+        "BREAKING-CHANGE: the old flag is gone",
+    ]
+    trailers = merge_trace.build_trailers(
+        CONTRACT,
+        {
+            "CSARC-Evidence": ATTEMPT_URL,
+            "CSARC-Evidence-SHA256": "sha256:" + "0" * 64,
+            "CSARC-Evidence-Tree": tree,
+            "CSARC-Trust": "github-hosted",
+            "CSARC-Route": "issue",
+            "CSARC-Approval": "review",
+            "CSARC-Authorization": REVIEW_URL,
+        },
+    )
+    title = "feat(api): replace the endpoint (#42)"
+    plain = _release_git(
+        tmp_path,
+        "commit-tree",
+        tree,
+        "-p",
+        main_sha,
+        "-m",
+        title,
+        "-m",
+        "\n".join(footers),
+    )
+    traced = _release_git(
+        tmp_path,
+        "commit-tree",
+        tree,
+        "-p",
+        main_sha,
+        "-m",
+        title,
+        "-m",
+        merge_trace.squash_message(footers, trailers),
+    )
+    plan = release_policy["release_plan"]
+    assert (
+        plan(tmp_path, plain)
+        == plan(tmp_path, traced)
+        == (
+            "v1.0.0",
+            "1.0.0",
+        )
+    )
+    notes = release_policy["_breaking_notes"]
+    traced_body = _release_git(tmp_path, "log", "-1", "--format=%b", traced)
+    plain_body = _release_git(tmp_path, "log", "-1", "--format=%b", plain)
+    assert notes(traced_body) == notes(plain_body)
+
+
+class TracedMergeSource:
+    """Serve one merged Dependabot PR to the release source resolver."""
+
+    def __init__(self, merge_sha: str, head_sha: str, tree: str) -> None:
+        self.merge_sha = merge_sha
+        self.head_sha = head_sha
+        self.tree = tree
+
+    def pages(self, _repo: str, _path: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "merged_at": "2026-10-14T00:00:00Z",
+                "merge_commit_sha": self.merge_sha,
+                "base": {"ref": "main", "repo": {"full_name": "owner/repo"}},
+                "head": {
+                    "sha": self.head_sha,
+                    "ref": "dependabot/github_actions/main/actions-checkout-7",
+                    "repo": {"full_name": "owner/repo"},
+                },
+                "user": {"login": "dependabot[bot]", "type": "Bot"},
+            }
+        ]
+
+    def get(self, _repo: str, path: str) -> dict[str, Any]:
+        if path in {
+            f"git/commits/{self.merge_sha}",
+            f"git/commits/{self.head_sha}",
+        }:
+            return {"tree": {"sha": self.tree}}
+        raise AssertionError(path)
+
+    def collection(
+        self, _repo: str, _path: str, _key: str
+    ) -> list[dict[str, Any]]:
+        return []
+
+
+def test_traced_dependabot_sync_squash_still_plans_release_from_exact_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #1056 survives tree binding and trailers on the squash."""
+    release_policy = runpy.run_path(str(SCRIPTS / "release_policy.py"))
+    checker = runpy.run_path(str(SCRIPTS / "check-trusted-verification"))
+    main_sha = _release_repository(tmp_path)
+    _release_git(
+        tmp_path, "checkout", "-b", "dependabot/github_actions/main/checkout"
+    )
+    (tmp_path / "workflow.yml").write_text("checkout@v7\n", encoding="utf-8")
+    _release_git(tmp_path, "add", ".")
+    _release_git(tmp_path, "commit", "-m", "fix(deps): bump actions/checkout")
+    prepared = release_policy["prepare_release_candidate"](
+        tmp_path, "HEAD", phase="stable"
+    )
+    _release_git(tmp_path, "add", ".")
+    _release_git(tmp_path, "commit", "-m", "chore(main): release 0.1.1")
+    head = _release_git(tmp_path, "rev-parse", "HEAD")
+    head_tree = _release_git(tmp_path, "rev-parse", "HEAD^{tree}")
+
+    route = trailer_route("main", "dependabot/uv/x", set(), True)
+    patch_merge_boundary(
+        monkeypatch,
+        traced_snapshot(
+            trailer_route=route,
+            hosted_verification={
+                **hosted_payload_fixture(head),
+                "tree_sha": head_tree,
+                "base_sha": main_sha,
+            },
+        ),
+    )
+    github = FakeGitHub(head)
+    github.base_sha = main_sha
+    github.destination_sha = main_sha
+    github.merge_parent = main_sha
+    github.merged_tree = head_tree
+    github.commit_payloads[f"git/commits/{head}"] = {
+        "sha": head,
+        "tree": {"sha": head_tree},
+    }
+    lease = {
+        **lease_fixture(),
+        "head_sha": head,
+        "head_tree": head_tree,
+        "base_sha": main_sha,
+    }
+    run_merge(tmp_path, github, lease)
+
+    squash = _release_git(
+        tmp_path,
+        "commit-tree",
+        head_tree,
+        "-p",
+        main_sha,
+        "-m",
+        github.merge_title,
+        "-m",
+        github.merge_message,
+    )
+    message = _release_git(tmp_path, "log", "-1", "--format=%B", squash)
+    pairs = merge_trace.parse_trailers(message)
+    assert merge_trace.trailer_errors(CONTRACT, pairs) == []
+    trailers = merge_trace.trailer_map(pairs)
+    assert trailers["CSARC-Route"] == ["dependabot"]
+    assert (
+        _release_git(tmp_path, "rev-parse", f"{squash}^{{tree}}")
+        == head_tree
+        == trailers["CSARC-Evidence-Tree"][0]
+    )
+
+    eligible = ("dependabot-merge-eligible", 15368)
+    monkeypatch.setitem(
+        checker["resolve_release_source"].__globals__,
+        "trusted_required_check_runs",
+        lambda *_args: (
+            {eligible: {"status": "completed", "conclusion": "success"}},
+            {},
+        ),
+    )
+    source = checker["resolve_release_source"](
+        TracedMergeSource(squash, head, head_tree), "owner/repo", squash
+    )
+    assert source == head
+    _release_git(tmp_path, "checkout", "--detach", squash)
+    report = release_policy["release_plan_report"](
+        tmp_path, squash, phase="stable", source_sha=source
+    )
+    assert report["status"] == "candidate"
+    assert report["materialized"] is True
+    assert report["tag"] == prepared["tag"]

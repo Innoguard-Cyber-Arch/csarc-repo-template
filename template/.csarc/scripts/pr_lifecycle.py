@@ -100,6 +100,7 @@ class SiblingModule:
 # selected command first needs it.
 dependabot_auth: Any = SiblingModule("authenticate_dependabot_head")
 local_verification: Any = SiblingModule("local_verification")
+merge_trace: Any = SiblingModule("merge_trace")
 promotion_gate: Any = SiblingModule("promotion_gate")
 release_level: Any = SiblingModule("release_level")
 review_gate: Any = SiblingModule("review_gate")
@@ -176,6 +177,32 @@ REVIEWED_MERGE_BYPASS_ACTORS = [
         "bypass_mode": "pull_request",
     }
 ]
+# Issue #1076 (#1058 decisions 10 and 27): without a Ruleset the platform
+# enforces nothing, so lifecycle may merge only when a complete readback
+# observes exactly one writer. Unrecognized roles are never guessed.
+WRITE_ROLES = frozenset({"write", "maintain", "admin"})
+NON_WRITE_ROLES = frozenset({"read", "triage"})
+WRITE_TEAM_PERMISSIONS = frozenset({"push", "maintain", "admin"})
+NON_WRITE_TEAM_PERMISSIONS = frozenset({"pull", "triage"})
+REQUIRED_CHECKS_POLICY = Path("policies") / "rulesets-required-checks.json"
+# Each protection state maps to exactly one merge route: `allowed` lets
+# lifecycle merge, `manual-only` leaves a human merge recorded as untraced,
+# and `blocked` has no route until the condition is fixed.
+MERGE_ROUTES = {
+    "enforced": "allowed",
+    "single-writer": "allowed",
+    "inconclusive": "manual-only",
+    "multiple-writers": "manual-only",
+    "unknown": "manual-only",
+    "blocked": "blocked",
+}
+AGENT_PROTECTIONS = frozenset(
+    state for state, route in MERGE_ROUTES.items() if route == "allowed"
+)
+DEPENDABOT_UPDATE_TYPE = re.compile(r"(?m)^\s*update-type:\s*(\S+)\s*$")
+LOCAL_DEPENDABOT_UPDATE_TYPES = frozenset(
+    {"version-update:semver-minor", "version-update:semver-patch"}
+)
 LEASE_CORE_FIELDS = (
     "schema_version",
     "repository",
@@ -270,6 +297,10 @@ class GitHub:
 
     def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
         """Read and flatten every page of a REST collection."""
+        return self.api_pages(f"repos/{repo}/{path}")
+
+    def api_pages(self, endpoint: str) -> list[dict[str, Any]]:
+        """Read and flatten every page of any REST collection endpoint."""
         payload = json.loads(
             run(
                 [
@@ -279,18 +310,20 @@ class GitHub:
                     "--slurp",
                     "-H",
                     "Accept: application/vnd.github+json",
-                    f"repos/{repo}/{path}",
+                    endpoint,
                 ]
             )
         )
         if not isinstance(payload, list):
-            raise RuntimeError(f"GitHub collection {path} is not a list")
+            raise RuntimeError(f"GitHub collection {endpoint} is not a list")
         pages = (
             payload if payload and isinstance(payload[0], list) else [payload]
         )
         items = [item for page in pages for item in page]
         if not all(isinstance(item, dict) for item in items):
-            raise RuntimeError(f"GitHub collection {path} has invalid entries")
+            raise RuntimeError(
+                f"GitHub collection {endpoint} has invalid entries"
+            )
         return items
 
     def collection(
@@ -335,7 +368,12 @@ class GitHub:
         return items
 
     def merge(
-        self, repo: str, pr_number: int, head_sha: str, title: str
+        self,
+        repo: str,
+        pr_number: int,
+        head_sha: str,
+        title: str,
+        message: str,
     ) -> dict[str, Any]:
         """Synchronously merge one exact PR head through the REST API."""
         payload = run(
@@ -353,6 +391,7 @@ class GitHub:
                     "sha": head_sha,
                     "merge_method": "squash",
                     "commit_title": title,
+                    "commit_message": message,
                 }
             ),
         )
@@ -370,6 +409,27 @@ class GitHub:
                 "--method",
                 "POST",
                 f"repos/{repo}/issues/{pr_number}/comments",
+                "--input",
+                "-",
+            ],
+            input_text=json.dumps({"body": body}),
+        )
+        result = json.loads(payload)
+        if not isinstance(result, dict):
+            raise RuntimeError("GitHub comment response is invalid")
+        return result
+
+    def edit_comment(
+        self, repo: str, comment_id: int, body: str
+    ) -> dict[str, Any]:
+        """Replace the body of the lifecycle's one evidence summary."""
+        payload = run(
+            [
+                "gh",
+                "api",
+                "--method",
+                "PATCH",
+                f"repos/{repo}/issues/comments/{comment_id}",
                 "--input",
                 "-",
             ],
@@ -1877,6 +1937,17 @@ def _effective_protection(  # noqa: C901
     check_rules = [
         item for item in rules if item.get("type") == "required_status_checks"
     ]
+    if not pull_rules and not check_rules:
+        # Issue #1076: a complete read with no review or check rule means
+        # the platform enforces nothing; only the audited single-writer
+        # route in `merge_snapshot` may still let lifecycle merge.
+        return (
+            "none",
+            "no Ruleset enforces review or required checks on this branch",
+            set(),
+            False,
+            False,
+        )
     if any(
         not isinstance(item.get("parameters"), dict)
         for item in pull_rules + check_rules
@@ -2161,6 +2232,211 @@ def _effective_protection(  # noqa: C901
         reviewed_bypass,
         copilot_only_block_possible,
     )
+
+
+def merge_route(protection: str) -> str:
+    """Return the `allowed`, `manual-only`, or `blocked` merge route."""
+    return MERGE_ROUTES.get(protection, "blocked")
+
+
+def merge_identity(
+    github: GitHub,
+    repo: str,
+    actor: str,
+    protection: str,
+    authorization_source: str,
+) -> tuple[str, str]:
+    """Classify the merge actor; return a refusal reason when it is unfit.
+
+    #1058 decision 27 (Issue #1076) separates the merge actor from the
+    authorizer. On the ordinary Ruleset agent route (an exact-head review
+    or Copilot review authorizes) the actor must hold `write` and neither
+    `maintain` nor `admin`, read from the live `role_name`; anything else,
+    including an unknown role, is refused. A GitHub App actor holds
+    installation permissions, never a repository role. On the admin-bypass
+    and emergency-hotfix routes the actor is the live admin authorizer
+    itself, and the single-writer route runs as the sole maintainer.
+    """
+    if protection == "single-writer":
+        return "sole-maintainer", ""
+    if protection != "enforced":
+        return "none", ""
+    if authorization_source in {"comment", "hotfix-emergency"}:
+        return "admin-authorizer", ""
+    if actor.endswith("[bot]"):
+        return "app", ""
+    role = live_repository_role(github, repo, actor)
+    if role == "write":
+        return "agent-write", ""
+    return (
+        "agent-" + role,
+        f"the agent-route merge actor {actor} has role {role!r}; a Ruleset "
+        "route needs an independent write identity without maintain or "
+        "admin",
+    )
+
+
+def _writer_logins(
+    collaborators: list[dict[str, Any]],
+) -> tuple[set[str], str]:
+    """Return observed writer logins, or why the readback is incomplete."""
+    writers: set[str] = set()
+    for item in collaborators:
+        login = item.get("login")
+        role = item.get("role_name")
+        if not isinstance(login, str) or not login:
+            return set(), "a collaborator entry has no login"
+        # #1058 decision 6: only `role_name` counts; a missing or custom
+        # role is never mapped back through the legacy `permission`.
+        if not isinstance(role, str) or not role:
+            return set(), f"collaborator {login} has no role_name"
+        if role in WRITE_ROLES:
+            writers.add(login.casefold())
+        elif role not in NON_WRITE_ROLES:
+            return set(), f"collaborator {login} has the unknown role {role!r}"
+    return writers, ""
+
+
+def _team_writer_gap(
+    github: GitHub, repo: str, writers: set[str]
+) -> tuple[str, str]:
+    """Check that every write-capable team is visible and fully observed."""
+    try:
+        teams = github.pages(repo, "teams?per_page=100")
+    except (RuntimeError, json.JSONDecodeError) as error:
+        return "inconclusive", f"the team readback is incomplete: {error}"
+    organization = urllib.parse.quote(repo.split("/", 1)[0], safe="")
+    for team in teams:
+        slug = team.get("slug")
+        permission = team.get("permission")
+        if not isinstance(slug, str) or not slug:
+            return "inconclusive", "a repository team has no slug"
+        if permission in NON_WRITE_TEAM_PERMISSIONS:
+            continue
+        if permission not in WRITE_TEAM_PERMISSIONS:
+            return (
+                "inconclusive",
+                f"team {slug} has the unknown permission {permission!r}",
+            )
+        endpoint = (
+            f"orgs/{organization}/teams/"
+            f"{urllib.parse.quote(slug, safe='')}/members?per_page=100"
+        )
+        try:
+            members = github.api_pages(endpoint)
+        except (RuntimeError, json.JSONDecodeError):
+            return (
+                "inconclusive",
+                f"the members of write-capable team {slug} are hidden",
+            )
+        for member in members:
+            login = member.get("login")
+            if not isinstance(login, str) or not login:
+                return (
+                    "inconclusive",
+                    f"team {slug} lists a member without a login",
+                )
+            if login.casefold() not in writers:
+                return (
+                    "inconclusive",
+                    f"team {slug} grants write to {login}, who is missing "
+                    "from the collaborator readback",
+                )
+    return "", ""
+
+
+def single_writer_eligibility(
+    github: GitHub, repo: str, actor: str
+) -> tuple[str, str]:
+    """Classify the `server_enforcement=none` route (Issue #1076).
+
+    #1058 decisions 10 and 27: only a complete, paginated readback that
+    observes exactly one writer -- the merge actor itself -- is `eligible`.
+    Another writer (a collaborator, a write-capable team member, or a
+    write deploy key) is `multiple-writers`; any failed, malformed, or
+    partial read is `inconclusive`. Both leave a manual merge only.
+    """
+    try:
+        repository = github.get(repo, "")
+        collaborators = github.pages(
+            repo, "collaborators?affiliation=all&per_page=100"
+        )
+        keys = github.pages(repo, "keys?per_page=100")
+    except (RuntimeError, json.JSONDecodeError) as error:
+        return "inconclusive", f"the writer readback is incomplete: {error}"
+    owner = repository.get("owner") if isinstance(repository, dict) else None
+    owner_type = owner.get("type") if isinstance(owner, dict) else None
+    if owner_type not in {"Organization", "User"}:
+        return "inconclusive", "the repository owner type is unavailable"
+    writers, reason = _writer_logins(collaborators)
+    if reason:
+        return "inconclusive", reason
+    if owner_type == "Organization":
+        state, reason = _team_writer_gap(github, repo, writers)
+        if state:
+            return state, reason
+    if any(type(key.get("read_only")) is not bool for key in keys):
+        return "inconclusive", "a deploy key has no read_only flag"
+    write_keys = [key for key in keys if key["read_only"] is False]
+    if len(writers) + len(write_keys) > 1:
+        return (
+            "multiple-writers",
+            f"{len(writers)} writer account(s) and {len(write_keys)} write "
+            "deploy key(s) can change this repository",
+        )
+    if writers != {actor.casefold()}:
+        return (
+            "inconclusive",
+            f"the merge actor {actor} is not the one observed writer",
+        )
+    return "eligible", f"{actor} is the only observed writer"
+
+
+def declared_required_contexts() -> set[tuple[str, int]]:
+    """Read the trusted base's declared required checks (Issue #1076).
+
+    Without a Ruleset GitHub enforces no check, so the hosted single-writer
+    route still requires every context the base policy declares.
+    """
+    path = Path(__file__).resolve().parents[1] / REQUIRED_CHECKS_POLICY
+    try:
+        policy = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            f"The declared required checks are unreadable: {error}"
+        ) from error
+    rules = policy.get("rules") if isinstance(policy, dict) else None
+    if not isinstance(rules, list):
+        raise RuntimeError("The declared required checks are malformed")
+    contexts: set[tuple[str, int]] = set()
+    for rule in rules:
+        if not isinstance(rule, dict):
+            raise RuntimeError("The declared required checks are malformed")
+        if rule.get("type") != "required_status_checks":
+            continue
+        parameters = rule.get("parameters")
+        items = (
+            parameters.get("required_status_checks")
+            if isinstance(parameters, dict)
+            else None
+        )
+        if not isinstance(items, list):
+            raise RuntimeError("The declared required checks are malformed")
+        for item in items:
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("context"), str)
+                or not item["context"]
+                or type(item.get("integration_id")) is not int
+                or item["integration_id"] <= 0
+            ):
+                raise RuntimeError("The declared required checks are malformed")
+            contexts.add((item["context"], item["integration_id"]))
+    if not contexts:
+        raise RuntimeError(
+            "Hosted single-writer merge needs declared required checks"
+        )
+    return contexts
 
 
 def repository_root() -> Path:
@@ -2482,14 +2758,14 @@ def trusted_required_check_runs(
     return required_runs, run_cache
 
 
-def require_trusted_dependabot_head(
+def authenticated_dependabot_commit(
     github: GitHub,
     repo: str,
     pull: dict[str, Any],
     head_sha: str,
     base_sha: str,
-) -> str:
-    """Reauthenticate one exact Dependabot head and its trusted eligibility."""
+) -> tuple[str, dict[str, Any]]:
+    """Return the head kind and its GitHub-signed Dependabot commit."""
     eligible, reason, live_base_sha, _, live_head_sha = (
         dependabot_auth.validated_dependabot_snapshot(pull, repo)
     )
@@ -2553,7 +2829,21 @@ def require_trusted_dependabot_head(
                 f"{direct_reason}; {child_reason}"
             )
         kind = "sync-child"
+        commit = chain[1]
+    return kind, commit
 
+
+def require_trusted_dependabot_head(
+    github: GitHub,
+    repo: str,
+    pull: dict[str, Any],
+    head_sha: str,
+    base_sha: str,
+) -> str:
+    """Reauthenticate one exact Dependabot head and its trusted eligibility."""
+    kind, _commit = authenticated_dependabot_commit(
+        github, repo, pull, head_sha, base_sha
+    )
     check_runs = github.collection(
         repo,
         f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
@@ -2575,18 +2865,66 @@ def require_trusted_dependabot_head(
     return kind
 
 
-def require_trusted_verification(
+def dependabot_update_scope(message: str) -> list[str]:
+    """Return the minor/patch update types a signed Dependabot commit states.
+
+    Issue #1076: local mode has no hosted eligibility workflow, so the
+    update scope comes from the GitHub-signed commit's own
+    `updated-dependencies` metadata; a major, unknown, or missing type
+    leaves only a manual merge.
+    """
+    _, separator, metadata = message.partition("updated-dependencies:")
+    types = DEPENDABOT_UPDATE_TYPE.findall(metadata) if separator else []
+    if not types:
+        raise RuntimeError(
+            "Dependabot update scope is missing from the signed commit; "
+            "merge it manually"
+        )
+    unsupported = sorted(set(types) - LOCAL_DEPENDABOT_UPDATE_TYPES)
+    if unsupported:
+        raise RuntimeError(
+            "Dependabot update scope "
+            + ", ".join(unsupported)
+            + " needs a manual review and merge"
+        )
+    return sorted(set(types))
+
+
+def require_local_dependabot_head(
+    github: GitHub,
+    repo: str,
+    pull: dict[str, Any],
+    head_sha: str,
+    base_sha: str,
+) -> tuple[str, list[str]]:
+    """Authenticate a local-mode Dependabot head and its update scope."""
+    kind, commit = authenticated_dependabot_commit(
+        github, repo, pull, head_sha, base_sha
+    )
+    message = (commit.get("commit") or {}).get("message")
+    return kind, dependabot_update_scope(
+        message if isinstance(message, str) else ""
+    )
+
+
+def require_trusted_verification(  # noqa: C901
     github: GitHub,
     repo: str,
     head_sha: str,
     integration_id: int,
     *,
-    max_age_hours: float = 24.0,
+    max_age_hours: float | None = None,
     required_tier: str | None = None,
     now: datetime | None = None,
     check_runs: list[dict[str, Any]] | None = None,
+    durable: dict[str, Any] | None = None,
 ) -> dict[str, object]:
-    """Require fresh hosted execution evidence for one exact commit."""
+    """Require fresh hosted execution evidence for one exact commit.
+
+    When `durable` is given, it receives the normalized payload that the
+    merge records durably (Issue #1073), so the facts survive Actions
+    retention.
+    """
     available = (
         check_runs
         if check_runs is not None
@@ -2727,7 +3065,86 @@ def require_trusted_verification(
     require_template_toolchain(
         evidence, Path(".csarc/scripts/verify-template.sh")
     )
+    if durable is not None:
+        durable.clear()
+        durable.update(
+            hosted_payload(
+                evidence, workflow_run, job, check_run, integration_id
+            )
+        )
     return evidence
+
+
+def evidence_time(value: object, label: str) -> str:
+    """Normalize a GitHub timestamp to the evidence `...Z` second form."""
+    return parse_time(value, label).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def hosted_payload(
+    evidence: dict[str, object],
+    workflow_run: dict[str, Any],
+    job: dict[str, Any],
+    check_run: dict[str, Any],
+    integration_id: int,
+) -> dict[str, Any]:
+    """Normalize derived hosted facts into one canonical evidence payload."""
+    repository = workflow_run.get("repository")
+    repository_id = (
+        repository.get("id") if isinstance(repository, dict) else None
+    )
+    labels = job.get("labels")
+    toolchain = evidence.get("toolchain")
+    scopes = evidence.get("scopes")
+    payload: dict[str, Any] = {
+        "schema_version": 1,
+        "trust": "github-hosted",
+        "success": True,
+        "conclusion": str(check_run.get("conclusion") or ""),
+        "repository": {
+            "full_name": str(evidence["repository"]),
+            **(
+                {"id": repository_id}
+                if type(repository_id) is int and repository_id > 0
+                else {}
+            ),
+        },
+        "head_sha": str(evidence["head_sha"]),
+        "tree_sha": str(evidence["tree_sha"]),
+        "base_ref": str(evidence.get("base") or ""),
+        "base_sha": str(evidence.get("base_sha") or ""),
+        "tier": str(evidence["tier"]),
+        "scopes": sorted(str(item) for item in scopes)
+        if isinstance(scopes, list)
+        else [],
+        "command": str(evidence["command"]),
+        "toolchain": sorted(str(item) for item in toolchain)
+        if isinstance(toolchain, list)
+        else [],
+        "runner_labels": sorted(str(item) for item in labels)
+        if isinstance(labels, list)
+        else [],
+        "executor": {
+            "kind": "github-hosted",
+            "id": f"{evidence['run_id']}/{workflow_run.get('run_attempt')}",
+            "run_id": evidence["run_id"],
+            "run_attempt": workflow_run.get("run_attempt"),
+            "job_id": evidence["job_id"],
+            "check_run_id": evidence["check_run_id"],
+            "app_id": integration_id,
+        },
+        "started_at": evidence_time(job.get("started_at"), "Verify start"),
+        "completed_at": evidence_time(
+            evidence.get("completed_at"), "Verify completion"
+        ),
+    }
+    if evidence.get("reused"):
+        payload["source"] = {
+            "run_id": evidence.get("source_run_id"),
+            "job_id": evidence.get("source_job_id"),
+            "check_run_id": evidence.get("source_check_run_id"),
+            "sync_main_sha": evidence.get("sync_main_sha") or "",
+        }
+    return payload
 
 
 def commit_tree_sha(github: GitHub, repo: str, sha: str) -> str | None:
@@ -2794,12 +3211,11 @@ def require_successful_checks(  # noqa: C901
     head_sha: str,
     contexts: set[tuple[str, int]],
     quota_run_urls: set[str] | None = None,
-    evidence_sink: list[dict[str, object]] | None = None,
+    durable: dict[str, Any] | None = None,
 ) -> str:
     """Require protected contexts to pass or have exact quota evidence.
 
-    `evidence_sink`, when given, receives each validated hosted verify
-    evidence so the caller can record it in the shared record contract.
+    `durable` receives the normalized hosted `verify` payload, if any.
     """
     check_runs = github.collection(
         repo,
@@ -2836,15 +3252,14 @@ def require_successful_checks(  # noqa: C901
             and item.get("status") == "completed"
             and item.get("conclusion") == "success"
         ):
-            hosted_evidence = require_trusted_verification(
+            require_trusted_verification(
                 github,
                 repo,
                 head_sha,
                 integration_id,
                 check_runs=check_runs,
+                durable=durable,
             )
-            if evidence_sink is not None:
-                evidence_sink.append(hosted_evidence)
     if quota_run_urls:
         non_quota_failures: set[str] = set()
         for item in authoritative_runs:
@@ -3026,13 +3441,19 @@ def merge_snapshot(  # noqa: C901
     head_sha = lease["head_sha"]
     require_lease(github, lease, repo, pr_number, head_sha)
     pull = live_pull(github, repo, pr_number, head_sha)
-    dependabot_head = (
-        require_trusted_dependabot_head(
+    verification_mode = configured_verification_mode()
+    dependabot_head = ""
+    dependabot_scope: list[str] = []
+    if require_dependabot_head and verification_mode == "local":
+        # Issue #1076: local mode has no hosted eligibility workflow; the
+        # signed commit's own update scope replaces it.
+        dependabot_head, dependabot_scope = require_local_dependabot_head(
             github, repo, pull, str(head_sha), str(lease["base_sha"])
         )
-        if require_dependabot_head
-        else ""
-    )
+    elif require_dependabot_head:
+        dependabot_head = require_trusted_dependabot_head(
+            github, repo, pull, str(head_sha), str(lease["base_sha"])
+        )
     if pull.get("draft") is not False:
         raise RuntimeError("Pull request is Draft at merge time")
     if UNCHECKED.search(str(pull.get("body") or "")):
@@ -3046,8 +3467,10 @@ def merge_snapshot(  # noqa: C901
     # Issue #1069: the trusted base selects the merge route and path tier;
     # the candidate's own policy only runs as a non-authoritative self-test.
     policy = base_policy_decision(lease, pull, label_names)
-    admin_bypass = level_decision.review == "self" and admin_bypass_opt_in(
-        github, repo, lease, pull
+    # A bot-authored Dependabot body cannot carry the marker, so the
+    # authenticated local Dependabot route is its own opt-in (Issue #1076).
+    admin_bypass = level_decision.review == "self" and (
+        bool(dependabot_scope) or admin_bypass_opt_in(github, repo, lease, pull)
     )
     bypass_route = (
         level_decision.level
@@ -3219,7 +3642,6 @@ def merge_snapshot(  # noqa: C901
     title = pull.get("title")
     if not isinstance(title, str) or not title.strip():
         raise RuntimeError("Pull request title is unavailable")
-    verification_mode = configured_verification_mode()
     if verification_mode == "local":
         require_local_pull_policy(repo, pull)
     (
@@ -3269,6 +3691,30 @@ def merge_snapshot(  # noqa: C901
         else:
             protection = "blocked"
             reason = "GitHub does not report the reviewed pull request as clean"
+    server_enforcement = "ruleset"
+    if protection == "none":
+        server_enforcement = "none"
+        writer_state, reason = single_writer_eligibility(github, repo, actor)
+        if writer_state != "eligible":
+            protection = writer_state
+        elif mergeable_state != "clean":
+            # Nothing on the server blocks an `unstable` or unknown state,
+            # so lifecycle never treats it as mergeable.
+            protection = "blocked"
+            reason = (
+                f"GitHub reports mergeable_state={mergeable_state!r}; "
+                "without a Ruleset only a clean pull request can merge"
+            )
+        else:
+            protection = "single-writer"
+            if verification_mode != "local":
+                required_contexts = declared_required_contexts()
+    identity, identity_refusal = merge_identity(
+        github, repo, actor, protection, authorization_source
+    )
+    if identity_refusal:
+        protection = "blocked"
+        reason = identity_refusal
     quota_run_urls = (
         require_routine_quota_fallback(
             github, lease, pull, auth, quota_fallback_note_url
@@ -3291,6 +3737,7 @@ def merge_snapshot(  # noqa: C901
     # Local and hosted evidence share one normalized record; only its trust
     # label differs.
     verification_record: dict[str, Any] | None = None
+    hosted_evidence: dict[str, Any] = {}
     if verification_mode == "local":
         if quota_run_urls:
             raise RuntimeError("Local verification cannot use quota fallback")
@@ -3305,21 +3752,21 @@ def merge_snapshot(  # noqa: C901
         verification_record = local_verification.normalized_record(
             local_evidence, local_verification.TRUST_LOCAL
         )
-    elif protection == "enforced" or quota_run_urls:
-        hosted_evidence: list[dict[str, object]] = []
+    elif protection in AGENT_PROTECTIONS or quota_run_urls:
         check_evidence = require_successful_checks(
             github,
             repo,
             head_sha,
             required_contexts,
             quota_run_urls,
-            evidence_sink=hosted_evidence,
+            hosted_evidence,
         )
         if hosted_evidence:
             verification_record = local_verification.normalized_record(
-                hosted_evidence[0], local_verification.TRUST_HOSTED
+                hosted_evidence, local_verification.TRUST_HOSTED
             )
     require_lease(github, lease, repo, pr_number, head_sha)
+    head_ref = str((pull.get("head") or {}).get("ref") or "")
     return {
         "repository": repo,
         "pull_request": pr_number,
@@ -3337,17 +3784,30 @@ def merge_snapshot(  # noqa: C901
         "bypass_route": bypass_route,
         "reviewed_bypass": reviewed_bypass,
         "protection": protection,
-        "merge_mode": "agent" if protection == "enforced" else "human-only",
+        "merge_mode": (
+            "agent" if protection in AGENT_PROTECTIONS else "human-only"
+        ),
+        "merge_permission": merge_route(protection),
+        "server_enforcement": server_enforcement,
+        "merge_identity": identity,
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
         "local_verification": local_evidence,
         "verification_record": verification_record,
+        "hosted_verification": hosted_evidence or None,
+        "trailer_route": trailer_route(
+            str(lease["base_ref"]),
+            head_ref,
+            label_names,
+            bool(dependabot_head),
+        ),
         "merge_route": policy["route"],
         "merge_route_reasons": policy["reasons"],
         "required_tier": required_tier,
         "policy_self_test": policy["self_test"],
         "admin_bypass": admin_bypass,
         "dependabot_head": dependabot_head,
+        "dependabot_update_scope": dependabot_scope,
         "hotfix_evidence": hotfix_evidence,
     }
 
@@ -3475,6 +3935,53 @@ def create_draft_pull(  # noqa: C901
     sys.stdout.write(url + "\n")
 
 
+def admin_bypass_marker_body(body: str, present: bool) -> str:
+    """Insert or remove the one exact admin-bypass marker line.
+
+    Issue #1076: the managed entry normalizes near-miss copies (a list
+    bullet or stray whitespace) so the body carries the marker exactly once
+    or not at all; the template's guidance comment is kept and anchors the
+    inserted line.
+    """
+    lines = [
+        line
+        for line in body.replace("\r\n", "\n").split("\n")
+        if line.strip().lstrip("-*+").strip() != ADMIN_BYPASS_MARKER
+    ]
+    if present:
+        anchor = next(
+            (
+                index + 1
+                for index, line in enumerate(lines)
+                if line.lstrip().startswith("<!--")
+                and ADMIN_BYPASS_MARKER in line
+            ),
+            None,
+        )
+        if anchor is None:
+            while lines and not lines[-1].strip():
+                lines.pop()
+            lines.extend(("", ADMIN_BYPASS_MARKER))
+        else:
+            lines.insert(anchor, ADMIN_BYPASS_MARKER)
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def requested_edit_body(
+    body_file: Path | None, marker: str | None, pull: dict[str, Any]
+) -> str | None:
+    """Return the body an edit writes from a file or the marker action."""
+    if marker is None:
+        return read_body_file(body_file)
+    if body_file is not None:
+        raise RuntimeError(
+            "Use either --body-file or --admin-bypass-marker, not both"
+        )
+    return admin_bypass_marker_body(
+        str(pull.get("body") or ""), marker == "add"
+    )
+
+
 def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
     """Edit the body, labels, or milestone while the lease remains live."""
     lease = read_lease(args.lease)
@@ -3487,10 +3994,12 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
         if isinstance(item, dict) and isinstance(item.get("name"), str)
     }
     body_file = getattr(args, "body_file", None)
-    requested_body = read_body_file(body_file)
+    marker = getattr(args, "admin_bypass_marker", None)
+    requested_body = requested_edit_body(body_file, marker, pull)
     if not any(
         (
             body_file is not None,
+            marker is not None,
             args.add_label,
             args.remove_label,
             args.milestone is not None,
@@ -3657,10 +4166,226 @@ def revalidate_release_candidate(
         )
 
 
-def merge(args: argparse.Namespace, github: GitHub) -> None:
+def trailer_route(
+    base_ref: str, head_ref: str, labels: set[str], dependabot: bool
+) -> str:
+    """Name the legal lifecycle route recorded in `CSARC-Route`."""
+    if dependabot or head_ref.startswith("dependabot/"):
+        return "dependabot"
+    if head_ref.startswith("sync/main-to-"):
+        return "sync"
+    kind = promotion_gate.route_for(base_ref, head_ref, set(labels)).kind
+    if kind in {
+        "hotfix",
+        "isolated",
+        "milestone",
+        "release-follow-up",
+        "release-recovery",
+    }:
+        return kind
+    if "hotfix" in labels:
+        return "hotfix"
+    return "issue"
+
+
+def require_head_contains_base(
+    github: GitHub, repo: str, lease: dict[str, Any]
+) -> None:
+    """Refuse a head that does not contain the lease-bound base commit."""
+    comparison = github.get(
+        repo, f"compare/{lease['base_sha']}...{lease['head_sha']}"
+    )
+    status = comparison.get("status") if isinstance(comparison, dict) else None
+    if status not in {"ahead", "identical"}:
+        raise RuntimeError(
+            "The pull request head does not contain the current base "
+            f"{lease['base_sha']} (compare status {status!r}); merge the "
+            "latest base into the branch and obtain fresh evidence: hosted "
+            "`verify` reruns on the new head, local mode reruns "
+            "`verify-fast` (Issue #1073)"
+        )
+
+
+def merge_evidence(
+    snapshot: dict[str, object], lease: dict[str, Any]
+) -> tuple[bytes, str]:
+    """Return canonical evidence bytes and trust bound to the lease tree."""
+    local = snapshot.get("local_verification")
+    hosted = snapshot.get("hosted_verification")
+    if isinstance(local, dict):
+        payload, trust = local, "self-attested-local"
+    elif isinstance(hosted, dict):
+        payload, trust = hosted, "github-hosted"
+    else:
+        raise RuntimeError(
+            "evidence-missing: no exact-head verification evidence can be "
+            "recorded for this merge"
+        )
+    if (
+        payload.get("head_sha") != lease["head_sha"]
+        or payload.get("tree_sha") != lease["head_tree"]
+    ):
+        raise RuntimeError(
+            "Verification evidence is not bound to the leased head tree"
+        )
+    try:
+        return merge_trace.canonical_bytes(payload), trust
+    except merge_trace.EvidenceError as error:
+        raise RuntimeError(f"Verification evidence: {error}") from error
+
+
+def comment_id(url: str) -> int:
+    """Return the numeric ID of one PR-comment locator."""
+    match = merge_trace.COMMENT_LOCATOR.fullmatch(url)
+    if match is None:
+        raise RuntimeError("Merge evidence summary URL is invalid")
+    return int(match.group("comment"))
+
+
+def ensure_summary(
+    github: GitHub,
+    repo: str,
+    pr_number: int,
+    record: dict[str, object],
+    data: bytes,
+) -> str:
+    """Create, or replace in place, the PR's single evidence summary.
+
+    Before the merge the latest attempt replaces the payload of the one
+    marker comment; a summary whose status left `attempt` belongs to a
+    completed merge and is never rewritten.
+    """
+    summaries = [
+        comment
+        for comment in github.pages(
+            repo, f"issues/{pr_number}/comments?per_page=100"
+        )
+        if merge_trace.is_summary(str(comment.get("body") or ""))
+    ]
+    if len(summaries) > 1:
+        raise RuntimeError(
+            "More than one merge evidence summary exists on the pull "
+            "request; remove the extra marker comments before merging"
+        )
+    body = merge_trace.summary_comment(record, data)
+    if not summaries:
+        created = github.comment(repo, pr_number, body)
+        url = str(created.get("html_url") or "")
+        comment_id(url)
+        return url
+    existing = summaries[0]
+    url = str(existing.get("html_url") or "")
+    comment_id(url)
+    try:
+        current = merge_trace.parse_summary(str(existing.get("body") or ""))
+    except merge_trace.EvidenceError:
+        current = None
+    if current is not None and current.status != "attempt":
+        raise RuntimeError(
+            "The merge evidence summary records a completed merge "
+            f"({current.status}) and is immutable"
+        )
+    if current is None or current.record != record or current.data != data:
+        github.edit_comment(repo, comment_id(url), body)
+    return url
+
+
+def merge_trailers(
+    contract: dict[str, Any],
+    snapshot: dict[str, object],
+    lease: dict[str, Any],
+    locator: str,
+    record: dict[str, object],
+) -> list[tuple[str, str]]:
+    """Build the fixed squash trailers for one lifecycle merge."""
+    values: dict[str, str | list[str]] = {
+        "CSARC-Evidence": locator,
+        "CSARC-Evidence-SHA256": str(record["digest"]),
+        "CSARC-Evidence-Tree": str(lease["head_tree"]),
+        "CSARC-Trust": str(record["trust"]),
+        "CSARC-Route": str(record["route"]),
+        "CSARC-Approval": str(snapshot.get("authorization_source") or ""),
+        "CSARC-Authorization": str(snapshot.get("authorization_url") or ""),
+    }
+    try:
+        return merge_trace.build_trailers(contract, values)
+    except merge_trace.EvidenceError as error:
+        raise RuntimeError(str(error)) from error
+
+
+def pull_commit_messages(
+    github: GitHub, repo: str, pr_number: int
+) -> list[str]:
+    """Read every commit message of the pull request being squashed."""
+    return [
+        str((item.get("commit") or {}).get("message") or "")
+        for item in github.pages(
+            repo, f"pulls/{pr_number}/commits?per_page=100"
+        )
+    ]
+
+
+def trace_lines(
+    snapshot: dict[str, object], lease: dict[str, Any], suffix: str
+) -> list[str]:
+    """Return the audit trace lines recorded in the summary status."""
+    lines: list[str] = []
+    if snapshot.get("reviewed_bypass") is True:
+        reason = (
+            "exact-head-copilot-review"
+            if snapshot.get("authorization_source") == "copilot"
+            else "emergency-hotfix"
+            if snapshot.get("authorization_source") == "hotfix-emergency"
+            else "exact-head-review"
+        )
+        lines.append(
+            "bypass-trace: "
+            f"release_level={snapshot['release_level']} "
+            f"route={snapshot['bypass_route']} "
+            f"actor={lease['actor']} reason={reason} {suffix}"
+        )
+    if snapshot.get("authorization_source") == "copilot":
+        lines.append(
+            "copilot-review-trace: "
+            f"review={snapshot['authorization_url']} "
+            f"head={lease['head_sha']} actor={lease['actor']} {suffix}"
+        )
+    if snapshot.get("server_enforcement") == "none":
+        lines.append(
+            "single-writer-trace: "
+            f"writer={lease['actor']} server_enforcement=none "
+            f"head={lease['head_sha']} {suffix}; no Ruleset enforced this "
+            "merge, lifecycle revalidated every control"
+        )
+    scope = snapshot.get("dependabot_update_scope")
+    if isinstance(scope, list) and scope:
+        lines.append(
+            "dependabot-trace: "
+            f"kind={snapshot['dependabot_head']} "
+            f"update_types={','.join(str(item) for item in scope)} "
+            f"route=dependabot release_level={snapshot['release_level']} "
+            f"{suffix}"
+        )
+    local_evidence = snapshot.get("local_verification")
+    if isinstance(local_evidence, dict):
+        lines.append(
+            "local-verification-trace: "
+            f"head={lease['head_sha']} tree={local_evidence['tree_sha']} "
+            f"base={lease['base_sha']} tier={local_evidence['tier']} "
+            f"scopes={','.join(local_evidence['scopes'])} {suffix} "
+            "trust=self-attested-local; this is not trusted hosted evidence"
+        )
+    return lines
+
+
+def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     """Merge only when the lease and exact-head controls are enforced."""
     lease = read_lease(args.lease)
     require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    try:
+        contract = merge_trace.load_contract()
+    except merge_trace.EvidenceError as error:
+        raise RuntimeError(str(error)) from error
     snapshot = merge_snapshot(
         github,
         lease,
@@ -3670,46 +4395,18 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
         getattr(args, "require_dependabot_head", False),
     )
     if snapshot["merge_mode"] != "agent":
+        permission = str(snapshot.get("merge_permission") or "blocked")
         raise RuntimeError(
-            "Agent merge is blocked: server-side protection is unavailable or "
-            "incomplete; a human maintainer must merge manually"
-        )
-    if snapshot.get("reviewed_bypass") is True:
-        reason = (
-            "exact-head-copilot-review"
-            if snapshot.get("authorization_source") == "copilot"
-            else "emergency-hotfix"
-            if snapshot.get("authorization_source") == "hotfix-emergency"
-            else "exact-head-review"
-        )
-        github.comment(
-            args.repo,
-            args.pr_number,
-            "bypass-trace: "
-            f"release_level={snapshot['release_level']} "
-            f"route={snapshot['bypass_route']} "
-            f"actor={lease['actor']} reason={reason}",
-        )
-    if snapshot.get("authorization_source") == "copilot":
-        github.comment(
-            args.repo,
-            args.pr_number,
-            "copilot-review-trace: "
-            f"review={snapshot['authorization_url']} "
-            f"head={lease['head_sha']} actor={lease['actor']}",
+            f"Agent merge is {permission}: "
+            f"{snapshot.get('protection_reason') or 'protection is unproven'}"
+            + (
+                "; a human maintainer must merge manually and the merge is "
+                "recorded as untraced"
+                if permission == "manual-only"
+                else "; fix the condition before any merge"
+            )
         )
     print_policy_self_test(snapshot)
-    local_evidence = snapshot.get("local_verification")
-    if isinstance(local_evidence, dict):
-        github.comment(
-            args.repo,
-            args.pr_number,
-            "local-verification-trace: "
-            f"head={lease['head_sha']} tree={local_evidence['tree_sha']} "
-            f"base={lease['base_sha']} tier={local_evidence['tier']} "
-            f"scopes={','.join(local_evidence['scopes'])} "
-            "trust=self-attested-local; this is not trusted hosted evidence",
-        )
     candidate_evidence = revalidate_release_candidate(
         github,
         lease,
@@ -3727,12 +4424,38 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
         getattr(args, "require_dependabot_head", False),
     )
     title = str(snapshot["title"])
+    require_head_contains_base(github, args.repo, lease)
+    # Because the head contains the base, the squash tree is the head tree;
+    # read it back before merging and bind it to the evidence.
+    if commit_tree_sha(github, args.repo, args.head_sha) != lease["head_tree"]:
+        raise RuntimeError(
+            "tree-mismatch: the head commit tree differs from the leased "
+            "verified tree"
+        )
+    data, trust = merge_evidence(snapshot, lease)
+    route = str(snapshot.get("trailer_route") or "issue")
+    try:
+        record = merge_trace.envelope(data, trust=trust, route=route)
+    except merge_trace.EvidenceError as error:
+        raise RuntimeError(str(error)) from error
+    # The only pre-merge write is the durable evidence summary; every trace
+    # waits until the merge is read back (Issue #1073).
+    locator = ensure_summary(github, args.repo, args.pr_number, record, data)
+    trailers = merge_trailers(contract, snapshot, lease, locator, record)
+    message = merge_trace.squash_message(
+        merge_trace.breaking_footers(
+            pull_commit_messages(github, args.repo, args.pr_number)
+        ),
+        trailers,
+    )
     confirm_refs(lease)
     if branch_sha(github, args.repo, lease["base_ref"]) != lease["base_sha"]:
         raise RuntimeError(
             "Pull request destination branch advanced before merge"
         )
-    result = github.merge(args.repo, args.pr_number, args.head_sha, title)
+    result = github.merge(
+        args.repo, args.pr_number, args.head_sha, title, message
+    )
     merge_sha = result.get("sha")
     if result.get("merged") is not True or not isinstance(merge_sha, str):
         raise RuntimeError(
@@ -3755,6 +4478,39 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
     ):
         raise RuntimeError(
             "Merged pull request state does not match the response"
+        )
+    commit = merge_commit if isinstance(merge_commit, dict) else {}
+    merged_tree = (commit.get("tree") or {}).get("sha")
+    merged_trailers = merge_trace.parse_trailers(
+        str(commit.get("message") or "")
+    )
+    suffix = f"merge={merge_sha} evidence={locator}"
+    status = (
+        "tree-mismatch"
+        if merged_tree != lease["head_tree"]
+        else "trailer-mismatch"
+        if merged_trailers != trailers
+        else "merged"
+    )
+    result_name = "traced" if status == "merged" else status
+    lines = [
+        f"merge-trace: result={result_name} {suffix} tree={merged_tree} "
+        f"expected_tree={lease['head_tree']} route={route} trust={trust} "
+        f"actor={lease['actor']} server_enforcement="
+        f"{snapshot.get('server_enforcement') or 'ruleset'} "
+        f"identity={snapshot.get('merge_identity') or 'unknown'}"
+    ]
+    if status == "merged":
+        lines.extend(trace_lines(snapshot, lease, suffix))
+    github.edit_comment(
+        args.repo,
+        comment_id(locator),
+        merge_trace.summary_comment(record, data, status, lines),
+    )
+    if status != "merged":
+        raise RuntimeError(
+            f"{status}: merge commit {merge_sha} does not carry the "
+            "verified tree and the computed trailers"
         )
     hotfix_evidence = snapshot.get("hotfix_evidence")
     if isinstance(hotfix_evidence, dict):
@@ -4497,6 +5253,11 @@ def parser() -> argparse.ArgumentParser:
             )
         if name == "edit":
             command.add_argument("--body-file", type=Path)
+            command.add_argument(
+                "--admin-bypass-marker",
+                choices=("add", "remove"),
+                help="insert or remove the one exact admin-bypass marker",
+            )
             command.add_argument("--add-label", action="append", default=[])
             command.add_argument("--remove-label", action="append", default=[])
             milestone = command.add_mutually_exclusive_group()

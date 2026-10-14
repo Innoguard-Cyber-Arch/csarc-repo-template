@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-25
-- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241), [#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308), [#938](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/938)
+- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241), [#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308), [#938](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/938), [#1076](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1076)
 - **實作 PRs：**[#127](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/127), [#147](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/147), [#158](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/158), [#173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/173), [#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)
 
 ## 問題與限制
@@ -22,7 +22,7 @@ GitHub Agents 頁籤可把 repository 工作交給 cloud coding agents，但 ses
 - 本機驗證 attestation 只有在精確 quota-only 條件與 human authorization 下成立，且只綁定一個 SHA。
 - GitHub Issue、PR、review 與 CI 維持協作與治理基線；Agents 頁籤已評估但暫不納入，不新增 setup workflow、custom agent 或 repository policy。
 - PR lifecycle 寫入以 repository remote ref 作 atomic single-writer lease；每張 PR 同時取得依 destination branch 決定的 lane lease。Lease 綁定 PR、base、完整 head SHA、期限與不公開的隨機 capability；只有可驗證的過期 lease 可被 atomic 回收。Agent 的 Ready／Draft、label／milestone、authorization preparation 與 merge 一律走 `scripts/pr_lifecycle.py`，其他 task 維持唯讀；無法在取得精確 PR/head 前綁定 lease 的 Release Please writer fail closed 為 human-only。
-- Merge 前在 lease 內重讀 live timeline、comments、reviews、checklists 與 effective Ruleset。無法證明 review、last-push approval、required checks 與 no bypass 時，agent 不合併；GitHub Free private 的 fallback 是 human-only manual merge。
+- Merge 前在 lease 內重讀 live timeline、comments、reviews、checklists 與 effective Ruleset。無法證明 review、last-push approval、required checks 與 no bypass 時，agent 不合併；GitHub Free private 的 fallback 是 human-only manual merge，唯一例外是下方 #1076 的 audited single-writer route。
 
 ## 歷史 disposition
 
@@ -34,6 +34,7 @@ GitHub Agents 頁籤可把 repository 工作交給 cloud coding agents，但 ses
 | Preserved | Actions 無法替代 agent host 上的 worktree cleanup | [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155)／[#158](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/158) |
 | Superseded | 每個 agent 啟動時全域掃描所有 worktree；實測在 43 個 worktree 與 File Provider 路徑下無界卡住，改由 creator-scoped cleanup 與明確維護取代 | [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204)／[PR #210](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/210)／[#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308) |
 | Preserved | Worktree isolation 不涵蓋 GitHub control plane；以遠端 PR／promotion lease 補足 | [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240) |
+| Superseded（部分） | Free private 一律 human-only manual merge；API 完整讀回恰好一個寫入者時改走 audited single-writer route | [#1076](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1076) |
 
 ## Ownership 與驗證
 
@@ -80,6 +81,25 @@ branch／lease、本機 worktree，以及 final report 後才能回報 `DONE`；
 不採用 background daemon、強制本機 mutex、輪詢服務或第二套 release／cleanup 工具；
 這些方案會增加卡死與狀態漂移面，且沒有比短期 advisory intent 加現有遠端 lease 提供更多
 可信保證。
+
+## 2026-10-14 單一寫入者的可稽核 merge 路徑（#1076）
+
+擁有者在 #1058 決定 10 與 27 確認：沒有 Ruleset 強制（`server_enforcement=none`）時，只有 API 完整、分頁讀回
+觀察到恰好一個寫入者，而且就是合併者本人，lifecycle 才可合併；agent 以這位唯一維護者的身分執行，不另建
+write 帳號。另有寫入者為 `multiple-writers`，任何讀取不完整（權限不足、分頁不完整、team 成員不可見、缺
+`role_name`）為 `inconclusive`，兩者都只能人工合併並記為 untraced，`csarc-owned` 發版 fail closed。有 Ruleset
+強制時，agent 使用獨立 write 身分且不持有 maintain／admin：一般 agent route 以即時 `role_name` 驗證合併者恰為
+`write`，其他或讀不到的角色都拒絕；admin bypass 與 emergency hotfix 的合併者是 live admin 授權者本人，
+維持允許，並在 trace 記為 `identity=admin-authorizer`，與獨立 agent 身分路線區分。
+
+這不是 Ruleset 的替代品：trace 明記 `server_enforcement=none` 與 trust，不宣稱伺服器曾經阻擋；exact-head
+授權、required checks、lease、verified tree 與 G4 durable trace 都不略過（#918、#908、#1073 保留）。上方
+「shared admin credential 視為 Ruleset」的駁回維持不變：single-writer 路線不共用憑證，只在讀回能證明沒有其他
+寫入者時成立。路由表與 local Dependabot route 見 `docs/ci-policy.md`「單一 maintainer 的可稽核合併路徑
+（#1076）」。
+
+重新評估條件：GitHub 提供可讀的 App 安裝寫入者清單、Free private 的 `rules/branches` 行為經 live 驗證，或
+單人維護的 repository 升級到可強制 private Ruleset 的方案。
 
 ## 重新評估條件
 

@@ -6,7 +6,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.30.7<!-- x-release-please-version --> |
+| 公版版本 | v0.31.0-beta.1<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript、Go（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
@@ -243,7 +243,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update
 ```
 
-`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。若有衝突，CLI 會列出檔案但不修改 target；請在目前分支調整衝突內容後重跑。若記錄的版本是已退役的 alpha、格式不符或無法理解，CLI 不保留舊版解析器，而是以最新 stable 重建模板管理的基線；設定、專案自有與已分歧檔案盡可能保留，無法安全判斷的項目交給人工合併。`update --check --json` 目前已是最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify`、repository settings `plan`，以及已確認的舊 CSARC Milestone description 升級；它不會套用 repository settings、push 或開 PR。
+`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。若有衝突，CLI 會列出檔案但不修改 target；逐一決定後以 `csarc update --finalize-plan --decision <path>=keep-current|take-new|custom:<file>` 在同一個報告資料夾寫出不可變的 final plan，再以 `csarc update --apply-plan <final plan>` 套用，套用時不再詢問或重算任何值。若記錄的版本是已退役的 alpha、格式不符或無法理解，CLI 不保留舊版解析器，而是以最新 stable 重建模板管理的基線；設定、專案自有與已分歧檔案盡可能保留，無法安全判斷的項目交給人工合併。`update --check --json` 目前已是最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify`、repository settings `plan`，以及已確認的舊 CSARC Milestone description 升級；它不會套用 repository settings、push 或開 PR。
 
 ### Agent prompt
 

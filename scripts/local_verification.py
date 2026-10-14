@@ -10,15 +10,19 @@ import os
 import re
 import subprocess
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     csarc_config = importlib.import_module("csarc_config")
+    evidence_freshness = importlib.import_module("evidence_freshness")
 else:
     csarc_config = importlib.import_module(f"{__package__}.csarc_config")
+    evidence_freshness = importlib.import_module(
+        f"{__package__}.evidence_freshness"
+    )
 
 SCHEMA_VERSION = 1
 SHA = re.compile(r"[0-9a-f]{40}")
@@ -27,7 +31,7 @@ VALID_TIERS = {"fast", "full"}
 # label differs, so a reader can compare candidates without ever treating
 # self-attested local evidence as trusted hosted evidence.
 TRUST_LOCAL = "self-attested-local"
-TRUST_HOSTED = "trusted-hosted"
+TRUST_HOSTED = "github-hosted"
 RECORD_KEYS = frozenset(
     {
         "schema_version",
@@ -86,9 +90,7 @@ def normalized_record(evidence: dict[str, Any], trust: str) -> dict[str, Any]:
         "command": evidence.get("command"),
         "completed_at": evidence.get("completed_at"),
     }
-    legacy_hosted_base = (
-        trust == TRUST_HOSTED and base_ref is None and base_sha is None
-    )
+    legacy_hosted_base = trust == TRUST_HOSTED and not base_ref and not base_sha
     exact_base = (
         isinstance(base_ref, str)
         and bool(base_ref)
@@ -299,7 +301,10 @@ def record(
             "tier": tier,
             "scopes": normalized_scopes,
             "command": command,
-            "completed_at": datetime.now(UTC).isoformat(),
+            # The canonical evidence contract (#1073) allows only
+            # whole-second UTC times, so the merge can hash this payload
+            # unchanged.
+            "completed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
         TRUST_LOCAL,
     )
@@ -318,7 +323,7 @@ def record(
     return payload
 
 
-def require(  # noqa: C901
+def require(
     *,
     head_sha: str,
     tree_sha: str,
@@ -326,9 +331,11 @@ def require(  # noqa: C901
     base_sha: str,
     required_tier: str,
     now: datetime | None = None,
-    max_age_hours: float = 24.0,
+    max_age_hours: float | None = None,
 ) -> dict[str, Any]:
     """Validate one exact local result without claiming trusted provenance."""
+    # Issue #1075: reject a widened window before reading candidate evidence.
+    max_age_hours = evidence_freshness.policy_max_age_hours(max_age_hours)
     if required_tier not in VALID_TIERS:
         raise RuntimeError("Required local verification tier is invalid")
     if any(
@@ -375,22 +382,12 @@ def require(  # noqa: C901
         raise RuntimeError(
             "Local verification evidence does not match the candidate"
         )
-    try:
-        completed_at = datetime.fromisoformat(str(payload["completed_at"]))
-    except ValueError as error:
-        raise RuntimeError(
-            "Local verification completion time is malformed"
-        ) from error
-    if completed_at.tzinfo is None:
-        raise RuntimeError("Local verification completion time has no timezone")
-    current = (now or datetime.now(UTC)).astimezone(UTC)
-    completed_at = completed_at.astimezone(UTC)
-    if completed_at > current + timedelta(minutes=5):
-        raise RuntimeError(
-            "Local verification completion time is in the future"
-        )
-    if completed_at < current - timedelta(hours=max_age_hours):
-        raise RuntimeError("Local verification evidence is stale")
+    evidence_freshness.require_fresh(
+        payload["completed_at"],
+        subject="Local verification",
+        now=now,
+        max_age_hours=max_age_hours,
+    )
     if (
         git("rev-parse", "HEAD") != head_sha
         or git("rev-parse", "HEAD^{tree}") != tree_sha

@@ -29,7 +29,7 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 - 生成專案的 `.csarc/scripts/verify` 與 `verify-fast` 只驗證產品與自己的設定，不執行公版自測（`.csarc/scripts/test-*` 與 `.csarc/tests/`）。同一批案例由公版 CI 對代表性 render 執行，案例數不得減少；診斷改由 `csarc status` 提供。
 - 產品 lint、format、type check、test discovery 與 coverage 不收集 `.csarc/`。`.csarc/.ignore` 讓遵守 ignore 檔的工具（Ruff、ty 等）跳過控制層的 Python 檔，Git 照常追蹤這些檔案；pytest 預設不遞迴進入點開頭的目錄。產品 manifest（`pyproject.toml`、`package.json`、`Cargo.toml`、`go.mod`）不寫 `.csarc`，也不把它列入套件、workspace 或 coverage 來源，所以採用既有專案時不必修改產品 manifest。代價是 ripgrep 這類工具搜尋整個 repository 時也會略過 `.csarc` 的 Python 檔，需要時直接指定檔案路徑。
 - `.csarc/scripts` 的模組層 import 只載入入口必定需要的模組，其他 sibling 在命令第一次使用時才載入。合法 render 少了選用模組（例如 `documentation_mode` 不是 `template-and-content` 時的網站模組），其餘入口仍可獨立載入與執行。
-- 本機與 hosted 驗證證據使用同一個正規化 record（`local_verification.normalized_record`），欄位與驗證規則相同，只保留各自的 trust label：`self-attested-local` 或 `trusted-hosted`。
+- 本機與 hosted 驗證證據使用同一個正規化 record（`local_verification.normalized_record`），欄位與驗證規則相同，只保留各自的 trust label：`self-attested-local` 或 `github-hosted`（與合併 evidence payload 同一個標籤）。
 
 ## 固定位置 allowlist
 
