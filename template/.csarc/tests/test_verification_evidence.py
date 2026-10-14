@@ -42,6 +42,7 @@ ROOT_TOOLCHAIN = {
     "pnpm-11.22.0",
     "node-24",
     "rust-1.98.0",
+    "go-1.27.1",
 }
 
 
@@ -84,7 +85,7 @@ def evidence(
         f"Execute trusted verification tier={tier} scopes=source "
         f"tree={tree} command={command} base={BASE} base-sha={BASE_SHA} "
         f"labels={LABELS} "
-        "release=alpha"
+        "release=beta"
     )
     if reuse is not None:
         source_run, source_job, source_check = reuse
@@ -92,7 +93,7 @@ def evidence(
             f"Reuse trusted verification tier={tier} scopes=source "
             f"tree={tree} command={command} base={BASE} base-sha={BASE_SHA} "
             f"labels={LABELS} "
-            f"release=alpha source-run={source_run} source-job={source_job} "
+            f"release=beta source-run={source_run} source-job={source_job} "
             f"source-check={source_check}"
         )
     if sync is not None:
@@ -100,7 +101,7 @@ def evidence(
         evidence_step = (
             "Validate trusted clean sync tier=fast scopes=source "
             f"tree={tree} command=./.csarc/scripts/verify-fast base={BASE} "
-            f"base-sha={BASE_SHA} labels={LABELS} release=alpha "
+            f"base-sha={BASE_SHA} labels={LABELS} release=beta "
             f"main={main_sha} "
             f"source-run={source_run} source-job={source_job} "
             f"source-check={source_check}"
@@ -113,6 +114,7 @@ def evidence(
         "Set up pnpm 11.22.0",
         "Set up Node.js 24",
         "Set up Rust 1.98.0",
+        "Set up Go 1.27.1",
         evidence_step,
     ]
     job = {
@@ -166,7 +168,7 @@ def test_valid_trusted_execution_binds_all_claims(
     assert result["base"] == BASE
     assert result["base_sha"] == BASE_SHA
     assert result["labels"] == LABELS
-    assert result["release_level"] == "alpha"
+    assert result["release_level"] == "beta"
     assert result["reused"] is False
     assert result["toolchain"] == [
         "python-3.14",
@@ -174,6 +176,7 @@ def test_valid_trusted_execution_binds_all_claims(
         "pnpm-11.22.0",
         "node-24",
         "rust-1.98.0",
+        "go-1.27.1",
     ]
 
 
@@ -394,7 +397,7 @@ def test_clean_sync_uses_one_direct_full_source_execution() -> None:
         command="./.csarc/scripts/verify",
         run_id=200,
         check_id=7,
-        head=SOURCE_HEAD,
+        head="e" * 40,
     )
     current = evidence(
         run_id=300,
@@ -505,7 +508,7 @@ def test_reusable_selector_uses_only_an_original_identical_route(
             "base": BASE,
             "base_sha": BASE_SHA,
             "labels": LABELS,
-            "release_level": "alpha",
+            "release_level": "beta",
             "reused": check_id == 8,
         }
 
@@ -524,7 +527,7 @@ def test_reusable_selector_uses_only_an_original_identical_route(
         base=BASE,
         base_sha=BASE_SHA,
         labels=LABELS,
-        release_level="alpha",
+        release_level="beta",
         exclude_run_id=300,
         max_age_hours=24,
     )

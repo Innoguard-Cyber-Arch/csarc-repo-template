@@ -4,21 +4,50 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from types import ModuleType
+from typing import TYPE_CHECKING, Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from authenticate_dependabot_head import dependabot_coordinates_eligible
-from pr_lifecycle import (
-    DEPENDABOT_ELIGIBILITY_CONTEXT,
-    GITHUB_ACTIONS_APP_ID,
-    GitHub,
-    require_trusted_verification,
-    trusted_required_check_runs,
-)
+if TYPE_CHECKING:
+    from pr_lifecycle import GitHub
+
+
+def lifecycle() -> ModuleType:
+    """Load the PR lifecycle module only when a command needs GitHub.
+
+    Argument parsing and --help never import it, so the lifecycle and its
+    siblings stay optional for this entry point.
+    """
+    return importlib.import_module("pr_lifecycle")
+
+
+def dependabot_coordinates_eligible(
+    author: str, head_ref: str, head_repo: str, repo: str
+) -> tuple[bool, str]:
+    """Delegate Dependabot coordinate checks to their owning module."""
+    module = importlib.import_module("authenticate_dependabot_head")
+    return module.dependabot_coordinates_eligible(
+        author, head_ref, head_repo, repo
+    )
+
+
+def require_trusted_verification(
+    *args: object, **kwargs: object
+) -> dict[str, object]:
+    """Validate hosted evidence through the lazily loaded lifecycle."""
+    return lifecycle().require_trusted_verification(*args, **kwargs)
+
+
+def trusted_required_check_runs(
+    *args: object, **kwargs: object
+) -> tuple[dict[tuple[str, int], dict[str, Any]], object]:
+    """Select trusted check rows through the lazily loaded lifecycle."""
+    return lifecycle().trusted_required_check_runs(*args, **kwargs)
 
 
 def write_outputs(path: Path | None, values: dict[str, object]) -> None:
@@ -68,7 +97,7 @@ def find_reusable_evidence(
                 github,
                 repo,
                 head_sha,
-                GITHUB_ACTIONS_APP_ID,
+                lifecycle().GITHUB_ACTIONS_APP_ID,
                 max_age_hours=max_age_hours,
                 check_runs=[check],
             )
@@ -160,7 +189,10 @@ def resolve_release_source(
     if not eligible or author_type != "Bot":
         return ""
 
-    identity = (DEPENDABOT_ELIGIBILITY_CONTEXT, GITHUB_ACTIONS_APP_ID)
+    identity = (
+        lifecycle().DEPENDABOT_ELIGIBILITY_CONTEXT,
+        lifecycle().GITHUB_ACTIONS_APP_ID,
+    )
     checks = github.collection(
         repo,
         f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
@@ -203,7 +235,7 @@ def main() -> None:
     parser.add_argument("--exclude-run-id", type=int)
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
-    github = GitHub()
+    github = lifecycle().GitHub()
     if args.resolve_release_source:
         source_sha = resolve_release_source(
             github, args.github_repo, args.commit, args.merge_branch
@@ -262,7 +294,7 @@ def main() -> None:
         github,
         args.github_repo,
         head_sha,
-        GITHUB_ACTIONS_APP_ID,
+        lifecycle().GITHUB_ACTIONS_APP_ID,
         max_age_hours=args.max_age_hours,
         required_tier=args.required_tier,
     )
