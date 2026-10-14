@@ -1922,6 +1922,10 @@ capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能�
 
 **明確保留 GitHub Actions 為預設／建議路徑，不是全面棄用**：`verify`／`title`／`review` 三個 required status check 仍然、也必須繼續只由 hosted Actions 產生；CodeQL 上傳到 GitHub 原生 code-scanning 介面同樣不在本節適用範圍。
 
+**單一 tree-bound Release writer（#1074）：** `.csarc/scripts/publish-release` 是 hosted 與本機 fallback 唯一建立或更新 tag、draft Release、成品與 immutable Release 的入口；Release body 的 included-work 紀錄也改由 `publish --included-work` 在同一個 writer 內寫入，`release.yml` 不再自己編輯 Release。`stage`／`publish` 寫入前先跑 `.csarc/scripts/release_writer.py preflight`：checkout 必須是 exact candidate 且 tracked tree 未修改；依已儲存的 `release_ownership` 決定模式——`csarc-owned` 以 `merge_trace.py` 的 strict audit 檢查 governance baseline 之後的每筆 merge，缺 trailer、payload／record 不符或 tree 不符都 fail closed；`product-owned` 只回報 drift、不寫入；`verification-only` 沒有 CSARC Release 可阻擋、也不寫入。除了 `release.yml` 之外還有 workflow 會寫 Release（例如舊版 `release-please.yml`）時同樣停止，先移除第二個 writer。遠端 tag 指向其他 commit、沒有 tag 的未知 draft／Release、或已公開但仍可變的 Release 都讓 writer 停止，不移動或重用 immutable tag；同一 candidate 重跑則冪等，已公開時 `publish` 只做 `rerun-verify`。
+
+每次寫入都在同一把遠端 release lease 下進行：lease 是每個 tag 一條 `refs/heads/csarc/leases/release-<sha256(tag)>` branch，指向記錄 holder（`actions:<run id>` 或 `local:<login>`）、candidate、tree 與到期時間的 lease commit。取得用原子 create；同一 holder 重試或過期回收只能 fast-forward 更新，所以兩個 writer 不可能同時認為自己持有；每個寫入前都重新確認仍持有且未過期，結束時只刪除仍指向自己 lease 的 ref。lease 預設一小時；被中斷的 run 留下的 lease 過期後即可由下一個 writer 回收，不需要手動刪 ref。
+
 ### hosted 發版路徑的已知限制，本機路徑升格為標準程序（2026-09-03）
 
 上一段原本建議「一般情況下仍走 hosted `release.yml`」；當天稍後的補發版嘗試（接續 #587）證明這個建議不成立，予以修正：
@@ -1972,7 +1976,7 @@ gh release create "$tag" --target "$sha" \
 只有一份實作，呼應 #589 決定本身的第一原則（單一 repo-local 腳本被兩種呼叫方式共用）。
 `.csarc/scripts/publish-release` 之後唯二對同一 Release 的寫入是 `gh release edit "$tag"
 --draft` 與 `gh release edit "$tag" --draft=false --latest`（`cmd_publish`／
-`revert_to_draft_on_failure`），兩者都不帶 `--notes`／`--notes-file`，不會覆寫或附加任何
+`revert_to_draft_on_failure`），兩者都不帶 `--notes`／`--included-work`，不會覆寫或附加任何
 自由格式文字到 `--generate-notes` 已寫入的內容。
 
 **最低必要欄位——已經是結構保證，不是待補的規範：**
@@ -2018,7 +2022,7 @@ Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 
 3. 真正值得防的風險——未來有人繞過 `converge-release-tag`、另開一個呼叫路徑，各自帶
    不同 flag（例如漏掉 `--generate-notes`，或加上覆寫用的 `--notes`）——是程式碼結構
    層級的問題，用回歸測試斷言「整個 repo 只有一個 `gh release create` 呼叫點，且該
-   呼叫點的 flag 組合不變、沒有其他地方對 Release 呼叫 `--notes`／`--notes-file`」就能
+   呼叫點的 flag 組合不變、沒有其他地方對 Release 呼叫 `--notes`／`--included-work`」就能
    可靠涵蓋，不需要解析或驗證產生出來的自由格式文字內容本身。
    `tests/test_release_notes_format.py` 落地這個斷言，掛在 `.csarc/scripts/verify-fast`
    既有的 `uv run pytest` 範圍內，每次 PR 都跑，不需要另外的 full-tier 專屬階段。

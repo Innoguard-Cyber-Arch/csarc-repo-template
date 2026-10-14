@@ -217,16 +217,6 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.state.outputs.tag }}
         run: python3 scripts/release_bundle.py prepare --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-assets"
-      - name: Record included work in the draft Release
-        if: ${{ steps.state.outputs.state == 'draft' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.state.outputs.tag }}
-        run: |
-          python3 scripts/release_level.py annotate-release \
-            --repo "$GITHUB_REPOSITORY" \
-            --tag "$RELEASE_TAG" \
-            --body-file "$RUNNER_TEMP/release-levels.md"
       - name: Generate the SPDX SBOM
         if: ${{ steps.state.outputs.state == 'draft' }}
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -245,7 +235,8 @@ jobs:
           RELEASE_TAG: ${{ steps.state.outputs.tag }}
         run: |
           ./scripts/publish-release publish \
-            --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
+            --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG" \
+            --included-work "$RUNNER_TEMP/release-levels.md"
       - name: Verify an already-published rerun
         if: ${{ steps.state.outputs.state == 'published' }}
         env:
