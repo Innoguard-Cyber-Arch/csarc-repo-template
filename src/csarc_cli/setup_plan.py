@@ -53,7 +53,8 @@ NEW_PROJECT_DEFAULTS: dict[str, object] = {
     "documentation_mode": "content-only",
     "documentation_languages": "zh-tw",
 }
-LICENSES = ("proprietary", "MIT", "Apache-2.0")
+# `custom`: the product owns its license; CSARC renders no LICENSE.
+LICENSES = ("proprietary", "MIT", "Apache-2.0", "custom")
 LANGUAGES = ("go", "python", "rust", "typescript")
 DOCUMENTATION_LANGUAGES = ("zh-tw", "en", "zh-tw+en", "en+zh-tw")
 CHOICES: dict[str, tuple[str, ...]] = {

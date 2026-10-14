@@ -6,8 +6,10 @@ description = {{ project_description | tojson }}
 {% if documentation_mode != 'off' -%}
 readme = "README.md"
 {% endif -%}
+{% if project_license != 'custom' -%}
 license = "{{ 'LicenseRef-Proprietary' if project_license == 'proprietary' else project_license }}"
 license-files = ["LICENSE"]
+{% endif -%}
 requires-python = "{% if python_floor == 'latest' %}>=3.14,<3.15{% else %}>={{ python_floor }}{% endif %}"
 dependencies = []
 

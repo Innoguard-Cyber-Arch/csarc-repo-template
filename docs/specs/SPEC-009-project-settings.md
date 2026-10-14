@@ -68,7 +68,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 | `project_slug` | `derived-context` | `text` | repository／distribution 名稱 | repository 名稱或 manifest `name` |
 | `project_name` | `one-time-seed` | `text` | 非空字串 | product manifest `name`，沒有時為目錄名 |
 | `project_description` | `one-time-seed` | `text` | 非空、非 placeholder | product manifest `description` |
-| `project_license` | `one-time-seed` | `choice` | `proprietary`, `MIT`, `Apache-2.0` | `LICENSE`；不是 starter 文字時為 product-owned（`custom`） |
+| `project_license` | `one-time-seed` | `choice` | `proprietary`, `MIT`, `Apache-2.0`, `custom` | `LICENSE`；不是 starter 文字時為 product-owned（`custom`）；init 選 `custom` 時不產生 `LICENSE` |
 | `copyright_holder` | `one-time-seed` | `text` | 非空字串 | `LICENSE` 的 `Copyright (c)` 行 |
 | `repository_url` | `live-fact` | `text` | `https://github.com/<owner>/<repo>` | origin remote 或 GitHub API；明確 override 只綁單次 plan |
 | `project_visibility` | `live-fact` | `choice` | `public`, `private`, `internal` | GitHub API |
@@ -198,6 +198,7 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 - **提問條件**：stdin 是 TTY，而且沒有 `--non-interactive` 與 `--json`。只用標準輸入；不合法的回答在同一題重問，不增加題數。阻擋後的確認（approval route、偵測結果被拒）不算題目。
 - **Non-interactive**：缺少必填輸入時，在查詢 Release、render 或寫檔前以一行 `csarc: Missing required setup input (...)` 結束，列出每個 `--data KEY=`。必填：init 的 `project_description`、`languages`（可為空字串，表示只有 CI baseline）、`copyright_holder`；adopt 沒有 manifest description 時的 `project_description`、沒有 `LICENSE`（plan 會新建）時的 `copyright_holder`、`ambiguous` 的 `package_name`；public 而沒有偵測到揭露政策管道時的 `security_reporting_channel`（需要 live visibility，所以在唯讀 GitHub 讀取之後、render 之前檢查）。有建議值的題目（授權 `proprietary`、文件語言 `zh-tw`、`governance_mode: managed`、Dockerfile 時的 `container: false`、`team` 的 `copilot_review: allowed`、`release_trigger: main`）採用建議值；adopt 對其中沒有唯一來源的意圖各列一個非 blocking 的 `setting-decision`（SPEC-008 `2.1.0`）。repository 無法解析時 non-interactive 仍需要 `--data repository_url=`；visibility 依 §8 使用 safe default。
 - **新專案預設**（#1058 決定 14）：init 由 CLI 採用 `documentation_mode: content-only`、`documentation_languages: zh-tw`；`copier.yml` 的預設只供 raw Copier render。
+- **`custom` 授權**（#1058 決定 17）：init 的授權題可選 `custom`，表示產品自行管理授權：不問 `copyright_holder`，CSARC 不產生 `LICENSE`，Python、npm、Cargo manifest 不寫 license 欄位（npm 維持 `private: true`）。`check_license_metadata.py` 只在 provenance 記錄 `project_license: custom` 時接受缺少 `LICENSE`；沒有 provenance 的 raw Copier render 只在沒有任何 manifest 宣告授權時接受。其他授權缺少 `LICENSE` 仍然失敗；之後加入的 `LICENSE` 由產品擁有，不被解讀。
 - **空 repository**：init 接受不存在的路徑、空資料夾，或只含 `.git`、沒有 commit 也沒有 tracked 檔的 repository（保留 `.git`）；`csarc status` 對後者回報 `create`。
 
 #### 工作模式（preset）
@@ -223,7 +224,7 @@ init 的 6 題依序為 `project_description`、`languages`、`project_license`�
 | `team` | ＋1（`copilot_review`） |
 | `custom` | ＋3（`verification_mode`、`admin_bypass`、`copilot_review`） |
 | repository 無法解析 | 最多＋2（`repository_url`、`project_visibility`） |
-| 授權選 `custom` | －1（略過 `copyright_holder`；init 的 `custom` 授權尚無 template 支援，見 Out of scope） |
+| 授權選 `custom` | －1（略過 `copyright_holder`） |
 | adopt | 3；每個無法唯一偵測的值（沒有 manifest description、沒有 `LICENSE`、`ambiguous` package）＋1；public 而揭露政策沒有唯一的私密管道＋1；偵測到 `Dockerfile`＋1（`container`）；工作模式、`release_trigger` 與 repository 的追加題同 init |
 | update | 0 |
 
@@ -277,7 +278,6 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 
 ## Out of scope
 
-- init 選 `custom` 授權（不產生 LICENSE、manifest 不寫 license 欄位）需要 template 與 `check_license_metadata.py` 支援，另開 Issue；目前 init 只提供 `proprietary`、`MIT`、`Apache-2.0`。
 - 依選項縮減的 payload 與預設值調整（#1077）。
 - `github_project_url`（#1080）。
 - 網站 token 與 CLI hint 的全面清理（#1090）、文件中的過期說法（#1091）。

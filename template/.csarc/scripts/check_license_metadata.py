@@ -15,63 +15,71 @@ import sys
 import tomllib
 from pathlib import Path
 
+Manifests = dict[str, dict]
+LICENSE_KEYS = ("license", "license-file", "license-files")
+READERS = (
+    ("pyproject.toml", lambda text: tomllib.loads(text)["project"]),
+    ("Cargo.toml", lambda text: tomllib.loads(text)["package"]),
+    ("package.json", json.loads),
+)
 
-def expected_identifiers(project_license: str) -> tuple[str, str]:
-    """Return the SPDX/Python and npm identifiers for one project license."""
-    if project_license == "proprietary":
-        return "LicenseRef-Proprietary", "UNLICENSED"
-    return project_license, project_license
 
-
-def validate_license_file(
-    path: Path, project_license: str, holder: str
-) -> None:
+def validate_license_file(path: Path, kind: str, holder: str) -> None:
     """Validate the human-readable license file."""
-    if not path.is_file():
-        raise ValueError("LICENSE is missing")
     license_text = path.read_text(encoding="utf-8")
     if holder not in license_text:
         raise ValueError("LICENSE does not name copyright_holder")
-    if project_license == "proprietary":
+    if kind == "proprietary":
         if "All rights reserved" not in license_text:
             raise ValueError("proprietary LICENSE must reserve all rights")
         return
-    license_name = f"{project_license.split('-')[0]} License"
-    if not license_text.startswith(license_name):
-        raise ValueError(f"LICENSE does not contain {project_license}")
+    if not license_text.startswith(f"{kind.split('-')[0]} License"):
+        raise ValueError(f"LICENSE does not contain {kind}")
 
 
-def validate_python(path: Path, expected: str) -> None:
-    """Validate Python package metadata when present."""
-    if not path.is_file():
-        return
-    project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
-    if project.get("license") != expected:
+def manifests(root: Path) -> Manifests:
+    """Return the license-bearing table of each present product manifest."""
+    return {
+        name: read((root / name).read_text(encoding="utf-8"))
+        for name, read in READERS
+        if (root / name).is_file()
+    }
+
+
+def require_custom(root: Path, found: Manifests) -> None:
+    """Accept a missing LICENSE only for a recorded `custom` choice (#1078)."""
+    try:
+        text = (root / ".csarc/provenance.json").read_text(encoding="utf-8")
+        context = json.loads(text)["settings"]["context"]
+        custom = context["project_license"] == "custom"
+    except (OSError, ValueError, KeyError, TypeError):
+        # A raw Copier render: `custom` manifests declare no license.
+        found_keys = (k for m in found.values() for k in LICENSE_KEYS if k in m)
+        custom = bool(found) and next(found_keys, None) is None
+    if not custom:
+        raise ValueError("LICENSE is missing")
+
+
+def validate_manifests(found: Manifests, project_license: str) -> None:
+    """Validate Python, npm, and Cargo metadata against LICENSE."""
+    proprietary = project_license == "proprietary"
+    spdx = "LicenseRef-Proprietary" if proprietary else project_license
+    npm = "UNLICENSED" if proprietary else project_license
+    python = found.get("pyproject.toml")
+    if python is not None and python.get("license") != spdx:
         raise ValueError("pyproject.toml license does not match LICENSE")
-    if "LICENSE" not in project.get("license-files", []):
+    if python is not None and "LICENSE" not in python.get("license-files", []):
         raise ValueError("pyproject.toml must package LICENSE")
-
-
-def validate_node(path: Path, expected: str, proprietary: bool) -> None:
-    """Validate npm package metadata when present."""
-    if not path.is_file():
-        return
-    package = json.loads(path.read_text(encoding="utf-8"))
-    if package.get("license") != expected:
+    node = found.get("package.json")
+    if node is not None and node.get("license") != npm:
         raise ValueError("package.json license does not match LICENSE")
-    if proprietary and package.get("private") is not True:
+    if node is not None and proprietary and node.get("private") is not True:
         raise ValueError("proprietary npm packages must set private=true")
-
-
-def validate_cargo(path: Path, project_license: str) -> None:
-    """Validate Cargo package metadata when present."""
-    if not path.is_file():
-        return
-    package = tomllib.loads(path.read_text(encoding="utf-8"))["package"]
-    if project_license == "proprietary":
-        if package.get("license-file") != "LICENSE" or "license" in package:
+    cargo = found.get("Cargo.toml")
+    if cargo is not None and proprietary:
+        if cargo.get("license-file") != "LICENSE" or "license" in cargo:
             raise ValueError("Cargo.toml proprietary license is inconsistent")
-    elif package.get("license") != project_license:
+    elif cargo is not None and cargo.get("license") != project_license:
         raise ValueError("Cargo.toml license does not match LICENSE")
 
 
@@ -81,24 +89,15 @@ def validate(root: Path) -> None:
     license_facts = runpy.run_path(str(script_dir / "csarc_config.py"))[
         "license_facts"
     ]
-    license_path = root / "LICENSE"
-    if not license_path.is_file():
-        raise ValueError("LICENSE is missing")
+    if not (root / "LICENSE").is_file():
+        return require_custom(root, manifests(root))
     project_license, holder = license_facts(root)
     if project_license == "custom":
-        # A product-owned license text: CSARC does not interpret it.
-        return
+        return  # A product-owned license text: CSARC does not interpret it.
     if not isinstance(holder, str) or not holder.strip():
         raise ValueError("LICENSE does not name a copyright holder")
-    validate_license_file(license_path, project_license, holder)
-    spdx_license, npm_license = expected_identifiers(project_license)
-    validate_python(root / "pyproject.toml", spdx_license)
-    validate_node(
-        root / "package.json",
-        npm_license,
-        project_license == "proprietary",
-    )
-    validate_cargo(root / "Cargo.toml", project_license)
+    validate_license_file(root / "LICENSE", project_license, holder)
+    validate_manifests(manifests(root), project_license)
 
 
 def main() -> int:

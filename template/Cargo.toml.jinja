@@ -9,7 +9,7 @@ repository = {{ repository_url | tojson }}
 readme = "README.md"
 {% endif -%}
 {% if project_license == 'proprietary' %}license-file = "LICENSE"
-{% else %}license = "{{ project_license }}"
+{% elif project_license != 'custom' %}license = "{{ project_license }}"
 {% endif %}
 
 [dependencies]

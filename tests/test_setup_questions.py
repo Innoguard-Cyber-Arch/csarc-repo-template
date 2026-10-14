@@ -124,6 +124,39 @@ def test_init_preset_follow_up_questions(
     assert result.work_mode == mode_answers[0]
 
 
+def test_custom_license_skips_the_copyright_question() -> None:
+    """Targets: choosing the `custom` license asks one question fewer."""
+    session = tty(
+        "Inventory service for warehouse teams.",
+        "python",
+        "custom",
+        "",
+        "",
+    )
+    result = setup_plan.plan_init(session, {}, None)
+
+    assert session.asked == [
+        "project_description",
+        "languages",
+        "project_license",
+        "documentation_languages",
+        "work_mode",
+    ]
+    assert result.values["project_license"] == "custom"
+    assert "copyright_holder" not in result.values
+    scripted = script()
+    setup_plan.plan_init(
+        scripted,
+        {
+            "project_description": "Inventory service.",
+            "languages": "python",
+            "project_license": "custom",
+        },
+        None,
+    )
+    scripted.require_complete("init")
+
+
 def test_public_and_unresolved_repository_add_their_questions() -> None:
     session, result = init_transcript("")
     session.ask = Script(
@@ -1074,3 +1107,47 @@ def test_questions_need_a_tty_without_script_flags(
     assert not cli.setup_interactive(copy_args(tmp_path / "x", json=True))
     monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False, raising=False)
     assert not cli.setup_interactive(copy_args(tmp_path / "x"))
+
+
+@pytest.mark.large
+def test_raw_render_with_custom_license_writes_no_license(
+    tmp_path: Path,
+) -> None:
+    """Issue #1078: `custom` renders no LICENSE or manifest license field."""
+    from copier import run_copy
+
+    target = tmp_path / "custom"
+    run_copy(
+        str(ROOT),
+        target,
+        data={
+            "project_name": "Custom Product",
+            "project_description": "A product that ships its own terms.",
+            "project_license": "custom",
+            "languages": ["python", "typescript", "rust"],
+            "repository_url": "https://github.com/example/custom",
+        },
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+        quiet=True,
+        vcs_ref="HEAD",
+    )
+
+    assert not (target / "LICENSE").exists()
+    pyproject = (target / "pyproject.toml").read_text(encoding="utf-8")
+    assert "license" not in pyproject
+    package = json.loads((target / "package.json").read_text(encoding="utf-8"))
+    assert "license" not in package
+    assert package["private"] is True
+    cargo = (target / "Cargo.toml").read_text(encoding="utf-8")
+    assert "license" not in cargo
+    readme = (target / "README.md").read_text(encoding="utf-8")
+    assert "CSARC 不產生也不解讀授權文件" in readme
+    result = cli.run(
+        ["python3", ".csarc/scripts/check_license_metadata.py"],
+        cwd=target,
+        capture=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
