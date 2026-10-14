@@ -1035,6 +1035,53 @@ canonical payload 與 digest、summary 的保存方式與 Actions 資料到期�
 fail closed（接入 publisher 由 #1074 負責）。本機證據的 `completed_at` 改成 `YYYY-MM-DDTHH:MM:SSZ`，讓合併可以
 不經轉換直接雜湊。
 
+### 單一 maintainer 的可稽核合併路徑（#1076）
+
+`scripts/pr_lifecycle.py check|merge` 依 base branch 的 effective rules 與寫入者讀回，把每個方案形狀歸到
+唯一一條 route（#1058 決定 4、5、10、27）：
+
+| 形狀 | `protection` | route | 說明 |
+| --- | --- | --- | --- |
+| A（hosted）、E1（local＋`beta-only`／`always`）、C（local＋`off`）的 Ruleset 完整讀回且相符 | `enforced` | allowed | `server_enforcement=ruleset`；合併者身分見下方 |
+| 沒有任何 `pull_request`／`required_status_checks` 規則，API 完整讀回恰好一個寫入者，而且就是合併者 | `single-writer` | allowed | `server_enforcement=none`；agent 以唯一維護者身分執行，不另建 write 帳號 |
+| 沒有 Ruleset，另有寫入者（collaborator、可寫 team 成員或可寫 deploy key） | `multiple-writers` | manual-only | 人工在 GitHub 合併，記為 `untraced`，`csarc-owned` 發版 fail closed |
+| Ruleset 或寫入者讀取失敗、分頁不完整、team 成員不可見、缺 `role_name` 或未知角色 | `inconclusive`／`unknown` | manual-only | 同上；不猜測、不讀 legacy `permission` |
+| Ruleset 形狀不符、未生效、未驗證的 bypass，或沒有 Ruleset 時 `mergeable_state` 不是 `clean`（含 `unstable`） | `blocked` | blocked | 先修正條件，lifecycle 不合併 |
+
+合併者（執行 lifecycle 的身分）與授權者（留下 exact-head 授權或 approval 的人）分開判斷
+（#1058 決定 27）。有 Ruleset 的一般 agent route（獨立 maintainer approval 或 Copilot review 授權）要求合併者
+即時 `role_name` 恰為 `write`；`maintain`、`admin`、自訂角色或讀不到都改判 `blocked`，不合併。GitHub App
+合併者（例如 `github-actions[bot]`）只有 installation 權限、沒有 repository role，記為 `app`。admin bypass 與
+emergency hotfix route 的合併者就是 live admin 授權者本人（#918／#1064），照常允許並記為
+`admin-authorizer`，表示這不是獨立 agent 身分路線；single-writer route 記為 `sole-maintainer`。`check` 輸出
+`merge_identity`，`merge-trace` 帶 `identity=<agent-write|app|admin-authorizer|sole-maintainer>`。
+
+寫入者讀回包含 `collaborators?affiliation=all`（每一列都要有 `role_name`；`read`／`triage` 不算寫入者，
+`write`／`maintain`／`admin` 算，其他值為 `inconclusive`）、每個 deploy key 的 `read_only`，organization
+repository 另讀 repository teams：每個可寫 team 的成員都必須讀得到，且已出現在 collaborator 讀回中。
+`check` 的 JSON 輸出 `protection`、`merge_permission` 與 `server_enforcement`。
+
+這條路線只把「缺少平台強制」換成「完整讀回證明只有一人能寫入」，其他控制都不略過：exact-head 授權
+（#918：admin bypass 只取代 approval）、lease、head 包含 base、verified tree、durable summary 與 trailer
+照常執行。hosted 模式從 trusted base 的 `policies/rulesets-required-checks.json`（generated：
+`.csarc/policies/rulesets-required-checks.json`）讀出 required checks 逐項重驗；local 模式照樣要求 exact-head
+本機證據（`self-attested-local`，#908）。合併讀回後，summary 的 `merge-trace` 帶 `server_enforcement=none`，
+並加一行 `single-writer-trace: writer=<login> server_enforcement=none ...`，明記沒有 Ruleset 參與，不宣稱
+伺服器曾經阻擋。`admin_bypass: off` 的 single-writer repository 沒有獨立 reviewer，lifecycle 會拒絕；改用
+`beta-only`／`always` 或人工合併。限制：GitHub App 安裝不在讀回範圍；Free private 的 `rules/branches`
+實際回應未經 live 驗證，讀取錯誤一律 `unknown`，只能人工合併。
+
+**local Dependabot route**：local 模式沒有 hosted eligibility workflow。`--require-dependabot-head` 在 local
+模式改為重驗 GitHub 簽章的 Dependabot head（或 #1052 的 sync child），再從簽章 commit 的
+`updated-dependencies` 讀出每個 `update-type`：只接受 `semver-minor`／`semver-patch`，major、缺漏或未知值
+只能人工合併；PR、head 或簽章身分不符一律拒絕。授權用合併者本人的 exact-head 授權留言（bot 產生的 body
+不需要 marker）；`CSARC-Route: dependabot` 與發布層級不變，summary 另寫
+`dependabot-trace: kind=<direct|sync-child> update_types=<...> route=dependabot release_level=<level>`。
+
+**Admin bypass marker**：`scripts/pr_lifecycle.py edit --admin-bypass-marker add|remove` 在 lease 內插入或
+移除 `Admin bypass / 管理員略過審核` 這一行。近似的複本（清單符號、多餘空白）會正規化成恰好一行，插在
+PR template 的說明註解之後；寫入後讀回不符就失敗，不當作成功。
+
 ### Risk-owned execution 與有限證據沿用（#812）
 
 單一 `verify` required context 保持不變，不新增 path-filtered workflow、matrix runner、stage registry 或跨 commit
