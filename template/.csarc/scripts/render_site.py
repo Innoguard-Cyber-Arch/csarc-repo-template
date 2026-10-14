@@ -75,6 +75,32 @@ class BundleError(ValueError):
     """Report a source that cannot satisfy the portable bundle contract."""
 
 
+# Issue #1090: tokens older site content used for settings that SPEC-009
+# retired or reclassified as live facts, with the current token carrying
+# the intent (None when no setting does). A build names the replacement
+# instead of rendering the stale token or failing with a bare error.
+RETIRED_CONFIG_TOKENS: Final[dict[str, str | None]] = {
+    "branch_strategy": None,
+    "features": "container",
+    "i18n": "documentation_languages",
+    "primary_language": "documentation_languages",
+    "project_visibility": None,
+    "review": "admin_bypass",
+    "reviewers": None,
+}
+
+
+def retired_token_message(key: str) -> str:
+    """Return the migration hint for one retired `[[key]]` token."""
+    successor = RETIRED_CONFIG_TOKENS[key]
+    action = (
+        f"replace it with [[{successor}]]"
+        if successor
+        else "remove it; no current setting carries it"
+    )
+    return f"Retired site content setting [[{key}]]: {action} (SPEC-009)."
+
+
 def _load_config(root: Path) -> dict[str, object]:
     """Read the repository's existing CSARC configuration."""
     config_reader = root / ".csarc/scripts/csarc_config.py"
@@ -106,6 +132,8 @@ def _substitute_config(markdown: str, config: dict[str, object]) -> str:
 
     def replace(match: re.Match[str]) -> str:
         key = match.group("key")
+        if key in RETIRED_CONFIG_TOKENS:
+            raise BundleError(retired_token_message(key))
         if key not in config:
             raise BundleError(f"Unknown site content setting: {key}")
         return _config_text(config[key])

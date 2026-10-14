@@ -70,7 +70,7 @@ This repo's governance rules live in three places, each with a distinct role: `A
 
 - **`AGENTS.md`:** an agent always reads this before starting work; the equivalent guidance for human contributors is in the README.
 - **`.csarc/policies/*.json`:** expected settings (branch protection, required checks, labels) applied and verified by `.csarc/scripts/apply-repository-settings.sh`.
-- **`.csarc/config.yml`:** this repo's actual choices (languages, branch strategy, code owner, and so on), kept in sync with template updates via `csarc update` while this file's own project content is preserved.
+- **`.csarc/config.yml`:** this repo's actual choices (languages, documentation mode, code owner, and so on), kept in sync with template updates via `csarc update` while this file's own project content is preserved.
 
 This site is itself an example of the same principle: `docs/index.html` embeds every style and script, so it opens offline once downloaded, with no separate hosting needed.
 {{< /ops >}}

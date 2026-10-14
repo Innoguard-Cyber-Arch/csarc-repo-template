@@ -212,7 +212,9 @@ def test_render_rejects_live_visibility_token(tmp_path: Path) -> None:
         tmp_path, "# [[project_name]]\n\nVisibility: [[project_visibility]]\n"
     )
 
-    with pytest.raises(BundleError, match="Unknown site content setting"):
+    with pytest.raises(
+        BundleError, match=r"\[\[project_visibility\]\]: remove it"
+    ):
         render(source, root=tmp_path)
 
 

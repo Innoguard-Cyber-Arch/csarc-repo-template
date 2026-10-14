@@ -23,6 +23,8 @@ import yaml
 from test_generated_layout_allowlist import allowlist
 from test_generated_runtime_boundary import probe, python_entries
 
+from csarc_cli import settings_schema
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -438,6 +440,91 @@ def test_render_passes_its_own_fast_verifier(
     combined = result.stdout + result.stderr
     assert result.returncode == 0, combined[-4000:]
     assert "cases passed" not in combined
+
+
+@pytest.mark.parametrize("name", list(MATRIX))
+def test_rulesets_require_only_checks_the_render_ships(
+    renders: dict[str, Path], name: str
+) -> None:
+    """Issue #1090 AC1/AC4: required checks follow rendered workflows.
+
+    Each local/hosted, lifecycle, and release-ownership render requires
+    exactly the checks its own workflows publish, on the default branch
+    and dev/m* alike, without any removed setting choosing the refs.
+    """
+    project = renders[name]
+    config = yaml.safe_load(
+        (project / ".csarc/config.yml").read_text(encoding="utf-8")
+    )
+    policies = project / ".csarc/policies"
+    required = yaml.safe_load(
+        (policies / "rulesets-required-checks.json").read_text(encoding="utf-8")
+    )
+    protected = yaml.safe_load(
+        (policies / "rulesets.json").read_text(encoding="utf-8")
+    )
+    assert required["conditions"] == protected["conditions"]
+    assert required["conditions"]["ref_name"]["include"] == [
+        "~DEFAULT_BRANCH",
+        "refs/heads/dev/m*",
+    ]
+    contexts = {
+        check["context"]
+        for rule in required["rules"]
+        for check in rule["parameters"]["required_status_checks"]
+    }
+    published = {
+        str(job.get("name", job_id))
+        for path in (project / ".github/workflows").glob("*.yml")
+        for job_id, job in (
+            yaml.safe_load(path.read_text(encoding="utf-8")).get("jobs") or {}
+        ).items()
+    }
+    if config["verification_mode"] == "local":
+        assert contexts == set()
+    else:
+        assert contexts == {"title", "verify", "review"}
+        assert contexts <= published
+
+
+# Ways an active file reads or suggests a setting by name (Issue #1090
+# AC5); migration code and historical fixtures are not rendered.
+RETIRED_REFERENCE_FORMS = (
+    r"\[\[{key}\]\]",
+    r"--data[ =]`?{key}=",
+    r"csarc_config\.py\"? {key}\b",
+)
+
+
+@pytest.mark.parametrize("name", list(MATRIX))
+def test_no_render_reads_or_suggests_a_retired_setting(
+    renders: dict[str, Path], name: str
+) -> None:
+    """Issue #1090 AC5: retired settings never reach active output."""
+    retired = sorted(
+        set(settings_schema.RETIRED_SETTINGS) - settings_schema.ONE_TIME_INPUTS
+    )
+    project = renders[name]
+    saved = yaml.safe_load(
+        (project / ".csarc/config.yml").read_text(encoding="utf-8")
+    )
+    assert not set(saved) & set(retired)
+    pattern = re.compile(
+        "|".join(
+            form.format(key=re.escape(key))
+            for form in RETIRED_REFERENCE_FORMS
+            for key in retired
+        )
+    )
+    found = [
+        f"{path}: {match.group(0)}"
+        for path in files_of(project)
+        if (project / path).is_file()
+        for match in pattern.finditer(
+            (project / path).read_text(encoding="utf-8", errors="ignore")
+        )
+    ]
+    assert found == []
 
 
 def test_payload_never_grows_past_its_recorded_ceiling() -> None:

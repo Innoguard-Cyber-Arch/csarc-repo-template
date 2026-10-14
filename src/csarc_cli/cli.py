@@ -5867,12 +5867,14 @@ def release_contract(answers: Mapping[str, object]) -> dict[str, object]:
         or not isinstance(reason, str)
         or not reason
     ):
+        # The reason is recomputed from release_ownership (SPEC-009), so the
+        # hint names only the current setting, never the retired reason key.
         raise CliError(
             "Release workflow ownership is incomplete. This is a "
-            "release_ownership/release_ownership_reason gap, not a "
-            "provenance problem; --accept-legacy does not resolve it. "
-            "Pass explicit --data release_ownership=<...> "
-            "release_ownership_reason=<...> to disambiguate."
+            "release_ownership gap, not a provenance problem; "
+            "--accept-legacy does not resolve it. Pass "
+            "--data release_ownership=csarc-owned|product-owned|"
+            "verification-only to choose the one release owner."
         )
     inputs = required_release_inputs(answers.get("release_required_inputs"))
     if ownership == "verification-only" and (workflow or inputs):
