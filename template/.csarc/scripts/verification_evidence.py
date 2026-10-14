@@ -3,11 +3,22 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import re
+import sys
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    evidence_freshness = importlib.import_module("evidence_freshness")
+else:
+    evidence_freshness = importlib.import_module(
+        f"{__package__}.evidence_freshness"
+    )
 
 VALID_TIERS = {"docs", "fast", "full"}
 TIER_RANK = {"docs": 0, "fast": 1, "full": 2}
@@ -296,8 +307,7 @@ def validate_verification_job(  # noqa: C901
     head_sha: str,
     tree_sha: str,
     now: datetime | None = None,
-    max_age_hours: float = 24.0,
-    max_clock_skew_minutes: float = 5.0,
+    max_age_hours: float | None = None,
     full_command: str = "./.csarc/scripts/verify",
     required_tier: str | None = None,
     expected_toolchain: set[str] | None = None,
@@ -312,8 +322,9 @@ def validate_verification_job(  # noqa: C901
     squash merge produced main; `commit_tree` then proves that main commit
     has exactly the verified source tree.
     """
-    if max_age_hours <= 0 or max_clock_skew_minutes < 0:
-        raise RuntimeError("Trusted verification freshness bounds are invalid")
+    # Issue #1075: the window comes from trusted policy and may only be
+    # tightened; reject a widened request before reading any evidence.
+    max_age_hours = evidence_freshness.policy_max_age_hours(max_age_hours)
     if (
         re.fullmatch(r"[0-9a-f]{40}", head_sha) is None
         or re.fullmatch(r"[0-9a-f]{40}", tree_sha) is None
@@ -368,13 +379,12 @@ def validate_verification_job(  # noqa: C901
         raise RuntimeError("Trusted verification used an untrusted runner")
 
     completed_at = parse_github_time(job.get("completed_at"), "completion time")
-    current = (now or datetime.now(UTC)).astimezone(UTC)
-    if completed_at - current > timedelta(minutes=max_clock_skew_minutes):
-        raise RuntimeError(
-            "Trusted verification completion time is in the future"
-        )
-    if current - completed_at > timedelta(hours=max_age_hours):
-        raise RuntimeError("Trusted verification evidence is stale")
+    evidence_freshness.require_fresh(
+        completed_at,
+        subject="Trusted verification",
+        now=now,
+        max_age_hours=max_age_hours,
+    )
 
     steps = successful_steps(job)
     missing_steps = [name for name in REQUIRED_STEPS if name not in steps]
@@ -457,7 +467,6 @@ def validate_verification_job(  # noqa: C901
             tree_sha=source_tree,
             now=now,
             max_age_hours=max_age_hours,
-            max_clock_skew_minutes=max_clock_skew_minutes,
             full_command=full_command,
             required_tier="full" if sync else required_tier,
             expected_toolchain=expected_toolchain,

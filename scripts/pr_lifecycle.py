@@ -2546,7 +2546,7 @@ def require_trusted_verification(  # noqa: C901
     head_sha: str,
     integration_id: int,
     *,
-    max_age_hours: float = 24.0,
+    max_age_hours: float | None = None,
     required_tier: str | None = None,
     now: datetime | None = None,
     check_runs: list[dict[str, Any]] | None = None,

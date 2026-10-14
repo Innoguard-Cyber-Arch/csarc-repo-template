@@ -431,6 +431,180 @@ def test_future_evidence_fails_closed() -> None:
         )
 
 
+def test_hosted_window_is_inclusive_at_exactly_24_hours() -> None:
+    """Hosted evidence uses the shared boundary: 24 hours old is fresh."""
+    check_run, workflow_run, job = evidence(
+        completed_at=NOW - timedelta(hours=24)
+    )
+    result = validate_verification_job(
+        check_run,
+        workflow_run,
+        job,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+    )
+    assert result["completed_at"] == (NOW - timedelta(hours=24)).isoformat()
+
+
+@pytest.mark.parametrize("value", [None, "", "2026-09-20T11:00:00"])
+def test_hosted_missing_or_naive_completion_fails_closed(value: object) -> None:
+    """A job without an aware completion time is never treated as fresh."""
+    check_run, workflow_run, job = evidence()
+    job["completed_at"] = value
+    with pytest.raises(RuntimeError, match="completion time"):
+        validate_verification_job(
+            check_run,
+            workflow_run,
+            job,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+        )
+
+
+def test_hosted_caller_cannot_widen_the_trusted_window() -> None:
+    """Issue #1075: a widened window fails closed instead of accepting."""
+    check_run, workflow_run, job = evidence(
+        completed_at=NOW - timedelta(hours=30)
+    )
+    with pytest.raises(RuntimeError, match="cannot exceed the trusted"):
+        validate_verification_job(
+            check_run,
+            workflow_run,
+            job,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            max_age_hours=48,
+        )
+
+
+def test_generated_reader_shares_the_window_and_tamper_rule() -> None:
+    """The `.csarc` copy keeps the same boundary and rejects widening."""
+    check_run, workflow_run, job = evidence(
+        command="./.csarc/scripts/verify-fast",
+        completed_at=NOW - timedelta(hours=24),
+    )
+    validate_template_verification_job(
+        check_run,
+        workflow_run,
+        job,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+    )
+    with pytest.raises(RuntimeError, match="stale"):
+        validate_template_verification_job(
+            check_run,
+            workflow_run,
+            job,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW + timedelta(seconds=1),
+        )
+    with pytest.raises(RuntimeError, match="cannot exceed the trusted"):
+        validate_template_verification_job(
+            check_run,
+            workflow_run,
+            job,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            max_age_hours=48,
+        )
+
+
+def test_tightened_policy_expires_a_reuse_source_until_reverified() -> None:
+    """A fresh reuse run cannot refresh an old source; a new run can."""
+    source = evidence(
+        run_id=200, check_id=7, completed_at=NOW - timedelta(hours=6)
+    )
+    current = evidence(
+        run_id=300,
+        check_id=8,
+        completed_at=NOW - timedelta(minutes=1),
+        reuse=(200, 7, 7),
+    )
+    validate_verification_job(
+        *current,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        source_evidence=(*source, TREE),
+    )
+    with pytest.raises(RuntimeError, match="stale"):
+        validate_verification_job(
+            *current,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            max_age_hours=1,
+            source_evidence=(*source, TREE),
+        )
+    rerun = evidence(
+        run_id=400, check_id=9, completed_at=NOW - timedelta(minutes=3)
+    )
+    result = validate_verification_job(
+        *rerun,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        max_age_hours=1,
+    )
+    assert result["run_id"] == 400
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("repository", "repository or exact head"),
+        ("head", "repository or exact head"),
+        ("tree", "tree does not match"),
+        ("tier", "tier is insufficient"),
+        ("runner", "ubuntu-latest"),
+        ("result", "did not complete successfully"),
+        ("toolchain", "toolchain"),
+    ],
+)
+def test_fresh_evidence_still_requires_every_identity_binding(
+    mutation: str, message: str
+) -> None:
+    """Freshness is necessary, never sufficient (Issue #1075 AC4)."""
+    check_run, workflow_run, job = evidence(completed_at=NOW)
+    kwargs: dict[str, Any] = {
+        "repo": "owner/repo",
+        "head_sha": HEAD,
+        "tree_sha": TREE,
+        "now": NOW,
+    }
+    if mutation == "repository":
+        workflow_run["repository"] = {"full_name": "other/repo"}
+    elif mutation == "head":
+        kwargs["head_sha"] = "e" * 40
+    elif mutation == "tree":
+        kwargs["tree_sha"] = "e" * 40
+    elif mutation == "tier":
+        kwargs["required_tier"] = "full"
+    elif mutation == "runner":
+        job["labels"] = ["macos-latest"]
+    elif mutation == "result":
+        job["conclusion"] = "failure"
+    elif mutation == "toolchain":
+        kwargs["expected_toolchain"] = {*ROOT_TOOLCHAIN, "java-25"}
+    with pytest.raises(RuntimeError, match=message):
+        validate_verification_job(check_run, workflow_run, job, **kwargs)
+
+
 def test_untrusted_runner_fails_closed() -> None:
     """A self-hosted label cannot impersonate the GitHub-hosted runner."""
     check_run, workflow_run, job = evidence()

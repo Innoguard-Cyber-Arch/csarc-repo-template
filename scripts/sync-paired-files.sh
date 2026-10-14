@@ -19,6 +19,7 @@ paired_files=(
   "scripts/csarc_config.py|template/.csarc/scripts/csarc_config.py"
   "scripts/documentation_review.py|template/.csarc/scripts/documentation_review.py"
   "scripts/delivery_sync.py|template/.csarc/scripts/delivery_sync.py"
+  "scripts/evidence_freshness.py|template/.csarc/scripts/evidence_freshness.py"
   "scripts/gh-issue-edit|template/.csarc/scripts/gh-issue-edit"
   "scripts/gh-issue-develop|template/.csarc/scripts/gh-issue-develop"
   "scripts/finalization-queue|template/.csarc/scripts/finalization-queue"
