@@ -1129,11 +1129,19 @@ check 清單對得上。
 ### Dependabot 依賴更新的發版與 template 同步（#755）
 
 **`uvx --from git+...@<sha>` 不吃 `uv.lock`（實測，2026-09-18）**：本機對 `git+file://` 本地來源、當下
-`pyproject.toml` 宣告 `copier>=9.17,<10`、`uv.lock` 鎖定 `copier==9.17.2` 的狀態實測
+`pyproject.toml` 宣告 `copier>=9.17,<10`、`uv.lock` 鎖定 `copier==9.17.2` 的狀態（#1067 前）實測
 `uvx --from "git+file://<repo>@<sha>" python -c "import copier; print(copier.__version__)"`，實際裝出
 `9.18.2`（範圍內當下最新版），不是 lock 檔鎖定的版本。結論：`uvx --from git+URL@<sha>` 安裝時直接依
 `pyproject.toml` 的版本範圍重新解析，不讀取目標 repo 的 `uv.lock`——`uv.lock` 只服務這個 repo 自己的
 `uv sync`／`uv run` 情境。
+
+**Copier 與 Jinja2 改為 exact pin（#1067）**：正因 `uvx --from git+URL@<sha>` 只看 `pyproject.toml`，
+同一個 CSARC Release 若宣告版本範圍，就可能在不同時間 render 出不同結果，`csarc update` 的 final plan 也
+無法重播。`pyproject.toml` 因此直接宣告 `copier==<版本>` 與 `jinja2==<版本>`，生成專案的
+`template-update.yml` 以 `uv tool install copier==<同一版本> --with jinja2==<同一版本>` 使用同一組
+pin；`tests/test_update_final_plan.py` 讀回 `pyproject.toml`、`uv.lock`、執行環境與 workflow 四處一致。
+這兩個依賴的 Dependabot bump 會改動 `pyproject.toml` 本身，適用下段「改動宣告的版本範圍」的情況；其餘
+runtime 依賴仍維持範圍宣告。
 
 因此 root 的 `.github/dependabot.yml` 的 `uv` 區段**維持現行 `build(deps)` 前綴，不區分 runtime／dev 依賴**：
 一般（非安全性）runtime 依賴的版本 bump，只要新版本仍落在既有範圍內，`uvx` 使用者下次執行就會自動拿到最新
