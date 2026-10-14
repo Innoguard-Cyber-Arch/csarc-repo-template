@@ -184,6 +184,13 @@ def setting_classes(  # noqa: C901
             if successor is not None
             else "Retired; the current schema has no equivalent setting."
         )
+        if key in settings_schema.RETIRED_SITE_TOKENS:
+            note += (
+                f" Replace `[[{key}]]` in project-owned site content with "
+                f"`[[{successor}]]`."
+                if successor is not None
+                else f" Remove `[[{key}]]` from project-owned site content."
+            )
         classes[key] = ("retired", note)
         if successor is not None:
             successors.add(successor)

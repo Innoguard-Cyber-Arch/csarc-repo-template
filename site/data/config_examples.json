@@ -490,8 +490,8 @@
             "en": "SAST is enabled when cross-function data-flow analysis is actually needed; lint or dependency-vulnerability scanning is never mistaken for CodeQL."
           },
           "code": {
-            "zh-tw": "project_visibility: public\nenable_codeql: true",
-            "en": "project_visibility: public\nenable_codeql: true"
+            "zh-tw": "enable_codeql: true  # public 預設；private／internal 先確認 Code Security\n# project_visibility 每次由 GitHub 讀取，不寫入設定",
+            "en": "enable_codeql: true  # public default; private/internal confirm Code Security first\n# project_visibility is read live from GitHub, never saved"
           },
           "summary": {
             "zh-tw": "public repo 預設開啟；private／internal repo 先確認 GitHub Code Security 授權，未選 Go、Python 或 TypeScript 時不產生。",

@@ -70,7 +70,7 @@ git clone [[repository_url]]
 
 - **`AGENTS.md`：** agent 開始工作前一律先讀這份；人類貢獻者的等效說明在 README。
 - **`.csarc/policies/*.json`：** 分支保護、必要檢查、標籤等期望設定，由 `.csarc/scripts/apply-repository-settings.sh` 套用與驗證。
-- **`.csarc/config.yml`：** 這個 repo 的實際選擇（語言、分支策略、負責人等），由 `csarc update` 持續同步公版更新，同時保留這裡的專案內容。
+- **`.csarc/config.yml`：** 這個 repo 的實際選擇（語言、文件模式、負責人等），由 `csarc update` 持續同步公版更新，同時保留這裡的專案內容。
 
 這個網站本身就是同一套原則的示範：`docs/index.html` 內嵌所有樣式與程式，下載後可離線打開，不需要另外架站。
 {{< /ops >}}

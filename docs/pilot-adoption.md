@@ -32,12 +32,14 @@
 - 重跑本機與 GitHub 驗證，以第二支 PR 合併更新。
 - 依證據類型調整 maturity：真實 consuming repo 證明共用導入、更新與線上 CI 邊界；語言模組則以可重現的建立、既有 repo 導入、更新與原生工具鏈驗證判定。
 
-## 2026-08-24 `ai-guardrail` 結果
+## 2026-08-24 pilot 結果
+
+公開文件不寫 consuming repository 的名稱或數量；原始 Issue、PR 與 run 保存在該 repository 自己的紀錄中。
 
 | 項目 | 結果 |
 | --- | --- |
-| Pilot | [`Innoguard-Cyber-Arch/ai-guardrail`](https://github.com/Innoguard-Cyber-Arch/ai-guardrail)，既有 private、container-first Python 產品 repo |
-| 追蹤 | [pilot Issue #1](https://github.com/Innoguard-Cyber-Arch/ai-guardrail/issues/1)、[導入 PR #2](https://github.com/Innoguard-Cyber-Arch/ai-guardrail/pull/2)、[更新 PR #3](https://github.com/Innoguard-Cyber-Arch/ai-guardrail/pull/3) |
+| Pilot | 既有 private、container-first Python 產品 repo |
+| 追蹤 | pilot repository 內的 pilot Issue、導入 PR 與更新 PR |
 | Profile | `ci`；產品 Python 只在 Docker 內執行，未強迫加入 host Python package 結構 |
 | 導入版本 | v0.2.4，commit `a4efc0cb61fe1f99cbd0d2ee7ecab7d2aa2e3095` |
 | 導入 dry-run | 新增 48、保留 45、覆寫 0、Copier 衝突 0 |
@@ -45,7 +47,7 @@
 | 更新版本 | 經驗證且 immutable 的 v0.3.1，commit `172bfe101d7001c7abb96b92cf27f92132b8eec0` |
 | 更新結果 | 35.23 秒、Copier 衝突 0、人工 merge 0；產品專屬變更全數保留 |
 | 本機驗證 | `./scripts/verify` 通過；Docker Desktop 未啟動，因此產品 Docker regression 無法在本機執行 |
-| 線上驗證 | 導入 [run 32664191977](https://github.com/Innoguard-Cyber-Arch/ai-guardrail/actions/runs/32664191977) 2 分 25 秒；更新 [run 32664445831](https://github.com/Innoguard-Cyber-Arch/ai-guardrail/actions/runs/32664445831) 2 分 17 秒；evaluation、telemetry、OSV、Zizmor、治理與 PR policy 全部通過 |
+| 線上驗證 | 導入 run 32664191977 2 分 25 秒；更新 run 32664445831 2 分 17 秒；evaluation、telemetry、OSV、Zizmor、治理與 PR policy 全部通過 |
 
 ## 採用與覆寫決策
 
@@ -59,12 +61,12 @@
 - 產品 evaluation container 固定非 root UID，Linux hosted runner 的 bind mount 原本不可寫。Pilot 將容器執行 UID 對齊 host，並只放寬模型 cache／report 目錄；兩次線上回歸都通過。
 - Copier `--pretend` 可能不輸出檔案明細，即使正式 update 仍會修改檔案。CLI 不再把空輸出宣稱為「no file changes」；Issue #1063 起改為在可丟棄的 clone 執行同一個三方 update 規劃，`--check` 與套用列出相同的衝突與檔案動作，不再呼叫 `--pretend`。
 
-### 2026-09-01 `csarc-ai-setup` 首次導入邊界
+### 2026-09-01 另一個 consuming repo 的首次導入邊界
 
-- PR #35 的 base `00ad182764bedb7ece7087fefa57051ac7888fb1` 尚無 `scripts/delivery_sync.py`，因此從 trusted base 執行的 PR policy 以 `127` 停止；這不是產品測試失敗，也不能靠執行 head 程式規避。
+- 該 repo 導入 PR 的 base `00ad182764bedb7ece7087fefa57051ac7888fb1` 尚無 `scripts/delivery_sync.py`，因此從 trusted base 執行的 PR policy 以 `127` 停止；這不是產品測試失敗，也不能靠執行 head 程式規避。
 - 導入使用不可變來源 `v0.12.2@661b843c17730c5689c99e0e9012a1b425f0e192`，rollout head 為 `d0c5ace4ca18464b057a893587ddcfef2eaf2c8d`；local same-plan apply、`scripts/verify`、`scripts/verify-skills` 與 plan conformance 都有通過證據。
 - 結論是人工核准首次導入，不建立 repo 內自我 checksum 或永久 bypass。若 canonical template 為 private，也不把可讀取來源的廣域 PAT 暴露給 PR 程式碼。
 
 ## 成熟度結論
 
-共用治理與 CI/CD-only 基線已具備一個真實 consuming repo、owner、導入、更新及完整線上驗證證據，維持 beta。這份真實試行驗證共用生命週期，不要求為每種語言另外維護專用測試 repo。Python、TypeScript 與 Rust 各自具備可執行的建立、既有 repo 導入、Copier 更新、鎖檔、測試、建置與封裝驗證，因此語言模組也升為 beta。Go 以可重現的建立、既有 repo 導入、Copier 更新、原生工具鏈（gofmt、`go vet`、`go test`、`go build`）與 hosted 驗證證據同樣升為 beta；Go 發版只附 source archive。真實產品採用仍會累積營運證據，但不是重複驗證模板機制的第二道 beta 門檻；同時選取多個模組不形成另一種 composition。
+共用治理與 CI/CD-only 基線已具備真實 consuming repo、owner、導入、更新及完整線上驗證證據，維持 beta。這份真實試行驗證共用生命週期，不要求為每種語言另外維護專用測試 repo。Python、TypeScript 與 Rust 各自具備可執行的建立、既有 repo 導入、Copier 更新、鎖檔、測試、建置與封裝驗證，因此語言模組也升為 beta。Go 以可重現的建立、既有 repo 導入、Copier 更新、原生工具鏈（gofmt、`go vet`、`go test`、`go build`）與 hosted 驗證證據同樣升為 beta；Go 發版只附 source archive。真實產品採用仍會累積營運證據，但不是重複驗證模板機制的第二道 beta 門檻；同時選取多個模組不形成另一種 composition。
