@@ -7587,7 +7587,7 @@ def print_governance_audit(governance: Mapping[str, object]) -> None:
         print(f"  unresolved {item['sha']}: {item['reason']}")
     if baseline["result"] == "inconclusive":
         print(
-            "  Blocking: confirm one candidate with "
+            "  Notice: confirm one candidate with "
             "--confirm-governance-baseline <SHA>: "
             + ", ".join(cast(list[str], baseline["candidates"]))
         )

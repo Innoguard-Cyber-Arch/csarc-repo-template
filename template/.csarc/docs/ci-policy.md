@@ -926,8 +926,8 @@ route，沒有 trailer。
 
 `csarc status` 推導 governance baseline（`resolved`、`confirmed`、`not-installed`、`inconclusive`）並分類之後
 每個 first-parent 合併：`traced`、`untraced`（只提示）、`tree-mismatch`、`evidence-missing`、
-`evidence-digest-mismatch`、`trailer-invalid` 或 `inconclusive`；阻擋項目讓 status 以 1 結束，`inconclusive`
-baseline 以一次性的 `--confirm-governance-baseline <SHA>` 從候選中確認。發版路徑使用
+`evidence-digest-mismatch`、`trailer-invalid` 或 `inconclusive`；阻擋項目讓 status 以 1 結束。`inconclusive`
+baseline 在 status 只是提示（只在 `audit --strict` 阻擋），以一次性的 `--confirm-governance-baseline <SHA>` 從候選中確認。發版路徑使用
 `python3 .csarc/scripts/merge_trace.py audit --strict`，`untraced` 也阻擋。
 
 ### Risk-owned execution 與有限證據沿用（#812）
