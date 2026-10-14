@@ -42,7 +42,7 @@ git switch -c chore/<issue-number>-update-repo-template
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
 ```
 
-更新入口只有 `csarc update`；`--check` 與套用使用同一份規劃，衝突與檔案動作相同。直接執行 `copier update` 不受支援。
+更新入口只有 `csarc update`；`--check` 與套用使用同一份規劃，衝突與檔案動作相同。直接執行 `copier update` 不受支援。有衝突時，`--finalize-plan --decision <path>=<決定>` 在同一個報告資料夾寫出不可變的 `csarc-update-final-plan.json`，`--apply-plan <final plan>` 只用其中記錄的值套用。
 
 規劃前，`csarc update` 先唯讀比對產品自有 workflow 與新版模板的 Action pin，在 plan 的 `action_pin_preflight` 與報告的 `product.action_pins` 逐項列出 file、line、action、舊／新 SHA 與原因；沒有漂移時為空清單。有漂移時套用會在 render 前停止並列出修復指令，請以人工 commit 更新這些 pin 後重新規劃；模板來源無法讀取或不可信時一律停止，不寫入 target。
 

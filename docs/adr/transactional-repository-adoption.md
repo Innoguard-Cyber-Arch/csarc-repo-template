@@ -88,6 +88,22 @@ update migration 都不能改寫。寫入前，候選的實際檔案效果必須
 byte-identical base，不產生 `.rej` 或 conflict marker。adopt 與重新安裝仍使用
 上節的 `write_candidate_patch`。
 
+## Update 衝突以可重播的 final plan 套用（#1067，2026-10-14）
+
+#1058 decision 19 決定：`csarc update --check` 的 stage-1 plan 標為
+`replayable: false`，只供審閱；人工決定寫入同一個 repo 外資料夾的不可變
+`csarc-update-final-plan.json`，再以 `csarc update --apply-plan` 套用。final plan
+保存每個衝突決定的確切內容、action pin 決定、設定變更列、Copier 新舊兩側輸入、
+工具版本、live facts、規劃結果與核准的檔案轉換，並以各區段 digest 與整份
+digest 綁定。套用時不再詢問、不取當下 default，也不重算可變 context；
+repository、visibility、origin、權限、Release、target 狀態或工具版本與 plan
+不同時，在寫入前停止。成功後 provenance 記錄 final plan digest，重跑同一份
+plan 是明確的 no-op。決定不寫進 target（不新增 committed conflict resolution
+或 pending state）。Copier 與 Jinja2 因此改為 exact pin，生成專案的
+template-update workflow 使用同一組版本；版本範圍會讓同一個 Release 在不同時間
+render 出不同結果，plan 就無法重播。#219 的 plan → confirm → apply 由此完成；
+#416 的「修改 target 後重跑」改為重新產生 plan，失敗仍保持 byte-identical。
+
 ## 評估過的替代方案
 
 - 在 README generic prompt 固定 path 或 SHA：path 無法跨 repo 重用，SHA 也無法在包含自身內容的 commit 中自我引用。

@@ -497,17 +497,93 @@ def report_json(report: Mapping[str, object]) -> str:
     return json.dumps(report, indent=2, sort_keys=True) + "\n"
 
 
+def finalize_update_report(
+    report: Mapping[str, object],
+    *,
+    decisions: Mapping[str, str],
+    stage1_sha256: str,
+    next_steps: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    """Record final-plan file decisions on one validated update report.
+
+    Each decided ``update-conflict`` row carries its decision and its
+    blocking ``file-conflict`` action is resolved; the report stays bound to
+    the reviewed stage-1 plan digest (#1067). The ``final_plan`` reference
+    is added separately, once the final plan digest exists.
+    """
+    current = validate_report(report)
+    if current["operation"] != "update":
+        raise LifecycleReportError("Only an update has a final plan.")
+    files = [dict(row) for row in _rows(current["files"], "$.files")]
+    conflicts = {
+        str(row["path"])
+        for row in files
+        if row["action"] == "conflict" and row["reason"] == "update-conflict"
+    }
+    if set(decisions) != conflicts:
+        raise LifecycleReportError(
+            "Final plan decisions must name every update conflict exactly."
+        )
+    for row in files:
+        if row["path"] in decisions and row["reason"] == "update-conflict":
+            row["decision"] = _member(
+                decisions[str(row["path"])], FILE_DECISIONS, "$.files.decision"
+            )
+    actions = [
+        dict(row)
+        for row in _rows(current["required_actions"], "$.required_actions")
+        if not (row["kind"] == "file-conflict" and row["subject"] in decisions)
+    ]
+    result = dict(current)
+    plan = dict(_mapping(current["plan"], "$.plan"))
+    plan["sha256"] = stage1_sha256
+    status = derive_status("update", actions, has_changes=True)
+    result.update(
+        {
+            "applicable": status not in {"blocked", "current"},
+            "files": files,
+            "next_steps": [dict(step) for step in next_steps],
+            "plan": plan,
+            "required_actions": actions,
+            "status": status,
+            "status_reason": (
+                "The final plan records every decision; apply it with csarc "
+                "update --apply-plan."
+                if status != "blocked"
+                else "A blocking item remains outside the recorded decisions."
+            ),
+        }
+    )
+    result["summary"] = summary_counts(
+        cast(list[Mapping[str, object]], result["settings"]), files, actions
+    )
+    validate_report(result)
+    return result
+
+
+def with_final_plan(
+    report: Mapping[str, object], reference: Mapping[str, object]
+) -> dict[str, object]:
+    """Return an update report that names its sealed final plan."""
+    result = dict(validate_report(report))
+    result["final_plan"] = dict(reference)
+    validate_report(result)
+    return result
+
+
 def mark_applied(
     report: Mapping[str, object],
     *,
     applied_at: str,
     plan_sha256: str,
     next_steps: Sequence[Mapping[str, object]],
+    final_plan_sha256: str | None = None,
 ) -> dict[str, object]:
     """Turn a validated unapplied report into its applied state.
 
     The applied report stays bound to the digest of the plan that was
-    replayed; a report for a different plan cannot be marked applied.
+    replayed; a report for a different plan cannot be marked applied. An
+    update applied from a final plan is also bound to that final plan.
     """
     current = validate_report(report)
     plan = _mapping(current["plan"], "$.plan")
@@ -516,6 +592,15 @@ def mark_applied(
             "Report is bound to a different plan digest; refusing to mark "
             "it applied."
         )
+    if final_plan_sha256 is not None:
+        final = current["final_plan"]
+        if not isinstance(final, Mapping) or (
+            final.get("sha256") != final_plan_sha256
+        ):
+            raise LifecycleReportError(
+                "Report is bound to a different final plan digest; refusing "
+                "to mark it applied."
+            )
     if current["status"] in {"applied", "blocked"}:
         raise LifecycleReportError(
             f"A {current['status']} report cannot be marked applied."

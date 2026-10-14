@@ -7955,6 +7955,8 @@ def test_update_check_validates_hook_without_running_it(
         (report_dir / cli.UPDATE_PLAN_BASENAME).read_text(encoding="utf-8")
     )
     assert saved_plan.pop("plan_sha256")
+    # The stage-1 plan is a preview only; the final plan replays (#1067).
+    assert saved_plan.pop("replayable") is False
     assert saved_plan == payload
     report = json.loads(
         (report_dir / "csarc-update-report.json").read_text(encoding="utf-8")
@@ -10901,7 +10903,49 @@ def test_status_governance_baseline_rules(
     baseline = result["baseline"]
     assert isinstance(baseline, dict)
     assert baseline["result"] == expected
-    assert result["blocking"] is (expected == "inconclusive")
+    # An inconclusive baseline audits no merge: a notice in status, and
+    # blocking only on the strict release path.
+    assert result["blocking"] is False
+    from csarc_cli import merge_trace
+
+    def fixture_git(arguments: list[str]) -> tuple[int, str]:
+        completed = subprocess.run(  # noqa: S603
+            ["git", "-C", str(repo), *arguments],  # noqa: S607
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return completed.returncode, completed.stdout
+
+    def fixture_api(endpoint: str) -> tuple[int, str]:
+        return responses.get(endpoint, (1, "gh: Not Found (HTTP 404)"))
+
+    def fixture_identity() -> object:
+        if identity is None:
+            return None
+        number = (
+            cli.CANONICAL_REPOSITORY_ID
+            if identity == cli.CANONICAL_REPOSITORY
+            else 99
+        )
+        return merge_trace.Identity(identity, number)
+
+    strict = merge_trace.audit(
+        merge_trace.AuditContext(fixture_git, fixture_api, fixture_identity),
+        "HEAD",
+        strict=True,
+    )
+    assert strict["blocking"] is (expected == "inconclusive")
+    monkeypatch.setattr(
+        cli,
+        "detect_install_state",
+        lambda *_args, **_kwargs: {
+            "state": "current",
+            "reason": "fixture",
+            "next_command": "none",
+        },
+    )
+    assert main(["status", str(repo), "--json"]) == 0
     if expected == "resolved":
         assert baseline["baseline"] == shas["baseline"]
     if scenario == "raw-copier-update":
