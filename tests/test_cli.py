@@ -8622,9 +8622,11 @@ def test_update_keeps_saved_visibility_when_github_differs(
     monkeypatch.setattr(
         cli,
         "repository_context",
+        # The same repository the init recorded; only visibility moved
+        # (a different repository fails closed, Issue #1072 AC5).
         lambda *args, **kwargs: cli.RepositoryContext(
-            "owner/repo",
-            "owner",
+            "example-org/product",
+            "example-org",
             "organization",
             "public",
             "github",

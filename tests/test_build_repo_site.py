@@ -1731,6 +1731,10 @@ def _write_minimal_downstream_fixture(root: Path) -> None:
         (ROOT / "scripts/csarc_config.py").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    (scripts / "repository_facts.py").write_text(
+        (ROOT / "scripts/repository_facts.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     config_dir = root / ".csarc"
     config_dir.mkdir()
     settings_support.write_settings(

@@ -38,6 +38,7 @@ from csarc_cli import (
     lifecycle_report,
     merge_trace,
     release_phase,
+    repository_facts,
     settings_schema,
     update_plan,
 )
@@ -339,6 +340,11 @@ class RepositoryContext:
     source: str
     verified: bool
     reason: str | None = None
+    # The shared detector's facts (Issue #1072). They stay out of the plan
+    # identity below so an adoption plan's repository binding is unchanged.
+    facts: Mapping[str, Mapping[str, object]] = dataclass_field(
+        default_factory=dict, compare=False
+    )
 
     def as_dict(self) -> dict[str, object]:
         """Return a stable JSON-safe repository context."""
@@ -376,6 +382,12 @@ class ResolvedPlan:
             "release_capabilities": self.capabilities,
             "release_ownership": release_ownership(self.answers),
             "repository": self.repository.as_dict(),
+            # Shared detector output (Issue #1072): every live fact with its
+            # known or unknown state. Informational; apply binds `repository`.
+            "repository_facts": {
+                name: dict(fact)
+                for name, fact in sorted(self.repository.facts.items())
+            },
             "schema_version": 1,
             "target": str(self.target),
             "template": {
@@ -2527,6 +2539,30 @@ def plan_status(
     )
 
 
+def observed_setting_note(key: str, value: object) -> str:
+    """Return the report note for one observed difference (#1068, #1072)."""
+    if key in settings_schema.DECISION_SETTINGS:
+        shown = (
+            ", ".join(f"`{redact(item)}`" for item in value)
+            if isinstance(value, list)
+            else f"`{redact(value)}`"
+        )
+        return (
+            f"The native manifests resolve {shown}; the recorded value is "
+            f"kept. Pass `--data {key}=<value>` once to decide."
+        )
+    if key in settings_schema.INTENT_SETTINGS:
+        return (
+            f"Live GitHub facts suggest `{redact(value)}`; the saved intent "
+            "stays unchanged. Pass `--data "
+            f"{key}=<value>` only to change it."
+        )
+    return (
+        f"Live GitHub facts suggest `{redact(value)}`; the saved value is "
+        f"kept. Pass `--data {key}=<value>` to change it."
+    )
+
+
 def report_setting_rows(
     after: Mapping[str, object],
     before: Mapping[str, object] | None,
@@ -2578,11 +2614,7 @@ def report_setting_rows(
         else:
             setting_class = "decision"
         if key in live and note is None:
-            note = (
-                f"Live GitHub facts suggest `{redact(live[key])}`; the "
-                f"saved value is kept. Pass `--data {key}=<value>` to "
-                "change it."
-            )
+            note = observed_setting_note(key, live[key])
         rows.append(
             {
                 "after": redact(new),
@@ -2853,17 +2885,26 @@ def update_required_actions(
         for row in settings
         if row["class"] == "decision" and row["source"] != "explicit"
     ]
+    # A saved intent the live facts no longer suggest is only a row note
+    # (#1058 decision 15, Issue #1072 AC4); live facts and contradicted
+    # derived context ask for one explicit decision.
     actions.extend(
         {
             "blocking": False,
             "command": f"csarc update --data {key}=<value>",
             "kind": "setting-decision",
-            "message": "Live GitHub facts suggest a value that differs from "
-            "the saved setting; the saved value is kept until you pass one "
-            "explicitly.",
+            "message": (
+                "The native manifests do not confirm the recorded value; "
+                "it is kept until you pass one explicitly."
+                if key in settings_schema.DECISION_SETTINGS
+                else "Live GitHub facts suggest a value that differs from "
+                "the saved setting; the saved value is kept until you pass "
+                "one explicitly."
+            ),
             "subject": key,
         }
         for key in sorted(live)
+        if key not in settings_schema.INTENT_SETTINGS
     )
     actions.extend(
         {
@@ -4929,42 +4970,63 @@ def settings_plan(target: Path) -> None:
         )
 
 
-def target_repository(target: Path) -> str | None:
-    """Return the GitHub origin of an existing target, when discoverable."""
-    root = run_git(
-        ["git", "-C", str(target), "rev-parse", "--show-toplevel"],
-        repository=target,
-        capture=True,
-        check=False,
-    )
-    is_repository_root = (
-        root.returncode == 0
-        and Path(root.stdout.strip()).resolve() == target.resolve()
-    )
-    if is_repository_root:
+def detector_git(target: Path) -> repository_facts.Runner:
+    """Return the shared detector's Git reader for one target."""
+
+    def read(arguments: Sequence[str]) -> tuple[int, str, str]:
         result = run_git(
-            ["git", "-C", str(target), "remote", "get-url", "origin"],
+            ["git", "-C", str(target), *arguments],
             repository=target,
             capture=True,
             check=False,
         )
-        if result.returncode == 0:
-            repository = github_repository(result.stdout.strip())
-            if repository is not None:
-                return repository
-    explicit_repository = os.environ.get("GH_REPO", "").strip()
-    if explicit_repository:
-        return github_repository(f"gh:{explicit_repository}")
-    return None
+        return result.returncode, result.stdout, result.stderr
+
+    return read
 
 
-def repository_context(  # noqa: C901
+def detector_api(arguments: Sequence[str]) -> tuple[int, str, str]:
+    """Serve the shared detector's read-only GitHub requests."""
+    try:
+        result = run(
+            ["gh", "api", "--method", "GET", *arguments],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return 1, "", "GitHub CLI is unavailable"
+    return result.returncode, result.stdout, result.stderr
+
+
+def target_origin(target: Path) -> dict[str, object]:
+    """Return the shared detector's origin fact for one target (#1072)."""
+    return repository_facts.observe_origin(target, detector_git(target))
+
+
+def target_repository(target: Path) -> str | None:
+    """Return the GitHub origin of an existing target, when discoverable.
+
+    Only a ``known`` origin identifies the target; an unknown or ambiguous
+    one (no origin, several other remotes) is never guessed (#1072).
+    """
+    origin = target_origin(target)
+    if origin["state"] != repository_facts.KNOWN:
+        return None
+    return repository_facts.github_slug(str(origin["value"]))
+
+
+def repository_context(
     target: Path,
     explicit_visibility: str | None,
     *,
     saved_visibility: str | None = None,
 ) -> RepositoryContext:
-    """Resolve repository owner and visibility before template rendering."""
+    """Resolve repository owner and visibility before template rendering.
+
+    The live facts come from the shared detector (Issue #1072) and ride on
+    the context; an unobservable fact stays ``unknown`` there even when the
+    render falls back to a saved, explicit, or safe default value.
+    """
     if (
         explicit_visibility is not None
         and explicit_visibility not in REPOSITORY_VISIBILITIES
@@ -4979,6 +5041,15 @@ def repository_context(  # noqa: C901
             raise CliError(
                 "Saved project_visibility must be public, private, or internal."
             )
+        facts = {
+            "origin": target_origin(target),
+            **{
+                name: repository_facts.unknown(
+                    "the repository identity is unknown"
+                )
+                for name in repository_facts.REMOTE_FACTS
+            },
+        }
         return RepositoryContext(
             repository=None,
             owner=None,
@@ -4993,56 +5064,50 @@ def repository_context(  # noqa: C901
             ),
             verified=False,
             reason="No GitHub origin or GH_REPO was found.",
+            facts=facts,
         )
 
-    try:
-        result = run(
-            ["gh", "api", "--method", "GET", f"repos/{repository}"],
-            capture=True,
-            check=False,
+    observed = repository_facts.observe_repository(repository, detector_api)
+    identity = observed["identity"]
+    if identity["state"] == repository_facts.KNOWN:
+        observed["plan"] = repository_facts.observe_plan(
+            cast(Mapping[str, object], identity["value"]), detector_api
         )
-    except FileNotFoundError:
-        result = subprocess.CompletedProcess(
-            ["gh"], 1, stdout="", stderr="GitHub CLI is unavailable"
-        )
-    failure = result.stderr.strip() or "GitHub API request failed"
-    payload: object = None
-    if result.returncode == 0:
-        try:
-            payload = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            failure = "GitHub returned invalid repository JSON"
-    if isinstance(payload, dict):
-        owner = payload.get("owner")
-        payload_visibility = payload.get("visibility")
-        full_name = payload.get("full_name")
+    facts = {
+        "origin": repository_facts.known(
+            repository_facts.repository_url(repository), "origin"
+        ),
+        **observed,
+    }
+    visibility_fact = observed["visibility"]
+    if (
+        identity["state"] == repository_facts.KNOWN
+        and visibility_fact["state"] == repository_facts.KNOWN
+    ):
+        value = cast(Mapping[str, object], identity["value"])
+        actual_visibility = str(visibility_fact["value"])
         if (
-            isinstance(owner, dict)
-            and isinstance(owner.get("login"), str)
-            and isinstance(owner.get("type"), str)
-            and isinstance(full_name, str)
-            and full_name.casefold() == repository.casefold()
-            and payload_visibility in REPOSITORY_VISIBILITIES
+            explicit_visibility is not None
+            and explicit_visibility != actual_visibility
         ):
-            actual_visibility = str(payload_visibility)
-            if (
-                explicit_visibility is not None
-                and explicit_visibility != actual_visibility
-            ):
-                raise CliError(
-                    "Explicit project_visibility does not match GitHub "
-                    f"({explicit_visibility} != {actual_visibility})."
-                )
-            return RepositoryContext(
-                repository=full_name,
-                owner=str(owner["login"]),
-                owner_type=str(owner["type"]).lower(),
-                visibility=actual_visibility,
-                source="github",
-                verified=True,
+            raise CliError(
+                "Explicit project_visibility does not match GitHub "
+                f"({explicit_visibility} != {actual_visibility})."
             )
-        failure = "GitHub returned incomplete repository metadata"
-
+        return RepositoryContext(
+            repository=str(value["repository"]),
+            owner=str(value["owner"]),
+            owner_type=str(value["owner_type"]),
+            visibility=actual_visibility,
+            source="github",
+            verified=True,
+            facts=facts,
+        )
+    failure = (
+        str(identity["reason"])
+        if identity["state"] != repository_facts.KNOWN
+        else "GitHub returned incomplete repository metadata"
+    )
     if explicit_visibility is None:
         raise CliError(
             f"Cannot confirm visibility for {repository}: {failure}. Pass "
@@ -5057,6 +5122,7 @@ def repository_context(  # noqa: C901
         source="explicit",
         verified=False,
         reason=failure,
+        facts=facts,
     )
 
 
@@ -6004,7 +6070,62 @@ def base_data(
         data["package_name"] = (
             str(data["project_slug"]).replace("-", "_").replace(".", "_")
         )
+    if mode == "adopt":
+        data.update(adoption_derived_context(target, data, values))
     return resolve_release_answers(target, data)
+
+
+def adoption_derived_context(
+    target: Path, data: Mapping[str, object], values: Mapping[str, str]
+) -> dict[str, object]:
+    """Return the derived context an adoption renders (Issue #1072).
+
+    Only an explicit ``--data`` value counts as recorded; the slug default
+    is a fallback the native manifests replace when they resolve one value
+    and several candidates fail closed until one is passed.
+    """
+    context = {
+        key: value
+        for key, value in data.items()
+        if key not in settings_schema.DECISION_SETTINGS or key in values
+    }
+    derived, _differences = resolve_derived_context(
+        target, context, explicit_decisions(values)
+    )
+    return derived
+
+
+def adoption_decisions(
+    target: Path, answers: Mapping[str, object]
+) -> dict[str, object]:
+    """Return the one-time decisions an adoption saves (SPEC-009, #1072).
+
+    A derived value is saved only when the native manifests cannot choose
+    it alone: several candidates, or an explicit value the manifests
+    contradict. The rule reads only the target and the plan answers, so a
+    dry run, its apply, and the finalize step save the same decisions.
+    """
+    languages = sorted(selected_languages(dict(answers)))
+    decisions: dict[str, object] = {}
+    package = repository_facts.derive_context(target, languages).get(
+        "package_name"
+    )
+    for key in ("package_name", "project_run_command"):
+        entry = (
+            package
+            if key == "package_name"
+            else repository_facts.derive_context(target, languages, decisions)[
+                "project_run_command"
+            ]
+        )
+        value = answers.get(key)
+        if entry is None or not isinstance(value, str):
+            continue
+        if entry["state"] == repository_facts.AMBIGUOUS or (
+            entry["state"] == repository_facts.KNOWN and entry["value"] != value
+        ):
+            decisions[key] = value
+    return decisions
 
 
 def default_security_reporting_channel(repository_url: str) -> str:
@@ -6257,6 +6378,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             stage,
             answers,
             skip_tasks=True,
+            decisions=adoption_decisions(target, answers),
         )
         preview_config_binding = copier_config_binding(stage)
         capabilities = capability_preflight(
@@ -6464,6 +6586,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             stage,
             answers,
             skip_tasks=False,
+            decisions=adoption_decisions(target, answers),
         )
         if copier_config_binding(stage) != preview_config_binding:
             raise CliError(
@@ -6760,6 +6883,7 @@ def command_apply_adoption_plan(  # noqa: C901
             preview_stage,
             answers,
             skip_tasks=True,
+            decisions=adoption_decisions(target, answers),
         )
         preview_config_binding = copier_config_binding(preview_stage)
         preview_candidate = temporary_root / "preview-candidate"
@@ -6795,6 +6919,7 @@ def command_apply_adoption_plan(  # noqa: C901
             stage,
             answers,
             skip_tasks=False,
+            decisions=adoption_decisions(target, answers),
         )
         if copier_config_binding(stage) != preview_config_binding:
             raise CliError(
@@ -6925,13 +7050,18 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
             file=sys.stderr,
         )
     explicit_data = parse_settings_data(args.data)
-    # Adoption replays its saved plan answers verbatim, so only init
-    # records explicit one-time decisions here (SPEC-009).
-    decisions = explicit_decisions(explicit_data) if mode == "init" else {}
     repository = repository_context(
         target, explicit_data.get("project_visibility")
     )
     data = base_data(target, mode, explicit_data)
+    # Init records every explicit one-time decision (SPEC-009); adoption
+    # saves one only where the native manifests cannot decide (#1072), by
+    # the same rule its apply and finalize steps replay.
+    decisions = (
+        explicit_decisions(explicit_data)
+        if mode == "init"
+        else adoption_decisions(target, data)
+    )
     # The repository URL comes only from the live repository identity or an
     # explicit answer; it is never derived from code_owner (#1061).
     if (
@@ -8013,50 +8143,153 @@ def update_plan_answers(  # noqa: C901
     return result, update_data
 
 
+def codeql_entitled(repository: RepositoryContext) -> bool | None:
+    """Return whether the live facts show a CodeQL entitlement, if known.
+
+    Public repositories are entitled. Otherwise only an observed security
+    capability decides; ``None`` means the detector could not observe it.
+    """
+    if repository.visibility == "public":
+        return True
+    security = repository.facts.get("security", {})
+    if security.get("state") != repository_facts.KNOWN:
+        return None
+    features = security.get("value")
+    if not isinstance(features, Mapping):
+        return None
+    return any(
+        features.get(name) == "enabled"
+        for name in ("advanced_security", "code_security")
+    )
+
+
 def observed_setting_differences(
     answers: Mapping[str, object],
     explicit_data: Mapping[str, str],
     repository: RepositoryContext,
 ) -> dict[str, object]:
-    """Return live facts that differ from saved settings (#1068).
+    """Return live facts that differ from saved settings (#1068, #1072).
 
-    Each entry is reported as a setting decision; none is written. Only a
-    verified GitHub observation counts, and an explicit --data value for
-    the key is the approved writer, so it is never reported again.
+    None is written. A differing live fact is reported as a setting
+    decision; a saved intent the facts no longer suggest (CodeQL after a
+    visibility or entitlement change) is only a report note and stays
+    ``unchanged``. Only a verified GitHub observation counts, and an
+    explicit --data value for the key is the approved writer, so it is
+    never reported again. A repository URL that differs is not reported
+    here: it fails closed in ``require_repository_identity``.
     """
     observed: dict[str, object] = {}
     if not repository.verified or repository.source != "github":
         return observed
     saved_visibility = answers.get("project_visibility")
-    if (
+    visibility_changed = (
         "project_visibility" not in explicit_data
         and isinstance(saved_visibility, str)
         and saved_visibility != repository.visibility
-    ):
+    )
+    if visibility_changed:
         observed["project_visibility"] = repository.visibility
-        # The CodeQL choice is listed for confirmation, never flipped by a
-        # visibility change (#1058 decision 15).
-        suggested = repository.visibility == "public" and bool(
-            selected_languages(dict(answers)) & CODEQL_LANGUAGES
+    # The CodeQL choice is noted, never flipped, when visibility or the
+    # observed entitlement changes (#1058 decision 15).
+    saved_codeql = answers.get("enable_codeql")
+    analyzable = bool(selected_languages(dict(answers)) & CODEQL_LANGUAGES)
+    entitled = codeql_entitled(repository)
+    if visibility_changed:
+        suggested: bool | None = repository.visibility == "public" and (
+            analyzable
         )
-        saved_codeql = answers.get("enable_codeql")
-        if (
-            "enable_codeql" not in explicit_data
-            and isinstance(saved_codeql, bool)
-            and saved_codeql != suggested
-        ):
-            observed["enable_codeql"] = suggested
-    saved_url = answers.get("repository_url")
+    elif saved_codeql is True and entitled is False:
+        suggested = False
+    else:
+        suggested = None
     if (
-        repository.repository is not None
-        and "repository_url" not in explicit_data
-        and isinstance(saved_url, str)
-        and saved_url
+        suggested is not None
+        and "enable_codeql" not in explicit_data
+        and isinstance(saved_codeql, bool)
+        and saved_codeql != suggested
     ):
-        live_url = f"https://github.com/{repository.repository}"
-        if saved_url.casefold() != live_url.casefold():
-            observed["repository_url"] = live_url
+        observed["enable_codeql"] = suggested
     return observed
+
+
+def require_repository_identity(
+    answers: Mapping[str, object],
+    explicit_data: Mapping[str, str],
+    repository: RepositoryContext,
+) -> None:
+    """Fail closed before any write when the target is another repository.
+
+    The URL the saved settings and provenance recorded must name the
+    repository the live origin identifies (Issue #1072). A one-time
+    ``--data repository_url=...`` override approves a different recorded
+    URL for this plan only; it must still name the live repository. An
+    unknown origin (offline, no remote) cannot contradict anything.
+    """
+    if repository.repository is None:
+        return
+    live_url = repository_facts.repository_url(repository.repository)
+    override = explicit_data.get("repository_url")
+    if override is not None:
+        if not repository_facts.same_repository(override, live_url):
+            raise CliError(
+                f"--data repository_url={override} does not name the "
+                f"repository the origin identifies ({live_url}); the target "
+                "was not changed."
+            )
+        return
+    recorded = answers.get("repository_url")
+    if (
+        isinstance(recorded, str)
+        and recorded
+        and not repository_facts.same_repository(recorded, live_url)
+    ):
+        raise CliError(
+            f"The origin identifies {live_url}, but the saved settings and "
+            f"provenance record {recorded}; the target was not changed. "
+            "Check the origin remote, or approve the new identity for this "
+            f"plan only with --data repository_url={live_url}."
+        )
+
+
+def resolve_derived_context(
+    target: Path,
+    answers: Mapping[str, object],
+    decisions: Mapping[str, object],
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Resolve the derived package and run command (Issue #1072).
+
+    Returns the values to render and the differences to report. A saved
+    or explicit decision always wins. Otherwise a value the native
+    manifests resolve uniquely fills a key nothing recorded; a recorded
+    value the manifests contradict, or several candidates, keeps the
+    recorded value and is reported until one explicit decision is passed.
+    Several candidates with nothing recorded fail closed before any write,
+    and an unobservable value keeps what the last render recorded.
+    """
+    languages = sorted(selected_languages(dict(answers)))
+    derived = repository_facts.derive_context(target, languages, decisions)
+    values: dict[str, object] = {}
+    differences: dict[str, object] = {}
+    for key, entry in derived.items():
+        if key in decisions:
+            continue
+        recorded = answers.get(key)
+        state = entry["state"]
+        if state == repository_facts.KNOWN:
+            if not isinstance(recorded, str) or not recorded:
+                values[key] = entry["value"]
+            elif recorded != entry["value"]:
+                differences[key] = entry["value"]
+        elif state == repository_facts.AMBIGUOUS:
+            candidates = cast(list[str], entry["candidates"])
+            if not isinstance(recorded, str) or not recorded:
+                raise CliError(
+                    f"{key} has several candidates in the native manifests "
+                    f"({', '.join(candidates)}); pass --data {key}=<value> "
+                    "once to decide. The target was not changed."
+                )
+            differences[key] = candidates
+    return values, differences
 
 
 def _render_reinstall_plan(
@@ -9818,12 +10051,21 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             saved_visibility if isinstance(saved_visibility, str) else None
         ),
     )
+    # A target whose origin names another repository stops before any
+    # render or write (Issue #1072 AC5).
+    require_repository_identity(saved_answers, explicit_data, repository)
     candidate_answers, update_data = update_plan_answers(
         saved_answers, explicit_data, repository
     )
     observed = observed_setting_differences(
         saved_answers, explicit_data, repository
     )
+    derived_values, derived_differences = resolve_derived_context(
+        target, candidate_answers, decisions
+    )
+    candidate_answers.update(derived_values)
+    update_data.update(derived_values)
+    observed.update(derived_differences)
     candidate_answers = resolve_release_answers(target, candidate_answers)
     try:
         status, current_revision, target_revision, previous = update_status(

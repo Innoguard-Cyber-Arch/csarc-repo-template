@@ -28,6 +28,7 @@ paired_files=(
   "scripts/release_level.py|template/.csarc/scripts/release_level.py"
   "scripts/release_phase.py|template/.csarc/scripts/release_phase.py"
   "scripts/release_writer.py|template/.csarc/scripts/release_writer.py"
+  "scripts/repository_facts.py|template/.csarc/scripts/repository_facts.py"
   "scripts/request-reviewer|template/.csarc/scripts/request-reviewer"
   "scripts/review_gate.py|template/.csarc/scripts/review_gate.py"
   "scripts/test-worktree-cleanup|tests/generated_self_tests/scripts/test-worktree-cleanup"
