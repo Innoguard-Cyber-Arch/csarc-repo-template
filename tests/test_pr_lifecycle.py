@@ -61,6 +61,32 @@ _GIT = shutil.which("git")
 if _GIT is None:
     raise RuntimeError("Git is required for PR lifecycle tests")
 GIT: str = _GIT
+risk_controls = MODULE["risk_controls"]
+# SPEC-010 (#1079): the default work Issue and its exact-head evidence.
+TRACE_ISSUE_BODY = (
+    "### 完成條件\n\n- [x] Acceptance verified\n\n### 補充\n\n"
+    "#### 風險與控制\n\n"
+    "| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |\n"
+    "| --- | --- | --- | --- | --- | --- | --- |\n"
+    "| R1 | correctness | medium | Lifecycle merge regresses | Focused "
+    "lifecycle tests | Regression tests | @agent |\n"
+)
+
+
+def trace_section(issue_body: str = TRACE_ISSUE_BODY, number: int = 42) -> str:
+    """Return a complete Requirement evidence section for one Issue."""
+    out: list[str] = []
+    coverage = risk_controls.coverage_digest(
+        risk_controls.parse_acs(issue_body, out),
+        risk_controls.parse_risks(issue_body, out),
+    )
+    return (
+        f"\n\n## Requirement evidence\n\nIssue: #{number}\n"
+        f"Coverage: {coverage}\n\n| ID | 證據 |\n| --- | --- |\n"
+        "| AC1 | manual: https://github.com/owner/repo/pull/42"
+        "#issuecomment-5 Reviewer confirmed the transcript |\n"
+        "| R1 | accepted: Solo maintainer accepts the residual risk |\n"
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -167,6 +193,11 @@ class FakeGitHub:
         self.hotfix_comments: list[dict[str, Any]] = []
         self.post_review_issues: list[dict[str, Any]] = []
         self.body = "Ready for review."
+        self.issue_body = TRACE_ISSUE_BODY
+        self.trace_evidence = True
+        self.pull_files: list[dict[str, Any]] = [
+            {"filename": "scripts/pr_lifecycle.py"}
+        ]
         self.check_conclusion = "success"
         self.additional_check_runs: list[dict[str, Any]] = []
         self.statuses: list[dict[str, Any]] = []
@@ -217,7 +248,17 @@ class FakeGitHub:
             "merge_commit_sha": "d" * 40 if self.merged else None,
             "draft": self.draft,
             "title": "fix(ci): serialize lifecycle writes",
-            "body": self.body,
+            "body": self.body
+            + (
+                trace_section(number=int(closing.group(1)))
+                if self.trace_evidence
+                and (
+                    closing := re.search(
+                        r"(?:Closes|Fixes) #(4[23])\b", self.body
+                    )
+                )
+                else ""
+            ),
             "labels": [{"name": name} for name in sorted(self.labels)],
             "milestone": (
                 {"title": self.milestone}
@@ -285,7 +326,8 @@ class FakeGitHub:
                     if self.issue_milestone_number is not None
                     else None
                 ),
-                "body": "- [x] Acceptance verified",
+                "body": self.issue_body,
+                "assignees": [{"login": "agent"}],
                 "labels": [
                     {"name": label} for label in sorted(self.issue_labels)
                 ],
@@ -495,7 +537,7 @@ class FakeGitHub:
             return self.statuses
         raise AssertionError(path)
 
-    def pages(self, _repo: str, path: str) -> list[dict[str, Any]]:
+    def pages(self, _repo: str, path: str) -> list[dict[str, Any]]:  # noqa: C901
         """Return one paginated fixture."""
         if path.startswith("issues/42/timeline"):
             return self.timeline
@@ -515,6 +557,8 @@ class FakeGitHub:
             return self.reviews
         if path.startswith("pulls/42/commits"):
             return self.pull_commits
+        if path.startswith("pulls/42/files"):
+            return self.pull_files
         raise AssertionError(path)
 
     def comment(self, _repo: str, number: int, body: str) -> dict[str, Any]:
@@ -5805,3 +5849,175 @@ def test_traced_dependabot_sync_squash_still_plans_release_from_exact_head(
     assert report["status"] == "candidate"
     assert report["materialized"] is True
     assert report["tag"] == prepared["tag"]
+
+
+def test_merge_snapshot_binds_the_requirement_trace_to_the_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """K1: the canonical evidence payload carries the requirement trace."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.body = "Closes #42"
+    snapshot = merge_snapshot(github, lease_fixture())
+    trace = snapshot["requirement_trace"]
+    assert trace["issue"] == 42
+    assert trace["coverage_digest"].startswith("sha256:")
+    assert trace["body_digest"].startswith("sha256:")
+    assert set(trace["evidence"]) == {"AC1", "R1"}
+    snapshot["hosted_verification"] = hosted_payload_fixture()
+    data, _ = MODULE["merge_evidence"](snapshot, lease_fixture())
+    assert json.loads(data)["requirement_trace"] == trace
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ("no-evidence", "RK20"),
+        ("reordered", "RK25"),
+        ("criterion-added", "RK25"),
+        ("criterion-removed", "RK25"),
+        ("block-removed", "RK01"),
+    ],
+)
+def test_merge_rechecks_a_trace_that_drifted_after_ready(
+    monkeypatch: pytest.MonkeyPatch, change: str, message: str
+) -> None:
+    """K1: Issue edits after Ready make the coverage stale before merge."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.body = "Closes #42"
+    acceptance = "- [x] Acceptance verified\n"
+    if change == "no-evidence":
+        github.trace_evidence = False
+    elif change == "reordered":
+        github.issue_body = TRACE_ISSUE_BODY.replace(
+            acceptance, "- [x] Second\n" + acceptance
+        )
+    elif change == "criterion-added":
+        github.issue_body = TRACE_ISSUE_BODY.replace(
+            acceptance, acceptance + "- [x] Another\n"
+        )
+    elif change == "criterion-removed":
+        github.issue_body = TRACE_ISSUE_BODY.replace(
+            acceptance, "- [x] Replaced criterion\n"
+        )
+    else:
+        github.issue_body = "### 完成條件\n\n" + acceptance
+    with pytest.raises(RuntimeError, match=message):
+        merge_snapshot(github, lease_fixture())
+
+
+def test_check_evidence_must_succeed_on_the_exact_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """K1: `check:` evidence names a check that passed on the merge head."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    section = trace_section().replace(
+        "| AC1 | manual: https://github.com/owner/repo/pull/42"
+        "#issuecomment-5 Reviewer confirmed the transcript |",
+        "| AC1 | check:release-notes |",
+    )
+    github.trace_evidence = False
+    github.body = "Closes #42" + section
+    with pytest.raises(RuntimeError, match="release-notes"):
+        merge_snapshot(github, lease_fixture())
+    github.body = "Closes #42" + section.replace("release-notes", "verify")
+    assert merge_snapshot(github, lease_fixture())["requirement_trace"]
+
+
+def test_untraced_routes_and_body_without_issue_skip_the_trace() -> None:
+    """Release, sync, automation, and promotion heads carry no work Issue."""
+    github = FakeGitHub("a" * 40)
+    trace = MODULE["requirement_trace"]
+    pull = github.pull()
+    pull["body"] = "Closes #42"
+    pull["head"]["ref"] = "release/v1.2.3"
+    assert trace(github, "owner/repo", pull, "a" * 40) is None
+    pull["head"]["ref"] = "promote/m18-x"
+    assert trace(github, "owner/repo", pull, "a" * 40) is None
+    pull["head"]["ref"] = "fix/42-x"
+    pull["body"] = "No closing keyword"
+    assert trace(github, "owner/repo", pull, "a" * 40) is None
+    pull["body"] = "Closes #42\nCloses #43"
+    with pytest.raises(RuntimeError, match="exactly one Issue"):
+        trace(github, "owner/repo", pull, "a" * 40)
+
+
+def test_ready_preflight_keeps_an_incomplete_trace_in_draft(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """K1: `state --state ready` stops before `gh pr ready`."""
+    github = FakeGitHub("a" * 40)
+    github.draft = True
+    github.body = "Closes #42"
+    github.trace_evidence = False
+    calls: list[list[str]] = []
+    scope = MODULE["mutate_state"].__globals__
+    monkeypatch.setitem(scope, "read_lease", lambda _path: lease_fixture())
+    monkeypatch.setitem(scope, "require_caller", lambda *_: None)
+    monkeypatch.setitem(scope, "require_lease", lambda *_: None)
+    monkeypatch.setitem(
+        scope, "run", lambda command, **_: calls.append(command)
+    )
+    args = SimpleNamespace(
+        lease=tmp_path / "lease.json",
+        owner="task",
+        actor="",
+        repo="owner/repo",
+        pr_number=42,
+        head_sha="a" * 40,
+        state="ready",
+    )
+    with pytest.raises(RuntimeError, match="RK20"):
+        MODULE["mutate_state"](args, github)
+    assert calls == []
+    github.trace_evidence = True
+    with pytest.raises(RuntimeError, match="Draft state did not change"):
+        MODULE["mutate_state"](args, github)
+    assert calls
+    assert calls[0][:3] == ["gh", "pr", "ready"]
+
+
+def test_hotfix_post_review_issue_carries_a_valid_risk_block() -> None:
+    """K1: the lifecycle validates the block before creating the Issue."""
+    github = FakeGitHub("a" * 40)
+    url = ensure_hotfix_post_review(
+        github,
+        "owner/repo",
+        43,
+        "a" * 40,
+        "stable",
+        "https://github.com/owner/repo/pull/43#issuecomment-9",
+        {
+            "actor": "maintainer",
+            "reason": "production outage",
+            "reason_url": "https://github.com/owner/repo/issues/43#c-1",
+        },
+    )
+    assert url.endswith("/issues/99")
+    body = github.post_review_issues[-1]["body"]
+    out: list[str] = []
+    risks = risk_controls.parse_risks(body, out)
+    assert risk_controls.parse_acs(body, out)
+    assert out == []
+    assert risks[0]["Owner"] == "@maintainer"
+
+
+def test_rendered_lifecycle_creates_the_post_review_issue_with_gh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A render has no gh-issue-create wrapper; it calls `gh issue create`."""
+    rendered = tmp_path / "pr_lifecycle.py"
+    rendered.write_text("", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: object) -> str:
+        calls.append(command)
+        return "https://github.com/owner/repo/issues/7"
+
+    scope = GitHub.create_issue.__globals__
+    monkeypatch.setitem(scope, "run", fake_run)
+    monkeypatch.setitem(scope, "__file__", str(rendered))
+    GitHub().create_issue("owner/repo", "Review", "body", "maintainer")
+    assert calls[0][:3] == ["gh", "issue", "create"]

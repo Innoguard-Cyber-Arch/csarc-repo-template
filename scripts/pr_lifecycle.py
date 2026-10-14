@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import base64
 import hashlib
 import importlib
 import importlib.util
@@ -98,12 +99,14 @@ class SiblingModule:
 
 # Only the configuration reader is eager; every other sibling loads when the
 # selected command first needs it.
+ci_tier: Any = SiblingModule("ci_tier")
 dependabot_auth: Any = SiblingModule("authenticate_dependabot_head")
 local_verification: Any = SiblingModule("local_verification")
 merge_trace: Any = SiblingModule("merge_trace")
 promotion_gate: Any = SiblingModule("promotion_gate")
 release_level: Any = SiblingModule("release_level")
 review_gate: Any = SiblingModule("review_gate")
+risk_controls: Any = SiblingModule("risk_controls")
 verification_evidence: Any = SiblingModule("verification_evidence")
 
 
@@ -447,9 +450,18 @@ class GitHub:
         body: str,
         assignee: str,
     ) -> dict[str, Any]:
-        """Create one governed post-review task with the repo wrapper."""
+        """Create one governed post-review task through the create entry.
+
+        The template repository keeps its `gh-issue-create` wrapper; a
+        rendered project has none and uses `gh issue create` directly.
+        """
+        wrapper = Path(__file__).with_name("gh-issue-create")
         command = [
-            str(Path(__file__).with_name("gh-issue-create")),
+            *(
+                [str(wrapper)]
+                if wrapper.is_file()
+                else ["gh", "issue", "create"]
+            ),
             "--repo",
             repo,
             "--title",
@@ -1547,8 +1559,22 @@ def ensure_hotfix_post_review(
         f"({evidence['reason_url']})\n\n"
         "## Release level / 發布層級\n\n"
         f"{release_level_name}\n\n"
+        "### 補充\n\n"
+        f"{risk_controls.LABEL}\n\n"
+        "| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| R1 | security | high | Emergency hotfix merged before independent "
+        "review | A maintainer other than the merge actor reviews the merged "
+        f"head | Review of PR #{pr_number} | @{actor} |\n\n"
         f"{marker}\n"
     )
+    problems: list[str] = []
+    risk_controls.parse_risks(body, problems)
+    risk_controls.parse_acs(body, problems)
+    if problems:
+        raise RuntimeError(
+            "Hotfix post-review Issue body is invalid: " + "; ".join(problems)
+        )
     created = github.create_issue(repo, title, body, actor)
     url = created.get("html_url")
     if not isinstance(url, str):
@@ -3350,6 +3376,87 @@ def require_routine_quota_fallback(
     )
 
 
+def requirement_trace(
+    github: GitHub, repo: str, pull: dict[str, Any], head_sha: str
+) -> dict[str, object] | None:
+    """Check the closing Issue's requirement evidence (SPEC-010, #1079)."""
+    base = str((pull.get("base") or {}).get("ref") or "")
+    head = str((pull.get("head") or {}).get("ref") or "")
+    body = str(pull.get("body") or "")
+    numbers = sorted({int(value) for value in CLOSING_ISSUE.findall(body)})
+    if not numbers or not risk_controls.traced_route(base, head):
+        return None
+    if len(numbers) != 1:
+        raise RuntimeError("A traced pull request closes exactly one Issue")
+    issue = github.get(repo, f"issues/{numbers[0]}")
+    if not isinstance(issue, dict) or issue.get("pull_request") is not None:
+        raise RuntimeError(f"Closing reference #{numbers[0]} is not an Issue")
+    files = github.pages(repo, f"pulls/{pull['number']}/files?per_page=100")
+    keys = ("filename", "previous_filename")
+    paths = sorted({str(f[key]) for f in files for key in keys if f.get(key)})
+
+    def read(path: str) -> str | None:
+        quoted = urllib.parse.quote(path)
+        try:
+            data = github.get(repo, f"contents/{quoted}?ref={head_sha}")
+        except RuntimeError:
+            return None
+        if not isinstance(data, dict) or data.get("type") != "file":
+            return None
+        content = base64.b64decode(str(data.get("content") or ""))
+        return content.decode("utf-8", "replace")
+
+    logins = [str(a.get("login") or "") for a in issue.get("assignees") or []]
+    trace, problems, notes = risk_controls.ready(
+        (numbers[0], str(issue.get("body") or ""), logins),
+        body,
+        paths,
+        ci_tier.scope_for,
+        read,
+    )
+    if problems:
+        raise RuntimeError(
+            "Requirement trace is incomplete (SPEC-010):\n"
+            + "\n".join(f"requirement-trace: {line}" for line in problems)
+        )
+    sys.stdout.writelines(f"requirement-trace: {line}\n" for line in notes)
+    return trace
+
+
+def require_trace_checks(
+    github: GitHub, repo: str, head_sha: str, trace: dict[str, Any], local: bool
+) -> None:
+    """Require each `check:` evidence to have succeeded on the exact head."""
+    evidence = trace.get("evidence") or {}
+    names = {v[6:] for v in evidence.values() if v.startswith("check:")}
+    if local:
+        names.discard("verify")
+    if not names:
+        return
+    runs = github.collection(
+        repo,
+        f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
+        "check_runs",
+    )
+    passed = {
+        str(run.get("name"))
+        for run in runs
+        if run.get("status") == "completed"
+        and run.get("conclusion") == "success"
+    }
+    if missing := sorted(names - passed):
+        raise RuntimeError(
+            "requirement-trace: check evidence has not succeeded on the "
+            "exact head: " + ", ".join(missing)
+        )
+
+
+def trace_command(args: argparse.Namespace, github: GitHub) -> None:
+    """Run the Ready requirement-trace check for validate-pr-policy."""
+    pull = live_pull(github, args.repo, args.pr_number, args.head_sha)
+    requirement_trace(github, args.repo, pull, args.head_sha)
+
+
 def merge_snapshot(  # noqa: C901
     github: GitHub,
     lease: dict[str, Any],
@@ -3557,6 +3664,7 @@ def merge_snapshot(  # noqa: C901
             raise RuntimeError(
                 f"Issue #{issue_number} has an unchecked checklist item"
             )
+    trace = requirement_trace(github, repo, pull, str(head_sha))
 
     base = pull.get("base") or {}
     base_ref = base.get("ref")
@@ -3688,9 +3796,18 @@ def merge_snapshot(  # noqa: C901
             verification_record = local_verification.normalized_record(
                 hosted_evidence, local_verification.TRUST_HOSTED
             )
+    if trace is not None:
+        require_trace_checks(
+            github,
+            repo,
+            str(head_sha),
+            trace,
+            verification_mode == "local" and local_evidence is not None,
+        )
     require_lease(github, lease, repo, pr_number, head_sha)
     head_ref = str((pull.get("head") or {}).get("ref") or "")
     return {
+        "requirement_trace": trace,
         "repository": repo,
         "pull_request": pr_number,
         "head_sha": head_sha,
@@ -3762,6 +3879,9 @@ def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
     desired = args.state == "draft"
     if current == desired:
         raise RuntimeError(f"Pull request is already {args.state}")
+    if not desired:
+        # SPEC-010: an incomplete requirement trace keeps the PR in Draft.
+        requirement_trace(github, args.repo, pull, args.head_sha)
     command = ["gh", "pr", "ready", str(args.pr_number), "--repo", args.repo]
     if desired:
         command.append("--undo")
@@ -4151,6 +4271,10 @@ def merge_evidence(
         raise RuntimeError(
             "Verification evidence is not bound to the leased head tree"
         )
+    trace = snapshot.get("requirement_trace")
+    if isinstance(trace, dict):
+        # K1 (SPEC-010): the payload digest also covers the requirement trace.
+        payload = {**payload, "requirement_trace": trace}
     try:
         return merge_trace.canonical_bytes(payload), trust
     except merge_trace.EvidenceError as error:
@@ -5147,6 +5271,11 @@ def parser() -> argparse.ArgumentParser:
     close_work.add_argument("--pr-number", required=True, type=int)
     close_work.add_argument("--head-sha", required=True)
     close_work.set_defaults(handler=close_work_issue)
+    trace = commands.add_parser("trace")
+    trace.add_argument("--repo", required=True)
+    trace.add_argument("--pr-number", required=True, type=int)
+    trace.add_argument("--head-sha", required=True)
+    trace.set_defaults(handler=trace_command)
 
     for name in (
         "state",
