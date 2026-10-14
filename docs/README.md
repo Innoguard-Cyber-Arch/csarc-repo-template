@@ -36,6 +36,7 @@
 - [`SPEC-007-portable-repo-site-documentation.md`](specs/SPEC-007-portable-repo-site-documentation.md) — canonical docs 與 portable presentation
 - [`SPEC-008-lifecycle-report-format.md`](specs/SPEC-008-lifecycle-report-format.md) — adopt／update 共用的 lifecycle report 格式
 - [`SPEC-009-project-settings.md`](specs/SPEC-009-project-settings.md) — 只保存無法安全重建的設定、provenance 與 migration registry
+- [`SPEC-010-issue-risk-controls.md`](specs/SPEC-010-issue-risk-controls.md) — Issue 風險與控制區塊、AC 對應與 exact-head requirement evidence
 
 `tracking: issue` 或預設值會同步 Task Issue；`tracking: story` 同步可容納 native subissues 的 Feature parent；`tracking: none` 用於已存在、仍需持續維護但不應新建 work item 的 current spec。Milestone 另作有 due date 的 delivery／release bucket，不再兼任 story identity。
 

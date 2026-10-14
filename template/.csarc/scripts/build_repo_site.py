@@ -111,6 +111,10 @@ _CONFIG_TOKENS: Final = (
 _CONFIG_TOKEN: Final = re.compile(
     r"\[\[(?P<key>" + "|".join(_CONFIG_TOKENS) + r")\]\]"
 )
+_RETIRED_CONFIG_TOKENS: Final = _RENDER_SITE["RETIRED_CONFIG_TOKENS"]
+_RETIRED_CONFIG_TOKEN: Final = re.compile(
+    r"\[\[(?P<key>" + "|".join(_RETIRED_CONFIG_TOKENS) + r")\]\]"
+)
 
 
 def _config_token_text(value: object, *, lang: str) -> str:
@@ -135,6 +139,13 @@ def _substitute_config_tokens(
     project's `.csarc/config.yml` does not actually define, instead of
     silently rendering an empty string.
     """
+    # Project-owned content from an older starter may still name a retired
+    # setting. A csarc update never rewrites that content and must not stop
+    # on it, so every build names the replacement on stderr instead of
+    # leaving the stale token unreported (Issue #1090).
+    for key in sorted(set(_RETIRED_CONFIG_TOKEN.findall(markdown))):
+        message = _RENDER_SITE["retired_token_message"](key)
+        sys.stderr.write(f"WARNING: {message}\n")
 
     def replace(match: re.Match[str]) -> str:
         key = match.group("key")

@@ -90,6 +90,60 @@ if (( title_found )); then
   fi
 fi
 
+# SPEC-010 (Issue #1079): a work Issue body carries the risk-controls block
+# and top-level acceptance criteria. Milestone trackers and promotion or
+# duplicate Issues are exempt. `--body-file -` is read once and replaced by
+# a temporary file so `gh` still receives the same body.
+body_given=0
+body_text=""
+risk_exempt=0
+[[ "$title" =~ ^Milestone\ [0-9]+:\  ]] && risk_exempt=1
+i=0
+while (( i < ${#args[@]} )); do
+  arg="${args[$i]}"
+  value=""
+  has_value=0
+  consumed=0
+  case "$arg" in
+    --body=*|--body-file=*|-b=*|-F=*) value="${arg#*=}"; has_value=1 ;;
+    --body|--body-file|-b|-F|--label|-l)
+      if (( i + 1 < ${#args[@]} )); then
+        value="${args[$((i + 1))]}"
+        has_value=1
+        consumed=1
+      fi
+      ;;
+    -b?*|-F?*) value="${arg:2}"; has_value=1 ;;
+    --label=*) value="${arg#--label=}" ;;
+  esac
+  if [[ "$arg" == --label* || "$arg" == -l ]]; then
+    [[ ",$value," =~ ,(promotion|duplicate), ]] && risk_exempt=1
+  elif (( has_value )) && [[ "$arg" == --body-file* || "$arg" == -F* ]]; then
+    body_given=1
+    if [[ "$value" == "-" ]]; then
+      body_text="$(cat)"
+      body_tmp="$(mktemp)"
+      printf '%s\n' "$body_text" >"$body_tmp"
+      if [[ "$arg" == *=* || "$arg" == -F?* ]]; then
+        args[i]="--body-file=$body_tmp"
+      else
+        args[i + 1]="$body_tmp"
+      fi
+    elif ! body_text="$(cat -- "$value")"; then
+      exit 1
+    fi
+  elif (( has_value )) && [[ "$arg" == --body* || "$arg" == -b* ]]; then
+    body_given=1
+    body_text="$value"
+  fi
+  i=$((i + 1 + consumed))
+done
+if (( body_given && ! risk_exempt )) &&
+  ! printf '%s\n' "$body_text" | python3 "$script_dir/risk_controls.py"; then
+  echo "Blocked locally: not calling 'gh issue create' -- add the SPEC-010 risk block (csarc issue create --body-out <file> guides it)." >&2
+  exit 1
+fi
+
 # Issue #551 safeguard: find --milestone/-m and --repo/-R (if given) among
 # the original arguments, the same way --title/-t was found above.
 milestone_given=0

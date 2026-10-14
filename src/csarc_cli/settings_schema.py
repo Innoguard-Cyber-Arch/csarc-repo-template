@@ -181,6 +181,19 @@ RELEASE_OBSERVATIONS = frozenset(
 )
 # Retired from the settings file but still accepted once as `--data`.
 ONE_TIME_INPUTS = frozenset({"work_item_mapping_review"})
+# Retired keys older repo-site content could show as `[[key]]` tokens. The
+# site engines (`render_site.py` RETIRED_CONFIG_TOKENS) stop on them, and an
+# update's retired row names the replacement token (Issue #1090).
+RETIRED_SITE_TOKENS = frozenset(
+    {
+        "branch_strategy",
+        "features",
+        "i18n",
+        "primary_language",
+        "review",
+        "reviewers",
+    }
+)
 
 
 def classification() -> dict[str, str]:

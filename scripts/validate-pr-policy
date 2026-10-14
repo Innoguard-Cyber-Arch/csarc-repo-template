@@ -124,6 +124,16 @@ validate_large_test_justification() {
   fi
 }
 
+validate_requirement_trace() {
+  # SPEC-010: the trusted lifecycle checks a Ready work pull request's trace.
+  local default=true
+  [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]] && default=false
+  [[ "${PR_DRAFT:-false}" != "true" && "${promotion:-false}" != "true" &&
+    "${PR_REQUIREMENT_TRACE_REQUIRED:-$default}" == "true" ]] || return 0
+  python3 "$script_dir/pr_lifecycle.py" trace --repo "$GITHUB_REPOSITORY" \
+    --pr-number "$PR_NUMBER" --head-sha "${PR_HEAD_SHA:-}" || exit 1
+}
+
 validate_governance_route() {
   # Issue #1069: changing .csarc/scripts or relaxing a governance value only
   # lands through the governance-switch route. This trusted base reads both
@@ -556,6 +566,7 @@ if [[ "${tracker_promotion:-false}" != "true" ]] && [[ "$pr_draft" != "true" ]] 
   echo "Issue #${issue_number} still has unchecked acceptance tasks."
   exit 1
 fi
+validate_requirement_trace
 if [[ "${tracker_promotion:-false}" == "true" ]]; then
   if [[ "$issue_title" != "Milestone ${promotion_milestone}: "* ]]; then
     echo "A Milestone ${promotion_milestone} promotion must reference its own tracker Issue."

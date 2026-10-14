@@ -43,6 +43,13 @@ body:
     id: supplement
     attributes:
       label: 補充
-      description: 選填：parent／dependency 理由、環境、風險或回退方式。
+      description: >-
+        parent／dependency 理由、環境、風險或回退方式；下方「風險與控制」區塊必填（SPEC-010）：每個風險一列並至少一個控制，Owner 是 Issue assignee；只改一般文件時改用 R0（不得涵蓋 AGENTS.md、SECURITY.md 或 CI policy）。PR 離開 Draft 前，在 PR 的「Requirement evidence」把每個 AC 與風險對應到 exact-head 證據。
+      value: |
+        #### 風險與控制
+
+        | ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | R1 | TODO | TODO | TODO | TODO | TODO | TODO |
     validations:
       required: false

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import settings_support
 
 ROOT = Path(__file__).parents[1]
@@ -1065,7 +1066,9 @@ def test_substitute_version_tokens_ignores_unrelated_bracket_text() -> None:
     assert text == "see `[[key]]` for details"
 
 
-def test_substitute_config_tokens_resolves_known_keys_only() -> None:
+def test_substitute_config_tokens_resolves_known_keys_only(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     # Issue #681 decision N: a downstream project's minimal repo-site uses
     # this to reach `.csarc/config.yml` facts at build time.
     config = {
@@ -1079,11 +1082,16 @@ def test_substitute_config_tokens_resolves_known_keys_only() -> None:
         lang="en",
     )
     assert text == "Demo Project uses python, typescript (zh-tw+en)"
-    # Live facts and retired settings are not site tokens (SPEC-009).
+    # Live facts and retired settings are not site tokens (SPEC-009); an
+    # older project-owned page keeps building, but each one is reported
+    # with its replacement (Issue #1090).
     for retired in ("project_visibility", "review", "features"):
         assert (
             _substitute_config_tokens(f"[[{retired}]]", config, lang="en")
             == f"[[{retired}]]"
+        )
+        assert f"Retired site content setting [[{retired}]]" in (
+            capsys.readouterr().err
         )
 
 
