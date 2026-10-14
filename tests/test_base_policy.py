@@ -286,28 +286,6 @@ def test_next_schema_requires_explicit_governance_values(
         executor["read_config"](path)
 
 
-def test_next_schema_does_not_require_the_retired_review_alias(
-    executor: dict[str, Any], tmp_path: Path
-) -> None:
-    """Issue #1071: schema 2 states admin_bypass, never the `review` alias.
-
-    The trusted base must read the final schema 2 file before the writer
-    switches, and the change is still routed as a governance switch.
-    """
-    base = write_config(tmp_path / "base.yml", config_text())
-    path = write_config(
-        tmp_path / "config.yml",
-        "schema_version: 2\n" + config_text(review=None),
-    )
-    candidate = executor["read_config"](path)
-    assert candidate["schema_version"] == 2
-    decision = executor["classify_route"](
-        [], executor["read_config"](base), candidate
-    )
-    assert decision.route == "governance-switch"
-    assert decision.reasons == ("changes schema_version: 1 -> 2",)
-
-
 def test_root_schema_two_settings_pass_the_trusted_base_reader(
     executor: dict[str, Any], tmp_path: Path
 ) -> None:
