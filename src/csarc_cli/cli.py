@@ -39,6 +39,7 @@ from csarc_cli import (
     merge_trace,
     release_phase,
     repository_facts,
+    risk_tools,
     settings_schema,
     update_plan,
 )
@@ -3014,6 +3015,30 @@ def lifecycle_next_steps(
     return steps
 
 
+RISK_CONTROLS_PATH = ".csarc/scripts/risk_controls.py"
+
+
+def risk_behavior_changes(files: Plan) -> list[dict[str, object]] | None:
+    """Report the SPEC-010 gate an update starts enforcing (#1079)."""
+    if RISK_CONTROLS_PATH not in files.add:
+        return None
+    return [
+        {
+            "subject": "risk-controls",
+            "before": "Ready pull requests are not checked for risk controls",
+            "after": (
+                "Ready pull requests require the linked Issue to carry a "
+                "valid risk-controls block and every acceptance criterion "
+                "and risk to map to exact-head evidence (SPEC-010)"
+            ),
+            "note": (
+                "Run csarc risk suggest --open to list open Issues without "
+                "one; there is no grace period."
+            ),
+        }
+    ]
+
+
 def lifecycle_report_model(  # noqa: C901
     plan: ResolvedPlan,
     *,
@@ -3161,7 +3186,9 @@ def lifecycle_report_model(  # noqa: C901
             "action_pins": update_pin_items(plan.update)
             if operation == "update" and adoption is None
             else None,
-            "behavior_changes": None,
+            "behavior_changes": risk_behavior_changes(files)
+            if operation == "update" and adoption is None
+            else None,
             "code_owner": owner,
             "release_ownership": release_contract(plan.answers),
             "release_writers": None,
@@ -10568,7 +10595,93 @@ def parser() -> argparse.ArgumentParser:
             "baseline is inconclusive"
         ),
     )
+    issue = subparsers.add_parser(
+        "issue", help="create a governed Issue (SPEC-010 risk block)"
+    )
+    issue_commands = issue.add_subparsers(dest="issue_command", required=True)
+    issue_create = issue_commands.add_parser(
+        "create",
+        help="check or guide the risk block, then run gh issue create",
+    )
+    issue_create.add_argument("--body-out", type=Path, metavar="FILE")
+    issue_create.add_argument(
+        "gh_arguments", nargs=argparse.REMAINDER, metavar="-- GH_ARGS"
+    )
+    risk = subparsers.add_parser(
+        "risk", help="read-only risk suggestions, register, and backfill"
+    )
+    risk_commands = risk.add_subparsers(dest="risk_command", required=True)
+    risk_suggest = risk_commands.add_parser("suggest")
+    target = risk_suggest.add_mutually_exclusive_group(required=True)
+    target.add_argument("--issue", type=int)
+    target.add_argument("--open", action="store_true")
+    risk_register = risk_commands.add_parser("register")
+    risk_register.add_argument("--milestone", type=int)
+    risk_register.add_argument(
+        "--state", choices=("open", "closed", "all"), default="open"
+    )
+    risk_backfill = risk_commands.add_parser("backfill")
+    risk_backfill.add_argument("--milestone", type=int)
+    risk_backfill.add_argument("--out", type=Path, metavar="FILE")
+    risk_backfill.add_argument("--verify", type=Path, metavar="FILE")
+    risk_backfill.add_argument("--digest", metavar="SHA256")
+    for command in (risk_suggest, risk_register, risk_backfill):
+        command.add_argument("--repo", default="", metavar="OWNER/NAME")
+        command.add_argument("--json", action="store_true")
     return result
+
+
+def command_risk(args: argparse.Namespace) -> int:  # noqa: C901
+    """Run `csarc issue create` or one read-only `csarc risk` command."""
+    if args.command == "issue":
+        gh_arguments = list(args.gh_arguments)
+        if gh_arguments[:1] == ["--"]:
+            gh_arguments = gh_arguments[1:]
+        return risk_tools.issue_create(gh_arguments, args.body_out)
+    if args.risk_command == "suggest":
+        found = risk_tools.suggest(args.repo, issue=args.issue)
+        if args.json:
+            print(json.dumps(found, ensure_ascii=False, indent=2))
+        for item in [] if args.json else found:
+            print(
+                f"#{item['issue']}: "
+                + (
+                    f"exempt ({item['exempt_reason']})"
+                    if item["exempt_reason"]
+                    else "; ".join(item["problems"]) or "valid"
+                )
+            )
+            if item["suggestion"]:
+                print(item["suggestion"])
+        return 0
+    if args.risk_command == "register":
+        data = risk_tools.register(
+            args.repo, milestone=args.milestone, state=args.state
+        )
+        print(
+            json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
+            if args.json
+            else risk_tools.render_register(data),
+            end="\n" if args.json else "",
+        )
+        return 0
+    if args.verify is not None:
+        if not args.digest:
+            raise CliError("--verify needs the saved --digest")
+        problems = risk_tools.verify_backfill(args.verify, args.digest)
+        for line in problems:
+            print(f"risk backfill: {line}", file=sys.stderr)
+        return 1 if problems else 0
+    if args.milestone is None:
+        raise CliError("risk backfill needs --milestone or --verify")
+    manifest = risk_tools.backfill(args.repo, args.milestone)
+    data = risk_tools.canonical(manifest)
+    if args.out is not None:
+        args.out.write_bytes(data)
+    elif args.json:
+        print(data.decode("utf-8"))
+    print(f"digest: {risk_tools.manifest_digest(manifest)}")
+    return 0
 
 
 def main(arguments: list[str] | None = None) -> int:
@@ -10581,10 +10694,17 @@ def main(arguments: list[str] | None = None) -> int:
             return command_copy(args, args.command)
         if args.command == "status":
             return command_status(args)
+        if args.command in {"issue", "risk"}:
+            return command_risk(args)
         if args.json and not args.check:
             raise CliError("--json is only valid with update --check.")
         return command_update(args)
-    except (CliError, OSError, subprocess.SubprocessError) as error:
+    except (
+        CliError,
+        risk_tools.RiskToolError,
+        OSError,
+        subprocess.SubprocessError,
+    ) as error:
         if getattr(args, "json", False):
             print(
                 json.dumps(

@@ -759,6 +759,8 @@ def test_marker_edit_uses_the_leased_writer_and_reads_back(
     lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
     github = FakeGitHub("a" * 40)
     github.body = "Closes #42\n"
+    # The marker edit reads back the exact stored body.
+    github.trace_evidence = False
     checks = 0
 
     def check_lease(*_arguments: object) -> None:
