@@ -1127,6 +1127,13 @@ def slugify(value: str) -> str:
     return slug or "csarc-project"
 
 
+# Files copier.yml renders only for a csarc-owned Release writer (#1068).
+CSARC_RELEASE_WRITER_FILES = (
+    ".github/workflows/release.yml",
+    ".github/workflows/release-drift.yml",
+    ".csarc/scripts/check-release-drift",
+)
+
 # CodeQL-analyzed modules; copier.yml's enable_codeql uses the same set.
 CODEQL_LANGUAGES = frozenset({"go", "python", "typescript"})
 
@@ -2394,15 +2401,19 @@ def report_setting_rows(
     after: Mapping[str, object],
     before: Mapping[str, object] | None,
     explicit: Collection[str] = (),
+    observed: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
     """Return allowlisted SPEC-008 setting rows with JSON-typed values.
 
     ``before`` is ``None`` for adoption: every resolved setting is new.
     Keys outside ``REPORT_SETTING_KEYS`` and the retired legacy keys never
     appear (#950). An update classifies migrated governance keys and
-    retired legacy keys with the approved mapping (#1064).
+    retired legacy keys with the approved mapping (#1064). A live fact in
+    ``observed`` that differs from the kept saved value is noted on its row
+    (#1068).
     """
     previous = {} if before is None else before
+    live = {} if observed is None else observed
     migrated = (
         {}
         if before is None
@@ -2433,6 +2444,12 @@ def report_setting_rows(
             source = "explicit" if key in explicit else "saved"
         else:
             setting_class = "decision"
+        if key in live and note is None:
+            note = (
+                f"Live GitHub facts suggest `{redact(live[key])}`; the "
+                f"saved value is kept. Pass `--data {key}=<value>` to "
+                "change it."
+            )
         rows.append(
             {
                 "after": redact(new),
@@ -2687,8 +2704,10 @@ def update_required_actions(
     files: Plan,
     settings: Sequence[Mapping[str, object]],
     pin_items: Sequence[Mapping[str, object]] = (),
+    observed: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
     """Derive the update required actions this release can evaluate."""
+    live = {} if observed is None else observed
     actions: list[dict[str, object]] = [
         {
             "blocking": False,
@@ -2701,6 +2720,18 @@ def update_required_actions(
         for row in settings
         if row["class"] == "decision" and row["source"] != "explicit"
     ]
+    actions.extend(
+        {
+            "blocking": False,
+            "command": f"csarc update --data {key}=<value>",
+            "kind": "setting-decision",
+            "message": "Live GitHub facts suggest a value that differs from "
+            "the saved setting; the saved value is kept until you pass one "
+            "explicitly.",
+            "subject": key,
+        }
+        for key in sorted(live)
+    )
     actions.extend(
         {
             "blocking": True,
@@ -2822,6 +2853,7 @@ def lifecycle_report_model(  # noqa: C901
     previous: Revision | None = None,
     target_head: str | None = None,
     target_changes: Sequence[str] | None = None,
+    observed: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build the single SPEC-008 report object for one adopt or update plan.
 
@@ -2836,7 +2868,10 @@ def lifecycle_report_model(  # noqa: C901
         if isinstance(raw_preserved, list):
             preserved_dirty = {str(path) for path in raw_preserved}
     settings = report_setting_rows(
-        plan.answers, before if operation == "update" else None, explicit
+        plan.answers,
+        before if operation == "update" else None,
+        explicit,
+        observed if operation == "update" else None,
     )
     if operation == "update":
         violations = governance_migration.governance_row_violations(settings)
@@ -2855,7 +2890,10 @@ def lifecycle_report_model(  # noqa: C901
         actions = adoption_required_actions(plan)
     else:
         actions = update_required_actions(
-            files, settings, update_pin_items(plan.update) or ()
+            files,
+            settings,
+            update_pin_items(plan.update) or (),
+            observed=observed,
         )
     if adoption is not None:
         applicable = adoption.get("applicable") is True
@@ -7233,6 +7271,11 @@ def trusted_policy_settings_check(
                 answers,
                 skip_tasks=True,
             )
+            # Copier never records the hidden release_ownership answer, so
+            # carry the saved owner into the inspected render; a missing
+            # owner stays missing and the helper fails closed (#1068).
+            if "release_ownership" in answers:
+                persist_release_answers(stage, answers)
             return run_policy_settings_check(
                 managed_script(stage, "apply-repository-settings.sh"), target
             )
@@ -7569,28 +7612,36 @@ def update_plan_answers(  # noqa: C901
         # the new empty default silently drop CODEOWNERS (#1061); a saved or
         # explicit owner is always authoritative and never rewritten here.
         update_data["code_owner"] = LEGACY_DEFAULT_OWNER
-    saved_visibility = answers.get("project_visibility")
-    update_data["project_visibility"] = repository.visibility
-    if repository.repository is not None:
-        repository_url = f"https://github.com/{repository.repository}"
-        previous_url = answers.get("repository_url")
-        previous_channel = answers.get("security_reporting_channel")
-        update_data["repository_url"] = repository_url
-        if (
-            "security_reporting_channel" not in explicit_data
-            and isinstance(previous_url, str)
-            and previous_channel
-            == default_security_reporting_channel(previous_url)
-        ):
-            update_data["security_reporting_channel"] = (
-                default_security_reporting_channel(repository_url)
-            )
-    if saved_visibility != repository.visibility:
-        enabled = repository.visibility == "public" and bool(
-            selected_languages(answers) & CODEQL_LANGUAGES
+    # Saved visibility and origin-derived settings are authoritative (#1068):
+    # live GitHub facts only fill a value the answers file never recorded.
+    # A differing live fact is reported by observed_setting_differences and
+    # changes the saved value only through an explicit --data choice.
+    if "project_visibility" not in answers:
+        update_data.setdefault("project_visibility", repository.visibility)
+    previous_url = answers.get("repository_url")
+    if (
+        repository.repository is not None
+        and not previous_url
+        and "repository_url" not in explicit_data
+    ):
+        update_data["repository_url"] = (
+            f"https://github.com/{repository.repository}"
         )
-        if "enable_codeql" in answers and "enable_codeql" not in explicit_data:
-            update_data["enable_codeql"] = str(enabled).lower()
+    new_url = update_data.get("repository_url")
+    previous_channel = answers.get("security_reporting_channel")
+    if (
+        isinstance(new_url, str)
+        and isinstance(previous_url, str)
+        and previous_url
+        and new_url != previous_url
+        and "security_reporting_channel" not in explicit_data
+        and previous_channel == default_security_reporting_channel(previous_url)
+    ):
+        # The explicit URL change carries the repository-derived reporting
+        # channel with it; a custom channel is never rewritten.
+        update_data["security_reporting_channel"] = (
+            default_security_reporting_channel(new_url)
+        )
     for key, value in update_data.items():
         previous_value = answers.get(key)
         if key == "languages":
@@ -7612,6 +7663,52 @@ def update_plan_answers(  # noqa: C901
         else:
             result[key] = value
     return result, update_data
+
+
+def observed_setting_differences(
+    answers: Mapping[str, object],
+    explicit_data: Mapping[str, str],
+    repository: RepositoryContext,
+) -> dict[str, object]:
+    """Return live facts that differ from saved settings (#1068).
+
+    Each entry is reported as a setting decision; none is written. Only a
+    verified GitHub observation counts, and an explicit --data value for
+    the key is the approved writer, so it is never reported again.
+    """
+    observed: dict[str, object] = {}
+    if not repository.verified or repository.source != "github":
+        return observed
+    saved_visibility = answers.get("project_visibility")
+    if (
+        "project_visibility" not in explicit_data
+        and isinstance(saved_visibility, str)
+        and saved_visibility != repository.visibility
+    ):
+        observed["project_visibility"] = repository.visibility
+        # The CodeQL choice is listed for confirmation, never flipped by a
+        # visibility change (#1058 decision 15).
+        suggested = repository.visibility == "public" and bool(
+            selected_languages(dict(answers)) & CODEQL_LANGUAGES
+        )
+        saved_codeql = answers.get("enable_codeql")
+        if (
+            "enable_codeql" not in explicit_data
+            and isinstance(saved_codeql, bool)
+            and saved_codeql != suggested
+        ):
+            observed["enable_codeql"] = suggested
+    saved_url = answers.get("repository_url")
+    if (
+        repository.repository is not None
+        and "repository_url" not in explicit_data
+        and isinstance(saved_url, str)
+        and saved_url
+    ):
+        live_url = f"https://github.com/{repository.repository}"
+        if saved_url.casefold() != live_url.casefold():
+            observed["repository_url"] = live_url
+    return observed
 
 
 def _render_reinstall_plan(
@@ -7800,6 +7897,9 @@ def command_update_reinstall(  # noqa: C901
         generated_at=generated_at,
         plan_path=report_directory / UPDATE_PLAN_BASENAME,
         before=candidate_answers,
+        observed=observed_setting_differences(
+            candidate_answers, {}, repository
+        ),
     )
     write_lifecycle_reports(
         report_directory,
@@ -8526,6 +8626,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     candidate_answers, update_data = update_plan_answers(
         saved_answers, explicit_data, repository
     )
+    observed = observed_setting_differences(
+        saved_answers, explicit_data, repository
+    )
     candidate_answers = resolve_release_answers(target, candidate_answers)
     try:
         status, current_revision, target_revision, previous = update_status(
@@ -8613,7 +8716,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             stage,
             target,
         )
-        retirement_candidates = (
+        retirement_candidates: tuple[str, ...] = (
             LEGACY_PROFILE_FILE.as_posix(),
             ".gitleaks.toml",
             ".pre-commit-config.yaml",
@@ -8622,6 +8725,16 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         old_render = file_transition.render_fingerprints(
             project_files(old_stage)
         )
+        if release_ownership(candidate_answers) != "csarc-owned":
+            # Only csarc-owned renders the CSARC Release writer (#1068).
+            # Copier never deletes a newly excluded file, so retire the
+            # writer the trusted old render produced; a product-owned
+            # workflow the old render never wrote is not a candidate.
+            retirement_candidates += tuple(
+                name
+                for name in CSARC_RELEASE_WRITER_FILES
+                if name in old_render
+            )
         # A legacy file retires only when it is byte-identical to the
         # trusted old render; a modified one stays as a conflict (#1066).
         retiring, retained = file_transition.split_retirements(
@@ -8731,6 +8844,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         previous=current_revision,
         target_head=report_head,
         target_changes=report_changes,
+        observed=observed,
     )
     if args.check:
         if args.json:

@@ -153,6 +153,7 @@ make_owner_root() {
   local root="$1" codeowners="$2"
   mkdir -p "$root/.csarc/scripts" "$root/.csarc/policies" "$root/.github"
   cp "$script_path" "$root/.csarc/scripts/apply-repository-settings.sh"
+  cp "$repo_root/.csarc/scripts/csarc_config.py" "$root/.csarc/scripts/csarc_config.py"
   cp -R "$repo_root/.csarc/policies/." "$root/.csarc/policies/"
   cp "$repo_root/.csarc/config.yml" "$root/.csarc/config.yml"
   if [[ "$codeowners" != "-" ]]; then
@@ -258,6 +259,7 @@ case_count=$((case_count + 1))
 mismatch_root="$fixture_root/org-mismatch"
 mkdir -p "$mismatch_root/.csarc/scripts" "$mismatch_root/.csarc/policies" "$mismatch_root/.github"
 cp "$script_path" "$mismatch_root/.csarc/scripts/apply-repository-settings.sh"
+cp "$repo_root/.csarc/scripts/csarc_config.py" "$mismatch_root/.csarc/scripts/csarc_config.py"
 cp -R "$repo_root/.csarc/policies/." "$mismatch_root/.csarc/policies/"
 cp "$repo_root/.csarc/config.yml" "$mismatch_root/.csarc/config.yml"
 printf '* @Other-Org/arch\n' >"$mismatch_root/.github/CODEOWNERS"
@@ -275,6 +277,7 @@ case_count=$((case_count + 1))
 personal_root="$fixture_root/personal-owner"
 mkdir -p "$personal_root/.csarc/scripts" "$personal_root/.csarc/policies" "$personal_root/.github"
 cp "$script_path" "$personal_root/.csarc/scripts/apply-repository-settings.sh"
+cp "$repo_root/.csarc/scripts/csarc_config.py" "$personal_root/.csarc/scripts/csarc_config.py"
 cp -R "$repo_root/.csarc/policies/." "$personal_root/.csarc/policies/"
 cp "$repo_root/.csarc/config.yml" "$personal_root/.csarc/config.yml"
 printf '* @outside-user\n' >"$personal_root/.github/CODEOWNERS"

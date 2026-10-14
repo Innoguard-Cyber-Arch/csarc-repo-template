@@ -138,7 +138,9 @@ release_ownership: verification-only
 governance_mode: observe
 """
 
-CONFIG_LEGACY_NO_POLICY_KEYS = "languages: []\n"
+CONFIG_LEGACY_NO_POLICY_KEYS = "languages: []\nrelease_ownership: csarc-owned\n"
+
+CONFIG_MISSING_RELEASE_OWNERSHIP = "languages: []\n"
 
 
 def _make_repo(tmp_path: Path, config_yaml: str) -> Path:
@@ -406,6 +408,23 @@ def test_legacy_config_without_policy_keys_defaults_every_area_on(
     )
     assert (
         "No changes applied. Re-run with 'apply' after review." in plan_output
+    )
+
+
+def test_missing_release_ownership_fails_closed_before_any_write(
+    tmp_path: Path,
+) -> None:
+    """A config without an owner never defaults to csarc-owned (#1068)."""
+    repo = _make_repo(tmp_path, CONFIG_MISSING_RELEASE_OWNERSHIP)
+
+    apply_log = tmp_path / "gh-apply.log"
+    result = _run(repo, tmp_path, "apply", log_path=apply_log)
+    output = result.stdout + result.stderr
+    assert result.returncode == 1, output
+    assert "CSARC settings error: release_ownership is missing" in output
+    assert "csarc update --data release_ownership=" in output
+    assert not apply_log.exists() or "--method" not in apply_log.read_text(
+        encoding="utf-8"
     )
 
 
