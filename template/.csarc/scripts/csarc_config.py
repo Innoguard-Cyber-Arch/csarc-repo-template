@@ -73,6 +73,7 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "security_reporting_channel": (KIND_TEXT, ()),
     "container": (KIND_BOOL, ()),
     "project_verification_hook": (KIND_TEXT, ()),
+    "github_project_url": (KIND_TEXT, ()),
 }
 # Derived context that is saved only as a one-time user decision when no
 # native manifest resolves it uniquely (SPEC-009); otherwise it is absent.

@@ -32,6 +32,7 @@ DEFAULTS: dict[str, object] = {
     "languages": ["python"],
     "lifecycle": ["issues", "milestones"],
     "project_maturity": "early",
+    "github_project_url": "",
     "project_verification_hook": "",
     "python_floor": "latest",
     "release_ownership": "csarc-owned",

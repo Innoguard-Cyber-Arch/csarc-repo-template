@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -251,6 +252,23 @@ def interactive_block(
     return "\n".join((risk_controls.LABEL, "", *HEADER_LINES, *rows))
 
 
+@dataclass(frozen=True)
+class Hooks:
+    """Run `gh issue create` between optional before/after hooks."""
+
+    run: Runner
+    before: Callable[[list[str]], None] | None = None
+    after: Callable[[str], int] | None = None
+
+    def create(self, command: list[str]) -> int:
+        """Create the Issue, echo gh's output, and return the hook status."""
+        if self.before is not None:
+            self.before(command)
+        output = self.run(["issue", "create", *command])
+        sys.stdout.write(output)
+        return self.after(output) if self.after is not None else 0
+
+
 def issue_create(
     arguments: list[str],
     body_out: Path | None = None,
@@ -259,8 +277,16 @@ def issue_create(
     ask: Prompt = input,
     interactive: bool | None = None,
     stdin: TextIO | None = None,
+    before: Callable[[list[str]], None] | None = None,
+    after: Callable[[str], int] | None = None,
 ) -> int:
-    """Check, optionally complete, and create one governed Issue."""
+    """Check, optionally complete, and create one governed Issue.
+
+    ``before`` runs after the body passes and right before `gh issue
+    create`; ``after`` receives its output once the Issue exists (#1080
+    uses them to check and then sync a configured GitHub Project).
+    """
+    hooks = Hooks(run, before, after)
     stream = stdin or sys.stdin
     titles = option_values(arguments, "--title", "-t")
     labels = {
@@ -269,8 +295,7 @@ def issue_create(
         for label in value.split(",")
     }
     if (titles and TRACKER.match(titles[0])) or labels & EXEMPT_LABELS:
-        run(["issue", "create", *arguments])
-        return 0
+        return hooks.create(arguments)
     index, flag, from_stdin = split_body_argument(arguments)
     inline = "=" in arguments[index]
     value = (
@@ -323,10 +348,9 @@ def issue_create(
     ) as handle:
         handle.write(body)
     try:
-        run(["issue", "create", *rest, "--body-file", handle.name])
+        return hooks.create([*rest, "--body-file", handle.name])
     finally:
         Path(handle.name).unlink(missing_ok=True)
-    return 0
 
 
 def resolve_repository(repo: str, run: Runner) -> str:

@@ -63,6 +63,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 | `security_reporting_channel` | `persistent-intent` | `text` | 非空、非 placeholder | public 必須是 GitHub 以外的私密管道 |
 | `container` | `persistent-intent` | `bool` | `true`, `false` | 舊 `features: docker`／`enable_docker` 遷移 |
 | `project_verification_hook` | `persistent-intent` | `text` | `''` 或安全的 repository 相對路徑 | 空值停用 |
+| `github_project_url` | `persistent-intent` | `text` | `''` 或完整 organization／user ProjectV2 URL | 空值停用；不提問，以 `--data` 設定（§9） |
 | `package_name` | `derived-decision` | `text` | 小寫 Python identifier | native manifest；無法唯一推導時才保存一次決定 |
 | `project_run_command` | `derived-decision` | `text` | 可執行指令 | native manifest；無法唯一推導時才保存一次決定 |
 | `project_slug` | `derived-context` | `text` | repository／distribution 名稱 | repository 名稱或 manifest `name` |
@@ -81,7 +82,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 
 <!-- csarc-settings-table:end -->
 
-`github_project_url` 由 #1080（K2）加入本表；本規格不預先保存未使用的鍵。題數、preset 展開與 transcript 由 #1078（Q3）定義，repository detector 與唯一推導規則見 §8（#1072，Q2），payload 由 #1077（P2）定義；它們都只能使用本表的分類。
+`github_project_url` 由 #1080（K2）加入本表（§9）；本規格不預先保存未使用的鍵。題數、preset 展開與 transcript 由 #1078（Q3）定義，repository detector 與唯一推導規則見 §8（#1072，Q2），payload 由 #1077（P2）定義；它們都只能使用本表的分類。
 
 ### 3. 退役鍵
 
@@ -190,6 +191,17 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 - visibility、entitlement（`security` 顯示 `advanced_security`／`code_security` 未啟用）、模板或 preset 預設改變時，已存的 `enable_codeql`、`scheduled_checks`、`lifecycle`、`coverage_*` 與 `python_floor` 一律維持 `unchanged`；差異只寫在報告列的 note，不產生 required action。
 - 身分：update 在任何 render 或寫入前，比較 origin 識別的 repository 與設定／provenance 記錄的 `repository_url`，不一致就 fail closed。一次性 `--data repository_url=...` 只核准這一次 plan，而且仍須指向 origin 識別的 repository；它不是設定鍵，只進 render 與 provenance context。origin 為 `unknown` 時不比較。
 
+### 9. GitHub Project Roadmap（#1080）
+
+`github_project_url` 是唯一的 Project 設定（#1058 決定 23）。它只保存完整的 organization 或 user ProjectV2 URL（`https://github.com/orgs/<org>/projects/<n>` 或 `https://github.com/users/<user>/projects/<n>`），預設空字串；不保存 project、field 或 item ID，也沒有其他 Project 鍵。init／adopt 不提問（題數不變），以 `--data github_project_url=<URL>` 設定，`csarc update --data github_project_url=` 清空。
+
+- 空值：`csarc issue create` 與 `csarc issue sync-project` 完全不呼叫 Project API；repository 的 `has_projects` 維持 `false`，不新增 workflow 或 check。
+- 有值：受管入口在任何寫入前即時解析 URL，讀回 owner、project URL、`closed`、`viewerCanUpdate`，以及唯一、型別為 DATE 的 `Project start`／`Project target` 欄位；token 能回報 scopes 時要求 `project`，否則明示 `unknown`。
+- `Project start` 是 Issue 建立日的 UTC 日期；`Project target` 是目前 Milestone `due_on` 的 UTC 日期，沒有 due date 時必須明確傳入 `--target-date YYYY-MM-DD`。
+- `csarc issue sync-project --issue <N>`／`--milestone <M>` 依目前的 Milestone 冪等同步；空欄直接寫入，既有值不同時先列 diff，經確認（互動確認或 `--yes`）才覆寫。只同步 Issue，不同步 PR。
+- Issue 已建立但 Project 寫入失敗時保留 Issue，輸出單一可重跑的修復指令；加入 item 以 Issue 與 Project 的 identity upsert，重跑不產生重複 item。
+- 只有經 `csarc issue create` 建立或 `csarc issue sync-project` 明確同步的 Issue 會進 Project；UI、`scripts/gh-issue-create` 或其他工具建立的 Issue 需要時再跑 `sync-project`。
+
 ## Acceptance criteria
 
 - [x] 本規格封閉列出 persistent intent、one-time seed、live facts、derived context 與 machine metadata，並列出每個退役鍵與承接鍵（#1071 AC1）。
@@ -197,12 +209,12 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 - [x] current parser 只接受 schema 2；legacy 設定只由 CLI migration registry 讀取並只寫 schema 2（#1071 AC3）。
 - [x] status／update 在寫入前驗證 provenance 與 digest，手改、缺漏、未知 schema 或矛盾時 fail closed（#1071 AC4）。
 - [x] conformance 測試讓本規格、`copier.yml`、CLI、root parser 與 generated parser 一致（#1071 AC7）。
+- [x] `github_project_url` 是唯一的 Project 設定，預設空字串，只保存完整 organization／user ProjectV2 URL（#1080 AC1）。
 
 ## Out of scope
 
 - 題數、preset 展開、WARNING 與 approval route preflight（#1078）。
 - 依選項縮減的 payload 與預設值調整（#1077）。
-- `github_project_url`（#1080）。
 - 網站 token 與 CLI hint 的全面清理（#1090）、文件中的過期說法（#1091）。
 
 ## Verification
@@ -210,6 +222,7 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 - `python3 scripts/spec_to_issue.py validate`
 - `uv run pytest tests/test_settings_spec.py tests/test_repository_facts.py`
 - `uv run pytest tests/test_settings_migration.py tests/test_root_config.py tests/test_base_policy.py`
+- `uv run pytest tests/test_project_roadmap.py`
 
 ## References
 
@@ -217,6 +230,7 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 - [Simplified project configuration ADR](../adr/simplified-project-configuration.md)
 - [Issue #1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)
 - [Issue #1072](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1072) — repository detector 與唯一推導
-- [Issue #1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058) — 決定 3、8、14–17、25
+- [Issue #1080](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1080) — GitHub Project Roadmap 同步
+- [Issue #1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058) — 決定 3、8、14–17、23、25
 - [Issue #900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900) — 平面、最少的設定
 - [Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919) — 文件模式與語言

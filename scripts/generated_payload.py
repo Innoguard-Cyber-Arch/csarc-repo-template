@@ -105,40 +105,42 @@ TARGETS: dict[str, dict[str, int | None]] = {
 # +400 script lines (`risk_controls.py` and its wiring). P2 left no room
 # to offset it, so the cut is a follow-up Issue; any other change may only
 # lower these. The gap to TARGETS stays open until the remaining cuts land
-# (#1058 kill criterion 4).
+# (#1058 kill criterion 4). K2 (#1080) adds exactly +1 script line per
+# fixture: the `github_project_url` entry the shared settings parser must
+# list; its Project sync stays CLI-only.
 CEILINGS: dict[str, dict[str, int]] = {
     "solo-default": {
         "files": 96,
         "scripts": 57,
-        "script_lines": 28_817,
+        "script_lines": 28_818,
         "bytes": 1_370_000,
         "workflows": 0,
     },
     "solo-python": {
         "files": 99,
         "scripts": 57,
-        "script_lines": 28_834,
+        "script_lines": 28_835,
         "bytes": 1_370_000,
         "workflows": 0,
     },
     "hosted-csarc-owned-python": {
         "files": 120,
         "scripts": 63,
-        "script_lines": 30_180,
+        "script_lines": 30_181,
         "bytes": 1_520_000,
         "workflows": 13,
     },
     "consumer-a": {
         "files": 106,
         "scripts": 56,
-        "script_lines": 27_838,
+        "script_lines": 27_839,
         "bytes": 1_420_000,
         "workflows": 12,
     },
     "consumer-b": {
         "files": 102,
         "scripts": 54,
-        "script_lines": 27_655,
+        "script_lines": 27_656,
         "bytes": 1_410_000,
         "workflows": 10,
     },

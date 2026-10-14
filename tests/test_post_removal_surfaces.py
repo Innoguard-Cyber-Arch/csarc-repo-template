@@ -65,6 +65,7 @@ def current_context(**overrides: object) -> dict[str, object]:
         coverage_threshold=80,
         code_owner="",
         project_verification_hook="",
+        github_project_url="",
         security_reporting_channel="Use the private security contact.",
         package_name="example",
         project_run_command="./.csarc/scripts/verify",

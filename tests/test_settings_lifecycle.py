@@ -26,6 +26,7 @@ pytestmark = pytest.mark.large
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_URL = "https://github.com/example/settings-fixture"
 LEGACY_TAG = "v0.30.3"
+PROJECT_URL = "https://github.com/orgs/example/projects/7"
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -159,12 +160,19 @@ def test_non_interactive_init_asks_nothing_and_saves_only_intent(
                 "project_description=Settings fixture product.",
                 "--data",
                 "copyright_holder=Example Owner",
+                "--data",
+                f"github_project_url={PROJECT_URL}",
             ]
         )
         == 0
     )
     capsys.readouterr()
     context = assert_schema_2(project)
+    # #1080 AC1: the one Project setting is saved as the full URL only.
+    saved = yaml.safe_load(
+        (project / ".csarc/config.yml").read_text(encoding="utf-8")
+    )
+    assert saved["github_project_url"] == PROJECT_URL
     for seed in settings_schema.SEED_KEYS + settings_schema.LIVE_KEYS:
         assert seed not in saved_keys(project)
     assert context["project_mode"] == "new"
