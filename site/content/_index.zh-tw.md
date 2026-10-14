@@ -38,7 +38,7 @@ fit = "符合畫面"
       </header>
       <div class="language-contract" aria-label="程式語言與公版設定">
         <p class="language-card"><strong>建立／導入時選擇程式語言</strong>Python、Rust、TypeScript、Go 需要哪些就勾哪些；都不選時只準備共通工作流程。</p>
-        <p class="language-card shared"><strong>一份公版設定</strong>模板把語言、分支與選用能力記在 <code>.csarc/config.yml</code>；更新時由公版維護，不必分散找設定。</p>
+        <p class="language-card shared"><strong>一份公版設定</strong>模板把語言、治理與選用能力記在 <code>.csarc/config.yml</code>；更新時由公版維護，不必分散找設定。</p>
         <p class="language-card future"><strong>目前支援版本</strong>Python 3.14、Rust 1.98、TypeScript 使用 Node 24 長期支援版、Go 最低 1.27（開發與驗證使用 1.27.1）。</p>
       </div>
       <div class="product-start">
@@ -810,7 +810,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 
 {{< ops key="template-release-mode-ops" title="單一來源、驗證流程與目前自動化邊界" >}}
 - `template/` 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理與 dogfood 設定，配對檔案由 `scripts/sync-paired-files.sh` 從 root 產生 `template/` 副本。
-- `.csarc/config.yml` 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。
+- `.csarc/config.yml` 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、治理與選用能力都從這裡讀取，分支路線則由 Issue 與 Milestone metadata 推導；後續擴充也增加設定項目，不另建第二份設定檔。
 - 新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自元件（模組），不建立組合專屬流程。
 - 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan；dry-run 不執行 target-owned helper 或 product hook，並唯讀盤點 GitHub Issue Types 與 labels。報告以 `Bug`／`Feature`／`Task` 作為 Issue 工作類型，以小寫 `bug`／`enhancement`／`documentation` 作為 PR 分類與 fallback，列出可安全整批接受的對應和需要逐項確認的自訂項目，但不會改動遠端 metadata。人核准同一份未漂移的 plan 後，CLI 才在隔離候選執行驗證，通過後寫入；第一張 PR 再由人核對來源、plan、diff 與本機結果。
 - 第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先用 dry-run 預覽，候選內容與衝突全部驗證完成才修改 target，若有衝突就保持 repo 不變，修正後重跑，再由一般 PR 與 trusted-base checks 審查。
@@ -1051,7 +1051,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
           <tr><td>OSV reusable workflow＋<a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">權限傳遞</a></td><td><span class="tier-chip best">已修正</span></td><td>呼叫端權限只能維持或縮小，不能替被呼叫 workflow 補權限；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> 補回必要權限後，<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">main 線上 run</a> 已成功。</td></tr>
           <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip partial">產品擴充</span></td><td>公版目前以 immutable GitHub Release、checksum、SBOM 與消費端驗證作共同基線；需要 registry 或 artifact attestation 的產品，應另案建立真實 publisher、OIDC 信任與驗證，不只提供無執行者的設定開關。</td></tr>
           <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip optional">方案感知</span></td><td>已有 pinned Actions、OSV、<code>SECURITY.md</code>、完整 Git 歷史與工作樹 secret scan；public repo 預設啟用 CodeQL，private／internal 則依 GitHub Code Security 授權明確 opt-in。</td></tr>
-          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">共用生命週期已證明</span></td><td><code>ai-guardrail</code> 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、Rust、TypeScript 與 Go 另有各自可執行的 beta 驗收證據。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
+          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">共用生命週期已證明</span></td><td>既有的 private、CI-only consuming repo 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、Rust、TypeScript 與 Go 另有各自可執行的 beta 驗收證據。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
         </tbody>
       </table>
 {{< /legacy >}}
@@ -1067,7 +1067,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 | OSV reusable workflow | 已修正 | 權限傳遞修正後已有成功 main run |
 | Artifact Attestations／SLSA | Conditional contract | 本機測試保留 repository、tag、digest 與 signer 核對；目前沒有 active consumer workflow |
 | OpenSSF Scorecard | 方案感知 | public 預設 CodeQL；private/internal 依授權 opt-in |
-| 真實 consuming repo | 共用生命週期已證明 | `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 update；語言模組另有可執行 beta 證據 |
+| 真實 consuming repo | 共用生命週期已證明 | 既有的 private、CI-only consuming repo 已完成 v0.2.4 導入與 v0.3.1 update；語言模組另有可執行 beta 證據 |
 
 {{< disclosure key="benchmark-gap" title="現階段缺口" >}}
 沒有跨 repo catalog、全面託管治理、registry publisher 或通用部署平台。歷史 live-integration run 只保留為稽核證據；現行能力必須同時有 `.github/workflows/` 內的 active file 與近期 run。真實產品 repo 繼續累積營運證據，但不作為一次性的語言測試 fixture。
@@ -1133,7 +1133,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
           <p>至少 5 個 consuming repo 後，滿足任一條才評估中央 enforcement：30 天內同類漂移出現於 <strong>2 個以上 repo</strong>；連續兩個模板 release 都有超過 <strong>20%</strong> 的 update PR 逾 <strong>5 個工作天</strong>；或每月人工 <code>apply</code>／修正超過 <strong>2 小時</strong>。Allstar 適合持續檢查與執行安全政策；Safe Settings 適合用階層設定檔統一下發 repository settings。兩者不取代 catalog。</p>
         </article>
       </div>
-      <aside class="selection-note"><strong>目前決定</strong><span>0 個 consuming repo，且沒有可用的漂移頻率樣本，不達任一門檻。維持 Copier／JSON policy／GitHub API／每日漂移檢查；不預先部署 Backstage、Allstar 或 Safe Settings。</span></aside>
+      <aside class="selection-note"><strong>目前決定</strong><span>consuming repo 不達任一門檻，也沒有可用的漂移頻率樣本。維持 Copier／JSON policy／GitHub API／每日漂移檢查；不預先部署 Backstage、Allstar 或 Safe Settings。</span></aside>
 {{< /legacy >}}
 
 {{< basic >}}

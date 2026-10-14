@@ -58,12 +58,14 @@ attestation verification.
    customized path, read `copier.yml` from the same verified full SHA and use
    its existing choices, defaults, help text, and conditions as the only
    question schema. Group the applicable questions for conversation as:
-   identity/languages/run and verification; branch/CODEOWNER/reviewers; PR
-   review source, admin bypass, project maturity, and verification; optional
-   coverage/CodeQL/Docker/update notifications; and repository/Actions/labels/
-   Ruleset policy. Keep `reviewers`, `code_owner`, `pr_review_mode`,
-   `admin_bypass`, `project_maturity`, and verification as distinct
-   decisions. Do not ask hidden, derived, or conditionally inapplicable
+   identity/languages/run and verification; CODEOWNER; Copilot review, admin
+   bypass, project maturity, and verification mode; optional
+   coverage/CodeQL/container/scheduled checks; and governance mode for the
+   repository/Actions/labels/Ruleset policy. Keep `code_owner`,
+   `copilot_review`, `admin_bypass`, `project_maturity`, and
+   `verification_mode` as distinct decisions. Branch routes come from Issue
+   and Milestone metadata, and reviewers are chosen from live `maintain`/`admin`
+   collaborators, so neither is a question. Do not ask hidden, derived, or conditionally inapplicable
    questions. Pass every confirmed override through the existing repeatable
    `--data KEY=VALUE` option; do not create another schema or configuration
    layer. Run the matching dry-run with `--json`, summarize its resolved
