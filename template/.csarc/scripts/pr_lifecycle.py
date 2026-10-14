@@ -117,6 +117,32 @@ REVIEWED_MERGE_BYPASS_ACTORS = [
         "bypass_mode": "pull_request",
     }
 ]
+# Issue #1076 (#1058 decisions 10 and 27): without a Ruleset the platform
+# enforces nothing, so lifecycle may merge only when a complete readback
+# observes exactly one writer. Unrecognized roles are never guessed.
+WRITE_ROLES = frozenset({"write", "maintain", "admin"})
+NON_WRITE_ROLES = frozenset({"read", "triage"})
+WRITE_TEAM_PERMISSIONS = frozenset({"push", "maintain", "admin"})
+NON_WRITE_TEAM_PERMISSIONS = frozenset({"pull", "triage"})
+REQUIRED_CHECKS_POLICY = Path("policies") / "rulesets-required-checks.json"
+# Each protection state maps to exactly one merge route: `allowed` lets
+# lifecycle merge, `manual-only` leaves a human merge recorded as untraced,
+# and `blocked` has no route until the condition is fixed.
+MERGE_ROUTES = {
+    "enforced": "allowed",
+    "single-writer": "allowed",
+    "inconclusive": "manual-only",
+    "multiple-writers": "manual-only",
+    "unknown": "manual-only",
+    "blocked": "blocked",
+}
+AGENT_PROTECTIONS = frozenset(
+    state for state, route in MERGE_ROUTES.items() if route == "allowed"
+)
+DEPENDABOT_UPDATE_TYPE = re.compile(r"(?m)^\s*update-type:\s*(\S+)\s*$")
+LOCAL_DEPENDABOT_UPDATE_TYPES = frozenset(
+    {"version-update:semver-minor", "version-update:semver-patch"}
+)
 LEASE_CORE_FIELDS = (
     "schema_version",
     "repository",
@@ -211,6 +237,10 @@ class GitHub:
 
     def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
         """Read and flatten every page of a REST collection."""
+        return self.api_pages(f"repos/{repo}/{path}")
+
+    def api_pages(self, endpoint: str) -> list[dict[str, Any]]:
+        """Read and flatten every page of any REST collection endpoint."""
         payload = json.loads(
             run(
                 [
@@ -220,18 +250,20 @@ class GitHub:
                     "--slurp",
                     "-H",
                     "Accept: application/vnd.github+json",
-                    f"repos/{repo}/{path}",
+                    endpoint,
                 ]
             )
         )
         if not isinstance(payload, list):
-            raise RuntimeError(f"GitHub collection {path} is not a list")
+            raise RuntimeError(f"GitHub collection {endpoint} is not a list")
         pages = (
             payload if payload and isinstance(payload[0], list) else [payload]
         )
         items = [item for page in pages for item in page]
         if not all(isinstance(item, dict) for item in items):
-            raise RuntimeError(f"GitHub collection {path} has invalid entries")
+            raise RuntimeError(
+                f"GitHub collection {endpoint} has invalid entries"
+            )
         return items
 
     def collection(
@@ -1845,6 +1877,17 @@ def _effective_protection(  # noqa: C901
     check_rules = [
         item for item in rules if item.get("type") == "required_status_checks"
     ]
+    if not pull_rules and not check_rules:
+        # Issue #1076: a complete read with no review or check rule means
+        # the platform enforces nothing; only the audited single-writer
+        # route in `merge_snapshot` may still let lifecycle merge.
+        return (
+            "none",
+            "no Ruleset enforces review or required checks on this branch",
+            set(),
+            False,
+            False,
+        )
     if any(
         not isinstance(item.get("parameters"), dict)
         for item in pull_rules + check_rules
@@ -2129,6 +2172,174 @@ def _effective_protection(  # noqa: C901
         reviewed_bypass,
         copilot_only_block_possible,
     )
+
+
+def merge_route(protection: str) -> str:
+    """Return the `allowed`, `manual-only`, or `blocked` merge route."""
+    return MERGE_ROUTES.get(protection, "blocked")
+
+
+def _writer_logins(
+    collaborators: list[dict[str, Any]],
+) -> tuple[set[str], str]:
+    """Return observed writer logins, or why the readback is incomplete."""
+    writers: set[str] = set()
+    for item in collaborators:
+        login = item.get("login")
+        role = item.get("role_name")
+        if not isinstance(login, str) or not login:
+            return set(), "a collaborator entry has no login"
+        # #1058 decision 6: only `role_name` counts; a missing or custom
+        # role is never mapped back through the legacy `permission`.
+        if not isinstance(role, str) or not role:
+            return set(), f"collaborator {login} has no role_name"
+        if role in WRITE_ROLES:
+            writers.add(login.casefold())
+        elif role not in NON_WRITE_ROLES:
+            return set(), f"collaborator {login} has the unknown role {role!r}"
+    return writers, ""
+
+
+def _team_writer_gap(
+    github: GitHub, repo: str, writers: set[str]
+) -> tuple[str, str]:
+    """Check that every write-capable team is visible and fully observed."""
+    try:
+        teams = github.pages(repo, "teams?per_page=100")
+    except (RuntimeError, json.JSONDecodeError) as error:
+        return "inconclusive", f"the team readback is incomplete: {error}"
+    organization = urllib.parse.quote(repo.split("/", 1)[0], safe="")
+    for team in teams:
+        slug = team.get("slug")
+        permission = team.get("permission")
+        if not isinstance(slug, str) or not slug:
+            return "inconclusive", "a repository team has no slug"
+        if permission in NON_WRITE_TEAM_PERMISSIONS:
+            continue
+        if permission not in WRITE_TEAM_PERMISSIONS:
+            return (
+                "inconclusive",
+                f"team {slug} has the unknown permission {permission!r}",
+            )
+        endpoint = (
+            f"orgs/{organization}/teams/"
+            f"{urllib.parse.quote(slug, safe='')}/members?per_page=100"
+        )
+        try:
+            members = github.api_pages(endpoint)
+        except (RuntimeError, json.JSONDecodeError):
+            return (
+                "inconclusive",
+                f"the members of write-capable team {slug} are hidden",
+            )
+        for member in members:
+            login = member.get("login")
+            if not isinstance(login, str) or not login:
+                return (
+                    "inconclusive",
+                    f"team {slug} lists a member without a login",
+                )
+            if login.casefold() not in writers:
+                return (
+                    "inconclusive",
+                    f"team {slug} grants write to {login}, who is missing "
+                    "from the collaborator readback",
+                )
+    return "", ""
+
+
+def single_writer_eligibility(
+    github: GitHub, repo: str, actor: str
+) -> tuple[str, str]:
+    """Classify the `server_enforcement=none` route (Issue #1076).
+
+    #1058 decisions 10 and 27: only a complete, paginated readback that
+    observes exactly one writer -- the merge actor itself -- is `eligible`.
+    Another writer (a collaborator, a write-capable team member, or a
+    write deploy key) is `multiple-writers`; any failed, malformed, or
+    partial read is `inconclusive`. Both leave a manual merge only.
+    """
+    try:
+        repository = github.get(repo, "")
+        collaborators = github.pages(
+            repo, "collaborators?affiliation=all&per_page=100"
+        )
+        keys = github.pages(repo, "keys?per_page=100")
+    except (RuntimeError, json.JSONDecodeError) as error:
+        return "inconclusive", f"the writer readback is incomplete: {error}"
+    owner = repository.get("owner") if isinstance(repository, dict) else None
+    owner_type = owner.get("type") if isinstance(owner, dict) else None
+    if owner_type not in {"Organization", "User"}:
+        return "inconclusive", "the repository owner type is unavailable"
+    writers, reason = _writer_logins(collaborators)
+    if reason:
+        return "inconclusive", reason
+    if owner_type == "Organization":
+        state, reason = _team_writer_gap(github, repo, writers)
+        if state:
+            return state, reason
+    if any(type(key.get("read_only")) is not bool for key in keys):
+        return "inconclusive", "a deploy key has no read_only flag"
+    write_keys = [key for key in keys if key["read_only"] is False]
+    if len(writers) + len(write_keys) > 1:
+        return (
+            "multiple-writers",
+            f"{len(writers)} writer account(s) and {len(write_keys)} write "
+            "deploy key(s) can change this repository",
+        )
+    if writers != {actor.casefold()}:
+        return (
+            "inconclusive",
+            f"the merge actor {actor} is not the one observed writer",
+        )
+    return "eligible", f"{actor} is the only observed writer"
+
+
+def declared_required_contexts() -> set[tuple[str, int]]:
+    """Read the trusted base's declared required checks (Issue #1076).
+
+    Without a Ruleset GitHub enforces no check, so the hosted single-writer
+    route still requires every context the base policy declares.
+    """
+    path = Path(__file__).resolve().parents[1] / REQUIRED_CHECKS_POLICY
+    try:
+        policy = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            f"The declared required checks are unreadable: {error}"
+        ) from error
+    rules = policy.get("rules") if isinstance(policy, dict) else None
+    if not isinstance(rules, list):
+        raise RuntimeError("The declared required checks are malformed")
+    contexts: set[tuple[str, int]] = set()
+    for rule in rules:
+        if not isinstance(rule, dict):
+            raise RuntimeError("The declared required checks are malformed")
+        if rule.get("type") != "required_status_checks":
+            continue
+        parameters = rule.get("parameters")
+        items = (
+            parameters.get("required_status_checks")
+            if isinstance(parameters, dict)
+            else None
+        )
+        if not isinstance(items, list):
+            raise RuntimeError("The declared required checks are malformed")
+        for item in items:
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("context"), str)
+                or not item["context"]
+                or type(item.get("integration_id")) is not int
+                or item["integration_id"] <= 0
+            ):
+                raise RuntimeError("The declared required checks are malformed")
+            contexts.add((item["context"], item["integration_id"]))
+    if not contexts:
+        raise RuntimeError(
+            "Hosted single-writer merge needs declared required checks"
+        )
+    return contexts
 
 
 def repository_root() -> Path:
@@ -2450,14 +2661,14 @@ def trusted_required_check_runs(
     return required_runs, run_cache
 
 
-def require_trusted_dependabot_head(
+def authenticated_dependabot_commit(
     github: GitHub,
     repo: str,
     pull: dict[str, Any],
     head_sha: str,
     base_sha: str,
-) -> str:
-    """Reauthenticate one exact Dependabot head and its trusted eligibility."""
+) -> tuple[str, dict[str, Any]]:
+    """Return the head kind and its GitHub-signed Dependabot commit."""
     eligible, reason, live_base_sha, _, live_head_sha = (
         dependabot_auth.validated_dependabot_snapshot(pull, repo)
     )
@@ -2521,7 +2732,21 @@ def require_trusted_dependabot_head(
                 f"{direct_reason}; {child_reason}"
             )
         kind = "sync-child"
+        commit = chain[1]
+    return kind, commit
 
+
+def require_trusted_dependabot_head(
+    github: GitHub,
+    repo: str,
+    pull: dict[str, Any],
+    head_sha: str,
+    base_sha: str,
+) -> str:
+    """Reauthenticate one exact Dependabot head and its trusted eligibility."""
+    kind, _commit = authenticated_dependabot_commit(
+        github, repo, pull, head_sha, base_sha
+    )
     check_runs = github.collection(
         repo,
         f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
@@ -2541,6 +2766,48 @@ def require_trusted_dependabot_head(
             "Dependabot head has no trusted merge eligibility on the exact head"
         )
     return kind
+
+
+def dependabot_update_scope(message: str) -> list[str]:
+    """Return the minor/patch update types a signed Dependabot commit states.
+
+    Issue #1076: local mode has no hosted eligibility workflow, so the
+    update scope comes from the GitHub-signed commit's own
+    `updated-dependencies` metadata; a major, unknown, or missing type
+    leaves only a manual merge.
+    """
+    _, separator, metadata = message.partition("updated-dependencies:")
+    types = DEPENDABOT_UPDATE_TYPE.findall(metadata) if separator else []
+    if not types:
+        raise RuntimeError(
+            "Dependabot update scope is missing from the signed commit; "
+            "merge it manually"
+        )
+    unsupported = sorted(set(types) - LOCAL_DEPENDABOT_UPDATE_TYPES)
+    if unsupported:
+        raise RuntimeError(
+            "Dependabot update scope "
+            + ", ".join(unsupported)
+            + " needs a manual review and merge"
+        )
+    return sorted(set(types))
+
+
+def require_local_dependabot_head(
+    github: GitHub,
+    repo: str,
+    pull: dict[str, Any],
+    head_sha: str,
+    base_sha: str,
+) -> tuple[str, list[str]]:
+    """Authenticate a local-mode Dependabot head and its update scope."""
+    kind, commit = authenticated_dependabot_commit(
+        github, repo, pull, head_sha, base_sha
+    )
+    message = (commit.get("commit") or {}).get("message")
+    return kind, dependabot_update_scope(
+        message if isinstance(message, str) else ""
+    )
 
 
 def require_trusted_verification(  # noqa: C901
@@ -3077,13 +3344,19 @@ def merge_snapshot(  # noqa: C901
     head_sha = lease["head_sha"]
     require_lease(github, lease, repo, pr_number, head_sha)
     pull = live_pull(github, repo, pr_number, head_sha)
-    dependabot_head = (
-        require_trusted_dependabot_head(
+    verification_mode = configured_verification_mode()
+    dependabot_head = ""
+    dependabot_scope: list[str] = []
+    if require_dependabot_head and verification_mode == "local":
+        # Issue #1076: local mode has no hosted eligibility workflow; the
+        # signed commit's own update scope replaces it.
+        dependabot_head, dependabot_scope = require_local_dependabot_head(
             github, repo, pull, str(head_sha), str(lease["base_sha"])
         )
-        if require_dependabot_head
-        else ""
-    )
+    elif require_dependabot_head:
+        dependabot_head = require_trusted_dependabot_head(
+            github, repo, pull, str(head_sha), str(lease["base_sha"])
+        )
     if pull.get("draft") is not False:
         raise RuntimeError("Pull request is Draft at merge time")
     if UNCHECKED.search(str(pull.get("body") or "")):
@@ -3097,8 +3370,10 @@ def merge_snapshot(  # noqa: C901
     # Issue #1069: the trusted base selects the merge route and path tier;
     # the candidate's own policy only runs as a non-authoritative self-test.
     policy = base_policy_decision(lease, pull, label_names)
-    admin_bypass = level_decision.review == "self" and admin_bypass_opt_in(
-        github, repo, lease, pull
+    # A bot-authored Dependabot body cannot carry the marker, so the
+    # authenticated local Dependabot route is its own opt-in (Issue #1076).
+    admin_bypass = level_decision.review == "self" and (
+        bool(dependabot_scope) or admin_bypass_opt_in(github, repo, lease, pull)
     )
     bypass_route = (
         level_decision.level
@@ -3270,7 +3545,6 @@ def merge_snapshot(  # noqa: C901
     title = pull.get("title")
     if not isinstance(title, str) or not title.strip():
         raise RuntimeError("Pull request title is unavailable")
-    verification_mode = configured_verification_mode()
     if verification_mode == "local":
         require_local_pull_policy(repo, pull)
     (
@@ -3320,6 +3594,24 @@ def merge_snapshot(  # noqa: C901
         else:
             protection = "blocked"
             reason = "GitHub does not report the reviewed pull request as clean"
+    server_enforcement = "ruleset"
+    if protection == "none":
+        server_enforcement = "none"
+        writer_state, reason = single_writer_eligibility(github, repo, actor)
+        if writer_state != "eligible":
+            protection = writer_state
+        elif mergeable_state != "clean":
+            # Nothing on the server blocks an `unstable` or unknown state,
+            # so lifecycle never treats it as mergeable.
+            protection = "blocked"
+            reason = (
+                f"GitHub reports mergeable_state={mergeable_state!r}; "
+                "without a Ruleset only a clean pull request can merge"
+            )
+        else:
+            protection = "single-writer"
+            if verification_mode != "local":
+                required_contexts = declared_required_contexts()
     quota_run_urls = (
         require_routine_quota_fallback(
             github, lease, pull, auth, quota_fallback_note_url
@@ -3351,7 +3643,7 @@ def merge_snapshot(  # noqa: C901
             required_tier=required_tier,
         )
         check_evidence = "local-self-attested"
-    elif protection == "enforced" or quota_run_urls:
+    elif protection in AGENT_PROTECTIONS or quota_run_urls:
         check_evidence = require_successful_checks(
             github,
             repo,
@@ -3379,7 +3671,11 @@ def merge_snapshot(  # noqa: C901
         "bypass_route": bypass_route,
         "reviewed_bypass": reviewed_bypass,
         "protection": protection,
-        "merge_mode": "agent" if protection == "enforced" else "human-only",
+        "merge_mode": (
+            "agent" if protection in AGENT_PROTECTIONS else "human-only"
+        ),
+        "merge_permission": merge_route(protection),
+        "server_enforcement": server_enforcement,
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
         "local_verification": local_evidence,
@@ -3396,6 +3692,7 @@ def merge_snapshot(  # noqa: C901
         "policy_self_test": policy["self_test"],
         "admin_bypass": admin_bypass,
         "dependabot_head": dependabot_head,
+        "dependabot_update_scope": dependabot_scope,
         "hotfix_evidence": hotfix_evidence,
     }
 
@@ -3523,6 +3820,53 @@ def create_draft_pull(  # noqa: C901
     sys.stdout.write(url + "\n")
 
 
+def admin_bypass_marker_body(body: str, present: bool) -> str:
+    """Insert or remove the one exact admin-bypass marker line.
+
+    Issue #1076: the managed entry normalizes near-miss copies (a list
+    bullet or stray whitespace) so the body carries the marker exactly once
+    or not at all; the template's guidance comment is kept and anchors the
+    inserted line.
+    """
+    lines = [
+        line
+        for line in body.replace("\r\n", "\n").split("\n")
+        if line.strip().lstrip("-*+").strip() != ADMIN_BYPASS_MARKER
+    ]
+    if present:
+        anchor = next(
+            (
+                index + 1
+                for index, line in enumerate(lines)
+                if line.lstrip().startswith("<!--")
+                and ADMIN_BYPASS_MARKER in line
+            ),
+            None,
+        )
+        if anchor is None:
+            while lines and not lines[-1].strip():
+                lines.pop()
+            lines.extend(("", ADMIN_BYPASS_MARKER))
+        else:
+            lines.insert(anchor, ADMIN_BYPASS_MARKER)
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def requested_edit_body(
+    body_file: Path | None, marker: str | None, pull: dict[str, Any]
+) -> str | None:
+    """Return the body an edit writes from a file or the marker action."""
+    if marker is None:
+        return read_body_file(body_file)
+    if body_file is not None:
+        raise RuntimeError(
+            "Use either --body-file or --admin-bypass-marker, not both"
+        )
+    return admin_bypass_marker_body(
+        str(pull.get("body") or ""), marker == "add"
+    )
+
+
 def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
     """Edit the body, labels, or milestone while the lease remains live."""
     lease = read_lease(args.lease)
@@ -3535,10 +3879,12 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
         if isinstance(item, dict) and isinstance(item.get("name"), str)
     }
     body_file = getattr(args, "body_file", None)
-    requested_body = read_body_file(body_file)
+    marker = getattr(args, "admin_bypass_marker", None)
+    requested_body = requested_edit_body(body_file, marker, pull)
     if not any(
         (
             body_file is not None,
+            marker is not None,
             args.add_label,
             args.remove_label,
             args.milestone is not None,
@@ -3889,6 +4235,22 @@ def trace_lines(
             f"review={snapshot['authorization_url']} "
             f"head={lease['head_sha']} actor={lease['actor']} {suffix}"
         )
+    if snapshot.get("server_enforcement") == "none":
+        lines.append(
+            "single-writer-trace: "
+            f"writer={lease['actor']} server_enforcement=none "
+            f"head={lease['head_sha']} {suffix}; no Ruleset enforced this "
+            "merge, lifecycle revalidated every control"
+        )
+    scope = snapshot.get("dependabot_update_scope")
+    if isinstance(scope, list) and scope:
+        lines.append(
+            "dependabot-trace: "
+            f"kind={snapshot['dependabot_head']} "
+            f"update_types={','.join(str(item) for item in scope)} "
+            f"route=dependabot release_level={snapshot['release_level']} "
+            f"{suffix}"
+        )
     local_evidence = snapshot.get("local_verification")
     if isinstance(local_evidence, dict):
         lines.append(
@@ -3918,9 +4280,16 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         getattr(args, "require_dependabot_head", False),
     )
     if snapshot["merge_mode"] != "agent":
+        permission = str(snapshot.get("merge_permission") or "blocked")
         raise RuntimeError(
-            "Agent merge is blocked: server-side protection is unavailable or "
-            "incomplete; a human maintainer must merge manually"
+            f"Agent merge is {permission}: "
+            f"{snapshot.get('protection_reason') or 'protection is unproven'}"
+            + (
+                "; a human maintainer must merge manually and the merge is "
+                "recorded as untraced"
+                if permission == "manual-only"
+                else "; fix the condition before any merge"
+            )
         )
     print_policy_self_test(snapshot)
     candidate_evidence = revalidate_release_candidate(
@@ -4012,7 +4381,8 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     lines = [
         f"merge-trace: result={result_name} {suffix} tree={merged_tree} "
         f"expected_tree={lease['head_tree']} route={route} trust={trust} "
-        f"actor={lease['actor']}"
+        f"actor={lease['actor']} server_enforcement="
+        f"{snapshot.get('server_enforcement') or 'ruleset'}"
     ]
     if status == "merged":
         lines.extend(trace_lines(snapshot, lease, suffix))
@@ -4767,6 +5137,11 @@ def parser() -> argparse.ArgumentParser:
             )
         if name == "edit":
             command.add_argument("--body-file", type=Path)
+            command.add_argument(
+                "--admin-bypass-marker",
+                choices=("add", "remove"),
+                help="insert or remove the one exact admin-bypass marker",
+            )
             command.add_argument("--add-label", action="append", default=[])
             command.add_argument("--remove-label", action="append", default=[])
             milestone = command.add_mutually_exclusive_group()

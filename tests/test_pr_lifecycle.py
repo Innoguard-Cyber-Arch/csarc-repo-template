@@ -4327,7 +4327,11 @@ def test_merge_never_calls_gh_when_protection_is_degraded(
     monkeypatch.setitem(
         merge.__globals__,
         "merge_snapshot",
-        lambda *_: {"merge_mode": "human-only"},
+        lambda *_: {
+            "merge_mode": "human-only",
+            "merge_permission": "manual-only",
+            "protection_reason": "the writer readback is incomplete",
+        },
     )
     called = False
 
@@ -4428,7 +4432,7 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     assert summary.lines == (
         f"merge-trace: result=traced {suffix} tree={'e' * 40} "
         f"expected_tree={'e' * 40} route=issue trust=github-hosted "
-        "actor=agent",
+        "actor=agent server_enforcement=ruleset",
         "bypass-trace: release_level=stable route=stable actor=agent "
         f"reason=exact-head-review {suffix}",
     )
