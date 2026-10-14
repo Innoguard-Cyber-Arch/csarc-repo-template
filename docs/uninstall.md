@@ -101,7 +101,7 @@ SECURITY.md
 .csarc/release-please-manifest.json（工具維護的版本狀態）
 .csarc/scripts/*（CSARC adapter，見下方清單）
 .csarc/site/*（網站引擎與共用資產）
-.csarc/tests/*（公版自測）
+.csarc/tests/*（舊版下發的公版自測；新版不再下發）
 .csarc/version.txt（無語言模組或只選 Go 時的版本面）
 .gitignore
 AGENTS.md（自動探索入口）
@@ -135,8 +135,7 @@ docs/site/content/*、docs/site/data/navigation.json、docs/site/theme.css
 .csarc/scripts/scan-secrets（執行期間才產生 Gitleaks 設定）
 .csarc/scripts/spec_to_issue.py
 .csarc/scripts/sync_*.py
-.csarc/scripts/test-*（test-apply-repository-settings、test-issue-triage、test-pr-policy、
-  test-worktree-cleanup）
+.csarc/scripts/test-*、.csarc/scripts/security-smoke（舊版下發的公版自測；新版不再下發）
 .csarc/scripts/validate-*
 .csarc/scripts/verify*
 ```
