@@ -125,7 +125,7 @@ docs/site/content/*、docs/site/data/navigation.json、docs/site/theme.css
 .csarc/scripts/install-*
 .csarc/scripts/lint-workflows-shell
 .csarc/scripts/pr_lifecycle.py
-.csarc/scripts/pre-commit（只在啟用時存在，執行期間才產生工具設定）
+.csarc/scripts/pre-commit（只在舊版啟用 `enable_precommit` 時存在；新版不再產生）
 .csarc/scripts/promotion_gate.py
 .csarc/scripts/publish-release
 .csarc/scripts/release_*.py
