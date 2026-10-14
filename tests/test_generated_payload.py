@@ -122,6 +122,7 @@ RELEASE_ONLY = {
     "install-syft",
     "publish-release",
     "release_bundle.py",
+    "release_candidate.py",
     "release_writer.py",
     "verify-release-candidate",
     "verify_release_consumption.py",

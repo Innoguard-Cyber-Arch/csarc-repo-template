@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-21
-- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）
+- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）
 - **實作 PR：**[#860](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/860)
 
 ## 問題與限制
@@ -112,10 +112,13 @@ typescript/tests/index.test.ts
 .csarc/scripts/check-repo-site-versions | documentation_mode == 'template-and-content'
 .csarc/scripts/check-scope-gate | verification_mode == 'hosted'
 .csarc/scripts/check-template-update | 'template-update' in scheduled_checks
+.csarc/scripts/check-trusted-verification | verification_mode == 'hosted'
 .csarc/scripts/converge-release-tag | release_ownership == 'csarc-owned'
+.csarc/scripts/detect-open-milestone | verification_mode == 'hosted'
 .csarc/scripts/install-syft | release_ownership == 'csarc-owned'
 .csarc/scripts/publish-release | release_ownership == 'csarc-owned'
 .csarc/scripts/release_bundle.py | release_ownership == 'csarc-owned'
+.csarc/scripts/release_candidate.py | release_ownership == 'csarc-owned'
 .csarc/scripts/release_writer.py | release_ownership == 'csarc-owned'
 .csarc/scripts/render_site.py | documentation_mode == 'template-and-content'
 .csarc/scripts/repo_site_blocks.py | documentation_mode == 'template-and-content'
@@ -123,6 +126,7 @@ typescript/tests/index.test.ts
 .csarc/scripts/spec_to_issue.py | verification_mode == 'hosted' or documentation_mode != 'off'
 .csarc/scripts/sync_work_item_metadata.py | verification_mode == 'hosted'
 .csarc/scripts/validate-issue-policy | verification_mode == 'hosted' and 'issues' in lifecycle
+.csarc/scripts/verification_evidence.py | verification_mode == 'hosted'
 .csarc/scripts/verify-release-candidate | release_ownership == 'csarc-owned'
 .csarc/scripts/verify_release_consumption.py | release_ownership == 'csarc-owned'
 .csarc/site | documentation_mode == 'template-and-content'
@@ -147,6 +151,13 @@ typescript/tests/index.test.ts
 .github/workflows/template-update.yml | 'template-update' in scheduled_checks
 .github/workflows/work-item-lifecycle.yml | verification_mode == 'hosted' and lifecycle
 ```
+
+### 模板 repository 專用工具與精簡後的共用模組（#1129）
+
+- 沒有任何生成專案 caller 的工具只留在模板 repository root，不 render：`check-repo-capabilities`、`repo_capabilities.py` 與 `policies/capability-matrix.json`。
+- 生成專案的共用模組可以比 root 少：已退役的功能（Actions quota fallback）、只有模板 repository 使用的路由，以及沒有生成專案 caller 的子命令（例如 `promotion_gate.py prepare`／`finalize`／`verify-main`、`delivery_sync.py reconcile`、`release_policy.py` 的 boundary 指令、`verification_cost.py report`）只存在 root。生成副本只能刪除 root 程式碼；保留的每個頂層定義都必須與 root 同名定義一致，例外逐一列在 `tests/test_generated_module_pruning.py` 並附理由。
+- 一個 root 模組可以在生成專案拆成依選項 render 的檔案：`release_policy.py` 只保留每個專案的 CLI 都會執行的 capability `preflight`，CSARC 發版指令放在只有 `csarc-owned` render 的 `release_candidate.py`，由 `release_policy.py` 的同一組命令列轉交。
+- 只由 hosted workflow 或 hosted PR policy 呼叫的 `check-trusted-verification`、`verification_evidence.py` 與 `detect-open-milestone` 只在 `verification_mode: hosted` render。依分支名稱就會到達的 Milestone 路由（`dev/m*`、`promote/m*`）不依 `lifecycle` 移除，因為 local 與只開 `issues` 的專案仍可能使用它們。
 
 `scripts/generated_payload.py` 量測 #1058 `Targets` 的 fixture；`tests/test_generated_payload.py` 斷言每個量測不超過記錄的上限，上限只能下降，不放寬 `Targets`。
 

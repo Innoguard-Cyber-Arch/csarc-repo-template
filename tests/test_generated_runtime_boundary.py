@@ -63,8 +63,12 @@ def optional_script_paths() -> set[str]:
     return optional
 
 
-def minimal_render(tmp_path: Path) -> Path:
-    """Copy the script set left when every optional script is not rendered."""
+def minimal_render(tmp_path: Path, *keep: str) -> Path:
+    """Copy the script set left when every optional script is not rendered.
+
+    `keep` names optional scripts a probe needs, such as a hosted-only
+    entry point, while every other optional sibling stays absent.
+    """
     project = tmp_path / "minimal"
     scripts = project / ".csarc" / "scripts"
     optional = optional_script_paths()
@@ -73,7 +77,7 @@ def minimal_render(tmp_path: Path) -> Path:
         scripts,
         ignore=shutil.ignore_patterns("*.jinja", "__pycache__"),
     )
-    for name in optional:
+    for name in optional - set(keep):
         (scripts / name).unlink(missing_ok=True)
     (project / ".csarc" / "config.yml").write_text(
         "languages: []\nverification_mode: local\n", encoding="utf-8"
@@ -167,7 +171,9 @@ def test_issue_edit_loads_only_the_issue_approval_module(
 
 def test_trusted_verification_help_skips_the_lifecycle(tmp_path: Path) -> None:
     """`check-trusted-verification --help` never loads `pr_lifecycle`."""
-    project = minimal_render(tmp_path)
+    # The script renders only in hosted mode (#1129); probe it beside the
+    # smallest set of other siblings.
+    project = minimal_render(tmp_path, "check-trusted-verification")
     code, loaded = probe(
         project,
         project / ".csarc/scripts/check-trusted-verification",

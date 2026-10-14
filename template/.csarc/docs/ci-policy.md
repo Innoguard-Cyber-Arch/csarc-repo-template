@@ -41,8 +41,8 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─────→ main
 release-worthy PR 都在原 PR 的 final release-only commit materialize 精確版本與
 CHANGELOG；Milestone work 使用 beta，promotion、standalone 與 hotfix 使用 stable。
 `promote/m<編號>-<簡稱>` PR 以
-`Closes #<tracker>` 直接關閉該 Milestone 的 tracker Issue，並由 `work-item-lifecycle.yml`
-的 `process` job（`record-promotion-evidence` step）在合併後自動把 merge commit 網址回填進
+`Closes #<tracker>` 直接關閉該 Milestone 的 tracker Issue，並由發版完成後的
+`sync_milestone_state.py complete-release` 把證據網址回填進
 tracker 的 `Completion evidence` 段落（見 #512）；#400 與 #401 的自動結案契約不再是
 blocked gap。
 Promotion 以 squash 合併後，`main` 追不到 delivery branch 的 beta tag，所以 `release.yml` 在
@@ -789,8 +789,8 @@ classifier 現在是 `title` job 內的一個 step，Ruleset 不再要求第四�
 自我核准。
 
 `title` 同時負責 Issue、Promotion checklist、scope 與 Milestone approval 的唯讀判定；正式 Milestone
-交付仍由 `promotion_gate.py prepare/finalize` 產生與驗證證據。`.github/workflows/milestone-lifecycle.yml`
-的 `Milestone approval` 是 comment refresh 用的非 Ruleset check，由上游模板另行維護。
+交付的版本由 `ci.yml` 的 `verify-promotion-version` 驗證；生成專案的 `promotion_gate.py` 只提供
+`check-route`、`check-intent` 與合併路由分類（#1129）。
 
 ### Required check producer 綁定（#835）
 
@@ -867,8 +867,7 @@ Jobs API，並重用 `.csarc/scripts/pr_lifecycle.py` 的 required-check produce
    判定；期限是受信任 script 的常數，不寫入 evidence，呼叫端只能縮短不能放寬（#1075）。
 
 `actions_fallback` 與它開放的 routine quota fallback 已退役：`pr_lifecycle.py merge
---quota-fallback-note-url` 與 `promotion_gate.py note-quota-fallback`／`finalize-quota-fallback` 一律在
-任何寫入前拒絕，GitHub billing zero-step 的 required check 不再有例外。Actions 中斷時改走 governance-switch
+--quota-fallback-note-url` 一律在任何寫入前拒絕，`promotion_gate.py` 也不再提供 quota fallback 指令，GitHub billing zero-step 的 required check 不再有例外。Actions 中斷時改走 governance-switch
 路線，required checks、exact-head 授權與 remote lease 照常要求；Ruleset 的 admin bypass 也不能把來源 check
 改寫成成功結果。release 先解析唯一 merged-main source
 PR，且只有 main tree 與 source head tree 完全相同時才重用證據；來源不唯一、tree 漂移、證據過期或任何欄位
