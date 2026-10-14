@@ -124,7 +124,11 @@ def test_both_shipped_copies_are_identical() -> None:
 def test_generated_formatter_keeps_trusted_scripts_on_py312_grammar(
     tmp_path: Path, support_mode: str
 ) -> None:
-    """A generated project's own `ruff format` keeps 3.12-parseable excepts."""
+    """A generated project's own `ruff format` keeps 3.12-parseable excepts.
+
+    The product formatter never collects `.csarc/` (#1070), so it cannot
+    rewrite trusted scripts to a newer grammar whatever its target is.
+    """
     from jinja2 import Environment, StrictUndefined
 
     template = Environment(
@@ -155,6 +159,10 @@ def test_generated_formatter_keeps_trusted_scripts_on_py312_grammar(
         tmp_path / ".csarc" / "scripts",
         ignore=shutil.ignore_patterns("*.jinja", "__pycache__"),
     )
+    shutil.copy2(
+        REPO_ROOT / "template" / ".csarc" / ".ignore.jinja",
+        tmp_path / ".csarc" / ".ignore",
+    )
     result = subprocess.run(
         [
             sys.executable,
@@ -162,7 +170,7 @@ def test_generated_formatter_keeps_trusted_scripts_on_py312_grammar(
             "ruff",
             "format",
             "--check",
-            ".csarc/scripts",
+            ".",
         ],
         cwd=tmp_path,
         check=False,

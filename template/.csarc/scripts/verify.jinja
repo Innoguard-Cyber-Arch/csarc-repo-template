@@ -260,13 +260,8 @@ fi
 ./.csarc/scripts/build-repo-site --check
 {% endif -%}
 ./.csarc/scripts/detect-language-profile
-./.csarc/scripts/test-issue-triage
-./.csarc/scripts/test-worktree-cleanup
-./.csarc/scripts/test-finalization-queue
-./.csarc/scripts/test-pr-policy
-./.csarc/scripts/test-apply-repository-settings
-./.csarc/scripts/test-check-repo-capabilities
-./.csarc/scripts/test-check-scope-gate
+# Repository-template self-tests run in the template's own CI, never in a
+# generated project's verification.
 ./.csarc/scripts/lint-workflows-shell
 verification_step "GitHub Actions pin check" \
   python3 .csarc/scripts/check_action_pins.py --root .
