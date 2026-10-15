@@ -494,6 +494,17 @@ project_verification_hook:
   when: "{{ project_mode == 'existing' }}"
   validator: "{% set hook = project_verification_hook | default('', true) | trim %}{% if hook and (hook != project_verification_hook or hook.startswith('/') or '..' in hook.split('/') or not (hook | regex_search('^[A-Za-z0-9._/-]+$'))) %}Use a safe repository-relative executable path without spaces, shell syntax, or parent traversal.{% endif %}"
 
+# K2 (#1080): optional organization/user ProjectV2 whose Roadmap dates
+# `csarc issue create` and `csarc issue sync-project` maintain. It is never
+# asked (no question-count change); set it once with --data. Empty disables
+# every Project API call, and repository Projects stay disabled.
+github_project_url:
+  type: str
+  help: Optional full organization or user GitHub Project (ProjectV2) URL for Roadmap dates
+  default: ""
+  when: false
+  validator: "{% if github_project_url and not github_project_url | regex_search('^https://github\\.com/(orgs|users)/[A-Za-z0-9-]+/projects/[1-9][0-9]*$') %}Use https://github.com/orgs/<org>/projects/<n> or https://github.com/users/<user>/projects/<n>, or leave it empty.{% endif %}"
+
 repository_url:
   type: str
   help: Canonical GitHub repository URL used by badges and package metadata

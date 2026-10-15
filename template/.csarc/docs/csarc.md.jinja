@@ -23,6 +23,10 @@
 | 工作項目自動化 | {% if lifecycle %}`{{ lifecycle | join('`、`') }}`{% else %}未啟用{% endif %} | {% if 'issues' in lifecycle %}Issue 分類與 standalone 核准{% if hosted %}由 workflow 自動維護{% else %}以本機 wrapper 維護{% endif %}；{% endif %}{% if 'milestones' in lifecycle %}Milestone tracker 核准、同步與結案（見 [`milestone-description.md`](milestone-description.md)）{% else %}不使用 Milestone tracker 自動化{% endif %} |
 | 排程檢查 | {% if scheduled_checks %}`{{ scheduled_checks | join('`、`') }}`{% else %}未啟用{% endif %} | {% if 'governance-drift' in scheduled_checks %}每日比對 repository 設定；{% endif %}{% if 'template-update' in scheduled_checks %}每週提醒新的 CSARC Release；{% endif %}{% if not scheduled_checks %}需要時手動執行 `./.csarc/scripts/apply-repository-settings.sh check` 與 `csarc update --check --json`{% else %}結果只開立或更新提醒 Issue{% endif %} |
 
+{%- if github_project_url %}
+| Project Roadmap | `{{ github_project_url }}` | `csarc issue create` 與 `csarc issue sync-project` 把 Issue 建立日與 Milestone due date 以 UTC 投影到這個 ProjectV2；既有值不同時先確認。只以 stub 驗證，未經 live ProjectV2 驗證 |
+{%- endif %}
+
 ## 工作流程
 
 - 修改前先讀 root `AGENTS.md` 與 [`agent-workflow.md`](agent-workflow.md)。

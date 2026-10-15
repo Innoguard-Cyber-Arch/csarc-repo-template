@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -90,7 +91,17 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "security_reporting_channel": (TEXT, ()),
     "container": (BOOL, ()),
     "project_verification_hook": (TEXT, ()),
+    "github_project_url": (TEXT, ()),
 }
+# Optional intent and its default when absent: #1080 added it after older
+# readers, which reject unknown keys, so a schema 2 file may omit it.
+OPTIONAL_DEFAULTS: dict[str, object] = {"github_project_url": ""}
+# K2 (#1080): only the full organization or user ProjectV2 URL is saved;
+# project, field, and item IDs are always resolved live.
+PROJECT_URL = re.compile(
+    r"^https://github\.com/(?P<kind>orgs|users)/(?P<login>[A-Za-z0-9-]+)"
+    r"/projects/(?P<number>[1-9][0-9]*)$"
+)
 DECISION_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "package_name": (TEXT, ()),
     "project_run_command": (TEXT, ()),
@@ -268,7 +279,11 @@ def _validate_value(key: str, value: object) -> None:
     elif kind == INT:
         valid = type(value) is int and 1 <= value <= 100
     else:
-        valid = isinstance(value, str)
+        valid = isinstance(value, str) and (
+            key != "github_project_url"
+            or not value
+            or PROJECT_URL.fullmatch(value) is not None
+        )
     if not valid:
         expected = ", ".join(allowed) if allowed else kind
         raise settings_error(
@@ -290,7 +305,11 @@ def validate_current(raw: Mapping[str, object]) -> None:
             "unknown or retired settings in .csarc/config.yml: "
             + ", ".join(unknown)
         )
-    missing = sorted(key for key in INTENT_SETTINGS if key not in raw)
+    missing = sorted(
+        key
+        for key in INTENT_SETTINGS
+        if key not in raw and key not in OPTIONAL_DEFAULTS
+    )
     if missing:
         raise settings_error(
             "missing persistent settings in .csarc/config.yml: "
@@ -564,6 +583,7 @@ def migrated_intent(answers: Mapping[str, object]) -> dict[str, object]:
         "scheduled_checks": legacy_scheduled_checks(answers),
         "enable_codeql": legacy_enable_codeql(answers),
         "project_verification_hook": "",
+        "github_project_url": "",
     }
     return {key: value for key, value in derived.items() if key not in answers}
 

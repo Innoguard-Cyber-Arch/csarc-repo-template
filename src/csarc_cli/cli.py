@@ -38,6 +38,7 @@ from csarc_cli import (
     governance_migration,
     lifecycle_report,
     merge_trace,
+    project_roadmap,
     release_phase,
     repository_facts,
     risk_tools,
@@ -11107,7 +11108,25 @@ def parser() -> argparse.ArgumentParser:
     )
     issue_create.add_argument("--body-out", type=Path, metavar="FILE")
     issue_create.add_argument(
+        "--target-date",
+        default="",
+        metavar="YYYY-MM-DD",
+        help="Project target when the Issue has no Milestone due date",
+    )
+    issue_create.add_argument(
         "gh_arguments", nargs=argparse.REMAINDER, metavar="-- GH_ARGS"
+    )
+    sync_project = issue_commands.add_parser(
+        "sync-project",
+        help="sync Roadmap dates to the configured github_project_url",
+    )
+    selection = sync_project.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--issue", type=int)
+    selection.add_argument("--milestone", type=int)
+    sync_project.add_argument("--target-date", default="", metavar="YYYY-MM-DD")
+    sync_project.add_argument("--repo", default="", metavar="OWNER/NAME")
+    sync_project.add_argument(
+        "--yes", action="store_true", help="confirm listed date overwrites"
     )
     risk = subparsers.add_parser(
         "risk", help="read-only risk suggestions, register, and backfill"
@@ -11135,11 +11154,32 @@ def parser() -> argparse.ArgumentParser:
 
 def command_risk(args: argparse.Namespace) -> int:  # noqa: C901
     """Run `csarc issue create` or one read-only `csarc risk` command."""
+    if args.command == "issue" and args.issue_command == "sync-project":
+        return project_roadmap.command_sync(
+            args.repo,
+            issue=args.issue,
+            milestone=args.milestone,
+            target_date=args.target_date,
+            confirm=args.yes,
+            ask=input if sys.stdin.isatty() else None,
+        )
     if args.command == "issue":
         gh_arguments = list(args.gh_arguments)
         if gh_arguments[:1] == ["--"]:
             gh_arguments = gh_arguments[1:]
-        return risk_tools.issue_create(gh_arguments, args.body_out)
+        url = project_roadmap.configured_project_url()
+        if not url or args.body_out is not None:
+            # An empty github_project_url never calls a Project API (#1080).
+            return risk_tools.issue_create(gh_arguments, args.body_out)
+        target = (
+            project_roadmap.checked_date(args.target_date)
+            if args.target_date
+            else ""
+        )
+        before, after = project_roadmap.create_hooks(url, target)
+        return risk_tools.issue_create(
+            gh_arguments, None, before=before, after=after
+        )
     if args.risk_command == "suggest":
         found = risk_tools.suggest(args.repo, issue=args.issue)
         if args.json:
@@ -11204,6 +11244,7 @@ def main(arguments: list[str] | None = None) -> int:
     except (
         CliError,
         risk_tools.RiskToolError,
+        project_roadmap.ProjectSyncError,
         OSError,
         subprocess.SubprocessError,
     ) as error:

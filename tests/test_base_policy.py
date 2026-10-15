@@ -101,6 +101,7 @@ def config_text(**overrides: object) -> str:
         "languages": ["python"],
         "lifecycle": ["issues", "milestones"],
         "project_maturity": "early",
+        "github_project_url": "",
         "project_verification_hook": "",
         "python_floor": "latest",
         "release_ownership": "csarc-owned",
@@ -308,6 +309,7 @@ def test_root_schema_two_settings_pass_the_trusted_base_reader(
         "package_name: csarc_cli\n"
         "project_maturity: early\n"
         "project_run_command: uv run csarc --help\n"
+        "github_project_url: ''\n"
         "project_verification_hook: ''\n"
         "python_floor: latest\n"
         "release_ownership: csarc-owned\n"
