@@ -521,8 +521,8 @@ if drift:
 
 排程執行的 `.csarc/scripts/check-release-drift` 偵測到 `main` 已經前進，但過去 {hours:g} 小時內
 沒有找到有效的 stable GitHub Release 或明確的 `no-release` run。這代表發版流程可能已經
-停擺，且過去沒有人會自動被通知——見 #587（2026-09-03，同樣的狀況拖了超過 8 小時才被人工
-發現 Releases 頁面停在舊版本）與 #605（本檢查本身的設計背景）。此通知不會自動觸發
+停擺；沒有這項檢查時，這種狀況只會在有人查看 Releases 頁面時才被發現。
+此通知不會自動觸發
 `release.yml` 重跑，也不會自動執行本機發版；是否接手仍由人或 agent 判斷。
 
 ### 目前證據
@@ -539,7 +539,7 @@ if drift:
 - [ ] 確認這是真的發版停擺，還是預期中「一整天沒有東西需要發版」的正常空窗期
 - [ ] 若確認停擺：檢查 `release.yml` 最近幾次 run 失敗原因
       （`gh run list --workflow release.yml` 或 Actions 頁面），修好 hosted 路徑；或依
-      `.csarc/docs/ci-policy.md` 的「Release 發版不依賴 Actions 健康度的 fallback（#589）」一節，
+      `.csarc/docs/ci-policy.md` 的「版本、發版、交付與部署矩陣」一節，
       由具備 admin 權限的維護者本機執行 `.csarc/scripts/publish-release`
 - [ ] 執行本機發版後，依約定在合併說明或本 Issue 留言留下稽核紀錄：
       `` `Release-publish-record: operator=<@handle> commit=<sha> command="<command>" result=<result>` ``

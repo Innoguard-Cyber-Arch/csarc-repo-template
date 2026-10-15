@@ -72,21 +72,17 @@ TARGETS: dict[str, dict[str, int]] = {
     "consumer-a": {"files": 121, "bytes": 1_050_000},
     "consumer-b": {"files": 117, "bytes": 1_050_000},
 }
-# A later change may only lower these. Every file ceiling is its Target.
-# Bytes record the #1129 head (rounded up to 10 KB): the generated
-# documents still dominate them, and #1081 lowers each bytes ceiling to
-# its Target when it replaces those documents before beta.2.
+# A later change may only lower these. Since #1081 replaced the static
+# operations documents with project-scoped ones, every ceiling is its
+# Target: no file or bytes gap remains open.
 CEILINGS: dict[str, dict[str, int]] = {
-    "solo-default": {"files": 92, "bytes": 1_200_000},
-    "solo-python": {"files": 95, "bytes": 1_200_000},
-    "hosted-csarc-owned-python": {"files": 137, "bytes": 1_380_000},
-    "consumer-a": {"files": 121, "bytes": 1_210_000},
-    "consumer-b": {"files": 117, "bytes": 1_200_000},
+    name: dict(targets) for name, targets in TARGETS.items()
 }
-# Ceilings still above their Target; #1081 closes every one of them.
-OPEN_TARGET_GAPS: frozenset[tuple[str, str]] = frozenset(
-    (name, "bytes") for name in TARGETS
-)
+# Ceilings still above their Target (none after #1081).
+OPEN_TARGET_GAPS: frozenset[tuple[str, str]] = frozenset()
+# #1058 Targets, documentation budget: solo `.csarc/docs` in total,
+# `ci-policy.md` for solo and hosted csarc-owned python, `agent-workflow.md`
+# in a local render, and `milestone-description.md` wherever it renders.
 DOC_TARGETS: dict[str, int] = {
     "solo_docs_lines": 600,
     "solo_docs_bytes": 60_000,

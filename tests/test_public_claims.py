@@ -43,7 +43,7 @@ ACTIVE_GUIDANCE = (
     "site/content/_index.zh-tw.md",
     "site/content/_index.en.md",
     "template/.csarc/docs/agent-workflow.md.jinja",
-    "template/.csarc/docs/ci-policy.md",
+    "template/.csarc/docs/ci-policy.md.jinja",
     "template/.csarc/docs/documentation-policy.md",
 )
 
@@ -94,7 +94,10 @@ def test_quota_fallback_is_never_described_as_an_owned_active_route() -> None:
         text = (ROOT / relative).read_text(encoding="utf-8")
         assert retirement in text
         assert "admin bypass, and quota fallback" not in text
-    for relative in ("docs/ci-policy.md", "template/.csarc/docs/ci-policy.md"):
+    for relative in (
+        "docs/ci-policy.md",
+        "template/.csarc/docs/ci-policy.md.jinja",
+    ):
         text = (ROOT / relative).read_text(encoding="utf-8")
         assert "quota fallback 的唯一規範來源" not in text
     for relative in ("README.md", "README.en.md"):

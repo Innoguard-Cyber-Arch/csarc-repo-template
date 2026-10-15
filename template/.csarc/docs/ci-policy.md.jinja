@@ -1,0 +1,160 @@
+{%- set hosted = verification_mode == 'hosted' -%}
+{%- set owned = release_ownership == 'csarc-owned' -%}
+# CI/CD 設定與交付邊界
+
+本文件依這個 repository 的設定產生（`verification_mode: {{ verification_mode }}`、`release_ownership: {{ release_ownership }}`、`lifecycle: {{ lifecycle | join(', ') if lifecycle else '[]' }}`），只描述目前啟用的檢查、合併與發版規則。設定改變後由 `csarc update` 重新產生；沒有列在這裡的 workflow 或路線不屬於本專案。操作總覽見 [`csarc.md`](csarc.md)。
+
+## 審查與合併資格
+
+本文件是審查、required checks、合併資格、admin bypass 與故障路線的唯一規範來源；`AGENTS.md` 與 README 只連到這裡，不另寫例外。一張 PR 只有同時符合下列條件才可合併：
+
+- 不是 Draft，並走下方「現行交付路徑」的其中一條。
+- 目前 head 有有效授權：獨立 maintainer 的 exact-head `APPROVED` review{% if copilot_review == 'allowed' %}、Copilot 對 exact head 沒有任何意見的審核{% endif %}{% if admin_bypass != 'off' %}，或 admin 在 lease 內留下的 exact-head 授權留言（`admin_bypass: {{ admin_bypass }}`{% if admin_bypass == 'beta-only' %}，只限 beta{% endif %}）{% endif %}。任何新 push 都讓舊授權失效。
+- {% if hosted %}required `title`、`verify`、`review` 在 exact head 成功{% else %}exact head 有 24 小時內、綁定同一 tree 與 base 的本機驗證證據{% endif %}，且 `## Requirement evidence` 完整。
+{%- if 'issues' in lifecycle %}
+- 沒有 Milestone 的 Issue 本身已核可：另一位協作者在 Issue 留言 `Approve`，或提案者以 admin 身分留言 `Admin-approve: <理由>`；`Object: <理由>` 會阻擋，直到 `Resolve: <連結>`。Issue body 改變後要重新核可。
+{%- endif %}
+{%- if 'milestones' in lifecycle %}
+- 有 Milestone 的 Issue 繼承 tracker 的核可；tracker 核可與 scope 規則見 [`milestone-description.md`](milestone-description.md)。
+{%- endif %}
+
+runner、方案或權限限制都不是略過檢查的理由。admin bypass 只取代同行核准，不能略過驗證、required checks、remote lease、即時 admin 身分或 exact-head 綁定。
+
+## 現行交付路徑
+
+`main` 是唯一永久整合 branch。Issue 以 `.csarc/scripts/gh-issue-develop <Issue> --base <base> --name type/<Issue>-<slug>` 建立分支；名稱與 Issue 編號不符時工具拒絕。PR 已開啟後不要改名或刪除它的 head branch，GitHub 會因此關閉 PR。
+
+```text
+獨立 Issue ───────────── topic PR ─────────→ main
+{%- if 'milestones' in lifecycle %}
+Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─→ main
+{%- endif %}
+緊急修正 ───────────── reviewed hotfix PR ──→ main
+```
+
+- **獨立工作**：從最新 `main` 開分支，PR 直接回 `main`，channel 為 `stable`、驗證下限為 full。
+{%- if 'milestones' in lifecycle %}
+- **Milestone 工作**：有共同期限、相依或整批驗收時使用 `dev/m<編號>-<簡稱>`；每張 Issue 的 PR 進入該 branch（`beta`、下限 fast），最後一張交付 PR 回 `main`（`stable`、full）。工作中發現的新問題預設留在同一個 Milestone。
+{%- endif %}
+- **Hotfix**：只用於必須立即修正 `main` 的缺陷。沒有 Milestone 的 Bug Issue 標 `hotfix`，分支 `fix/<Issue>-<slug>`，PR 標題 `fix(scope): summary`，一律 full 驗證與正常 review。
+- **Release recovery**：`main` 缺少一次應有的發版時，以 `fix/<Issue>-<slug>`、`release-recovery` label 直接對 `main` 提出修正，比照 hotfix 一律 full。
+- **Dependabot**：minor／patch 更新在 exact head 重新驗證後經 lifecycle 合併，major 保留人工審核。
+- **模板更新**：`csarc update` 產生的 PR 帶 `governance-switch` label；改動 `.csarc/scripts/` 或放寬治理設定（例如 `admin_bypass`、`verification_mode`、關閉 CodeQL、移除 `lifecycle` 項目、降低 coverage 門檻）的 PR 也一樣。
+
+## Milestone 掛勾與持續同步
+
+{% if 'milestones' in lifecycle -%}
+PR 從唯一的 linked Issue 繼承 Milestone{% if hosted %}；`pr-policy-writes.yml` 在 PR 事件同步 classification、assignee 與 Milestone，Issue 改掛 Milestone 時 `work-item-lifecycle.yml` 同步所有 linked open PR{% else %}；local 模式不自動同步，由建立者以本機 wrapper 設定，`pr_lifecycle.py check` 在合併前比對{% endif %}。PR 指向多張 Issue、或 Issue 與 PR 的 Milestone 不一致時 fail closed。
+{%- else -%}
+本專案未啟用 Milestone 自動化；PR 與 linked Issue 的 Milestone 仍必須一致，不一致時 PR policy fail closed。
+{%- endif %}
+
+Milestone 關閉後補掛不能用 `gh issue edit --milestone <名稱>`，改以 number 指定：
+
+```bash
+gh api repos/{owner}/{repo}/issues/{n} --method PATCH -f milestone=<number>
+```
+
+## PR lifecycle single-writer
+
+Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact head 直接建立 Draft PR。之後的 Ready／Draft、授權、metadata 與合併寫入，都先取得 remote lease，再經 `.csarc/scripts/pr_lifecycle.py`；`.csarc/scripts/verify` 會拒絕另一套寫入者。Issue body 改用 `.csarc/scripts/gh-issue-edit` 編輯，它會在既有核可將失效時先提醒；它無法攔截 GitHub UI 或直接 API 編輯。
+
+- **Exact-head 授權**：獨立 maintainer 對目前 head 的最新 `APPROVED` 直接視為授權；lifecycle 即時確認 reviewer 的 `role_name` 與 review 的 `commit_id`。admin 專用檢查只接受即時 `role_name: admin`，讀不到角色時判為 `unknown` 並 fail closed。
+- **Lease 續租**：lease 最多兩小時。要保住既有授權時以 `acquire --renew <lease.json>` 續租；先 release 再 acquire 會讓舊授權失效。
+- **Admin bypass marker**：自核時以 `pr_lifecycle.py edit --admin-bypass-marker add` 在 PR body 加入唯一一行 `Admin bypass / 管理員略過審核`。
+{%- if copilot_review == 'allowed' %}
+- **Copilot 審核**：`python3 .csarc/scripts/review_gate.py status --repo <owner/repo> --pr <N>` 列出 Copilot 對目前 head 的意見與未解決 thread；修正、push、resolve，直到狀態為 `clean`。沒有授權或額度時 Copilot 不會審核，改走 maintainer approval。Copilot 沒有意見不代表沒有缺陷。
+{%- endif %}
+
+合併時 lifecycle 依序：確認 lease 的 base 是 head 的祖先（head 落後時先合併最新 base 並重新取得證據）、讀回 head tree 必須等於證據綁定的 tree、把 canonical 證據寫進 PR 唯一的 summary 留言（`csarc-merge-evidence: v1`）、以 squash 合併並加上 `CSARC-Evidence`、`CSARC-Evidence-SHA256`、`CSARC-Trust` 等 trailer，最後讀回 merge commit。tree 或 trailer 不符時 summary 標成 mismatch 並以非 0 結束。
+
+依 base branch 的 effective rules 與寫入者讀回，lifecycle 只選一條 route：
+
+| 狀態 | route | 說明 |
+| --- | --- | --- |
+| Ruleset 完整讀回且形狀相符 | allowed | `server_enforcement=ruleset` |
+| 沒有 Ruleset，API 完整讀回只有一個寫入者，就是合併者 | allowed | `server_enforcement=none`；summary 加 `single-writer-trace` |
+| 沒有 Ruleset 且另有寫入者 | manual-only | 人工合併並記為 `untraced`{% if owned %}；CSARC 發版 fail closed{% endif %} |
+| 讀取失敗、分頁不完整或角色不明 | manual-only | 判為 `inconclusive`／`unknown`，不猜測 |
+| Ruleset 不符或 `mergeable_state` 不是 `clean` | blocked | 先修正條件 |
+
+GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；`csarc status` 把之後的這類合併列為 `untraced`。
+
+## 本機與 hosted 驗證模式
+
+{% if hosted -%}
+本專案使用 `hosted`。required `verify` 由 `ci.yml` 以 `pull_request_target` 啟動：先從 trusted base 準備 router 與 verifier，再對 exact candidate 執行一次 fast 或 full，證據綁定 repository、head／tree、base、tier、scopes、command、toolchain、runner 與結果，預設 24 小時內有效。Draft 活動在 runner 前略過；`ready_for_review` 與之後的新 head 都重新判斷。`title` 由 `pr-policy.yml` 驗證 Issue、route、label、Milestone 與 checklist，`review` 由 `pr-review.yml` 發布。reviewer assignment 由 `governance-comment.yml` 處理。
+
+實作中只跑 focused checks；`./.csarc/scripts/verify-fast` 是可選診斷，不因 trusted plan 選到 full 就在本機重跑。`./.csarc/scripts/check-trusted-verification <head-sha> --github-repo <owner/repo>` 讀回 hosted 證據。Workflow YAML 只負責事件、權限與呼叫；所有第三方 Actions 固定在完整 commit SHA。
+{%- else -%}
+本專案使用 `local`，因此不產生 `ci.yml`、`pr-policy.yml`、`pr-review.yml`、reviewer assignment 或 Dependabot 自動合併 workflow，required-checks Ruleset 保持停用。候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`；成功時把 head／tree、base、tier、scopes、command 與結果寫進 Git metadata，24 小時內有效。尚未 commit 或仍有未提交修改時，測試照常回報，但不產生可合併的證據。`pr_lifecycle.py merge` 在合併前重讀 GitHub metadata、review、lease 與這份證據，從 trusted base 執行 PR policy，合併讀回後留下 `self-attested-local` trace。
+
+這份證據能防止拿錯舊結果、錯 branch 或測完又改檔，但不能防止有寫入權限的人偽造，也不能證明 GitHub event、權限、遠端 runner 或 release provenance。外部協作者在 GitHub UI 改的 metadata 不會即時修正。需要這些保證時，以 `csarc update --data verification_mode=hosted` 切換並重新套用 repository settings。
+{%- endif %}
+
+合併與驗證在兩種模式都只依 trusted base 的政策決定：gate、router、設定 reader 與 PR policy 都取自 base，candidate 只是被驗證的 exact head；candidate 自己的 gate 只做不影響結果的自我測試。
+
+## 驗證分級
+
+正式組合只有 `fast` 與 `full`；開發中的 focused check 是本機回饋，不是第三種 tier。最後要求取發布通道下限與 `.csarc/scripts/ci_tier.py` 路徑分類中較強者：{% if 'milestones' in lifecycle %}`dev/m*` 的工作 PR 下限為 fast，{% endif %}指向 `main` 的 standalone、hotfix 與 release recovery 下限為 full；分類器無法判斷時升級 full。
+
+- **focused**：實作中只跑變更 owner 的窄檢查，例如單一測試檔或 lint 路徑。
+- **fast**：`./.csarc/scripts/verify-fast` 從 `branch.<name>.gh-merge-base`（或 `CSARC_CI_BASE`）找出 base，對變更路徑跑 diff hygiene、衝突標記、secret 掃描與受影響的 owner；base 無法判定時 fail closed。
+- **full**：`./.csarc/scripts/verify` 執行共同基線、已選語言的完整品質與原生建置，以及已啟用的容器與產品 hook（`project_verification_hook` 或 `scripts/verify-product`）。
+
+`CSARC_CI_TIER`、`CSARC_CI_SCOPES` 只能增加 suite 或 scope，不能移除自動算出的要求。產品 test discovery 與 coverage 不收集 `.csarc/`，generated verify 不執行模板自測。
+
+### Requirement evidence
+
+每張 work Issue 的「補充」帶 `#### 風險與控制` 區塊（`| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |`），「完成條件」的頂層 checkbox 依序是 AC1…ACn。PR body 只有一節 `## Requirement evidence`：`Issue: #N`、`Coverage: sha256:…` 與 `| ID | 證據 |` 表。證據只接受 exact head 上的 `path` 或 `path::name`、`check:<name>`、`manual: <https URL> <理由>`、只限風險的 `accepted: <理由>`，以及只限 `R0` 的 `scope:docs`。
+
+- 不完整時 PR 不能離開 Draft：Ready 預檢、base 的 PR policy 與合併 snapshot 共用 `.csarc/scripts/risk_controls.py`，沒有寬限期。
+- `R0` 只在全部變更都是文件，且沒有改到 `AGENTS.md`、`SECURITY.md`、`.github/SECURITY.md` 或本文件時有效。`R0` 與 `accepted:` 在 Ready 與合併輸出各列一行；單人維護者可以自行接受 `high`，但永遠可見。
+- Issue 的 AC 或風險在 Ready 後改變時 coverage digest 改變，合併前會被擋下；依錯誤訊息列出的新 digest 重新對應。
+- release、sync、Dependabot 與 promotion PR 不檢查本節。
+
+### Acceptance-checklist 驗證時機
+
+Draft PR 不檢查 PR 與 Issue 的 checklist 是否全勾；轉為 Ready 時對當下 head 完整檢查，之後每次 push 或 edit 都重新檢查。只在每個勾選都有真實證據、全部完成後才 push 要滿足 closing keyword 的 commit，不要一邊 push 一邊逐項打勾。
+
+## 版本、發版、交付與部署矩陣
+
+{% if owned -%}
+本專案是 `csarc-owned`：CSARC 管理版本、CHANGELOG 與 GitHub Release。
+
+| 通道 | 版本 | 來源 | 最低驗證 |
+| --- | --- | --- | --- |
+{%- if 'milestones' in lifecycle %}
+| beta | `X.Y.Z-beta.N` | Milestone 工作合併進 `dev/m*` | fast，路徑風險可升為 full |
+{%- endif %}
+| stable | `X.Y.Z` | {% if 'milestones' in lifecycle %}Milestone 交付、{% endif %}standalone 或 hotfix | full |
+
+- release-worthy 的 PR 在 Draft 時執行 `python3 .csarc/scripts/release_policy.py prepare-candidate --sha HEAD --phase <beta|stable>`，版本與 CHANGELOG 是同一張 PR 的最後一個 commit；不在合併後另開版本 PR，也不手動建立 tag。
+- `project_maturity: {{ project_maturity }}`：`early` 的 breaking 變更從 `0.y.z` 升為 `0.(y+1).0`，`formal` 依 SemVer 升 MAJOR；只有明確宣告的 standalone stable PR 能改成 `formal`。含 breaking 變更的 CHANGELOG 另列 `Migration notes`。
+- `.csarc/scripts/publish-release` 是唯一的 Release writer：寫入前以 `release_writer.py preflight` 確認 exact candidate、tree 未修改、沒有第二個 Release workflow，並以 merge trace strict audit 檢查 governance baseline 之後的每筆合併。每個 tag 有自己的 remote release lease。
+{%- if hosted and project_mode == 'new' %}
+- 合併後 `release.yml`（`release_trigger: {{ release_trigger }}`）呼叫同一支腳本；checksum 與 SPDX SBOM 隨 Release 上傳，失敗時 Release 保持 draft。
+{%- else %}
+- 合併後由維護者以自己的 `gh` 身分在本機執行 `publish-release stage`、`resolve`、`publish`；失敗時 Release 保持 draft，同一 candidate 重跑是冪等的。
+{%- endif %}
+{%- elif release_ownership == 'product-owned' -%}
+本專案是 `product-owned`：產品既有的 release workflow 保留，CSARC 不產生第二支 release workflow、不建立 tag 或 Release，只在 release preflight 回報 drift。
+{%- else -%}
+本專案是 `verification-only`：CSARC 只提供驗證與交付治理，不管理版本、tag 或 Release。
+{%- endif %}
+
+合併到 `main` 是 repository delivery，不等於 Release；deployment 由有真實 runtime target 的產品流程定義。
+
+## Failure 與 fallback
+
+- 分類器無法判斷時升級 full；skipped 或 zero-step 不算成功證據。
+{%- if hosted %}
+- Hosted Actions 中斷時改走 governance-switch 路線：required checks、exact-head 授權與 remote lease 照常要求，Ruleset 的 admin bypass 也不能把缺少的 check 當成成功。
+{%- endif %}
+{%- if owned %}
+- 版本候選驗證失敗時 Release 保持 draft；GitHub 拒絕 tag 或 Release 寫入時明確回報 BLOCKED。
+{%- endif %}
+- 合併後自動刪除一般來源 branch（`delete_branch_on_merge`，由 `apply-repository-settings.sh check` 回讀）；delivery branch 在確認結案與證據後才刪。`.csarc/scripts/cleanup-worktrees --apply` 只清除乾淨、未鎖定且可證明已合併的本機 worktree。
+- `stale_branch_detection.py` 在 Milestone 與 release preflight 列出 30 天以上沒有 open PR 的 branch，只提示、不刪除。
+- `scheduled_checks` 的 `template-update` {% if 'template-update' in scheduled_checks %}已啟用：每週由 `template-update.yml` 呼叫 `.csarc/scripts/check-template-update`，有新 Release 時開立或更新提醒 Issue{% else %}未啟用；以 `csarc update --check --json` 查看新 Release{% endif %}。`governance-drift` {% if 'governance-drift' in scheduled_checks %}已啟用：每日比對 repository 設定，drift 只開立或更新提醒 Issue{% else %}未啟用；需要時執行 `./.csarc/scripts/apply-repository-settings.sh check`{% endif %}。
+- 沒有真實成品、owner、權限或 live run 時，狀態保持 manual、blocked 或 not applicable，不以歷史成功補足。

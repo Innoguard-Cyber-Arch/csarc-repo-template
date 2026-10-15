@@ -376,7 +376,7 @@ def test_docs_reflect_restored_governance_actions() -> None:
     for path in (
         ROOT / "README.md",
         ROOT / "docs/ci-policy.md",
-        ROOT / "template/.csarc/docs/ci-policy.md",
+        ROOT / "template/.csarc/docs/ci-policy.md.jinja",
     ):
         text = path.read_text(encoding="utf-8")
         assert stale_archived_list not in text, path

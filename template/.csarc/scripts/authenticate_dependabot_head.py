@@ -438,7 +438,7 @@ def resolve_main(argv: list[str]) -> int:
     """Resolve the exact merge candidate and write GitHub Actions outputs."""
     parser = argparse.ArgumentParser(
         prog="authenticate_dependabot_head.py resolve-merge-candidate",
-        description="Resolve the exact open Dependabot PR (#1087).",
+        description="Resolve the exact open Dependabot PR.",
     )
     parser.add_argument("--base-repo", required=True)
     parser.add_argument("--head-sha", required=True)

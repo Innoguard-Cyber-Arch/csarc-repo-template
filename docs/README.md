@@ -66,7 +66,9 @@
 | 網站來源 | `site/` | 分開維護雙語 Markdown、純 Python 渲染引擎、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
 | 操作契約 | `docs/agent-install.md`、`docs/milestone-description.md` | 已發布且可能由固定版本 URL 讀取的介面；路徑保持穩定 |
 | 文件治理 | `docs/documentation-policy.md` | 文件模板／內容責任、資訊架構、i18n、README、AI 一致性 review 與授權同步 |
-| Scanner readiness | `docs/security-scanner-readiness.md` | Provider capability、policy chain、真實 attack surface、精確命令與離線 smoke 邊界；以 paired copy 下發至 `.csarc/docs/` |
+| 產品手冊 | `docs/handbook/` | 核准的產品政策與使用者承諾：`handbook.md` 是權威來源，`index.html` 由 `scripts/build-handbook` 生成，`approved/` 保存核准原檔，`manifest.json` 記錄 digest；生成專案以完整 SHA 連結 |
+| Scanner readiness | `docs/security-scanner-readiness.md` | Provider capability、policy chain、真實 attack surface、精確命令與離線 smoke 邊界；生成專案另有精簡的 `.csarc/docs/` 版本 |
+| 稽核證據 | `docs/evidence/m18-risk-backfill.json` | K1 之前合併的 Milestone 18 work PR 的 backfill manifest（SPEC-010）；canonical bytes，不手改 |
 | Runbook | `docs/live-integration.md`、`docs/artifact-consumption.md` | 維護者執行線上驗證或排查交付鏈時使用 |
 | Runbook | `docs/uninstall.md` | repository owner 決定不再採用 CSARC 時的自助解除安裝指南 |
 | 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據 |

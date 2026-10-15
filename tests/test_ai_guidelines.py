@@ -59,9 +59,9 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert "never store raw chat transcripts" in rendered
     assert "single detailed CSARC workflow" in rendered
     assert "`.claude/CLAUDE.md` only imports the root entry point" in rendered
-    assert ".csarc/docs/csarc.md#工作流程" in rendered
-    assert ".csarc/docs/ci-policy.md#審查與合併資格" in rendered
-    assert ".csarc/docs/ci-policy.md#驗證分級與實測成本" in rendered
+    assert "](csarc.md#工作流程)" in rendered
+    assert "](ci-policy.md#審查與合併資格)" in rendered
+    assert "](ci-policy.md#驗證分級)" in rendered
     assert "docs/index.html#" not in rendered
     assert "docs/index.html#work" not in rendered
     assert "review requirements, merge eligibility" in rendered
@@ -100,7 +100,7 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert "READY_TO_FINALIZE" in rendered
     assert "ARCHIVE_READY" in rendered
     assert "never rename or delete an open PR's head" in rendered
-    assert ".csarc/docs/csarc.md#公版更新" in rendered
+    assert "](csarc.md#公版更新)" in rendered
     assert "automation are suspended" not in rendered
     assert ("Python setup:" in rendered) is python_command
     assert ("TypeScript setup:" in rendered) is typescript_command
@@ -154,7 +154,7 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
     assert "一般情況下不能自行合併" not in readme
     assert "AGENTS.md" in readme
-    assert ".csarc/docs/ci-policy.md#審查與合併資格" in (
+    assert "](ci-policy.md#審查與合併資格)" in (
         WORKFLOW_TEMPLATE.read_text(encoding="utf-8")
     )
 
@@ -173,9 +173,21 @@ def test_security_scanner_policy_and_guidance_are_shared() -> None:
     assert "## Threat Model and Trust Boundaries" not in disclosure
 
     readiness = READINESS.read_text(encoding="utf-8")
-    assert readiness == (
+    # Issue #1081: generated repositories get a project-scoped readiness
+    # page without this repository's inventory or measurements.
+    generated = (
         ROOT / "template/.csarc/docs/security-scanner-readiness.md"
     ).read_text(encoding="utf-8")
+    for required in (
+        "Codex Security",
+        "Claude Security",
+        "unavailable / not established",
+        "never runs an AI security scanner",
+        "`.github/SECURITY.md`",
+    ):
+        assert required in generated, required
+    for absent in ("security-smoke", "verify-template", "src/csarc_cli"):
+        assert absent not in generated, absent
     for required in (
         "Codex Security",
         "Claude / Anthropic",

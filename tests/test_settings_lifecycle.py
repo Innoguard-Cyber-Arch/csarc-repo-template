@@ -94,7 +94,12 @@ def template_source(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
         f"refs/tags/{LEGACY_TAG}:refs/tags/{LEGACY_TAG}",
     )
     shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
-    shutil.copytree(ROOT / "template", source / "template", symlinks=True)
+    shutil.copytree(
+        ROOT / "template",
+        source / "template",
+        symlinks=True,
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
     current = commit_all(source, "test: current template")
     git(source, "tag", "v0.99.0", current)
     return {

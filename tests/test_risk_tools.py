@@ -381,3 +381,34 @@ def test_update_reports_the_new_gate_as_a_behavior_change() -> None:
     assert "csarc risk suggest --open" in str(rows[0]["note"])
     present = cli.Plan((), (cli.RISK_CONTROLS_PATH,), (), (), (), (), ())
     assert cli.risk_behavior_changes(present) is None
+
+
+# Issue #1081 AC7: the K1 backfill manifest saved before beta.2 for the
+# Milestone 18 work pull requests merged before the Requirement evidence
+# gate. The live readback (`csarc risk backfill --verify`) runs at
+# promotion; this offline check keeps the saved bytes and digest bound.
+M18_BACKFILL = Path(__file__).resolve().parents[1] / (
+    "docs/evidence/m18-risk-backfill.json"
+)
+M18_BACKFILL_DIGEST = (
+    "sha256:32d064261642befebb51ca272ea264a6cb32a3b4942ecc72dc5bc1180cd0f7f6"
+)
+
+
+def test_saved_m18_backfill_manifest_is_canonical_and_bound() -> None:
+    assert (
+        risk_tools.verify_backfill(
+            M18_BACKFILL, M18_BACKFILL_DIGEST, live=False
+        )
+        == []
+    )
+    manifest = json.loads(M18_BACKFILL.read_bytes())
+    assert manifest["format"] == risk_tools.BACKFILL_FORMAT
+    assert manifest["milestone"] == 18
+    pulls = [entry["pull_request"] for entry in manifest["entries"]]
+    assert pulls == sorted(set(pulls))
+    for entry in manifest["entries"]:
+        assert len(entry["merge_commit_sha"]) == 40
+        assert entry["acceptance"]
+        assert entry["risks"]
+        assert entry["problems"] == []
