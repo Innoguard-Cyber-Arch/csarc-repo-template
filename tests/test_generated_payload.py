@@ -700,7 +700,10 @@ def test_render_carries_no_template_issue_reference(
         )
     # Committed scripts only: import probes may leave `__pycache__` behind.
     for relative in files_of(project):
-        if not relative.startswith(".csarc/scripts/"):
+        if (
+            not relative.startswith(".csarc/scripts/")
+            or "__pycache__" in relative
+        ):
             continue
         path = project / relative
         for text in visible_script_strings(path):

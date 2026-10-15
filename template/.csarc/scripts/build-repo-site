@@ -7,6 +7,9 @@ if (($# > 1)) || { (($# == 1)) && [[ "$1" != "--check" ]]; }; then
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# The build runs as a Copier task inside every render; it must not leave
+# bytecode caches next to the CSARC runtime it imports.
+export PYTHONDONTWRITEBYTECODE=1
 
 # Issue #681 decision N: this repo-site engine replaces the retired
 # docs/site-content.md handbook renderer. A repository generated before
