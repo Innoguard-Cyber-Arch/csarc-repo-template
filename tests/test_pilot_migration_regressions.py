@@ -147,6 +147,13 @@ def test_ignored_rendered_files_stop_the_update(tmp_path: Path) -> None:
     assert "data/tracked.txt" not in str(error.value)
     assert "target was not changed" in str(error.value)
 
+    # The plan still lists the hidden file while a .gitignore conflict is
+    # undecided, so the decided apply is compared with the same additions.
+    cli.stage_payload(candidate, payload)
+    staged = git(candidate, "diff", "--cached", "--name-only")
+    assert glossary in staged.splitlines()
+    git(candidate, "rm", "--cached", "--quiet", glossary)
+
     write(candidate / ".gitignore", "data/\n!/.csarc/site/data/\n")
     cli.reject_ignored_payload(candidate, payload)
     cli.reject_ignored_payload(candidate, ())

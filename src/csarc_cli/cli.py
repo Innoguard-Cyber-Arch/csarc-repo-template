@@ -9534,6 +9534,10 @@ def run_update_candidate(
             ],
             repository=candidate,
         )
+    # A rendered file stays visible to the plan even while an undecided
+    # .gitignore conflict would hide it; the final candidate above already
+    # failed closed if the decided ignore rules still hide it (#1083).
+    stage_payload(candidate, inputs.payload)
     return UpdateRun(
         candidate,
         baseline_head,
@@ -9546,6 +9550,26 @@ def run_update_candidate(
     )
 
 
+def present_payload(candidate: Path, payload: Sequence[str]) -> list[str]:
+    """Return the rendered payload files the candidate holds."""
+    return [
+        name
+        for name in payload
+        if (candidate / name).is_file() and not (candidate / name).is_symlink()
+    ]
+
+
+def stage_payload(candidate: Path, payload: Sequence[str]) -> None:
+    """Stage every rendered file, including one ignore rules would hide."""
+    present = present_payload(candidate, payload)
+    if present:
+        run_git(
+            ["git", "-C", str(candidate), "add", "--force", "--", *present],
+            repository=candidate,
+            neutralize_filters=True,
+        )
+
+
 def reject_ignored_payload(candidate: Path, payload: Sequence[str]) -> None:
     """Fail closed when ignore rules would hide a rendered file (#1083).
 
@@ -9553,11 +9577,7 @@ def reject_ignored_payload(candidate: Path, payload: Sequence[str]) -> None:
     stages an untracked ignored one, so the target would silently miss it
     and the verified tree would differ from the written one.
     """
-    present = [
-        name
-        for name in payload
-        if (candidate / name).is_file() and not (candidate / name).is_symlink()
-    ]
+    present = present_payload(candidate, payload)
     if not present:
         return
     result = run_git(
