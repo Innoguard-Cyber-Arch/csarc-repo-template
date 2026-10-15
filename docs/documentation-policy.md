@@ -20,7 +20,7 @@ Copier update 可以更新第一層；第二層首次建立後必須保留。若
 |  | `off` | 不產生、不整理，也不要求文件一致性 review；既有 project-owned 文件不會被刪除 |
 | `documentation_languages` | `zh-tw`／`en`／`zh-tw+en`／`en+zh-tw` | 第一個語言決定 `README.md` 與主要入口；有第二個語言時另產生 `README.<lang>.md` 並維護雙語公版入口。只管 project-owned 文件 |
 
-授權與著作權人是 create／adopt 的一次性 seed，不是設定：`project_license`（`proprietary`／`MIT`／`Apache-2.0`，未明確選擇時一律 `proprietary`，不得推定為開源）與 `copyright_holder`（不得由 GitHub 帳號、CODEOWNERS 或 commit 作者推定）只寫進 `LICENSE` 與 package manifest，之後以 `LICENSE` 為準。
+授權與著作權人是 create／adopt 的一次性 seed，不是設定：`project_license`（`proprietary`／`MIT`／`Apache-2.0`，未明確選擇時一律 `proprietary`，不得推定為開源；`custom` 表示產品自行管理授權，CSARC 不產生 `LICENSE`、manifest 不寫 license 欄位）與 `copyright_holder`（不得由 GitHub 帳號、CODEOWNERS 或 commit 作者推定）只寫進 `LICENSE` 與 package manifest，之後以 `LICENSE` 為準。
 
 舊設定由外部 CLI 的 migration registry 唯讀遷移：`features: repo-site` 為 `documentation_mode: template-and-content`，沒有 repo-site 為 `content-only`；`primary_language`＋`i18n`（或更早的 `readme_primary_language`）合併為 `documentation_languages`。遷移完成後只保留目前 schema。
 

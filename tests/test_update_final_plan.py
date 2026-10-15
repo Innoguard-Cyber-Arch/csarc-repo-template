@@ -8,11 +8,18 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import settings_support
 import yaml
 from test_cli import commit, git, make_template
 
 from csarc_cli import cli, file_transition, final_plan
-from csarc_cli.cli import main
+from csarc_cli.cli import main as cli_main
+
+
+def main(arguments: list[str] | None = None) -> int:
+    """Run the CLI with the explicit setup seeds a script passes (#1078)."""
+    return cli_main(settings_support.seeded_setup(arguments))
+
 
 ROOT = Path(__file__).resolve().parents[1]
 OLD_PIN = "1" * 40
@@ -197,6 +204,10 @@ def updated_fixture(tmp_path: Path) -> tuple[Path, str, Path]:
                 "--non-interactive",
                 "--data",
                 "language=ci",
+                # Start from `off` so the update changes it explicitly; the
+                # solo-local work mode would otherwise expand `allowed`.
+                "--data",
+                "copilot_review=off",
             ]
         )
         == 0

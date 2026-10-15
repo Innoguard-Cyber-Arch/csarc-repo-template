@@ -88,3 +88,42 @@ def write_settings(path: Path, partial: str = "", **overrides: object) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(settings_text(partial, **overrides), encoding="utf-8")
     return path
+
+
+# Issue #1078: init and adopt ask only for intent no source decides, and a
+# non-interactive run without one of those inputs stops before rendering.
+# Tests about other contracts pass the same explicit seeds a script would;
+# tests/test_setup_questions.py proves the missing-input failure itself.
+SETUP_SEEDS: dict[str, dict[str, str]] = {
+    "init": {
+        "project_description": "Example product used by the CLI tests.",
+        "copyright_holder": "Example Maintainers",
+        "languages": "python",
+    },
+    "adopt": {
+        "project_description": "Example product used by the CLI tests.",
+        "copyright_holder": "Example Maintainers",
+        "governance_mode": "managed",
+    },
+}
+
+
+def seeded_setup(arguments: list[str] | None) -> list[str] | None:
+    """Add the explicit init/adopt setup inputs a script must pass."""
+    if (
+        not arguments
+        or arguments[0] not in SETUP_SEEDS
+        or {"--apply-plan", "--finalize"} & set(arguments)
+    ):
+        return arguments
+    given = {
+        arguments[index + 1].partition("=")[0]
+        for index, item in enumerate(arguments[:-1])
+        if item == "--data"
+    }
+    seeded = list(arguments)
+    for key, value in SETUP_SEEDS[arguments[0]].items():
+        if key in given or (key == "languages" and "language" in given):
+            continue
+        seeded.extend(["--data", f"{key}={value}"])
+    return seeded

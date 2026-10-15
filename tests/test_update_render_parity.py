@@ -9,10 +9,17 @@ import sys
 from pathlib import Path
 
 import pytest
+import settings_support
 import yaml
 
 from csarc_cli import update_plan
-from csarc_cli.cli import main
+from csarc_cli.cli import main as cli_main
+
+
+def main(arguments: list[str] | None = None) -> int:
+    """Run the CLI with the explicit setup seeds a script passes (#1078)."""
+    return cli_main(settings_support.seeded_setup(arguments))
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CODE_OWNER = "@Innoguard-Cyber-Arch/platform"

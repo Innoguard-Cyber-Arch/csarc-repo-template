@@ -1,7 +1,7 @@
 """Project an Issue's Roadmap dates onto a configured ProjectV2 (#1080, K2).
 
 `.csarc/config.yml` keeps one optional setting, `github_project_url`: the
-full organization or user ProjectV2 URL (#1058 decision 23, SPEC-009 §9).
+full organization or user ProjectV2 URL (#1058 decision 23, SPEC-009 §10).
 An empty value disables everything here, so no Project API is ever called.
 Repository Projects stay disabled; the external ProjectV2 is only a
 projection of Issue facts:

@@ -396,6 +396,7 @@ def test_representative_generated_project_runs_full_verifier(
         return original_verify_project(target)
 
     monkeypatch.setattr(cli, "verify_project", record_verification)
+    arguments = settings_support.seeded_setup(arguments) or []
     assert cli.main([*arguments, "--dry-run"]) == 0
     assert not project.exists()
     assert cli.main([*arguments, "--yes", "--non-interactive"]) == 0
