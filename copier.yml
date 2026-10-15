@@ -73,6 +73,8 @@ _exclude:
   - "{% if 'rust' in languages %}__keep_rust_source__{% else %}/src/lib.rs{% endif %}"
   - "{% if not ('python' in languages or 'rust' in languages or 'typescript' in languages) %}__keep_ci_version__{% else %}.csarc/version.txt{% endif %}"
   - "{% if code_owner %}__keep_codeowners__{% else %}.github/CODEOWNERS{% endif %}"
+  # Issue #1078: a product-owned license is never rendered by CSARC.
+  - "{% if (project_license | default('')) == 'custom' %}/LICENSE{% else %}__keep_license__{% endif %}"
   # Issue #1077: every rendered script, workflow, and operations document
   # has a caller that the selected options enable. The generated-layout ADR
   # (docs/adr/generated-repository-layout.md) lists these payload rules.
@@ -384,13 +386,15 @@ project_license:
     Proprietary, all rights reserved: proprietary
     MIT License: MIT
     Apache License 2.0: Apache-2.0
+    Product-owned license (CSARC renders no LICENSE): custom
   default: proprietary
 
 copyright_holder:
   type: str
   help: Copyright holder written to LICENSE and package metadata
-  default: "{{ project_name }}"
-  validator: "{% if not copyright_holder | trim %}Enter the copyright holder; it is never inferred from repository ownership.{% endif %}"
+  default: "{{ '' if project_license == 'custom' else project_name }}"
+  when: "{{ project_license != 'custom' }}"
+  validator: "{% if project_license != 'custom' and not copyright_holder | trim %}Enter the copyright holder; it is never inferred from repository ownership.{% endif %}"
 
 languages:
   type: str

@@ -2,8 +2,8 @@
   "name": {{ project_slug | tojson }},
   "version": "0.1.0-beta.1",
   "description": {{ project_description | tojson }},
-  "license": "{{ 'UNLICENSED' if project_license == 'proprietary' else project_license }}",
-  "private": {{ 'true' if project_license == 'proprietary' else 'false' }},
+{% if project_license != 'custom' %}  "license": "{{ 'UNLICENSED' if project_license == 'proprietary' else project_license }}",
+{% endif %}  "private": {{ 'true' if project_license in ['proprietary', 'custom'] else 'false' }},
   "repository": {
     "type": "git",
     "url": {{ repository_url | tojson }}

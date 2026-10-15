@@ -45,4 +45,4 @@ README 是文件的簡要入口；功能、設定、介面與維運細節以 `do
 
 ## 授權
 
-{% if project_license == 'proprietary' %}專有軟體，詳見 [LICENSE](LICENSE)。保留所有權利；未取得 {{ copyright_holder }} 明確授權，不得使用、複製、修改或散布。{% else %}採用 [{{ project_license }}](LICENSE) 授權。{% endif %}
+{% if project_license == 'proprietary' %}專有軟體，詳見 [LICENSE](LICENSE)。保留所有權利；未取得 {{ copyright_holder }} 明確授權，不得使用、複製、修改或散布。{% elif project_license == 'custom' %}授權由專案自行管理；CSARC 不產生也不解讀授權文件。{% else %}採用 [{{ project_license }}](LICENSE) 授權。{% endif %}

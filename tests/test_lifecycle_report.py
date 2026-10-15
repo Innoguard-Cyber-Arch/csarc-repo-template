@@ -150,11 +150,12 @@ def test_adopt_and_update_share_one_closed_schema(tmp_path: Path) -> None:
     adopt = adopt_report(tmp_path)
     update = update_report(tmp_path)
 
-    assert set(adopt) == set(update) == lifecycle_report.REPORT_KEYS
+    assert set(adopt) == set(update) == lifecycle_report.REPORT_KEYS_2_1
     for key in ("plan", "target", "release", "product", "verification"):
         assert set(adopt[key]) == set(update[key])  # type: ignore[arg-type]
     assert adopt["report_format_version"] == update["report_format_version"]
-    assert adopt["report_format_version"] == "2.0.0"
+    assert adopt["report_format_version"] == "2.1.0"
+    assert update["setup"] is None
     assert adopt["operation"] == "adopt"
     assert update["operation"] == "update"
     assert update["final_plan"] is None
@@ -179,7 +180,7 @@ def test_markdown_round_trips_from_report_json_only(
     assert headings(markdown, "##") == list(lifecycle_report.SECTION_HEADINGS)
     title = "adoption" if operation == "adopt" else "update"
     assert markdown.startswith(f"# CSARC {title} report\n")
-    assert "Report format version: `2.0.0`" in markdown
+    assert "Report format version: `2.1.0`" in markdown
     summary_rows = re.findall(r"^\| `([a-z]+)` \| (\d+) \|$", markdown, re.M)
     assert [name for name, _count in summary_rows] == list(
         lifecycle_report.FILE_ACTIONS
@@ -267,7 +268,8 @@ def test_unredacted_secret_fails_closed(tmp_path: Path) -> None:
         (("settings", 0, "class"), "broadened", "unknown value"),
         (("settings", 0, "source"), "guessed", "unknown value"),
         (("target", "working_tree"), "dirty", "unknown value"),
-        (("report_format_version",), "2.1.0", "unsupported version"),
+        (("report_format_version",), "2.2.0", "unsupported version"),
+        (("report_format_version",), "1.1.0", "unsupported version"),
         (("operation",), "init", "unknown value"),
     ],
 )
@@ -302,8 +304,7 @@ def test_missing_or_extra_keys_and_count_drift_fail_closed(
         lifecycle_report.validate_report(drift)
 
 
-def test_setting_decision_stays_update_only_in_2_0_0(tmp_path: Path) -> None:
-    report = adopt_report(tmp_path)
+def with_setting_decision(report: dict[str, object]) -> dict[str, object]:
     report["required_actions"] = [
         {
             "blocking": False,
@@ -319,9 +320,96 @@ def test_setting_decision_stays_update_only_in_2_0_0(tmp_path: Path) -> None:
         report["files"],  # type: ignore[arg-type]
         report["required_actions"],  # type: ignore[arg-type]
     )
+    return report
 
+
+def as_2_0_0(report: dict[str, object]) -> dict[str, object]:
+    """Return the report as a 2.0.0 writer produced it (no setup field)."""
+    previous = dict(report)
+    previous.pop("setup")
+    previous["report_format_version"] = "2.0.0"
+    return previous
+
+
+def test_2_1_0_opens_setting_decision_to_adopt(tmp_path: Path) -> None:
+    """AC6: 2.1.0 adds only the adopt setting-decision and setup record."""
+    report = with_setting_decision(adopt_report(tmp_path))
+
+    assert lifecycle_report.validate_report(report) is report
+    assert {
+        "setup"
+    } == lifecycle_report.REPORT_KEYS_2_1 - lifecycle_report.REPORT_KEYS_2_0
+
+
+def test_2_0_0_reports_stay_readable_by_their_own_rules(tmp_path: Path) -> None:
+    """AC6: a 2.0.0 report validates as 2.0.0; nothing else is widened."""
+    for report in (adopt_report(tmp_path), update_report(tmp_path)):
+        previous = as_2_0_0(report)
+        assert lifecycle_report.validate_report(previous) is previous
+        markdown = lifecycle_report.render_markdown(previous)
+        assert "Report format version: `2.0.0`" in markdown
+        assert "### Warnings" not in markdown
+    old_adopt = as_2_0_0(with_setting_decision(adopt_report(tmp_path)))
     with pytest.raises(LifecycleReportError, match="unknown value"):
-        lifecycle_report.validate_report(report)
+        lifecycle_report.validate_report(old_adopt)
+    mixed = as_2_0_0(adopt_report(tmp_path))
+    mixed["setup"] = None
+    with pytest.raises(LifecycleReportError, match="unknown keys"):
+        lifecycle_report.validate_report(mixed)
+    missing = adopt_report(tmp_path)
+    del missing["setup"]
+    with pytest.raises(LifecycleReportError, match="missing keys"):
+        lifecycle_report.validate_report(missing)
+
+
+SETUP = {
+    "approval_route": {
+        "confirmation": "second-approver",
+        "reason": "the collaborator read is incomplete: HTTP 403",
+        "state": "inconclusive",
+    },
+    "questions": ["detected", "governance_mode", "work_mode"],
+    "warnings": [
+        {
+            "code": "W03-second-approver-confirmed",
+            "command": "csarc update --data admin_bypass=always",
+            "message": "You confirmed another maintainer can approve.",
+            "subject": "admin_bypass",
+        }
+    ],
+    "work_mode": "team",
+}
+
+
+def test_setup_record_renders_and_fails_closed(tmp_path: Path) -> None:
+    report = adopt_report(tmp_path)
+    report["setup"] = copy.deepcopy(SETUP)
+    markdown = lifecycle_report.render_markdown(report)
+
+    assert headings(markdown, "##") == list(lifecycle_report.SECTION_HEADINGS)
+    assert "### Warnings" in markdown
+    assert "W03-second-approver-confirmed" in markdown
+    assert "setup questions asked: 3" in markdown
+    assert "(confirmed `second-approver`)" in markdown
+    for path, value, message in (
+        (("work_mode",), "solo", "unknown value"),
+        (("approval_route", "state"), "eligible", "unknown value"),
+        (("approval_route", "confirmation"), "yes", "unknown value"),
+        (("warnings", 0, "code"), "W3", "unknown value"),
+        (("questions",), "work_mode", "must be a list"),
+    ):
+        broken: dict[str, object] = copy.deepcopy(SETUP)
+        container: object = broken
+        for part in path[:-1]:
+            container = container[part]  # type: ignore[index]
+        container[path[-1]] = value  # type: ignore[index]
+        report["setup"] = broken
+        with pytest.raises(LifecycleReportError, match=message):
+            lifecycle_report.validate_report(report)
+    update = update_report(tmp_path)
+    update["setup"] = copy.deepcopy(SETUP)
+    with pytest.raises(LifecycleReportError, match="only adopt"):
+        lifecycle_report.validate_report(update)
 
 
 @pytest.mark.parametrize(
@@ -620,5 +708,9 @@ def test_spec_documents_the_closed_contract() -> None:
         *lifecycle_report.REQUIRED_ACTION_KINDS,
         *lifecycle_report.WORKING_TREE_STATES,
         *lifecycle_report.CANDIDATE_STATES,
+        *lifecycle_report.APPROVAL_ROUTE_STATES,
+        *lifecycle_report.APPROVAL_CONFIRMATIONS,
+        *lifecycle_report.WORK_MODES,
+        *lifecycle_report.READABLE_REPORT_FORMAT_VERSIONS,
     ):
         assert f"`{value}`" in spec, value

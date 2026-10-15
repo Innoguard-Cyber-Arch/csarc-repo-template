@@ -16,7 +16,7 @@ tracking: none
 
 `adopt` 與 `update` 每次規劃都由同一個 report model 在 target 外寫出 machine plan、report JSON 與從 report JSON render 的 Markdown。report JSON 是唯一來源，詞彙封閉，未知值 fail closed；套用成功後同一份報告轉為 `applied` 並綁定被重播的 plan digest。
 
-格式版本：`2.0.0`（`LIFECYCLE_REPORT_FORMAT_VERSION`，`src/csarc_cli/lifecycle_report.py`）。
+格式版本：`2.1.0`（`LIFECYCLE_REPORT_FORMAT_VERSION`，`src/csarc_cli/lifecycle_report.py`）。`2.1.0` 由 Issue #1078 依 MINOR 規則提升，只新增 adopt 的 `setup` 紀錄並把 `setting-decision` 開放給 adopt；相容規則見 §7。
 
 ## Context
 
@@ -46,7 +46,7 @@ tracking: none
 
 每個鍵都一定存在，未知鍵被拒絕。`null` 表示這個 operation 不評估，或負責的 Issue 尚未實作；`[]` 表示評估過但沒有項目。輸出以 `sort_keys`、兩格縮排序列化；相同輸入產生相同位元組。
 
-- `report_format_version`：`2.0.0`。
+- `report_format_version`：`2.1.0`。
 - `operation`：`adopt`｜`update`。
 - `status`、`status_reason`、`applicable`（機器的 apply 閘門）。
 - `generated_at`、`applied_at`：`applied_at` 只在 `status` 為 `applied` 時是字串。
@@ -61,6 +61,7 @@ tracking: none
 - `required_actions`：每列 {`kind`、`subject`、`blocking`、`message`、`command`}。
 - `verification`：{`candidate`、`hook`、`render_parity`}；`render_parity` 只有 `state`。update（不含 reinstall）由 Issue #1063 的共用規劃器填入：以舊 template 實際詢問的答案與可信快照重建的舊側 render，與 target 逐檔相同為 `equal`，否則為 `diverged`；adopt 與 reinstall 為 `null`。
 - `next_steps`：每列 {`text`、`command`}，由 operation 與 status 算出。
+- `setup`（`2.1.0` 新增，Issue #1078）：adopt 的設定問卷紀錄 {`work_mode`、`questions`、`warnings`、`approval_route`}；update 與沒有紀錄的 adopt（例如 `--finalize`）為 `null`。`work_mode` 是展開的工作模式（只顯示，不寫入設定檔）；`questions` 是 TTY 依序詢問的鍵，non-interactive 為 `[]`；`warnings` 每列 {`code`、`subject`、`message`、`command`}，`code` 是 SPEC-009 的穩定代碼（`W` 加兩位數字與名稱，例如 `W09-governance-observe`）；`approval_route` 只在 `admin_bypass` 為 `off` 或 `beta-only` 時是 {`state`、`reason`、`confirmation`}，其他為 `null`。`--apply-plan` 重播 plan 內的同一份紀錄，不再提問。
 
 ### 4. 封閉詞彙
 
@@ -73,6 +74,9 @@ tracking: none
 | `verification.candidate.state` | `pending-authorization`、`deferred-manual-merge`、`passed`、`failed`、`not-run` |
 | `verification.render_parity.state` | `equal`、`diverged` |
 | `files[].decision` | `pending`、`keep-current`、`take-new`、`custom`、`null` |
+| `setup.work_mode` | `solo-local`、`solo-hosted`、`team`、`custom` |
+| `setup.approval_route.state` | `route-observed`、`none-observed`、`inconclusive` |
+| `setup.approval_route.confirmation` | `second-approver`、`copilot-entitlement`、`null` |
 
 檔案 `action` 與 `reason`（依 action 順序）：
 
@@ -88,7 +92,7 @@ tracking: none
 
 無法驗證（`unknown`）的 CODEOWNER 只在 `## Product state` 顯示，不算 required action；`blocked` 才產生 blocking 的 `code-owner`。
 
-required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、`file-conflict`、`mapping-decision`、`mapping-review`、`release-writer`、`render-parity`、`retire-modified`、`runtime-mismatch`、`setting-decision`、`verification`、`version-surface`、`working-tree`。2.0.0 的 `setting-decision` 只用於 update。
+required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、`file-conflict`、`mapping-decision`、`mapping-review`、`release-writer`、`render-parity`、`retire-modified`、`runtime-mismatch`、`setting-decision`、`verification`、`version-surface`、`working-tree`。`2.0.0` 的 `setting-decision` 只用於 update；`2.1.0` 也用於 adopt：non-interactive adopt 對沒有唯一來源的意圖採用建議值時（例如 `governance_mode`、偵測到 Dockerfile 時的 `container`），每個鍵各產生一列非 blocking 的 `setting-decision`。
 
 狀態規則（validator 強制）：
 
@@ -101,19 +105,19 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - update 的檔案列與衝突來自 `--check` 與套用共用的同一個三方 update 規劃（Issue #1063）：衝突為 `conflict`／`update-conflict`，並產生 blocking 的 `file-conflict`；template 刪除的路徑為 `remove`／`template-deleted`。
 - update 的檔案轉換只來自同一份核准 plan（Issue #1066）：不再 render 的 CSARC-owned 檔案只在與可信舊側 render byte-identical 時退役；修改過的檔案保留為 `conflict`／`retire-modified`（decision `keep-current`），並產生非 blocking 的 `retire-modified`。repository 已有的產品發版狀態（`.csarc/version.txt`、`.csarc/release-please-manifest.json`、`CHANGELOG.md`，以及搬移前的舊路徑）不被 template seed 或 update migration 改寫，列為 `preserve`／`product-owned`。套用前實際的新增、修改、搬移與刪除集合必須與核准 plan 相同，否則 fail closed；寫入以 transaction 進行，任一步失敗時 target 回到 byte-identical base。
 
-設定分類（本 Issue 實作的通用規則；個別鍵的遷移分類由後續 Issue 補上）：adopt 的每列都是 `new`；update 前後相同為 `unchanged`、新出現為 `new`、消失為 `retired`、其他改變為 `decision`。來源不是 `explicit` 的 `decision` 產生非 blocking 的 `setting-decision`。
+設定分類（本 Issue 實作的通用規則；個別鍵的遷移分類由後續 Issue 補上）：adopt 的每列都是 `new`，`source` 與 `note` 取自 `setup`：問卷回答或明確 `--data` 為 `explicit`（回答的 `note` 為 `asked`），偵測、工作模式展開與建議值為 `derived`（`note` 寫出偵測來源、`work mode <name>` 或 `suggested default`）；update 前後相同為 `unchanged`、新出現為 `new`、消失為 `retired`、其他改變為 `decision`。來源不是 `explicit` 的 `decision` 產生非 blocking 的 `setting-decision`。
 
-**Fail closed**：writer 與 renderer 先驗證整份 report；缺鍵、未知鍵、未知詞彙、`report_format_version` 不是 `2.0.0`、計數不符或狀態規則不成立時拋出錯誤，三個檔案都不寫，CLI 以錯誤結束。
+**Fail closed**：writer 與 renderer 先驗證整份 report；缺鍵、未知鍵、未知詞彙、`report_format_version` 不是 `2.1.0` 或 `2.0.0`、計數不符或狀態規則不成立時拋出錯誤，三個檔案都不寫，CLI 以錯誤結束。
 
 ### 5. Markdown
 
-- H1 為 `# CSARC adoption report` 或 `# CSARC update report`，接著是 `> **Status: <banner>.** <status_reason>` 與 ``Report format version: `2.0.0` ``。
+- H1 為 `# CSARC adoption report` 或 `# CSARC update report`，接著是 `> **Status: <banner>.** <status_reason>` 與 ``Report format version: `2.1.0` ``。
 - banner：adopt 為 `Ready to adopt`、`Review required`、`Blocked`、`Adopted`；update 為 `Current`、`Ready to update`、`Review required`、`Blocked`、`Updated`。
 - 九個 H2 依序一律出現，沒有內容時印 `None.`：
   1. `## Items requiring your decision`：blocking 項目在前；沒有項目時印 "No known file conflicts. This does not guarantee semantic or runtime compatibility."
   2. `## Snapshot`
   3. `## Summary of file changes`：`| Action | Files |`，七列，數量為 0 也列出。
-  4. `## Impact analysis`：有 `widened` 設定時第一列固定為 `Widened settings: ... See Settings.`
+  4. `## Impact analysis`：有 `widened` 設定時第一列固定為 `Widened settings: ... See Settings.`；`setup` 不是 `null` 時另列工作模式、提問數與 approval route，並以 H3 `### Warnings` 列出每個 WARNING（沒有時印 `None.`）。
   5. `## File changes`：`preserve` 只計數，逐列清單只在 JSON。
   6. `## Settings`
   7. `## Product state`：H3 只在 JSON 值不是 `null` 時出現，順序為 `### Release writers`、`### Version surfaces`、`### Action pins`、`### Reviewer rotation`、`### Behavior changes`、`### Work-item mapping`。
@@ -135,7 +139,8 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - MAJOR：改檔名；移除或改名 JSON 欄位，或改變欄位的型別或意義；移除、改名或重排 H2；移除或改名詞彙值。
 - MINOR：新增 JSON 欄位、詞彙值、required action kind 或 H3；在不改變既有順序的前提下新增 H2。
 - PATCH：只改措辭或跳脫。
-- 與上一個已發布 Release 相比，每個層級最多提升一次。1.1.0 是最後發布的格式；本規格定義 2.0.0。Milestone 18 中只有設定問卷的 Issue 可在 beta.2 前依 MINOR 提升一次到 2.1.0（並把 `setting-decision` 開放給 adopt）；其他 Issue 只填入已保留的欄位與詞彙。
+- 與上一個已發布 Release 相比，每個層級最多提升一次。1.1.0 是最後發布的格式；本規格定義 2.0.0。Milestone 18 中只有設定問卷的 Issue（#1078）可在 beta.2 前依 MINOR 提升一次到 2.1.0（並把 `setting-decision` 開放給 adopt）；其他 Issue 只填入已保留的欄位與詞彙。
+- `2.1.0` 相容結果（#1078 AC6）：`2.1.0` reader 以 `2.0.0` 規則驗證 `2.0.0` 報告（沒有 `setup`、`setting-decision` 只用於 update），例如舊 final plan 內嵌的報告；writer 只寫 `2.1.0`。已發布的 `2.0.0` reader 讀到 `2.1.0` 報告時以 `unsupported version '2.1.0'` fail closed，不寫任何檔案，也不部分解析；改用寫出該報告的 CLI 版本或更新的版本。
 - machine plan 的 `schema_version` 另外計算。
 
 ### 8. 位置
@@ -152,6 +157,7 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - [x] update 的 render parity、三方衝突列與 template 刪除列由 Issue #1063 填入。
 - [x] update 的退役保留與 product 保留欄位由 Issue #1066 填入。
 - [x] update 的 final plan 由 Issue #1067 填入。
+- [x] `2.1.0`（Issue #1078）：adopt 的 `setup` 紀錄與 adopt `setting-decision`；`2.0.0` 報告依原規則可讀，其他版本 fail closed。
 
 ## Out of scope
 
@@ -169,6 +175,7 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 ## References
 
 - [Issue #1062](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1062)：本規格的來源。
+- [Issue #1078](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1078)：`2.1.0` 的 setup 紀錄與 adopt `setting-decision`。
 - [Issue #530](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/530)：報告的獨立版本號；Markdown-only 改為以 report JSON 為唯一來源。
 - [Issue #529](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/529)：試跑與正式執行更新同一份報告，每個目錄只有一份。
 - [Issue #950](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/950)：設定 allowlist 與 secret 不出現。

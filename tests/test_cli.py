@@ -13,13 +13,20 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import settings_support
 import yaml
 
 import csarc_cli.cli as cli
 from csarc_cli import lifecycle_report, settings_schema
-from csarc_cli.cli import CliError, main
+from csarc_cli.cli import CliError
+from csarc_cli.cli import main as cli_main
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def main(arguments: list[str] | None = None) -> int:
+    """Run the CLI with the explicit setup seeds a script passes (#1078)."""
+    return cli_main(settings_support.seeded_setup(arguments))
 
 
 def adoption_report_object(
@@ -691,10 +698,21 @@ class FakeReleaseClient:
 
 
 @pytest.mark.large
-def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
-    """Init previews without writes, then creates and verifies the project."""
+@pytest.mark.parametrize("empty_git", [False, True])
+def test_init_dry_run_and_apply_pin_full_sha(
+    tmp_path: Path, empty_git: bool
+) -> None:
+    """Init previews without writes, then creates and verifies the project.
+
+    Issue #1078 AC4: an empty Git repository (only ``.git``, no commit or
+    tracked file) is an init target too, and keeps its ``.git``.
+    """
     source, first_sha = make_template(tmp_path)
     project = tmp_path / "new-project"
+    if empty_git:
+        project.mkdir()
+        git(project, "init", "-b", "main")
+        assert cli.detect_install_state(project)["state"] == "create"
     arguments = [
         "init",
         "--data",
@@ -710,7 +728,9 @@ def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     ]
 
     assert main([*arguments, "--dry-run"]) == 0
-    assert not project.exists()
+    assert project.exists() == empty_git
+    if empty_git:
+        assert sorted(path.name for path in project.iterdir()) == [".git"]
     assert main([*arguments, "--yes", "--non-interactive"]) == 0
     answers = (project / ".copier-answers.yml").read_text(encoding="utf-8")
     assert f"_commit: {first_sha}" in answers
@@ -720,6 +740,7 @@ def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     )
     assert provenance["commit_sha"] == first_sha
     assert provenance["verification"] == "development-unreleased"
+    assert (project / ".git").is_dir() == empty_git
 
 
 @pytest.mark.large
@@ -1962,6 +1983,8 @@ def test_init_json_uses_one_complete_resolved_plan(
                 "language=python",
                 "--data",
                 f"project_visibility={visibility}",
+                "--data",
+                "security_reporting_channel=security@example.com",
                 "--dry-run",
                 "--json",
             ]
@@ -1976,7 +1999,11 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["answers"]["project_visibility"] == visibility
     assert payload["answers"]["enable_codeql"] is enabled
     assert payload["answers"]["review"] == "peer"
-    assert payload["answers"]["copilot_review"] == "off"
+    # The non-interactive solo-local work mode expands into these (#1078).
+    assert payload["answers"]["copilot_review"] == "allowed"
+    assert payload["answers"]["lifecycle"] == []
+    assert payload["setup"]["work_mode"] == "solo-local"
+    assert payload["setup"]["questions"] == []
     assert payload["answers"]["features"] == ["repo-site"]
     assert "reviewers" not in payload["answers"]
     assert payload["release_ownership"] == "csarc-owned"
@@ -7149,6 +7176,10 @@ def initialize_verified_project(
                 "--non-interactive",
                 "--data",
                 "language=ci",
+                # The fixture template renders no README; keep its own
+                # default instead of the CLI's new-project content-only.
+                "--data",
+                "documentation_mode=off",
             ]
         )
         == 0
