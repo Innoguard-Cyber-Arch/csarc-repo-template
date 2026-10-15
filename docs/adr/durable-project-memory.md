@@ -24,6 +24,13 @@
 
 這裡使用 **Durable Project Memory** 作正式能力名稱。OpenAI 已明確使用此詞描述長任務的 durable Markdown context；其他大型專案對相同原則有高度共識，但沒有標準化的單一目錄或 schema。
 
+## 2026-10-15 產品手冊權威層（#1081）
+
+- **決定（#1058 決定 24）**：核准的技術手冊是 repo-template 的產品政策與使用者承諾來源。`docs/handbook/handbook.md` 是可編輯的權威來源，`docs/handbook/index.html` 由 `./scripts/build-handbook` 生成；`docs/handbook/approved/` 保存擁有者核准的 HTML 原檔，`docs/handbook/manifest.json` 記錄核准原檔、來源與生成頁的 SHA-256。
+- **分層**：手冊定義產品政策與承諾；`docs/specs/`／`docs/adr/` 提供精確契約與理由；`AGENTS.md`／`docs/ci-policy.md` 提供可執行規則；生成內容、程式與測試提供證據。下層不能推翻手冊，衝突即為 drift，由每張 leaf 與 promotion 的 documentation review 對 exact head 判定 `aligned` 或 `drift`。`AGENTS.md` 仍是 AI 工作指示唯一的可執行來源，手冊不直接對 agent 下指令。
+- **核准與變更**：`tests/test_handbook.py` 要求生成頁與核准原檔的 DOM 事件序列（標籤、屬性、文字）完全相同，因此文字、planned 標記與 A4 版面都不會在轉換中改變。修改手冊內容必須取得新的擁有者核准，並在同一個變更中替換 `approved/` 原檔與 digest。M18 stable 發布前，手冊描述的新能力一律是 planned（front matter `status = "planned"`）。
+- **生成專案**：不內含手冊；`.csarc/docs/csarc.md` 只描述該 render 啟用的能力，並以所安裝 Release 的完整 SHA 連結手冊。
+
 ## 歷史 disposition
 
 | 狀態 | 決策 | 來源 |

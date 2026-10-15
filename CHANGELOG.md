@@ -7,6 +7,27 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.32.0-beta.1] - 2026-10-15
+
+### Features
+
+* feat(verification): share one trusted evidence freshness policy (e749be1)
+* feat(lifecycle): give a single maintainer an audited merge route (5c2a3a6)
+* feat(template): decouple generated verification from template self-tests (89ddb28)
+* feat(config): persist only settings that cannot be safely reconstructed (669e54b)
+* feat(release): publish local releases through one tree-bound writer (4079c19)
+* feat(settings): detect repository facts without changing saved intent (f4fbdc8)
+* feat(template): render only the payload each option uses (074e7a9)
+* feat(trace): trace Issue requirements to risks and exact-head evidence (1edc08d)
+* feat(cli): ask only undetectable setup questions before rendering (e4d4526)
+* feat(issue): sync configured GitHub Project roadmap dates (14c98b1)
+
+### Bug Fixes
+
+* fix(ci): read the final schema 2 settings in the trusted base (58276d3)
+* fix(template): keep rulesets, site tokens and hints on the current schema (080d06d)
+* fix(template): keep CSARC bytecode out of renders and update plans (c756e7d)
+
 ## [0.31.0-beta.1] - 2026-10-14
 
 ### Features

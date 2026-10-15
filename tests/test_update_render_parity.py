@@ -238,12 +238,17 @@ def template_source(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
         *(f"refs/tags/{tag}:refs/tags/{tag}" for tag in LEGACY_TAGS),
     )
     shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
-    shutil.copytree(ROOT / "template", source / "template", symlinks=True)
+    shutil.copytree(
+        ROOT / "template",
+        source / "template",
+        symlinks=True,
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
     current = commit_all(source, "test: current template")
     # Copier refuses downgrades, so the current trees carry versions above
     # every legacy tag.
     git(source, "tag", "v0.99.0", current)
-    policy = source / "template/.csarc/docs/ci-policy.md"
+    policy = source / "template/.csarc/docs/ci-policy.md.jinja"
     policy.write_text(
         policy.read_text(encoding="utf-8")
         + "\nParity fixture: one template change.\n",

@@ -1,0 +1,20 @@
+{
+  "baseline": {
+    "path": "docs/handbook/approved/261013r2_repo-template-handbook.html",
+    "sha256": "a69d2124a549dceb9478f40055675dd4495455d34d979ca02861171dbfb3292d"
+  },
+  "source": {
+    "path": "docs/handbook/handbook.md",
+    "sha256": "6ae475cddfafcaa3c67234e018a82dd73b228aed3c16865d1fb21bf35a2052f8"
+  },
+  "stylesheet": {
+    "path": "docs/handbook/handbook.css",
+    "sha256": "688446bd59ff28eb58445469144f0f9b76b42f2295859cfae9110961ffadef2d"
+  },
+  "html": {
+    "path": "docs/handbook/index.html",
+    "sha256": "4eddf7e015bcb204a8cf06016204543f83ab62c52074dd98625d5eedfe14111c"
+  },
+  "status": "planned",
+  "sheets": 10
+}

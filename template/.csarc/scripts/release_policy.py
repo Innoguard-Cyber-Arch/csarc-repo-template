@@ -499,7 +499,7 @@ def parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Release channel to apply to a freshly computed version "
-            "(beta/stable, Issue #918); omit it to report the bare core."
+            "(beta/stable); omit it to report the bare core."
         ),
     )
     plan.add_argument(
@@ -545,8 +545,8 @@ def parser() -> argparse.ArgumentParser:
     retention = subparsers.add_parser(
         "retention-plan",
         help=(
-            "List which Releases should be kept vs. deleted under Issue "
-            "#744 decision 5 (dry-run only; never deletes anything)."
+            "List which Releases should be kept vs. deleted under the "
+            "retention policy (dry-run only; never deletes anything)."
         ),
     )
     retention.add_argument("--repo", required=True)

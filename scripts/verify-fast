@@ -282,5 +282,6 @@ if [[ "$scopes" == *,docs,* ]]; then
   verification_step "Specification validation" \
     python3 scripts/spec_to_issue.py validate
   verification_step "Repository site render" ./scripts/build-repo-site --check
+  verification_step "Handbook render" ./scripts/build-handbook --check
   verification_step "Paired-file drift" ./scripts/sync-paired-files.sh --check
 fi

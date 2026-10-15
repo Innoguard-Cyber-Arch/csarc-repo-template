@@ -447,7 +447,6 @@ def test_representative_generated_project_runs_full_verifier(
         "Cargo.lock",
         "Cargo.toml",
         "LICENSE",
-        "README.en.md",
         "README.md",
         "SECURITY.md",
         "biome.json",

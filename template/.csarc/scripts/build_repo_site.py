@@ -1478,7 +1478,7 @@ _DETAIL_LEVEL_SCRIPT: Final = """\
 _REORDER_SCRIPT: Final = """\
   <script>
     (() => {
-      // Issue #681/#682: this used to also force `pr` before `supply` at
+      // This used to also force `pr` before `supply` at
       // runtime, papering over the two slides being declared in the wrong
       // order in docs/site/content/_index.*.md (04 languages -> 06 pr -> 05
       // supply -> 07 deploy, contradicting their own "步驟 05/06" labels,

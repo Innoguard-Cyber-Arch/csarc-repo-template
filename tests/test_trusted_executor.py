@@ -28,6 +28,7 @@ SUBJECT_CHECKS = (
     "scan-secrets",
     "check-bypass-lifecycle",
     "build-repo-site",
+    "build-handbook",
     "sync-paired-files.sh",
     "lint-workflows-shell",
     "test-static-validation",
@@ -284,6 +285,7 @@ def test_normal_candidate_passes_through_the_trusted_executor(
         "check-bypass-lifecycle",
         "spec_to_issue.py",
         "build-repo-site",
+        "build-handbook",
         "sync-paired-files.sh",
     ):
         # Nested checks never inherit the subject override.
