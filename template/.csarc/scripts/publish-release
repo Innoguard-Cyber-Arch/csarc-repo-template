@@ -7,7 +7,7 @@ set -euo pipefail
 # keeping a failed mutable release in draft. Extracted from
 # .github/workflows/release.yml so release.yml and a human or agent running
 # the release locally (the "Actions is unhealthy" backup path; see
-# .csarc/docs/ci-policy.md's "Release 發版不依賴 Actions 健康度的 fallback" section
+# .csarc/docs/ci-policy.md's "版本、發版、交付與部署矩陣" section
 # and the release-security-and-dependencies ADR) call the exact same script
 # instead of maintaining two copies of this logic. Local execution never
 # skips the review and exact same-PR materialization the delivery pull request

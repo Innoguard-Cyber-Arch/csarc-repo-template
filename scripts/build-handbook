@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Render docs/handbook/index.html and manifest.json from handbook.md
+# (Issue #1081); pass --check to fail when the outputs are stale.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec python3 "$repo_root/scripts/build_handbook.py" --root "$repo_root" "$@"

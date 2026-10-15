@@ -3369,7 +3369,7 @@ def require_routine_quota_fallback(
     """Validate a canonical routine-PR quota note and every bound run."""
     raise RuntimeError(
         "The Actions quota fallback was retired with actions_fallback "
-        "(SPEC-009, Issue #1071); an Actions outage uses the "
+        "(SPEC-009); an Actions outage uses the "
         "governance-switch route with its required checks"
     )
 
@@ -4212,7 +4212,7 @@ def require_head_contains_base(
             f"{lease['base_sha']} (compare status {status!r}); merge the "
             "latest base into the branch and obtain fresh evidence: hosted "
             "`verify` reruns on the new head, local mode reruns "
-            "`verify-fast` (Issue #1073)"
+            "`verify-fast`"
         )
 
 

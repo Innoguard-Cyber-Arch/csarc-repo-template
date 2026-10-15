@@ -11,7 +11,6 @@ set -euo pipefail
 #   scripts/sync-paired-files.sh --check  Verify copies without writing.
 paired_files=(
   "SECURITY.md|template/SECURITY.md"
-  "docs/security-scanner-readiness.md|template/.csarc/docs/security-scanner-readiness.md"
   "docs/documentation-policy.md|template/.csarc/docs/documentation-policy.md"
   "scripts/authenticate_dependabot_head.py|template/.csarc/scripts/authenticate_dependabot_head.py"
   "scripts/check-trusted-verification|template/.csarc/scripts/check-trusted-verification"

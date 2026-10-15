@@ -243,7 +243,7 @@ def template_source(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
     # Copier refuses downgrades, so the current trees carry versions above
     # every legacy tag.
     git(source, "tag", "v0.99.0", current)
-    policy = source / "template/.csarc/docs/ci-policy.md"
+    policy = source / "template/.csarc/docs/ci-policy.md.jinja"
     policy.write_text(
         policy.read_text(encoding="utf-8")
         + "\nParity fixture: one template change.\n",

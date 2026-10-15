@@ -9,6 +9,8 @@ starter, and that each representative render imports and verifies itself.
 
 from __future__ import annotations
 
+import ast
+import functools
 import os
 import re
 import shutil
@@ -97,19 +99,20 @@ TEMPLATE_REPOSITORY_ONLY = (
 RUNTIME_GATED_REFERENCES = {
     (".github/workflows/ci.yml", "verify-release-candidate"),
 }
-# Reference documents describe the whole template; they never make a
-# script reachable, and they may name a script another option renders.
-REFERENCE_DOCUMENTS = {
-    ".csarc/docs/ci-policy.md",
-    ".csarc/docs/security-scanner-readiness.md",
-}
+# Reference documents would describe the whole template and never make a
+# script reachable. Since #1081 every operations document is rendered per
+# option, so none remains.
+REFERENCE_DOCUMENTS: set[str] = set()
 # Operations entry points rendered per option: every script they name must
 # exist in that render.
 STRICT_FILES = {
     "AGENTS.md",
     ".claude/CLAUDE.md",
     ".csarc/docs/agent-workflow.md",
+    ".csarc/docs/ci-policy.md",
     ".csarc/docs/csarc.md",
+    ".csarc/docs/milestone-description.md",
+    ".csarc/docs/security-scanner-readiness.md",
     ".github/pull_request_template.md",
     "docs/README.md",
 }
@@ -543,26 +546,310 @@ def test_no_render_reads_or_suggests_a_retired_setting(
     assert found == []
 
 
+@functools.cache
+def measured() -> dict[str, dict[str, int]]:
+    """Render and measure every Targets fixture once per test session."""
+    return generated_payload.measure_fixtures(list(generated_payload.FIXTURES))
+
+
 def test_payload_never_grows_past_its_recorded_ceiling() -> None:
     """Targets: measures only shrink; the ceiling never relaxes a Target."""
-    measured = generated_payload.measure_fixtures(
-        list(generated_payload.FIXTURES)
-    )
-    for name, values in measured.items():
+    for name, values in measured().items():
         for measure, ceiling in generated_payload.CEILINGS[name].items():
             assert values[measure] <= ceiling, (name, measure, values[measure])
 
 
-def test_ceilings_equal_targets_except_open_gaps() -> None:
-    """#1129 AC1: file ceilings are the Targets; only bytes wait for #1081."""
-    gaps = generated_payload.OPEN_TARGET_GAPS
-    assert {measure for _name, measure in gaps} == {"bytes"}
+def test_ceilings_equal_targets() -> None:
+    """#1081 AC8: every file and bytes ceiling is exactly its Target."""
+    assert not generated_payload.OPEN_TARGET_GAPS
     for name, targets in generated_payload.TARGETS.items():
         ceilings = generated_payload.CEILINGS[name]
         # The re-approved budget is exactly the file count and total bytes.
         assert set(targets) == set(ceilings) == {"files", "bytes"}
-        for measure, target in targets.items():
-            if (name, measure) in gaps:
-                assert ceilings[measure] > target, ("stale gap", name, measure)
-            else:
-                assert ceilings[measure] == target, (name, measure)
+        assert ceilings == targets, name
+
+
+def test_documentation_stays_within_its_budget() -> None:
+    """#1081 AC3/AC8: the #1058 documentation budget holds per fixture."""
+    budget = generated_payload.DOC_TARGETS
+    values = measured()
+    solo = values["solo-default"]
+    assert solo["docs_lines"] <= budget["solo_docs_lines"]
+    assert solo["docs_bytes"] <= budget["solo_docs_bytes"]
+    assert solo["ci_policy_lines"] <= budget["solo_ci_policy_lines"]
+    hosted = values["hosted-csarc-owned-python"]
+    assert hosted["ci_policy_lines"] <= budget["hosted_ci_policy_lines"]
+    for name, data in generated_payload.FIXTURES.items():
+        if data.get("verification_mode") == "local":
+            lines = values[name]["agent_workflow_lines"]
+            size = values[name]["agent_workflow_bytes"]
+            assert lines <= budget["agent_workflow_lines"], name
+            assert size <= budget["agent_workflow_bytes"], name
+        assert (
+            values[name]["milestone_description_lines"]
+            <= budget["milestone_description_lines"]
+        ), name
+
+
+TEMPLATE_REPOSITORY = (
+    "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template"
+)
+FULL_SHA_LINK = re.compile(
+    re.escape(TEMPLATE_REPOSITORY) + r"/(?:blob|tree|raw)/[0-9a-f]{40}/"
+)
+ISSUE_REFERENCE = re.compile(r"(?<![\w&/#])#\d+\b")
+# Documents an operator reads in a render (#1058 Targets, references).
+REFERENCE_SCOPE = (
+    "AGENTS.md",
+    ".claude/CLAUDE.md",
+    "SECURITY.md",
+    ".github/SECURITY.md",
+    ".github/pull_request_template.md",
+    ".github/ISSUE_TEMPLATE/*",
+    ".csarc/docs/*",
+    "README*.md",
+    "docs/**/*.md",
+)
+# Every template `#N` that may reach a render, with the reason it stays.
+ISSUE_REFERENCE_ALLOWLIST: dict[tuple[str, str], str] = {
+    (".github/ISSUE_TEMPLATE/milestone-tracker.yml", "#100"): (
+        "example range in the form's placeholder text, not a template Issue"
+    ),
+    (".github/ISSUE_TEMPLATE/milestone-tracker.yml", "#110"): (
+        "example range in the form's placeholder text, not a template Issue"
+    ),
+    (".csarc/scripts/authenticate_dependabot_head.py", "#755"): (
+        "protocol string: the commit subject existing sync children carry"
+    ),
+    (".csarc/scripts/release_level.py", "#755"): (
+        "protocol string: the same sync-child commit subject it classifies"
+    ),
+    (".csarc/scripts/sync_milestone_state.py", "#816"): (
+        "protocol string: a Reconciliation status existing trackers contain"
+    ),
+}
+# Root paths that exist only in the template repository.
+TEMPLATE_ONLY_PATH = re.compile(
+    r"(?<![\w./-])(?:scripts/(?!verify-product\b)[\w.-]+"
+    r"|docs/index(?:\.en)?\.html|Journey \d+)"
+)
+
+
+def scoped_documents(project: Path) -> list[str]:
+    """Return the rendered operator documents the reference rules cover."""
+    return sorted(
+        path
+        for path in files_of(project)
+        if any(fnmatchcase(path, pattern) for pattern in REFERENCE_SCOPE)
+    )
+
+
+def visible_script_strings(path: Path) -> list[str]:
+    """Return the text a rendered script can print, without its comments.
+
+    Python sources contribute every string literal except docstrings; any
+    other script contributes its non-comment lines.
+    """
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    if path.suffix != ".py" and not text.startswith("#!/usr/bin/env python"):
+        return [
+            line
+            for line in text.splitlines()
+            if not line.lstrip().startswith("#")
+        ]
+    tree = ast.parse(text)
+    docstrings = {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(
+            node,
+            ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
+        )
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+    }
+    return [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstrings
+    ]
+
+
+@pytest.mark.parametrize("name", list(MATRIX))
+def test_render_carries_no_template_issue_reference(
+    renders: dict[str, Path], name: str
+) -> None:
+    """#1081 AC4/R3: no template `#N` outside the reasoned allowlist."""
+    project = renders[name]
+    found: list[str] = []
+    for relative in scoped_documents(project):
+        text = (project / relative).read_text(encoding="utf-8")
+        found.extend(
+            f"{relative}: {match}"
+            for match in ISSUE_REFERENCE.findall(text)
+            if (relative, match) not in ISSUE_REFERENCE_ALLOWLIST
+        )
+    for path in sorted((project / ".csarc/scripts").iterdir()):
+        relative = path.relative_to(project).as_posix()
+        for text in visible_script_strings(path):
+            found.extend(
+                f"{relative}: {match}"
+                for match in ISSUE_REFERENCE.findall(text)
+                if (relative, match) not in ISSUE_REFERENCE_ALLOWLIST
+            )
+    assert found == []
+
+
+@pytest.mark.parametrize("name", list(MATRIX))
+def test_render_links_stay_resolvable(
+    renders: dict[str, Path], name: str
+) -> None:
+    """#1081 AC4: one pinned template link per document at most, no
+    `blob/main`, no template-only path, and no broken relative link."""
+    project = renders[name]
+    problems: list[str] = []
+    for relative in files_of(project):
+        path = project / relative
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if "blob/main" in text:
+            problems.append(f"{relative}: blob/main")
+        if len(FULL_SHA_LINK.findall(text)) > 1:
+            problems.append(f"{relative}: more than one pinned template link")
+    for relative in scoped_documents(project):
+        text = (project / relative).read_text(encoding="utf-8")
+        problems.extend(
+            f"{relative}: template-only {match}"
+            for match in TEMPLATE_ONLY_PATH.findall(text)
+        )
+        if relative.endswith(".md"):
+            problems.extend(broken_links(project, relative, text))
+    assert problems == []
+
+
+def broken_links(project: Path, relative: str, text: str) -> list[str]:
+    """Return every relative Markdown link or anchor that does not resolve."""
+    problems: list[str] = []
+    for target in re.findall(r"\]\(([^)\s]+)\)", text):
+        if re.match(r"[a-z]+:", target):
+            continue
+        file_part, _, anchor = target.partition("#")
+        source = project / relative
+        linked = source.parent / file_part if file_part else source
+        if not linked.exists():
+            problems.append(f"{relative}: missing {target}")
+        elif (
+            anchor
+            and linked.suffix == ".md"
+            and anchor not in heading_slugs(linked.read_text("utf-8"))
+        ):
+            problems.append(f"{relative}: missing anchor {target}")
+    return problems
+
+
+def heading_slugs(text: str) -> set[str]:
+    """Return GitHub's anchor slugs for every Markdown heading."""
+    slugs: set[str] = set()
+    for heading in re.findall(r"(?m)^#{1,6} +(.+?) *$", text):
+        slug = re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
+        slugs.add(slug)
+    return slugs
+
+
+def guide(project: Path) -> str:
+    """Return the rendered project operations guide."""
+    return (project / ".csarc/docs/csarc.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("name", list(MATRIX))
+def test_guide_describes_only_the_enabled_options(
+    renders: dict[str, Path], name: str
+) -> None:
+    """#1081 AC3: the guide names this render's lifecycle, verification,
+    release ownership, evidence, update, and recovery, and nothing else."""
+    data = MATRIX[name]
+    text = guide(renders[name])
+    hosted = data["verification_mode"] == "hosted"
+    lifecycle = cast(list[str], data.get("lifecycle", ["issues", "milestones"]))
+    config = yaml.safe_load(
+        (renders[name] / ".csarc/config.yml").read_text(encoding="utf-8")
+    )
+    ownership = config["release_ownership"]
+    for heading in (
+        "## 本專案設定",
+        "## 工作流程",
+        "## 驗證與合併",
+        "## Requirement evidence",
+        "## 公版更新",
+        "## 故障與恢復",
+    ):
+        assert heading in text, heading
+    assert f"| 驗證 | `{data['verification_mode']}` |" in text
+    assert f"| 發版 | `{ownership}` |" in text
+    assert ("required `title`、`verify`、`review`" in text) is hosted
+    assert ("self-attested-local" in text) is not hosted
+    assert ("## 發版" in text) is (ownership == "csarc-owned")
+    assert ("publish-release" in text) is (ownership == "csarc-owned")
+    assert ("milestone-description.md" in text) is ("milestones" in lifecycle)
+    assert ("dev/m<Milestone>" in text) is ("milestones" in lifecycle)
+    assert "csarc update --apply-plan" in text
+    # A render from a template copy has no Release commit to pin.
+    assert FULL_SHA_LINK.search(text) is None
+    assert "沒有固定的 Release commit" in text
+
+
+def test_guide_links_the_installed_release_handbook(
+    tmp_path: Path,
+) -> None:
+    """#1081 AC4: a Release render links its own handbook by full SHA."""
+    from copier import run_copy
+
+    source = tmp_path / "source"
+    source.mkdir()
+    generated_payload.template_copy(source)
+    git(source, "init", "-q", "-b", "main")
+    git(source, "add", "-A")
+    git(
+        source,
+        "-c",
+        "user.name=Payload Test",
+        "-c",
+        "user.email=payload@example.invalid",
+        "commit",
+        "-q",
+        "-m",
+        "test: template release",
+    )
+    sha = git(source, "rev-parse", "HEAD")
+    project = tmp_path / "project"
+    run_copy(
+        str(source),
+        project,
+        data={**generated_payload.BASE_DATA, **NARROW},
+        vcs_ref=sha,
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+        quiet=True,
+    )
+    text = guide(project)
+    expected = f"{TEMPLATE_REPOSITORY}/blob/{sha}/docs/handbook/handbook.md"
+    assert FULL_SHA_LINK.findall(text) == [f"{TEMPLATE_REPOSITORY}/blob/{sha}/"]
+    assert expected in text
+    assert (ROOT / "docs/handbook/handbook.md").is_file()
+    assert "沒有固定的 Release commit" not in text
+    for relative in files_of_tree(project):
+        if relative != ".csarc/docs/csarc.md":
+            content = (project / relative).read_text("utf-8", errors="ignore")
+            assert FULL_SHA_LINK.search(content) is None, relative
+
+
+def files_of_tree(project: Path) -> list[str]:
+    """Return every rendered file of an uncommitted project."""
+    return sorted(
+        path.relative_to(project).as_posix()
+        for path in project.rglob("*")
+        if path.is_file() and ".git" not in path.parts
+    )
