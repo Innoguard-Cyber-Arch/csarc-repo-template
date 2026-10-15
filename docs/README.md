@@ -70,6 +70,7 @@
 | Scanner readiness | `docs/security-scanner-readiness.md` | Provider capability、policy chain、真實 attack surface、精確命令與離線 smoke 邊界；生成專案另有精簡的 `.csarc/docs/` 版本 |
 | 稽核證據 | `docs/evidence/m18-risk-backfill.json` | K1 之前合併的 Milestone 18 work PR 的 backfill manifest（SPEC-010）；canonical bytes，不手改 |
 | Runbook | `docs/live-integration.md`、`docs/artifact-consumption.md` | 維護者執行線上驗證或排查交付鏈時使用 |
+| Runbook | `docs/security-response.md` | 收到私密漏洞通報後的記錄、修正與公開步驟；入口規則見 `.github/SECURITY.md` |
 | Runbook | `docs/uninstall.md` | repository owner 決定不再採用 CSARC 時的自助解除安裝指南 |
 | 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據 |
 

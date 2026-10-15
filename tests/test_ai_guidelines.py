@@ -1,5 +1,8 @@
 """Structural tests for the generated AI-guidance contract."""
 
+import re
+import runpy
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -208,3 +211,97 @@ def test_security_scanner_policy_and_guidance_are_shared() -> None:
         "{% if (project_mode | default('')) == 'existing' %}/SECURITY.md"
         in (ROOT / "copier.yml").read_text(encoding="utf-8")
     )
+
+
+TITLE_CHECKS = (
+    ROOT / "scripts/validate-pr-policy",
+    ROOT / "template/.csarc/scripts/validate-pr-policy",
+)
+CONVENTION = re.compile(
+    r"Pull request titles use `type\(scope\): summary` in ASCII: type is one "
+    r"of (?P<types>[^;]+); the scope is optional lowercase "
+    r"`\[(?P<scope>[^\]]+)\]`; `!` before the colon marks a breaking change; "
+    r"the `title` check enforces this\. The squash commit and any release "
+    r"notes take this title, and release intent reads its type \(`!` major, "
+    r"`feat` minor, `fix` or `revert` patch, others none\)"
+)
+
+
+def _documented_convention(text: str) -> tuple[tuple[str, ...], str]:
+    match = CONVENTION.search(text)
+    assert match is not None, "PR title convention sentence is missing"
+    return tuple(re.findall(r"`([a-z]+)`", match["types"])), match["scope"]
+
+
+def _title_rule(script: Path) -> str:
+    match = re.search(
+        r'if \[\[ ! "\$PR_TITLE" =~ (.+?) \]\]; then',
+        script.read_text(encoding="utf-8"),
+    )
+    assert match is not None, script
+    return match.group(1)
+
+
+def _title_check_accepts(rule: str, title: str) -> bool:
+    # Run the exact Bash pattern the `title` check uses, then its ASCII guard.
+    script = (
+        f'[[ "$1" =~ {rule} ]] || exit 1; '
+        "printf '%s' \"$1\" | LC_ALL=C grep -q '[^ -~]' && exit 1; exit 0"
+    )
+    result = subprocess.run(  # noqa: S603
+        ["bash", "-c", script, "title-check", title],  # noqa: S607
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def test_pr_title_convention_matches_the_title_check() -> None:
+    """Issue #1139 AC3: the documented PR title rule is the `title` check."""
+    environment = Environment(autoescape=False, undefined=StrictUndefined)  # noqa: S701
+    workflow = environment.from_string(
+        WORKFLOW_TEMPLATE.read_text(encoding="utf-8")
+    )
+    base = {
+        "copilot_review": "disallowed",
+        "languages": [],
+        "project_name": "Title fixture",
+        "documentation_mode": "off",
+        "lifecycle": [],
+        "release_ownership": "verification-only",
+    }
+    sources = [(ROOT / "AGENTS.md").read_text(encoding="utf-8")] + [
+        workflow.render(**base, verification_mode=mode)
+        for mode in ("local", "hosted")
+    ]
+    documented = {_documented_convention(text) for text in sources}
+    assert len(documented) == 1
+    types, scope = next(iter(documented))
+
+    for script in TITLE_CHECKS:
+        rule = _title_rule(script)
+        group = re.match(r"\^\(([a-z|]+)\)", rule)
+        assert group is not None
+        assert tuple(group.group(1).split("|")) == types
+        assert f"[{scope}]" in rule
+        for kind in types:
+            assert _title_check_accepts(rule, f"{kind}: add one summary")
+            assert _title_check_accepts(rule, f"{kind}(a.b_c/d-1): summary")
+            assert _title_check_accepts(rule, f"{kind}(cli)!: break it")
+        for title in (
+            "feature: add one summary",
+            "feat(CLI): uppercase scope",
+            "feat add one summary",
+            "feat: 中文標題",
+        ):
+            assert not _title_check_accepts(rule, title), title
+
+    # The documented intent mapping is the one release planning applies.
+    release_intent = runpy.run_path(str(ROOT / "scripts/release_policy.py"))[
+        "release_intent"
+    ]
+    expected = {"feat": "minor", "fix": "patch", "revert": "patch"}
+    for kind in types:
+        assert release_intent(f"{kind}: summary") == expected.get(
+            kind, "no-release"
+        )
+        assert release_intent(f"{kind}(x)!: summary") == "major"
