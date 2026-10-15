@@ -93,6 +93,9 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "project_verification_hook": (TEXT, ()),
     "github_project_url": (TEXT, ()),
 }
+# Optional intent and its default when absent: #1080 added it after older
+# readers, which reject unknown keys, so a schema 2 file may omit it.
+OPTIONAL_DEFAULTS: dict[str, object] = {"github_project_url": ""}
 # K2 (#1080): only the full organization or user ProjectV2 URL is saved;
 # project, field, and item IDs are always resolved live.
 PROJECT_URL = re.compile(
@@ -302,7 +305,11 @@ def validate_current(raw: Mapping[str, object]) -> None:
             "unknown or retired settings in .csarc/config.yml: "
             + ", ".join(unknown)
         )
-    missing = sorted(key for key in INTENT_SETTINGS if key not in raw)
+    missing = sorted(
+        key
+        for key in INTENT_SETTINGS
+        if key not in raw and key not in OPTIONAL_DEFAULTS
+    )
     if missing:
         raise settings_error(
             "missing persistent settings in .csarc/config.yml: "

@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import runpy
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -276,10 +277,33 @@ def test_setting_is_one_unasked_key_defaulting_to_empty() -> None:
     project_keys = [key for key in copier if "project_url" in key]
     assert project_keys == ["github_project_url"]
     assert settings_schema.migrated_intent({})["github_project_url"] == ""
+    # The root file omits the optional key so older trusted-base readers,
+    # which reject unknown keys, still accept it; absent means ''.
     root = yaml.safe_load(
         (ROOT / ".csarc/config.yml").read_text(encoding="utf-8")
     )
-    assert root["github_project_url"] == ""
+    assert "github_project_url" not in root
+    assert (
+        project_roadmap.configured_project_url(ROOT / ".csarc/config.yml") == ""
+    )
+
+
+def test_missing_optional_key_is_valid_and_defaults_to_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC1/AC2: schema 2 without the key is valid in every reader."""
+    values = dict(settings_support.DEFAULTS)
+    values.pop("github_project_url", None)
+    settings_schema.validate_current(values)
+    text = settings_schema.config_text(values)
+    assert "github_project_url" not in text
+    config = tmp_path / ".csarc/config.yml"
+    config.parent.mkdir()
+    config.write_text(text, encoding="utf-8")
+    runtime = runpy.run_path(str(ROOT / "scripts/csarc_config.py"))
+    runtime["validate_config"](runtime["load_config"](config), config)
+    monkeypatch.chdir(tmp_path)
+    assert runtime["main"](["github_project_url"]) == 0
 
 
 def test_empty_setting_never_calls_a_project_api(tmp_path: Path) -> None:

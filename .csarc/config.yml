@@ -12,7 +12,6 @@ coverage_threshold: 80
 documentation_languages: zh-tw+en
 documentation_mode: template-and-content
 enable_codeql: false
-github_project_url: ''
 governance_mode: managed
 languages:
 - python

@@ -105,9 +105,9 @@ TARGETS: dict[str, dict[str, int | None]] = {
 # +400 script lines (`risk_controls.py` and its wiring). P2 left no room
 # to offset it, so the cut is a follow-up Issue; any other change may only
 # lower these. The gap to TARGETS stays open until the remaining cuts land
-# (#1058 kill criterion 4). K2 (#1080) adds exactly +1 script line per
-# fixture: the `github_project_url` entry the shared settings parser must
-# list; its Project sync stays CLI-only.
+# (#1058 kill criterion 4). K2 (#1080) adds exactly +1 measured script line per
+# fixture: the optional `github_project_url` entry and its default in the
+# shared settings parser; its Project sync stays CLI-only.
 CEILINGS: dict[str, dict[str, int]] = {
     "solo-default": {
         "files": 96,

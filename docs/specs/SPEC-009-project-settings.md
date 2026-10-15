@@ -147,7 +147,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 
 ### 4. 儲存契約
 
-- `.csarc/config.yml`：只含本表 `persistent-intent` 的每一個鍵、有明確決定時的 `derived-decision` 鍵、`schema_version: 2`，以及 generated repository 的 `_src_path`、`_commit`。CLI 以單一 canonical writer 寫出（排序、不折行）；raw Copier render 由 answers 模板寫出同一組鍵。
+- `.csarc/config.yml`：只含本表 `persistent-intent` 的每一個鍵（選用的 `github_project_url` 可省略，見 §10）、有明確決定時的 `derived-decision` 鍵、`schema_version: 2`，以及 generated repository 的 `_src_path`、`_commit`。CLI 以單一 canonical writer 寫出（排序、不折行）；raw Copier render 由 answers 模板寫出同一組鍵。
 - `.csarc/provenance.json`：CLI 在 init、adopt、update 成功後寫入 `settings` 紀錄：`schema_version: 2`、`project_mode`、`context`（本表 seed、live fact、derived context 與 `project_mode` 的 resolved 值）、`context_sha256`、`config_sha256`（settings 檔位元組）與 `record_sha256`（紀錄本身）。這份紀錄不可手改。
 - `csarc status` 與 `csarc update` 在任何 render 或寫入前驗證：未知或格式錯誤的 `schema_version`、settings 檔與 digest 不符、紀錄缺漏、紀錄被手改、context 含未知鍵，或 `project_mode` 缺漏／矛盾時，以穩定的 `CSARC settings error` fail closed，並寫出恢復方式：以 `git checkout -- .csarc/config.yml .csarc/provenance.json` 還原後，只用 `csarc update --data KEY=VALUE` 變更設定。
 - update 的舊側：schema 2 target 以已驗證的 provenance context 加上已存 intent 重建，與舊 render 實際消耗的答案相同；legacy target 沿用 #1063 的 asked-key 重建。新側的 seed 沒有 native source 時沿用 provenance context。
@@ -270,7 +270,7 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 
 ### 10. GitHub Project Roadmap（#1080）
 
-`github_project_url` 是唯一的 Project 設定（#1058 決定 23）。它只保存完整的 organization 或 user ProjectV2 URL（`https://github.com/orgs/<org>/projects/<n>` 或 `https://github.com/users/<user>/projects/<n>`），預設空字串；不保存 project、field 或 item ID，也沒有其他 Project 鍵。init／adopt 不提問（題數不變），以 `--data github_project_url=<URL>` 設定，`csarc update --data github_project_url=` 清空。
+`github_project_url` 是唯一的 Project 設定（#1058 決定 23）。它只保存完整的 organization 或 user ProjectV2 URL（`https://github.com/orgs/<org>/projects/<n>` 或 `https://github.com/users/<user>/projects/<n>`），預設空字串；不保存 project、field 或 item ID，也沒有其他 Project 鍵。init／adopt 不提問（題數不變），以 `--data github_project_url=<URL>` 設定，`csarc update --data github_project_url=` 清空。它是唯一的選用 intent：檔案沒有這個鍵時等於 `''`（停用），因為較早的 current-only reader 會拒絕未知鍵；新 render 會寫出它，本 repository 的 root 設定在 trusted base 認得它之前不寫。
 
 - 空值：`csarc issue create` 與 `csarc issue sync-project` 完全不呼叫 Project API；repository 的 `has_projects` 維持 `false`，不新增 workflow 或 check。
 - 有值：受管入口在任何寫入前即時解析 URL，讀回 owner、project URL、`closed`、`viewerCanUpdate`，以及唯一、型別為 DATE 的 `Project start`／`Project target` 欄位；token 能回報 scopes 時要求 `project`，否則明示 `unknown`。
