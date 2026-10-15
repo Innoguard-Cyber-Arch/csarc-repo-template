@@ -382,21 +382,6 @@ def release_batch_markdown(batch: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-def level_allows_copilot(max_level: str, level: str) -> bool:
-    """Apply the optional Copilot ceiling to one resolved level."""
-    if max_level == "unlimited":
-        return True
-    normalized = {
-        "alpha": "beta",
-        "early": "stable",
-        "formal": "stable",
-        "release": "stable",
-    }.get(max_level, max_level)
-    if normalized not in LEVEL_RANK or level not in LEVEL_RANK:
-        raise ValueError("invalid Copilot release-level limit")
-    return LEVEL_RANK[level] <= LEVEL_RANK[normalized]
-
-
 def _permission(github: GitHubReader, repo: str, login: object) -> str | None:
     if not isinstance(login, str) or not login:
         return None

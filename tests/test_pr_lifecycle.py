@@ -95,7 +95,7 @@ def human_review_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(
         MODULE["merge_snapshot"].__globals__,
         "review_settings",
-        lambda: ("human", "unlimited"),
+        lambda: "human",
     )
 
     def resolved_level(
@@ -537,14 +537,21 @@ class FakeGitHub:
             return self.statuses
         raise AssertionError(path)
 
-    def pages(self, _repo: str, path: str) -> list[dict[str, Any]]:  # noqa: C901
+    def pages(self, _repo: str, path: str) -> list[dict[str, Any]]:
         """Return one paginated fixture."""
         if path.startswith("issues/42/timeline"):
             return self.timeline
         if path.startswith("issues/42/comments"):
-            if self.comment_snapshots:
-                return self.comment_snapshots.pop(0)
-            return self.comments
+            comments = (
+                self.comment_snapshots.pop(0)
+                if self.comment_snapshots
+                else self.comments
+            )
+            # Issue #1082: the shared review decision scans the PR comments
+            # for the same exact-head authorization merge names by URL.
+            authorization = self.get(_repo, "issues/comments/99")
+            assert isinstance(authorization, dict)
+            return [*comments, authorization]
         if path.startswith("issues/43/comments"):
             return self.hotfix_comments
         if path.startswith("issues?state=all&labels=needs-manual-review"):
@@ -4690,7 +4697,6 @@ class CopilotGitHub(FakeGitHub):
 
 def copilot_mode(
     monkeypatch: pytest.MonkeyPatch,
-    cap: str = "unlimited",
     level: str = "beta",
     review: str = "self",
 ) -> None:
@@ -4698,7 +4704,7 @@ def copilot_mode(
     monkeypatch.setitem(
         merge_snapshot.__globals__,
         "review_settings",
-        lambda: ("copilot", cap),
+        lambda: "copilot",
     )
     monkeypatch.setitem(
         merge_snapshot.__globals__,
@@ -4724,7 +4730,7 @@ def test_copilot_clean_exact_head_review_authorizes_agent_merge(
 @pytest.mark.parametrize(
     ("change", "message"),
     [
-        ("stale", "not reviewed the current head"),
+        ("stale", "No self-review authorization"),
         ("inline", "left 1 comment"),
         ("suppressed", "suppressed"),
         ("unrecognized", "does not state"),
@@ -4795,24 +4801,30 @@ def test_human_mode_ignores_a_clean_copilot_review(
         merge_snapshot(github, lease_fixture())
 
 
-def test_copilot_level_cap_blocks_higher_release_level(
+def test_clean_copilot_review_satisfies_a_peer_review_level(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Copilot cannot authorize work above its configured level ceiling."""
-    bind_remote_lease(monkeypatch)
-    copilot_mode(monkeypatch, "beta", "stable")
-    with pytest.raises(RuntimeError, match="does not allow Copilot"):
-        merge_snapshot(CopilotGitHub("a" * 40), lease_fixture())
-
-
-def test_beta_release_level_requires_peer_review(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A clean Copilot review cannot satisfy a peer-review level."""
+    """Issue #1082: merge no longer limits Copilot evidence to self (#745)."""
     bind_remote_lease(monkeypatch)
     copilot_mode(monkeypatch, level="beta", review="peer")
-    with pytest.raises(RuntimeError, match="beta release level requires"):
-        merge_snapshot(CopilotGitHub("a" * 40), lease_fixture())
+    github = CopilotGitHub("a" * 40)
+    snapshot = merge_snapshot(github, lease_fixture())
+    assert snapshot["authorization_source"] == "copilot"
+    # Merge records exactly the shared decision `check`/`status` publish.
+    review_gate = MODULE["review_gate"]
+    assert snapshot["review_decision"] == review_gate.decide(
+        review_gate.review_inputs(
+            github,
+            "owner/repo",
+            42,
+            github.pull(),
+            "copilot",
+            MODULE["release_level"].Decision("beta", "peer", "fast", "test"),
+            actor=github.authenticated_actor,
+            default_branch="main",
+        )
+    )
+    assert snapshot["review_decision"]["code"] == "copilot-clean"
 
 
 def emergency_hotfix_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object]]:
@@ -5242,7 +5254,7 @@ def test_admin_bypass_merge_requires_the_live_admin_role(
         "enforcement": "active",
         "bypass_actors": MODULE["REVIEWED_MERGE_BYPASS_ACTORS"],
     }
-    with pytest.raises(RuntimeError, match="live admin permission"):
+    with pytest.raises(RuntimeError, match="live admin"):
         merge_snapshot(
             github,
             lease_fixture(),

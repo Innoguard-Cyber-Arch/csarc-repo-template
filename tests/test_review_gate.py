@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import io
 import json
 import re
 import shutil
@@ -74,9 +75,27 @@ class FakeGitHub:
         self.labels: set[str] = set()
         self.permission = "maintain"
         self.role_name: str | None = None
+        # Ruleset shape A/E1 by default; 1 approval models shape C.
+        self.required_approvals: object = 0
 
-    def get(self, repo: str, path: str) -> object:
+    def get(self, repo: str, path: str) -> object:  # noqa: C901
         """Return one REST fixture."""
+        if path.startswith("rules/branches/"):
+            if self.required_approvals is None:
+                raise RuntimeError("Upgrade to GitHub Pro")
+            return [
+                {
+                    "type": "pull_request",
+                    "parameters": {
+                        "required_approving_review_count": (
+                            self.required_approvals
+                        ),
+                        "dismiss_stale_reviews_on_push": True,
+                        "require_last_push_approval": True,
+                        "required_review_thread_resolution": True,
+                    },
+                }
+            ]
         if path == "pulls/7":
             return {
                 "draft": self.draft,
@@ -125,7 +144,7 @@ class FakeGitHub:
             return {"number": 7, "title": "Delivery"}
         match = re.fullmatch(r"collaborators/([^/]+)/permission", path)
         if match:
-            return {
+            response: dict[str, object] = {
                 "permission": self.permission,
                 "role_name": (
                     self.permission
@@ -134,6 +153,9 @@ class FakeGitHub:
                 ),
                 "user": {"login": match.group(1)},
             }
+            if self.role_name == "missing":
+                del response["role_name"]
+            return response
         raise AssertionError(path)
 
     def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
@@ -180,10 +202,7 @@ def test_legacy_settings_fail_closed_instead_of_human_mode(
     path.write_text("languages: []\n", encoding="utf-8")
     with pytest.raises(ValueError, match="legacy settings schema"):
         review_gate.review_settings(path)
-    assert review_gate.review_settings(tmp_path / "absent.yml") == (
-        "human",
-        "unlimited",
-    )
+    assert review_gate.review_settings(tmp_path / "absent.yml") == "human"
 
 
 def test_invalid_review_mode_is_rejected(tmp_path: Path) -> None:
@@ -327,7 +346,9 @@ def test_copilot_review_that_is_not_clean_fails(
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert not result["passed"]
     assert result["state"] == state
-    assert reason in result["reason"]
+    # Waiting Copilot evidence leaves the human decision unchanged (#1082);
+    # the status loop still sees why Copilot is not usable yet.
+    assert reason in result["copilot"]["reason"]
     assert "maintainer approval" in result["reason"]
 
 
@@ -979,3 +1000,237 @@ def test_human_review_uses_the_level_aware_review_check(tmp_path: Path) -> None:
     assert "verify_container" not in verifier
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
     assert "copilot_review: 'off'" in config
+
+
+# Issue #1082: one review decision for the `review` check, `status`, and merge.
+MATRIX_REVIEWS = ("self", "peer")
+MATRIX_COPILOT = ("allowed", "off")
+MATRIX_EVIDENCE = ("none", "approval", "copilot", "admin", "copilot+admin")
+# 0 = shape A/E1, 1 = shape C, None = unreadable Ruleset, False = malformed.
+MATRIX_SHAPES = (0, 1, None, False)
+MATRIX_ROLES = ("admin", "maintain", "write", "missing")
+
+
+def matrix_expected(
+    review: str, copilot_review: str, evidence: str, shape: object, role: str
+) -> tuple[str, str]:
+    """Return the expected (state, code) from the approved rule table."""
+    if evidence == "approval" and role in {"admin", "maintain"}:
+        return "success", "maintainer-approval"
+    if review == "self" and "admin" in evidence:
+        if role == "admin":
+            return "success", "admin-bypass-authorized"
+        return "pending", "admin-bypass-unauthorized"
+    copilot_runs = copilot_review == "allowed" and type(shape) is int
+    copilot_runs = copilot_runs and shape == 0
+    if "copilot" in evidence and copilot_runs:
+        return "success", "copilot-clean"
+    return "pending", "approval-required"
+
+
+def matrix_github(evidence: str, shape: object, role: str) -> FakeGitHub:
+    """Return a ready PR carrying one combination of review evidence."""
+    github = FakeGitHub([])
+    github.required_approvals = shape
+    github.role_name = role
+    github.permission = "admin"
+    if evidence == "approval":
+        github.reviews = [approval("maintainer")]
+    if "copilot" in evidence:
+        github.reviews = [copilot()]
+    if "admin" in evidence:
+        github.body = f"Closes #42\n\n{pr_lifecycle.ADMIN_BYPASS_MARKER}"
+        github.issue_comments = [alpha_authorization_comment()]
+    return github
+
+
+def matrix_config(tmp_path: Path, review: str, copilot_review: str) -> Path:
+    """Return settings whose stable level resolves to the review mode."""
+    bypass = "always" if review == "self" else "off"
+    return config(
+        tmp_path,
+        f"copilot_review: {copilot_review}\nadmin_bypass: {bypass}\n",
+    )
+
+
+def entry_point_outputs(
+    monkeypatch: pytest.MonkeyPatch, github: FakeGitHub, path: Path
+) -> dict[str, Any]:
+    """Run the check, status, and merge entry points on the same state."""
+    args = ["--repo", "o/r", "--pr", "7", "--config", str(path)]
+    check = review_gate.evaluate(github, "o/r", 7, path)
+    status_output = io.StringIO()
+    with monkeypatch.context() as patch:
+        patch.setattr(pr_lifecycle, "GitHub", lambda: github)
+        patch.setattr(review_gate, "unresolved_threads", lambda *_: [])
+        assert review_gate.main(["check", *args]) == (
+            0 if check["passed"] else 1
+        )
+        patch.setattr(sys, "stdout", status_output)
+        assert review_gate.main(["status", *args]) == 0
+    status = json.loads(status_output.getvalue())
+    assert status.pop("unresolved_threads") == []
+    pull = github.get("o/r", "pulls/7")
+    assert isinstance(pull, dict)
+    level = review_gate.release_level.resolve_pull(
+        github, "o/r", pull, review_gate.release_level.load_settings(path)
+    )
+    # Merge reads the same inputs, adding only its own actor as an excluded
+    # approver and the lease's default branch.
+    merge = review_gate.decide(
+        review_gate.review_inputs(
+            github,
+            "o/r",
+            7,
+            pull,
+            review_gate.review_settings(path),
+            level,
+            actor="merger",
+            default_branch="main",
+        )
+    )
+    return {
+        "check": json.loads(json.dumps(check)),
+        "status": status,
+        "merge": json.loads(json.dumps(merge)),
+    }
+
+
+@pytest.mark.parametrize("review", MATRIX_REVIEWS)
+@pytest.mark.parametrize("copilot_review", MATRIX_COPILOT)
+@pytest.mark.parametrize("evidence", MATRIX_EVIDENCE)
+@pytest.mark.parametrize("shape", MATRIX_SHAPES)
+@pytest.mark.parametrize("role", MATRIX_ROLES)
+def test_review_decision_matrix_is_identical_across_entry_points(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    review: str,
+    copilot_review: str,
+    evidence: str,
+    shape: object,
+    role: str,
+) -> None:
+    """AC1-AC5, AC7: one decision, one reason code, three entry points."""
+    path = matrix_config(tmp_path, review, copilot_review)
+    outputs = entry_point_outputs(
+        monkeypatch, matrix_github(evidence, shape, role), path
+    )
+    assert outputs["check"] == outputs["status"] == outputs["merge"]
+    decision = outputs["check"]
+    assert decision["required_review"] == review
+    assert (decision["state"], decision["code"]) == matrix_expected(
+        review, copilot_review, evidence, shape, role
+    )
+    assert decision["passed"] == (decision["state"] == "success")
+
+
+@pytest.mark.parametrize("evidence", ["none", "copilot-pending", "copilot"])
+@pytest.mark.parametrize("shape", [0, 1, None])
+@pytest.mark.parametrize("review", MATRIX_REVIEWS)
+def test_waiting_or_unavailable_copilot_equals_copilot_off(
+    tmp_path: Path, evidence: str, shape: object, review: str
+) -> None:
+    """AC3/AC4: Copilot is never required and never probes entitlement."""
+    github = matrix_github("none", shape, "maintain")
+    if evidence == "copilot-pending":
+        github.reviews = [copilot("b" * 40)]
+    elif evidence == "copilot":
+        github.reviews = [copilot()]
+    allowed = review_gate.evaluate(
+        github, "o/r", 7, matrix_config(tmp_path, review, "allowed")
+    )
+    off = review_gate.evaluate(
+        github, "o/r", 7, matrix_config(tmp_path, review, "off")
+    )
+    if evidence == "copilot" and shape == 0:
+        assert allowed["code"] == "copilot-clean"
+        return
+    keys = ("state", "passed", "source", "code", "reason", "evidence")
+    assert {key: allowed[key] for key in keys} == {
+        key: off[key] for key in keys
+    }
+
+
+def test_valid_admin_bypass_marker_excludes_copilot_evidence(
+    copilot_config: Path,
+) -> None:
+    """AC2: a clean Copilot review never replaces a pending admin route."""
+    github = matrix_github("copilot+admin", 0, "maintain")
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["admin_bypass"] == "valid"
+    assert result["copilot"]["state"] == "clean"
+    assert result["code"] == "admin-bypass-unauthorized"
+    assert not result["passed"]
+
+
+def test_invalid_admin_bypass_marker_fails_closed_over_copilot(
+    copilot_config: Path,
+) -> None:
+    """A rejected opt-in fails instead of silently falling back to Copilot."""
+    github = matrix_github("copilot+admin", 0, "admin")
+    github.issue_milestone = 7
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["admin_bypass"] == "invalid"
+    assert result["state"] == "failure"
+    assert result["code"] == "admin-bypass-invalid"
+
+
+@pytest.mark.parametrize(
+    ("permission", "role_name", "accepted"),
+    [
+        # The legacy field folds `maintain` into `write`; role_name decides.
+        ("write", "maintain", True),
+        ("admin", "admin", True),
+        # A legacy `admin` permission never widens a missing or write role.
+        ("admin", "missing", False),
+        ("admin", "write", False),
+        ("admin", "custom-reviewer", False),
+    ],
+)
+def test_maintainer_approval_reads_only_the_live_role_name(
+    copilot_config: Path, permission: str, role_name: str, accepted: bool
+) -> None:
+    """AC5: `maintain`/`admin` count by role_name; unknown fails closed."""
+    github = FakeGitHub([approval("maintainer")])
+    github.permission = permission
+    github.role_name = role_name
+    result = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert result["passed"] is accepted
+    assert (result["code"] == "maintainer-approval") is accepted
+
+
+@pytest.mark.parametrize("source", ["maintainer", "copilot"])
+def test_evidence_binds_exact_head_and_invalidates_on_change(
+    copilot_config: Path, source: str
+) -> None:
+    """AC6: a push or dismissal invalidates the accepted evidence."""
+    review = approval("maintainer") if source == "maintainer" else copilot()
+    github = FakeGitHub([review])
+    accepted = review_gate.evaluate(github, "o/r", 7, copilot_config)
+    assert accepted["source"] == source
+    assert accepted["evidence"] == {
+        "repository": "o/r",
+        "pull_request": 7,
+        "head_sha": HEAD,
+        "id": review["id"],
+        "author": review["user"]["login"],
+        "state": review["state"],
+        "commit_id": HEAD,
+        "at": review["submitted_at"],
+        "url": review["html_url"],
+        "admin_bypass": "absent",
+    }
+    pushed = {**review, "commit_id": "c" * 40}
+    assert not review_gate.evaluate(
+        FakeGitHub([pushed]), "o/r", 7, copilot_config
+    )["passed"]
+    dismissed = {
+        **review,
+        "state": "DISMISSED",
+        "submitted_at": "2026-09-18T04:00:00Z",
+    }
+    after_dismissal = review_gate.evaluate(
+        FakeGitHub([review, dismissed]), "o/r", 7, copilot_config
+    )
+    assert not after_dismissal["passed"]
+    assert after_dismissal["evidence"] is None

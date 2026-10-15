@@ -1261,6 +1261,15 @@ def live_repository_role(github: GitHub, repo: str, login: str) -> str:
     return role
 
 
+def is_maintainer(github: GitHub, repo: str, login: str) -> bool:
+    """Return whether a live `role_name` is `maintain` or `admin`.
+
+    #1058 decision 6: the legacy `permission` field folds `maintain` into
+    `write`, so it is never read; a missing role is `unknown` and fails.
+    """
+    return live_repository_role(github, repo, login) in MAINTAINER_PERMISSIONS
+
+
 def authorization(
     github: GitHub, repo: str, pr_number: int, head_sha: str, url: str
 ) -> dict[str, Any]:
@@ -1301,16 +1310,7 @@ def authorization(
         or normalized_comment_body(body) != expected_body
     ):
         raise RuntimeError("Authorization is not an exact maintainer statement")
-    permission = github.get(
-        repo,
-        "collaborators/"
-        f"{urllib.parse.quote(user['login'], safe='')}/permission",
-    )
-    if (
-        not isinstance(permission, dict)
-        or permission.get("permission") not in MAINTAINER_PERMISSIONS
-        or (permission.get("user") or {}).get("login") != user["login"]
-    ):
+    if not is_maintainer(github, repo, user["login"]):
         raise RuntimeError("Authorization actor lacks maintainer permission")
     parse_time(payload.get("created_at"), "Authorization")
     return payload
@@ -1326,25 +1326,11 @@ def find_exact_head_authorization(
 ) -> dict[str, Any] | None:
     """Return the newest exact-head maintainer authorization, if one exists.
 
-    Unlike `authorization()`, which validates one comment a caller already
-    points to (the merge attempt's own evidence), this scans every comment
-    on the pull request to answer "has a maintainer authorized this exact
-    head at all" -- used by `.csarc/scripts/review_gate.py` to let the `review`
-    required check recognize an admin-bypass authorization the same way
-    it recognizes a native `APPROVED` review, without needing a lease or a
-    specific comment URL threaded through.
-
-    Deliberately does not check the comment's `author_association` (Issue
-    #785): that field is computed relative to what the *querying*
-    credential can resolve, not an absolute fact about the commenter, and
-    the restricted `GITHUB_TOKEN` the `review` job runs under reports a
-    genuine org member as `COLLABORATOR` instead of `MEMBER` -- #549 hit
-    and fixed the identical problem in `sync_milestone_state.py`. The
-    `collaborators/{login}/permission` lookup below is the authoritative,
-    token-scope-independent check; requiring `admin`/`maintain` permission
-    there is what actually enforces "a real maintainer wrote this."
-    With `require_admin`, used by the admin-bypass path of the `review`
-    check, only a live `role_name` of `admin` counts (Issue #1064).
+    Unlike `authorization()`, this scans every PR comment so the shared
+    review decision needs no lease or comment URL. It ignores the
+    token-relative `author_association` (#785, #549); a live `role_name` of
+    `admin`/`maintain` proves the author, and `require_admin` accepts only
+    `admin` (Issue #1064).
     """
     expected_body = authorization_statement(repo, pr_number, head_sha)
     comments = github.pages(repo, f"issues/{pr_number}/comments?per_page=100")
@@ -1359,28 +1345,11 @@ def find_exact_head_authorization(
             or user.get("type") != "User"
         ):
             continue
-        if require_admin:
-            if live_repository_role(github, repo, str(user["login"])) != (
-                "admin"
-            ):
-                continue
-        else:
-            permission = github.get(
-                repo,
-                "collaborators/"
-                f"{urllib.parse.quote(str(user['login']), safe='')}/permission",
-            )
-            permission_user = (
-                permission.get("user") if isinstance(permission, dict) else None
-            )
-            if (
-                not isinstance(permission, dict)
-                or permission.get("permission") not in MAINTAINER_PERMISSIONS
-                or not isinstance(permission_user, dict)
-                or str(permission_user.get("login", "")).casefold()
-                != str(user["login"]).casefold()
-            ):
-                continue
+        role = live_repository_role(github, repo, str(user["login"]))
+        if role != "admin" and (
+            require_admin or role not in MAINTAINER_PERMISSIONS
+        ):
+            continue
         if not isinstance(payload.get("created_at"), str):
             continue
         candidates.append(payload)
@@ -1849,38 +1818,25 @@ def exact_head_approval(
     repo: str,
     reviews: dict[str, dict[str, Any]],
     head_sha: str,
-    actor: str,
+    actor: str | set[str],
 ) -> dict[str, Any] | None:
     """Return the newest independent maintainer approval for this head.
 
+    ``actor`` names every account that cannot approve (author and merger).
     Ignores `author_association` for the same reason `authorization()`
-    does (Issue #785): the `collaborators/{login}/permission` lookup below
-    is the token-scope-independent source of truth.
+    does (Issue #785): the live `role_name` is the source of truth.
     """
+    excluded = {actor} if isinstance(actor, str) else actor
     approved: list[dict[str, Any]] = []
     for login, review in reviews.items():
         user = review.get("user") or {}
         if (
-            login == actor
+            login in excluded
             or review.get("state") != "APPROVED"
             or review.get("commit_id") != head_sha
             or not isinstance(user, dict)
             or user.get("type") != "User"
-        ):
-            continue
-        permission = github.get(
-            repo,
-            "collaborators/"
-            f"{urllib.parse.quote(str(user['login']), safe='')}/permission",
-        )
-        permission_user = (
-            permission.get("user") if isinstance(permission, dict) else None
-        )
-        if (
-            not isinstance(permission, dict)
-            or permission.get("permission") not in MAINTAINER_PERMISSIONS
-            or not isinstance(permission_user, dict)
-            or str(permission_user.get("login", "")).casefold() != login
+            or not is_maintainer(github, repo, str(user["login"]))
         ):
             continue
         parse_time(review.get("submitted_at"), "Review approval")
@@ -3471,18 +3427,6 @@ def merge_snapshot(  # noqa: C901
     # Issue #1069: the trusted base selects the merge route and path tier;
     # the candidate's own policy only runs as a non-authoritative self-test.
     policy = base_policy_decision(lease, pull, label_names)
-    # A bot-authored Dependabot body cannot carry the marker, so the
-    # authenticated local Dependabot route is its own opt-in (Issue #1076).
-    admin_bypass = level_decision.review == "self" and (
-        bool(dependabot_scope) or admin_bypass_opt_in(github, repo, lease, pull)
-    )
-    bypass_route = (
-        level_decision.level
-        if admin_bypass
-        else "hotfix"
-        if "hotfix" in label_names
-        else None
-    )
     comments = [
         *github.pages(repo, f"issues/{pr_number}/comments?per_page=100"),
         *github.pages(repo, f"pulls/{pr_number}/comments?per_page=100"),
@@ -3519,43 +3463,44 @@ def merge_snapshot(  # noqa: C901
         raise RuntimeError(
             "Authenticated GitHub actor changed after lease acquisition"
         )
-    approval = exact_head_approval(github, repo, review_states, head_sha, actor)
+    # Issue #1082: the `review` check, `status`, and merge share one
+    # decision. A bot-authored Dependabot body cannot carry the marker, so
+    # the authenticated local Dependabot route is its own opt-in (#1076).
+    review_input = review_gate.review_inputs(
+        github,
+        repo,
+        pr_number,
+        pull,
+        review_settings(),
+        level_decision,
+        actor=actor,
+        default_branch=str(lease["default_branch"]),
+        admin_bypass="valid" if dependabot_scope else None,
+    )
+    review_decision = review_gate.decide(review_input)
+    if not review_decision["passed"]:
+        raise RuntimeError(review_decision["reason"])
+    admin_bypass = review_decision["admin_bypass"] == "valid"
+    copilot_mode = review_decision["mode"] == "copilot"
+    source = review_decision["source"]
+    bypass_route = (
+        level_decision.level
+        if admin_bypass
+        else "hotfix"
+        if "hotfix" in label_names
+        else None
+    )
     hotfix_evidence: dict[str, object] | None = None
-    review_mode, copilot_max_level = review_settings()
-    copilot_mode = review_mode == "copilot"
-    copilot_verdict = None
-    if (
-        approval is None
-        and not admin_bypass
-        and copilot_mode
-        and level_decision.review == "self"
-    ):
-        allowed, cap_reason = review_gate.level_allows_copilot(
-            copilot_max_level, level_decision.level
+    if source in {"maintainer", "copilot"}:
+        reviewed = (
+            review_input["approval"]
+            if source == "maintainer"
+            else review_input["copilot"].review
         )
-        if not allowed:
-            raise RuntimeError(cap_reason)
-        copilot_verdict = review_gate.copilot_verdict(
-            reviews,
-            head_sha,
-            lambda review_id: github.pages(
-                repo,
-                f"pulls/{pr_number}/reviews/{review_id}/comments?per_page=100",
-            ),
-        )
-        if copilot_verdict.state != "clean":
-            raise RuntimeError(
-                "Copilot review of the exact head is not clean: "
-                + copilot_verdict.reason
-            )
-    if approval is not None:
-        auth = {
-            **approval,
-            "created_at": approval.get("submitted_at"),
-        }
-        authorization_source = "review"
-        authorization_url = str(approval.get("html_url") or "")
-    elif admin_bypass:
+        auth = {**reviewed, "created_at": reviewed.get("submitted_at")}
+        authorization_source = "review" if source == "maintainer" else source
+        authorization_url = str(reviewed.get("html_url") or "")
+    elif source == "admin-bypass":
         if not authorization_url:
             raise RuntimeError(
                 "Admin bypass requires an exact maintainer "
@@ -3579,14 +3524,7 @@ def merge_snapshot(  # noqa: C901
         if live_repository_role(github, repo, actor) != "admin":
             raise RuntimeError("Admin bypass requires live admin permission")
         authorization_source = "comment"
-    elif copilot_verdict is not None and copilot_verdict.review is not None:
-        auth = {
-            **copilot_verdict.review,
-            "created_at": copilot_verdict.review.get("submitted_at"),
-        }
-        authorization_source = "copilot"
-        authorization_url = str(copilot_verdict.review.get("html_url") or "")
-    elif level_decision.review == "peer" and "hotfix" in label_names:
+    else:
         if not authorization_url:
             raise RuntimeError(
                 "Emergency hotfix merge requires an exact-head "
@@ -3608,11 +3546,6 @@ def merge_snapshot(  # noqa: C901
             )
         hotfix_evidence = hotfix_emergency_evidence(github, repo, pull, auth)
         authorization_source = "hotfix-emergency"
-    else:
-        raise RuntimeError(
-            f"The {level_decision.level} release level requires an "
-            "independent maintainer approval for the exact head"
-        )
     authorized_at = parse_time(auth.get("created_at"), "Authorization")
     timeline = github.pages(repo, f"issues/{pr_number}/timeline?per_page=100")
     if any(
@@ -3663,7 +3596,8 @@ def merge_snapshot(  # noqa: C901
         # configured admin bypass actor; unknown bypass shapes still block.
         authorization_source
         in {"review", "copilot", "comment", "hotfix-emergency"},
-        copilot_mode and level_decision.review == "self" and not admin_bypass,
+        # Copilot is never required: only Copilot evidence needs its rules.
+        authorization_source == "copilot",
         verification_mode == "local",
         verification_mode == "local"
         and configured_admin_bypass() in {"beta-only", "always"},
@@ -3817,11 +3751,12 @@ def merge_snapshot(  # noqa: C901
         "dependabot_head": dependabot_head,
         "dependabot_update_scope": dependabot_scope,
         "hotfix_evidence": hotfix_evidence,
+        "review_decision": review_decision,
     }
 
 
-def review_settings() -> tuple[str, str]:
-    """Return this checkout's normalized Copilot review settings."""
+def review_settings() -> str:
+    """Return this checkout's normalized Copilot review setting."""
     return review_gate.review_settings(
         Path(__file__).resolve().parents[2] / ".csarc/config.yml"
     )
