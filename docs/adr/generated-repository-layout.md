@@ -106,7 +106,7 @@ typescript/tests/index.test.ts
 .csarc/scripts/build-repo-site | documentation_mode == 'template-and-content'
 .csarc/scripts/build_repo_site.py | documentation_mode == 'template-and-content'
 .csarc/scripts/check-governance-drift | 'governance-drift' in scheduled_checks
-.csarc/scripts/check-release-drift | release_ownership == 'csarc-owned' and project_mode == 'new' and verification_mode == 'hosted'
+.csarc/scripts/check-release-drift | release_ownership == 'csarc-owned' and verification_mode == 'hosted' and (project_mode == 'new' or csarc_release_workflow | default(false))
 .csarc/scripts/check-repo-site-navigation | documentation_mode == 'template-and-content'
 .csarc/scripts/check-repo-site-translations | documentation_mode == 'template-and-content'
 .csarc/scripts/check-repo-site-versions | documentation_mode == 'template-and-content'
@@ -145,8 +145,8 @@ typescript/tests/index.test.ts
 .github/workflows/pr-policy-writes.yml | verification_mode == 'hosted'
 .github/workflows/pr-policy.yml | verification_mode == 'hosted'
 .github/workflows/pr-review.yml | verification_mode == 'hosted'
-.github/workflows/release-drift.yml | release_ownership == 'csarc-owned' and project_mode == 'new' and verification_mode == 'hosted'
-.github/workflows/release.yml | release_ownership == 'csarc-owned' and project_mode == 'new' and verification_mode == 'hosted'
+.github/workflows/release-drift.yml | release_ownership == 'csarc-owned' and verification_mode == 'hosted' and (project_mode == 'new' or csarc_release_workflow | default(false))
+.github/workflows/release.yml | release_ownership == 'csarc-owned' and verification_mode == 'hosted' and (project_mode == 'new' or csarc_release_workflow | default(false))
 .github/workflows/spec-to-issue.yml | verification_mode == 'hosted'
 .github/workflows/template-update.yml | 'template-update' in scheduled_checks
 .github/workflows/work-item-lifecycle.yml | verification_mode == 'hosted' and lifecycle

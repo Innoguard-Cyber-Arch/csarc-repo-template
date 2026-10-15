@@ -643,7 +643,7 @@ def test_copier_renders_the_release_workflow_for_a_migrated_writer() -> None:
         "copilot_review": "off",
     }
     release = ".github/workflows/release.yml"
-    migrated = {**existing, "release_workflow": release}
+    migrated = {**existing, "csarc_release_workflow": True}
     assert release in pins.managed_workflows(files, config, migrated)
     assert release not in pins.managed_workflows(files, config, existing)
     assert release in pins.managed_workflows(

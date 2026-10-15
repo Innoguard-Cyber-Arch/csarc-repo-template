@@ -55,7 +55,7 @@ PR body 的 `## Requirement evidence` 依 Issue「完成條件」順序為 AC1�
 {% if release_ownership == 'csarc-owned' %}
 ## 發版
 
-release-worthy 的 PR 在仍是 Draft 時執行 `python3 .csarc/scripts/release_policy.py prepare-candidate --sha HEAD --phase <beta|stable>`，把版本與 CHANGELOG 作為同一張 PR 的最後一個 commit；{% if 'milestones' in lifecycle %}Milestone 工作用 `beta`，standalone、hotfix 與 promotion 用 `stable`{% else %}standalone 與 hotfix 用 `stable`{% endif %}。{% if hosted and (project_mode == 'new' or release_workflow | default('') == '.github/workflows/release.yml') %}合併後 `release.yml`{% if release_trigger == 'manual' %}（只接受手動 dispatch）{% endif %}呼叫 `.csarc/scripts/publish-release`；Actions 不健康時，維護者以自己的身分在本機執行同一支腳本。{% else %}合併後由維護者在本機執行 `.csarc/scripts/publish-release stage`／`publish`，不另建版本 PR 或手動建立 tag。{% endif %}發布前 writer 先以 merge trace 檢查 governance baseline 之後的每筆合併，失敗時 Release 保持 draft。
+release-worthy 的 PR 在仍是 Draft 時執行 `python3 .csarc/scripts/release_policy.py prepare-candidate --sha HEAD --phase <beta|stable>`，把版本與 CHANGELOG 作為同一張 PR 的最後一個 commit；{% if 'milestones' in lifecycle %}Milestone 工作用 `beta`，standalone、hotfix 與 promotion 用 `stable`{% else %}standalone 與 hotfix 用 `stable`{% endif %}。{% if hosted and (project_mode == 'new' or csarc_release_workflow | default(false)) %}合併後 `release.yml`{% if release_trigger == 'manual' %}（只接受手動 dispatch）{% endif %}呼叫 `.csarc/scripts/publish-release`；Actions 不健康時，維護者以自己的身分在本機執行同一支腳本。{% else %}合併後由維護者在本機執行 `.csarc/scripts/publish-release stage`／`publish`，不另建版本 PR 或手動建立 tag。{% endif %}發布前 writer 先以 merge trace 檢查 governance baseline 之後的每筆合併，失敗時 Release 保持 draft。
 {% endif %}
 ## 公版更新
 

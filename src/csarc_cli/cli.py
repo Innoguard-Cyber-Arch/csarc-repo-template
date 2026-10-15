@@ -11063,10 +11063,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     if (
         candidate_answers.get("release_ownership") == "csarc-owned"
         and candidate_answers.get("project_mode") == "existing"
+        and candidate_answers.get("release_workflow") == CSARC_RELEASE_WORKFLOW
     ):
         # copier.yml renders the hosted release workflow for an existing
         # project only when it is the selected CSARC writer.
-        update_data["release_workflow"] = candidate_answers["release_workflow"]
+        candidate_answers["csarc_release_workflow"] = True
+        update_data["csarc_release_workflow"] = True
     # Product action pin drift is known before any render, plan, or write.
     # A one-shot apply stops here; a reviewed plan first drops the
     # workflows it retires, which are not product workflows (#1083).
