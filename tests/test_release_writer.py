@@ -160,6 +160,7 @@ def schema2_settings(ownership: str | None) -> str:
         "languages: []",
         "lifecycle: []",
         "project_maturity: early",
+        "github_project_url: ''",
         "project_verification_hook: ''",
         "python_floor: latest",
         "release_trigger: manual",

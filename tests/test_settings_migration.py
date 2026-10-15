@@ -246,6 +246,7 @@ CURRENT_NEXT = {
     "languages": ["python"],
     "lifecycle": [],
     "project_maturity": "early",
+    "github_project_url": "",
     "project_verification_hook": "",
     "python_floor": "3.12",
     "release_ownership": "csarc-owned",

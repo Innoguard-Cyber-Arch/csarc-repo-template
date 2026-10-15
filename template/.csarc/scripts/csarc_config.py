@@ -73,7 +73,9 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "security_reporting_channel": (KIND_TEXT, ()),
     "container": (KIND_BOOL, ()),
     "project_verification_hook": (KIND_TEXT, ()),
+    "github_project_url": (KIND_TEXT, ()),
 }
+OPTIONAL_DEFAULTS: dict[str, object] = {"github_project_url": ""}
 # Derived context that is saved only as a one-time user decision when no
 # native manifest resolves it uniquely (SPEC-009); otherwise it is absent.
 DECISION_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -264,7 +266,7 @@ def validate_config(
             + ", ".join(unknown)
             + f" are not part of schema {SCHEMA_VERSION}",
         )
-    missing = sorted(key for key in INTENT_SETTINGS if key not in config)
+    missing = sorted(set(INTENT_SETTINGS) - {*config, *OPTIONAL_DEFAULTS})
     if missing:
         raise settings_error(
             path, "missing persistent settings " + ", ".join(missing)
@@ -499,7 +501,7 @@ def main(argv: list[str] | None = None) -> int:
                 "SPEC-009 for its native source"
             )
         else:
-            value = config.get(key)
+            value = config.get(key, OPTIONAL_DEFAULTS.get(key))
     except (OSError, KeyError, ValueError) as error:
         message = error.args[0] if isinstance(error, KeyError) else error
         sys.stderr.write(f"{message}\n")
