@@ -7,6 +7,22 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.33.0-beta.1] - 2026-10-15
+
+### Features
+
+* feat(cli): migrate legacy writers, keep newer pins, and shim moved scripts (41de40a)
+
+### Bug Fixes
+
+* fix(review): share one review decision across gate, status, and merge (363e9a0)
+* fix(cli): apply pilot-proven legacy update plans as reviewed (e39971a)
+* fix(cli): stop updates that drop ignored payload or re-move kept files (dad7ce7)
+* fix(cli): keep rendered files in the plan while a .gitignore is undecided (811280c)
+* fix(cli): keep rendered files Copier's update pass deletes early (2906079)
+* fix(template): render the migrated release workflow from a dedicated flag (601ed31)
+* fix(cli): keep the release render flag out of the settings comparison (2a07ea1)
+
 ## [0.32.0-beta.1] - 2026-10-15
 
 ### Features

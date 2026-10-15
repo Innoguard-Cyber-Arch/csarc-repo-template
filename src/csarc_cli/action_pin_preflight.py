@@ -25,7 +25,7 @@ import fnmatch
 import re
 import subprocess
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -43,7 +43,17 @@ WORKFLOW_SUFFIXES = (".yml", ".yaml")
 TEMPLATE_SUFFIX = ".jinja"
 REASON_TEMPLATE_PIN_CHANGED = "template-pin-changed"
 REASON_PRODUCT_PIN_DIVERGED = "product-pin-diverged"
-REASONS = (REASON_TEMPLATE_PIN_CHANGED, REASON_PRODUCT_PIN_DIVERGED)
+# Issue #1083: a product pin newer than the template's within the same
+# major release is kept; the update aligns the template workflows to it.
+REASON_PRODUCT_PIN_NEWER = "product-pin-newer"
+REASONS = (
+    REASON_TEMPLATE_PIN_CHANGED,
+    REASON_PRODUCT_PIN_DIVERGED,
+    REASON_PRODUCT_PIN_NEWER,
+)
+# The readable release tag after a full-SHA pin, for example `# v10.3.0`.
+TAG_COMMENT = re.compile(r"@[0-9a-f]{40}\s+#\s*(\S+)")
+SEMVER_TAG = re.compile(r"v?(\d+)\.(\d+)(?:\.(\d+))?")
 ITEM_KEYS = ("action", "file", "line", "new_sha", "old_sha", "reason")
 DECISION_KEYS = (*ITEM_KEYS, "commit_sha")
 
@@ -84,21 +94,36 @@ class PinPreflight:
     source_sha: str
     product_workflows: tuple[str, ...]
     items: tuple[PinDrift, ...]
+    # (action, template SHA, product SHA, template tag, product tag) for
+    # every kept newer product pin (#1083).
+    aligned: tuple[tuple[str, str, str, str, str], ...] = ()
+
+    @property
+    def blocking(self) -> tuple[PinDrift, ...]:
+        """Return the items that need a product pin commit."""
+        return tuple(
+            item
+            for item in self.items
+            if item.reason != REASON_PRODUCT_PIN_NEWER
+        )
 
     @property
     def state(self) -> str:
-        """Return ``drift`` when any item exists, otherwise ``clean``."""
-        return "drift" if self.items else "clean"
+        """Return ``drift`` when a blocking item exists, else ``clean``."""
+        return "drift" if self.blocking else "clean"
 
     def as_dict(self) -> dict[str, object]:
         """Return the plan payload; an empty ``items`` list means no drift."""
-        return {
+        payload: dict[str, object] = {
             "items": [item.as_dict() for item in self.items],
             "product_workflows": list(self.product_workflows),
             "schema_version": SCHEMA_VERSION,
             "source_sha": self.source_sha,
             "state": self.state,
         }
+        if self.aligned:
+            payload["aligned"] = [list(entry) for entry in self.aligned]
+        return payload
 
 
 def parse_pins(text: str) -> list[tuple[int, str, str]]:
@@ -109,6 +134,82 @@ def parse_pins(text: str) -> list[tuple[int, str, str]]:
         if match is not None:
             pins.append((number, match.group(1), match.group(2)))
     return pins
+
+
+def pin_tag(line: str) -> str | None:
+    """Return the readable release tag written after one pin, if any."""
+    match = TAG_COMMENT.search(line)
+    return match.group(1) if match else None
+
+
+def semver(tag: str | None) -> tuple[int, int, int] | None:
+    """Parse ``vMAJOR.MINOR[.PATCH]``; anything else is unknown."""
+    match = SEMVER_TAG.fullmatch(tag or "")
+    if match is None:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3) or 0))
+
+
+def template_tags(
+    files: Mapping[str, str], pins: Mapping[str, str]
+) -> dict[str, str]:
+    """Return the one release tag the template writes after each pin.
+
+    An action whose template lines disagree on (or omit) the tag has no
+    trusted tag, so its product pins are never judged newer.
+    """
+    seen: dict[str, set[str | None]] = {}
+    for text in files.values():
+        for line in text.splitlines():
+            match = USES.match(line)
+            if match is not None and pins.get(match.group(1)) == match.group(2):
+                seen.setdefault(match.group(1), set()).add(pin_tag(line))
+    result: dict[str, str] = {}
+    for action, tags in seen.items():
+        (tag,) = tags if len(tags) == 1 else (None,)
+        if tag is not None:
+            result[action] = tag
+    return result
+
+
+def newer_product_pins(
+    target_files: Mapping[str, str],
+    product: Sequence[str],
+    new_pins: Mapping[str, str],
+    tags: Mapping[str, str],
+) -> dict[str, tuple[str, str, str]]:
+    """Return actions whose product pins are newer in the same major.
+
+    Every product line of the action must pin the same SHA with a semver
+    tag in the template's major release and above the template's tag;
+    anything ambiguous or unparsable keeps the blocking drift (#1083).
+    """
+    found: dict[str, set[tuple[str, str | None]]] = {}
+    for path in product:
+        for line in target_files[path].splitlines():
+            match = USES.match(line)
+            if match is not None and match.group(1) in new_pins:
+                found.setdefault(match.group(1), set()).add(
+                    (match.group(2), pin_tag(line))
+                )
+    result: dict[str, tuple[str, str, str]] = {}
+    for action, occurrences in found.items():
+        if len(occurrences) != 1:
+            continue
+        sha, tag = next(iter(occurrences))
+        template_tag = tags.get(action)
+        product_version, template_version = semver(tag), semver(template_tag)
+        if (
+            sha != new_pins[action]
+            and tag is not None
+            and template_tag is not None
+            and product_version is not None
+            and template_version is not None
+            and product_version[0] == template_version[0]
+            and product_version > template_version
+        ):
+            result[action] = (sha, tag, template_tag)
+    return result
 
 
 def template_pins(files: Mapping[str, str]) -> dict[str, str]:
@@ -365,9 +466,11 @@ def evaluate(
     managed: set[str],
     new_pins: Mapping[str, str],
     source_sha: str,
+    tags: Mapping[str, str] | None = None,
 ) -> PinPreflight:
     """Compare product-owned pins with the new template pins."""
     product = sorted(path for path in target_files if path not in managed)
+    newer = newer_product_pins(target_files, product, new_pins, tags or {})
     current_template: dict[str, set[str]] = {}
     for path, text in target_files.items():
         if path in managed:
@@ -380,12 +483,18 @@ def evaluate(
             if new_sha is None or new_sha == sha:
                 continue
             reason = (
-                REASON_TEMPLATE_PIN_CHANGED
+                REASON_PRODUCT_PIN_NEWER
+                if action in newer
+                else REASON_TEMPLATE_PIN_CHANGED
                 if sha in current_template.get(action, set())
                 else REASON_PRODUCT_PIN_DIVERGED
             )
             items.append(PinDrift(path, line, action, sha, new_sha, reason))
-    return PinPreflight(source_sha, tuple(product), tuple(items))
+    aligned = tuple(
+        (action, new_pins[action], sha, template_tag, tag)
+        for action, (sha, tag, template_tag) in sorted(newer.items())
+    )
+    return PinPreflight(source_sha, tuple(product), tuple(items), aligned)
 
 
 def run_preflight(
@@ -404,7 +513,71 @@ def run_preflight(
                 f"Template pin for {action} is not a full commit SHA."
             )
     managed = managed_workflows(files, config, answers)
-    return evaluate(_target_workflows(target), managed, new_pins, sha)
+    return evaluate(
+        _target_workflows(target),
+        managed,
+        new_pins,
+        sha,
+        template_tags(files, new_pins),
+    )
+
+
+def excluding(
+    preflight: PinPreflight, retired: Collection[str]
+) -> PinPreflight:
+    """Drop workflows the update retires; they are not product-owned.
+
+    A legacy workflow the trusted old render generated and the new release
+    no longer renders is deleted by the reviewed plan, so pinning it again
+    would only turn a clean retirement into a kept, modified copy (#1083).
+    """
+    gone = set(retired)
+    items = tuple(item for item in preflight.items if item.file not in gone)
+    kept = {item.action for item in items}
+    return PinPreflight(
+        preflight.source_sha,
+        tuple(path for path in preflight.product_workflows if path not in gone),
+        items,
+        tuple(entry for entry in preflight.aligned if entry[0] in kept),
+    )
+
+
+def align_pins(root: Path, aligned: Sequence[Sequence[str]]) -> list[str]:
+    """Raise every remaining template pin to the kept newer product pin.
+
+    The generated pin check requires one SHA per action across the
+    repository, so the template workflows adopt the product's same-major
+    newer pin (and its tag) instead of the product being downgraded.
+    Returns the workflow files that changed.
+    """
+    changed: list[str] = []
+    directory = root / WORKFLOW_DIRECTORY
+    if not aligned or not directory.is_dir():
+        return changed
+    for path in sorted(directory.iterdir()):
+        if not path.name.endswith(WORKFLOW_SUFFIXES) or not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        updated = text
+        for (
+            action,
+            template_sha,
+            product_sha,
+            template_tag,
+            product_tag,
+        ) in aligned:
+            updated = re.sub(
+                rf"({re.escape(action)}@){template_sha}(\s+#\s*){re.escape(template_tag)}(?=\s|$)",
+                rf"\g<1>{product_sha}\g<2>{product_tag}",
+                updated,
+            )
+            updated = updated.replace(
+                f"{action}@{template_sha}", f"{action}@{product_sha}"
+            )
+        if updated != text:
+            path.write_text(updated, encoding="utf-8")
+            changed.append(f"{WORKFLOW_DIRECTORY}/{path.name}")
+    return changed
 
 
 def repair_commands(items: Sequence[PinDrift]) -> list[str]:
@@ -569,11 +742,22 @@ def _unlisted_in_file(
             item is None
             or old_line != new_line
             or f"{item['action']}@{item['old_sha']}" not in before
-            or before.replace(str(item["old_sha"]), str(item["new_sha"]))
-            != after
+            or _pin_code(before).replace(
+                str(item["old_sha"]), str(item["new_sha"])
+            )
+            != _pin_code(after)
         ):
             unlisted.append(f"{change.path}:{new_line}")
     return unlisted
+
+
+def _pin_code(line: str) -> str:
+    """Return one ``uses:`` line without its trailing comment.
+
+    The readable release tag after a pin (``# v1.2.3``) changes together
+    with the SHA by convention, so a listed pin edit may update it (#1083).
+    """
+    return line.partition(" #")[0].rstrip()
 
 
 def unlisted_pin_changes(

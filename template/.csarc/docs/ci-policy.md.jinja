@@ -132,7 +132,7 @@ Draft PR 不檢查 PR 與 Issue 的 checklist 是否全勾；轉為 Ready 時對
 - release-worthy 的 PR 在 Draft 時執行 `python3 .csarc/scripts/release_policy.py prepare-candidate --sha HEAD --phase <beta|stable>`，版本與 CHANGELOG 是同一張 PR 的最後一個 commit；不在合併後另開版本 PR，也不手動建立 tag。
 - `project_maturity: {{ project_maturity }}`：`early` 的 breaking 變更從 `0.y.z` 升為 `0.(y+1).0`，`formal` 依 SemVer 升 MAJOR；只有明確宣告的 standalone stable PR 能改成 `formal`。含 breaking 變更的 CHANGELOG 另列 `Migration notes`。
 - `.csarc/scripts/publish-release` 是唯一的 Release writer：寫入前以 `release_writer.py preflight` 確認 exact candidate、tree 未修改、沒有第二個 Release workflow，並以 merge trace strict audit 檢查 governance baseline 之後的每筆合併。每個 tag 有自己的 remote release lease。
-{%- if hosted and project_mode == 'new' %}
+{%- if hosted and (project_mode == 'new' or csarc_release_workflow | default(false)) %}
 - 合併後 `release.yml`（`release_trigger: {{ release_trigger }}`）呼叫同一支腳本；checksum 與 SPDX SBOM 隨 Release 上傳，失敗時 Release 保持 draft。
 {%- else %}
 - 合併後由維護者以自己的 `gh` 身分在本機執行 `publish-release stage`、`resolve`、`publish`；失敗時 Release 保持 draft，同一 candidate 重跑是冪等的。

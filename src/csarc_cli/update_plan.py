@@ -223,6 +223,11 @@ class UpdatePlanning:
     # release state the update restored instead of reseeding.
     retained: tuple[str, ...] = field(default=())
     product_owned: tuple[str, ...] = field(default=())
+    # Issue #1083: CSARC forwarding wrappers kept at moved scripts' old
+    # paths while product files still call them.
+    shims: tuple[str, ...] = field(default=())
+    # Rendered files restored after Copier's update deleted them (#1083).
+    restored: tuple[str, ...] = field(default=())
 
     def changed_paths(self) -> frozenset[str]:
         """Return every path the plan expects the update to change."""
@@ -232,22 +237,27 @@ class UpdatePlanning:
 
     def digest(self) -> str:
         """Bind the inputs, normalized diff, and conflicts in one digest."""
-        return canonical_digest(
-            {
-                "conflicts": list(self.conflicts),
-                "files": {
-                    "add": list(self.add),
-                    "automatic_merge": list(self.merge),
-                    "delete": list(self.delete),
-                    "overwrite": list(self.overwrite),
-                },
-                "new_data": dict(self.new_data),
-                "old_side": self.old_side.copier_answers(),
-                "product_owned": list(self.product_owned),
-                "render_parity": self.render_parity,
-                "retained": list(self.retained),
-            }
-        )
+        value: dict[str, object] = {
+            "conflicts": list(self.conflicts),
+            "files": {
+                "add": list(self.add),
+                "automatic_merge": list(self.merge),
+                "delete": list(self.delete),
+                "overwrite": list(self.overwrite),
+            },
+            "new_data": dict(self.new_data),
+            "old_side": self.old_side.copier_answers(),
+            "product_owned": list(self.product_owned),
+            "render_parity": self.render_parity,
+            "retained": list(self.retained),
+        }
+        if self.shims:
+            # Only a plan with shims binds them, so earlier plans keep
+            # their digest.
+            value["shims"] = list(self.shims)
+        if self.restored:
+            value["restored"] = list(self.restored)
+        return canonical_digest(value)
 
     def as_dict(self) -> dict[str, object]:
         """Return the machine-plan summary of this planning result."""
@@ -259,6 +269,8 @@ class UpdatePlanning:
             "render_parity": self.render_parity,
             "render_parity_paths": list(self.parity_paths),
             "retained": list(self.retained),
+            "shims": list(self.shims),
+            "restored": list(self.restored),
         }
 
 

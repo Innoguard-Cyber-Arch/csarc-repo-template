@@ -720,14 +720,16 @@ def test_release_drift_check_ships_with_release_ownership() -> None:
     """
     copier = (ROOT / "copier.yml").read_text(encoding="utf-8")
     assert (
-        "{% if release_ownership == 'csarc-owned' and project_mode == 'new' "
-        "and verification_mode == 'hosted' %}"
+        "{% if release_ownership == 'csarc-owned' and verification_mode == "
+        "'hosted' and (project_mode == 'new' or csarc_release_workflow | "
+        "default(false)) %}"
         "__keep_release_drift_workflow__"
         "{% else %}.github/workflows/release-drift.yml{% endif %}" in copier
     )
     assert (
-        "{% if release_ownership == 'csarc-owned' and project_mode == 'new' "
-        "and verification_mode == 'hosted' %}"
+        "{% if release_ownership == 'csarc-owned' and verification_mode == "
+        "'hosted' and (project_mode == 'new' or csarc_release_workflow | "
+        "default(false)) %}"
         "__keep_release_drift_script__"
         "{% else %}.csarc/scripts/check-release-drift{% endif %}" in copier
     )
