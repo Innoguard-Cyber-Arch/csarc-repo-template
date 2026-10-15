@@ -248,7 +248,7 @@ acceptance 未完成的 Issue 仍然阻擋）；
 的段落為準，兩者不一致時以 ci-policy 為準並修正本清單（#1139）。
 
 1. **開始前**：tracker `Promotion` 段落每一項都有 exact-head 證據，其餘 Milestone Issue 已關閉
-   或明確 `not_planned`（`title` 以 `promotion_decision()` 檢查；「Promotion route 併入 PR policy」）。
+   或明確 `not_planned`（`title` 以 `promotion_decision()` 檢查；「Promotion route 併入 PR policy（#601、#876）」）。
 2. **凍結 `main`**：通知所有可能合併進 `main` 的 session，執行
    `scripts/finalization-queue announce --issue <tracker> --base main`，`status` 回報 `ready` 才繼續。
    promotion 合併前 `main` 每多一個 commit，就要重做下一步的 sync 與 bridge（「現行交付路徑」）。
@@ -262,8 +262,7 @@ acceptance 未完成的 Issue 仍然阻擋）；
 5. **合併**：取得 lease 後以 `scripts/pr_lifecycle.py merge` 合併；授權必須綁定目前 exact head
    （「PR lifecycle single-writer」「Beta／stable 發布通道與 admin bypass（#918）」）。
 6. **Tag／Release 讀回**：確認 stable tag 指向 promotion commit、Release 頁面與成品存在；
-   hosted 發版失敗時改用本機 `scripts/publish-release`（「Release 發版不依賴 Actions 健康度的
-   fallback（#589）」）。只有讀回成功才能宣稱已發版。
+   hosted 發版失敗時改用本機 `scripts/publish-release`（「Release 發版不依賴 Actions 健康度的 fallback（#589，2026-09-03）」）。只有讀回成功才能宣稱已發版。
 7. **Feature parent 與 sub-Issue 收尾**：Milestone 內每張 sub-Issue 已關閉且 acceptance 全勾；
    Feature parent 勾完 acceptance 後以 `completed` 關閉（#1026）。
 8. **Tracker 關閉順序**：Release 讀回 → Feature parent 關閉 → `complete-release` 回填

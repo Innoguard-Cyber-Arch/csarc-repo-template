@@ -324,3 +324,62 @@ def test_security_response_procedure_stays_private() -> None:
     assert "security-response" not in (
         ROOT / "template/.github/SECURITY.md.jinja"
     ).read_text(encoding="utf-8")
+
+
+def _section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"(?ms)^(#+) {re.escape(heading)}\n(?P<body>.*?)(?=^#{{1,4}} |\Z)",
+        text,
+    )
+    assert match is not None, heading
+    return match["body"]
+
+
+def test_governance_records_cite_existing_policy_sections() -> None:
+    """Issue #1139 AC1/AC2: lists order steps and cite real ci-policy rules."""
+    policy = (ROOT / "docs/ci-policy.md").read_text(encoding="utf-8")
+    headings = set(re.findall(r"(?m)^#+ (.+?)\s*$", policy))
+    checklist = _section(
+        (ROOT / "docs/milestone-description.md").read_text(encoding="utf-8"),
+        "Promotion checklist",
+    )
+    hotfix = _section(policy, "Hotfix 事後紀錄（#1139）")  # noqa: RUF001
+
+    response = (ROOT / "docs/security-response.md").read_text(encoding="utf-8")
+    for text in (checklist, hotfix, response):
+        for cited in re.findall(r"「([^」]+)」", text):
+            if cited in {
+                "補充",
+                "見私密紀錄",
+                "不在公開位置揭露",
+                "強化某參數的輸入驗證",
+            }:
+                continue
+            assert cited in headings, cited
+
+    steps = re.findall(r"(?m)^\d+\. \*\*([^*]+)\*\*", checklist)
+    for required in (
+        "凍結 `main`",
+        "Sync 協調",
+        "Tag／Release 讀回",  # noqa: RUF001
+        "Feature parent 與 sub-Issue 收尾",
+        "Tracker 關閉順序",
+    ):
+        assert required in steps, required
+    assert "scripts/finalization-queue announce" in checklist
+
+    fields = re.findall(r"(?m)^\| ([^|]+?) \|", hotfix)
+    assert fields[2:] == [
+        "原因",
+        "影響範圍",
+        "Exact base／head",  # noqa: RUF001
+        "為何不能等 Milestone",
+        "授權來源",
+        "驗證證據",
+        "後續 Issue",
+    ]
+    assert "Requirement evidence" in hotfix
+    assert "不另開 Issue 表單" in hotfix
+    # The template copy stays within budget and is not changed by #1139.
+    template = ROOT / "template/.csarc/docs/milestone-description.md"
+    assert "Promotion checklist" not in template.read_text(encoding="utf-8")
