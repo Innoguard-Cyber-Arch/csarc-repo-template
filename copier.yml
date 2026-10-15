@@ -81,6 +81,11 @@ _exclude:
   - "{% if verification_mode == 'hosted' %}__keep_reviewer_assignment_script__{% else %}.csarc/scripts/request-reviewer{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_work_item_metadata_script__{% else %}.csarc/scripts/sync_work_item_metadata.py{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_scope_gate_script__{% else %}.csarc/scripts/check-scope-gate{% endif %}"
+  # Issue #1129: hosted-evidence readers and the open-Milestone nudge only
+  # run from hosted workflows and the hosted PR policy.
+  - "{% if verification_mode == 'hosted' %}__keep_trusted_verification_check__{% else %}.csarc/scripts/check-trusted-verification{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_verification_evidence__{% else %}.csarc/scripts/verification_evidence.py{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_open_milestone_detector__{% else %}.csarc/scripts/detect-open-milestone{% endif %}"
   - "{% if verification_mode == 'hosted' and 'issues' in lifecycle %}__keep_issue_policy_script__{% else %}.csarc/scripts/validate-issue-policy{% endif %}"
   - "{% if verification_mode == 'hosted' or documentation_mode != 'off' %}__keep_spec_script__{% else %}.csarc/scripts/spec_to_issue.py{% endif %}"
   - "{% if 'milestones' in lifecycle %}__keep_milestone_format__{% else %}.csarc/docs/milestone-description.md{% endif %}"
@@ -93,6 +98,9 @@ _exclude:
   - "{% if release_ownership == 'csarc-owned' %}__keep_install_syft__{% else %}.csarc/scripts/install-syft{% endif %}"
   - "{% if release_ownership == 'csarc-owned' %}__keep_verify_release_candidate__{% else %}.csarc/scripts/verify-release-candidate{% endif %}"
   - "{% if release_ownership == 'csarc-owned' %}__keep_verify_release_consumption__{% else %}.csarc/scripts/verify_release_consumption.py{% endif %}"
+  # Issue #1129: release_policy.py keeps only the capability preflight every
+  # project's CLI runs; the CSARC release commands render for their owner.
+  - "{% if release_ownership == 'csarc-owned' %}__keep_release_candidate__{% else %}.csarc/scripts/release_candidate.py{% endif %}"
   # An adopted repository keeps its own product starters, manifests,
   # lockfiles, and tool settings; only CSARC runtime is added (#1058 decision 25).
   - "{% if (project_mode | default('')) == 'existing' %}/src{% else %}__keep_new_src__{% endif %}"
