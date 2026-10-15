@@ -2418,7 +2418,12 @@ def legacy_layout_pairs(
     stage: Path,
     target: Path,
 ) -> tuple[tuple[str, str], ...]:
-    """Return only known generated paths that need the one-time layout move."""
+    """Return only known generated paths that need the one-time layout move.
+
+    A destination the target already has means the move happened in an
+    earlier update; a legacy file left beside it is the customized copy
+    that update kept, never a second move onto that destination (#1083).
+    """
     pairs: set[tuple[str, str]] = set()
     staged = project_files(stage)
     existing = project_files(target)
@@ -2432,7 +2437,7 @@ def legacy_layout_pairs(
         for new in staged:
             if new.startswith(new_prefix):
                 old = old_prefix + new.removeprefix(new_prefix)
-                if old in existing:
+                if old in existing and new not in existing:
                     pairs.add((old, new))
     exact = {
         ".copier-answers.yml": ".csarc/config.yml",
@@ -2455,14 +2460,15 @@ def legacy_layout_pairs(
         "version.txt": ".csarc/version.txt",
     }
     for old, new in exact.items():
-        if old in existing and new in staged:
+        if old in existing and new in staged and new not in existing:
             pairs.add((old, new))
     for old in existing:
         if old.startswith("site/content/"):
             destination = "docs/site/content/" + old.removeprefix(
                 "site/content/"
             )
-            pairs.add((old, destination))
+            if destination not in existing:
+                pairs.add((old, destination))
     return tuple(sorted(pairs))
 
 
@@ -9306,6 +9312,9 @@ class UpdateRunInputs:
     target_uses_current_config: bool
     # Fingerprints of the trusted old render, keyed by path (#1066).
     old_render: Mapping[str, str] = dataclass_field(default_factory=dict)
+    # Every path the new release renders; none may hide behind the
+    # repository's ignore rules (#1083).
+    payload: tuple[str, ...] = ()
 
 
 def baseline_paths(candidate: Path, baseline: str) -> tuple[str, ...]:
@@ -9502,6 +9511,7 @@ def run_update_candidate(
         # otherwise outside that clean update, so finish the move only when
         # it is safe and fail closed on a different destination.
         apply_layout_moves(candidate, deferred_layout_moves)
+        reject_ignored_payload(candidate, inputs.payload)
     head = run_git(
         ["git", "-C", str(candidate), "rev-parse", "HEAD"],
         repository=candidate,
@@ -9534,6 +9544,60 @@ def run_update_candidate(
         retained,
         product_owned,
     )
+
+
+def reject_ignored_payload(candidate: Path, payload: Sequence[str]) -> None:
+    """Fail closed when ignore rules would hide a rendered file (#1083).
+
+    The candidate is verified with every rendered file, but Git never
+    stages an untracked ignored one, so the target would silently miss it
+    and the verified tree would differ from the written one.
+    """
+    present = [
+        name
+        for name in payload
+        if (candidate / name).is_file() and not (candidate / name).is_symlink()
+    ]
+    if not present:
+        return
+    result = run_git(
+        [
+            "git",
+            "-C",
+            str(candidate),
+            "check-ignore",
+            "--verbose",
+            "--",
+            *present,
+        ],
+        repository=candidate,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    if result.returncode not in {0, 1}:
+        raise CliError(
+            "Cannot evaluate the repository ignore rules for the rendered "
+            "files; the target was not changed."
+        )
+    # Each line is `<source>:<line>:<pattern>\t<path>`; rendered paths are
+    # plain template names, so Git never quotes them.
+    hidden = []
+    for line in result.stdout.splitlines():
+        rule, _tab, path = line.partition("\t")
+        source, _colon, rest = rule.partition(":")
+        number, _colon, pattern = rest.partition(":")
+        if path:
+            hidden.append(f"{path} ({source}:{number}: {pattern})")
+    if hidden:
+        raise CliError(
+            "Repository ignore rules hide rendered CSARC files, so the "
+            "update would not deliver them: "
+            + "; ".join(hidden)
+            + ". Narrow or except those rules (for a conflicted .gitignore, "
+            "in its decision), then create a new plan. The target was not "
+            "changed."
+        )
 
 
 def resolve_recorded_conflicts(
@@ -10109,6 +10173,7 @@ def final_plan_payload(
                     list(move) for move in run_inputs.layout_moves
                 ],
                 "old_render": dict(run_inputs.old_render),
+                "payload": list(run_inputs.payload),
                 "planning": planning_record(context.planning),
                 "retiring": list(run_inputs.retiring),
                 "transitions": approved.as_dict(),
@@ -10315,6 +10380,7 @@ def recorded_run(
         retiring=tuple(derived["retiring"]),
         target_uses_current_config=bool(inputs["target_uses_current_config"]),
         old_render=dict(derived["old_render"]),
+        payload=tuple(derived.get("payload", ())),
     )
     recorded = derived["planning"]
     planning = update_plan.UpdatePlanning(
@@ -10757,6 +10823,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             retiring=retiring,
             target_uses_current_config=target_uses_current_config,
             old_render=old_render,
+            payload=tuple(sorted(project_files(stage))),
         )
         planning_root = workdir / "planning"
         planning_root.mkdir()

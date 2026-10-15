@@ -124,6 +124,34 @@ def test_pin_commit_may_refresh_the_release_tag_comment(
     assert pins.unlisted_pin_changes(items, git_runner, target, commit) == []
 
 
+def test_ignored_rendered_files_stop_the_update(tmp_path: Path) -> None:
+    """R5: a product ignore rule never silently drops a rendered file.
+
+    The legacy consumer ignored every ``data/`` directory, which hid the
+    rendered ``.csarc/site/data/glossary.toml``: the candidate verified
+    with it, the target never received it, and the next update failed.
+    """
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    git(candidate, "init", "-b", "main")
+    write(candidate / ".gitignore", "data/\n")
+    write(candidate / "data/tracked.txt", "product\n")
+    git(candidate, "add", "--force", ".gitignore", "data/tracked.txt")
+    glossary = ".csarc/site/data/glossary.toml"
+    write(candidate / glossary, 'title = "Glossary"\n')
+    payload = (glossary, "data/tracked.txt", "missing.txt")
+
+    with pytest.raises(cli.CliError) as error:
+        cli.reject_ignored_payload(candidate, payload)
+    assert f"{glossary} (.gitignore:1: data/)" in str(error.value)
+    assert "data/tracked.txt" not in str(error.value)
+    assert "target was not changed" in str(error.value)
+
+    write(candidate / ".gitignore", "data/\n!/.csarc/site/data/\n")
+    cli.reject_ignored_payload(candidate, payload)
+    cli.reject_ignored_payload(candidate, ())
+
+
 # --- One consumer-shaped check -> decide -> apply ---------------------------
 
 
@@ -315,3 +343,19 @@ def test_legacy_consumer_update_applies_its_final_plan(
     assert effects["D"] - metadata == set(approved["delete"])
     assert effects["A"] - metadata == set(approved["create"])
     assert effects["M"] - metadata == set(approved["modify"])
+
+    # R6: the kept legacy verifier beside its migrated destination is not a
+    # second layout move, so the next check of the same release plans
+    # without a collision, conflict, or move.
+    commit(project, "chore: apply the reviewed update")
+    capsys.readouterr()
+    assert update(project, new_sha, "--check") in {0, 1}, (
+        capsys.readouterr().err
+    )
+    again: dict[str, Any] = json.loads(
+        (report_dir / "csarc-update-plan.json").read_text(encoding="utf-8")
+    )
+    assert again["files"]["move"] == []
+    assert again["planning"]["conflicts"] == []
+    assert "scripts/verify" in again["files"]["preserve"]
+    assert (project / "scripts/verify").read_bytes() == verify_before
