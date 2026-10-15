@@ -698,8 +698,11 @@ def test_render_carries_no_template_issue_reference(
             for match in ISSUE_REFERENCE.findall(text)
             if (relative, match) not in ISSUE_REFERENCE_ALLOWLIST
         )
-    for path in sorted((project / ".csarc/scripts").iterdir()):
-        relative = path.relative_to(project).as_posix()
+    # Committed scripts only: import probes may leave `__pycache__` behind.
+    for relative in files_of(project):
+        if not relative.startswith(".csarc/scripts/"):
+            continue
+        path = project / relative
         for text in visible_script_strings(path):
             found.extend(
                 f"{relative}: {match}"
