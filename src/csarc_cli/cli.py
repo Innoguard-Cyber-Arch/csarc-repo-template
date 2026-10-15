@@ -1132,6 +1132,16 @@ CSARC_OWNED_PREFIXES = (
 )
 
 
+def product_release_workflow(answers: Mapping[str, object]) -> tuple[str, ...]:
+    """Return the selected product-owned release workflow, if any (#1083)."""
+    workflow = answers.get("release_workflow")
+    if answers.get("release_ownership") != "product-owned" or not (
+        isinstance(workflow, str) and workflow
+    ):
+        return ()
+    return (workflow,)
+
+
 def option_retirements(
     old_render: Mapping[str, object], new_render: Mapping[str, object]
 ) -> tuple[str, ...]:
@@ -9466,8 +9476,16 @@ def run_update_candidate(
     product_owned, retained, completed_moves = protect_candidate_transitions(
         candidate, baseline_head, inputs, early_layout_moves
     )
-    deferred_layout_moves = tuple(
-        move for move in deferred_layout_moves if move not in completed_moves
+    # A retained legacy source is a modified generated file the plan keeps
+    # in place as a retire-modified conflict (#1066); it never moves onto
+    # the destination the new release renders (#1083).
+    deferred_layout_moves = effective_layout_moves(
+        tuple(
+            move
+            for move in deferred_layout_moves
+            if move not in completed_moves
+        ),
+        retained,
     )
     conflicts = find_conflicts(candidate)
     copier_succeeded = result.returncode == 0
@@ -9597,11 +9615,15 @@ def plan_update(
     inputs: UpdateRunInputs,
     old_stage: Path,
     retained: Collection[str] = (),
+    product_paths: Collection[str] = (),
 ) -> update_plan.UpdatePlanning:
     """Build the immutable planning result both check and apply review.
 
     ``retained`` lists retirement candidates kept because they differ from
-    the trusted old render (#1066).
+    the trusted old render (#1066). ``product_paths`` lists generated
+    paths the product now owns (the selected product-owned release
+    workflow, #1083): Copier's deletion of one is undone and the plan
+    reports it as product-owned, not as a retirement.
     """
     run_result = run_update_candidate(
         target, workdir, inputs, working_tree=True, skip_tasks=True
@@ -9632,8 +9654,13 @@ def plan_update(
         for name in parity_paths
         if name in target_files and name not in answers_files
     }
+    kept = {*retained, *run_result.retained}
+    owned = kept & set(product_paths)
+    kept -= owned
     excluded = set(inputs.retiring)
-    for source_name, destination_name in inputs.layout_moves:
+    for source_name, destination_name in effective_layout_moves(
+        inputs.layout_moves, kept
+    ):
         excluded.update((source_name, destination_name))
     add, overwrite, merge, delete = update_plan.classify_changes(
         run_result.changes,
@@ -9655,15 +9682,28 @@ def plan_update(
             else update_plan.RENDER_PARITY_EQUAL
         ),
         parity_paths=parity_paths,
-        retained=tuple(sorted({*retained, *run_result.retained})),
+        retained=tuple(sorted(kept)),
         product_owned=tuple(
             sorted(
                 name
-                for name in run_result.product_owned
+                for name in {*run_result.product_owned, *owned}
                 if name in target_files
             )
         ),
     )
+
+
+def effective_layout_moves(
+    layout_moves: tuple[tuple[str, str], ...], retained: Collection[str]
+) -> tuple[tuple[str, str], ...]:
+    """Drop the layout moves whose legacy source the plan keeps (#1083).
+
+    A retained source is a modified generated file reported as a
+    retire-modified conflict: it stays where it is, and the destination the
+    new release renders is an ordinary addition, never a move target.
+    """
+    kept = set(retained)
+    return tuple(move for move in layout_moves if move[0] not in kept)
 
 
 def planned_update_files(
@@ -9673,6 +9713,7 @@ def planned_update_files(
     retiring: tuple[str, ...],
 ) -> Plan:
     """Project one planning result onto the shared file plan model."""
+    layout_moves = effective_layout_moves(layout_moves, planning.retained)
     acted = set(planning.changed_paths()) | set(planning.conflicts)
     acted.update(retiring)
     acted.update(planning.retained)
@@ -9706,7 +9747,7 @@ def update_transitions(
         merge=planning.merge,
         delete=planning.delete,
         retire=retiring,
-        moves=layout_moves,
+        moves=effective_layout_moves(layout_moves, planning.retained),
         target_files=project_files(target),
         metadata=(
             CONFIG_FILE.as_posix(),
@@ -10600,10 +10641,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     if not isinstance(source, str):
         raise CliError("Update source must be a string.")
     # Product action pin drift is known before any render, plan, or write.
+    # A one-shot apply stops here; a reviewed plan first drops the
+    # workflows it retires, which are not product workflows (#1083).
     pins = update_action_pin_preflight(
         target, source, target_revision.sha, candidate_answers
     )
-    if pins.items and not (args.check or args.dry_run):
+    if pins.items and not (args.check or args.dry_run or args.finalize_plan):
         raise CliError(action_pin_preflight.drift_error(pins))
     raw_answers = read_raw_answers(answers_path)
     with tempfile.TemporaryDirectory(prefix="csarc-update-plan-") as temporary:
@@ -10673,6 +10716,15 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         old_render = file_transition.render_fingerprints(
             project_files(old_stage)
         )
+        # The selected product-owned release workflow is the product's only
+        # Release writer even when a legacy render generated it, so the
+        # update never retires or deletes it (#1083).
+        product_paths = product_release_workflow(answers)
+        old_render = {
+            name: value
+            for name, value in old_render.items()
+            if name not in product_paths
+        }
         # Copier never deletes a file that a newly selected option excludes
         # (for example the Release writer once ownership leaves csarc-owned,
         # #1068), so retire every CSARC-owned file the trusted old render
@@ -10709,8 +10761,18 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         planning_root = workdir / "planning"
         planning_root.mkdir()
         planning = plan_update(
-            target, planning_root, run_inputs, old_stage, retained
+            target,
+            planning_root,
+            run_inputs,
+            old_stage,
+            retained,
+            product_paths,
         )
+        # A workflow this update retires is not a product workflow, so its
+        # pins never ask for a product commit (#1083).
+        pins = action_pin_preflight.excluding(pins, retiring)
+        if pins.items and not (args.check or args.dry_run):
+            raise CliError(action_pin_preflight.drift_error(pins))
         files = planned_update_files(target, planning, layout_moves, retiring)
         transitions = update_transitions(
             target, planning, layout_moves, retiring

@@ -421,16 +421,21 @@ def test_pilot_detects_product_changes_outside_the_list(
 
 
 def test_pilot_rejects_a_line_changed_beyond_the_sha(tmp_path: Path) -> None:
-    """AC4: a listed line may only swap the old SHA for the new one."""
+    """AC4: a listed line may only swap the old SHA for the new one.
+
+    Its trailing release-tag comment may follow the SHA (#1083); any other
+    change to the line is still outside the preflight list.
+    """
     target, items = drift_fixture(tmp_path)
     path = target / ".github/workflows/product.yml"
     path.write_text(
         path.read_text(encoding="utf-8").replace(
-            f"actions/checkout@{OLD} # v1", f"actions/checkout@{NEW} # v9"
+            f"- uses: actions/checkout@{OLD} # v1",
+            f"- uses:  actions/checkout@{NEW} # v9",
         ),
         encoding="utf-8",
     )
-    commit = commit_all(target, "fix: pin with a changed comment")
+    commit = commit_all(target, "fix: pin with a changed line")
 
     assert pins.unlisted_pin_changes(items, git_runner, target, commit) == [
         ".github/workflows/product.yml:6"

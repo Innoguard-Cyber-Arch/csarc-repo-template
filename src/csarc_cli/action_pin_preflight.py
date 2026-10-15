@@ -25,7 +25,7 @@ import fnmatch
 import re
 import subprocess
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -407,6 +407,23 @@ def run_preflight(
     return evaluate(_target_workflows(target), managed, new_pins, sha)
 
 
+def excluding(
+    preflight: PinPreflight, retired: Collection[str]
+) -> PinPreflight:
+    """Drop workflows the update retires; they are not product-owned.
+
+    A legacy workflow the trusted old render generated and the new release
+    no longer renders is deleted by the reviewed plan, so pinning it again
+    would only turn a clean retirement into a kept, modified copy (#1083).
+    """
+    gone = set(retired)
+    return PinPreflight(
+        preflight.source_sha,
+        tuple(path for path in preflight.product_workflows if path not in gone),
+        tuple(item for item in preflight.items if item.file not in gone),
+    )
+
+
 def repair_commands(items: Sequence[PinDrift]) -> list[str]:
     """Return one manual repair instruction per drift item."""
     return [
@@ -569,11 +586,22 @@ def _unlisted_in_file(
             item is None
             or old_line != new_line
             or f"{item['action']}@{item['old_sha']}" not in before
-            or before.replace(str(item["old_sha"]), str(item["new_sha"]))
-            != after
+            or _pin_code(before).replace(
+                str(item["old_sha"]), str(item["new_sha"])
+            )
+            != _pin_code(after)
         ):
             unlisted.append(f"{change.path}:{new_line}")
     return unlisted
+
+
+def _pin_code(line: str) -> str:
+    """Return one ``uses:`` line without its trailing comment.
+
+    The readable release tag after a pin (``# v1.2.3``) changes together
+    with the SHA by convention, so a listed pin edit may update it (#1083).
+    """
+    return line.partition(" #")[0].rstrip()
 
 
 def unlisted_pin_changes(
