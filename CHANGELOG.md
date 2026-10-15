@@ -7,6 +7,14 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.32.1-beta.1] - 2026-10-16
+
+### Bug Fixes
+
+* fix(review): share one review decision across gate, status, and merge (363e9a0)
+* fix(cli): apply pilot-proven legacy update plans as reviewed (52b029b)
+* fix(release): revert the mismatched 0.33.0-beta.1 materialization (0f5fd7f)
+
 ## [0.32.0-beta.1] - 2026-10-15
 
 ### Features
