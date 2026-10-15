@@ -62,89 +62,31 @@ FIXTURES: dict[str, dict[str, object]] = {
     },
     "consumer-b": {**ADOPTED_HOSTED, "scheduled_checks": []},
 }
-# #1058 Targets; `None` means the tracker sets no budget for that measure.
-TARGETS: dict[str, dict[str, int | None]] = {
-    "solo-default": {
-        "files": 80,
-        "scripts": 42,
-        "script_lines": 16_500,
-        "bytes": 700_000,
-        "workflows": 0,
-    },
-    "solo-python": {
-        "files": 85,
-        "scripts": 43,
-        "script_lines": 17_000,
-        "bytes": 760_000,
-        "workflows": 0,
-    },
-    "hosted-csarc-owned-python": {
-        "files": 137,
-        "scripts": None,
-        "script_lines": 28_600,
-        "bytes": None,
-        "workflows": None,
-    },
-    "consumer-a": {
-        "files": 121,
-        "scripts": 57,
-        "script_lines": 23_900,
-        "bytes": None,
-        "workflows": 13,
-    },
-    "consumer-b": {
-        "files": 117,
-        "scripts": 55,
-        "script_lines": 23_700,
-        "bytes": None,
-        "workflows": 11,
-    },
+# #1058 Targets, re-approved 2026-10-15: the payload budget is the file
+# count and total bytes. Script counts, script lines, and workflows are
+# still measured and printed, but they are informational, not budgets.
+TARGETS: dict[str, dict[str, int]] = {
+    "solo-default": {"files": 92, "bytes": 1_000_000},
+    "solo-python": {"files": 95, "bytes": 1_010_000},
+    "hosted-csarc-owned-python": {"files": 137, "bytes": 1_200_000},
+    "consumer-a": {"files": 121, "bytes": 1_050_000},
+    "consumer-b": {"files": 117, "bytes": 1_050_000},
 }
-# Measured at the #1077 head (bytes rounded up to 10 KB), plus K1's
-# (#1079) exact allowance per fixture: +1 file, +1 `.csarc/scripts`,
-# +400 script lines (`risk_controls.py` and its wiring). P2 left no room
-# to offset it, so the cut is a follow-up Issue; any other change may only
-# lower these. The gap to TARGETS stays open until the remaining cuts land
-# (#1058 kill criterion 4). K2 (#1080) adds exactly +1 measured script line per
-# fixture: the optional `github_project_url` entry and its default in the
-# shared settings parser; its Project sync stays CLI-only.
+# A later change may only lower these. Every file ceiling is its Target.
+# Bytes record the #1129 head (rounded up to 10 KB): the generated
+# documents still dominate them, and #1081 lowers each bytes ceiling to
+# its Target when it replaces those documents before beta.2.
 CEILINGS: dict[str, dict[str, int]] = {
-    "solo-default": {
-        "files": 96,
-        "scripts": 57,
-        "script_lines": 28_818,
-        "bytes": 1_370_000,
-        "workflows": 0,
-    },
-    "solo-python": {
-        "files": 99,
-        "scripts": 57,
-        "script_lines": 28_835,
-        "bytes": 1_370_000,
-        "workflows": 0,
-    },
-    "hosted-csarc-owned-python": {
-        "files": 120,
-        "scripts": 63,
-        "script_lines": 30_181,
-        "bytes": 1_520_000,
-        "workflows": 13,
-    },
-    "consumer-a": {
-        "files": 106,
-        "scripts": 56,
-        "script_lines": 27_839,
-        "bytes": 1_420_000,
-        "workflows": 12,
-    },
-    "consumer-b": {
-        "files": 102,
-        "scripts": 54,
-        "script_lines": 27_656,
-        "bytes": 1_410_000,
-        "workflows": 10,
-    },
+    "solo-default": {"files": 92, "bytes": 1_200_000},
+    "solo-python": {"files": 95, "bytes": 1_200_000},
+    "hosted-csarc-owned-python": {"files": 137, "bytes": 1_380_000},
+    "consumer-a": {"files": 121, "bytes": 1_210_000},
+    "consumer-b": {"files": 117, "bytes": 1_200_000},
 }
+# Ceilings still above their Target; #1081 closes every one of them.
+OPEN_TARGET_GAPS: frozenset[tuple[str, str]] = frozenset(
+    (name, "bytes") for name in TARGETS
+)
 DOC_TARGETS: dict[str, int] = {
     "solo_docs_lines": 600,
     "solo_docs_bytes": 60_000,
@@ -255,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, values in results.items():
         cells = []
         for column in columns:
-            target = TARGETS[name][column]
+            target = TARGETS[name].get(column)
             cells.append(
                 f"{values[column]:,}"
                 + (f" (≤ {target:,})" if target is not None else "")

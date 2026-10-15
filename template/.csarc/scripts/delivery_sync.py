@@ -9,19 +9,15 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 DELIVERY_BRANCH = re.compile(r"^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$")
 ISOLATED_BRANCH = re.compile(r"^dev/i([0-9]+)-[a-z0-9][a-z0-9-]*$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
-REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-CAPABILITY_STATES = {"allowed", "blocked", "unknown"}
 MERGE_QUEUE_REF = re.compile(
     r"^refs/heads/gh-readonly-queue/main/pr-([1-9][0-9]*)-[A-Za-z0-9_-]+$"
 )
@@ -86,16 +82,6 @@ class GitHubAPI:
             return 0, {"message": str(error)}
 
 
-@dataclass(frozen=True)
-class DeliveryState:
-    """One requested delivery branch compared with the current main SHA."""
-
-    branch: str
-    sha: str
-    current: bool
-    compare_status: str
-
-
 class API(Protocol):
     """Describe the REST method required by synchronization decisions."""
 
@@ -127,33 +113,6 @@ def require_response(status: int, payload: object, operation: str) -> object:
 def includes_main(compare_status: str) -> bool:
     """Return whether the compared head contains the selected main commit."""
     return compare_status in {"ahead", "identical"}
-
-
-def capability_state(status: int) -> str:
-    """Map a non-mutating validation probe to the shared tri-state model."""
-    if status == 422:
-        return "allowed"
-    if status in {401, 403, 409}:
-        return "blocked"
-    return "unknown"
-
-
-def select_auto_mode(
-    requested: bool,
-    external_token: bool,
-    pull_request_capability: str,
-    contents_capability: str,
-) -> str:
-    """Enable automation only with an external token and proven capabilities."""
-    if {pull_request_capability, contents_capability} - CAPABILITY_STATES:
-        raise ValueError("invalid capability state")
-    if not requested:
-        return "manual"
-    if not external_token:
-        return "manual"
-    if pull_request_capability == contents_capability == "allowed":
-        return "automatic"
-    return "manual"
 
 
 def compare(api: API, repo: str, main_sha: str, head_sha: str) -> str:
@@ -527,254 +486,6 @@ def merge_group_gate(
     return f"exact queue candidate for {head_ref}"
 
 
-def manual_commands(delivery_branch: str, main_sha: str) -> str:
-    """Return the portable reviewed-PR fallback for one branch."""
-    sync_branch = sync_branch_name(delivery_branch, main_sha)
-    lifecycle = Path(__file__).with_name("pr_lifecycle.py")
-    return "\n".join(
-        [
-            f"git fetch origin main {delivery_branch}",
-            f"git switch -c {sync_branch} origin/{delivery_branch}",
-            "git merge --no-ff origin/main",
-            f"git push -u origin {sync_branch}",
-            f"python3 {lifecycle} create --repo $GITHUB_REPOSITORY "
-            f"--base {delivery_branch} --head {sync_branch} "
-            f"--title 'chore(sync): merge main into {delivery_branch}' "
-            "--body-file .github/pull_request_template.md",
-            "# Add the enhancement label only through pr_lifecycle.py edit.",
-        ]
-    )
-
-
-def lifecycle_command(arguments: list[str]) -> None:
-    """Run one fail-closed PR lifecycle operation."""
-    result = subprocess.run(  # noqa: S603
-        [
-            sys.executable,
-            str(Path(__file__).with_name("pr_lifecycle.py")),
-            *arguments,
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(f"PR lifecycle operation failed: {detail}")
-
-
-def label_sync_pr(repo: str, number: int, head_sha: str) -> None:
-    """Label a new Draft sync PR, then mark it Ready, under one lease.
-
-    The PR is created as Draft so the CI job guard skips its `opened`
-    event; hosted `verify` first runs on `ready_for_review`, after the
-    `enhancement` label that `validate_sync_route()` requires exists.
-    """
-    owner = (
-        "github-actions/"
-        f"{os.environ.get('GITHUB_RUN_ID', 'local')}/"
-        f"{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}"
-    )
-    with tempfile.TemporaryDirectory(
-        prefix="csarc-delivery-lease-"
-    ) as directory:
-        evidence = Path(directory) / "lease.json"
-        common = [
-            "--repo",
-            repo,
-            "--pr-number",
-            str(number),
-            "--owner",
-            owner,
-        ]
-        lifecycle_command(
-            [
-                "acquire",
-                *common,
-                "--head-sha",
-                head_sha,
-                "--output",
-                str(evidence),
-            ]
-        )
-        try:
-            lifecycle_command(
-                [
-                    "edit",
-                    *common,
-                    "--head-sha",
-                    head_sha,
-                    "--lease",
-                    str(evidence),
-                    "--add-label",
-                    "enhancement",
-                ]
-            )
-            lifecycle_command(
-                [
-                    "state",
-                    *common,
-                    "--head-sha",
-                    head_sha,
-                    "--lease",
-                    str(evidence),
-                    "--state",
-                    "ready",
-                ]
-            )
-        finally:
-            lifecycle_command(["release", *common, "--lease", str(evidence)])
-
-
-def probe_capabilities(api: API, repo: str, main_sha: str) -> tuple[str, str]:
-    """Probe branch and pull-request writes without creating resources."""
-    pr_status, _ = api.request(
-        "POST",
-        f"repos/{repo}/pulls",
-        {
-            "title": "csarc delivery sync capability probe",
-            "head": f"__csarc_sync_probe_{main_sha[:12]}__",
-            "base": "main",
-            "body": "This invalid head must never create a pull request.",
-        },
-    )
-    ref_status, _ = api.request(
-        "POST",
-        f"repos/{repo}/git/refs",
-        {"ref": "invalid-csarc-delivery-sync-probe", "sha": main_sha},
-    )
-    return capability_state(pr_status), capability_state(ref_status)
-
-
-def create_sync_pr(
-    api: API,
-    repo: str,
-    delivery_branch: str,
-    delivery_sha: str,
-    main_sha: str,
-    reason: str,
-    request_pr: int,
-) -> str:
-    """Create one deterministic branch, merge commit, and reviewed sync PR."""
-    sync_branch = sync_branch_name(delivery_branch, main_sha)
-    owner = repo.split("/", 1)[0]
-    query = urllib.parse.urlencode(
-        {
-            "state": "open",
-            "head": f"{owner}:{sync_branch}",
-            "base": delivery_branch,
-            "per_page": 1,
-        }
-    )
-    status, payload = api.request("GET", f"repos/{repo}/pulls?{query}")
-    existing = require_response(status, payload, "find existing sync PR")
-    if isinstance(existing, list) and existing:
-        return str(existing[0]["html_url"])
-
-    encoded_branch = urllib.parse.quote(sync_branch, safe="")
-    status, payload = api.request(
-        "GET", f"repos/{repo}/git/ref/heads/{encoded_branch}"
-    )
-    if status == 404:
-        status, payload = api.request(
-            "POST",
-            f"repos/{repo}/git/refs",
-            {"ref": f"refs/heads/{sync_branch}", "sha": delivery_sha},
-        )
-        require_response(status, payload, "create sync branch")
-    elif not 200 <= status < 300:
-        require_response(status, payload, "read sync branch")
-
-    status, payload = api.request(
-        "POST",
-        f"repos/{repo}/merges",
-        {"base": sync_branch, "head": main_sha},
-    )
-    if status == 409:
-        raise RuntimeError(
-            f"main conflicts with {delivery_branch}; "
-            f"resolve it on {sync_branch}"
-        )
-    require_response(status, payload, "merge main into sync branch")
-
-    body = (
-        "## Purpose\n\n"
-        f"Synchronize `{main_sha}` into `{delivery_branch}`.\n\n"
-        "## 完成清單\n\n"
-        "- [x] Merge the selected main commit without direct-pushing "
-        "the delivery branch.\n\n"
-        "## 補充\n\n"
-        f"Requested from PR #{request_pr} for `{reason}`. Created by the "
-        "delivery sync workflow; normal review and checks still apply."
-    )
-    status, payload = api.request(
-        "POST",
-        f"repos/{repo}/pulls",
-        {
-            "title": f"chore(sync): merge main into {delivery_branch}",
-            "head": sync_branch,
-            "base": delivery_branch,
-            "body": body,
-            "draft": True,
-        },
-    )
-    pull = require_response(status, payload, "create sync PR")
-    number = pull.get("number") if isinstance(pull, dict) else None
-    url = pull.get("html_url") if isinstance(pull, dict) else None
-    head = pull.get("head") if isinstance(pull, dict) else None
-    head_sha = head.get("sha") if isinstance(head, dict) else None
-    if (
-        not isinstance(number, int)
-        or not isinstance(url, str)
-        or not isinstance(head_sha, str)
-    ):
-        raise RuntimeError("GitHub returned an invalid pull request response")
-    label_sync_pr(repo, number, head_sha)
-    return url
-
-
-def read_delivery_state(
-    api: API, repo: str, main_sha: str, branch: str
-) -> DeliveryState:
-    """Read one open-Milestone delivery branch and compare it with main."""
-    milestone_match = DELIVERY_BRANCH.fullmatch(branch)
-    isolated_match = ISOLATED_BRANCH.fullmatch(branch)
-    if milestone_match is None and isolated_match is None:
-        raise RuntimeError("Sync requires one policy-named delivery branch")
-    delivery_sha = ref_sha(api, repo, branch)
-    if milestone_match is not None:
-        number = int(milestone_match.group(1))
-        status, payload = api.request(
-            "GET", f"repos/{repo}/milestones/{number}"
-        )
-        milestone = require_response(status, payload, "read delivery Milestone")
-        if (
-            not isinstance(milestone, dict)
-            or milestone.get("number") != number
-            or milestone.get("state") != "open"
-        ):
-            raise RuntimeError(
-                "Delivery sync requires its matching open Milestone"
-            )
-    else:
-        if isolated_match is None:
-            raise RuntimeError("Sync requires one policy-named delivery branch")
-        number = int(isolated_match.group(1))
-        status, payload = api.request("GET", f"repos/{repo}/issues/{number}")
-        issue = require_response(status, payload, "read isolated Issue")
-        if (
-            not isinstance(issue, dict)
-            or issue.get("number") != number
-            or issue.get("state") != "open"
-            or "promotion" not in issue_labels(issue)
-        ):
-            raise RuntimeError(
-                "Isolated sync requires its matching open promotion Issue"
-            )
-    state = compare(api, repo, main_sha, delivery_sha)
-    return DeliveryState(branch, delivery_sha, includes_main(state), state)
-
-
 def require_sync_request(
     api: API,
     repo: str,
@@ -833,63 +544,6 @@ def require_sync_request(
         )
 
 
-def reconcile(
-    api: API,
-    repo: str,
-    main_sha: str,
-    *,
-    auto_requested: bool,
-    external_token: bool,
-    branch_strategy: str = "delivery",
-    delivery_branch: str,
-    reason: str,
-    request_pr: int,
-    requester: str,
-) -> list[str]:
-    """Report or create one reviewed sync for one authorized delivery."""
-    if branch_strategy != "delivery":
-        return ["Main-only profile has no delivery sync action."]
-    require_sync_request(
-        api, repo, delivery_branch, reason, request_pr, requester
-    )
-    state = read_delivery_state(api, repo, main_sha, delivery_branch)
-    if state.current:
-        return [f"{delivery_branch} already contains current main."]
-
-    pr_capability = contents_capability = "unknown"
-    if auto_requested and external_token:
-        pr_capability, contents_capability = probe_capabilities(
-            api, repo, main_sha
-        )
-    mode = select_auto_mode(
-        auto_requested,
-        external_token,
-        pr_capability,
-        contents_capability,
-    )
-    results = [
-        f"Sync mode: {mode} (pull requests: {pr_capability}; "
-        f"contents: {contents_capability})."
-    ]
-    if mode == "automatic":
-        url = create_sync_pr(
-            api,
-            repo,
-            state.branch,
-            state.sha,
-            main_sha,
-            reason,
-            request_pr,
-        )
-        results.append(f"{state.branch}: {url}")
-    else:
-        results.append(
-            f"{state.branch} is {state.compare_status}; run:\n"
-            f"```bash\n{manual_commands(state.branch, main_sha)}\n```"
-        )
-    return results
-
-
 def main() -> None:
     """Run the PR gate or one explicitly requested sync action."""
     parser = argparse.ArgumentParser()
@@ -898,7 +552,6 @@ def main() -> None:
         choices=(
             "gate",
             "merge-group-gate",
-            "reconcile",
             "verify-sync",
         ),
     )
@@ -911,22 +564,10 @@ def main() -> None:
     parser.add_argument("--queue-ref", default="")
     parser.add_argument("--queue-sha", default="")
     parser.add_argument("--base-sha", default="")
-    parser.add_argument("--delivery-branch", default="")
-    parser.add_argument(
-        "--reason", choices=("promotion", "explicit-dependency"), default=""
-    )
-    parser.add_argument("--request-pr", type=int, default=0)
-    parser.add_argument("--requester", default="")
-    parser.add_argument("--auto", choices=("true", "false"), default="false")
     parser.add_argument(
         "--branch-strategy",
         choices=("main", "delivery"),
         default="delivery",
-    )
-    parser.add_argument(
-        "--token-kind",
-        choices=("github-token", "external"),
-        default="github-token",
     )
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
@@ -960,21 +601,6 @@ def main() -> None:
                 args.base_sha,
             )
             print(f"delivery sync gate: {result}")  # noqa: T201
-        else:
-            main_sha = args.main_sha or read_main_sha(api, args.repo)
-            for line in reconcile(
-                api,
-                args.repo,
-                main_sha,
-                auto_requested=args.auto == "true",
-                external_token=args.token_kind == "external",  # noqa: S105
-                branch_strategy=args.branch_strategy,
-                delivery_branch=args.delivery_branch,
-                reason=args.reason,
-                request_pr=args.request_pr,
-                requester=args.requester,
-            ):
-                print(line)  # noqa: T201
     except RuntimeError as error:
         raise SystemExit(str(error)) from error
 

@@ -815,37 +815,6 @@ def _vocabulary_approval_records(
     return approvals, objections, resolved, admin_approvals, stale
 
 
-def _admin_self_approval(
-    command: str,
-    author: str,
-    author_type: str | None,
-    permission: str | None,
-    proposer: str | None,
-) -> str | None:
-    """Return the reason for one valid tracker admin self-approval, if any."""
-    return _vocabulary_admin_self_approval(
-        _TRACKER_VOCABULARY, command, author, author_type, permission, proposer
-    )
-
-
-def _record_objection(
-    command: str, author: str, url: object, objections: dict[str, str]
-) -> None:
-    """Record one tracker objection comment, keyed by its own permalink."""
-    _vocabulary_record_objection(
-        _TRACKER_VOCABULARY, command, command, author, url, objections
-    )
-
-
-def _record_resolution(
-    command: str, author: str, objections: dict[str, str], resolved: set[str]
-) -> None:
-    """Record one tracker objection withdrawal by its original author."""
-    _vocabulary_record_resolution(
-        _TRACKER_VOCABULARY, command, command, author, objections, resolved
-    )
-
-
 def _approval_records(
     snapshot: dict[str, Any],
     proposer: str | None,
@@ -1834,36 +1803,6 @@ def check_merge_group(
     return decision
 
 
-def record_promotion_evidence(
-    repo: str, tracker_number: int, evidence_url: str
-) -> Decision:
-    """Append one promotion merge evidence URL onto a tracker Issue."""
-    issue = json.loads(run_gh(["api", f"repos/{repo}/issues/{tracker_number}"]))
-    body = issue.get("body")
-    if not isinstance(body, str):
-        return Decision(False, "The lifecycle Issue body is missing")
-    try:
-        new_body = append_completion_evidence(body, evidence_url)
-    except RuntimeError as error:
-        return Decision(False, str(error))
-    if new_body == body:
-        return Decision(
-            True, f"Promotion evidence already recorded on #{tracker_number}"
-        )
-    run_gh(
-        [
-            "issue",
-            "edit",
-            str(tracker_number),
-            "--repo",
-            repo,
-            "--body",
-            new_body,
-        ]
-    )
-    return Decision(True, f"Recorded promotion evidence on #{tracker_number}")
-
-
 def complete_release(  # noqa: C901
     repo: str,
     main_sha: str,
@@ -2160,10 +2099,6 @@ def main() -> None:
     queue_mode.add_argument("--read-only", action="store_true")
     queue_mode.add_argument("--publish-only", action="store_true")
     subparsers.add_parser("check-promotion")
-    record = subparsers.add_parser("record-promotion-evidence")
-    record.add_argument("--repo", required=True)
-    record.add_argument("--tracker", required=True, type=int)
-    record.add_argument("--evidence-url", required=True)
     complete = subparsers.add_parser("complete-release")
     complete.add_argument("--repo", required=True)
     complete.add_argument("--main-sha", required=True)
@@ -2198,7 +2133,7 @@ def main() -> None:
         raise SystemExit(1)
 
 
-def _dispatch(args: argparse.Namespace) -> Decision:  # noqa: C901
+def _dispatch(args: argparse.Namespace) -> Decision:
     """Route one parsed subcommand to its handler function."""
     if args.command == "check-pr":
         decision = check_pr(args.repo, args.pr, record_check=not args.read_only)
@@ -2218,10 +2153,6 @@ def _dispatch(args: argparse.Namespace) -> Decision:  # noqa: C901
         )
     if args.command == "check-promotion":
         return promotion_decision(sys.stdin.read())
-    if args.command == "record-promotion-evidence":
-        return record_promotion_evidence(
-            args.repo, args.tracker, args.evidence_url
-        )
     if args.command == "complete-release":
         return complete_release(
             args.repo,

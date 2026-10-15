@@ -82,11 +82,16 @@ MATRIX: dict[str, dict[str, object]] = {
     },
 }
 # Read-only operator diagnostics documented for maintainers; they have no
-# automated caller, so each one needs a reason here.
-OPERATOR_ENTRY_POINTS = {
-    # Read-only capability diagnostic (#531) documented in ci-policy.md.
-    "check-repo-capabilities": "documented capability diagnostic",
-}
+# automated caller, so each one needs a reason here. The capability
+# diagnostic (#531) had none and is no longer rendered (#1129 AC5); it stays
+# a template-repository tool under root `scripts/`.
+OPERATOR_ENTRY_POINTS: dict[str, str] = {}
+# Template-repository tools that no generated caller reaches (#1129).
+TEMPLATE_REPOSITORY_ONLY = (
+    ".csarc/scripts/check-repo-capabilities",
+    ".csarc/scripts/repo_capabilities.py",
+    ".csarc/policies/capability-matrix.json",
+)
 # A static reference whose step the workflow gates on the same option at
 # runtime, so it never executes when the script is not rendered.
 RUNTIME_GATED_REFERENCES = {
@@ -119,6 +124,7 @@ RELEASE_ONLY = {
     "install-syft",
     "publish-release",
     "release_bundle.py",
+    "release_candidate.py",
     "release_writer.py",
     "verify-release-candidate",
     "verify_release_consumption.py",
@@ -391,6 +397,16 @@ def test_render_stays_inside_the_adr_allowlist(
     ] == []
 
 
+@pytest.mark.parametrize("name", list(MATRIX))
+def test_template_repository_tools_are_never_rendered(
+    renders: dict[str, Path], name: str
+) -> None:
+    """#1129 AC5: an uncalled diagnostic stays in the template repository."""
+    for relative in TEMPLATE_REPOSITORY_ONLY:
+        assert not (renders[name] / relative).exists(), relative
+        assert (ROOT / relative.removeprefix(".csarc/")).is_file(), relative
+
+
 def test_existing_adopt_adds_no_product_starter(
     renders: dict[str, Path],
 ) -> None:
@@ -535,3 +551,18 @@ def test_payload_never_grows_past_its_recorded_ceiling() -> None:
     for name, values in measured.items():
         for measure, ceiling in generated_payload.CEILINGS[name].items():
             assert values[measure] <= ceiling, (name, measure, values[measure])
+
+
+def test_ceilings_equal_targets_except_open_gaps() -> None:
+    """#1129 AC1: file ceilings are the Targets; only bytes wait for #1081."""
+    gaps = generated_payload.OPEN_TARGET_GAPS
+    assert {measure for _name, measure in gaps} == {"bytes"}
+    for name, targets in generated_payload.TARGETS.items():
+        ceilings = generated_payload.CEILINGS[name]
+        # The re-approved budget is exactly the file count and total bytes.
+        assert set(targets) == set(ceilings) == {"files", "bytes"}
+        for measure, target in targets.items():
+            if (name, measure) in gaps:
+                assert ceilings[measure] > target, ("stale gap", name, measure)
+            else:
+                assert ceilings[measure] == target, (name, measure)
