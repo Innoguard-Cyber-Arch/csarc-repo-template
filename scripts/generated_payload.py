@@ -62,102 +62,30 @@ FIXTURES: dict[str, dict[str, object]] = {
     },
     "consumer-b": {**ADOPTED_HOSTED, "scheduled_checks": []},
 }
-# #1058 Targets; `None` means the tracker sets no budget for that measure.
-TARGETS: dict[str, dict[str, int | None]] = {
-    "solo-default": {
-        "files": 80,
-        "scripts": 42,
-        "script_lines": 16_500,
-        "bytes": 700_000,
-        "workflows": 0,
-    },
-    "solo-python": {
-        "files": 85,
-        "scripts": 43,
-        "script_lines": 17_000,
-        "bytes": 760_000,
-        "workflows": 0,
-    },
-    "hosted-csarc-owned-python": {
-        "files": 137,
-        "scripts": None,
-        "script_lines": 28_600,
-        "bytes": None,
-        "workflows": None,
-    },
-    "consumer-a": {
-        "files": 121,
-        "scripts": 57,
-        "script_lines": 23_900,
-        "bytes": None,
-        "workflows": 13,
-    },
-    "consumer-b": {
-        "files": 117,
-        "scripts": 55,
-        "script_lines": 23_700,
-        "bytes": None,
-        "workflows": 11,
-    },
+# #1058 Targets, re-approved 2026-10-15: the payload budget is the file
+# count and total bytes. Script counts, script lines, and workflows are
+# still measured and printed, but they are informational, not budgets.
+TARGETS: dict[str, dict[str, int]] = {
+    "solo-default": {"files": 92, "bytes": 1_000_000},
+    "solo-python": {"files": 95, "bytes": 1_010_000},
+    "hosted-csarc-owned-python": {"files": 137, "bytes": 1_200_000},
+    "consumer-a": {"files": 121, "bytes": 1_050_000},
+    "consumer-b": {"files": 117, "bytes": 1_050_000},
 }
-# Recorded at the #1129 head, after K1 (#1079). A later change may only
-# lower these. Every met Target is the ceiling itself; a measure the
-# tracker leaves unbudgeted records this head. Bytes record this head
-# (rounded up to 10 KB): the documents still dominate them, and #1081
-# lowers the bytes ceilings to TARGETS when it replaces the generated
-# documents before beta.2. The solo fixtures still exceed their file,
-# script, and script-line Targets after every behaviour-preserving cut;
-# they record this head for the owner's #1058 kill criterion 4 decision.
+# A later change may only lower these. Every file ceiling is its Target.
+# Bytes record the #1129 head (rounded up to 10 KB): the generated
+# documents still dominate them, and #1081 lowers each bytes ceiling to
+# its Target when it replaces those documents before beta.2.
 CEILINGS: dict[str, dict[str, int]] = {
-    "solo-default": {
-        "files": 91,
-        "scripts": 53,
-        "script_lines": 24_748,
-        "bytes": 1_200_000,
-        "workflows": 0,
-    },
-    "solo-python": {
-        "files": 94,
-        "scripts": 53,
-        "script_lines": 24_765,
-        "bytes": 1_200_000,
-        "workflows": 0,
-    },
-    "hosted-csarc-owned-python": {
-        "files": 137,
-        "scripts": 62,
-        "script_lines": 28_600,
-        "bytes": 1_380_000,
-        "workflows": 13,
-    },
-    "consumer-a": {
-        "files": 121,
-        "scripts": 57,
-        "script_lines": 23_900,
-        "bytes": 1_210_000,
-        "workflows": 13,
-    },
-    "consumer-b": {
-        "files": 117,
-        "scripts": 55,
-        "script_lines": 23_700,
-        "bytes": 1_200_000,
-        "workflows": 11,
-    },
+    "solo-default": {"files": 92, "bytes": 1_200_000},
+    "solo-python": {"files": 95, "bytes": 1_200_000},
+    "hosted-csarc-owned-python": {"files": 137, "bytes": 1_380_000},
+    "consumer-a": {"files": 121, "bytes": 1_210_000},
+    "consumer-b": {"files": 117, "bytes": 1_200_000},
 }
-# Ceilings still above their Target; every other ceiling equals or beats
-# it. Bytes close with #1081; the solo rows await the #1058 decision.
+# Ceilings still above their Target; #1081 closes every one of them.
 OPEN_TARGET_GAPS: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("solo-default", "files"),
-        ("solo-default", "scripts"),
-        ("solo-default", "script_lines"),
-        ("solo-default", "bytes"),
-        ("solo-python", "files"),
-        ("solo-python", "scripts"),
-        ("solo-python", "script_lines"),
-        ("solo-python", "bytes"),
-    }
+    (name, "bytes") for name in TARGETS
 )
 DOC_TARGETS: dict[str, int] = {
     "solo_docs_lines": 600,
@@ -269,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, values in results.items():
         cells = []
         for column in columns:
-            target = TARGETS[name][column]
+            target = TARGETS[name].get(column)
             cells.append(
                 f"{values[column]:,}"
                 + (f" (≤ {target:,})" if target is not None else "")

@@ -554,20 +554,15 @@ def test_payload_never_grows_past_its_recorded_ceiling() -> None:
 
 
 def test_ceilings_equal_targets_except_open_gaps() -> None:
-    """#1129 AC1: met Targets are the ceilings; open gaps stay declared."""
+    """#1129 AC1: file ceilings are the Targets; only bytes wait for #1081."""
     gaps = generated_payload.OPEN_TARGET_GAPS
+    assert {measure for _name, measure in gaps} == {"bytes"}
     for name, targets in generated_payload.TARGETS.items():
         ceilings = generated_payload.CEILINGS[name]
+        # The re-approved budget is exactly the file count and total bytes.
+        assert set(targets) == set(ceilings) == {"files", "bytes"}
         for measure, target in targets.items():
-            if target is None:
-                continue
             if (name, measure) in gaps:
                 assert ceilings[measure] > target, ("stale gap", name, measure)
             else:
-                assert ceilings[measure] <= target, (name, measure)
-    assert gaps <= {
-        (name, measure)
-        for name, targets in generated_payload.TARGETS.items()
-        for measure, target in targets.items()
-        if target is not None
-    }
+                assert ceilings[measure] == target, (name, measure)
