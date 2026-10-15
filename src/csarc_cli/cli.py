@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -9386,6 +9387,7 @@ class UpdateRun:
     retained: tuple[str, ...] = ()
     product_owned: tuple[str, ...] = ()
     shims: tuple[str, ...] = ()
+    restored: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -9408,6 +9410,11 @@ class UpdateRunInputs:
     payload: tuple[str, ...] = ()
     # Kept newer product pins the template workflows adopt (#1083).
     pin_alignment: tuple[tuple[str, ...], ...] = ()
+    # Rendered files Copier's update deleted although the reviewed new
+    # render keeps them, as {path: [base64 content, executable]} (#1083).
+    restored: Mapping[str, Sequence[object]] = dataclass_field(
+        default_factory=dict
+    )
 
 
 def baseline_paths(candidate: Path, baseline: str) -> tuple[str, ...]:
@@ -9484,6 +9491,7 @@ def run_update_candidate(
     working_tree: bool,
     skip_tasks: bool,
     resolutions: Mapping[str, bytes | None] | None = None,
+    stage: Path | None = None,
 ) -> UpdateRun:
     """Run the one shared three-way update in a disposable candidate.
 
@@ -9575,6 +9583,7 @@ def run_update_candidate(
     command.append(str(candidate))
     result = run(command, capture=True, check=False)
     output = (result.stderr or "").strip() or (result.stdout or "").strip()
+    restored = restore_rendered_payload(target, candidate, inputs, stage)
     product_owned, retained, completed_moves = protect_candidate_transitions(
         candidate, baseline_head, inputs, early_layout_moves
     )
@@ -9645,7 +9654,65 @@ def run_update_candidate(
         retained,
         product_owned,
         shims,
+        restored,
     )
+
+
+def restore_rendered_payload(
+    target: Path,
+    candidate: Path,
+    inputs: UpdateRunInputs,
+    stage: Path | None,
+) -> tuple[str, ...]:
+    """Put back rendered files Copier's update deleted (Issue #1083).
+
+    Copier lists the files an update removes before it loads every answer,
+    so a file whose ``_exclude`` rule reads CLI-provided data (the migrated
+    CSARC release workflow) can be deleted although the reviewed new render
+    keeps it. The planning run takes such a file from that render when the
+    target still holds the unmodified old render; the plan records the
+    bytes and the apply run writes the same bytes.
+    """
+    contents: dict[str, tuple[bytes, bool]] = {}
+    for name, (encoded, executable) in inputs.restored.items():
+        contents[name] = (base64.b64decode(str(encoded)), bool(executable))
+    if stage is not None:
+        for name in inputs.payload:
+            rendered = stage / name
+            if (
+                name in contents
+                or (candidate / name).exists()
+                or (candidate / name).is_symlink()
+                or not rendered.is_file()
+                or rendered.is_symlink()
+                or inputs.old_render.get(name) is None
+                or file_transition.fingerprint(target / name)
+                != inputs.old_render.get(name)
+            ):
+                continue
+            contents[name] = (
+                rendered.read_bytes(),
+                bool(rendered.stat().st_mode & 0o111),
+            )
+    for name, (content, executable) in sorted(contents.items()):
+        path = checked_destination(candidate, name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        path.chmod(0o755 if executable else 0o644)
+    return tuple(sorted(contents))
+
+
+def restored_record(
+    stage: Path, names: Sequence[str]
+) -> dict[str, list[object]]:
+    """Return the recorded bytes of the files a planning run restored."""
+    return {
+        name: [
+            base64.b64encode((stage / name).read_bytes()).decode("ascii"),
+            bool((stage / name).stat().st_mode & 0o111),
+        ]
+        for name in sorted(names)
+    }
 
 
 SHIM_MARKER = "# CSARC compatibility shim (Issue #1083)"
@@ -9918,6 +9985,7 @@ def plan_update(
     old_stage: Path,
     retained: Collection[str] = (),
     product_paths: Collection[str] = (),
+    stage: Path | None = None,
 ) -> update_plan.UpdatePlanning:
     """Build the immutable planning result both check and apply review.
 
@@ -9928,7 +9996,12 @@ def plan_update(
     reports it as product-owned, not as a retirement.
     """
     run_result = run_update_candidate(
-        target, workdir, inputs, working_tree=True, skip_tasks=True
+        target,
+        workdir,
+        inputs,
+        working_tree=True,
+        skip_tasks=True,
+        stage=stage,
     )
     if run_result.returncode != 0 and not run_result.conflicts:
         raise CliError(
@@ -9986,6 +10059,7 @@ def plan_update(
         parity_paths=parity_paths,
         retained=tuple(sorted(kept)),
         shims=run_result.shims,
+        restored=run_result.restored,
         product_owned=tuple(
             sorted(
                 name
@@ -10340,6 +10414,7 @@ def planning_record(planning: update_plan.UpdatePlanning) -> dict[str, object]:
         "render_parity": planning.render_parity,
         "retained": list(planning.retained),
         "shims": list(planning.shims),
+        "restored": list(planning.restored),
     }
 
 
@@ -10426,6 +10501,10 @@ def final_plan_payload(
                 "pin_alignment": [
                     list(entry) for entry in run_inputs.pin_alignment
                 ],
+                "restored": {
+                    name: list(value)
+                    for name, value in run_inputs.restored.items()
+                },
                 "planning": planning_record(context.planning),
                 "retiring": list(run_inputs.retiring),
                 "transitions": approved.as_dict(),
@@ -10637,6 +10716,10 @@ def recorded_run(
             tuple(str(part) for part in entry)
             for entry in derived.get("pin_alignment", ())
         ),
+        restored={
+            str(name): list(value)
+            for name, value in derived.get("restored", {}).items()
+        },
     )
     recorded = derived["planning"]
     planning = update_plan.UpdatePlanning(
@@ -10651,6 +10734,7 @@ def recorded_run(
         parity_paths=tuple(recorded["parity_paths"]),
         retained=tuple(recorded["retained"]),
         shims=tuple(recorded.get("shims", ())),
+        restored=tuple(recorded.get("restored", ())),
         product_owned=tuple(recorded["product_owned"]),
     )
     if planning.digest() != recorded["digest"]:
@@ -11121,7 +11205,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             old_stage,
             retained,
             product_paths,
+            stage,
         )
+        if planning.restored:
+            run_inputs = replace(
+                run_inputs, restored=restored_record(stage, planning.restored)
+            )
         # A workflow this update retires is not a product workflow, so its
         # pins never ask for a product commit (#1083).
         pins = action_pin_preflight.excluding(pins, retiring)

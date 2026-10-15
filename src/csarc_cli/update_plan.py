@@ -226,6 +226,8 @@ class UpdatePlanning:
     # Issue #1083: CSARC forwarding wrappers kept at moved scripts' old
     # paths while product files still call them.
     shims: tuple[str, ...] = field(default=())
+    # Rendered files restored after Copier's update deleted them (#1083).
+    restored: tuple[str, ...] = field(default=())
 
     def changed_paths(self) -> frozenset[str]:
         """Return every path the plan expects the update to change."""
@@ -253,6 +255,8 @@ class UpdatePlanning:
             # Only a plan with shims binds them, so earlier plans keep
             # their digest.
             value["shims"] = list(self.shims)
+        if self.restored:
+            value["restored"] = list(self.restored)
         return canonical_digest(value)
 
     def as_dict(self) -> dict[str, object]:
@@ -266,6 +270,7 @@ class UpdatePlanning:
             "render_parity_paths": list(self.parity_paths),
             "retained": list(self.retained),
             "shims": list(self.shims),
+            "restored": list(self.restored),
         }
 
 
