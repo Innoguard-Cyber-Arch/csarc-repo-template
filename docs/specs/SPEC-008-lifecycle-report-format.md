@@ -16,7 +16,7 @@ tracking: none
 
 `adopt` 與 `update` 每次規劃都由同一個 report model 在 target 外寫出 machine plan、report JSON 與從 report JSON render 的 Markdown。report JSON 是唯一來源，詞彙封閉，未知值 fail closed；套用成功後同一份報告轉為 `applied` 並綁定被重播的 plan digest。
 
-格式版本：`2.1.0`（`LIFECYCLE_REPORT_FORMAT_VERSION`，`src/csarc_cli/lifecycle_report.py`）。`2.1.0` 由 Issue #1078 依 MINOR 規則提升，只新增 adopt 的 `setup` 紀錄並把 `setting-decision` 開放給 adopt；相容規則見 §7。
+格式版本：`2.2.0`（`LIFECYCLE_REPORT_FORMAT_VERSION`，`src/csarc_cli/lifecycle_report.py`）。`2.1.0` 由 Issue #1078 依 MINOR 規則提升，只新增 adopt 的 `setup` 紀錄並把 `setting-decision` 開放給 adopt；`2.2.0` 由 Issue #1083 依 MINOR 規則提升，只新增 `overwrite` 的 `compatibility-shim` 理由；相容規則見 §7。
 
 ## Context
 
@@ -46,7 +46,7 @@ tracking: none
 
 每個鍵都一定存在，未知鍵被拒絕。`null` 表示這個 operation 不評估，或負責的 Issue 尚未實作；`[]` 表示評估過但沒有項目。輸出以 `sort_keys`、兩格縮排序列化；相同輸入產生相同位元組。
 
-- `report_format_version`：`2.1.0`。
+- `report_format_version`：`2.2.0`。
 - `operation`：`adopt`｜`update`。
 - `status`、`status_reason`、`applicable`（機器的 apply 閘門）。
 - `generated_at`、`applied_at`：`applied_at` 只在 `status` 為 `applied` 時是字串。
@@ -83,7 +83,7 @@ tracking: none
 | Action | Reason |
 | --- | --- |
 | `add` | `template`、`lockfile` |
-| `overwrite` | `template`、`automatic-merge` |
+| `overwrite` | `template`、`automatic-merge`、`compatibility-shim`（`2.2.0`） |
 | `move` | `layout-migration` |
 | `remove` | `template-deleted` |
 | `retire` | `obsolete-generated`、`excluded-orphan` |
@@ -104,15 +104,15 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - 報告的 `status` 與 CLI exit code 是兩回事；`update --check` 的 exit code 不變。
 - update 的檔案列與衝突來自 `--check` 與套用共用的同一個三方 update 規劃（Issue #1063）：衝突為 `conflict`／`update-conflict`，並產生 blocking 的 `file-conflict`；template 刪除的路徑為 `remove`／`template-deleted`。
 - update 的檔案轉換只來自同一份核准 plan（Issue #1066）：不再 render 的 CSARC-owned 檔案只在與可信舊側 render byte-identical 時退役；修改過的檔案保留為 `conflict`／`retire-modified`（decision `keep-current`），並產生非 blocking 的 `retire-modified`。repository 已有的產品發版狀態（`.csarc/version.txt`、`.csarc/release-please-manifest.json`、`CHANGELOG.md`，以及搬移前的舊路徑）不被 template seed 或 update migration 改寫，列為 `preserve`／`product-owned`。套用前實際的新增、修改、搬移與刪除集合必須與核准 plan 相同，否則 fail closed；寫入以 transaction 進行，任一步失敗時 target 回到 byte-identical base。
-- update 的 pilot 修正（Issue #1083）：所選的 product-owned Release workflow（`release_workflow`）即使由舊 render 產生，仍是產品唯一的 Release writer，不會退役或被刪除，列為 `preserve`／`product-owned`；action pin preflight 不再列出本次 plan 退役的 workflow；pin 決定的 commit 可同時更新同一行 SHA 後的版本註解。保留為 `retire-modified` 的舊路徑不是 layout 搬移來源，新位置以 `add` 列出；target 已有搬移目的地時，舊路徑也不再配對搬移。產品 ignore 規則隱藏任何 render 出的檔案時，plan 仍列出該檔，最終 candidate 則 fail closed，避免驗證過的 candidate 與實際寫入的 target 不同。
+- update 的 pilot 修正（Issue #1083）：所選的 product-owned Release workflow（`release_workflow`）即使由舊 render 產生，仍是產品唯一的 Release writer，不會退役或被刪除，列為 `preserve`／`product-owned`；action pin preflight 不再列出本次 plan 退役的 workflow；pin 決定的 commit 可同時更新同一行 SHA 後的版本註解。保留為 `retire-modified` 的舊路徑不是 layout 搬移來源，新位置以 `add` 列出；target 已有搬移目的地時，舊路徑也不再配對搬移。產品 ignore 規則隱藏任何 render 出的檔案時，plan 仍列出該檔，最終 candidate 則 fail closed，避免驗證過的 candidate 與實際寫入的 target 不同。移動到 `.csarc/` 的可執行 script 若仍被產品檔案（含保留的舊檔）以舊路徑或同目錄檔名呼叫，舊路徑留下 CSARC 擁有的轉呼叫 wrapper，列為 `overwrite`／`compatibility-shim`；之後的 update 在沒有任何呼叫時移除它。產品 workflow 的 action pin 若比 template pin 新且同一 major（依 `# vX.Y.Z` 註解判斷，無法判斷時維持 blocking），preflight 列為 `product-pin-newer` 且不 blocking，update 把 template workflow 對齊產品 pin，不降版。沒有已存 release owner、唯一 Release writer 又與舊 template 的非 Jinja workflow byte-identical 的 existing 專案，update 改為 `csarc-owned`：退役舊 writer、render `.github/workflows/release.yml`，版本狀態依 #1066 保留；目標 release 無法 render 該 workflow 時 fail closed。
 
 設定分類（本 Issue 實作的通用規則；個別鍵的遷移分類由後續 Issue 補上）：adopt 的每列都是 `new`，`source` 與 `note` 取自 `setup`：問卷回答或明確 `--data` 為 `explicit`（回答的 `note` 為 `asked`），偵測、工作模式展開與建議值為 `derived`（`note` 寫出偵測來源、`work mode <name>` 或 `suggested default`）；update 前後相同為 `unchanged`、新出現為 `new`、消失為 `retired`、其他改變為 `decision`。來源不是 `explicit` 的 `decision` 產生非 blocking 的 `setting-decision`。
 
-**Fail closed**：writer 與 renderer 先驗證整份 report；缺鍵、未知鍵、未知詞彙、`report_format_version` 不是 `2.1.0` 或 `2.0.0`、計數不符或狀態規則不成立時拋出錯誤，三個檔案都不寫，CLI 以錯誤結束。
+**Fail closed**：writer 與 renderer 先驗證整份 report；缺鍵、未知鍵、未知詞彙、`report_format_version` 不是 `2.2.0`、`2.1.0` 或 `2.0.0`、計數不符或狀態規則不成立時拋出錯誤，三個檔案都不寫，CLI 以錯誤結束。
 
 ### 5. Markdown
 
-- H1 為 `# CSARC adoption report` 或 `# CSARC update report`，接著是 `> **Status: <banner>.** <status_reason>` 與 ``Report format version: `2.1.0` ``。
+- H1 為 `# CSARC adoption report` 或 `# CSARC update report`，接著是 `> **Status: <banner>.** <status_reason>` 與 ``Report format version: `2.2.0` ``。
 - banner：adopt 為 `Ready to adopt`、`Review required`、`Blocked`、`Adopted`；update 為 `Current`、`Ready to update`、`Review required`、`Blocked`、`Updated`。
 - 九個 H2 依序一律出現，沒有內容時印 `None.`：
   1. `## Items requiring your decision`：blocking 項目在前；沒有項目時印 "No known file conflicts. This does not guarantee semantic or runtime compatibility."
@@ -140,7 +140,8 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - MAJOR：改檔名；移除或改名 JSON 欄位，或改變欄位的型別或意義；移除、改名或重排 H2；移除或改名詞彙值。
 - MINOR：新增 JSON 欄位、詞彙值、required action kind 或 H3；在不改變既有順序的前提下新增 H2。
 - PATCH：只改措辭或跳脫。
-- 與上一個已發布 Release 相比，每個層級最多提升一次。1.1.0 是最後發布的格式；本規格定義 2.0.0。Milestone 18 中只有設定問卷的 Issue（#1078）可在 beta.2 前依 MINOR 提升一次到 2.1.0（並把 `setting-decision` 開放給 adopt）；其他 Issue 只填入已保留的欄位與詞彙。
+- 與上一個已發布 Release 相比，每個層級最多提升一次。1.1.0 是最後發布的格式；本規格定義 2.0.0。Milestone 18 中只有設定問卷的 Issue（#1078）可在 beta.2 前依 MINOR 提升一次到 2.1.0（並把 `setting-decision` 開放給 adopt）；其他 Issue 只填入已保留的欄位與詞彙。beta.2 之後，Pilot fixes 的 #1083 依擁有者 2026-10-15 決定提升一次到 `2.2.0`，只新增 `compatibility-shim`。
+- `2.2.0` 相容結果（#1083）：reader 以各自規則驗證 `2.0.0` 與 `2.1.0` 報告，`compatibility-shim` 只在 `2.2.0` 合法；writer 只寫 `2.2.0`。
 - `2.1.0` 相容結果（#1078 AC6）：`2.1.0` reader 以 `2.0.0` 規則驗證 `2.0.0` 報告（沒有 `setup`、`setting-decision` 只用於 update），例如舊 final plan 內嵌的報告；writer 只寫 `2.1.0`。已發布的 `2.0.0` reader 讀到 `2.1.0` 報告時以 `unsupported version '2.1.0'` fail closed，不寫任何檔案，也不部分解析；改用寫出該報告的 CLI 版本或更新的版本。
 - machine plan 的 `schema_version` 另外計算。
 
@@ -159,6 +160,7 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - [x] update 的退役保留與 product 保留欄位由 Issue #1066 填入。
 - [x] update 的 final plan 由 Issue #1067 填入。
 - [x] `2.1.0`（Issue #1078）：adopt 的 `setup` 紀錄與 adopt `setting-decision`；`2.0.0` 報告依原規則可讀，其他版本 fail closed。
+- [x] `2.2.0`（Issue #1083）：update 的 `overwrite`／`compatibility-shim` 列；`2.0.0` 與 `2.1.0` 報告依原規則可讀。
 
 ## Out of scope
 

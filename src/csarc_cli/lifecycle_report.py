@@ -14,14 +14,20 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import cast
 
-LIFECYCLE_REPORT_FORMAT_VERSION = "2.1.0"
-# The 2.1.0 reader still validates a 2.0.0 report (for example one embedded
-# in an earlier final plan) by the 2.0.0 rules; the writer emits only 2.1.0.
+LIFECYCLE_REPORT_FORMAT_VERSION = "2.2.0"
+# The reader still validates a 2.0.0 or 2.1.0 report (for example one
+# embedded in an earlier final plan) by its own rules; the writer emits only
+# 2.2.0.
 PREVIOUS_REPORT_FORMAT_VERSION = "2.0.0"
+REPORT_FORMAT_VERSION_2_1 = "2.1.0"
 READABLE_REPORT_FORMAT_VERSIONS = (
     PREVIOUS_REPORT_FORMAT_VERSION,
+    REPORT_FORMAT_VERSION_2_1,
     LIFECYCLE_REPORT_FORMAT_VERSION,
 )
+# 2.2.0 adds the update compatibility shim a moved script keeps at its
+# legacy path while product files still call it (Issue #1083).
+COMPATIBILITY_SHIM = "compatibility-shim"
 OPERATIONS = ("adopt", "update")
 STATUSES = ("applied", "blocked", "review-required", "ready", "current")
 OPERATION_STATUSES = {
@@ -55,7 +61,7 @@ SETTING_CLASSES = (
 SETTING_SOURCES = ("explicit", "saved", "derived")
 FILE_ACTIONS = {
     "add": ("template", "lockfile"),
-    "overwrite": ("template", "automatic-merge"),
+    "overwrite": ("template", "automatic-merge", COMPATIBILITY_SHIM),
     "move": ("layout-migration",),
     "remove": ("template-deleted",),
     "retire": ("obsolete-generated", "excluded-orphan"),
@@ -319,6 +325,12 @@ def _validate_files(report: Mapping[str, object]) -> list[Mapping[str, object]]:
         _exact_keys(row, FILE_KEYS, path)
         action = _member(row["action"], order, f"{path}.action")
         _member(row["reason"], FILE_ACTIONS[action], f"{path}.reason")
+        if (
+            row["reason"] == COMPATIBILITY_SHIM
+            and report["report_format_version"]
+            != LIFECYCLE_REPORT_FORMAT_VERSION
+        ):
+            raise _fail(f"{path}.reason", "compatibility-shim needs 2.2.0")
         if not isinstance(row["path"], str):
             raise _fail(f"{path}.path", "must be a string")
         if action == "move":
@@ -511,7 +523,7 @@ def validate_report(report: object) -> Mapping[str, object]:
         "$",
     )
     operation = _member(value["operation"], OPERATIONS, "$.operation")
-    if version == LIFECYCLE_REPORT_FORMAT_VERSION:
+    if version != PREVIOUS_REPORT_FORMAT_VERSION:
         _validate_setup(value, operation)
     settings = _validate_settings(value)
     files = _validate_files(value)

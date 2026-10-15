@@ -9,6 +9,8 @@ models one shape the pilot hit; no consumer identity is recorded here.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +21,7 @@ from test_action_pin_preflight import commit_all, drift_fixture, git_runner
 from test_cli import commit, git, make_template, write_executable
 
 from csarc_cli import action_pin_preflight as pins
-from csarc_cli import cli, final_plan
+from csarc_cli import cli, final_plan, lifecycle_report
 from csarc_cli.cli import main as cli_main
 
 OLD_PIN = "1" * 40
@@ -27,6 +29,7 @@ NEW_PIN = "2" * 40
 RELEASE_PIN = "3" * 40
 RELEASE_WORKFLOW = ".github/workflows/release-please.yml"
 LEGACY_WORKFLOW = ".github/workflows/legacy-tool.yml"
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def main(arguments: list[str]) -> int:
@@ -171,13 +174,17 @@ def legacy_consumer(tmp_path: Path) -> tuple[Path, Path, str]:
     ``scripts/verify`` and ``managed.txt``, and its only Release writer is
     the generated release-please workflow. The next template moves the
     verifier under ``.csarc/``, drops both workflows, and bumps the pin.
+
+    The release workflow is a Jinja source here, so the CLI cannot prove the
+    old template wrote it and keeps the product-owned derivation; the byte
+    identical non-Jinja case migrates to CSARC ownership instead.
     """
     source, _first = make_template(tmp_path)
     template = source / "template"
     write(template / LEGACY_WORKFLOW, setup_workflow(OLD_PIN))
     write(template / ".github/workflows/ci.yml", setup_workflow(OLD_PIN))
     write(
-        template / RELEASE_WORKFLOW,
+        template / f"{RELEASE_WORKFLOW}.jinja",
         "on: push\njobs:\n  release:\n    runs-on: ubuntu-latest\n"
         "    steps:\n"
         f"      - uses: googleapis/release-please-action@{RELEASE_PIN}"
@@ -231,7 +238,7 @@ def legacy_consumer(tmp_path: Path) -> tuple[Path, Path, str]:
     generated.mkdir(parents=True)
     (template / "scripts/verify").replace(generated / "verify")
     (template / LEGACY_WORKFLOW).unlink()
-    (template / RELEASE_WORKFLOW).unlink()
+    (template / f"{RELEASE_WORKFLOW}.jinja").unlink()
     write(template / ".github/workflows/ci.yml", setup_workflow(NEW_PIN))
     write(template / "managed.txt", "template version two\n")
     write_executable(
@@ -366,3 +373,282 @@ def test_legacy_consumer_update_applies_its_final_plan(
     assert again["planning"]["conflicts"] == []
     assert "scripts/verify" in again["files"]["preserve"]
     assert (project / "scripts/verify").read_bytes() == verify_before
+
+
+# --- Owner decisions 2026-10-15 (Issue #1083) -------------------------------
+
+SETUP = "astral-sh/setup-uv"
+PRODUCT_PIN = "4" * 40
+
+
+def pin_line(sha: str, tag: str | None) -> str:
+    """Return one workflow step pinning setup-uv with an optional tag."""
+    suffix = f" # {tag}" if tag is not None else ""
+    return f"      - uses: {SETUP}@{sha}{suffix}\n"
+
+
+def pin_case(product: list[tuple[str, str | None]]) -> pins.PinPreflight:
+    """Evaluate one consumer whose template pins setup-uv at v10.2.0."""
+    template = {"ci.yml": "steps:\n" + pin_line(NEW_PIN, "v10.2.0")}
+    new_pins = pins.template_pins(template)
+    target = {
+        ".github/workflows/ci.yml": "steps:\n" + pin_line(NEW_PIN, "v10.2.0"),
+        ".github/workflows/product.yml": "steps:\n"
+        + "".join(pin_line(sha, tag) for sha, tag in product),
+    }
+    return pins.evaluate(
+        target,
+        {".github/workflows/ci.yml"},
+        new_pins,
+        "a" * 40,
+        pins.template_tags(template, new_pins),
+    )
+
+
+def test_a_newer_same_major_product_pin_is_kept() -> None:
+    """Decision 2: v10.3.0 over the template's v10.2.0 is not downgraded."""
+    result = pin_case([(PRODUCT_PIN, "v10.3.0"), (PRODUCT_PIN, "v10.3.0")])
+
+    assert {item.reason for item in result.items} == {
+        pins.REASON_PRODUCT_PIN_NEWER
+    }
+    assert result.blocking == ()
+    assert result.state == "clean"
+    assert result.aligned == (
+        (SETUP, NEW_PIN, PRODUCT_PIN, "v10.2.0", "v10.3.0"),
+    )
+    assert result.as_dict()["aligned"] == [
+        [SETUP, NEW_PIN, PRODUCT_PIN, "v10.2.0", "v10.3.0"]
+    ]
+
+
+@pytest.mark.parametrize(
+    "product",
+    [
+        [(PRODUCT_PIN, "v11.0.0")],  # newer, different major
+        [(PRODUCT_PIN, "v9.9.0")],  # older major
+        [(PRODUCT_PIN, "v10.1.9")],  # older, same major
+        [(PRODUCT_PIN, None)],  # no tag
+        [(PRODUCT_PIN, "main")],  # not semver
+        [(PRODUCT_PIN, "v10.3.0"), ("5" * 40, "v10.4.0")],  # ambiguous
+    ],
+)
+def test_other_product_pins_keep_blocking(
+    product: list[tuple[str, str | None]],
+) -> None:
+    """Decision 2: anything else (or unknown) keeps today's behaviour."""
+    result = pin_case(product)
+
+    assert result.items
+    assert result.blocking == result.items
+    assert result.aligned == ()
+
+
+def test_an_untagged_template_pin_never_judges_newer() -> None:
+    """Decision 2: no trusted template tag means fail closed."""
+    template = {"ci.yml": "steps:\n" + pin_line(NEW_PIN, None)}
+    new_pins = pins.template_pins(template)
+    assert pins.template_tags(template, new_pins) == {}
+    assert pins.semver("v10.3") == (10, 3, 0)
+    assert pins.semver("10.3.1") == (10, 3, 1)
+    assert pins.semver("v10") is None
+
+
+def test_template_workflows_adopt_the_kept_product_pin(tmp_path: Path) -> None:
+    """Decision 2: one pin per action remains, so the pin check passes."""
+    workflows = tmp_path / ".github/workflows"
+    write(workflows / "ci.yml", "steps:\n" + pin_line(NEW_PIN, "v10.2.0"))
+    write(
+        workflows / "product.yml",
+        "steps:\n" + pin_line(PRODUCT_PIN, "v10.3.0"),
+    )
+    aligned = [(SETUP, NEW_PIN, PRODUCT_PIN, "v10.2.0", "v10.3.0")]
+
+    assert pins.align_pins(tmp_path, aligned) == [".github/workflows/ci.yml"]
+    assert (workflows / "ci.yml").read_text(encoding="utf-8") == (
+        "steps:\n" + pin_line(PRODUCT_PIN, "v10.3.0")
+    )
+    assert pins.align_pins(tmp_path, aligned) == []
+
+
+def shim_candidate(tmp_path: Path, caller: str) -> Path:
+    """Return a candidate whose product script calls a moved CSARC script."""
+    candidate = tmp_path / "candidate"
+    write_executable(
+        candidate / ".csarc/scripts/scan-secrets",
+        '#!/usr/bin/env bash\necho scanned "$@"\n',
+    )
+    write_executable(candidate / "scripts/check-intake", caller)
+    return candidate
+
+
+def test_moved_scripts_keep_a_shim_while_products_call_them(
+    tmp_path: Path,
+) -> None:
+    """Decision 3: a sibling call keeps working with no product change."""
+    candidate = shim_candidate(
+        tmp_path,
+        "#!/usr/bin/env python3\n"
+        "from pathlib import Path\n"
+        'tool = Path(__file__).resolve().parent / "scan-secrets"\n',
+    )
+    moves = (("scripts/scan-secrets", ".csarc/scripts/scan-secrets"),)
+
+    assert cli.write_compatibility_shims(candidate, moves, (), ()) == (
+        "scripts/scan-secrets",
+    )
+    shim = candidate / "scripts/scan-secrets"
+    assert cli.SHIM_MARKER in shim.read_text(encoding="utf-8")
+    result = subprocess.run(  # noqa: S603
+        [str(shim), "skills"], capture_output=True, text=True, check=True
+    )
+    assert result.stdout == "scanned skills\n"
+    # A retained legacy copy, or nothing calling it, never gets a shim.
+    shim.unlink()
+    assert (
+        cli.write_compatibility_shims(
+            candidate, moves, ("scripts/scan-secrets",), ()
+        )
+        == ()
+    )
+    assert not shim.exists()
+
+
+def test_an_unused_shim_is_retired(tmp_path: Path) -> None:
+    """Decision 3: the shim leaves once no product file calls it."""
+    candidate = shim_candidate(tmp_path, "#!/usr/bin/env bash\necho ok\n")
+    shim = candidate / "scripts/scan-secrets"
+    write_executable(
+        shim,
+        cli.shim_text("scripts/scan-secrets", ".csarc/scripts/scan-secrets"),
+    )
+
+    assert cli.write_compatibility_shims(candidate, (), (), ()) == ()
+    assert not shim.exists()
+
+
+def test_a_python_shim_runs_and_imports_the_moved_module(
+    tmp_path: Path,
+) -> None:
+    """Decision 3: a moved Python tool stays runnable and importable."""
+    candidate = tmp_path / "candidate"
+    write_executable(
+        candidate / ".csarc/scripts/ci_tier.py",
+        "#!/usr/bin/env python3\nVALUE = 7\n"
+        'if __name__ == "__main__":\n    print("tier", VALUE)\n',
+    )
+    write(candidate / "scripts/product.py", "import ci_tier\n")
+    moves = (("scripts/ci_tier.py", ".csarc/scripts/ci_tier.py"),)
+
+    assert cli.write_compatibility_shims(candidate, moves, (), ()) == (
+        "scripts/ci_tier.py",
+    )
+    shim = candidate / "scripts/ci_tier.py"
+    run = subprocess.run(  # noqa: S603
+        [sys.executable, str(shim)], capture_output=True, text=True, check=True
+    )
+    assert run.stdout == "tier 7\n"
+    imported = subprocess.run(
+        [sys.executable, "-c", "import ci_tier; print(ci_tier.VALUE)"],
+        cwd=candidate / "scripts",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert imported.stdout == "7\n"
+
+
+def test_compatibility_shim_rows_need_report_2_2_0() -> None:
+    """Decision 3: the shim is a listed transition in the closed vocabulary."""
+    assert lifecycle_report.LIFECYCLE_REPORT_FORMAT_VERSION == "2.2.0"
+    assert "compatibility-shim" in lifecycle_report.FILE_ACTIONS["overwrite"]
+    rows = cli.report_file_rows(
+        cli.Plan(
+            (),
+            ("scripts/scan-secrets",),
+            (),
+            (),
+            (),
+            (),
+            (),
+            shims=("scripts/scan-secrets",),
+        ),
+        update=True,
+    )
+    assert rows[0]["reason"] == "compatibility-shim"
+
+
+def legacy_release_source(tmp_path: Path) -> tuple[Path, str, str]:
+    """Return a template source whose old release writer is not Jinja."""
+    source = tmp_path / "source"
+    workflow = (
+        "on: push\njobs:\n  release:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        f"      - uses: googleapis/release-please-action@{RELEASE_PIN}\n"
+    )
+    write(source / "copier.yml", "_subdirectory: template\n")
+    write(source / "template" / RELEASE_WORKFLOW, workflow)
+    git(source, "init", "-b", "main")
+    git(source, "config", "user.name", "CLI Test")
+    git(source, "config", "user.email", "cli-test@example.invalid")
+    return source, commit(source, "test: legacy release writer"), workflow
+
+
+def test_a_legacy_template_release_writer_is_recognized(tmp_path: Path) -> None:
+    """Decision 1: only the old template's byte-identical writer migrates."""
+    source, sha, workflow = legacy_release_source(tmp_path)
+    target = tmp_path / "consumer"
+    write(target / RELEASE_WORKFLOW, workflow)
+    answers = {
+        "project_mode": "existing",
+        "release_ownership": "product-owned",
+        "release_workflow": RELEASE_WORKFLOW,
+    }
+
+    assert (
+        cli.legacy_release_writer(target, str(source), sha, answers)
+        == RELEASE_WORKFLOW
+    )
+    for changed in (
+        {"release_ownership": "csarc-owned"},
+        {"project_mode": "new"},
+        {"release_workflow": ".github/workflows/other.yml"},
+    ):
+        assert (
+            cli.legacy_release_writer(
+                target, str(source), sha, {**answers, **changed}
+            )
+            is None
+        )
+    write(target / RELEASE_WORKFLOW, workflow + "# product edit\n")
+    assert cli.legacy_release_writer(target, str(source), sha, answers) is None
+    assert cli.CSARC_RELEASE_MIGRATION["release_ownership"] == "csarc-owned"
+
+
+def test_copier_renders_the_release_workflow_for_a_migrated_writer() -> None:
+    """Decision 1: the hosted CSARC writer renders for the migrated case."""
+    config = yaml.safe_load((ROOT / "copier.yml").read_text(encoding="utf-8"))
+    files = {"release.yml.jinja": "", "ci.yml.jinja": ""}
+    existing = {
+        "project_mode": "existing",
+        "release_ownership": "csarc-owned",
+        "verification_mode": "hosted",
+        "languages": [],
+        "documentation_mode": "template-and-content",
+        "documentation_languages": "zh-tw",
+        "container": False,
+        "lifecycle": ["issues", "milestones"],
+        "scheduled_checks": [],
+        "enable_codeql": False,
+        "copilot_review": "off",
+    }
+    release = ".github/workflows/release.yml"
+    migrated = {**existing, "release_workflow": release}
+    assert release in pins.managed_workflows(files, config, migrated)
+    assert release not in pins.managed_workflows(files, config, existing)
+    assert release in pins.managed_workflows(
+        files, config, {**existing, "project_mode": "new"}
+    )
+    assert release not in pins.managed_workflows(
+        files, config, {**migrated, "release_ownership": "product-owned"}
+    )

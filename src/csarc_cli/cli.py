@@ -25,7 +25,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, replace
 from dataclasses import field as dataclass_field
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal, NoReturn, Protocol, cast, overload
 from urllib.parse import quote
 
@@ -331,6 +331,9 @@ class Plan:
     # stay in place, and product release state is never rewritten.
     retained: tuple[str, ...] = ()
     product_owned: tuple[str, ...] = ()
+    # Update only (#1083): CSARC forwarding wrappers at moved scripts' old
+    # paths that product files still call.
+    shims: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2728,7 +2731,16 @@ def report_file_rows(
     rows: list[tuple[str, str, str, str | None, str | None]] = []
     rows.extend((path, "add", "template", None, None) for path in files.add)
     rows.extend(
-        (path, "overwrite", "template", None, None) for path in files.overwrite
+        (
+            path,
+            "overwrite",
+            lifecycle_report.COMPATIBILITY_SHIM
+            if path in files.shims
+            else "template",
+            None,
+            None,
+        )
+        for path in files.overwrite
     )
     rows.extend(
         (path, "overwrite", "automatic-merge", None, None)
@@ -3027,6 +3039,22 @@ def update_required_actions(
             "subject": f"{item['file']}:{item['line']}",
         }
         for item in pin_items
+        if item.get("reason") != action_pin_preflight.REASON_PRODUCT_PIN_NEWER
+    )
+    actions.extend(
+        {
+            "blocking": False,
+            "command": None,
+            "kind": "action-pin",
+            "message": f"Product workflow keeps {item['action']}@"
+            f"{item['old_sha']}, newer than the template pin "
+            f"{item['new_sha']} in the same major release "
+            f"({item['reason']}); the update aligns the template workflows "
+            "to the product pin.",
+            "subject": f"{item['file']}:{item['line']}",
+        }
+        for item in pin_items
+        if item.get("reason") == action_pin_preflight.REASON_PRODUCT_PIN_NEWER
     )
     actions.extend(
         {
@@ -4446,7 +4474,14 @@ def confirm(args: argparse.Namespace) -> bool:
         raise CliError(
             "--non-interactive requires --yes before files may change."
         )
-    return input("Apply this plan? [y/N] ").strip().lower() in {"y", "yes"}
+    try:
+        answer = input("Apply this plan? [y/N] ")
+    except EOFError as error:
+        raise CliError(
+            "No confirmation could be read; pass --yes to apply without a "
+            "prompt. Nothing was changed."
+        ) from error
+    return answer.strip().lower() in {"y", "yes"}
 
 
 def checked_destination(root: Path, relative_name: str) -> Path:
@@ -6365,6 +6400,61 @@ def release_contract(answers: Mapping[str, object]) -> dict[str, object]:
         "selected_workflow": workflow or None,
         "settings_owner": settings_owner,
     }
+
+
+CSARC_RELEASE_WORKFLOW = ".github/workflows/release.yml"
+CSARC_RELEASE_MIGRATION: dict[str, object] = {
+    "release_immutable_releases": "required",
+    "release_ownership": "csarc-owned",
+    "release_ownership_reason": (
+        "CSARC owns the only version policy and GitHub Release workflow."
+    ),
+    "release_required_inputs": [],
+    "release_settings_owner": "csarc-admin",
+    "release_workflow": CSARC_RELEASE_WORKFLOW,
+}
+
+
+def legacy_release_writer(
+    target: Path,
+    source: str,
+    old_sha: str,
+    answers: Mapping[str, object],
+) -> str | None:
+    """Return the sole Release writer when the old template generated it.
+
+    A legacy existing-mode repository without a saved release owner is
+    derived as product-owned when it has one release-writing workflow. If
+    that workflow is byte-identical to the old template's own (non-Jinja)
+    workflow, CSARC wrote it, so it is not product release machinery
+    (Issue #1083). Anything else, or an unreadable source, returns None and
+    keeps the product-owned derivation.
+    """
+    workflow = answers.get("release_workflow")
+    if (
+        answers.get("project_mode") != "existing"
+        or answers.get("release_ownership") != "product-owned"
+        or not isinstance(workflow, str)
+        or not workflow.startswith(".github/workflows/")
+    ):
+        return None
+    path = target / workflow
+    if path.is_symlink() or not path.is_file():
+        return None
+    try:
+        _config, files = action_pin_preflight.read_template_source(
+            lambda command: run_git(command, capture=True, check=False),
+            source,
+            old_sha,
+        )
+    except action_pin_preflight.PinPreflightError:
+        return None
+    legacy = files.get(PurePosixPath(workflow).name)
+    try:
+        current = path.read_text(encoding="utf-8")
+    except OSError, UnicodeDecodeError:
+        return None
+    return workflow if legacy is not None and legacy == current else None
 
 
 def resolve_release_answers(  # noqa: C901
@@ -8855,7 +8945,7 @@ def _render_reinstall_plan(
     pins = update_action_pin_preflight(
         target, revision.source, revision.sha, candidate_answers
     )
-    if pins.items:
+    if pins.blocking:
         if not (args.check or args.dry_run):
             raise CliError(action_pin_preflight.drift_error(pins))
         print(action_pin_preflight.drift_error(pins), file=sys.stderr)
@@ -9295,6 +9385,7 @@ class UpdateRun:
     output: str
     retained: tuple[str, ...] = ()
     product_owned: tuple[str, ...] = ()
+    shims: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -9315,6 +9406,8 @@ class UpdateRunInputs:
     # Every path the new release renders; none may hide behind the
     # repository's ignore rules (#1083).
     payload: tuple[str, ...] = ()
+    # Kept newer product pins the template workflows adopt (#1083).
+    pin_alignment: tuple[tuple[str, ...], ...] = ()
 
 
 def baseline_paths(candidate: Path, baseline: str) -> tuple[str, ...]:
@@ -9537,6 +9630,10 @@ def run_update_candidate(
     # A rendered file stays visible to the plan even while an undecided
     # .gitignore conflict would hide it; the final candidate above already
     # failed closed if the decided ignore rules still hide it (#1083).
+    action_pin_preflight.align_pins(candidate, inputs.pin_alignment)
+    shims = write_compatibility_shims(
+        candidate, inputs.layout_moves, retained, inputs.payload
+    )
     stage_payload(candidate, inputs.payload)
     return UpdateRun(
         candidate,
@@ -9547,7 +9644,128 @@ def run_update_candidate(
         output,
         retained,
         product_owned,
+        shims,
     )
+
+
+SHIM_MARKER = "# CSARC compatibility shim (Issue #1083)"
+
+
+def shim_text(source: str, destination: str) -> str:
+    """Return the forwarding wrapper kept at one moved script's old path."""
+    relative = os.path.relpath(destination, os.path.dirname(source) or ".")
+    header = (
+        f"{SHIM_MARKER}: {source} moved to {destination}.\n"
+        "# csarc update removes this file once no product file calls it.\n"
+    )
+    if source.endswith(".py"):
+        # A Python caller may run the module or import it from this path.
+        return (
+            "#!/usr/bin/env python3\n" + header + "import os\n"
+            "import runpy\n"
+            "import sys\n\n"
+            "_TARGET = os.path.join(\n"
+            "    os.path.dirname(os.path.abspath(__file__)), "
+            f"{relative!r}\n"
+            ")\n"
+            'if __name__ == "__main__":\n'
+            "    sys.argv[0] = _TARGET\n"
+            '    runpy.run_path(_TARGET, run_name="__main__")\n'
+            "else:\n"
+            "    globals().update(runpy.run_path(_TARGET))\n"
+        )
+    return (
+        "#!/usr/bin/env bash\n"
+        + header
+        + 'exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/'
+        f'{relative}" "$@"\n'
+    )
+
+
+def product_references(
+    candidate: Path, source: str, payload: Collection[str]
+) -> bool:
+    """Return whether a non-CSARC file still calls one legacy path.
+
+    A file names the path itself, or it sits in the same directory and
+    names the script by its file name (for example a sibling lookup).
+    """
+    directory, _slash, name = source.rpartition("/")
+    pattern = rf"(?<![\w.-]){re.escape(name)}(?![\w.-])"
+    if name.endswith(".py"):
+        # A sibling Python file may import the moved module by name.
+        module = re.escape(name.removesuffix(".py"))
+        pattern += rf"|^\s*(?:import|from)\s+{module}\b"
+    sibling = re.compile(pattern, re.MULTILINE)
+    rendered = set(payload)
+    for relative, path in project_files(candidate).items():
+        if (
+            relative == source
+            or relative in rendered
+            or relative.startswith((".csarc/", ".git/"))
+            or not path.is_file()
+            or path.is_symlink()
+            or path.stat().st_size > 1_000_000
+        ):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if source in text or (
+            relative.rpartition("/")[0] == directory and sibling.search(text)
+        ):
+            return True
+    return False
+
+
+def write_compatibility_shims(
+    candidate: Path,
+    layout_moves: Sequence[tuple[str, str]],
+    retained: Collection[str],
+    payload: Collection[str],
+) -> tuple[str, ...]:
+    """Keep moved scripts callable at their old paths for product files.
+
+    A moved executable whose legacy path a product file still calls gets a
+    CSARC-owned forwarding wrapper there; an earlier wrapper nothing calls
+    any longer is removed (Issue #1083). Returns the wrappers written.
+    """
+    shims: list[str] = []
+    for source, destination in layout_moves:
+        target = candidate / source
+        moved = candidate / destination
+        if (
+            source in retained
+            or target.exists()
+            or target.is_symlink()
+            or not moved.is_file()
+            or not os.access(moved, os.X_OK)
+            or not product_references(candidate, source, payload)
+        ):
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(shim_text(source, destination), encoding="utf-8")
+        target.chmod(0o755)
+        shims.append(source)
+    for relative, path in sorted(project_files(candidate).items()):
+        if (
+            relative in shims
+            or relative.startswith(".csarc/")
+            or not path.is_file()
+            or path.is_symlink()
+            or path.stat().st_size > 4096
+        ):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if SHIM_MARKER in text and not product_references(
+            candidate, relative, payload
+        ):
+            path.unlink()
+    return tuple(sorted(shims))
 
 
 def present_payload(candidate: Path, payload: Sequence[str]) -> list[str]:
@@ -9743,7 +9961,7 @@ def plan_update(
     kept -= owned
     excluded = set(inputs.retiring)
     for source_name, destination_name in effective_layout_moves(
-        inputs.layout_moves, kept
+        inputs.layout_moves, {*kept, *run_result.shims}
     ):
         excluded.update((source_name, destination_name))
     add, overwrite, merge, delete = update_plan.classify_changes(
@@ -9767,6 +9985,7 @@ def plan_update(
         ),
         parity_paths=parity_paths,
         retained=tuple(sorted(kept)),
+        shims=run_result.shims,
         product_owned=tuple(
             sorted(
                 name
@@ -9797,7 +10016,9 @@ def planned_update_files(
     retiring: tuple[str, ...],
 ) -> Plan:
     """Project one planning result onto the shared file plan model."""
-    layout_moves = effective_layout_moves(layout_moves, planning.retained)
+    layout_moves = effective_layout_moves(
+        layout_moves, {*planning.retained, *planning.shims}
+    )
     acted = set(planning.changed_paths()) | set(planning.conflicts)
     acted.update(retiring)
     acted.update(planning.retained)
@@ -9815,6 +10036,7 @@ def planned_update_files(
         planning.delete,
         planning.retained,
         planning.product_owned,
+        planning.shims,
     )
 
 
@@ -9831,7 +10053,9 @@ def update_transitions(
         merge=planning.merge,
         delete=planning.delete,
         retire=retiring,
-        moves=effective_layout_moves(layout_moves, planning.retained),
+        moves=effective_layout_moves(
+            layout_moves, {*planning.retained, *planning.shims}
+        ),
         target_files=project_files(target),
         metadata=(
             CONFIG_FILE.as_posix(),
@@ -10080,7 +10304,11 @@ def final_pin_decisions(
     pin_commit: str | None,
 ) -> dict[str, object]:
     """Accept the committed product pin decisions for the stage-1 items."""
-    items = update_pin_items(stage1) or []
+    items = [
+        item
+        for item in update_pin_items(stage1) or []
+        if item.get("reason") != action_pin_preflight.REASON_PRODUCT_PIN_NEWER
+    ]
     if not items:
         if pin_commit is not None:
             raise CliError(
@@ -10111,6 +10339,7 @@ def planning_record(planning: update_plan.UpdatePlanning) -> dict[str, object]:
         "product_owned": list(planning.product_owned),
         "render_parity": planning.render_parity,
         "retained": list(planning.retained),
+        "shims": list(planning.shims),
     }
 
 
@@ -10194,6 +10423,9 @@ def final_plan_payload(
                 ],
                 "old_render": dict(run_inputs.old_render),
                 "payload": list(run_inputs.payload),
+                "pin_alignment": [
+                    list(entry) for entry in run_inputs.pin_alignment
+                ],
                 "planning": planning_record(context.planning),
                 "retiring": list(run_inputs.retiring),
                 "transitions": approved.as_dict(),
@@ -10401,6 +10633,10 @@ def recorded_run(
         target_uses_current_config=bool(inputs["target_uses_current_config"]),
         old_render=dict(derived["old_render"]),
         payload=tuple(derived.get("payload", ())),
+        pin_alignment=tuple(
+            tuple(str(part) for part in entry)
+            for entry in derived.get("pin_alignment", ())
+        ),
     )
     recorded = derived["planning"]
     planning = update_plan.UpdatePlanning(
@@ -10414,6 +10650,7 @@ def recorded_run(
         render_parity=str(recorded["render_parity"]),
         parity_paths=tuple(recorded["parity_paths"]),
         retained=tuple(recorded["retained"]),
+        shims=tuple(recorded.get("shims", ())),
         product_owned=tuple(recorded["product_owned"]),
     )
     if planning.digest() != recorded["digest"]:
@@ -10726,13 +10963,33 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     source = status.get("source")
     if not isinstance(source, str):
         raise CliError("Update source must be a string.")
+    release_migrated = bool(
+        "release_ownership" not in saved_answers
+        and "release_ownership" not in explicit_data
+        and legacy_release_writer(
+            target, source, current_revision.sha, candidate_answers
+        )
+    )
+    if release_migrated:
+        # The only Release writer is the legacy template's own workflow, so
+        # the release moves to the current CSARC writer (Issue #1083); the
+        # plan retires the legacy workflow and keeps the version state.
+        candidate_answers.update(CSARC_RELEASE_MIGRATION)
+        update_data["release_ownership"] = "csarc-owned"
+    if (
+        candidate_answers.get("release_ownership") == "csarc-owned"
+        and candidate_answers.get("project_mode") == "existing"
+    ):
+        # copier.yml renders the hosted release workflow for an existing
+        # project only when it is the selected CSARC writer.
+        update_data["release_workflow"] = candidate_answers["release_workflow"]
     # Product action pin drift is known before any render, plan, or write.
     # A one-shot apply stops here; a reviewed plan first drops the
     # workflows it retires, which are not product workflows (#1083).
     pins = update_action_pin_preflight(
         target, source, target_revision.sha, candidate_answers
     )
-    if pins.items and not (args.check or args.dry_run or args.finalize_plan):
+    if pins.blocking and not (args.check or args.dry_run or args.finalize_plan):
         raise CliError(action_pin_preflight.drift_error(pins))
     raw_answers = read_raw_answers(answers_path)
     with tempfile.TemporaryDirectory(prefix="csarc-update-plan-") as temporary:
@@ -10748,6 +11005,13 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             decisions=decisions,
         )
         reject_retired_data_for(stage, explicit_data)
+        if release_migrated and not (stage / CSARC_RELEASE_WORKFLOW).is_file():
+            raise CliError(
+                "This template release cannot render the CSARC release "
+                "workflow that replaces the legacy release writer; update to "
+                "a release that supports the migration. The target was not "
+                "changed."
+            )
         target_uses_current_config = (stage / CONFIG_FILE).is_file()
         # The persisted file intentionally keeps only user-owned release
         # choices. Preserve the repository-derived release contract in the
@@ -10844,6 +11108,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             target_uses_current_config=target_uses_current_config,
             old_render=old_render,
             payload=tuple(sorted(project_files(stage))),
+            pin_alignment=action_pin_preflight.excluding(
+                pins, retiring
+            ).aligned,
         )
         planning_root = workdir / "planning"
         planning_root.mkdir()
@@ -10858,7 +11125,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         # A workflow this update retires is not a product workflow, so its
         # pins never ask for a product commit (#1083).
         pins = action_pin_preflight.excluding(pins, retiring)
-        if pins.items and not (args.check or args.dry_run):
+        if pins.blocking and not (args.check or args.dry_run):
             raise CliError(action_pin_preflight.drift_error(pins))
         files = planned_update_files(target, planning, layout_moves, retiring)
         transitions = update_transitions(
