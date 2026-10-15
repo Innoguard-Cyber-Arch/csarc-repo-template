@@ -305,3 +305,22 @@ def test_pr_title_convention_matches_the_title_check() -> None:
             kind, "no-release"
         )
         assert release_intent(f"{kind}(x)!: summary") == "major"
+
+
+def test_security_response_procedure_stays_private() -> None:
+    """Issue #1139 AC4: report handling never moves details into public."""
+    policy = (ROOT / ".github/SECURITY.md").read_text(encoding="utf-8")
+    procedure = (ROOT / "docs/security-response.md").read_text(encoding="utf-8")
+
+    assert "(../docs/security-response.md)" in policy
+    # The procedure keeps the policy's no-SLA promise and private routing.
+    assert "does not invent an acknowledgement or resolution" in policy
+    assert "不對外承諾確認或修正時間" in procedure
+    assert "不放在公開 Issue、PR、Discussion" in procedure
+    assert "只寫修正範圍" in procedure
+    assert "修正前不公開" in procedure
+    # Root-only: generated projects receive no new file or reference.
+    assert not list((ROOT / "template").rglob("security-response*"))
+    assert "security-response" not in (
+        ROOT / "template/.github/SECURITY.md.jinja"
+    ).read_text(encoding="utf-8")
