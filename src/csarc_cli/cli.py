@@ -11105,6 +11105,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         answers = dict(candidate_answers)
         answers.update(read_copier_answers(config_path(stage)))
         answers.update(render_context)
+        # The release workflow render flag is derived each run, never a
+        # setting, so it cannot make a current repository look outdated.
+        answers.pop("csarc_release_workflow", None)
         preflight = capability_preflight(
             managed_script(stage, "release_policy.py"),
             target,
