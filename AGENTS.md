@@ -13,6 +13,7 @@
 
 - This file applies to the whole repository. Read a nearer `AGENTS.md` only if a future subtree genuinely needs different commands or safety rules.
 - Three documents split by audience, each authoritative for its own layer: `README.md` targets general users adopting the template (what it is, whether to use it, how to start); this file targets contributors and agents working in this repository (executable workflow rules); `docs/index.html` is the appendix for decision rationale and technical detail. Do not restate this file's workflow rules in `README.md`; link to it instead.
+- The approved product handbook (`docs/handbook/handbook.md`, rendered by `./scripts/build-handbook` into `docs/handbook/index.html`) is the source of product policy and user commitments; specs/ADRs carry exact contracts and this file plus `docs/ci-policy.md` carry executable rules. A conflict with the handbook is `drift` in the documentation review. Editing the handbook needs a new owner approval that replaces `docs/handbook/approved/` in the same change; see `docs/adr/durable-project-memory.md`.
 - Treat `copier.yml`, `template/`, `policies/`, and `profiles/catalog.yaml` as the product.
 - `template/` is what downstream repositories receive. Root configuration governs this template repository itself.
 - Use root `docs/specs/` for SDD current contracts; `docs/README.md` maps durable project memory.

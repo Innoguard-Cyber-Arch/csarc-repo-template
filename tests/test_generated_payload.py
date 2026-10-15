@@ -618,6 +618,12 @@ ISSUE_REFERENCE_ALLOWLIST: dict[tuple[str, str], str] = {
     (".github/ISSUE_TEMPLATE/milestone-tracker.yml", "#110"): (
         "example range in the form's placeholder text, not a template Issue"
     ),
+    ("docs/adr/README.md", "#1"): (
+        "example ADR header linking a placeholder owner/repo Issue"
+    ),
+    ("docs/adr/README.md", "#2"): (
+        "example ADR header linking a placeholder owner/repo pull request"
+    ),
     (".csarc/scripts/authenticate_dependabot_head.py", "#755"): (
         "protocol string: the commit subject existing sync children carry"
     ),
@@ -714,7 +720,7 @@ def test_render_links_stay_resolvable(
     for relative in files_of(project):
         path = project / relative
         text = path.read_text(encoding="utf-8", errors="ignore")
-        if "blob/main" in text:
+        if f"{TEMPLATE_REPOSITORY}/blob/main" in text:
             problems.append(f"{relative}: blob/main")
         if len(FULL_SHA_LINK.findall(text)) > 1:
             problems.append(f"{relative}: more than one pinned template link")
@@ -723,17 +729,29 @@ def test_render_links_stay_resolvable(
         problems.extend(
             f"{relative}: template-only {match}"
             for match in TEMPLATE_ONLY_PATH.findall(text)
+            if not (project / match).exists()
         )
         if relative.endswith(".md"):
-            problems.extend(broken_links(project, relative, text))
+            problems.extend(broken_links(project, relative, text, MATRIX[name]))
     assert problems == []
 
 
-def broken_links(project: Path, relative: str, text: str) -> list[str]:
-    """Return every relative Markdown link or anchor that does not resolve."""
+def broken_links(
+    project: Path, relative: str, text: str, data: dict[str, object]
+) -> list[str]:
+    """Return every relative Markdown link or anchor that does not resolve.
+
+    An adopted repository keeps its own root README, CHANGELOG, and LICENSE,
+    which the render never creates; links to them resolve in the product.
+    """
+    product_owned = (
+        {"README.md", "CHANGELOG.md", "LICENSE"}
+        if data.get("project_mode") == "existing"
+        else set()
+    )
     problems: list[str] = []
     for target in re.findall(r"\]\(([^)\s]+)\)", text):
-        if re.match(r"[a-z]+:", target):
+        if re.match(r"[a-z]+:", target) or target in product_owned:
             continue
         file_part, _, anchor = target.partition("#")
         source = project / relative
