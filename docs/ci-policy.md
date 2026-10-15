@@ -145,7 +145,8 @@ ready／draft、授權或 metadata，必須先取得 remote lease，並透過 `s
 
 一般有獨立 reviewer 的 PR，不需要再留一則重複的授權留言。`scripts/pr_lifecycle.py`
 會把獨立 maintainer 對**目前 head SHA** 的最新有效 `APPROVED` review 直接視為合併授權；
-它會即時確認 reviewer 仍有 `maintain`／`admin` 權限、不是執行 merge 的帳號，而且 review
+它以即時 `role_name` 確認 reviewer 為 `maintain`／`admin`（不讀 legacy `permission`，缺漏即
+`unknown` 並拒絕）、不是 PR 作者或執行 merge 的帳號，而且 review
 的 `commit_id` 正好等於目前 head。任何後續 push 都會產生新 SHA，使舊 approval 自然
 失效；`CHANGES_REQUESTED`、新的 Draft 事件、未解決的 blocking comment、未完成 checklist
 或 required check 仍會 fail closed。
@@ -193,7 +194,9 @@ exact-head 與 actor 綁定。續租條件不成立時工具會拒絕，並說�
   1. 獨立 maintainer 對**目前 head SHA** 的有效 `APPROVED`（沿用 #719 判斷，人工審核路徑
      仍然有效）；或
   2. Copilot 對**目前 head SHA** 的最新審核沒有任何 inline comment、內文沒有被隱藏的
-     低信心意見（suppressed comments），且內文明確寫出沒有產生意見；或
+     低信心意見（suppressed comments），且內文明確寫出沒有產生意見；self／peer 皆適用，
+     但 PR 有有效 admin-bypass 標記，或 Ruleset 不是 0 個原生 approval 的 A／E1 形狀時
+     不採用，結果與 `copilot_review: off` 相同；或
   3.（#775／#826／#905／#918）這是一張符合 `admin_bypass_opt_in` 條件（PR body恰好一次
      `Admin bypass / 管理員略過審核` 標記、Milestone-less Issue 的 direct-to-main
      路由、既有 `dev/mN` Issue 路由、經 `require_routine_route()` 完整驗證的正式
@@ -207,7 +210,8 @@ exact-head 與 actor 綁定。續租條件不成立時工具會拒絕，並說�
   workflow 會把判定發布成獨立的三態 check-run：Draft、尚未審核或只審過舊 head 時為
   `queued`（pending）；exact-head 審核符合上列條件時為 `success`；已留下意見、內文格式
   無法辨識或授權路由無效時才是 `failure`。發布 job 本身只在判定或 GitHub API 寫入失敗
-  時失敗，避免把預期等待誤報成自動化故障。
+  時失敗，避免把預期等待誤報成自動化故障。`review`、`status` 與 `pr_lifecycle.py merge`
+  共用 `review_gate.decide()` 的同一判定與 reason code（#1082）。
   一般 PR 仍使用 PR base 的可信 publisher；正式 current-main sync 因為目的就是把新治理
   帶進較舊的 delivery base，改用 GitHub API 解析出的 current default-branch commit 作為
   可信 publisher。該 evaluator 仍以 exact head 與 `require_routine_route()` 驗證 sync
