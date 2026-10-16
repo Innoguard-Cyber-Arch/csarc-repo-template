@@ -330,3 +330,40 @@ def test_update_guide_covers_operator_edge_cases(
         "--report-dir ../<repo>-csarc-update-report-2",
     ):
         assert term in text, term
+
+
+def test_pin_commit_is_required_only_while_the_stage1_plan_lists_drift(
+    tmp_path: Path,
+) -> None:
+    """AC5: the single SPEC-008 rule for --pin-commit.
+
+    A stage-1 plan that lists blocking pin drift needs --pin-commit; one that
+    lists none (for example a recheck after the pin commit) rejects it, and
+    a non-blocking product-pin-newer row never asks for it.
+    """
+    drift = {
+        "action": "actions/checkout",
+        "file": ".github/workflows/product.yml",
+        "line": 6,
+        "new_sha": "2" * 40,
+        "old_sha": "1" * 40,
+        "reason": "template-pin-changed",
+    }
+    listed = {"action_pin_preflight": {"items": [drift]}}
+    rechecked: dict[str, object] = {"action_pin_preflight": {"items": []}}
+    newer = {
+        "action_pin_preflight": {
+            "items": [dict(drift, reason="product-pin-newer")]
+        }
+    }
+    with pytest.raises(cli.CliError, match="--pin-commit <full SHA>"):
+        cli.final_pin_decisions(tmp_path, listed, None)
+    with pytest.raises(cli.CliError, match="lists no action pin drift"):
+        cli.final_pin_decisions(tmp_path, rechecked, "3" * 40)
+    empty = {"commit": None, "decisions": [], "items": []}
+    assert cli.final_pin_decisions(tmp_path, rechecked, None) == empty
+    assert cli.final_pin_decisions(tmp_path, newer, None) == empty
+    spec = (ROOT / "docs/specs/SPEC-008-lifecycle-report-format.md").read_text(
+        encoding="utf-8"
+    )
+    assert "`--pin-commit` 只在**被 finalize 的那份 stage-1 plan**" in spec
