@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import base64
+import collections
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -2964,11 +2966,48 @@ def update_pin_items(
     return [dict(item) for item in items if isinstance(item, dict)]
 
 
+def update_ignored_payload(
+    update: Mapping[str, object] | None,
+) -> list[dict[str, str]]:
+    """Return the hidden rendered files recorded in an update plan."""
+    rows = (update or {}).get("ignored_payload")
+    if not isinstance(rows, list):
+        return []
+    return [
+        {str(key): str(value) for key, value in row.items()}
+        for row in rows
+        if isinstance(row, dict)
+    ]
+
+
+def ignored_payload_actions(
+    hidden: Sequence[Mapping[str, str]],
+) -> list[dict[str, object]]:
+    """Return one blocking row per ignore file that hides rendered files."""
+    by_source: dict[str, list[Mapping[str, str]]] = {}
+    for row in hidden:
+        by_source.setdefault(row["source"], []).append(row)
+    return [
+        {
+            "blocking": True,
+            "command": None,
+            "kind": "file-conflict",
+            "message": "Ignore rules hide rendered CSARC files, so the "
+            f"update cannot deliver them: {ignored_text(rows)}. Except "
+            "those paths in this file (in its --decision when it is a "
+            "conflict), then create a new plan.",
+            "subject": source,
+        }
+        for source, rows in sorted(by_source.items())
+    ]
+
+
 def update_required_actions(
     files: Plan,
     settings: Sequence[Mapping[str, object]],
     pin_items: Sequence[Mapping[str, object]] = (),
     observed: Mapping[str, object] | None = None,
+    ignored: Sequence[Mapping[str, str]] = (),
 ) -> list[dict[str, object]]:
     """Derive the update required actions this release can evaluate."""
     live = {} if observed is None else observed
@@ -3017,6 +3056,7 @@ def update_required_actions(
         }
         for path in files.manual
     )
+    actions.extend(ignored_payload_actions(ignored))
     actions.extend(
         {
             "blocking": False,
@@ -3211,6 +3251,7 @@ def lifecycle_report_model(  # noqa: C901
             settings,
             update_pin_items(plan.update) or (),
             observed=observed,
+            ignored=update_ignored_payload(plan.update),
         )
     if adoption is not None:
         applicable = adoption.get("applicable") is True
@@ -5367,6 +5408,56 @@ def managed_script(root: Path, name: str) -> Path:
     return current if current.is_file() else root / "scripts" / name
 
 
+VERIFY_STEP_FAILED = "[verify-step] FAILED "
+
+
+def verification_failure(lines: Sequence[str]) -> str:
+    """Name the failed verify step from its output (Issue #1146 AC5).
+
+    ``verification_step`` and the canonical verifier's error trap print a
+    ``[verify-step] FAILED`` line; the first one names the step that
+    stopped the run. Without one, the last output line is the best reason.
+    """
+    for line in lines:
+        if line.startswith(VERIFY_STEP_FAILED):
+            return line.removeprefix(VERIFY_STEP_FAILED).strip()
+    for line in reversed(lines):
+        if line.strip():
+            return f"no step reported a failure; last output: {line.strip()}"
+    return "no step reported a failure and the verifier printed nothing"
+
+
+def run_verification_streaming(
+    command: list[str],
+    cwd: Path,
+    environment: Mapping[str, str],
+    status_fd: int,
+) -> tuple[int, str]:
+    """Run the verifier, echo its output, and name a failed step."""
+    tail: collections.deque[str] = collections.deque(maxlen=200)
+    failed: list[str] = []
+    with subprocess.Popen(  # noqa: S603
+        command,
+        cwd=cwd,
+        env=dict(environment),
+        pass_fds=(status_fd,),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+    ) as process:
+        assert process.stdout is not None  # noqa: S101
+        for line in process.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            text = line.rstrip("\n")
+            tail.append(text)
+            if text.startswith(VERIFY_STEP_FAILED) and not failed:
+                failed.append(text)
+        returncode = process.wait()
+    return returncode, verification_failure([*failed, *tail])
+
+
 def verify_project(target: Path) -> dict[str, object]:
     """Run canonical verification and one validated project hook."""
     configuration = project_verification_configuration(target)
@@ -5396,18 +5487,14 @@ def verify_project(target: Path) -> dict[str, object]:
         environment.pop("_CSARC_PROJECT_VERIFICATION_STATUS_FILE", None)
         status_fd = status_file.fileno()
         environment["_CSARC_PROJECT_VERIFICATION_STATUS_FD"] = str(status_fd)
-        result = subprocess.run(  # noqa: S603
-            [str(verify)],
-            cwd=target,
-            check=False,
-            env=environment,
-            pass_fds=(status_fd,),
+        returncode, failure = run_verification_streaming(
+            [str(verify)], target, environment, status_fd
         )
         status_file.seek(0)
         hook_statuses = tuple(status_file.read().splitlines())
     expected_statuses = (
         ("not-run", "started", "passed")
-        if project_hook is not None and result.returncode == 0
+        if project_hook is not None and returncode == 0
         else (
             ("not-run",)
             if project_hook is None or hook_statuses == ("not-run",)
@@ -5423,7 +5510,7 @@ def verify_project(target: Path) -> dict[str, object]:
         raise ProjectVerificationError(
             "Project verification hook status is invalid.", hook
         )
-    if result.returncode != 0:
+    if returncode != 0:
         if hook_statuses == ("not-run", "started", "failed"):
             hook = project_verification_evidence(
                 configuration,
@@ -5438,10 +5525,13 @@ def verify_project(target: Path) -> dict[str, object]:
         hook = project_verification_evidence(
             configuration,
             "not-run",
-            "Canonical project verification failed before the hook ran.",
+            "Canonical project verification failed before the hook ran: "
+            f"{failure}",
         )
         raise ProjectVerificationError(
-            "Project verification failed.",
+            f"Project verification failed: {failure}. Rerun "
+            f"{verify.relative_to(target).as_posix()} in the candidate "
+            "layout to see the full output.",
             hook,
         )
     if project_hook is not None:
@@ -5463,12 +5553,31 @@ def settings_plan(target: Path) -> None:
     if not settings.is_file():
         print("Repository settings plan unavailable: script is missing.")
         return
-    result = run([str(settings), "plan"], cwd=target, check=False)
-    if result.returncode != 0:
+    result = run([str(settings), "plan"], cwd=target, capture=True, check=False)
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    if result.returncode == 0:
+        return
+    # Only an unidentified origin is a missing remote; any other failure
+    # names its own reason (Issue #1146 AC6).
+    if target_repository(target) is None:
         print(
-            "Repository settings plan needs a GitHub remote; "
+            "Repository settings plan needs a GitHub origin remote; "
             "no settings were applied."
         )
+        return
+    lines = [
+        line.strip()
+        for line in (result.stderr or result.stdout or "").splitlines()
+        if line.strip()
+    ]
+    reason = lines[-1].rstrip(".") if lines else "no output"
+    print(
+        f"Repository settings plan failed (exit {result.returncode}): "
+        f"{reason}; no settings were applied."
+    )
 
 
 def detector_git(target: Path) -> repository_facts.Runner:
@@ -6456,6 +6565,30 @@ def legacy_release_writer(
     except OSError, UnicodeDecodeError:
         return None
     return workflow if legacy is not None and legacy == current else None
+
+
+def implicit_release_owner(
+    target: Path,
+    candidate: Mapping[str, object],
+    saved: Mapping[str, object],
+    explicit: Mapping[str, str],
+) -> dict[str, object] | None:
+    """Return the release answers derived without an explicit owner.
+
+    A legacy repository that never saved ``release_ownership`` derives its
+    owner from repository evidence, and the legacy-writer migration reads
+    that derivation. An explicit ``--data release_ownership`` must not
+    hide it: confirming the derived ``csarc-owned`` value otherwise
+    selected the legacy writer itself and retired both release workflows
+    (Issue #1146 AC1). ``None`` means the evidence derives no owner.
+    """
+    implicit = dict(candidate)
+    if "release_ownership" not in saved and "release_ownership" in explicit:
+        implicit.pop("release_ownership", None)
+    try:
+        return resolve_release_answers(target, implicit)
+    except CliError:
+        return None
 
 
 def resolve_release_answers(  # noqa: C901
@@ -9441,16 +9574,22 @@ def protect_candidate_transitions(
     baseline: str,
     inputs: UpdateRunInputs,
     early_layout_moves: tuple[tuple[str, str], ...],
+    *,
+    rebuild_site: bool = False,
 ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[tuple[str, str], ...]]:
     """Keep Copier inside the transitions an update may approve (#1066).
 
-    Product release state returns to its baseline content (relocated when
-    the layout migration moves it), and every Copier deletion the trusted
-    old render cannot justify is undone. Both the check and the apply run
-    call this with the same inputs. Returns the protected product paths,
-    the retained modified paths, and the layout moves already completed.
+    Product release state and project-owned site content return to their
+    baseline content (relocated when the layout migration moves them), and
+    every Copier deletion the trusted old render cannot justify is undone.
+    Both the check and the apply run call this with the same inputs. With
+    ``rebuild_site`` (a run whose Copier tasks built the site from the new
+    seed) the derived site is rebuilt from restored content. Returns the
+    protected product paths, the retained modified paths, and the layout
+    moves already completed.
     """
     tracked = baseline_paths(candidate, baseline)
+    site_before = project_site_fingerprints(candidate)
 
     def restore(names: Sequence[str]) -> None:
         run_git(
@@ -9470,6 +9609,8 @@ def protect_candidate_transitions(
     product, completed = file_transition.protect_product_state(
         candidate, tracked, inputs.layout_moves, restore
     )
+    if rebuild_site and project_site_fingerprints(candidate) != site_before:
+        rebuild_project_site(candidate)
     skip = {
         CONFIG_FILE.as_posix(),
         LEGACY_ANSWERS_FILE.as_posix(),
@@ -9481,6 +9622,38 @@ def protect_candidate_transitions(
         candidate, tracked, inputs.old_render, skip, restore
     )
     return product, retained, completed
+
+
+def project_site_fingerprints(candidate: Path) -> dict[str, str | None]:
+    """Fingerprint the project-owned repo-site sources in a candidate."""
+    names = file_transition.project_owned_state(project_files(candidate), ())
+    return {
+        name: file_transition.fingerprint(candidate / name)
+        for name in names
+        if name.startswith(file_transition.PROJECT_SITE_CONTENT_PREFIX)
+        or name in file_transition.PROJECT_SITE_FILES
+    }
+
+
+def rebuild_project_site(candidate: Path) -> None:
+    """Rebuild the derived site after project content was put back.
+
+    Copier's site build task ran on the new seed before the update restored
+    the project's own repo-site content (Issue #1146 AC3), so the derived
+    pages are built again from the content the plan keeps.
+    """
+    script = candidate / ".csarc/scripts/build-repo-site"
+    if script.is_symlink() or not script.is_file():
+        return
+    result = run(
+        ["bash", str(script)], cwd=candidate, capture=True, check=False
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or "").strip() or (result.stdout or "").strip()
+        raise CliError(
+            "Rebuilding the repo-site from the project's own site content "
+            f"failed: {detail or 'unknown error'}. The target was not changed."
+        )
 
 
 def run_update_candidate(
@@ -9585,7 +9758,11 @@ def run_update_candidate(
     output = (result.stderr or "").strip() or (result.stdout or "").strip()
     restored = restore_rendered_payload(target, candidate, inputs, stage)
     product_owned, retained, completed_moves = protect_candidate_transitions(
-        candidate, baseline_head, inputs, early_layout_moves
+        candidate,
+        baseline_head,
+        inputs,
+        early_layout_moves,
+        rebuild_site=not skip_tasks,
     )
     # A retained legacy source is a modified generated file the plan keeps
     # in place as a retire-modified conflict (#1066); it never moves onto
@@ -9855,27 +10032,23 @@ def stage_payload(candidate: Path, payload: Sequence[str]) -> None:
         )
 
 
-def reject_ignored_payload(candidate: Path, payload: Sequence[str]) -> None:
-    """Fail closed when ignore rules would hide a rendered file (#1083).
-
-    The candidate is verified with every rendered file, but Git never
-    stages an untracked ignored one, so the target would silently miss it
-    and the verified tree would differ from the written one.
-    """
-    present = present_payload(candidate, payload)
-    if not present:
-        return
+def ignored_paths(
+    repository: Path, paths: Sequence[str]
+) -> list[dict[str, str]]:
+    """Return each path the repository's ignore rules hide, with its rule."""
+    if not paths:
+        return []
     result = run_git(
         [
             "git",
             "-C",
-            str(candidate),
+            str(repository),
             "check-ignore",
             "--verbose",
             "--",
-            *present,
+            *paths,
         ],
-        repository=candidate,
+        repository=repository,
         capture=True,
         check=False,
         neutralize_filters=True,
@@ -9893,16 +10066,90 @@ def reject_ignored_payload(candidate: Path, payload: Sequence[str]) -> None:
         source, _colon, rest = rule.partition(":")
         number, _colon, pattern = rest.partition(":")
         if path:
-            hidden.append(f"{path} ({source}:{number}: {pattern})")
+            hidden.append(
+                {
+                    "line": number,
+                    "path": path,
+                    "pattern": pattern,
+                    "source": source,
+                }
+            )
+    return hidden
+
+
+def ignored_text(hidden: Sequence[Mapping[str, str]]) -> str:
+    """Render hidden payload rows as ``path (source:line: pattern)``."""
+    return "; ".join(
+        f"{row['path']} ({row['source']}:{row['line']}: {row['pattern']})"
+        for row in hidden
+    )
+
+
+def reject_ignored_payload(candidate: Path, payload: Sequence[str]) -> None:
+    """Fail closed when ignore rules would hide a rendered file (#1083).
+
+    The candidate is verified with every rendered file, but Git never
+    stages an untracked ignored one, so the target would silently miss it
+    and the verified tree would differ from the written one.
+    """
+    hidden = ignored_paths(candidate, present_payload(candidate, payload))
     if hidden:
         raise CliError(
             "Repository ignore rules hide rendered CSARC files, so the "
             "update would not deliver them: "
-            + "; ".join(hidden)
+            + ignored_text(hidden)
             + ". Narrow or except those rules (for a conflicted .gitignore, "
             "in its decision), then create a new plan. The target was not "
             "changed."
         )
+
+
+def planned_ignored_payload(
+    target: Path,
+    payload: Sequence[str],
+    overrides: Mapping[str, bytes | None] | None = None,
+) -> list[dict[str, str]]:
+    """Return rendered files the target's ignore rules would hide.
+
+    The apply stops on such a file (``reject_ignored_payload``); this
+    evaluates the same rules before any candidate exists, so ``--check``
+    lists them and ``--finalize-plan`` rejects a decided ``.gitignore``
+    that still hides one (Issue #1146 AC4). ``overrides`` replaces the
+    content of conflicted ignore files with their recorded decisions. A
+    payload path the target already tracks is delivered regardless.
+    """
+    tracked = set(
+        run_git(
+            ["git", "-C", str(target), "ls-files", "-z"],
+            repository=target,
+            capture=True,
+            neutralize_filters=True,
+        ).stdout.split("\0")
+    )
+    candidates = sorted(name for name in payload if name not in tracked)
+    if not candidates:
+        return []
+    decided = dict(overrides or {})
+    with tempfile.TemporaryDirectory(prefix="csarc-ignore-") as temporary:
+        root = Path(temporary).resolve()
+        run_git(["git", "init", "--quiet", str(root)])
+        sources = {
+            name: path.read_bytes()
+            for name, path in project_files(target).items()
+            if PurePosixPath(name).name == ".gitignore"
+            and not path.is_symlink()
+        }
+        for name, content in decided.items():
+            if PurePosixPath(name).name == ".gitignore":
+                if content is None:
+                    sources.pop(name, None)
+                else:
+                    sources[name] = content
+        for name, content in sources.items():
+            destination = checked_destination(root, name)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(content)
+        return ignored_paths(root, candidates)
 
 
 def resolve_recorded_conflicts(
@@ -10081,6 +10328,82 @@ def effective_layout_moves(
     """
     kept = set(retained)
     return tuple(move for move in layout_moves if move[0] not in kept)
+
+
+def referenced_removals(
+    target: Path,
+    planning: update_plan.UpdatePlanning,
+    layout_moves: tuple[tuple[str, str], ...],
+    retiring: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return the planned removals a file the plan keeps still uses.
+
+    A kept file is one the plan leaves with its product content: untouched,
+    product-owned, or merged. A conflict is not kept until its decision;
+    ``--finalize-plan`` rejects a decision that keeps a use of a removal
+    (``reject_decided_uses``). A retained ``retire-modified`` file is the
+    superseded legacy layout kept only for review, so its calls into that
+    layout keep nothing alive. A move source is excluded; its callers keep
+    working through a compatibility shim (#1083). See
+    ``file_transition.content_uses`` for what counts as a use (#1146 AC2).
+    """
+    files = planned_update_files(target, planning, layout_moves, retiring)
+    kept = {*files.preserve, *files.merge, *files.product_owned}
+    kept -= {*files.retained, *files.manual}
+    return file_transition.referenced_retirements(
+        target, (*retiring, *planning.delete), kept
+    )
+
+
+def reject_decided_ignore_rules(
+    target: Path,
+    payload: Sequence[str],
+    resolutions: Mapping[str, bytes | None],
+) -> None:
+    """Stop a final plan whose decided ignore rules hide rendered files.
+
+    The apply would fail closed on the same files (#1083); finalize knows
+    every decision, so it refuses before the plan exists (#1146 AC4).
+    """
+    hidden = planned_ignored_payload(target, payload, resolutions)
+    if hidden:
+        raise CliError(
+            "With the recorded decisions, ignore rules still hide rendered "
+            "CSARC files, so the apply would stop: "
+            + ignored_text(hidden)
+            + ". Except those paths (for a conflicted .gitignore, in its "
+            "--decision), then run csarc update --check again; the target "
+            "was not changed."
+        )
+
+
+def reject_decided_uses(
+    resolutions: Mapping[str, bytes | None],
+    removals: Sequence[str],
+) -> None:
+    """Stop a final plan whose decided content uses a file it removes.
+
+    keep-current or custom content for a conflict is kept by the plan, so
+    it must not call or configure a file the same plan retires or deletes
+    (Issue #1146 AC2). The operator chooses take-new, a custom file
+    without that use, or moves the product use into a product file and
+    plans again, which keeps the used file as product-owned.
+    """
+    planned = tuple(removals)
+    findings = [
+        f"{name} uses {', '.join(used)}"
+        for name, content in sorted(resolutions.items())
+        if content is not None
+        and (used := file_transition.content_uses(name, content, planned))
+    ]
+    if findings:
+        raise CliError(
+            "The decided content keeps a use of a file this plan removes: "
+            + "; ".join(findings)
+            + ". Choose take-new or a custom file without that use, or move "
+            "the use into a product file and run csarc update --check "
+            "again; the target was not changed."
+        )
 
 
 def planned_update_files(
@@ -10597,6 +10920,10 @@ def write_update_final_plan(
         name: decision_content(target, name, choice, custom, context.new_side)
         for name, (choice, custom) in sorted(file_choices.items())
     }
+    reject_decided_uses(
+        resolutions, (*context.run_inputs.retiring, *planning.delete)
+    )
+    reject_decided_ignore_rules(target, context.run_inputs.payload, resolutions)
     approved = resolution_transitions(target, context.transitions, resolutions)
     stage1_sha256 = str(stage1["plan_sha256"])
     try:
@@ -11021,6 +11348,12 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     candidate_answers.update(derived_values)
     update_data.update(derived_values)
     observed.update(derived_differences)
+    # The release owner the repository evidence derives without any
+    # explicit choice; confirming that value with --data must plan exactly
+    # like leaving it out (Issue #1146 AC1).
+    implicit_release_answers = implicit_release_owner(
+        target, candidate_answers, saved_answers, explicit_data
+    )
     candidate_answers = resolve_release_answers(target, candidate_answers)
     try:
         status, current_revision, target_revision, previous = update_status(
@@ -11049,9 +11382,10 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         raise CliError("Update source must be a string.")
     release_migrated = bool(
         "release_ownership" not in saved_answers
-        and "release_ownership" not in explicit_data
+        and explicit_data.get("release_ownership") in {None, "csarc-owned"}
+        and implicit_release_answers is not None
         and legacy_release_writer(
-            target, source, current_revision.sha, candidate_answers
+            target, source, current_revision.sha, implicit_release_answers
         )
     )
     if release_migrated:
@@ -11146,72 +11480,83 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             stage,
             target,
         )
-        retirement_candidates: tuple[str, ...] = (
+        candidates: tuple[str, ...] = (
             LEGACY_PROFILE_FILE.as_posix(),
             ".gitleaks.toml",
             ".pre-commit-config.yaml",
             "zizmor.yml",
         )
-        old_render = file_transition.render_fingerprints(
-            project_files(old_stage)
-        )
+        rendered = file_transition.render_fingerprints(project_files(old_stage))
+        stage_files = project_files(stage)
         # The selected product-owned release workflow is the product's only
         # Release writer even when a legacy render generated it, so the
-        # update never retires or deletes it (#1083).
-        product_paths = product_release_workflow(answers)
-        old_render = {
-            name: value
-            for name, value in old_render.items()
-            if name not in product_paths
-        }
-        # Copier never deletes a file that a newly selected option excludes
-        # (for example the Release writer once ownership leaves csarc-owned,
-        # #1068), so retire every CSARC-owned file the trusted old render
-        # produced that the new render no longer contains (#1077). A
-        # product-owned workflow the old render never wrote is not a
-        # candidate, and a customized copy stays a conflict below.
-        retirement_candidates += option_retirements(
-            old_render, project_files(stage)
-        )
-        # A legacy file retires only when it is byte-identical to the
-        # trusted old render; a modified one stays as a conflict (#1066).
-        retiring, retained = file_transition.split_retirements(
-            (
-                name
-                for name in retirement_candidates
-                if (target / name).is_file()
-                and not (target / name).is_symlink()
-            ),
-            target,
-            old_render,
-        )
-        run_inputs = UpdateRunInputs(
-            raw_answers=raw_answers,
-            old_side=old_side,
-            new_data=new_data,
-            old_commit=current_revision.sha,
-            source=source,
-            target_sha=str(status["target_sha"]),
-            layout_moves=layout_moves,
-            retiring=retiring,
-            target_uses_current_config=target_uses_current_config,
-            old_render=old_render,
-            payload=tuple(sorted(project_files(stage))),
-            pin_alignment=action_pin_preflight.excluding(
-                pins, retiring
-            ).aligned,
-        )
-        planning_root = workdir / "planning"
-        planning_root.mkdir()
-        planning = plan_update(
-            target,
-            planning_root,
-            run_inputs,
-            old_stage,
-            retained,
-            product_paths,
-            stage,
-        )
+        # update never retires or deletes it (#1083). A generated file the
+        # new render drops while a file the plan keeps still uses it is
+        # product-owned in the same way (#1146 AC2): each pass plans with
+        # the referenced removals kept, until no kept file uses a removal.
+        product_paths: tuple[str, ...] = product_release_workflow(answers)
+        for attempt in itertools.count(1):
+            old_render = {
+                name: value
+                for name, value in rendered.items()
+                if name not in product_paths
+            }
+            # Copier never deletes a file that a newly selected option
+            # excludes (for example the Release writer once ownership leaves
+            # csarc-owned, #1068), so retire every CSARC-owned file the
+            # trusted old render produced that the new render no longer
+            # contains (#1077). A product-owned workflow the old render
+            # never wrote is not a candidate, and a customized copy stays a
+            # conflict below.
+            retirement_candidates = (
+                *candidates,
+                *option_retirements(old_render, stage_files),
+            )
+            # A legacy file retires only when it is byte-identical to the
+            # trusted old render; a modified one stays as a conflict (#1066).
+            retiring, retained = file_transition.split_retirements(
+                (
+                    name
+                    for name in retirement_candidates
+                    if (target / name).is_file()
+                    and not (target / name).is_symlink()
+                ),
+                target,
+                old_render,
+            )
+            run_inputs = UpdateRunInputs(
+                raw_answers=raw_answers,
+                old_side=old_side,
+                new_data=new_data,
+                old_commit=current_revision.sha,
+                source=source,
+                target_sha=str(status["target_sha"]),
+                layout_moves=layout_moves,
+                retiring=retiring,
+                target_uses_current_config=target_uses_current_config,
+                old_render=old_render,
+                payload=tuple(sorted(stage_files)),
+                pin_alignment=action_pin_preflight.excluding(
+                    pins, retiring
+                ).aligned,
+            )
+            planning_root = workdir / f"planning-{attempt}"
+            planning_root.mkdir()
+            planning = plan_update(
+                target,
+                planning_root,
+                run_inputs,
+                old_stage,
+                retained,
+                product_paths,
+                stage,
+            )
+            referenced = referenced_removals(
+                target, planning, layout_moves, retiring
+            )
+            if set(referenced) <= set(product_paths):
+                break
+            product_paths = tuple(sorted({*product_paths, *referenced}))
         if planning.restored:
             run_inputs = replace(
                 run_inputs, restored=restored_record(stage, planning.restored)
@@ -11225,6 +11570,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         transitions = update_transitions(
             target, planning, layout_moves, retiring
         )
+        # Rendered files the target's ignore rules would hide stop the
+        # apply; list them now (Issue #1146 AC4).
+        ignored_payload = planned_ignored_payload(target, run_inputs.payload)
         # take-new decisions resolve to the reviewed new-side render.
         new_side = {
             name: (stage / name).read_bytes()
@@ -11251,6 +11599,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     status.update(
         {
             "action_pin_preflight": pins.as_dict(),
+            "ignored_payload": ignored_payload,
             "answers_changed": answers_changed,
             "capabilities_changed": capabilities_changed,
             "planning": planning.as_dict(),

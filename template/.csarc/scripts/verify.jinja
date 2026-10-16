@@ -66,6 +66,9 @@ cleanup() {
   return 0
 }
 trap cleanup EXIT
+# A check outside verification_step stops the run silently under set -e;
+# name it so csarc update can report the failed step (Issue #1146 AC5).
+trap 'printf "[verify-step] FAILED verify line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 verify_typescript_package_import() (
   cd "$1"
