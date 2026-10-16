@@ -37,6 +37,24 @@ def test_render_uses_one_release_identity_and_existing_setup_contract() -> None:
     assert "init／adopt／update prompt" not in prompt
 
 
+def test_prompt_and_pilot_record_rules_agree() -> None:
+    """Issue #1147 AC6: one record location and one allowed-action rule."""
+    restriction = (
+        "全程不要自行 stash、commit、套用 GitHub settings、push 或建立 PR"
+    )
+    prompt = render("v1.2.3", "a" * 40)
+    assert restriction in prompt
+    assert "pilot-adoption.md 的 operator-independence run 步驟 5" in prompt
+    pilot = (
+        Path(__file__).parents[1] / "docs" / "pilot-adoption.md"
+    ).read_text(encoding="utf-8")
+    run = pilot.split("## Operator-independence run", 1)[1].split("\n## ", 1)[0]
+    assert restriction in run
+    assert "5. 依下表記錄。驗證通過後" in run
+    assert "正式紀錄只有一處：target repository 自己的 pilot Issue 留言" in run
+    assert "Draft PR 只承載 diff" in run
+
+
 @pytest.mark.parametrize(
     ("tag", "sha"),
     [("1.2.3", "a" * 40), ("v1.2.3", "A" * 40), ("v1.2.3", "a" * 39)],

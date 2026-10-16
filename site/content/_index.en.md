@@ -125,7 +125,7 @@ It only reads local files plus, once a repository is already managed, the resolv
 | `adopt` (existing repository) | The target already has content but no `.csarc/config.yml` | `csarc adopt <path>`: write a dry-run plan, review it, then apply with `--apply-plan` |
 | `adoption-pending` (adoption incomplete) | The local adoption checkpoint passes identity validation, but adoption is not complete | `csarc adopt <path> --finalize`: preview and continue the existing finalize flow |
 | `migrate` (legacy answers) | `.csarc/config.yml` has a non-full `_commit` and no trusted verified provenance | Review a tag or short SHA and follow `next_command` to bind it to a verified Release; restore the correct SHA for any other format |
-| `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | `csarc update <path> --check` to preview, then `csarc update <path>` |
+| `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | Follow `next_command`: `--check` with `--to`/`--expected-sha` to preview, `--finalize-plan --decision` to decide conflicts, then `--apply-plan` (see `docs/install.en.md`) |
 | `current` (nothing to do) | The Copier revision is current, and `policies/` matches the repository's live GitHub settings | No action needed |
 | `policy-only-update` (policy settings changed) | The Copier revision is current, but `policies/` (for example, whether workarounds are allowed) no longer matches the live GitHub settings | `.csarc/scripts/apply-repository-settings.sh plan` to preview, then `apply`; this **skips** a full adopt or update run |
 
