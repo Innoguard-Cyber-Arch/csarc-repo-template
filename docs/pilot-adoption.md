@@ -32,6 +32,80 @@
 - 重跑本機與 GitHub 驗證，以第二支 PR 合併更新。
 - 依證據類型調整 maturity：真實 consuming repo 證明共用導入、更新與線上 CI 邊界；語言模組則以可重現的建立、既有 repo 導入、更新與原生工具鏈驗證判定。
 
+## Pilot 紀錄格式
+
+每個 pilot run 在該 consumer 自己的 pilot Issue 留下一筆紀錄，Milestone 的 regression Issue 只連結它。公開文件只放格式，不寫 consumer 名稱、owner、private URL 或其他敏感 identity。欄位逐一對應 Milestone tracker `### Pilot` 的「進場條件」與「紀錄」：
+
+| 欄位 | 填什麼 |
+| --- | --- |
+| Exact base／head | pilot 分支的 base 與 head 完整 SHA |
+| Release | 測試的不可變 beta tag 與完整 commit SHA |
+| 指令 | 依序執行的每個指令（含 `csarc update --check --json`、`--finalize-plan`、`--apply-plan`）與 exit code |
+| 衝突數 | plan 列出的衝突數，以及實際需要人工決定的數量 |
+| 耗時 | 每個指令的耗時與總耗時 |
+| 人工決策 | 每個衝突的 `keep-current`／`take-new`／`custom` 與理由 |
+| Pin | 每筆人工 pin：`file:line`、action、舊 SHA、新 SHA、pin commit SHA；必須都在 preflight 清單內 |
+| 產品 diff | pin 以外的產品檔案變更；進場條件要求為空 |
+| 本機 candidate | `./.csarc/scripts/verify-fast` 的 exact head、tier 與結果 |
+| Native checks | 產品原有檢查的指令與結果 |
+| 遮蔽報告 | 去除 identity 後的導入／更新報告，或其連結 |
+| 語言偵測 | 偵測到的語言、`uncertain` 項目與最終選擇 |
+| Risk 工具摘要 | `csarc risk` 對該 run 的 Issue／PR 輸出摘要 |
+| 結果 | `entered`（達到進場條件）或 `blocked`；`blocked` 另附擋點分類與失敗輸出 |
+
+卡在 beta、到不了進場條件的 run 也用同一張表：已執行的欄位照填，未執行的寫 `not-reached`，「結果」寫 `blocked`、擋點屬於 migration 或 ownership 邊界，並貼上失敗指令的完整輸出（去除 identity）。這筆紀錄就是修正 Issue 的 regression 證據。
+
+填寫範例（虛構）：
+
+| 欄位 | 範例 |
+| --- | --- |
+| Exact base／head | `1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b`／`2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c` |
+| Release | `v0.0.0-beta.2`／`3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d` |
+| 指令 | `csarc update --check --json` → 0；`--finalize-plan --decision README.md=keep-current` → 0；`--apply-plan` → 0 |
+| 衝突數 | 1／人工 1 |
+| 耗時 | 42 秒、18 秒、35 秒；總計 95 秒 |
+| 人工決策 | `README.md=keep-current`：保留產品說明 |
+| Pin | `.github/workflows/product.yml:12`、`actions/checkout`、`0000…aaaa`→`1111…bbbb`、pin commit `4d5e…3e4f` |
+| 產品 diff | 無 |
+| 本機 candidate | head `5e6f…4f5a`、`fast`、passed |
+| Native checks | `make test` passed |
+| 遮蔽報告 | pilot Issue 附件 `report-redacted.md` |
+| 語言偵測 | `python`；無 `uncertain` |
+| Risk 工具摘要 | `csarc risk register`：0 unknown、0 uncovered |
+| 結果 | `entered` |
+
+## Operator-independence run
+
+Stable promotion 前要證明：沒有參與實作的人，只靠已發布的文件就能完成同樣的升級。這個 run 由擁有者在最後一個 beta 發布後安排，結果決定 promotion checklist 的 operator-independence 項目能不能勾選。
+
+**執行者條件：**全新的 agent session 或人；沒有參與該 Milestone 的實作；不讀該 Milestone 的 Issue 留言、PR 討論、對話紀錄或草稿。
+
+**可讀的文件：**只限以 release tag 固定的核准手冊（`docs/handbook/`）、手冊明確連結的文件（同一個 tag）、該 Release 的 `release-prompt.txt`，以及 target 內生成的 `.csarc/docs/csarc.md`。需要其他資訊才能繼續時，記為文件 drift 並停止，不自行補問。
+
+**禁止：**不 push default branch、不合併、不改 repository 設定（`apply-repository-settings.sh` 只能 `plan`）、不建立新的 GitHub repository。
+
+**步驟：**
+
+1. 記錄 release tag 與完整 SHA，從 `release-prompt.txt` 取得固定版本的 `csarc`。
+2. 在 target 的乾淨 clone 開一般分支，執行 `csarc status` 與 `csarc update --check --json`。
+3. 依手冊處理衝突並 `--finalize-plan`，再 `--apply-plan`。
+4. 執行 `./.csarc/scripts/verify-fast` 與產品原有檢查。
+5. 依下表記錄；最多把分支推到非 default branch 的 Draft PR。
+
+**必填欄位：**
+
+| 欄位 | 填什麼 |
+| --- | --- |
+| Release | tag 與完整 SHA |
+| 步驟紀錄 | 每一步的指令、exit code 與結果摘要 |
+| 衝突與決定 | 每個衝突的決定，以及依據手冊哪一節 |
+| 產品 diff 摘要 | 套用後產品檔案的變更；預期為空或只有 preflight pin |
+| Native checks | 產品原有檢查的指令與結果 |
+| 額外提示或文件 drift | 手冊沒寫、需要猜或與工具輸出不符的地方；沒有時寫 `none` |
+| 實作者協助 | `no`，或需要哪些協助；`yes` 表示這次 run 不成立 |
+
+**紀錄位置：**寫在 target repository 自己的 pilot Issue 留言。Milestone tracker 的 Promotion 只記 tag、結果（`pass`／`fail`）與「是否需要協助」，不寫 consumer 名稱或 URL。結果為 `pass` 的條件是：所有步驟成功、額外提示為 `none`、實作者協助為 `no`。
+
 ## 2026-08-24 pilot 結果
 
 公開文件不寫 consuming repository 的名稱或數量；原始 Issue、PR 與 run 保存在該 repository 自己的紀錄中。

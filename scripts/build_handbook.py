@@ -13,6 +13,10 @@ block per line group:
 
 - `::: sheet <id> | <footer label>` opens an A4 sheet; `:::` closes it. The
   renderer adds the footer with the label, `footer_version` and `N / total`.
+- `::: annex <id> | <footer label>` opens an appended appendix sheet (Issue
+  #1138). Annex sheets come after every main sheet, render as
+  `class="sheet annex"`, number themselves `附錄 N / total`, and never count
+  toward the main body's sheet total, so the approved main body is unchanged.
 - `#`, `##`, `###` headings; any other plain line is one paragraph (one
   paragraph per line, so CJK text is never joined with spaces).
 - A trailing ` {: spec}` on a heading or paragraph sets its element and
@@ -60,7 +64,7 @@ ICON: Final = (
 )
 _SPEC_SUFFIX: Final = re.compile(r"\s+\{:\s*([^}]*)\}$")
 _SPEC_LINE: Final = re.compile(r"^\{:\s*([^}]*)\}$")
-_SHEET: Final = re.compile(r"^::: sheet ([\w-]+) \| (.+)$")
+_SHEET: Final = re.compile(r"^::: (sheet|annex) ([\w-]+) \| (.+)$")
 _HEADING: Final = re.compile(r"^(#{1,3}) (.+)$")
 _TABLE_FLAGS: Final = frozenset({"stage", "stage-td", "headless"})
 _INDENT: Final = "      "
@@ -144,13 +148,18 @@ def render_table(
     return out
 
 
-def render_body(lines: list[str], meta: dict[str, Any]) -> tuple[str, int]:  # noqa: C901
-    """Render the Markdown body into sheets; return HTML and sheet count."""
-    total = sum(1 for line in lines if _SHEET.match(line))
+def render_body(  # noqa: C901
+    lines: list[str], meta: dict[str, Any]
+) -> tuple[str, int, int]:
+    """Render the Markdown body; return HTML, main and annex sheet counts."""
+    kinds = [m.group(1) for line in lines if (m := _SHEET.match(line))]
+    total, annexes = kinds.count("sheet"), kinds.count("annex")
+    if kinds != sorted(kinds, key=lambda kind: kind == "annex"):
+        raise HandbookError("annex sheets must follow every main sheet")
     out: list[str] = []
     pending: tuple[str | None, list[str], set[str]] | None = None
-    sheet = 0
-    footer = ""
+    sheet = annex = 0
+    footer = page = ""
     index = 0
 
     def take(predicate: Callable[[str], bool]) -> list[str]:
@@ -174,14 +183,19 @@ def render_body(lines: list[str], meta: dict[str, Any]) -> tuple[str, int]:  # n
                 line = lines[index]
                 index += 1
         elif match := _SHEET.match(line):
-            sheet += 1
-            footer = match.group(2)
+            kind, footer = match.group(1), match.group(3)
+            if kind == "sheet":
+                sheet += 1
+                page, classes = f"{sheet} / {total}", "sheet"
+            else:
+                annex += 1
+                page, classes = f"附錄 {annex} / {annexes}", "sheet annex"
             out += [
-                f'  <section class="sheet" id="{match.group(1)}">',
+                f'  <section class="{classes}" id="{match.group(2)}">',
                 '    <div class="page-content">',
             ]
         elif stripped == ":::":
-            spans = (footer, meta["footer_version"], f"{sheet} / {total}")
+            spans = (footer, meta["footer_version"], page)
             inner = "".join(f"<span>{html.escape(s)}</span>" for s in spans)
             out += [
                 "    </div>",
@@ -239,7 +253,7 @@ def render_body(lines: list[str], meta: dict[str, Any]) -> tuple[str, int]:  # n
             )
     if pending is not None:
         raise HandbookError("block spec at end of source")
-    return "\n".join(out), total
+    return "\n".join(out), total, annexes
 
 
 def render(root: Path) -> tuple[str, dict[str, Any]]:
@@ -252,7 +266,7 @@ def render(root: Path) -> tuple[str, dict[str, Any]]:
             f"{baseline.relative_to(root)} sha256 {digest} is not the "
             f"approved {meta['baseline_sha256']}"
         )
-    body, total = render_body(lines, meta)
+    body, total, annexes = render_body(lines, meta)
     css = (root / STYLESHEET).read_text("utf-8")
     page = (
         "<!doctype html>\n"
@@ -278,6 +292,7 @@ def render(root: Path) -> tuple[str, dict[str, Any]]:
         },
         "status": meta["status"],
         "sheets": total,
+        "annex_sheets": annexes,
     }
     return page, manifest
 

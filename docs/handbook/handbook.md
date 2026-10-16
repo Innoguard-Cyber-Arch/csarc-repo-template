@@ -599,3 +599,22 @@ ProjectV2
 </div>
 
 :::
+
+::: annex templates | 附錄 B · 範本清單
+
+附錄 B · 範本清單 {: div.eyebrow}
+
+## 附錄 B：範本清單
+
+本附錄接在核准的 10 張主文之後，不屬於核准基準，也不受 10 張的頁數限制。它只介紹使用者或 agent 要照格式填寫的範本：每項列出用途、誰填、位置與出現條件；精確格式以連結的權威文件或生成內容為準，本附錄不另定一套。 {: .compact}
+
+{: table.stage-table.dense stage}
+| 範本 | 用途 | 誰填 | 位置與出現條件 |
+|---|---|---|---|
+| ADR | 記錄已確認、會持續影響架構、工具或相容性的決定 | 專案維護者或 agent | [`docs/adr/README.md`](../adr/README.md) 的規則與範例；生成專案在 `documentation_mode` 不是 `off` 時有同一份 |
+| Pilot 紀錄 | 記錄 consumer 導入試行，含未達進場條件的失敗 run | pilot 執行者 | [`docs/pilot-adoption.md`](../pilot-adoption.md#pilot-紀錄格式)；只在模板 repository，不 render |
+| Operator-independence run | stable promotion 前證明未參與實作者只靠文件能完成升級 | 未參與該 Milestone 的新 session 或人 | [`docs/pilot-adoption.md`](../pilot-adoption.md#operator-independence-run)；只在模板 repository，不 render |
+| 合併授權留言 | admin 以 exact-head 留言取代核准 | 執行合併的 admin | 生成的 `.csarc/docs/csarc.md`「驗證與合併」；`admin_bypass` 不是 `off` 時 |
+| ProjectV2 設定 | 第一次同步前建立 DATE 欄位並確認 scope 與寫入權 | 專案維護者 | 生成的 `.csarc/docs/csarc.md`「Project Roadmap 設定」；設定 `github_project_url` 時 |
+
+:::

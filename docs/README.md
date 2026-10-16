@@ -71,7 +71,7 @@
 | 稽核證據 | `docs/evidence/m18-risk-backfill.json` | K1 之前合併的 Milestone 18 work PR 的 backfill manifest（SPEC-010）；canonical bytes，不手改 |
 | Runbook | `docs/live-integration.md`、`docs/artifact-consumption.md` | 維護者執行線上驗證或排查交付鏈時使用 |
 | Runbook | `docs/uninstall.md` | repository owner 決定不再採用 CSARC 時的自助解除安裝指南 |
-| 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據 |
+| 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據；pilot 與 operator-independence run 的紀錄格式 |
 
 ## 新決策如何進來
 
