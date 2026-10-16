@@ -5,7 +5,7 @@
   },
   "source": {
     "path": "docs/handbook/handbook.md",
-    "sha256": "3a8c8bcf7d605059e8b8e4b1e3ca5af0308de8e7cefaac166b03c661866370b1"
+    "sha256": "01e97491662ec80ef0eb53a7d3936d0bb10e93b26ad6b7298a5422aee7b511ea"
   },
   "stylesheet": {
     "path": "docs/handbook/handbook.css",
@@ -13,9 +13,9 @@
   },
   "html": {
     "path": "docs/handbook/index.html",
-    "sha256": "f9c0f79ddfd9c88c275ab26ec6a21c4f07d2dc1621019277a23f78183cec0b14"
+    "sha256": "79c1af2d93a74bfee8b036cb1d32dfc8b1c145820061f2d16e462243dfcd7f16"
   },
   "status": "planned",
   "sheets": 10,
-  "annex_sheets": 4
+  "annex_sheets": 15
 }
