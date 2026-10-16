@@ -606,15 +606,105 @@ ProjectV2
 
 ## 附錄 B：範本清單
 
-本附錄接在核准的 10 張主文之後，不屬於核准基準，也不受 10 張的頁數限制。它只介紹使用者或 agent 要照格式填寫的範本：每項列出用途、誰填、位置與出現條件；精確格式以連結的權威文件或生成內容為準，本附錄不另定一套。 {: .compact}
+本附錄接在核准的 10 張主文之後，不屬於核准基準，也不受 10 張的頁數限制。範本依使用者或 agent 實際經過的流程排列：建立／導入、規劃、開發、驗證與合併、發版、升級、例外與事後、整合。每項列出用途、誰填、位置與出現條件；精確格式以連結的權威文件或生成內容為準，本附錄不另定一套。生成專案不內含本手冊，對應的操作入口是 `.csarc/docs/csarc.md`。 {: .compact}
+
+### B.1 建立／導入 {: .mt-3}
 
 {: table.stage-table.dense stage}
 | 範本 | 用途 | 誰填 | 位置與出現條件 |
 |---|---|---|---|
+| 設定檔 | 只保存無法安全重建的使用者意圖；改值用 `csarc update --data KEY=VALUE` | CLI 產生，人只用指令改 | `.csarc/config.yml`；契約見 [`SPEC-009`](../specs/SPEC-009-project-settings.md)；一律 render |
+| Provenance | schema、模板來源、`project_mode` 與舊側 snapshot；以 digest 防改 | CLI 寫入，不可手改 | `.csarc/provenance.json`；契約見 [`SPEC-009`](../specs/SPEC-009-project-settings.md)；一律寫入 |
+| 掃描政策 | 說明安全掃描器的政策與範圍 | 工具產生 | [`SECURITY.md`](../../SECURITY.md)；新專案 render，既有專案保留自己的檔案 |
+| 漏洞通報政策 | 人工私密通報入口；public repository 必須有 GitHub 以外的管道 | 維護者在 init／adopt 提供管道 | [`.github/SECURITY.md`](../../.github/SECURITY.md)；新專案依 visibility render，既有專案保留自己的檔案 |
+| LICENSE | 授權條文 | init／adopt 的一次性 seed | [`template/LICENSE.jinja`](../../template/LICENSE.jinja)；`project_license` 不是 `custom` 的新專案；既有專案保留自己的檔案 |
+| 操作指南 | 依本專案設定產生的設定表、工作流程、驗證與合併、發版、更新與恢復 | 工具產生，不手改 | [`template/.csarc/docs/csarc.md.jinja`](../../template/.csarc/docs/csarc.md.jinja)；生成 `.csarc/docs/csarc.md`，一律 render |
+| Agent 工作規則 | agent 的可執行規則；`AGENTS.md` 只有 CSARC 區塊由工具更新 | 工具產生 | [`template/.csarc/docs/agent-workflow.md.jinja`](../../template/.csarc/docs/agent-workflow.md.jinja)；生成 `AGENTS.md` 與 `.csarc/docs/agent-workflow.md`，一律 render |
+| 文件地圖 | 說明 specs、ADR、Issue 與測試各自回答什麼問題 | 工具產生，專案可改 | [`template/docs/README.md.jinja`](../../template/docs/README.md.jinja)；`documentation_mode` 不是 `off` 時 |
+
+:::
+
+::: annex templates-plan | 附錄 B · 範本清單
+
+### B.2 規劃
+
+{: table.stage-table.dense stage}
+| 範本 | 用途 | 誰填 | 位置與出現條件 |
+|---|---|---|---|
+| Milestone description | Milestone 描述欄的七段格式與建立、預檢、收尾步驟 | Milestone 負責人 | [`docs/milestone-description.md`](../milestone-description.md)；生成 `.csarc/docs/milestone-description.md` 為精簡版；`lifecycle` 含 `milestones` 時 |
+| Milestone tracker 表單 | 單一 tracker：Proposal、Completion evidence、Early termination、Promotion，可宣告 `### Checkpoints` | Milestone 負責人 | [`milestone-tracker.yml`](../../.github/ISSUE_TEMPLATE/milestone-tracker.yml)；`lifecycle` 含 `milestones` 時 |
+| Issue 表單：Task | 一項能獨立完成、驗證、交付的工作；最常用 | 使用者或 agent | [`task.yml`](../../.github/ISSUE_TEMPLATE/task.yml)；一律 render |
+| Issue 表單：Bug | 回報能重現的非預期行為；hotfix 也從這裡開始 | 使用者或 agent | [`bug.yml`](../../.github/ISSUE_TEMPLATE/bug.yml)；一律 render |
+| Issue 表單：Feature | 需要多張工作才能完成的共同成果 | 需求負責人 | [`feature.yml`](../../.github/ISSUE_TEMPLATE/feature.yml)；一律 render |
+| Issue 表單：Documentation | 只改一般文件；`AGENTS.md`、`SECURITY.md` 與 CI policy 不適用 | 使用者或 agent | [`documentation.yml`](../../.github/ISSUE_TEMPLATE/documentation.yml)；一律 render |
+| Issue 表單設定 | 關閉空白 Issue，只能從表單建立 | 不需填 | [`config.yml`](../../.github/ISSUE_TEMPLATE/config.yml)；一律 render |
+| 風險與控制區塊 | 每個風險一列（ID、類別、等級、控制、預計證據、Owner），或唯一一列 `R0`；Ready 前檢查 | Issue assignee | 表單「補充」預填；契約見 [`SPEC-010`](../specs/SPEC-010-issue-risk-controls.md)；隨表單 render |
+
+:::
+
+::: annex templates-develop | 附錄 B · 範本清單
+
+### B.3 開發
+
+{: table.stage-table.dense stage}
+| 範本 | 用途 | 誰填 | 位置與出現條件 |
+|---|---|---|---|
+| Branch 命名 | `type/<Issue>-<slug>`；`gh-issue-develop` 建立前檢查名稱並連結 Issue | agent 或 PR 作者 | [`gh-issue-develop`](../../scripts/gh-issue-develop)；生成 `.csarc/scripts/gh-issue-develop`，一律 render |
+| PR 標題與 commit 慣例 | `type(scope): summary`；squash commit 與 release notes 取自 PR 標題，類型決定 release intent | PR 作者 | [`AGENTS.md`](../../AGENTS.md) 工作迴圈第 12 步；生成 `.csarc/docs/agent-workflow.md` 第 12 步；由 `title` check 強制 |
+| PR template | Purpose、完成清單、Requirement evidence、文件一致性、補充 | PR 作者（通常是 agent） | [`pull_request_template.md`](../../.github/pull_request_template.md)；一律 render |
+| Requirement evidence | 每個 AC 與風險 ID 對應一項 exact-head 證據；Ready 前不得缺漏或未知 | PR 作者 | PR template 的 `## Requirement evidence`；契約見 [`SPEC-010`](../specs/SPEC-010-issue-risk-controls.md) |
+| 文件一致性紀錄 | `aligned` 或附理由的 `not-applicable`；`drift`、`inconclusive` 擋下交付 | PR 作者 | PR template 的 `## 文件一致性`；規則見 [`documentation-policy.md`](../documentation-policy.md) |
 | ADR | 記錄已確認、會持續影響架構、工具或相容性的決定 | 專案維護者或 agent | [`docs/adr/README.md`](../adr/README.md) 的規則與範例；生成專案在 `documentation_mode` 不是 `off` 時有同一份 |
+| SPEC | front matter 與 Problem、Outcome、AC、Out of scope、Verification 等段落 | 專案維護者或 agent | [`SPEC-001-example.md`](../specs/SPEC-001-example.md)；生成 `docs/specs/SPEC-001-example.md` 在 `documentation_mode` 不是 `off` 時；`code_owner` 空白時 `owner` 為空 |
+| 站台設定範例 | 網站上 `config-guidance` 區塊使用的設定範例 | 模板維護者 | [`config_examples.json`](../../site/data/config_examples.json)；只在模板 repository，不 render |
+
+### B.4 驗證與合併 {: .mt-3}
+
+{: table.stage-table.dense stage}
+| 範本 | 用途 | 誰填 | 位置與出現條件 |
+|---|---|---|---|
+| 合併授權留言 | admin 以 exact-head 留言取代核准 | 執行合併的 admin | 生成的 `.csarc/docs/csarc.md`「驗證與合併」；`admin_bypass` 不是 `off` 時 |
+| 合併 commit trailer | squash commit 固定的 `CSARC-*` trailer；是稽核紀錄，不是驗證證據 | `pr_lifecycle.py merge` 自動寫入 | [`merge-trailers.json`](../../policies/merge-trailers.json)；生成 `.csarc/policies/merge-trailers.json`，一律 render |
+| 驗證證據 | hosted：綁定 repository、head／tree、tier 與 runner 的 `verify` 結果；local：self-attested 紀錄 | CI 或 `verify-fast` 自動產生 | hosted 以 `check-trusted-verification` 讀取；local 存在 Git metadata，不進 repository；規則見 [`ci-policy.md`](../ci-policy.md) |
+| 風險登錄冊 | 從 Issue 與 PR 計算的唯讀登錄冊 | `csarc risk register` 產生 | 不 commit；格式 `csarc-risk-register` 見 [`SPEC-010`](../specs/SPEC-010-issue-risk-controls.md) |
+
+:::
+
+::: annex templates-release | 附錄 B · 範本清單
+
+### B.5 發版
+
+{: table.stage-table.dense stage}
+| 範本 | 用途 | 誰填 | 位置與出現條件 |
+|---|---|---|---|
+| CHANGELOG | 版本紀錄 | `csarc-owned` 時由 `prepare-candidate` 物化，其他由產品維護 | [`template/CHANGELOG.md`](../../template/CHANGELOG.md)；只有新專案 render，既有專案保留自己的 |
+| Release notes | Release 說明文字的最低內容，取自已合併 PR 標題 | `publish-release` 產生 | [`ci-policy.md`](../ci-policy.md)「Release 說明文字的最低格式規範」；`release_ownership` 是 `csarc-owned` 時 |
+| `release-prompt.txt` | 給使用者複製的固定版本 CLI 呼叫 | `publish-release` 產生 | 模板 Release 的 asset；只在模板 repository |
+
+### B.6 升級 {: .mt-3}
+
+{: table.stage-table.dense stage}
+| 範本 | 用途 | 誰填 | 位置與出現條件 |
+|---|---|---|---|
+| 導入／更新報告 | plan、JSON 與 Markdown 報告、update 的 final plan；先看 Items requiring your decision | CLI 產生，人閱讀與決定 | repository 外；格式見 [`SPEC-008`](../specs/SPEC-008-lifecycle-report-format.md) |
+| 設定 plan／apply | 遠端 repository 設定的預覽與套用；先看 plan 再 apply | 工具產生，管理員審核 | [`apply-repository-settings.sh`](../../template/.csarc/scripts/apply-repository-settings.sh)；一律 render |
+
+### B.7 例外與事後 {: .mt-3}
+
+{: table.stage-table.dense stage}
+| 範本 | 用途 | 誰填 | 位置與出現條件 |
+|---|---|---|---|
+| Hotfix 事後紀錄 | 原因、影響範圍、exact base／head、為何不能等 Milestone、授權來源、驗證證據、後續 Issue | hotfix 作者 | 寫在 hotfix Issue「補充」或 PR 的 Requirement evidence；欄位見 [`ci-policy.md`](../ci-policy.md)「Hotfix 事後紀錄」；只在模板 repository |
+| 安全通報處理程序 | 收到私密通報後的記錄、確認、修正、公開與結案；細節只留私密管道 | 收件維護者 | [`security-response.md`](../security-response.md)；只在模板 repository，生成專案自訂 |
 | Pilot 紀錄 | 記錄 consumer 導入試行，含未達進場條件的失敗 run | pilot 執行者 | [`docs/pilot-adoption.md`](../pilot-adoption.md#pilot-紀錄格式)；只在模板 repository，不 render |
 | Operator-independence run | stable promotion 前證明未參與實作者只靠文件能完成升級 | 未參與該 Milestone 的新 session 或人 | [`docs/pilot-adoption.md`](../pilot-adoption.md#operator-independence-run)；只在模板 repository，不 render |
-| 合併授權留言 | admin 以 exact-head 留言取代核准 | 執行合併的 admin | 生成的 `.csarc/docs/csarc.md`「驗證與合併」；`admin_bypass` 不是 `off` 時 |
+| Promotion checklist | Milestone promotion 的九步：凍結 `main`、sync、bridge、合併、Tag／Release 讀回、收尾與 tracker 關閉順序 | Milestone 負責人或 agent | [`milestone-description.md`](../milestone-description.md#promotion-checklist)；只在模板 repository |
+
+### B.8 整合 {: .mt-3}
+
+{: table.stage-table.dense stage}
+| 範本 | 用途 | 誰填 | 位置與出現條件 |
+|---|---|---|---|
 | ProjectV2 設定 | 第一次同步前建立 DATE 欄位並確認 scope 與寫入權 | 專案維護者 | 生成的 `.csarc/docs/csarc.md`「Project Roadmap 設定」；設定 `github_project_url` 時 |
 
 :::

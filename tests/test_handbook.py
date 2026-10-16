@@ -152,6 +152,61 @@ def test_annex_sheets_follow_the_main_body() -> None:
         assert template in texts, template
 
 
+# Issue #1139 AC5 (owner decision 2026-10-16): appendix B lists every
+# template once, grouped by the execution flow a user or agent follows.
+FLOW = (
+    "B.1 建立／導入",  # noqa: RUF001
+    "B.2 規劃",
+    "B.3 開發",
+    "B.4 驗證與合併",
+    "B.5 發版",
+    "B.6 升級",
+    "B.7 例外與事後",
+    "B.8 整合",
+)
+
+
+def test_annex_lists_templates_in_flow_order() -> None:
+    """#1139 AC5: stage headings follow the flow; each row appears once."""
+    _, annexes = _split_annexes(_events(GENERATED))
+    events = [e for annex in annexes for e in annex]
+    stages: list[str] = []
+    rows: dict[str, str] = {}
+    cell: list[str] | None = None
+    first_cell = False
+    for index, event in enumerate(events):
+        if event[:2] == ("start", "h3"):
+            stages.append(events[index + 1][1])
+        elif event[:2] == ("start", "tr"):
+            first_cell = True
+        elif event[:2] == ("start", "td") and first_cell:
+            cell, first_cell = [], False
+        elif event[:2] == ("end", "td") and cell is not None:
+            name = "".join(cell).strip()
+            assert name not in rows, f"duplicate template row {name}"
+            rows[name] = stages[-1]
+            cell = None
+        elif event[0] == "text" and cell is not None:
+            cell.append(event[1])
+    assert tuple(stages) == FLOW
+    expected = {
+        "Promotion checklist": "B.7 例外與事後",
+        "Hotfix 事後紀錄": "B.7 例外與事後",
+        "安全通報處理程序": "B.7 例外與事後",
+        "PR 標題與 commit 慣例": "B.3 開發",
+        "ADR": "B.3 開發",
+        "合併授權留言": "B.4 驗證與合併",
+        "ProjectV2 設定": "B.8 整合",
+        "Milestone description": "B.2 規劃",
+        "設定檔": "B.1 建立／導入",  # noqa: RUF001
+        "導入／更新報告": "B.6 升級",  # noqa: RUF001
+        "CHANGELOG": "B.5 發版",
+    }
+    for name, stage in expected.items():
+        assert rows.get(name) == stage, name
+    assert len(rows) >= 39
+
+
 def test_annex_links_resolve() -> None:
     """#1138 AC6: every relative link in an annex names a real file and
     heading."""
