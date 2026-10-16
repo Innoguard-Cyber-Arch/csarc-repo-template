@@ -31,6 +31,13 @@ block per line group:
 - Fenced code renders as a bare `<pre>`; `<!-- ... -->` blocks are
   source-only notes and are dropped; any other line starting with `<` is raw
   HTML passed through unchanged.
+- `::: format <kind> <argument>` (one line) renders a `<pre class="format">`
+  generated from the authoritative source at build time (Issue #1139):
+  `file <path>`, `fence <path> <first line>`, `issue-form <path>`,
+  `record <path> <heading>` (field table to fill-in skeleton),
+  `checklist <path> <heading>`, `section <path> <heading>`, `tracker`,
+  `conventions`, `authorization`, `changelog`, `trailers` and `report`.
+  A missing source fails the build.
 - Inline `code`, **bold** and [links](...) come from `_inline_markdown` in
   `scripts/render_site.py`.
 """
@@ -41,9 +48,12 @@ import argparse
 import hashlib
 import html
 import json
+import os
 import re
 import runpy
+import subprocess
 import sys
+import tempfile
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
@@ -66,6 +76,7 @@ _SPEC_SUFFIX: Final = re.compile(r"\s+\{:\s*([^}]*)\}$")
 _SPEC_LINE: Final = re.compile(r"^\{:\s*([^}]*)\}$")
 _SHEET: Final = re.compile(r"^::: (sheet|annex) ([\w-]+) \| (.+)$")
 _HEADING: Final = re.compile(r"^(#{1,3}) (.+)$")
+_FORMAT: Final = re.compile(r"^::: format ([\w-]+)(?: (.+))?$")
 _TABLE_FLAGS: Final = frozenset({"stage", "stage-td", "headless"})
 _INDENT: Final = "      "
 
@@ -148,8 +159,255 @@ def render_table(
     return out
 
 
+def _section_lines(path: Path, heading: str) -> list[str]:
+    """Return the lines under one exact heading, up to the next heading."""
+    lines = path.read_text("utf-8").splitlines()
+    for start, line in enumerate(lines):
+        if re.fullmatch(rf"#{{1,6}} {re.escape(heading)}", line):
+            level = len(line) - len(line.lstrip("#"))
+            end = next(
+                (
+                    i
+                    for i in range(start + 1, len(lines))
+                    if re.match(rf"#{{1,{level}}} ", lines[i])
+                ),
+                len(lines),
+            )
+            return lines[start + 1 : end]
+    raise HandbookError(f"{path.name}: heading not found: {heading}")
+
+
+def _fence(path: Path, first: str) -> str:
+    """Return the fenced block of a file whose first line is `first`."""
+    lines = path.read_text("utf-8").splitlines()
+    for index, line in enumerate(lines):
+        if line.startswith("```") and lines[index + 1 : index + 2] == [first]:
+            end = lines.index(line[:3], index + 1)
+            return "\n".join(lines[index + 1 : end])
+    raise HandbookError(f"{path.name}: no fenced block starts with {first}")
+
+
+def _issue_form(path: Path) -> str:
+    """Return the body a submitted Issue form produces, with placeholders."""
+    import yaml
+
+    form = yaml.safe_load(path.read_text("utf-8"))
+    parts = []
+    for item in form["body"]:
+        if item["type"] == "markdown":
+            continue
+        attrs = item["attributes"]
+        if item["type"] == "dropdown":
+            value = "<" + " / ".join(attrs["options"]) + ">"
+        else:
+            value = (
+                attrs.get("value")
+                or attrs.get("placeholder")
+                or (f"<{attrs['description'].strip()}>")
+            )
+        parts.append(f"### {attrs['label']}\n\n{value.rstrip()}")
+    return "\n\n".join(parts)
+
+
+def _record(path: Path, heading: str) -> str:
+    """Turn a section's field table into a fill-in record skeleton."""
+    rows = [
+        cells(line)
+        for line in _section_lines(path, heading)
+        if line.startswith("|")
+    ]
+    if len(rows) < 3 or rows[0][0] != "欄位":
+        raise HandbookError(f"{path.name}: {heading} has no field table")
+    end = next(
+        (i for i, row in enumerate(rows[2:], 2) if row[0] == "欄位"), len(rows)
+    )
+    body = [f"| {name} | <{hint}> |" for name, hint, *_ in rows[2:end]]
+    return "\n".join(["| 欄位 | 內容 |", "| --- | --- |", *body])
+
+
+def _checklist(path: Path, heading: str) -> str:
+    """Turn numbered `N. **Step**` lines into checkbox lines."""
+    steps = [
+        match.group(1)
+        for line in _section_lines(path, heading)
+        if (match := re.match(r"\d+\. \*\*(.+?)\*\*", line))
+    ]
+    if not steps:
+        raise HandbookError(f"{path.name}: {heading} has no numbered steps")
+    return "\n".join(f"- [ ] {step}" for step in steps)
+
+
+def _conventions(root: Path) -> str:
+    """Show branch and PR title rules from the checks that enforce them."""
+    branch = re.search(
+        r"work_branch_pattern='\^\(([a-z|]+)\)/",
+        (root / "scripts/gh-issue-develop").read_text("utf-8"),
+    )
+    title = re.search(
+        r'"\$PR_TITLE" =~ \^\(([a-z|]+)\)',
+        (root / "scripts/validate-pr-policy").read_text("utf-8"),
+    )
+    if branch is None or title is None:
+        raise HandbookError("branch or PR title rule not found")
+    return "\n".join(
+        [
+            "Branch:   <type>/<Issue>-<slug>",
+            "          feat/123-summary-table",
+            f"          type = {branch.group(1).replace('|', ' | ')}",
+            "",
+            "PR title: <type>(<scope>)!: <summary>",
+            "          (ASCII; scope and ! are optional)",
+            "          feat(report): add a summary table",
+            "          fix(cli)!: reject an empty answer",
+            f"          type = {title.group(1).replace('|', ' | ')}",
+            "",
+            "Squash commit = PR title; feat → minor, fix/revert → patch,",
+            "! → major, other types → no release.",
+        ]
+    )
+
+
+def _authorization(root: Path) -> str:
+    """Return the exact merge authorization comment with placeholders."""
+    statement = runpy.run_path(str(root / "scripts/pr_lifecycle.py"))[
+        "authorization_statement"
+    ]
+    pr, head = 987654321, "f" * 40
+    text = statement("<owner>/<repository>", pr, head)
+    return text.replace(str(pr), "<PR>").replace(head, "<head SHA>")
+
+
+def _changelog(root: Path) -> str:
+    """Generate one CHANGELOG entry with the real writer on fictional work."""
+    writer = runpy.run_path(str(root / "scripts/release_policy.py"))[
+        "_write_changelog"
+    ]
+    fixed = {
+        "GIT_AUTHOR_NAME": "Example",
+        "GIT_AUTHOR_EMAIL": "example@example.invalid",
+        "GIT_COMMITTER_NAME": "Example",
+        "GIT_COMMITTER_EMAIL": "example@example.invalid",
+        "GIT_AUTHOR_DATE": "2026-01-02T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-02T00:00:00Z",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    saved = {key: os.environ.get(key) for key in fixed}
+    os.environ.update(fixed)
+    try:
+        with tempfile.TemporaryDirectory(prefix="handbook-") as temporary:
+            repo = Path(temporary)
+
+            def git(*args: str) -> str:
+                return subprocess.run(  # noqa: S603
+                    ["git", *args],  # noqa: S607
+                    cwd=repo,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+
+            git("init", "-q", "-b", "main")
+            (repo / "CHANGELOG.md").write_text("# Changelog\n", "utf-8")
+            for subject in (
+                "chore: start the project",
+                "feat(report): add a summary table",
+                "fix(cli): reject an empty answer",
+                "docs: explain the setup",
+            ):
+                (repo / "work.txt").write_text(subject, "utf-8")
+                git("add", "-A")
+                git("commit", "-q", "-m", subject)
+            writer(repo, git("rev-parse", "HEAD"), "1.1.0")
+            text = (repo / "CHANGELOG.md").read_text("utf-8")
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    return text.split("\n", 2)[2].strip()
+
+
+def _section_text(path: Path, heading: str) -> str:
+    """Return a section's text, with Jinja tags shown as placeholders."""
+    text = "\n".join(_section_lines(path, heading)).strip()
+    text = re.sub(r"\{%-?.*?-?%\}", "", text)
+    return re.sub(r"\{\{\s*(\w+)[^}]*\}\}", r"<\1>", text).strip()
+
+
+def _trailers(root: Path) -> str:
+    """Show the squash commit trailers in their fixed order."""
+    policy = json.loads((root / "policies/merge-trailers.json").read_text())
+    lines = ["<PR title>", "", "<squash body>", ""]
+    for key in policy["order"]:
+        spec = policy["keys"][key]
+        value = (
+            " | ".join(spec["values"]) if "values" in spec else spec["value"]
+        )
+        optional = "" if spec.get("required") else "   (optional)"
+        lines.append(f"{key}: <{value}>{optional}")
+    return "\n".join(lines)
+
+
+def _report(root: Path) -> str:
+    """Show the lifecycle report's fixed Markdown sections (SPEC-008)."""
+    import ast
+
+    tree = ast.parse((root / "src/csarc_cli/lifecycle_report.py").read_text())
+    for node in tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == "SECTION_HEADINGS"
+        ):
+            headings = ast.literal_eval(node.value)
+            return "\n\n".join(f"## {name}\n\n<…>" for name in headings)
+    raise HandbookError("lifecycle report SECTION_HEADINGS not found")
+
+
+def render_format(root: Path, kind: str, argument: str) -> str:
+    """Render one `::: format` directive from its authoritative source."""
+    if kind == "file":
+        text = (root / argument).read_text("utf-8").rstrip()
+        if argument.endswith(".jinja"):
+            text = re.sub(r"\{\{\s*(\w+)[^}]*\}\}", r"<\1>", text)
+        return text
+    if kind in {"fence", "record", "checklist", "section"}:
+        path, _, rest = argument.partition(" ")
+        handler = {
+            "fence": _fence,
+            "record": _record,
+            "checklist": _checklist,
+            "section": _section_text,
+        }
+        return handler[kind](root / path, rest)
+    if kind == "issue-form":
+        return _issue_form(root / argument)
+    if kind == "tracker":
+        script = (root / "scripts/create-milestone").read_text("utf-8")
+        found = re.search(r"printf '(## Proposal[^']*)'", script)
+        if found is None:
+            raise HandbookError("create-milestone tracker body not found")
+        body = found.group(1).replace("\\n", "\n").rstrip()
+        return body.replace(
+            "%s",
+            "<Proposal：範圍、所屬 Issue，可含 ### Checkpoints>",  # noqa: RUF001
+        )
+    generators = {
+        "conventions": _conventions,
+        "authorization": _authorization,
+        "changelog": _changelog,
+        "trailers": _trailers,
+        "report": _report,
+    }
+    if kind not in generators:
+        raise HandbookError(f"unknown format kind: {kind}")
+    return generators[kind](root)
+
+
 def render_body(  # noqa: C901
-    lines: list[str], meta: dict[str, Any]
+    lines: list[str], meta: dict[str, Any], root: Path | None = None
 ) -> tuple[str, int, int]:
     """Render the Markdown body; return HTML, main and annex sheet counts."""
     kinds = [m.group(1) for line in lines if (m := _SHEET.match(line))]
@@ -182,6 +440,12 @@ def render_body(  # noqa: C901
             while "-->" not in line and index < len(lines):
                 line = lines[index]
                 index += 1
+        elif match := _FORMAT.match(stripped):
+            if root is None:
+                raise HandbookError("format directives need a source root")
+            text = render_format(root, match.group(1), match.group(2) or "")
+            escaped = html.escape(text, quote=False)
+            out.append(f'{_INDENT}<pre class="format">{escaped}</pre>')
         elif match := _SHEET.match(line):
             kind, footer = match.group(1), match.group(3)
             if kind == "sheet":
@@ -266,7 +530,7 @@ def render(root: Path) -> tuple[str, dict[str, Any]]:
             f"{baseline.relative_to(root)} sha256 {digest} is not the "
             f"approved {meta['baseline_sha256']}"
         )
-    body, total, annexes = render_body(lines, meta)
+    body, total, annexes = render_body(lines, meta, root)
     css = (root / STYLESHEET).read_text("utf-8")
     page = (
         "<!doctype html>\n"

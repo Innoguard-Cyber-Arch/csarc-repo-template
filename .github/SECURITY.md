@@ -21,6 +21,9 @@ secrets, credentials, personal data, or other sensitive information in any
 public channel. This policy does not invent an acknowledgement or resolution
 SLA.
 
+Maintainers handle private reports as described in
+[`docs/security-response.md`](../docs/security-response.md).
+
 ## Scope
 
 This policy covers the code, workflows, and configuration in this

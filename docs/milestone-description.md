@@ -241,3 +241,34 @@ acceptance 未完成的 Issue 仍然阻擋）；
 
 建立前須閱讀相關 open／closed Issues 的內文、comments 與 linked pull requests；
 不能只依 titles 或 labels 推翻既有決策。
+
+## Promotion checklist
+
+每次 Milestone promotion 照下列順序執行；這份清單只排步驟，規則以括號內 `docs/ci-policy.md`
+的段落為準，兩者不一致時以 ci-policy 為準並修正本清單（#1139）。
+
+1. **開始前**：tracker `Promotion` 段落每一項都有 exact-head 證據，其餘 Milestone Issue 已關閉
+   或明確 `not_planned`（`title` 以 `promotion_decision()` 檢查；「Promotion route 併入 PR policy（#601、#876）」）。
+2. **凍結 `main`**：通知所有可能合併進 `main` 的 session，執行
+   `scripts/finalization-queue announce --issue <tracker> --base main`，`status` 回報 `ready` 才繼續。
+   promotion 合併前 `main` 每多一個 commit，就要重做下一步的 sync 與 bridge（「現行交付路徑」）。
+3. **Sync 協調**：delivery branch 不含 current `main` 時，以正式
+   `sync/main-to-mN-<slug>-<main 短 SHA>` PR 帶入；雙父 merge commit 依序是 delivery tip 與
+   current `main`，衝突時保留 delivery 端內容，並在合併前跑受影響 owner 的 focused checks
+   （「現行交付路徑」）。
+4. **Bridge 與版本**：`promote/m<編號>-<簡稱>` 的 head 是同樣雙父的 bridge commit；依上文
+   以 `release_policy.py plan`／`prepare-candidate --phase stable` 物化版本並 amend 回 bridge。
+   PR body 用 `Refs #<tracker>`，掛 `promotion` label 與由 tracker Type 推導的分類 label。
+5. **合併**：取得 lease 後以 `scripts/pr_lifecycle.py merge` 合併；授權必須綁定目前 exact head
+   （「PR lifecycle single-writer」「Beta／stable 發布通道與 admin bypass（#918）」）。
+6. **Tag／Release 讀回**：確認 stable tag 指向 promotion commit、Release 頁面與成品存在；
+   hosted 發版失敗時改用本機 `scripts/publish-release`（「Release 發版不依賴 Actions 健康度的 fallback（#589，2026-09-03）」）。只有讀回成功才能宣稱已發版。
+7. **Feature parent 與 sub-Issue 收尾**：Milestone 內每張 sub-Issue 已關閉且 acceptance 全勾；
+   Feature parent 勾完 acceptance 後以 `completed` 關閉（#1026）。
+8. **Tracker 關閉順序**：Release 讀回 → Feature parent 關閉 → `complete-release` 回填
+   `Completion evidence`、重算 `Reconciliation` 並關閉 tracker 與 Milestone（`publish-release`
+   自動呼叫；中斷時以相同參數重跑）。核准之後到收尾完成前不要編輯或留言 tracker，否則
+   核准過期。
+9. **解除凍結與清理**：讀回 tracker 與 Milestone 都已關閉後，執行
+   `scripts/finalization-queue leave --issue <tracker>`，再依 `AGENTS.md` 第 13 步清理 delivery
+   branch 與 worktree。

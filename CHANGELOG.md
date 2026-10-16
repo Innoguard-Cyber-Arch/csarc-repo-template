@@ -7,6 +7,15 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.33.0-beta.1] - 2026-10-16
+
+### Features
+
+* feat(docs): add shared governance templates for promotion, hotfix and commits (27bf125)
+* feat(templates): add missing workflow templates for decisions, pilots and merges (67b1bbd)
+* feat(handbook): list every template in appendix B by execution flow (b9eac9c)
+* feat(handbook): show generated template formats in appendix B (4739584)
+
 ## [0.32.1-beta.1] - 2026-10-16
 
 ### Bug Fixes

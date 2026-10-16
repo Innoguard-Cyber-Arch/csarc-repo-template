@@ -853,21 +853,545 @@ push 或建立 PR。</pre>
   </section>
   <section class="sheet annex" id="templates">
     <div class="page-content">
-      <div class="eyebrow">附錄 B · 範本清單</div>
-      <h2>附錄 B：範本清單</h2>
-      <p class="compact">本附錄接在核准的 10 張主文之後，不屬於核准基準，也不受 10 張的頁數限制。它只介紹使用者或 agent 要照格式填寫的範本：每項列出用途、誰填、位置與出現條件；精確格式以連結的權威文件或生成內容為準，本附錄不另定一套。</p>
+      <div class="eyebrow">附錄 B · 範本格式</div>
+      <h2>附錄 B：範本格式</h2>
+      <p class="compact">本附錄接在核准的 10 張主文之後，不屬於核准基準，也不受 10 張的頁數限制。它依使用者或 agent 實際經過的流程（建立／導入、規劃、開發、驗證與合併、發版、升級、例外與事後、整合）列出重要範本的實際格式。每個灰底區塊都在建置時，由它上方那段說明連結的權威檔案或工具程式直接產生，不是另外抄寫的版本；權威檔案一改，<code>scripts/build-handbook --check</code> 就會要求重建。<code>&lt;…&gt;</code> 是要填的位置，範例值都是虛構的。最後的 B.9 是所有範本的索引，列出位置與出現條件。</p>
+      <h3 class="mt-3">B.1 建立／導入</h3>
+      <p class="compact">建立或導入時沒有要手填的範本：<code>csarc init</code>／<code>adopt</code> 只詢問偵測不到的選擇，再產生 <code>.csarc/config.yml</code>、<code>.csarc/provenance.json</code>、兩份 <code>SECURITY.md</code>、LICENSE、<code>.csarc/docs/csarc.md</code> 與 agent 規則。設定只用 <code>csarc update --data KEY=VALUE</code> 修改，provenance 不可手改；各檔位置與出現條件見 B.9。</p>
+      <h3 class="mt-3">B.2 規劃</h3>
+      <p class="compact mt-3"><strong>開 Issue：Task 表單</strong>　誰填：使用者或 agent；何時：每一項能獨立交付的工作開始前。送出後的 Issue 本文就是下列格式，「完成條件」的每個頂層 checkbox 依序成為 AC1…ACn。來源：<a href="../../.github/ISSUE_TEMPLATE/task.yml"><code>task.yml</code></a></p>
+      <pre class="format">### 問題
+
+&lt;一兩句話說明現況與原因。&gt;
+
+### Release level / 發布層級
+
+&lt;beta / stable&gt;
+
+### 完成條件
+
+- [ ] ...
+
+### 補充
+
+#### 風險與控制
+
+| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1 | TODO | TODO | TODO | TODO | TODO | TODO |</pre>
+      <p class="compact mt-3"><strong>風險與控制區塊</strong>　誰填：Issue assignee；何時：開 Issue 時填在「補充」，Ready 前會被檢查。每個風險一列；只改一般文件時改用唯一一列 <code>R0</code>。來源：<a href="../specs/SPEC-010-issue-risk-controls.md"><code>SPEC-010</code></a></p>
+      <pre class="format">#### 風險與控制
+
+| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1 | data | high | adopt 覆寫產品既有檔案 | adopt 預設試跑並保留產品檔 | 試跑 regression | @alice |</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 1 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-issues">
+    <div class="page-content">
+      <p class="compact"><strong>開 Issue：Bug 表單</strong>　誰填：使用者或 agent；何時：回報能重現的非預期行為，hotfix 也從這張開始。來源：<a href="../../.github/ISSUE_TEMPLATE/bug.yml"><code>bug.yml</code></a></p>
+      <pre class="format">### 問題
+
+&lt;說明預期行為、實際行為與可重現步驟。&gt;
+
+### Release level / 發布層級
+
+&lt;beta / stable&gt;
+
+### 完成條件
+
+- [ ] ...
+
+### 補充
+
+#### 風險與控制
+
+| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1 | TODO | TODO | TODO | TODO | TODO | TODO |</pre>
+      <p class="compact mt-3"><strong>開 Issue：Feature 表單</strong>　誰填：需求負責人；何時：需要多張工作才能完成的共同成果。來源：<a href="../../.github/ISSUE_TEMPLATE/feature.yml"><code>feature.yml</code></a></p>
+      <pre class="format">### 問題
+
+&lt;一兩句話說明要共同解決的問題與原因。&gt;
+
+### Release level / 發布層級
+
+&lt;beta / stable&gt;
+
+### 完成條件
+
+- [ ] ...
+
+### 補充
+
+#### 風險與控制
+
+| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1 | TODO | TODO | TODO | TODO | TODO | TODO |</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 2 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-issues-2">
+    <div class="page-content">
+      <p class="compact"><strong>開 Issue：Documentation 表單</strong>　誰填：使用者或 agent；何時：只改一般文件，「補充」預填 <code>R0</code>。來源：<a href="../../.github/ISSUE_TEMPLATE/documentation.yml"><code>documentation.yml</code></a></p>
+      <pre class="format">### 問題
+
+&lt;一兩句話說明讀者目前遇到的資訊缺口。&gt;
+
+### Release level / 發布層級
+
+&lt;beta / stable&gt;
+
+### 完成條件
+
+- [ ] ...
+
+### 補充
+
+#### 風險與控制
+
+| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| R0 | none | — | TODO | TODO | scope:docs | TODO |</pre>
+      <p class="compact mt-3"><strong>Milestone description</strong>　誰填：Milestone 負責人；何時：建立有真實 due date 的 Milestone 時，填在 Milestone 本身的描述欄。來源：<a href="../milestone-description.md"><code>milestone-description.md</code></a></p>
+      <pre class="format">## Problem
+
+用一小段話交代這次 delivery 要收斂的問題與為何現在值得處理；先描述問題，
+不先指定解法。
+
+## Outcome
+
+說明這次 delivery 完成後可觀察的價值，並連回對應 Feature parent。
+
+## Acceptance criteria
+
+- [ ] 列出 2–5 項 story-level、可獨立驗證的結果，不要抄寫 implementation tasks。
+
+## Plan
+
+1. #&lt;leaf-issue&gt; — 第一個可獨立交付的 Task／Bug 與目的。
+2. #&lt;leaf-issue&gt; — 後續工作；只有真實順序限制才另設 native dependency。
+
+## Out of scope
+
+列出看似相關、但不影響本 story 驗收且刻意排除的工作。
+
+## Verification
+
+寫出 maintainer 如何端到端驗證 outcome，而不只列單元測試指令。
+
+## References
+
+- #N — 註明沿用、取代或駁回的既有決策與理由。
+- 連結來源 spec、使用者研究或導入盤點；若沒有候選，記錄 bounded search 範圍。</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 3 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-milestone">
+    <div class="page-content">
+      <p class="compact"><strong>Milestone tracker 本文</strong>　誰填：Milestone 負責人；何時：與 Milestone 一起由 <code>scripts/create-milestone</code> 建立，<code>lifecycle</code> 含 <code>milestones</code> 時才有。來源：<a href="../../scripts/create-milestone"><code>create-milestone</code></a></p>
+      <pre class="format">## Proposal
+
+&lt;Proposal：範圍、所屬 Issue，可含 ### Checkpoints&gt;
+
+## Completion evidence
+
+&lt;!-- Fill after release. --&gt;
+
+## Early termination
+
+&lt;!-- Fill only when stopped early. --&gt;
+
+## Promotion
+
+&lt;!-- Fill when ready to promote. --&gt;</pre>
+      <p class="compact mt-3"><strong>Checkpoints 區塊</strong>　誰填：Milestone 負責人；何時：核准前寫在 tracker 的 Proposal 內，宣告哪些 Issue 一起發一個 beta。來源：<a href="../milestone-description.md"><code>milestone-description.md</code></a></p>
+      <pre class="format">### Checkpoints
+
+- Checkpoint A (beta): #101; terminal #101
+- Checkpoint B (beta): #102, #103; terminal #103</pre>
+      <h3 class="mt-3">B.3 開發</h3>
+      <p class="compact mt-3"><strong>Branch 名稱與 PR 標題</strong>　誰填：agent 或 PR 作者；何時：建立 branch 與 PR 時。規則取自 <code>gh-issue-develop</code> 與 <code>title</code> check 實際使用的 pattern。來源：<a href="../../AGENTS.md"><code>AGENTS.md</code></a> 工作迴圈第 12 步</p>
+      <pre class="format">Branch:   &lt;type&gt;/&lt;Issue&gt;-&lt;slug&gt;
+          feat/123-summary-table
+          type = feat | fix | docs | refactor | test | build | ci | chore | revert
+
+PR title: &lt;type&gt;(&lt;scope&gt;)!: &lt;summary&gt;
+          (ASCII; scope and ! are optional)
+          feat(report): add a summary table
+          fix(cli)!: reject an empty answer
+          type = feat | fix | docs | refactor | test | build | ci | chore | revert
+
+Squash commit = PR title; feat → minor, fix/revert → patch,
+! → major, other types → no release.</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 4 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-develop">
+    <div class="page-content">
+      <p class="compact"><strong>PR 本文</strong>　誰填：PR 作者（通常是 agent）；何時：以 <code>pr_lifecycle.py create</code> 建立 Draft PR 時，Ready 前把完成清單、Requirement evidence 與文件一致性填好。來源：<a href="../../.github/pull_request_template.md"><code>pull_request_template.md</code></a></p>
+      <pre class="format">## Purpose
+
+&lt;!-- Replace N with the Issue number used in the branch name. --&gt;
+
+Closes #N
+
+&lt;!-- Work PRs use type/N-short-slug and target the configured integration branch. --&gt;
+&lt;!-- A CSARC-owned Milestone promotion bridge (promote/m&lt;N&gt;-&lt;slug&gt;) replaces the line above with Refs #N so release.yml closes the tracker only after publication succeeds. --&gt;
+
+## 完成清單
+
+&lt;!-- Closing keywords require every task here and in the linked Issue to be checked. --&gt;
+
+- [ ] 已完成變更 owner 的 focused checks；hosted `verify` 會依風險在 exact candidate 執行 fast／full 並提供 required merge evidence，不因選到 full 就在本機重跑同一套 `./scripts/verify-template.sh`（文件明定的 fallback／診斷除外，見 `docs/ci-policy.md`）；PR assignee／label／Milestone 與 linked Issue 一致；work branch 已顯示於 Issue Development；未超出原 Issue 範圍
+- [ ] 已測試新專案產生並評估既有專案更新影響；第三方 Actions 固定完整 commit SHA
+
+## Requirement evidence
+
+&lt;!-- SPEC-010：Ready 前，依 Issue「完成條件」順序為每個 AC 與每個風險 ID 各填一列。證據形式：`path` 或 `path::name`（exact head 上的 regression）、`check:&lt;name&gt;`（exact-head check）、`manual: &lt;https URL&gt; &lt;理由&gt;`、`accepted: &lt;理由&gt;`（只限風險）、`scope:docs`（只限 R0）。Coverage 寫 Ready 檢查訊息列出的值；Issue 的 AC 或風險改變後要重新對應。 --&gt;
+
+Issue: #N
+Coverage: sha256:replace-with-the-value-from-the-ready-check
+
+| ID | 證據 |
+| --- | --- |
+| AC1 | replace-with-evidence |
+| R1 | replace-with-evidence |
+
+## 文件一致性
+
+&lt;!-- 由本機 AI 比對程式、設定、測試與文件；每次 push 後都要重填 exact head。 --&gt;
+
+- Status: `inconclusive`
+- Reviewed head: `&lt;40-character commit SHA&gt;`
+- Reason: Replace this text with the checked scope or why documentation is not applicable.
+
+## 補充
+
+&lt;!-- 選填：風險、回退，或本 PR 對其他專案的額外影響。 --&gt;
+&lt;!-- 若依 admin_bypass 使用自核，另加一行完全相同的：Admin bypass / 管理員略過審核 --&gt;</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 5 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-evidence">
+    <div class="page-content">
+      <p class="compact"><strong>Requirement evidence 填寫範例</strong>　誰填：PR 作者；何時：Ready 前，每個 AC 與風險 ID 各一列 exact-head 證據。來源：<a href="../specs/SPEC-010-issue-risk-controls.md"><code>SPEC-010</code></a></p>
+      <pre class="format">## Requirement evidence
+
+Issue: #123
+Coverage: sha256:&lt;64 hex&gt;
+
+| ID | 證據 |
+| --- | --- |
+| AC1 | tests/test_report.py::test_report_renders |
+| AC2 | check:verify |
+| R1 | accepted: 單人維護者接受這個殘餘風險 |</pre>
+      <p class="compact mt-3"><strong>ADR</strong>　誰填：專案維護者或 agent；何時：使用者確認了會持續影響架構、工具或相容性的決定。生成專案在 <code>documentation_mode</code> 不是 <code>off</code> 時有同一份規則。來源：<a href="../adr/README.md"><code>docs/adr/README.md</code></a></p>
+      <pre class="format"># Choose a durable option
+
+- **狀態：**Accepted
+- **日期：**2026-08-24
+- **來源 Issue：**[Issue #1](https://github.com/owner/repo/issues/1)
+- **實作 PR：**[PR #2](https://github.com/owner/repo/pull/2)
+
+## 問題與限制
+
+要解決的問題與已確認的限制。
+
+## 決定
+
+採用的方案與理由；誰維護、如何更新，以及用哪個檢查驗證。
+
+## 評估過的替代方案
+
+評估但未採用的選項，各附一句原因。
+
+## 重新評估條件
+
+已知限制、失敗時的 fallback，以及哪些情況要重新評估。</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 6 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-spec">
+    <div class="page-content">
+      <p class="compact"><strong>SPEC</strong>　誰填：專案維護者或 agent；何時：需要可驗收的能力規格時，從範例複製。來源：<a href="../../template/docs/specs/SPEC-001-example.md.jinja"><code>SPEC-001-example.md.jinja</code></a></p>
+      <pre class="format">---
+id: SPEC-001
+title: Replace this example with one observable outcome
+owner: &lt;code_owner&gt;
+priority: P2
+estimate: 1-3 days
+status: draft
+# tracking: story
+# Use tracking: none for a current spec without a work tracker.
+---
+
+## Problem
+
+Describe who is affected and what is not working today.
+
+## Outcome
+
+Describe what a user or operator will be able to observe after this work is complete.
+
+## Context
+
+Explain why the outcome matters. Keep implementation choices out until they are necessary.
+
+## Acceptance criteria
+
+- [ ] Replace this line with one independently verifiable condition.
+
+## Plan
+
+List the independently deliverable Issues in dependency order.
+
+## Out of scope
+
+List related work that this spec deliberately excludes.
+
+## Verification
+
+List the command, test, or observable result a reviewer will use.
+
+## References
+
+Link the source request and preserved or superseded decisions.</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 7 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-merge">
+    <div class="page-content">
+      <h3>B.4 驗證與合併</h3>
+      <p class="compact mt-3"><strong>合併授權留言</strong>　誰填：執行合併的 admin 本人；何時：<code>admin_bypass</code> 不是 <code>off</code>、以留言取代核准時，取得 lease 後貼在 PR。格式由 <code>pr_lifecycle.authorization_statement()</code> 產生。來源：<a href="../../scripts/pr_lifecycle.py"><code>pr_lifecycle.py</code></a></p>
+      <pre class="format">PR lifecycle merge authorization
+
+`{"head_sha":"&lt;head SHA&gt;","pull_request":&lt;PR&gt;,"repository":"&lt;owner&gt;/&lt;repository&gt;"}`
+
+I authorize this exact pull request head for one merge attempt.</pre>
+      <p class="compact mt-3"><strong>合併 commit trailer</strong>　誰填：<code>pr_lifecycle.py merge</code> 自動寫入；何時：每次 squash 合併。它是稽核紀錄，不是驗證證據。來源：<a href="../../policies/merge-trailers.json"><code>merge-trailers.json</code></a></p>
+      <pre class="format">&lt;PR title&gt;
+
+&lt;squash body&gt;
+
+CSARC-Evidence: &lt;url&gt;
+CSARC-Evidence-SHA256: &lt;digest&gt;
+CSARC-Evidence-Tree: &lt;sha&gt;
+CSARC-Trust: &lt;github-hosted | self-attested-local&gt;
+CSARC-Route: &lt;dependabot | hotfix | isolated | issue | milestone | release-follow-up | release-recovery | sync&gt;
+CSARC-Approval: &lt;comment | copilot | hotfix-emergency | review&gt;
+CSARC-Authorization: &lt;url&gt;</pre>
+      <h3 class="mt-3">B.5 發版</h3>
+      <p class="compact mt-3"><strong>CHANGELOG 段落</strong>　誰填：<code>csarc-owned</code> 時由 <code>release_policy.py prepare-candidate</code> 在交付 PR 物化；何時：release-worthy 的最後一個 commit。下例是用同一個 writer 對虛構 commit 產生的結果；<code>docs</code>、<code>chore</code> 等類型不列入。GitHub Release notes 由 <code>--generate-notes</code> 依已合併 PR 標題列出 What&#x27;s Changed 與比較連結，不另填。來源：<a href="../../scripts/release_policy.py"><code>release_policy.py</code></a></p>
+      <pre class="format">## [1.1.0] - 2026-01-02
+
+### Features
+
+* feat(report): add a summary table (f32ccd0)
+
+### Bug Fixes
+
+* fix(cli): reject an empty answer (dc22059)</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 8 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-upgrade">
+    <div class="page-content">
+      <h3>B.6 升級</h3>
+      <p class="compact mt-3"><strong>導入／更新報告</strong>　誰填：CLI 產生，人閱讀與決定；何時：<code>csarc adopt</code>／<code>update --check</code> 時寫在 repository 外。Markdown 報告固定這九節，先看第一節。來源：<a href="../specs/SPEC-008-lifecycle-report-format.md"><code>SPEC-008</code></a></p>
+      <pre class="format">## Items requiring your decision
+
+&lt;…&gt;
+
+## Snapshot
+
+&lt;…&gt;
+
+## Summary of file changes
+
+&lt;…&gt;
+
+## Impact analysis
+
+&lt;…&gt;
+
+## File changes
+
+&lt;…&gt;
+
+## Settings
+
+&lt;…&gt;
+
+## Product state
+
+&lt;…&gt;
+
+## Verification
+
+&lt;…&gt;
+
+## Next steps
+
+&lt;…&gt;</pre>
+      <h3 class="mt-3">B.7 例外與事後</h3>
+      <p class="compact mt-3"><strong>Hotfix 事後紀錄</strong>　誰填：hotfix 作者；何時：hotfix 合併後，寫在 hotfix Issue「補充」或 PR 的 Requirement evidence。來源：<a href="../ci-policy.md"><code>ci-policy.md</code></a></p>
+      <pre class="format">| 欄位 | 內容 |
+| --- | --- |
+| 原因 | &lt;缺陷的直接原因與觸發條件&gt; |
+| 影響範圍 | &lt;受影響的版本、功能、repository 或使用者，以及發生期間&gt; |
+| Exact base／head | &lt;修正 PR 合併時的 base SHA 與 head SHA，以及合併後的 `main` commit&gt; |
+| 為何不能等 Milestone | &lt;不立即修正的具體後果；說不出來就改走一般 Issue 或 Milestone&gt; |
+| 授權來源 | &lt;Issue 核可留言與 PR exact-head 授權或 review 的連結；admin bypass 時連到自動建立的同儕複核 Issue&gt; |
+| 驗證證據 | &lt;full run 連結、rollback 說明，以及是否發版與 Release 讀回結果&gt; |
+| 後續 Issue | &lt;根因修正、測試補強或流程調整的 Issue 編號；沒有時寫明理由&gt; |</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 9 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-security">
+    <div class="page-content">
+      <p class="compact"><strong>安全通報私密紀錄</strong>　誰填：收件維護者；何時：收到私密漏洞通報後，只存在私密管道。來源：<a href="../security-response.md"><code>security-response.md</code></a></p>
+      <pre class="format">| 欄位 | 內容 |
+| --- | --- |
+| 收件 | &lt;收件時間、通報管道與收件維護者&gt; |
+| 通報者 | &lt;聯絡方式，以及是否同意公開署名&gt; |
+| 影響 | &lt;受影響的版本、元件與設定條件&gt; |
+| 重現狀態 | &lt;`reproduced`、`not-reproduced` 或 `pending`，附重現環境&gt; |
+| 第一次回覆 | &lt;回覆通報者的時間與內容摘要&gt; |
+| 秘密外洩 | &lt;`none`，或已撤銷與輪替的項目（不寫值）&gt; |
+| 修正 | &lt;公開 Issue 與 PR 編號、修正版本與 Release 讀回結果&gt; |
+| 公開 | &lt;公開日期與 advisory 或 Release notes 連結；未公開寫 `not-yet`&gt; |
+| 結案 | &lt;`fixed`、`not-a-vulnerability` 或 `upstream`，以及回覆通報者的時間&gt; |</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 10 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-records">
+    <div class="page-content">
+      <p class="compact"><strong>Pilot 紀錄</strong>　誰填：pilot 執行者；何時：每次 consumer 導入試行，寫在該 consumer 的 pilot Issue。來源：<a href="../pilot-adoption.md#pilot-紀錄格式"><code>pilot-adoption.md</code></a></p>
+      <pre class="format">| 欄位 | 內容 |
+| --- | --- |
+| Exact base／head | &lt;pilot 分支的 base 與 head 完整 SHA&gt; |
+| Release | &lt;測試的不可變 beta tag 與完整 commit SHA&gt; |
+| 指令 | &lt;依序執行的每個指令（含 `csarc update --check --json`、`--finalize-plan`、`--apply-plan`）與 exit code&gt; |
+| 衝突數 | &lt;plan 列出的衝突數，以及實際需要人工決定的數量&gt; |
+| 耗時 | &lt;每個指令的耗時與總耗時&gt; |
+| 人工決策 | &lt;每個衝突的 `keep-current`／`take-new`／`custom` 與理由&gt; |
+| Pin | &lt;每筆人工 pin：`file:line`、action、舊 SHA、新 SHA、pin commit SHA；必須都在 preflight 清單內&gt; |
+| 產品 diff | &lt;pin 以外的產品檔案變更；進場條件要求為空&gt; |
+| 本機 candidate | &lt;`./.csarc/scripts/verify-fast` 的 exact head、tier 與結果&gt; |
+| Native checks | &lt;產品原有檢查的指令與結果&gt; |
+| 遮蔽報告 | &lt;去除 identity 後的導入／更新報告，或其連結&gt; |
+| 語言偵測 | &lt;偵測到的語言、`uncertain` 項目與最終選擇&gt; |
+| Risk 工具摘要 | &lt;`csarc risk` 對該 run 的 Issue／PR 輸出摘要&gt; |
+| 結果 | &lt;`entered`（達到進場條件）或 `blocked`；`blocked` 另附擋點分類與失敗輸出&gt; |</pre>
+      <p class="compact mt-3"><strong>Operator-independence run 紀錄</strong>　誰填：未參與該 Milestone 的新 session 或人；何時：stable promotion 前。來源：<a href="../pilot-adoption.md#operator-independence-run"><code>pilot-adoption.md</code></a></p>
+      <pre class="format">| 欄位 | 內容 |
+| --- | --- |
+| Release | &lt;tag 與完整 SHA&gt; |
+| 步驟紀錄 | &lt;每一步的指令、exit code 與結果摘要&gt; |
+| 衝突與決定 | &lt;每個衝突的決定，以及依據手冊哪一節&gt; |
+| 產品 diff 摘要 | &lt;套用後產品檔案的變更；預期為空或只有 preflight pin&gt; |
+| Native checks | &lt;產品原有檢查的指令與結果&gt; |
+| 額外提示或文件 drift | &lt;手冊沒寫、需要猜或與工具輸出不符的地方；沒有時寫 `none`&gt; |
+| 實作者協助 | &lt;`no`，或需要哪些協助；`yes` 表示這次 run 不成立&gt; |</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 11 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-promotion">
+    <div class="page-content">
+      <p class="compact"><strong>Promotion checklist</strong>　誰填：Milestone 負責人或 agent；何時：每次 Milestone promotion，依序執行。來源：<a href="../milestone-description.md#promotion-checklist"><code>milestone-description.md</code></a></p>
+      <pre class="format">- [ ] 開始前
+- [ ] 凍結 `main`
+- [ ] Sync 協調
+- [ ] Bridge 與版本
+- [ ] 合併
+- [ ] Tag／Release 讀回
+- [ ] Feature parent 與 sub-Issue 收尾
+- [ ] Tracker 關閉順序
+- [ ] 解除凍結與清理</pre>
+      <h3 class="mt-3">B.8 整合</h3>
+      <p class="compact mt-3"><strong>ProjectV2 設定</strong>　誰填：專案維護者；何時：設定 <code>github_project_url</code> 後、第一次同步前。生成的 <code>.csarc/docs/csarc.md</code> 只在設定時出現這一節。來源：<a href="../../template/.csarc/docs/csarc.md.jinja"><code>csarc.md.jinja</code></a></p>
+      <pre class="format">第一次同步前：
+
+1. 在 `&lt;github_project_url&gt;` 新增兩個 DATE 欄位，名稱逐字為 `Project start` 與 `Project target`。
+2. 確認 `gh` 的 token 有 `project` scope（`gh auth refresh -s project`），而且你對這個 Project 有寫入權。
+3. 先對一張 Issue 執行 `csarc issue sync-project --issue &lt;N&gt;`：寫入前檢查 Project、欄位、scope 與權限，缺一項就停止；既有日期不同時先列出差異，確認後才以 `--yes` 覆寫。
+
+只以 stub 驗證，未經 live ProjectV2 驗證。</pre>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 12 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-index">
+    <div class="page-content">
+      <h3>B.9 索引</h3>
       <table class="stage-table dense">
         <thead><tr><th class="stage">範本</th><th>用途</th><th>誰填</th><th>位置與出現條件</th></tr></thead>
         <tbody>
+          <tr><td class="stage">設定檔</td><td>只保存無法安全重建的使用者意圖；改值用 <code>csarc update --data KEY=VALUE</code></td><td>CLI 產生，人只用指令改</td><td><code>.csarc/config.yml</code>；契約見 <a href="../specs/SPEC-009-project-settings.md"><code>SPEC-009</code></a>；一律 render</td></tr>
+          <tr><td class="stage">Provenance</td><td>schema、模板來源、<code>project_mode</code> 與舊側 snapshot；以 digest 防改</td><td>CLI 寫入，不可手改</td><td><code>.csarc/provenance.json</code>；契約見 <a href="../specs/SPEC-009-project-settings.md"><code>SPEC-009</code></a>；一律寫入</td></tr>
+          <tr><td class="stage">掃描政策</td><td>說明安全掃描器的政策與範圍</td><td>工具產生</td><td><a href="../../SECURITY.md"><code>SECURITY.md</code></a>；新專案 render，既有專案保留自己的檔案</td></tr>
+          <tr><td class="stage">漏洞通報政策</td><td>人工私密通報入口；public repository 必須有 GitHub 以外的管道</td><td>維護者在 init／adopt 提供管道</td><td><a href="../../.github/SECURITY.md"><code>.github/SECURITY.md</code></a>；新專案依 visibility render，既有專案保留自己的檔案</td></tr>
+          <tr><td class="stage">LICENSE</td><td>授權條文</td><td>init／adopt 的一次性 seed</td><td><a href="../../template/LICENSE.jinja"><code>template/LICENSE.jinja</code></a>；<code>project_license</code> 不是 <code>custom</code> 的新專案；既有專案保留自己的檔案</td></tr>
+          <tr><td class="stage">操作指南</td><td>依本專案設定產生的設定表、工作流程、驗證與合併、發版、更新與恢復</td><td>工具產生，不手改</td><td><a href="../../template/.csarc/docs/csarc.md.jinja"><code>template/.csarc/docs/csarc.md.jinja</code></a>；生成 <code>.csarc/docs/csarc.md</code>，一律 render</td></tr>
+          <tr><td class="stage">Agent 工作規則</td><td>agent 的可執行規則；<code>AGENTS.md</code> 只有 CSARC 區塊由工具更新</td><td>工具產生</td><td><a href="../../template/.csarc/docs/agent-workflow.md.jinja"><code>template/.csarc/docs/agent-workflow.md.jinja</code></a>；生成 <code>AGENTS.md</code> 與 <code>.csarc/docs/agent-workflow.md</code>，一律 render</td></tr>
+          <tr><td class="stage">文件地圖</td><td>說明 specs、ADR、Issue 與測試各自回答什麼問題</td><td>工具產生，專案可改</td><td><a href="../../template/docs/README.md.jinja"><code>template/docs/README.md.jinja</code></a>；<code>documentation_mode</code> 不是 <code>off</code> 時</td></tr>
+          <tr><td class="stage">Milestone description</td><td>Milestone 描述欄的七段格式與建立、預檢、收尾步驟</td><td>Milestone 負責人</td><td><a href="../milestone-description.md"><code>docs/milestone-description.md</code></a>；生成 <code>.csarc/docs/milestone-description.md</code> 為精簡版；<code>lifecycle</code> 含 <code>milestones</code> 時</td></tr>
+          <tr><td class="stage">Milestone tracker 表單</td><td>單一 tracker：Proposal、Completion evidence、Early termination、Promotion，可宣告 <code>### Checkpoints</code></td><td>Milestone 負責人</td><td><a href="../../.github/ISSUE_TEMPLATE/milestone-tracker.yml"><code>milestone-tracker.yml</code></a>；<code>lifecycle</code> 含 <code>milestones</code> 時</td></tr>
+          <tr><td class="stage">Issue 表單：Task</td><td>一項能獨立完成、驗證、交付的工作；最常用</td><td>使用者或 agent</td><td><a href="../../.github/ISSUE_TEMPLATE/task.yml"><code>task.yml</code></a>；一律 render</td></tr>
+          <tr><td class="stage">Issue 表單：Bug</td><td>回報能重現的非預期行為；hotfix 也從這裡開始</td><td>使用者或 agent</td><td><a href="../../.github/ISSUE_TEMPLATE/bug.yml"><code>bug.yml</code></a>；一律 render</td></tr>
+          <tr><td class="stage">Issue 表單：Feature</td><td>需要多張工作才能完成的共同成果</td><td>需求負責人</td><td><a href="../../.github/ISSUE_TEMPLATE/feature.yml"><code>feature.yml</code></a>；一律 render</td></tr>
+          <tr><td class="stage">Issue 表單：Documentation</td><td>只改一般文件；<code>AGENTS.md</code>、<code>SECURITY.md</code> 與 CI policy 不適用</td><td>使用者或 agent</td><td><a href="../../.github/ISSUE_TEMPLATE/documentation.yml"><code>documentation.yml</code></a>；一律 render</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 13 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-index-2">
+    <div class="page-content">
+      <table class="stage-table dense">
+        <thead><tr><th class="stage">範本</th><th>用途</th><th>誰填</th><th>位置與出現條件</th></tr></thead>
+        <tbody>
+          <tr><td class="stage">Issue 表單設定</td><td>關閉空白 Issue，只能從表單建立</td><td>不需填</td><td><a href="../../.github/ISSUE_TEMPLATE/config.yml"><code>config.yml</code></a>；一律 render</td></tr>
+          <tr><td class="stage">風險與控制區塊</td><td>每個風險一列（ID、類別、等級、控制、預計證據、Owner），或唯一一列 <code>R0</code>；Ready 前檢查</td><td>Issue assignee</td><td>表單「補充」預填；契約見 <a href="../specs/SPEC-010-issue-risk-controls.md"><code>SPEC-010</code></a>；隨表單 render</td></tr>
+          <tr><td class="stage">Branch 命名</td><td><code>type/&lt;Issue&gt;-&lt;slug&gt;</code>；<code>gh-issue-develop</code> 建立前檢查名稱並連結 Issue</td><td>agent 或 PR 作者</td><td><a href="../../scripts/gh-issue-develop"><code>gh-issue-develop</code></a>；生成 <code>.csarc/scripts/gh-issue-develop</code>，一律 render</td></tr>
+          <tr><td class="stage">PR 標題與 commit 慣例</td><td><code>type(scope): summary</code>；squash commit 與 release notes 取自 PR 標題，類型決定 release intent</td><td>PR 作者</td><td><a href="../../AGENTS.md"><code>AGENTS.md</code></a> 工作迴圈第 12 步；生成 <code>.csarc/docs/agent-workflow.md</code> 第 12 步；由 <code>title</code> check 強制</td></tr>
+          <tr><td class="stage">PR template</td><td>Purpose、完成清單、Requirement evidence、文件一致性、補充</td><td>PR 作者（通常是 agent）</td><td><a href="../../.github/pull_request_template.md"><code>pull_request_template.md</code></a>；一律 render</td></tr>
+          <tr><td class="stage">Requirement evidence</td><td>每個 AC 與風險 ID 對應一項 exact-head 證據；Ready 前不得缺漏或未知</td><td>PR 作者</td><td>PR template 的 <code>## Requirement evidence</code>；契約見 <a href="../specs/SPEC-010-issue-risk-controls.md"><code>SPEC-010</code></a></td></tr>
+          <tr><td class="stage">文件一致性紀錄</td><td><code>aligned</code> 或附理由的 <code>not-applicable</code>；<code>drift</code>、<code>inconclusive</code> 擋下交付</td><td>PR 作者</td><td>PR template 的 <code>## 文件一致性</code>；規則見 <a href="../documentation-policy.md"><code>documentation-policy.md</code></a></td></tr>
           <tr><td class="stage">ADR</td><td>記錄已確認、會持續影響架構、工具或相容性的決定</td><td>專案維護者或 agent</td><td><a href="../adr/README.md"><code>docs/adr/README.md</code></a> 的規則與範例；生成專案在 <code>documentation_mode</code> 不是 <code>off</code> 時有同一份</td></tr>
+          <tr><td class="stage">SPEC</td><td>front matter 與 Problem、Outcome、AC、Out of scope、Verification 等段落</td><td>專案維護者或 agent</td><td><a href="../specs/SPEC-001-example.md"><code>SPEC-001-example.md</code></a>；生成 <code>docs/specs/SPEC-001-example.md</code> 在 <code>documentation_mode</code> 不是 <code>off</code> 時；<code>code_owner</code> 空白時 <code>owner</code> 為空</td></tr>
+          <tr><td class="stage">站台設定範例</td><td>網站上 <code>config-guidance</code> 區塊使用的設定範例</td><td>模板維護者</td><td><a href="../../site/data/config_examples.json"><code>config_examples.json</code></a>；只在模板 repository，不 render</td></tr>
+          <tr><td class="stage">合併授權留言</td><td>admin 以 exact-head 留言取代核准</td><td>執行合併的 admin</td><td>生成的 <code>.csarc/docs/csarc.md</code>「驗證與合併」；<code>admin_bypass</code> 不是 <code>off</code> 時</td></tr>
+          <tr><td class="stage">合併 commit trailer</td><td>squash commit 固定的 <code>CSARC-*</code> trailer；是稽核紀錄，不是驗證證據</td><td><code>pr_lifecycle.py merge</code> 自動寫入</td><td><a href="../../policies/merge-trailers.json"><code>merge-trailers.json</code></a>；生成 <code>.csarc/policies/merge-trailers.json</code>，一律 render</td></tr>
+          <tr><td class="stage">驗證證據</td><td>hosted：綁定 repository、head／tree、tier 與 runner 的 <code>verify</code> 結果；local：self-attested 紀錄</td><td>CI 或 <code>verify-fast</code> 自動產生</td><td>hosted 以 <code>check-trusted-verification</code> 讀取；local 存在 Git metadata，不進 repository；規則見 <a href="../ci-policy.md"><code>ci-policy.md</code></a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 14 / 15</span></footer>
+  </section>
+  <section class="sheet annex" id="templates-index-3">
+    <div class="page-content">
+      <table class="stage-table dense">
+        <thead><tr><th class="stage">範本</th><th>用途</th><th>誰填</th><th>位置與出現條件</th></tr></thead>
+        <tbody>
+          <tr><td class="stage">風險登錄冊</td><td>從 Issue 與 PR 計算的唯讀登錄冊</td><td><code>csarc risk register</code> 產生</td><td>不 commit；格式 <code>csarc-risk-register</code> 見 <a href="../specs/SPEC-010-issue-risk-controls.md"><code>SPEC-010</code></a></td></tr>
+          <tr><td class="stage">CHANGELOG</td><td>版本紀錄</td><td><code>csarc-owned</code> 時由 <code>prepare-candidate</code> 物化，其他由產品維護</td><td><a href="../../template/CHANGELOG.md"><code>template/CHANGELOG.md</code></a>；只有新專案 render，既有專案保留自己的</td></tr>
+          <tr><td class="stage">Release notes</td><td>Release 說明文字的最低內容，取自已合併 PR 標題</td><td><code>publish-release</code> 產生</td><td><a href="../ci-policy.md"><code>ci-policy.md</code></a>「Release 說明文字的最低格式規範」；<code>release_ownership</code> 是 <code>csarc-owned</code> 時</td></tr>
+          <tr><td class="stage"><code>release-prompt.txt</code></td><td>給使用者複製的固定版本 CLI 呼叫</td><td><code>publish-release</code> 產生</td><td>模板 Release 的 asset；只在模板 repository</td></tr>
+          <tr><td class="stage">導入／更新報告</td><td>plan、JSON 與 Markdown 報告、update 的 final plan；先看 Items requiring your decision</td><td>CLI 產生，人閱讀與決定</td><td>repository 外；格式見 <a href="../specs/SPEC-008-lifecycle-report-format.md"><code>SPEC-008</code></a></td></tr>
+          <tr><td class="stage">設定 plan／apply</td><td>遠端 repository 設定的預覽與套用；先看 plan 再 apply</td><td>工具產生，管理員審核</td><td><a href="../../template/.csarc/scripts/apply-repository-settings.sh"><code>apply-repository-settings.sh</code></a>；一律 render</td></tr>
+          <tr><td class="stage">Hotfix 事後紀錄</td><td>原因、影響範圍、exact base／head、為何不能等 Milestone、授權來源、驗證證據、後續 Issue</td><td>hotfix 作者</td><td>寫在 hotfix Issue「補充」或 PR 的 Requirement evidence；欄位見 <a href="../ci-policy.md"><code>ci-policy.md</code></a>「Hotfix 事後紀錄」；只在模板 repository</td></tr>
+          <tr><td class="stage">安全通報處理程序</td><td>收到私密通報後的記錄、確認、修正、公開與結案；細節只留私密管道</td><td>收件維護者</td><td><a href="../security-response.md"><code>security-response.md</code></a>；只在模板 repository，生成專案自訂</td></tr>
           <tr><td class="stage">Pilot 紀錄</td><td>記錄 consumer 導入試行，含未達進場條件的失敗 run</td><td>pilot 執行者</td><td><a href="../pilot-adoption.md#pilot-紀錄格式"><code>docs/pilot-adoption.md</code></a>；只在模板 repository，不 render</td></tr>
           <tr><td class="stage">Operator-independence run</td><td>stable promotion 前證明未參與實作者只靠文件能完成升級</td><td>未參與該 Milestone 的新 session 或人</td><td><a href="../pilot-adoption.md#operator-independence-run"><code>docs/pilot-adoption.md</code></a>；只在模板 repository，不 render</td></tr>
-          <tr><td class="stage">合併授權留言</td><td>admin 以 exact-head 留言取代核准</td><td>執行合併的 admin</td><td>生成的 <code>.csarc/docs/csarc.md</code>「驗證與合併」；<code>admin_bypass</code> 不是 <code>off</code> 時</td></tr>
+          <tr><td class="stage">Promotion checklist</td><td>Milestone promotion 的九步：凍結 <code>main</code>、sync、bridge、合併、Tag／Release 讀回、收尾與 tracker 關閉順序</td><td>Milestone 負責人或 agent</td><td><a href="../milestone-description.md#promotion-checklist"><code>milestone-description.md</code></a>；只在模板 repository</td></tr>
           <tr><td class="stage">ProjectV2 設定</td><td>第一次同步前建立 DATE 欄位並確認 scope 與寫入權</td><td>專案維護者</td><td>生成的 <code>.csarc/docs/csarc.md</code>「Project Roadmap 設定」；設定 <code>github_project_url</code> 時</td></tr>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本清單</span><span>版本日期 261013 r2</span><span>附錄 1 / 1</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 15 / 15</span></footer>
   </section>
 </main>
 </body>

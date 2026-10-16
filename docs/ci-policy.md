@@ -630,6 +630,25 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
    recovery Issue 核可 gate（#743）」。這與第 2 步的 PR review 是兩道獨立關卡：真正
    緊急、找不到第二人核准時，admin self-approval 保證這條路徑不會因為等待核准而卡死。
 
+#### Hotfix 事後紀錄（#1139）
+
+上面第 3 步要保留的內容，以下表為固定欄位；本節只規定要記什麼與放哪裡，不改變上述路由、
+審查與核可規則。紀錄寫在 hotfix Issue 的「補充」，或 PR 的 `## Requirement evidence`
+（逐項對應 Issue 的風險 ID）；不另開 Issue 表單或紀錄檔。
+
+| 欄位 | 內容 |
+| --- | --- |
+| 原因 | 缺陷的直接原因與觸發條件 |
+| 影響範圍 | 受影響的版本、功能、repository 或使用者，以及發生期間 |
+| Exact base／head | 修正 PR 合併時的 base SHA 與 head SHA，以及合併後的 `main` commit |
+| 為何不能等 Milestone | 不立即修正的具體後果；說不出來就改走一般 Issue 或 Milestone |
+| 授權來源 | Issue 核可留言與 PR exact-head 授權或 review 的連結；admin bypass 時連到自動建立的同儕複核 Issue |
+| 驗證證據 | full run 連結、rollback 說明，以及是否發版與 Release 讀回結果 |
+| 後續 Issue | 根因修正、測試補強或流程調整的 Issue 編號；沒有時寫明理由 |
+
+這份紀錄不取代 #743 的 Issue 核可。若內容涉及尚未公開的漏洞，公開紀錄只寫修正範圍，細節留在
+私密管道（見 `docs/security-response.md`）。
+
 ### Release recovery
 
 `release-recovery` 標籤（`policies/labels.json`）標出「`main` 缺少一次應有發版、需要直接對

@@ -141,7 +141,7 @@ def test_annex_sheets_follow_the_main_body() -> None:
     assert all(_is_annex(e) for e in later)
     assert sum(e[:2] == ("start", "section") for e in main) == SHEETS
     texts = [e[1] for annex in annexes for e in annex if e[0] == "text"]
-    assert "附錄 B\N{FULLWIDTH COLON}範本清單" in texts
+    assert "附錄 B\N{FULLWIDTH COLON}範本格式" in texts
     for template in (
         "ADR",
         "Pilot 紀錄",
@@ -150,6 +150,157 @@ def test_annex_sheets_follow_the_main_body() -> None:
         "ProjectV2 設定",
     ):
         assert template in texts, template
+
+
+# Issue #1139 AC5 (owner decisions 2026-10-16): appendix B shows the
+# concrete format of the key templates in execution-flow order, generated
+# at build time from the authoritative sources, then a compact index.
+FLOW = (
+    "B.1 建立／導入",  # noqa: RUF001
+    "B.2 規劃",
+    "B.3 開發",
+    "B.4 驗證與合併",
+    "B.5 發版",
+    "B.6 升級",
+    "B.7 例外與事後",
+    "B.8 整合",
+    "B.9 索引",
+)
+FORMATS = (
+    ("issue-form", ".github/ISSUE_TEMPLATE/task.yml"),
+    ("fence", "docs/specs/SPEC-010-issue-risk-controls.md #### 風險與控制"),
+    ("issue-form", ".github/ISSUE_TEMPLATE/bug.yml"),
+    ("issue-form", ".github/ISSUE_TEMPLATE/feature.yml"),
+    ("issue-form", ".github/ISSUE_TEMPLATE/documentation.yml"),
+    ("fence", "docs/milestone-description.md ## Problem"),
+    ("tracker", ""),
+    ("fence", "docs/milestone-description.md ### Checkpoints"),
+    ("conventions", ""),
+    ("file", ".github/pull_request_template.md"),
+    (
+        "fence",
+        "docs/specs/SPEC-010-issue-risk-controls.md ## Requirement evidence",
+    ),
+    ("fence", "docs/adr/README.md # Choose a durable option"),
+    ("file", "template/docs/specs/SPEC-001-example.md.jinja"),
+    ("authorization", ""),
+    ("trailers", ""),
+    ("changelog", ""),
+    ("report", ""),
+    ("record", "docs/ci-policy.md Hotfix 事後紀錄（#1139）"),  # noqa: RUF001
+    ("record", "docs/security-response.md 私密紀錄格式"),
+    ("record", "docs/pilot-adoption.md Pilot 紀錄格式"),
+    ("record", "docs/pilot-adoption.md Operator-independence run"),
+    ("checklist", "docs/milestone-description.md Promotion checklist"),
+    (
+        "section",
+        "template/.csarc/docs/csarc.md.jinja Project Roadmap 設定",
+    ),
+)
+BUILDER = runpy.run_path(str(ROOT / "scripts/build_handbook.py"))
+
+
+def test_annex_shows_template_formats_in_flow_order() -> None:
+    """#1139 AC5: stage headings and format blocks follow the flow."""
+    source = (HANDBOOK / "handbook.md").read_text("utf-8")
+    directives = re.findall(r"(?m)^::: format ([\w-]+)(?: (.+))?$", source)
+    assert tuple(directives) == FORMATS
+
+    _, annexes = _split_annexes(_events(GENERATED))
+    events = [e for annex in annexes for e in annex]
+    stages = [
+        events[i + 1][1]
+        for i, e in enumerate(events)
+        if e[:2] == ("start", "h3")
+    ]
+    assert tuple(stages) == FLOW
+    blocks = [
+        events[i + 1][1]
+        for i, e in enumerate(events)
+        if e[:2] == ("start", "pre") and dict(e[2]).get("class") == "format"
+    ]
+    assert len(blocks) == len(FORMATS)
+    for (kind, argument), block in zip(FORMATS, blocks, strict=True):
+        expected = BUILDER["render_format"](ROOT, kind, argument)
+        # The event parser collapses whitespace; compare the same way.
+        assert block == " ".join(expected.split())
+    # The compact index still names every template once.
+    names = [
+        events[i + 2][1]
+        for i, e in enumerate(events)
+        if e[:2] == ("start", "tr") and events[i + 1][:2] == ("start", "td")
+    ]
+    assert len(names) == len(set(names)) >= 39
+
+
+def test_annex_formats_follow_their_sources() -> None:
+    """#1139 AC5: each generated format carries its source's exact shape."""
+    render = BUILDER["render_format"]
+    task = render(ROOT, "issue-form", ".github/ISSUE_TEMPLATE/task.yml")
+    for heading in ("### 問題", "### 完成條件", "### 補充"):
+        assert heading in task
+    assert "- [ ] ..." in task
+    assert "#### 風險與控制" in task
+    docs = render(
+        ROOT, "issue-form", ".github/ISSUE_TEMPLATE/documentation.yml"
+    )
+    assert "| R0 | none |" in docs
+
+    lifecycle = runpy.run_path(str(ROOT / "scripts/pr_lifecycle.py"))
+    expected = lifecycle["authorization_statement"](
+        "<owner>/<repository>", 987654321, "f" * 40
+    )
+    assert render(ROOT, "authorization", "") == expected.replace(
+        "987654321", "<PR>"
+    ).replace("f" * 40, "<head SHA>")
+
+    changelog = render(ROOT, "changelog", "")
+    assert changelog.startswith("## [1.1.0] - 2026-01-02")
+    assert "### Features\n\n* feat(report): add a summary table (" in changelog
+    assert "### Bug Fixes\n\n* fix(cli): reject an empty answer (" in changelog
+    assert "docs: explain the setup" not in changelog
+
+    trailers = render(ROOT, "trailers", "")
+    policy = json.loads((ROOT / "policies/merge-trailers.json").read_text())
+    keys = [line.split(":")[0] for line in trailers.splitlines()[4:]]
+    assert keys == policy["order"]
+
+    hotfix = render(
+        ROOT,
+        "record",
+        "docs/ci-policy.md Hotfix 事後紀錄（#1139）",  # noqa: RUF001
+    )
+    assert [row.split(" | ")[0][2:] for row in hotfix.splitlines()[2:]] == [
+        "原因",
+        "影響範圍",
+        "Exact base／head",  # noqa: RUF001
+        "為何不能等 Milestone",
+        "授權來源",
+        "驗證證據",
+        "後續 Issue",
+    ]
+    tracker = render(ROOT, "tracker", "")
+    for section in ("Proposal", "Completion evidence", "Early termination"):
+        assert f"## {section}" in tracker
+    spec = render(ROOT, "file", "template/docs/specs/SPEC-001-example.md.jinja")
+    assert "owner: <code_owner>" in spec
+    assert "{{" not in spec
+
+
+def test_annex_format_drift_fails_the_build(tmp_path: Path) -> None:
+    """#1139 AC5: a changed source changes the generated appendix."""
+    form = tmp_path / ".github/ISSUE_TEMPLATE/task.yml"
+    form.parent.mkdir(parents=True)
+    source = (ROOT / ".github/ISSUE_TEMPLATE/task.yml").read_text("utf-8")
+    form.write_text(source.replace("label: 完成條件", "label: 驗收"), "utf-8")
+    changed = BUILDER["render_format"](
+        tmp_path, "issue-form", ".github/ISSUE_TEMPLATE/task.yml"
+    )
+    assert "### 驗收" in changed
+    with pytest.raises(BUILDER["HandbookError"], match="heading not found"):
+        BUILDER["render_format"](
+            ROOT, "record", "docs/ci-policy.md No such heading"
+        )
 
 
 def test_annex_links_resolve() -> None:
