@@ -24,7 +24,7 @@
 | 排程檢查 | {% if scheduled_checks %}`{{ scheduled_checks | join('`、`') }}`{% else %}未啟用{% endif %} | {% if 'governance-drift' in scheduled_checks %}每日比對 repository 設定；{% endif %}{% if 'template-update' in scheduled_checks %}每週提醒新的 CSARC Release；{% endif %}{% if not scheduled_checks %}需要時手動執行 `./.csarc/scripts/apply-repository-settings.sh check` 與 `csarc update --check --json`{% else %}結果只開立或更新提醒 Issue{% endif %} |
 
 {%- if github_project_url | default('') %}
-| Project Roadmap | `{{ github_project_url }}` | `csarc issue create` 與 `csarc issue sync-project` 把 Issue 建立日與 Milestone due date 以 UTC 投影到這個 ProjectV2；既有值不同時先確認。只以 stub 驗證，未經 live ProjectV2 驗證 |
+| Project Roadmap | `{{ github_project_url }}` | `csarc issue create` 與 `csarc issue sync-project` 把 Issue 建立日與 Milestone due date 以 UTC 投影到這個 ProjectV2；既有值不同時先確認；設定步驟見下方 |
 {%- endif %}
 
 ## 工作流程
@@ -38,6 +38,18 @@
 {%- endif %}
 - 超出原 Issue 的工作另開 Issue。PR 先以 `.csarc/scripts/pr_lifecycle.py create` 建成 Draft；完成條件、PR checklist 與證據都齊備後才 Ready。
 - Repository 設定只先執行 `./.csarc/scripts/apply-repository-settings.sh plan`；沒有管理員明確授權不 apply。
+{%- if github_project_url | default('') %}
+
+## Project Roadmap 設定
+
+第一次同步前：
+
+1. 在 `{{ github_project_url }}` 新增兩個 DATE 欄位，名稱逐字為 `Project start` 與 `Project target`。
+2. 確認 `gh` 的 token 有 `project` scope（`gh auth refresh -s project`），而且你對這個 Project 有寫入權。
+3. 先對一張 Issue 執行 `csarc issue sync-project --issue <N>`：寫入前檢查 Project、欄位、scope 與權限，缺一項就停止；既有日期不同時先列出差異，確認後才以 `--yes` 覆寫。
+
+只以 stub 驗證，未經 live ProjectV2 驗證。
+{%- endif %}
 
 ## 驗證與合併
 
@@ -48,7 +60,17 @@
 {%- endif %}
 
 GitHub UI 或 `gh pr merge --admin` 合併會略過 lifecycle，`csarc status` 把它列為 `untraced`{% if release_ownership == 'csarc-owned' %}，並阻擋下一次 CSARC 發版{% endif %}。細節見 [`ci-policy.md`](ci-policy.md#審查與合併資格)。
+{% if admin_bypass != 'off' %}
+admin 以授權留言取代核准時，先取得 lifecycle lease，再由執行合併的 admin 本人在 PR 貼出下列留言（`pr_lifecycle.py authorization-template` 印出同一段），把 `<PR>`、`<head SHA>` 換成實際值，合併時以 `--authorization-url <留言 URL>` 帶入。留言只對該 head 有效；head 改變或早於目前 lease 時要重貼。
 
+```text
+PR lifecycle merge authorization
+
+`{"head_sha":"<head SHA>","pull_request":<PR>,"repository":"{{ repository_url | replace('https://github.com/', '') }}"}`
+
+I authorize this exact pull request head for one merge attempt.
+```
+{% endif %}
 ## Requirement evidence
 
 PR body 的 `## Requirement evidence` 依 Issue「完成條件」順序為 AC1…ACn 與每個風險 ID 各列一項證據：exact head 上的測試路徑、`check:<name>`、附理由的 `manual:` 連結，或只限風險的 `accepted: <理由>`。缺項時 PR 不能離開 Draft；Issue 的 AC 或風險在 Ready 後改變，合併前要重新對應。`R0` 只用於沒有改到 `AGENTS.md`、安全政策或 CI policy 的文件變更。

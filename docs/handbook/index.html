@@ -851,6 +851,24 @@ push 或建立 PR。</pre>
     </div>
     <footer class="page-footer"><span>附錄 · 快速參考</span><span>版本日期 261013 r2</span><span>10 / 10</span></footer>
   </section>
+  <section class="sheet annex" id="templates">
+    <div class="page-content">
+      <div class="eyebrow">附錄 B · 範本清單</div>
+      <h2>附錄 B：範本清單</h2>
+      <p class="compact">本附錄接在核准的 10 張主文之後，不屬於核准基準，也不受 10 張的頁數限制。它只介紹使用者或 agent 要照格式填寫的範本：每項列出用途、誰填、位置與出現條件；精確格式以連結的權威文件或生成內容為準，本附錄不另定一套。</p>
+      <table class="stage-table dense">
+        <thead><tr><th class="stage">範本</th><th>用途</th><th>誰填</th><th>位置與出現條件</th></tr></thead>
+        <tbody>
+          <tr><td class="stage">ADR</td><td>記錄已確認、會持續影響架構、工具或相容性的決定</td><td>專案維護者或 agent</td><td><a href="../adr/README.md"><code>docs/adr/README.md</code></a> 的規則與範例；生成專案在 <code>documentation_mode</code> 不是 <code>off</code> 時有同一份</td></tr>
+          <tr><td class="stage">Pilot 紀錄</td><td>記錄 consumer 導入試行，含未達進場條件的失敗 run</td><td>pilot 執行者</td><td><a href="../pilot-adoption.md#pilot-紀錄格式"><code>docs/pilot-adoption.md</code></a>；只在模板 repository，不 render</td></tr>
+          <tr><td class="stage">Operator-independence run</td><td>stable promotion 前證明未參與實作者只靠文件能完成升級</td><td>未參與該 Milestone 的新 session 或人</td><td><a href="../pilot-adoption.md#operator-independence-run"><code>docs/pilot-adoption.md</code></a>；只在模板 repository，不 render</td></tr>
+          <tr><td class="stage">合併授權留言</td><td>admin 以 exact-head 留言取代核准</td><td>執行合併的 admin</td><td>生成的 <code>.csarc/docs/csarc.md</code>「驗證與合併」；<code>admin_bypass</code> 不是 <code>off</code> 時</td></tr>
+          <tr><td class="stage">ProjectV2 設定</td><td>第一次同步前建立 DATE 欄位並確認 scope 與寫入權</td><td>專案維護者</td><td>生成的 <code>.csarc/docs/csarc.md</code>「Project Roadmap 設定」；設定 <code>github_project_url</code> 時</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <footer class="page-footer"><span>附錄 B · 範本清單</span><span>版本日期 261013 r2</span><span>附錄 1 / 1</span></footer>
+  </section>
 </main>
 </body>
 </html>
