@@ -280,3 +280,53 @@ def test_documented_update_flags_match_the_cli(
     )
     named = set(re.findall(r"(?<![\w-])--[a-z][a-z-]+", section))
     assert named <= known, sorted(named - known)
+
+
+@pytest.mark.parametrize(
+    ("relative", "headings"),
+    [
+        (
+            "docs/install.md",
+            (
+                "### 失敗後重試",
+                "### Action pin 漂移",
+                "### 模板 workflow 的衝突裡有產品 job",
+                "### 保留的舊檔與過時連結",
+                "### 套用時的附帶訊息",
+                "### 平行執行",
+            ),
+        ),
+        (
+            "docs/install.en.md",
+            (
+                "### Retry after a failure",
+                "### Action pin drift",
+                "### A template workflow conflict that contains product jobs",
+                "### Kept legacy files and stale links",
+                "### Messages printed by apply",
+                "### Parallel runs",
+            ),
+        ),
+    ],
+)
+def test_update_guide_covers_operator_edge_cases(
+    relative: str, headings: tuple[str, ...]
+) -> None:
+    """AC3/AC4: retries, pins, product jobs, kept files, and parallel runs.
+
+    Both languages keep the same subsections, and the guide names the
+    report vocabulary the operator acts on.
+    """
+    text = (ROOT / relative).read_text(encoding="utf-8")
+    for heading in headings:
+        assert heading in text
+    for term in (
+        "retire-modified",
+        "`move`",
+        "product-ci.yml",
+        "--pin-commit",
+        "conflicts/new/<path>",
+        "custom:<file>",
+        "--report-dir ../<repo>-csarc-update-report-2",
+    ):
+        assert term in text, term
