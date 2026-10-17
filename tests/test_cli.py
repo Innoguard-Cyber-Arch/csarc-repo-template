@@ -8120,8 +8120,21 @@ def test_update_verification_failure_does_not_claim_candidate_preserved(
     base = commit(project, "test: generated project")
     before_files = cli.target_file_snapshot(project)
 
-    (source / "template" / "managed.txt").unlink()
-    revision = commit(source, "test: remove required managed file")
+    # Issue #1151: a retired managed file still referenced by a kept file
+    # stays product-owned since #1146, so removing one no longer fails
+    # verification. Ship a template verifier that fails one named step.
+    verify_script = source / "template" / "scripts" / "verify"
+    verify_text = verify_script.read_text(encoding="utf-8")
+    assert "test -f managed.txt\n" in verify_text
+    write_executable(
+        verify_script,
+        verify_text.replace(
+            "test -f managed.txt\n",
+            "printf '[verify-step] FAILED template-required-check\\n'\n"
+            "exit 1\n",
+        ),
+    )
+    revision = commit(source, "test: fail a required verify step")
     temporary_root = tmp_path / "temporary"
     temporary_root.mkdir()
     monkeypatch.setattr(cli.tempfile, "tempdir", str(temporary_root))
@@ -8141,7 +8154,8 @@ def test_update_verification_failure_does_not_claim_candidate_preserved(
         == 2
     )
     error = capsys.readouterr().err
-    assert "Project verification failed." in error
+    # Issue #1146 AC5: the failure names the verify step that stopped it.
+    assert "Project verification failed: template-required-check." in error
     assert "preserved" not in error.lower()
     assert list(temporary_root.iterdir()) == []
     assert git(project, "rev-parse", "HEAD") == base
