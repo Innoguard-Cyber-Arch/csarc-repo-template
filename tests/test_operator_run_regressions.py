@@ -8,6 +8,7 @@ run hit; no consumer identity is recorded here.
 from __future__ import annotations
 
 import json
+import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -478,6 +479,63 @@ def test_finalize_rejects_decided_ignore_rules_that_hide_files(
     excepted = b"build/\ndata/\n!/.csarc/site/data/\n"
     cli.reject_decided_ignore_rules(target, payload, {".gitignore": excepted})
     cli.reject_decided_ignore_rules(target, payload, {".gitignore": None})
+
+
+def memory_map_block() -> str:
+    """Return the canonical verifier's Durable Project Memory checks."""
+    lines = (
+        (ROOT / "template/.csarc/scripts/verify.jinja")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    start = lines.index("test -f docs/adr/README.md")
+    end = max(i for i, line in enumerate(lines) if '"$memory_map"' in line)
+    return "\n".join(lines[start : end + 1]) + "\n"
+
+
+def test_verify_reads_the_memory_map_from_a_csarc_owned_document(
+    tmp_path: Path,
+) -> None:
+    """AC4 (owner option C): a kept product docs/README.md passes verify.
+
+    The doc map verify checks lives in the CSARC-owned documentation
+    policy that every update refreshes; the project-owned docs/README.md
+    is never read, so keep-current on it no longer fails the apply.
+    """
+    block = memory_map_block()
+    verify = (ROOT / "template/.csarc/scripts/verify.jinja").read_text(
+        encoding="utf-8"
+    )
+    assert not [
+        line
+        for line in verify.splitlines()
+        if "docs/README.md" in line and not line.lstrip().startswith("#")
+    ]
+    policy = ROOT / "template/.csarc/docs/documentation-policy.md"
+    project = tmp_path / "project"
+    write(project / "docs/README.md", "# Product documentation\n")
+    write(project / "docs/adr/README.md", "# Decisions\n")
+    write(
+        project / ".csarc/docs/documentation-policy.md",
+        policy.read_text(encoding="utf-8"),
+    )
+    script = project / "check-memory-map"
+    write_executable(script, "#!/usr/bin/env bash\nset -euo pipefail\n" + block)
+
+    assert (
+        subprocess.run(  # noqa: S603
+            [str(script)], cwd=project, check=False
+        ).returncode
+        == 0
+    )
+    # The check is real: a policy without the map fails it.
+    write(project / ".csarc/docs/documentation-policy.md", "# Policy\n")
+    assert (
+        subprocess.run(  # noqa: S603
+            [str(script)], cwd=project, check=False
+        ).returncode
+        != 0
+    )
 
 
 # --- AC5: the failed verify step --------------------------------------------
