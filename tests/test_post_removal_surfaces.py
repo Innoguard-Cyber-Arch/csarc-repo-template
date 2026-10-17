@@ -394,7 +394,12 @@ def test_update_report_names_the_replacement_site_token() -> None:
         "in project-owned site content with `[[container]]`.",
     )
     assert "`[[documentation_languages]]`" in str(classes["i18n"][1])
-    assert classes["reviewers"][1] == (
-        "Retired; the current schema has no equivalent setting. Remove "
-        "`[[reviewers]]` from project-owned site content."
+    # The reviewers note also explains the new assignment (Issue #1157).
+    reviewers = str(classes["reviewers"][1])
+    assert reviewers.startswith(
+        "Retired; pull requests no longer request the reviewers listed in "
+        "`.github/REVIEWERS`."
+    )
+    assert reviewers.endswith(
+        "Remove `[[reviewers]]` from project-owned site content."
     )

@@ -597,8 +597,11 @@ def finalize_update_report(
 
     Each decided ``update-conflict`` row carries its decision and its
     blocking ``file-conflict`` action is resolved; the report stays bound to
-    the reviewed stage-1 plan digest (#1067). The ``final_plan`` reference
-    is added separately, once the final plan digest exists.
+    the reviewed stage-1 plan digest (#1067). A ``retire-modified`` row may
+    also be decided (Issue #1157): ``take-new`` retires the kept file as
+    the new release does, which resolves its ``retire-modified`` action.
+    The ``final_plan`` reference is added separately, once the final plan
+    digest exists.
     """
     current = validate_report(report)
     if current["operation"] != "update":
@@ -609,12 +612,24 @@ def finalize_update_report(
         for row in files
         if row["action"] == "conflict" and row["reason"] == "update-conflict"
     }
-    if set(decisions) != conflicts:
+    kept = {
+        str(row["path"])
+        for row in files
+        if row["action"] == "conflict" and row["reason"] == "retire-modified"
+    }
+    retired = {path for path, choice in decisions.items() if path in kept}
+    if set(decisions) - retired != conflicts or any(
+        decisions[path] != "take-new" for path in retired
+    ):
         raise LifecycleReportError(
-            "Final plan decisions must name every update conflict exactly."
+            "Final plan decisions must name every update conflict exactly; "
+            "a retire-modified file only takes take-new."
         )
     for row in files:
-        if row["path"] in decisions and row["reason"] == "update-conflict":
+        if row["path"] in decisions and row["reason"] in {
+            "update-conflict",
+            "retire-modified",
+        }:
             row["decision"] = _member(
                 decisions[str(row["path"])], FILE_DECISIONS, "$.files.decision"
             )
@@ -622,6 +637,7 @@ def finalize_update_report(
         dict(row)
         for row in _rows(current["required_actions"], "$.required_actions")
         if not (row["kind"] == "file-conflict" and row["subject"] in decisions)
+        and not (row["kind"] == "retire-modified" and row["subject"] in retired)
     ]
     result = dict(current)
     plan = dict(_mapping(current["plan"], "$.plan"))

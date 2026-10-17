@@ -191,10 +191,10 @@ INSTALL_STATE_NEXT_COMMAND = {
     INSTALL_STATE_ADOPTION_PENDING: "csarc adopt <path> --finalize",
     INSTALL_STATE_UPDATE: (
         "csarc update . --to <release> --expected-sha <full SHA> "
-        "--check to preview; then the same command with --finalize-plan "
-        "--decision PATH=keep-current|take-new|custom:FILE (one per listed "
-        "conflict) instead of --check; then csarc update . "
-        f"--apply-plan {UPDATE_FINAL_PLAN_HINT}"
+        "--check --json to preview; then the same command with "
+        "--finalize-plan --decision PATH=keep-current|take-new|custom:FILE "
+        "(one per listed conflict) instead of --check --json; then csarc "
+        f"update . --apply-plan {UPDATE_FINAL_PLAN_HINT} --yes"
     ),
     INSTALL_STATE_CURRENT: "no action needed",
     INSTALL_STATE_POLICY_ONLY: (
@@ -3098,6 +3098,7 @@ def update_required_actions(
     ] = MappingProxyType({}),
     ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
     writer_moves: Sequence[Mapping[str, str]] = (),
+    retained_uses: Sequence[Mapping[str, str]] = (),
 ) -> list[dict[str, object]]:
     """Derive the update required actions this release can evaluate."""
     live = {} if observed is None else observed
@@ -3192,8 +3193,12 @@ def update_required_actions(
         for item in pin_items
         if item.get("reason") == action_pin_preflight.REASON_PRODUCT_PIN_NEWER
     )
+    actions.extend(reviewer_assignment_actions(files, settings))
+    uses = retained_uses_by_script(retained_uses)
     actions.extend(
-        {
+        retained_use_action(path, uses[path])
+        if path in uses
+        else {
             "blocking": False,
             "command": None,
             "kind": "retire-modified",
@@ -3205,6 +3210,81 @@ def update_required_actions(
         for path in files.retained
     )
     return actions
+
+
+def reviewer_assignment_actions(
+    files: Plan, settings: Sequence[Mapping[str, object]]
+) -> list[dict[str, object]]:
+    """Ask the owner to confirm the reviewer assignment change (#1157).
+
+    Retiring ``reviewers`` or ``.github/REVIEWERS`` changes who reviews
+    pull requests. The setting row stays ``retired`` and its note explains
+    the new behavior; this row asks the owner to confirm it, the way a
+    ``widened`` row needs an explicit owner decision.
+    """
+    key = governance_migration.REVIEWERS_KEY
+    path = governance_migration.REVIEWERS_FILE
+    retired = [
+        row
+        for row in settings
+        if row["key"] == key and row["class"] == "retired"
+    ]
+    if not retired and path not in {
+        *files.remove,
+        *files.delete,
+        *files.retained,
+    }:
+        return []
+    before = retired[0]["before"] if retired else None
+    return [
+        {
+            "blocking": False,
+            "command": None,
+            "kind": "setting-decision",
+            "message": "Reviewer assignment changes and the owner must "
+            "confirm it before --finalize-plan: "
+            + governance_migration.reviewers_note(before).removeprefix(
+                "Retired; "
+            ),
+            "subject": key,
+        }
+    ]
+
+
+def retained_uses_by_script(
+    rows: Sequence[Mapping[str, str]],
+) -> dict[str, list[Mapping[str, str]]]:
+    """Group the recorded retained-script uses by the retained script."""
+    grouped: dict[str, list[Mapping[str, str]]] = {}
+    for row in rows:
+        grouped.setdefault(row["script"], []).append(row)
+    return grouped
+
+
+def retained_use_action(
+    path: str, uses: Sequence[Mapping[str, str]]
+) -> dict[str, object]:
+    """Return the blocking row for a kept script the plan would break."""
+    used = ", ".join(
+        f"{row['path']} -> {row['destination']}"
+        if row["destination"]
+        else f"{row['path']} (removed)"
+        for row in uses
+    )
+    return {
+        "blocking": True,
+        "command": None,
+        "kind": "retire-modified",
+        "message": "The new release no longer renders this script, but it "
+        "differs from the trusted old render, so it is kept. It still runs "
+        f"or reads files this update removes or moves: {used}, so it would "
+        "fail after the update. Retire it as the new release does with "
+        f"csarc update --finalize-plan --decision {path}=take-new (the "
+        ".csarc/scripts/ version replaces it), or change it in a product "
+        "commit so it no longer uses these paths and run csarc update "
+        "--check again; the target was not changed.",
+        "subject": path,
+    }
 
 
 APPLIED_NEXT_STEPS = (
@@ -3227,7 +3307,14 @@ def decidable_conflicts_only(
     """
     blocking = [action for action in actions if action["blocking"]]
     return bool(blocking) and all(
-        action["kind"] == "file-conflict" and action["subject"] in files.manual
+        (
+            action["kind"] == "file-conflict"
+            and action["subject"] in files.manual
+        )
+        or (
+            action["kind"] == "retire-modified"
+            and action["subject"] in files.retained
+        )
         for action in blocking
     )
 
@@ -3263,8 +3350,9 @@ def lifecycle_next_steps(
                 "--finalize-plan --decision "
                 "PATH=keep-current|take-new|custom:FILE",
                 "text": "Decide every blocking file conflict in one final "
-                "plan, with one --decision per conflict and any --data "
-                "options used for this plan:",
+                "plan, with one --decision per conflict (a blocking "
+                "retire-modified script takes PATH=take-new to retire it) "
+                "and any --data options used for this plan:",
             },
             {
                 "command": f"csarc update {plan.target} --apply-plan {final}",
@@ -3398,6 +3486,7 @@ def lifecycle_report_model(  # noqa: C901
             pin_versions=pin_versions,
             ignore_gaps=ignore_gaps,
             writer_moves=update_release_writer_moves(plan.update),
+            retained_uses=update_retained_uses(plan.update),
         )
     if adoption is not None:
         applicable = adoption.get("applicable") is True
@@ -8552,8 +8641,10 @@ def update_next_command(
     Every stage names the resolved release and its full SHA, so a beta or a
     pinned release is never silently replaced by the latest stable one and
     `--finalize-plan` re-plans the exact release the check reviewed. The
-    commands and the default report folder follow docs/install.md: run from
-    inside the target, the report sits next to it (Issue #1153).
+    commands, their flags, and the default report folder follow
+    docs/install.md: run from inside the target, the report sits next to it
+    (Issue #1153), and check and apply carry the same ``--json`` and
+    ``--yes`` as the documented sequence (Issue #1157).
     """
     flags = [
         "--to",
@@ -8569,11 +8660,11 @@ def update_next_command(
         flags.append("--allow-unreleased")
     release = " ".join(flags)
     return (
-        f"csarc update . {release} --check to preview; then "
+        f"csarc update . {release} --check --json to preview; then "
         f"csarc update . {release} --finalize-plan "
         "--decision PATH=keep-current|take-new|custom:FILE (one per listed "
         "conflict, repeating every --data used for the check); then "
-        f"csarc update . --apply-plan {UPDATE_FINAL_PLAN_HINT}"
+        f"csarc update . --apply-plan {UPDATE_FINAL_PLAN_HINT} --yes"
     )
 
 
@@ -9859,12 +9950,16 @@ def run_update_candidate(
     skip_tasks: bool,
     resolutions: Mapping[str, bytes | None] | None = None,
     stage: Path | None = None,
+    retire: Collection[str] = (),
 ) -> UpdateRun:
     """Run the one shared three-way update in a disposable candidate.
 
     ``resolutions`` are the conflict decisions a final plan recorded
     (#1067): Copier must report exactly those conflicts, and each one is
     replaced by its recorded bytes (or removed) before anything else runs.
+    ``retire`` lists kept ``retire-modified`` files the final plan retires
+    with ``take-new`` (Issue #1157); they are removed last, after the
+    compatibility shims the plan reviewed are written.
 
     Both ``update --check`` (``skip_tasks=True`` on a working-tree clone)
     and the apply path (``skip_tasks=False`` on the committed target) run
@@ -10014,6 +10109,7 @@ def run_update_candidate(
     shims = write_compatibility_shims(
         candidate, inputs.layout_moves, retained, inputs.payload
     )
+    retire_kept_files(candidate, retire, retained)
     stage_payload(candidate, inputs.payload)
     return UpdateRun(
         candidate,
@@ -10027,6 +10123,20 @@ def run_update_candidate(
         shims,
         restored,
     )
+
+
+def retire_kept_files(
+    candidate: Path, retire: Collection[str], retained: Collection[str]
+) -> None:
+    """Remove the kept files a final plan retires (Issue #1157)."""
+    for name in sorted(set(retire)):
+        if name not in retained:
+            raise CliError(
+                f"The final plan retires {name}, but the update no longer "
+                "keeps it as a retire-modified file; the target was not "
+                "changed. Create a new plan."
+            )
+        checked_destination(candidate, name).unlink()
 
 
 def restore_rendered_payload(
@@ -10604,7 +10714,9 @@ def referenced_removals(
     ``--finalize-plan`` rejects a decision that keeps a use of a removal
     (``reject_decided_uses``). A retained ``retire-modified`` file is the
     superseded legacy layout kept only for review, so its calls into that
-    layout keep nothing alive. A move source is excluded; its callers keep
+    layout keep nothing alive; a retained script that still uses them blocks
+    the plan instead (``retained_script_uses``, Issue #1157). A move source
+    is excluded; its callers keep
     working through a compatibility shim (#1083). See
     ``file_transition.content_uses`` for what counts as a use (#1146 AC2).
     """
@@ -10661,6 +10773,150 @@ def release_writer_moves(
             for name in sorted(used)
         )
     return rows
+
+
+def retained_script_uses(
+    target: Path,
+    retained: Sequence[str],
+    removals: Sequence[str],
+    moves: Sequence[tuple[str, str]],
+) -> list[dict[str, str]]:
+    """Return the removed or moved files a kept legacy script still uses.
+
+    A ``retire-modified`` script stays in place, but the same plan removes
+    or moves the files it runs or reads; after the apply it fails, as a kept
+    ``scripts/verify`` that called a removed ``scripts/test-pr-policy`` and
+    read the moved ``policies/*.json`` did (Issue #1157). Each row names the
+    script, the used path, and its destination (empty when removed); the
+    report blocks on them. A move source with a compatibility shim keeps
+    working and is not in ``moves``.
+    """
+    destinations = dict(moves)
+    gone = {*removals, *destinations}
+    rows: list[dict[str, str]] = []
+    for script in sorted(set(retained)):
+        path = target / script
+        if path.is_symlink() or not path.is_file():
+            continue
+        content = path.read_bytes()
+        if not (path.stat().st_mode & 0o111 or content.startswith(b"#!")):
+            continue
+        rows.extend(
+            {
+                "destination": destinations.get(used, ""),
+                "path": used,
+                "script": script,
+            }
+            for used in file_transition.content_uses(script, content, gone)
+        )
+    return rows
+
+
+def update_retained_uses(
+    update: Mapping[str, object] | None,
+) -> list[dict[str, str]]:
+    """Return the recorded retained-script uses from one plan."""
+    rows = (update or {}).get("retained_uses")
+    if not isinstance(rows, list):
+        return []
+    return [
+        {str(key): str(value) for key, value in row.items()}
+        for row in rows
+        if isinstance(row, dict)
+    ]
+
+
+def reject_retained_uses(
+    report: Mapping[str, object], retired: Collection[str] = ()
+) -> None:
+    """Stop a final plan while a kept legacy script loses its files.
+
+    The ``take-new`` decision retires the script as the new release does
+    (Issue #1157); otherwise it has to change in a product commit, and a
+    new ``--check`` plans again. ``retired`` lists the decided scripts.
+    """
+    actions = cast(list[Mapping[str, object]], report["required_actions"])
+    blocked = [
+        str(row["message"])
+        for row in actions
+        if row["kind"] == "retire-modified"
+        and row["blocking"] is True
+        and row["subject"] not in retired
+    ]
+    if blocked:
+        raise CliError(" ".join(blocked))
+
+
+def split_retirement_decisions(
+    choices: Mapping[str, tuple[str, Path | None]],
+    retained: Collection[str],
+) -> tuple[dict[str, tuple[str, Path | None]], tuple[str, ...]]:
+    """Split ``--decision`` values into conflict choices and retirements.
+
+    A kept ``retire-modified`` file takes only ``take-new``: retire it as
+    the new release does (Issue #1157). Leaving it out keeps it.
+    """
+    kept = set(retained)
+    retired = sorted(name for name in choices if name in kept)
+    wrong = [name for name in retired if choices[name][0] != "take-new"]
+    if wrong:
+        raise CliError(
+            "A retire-modified file is kept unless you retire it with "
+            "--decision PATH=take-new; leave it out to keep it ("
+            + ", ".join(wrong)
+            + "). The target was not changed."
+        )
+    conflicts = {
+        name: choice for name, choice in choices.items() if name not in kept
+    }
+    return conflicts, tuple(retired)
+
+
+def reject_retired_uses(
+    target: Path,
+    files: Plan,
+    retired: Sequence[str],
+    resolutions: Mapping[str, bytes | None],
+) -> None:
+    """Stop a final plan that retires a file something it keeps uses.
+
+    Retiring a kept legacy script must not break another file the plan
+    keeps: an untouched, product-owned, merged, still-retained, or decided
+    file that runs or reads it (Issue #1157).
+    """
+    if not retired:
+        return
+    kept = {
+        *files.preserve,
+        *files.merge,
+        *files.product_owned,
+        *files.retained,
+    } - {*retired, *resolutions}
+    findings = [
+        f"{name} uses {', '.join(used)}"
+        for name in sorted(kept)
+        if (target / name).is_file()
+        and not (target / name).is_symlink()
+        and (
+            used := file_transition.content_uses(
+                name, (target / name).read_bytes(), retired
+            )
+        )
+    ]
+    findings.extend(
+        f"{name} uses {', '.join(used)}"
+        for name, content in sorted(resolutions.items())
+        if content is not None
+        and (used := file_transition.content_uses(name, content, retired))
+    )
+    if findings:
+        raise CliError(
+            "The plan keeps a file that uses a retired file: "
+            + "; ".join(findings)
+            + ". Keep the retired file, or change that use in a product "
+            "commit and run csarc update --check again; the target was not "
+            "changed."
+        )
 
 
 def update_release_writer_moves(
@@ -10746,21 +11002,30 @@ def reject_decided_ignore_rules(
 def reject_decided_uses(
     resolutions: Mapping[str, bytes | None],
     removals: Sequence[str],
+    moved: Sequence[str] = (),
 ) -> None:
     """Stop a final plan whose decided content uses a file it removes.
 
     keep-current or custom content for a conflict is kept by the plan, so
     it must not call or configure a file the same plan retires or deletes
-    (Issue #1146 AC2). The operator chooses take-new, a custom file
-    without that use, or moves the product use into a product file and
-    plans again, which keeps the used file as product-owned.
+    (Issue #1146 AC2). A kept script also must not run or read a file the
+    plan moves without a compatibility shim (Issue #1157). The operator
+    chooses take-new, a custom file without that use, or moves the product
+    use into a product file and plans again, which keeps the used file as
+    product-owned.
     """
     planned = tuple(removals)
     findings = [
         f"{name} uses {', '.join(used)}"
         for name, content in sorted(resolutions.items())
         if content is not None
-        and (used := file_transition.content_uses(name, content, planned))
+        and (
+            used := file_transition.content_uses(
+                name,
+                content,
+                (*planned, *moved) if content.startswith(b"#!") else planned,
+            )
+        )
     ]
     if findings:
         raise CliError(
@@ -11267,7 +11532,12 @@ def write_update_final_plan(
     try:
         stage1 = final_plan.load_stage1(stage1_path)
         file_choices = final_plan.parse_file_decisions(args.decision)
-        final_plan.require_complete_decisions(planning.conflicts, file_choices)
+        conflict_choices, retired = split_retirement_decisions(
+            file_choices, planning.retained
+        )
+        final_plan.require_complete_decisions(
+            planning.conflicts, conflict_choices
+        )
     except final_plan.FinalPlanError as error:
         raise CliError(str(error)) from error
     stage1_planning = stage1.get("planning")
@@ -11284,15 +11554,41 @@ def write_update_final_plan(
             "--check again and review it before deciding."
         )
     pins = final_pin_decisions(target, stage1, args.pin_commit)
-    resolutions = {
+    resolutions: dict[str, bytes | None] = {
         name: decision_content(target, name, choice, custom, context.new_side)
-        for name, (choice, custom) in sorted(file_choices.items())
+        for name, (choice, custom) in sorted(conflict_choices.items())
     }
+    # A retired kept file resolves to no file (Issue #1157).
+    resolutions.update(dict.fromkeys(retired))
     reject_decided_uses(
-        resolutions, (*context.run_inputs.retiring, *planning.delete)
+        resolutions,
+        (*context.run_inputs.retiring, *planning.delete),
+        tuple(
+            source
+            for source, _destination in effective_layout_moves(
+                context.run_inputs.layout_moves,
+                {*planning.retained, *planning.shims},
+            )
+        ),
     )
     reject_decided_ignore_rules(target, context.run_inputs.payload, resolutions)
     reject_release_writer_moves(context.update_report)
+    reject_retained_uses(context.update_report, retired)
+    reject_retired_uses(
+        target,
+        planned_update_files(
+            target,
+            planning,
+            context.run_inputs.layout_moves,
+            context.run_inputs.retiring,
+        ),
+        retired,
+        {
+            name: content
+            for name, content in resolutions.items()
+            if name not in retired
+        },
+    )
     approved = resolution_transitions(target, context.transitions, resolutions)
     stage1_sha256 = str(stage1["plan_sha256"])
     try:
@@ -11575,6 +11871,18 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
         }
     except final_plan.FinalPlanError as error:
         raise CliError(f"{error} The target was not changed.") from error
+    # A decided retire-modified file is retired, not a Copier conflict
+    # (Issue #1157).
+    retire = tuple(
+        name
+        for name, content in sorted(resolutions.items())
+        if name in planning.retained and content is None
+    )
+    resolutions = {
+        name: content
+        for name, content in resolutions.items()
+        if name not in planning.retained
+    }
     target_snapshot = cast(
         dict[str, object], cast(dict[str, Any], sealed["live_facts"])["target"]
     )
@@ -11588,6 +11896,7 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
             working_tree=False,
             skip_tasks=False,
             resolutions=resolutions,
+            retire=retire,
         )
         if applied.returncode != 0 or applied.conflicts:
             raise CliError(
@@ -11952,6 +12261,16 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                 layout_moves, {*planning.retained, *planning.shims}
             ),
         )
+        # A kept legacy script must not lose the files the same plan
+        # removes or moves without a shim (Issue #1157).
+        retained_uses = retained_script_uses(
+            target,
+            planning.retained,
+            (*retiring, *planning.delete),
+            effective_layout_moves(
+                layout_moves, {*planning.retained, *planning.shims}
+            ),
+        )
         # take-new decisions resolve to the reviewed new-side render, with
         # the template pins the apply aligns to kept newer product pins
         # already raised, so conflicts/new is what take-new writes (#1153).
@@ -11989,6 +12308,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             "action_pin_preflight": pins.as_dict(),
             "ignored_payload": ignored_payload,
             "release_writer_moves": writer_moves,
+            "retained_uses": retained_uses,
             "answers_changed": answers_changed,
             "capabilities_changed": capabilities_changed,
             "planning": planning.as_dict(),
