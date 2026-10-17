@@ -98,13 +98,23 @@ def test_file_conflict_message_points_to_sides_and_finalize() -> None:
     assert "the target was not changed" in error
 
 
-def jinja_conflict_fixture(tmp_path: Path) -> tuple[Path, str]:
-    """Return a product whose Jinja-rendered file conflicts on update."""
+def jinja_conflict_fixture(
+    tmp_path: Path, *, ignore_conflict: bool = False
+) -> tuple[Path, str]:
+    """Return a product whose Jinja-rendered file conflicts on update.
+
+    With ``ignore_conflict`` the product also edits ``.gitignore`` where the
+    new release adds a rule, so that ignore file conflicts too (#1154).
+    """
     source, _first = make_template(tmp_path)
     template = source / "template"
     (template / "rendered.txt.jinja").write_text(
         "name: {{ project_name }}\nline two\n", encoding="utf-8"
     )
+    if ignore_conflict:
+        (template / ".gitignore").write_text(
+            "# Shared generated output\ndist/\n.cache/\n", encoding="utf-8"
+        )
     first_sha = commit(source, "test: rendered file")
     project = tmp_path / "product"
     assert (
@@ -130,6 +140,15 @@ def jinja_conflict_fixture(tmp_path: Path) -> tuple[Path, str]:
     (project / "rendered.txt").write_text(
         "name: product edit\nline two\n", encoding="utf-8"
     )
+    if ignore_conflict:
+        (project / ".gitignore").write_text(
+            "# Shared generated output\n.cache/\nlocal-data/\n",
+            encoding="utf-8",
+        )
+        (template / ".gitignore").write_text(
+            "# Shared generated output\ndist/\n.cache/\nbuild-output/\n",
+            encoding="utf-8",
+        )
     git_identity(project)
     (template / "rendered.txt.jinja").write_text(
         "name: {{ project_name }} (template)\nline two\n", encoding="utf-8"
@@ -204,6 +223,76 @@ def test_check_writes_three_readable_sides_for_each_conflict(
         encoding="utf-8"
     )
     assert "conflicts/current/rendered.txt" in markdown
+
+
+def test_ignore_conflict_message_lists_missing_template_rules() -> None:
+    """AC3/R3: only ignore-file conflicts name the rules current lacks."""
+    sides = {
+        ".gitignore": {
+            "base": b"dist/\n.cache/\n",
+            "current": b"# kept\n.cache/\nlocal-data/\n",
+            "new": b"# Shared\ndist/\n.cache/\n\nbuild-output/\ndist/\n",
+        },
+        "docs/.gitignore": {"base": None, "current": b"a/\n", "new": b"a/\n"},
+        "README.md": {"base": b"x\n", "current": b"y\n", "new": b"dist/\n"},
+    }
+    gaps = cli.missing_ignore_rules(sides)
+    assert gaps == {".gitignore": ["dist/", "build-output/"]}
+    message = cli.update_conflict_message(".gitignore", gaps[".gitignore"])
+    assert message.startswith(cli.update_conflict_message(".gitignore"))
+    assert message.endswith(
+        "lacks these template ignore rules; keep-current leaves them out, "
+        "so add the ones the project needs to a custom:FILE decision: "
+        "dist/, build-output/."
+    )
+
+
+@pytest.mark.large
+def test_check_reports_template_ignore_rules_a_kept_gitignore_lacks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC3/R3: ``--check`` names the template ignore rules current lacks.
+
+    Keeping the product ``.gitignore`` (keep-current or a custom file built
+    from it) would drop ``dist/``, which verify-fast writes to; the report
+    row in JSON and Markdown lists each missing rule.
+    """
+    project, target_sha = jinja_conflict_fixture(tmp_path, ignore_conflict=True)
+    report_dir = tmp_path / "report"
+    capsys.readouterr()
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--check",
+                "--json",
+                "--to",
+                target_sha,
+                "--allow-unreleased",
+                "--report-dir",
+                str(report_dir),
+            ]
+        )
+        == 1
+    )
+    capsys.readouterr()
+    report = json.loads(
+        (report_dir / "csarc-update-report.json").read_text(encoding="utf-8")
+    )
+    rows = {
+        action["subject"]: action["message"]
+        for action in report["required_actions"]
+        if action["kind"] == "file-conflict"
+    }
+    expected = "custom:FILE decision: dist/, build-output/."
+    assert rows[".gitignore"].endswith(expected)
+    assert "template ignore rules" not in rows["rendered.txt"]
+    markdown = (report_dir / "csarc-update-report.md").read_text(
+        encoding="utf-8"
+    )
+    assert "build-output/" in markdown
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -292,6 +381,9 @@ def test_documented_update_flags_match_the_cli(
                 "### Action pin 漂移",
                 "### 模板 workflow 的衝突裡有產品 job",
                 "### 保留的舊檔與過時連結",
+                "### 其他衝突與並存檔案",
+                "### 產品自有的 workflow audit",
+                "### 放寬的設定（`widened`）",
                 "### 套用時的附帶訊息",
                 "### 平行執行",
             ),
@@ -303,6 +395,9 @@ def test_documented_update_flags_match_the_cli(
                 "### Action pin drift",
                 "### A template workflow conflict that contains product jobs",
                 "### Kept legacy files and stale links",
+                "### Other conflicts and coexisting files",
+                "### Product-owned workflow audits",
+                "### Widened settings",
                 "### Messages printed by apply",
                 "### Parallel runs",
             ),
@@ -328,6 +423,18 @@ def test_update_guide_covers_operator_edge_cases(
         "conflicts/new/<path>",
         "custom:<file>",
         "--report-dir ../<repo>-csarc-update-report-2",
+        # Issue #1154: the decision rules the beta.5 operator run lacked.
+        "<!-- BEGIN CSARC MANAGED BLOCK -->",
+        "--decision AGENTS.md=custom:",
+        ".claude/CLAUDE.md",
+        "governance-comment.yml",
+        "dist/",
+        "major upgrade: yes|no|unknown",
+        "pull_request_target",
+        "workflow_run",
+        "dangerous-triggers",
+        "--data admin_bypass=always",
+        "--data admin_bypass=<",
     ):
         assert term in text, term
 

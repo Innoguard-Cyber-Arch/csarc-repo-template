@@ -29,6 +29,7 @@ from dataclasses import asdict, dataclass, replace
 from dataclasses import field as dataclass_field
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
+from types import MappingProxyType
 from typing import Any, Literal, NoReturn, Protocol, cast, overload
 from urllib.parse import quote
 
@@ -2974,12 +2975,18 @@ CONFLICT_SIDES_DIRECTORY = "conflicts"
 CONFLICT_SIDES = ("base", "current", "new")
 
 
-def update_conflict_message(path: str) -> str:
-    """Point one update conflict at its sides and its decision (#1147)."""
+def update_conflict_message(
+    path: str, missing_ignore_rules: Sequence[str] = ()
+) -> str:
+    """Point one update conflict at its sides and its decision (#1147).
+
+    An ignore-file conflict also names the template rules the current file
+    lacks, so keeping it does not silently drop them (#1154 AC3).
+    """
     sides = ", ".join(
         f"{CONFLICT_SIDES_DIRECTORY}/{side}/{path}" for side in CONFLICT_SIDES
     )
-    return (
+    message = (
         "Template and repository changes overlap in the three-way update. "
         f"Compare {sides} in this report folder (base: the recorded "
         "release's render; current: this repository; new: the target "
@@ -2987,6 +2994,55 @@ def update_conflict_message(path: str) -> str:
         f"decide it with csarc update --finalize-plan --decision {path}="
         "keep-current|take-new|custom:FILE."
     )
+    if missing_ignore_rules:
+        message += (
+            " The current file lacks these template ignore rules; "
+            "keep-current leaves them out, so add the ones the project "
+            "needs to a custom:FILE decision: "
+            + ", ".join(missing_ignore_rules)
+            + "."
+        )
+    return message
+
+
+IGNORE_FILE_NAMES = frozenset({".gitignore"})
+
+
+def ignore_rules(content: bytes | None) -> list[str]:
+    """Return the non-comment, non-blank rules of one ignore file."""
+    if content is None:
+        return []
+    rules: list[str] = []
+    for line in content.decode("utf-8", errors="replace").splitlines():
+        rule = line.strip()
+        if rule and not rule.startswith("#"):
+            rules.append(rule)
+    return rules
+
+
+def missing_ignore_rules(
+    sides: Mapping[str, Mapping[str, bytes | None]],
+) -> dict[str, list[str]]:
+    """Return, per ignore-file conflict, new-side rules current lacks.
+
+    ``keep-current`` records the current side, so these are exactly the
+    template rules that decision would leave out (#1154 AC3).
+    """
+    result: dict[str, list[str]] = {}
+    for path, contents in sides.items():
+        if PurePosixPath(path).name not in IGNORE_FILE_NAMES:
+            continue
+        current = set(ignore_rules(contents.get("current")))
+        missing = list(
+            dict.fromkeys(
+                rule
+                for rule in ignore_rules(contents.get("new"))
+                if rule not in current
+            )
+        )
+        if missing:
+            result[path] = missing
+    return result
 
 
 def update_ignored_payload(
@@ -3031,6 +3087,10 @@ def update_required_actions(
     pin_items: Sequence[Mapping[str, object]] = (),
     observed: Mapping[str, object] | None = None,
     ignored: Sequence[Mapping[str, str]] = (),
+    pin_versions: Mapping[
+        tuple[str, int], tuple[str | None, str | None]
+    ] = MappingProxyType({}),
+    ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
 ) -> list[dict[str, object]]:
     """Derive the update required actions this release can evaluate."""
     live = {} if observed is None else observed
@@ -3072,7 +3132,7 @@ def update_required_actions(
             "blocking": True,
             "command": None,
             "kind": "file-conflict",
-            "message": update_conflict_message(path),
+            "message": update_conflict_message(path, ignore_gaps.get(path, ())),
             "subject": path,
         }
         for path in files.manual
@@ -3096,8 +3156,14 @@ def update_required_actions(
             "kind": "action-pin",
             "message": f"Product workflow pins {item['action']}@"
             f"{item['old_sha']}; the new template pins {item['new_sha']} "
-            f"({item['reason']}). Commit that pin change, then create a "
-            "new plan.",
+            f"({item['reason']}; "
+            + action_pin_preflight.version_note(
+                *pin_versions.get(
+                    (str(item["file"]), cast(int, item["line"])),
+                    (None, None),
+                )
+            )
+            + "). Commit that pin change, then create a new plan.",
             "subject": f"{item['file']}:{item['line']}",
         }
         for item in pin_items
@@ -3272,6 +3338,10 @@ def lifecycle_report_model(  # noqa: C901
     target_head: str | None = None,
     target_changes: Sequence[str] | None = None,
     observed: Mapping[str, object] | None = None,
+    pin_versions: Mapping[
+        tuple[str, int], tuple[str | None, str | None]
+    ] = MappingProxyType({}),
+    ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
 ) -> dict[str, object]:
     """Build the single SPEC-008 report object for one adopt or update plan.
 
@@ -3317,6 +3387,8 @@ def lifecycle_report_model(  # noqa: C901
             update_pin_items(plan.update) or (),
             observed=observed,
             ignored=update_ignored_payload(plan.update),
+            pin_versions=pin_versions,
+            ignore_gaps=ignore_gaps,
         )
     if adoption is not None:
         applicable = adoption.get("applicable") is True
@@ -11843,6 +11915,8 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         target_head=report_head,
         target_changes=report_changes,
         observed=observed,
+        pin_versions=pins.versions,
+        ignore_gaps=missing_ignore_rules(conflict_sides),
     )
     if args.finalize_plan:
         print_plan(plan)
