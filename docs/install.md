@@ -49,18 +49,18 @@ csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-pla
 ```
 
 1. **`status`**：回報 `update` 時，照 `next_command` 走；它已帶上 `--to` 與 `--expected-sha`。beta 或指定版本一定要帶這兩個旗標，否則 CLI 會改用最新 stable。
-2. **`--check`**：不修改 target，在 `../<repo>-csarc-update-report/` 寫出 stage-1 plan（`csarc-update-plan.json`）、報告 JSON 與 Markdown。有更新時 exit 1，已是最新時 0，錯誤時 2。報告的 `Items requiring your decision` 列出要處理的項目。`--data` 明確確認的值若與 CLI 推導值相同（例如 `release_ownership`），計畫與不傳值時完全相同。報告的 Settings 有 `widened` 列（例如 `admin_bypass`）時，`--finalize-plan` 前要由擁有者明確決定，見下方「放寬的設定」。
+2. **`--check`**：不修改 target，在 `../<repo>-csarc-update-report/` 寫出 stage-1 plan（`csarc-update-plan.json`）、報告 JSON 與 Markdown。有更新時 exit 1，已是最新時 0，錯誤時 2。報告的 `Items requiring your decision` 列出要處理的項目。`--data` 明確確認的值若與 CLI 推導值相同（例如 `release_ownership`），計畫與不傳值時完全相同。報告的 Settings 有 `widened` 列（例如 `admin_bypass`）時，`--finalize-plan` 前要由擁有者明確決定，見下方「放寬的設定」。`setting-decision` 列（例如 `release_ownership`、`project_run_command`）見下方「設定決定」。
 3. **看衝突內容**：每個 `file-conflict` 在報告資料夾的 `conflicts/` 下有三個檔案：`conflicts/base/<path>`（目前版本的 render）、`conflicts/current/<path>`（target 現在的內容，也就是 `keep-current` 的結果）、`conflicts/new/<path>`（新版本以同一份設定 render 的結果，也就是 `take-new` 的結果）。某一側沒有檔案就是該側不存在。Jinja 模板已 render 完成，不必讀模板原始碼或試套用。`conflicts/` 每次規劃都會整個重寫。
 4. **`--finalize-plan`**：一次寫出不可變的 `csarc-update-final-plan.json`。
    - 必須重帶 `--check` 用過的每個 `--to`、`--expected-sha`、`--data`、`--report-dir`，以及 `--from-release`、`--accept-legacy`、`--allow-unreleased`；CLI 會重新規劃並比對 stage-1 plan，任何輸入不同就停止，要求重新 `--check`。不能和 `--check`、`--json`、`--dry-run` 一起用。
    - 每個 `update-conflict` 恰好一個 `--decision <path>=keep-current|take-new|custom:<file>`，缺少、重複或不是衝突的路徑都會停止；沒有衝突時不帶 `--decision`。
    - `custom:<file>` 是該路徑**最終的完整檔案內容**，不是 patch。`<file>` 是絕對路徑或相對於執行指令時所在目錄的路徑，必須是 target repo 外的一般檔案（不能是 symlink），且不能含 conflict marker。內容會複製進 final plan，之後改 `<file>` 不會影響已寫出的 plan。不要放在 `conflicts/` 底下，因為那裡每次規劃都會重寫。
-   - target 必須是乾淨的工作樹：產品準備變更與 pin 變更都要先 commit。
+   - target 必須是乾淨的工作樹。本頁要求的產品準備變更（例如下方的產品 job 搬移、Action pin、ignore 例外）以獨立的產品準備 commit 在 `--finalize-plan` 前提交，提交後重新 `--check`；在 PR 逐條列出這些 commit 與依據的章節。
    - `.gitignore` 衝突的報告列會列出 current 沒有、新版有的忽略規則；用 `keep-current` 或以 current 為底的 `custom:<file>` 保留產品 `.gitignore` 時，見下方「`.gitignore` 缺少模板規則」。
    - 產品 ignore 規則（例如 `.gitignore` 的 `data/`）會隱藏新版要放的檔案時，`--check` 以該 ignore 檔為 subject 列出 blocking 的 `file-conflict`，訊息寫出被隱藏的路徑與規則。在該 ignore 檔加上例外（例如 `!.csarc/site/data/`）：它本身是衝突時寫在它的 `custom:<file>` 決定裡，否則以產品 commit 加入後重新 `--check`。`--finalize-plan` 會依決定後的內容再檢查一次，仍會隱藏時拒絕寫入。
    - 決定若讓保留的檔案繼續引用本次要退役的檔案，`--finalize-plan` 會拒絕；改用 `take-new`、`custom`，或先在產品裡移除那個引用。
 5. **`--apply-plan`**：只接受 final plan 路徑，`--to`、`--data`、`--decision` 等會改變輸入的旗標一律拒絕；`--report-dir` 只能等於 final plan 所在資料夾。沒有 `--yes` 時會顯示 plan 並詢問 `Apply this plan? [y/N]`；agent 或沒有終端輸入時要加 `--yes`。套用前重新觀察工具版本與 live facts，任何不同或驗證失敗都會在寫入前停止，target 不變；驗證失敗的訊息寫出失敗的 verify 步驟與原因（`Project verification failed: ...`）。
-6. **commit 與驗證**：套用成功後檢查 diff，commit 到同一個分支，執行 `./.csarc/scripts/verify-fast` 與產品原有檢查，再開 PR。
+6. **commit 與驗證**：套用成功後檢查 diff，commit 到同一個分支，再在這個已 commit、乾淨的 head 執行 `./.csarc/scripts/verify-fast` 與產品原有檢查（本機結果綁定 exact head，未 commit 的結果不算證據），最後開 PR。
 
 ### 失敗後重試
 
@@ -105,6 +105,7 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
   ```
 
 - **根目錄 `CLAUDE.md` 與 `.claude/CLAUDE.md` 並存**：`.claude/CLAUDE.md` 屬模板，只匯入 `AGENTS.md`；AI 規則以 `AGENTS.md` 為唯一來源。update 把舊的根目錄 `CLAUDE.md` 列為 `retire-modified` 時，它只是保留的舊檔，CSARC 不再讀取或更新。Claude Code 可能兩份都載入；內容不一致時以 `AGENTS.md` 為準。處理方式：把根目錄 `CLAUDE.md` 裡仍需要的產品指引搬到 `AGENTS.md` 的 managed block 外；產品文件若依賴根目錄 `CLAUDE.md`，改指向 `AGENTS.md`；最後另開 commit 刪除根目錄 `CLAUDE.md`。
+- **`.github/pull_request_template.md` 有產品自加的列**：PR template 依手冊 5.1 屬模板，但產品可能在舊版裡加了自己的 checklist 列。比對 `conflicts/base/<path>` 與 `conflicts/current/<path>`，差異就是產品加的列。用 `custom:<file>`：以 `conflicts/new/.github/pull_request_template.md` 全文為底，把產品加的列原樣放回它原本所在的區段（例如 `## 完成清單` 的最後），模板的列一字不改。不要用 `keep-current`（會留下舊版模板內容，少了新版的區段與文字）；產品不再需要這些列時用 `take-new`。在 PR 列出放回的列。之後的 update 只要新版改了 PR template，這個檔案會再次衝突，照同樣方式處理。
 - **`.gitignore` 缺少模板規則**：`.gitignore` 共同維護，衝突的報告列會在最後列出 current 沒有、新版有的忽略規則（`The current file lacks these template ignore rules ...`）。`keep-current` 會漏掉它們；以 current 為底的 `custom:<file>` 要把專案需要的規則加進去。最常見的是 `dist/`：`./.csarc/scripts/verify-fast` 會產生 `dist/repo-site/`，少了這條規則，verify 後工作樹會變 dirty。刻意不收某條規則時，在 PR 寫明理由。套用並執行 verify 後看 `git status`；仍有新的未追蹤產物時，另開 commit 補規則。
 
 ### 產品自有的 workflow audit
@@ -138,13 +139,29 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 `beta-only` 換成 note 寫的原值；`--decision` 依該次報告的衝突照常給，沒有衝突時不帶。
 
+### 設定決定（`setting-decision`）
+
+報告 `Items requiring your decision` 的 `setting-decision` 列不會讓 `--check` 變成 blocking，但每一列都要在 `--finalize-plan` 前處理：接受報告的值，或依下列規則以 `--data <key>=<value>` 重新 `--check` 明確選值；`--finalize-plan` 重帶同一個 `--data`。`reviewers` 列見下方「Reviewer 指派改變」。
+
+**`release_ownership`**：決定誰負責版本與 GitHub Release，是擁有者決定。報告 Settings 的這一列寫出原值與這份 plan 採用的值，`setting-decision` 列要求確認新值或傳入要保留的值。兩個選項：
+
+1. `product-owned`：產品自己維護的 Release workflow（例如產品設定的 release-please）繼續負責版本與 Release，CSARC 只回報 drift。產品有自己維護、仍要繼續使用的 writer 時選這項。
+2. `csarc-owned`：CSARC 的 `release.yml` 與 version policy 負責版本、CHANGELOG 與 Release，`version.txt` 與 CHANGELOG 沿用原本的值。原本的 Release workflow 是舊版模板產生的、產品沒有自己的發版流程，或擁有者要改由 CSARC 發版時選這項。
+
+選 `product-owned` 後，若 `--check` 列出 blocking 的 `release-writer`，表示保留的 writer 用到這次要搬進 `.csarc/` 的檔案（訊息逐項寫出 `原路徑 -> 新路徑`），`--finalize-plan` 會拒絕。這時只有兩條路：改選 `csarc-owned`，或先以產品準備 commit 讓 writer 不再使用這些路徑，再重新 `--check`；後者會產生產品 diff。agent 依上面的判斷方式在 PR 寫出選擇、理由與 `release-writer` 訊息，合併前由擁有者確認。`verification-only`（CSARC 只驗證、不管理發布）只在擁有者明確要求時使用。
+
+**`project_run_command`**：產品最短的啟動或呼叫指令（`package_name` 規則相同）。CLI 能從 native manifest（`pyproject.toml`、`package.json`、`Cargo.toml`、`go.mod`）唯一推導時不保存這個值；update 使用的值記在 `.csarc/provenance.json` 的 render context，`.csarc/config.yml` 不會列出它。推導結果與記錄值不同、或無法唯一推導時，報告列出 `setting-decision`，記錄值繼續保留：
+
+- 不傳 `--data`：沿用記錄值，產品行為不變。
+- 要改用其他指令：以 `--data project_run_command=<command>` 明確決定。這個值寫進 `.csarc/config.yml`，之後的 update 一律優先使用它，不再依 manifest 推導。
+
 ### Reviewer 指派改變（`reviewers`）
 
 舊設定的 `reviewers` 與 `.github/REVIEWERS` 已退役：Settings 那一列仍是 `retired`，note 寫出原本的 reviewer、新的指派方式與恢復方式；`Items requiring your decision` 另列一列非 blocking 的 `setting-decision`（subject `reviewers`）。新版本在每個 ready PR 從具 maintain 或 admin 權限、且不是作者的協作者中輪流請求一位 reviewer。這一列和 `widened` 一樣不會讓 `--check` 變成 blocking，但 `--finalize-plan` 前必須由擁有者確認，agent 不能代為接受。要維持原本的 reviewer，只給他們 maintain 或 admin 權限，或用 `--data code_owner=<owners>` 把他們設為 code owner，讓 GitHub 在每個 PR 請求他們審查；在 PR 記錄擁有者的決定。
 
 ### 保留的舊檔與過時連結
 
-- 仍被使用的舊檔：新版本不再產生的檔案若仍被保留的檔案以完整路徑引用，或是工具會自動讀取的設定（`zizmor.yml`、`.gitleaks.toml`、`.pre-commit-config.yaml`），計畫改列 `preserve`／`product-owned`，不會刪除；之後由產品自行維護。搬到 `.csarc/scripts/` 的 script 若仍被產品以舊路徑呼叫，舊路徑留下轉呼叫 wrapper（`overwrite`／`compatibility-shim`）。產品自有的 Release writer（`release_ownership=product-owned`）若仍使用本次要搬進 `.csarc/` 的檔案（例如 release-please 的 config、manifest 與它隱含的 `version.txt`），計畫列出 blocking 的 `release-writer`，`--finalize-plan` 拒絕寫入；改用 `--data release_ownership=csarc-owned`，或先以產品 commit 讓 writer 不再使用這些路徑，再重新 `--check`。
+- 仍被使用的舊檔：新版本不再產生的檔案若仍被保留的檔案以完整路徑引用，或是工具會自動讀取的設定（`zizmor.yml`、`.gitleaks.toml`、`.pre-commit-config.yaml`），計畫改列 `preserve`／`product-owned`，不會刪除；之後由產品自行維護。搬到 `.csarc/scripts/` 的 script 若仍被產品以舊路徑呼叫，舊路徑留下轉呼叫 wrapper（`overwrite`／`compatibility-shim`）。產品自有的 Release writer（`release_ownership=product-owned`）若仍使用本次要搬進 `.csarc/` 的檔案（例如 release-please 的 config、manifest 與它隱含的 `version.txt`），計畫列出 blocking 的 `release-writer`，`--finalize-plan` 拒絕寫入；改用 `--data release_ownership=csarc-owned`，或先以產品 commit 讓 writer 不再使用這些路徑，再重新 `--check`。怎麼選見「設定決定」。
 - `retire-modified`：新版本不再產生、但內容和舊 render 不同的檔案（例如根目錄的 `scripts/verify`）會原地保留，新的版本在 `.csarc/scripts/`。保留的舊檔不再由 CSARC 呼叫或更新；確認沒有產品檔案、文件或 workflow 還在引用後，另開 commit 刪除，避免有人誤用舊版。保留的舊 script 若仍呼叫或讀取同一份計畫刪除或搬走的檔案（例如保留的 `scripts/verify` 呼叫被刪除的 `scripts/test-pr-policy`、讀取搬到 `.csarc/policies/` 的 `policies/*.json`），套用後就無法執行：該列 `retire-modified` 改為 blocking，訊息列出每個用到的路徑。不需要產品 commit：在 `--finalize-plan` 加 `--decision scripts/verify=take-new`，照新版本的做法把這個舊 script 退役（新版本在 `.csarc/scripts/`）；`retire-modified` 只接受 `take-new`，不帶就保留，保留時 `--finalize-plan` 拒絕寫入。若計畫保留的其他檔案（例如產品 workflow、另一個保留的舊 script）仍呼叫被退役的檔案，`--finalize-plan` 也拒絕，請一併退役那個舊 script。要保留這個 script 時，改以產品 commit 讓它不再使用這些路徑（例如改呼叫 `.csarc/scripts/` 的版本），再重新 `--check`。
 - 搬移：報告的 `move` 列是 update 搬動的路徑（例如 `CLAUDE.md` 移到 `.claude/CLAUDE.md`、`scripts/` 移到 `.csarc/scripts/`）。用 `keep-current` 或 `custom` 保留的產品文件（例如 `docs/README.md`）可能還連到舊路徑；套用後依 `move` 列搜尋舊路徑，另開 commit 修正連結。
 - 網站內容：專案維護的 `docs/site/content/`、`docs/site/data/navigation.json` 與 `docs/site/theme.css` 原封不動保留；舊位置的 `site/content/`、`site/data/navigation.json`、`docs/site-theme.css` 以 `move` 搬到新位置，`docs/index.html`／`docs/index.en.html` 依保留的內容重建。

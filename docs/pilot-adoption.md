@@ -88,9 +88,11 @@ Stable promotion 前要證明：沒有參與實作的人，只靠已發布的文
 
 1. 記錄 release tag 與完整 SHA，從 `release-prompt.txt` 取得固定版本的 `csarc`。
 2. 在 target 的乾淨 clone 開一般分支，執行 `csarc status` 與 `csarc update --check --json`。
-3. 依手冊處理衝突並 `--finalize-plan`，再 `--apply-plan`。
-4. 執行 `./.csarc/scripts/verify-fast` 與產品原有檢查。
-5. 依下表記錄。驗證通過後，可以把分支 commit 並推成非 default branch 的 Draft PR，只用來承載 diff；這一步是本 run 的明確指派。`release-prompt.txt`「全程不要自行 stash、commit、套用 GitHub settings、push 或建立 PR」在步驟 1–4 仍然適用，步驟 5 也只放寬 commit、push 非 default branch 與建立 Draft PR 這三件事。
+3. 依手冊與 `docs/install.md` 處理衝突。install.md 要求的產品準備變更（例如把模板 workflow 裡的產品 job 搬到產品 workflow、更新 blocking 的 Action pin）以獨立的產品準備 commit 在 `--finalize-plan` 前提交，再重新 `--check`；之後 `--finalize-plan`、`--apply-plan`。以 `--decision <path>=take-new` 退役保留的舊 script（install.md「保留的舊檔與過時連結」）是 plan 的決定，不是產品準備 commit，記在「衝突與決定」，不算產品 diff。
+4. apply 成功後把結果 commit 到同一個分支，在這個已 commit 的 head 執行 `./.csarc/scripts/verify-fast` 與產品原有檢查；產品原有檢查也在 `main` 跑一次對照。
+5. 依下表記錄。驗證通過後，可以把分支推成非 default branch 的 Draft PR，只用來承載 diff；這一步是本 run 的明確指派。
+
+`release-prompt.txt` 的「commit 只限 docs/install.md 指定的兩種」在每一步都適用：步驟 3 的產品準備 commit，以及步驟 4 apply 後的 commit。步驟 5 只另外放寬 push 非 default branch 與建立 Draft PR 這兩件事；stash、套用 GitHub settings 與 push default branch 一律不做。
 
 **必填欄位：**
 
@@ -99,12 +101,22 @@ Stable promotion 前要證明：沒有參與實作的人，只靠已發布的文
 | Release | tag 與完整 SHA |
 | 步驟紀錄 | 每一步的指令、exit code 與結果摘要 |
 | 衝突與決定 | 每個衝突的決定，以及依據手冊哪一節 |
-| 產品 diff 摘要 | 套用後產品檔案的變更；預期為空或只有 preflight pin |
-| Native checks | 產品原有檢查的指令與結果 |
-| 額外提示或文件 drift | 手冊沒寫、需要猜或與工具輸出不符的地方；沒有時寫 `none` |
+| 產品 diff 摘要 | 套用後產品檔案的變更。只能是 install.md 列出的產品準備 commit（例如產品 job 搬移、Action pin）與 apply 結果；每個產品準備 commit 逐條記錄 SHA、內容與依據的 install.md 章節，沒有時寫 `none`。`take-new` 退役的舊檔不列在這裡 |
+| Native checks | 每個產品原有檢查的指令，以及在 `main` 與 branch 的結果 |
+| 產品檢查變化 | 結果與 `main` 不同的每個產品檢查，標 `待擁有者決定`（附文件章節與列出的選項）或 `regression`；沒有時寫 `none` |
+| 無依據猜測 | 會改變產品行為或治理範圍、卻找不到文件依據的猜測；沒有時寫 `none` |
+| 文件不清楚 | 其餘手冊沒寫清楚、需要判斷或與工具輸出不符的地方，每一條附追蹤 Issue 編號；沒有時寫 `none` |
 | 實作者協助 | `no`，或需要哪些協助；`yes` 表示這次 run 不成立 |
+| 結果 | `pass` 或 `fail`；`fail` 寫出未符合下方哪一條 |
 
-**紀錄位置：**正式紀錄只有一處：target repository 自己的 pilot Issue 留言（填上表）。步驟 5 的 Draft PR 只承載 diff，描述連回該留言；執行者本機的檔案只是草稿，不算紀錄。Milestone tracker 的 Promotion 只記 tag、結果（`pass`／`fail`）與「是否需要協助」，不寫 consumer 名稱或 URL。結果為 `pass` 的條件是：所有步驟成功、額外提示為 `none`、實作者協助為 `no`。
+**Pass 條件：**步驟 1–4 都執行完成，並同時符合下列四條：
+
+1. **不需要實作者協助**：「實作者協助」為 `no`。
+2. **沒有無依據的猜測**：「無依據猜測」為 `none`。依文件列出的選項所做的決定不算猜測；文件沒寫、由執行者自行決定的事，只要會改變產品行為或治理範圍，就算一項。
+3. **其餘不清楚之處都有追蹤**：「文件不清楚」的每一條都已在模板 repository 開 Issue，並在紀錄列出編號。這些項目本身不讓 run fail；缺少 Issue 編號時才算 fail。
+4. **產品檢查沒有 regression**：產品原有檢查的結果與 `main` 不同時，只有文件已列為擁有者決定、並寫出選項的變化（例如 install.md「產品自有的 workflow audit」）可以記為 `待擁有者決定`，不算 regression。其他變化，包括文件沒有寫出選項的變化，一律記為 `regression`，run 為 `fail`。
+
+**紀錄位置：**正式紀錄只有一處：target repository 自己的 pilot Issue 留言（填上表）。步驟 5 的 Draft PR 只承載 diff，描述連回該留言；執行者本機的檔案只是草稿，不算紀錄。Milestone tracker 的 Promotion 只記 tag、結果（`pass`／`fail`）與「是否需要協助」，不寫 consumer 名稱或 URL。
 
 ## 2026-08-24 pilot 結果
 
