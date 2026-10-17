@@ -1238,6 +1238,196 @@ def test_delivery_version_requires_one_exact_final_release_commit(
     assert result["base_sha"] == base_sha
 
 
+def _title_fixture(
+    root: Path, monkeypatch: pytest.MonkeyPatch, *commits: str
+) -> tuple[str, str]:
+    """Return (base, branch head) for one branch of conventional commits."""
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-10-16T23:59:00Z")
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-10-16T23:59:00Z")
+    git(root, "init", "-b", "main")
+    git(root, "config", "user.name", "Release Test")
+    git(root, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(root, "0.1.0")
+    (root / "release-please-config.json").write_text(
+        json.dumps(
+            {"release-type": "simple", "packages": {".": {"component": "demo"}}}
+        ),
+        encoding="utf-8",
+    )
+    git(root, "add", ".")
+    git(root, "commit", "-m", "chore: baseline")
+    git(root, "tag", "v0.1.0")
+    base_sha = git(root, "rev-parse", "HEAD")
+    git(root, "checkout", "-b", "work")
+    for index, message in enumerate(commits):
+        (root / f"change-{index}").write_text(f"{index}\n", encoding="utf-8")
+        git(root, "add", ".")
+        git(root, "commit", "-m", message)
+    return base_sha, git(root, "rev-parse", "HEAD")
+
+
+def _materialize(root: Path, sha: str, phase: str) -> str:
+    prepare_release_candidate(root, sha, phase=phase)
+    git(root, "add", ".")
+    git(root, "commit", "-m", "chore(release): materialize the candidate")
+    return git(root, "rev-parse", "HEAD")
+
+
+def test_delivery_version_rejects_a_title_below_the_branch_commit_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #1137: the squash keeps the title, so its type must match."""
+    base_sha, feature_sha = _title_fixture(
+        tmp_path, monkeypatch, "fix(cli): repair", "feat(cli): add a command"
+    )
+    head_sha = _materialize(tmp_path, feature_sha, "stable")
+
+    with pytest.raises(ValueError) as rejected:
+        verify_delivery_version(
+            tmp_path,
+            base_sha,
+            head_sha,
+            phase="stable",
+            pr_title="fix(cli): repair the command (#1136)",
+        )
+    message = str(rejected.value)
+    assert "PR title release intent is patch" in message
+    assert "highest branch commit intent is minor" in message
+    assert "Change the PR title type" in message
+    assert "separate pull request" in message
+    # The CLI reports the same failure instead of a passing plan.
+    with pytest.raises(SystemExit, match="PR title release intent"):
+        main(
+            [
+                "verify-delivery-version",
+                "--root",
+                str(tmp_path),
+                "--base-sha",
+                base_sha,
+                "--head-sha",
+                head_sha,
+                "--phase",
+                "stable",
+                "--pr-title",
+                "fix(cli): repair the command",
+            ]
+        )
+
+    accepted = verify_delivery_version(
+        tmp_path,
+        base_sha,
+        head_sha,
+        phase="stable",
+        pr_title="feat(cli): add a command",
+    )
+    assert accepted["status"] == "candidate"
+    assert accepted["version"] == "0.2.0"
+    # Older callers that pass no title keep the earlier interface (#1137 R4).
+    legacy = verify_delivery_version(
+        tmp_path, base_sha, head_sha, phase="stable"
+    )
+    assert legacy["version"] == "0.2.0"
+
+
+def test_delivery_version_rejects_a_title_above_the_branch_commit_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A release title over no-release commits would publish unmaterialized."""
+    base_sha, head_sha = _title_fixture(
+        tmp_path, monkeypatch, "docs: clarify the guide"
+    )
+    with pytest.raises(ValueError, match="title release intent is patch"):
+        verify_delivery_version(
+            tmp_path,
+            base_sha,
+            head_sha,
+            phase="stable",
+            pr_title="fix: clarify the guide",
+        )
+    assert (
+        verify_delivery_version(
+            tmp_path,
+            base_sha,
+            head_sha,
+            phase="stable",
+            pr_title="docs: clarify the guide",
+        )["status"]
+        == "no-release"
+    )
+
+
+def test_delivery_version_breaking_footer_requires_a_breaking_title(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A BREAKING CHANGE footer is a major intent the title must carry."""
+    base_sha, feature_sha = _title_fixture(
+        tmp_path,
+        monkeypatch,
+        "feat: replace the flag\n\nBREAKING CHANGE: the old flag is gone",
+    )
+    head_sha = _materialize(tmp_path, feature_sha, "stable")
+    with pytest.raises(ValueError, match="commit intent is major"):
+        verify_delivery_version(
+            tmp_path,
+            base_sha,
+            head_sha,
+            phase="stable",
+            pr_title="feat: replace the flag",
+        )
+    accepted = verify_delivery_version(
+        tmp_path,
+        base_sha,
+        head_sha,
+        phase="stable",
+        pr_title="feat!: replace the flag",
+    )
+    assert accepted["status"] == "candidate"
+
+
+def test_delivery_title_check_keeps_matching_existing_routes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Matching titles, deferred work and Dependabot keep their behavior."""
+    base_sha, head_sha = _title_fixture(
+        tmp_path, monkeypatch, "build(deps): bump demo from 1 to 2"
+    )
+    dependabot = verify_delivery_version(
+        tmp_path,
+        base_sha,
+        head_sha,
+        phase="stable",
+        pr_title="build(deps): bump demo from 1 to 2",
+    )
+    assert dependabot["status"] == "no-release"
+
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: deferred checkpoint work")
+    feature_sha = git(tmp_path, "rev-parse", "HEAD")
+    for title in ("feat: deferred checkpoint work", "fix: deferred work"):
+        deferred = verify_delivery_version(
+            tmp_path,
+            base_sha,
+            feature_sha,
+            phase="beta",
+            checkpoint_role="deferred",
+            pr_title=title,
+        )
+        assert deferred["status"] == "deferred"
+
+    head_sha = _materialize(tmp_path, feature_sha, "beta")
+    beta = verify_delivery_version(
+        tmp_path,
+        base_sha,
+        head_sha,
+        phase="beta",
+        checkpoint_role="terminal",
+        pr_title="feat: deliver the checkpoint",
+    )
+    assert beta["status"] == "candidate"
+    assert beta["version"] == "0.2.0-beta.1"
+
+
 def test_delivery_version_rejects_a_stale_release_worthy_branch(
     tmp_path: Path,
 ) -> None:

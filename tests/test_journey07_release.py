@@ -510,6 +510,65 @@ def test_materialization_gate_forwards_a_checkpoint_role_only_when_reported(
         assert ("--checkpoint-role" in arguments) is bool(role)
 
 
+def test_materialization_gate_passes_the_pr_title_only_when_supported(
+    tmp_path: Path,
+) -> None:
+    """Issue #1137: forward the squash title without breaking older bases."""
+    root = yaml.safe_load(
+        (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+    step = next(
+        step
+        for job in root["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("name") == "Validate same-PR release materialization"
+    )
+    # The title reaches the shell only through the environment.
+    assert step["env"]["PR_TITLE"] == "${{ github.event.pull_request.title }}"
+    assert "github.event.pull_request.title" not in step["run"]
+    script = step["run"].replace(
+        '"$RUNNER_TEMP/trusted-verification/release_policy.py"',
+        '"$FAKE_POLICY"',
+    )
+    assert "$FAKE_POLICY" in script
+    title = 'fix(cli): repair "$(touch pwned)" `id` (#1136)'
+    current = tmp_path / "current.py"
+    current.write_text(
+        "import json, sys\n"
+        '# supports "--pr-title"\n'
+        "print(json.dumps(sys.argv[1:]))\n",
+        encoding="utf-8",
+    )
+    older = tmp_path / "older.py"
+    older.write_text(
+        "import json, sys\nprint(json.dumps(sys.argv[1:]))\n",
+        encoding="utf-8",
+    )
+    for policy, expected in (
+        (current, ["--pr-title", title]),
+        (older, ["--phase", "beta"]),
+    ):
+        result = subprocess.run(  # noqa: S603
+            ["bash", "-e", "-c", script],  # noqa: S607
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+            env={
+                "PATH": os.environ["PATH"],
+                "FAKE_POLICY": str(policy),
+                "GITHUB_WORKSPACE": str(tmp_path),
+                "BASE_SHA": "b" * 40,
+                "HEAD_SHA": "h" * 40,
+                "RELEASE_LEVEL": "beta",
+                "CHECKPOINT_ROLE": "",
+                "PR_TITLE": title,
+            },
+        )
+        assert json.loads(result.stdout)[-2:] == expected
+    assert not (tmp_path / "pwned").exists()
+
+
 def test_one_issue_milestone_uses_only_work_and_promotion_prs() -> None:
     """No post-promotion version PR is needed for a CSARC-owned Milestone."""
     release = (ROOT / ".github/workflows/release.yml").read_text(

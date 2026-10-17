@@ -3273,6 +3273,8 @@ def revalidate_release_candidate(
                 release_phase_name,
                 "--checkpoint-role",
                 role,
+                "--pr-title",
+                str(pull.get("title") or ""),
             ]
         )
     with tempfile.TemporaryDirectory(

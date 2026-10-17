@@ -1595,7 +1595,7 @@ Journey 08 與本文件既有規則決定。
 
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
 | --- | --- | --- | --- | --- |
-| 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
+| 版本意圖 | PR title 表達 major／minor／patch／no-release；branch 內 commit 的最高型別必須等於 PR title 型別，否則物化結果在 squash 後不成立 | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
 | 正式版本與 CHANGELOG | Milestone work PR 的 final release-only commit materialize beta | promotion bridge materialize stable | standalone／hotfix 原 PR materialize stable | manual 只重跑同一流程，不另開版本來源 |
 | CI | fast／full 依風險 | 一律 full | release workflow 對目前 `main` 跑一次 full | 候選只跑版本／檔案／可打包 focused check；正式發布前已在 main 跑 full |
 | 成品／checksum／SBOM | beta 合併後從精確 commit 建立 | stable 合併後從精確 commit 建立 | 同 PR stable 候選合併後建立 | draft Release 先上傳、下載重驗，成功才公開 |
