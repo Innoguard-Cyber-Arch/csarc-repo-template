@@ -7,6 +7,16 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.34.0-beta.1] - 2026-10-17
+
+### Features
+
+* feat(cli): guide operators through check, finalize, and apply (4624471)
+
+### Bug Fixes
+
+* fix(update): close operator-run planning defects (28d49a9)
+
 ## [0.33.0-beta.1] - 2026-10-16
 
 ### Features
