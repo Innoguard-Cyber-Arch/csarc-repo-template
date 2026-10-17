@@ -408,6 +408,7 @@ def test_documented_update_flags_match_the_cli(
                 "### 其他衝突與並存檔案",
                 "### 產品自有的 workflow audit",
                 "### 放寬的設定",
+                "### 設定決定",
                 "### 套用時的附帶訊息",
                 "### 平行執行",
             ),
@@ -422,6 +423,7 @@ def test_documented_update_flags_match_the_cli(
                 "### Other conflicts and coexisting files",
                 "### Product-owned workflow audits",
                 "### Widened settings",
+                "### Setting decisions",
                 "### Messages printed by apply",
                 "### Parallel runs",
             ),
@@ -459,6 +461,13 @@ def test_update_guide_covers_operator_edge_cases(
         "dangerous-triggers",
         "--data admin_bypass=always",
         "--data admin_bypass=<",
+        # Issue #1158 AC4: product PR template rows and setting decisions.
+        "conflicts/new/.github/pull_request_template.md",
+        "release-writer",
+        "`product-owned`",
+        "`csarc-owned`",
+        ".csarc/provenance.json",
+        "--data project_run_command=<command>",
     ):
         assert term in text, term
 

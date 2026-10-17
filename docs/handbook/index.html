@@ -1292,10 +1292,13 @@ CSARC-Authorization: &lt;url&gt;</pre>
 | Release | &lt;tag 與完整 SHA&gt; |
 | 步驟紀錄 | &lt;每一步的指令、exit code 與結果摘要&gt; |
 | 衝突與決定 | &lt;每個衝突的決定，以及依據手冊哪一節&gt; |
-| 產品 diff 摘要 | &lt;套用後產品檔案的變更；預期為空或只有 preflight pin&gt; |
-| Native checks | &lt;產品原有檢查的指令與結果&gt; |
-| 額外提示或文件 drift | &lt;手冊沒寫、需要猜或與工具輸出不符的地方；沒有時寫 `none`&gt; |
-| 實作者協助 | &lt;`no`，或需要哪些協助；`yes` 表示這次 run 不成立&gt; |</pre>
+| 產品 diff 摘要 | &lt;套用後產品檔案的變更。只能是 install.md 列出的產品準備 commit（例如產品 job 搬移、Action pin）與 apply 結果；每個產品準備 commit 逐條記錄 SHA、內容與依據的 install.md 章節，沒有時寫 `none`&gt; |
+| Native checks | &lt;每個產品原有檢查的指令，以及在 `main` 與 branch 的結果&gt; |
+| 產品檢查變化 | &lt;結果與 `main` 不同的每個產品檢查，標 `待擁有者決定`（附文件章節與列出的選項）或 `regression`；沒有時寫 `none`&gt; |
+| 無依據猜測 | &lt;會改變產品行為或治理範圍、卻找不到文件依據的猜測；沒有時寫 `none`&gt; |
+| 文件不清楚 | &lt;其餘手冊沒寫清楚、需要判斷或與工具輸出不符的地方，每一條附追蹤 Issue 編號；沒有時寫 `none`&gt; |
+| 實作者協助 | &lt;`no`，或需要哪些協助；`yes` 表示這次 run 不成立&gt; |
+| 結果 | &lt;`pass` 或 `fail`；`fail` 寫出未符合下方哪一條&gt; |</pre>
     </div>
     <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261013 r2</span><span>附錄 11 / 15</span></footer>
   </section>
