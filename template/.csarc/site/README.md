@@ -3,7 +3,9 @@
 `docs/site/content/_index.zh-tw.md` and `_index.en.md` are the Markdown sources for
 this project's own presentation-style site (`docs/index.html` /
 `docs/index.en.html`), built by `.csarc/scripts/build-repo-site`. Once generated,
-both files are yours to edit -- a later `csarc update` never overwrites them.
+both files are yours to edit -- a later `csarc update` never overwrites them,
+nor `docs/site/data/navigation.json` or `docs/site/theme.css`. An update from
+the older `site/` layout moves them here unchanged and lists each move.
 
 - Add a page by adding a new `{{< slide key="..." track="..." ... >}}...{{< /slide >}}`
   block to both language files (same `key`, same structure) and a matching

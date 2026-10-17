@@ -24,6 +24,18 @@ Copier update 可以更新第一層；第二層首次建立後必須保留。若
 
 舊設定由外部 CLI 的 migration registry 唯讀遷移：`features: repo-site` 為 `documentation_mode: template-and-content`，沒有 repo-site 為 `content-only`；`primary_language`＋`i18n`（或更早的 `readme_primary_language`）合併為 `documentation_languages`。遷移完成後只保留目前 schema。
 
+## 持久化專案記憶（Durable Project Memory）
+
+這份文件地圖由 CSARC 維護，說明跨 session、跨 agent 與跨時間都要留下的專案知識放在哪裡；`.csarc/scripts/verify` 只檢查這裡，不檢查專案擁有的 `docs/README.md` 內容。
+
+| 問題 | 位置 |
+| --- | --- |
+| 現在必須做到什麼？ | `docs/specs/` 的 living Spec-Driven Development（SDD）契約 |
+| 為什麼這樣選？ | `docs/adr/` 的 Architecture Decision Records（ADR） |
+| 行為是否仍成立？ | Test-Driven Development（TDD）、Behavior-Driven Development（BDD）、CI 與 release evidence |
+
+從舊版公版更新的專案可能仍有 project-owned `docs/decisions/`；搜尋時一併讀取，新紀錄寫入 `docs/adr/`，不自動搬移或覆寫既有內容。`docs/README.md` 是專案自己的文件入口，更新不會改寫它。
+
 ## 共同資訊架構
 
 文件只需要覆蓋適用的五種讀者任務，不強制五個目錄或五份檔案；一份文件可以同時承擔多個角色，沒有內容時不要建立空頁。
