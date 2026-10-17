@@ -9,6 +9,7 @@ fail closed instead of being rendered.
 
 from __future__ import annotations
 
+import collections
 import json
 import re
 from collections.abc import Mapping, Sequence
@@ -851,6 +852,23 @@ def _summary_lines(report: Mapping[str, object]) -> list[str]:
     return lines
 
 
+def _action_kind_counts(report: Mapping[str, object]) -> str:
+    """Return the Items count per required action kind, or nothing."""
+    actions = cast(list[Mapping[str, object]], report["required_actions"])
+    counts = collections.Counter(str(row["kind"]) for row in actions)
+    if not counts:
+        return ""
+    return (
+        " ("
+        + ", ".join(
+            f"{code(kind)} {counts[kind]}"
+            for kind in REQUIRED_ACTION_KINDS
+            if counts[kind]
+        )
+        + ")"
+    )
+
+
 def _impact_lines(report: Mapping[str, object]) -> list[str]:
     summary = cast(Mapping[str, Mapping[str, object]], report["summary"])
     settings = cast(list[Mapping[str, object]], report["settings"])
@@ -873,6 +891,8 @@ def _impact_lines(report: Mapping[str, object]) -> list[str]:
         [
             f"- Files changed by this plan: {changed}; conflicts: "
             f"{files['conflict']}; preserved: {files['preserve']}.",
+            # A class counts how a value changes, so a kept value can still
+            # need a decision; the kinds below count Items (Issue #1153).
             "- Settings by class: "
             + ", ".join(
                 f"{name} {summary['settings'][name]}"
@@ -881,7 +901,9 @@ def _impact_lines(report: Mapping[str, object]) -> list[str]:
             + ".",
             "- Required actions: "
             f"{summary['required_actions']['blocking']} blocking, "
-            f"{summary['required_actions']['non_blocking']} non-blocking.",
+            f"{summary['required_actions']['non_blocking']} non-blocking"
+            + _action_kind_counts(report)
+            + ".",
         ]
     )
     ownership = _optional_mapping(product["release_ownership"])

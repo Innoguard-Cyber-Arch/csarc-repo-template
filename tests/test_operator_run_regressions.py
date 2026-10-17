@@ -633,3 +633,259 @@ def test_settings_plan_without_origin_says_so(
         "Repository settings plan needs a GitHub origin remote; no settings "
         "were applied."
     ) in capsys.readouterr().out
+
+
+# --- Issue #1153 AC1: a kept product Release writer loses moved files -------
+
+RELEASE_CONFIG = (
+    '{"release-type": "simple", "packages": {".": {"component": "c"}}}\n'
+)
+PRODUCT_WRITER = (
+    "on: push\njobs:\n  release:\n    runs-on: ubuntu-latest\n"
+    "    steps:\n"
+    f"      - uses: googleapis/release-please-action@{RELEASE_PIN}\n"
+    "        with:\n"
+    "          config-file: release-please-config.json\n"
+    "          manifest-file: .release-please-manifest.json\n"
+)
+
+
+def test_release_please_config_implies_its_version_file() -> None:
+    """AC1: a simple release type bumps version.txt nobody names."""
+    implied = file_transition.release_please_version_files
+    assert implied(RELEASE_CONFIG.encode()) == ("version.txt",)
+    assert implied(
+        b'{"packages": {"pkg": {"release-type": "simple",'
+        b' "version-file": "VERSION"}, "lib": {"release-type": "python"}}}'
+    ) == ("pkg/VERSION",)
+    assert implied(b'{"release-type": "node", "packages": {".": {}}}') == ()
+    assert implied(b"not json") == ()
+    assert implied(b"[]") == ()
+
+
+def test_kept_writer_blocks_on_the_files_the_update_moves(
+    tmp_path: Path,
+) -> None:
+    """AC1/R1: a writer's named and implied files are listed, then block."""
+    target = tmp_path / "consumer"
+    write(target / LEGACY_RELEASE, PRODUCT_WRITER)
+    write(target / "release-please-config.json", RELEASE_CONFIG)
+    write(target / ".release-please-manifest.json", '{".": "0.1.0"}\n')
+    write(target / "version.txt", "0.1.0\n")
+    write(target / "docs/ci-policy.md", "unused\n")
+    moves = (
+        (
+            ".release-please-manifest.json",
+            ".csarc/release-please-manifest.json",
+        ),
+        ("docs/ci-policy.md", ".csarc/docs/ci-policy.md"),
+        ("release-please-config.json", ".csarc/release-please-config.json"),
+        ("version.txt", ".csarc/version.txt"),
+    )
+
+    rows = cli.release_writer_moves(target, (LEGACY_RELEASE,), moves)
+    assert [row["path"] for row in rows] == [
+        ".release-please-manifest.json",
+        "release-please-config.json",
+        "version.txt",
+    ]
+    assert {row["writer"] for row in rows} == {LEGACY_RELEASE}
+    assert cli.release_writer_moves(target, (), moves) == []
+    [action] = cli.update_required_actions(
+        cli.Plan((), (), (), (), (), (), ()), (), writer_moves=rows
+    )
+    assert action["kind"] == "release-writer"
+    assert action["blocking"] is True
+    assert action["subject"] == LEGACY_RELEASE
+    assert "version.txt -> .csarc/version.txt" in str(action["message"])
+    assert "release_ownership=csarc-owned" in str(action["command"])
+
+
+@pytest.mark.large
+def test_product_owned_legacy_release_please_writer_blocks_the_plan(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC1/R1: choosing product-owned never silently breaks the writer.
+
+    The legacy release-please writer stays as the product's Release writer,
+    so the plan must not quietly move its config, manifest, and implied
+    version file into ``.csarc/``; it blocks and finalize refuses.
+    """
+    project, source = legacy_consumer(
+        tmp_path,
+        {
+            LEGACY_RELEASE: PRODUCT_WRITER,
+            "release-please-config.json": RELEASE_CONFIG,
+            ".release-please-manifest.json": '{".": "0.1.0"}\n',
+            "version.txt": "0.1.0\n",
+        },
+    )
+    template = source / "template"
+    for name in (
+        "release-please-config.json",
+        ".release-please-manifest.json",
+        "version.txt",
+    ):
+        destination = (
+            ".csarc/release-please-manifest.json"
+            if name == ".release-please-manifest.json"
+            else f".csarc/{name}"
+        )
+        write(
+            template / destination,
+            (template / name).read_text(encoding="utf-8"),
+        )
+        (template / name).unlink()
+    new_sha = commit(source, "test: CSARC layout")
+    reports = tmp_path / "reports"
+    owner = ("--data", "release_ownership=product-owned")
+    capsys.readouterr()
+
+    assert (
+        update(
+            project, new_sha, "--check", "--report-dir", str(reports), *owner
+        )
+        == 1
+    ), capsys.readouterr().err
+    report = read_json(reports / "csarc-update-report.json")
+    assert report["product"]["release_ownership"]["selected_workflow"] == (
+        LEGACY_RELEASE
+    )
+    [blocking] = [
+        row
+        for row in report["required_actions"]
+        if row["kind"] == "release-writer"
+    ]
+    assert blocking["blocking"] is True
+    assert blocking["subject"] == LEGACY_RELEASE
+    for moved in (
+        "release-please-config.json -> .csarc/release-please-config.json",
+        ".release-please-manifest.json -> .csarc/release-please-manifest.json",
+        "version.txt -> .csarc/version.txt",
+    ):
+        assert moved in blocking["message"]
+    assert report["status"] == "blocked"
+    capsys.readouterr()
+    assert (
+        update(
+            project,
+            new_sha,
+            "--finalize-plan",
+            "--report-dir",
+            str(reports),
+            *owner,
+        )
+        != 0
+    )
+    assert not (reports / final_plan.FINAL_PLAN_BASENAME).exists()
+
+
+# --- Issue #1153 AC2: conflicts/new is what take-new writes -----------------
+
+SETUP_UV = "astral-sh/setup-uv"
+BASE_UV = "1" * 40
+TEMPLATE_UV = "2" * 40
+PRODUCT_UV = "4" * 40
+
+
+def uv_step(sha: str, tag: str) -> str:
+    """Return one workflow step pinning setup-uv with its version tag."""
+    return f"      - uses: {SETUP_UV}@{sha} # {tag}\n"
+
+
+def test_aligned_new_side_equals_the_aligned_apply(tmp_path: Path) -> None:
+    """AC2/R2: the planned bytes and align_pins' bytes are the same."""
+    from csarc_cli import action_pin_preflight as pins
+
+    aligned = [(SETUP_UV, TEMPLATE_UV, PRODUCT_UV, "v10.2.0", "v10.3.0")]
+    rendered = ("on: push\nsteps:\n" + uv_step(TEMPLATE_UV, "v10.2.0")).encode()
+    name = ".github/workflows/spec.yml"
+    write(tmp_path / name, rendered.decode())
+    pins.align_pins(tmp_path, aligned)
+
+    planned = pins.align_content(name, rendered, aligned)
+    assert planned == (tmp_path / name).read_bytes()
+    assert PRODUCT_UV.encode() in planned
+    # Only the workflows align_pins rewrites are touched.
+    assert pins.align_content("docs/spec.yml", rendered, aligned) == rendered
+    assert pins.align_content(name, rendered, ()) == rendered
+    assert pins.align_content(name, None, aligned) is None
+
+
+@pytest.mark.large
+def test_take_new_writes_the_reviewed_new_side_with_product_pins(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC2/R2: conflicts/new equals the bytes take-new applies.
+
+    A product workflow keeps a newer same-major setup-uv pin, so the apply
+    aligns the template workflows to it. The conflicting template workflow's
+    new side must already show that pin, and apply must write exactly it.
+    """
+    workflow = ".github/workflows/spec.yml"
+    project, source = legacy_consumer(
+        tmp_path,
+        {
+            workflow: "on: push\njobs:\n  spec:\n    steps:\n"
+            + uv_step(BASE_UV, "v10.1.0")
+        },
+    )
+    # The product bumps the pin in its own and the template workflow.
+    write(
+        project / workflow,
+        "on: push\njobs:\n  spec:\n    steps:\n"
+        + uv_step(PRODUCT_UV, "v10.3.0"),
+    )
+    write(
+        project / PRODUCT_WORKFLOW,
+        "on: push\njobs:\n  product:\n    steps:\n"
+        + uv_step(PRODUCT_UV, "v10.3.0"),
+    )
+    commit(project, "test: product pins setup-uv v10.3.0")
+    template = source / "template"
+    write(
+        template / workflow,
+        "on: push\njobs:\n  spec:\n    steps:\n"
+        + uv_step(TEMPLATE_UV, "v10.2.0"),
+    )
+    new_sha = commit(source, "test: template pins setup-uv v10.2.0")
+    reports = tmp_path / "reports"
+    capsys.readouterr()
+
+    assert (
+        update(project, new_sha, "--check", "--report-dir", str(reports)) == 1
+    ), capsys.readouterr().err
+    report = read_json(reports / "csarc-update-report.json")
+    assert {
+        row["subject"]
+        for row in report["required_actions"]
+        if row["kind"] == "file-conflict"
+    } == {workflow}
+    new_side = (reports / "conflicts/new" / workflow).read_bytes()
+    assert f"{SETUP_UV}@{PRODUCT_UV} # v10.3.0".encode() in new_side
+    assert TEMPLATE_UV.encode() not in new_side
+    assert (
+        update(
+            project,
+            new_sha,
+            "--finalize-plan",
+            "--report-dir",
+            str(reports),
+            "--decision",
+            f"{workflow}=take-new",
+        )
+        == 0
+    ), capsys.readouterr().err
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--apply-plan",
+                str(reports / final_plan.FINAL_PLAN_BASENAME),
+                "--yes",
+            ]
+        )
+        == 0
+    ), capsys.readouterr().err
+    assert (project / workflow).read_bytes() == new_side
