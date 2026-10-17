@@ -668,6 +668,7 @@ def pin_report(
         previous=cli.Revision("v1.0.0", "b" * 40, "https://example.invalid"),
         target_head="c" * 40,
         target_changes=(),
+        pin_versions=preflight.versions,
     )
 
 
@@ -711,3 +712,80 @@ def test_report_shows_an_evaluated_empty_pin_set(tmp_path: Path) -> None:
     assert report["status"] == "ready"
     markdown = lifecycle_report.render_markdown(report)
     assert "### Action pins\n\nNone." in markdown
+
+
+# --- Version tags on blocking rows (#1154 AC2) --------------------------------
+
+
+def tagged_workflow(action: str, sha: str, tag: str | None) -> str:
+    """Return a one-step workflow whose pin carries an optional tag comment."""
+    comment = f" # {tag}" if tag is not None else ""
+    header = "on: push\njobs:\n  job:\n    runs-on: ubuntu-latest\n"
+    return f"{header}    steps:\n      - uses: {action}@{sha}{comment}\n"
+
+
+@pytest.mark.parametrize(
+    ("old_tag", "new_tag", "expected"),
+    [
+        (
+            "v6.1.0",
+            "v7.0.0",
+            "product tag v6.1.0, template tag v7.0.0, major upgrade: yes",
+        ),
+        (
+            "v7.0.0",
+            "v7.2.1",
+            "product tag v7.0.0, template tag v7.2.1, major upgrade: no",
+        ),
+        (
+            None,
+            "v7.0.0",
+            "product tag unknown, template tag v7.0.0, major upgrade: unknown",
+        ),
+        (
+            "main",
+            None,
+            "product tag main, template tag unknown, major upgrade: unknown",
+        ),
+    ],
+)
+def test_blocking_pin_row_names_tags_and_major_upgrade(
+    tmp_path: Path, old_tag: str | None, new_tag: str | None, expected: str
+) -> None:
+    """AC2/R2: the blocking row shows both tags and the major judgement.
+
+    Tags come from the ``# vX.Y.Z`` comments of the product line and the
+    template pin; a missing or non-semver tag is ``unknown``, never a guess.
+    The machine rows keep exactly the SPEC-008 fields.
+    """
+    product = ".github/workflows/product-ci.yml"
+    action = "actions/setup-node"
+    template = {
+        ".github/workflows/ci.yml": tagged_workflow(action, NEW, new_tag)
+    }
+    drift = pins.evaluate(
+        {product: tagged_workflow(action, OLD, old_tag)},
+        set(),
+        pins.template_pins(template),
+        NEW,
+        pins.template_tags(template, pins.template_pins(template)),
+    )
+    assert drift.versions == {(product, 6): (old_tag, new_tag)}
+
+    report = pin_report(tmp_path, drift)
+    product_rows = report["product"]
+    assert isinstance(product_rows, dict)
+    assert product_rows["action_pins"] == [drift.items[0].as_dict()]
+    assert set(drift.as_dict()) == {
+        "items",
+        "product_workflows",
+        "schema_version",
+        "source_sha",
+        "state",
+    }
+    actions = report["required_actions"]
+    assert isinstance(actions, list)
+    [row] = [action for action in actions if action["kind"] == "action-pin"]
+    assert row["blocking"] is True
+    assert expected in row["message"]
+    assert expected in lifecycle_report.render_markdown(report)

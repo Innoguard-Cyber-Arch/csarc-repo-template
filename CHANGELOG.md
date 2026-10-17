@@ -7,6 +7,16 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.35.0-beta.1] - 2026-10-17
+
+### Features
+
+* feat(update): show pin tags and missing ignore rules (fd81be1)
+
+### Bug Fixes
+
+* fix(cli): close update plan and report gaps from the beta.5 run (f8d0699)
+
 ## [0.34.0-beta.1] - 2026-10-17
 
 ### Features

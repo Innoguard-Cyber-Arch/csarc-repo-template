@@ -26,7 +26,7 @@ import re
 import subprocess
 import tempfile
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 import yaml  # type: ignore[import-untyped]
@@ -97,6 +97,12 @@ class PinPreflight:
     # (action, template SHA, product SHA, template tag, product tag) for
     # every kept newer product pin (#1083).
     aligned: tuple[tuple[str, str, str, str, str], ...] = ()
+    # (file, line) -> (product tag, template tag) read from the `# vX.Y.Z`
+    # comments. It only words the report message (#1154) and is never part
+    # of the plan payload, so the plan schema does not change.
+    versions: Mapping[tuple[str, int], tuple[str | None, str | None]] = field(
+        default_factory=dict, compare=False
+    )
 
     @property
     def blocking(self) -> tuple[PinDrift, ...]:
@@ -148,6 +154,25 @@ def semver(tag: str | None) -> tuple[int, int, int] | None:
     if match is None:
         return None
     return (int(match.group(1)), int(match.group(2)), int(match.group(3) or 0))
+
+
+def version_note(old_tag: str | None, new_tag: str | None) -> str:
+    """Name both release tags and whether the change is a major upgrade.
+
+    A missing or non-semver tag on either side makes the major judgement
+    ``unknown`` instead of a guess (#1154).
+    """
+    old_version, new_version = semver(old_tag), semver(new_tag)
+    if old_version is None or new_version is None:
+        major = "unknown"
+    elif new_version[0] > old_version[0]:
+        major = "yes"
+    else:
+        major = "no"
+    return (
+        f"product tag {old_tag or 'unknown'}, template tag "
+        f"{new_tag or 'unknown'}, major upgrade: {major}"
+    )
 
 
 def template_tags(
@@ -477,11 +502,17 @@ def evaluate(
             for _line, action, sha in parse_pins(text):
                 current_template.setdefault(action, set()).add(sha)
     items: list[PinDrift] = []
+    versions: dict[tuple[str, int], tuple[str | None, str | None]] = {}
     for path in product:
+        lines = target_files[path].splitlines()
         for line, action, sha in parse_pins(target_files[path]):
             new_sha = new_pins.get(action)
             if new_sha is None or new_sha == sha:
                 continue
+            versions[(path, line)] = (
+                pin_tag(lines[line - 1]),
+                (tags or {}).get(action),
+            )
             reason = (
                 REASON_PRODUCT_PIN_NEWER
                 if action in newer
@@ -494,7 +525,9 @@ def evaluate(
         (action, new_pins[action], sha, template_tag, tag)
         for action, (sha, tag, template_tag) in sorted(newer.items())
     )
-    return PinPreflight(source_sha, tuple(product), tuple(items), aligned)
+    return PinPreflight(
+        source_sha, tuple(product), tuple(items), aligned, versions
+    )
 
 
 def run_preflight(
@@ -539,6 +572,11 @@ def excluding(
         tuple(path for path in preflight.product_workflows if path not in gone),
         items,
         tuple(entry for entry in preflight.aligned if entry[0] in kept),
+        {
+            key: value
+            for key, value in preflight.versions.items()
+            if key[0] not in gone
+        },
     )
 
 
