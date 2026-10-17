@@ -6,6 +6,7 @@ import copy
 import json
 import re
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -573,6 +574,53 @@ def test_widened_settings_lead_the_impact_analysis(tmp_path: Path) -> None:
     impact = markdown.split("## Impact analysis\n\n", 1)[1]
 
     assert impact.startswith("- Widened settings: `language`. See Settings.\n")
+
+
+def test_impact_analysis_counts_every_item_kind(tmp_path: Path) -> None:
+    """Issue #1153 AC3/R3: Impact counts match Items, setting-decision too.
+
+    A native-manifest observation keeps the saved value (class
+    ``unchanged``) yet asks for a decision; the Impact analysis must still
+    count that Item instead of reading as zero decisions.
+    """
+    report = update_report(tmp_path)
+    rows = cli.report_setting_rows(
+        {"project_run_command": "./scripts/verify-skills"},
+        {"project_run_command": "./scripts/verify-skills"},
+        (),
+        {"project_run_command": "./.csarc/scripts/verify"},
+    )
+    assert rows[0]["class"] == "unchanged"
+    report["settings"] = rows
+    report["required_actions"] = cli.update_required_actions(
+        cli.Plan((), (), (), (), (), ("docs/README.md",), ()),
+        rows,
+        observed={"project_run_command": "./.csarc/scripts/verify"},
+    )
+    report["status"] = "blocked"
+    report["applicable"] = False
+    report["summary"] = lifecycle_report.summary_counts(
+        rows,
+        cast(list[dict[str, object]], report["files"]),
+        report["required_actions"],
+    )
+    markdown = lifecycle_report.render_markdown(
+        lifecycle_report.validate_report(report)
+    )
+    items = markdown.split("## Items requiring your decision\n\n", 1)[1]
+    items = items.split("\n## ", 1)[0]
+    impact = markdown.split("## Impact analysis\n\n", 1)[1].split("\n## ")[0]
+    listed: dict[str, int] = {}
+    for kind in re.findall(r"^- \*\*\w+\*\* `([a-z-]+)`", items, re.M):
+        listed[kind] = listed.get(kind, 0) + 1
+    assert listed == {"file-conflict": 1, "setting-decision": 1}
+    [line] = [row for row in impact.splitlines() if "Required actions" in row]
+    counted = {
+        kind: int(count)
+        for kind, count in re.findall(r"`([a-z-]+)` (\d+)", line)
+    }
+    assert counted == listed
+    assert line.startswith("- Required actions: 1 blocking, 1 non-blocking")
 
 
 def test_applied_report_is_bound_to_the_replayed_plan(tmp_path: Path) -> None:

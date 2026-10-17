@@ -19,7 +19,9 @@ the apply step inside that boundary:
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+import posixpath
 import re
 import shutil
 import stat
@@ -192,6 +194,42 @@ def content_uses(
         for removal in sorted(set(removals))
         if removal != name and _references(lines, removal)
     )
+
+
+RELEASE_PLEASE_DEFAULT_VERSION_FILE = "version.txt"
+
+
+def release_please_version_files(content: bytes) -> tuple[str, ...]:
+    """Return the version files one release-please config implies.
+
+    A ``simple`` release type reads and bumps ``version.txt`` (or its
+    ``version-file``) in each package directory although the workflow and
+    the config never name it as a path (Issue #1153). Anything that is not
+    a release-please manifest config implies nothing.
+    """
+    try:
+        config = json.loads(content.decode("utf-8"))
+    except UnicodeDecodeError, ValueError:
+        return ()
+    if not isinstance(config, dict):
+        return ()
+    packages = config.get("packages")
+    if not isinstance(packages, dict):
+        return ()
+    files: set[str] = set()
+    for directory, package in packages.items():
+        settings = package if isinstance(package, dict) else {}
+        release_type = settings.get("release-type", config.get("release-type"))
+        if release_type != "simple" or not isinstance(directory, str):
+            continue
+        version_file = settings.get(
+            "version-file",
+            config.get("version-file", RELEASE_PLEASE_DEFAULT_VERSION_FILE),
+        )
+        if not isinstance(version_file, str) or not version_file:
+            continue
+        files.add(posixpath.normpath(posixpath.join(directory, version_file)))
+    return tuple(sorted(files))
 
 
 def referenced_retirements(
