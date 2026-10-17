@@ -1987,6 +1987,47 @@ def _manifest_version(root: Path, revision: str) -> object:
     return manifest.get(".") if isinstance(manifest, dict) else None
 
 
+def branch_release_intent(root: Path, base_sha: str, head_sha: str) -> str:
+    """Return the highest release intent among the branch-only commits."""
+    raw = git_output(
+        ["log", "--format=%s%x1f%b%x1e", f"{base_sha}..{head_sha}"], root
+    )
+    highest = "no-release"
+    for message in raw.split("\x1e"):
+        subject, _, body = message.strip("\n").partition("\x1f")
+        if not subject:
+            continue
+        intent = release_intent(subject)
+        if "BREAKING CHANGE:" in body or "BREAKING-CHANGE:" in body:
+            intent = "major"
+        if INTENT_RANK[intent] > INTENT_RANK[highest]:
+            highest = intent
+    return highest
+
+
+def pull_request_title_errors(
+    root: Path, base_sha: str, head_sha: str, title: str
+) -> list[str]:
+    """Reject a PR title whose release intent differs from its commits.
+
+    A squash merge keeps only the PR title, so release planning after the
+    merge reads the title's type while materialization on the branch reads
+    every branch commit. Both must express the same intent.
+    """
+    title_intent = release_intent(title)
+    commit_intent = branch_release_intent(root, base_sha, head_sha)
+    if title_intent == commit_intent:
+        return []
+    return [
+        f"PR title release intent is {title_intent}, but the highest "
+        f"branch commit intent is {commit_intent}; the squash merge keeps "
+        "only the title, so the version materialized on this branch would "
+        "not hold after merge. Change the PR title type to match the "
+        "highest branch commit type, or move the higher-type commits to a "
+        "separate pull request."
+    ]
+
+
 def verify_delivery_version(
     root: Path,
     base_sha: str,
@@ -1994,12 +2035,22 @@ def verify_delivery_version(
     *,
     phase: str,
     checkpoint_role: str = "none",
+    pr_title: str | None = None,
 ) -> dict[str, object]:
     """Require release-worthy work to end in one exact release-only commit.
 
     Deferred checkpoint work is the exception: it must leave the version
     untouched so only the checkpoint's terminal Issue publishes the beta.
+    When ``pr_title`` is given, the title's release intent must equal the
+    highest branch commit intent, because the squash merge keeps only the
+    title. Callers that omit it keep the earlier interface.
     """
+    if pr_title is not None and checkpoint_role != "deferred":
+        title_errors = pull_request_title_errors(
+            root, base_sha, head_sha, pr_title
+        )
+        if title_errors:
+            raise ValueError(title_errors[0])
     planned = release_plan(root, head_sha, phase=phase)
     if planned is None:
         return {
@@ -2341,6 +2392,13 @@ def parser() -> argparse.ArgumentParser:
     verify_delivery.add_argument(
         "--checkpoint-role", choices=CHECKPOINT_ROLES, default="none"
     )
+    verify_delivery.add_argument(
+        "--pr-title",
+        help=(
+            "pull request title; its release intent must equal the highest "
+            "branch commit intent because the squash keeps only the title"
+        ),
+    )
     verify_promotion = subparsers.add_parser("verify-promotion-version")
     verify_promotion.add_argument("--source-sha", required=True)
     verify_promotion.add_argument("--head-sha", required=True)
@@ -2502,6 +2560,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
                     args.head_sha,
                     phase=phase,
                     checkpoint_role=args.checkpoint_role,
+                    pr_title=args.pr_title,
                 )
             else:
                 payload = verify_promotion_version(

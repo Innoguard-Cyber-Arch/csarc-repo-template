@@ -4416,7 +4416,11 @@ def test_revalidation_rebuilds_an_ordinary_same_pr_release(
     monkeypatch.setitem(
         revalidate_release_candidate.__globals__,
         "live_pull",
-        lambda *_: {"base": {"ref": "main"}, "body": "Closes #925"},
+        lambda *_: {
+            "base": {"ref": "main"},
+            "body": "Closes #925",
+            "title": "fix(release): keep the materialized version exact",
+        },
     )
 
     result = revalidate_release_candidate(
@@ -4429,7 +4433,9 @@ def test_revalidation_rebuilds_an_ordinary_same_pr_release(
     assert result == "delivery version is exact"
     assert len(commands) == 1
     assert "verify-delivery-version" in commands[0]
-    assert commands[0][-8:] == [
+    # The live PR title is passed so the squash title's release intent is
+    # checked against the branch commits before merge (#1137).
+    assert commands[0][-10:] == [
         "--base-sha",
         "b" * 40,
         "--head-sha",
@@ -4438,6 +4444,8 @@ def test_revalidation_rebuilds_an_ordinary_same_pr_release(
         "stable",
         "--checkpoint-role",
         "none",
+        "--pr-title",
+        "fix(release): keep the materialized version exact",
     ]
 
 
@@ -4475,7 +4483,7 @@ def test_revalidation_passes_the_live_checkpoint_role(
         FakeGitHub("a" * 40), lease_fixture(), "feat/997-canary", "beta"
     )
 
-    assert commands[0][-2:] == ["--checkpoint-role", "deferred"]
+    assert commands[0][-4:-2] == ["--checkpoint-role", "deferred"]
 
 
 def test_revalidation_skips_a_formal_delivery_sync(
