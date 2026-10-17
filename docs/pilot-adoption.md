@@ -90,7 +90,7 @@ Stable promotion 前要證明：沒有參與實作的人，只靠已發布的文
 2. 在 target 的乾淨 clone 開一般分支，執行 `csarc status` 與 `csarc update --check --json`。
 3. 依手冊處理衝突並 `--finalize-plan`，再 `--apply-plan`。
 4. 執行 `./.csarc/scripts/verify-fast` 與產品原有檢查。
-5. 依下表記錄；最多把分支推到非 default branch 的 Draft PR。
+5. 依下表記錄。驗證通過後，可以把分支 commit 並推成非 default branch 的 Draft PR，只用來承載 diff；這一步是本 run 的明確指派。`release-prompt.txt`「全程不要自行 stash、commit、套用 GitHub settings、push 或建立 PR」在步驟 1–4 仍然適用，步驟 5 也只放寬 commit、push 非 default branch 與建立 Draft PR 這三件事。
 
 **必填欄位：**
 
@@ -104,7 +104,7 @@ Stable promotion 前要證明：沒有參與實作的人，只靠已發布的文
 | 額外提示或文件 drift | 手冊沒寫、需要猜或與工具輸出不符的地方；沒有時寫 `none` |
 | 實作者協助 | `no`，或需要哪些協助；`yes` 表示這次 run 不成立 |
 
-**紀錄位置：**寫在 target repository 自己的 pilot Issue 留言。Milestone tracker 的 Promotion 只記 tag、結果（`pass`／`fail`）與「是否需要協助」，不寫 consumer 名稱或 URL。結果為 `pass` 的條件是：所有步驟成功、額外提示為 `none`、實作者協助為 `no`。
+**紀錄位置：**正式紀錄只有一處：target repository 自己的 pilot Issue 留言（填上表）。步驟 5 的 Draft PR 只承載 diff，描述連回該留言；執行者本機的檔案只是草稿，不算紀錄。Milestone tracker 的 Promotion 只記 tag、結果（`pass`／`fail`）與「是否需要協助」，不寫 consumer 名稱或 URL。結果為 `pass` 的條件是：所有步驟成功、額外提示為 `none`、實作者協助為 `no`。
 
 ## 2026-08-24 pilot 結果
 

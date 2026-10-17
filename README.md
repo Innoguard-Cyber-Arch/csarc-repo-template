@@ -6,7 +6,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.33.0-beta.1<!-- x-release-please-version --> |
+| 公版版本 | v0.34.0-beta.1<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript、Go（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
@@ -239,11 +239,12 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ```bash
 git switch -c chore/<issue-number>-update-repo-template
-uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
-uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update . --to <tag> --expected-sha <full-sha> --check --json
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --decision <path>=keep-current
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-plan.json --yes
 ```
 
-`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。若有衝突，CLI 會列出檔案但不修改 target；逐一決定後以 `csarc update --finalize-plan --decision <path>=keep-current|take-new|custom:<file>` 在同一個報告資料夾寫出不可變的 final plan，再以 `csarc update --apply-plan <final plan>` 套用，套用時不再詢問或重算任何值。若記錄的版本是已退役的 alpha、格式不符或無法理解，CLI 不保留舊版解析器，而是以最新 stable 重建模板管理的基線；設定、專案自有與已分歧檔案盡可能保留，無法安全判斷的項目交給人工合併。`update --check --json` 目前已是最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify`、repository settings `plan`，以及已確認的舊 CSARC Milestone description 升級；它不會套用 repository settings、push 或開 PR。
+`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。流程固定為三段：`--check` 寫出報告與每個衝突的 base／current／new 三側檔案（報告資料夾的 `conflicts/`），不修改 target；`--finalize-plan` 重帶 `--check` 的 `--to`、`--expected-sha` 與 `--data`，每個衝突給一個 `--decision <path>=keep-current|take-new|custom:<file>`，寫出不可變的 final plan；`--apply-plan <final plan>` 只用其中記錄的值套用（非互動時加 `--yes`）。每一步的完整規則、`custom:<file>` 語意、失敗重試、Action pin 與平行執行限制見 [`docs/install.md`](docs/install.md#更新已導入的-repo)。若記錄的版本是已退役的 alpha、格式不符或無法理解，CLI 不保留舊版解析器，而是以最新 stable 重建模板管理的基線；設定、專案自有與已分歧檔案盡可能保留，無法安全判斷的項目交給人工合併。`update --check --json` 目前已是最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify`、repository settings `plan`，以及已確認的舊 CSARC Milestone description 升級；它不會套用 repository settings、push 或開 PR。
 
 ### Agent prompt
 

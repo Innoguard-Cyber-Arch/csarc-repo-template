@@ -38,7 +38,8 @@ tracking: none
 - `--report-dir PATH` 可改目錄；`adopt --apply-plan` 一律寫回被重播的 plan 所在的目錄，另外傳入不同的 `--report-dir` 時在寫入 target 前拒絕。
 - 寫入順序：machine plan、report JSON、Markdown。Markdown 只由 report JSON 的位元組解析後 render；report 驗證失敗時三個檔案都不寫。
 - adopt 的 machine plan 契約不變（`plan.as_dict()` 加 `plan_sha256`，`schema_version: 1`，可被 `--apply-plan` 重播，套用後照舊寫入 `adoption.applied`）。update 的 stage-1 machine plan 是同一次 `update --check --json` 的 plan 加上 `replayable: false` 與 `plan_sha256`，只供審閱，不能套用。
-- update 的 final plan（Issue #1067）：`update --finalize-plan` 在 stage-1 plan 所在的同一目錄寫出 `csarc-update-final-plan.json`（`schema_version: 1`、`replayable: true`）。它要求 stage-1 plan 的 digest 有效、規劃 digest 與 template SHA 仍相同，且每個 `update-conflict` 恰有一個 `--decision PATH=keep-current|take-new|custom:FILE`；action pin 漂移須以 `--pin-commit` 指名的產品 commit 讀回。plan 記錄 `toolchain`（Copier、Jinja2、Git、Python、csarc 版本）、`inputs`（新舊兩側 Copier answers、`--data` 與命令參數）、`live_facts`（repository 與 visibility、origin、權限、Release 與 target HEAD／status／檔案指紋）、`derived`（規劃結果、核准的檔案轉換、舊 render 指紋）、`decisions`（檔案決定與其確切內容、設定變更列、pin 決定）與內嵌報告，各區段有 digest，`final_plan_sha256` 綁定整份 plan。檔案已存在時拒絕覆寫。
+- update 的 final plan（Issue #1067）：`update --finalize-plan` 在 stage-1 plan 所在的同一目錄寫出 `csarc-update-final-plan.json`（`schema_version: 1`、`replayable: true`）。它要求 stage-1 plan 的 digest 有效、規劃 digest 與 template SHA 仍相同，且每個 `update-conflict` 恰有一個 `--decision PATH=keep-current|take-new|custom:FILE`。pin 漂移只有一條規則（Issue #1147）：`--pin-commit` 只在**被 finalize 的那份 stage-1 plan** 仍列出 blocking `action-pin` 時必填，值是只改這些 pin 的產品 commit，CLI 從該 commit 讀回並拒絕清單外的變更；stage-1 plan 沒有列出 pin 漂移時傳入 `--pin-commit` 一律拒絕。因為 `--check` 每次都重新比對 pin，先 commit pin 再重新 `--check` 所得的新 stage-1 plan 不再列出那些 pin，finalize 也就不需要 `--pin-commit`；文件建議走這條路，`--pin-commit` 只用於沿用 commit 之前的 stage-1 plan。plan 記錄 `toolchain`（Copier、Jinja2、Git、Python、csarc 版本）、`inputs`（新舊兩側 Copier answers、`--data` 與命令參數）、`live_facts`（repository 與 visibility、origin、權限、Release 與 target HEAD／status／檔案指紋）、`derived`（規劃結果、核准的檔案轉換、舊 render 指紋）、`decisions`（檔案決定與其確切內容、設定變更列、pin 決定）與內嵌報告，各區段有 digest，`final_plan_sha256` 綁定整份 plan。檔案已存在時拒絕覆寫；要重新決定時保留舊檔，以新的 `--report-dir` 重新 `--check` 與 `--finalize-plan`（Issue #1147）。
+- update 的衝突三側（Issue #1147）：`--check`、`--dry-run` 與確認前的 plan 在報告目錄的 `conflicts/` 下，為每個 `update-conflict` 寫出 `conflicts/base/<path>`（記錄版本的 render）、`conflicts/current/<path>`（target 目前內容，即 `keep-current` 會記錄的位元組）與 `conflicts/new/<path>`（目標版本以同一份 answers render 的結果，即 `take-new` 會記錄的位元組）；某一側沒有檔案時不寫。`conflicts/` 是工具輸出，每次規劃整個取代；對應的 `file-conflict` 列在 `message` 寫出這三個路徑與 `--finalize-plan --decision` 指令，不新增欄位。
 - `update --apply-plan <final plan>` 只用 plan 記錄的值 render 與套用，不接受 `--data`、`--to` 等會改變輸入的參數；套用前重新觀察工具版本與 live facts，任何不同都在寫入前停止。成功後 `.csarc/provenance.json` 記錄 `final_plan_sha256`，報告轉為 `applied` 並同時綁定 stage-1 與 final plan digest；對已套用的 plan 重跑時說明已套用並以 0 結束，不改任何檔案。
 - 1.1.0 的 `csarc-adoption-dry-run.md` 在新檔寫完後，以同一個 no-follow 目錄 descriptor 刪除；它是 symlink 或非一般檔案時保留並警告，讓每個目錄只有一份報告。
 
@@ -60,7 +61,7 @@ tracking: none
 - `product`：{`release_ownership`、`code_owner`、`work_item_mapping`、`release_writers`、`version_surfaces`、`action_pins`、`reviewer_rotation`、`behavior_changes`}；後五項保留給後續 Issue，尚未實作時為 `null`。`action_pins` 由 Issue #1065 填入：update（不含 reinstall）為產品 Action pin preflight 的列，每列 {`file`、`line`、`action`、`old_sha`、`new_sha`、`reason`}，`reason` 為 `template-pin-changed`（產品 pin 等於目前受管 workflow 的 pin）或 `product-pin-diverged`；沒有漂移時為 `[]`，adopt 為 `null`。每列另產生 blocking 的 `action-pin`，`subject` 為 `file:line`。
 - `required_actions`：每列 {`kind`、`subject`、`blocking`、`message`、`command`}。
 - `verification`：{`candidate`、`hook`、`render_parity`}；`render_parity` 只有 `state`。update（不含 reinstall）由 Issue #1063 的共用規劃器填入：以舊 template 實際詢問的答案與可信快照重建的舊側 render，與 target 逐檔相同為 `equal`，否則為 `diverged`；adopt 與 reinstall 為 `null`。
-- `next_steps`：每列 {`text`、`command`}，由 operation 與 status 算出。
+- `next_steps`：每列 {`text`、`command`}，由 operation 與 status 算出。update 為 `blocked` 且 blocking 項目全是 `file-conflict` 時，依序列出帶 `--to`／`--expected-sha` 的 `--finalize-plan --decision` 指令與 `--apply-plan <報告目錄>/csarc-update-final-plan.json`（Issue #1147）。
 - `setup`（`2.1.0` 新增，Issue #1078）：adopt 的設定問卷紀錄 {`work_mode`、`questions`、`warnings`、`approval_route`}；update 與沒有紀錄的 adopt（例如 `--finalize`）為 `null`。`work_mode` 是展開的工作模式（只顯示，不寫入設定檔）；`questions` 是 TTY 依序詢問的鍵，non-interactive 為 `[]`；`warnings` 每列 {`code`、`subject`、`message`、`command`}，`code` 是 SPEC-009 的穩定代碼（`W` 加兩位數字與名稱，例如 `W09-governance-observe`）；`approval_route` 只在 `admin_bypass` 為 `off` 或 `beta-only` 時是 {`state`、`reason`、`confirmation`}，其他為 `null`。`--apply-plan` 重播 plan 內的同一份紀錄，不再提問。
 
 ### 4. 封閉詞彙
@@ -160,6 +161,7 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - [x] update 的 render parity、三方衝突列與 template 刪除列由 Issue #1063 填入。
 - [x] update 的退役保留與 product 保留欄位由 Issue #1066 填入。
 - [x] update 的 final plan 由 Issue #1067 填入。
+- [x] update 衝突的 base／current／new 三側檔案、指向 `--finalize-plan --decision` 的 `file-conflict` 訊息與 next steps，以及唯一的 pin 漂移規則由 Issue #1147 填入（只改 `message` 與 `next_steps` 的文字，不改報告形狀）。
 - [x] `2.1.0`（Issue #1078）：adopt 的 `setup` 紀錄與 adopt `setting-decision`；`2.0.0` 報告依原規則可讀，其他版本 fail closed。
 - [x] `2.2.0`（Issue #1083）：update 的 `overwrite`／`compatibility-shim` 列；`2.0.0` 與 `2.1.0` 報告依原規則可讀。
 

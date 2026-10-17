@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">4 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.33.0-beta.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.34.0-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, TypeScript, and Go independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.33.0-beta.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.34.0-beta.1<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -125,7 +125,7 @@ It only reads local files plus, once a repository is already managed, the resolv
 | `adopt` (existing repository) | The target already has content but no `.csarc/config.yml` | `csarc adopt <path>`: write a dry-run plan, review it, then apply with `--apply-plan` |
 | `adoption-pending` (adoption incomplete) | The local adoption checkpoint passes identity validation, but adoption is not complete | `csarc adopt <path> --finalize`: preview and continue the existing finalize flow |
 | `migrate` (legacy answers) | `.csarc/config.yml` has a non-full `_commit` and no trusted verified provenance | Review a tag or short SHA and follow `next_command` to bind it to a verified Release; restore the correct SHA for any other format |
-| `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | `csarc update <path> --check` to preview, then `csarc update <path>` |
+| `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | Follow `next_command`: `--check` with `--to`/`--expected-sha` to preview, `--finalize-plan --decision` to decide conflicts, then `--apply-plan` (see `docs/install.en.md`) |
 | `current` (nothing to do) | The Copier revision is current, and `policies/` matches the repository's live GitHub settings | No action needed |
 | `policy-only-update` (policy settings changed) | The Copier revision is current, but `policies/` (for example, whether workarounds are allowed) no longer matches the live GitHub settings | `.csarc/scripts/apply-repository-settings.sh plan` to preview, then `apply`; this **skips** a full adopt or update run |
 
@@ -877,9 +877,9 @@ Root `.csarc/config.yml` records the capabilities the template repository select
 {{< disclosure key="docs-site-access" title="Access and maintenance boundaries" >}}
 `noindex` and `robots.txt` reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 
-The renderer resolves the same Rules-governance-approved `.csarc/config.yml` keys documented in the governance configuration table above; it does not define a second, site-only list. Product-specific prose lives in `site/content/_index.zh-tw.md` / `_index.en.md`, theme overrides remain in `docs/site-theme.css`, and the generated `docs/index.html` / `docs/index.en.html` is never edited directly.
+The renderer resolves the same Rules-governance-approved `.csarc/config.yml` keys documented in the governance configuration table above; it does not define a second, site-only list. A generated project keeps its prose in `docs/site/content/_index.zh-tw.md` / `_index.en.md`, its navigation in `docs/site/data/navigation.json`, and its theme overrides in `docs/site/theme.css`, rebuilds with `./.csarc/scripts/build-repo-site`, and never edits the generated `docs/index.html` / `docs/index.en.html` directly.
 
-**Custom theme for this page (the root site, Issue #527):** the `.csarc/config.yml` / `docs/site-theme.css` path above belongs to a generated project's own repo-site. A maintainer who forks or vendors this template repository itself and wants to restyle its own root repo site uses `site/theme.css` instead. Scope stays deliberately narrow: only override CSS custom properties already declared in `site/static/styles.css`'s `:root` block, plus narrow, purely-visual declarations on existing block-level classes -- no new HTML, JavaScript, or layout rules; ordinary PR review is the only gate, no extra tooling. This file always exists and is always inlined by the engine; it ships empty, so the default output keeps the template's palette unchanged:
+**Custom theme for this page (the root site, Issue #527):** the `.csarc/config.yml` / `docs/site/theme.css` path above belongs to a generated project's own repo-site. A maintainer who forks or vendors this template repository itself and wants to restyle its own root repo site uses `site/theme.css` instead. Scope stays deliberately narrow: only override CSS custom properties already declared in `site/static/styles.css`'s `:root` block, plus narrow, purely-visual declarations on existing block-level classes -- no new HTML, JavaScript, or layout rules; ordinary PR review is the only gate, no extra tooling. This file always exists and is always inlined by the engine; it ships empty, so the default output keeps the template's palette unchanged:
 
 ```css
 :root {

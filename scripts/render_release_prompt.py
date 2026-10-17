@@ -49,7 +49,10 @@ def render(tag: str, sha: str) -> str:
                 "apply-repository-settings.sh plan`，摘要後等待確認。"
                 "能力未知或不可用時"
                 "要明確回報，不得宣稱已啟用。全程不要自行 stash、commit、套用 "
-                "GitHub settings、push 或建立 PR。",
+                "GitHub settings、push 或建立 PR；只有擁有者另外明確指派時"
+                "（例如 docs/pilot-adoption.md 的 operator-independence run "
+                "步驟 5：驗證後 commit、push 非 default branch 並建立 Draft "
+                "PR），才執行被指派的那一步，紀錄寫在該文件指定的位置。",
             )
         )
         + "\n"

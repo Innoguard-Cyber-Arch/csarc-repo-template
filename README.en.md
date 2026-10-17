@@ -6,7 +6,7 @@ Cyber-Arch's updatable repository foundation: creating a new project, adopting a
 
 | Item | Current status |
 | --- | --- |
-| Template version | v0.33.0-beta.1<!-- x-release-please-version --> |
+| Template version | v0.34.0-beta.1<!-- x-release-please-version --> |
 | Supported languages | Python, Rust, TypeScript, Go (independently multi-selectable; choosing none uses only the common workflow) |
 | repo-site presentation template version | 1.1.0 |
 | repo-site render engine version | 1.1.0 |
@@ -239,11 +239,12 @@ If the first phase lists a manual merge, finish those manual results first, then
 
 ```bash
 git switch -c chore/<issue-number>-update-repo-template
-uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
-uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update . --to <tag> --expected-sha <full-sha> --check --json
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --decision <path>=keep-current
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-plan.json --yes
 ```
 
-`update` reads the existing answers, runs a Copier smart update, and fails closed on a conflict marker or a `.rej` file. On a conflict, the CLI lists the affected files without modifying the target; adjust the conflicting content on the current branch and rerun. If the recorded version is a retired alpha, malformed, or otherwise unsupported, the CLI does not retain a legacy parser: it rebuilds the template-managed baseline from the latest stable while preserving settings and project-owned or divergent files wherever safe, and routes ambiguous files to manual merge. `update --check --json` returns 0 when already current, 1 when an update is available, and 2 on an execution or input error. After writing files successfully, the CLI automatically runs `./scripts/verify`, the repository settings `plan`, and any confirmed legacy CSARC Milestone description upgrade; it never applies repository settings, pushes, or opens a PR itself.
+`update` reads the existing answers, runs a Copier smart update, and fails closed on a conflict marker or a `.rej` file. The flow has three stages: `--check` writes the report and each conflict's base, current, and new sides (under the report folder's `conflicts/`) without modifying the target; `--finalize-plan` repeats the check's `--to`, `--expected-sha`, and `--data`, takes one `--decision <path>=keep-current|take-new|custom:<file>` per conflict, and writes an immutable final plan; `--apply-plan <final plan>` applies only the values it records (pass `--yes` when non-interactive). See [`docs/install.en.md`](docs/install.en.md#update-an-adopted-repo) for every stage's rules, the `custom:<file>` meaning, retries, Action pins, and the parallel-run limit. If the recorded version is a retired alpha, malformed, or otherwise unsupported, the CLI does not retain a legacy parser: it rebuilds the template-managed baseline from the latest stable while preserving settings and project-owned or divergent files wherever safe, and routes ambiguous files to manual merge. `update --check --json` returns 0 when already current, 1 when an update is available, and 2 on an execution or input error. After writing files successfully, the CLI automatically runs `./scripts/verify`, the repository settings `plan`, and any confirmed legacy CSARC Milestone description upgrade; it never applies repository settings, pushes, or opens a PR itself.
 
 ### Agent prompt
 

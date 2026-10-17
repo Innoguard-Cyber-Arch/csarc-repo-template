@@ -51,7 +51,13 @@ attestation verification.
    entirely and run `.csarc/scripts/apply-repository-settings.sh plan`, then
    `apply` after the confirmation in step 5 — never rerun a full adopt or
    update just to change a policy setting. For a release-specific request,
-   pass both `--to` and `--expected-sha`.
+   pass both `--to` and `--expected-sha`. For `update`, follow the complete
+   check, finalize, and apply flow in
+   [`install.en.md`](install.en.md#update-an-adopted-repo) (繁體中文：
+   [`install.md`](install.md#更新已導入的-repo)): how to read each conflict's
+   base, current, and new sides, which flags `--finalize-plan` repeats, the
+   `custom:FILE` rules, `--apply-plan --yes`, retries, Action pin drift, and
+   running one `csarc` at a time.
 
    For `create` or `adopt`, the CLI owns the setup questions (SPEC-009 §9,
    Issue #1078): it asks only for values no repository fact decides and

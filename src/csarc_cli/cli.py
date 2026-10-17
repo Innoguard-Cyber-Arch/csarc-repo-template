@@ -183,7 +183,11 @@ INSTALL_STATE_NEXT_COMMAND = {
     ),
     INSTALL_STATE_ADOPTION_PENDING: "csarc adopt <path> --finalize",
     INSTALL_STATE_UPDATE: (
-        "csarc update <path> --check to preview, then csarc update <path>"
+        "csarc update <path> --to <release> --expected-sha <full SHA> "
+        "--check to preview; then the same command with --finalize-plan "
+        "--decision PATH=keep-current|take-new|custom:FILE (one per listed "
+        "conflict) instead of --check; then csarc update <path> "
+        "--apply-plan <path>-csarc-update-report/csarc-update-final-plan.json"
     ),
     INSTALL_STATE_CURRENT: "no action needed",
     INSTALL_STATE_POLICY_ONLY: (
@@ -2966,6 +2970,25 @@ def update_pin_items(
     return [dict(item) for item in items if isinstance(item, dict)]
 
 
+CONFLICT_SIDES_DIRECTORY = "conflicts"
+CONFLICT_SIDES = ("base", "current", "new")
+
+
+def update_conflict_message(path: str) -> str:
+    """Point one update conflict at its sides and its decision (#1147)."""
+    sides = ", ".join(
+        f"{CONFLICT_SIDES_DIRECTORY}/{side}/{path}" for side in CONFLICT_SIDES
+    )
+    return (
+        "Template and repository changes overlap in the three-way update. "
+        f"Compare {sides} in this report folder (base: the recorded "
+        "release's render; current: this repository; new: the target "
+        "release's render; a missing file means that side has none), then "
+        f"decide it with csarc update --finalize-plan --decision {path}="
+        "keep-current|take-new|custom:FILE."
+    )
+
+
 def update_ignored_payload(
     update: Mapping[str, object] | None,
 ) -> list[dict[str, str]]:
@@ -3049,9 +3072,7 @@ def update_required_actions(
             "blocking": True,
             "command": None,
             "kind": "file-conflict",
-            "message": "Template and repository changes overlap in the "
-            "three-way update; resolve the file in the target, then create "
-            "a new plan.",
+            "message": update_conflict_message(path),
             "subject": path,
         }
         for path in files.manual
@@ -3121,6 +3142,22 @@ APPLIED_NEXT_STEPS = (
 )
 
 
+def decidable_conflicts_only(
+    actions: Sequence[Mapping[str, object]], files: Plan
+) -> bool:
+    """Return whether every blocking row is a planned, decidable conflict.
+
+    Only these are resolved by ``--finalize-plan --decision`` (Issue #1147);
+    any other blocking row, such as ignore rules hiding rendered files
+    outside the conflicts, needs a product change and a new plan first.
+    """
+    blocking = [action for action in actions if action["blocking"]]
+    return bool(blocking) and all(
+        action["kind"] == "file-conflict" and action["subject"] in files.manual
+        for action in blocking
+    )
+
+
 def lifecycle_next_steps(
     operation: str,
     status: str,
@@ -3128,11 +3165,39 @@ def lifecycle_next_steps(
     applicable: bool,
     plan: ResolvedPlan,
     plan_path: Path | None,
+    conflicts_only: bool = False,
 ) -> list[dict[str, object]]:
     """Return the next steps for one unapplied report status."""
     if status == "current":
         return [{"command": None, "text": "No update is available."}]
     steps: list[dict[str, object]] = []
+    if (
+        status == "blocked"
+        and operation == "update"
+        and plan_path is not None
+        and conflicts_only
+    ):
+        # Only file conflicts block: they are decided in one final plan,
+        # not by editing the target (Issue #1147).
+        release = (
+            f"--to {plan.revision.label} --expected-sha {plan.revision.sha}"
+        )
+        final = plan_path.parent / final_plan.FINAL_PLAN_BASENAME
+        return [
+            {
+                "command": f"csarc update {plan.target} {release} "
+                "--finalize-plan --decision "
+                "PATH=keep-current|take-new|custom:FILE",
+                "text": "Decide every blocking file conflict in one final "
+                "plan, with one --decision per conflict and any --data "
+                "options used for this plan:",
+            },
+            {
+                "command": f"csarc update {plan.target} --apply-plan {final}",
+                "text": "Review the final plan, then apply it exactly as "
+                "recorded:",
+            },
+        ]
     if status == "blocked":
         return [
             {
@@ -3332,6 +3397,7 @@ def lifecycle_report_model(  # noqa: C901
             applicable=applicable,
             plan=plan,
             plan_path=plan_path,
+            conflicts_only=decidable_conflicts_only(actions, files),
         ),
         "operation": operation,
         "plan": {
@@ -3646,11 +3712,11 @@ def create_atomic_temporary(
 def atomic_replace_text(
     root: Path,
     relative_name: str,
-    content: str,
+    content: str | bytes,
     *,
     mode: int = 0o600,
 ) -> None:
-    """Replace text through no-follow directory and temporary descriptors."""
+    """Replace text or bytes through no-follow descriptors."""
     temporary_name: str | None = None
     with atomic_parent_directory(root, relative_name) as (
         directory_fd,
@@ -3662,8 +3728,13 @@ def atomic_replace_text(
                 directory_fd, destination_name, mode
             )
 
-            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
-                output.write(content)
+            data = (
+                content
+                if isinstance(content, bytes)
+                else content.encode("utf-8")
+            )
+            with os.fdopen(descriptor, "wb") as output:
+                output.write(data)
                 output.flush()
                 os.fsync(output.fileno())
             os.replace(
@@ -8388,6 +8459,42 @@ def classify_policy_check(
     return PolicyCheckResult(False, None, output or "policy check unavailable")
 
 
+def update_next_command(
+    status: Mapping[str, object],
+    *,
+    allow_unreleased: bool = False,
+    accept_legacy: bool = False,
+    from_release: str | None = None,
+) -> str:
+    """Return the full check -> finalize -> apply sequence (Issue #1147).
+
+    Every stage names the resolved release and its full SHA, so a beta or a
+    pinned release is never silently replaced by the latest stable one and
+    `--finalize-plan` re-plans the exact release the check reviewed.
+    """
+    flags = [
+        "--to",
+        str(status["target_version"]),
+        "--expected-sha",
+        str(status["target_sha"]),
+    ]
+    if from_release is not None:
+        flags += ["--from-release", from_release]
+    if accept_legacy:
+        flags.append("--accept-legacy")
+    if allow_unreleased:
+        flags.append("--allow-unreleased")
+    release = " ".join(flags)
+    final = f"<path>-csarc-update-report/{final_plan.FINAL_PLAN_BASENAME}"
+    return (
+        f"csarc update <path> {release} --check to preview; then "
+        f"csarc update <path> {release} --finalize-plan "
+        "--decision PATH=keep-current|take-new|custom:FILE (one per listed "
+        "conflict, repeating every --data used for the check); then "
+        f"csarc update <path> --apply-plan {final}"
+    )
+
+
 def detect_install_state(
     target: Path,
     *,
@@ -8485,7 +8592,12 @@ def detect_install_state(
     )
     if status["update_available"]:
         return {
-            "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_UPDATE],
+            "next_command": update_next_command(
+                status,
+                allow_unreleased=allow_unreleased,
+                accept_legacy=accept_legacy,
+                from_release=from_release,
+            ),
             "reason": (
                 f"Copier revision {status['current_sha']} is behind "
                 f"target {status['target_sha']}."
@@ -10211,6 +10323,70 @@ def update_action_pin_preflight(
         ) from error
 
 
+def update_conflict_sides(
+    target: Path,
+    old_stage: Path,
+    new_side: Mapping[str, bytes | None],
+    layout_moves: Sequence[tuple[str, str]],
+) -> dict[str, dict[str, bytes | None]]:
+    """Return the base, current, and new bytes of each conflict (#1147).
+
+    ``current`` and ``new`` are exactly what ``keep-current`` and
+    ``take-new`` would record; ``base`` is the recorded release's render,
+    read at its old path when the update moves the file.
+    """
+    old_names = {new: old for old, new in layout_moves}
+
+    def regular(path: Path) -> bytes | None:
+        if path.is_symlink() or not path.is_file():
+            return None
+        return path.read_bytes()
+
+    return {
+        name: {
+            "base": regular(old_stage / name)
+            if (old_stage / name).exists()
+            else regular(old_stage / old_names.get(name, name)),
+            "current": regular(target / name),
+            "new": new_content,
+        }
+        for name, new_content in sorted(new_side.items())
+    }
+
+
+def write_conflict_sides(
+    report_directory: Path,
+    sides: Mapping[str, Mapping[str, bytes | None]],
+) -> None:
+    """Write each conflict's sides under the report folder (#1147).
+
+    The ``conflicts`` folder is tool output: it is replaced on every plan so
+    no file from an earlier plan can be mistaken for the current one.
+    """
+    folder = report_directory / CONFLICT_SIDES_DIRECTORY
+    if folder.is_symlink():
+        raise CliError(
+            f"{folder} is a symlink; remove it so conflict sides can be "
+            "written."
+        )
+    if folder.is_dir():
+        shutil.rmtree(folder)
+    filesystem_root = Path(report_directory.anchor)
+    relative_directory = report_directory.relative_to(filesystem_root)
+    for name, contents in sides.items():
+        for side in CONFLICT_SIDES:
+            content = contents.get(side)
+            if content is None:
+                continue
+            atomic_replace_text(
+                filesystem_root,
+                (
+                    relative_directory / CONFLICT_SIDES_DIRECTORY / side / name
+                ).as_posix(),
+                content,
+            )
+
+
 def update_conflict_error(conflicts: Sequence[str], detail: str = "") -> str:
     """Return the one fail-closed message for an update conflict."""
     summary = (
@@ -10220,8 +10396,11 @@ def update_conflict_error(conflicts: Sequence[str], detail: str = "") -> str:
     )
     return (
         f"Update needs manual conflict resolution ({summary}); the target "
-        "was not changed. Resolve the listed files in the target or "
-        "template, then rerun the update."
+        "was not changed. Run csarc update --check, compare each file's "
+        "base, current, and new sides in the report folder, decide every "
+        "listed file with csarc update --finalize-plan --decision "
+        "PATH=keep-current|take-new|custom:FILE, then apply the final plan "
+        "with csarc update --apply-plan."
     )
 
 
@@ -10893,7 +11072,9 @@ def write_update_final_plan(
     if final_path.exists() or final_path.is_symlink():
         raise CliError(
             f"Final plan {final_path} already exists and is immutable; apply "
-            "it with csarc update --apply-plan, or remove it to decide again."
+            "it with csarc update --apply-plan, or keep it and decide again "
+            "in a new report folder: run csarc update --check with a new "
+            "--report-dir, then --finalize-plan with that same --report-dir."
         )
     toolchain = update_toolchain()
     try:
@@ -11158,8 +11339,9 @@ def require_recorded_live_facts(
         raise CliError(
             "Live facts differ from the final plan ("
             + ", ".join(changed)
-            + "); the target was not changed. Run csarc update --check "
-            "again to create a new plan."
+            + "); the target was not changed. Keep this final plan and "
+            "create a new one: run csarc update --check with a new "
+            "--report-dir, then --finalize-plan with that same --report-dir."
         )
     return resolved, previous
 
@@ -11580,6 +11762,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             else None
             for name in planning.conflicts
         }
+        conflict_sides = update_conflict_sides(
+            target, old_stage, new_side, layout_moves
+        )
     hook_configuration = project_verification_configuration(target, answers)
     validated_project_verification_hook(target, hook_configuration)
     hook = project_verification_evidence(
@@ -11687,6 +11872,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             )
         else:
             print_plan(plan)
+        write_conflict_sides(report_directory, conflict_sides)
         write_lifecycle_reports(
             report_directory,
             operation="update",
@@ -11696,6 +11882,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             emit=not args.json,
         )
         return 1 if status["update_available"] else 0
+    write_conflict_sides(report_directory, conflict_sides)
     write_lifecycle_reports(
         report_directory,
         operation="update",
