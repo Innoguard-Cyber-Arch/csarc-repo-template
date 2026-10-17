@@ -163,13 +163,17 @@ _PATH_TOKEN = re.compile(r"[\w.@+~/-]+")
 def _references(lines: Sequence[str], name: str) -> bool:
     """Return whether ``lines`` name ``name`` or run its discovering tool.
 
-    A path counts only as a whole token, optionally written ``./name``:
+    A path counts only as a whole token, optionally written ``./name`` or
+    under a shell variable such as ``$repo_root/name`` (Issue #1157):
     ``.csarc/scripts/verify`` is another file than ``scripts/verify``.
     """
+    rooted = re.compile(rf"\$(?:\w+|\{{\w+\}})/{re.escape(name)}(?![\w.@+~/-])")
     for line in lines:
         for token in _PATH_TOKEN.findall(line):
             if token.removeprefix("./").rstrip(".") == name:
                 return True
+        if rooted.search(line):
+            return True
     tool = DISCOVERED_CONFIGURATION.get(name)
     if tool is None:
         return False

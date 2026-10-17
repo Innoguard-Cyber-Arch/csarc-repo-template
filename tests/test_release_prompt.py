@@ -158,6 +158,8 @@ def test_operator_run_pass_rule_is_measurable() -> None:
     assert "預期為空或只有 preflight pin" not in run
     assert "只能是 install.md 列出的產品準備 commit" in run
     assert "逐條記錄 SHA、內容與依據的 install.md 章節" in run
+    # Retiring a kept legacy script with take-new is a plan decision (#1157).
+    assert "是 plan 的決定，不是產品準備 commit" in run
 
 
 @pytest.mark.parametrize(

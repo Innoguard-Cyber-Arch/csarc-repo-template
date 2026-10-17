@@ -52,6 +52,27 @@ GOVERNANCE_KEYS = frozenset(
 GOVERNANCE_CLASSES = frozenset(
     {"unchanged", "exact", "narrowed", "decision", "retired"}
 )
+# Retired reviewer configuration (Issue #1157): the key stays ``retired``
+# (#1058 Kill criteria 2), but who reviews pull requests changes, so the
+# note explains the new behavior and how to restore it, like ``widened``.
+REVIEWERS_KEY = "reviewers"
+REVIEWERS_FILE = ".github/REVIEWERS"
+
+
+def reviewers_note(before: object) -> str:
+    """Explain the reviewer assignment that replaces a retired list."""
+    earlier = (
+        f" (`{before}`)" if isinstance(before, str) and before.strip() else ""
+    )
+    return (
+        f"Retired; pull requests no longer request the reviewers listed in "
+        f"`{REVIEWERS_FILE}`{earlier}. Each ready pull request now requests "
+        "one collaborator with maintain or admin permission, other than "
+        "the author, chosen by rotation. To keep the earlier reviewers, give "
+        "maintain or admin permission only to them, or name them as code "
+        "owners with `csarc update --data code_owner=<owners>` so GitHub "
+        "requests them on every pull request."
+    )
 
 
 class GovernanceMigrationError(ValueError):
@@ -179,11 +200,12 @@ def setting_classes(  # noqa: C901
     for key, successor in RETIRED_SETTINGS.items():
         if key not in before or key in settings_schema.RELEASE_OBSERVATIONS:
             continue
-        note = (
-            f"Retired; `{successor}` carries this intent."
-            if successor is not None
-            else "Retired; the current schema has no equivalent setting."
-        )
+        if key == REVIEWERS_KEY:
+            note = reviewers_note(before[key])
+        elif successor is not None:
+            note = f"Retired; `{successor}` carries this intent."
+        else:
+            note = "Retired; the current schema has no equivalent setting."
         if key in settings_schema.RETIRED_SITE_TOKENS:
             note += (
                 f" Replace `[[{key}]]` in project-owned site content with "
