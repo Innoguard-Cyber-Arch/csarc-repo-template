@@ -82,6 +82,12 @@ PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-report"
 ADOPTION_PLAN_BASENAME = "csarc-adoption-plan.json"
 UPDATE_REPORT_BASENAME = "csarc-update-report"
+# The default update report folder as docs/install.md names it: commands run
+# from inside the target (``.``), and ``lifecycle_report_directory`` writes
+# the folder next to it as ``<repo>-csarc-update-report`` (Issue #1153).
+UPDATE_FINAL_PLAN_HINT = (
+    f"../<repo>-{UPDATE_REPORT_BASENAME}/{final_plan.FINAL_PLAN_BASENAME}"
+)
 UPDATE_PLAN_BASENAME = "csarc-update-plan.json"
 # The 1.1.0 Markdown-only report name, removed after the new set is written.
 LEGACY_ADOPTION_REPORT_NAME = "csarc-adoption-dry-run.md"
@@ -184,11 +190,11 @@ INSTALL_STATE_NEXT_COMMAND = {
     ),
     INSTALL_STATE_ADOPTION_PENDING: "csarc adopt <path> --finalize",
     INSTALL_STATE_UPDATE: (
-        "csarc update <path> --to <release> --expected-sha <full SHA> "
+        "csarc update . --to <release> --expected-sha <full SHA> "
         "--check to preview; then the same command with --finalize-plan "
         "--decision PATH=keep-current|take-new|custom:FILE (one per listed "
-        "conflict) instead of --check; then csarc update <path> "
-        "--apply-plan <path>-csarc-update-report/csarc-update-final-plan.json"
+        "conflict) instead of --check; then csarc update . "
+        f"--apply-plan {UPDATE_FINAL_PLAN_HINT}"
     ),
     INSTALL_STATE_CURRENT: "no action needed",
     INSTALL_STATE_POLICY_ONLY: (
@@ -3091,6 +3097,7 @@ def update_required_actions(
         tuple[str, int], tuple[str | None, str | None]
     ] = MappingProxyType({}),
     ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
+    writer_moves: Sequence[Mapping[str, str]] = (),
 ) -> list[dict[str, object]]:
     """Derive the update required actions this release can evaluate."""
     live = {} if observed is None else observed
@@ -3138,6 +3145,7 @@ def update_required_actions(
         for path in files.manual
     )
     actions.extend(ignored_payload_actions(ignored))
+    actions.extend(release_writer_actions(writer_moves))
     actions.extend(
         {
             "blocking": False,
@@ -3389,6 +3397,7 @@ def lifecycle_report_model(  # noqa: C901
             ignored=update_ignored_payload(plan.update),
             pin_versions=pin_versions,
             ignore_gaps=ignore_gaps,
+            writer_moves=update_release_writer_moves(plan.update),
         )
     if adoption is not None:
         applicable = adoption.get("applicable") is True
@@ -8542,7 +8551,9 @@ def update_next_command(
 
     Every stage names the resolved release and its full SHA, so a beta or a
     pinned release is never silently replaced by the latest stable one and
-    `--finalize-plan` re-plans the exact release the check reviewed.
+    `--finalize-plan` re-plans the exact release the check reviewed. The
+    commands and the default report folder follow docs/install.md: run from
+    inside the target, the report sits next to it (Issue #1153).
     """
     flags = [
         "--to",
@@ -8557,13 +8568,12 @@ def update_next_command(
     if allow_unreleased:
         flags.append("--allow-unreleased")
     release = " ".join(flags)
-    final = f"<path>-csarc-update-report/{final_plan.FINAL_PLAN_BASENAME}"
     return (
-        f"csarc update <path> {release} --check to preview; then "
-        f"csarc update <path> {release} --finalize-plan "
+        f"csarc update . {release} --check to preview; then "
+        f"csarc update . {release} --finalize-plan "
         "--decision PATH=keep-current|take-new|custom:FILE (one per listed "
         "conflict, repeating every --data used for the check); then "
-        f"csarc update <path> --apply-plan {final}"
+        f"csarc update . --apply-plan {UPDATE_FINAL_PLAN_HINT}"
     )
 
 
@@ -10606,6 +10616,111 @@ def referenced_removals(
     )
 
 
+def release_writer_moves(
+    target: Path,
+    writers: Sequence[str],
+    moves: Sequence[tuple[str, str]],
+) -> list[dict[str, str]]:
+    """Return the moved files a kept product Release writer still uses.
+
+    A product-owned Release writer stays where it is (#1083), but the
+    layout migration moves the legacy release config, manifest, and version
+    file into ``.csarc/``; a writer that still names them, or a
+    release-please config that implies the moved version file, would stop
+    releasing the product (Issue #1153). Each row names the writer, the
+    used path, and its destination; the report blocks on them.
+    """
+    destinations = dict(moves)
+    rows: list[dict[str, str]] = []
+    for writer in writers:
+        path = target / writer
+        if path.is_symlink() or not path.is_file():
+            continue
+        used = set(
+            file_transition.content_uses(
+                writer, path.read_bytes(), destinations
+            )
+        )
+        for config in sorted(used):
+            source = target / config
+            if source.is_symlink() or not source.is_file():
+                continue
+            used.update(
+                name
+                for name in file_transition.release_please_version_files(
+                    source.read_bytes()
+                )
+                if name in destinations
+            )
+        rows.extend(
+            {
+                "destination": destinations[name],
+                "path": name,
+                "writer": writer,
+            }
+            for name in sorted(used)
+        )
+    return rows
+
+
+def update_release_writer_moves(
+    update: Mapping[str, object] | None,
+) -> list[dict[str, str]]:
+    """Return the recorded writer uses of moved files from one plan."""
+    rows = (update or {}).get("release_writer_moves")
+    if not isinstance(rows, list):
+        return []
+    return [
+        {str(key): str(value) for key, value in row.items()}
+        for row in rows
+        if isinstance(row, dict)
+    ]
+
+
+def release_writer_actions(
+    rows: Sequence[Mapping[str, str]],
+) -> list[dict[str, object]]:
+    """Return one blocking row per product writer that moves would break."""
+    by_writer: dict[str, list[Mapping[str, str]]] = {}
+    for row in rows:
+        by_writer.setdefault(row["writer"], []).append(row)
+    return [
+        {
+            "blocking": True,
+            "command": "csarc update --data release_ownership=csarc-owned",
+            "kind": "release-writer",
+            "message": "The product-owned Release writer is kept, but this "
+            "update moves files it uses: "
+            + ", ".join(
+                f"{row['path']} -> {row['destination']}" for row in uses
+            )
+            + ", so product releases would break. Plan again with "
+            "--data release_ownership=csarc-owned to let CSARC own the "
+            "release, or change the writer in a product commit so it no "
+            "longer uses these paths, then run csarc update --check again; "
+            "the target was not changed.",
+            "subject": writer,
+        }
+        for writer, uses in sorted(by_writer.items())
+    ]
+
+
+def reject_release_writer_moves(report: Mapping[str, object]) -> None:
+    """Stop a final plan while a kept Release writer loses moved files.
+
+    No file decision resolves it (Issue #1153): the release owner or the
+    writer itself has to change, and a new ``--check`` then plans again.
+    """
+    actions = cast(list[Mapping[str, object]], report["required_actions"])
+    blocked = [
+        str(row["message"])
+        for row in actions
+        if row["kind"] == "release-writer" and row["blocking"] is True
+    ]
+    if blocked:
+        raise CliError(" ".join(blocked))
+
+
 def reject_decided_ignore_rules(
     target: Path,
     payload: Sequence[str],
@@ -11177,6 +11292,7 @@ def write_update_final_plan(
         resolutions, (*context.run_inputs.retiring, *planning.delete)
     )
     reject_decided_ignore_rules(target, context.run_inputs.payload, resolutions)
+    reject_release_writer_moves(context.update_report)
     approved = resolution_transitions(target, context.transitions, resolutions)
     stage1_sha256 = str(stage1["plan_sha256"])
     try:
@@ -11827,11 +11943,26 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         # Rendered files the target's ignore rules would hide stop the
         # apply; list them now (Issue #1146 AC4).
         ignored_payload = planned_ignored_payload(target, run_inputs.payload)
-        # take-new decisions resolve to the reviewed new-side render.
+        # A kept product Release writer must not lose the files the layout
+        # migration moves (Issue #1153).
+        writer_moves = release_writer_moves(
+            target,
+            product_release_workflow(answers),
+            effective_layout_moves(
+                layout_moves, {*planning.retained, *planning.shims}
+            ),
+        )
+        # take-new decisions resolve to the reviewed new-side render, with
+        # the template pins the apply aligns to kept newer product pins
+        # already raised, so conflicts/new is what take-new writes (#1153).
         new_side = {
-            name: (stage / name).read_bytes()
-            if (stage / name).is_file() and not (stage / name).is_symlink()
-            else None
+            name: action_pin_preflight.align_content(
+                name,
+                (stage / name).read_bytes()
+                if (stage / name).is_file() and not (stage / name).is_symlink()
+                else None,
+                run_inputs.pin_alignment,
+            )
             for name in planning.conflicts
         }
         conflict_sides = update_conflict_sides(
@@ -11857,6 +11988,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         {
             "action_pin_preflight": pins.as_dict(),
             "ignored_payload": ignored_payload,
+            "release_writer_moves": writer_moves,
             "answers_changed": answers_changed,
             "capabilities_changed": capabilities_changed,
             "planning": planning.as_dict(),

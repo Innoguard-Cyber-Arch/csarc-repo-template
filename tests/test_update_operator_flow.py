@@ -64,11 +64,11 @@ def test_status_next_command_names_release_and_three_stages(
     check = hint.index("--check")
     finalize = hint.index("--finalize-plan")
     decision = hint.index("--decision PATH=keep-current|take-new|custom:FILE")
-    apply = hint.index(
-        f"--apply-plan <path>-csarc-update-report/"
-        f"{final_plan.FINAL_PLAN_BASENAME}"
-    )
+    apply = hint.index(f"--apply-plan {cli.UPDATE_FINAL_PLAN_HINT}")
     assert check < finalize < decision < apply
+    # Every stage runs from inside the target, as docs/install.md does.
+    assert hint.count("csarc update . ") == 3
+    assert "<path>" not in hint
     # The apply stage takes only the plan; it rejects --to and friends.
     assert release not in hint[apply:]
 
@@ -84,6 +84,26 @@ def test_update_next_command_without_explicit_release_still_pins_it() -> None:
     assert hint.count(f"--to v1.2.3 --expected-sha {'a' * 40}") == 2
     assert "--allow-unreleased" not in hint
     assert hint.index("--check") < hint.index("--finalize-plan")
+
+
+def test_next_command_report_folder_is_the_default_one(
+    tmp_path: Path,
+) -> None:
+    """Issue #1153 AC4: the hinted plan path is where update writes it.
+
+    Run from inside the target (``.``), ``../<repo>-csarc-update-report``
+    is the folder ``lifecycle_report_directory`` picks by default.
+    """
+    target = tmp_path / "product"
+    target.mkdir()
+    default = cli.lifecycle_report_directory(target, None, "update")
+    hinted = cli.UPDATE_FINAL_PLAN_HINT.replace("<repo>", target.name)
+    assert (target / hinted).resolve() == (
+        default / final_plan.FINAL_PLAN_BASENAME
+    ).resolve()
+    static = cli.INSTALL_STATE_NEXT_COMMAND[cli.INSTALL_STATE_UPDATE]
+    assert f"--apply-plan {cli.UPDATE_FINAL_PLAN_HINT}" in static
+    assert "<path>" not in static
 
 
 def test_file_conflict_message_points_to_sides_and_finalize() -> None:
@@ -350,11 +370,13 @@ def test_documented_update_flags_match_the_cli(
         if stage in command
     ]
     assert stages[:3] == ["--check", "--finalize-plan", "--apply-plan"]
+    applied = []
     for command in commands:
         args = cli.parser().parse_args(command)
         if command[0] != "update":
             continue
         if args.apply_plan is not None:
+            applied.append(args.apply_plan)
             cli.reject_apply_plan_arguments(args)
             assert args.yes
         if args.finalize_plan:
@@ -369,6 +391,8 @@ def test_documented_update_flags_match_the_cli(
     )
     named = set(re.findall(r"(?<![\w-])--[a-z][a-z-]+", section))
     assert named <= known, sorted(named - known)
+    # The documented apply uses the report folder status names (#1153).
+    assert applied[0] == Path(cli.UPDATE_FINAL_PLAN_HINT)
 
 
 @pytest.mark.parametrize(

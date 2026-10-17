@@ -580,6 +580,56 @@ def excluding(
     )
 
 
+def align_text(text: str, aligned: Sequence[Sequence[str]]) -> str:
+    """Return one workflow text with every aligned template pin raised."""
+    updated = text
+    for (
+        action,
+        template_sha,
+        product_sha,
+        template_tag,
+        product_tag,
+    ) in aligned:
+        updated = re.sub(
+            rf"({re.escape(action)}@){template_sha}(\s+#\s*){re.escape(template_tag)}(?=\s|$)",
+            rf"\g<1>{product_sha}\g<2>{product_tag}",
+            updated,
+        )
+        updated = updated.replace(
+            f"{action}@{template_sha}", f"{action}@{product_sha}"
+        )
+    return updated
+
+
+def is_aligned_workflow(name: str) -> bool:
+    """Return whether ``align_pins`` rewrites the file at ``name``."""
+    path = Path(name)
+    return path.parent.as_posix() == WORKFLOW_DIRECTORY and path.name.endswith(
+        WORKFLOW_SUFFIXES
+    )
+
+
+def align_content(
+    name: str, content: bytes | None, aligned: Sequence[Sequence[str]]
+) -> bytes | None:
+    """Return the bytes ``align_pins`` leaves at ``name`` (Issue #1153).
+
+    The apply raises template pins after it resolves every conflict, so the
+    reviewed take-new side must already carry the aligned pins; otherwise
+    ``conflicts/new`` would differ from what take-new writes.
+    """
+    if content is None or not aligned or not is_aligned_workflow(name):
+        return content
+    try:
+        # Read and write the way ``align_pins`` does: text mode translates
+        # line endings, and an unchanged file is never rewritten.
+        text = content.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    except UnicodeDecodeError:
+        return content
+    updated = align_text(text, aligned)
+    return content if updated == text else updated.encode("utf-8")
+
+
 def align_pins(root: Path, aligned: Sequence[Sequence[str]]) -> list[str]:
     """Raise every remaining template pin to the kept newer product pin.
 
@@ -596,22 +646,7 @@ def align_pins(root: Path, aligned: Sequence[Sequence[str]]) -> list[str]:
         if not path.name.endswith(WORKFLOW_SUFFIXES) or not path.is_file():
             continue
         text = path.read_text(encoding="utf-8")
-        updated = text
-        for (
-            action,
-            template_sha,
-            product_sha,
-            template_tag,
-            product_tag,
-        ) in aligned:
-            updated = re.sub(
-                rf"({re.escape(action)}@){template_sha}(\s+#\s*){re.escape(template_tag)}(?=\s|$)",
-                rf"\g<1>{product_sha}\g<2>{product_tag}",
-                updated,
-            )
-            updated = updated.replace(
-                f"{action}@{template_sha}", f"{action}@{product_sha}"
-            )
+        updated = align_text(text, aligned)
         if updated != text:
             path.write_text(updated, encoding="utf-8")
             changed.append(f"{WORKFLOW_DIRECTORY}/{path.name}")

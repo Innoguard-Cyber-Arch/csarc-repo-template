@@ -140,7 +140,7 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 ### 保留的舊檔與過時連結
 
-- 仍被使用的舊檔：新版本不再產生的檔案若仍被保留的檔案以完整路徑引用，或是工具會自動讀取的設定（`zizmor.yml`、`.gitleaks.toml`、`.pre-commit-config.yaml`），計畫改列 `preserve`／`product-owned`，不會刪除；之後由產品自行維護。搬到 `.csarc/scripts/` 的 script 若仍被產品以舊路徑呼叫，舊路徑留下轉呼叫 wrapper（`overwrite`／`compatibility-shim`）。
+- 仍被使用的舊檔：新版本不再產生的檔案若仍被保留的檔案以完整路徑引用，或是工具會自動讀取的設定（`zizmor.yml`、`.gitleaks.toml`、`.pre-commit-config.yaml`），計畫改列 `preserve`／`product-owned`，不會刪除；之後由產品自行維護。搬到 `.csarc/scripts/` 的 script 若仍被產品以舊路徑呼叫，舊路徑留下轉呼叫 wrapper（`overwrite`／`compatibility-shim`）。產品自有的 Release writer（`release_ownership=product-owned`）若仍使用本次要搬進 `.csarc/` 的檔案（例如 release-please 的 config、manifest 與它隱含的 `version.txt`），計畫列出 blocking 的 `release-writer`，`--finalize-plan` 拒絕寫入；改用 `--data release_ownership=csarc-owned`，或先以產品 commit 讓 writer 不再使用這些路徑，再重新 `--check`。
 - `retire-modified`：新版本不再產生、但內容和舊 render 不同的檔案（例如根目錄的 `scripts/verify`）會原地保留，新的版本在 `.csarc/scripts/`。保留的舊檔不再由 CSARC 呼叫或更新；確認沒有產品檔案、文件或 workflow 還在引用後，另開 commit 刪除，避免有人誤用舊版。
 - 搬移：報告的 `move` 列是 update 搬動的路徑（例如 `CLAUDE.md` 移到 `.claude/CLAUDE.md`、`scripts/` 移到 `.csarc/scripts/`）。用 `keep-current` 或 `custom` 保留的產品文件（例如 `docs/README.md`）可能還連到舊路徑；套用後依 `move` 列搜尋舊路徑，另開 commit 修正連結。
 - 網站內容：專案維護的 `docs/site/content/`、`docs/site/data/navigation.json` 與 `docs/site/theme.css` 原封不動保留；舊位置的 `site/content/`、`site/data/navigation.json`、`docs/site-theme.css` 以 `move` 搬到新位置，`docs/index.html`／`docs/index.en.html` 依保留的內容重建。
