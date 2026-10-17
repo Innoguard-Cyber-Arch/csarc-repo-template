@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import stat
 import tempfile
@@ -40,6 +41,28 @@ LEGACY_PRODUCT_RELEASE_STATE = {
     ".release-please-manifest.json": ".csarc/release-please-manifest.json",
     "version.txt": ".csarc/version.txt",
 }
+# Project-owned repo-site content (handbook 5.1, docs content): the pages,
+# their navigation entries, and the theme overrides. The template seeds them
+# once and a later update never rewrites them; the layout migration carries
+# the project's bytes from the legacy site/ paths (Issue #1146 AC3).
+PROJECT_SITE_CONTENT_PREFIX = "docs/site/content/"
+PROJECT_SITE_FILES = ("docs/site/data/navigation.json", "docs/site/theme.css")
+
+
+def project_owned_state(
+    baseline_files: Collection[str], moves: Sequence[tuple[str, str]]
+) -> tuple[str, ...]:
+    """Return the canonical paths whose content the repository owns.
+
+    That is the product release state plus the project's repo-site content
+    and navigation, whether the repository already holds them at their
+    canonical path or a layout move brings them there.
+    """
+    names = {*PRODUCT_RELEASE_STATE, *PROJECT_SITE_FILES}
+    for name in (*baseline_files, *(new for _old, new in moves)):
+        if name.startswith(PROJECT_SITE_CONTENT_PREFIX):
+            names.add(name)
+    return tuple(sorted(names))
 
 
 class TransitionError(ValueError):
@@ -102,24 +125,127 @@ def split_retirements(
     return tuple(retire), tuple(retained)
 
 
+# Tools that find their configuration at a fixed path by discovery: running
+# the tool reads the file even when the caller never names it (Issue #1146).
+DISCOVERED_CONFIGURATION = {
+    ".gitleaks.toml": "gitleaks",
+    ".pre-commit-config.yaml": "pre-commit",
+    "zizmor.yml": "zizmor",
+}
+# Prose never runs a tool, so documentation does not keep a file alive.
+_PROSE_SUFFIXES = frozenset({".adoc", ".html", ".markdown", ".md", ".rst"})
+_REFERENCE_SCAN_LIMIT = 1_000_000
+
+
+def _reference_lines(name: str, content: bytes) -> list[str] | None:
+    """Return one file's non-comment lines, or ``None`` when not scanned."""
+    if (
+        Path(name).suffix.lower() in _PROSE_SUFFIXES
+        or len(content) > _REFERENCE_SCAN_LIMIT
+    ):
+        return None
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return [
+        line
+        for line in text.splitlines()
+        if not line.lstrip().startswith(("#", "//"))
+    ]
+
+
+_PATH_TOKEN = re.compile(r"[\w.@+~/-]+")
+
+
+def _references(lines: Sequence[str], name: str) -> bool:
+    """Return whether ``lines`` name ``name`` or run its discovering tool.
+
+    A path counts only as a whole token, optionally written ``./name``:
+    ``.csarc/scripts/verify`` is another file than ``scripts/verify``.
+    """
+    for line in lines:
+        for token in _PATH_TOKEN.findall(line):
+            if token.removeprefix("./").rstrip(".") == name:
+                return True
+    tool = DISCOVERED_CONFIGURATION.get(name)
+    if tool is None:
+        return False
+    pattern = re.compile(rf"(?<![\w.-]){re.escape(tool)}(?![\w.])")
+    return any(pattern.search(line) for line in lines)
+
+
+def content_uses(
+    name: str, content: bytes, removals: Iterable[str]
+) -> tuple[str, ...]:
+    """Return the ``removals`` that file ``name`` with ``content`` uses.
+
+    A use names the removed path, or runs the tool that discovers it as
+    configuration (``DISCOVERED_CONFIGURATION``). Prose and comment lines
+    never count, and neither do binary or oversized files.
+    """
+    lines = _reference_lines(name, content)
+    if lines is None:
+        return ()
+    return tuple(
+        removal
+        for removal in sorted(set(removals))
+        if removal != name and _references(lines, removal)
+    )
+
+
+def referenced_retirements(
+    target: Path,
+    candidates: Iterable[str],
+    kept_files: Iterable[str],
+) -> tuple[str, ...]:
+    """Return removal candidates a file the plan keeps still uses.
+
+    An update retires or deletes a generated file the new render no
+    longer produces. When a file the plan keeps still names that path, or
+    runs the tool that discovers it as configuration, removing it silently
+    breaks the product: a product zizmor job lost its ignore file and its
+    CI turned red (Issue #1146 AC2). Such a file is kept as product-owned
+    instead. ``kept_files`` are names relative to ``target``.
+    """
+    names = sorted(
+        name
+        for name in set(candidates)
+        if (target / name).is_file() and not (target / name).is_symlink()
+    )
+    used: set[str] = set()
+    for relative in sorted(set(kept_files) - set(names)):
+        path = target / relative
+        if path.is_symlink() or not path.is_file():
+            continue
+        try:
+            content = path.read_bytes()
+        except OSError:
+            continue
+        used.update(content_uses(relative, content, names))
+    return tuple(sorted(used))
+
+
 def protect_product_state(
     candidate: Path,
     baseline_files: Collection[str],
     moves: Sequence[tuple[str, str]],
     restore: Callable[[Sequence[str]], None],
 ) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:
-    """Put the repository's own release state back after a template update.
+    """Put the repository's own state back after a template update.
 
-    ``baseline_files`` lists the paths the candidate held before Copier
-    ran and ``restore`` checks those paths out again. A canonical path
-    keeps its baseline content; a legacy path that the layout migration
-    moves carries its product content to the canonical path. A seed only
-    reaches a repository that has no such state yet. Returns the protected
-    canonical paths and the layout moves this step already completed.
+    That state is the release state and the project-owned repo-site
+    content (``project_owned_state``). ``baseline_files`` lists the paths
+    the candidate held before Copier ran and ``restore`` checks those paths
+    out again. A canonical path keeps its baseline content; a legacy path
+    that the layout migration moves carries its product content to the
+    canonical path. A seed only reaches a repository that has no such state
+    yet. Returns the protected canonical paths and the layout moves this
+    step already completed.
     """
     baseline = set(baseline_files)
     sources: dict[str, str] = {}
-    for canonical in PRODUCT_RELEASE_STATE:
+    for canonical in project_owned_state(baseline, moves):
         if canonical in baseline:
             sources[canonical] = canonical
             continue

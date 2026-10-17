@@ -66,6 +66,9 @@ cleanup() {
   return 0
 }
 trap cleanup EXIT
+# A check outside verification_step stops the run silently under set -e;
+# name it so csarc update can report the failed step (Issue #1146 AC5).
+trap 'printf "[verify-step] FAILED verify line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 verify_typescript_package_import() (
   cd "$1"
@@ -293,14 +296,16 @@ fi
 {% if documentation_mode != 'off' -%}
 verification_step "Specification validation" \
   "${platform_python[@]}" .csarc/scripts/spec_to_issue.py validate
-test -f docs/README.md
 test -f docs/adr/README.md
-grep -q 'Durable Project Memory' docs/README.md
-grep -q 'Spec-Driven Development' docs/README.md
-grep -q 'Architecture Decision Records' docs/README.md
-grep -q 'Test-Driven Development' docs/README.md
-grep -q 'Behavior-Driven Development' docs/README.md
-grep -q 'docs/decisions/' docs/README.md
+# The Durable Project Memory map lives in a CSARC-owned document; the
+# project-owned docs/README.md is never checked (Issue #1146 AC4).
+memory_map=.csarc/docs/documentation-policy.md
+grep -q 'Durable Project Memory' "$memory_map"
+grep -q 'Spec-Driven Development' "$memory_map"
+grep -q 'Architecture Decision Records' "$memory_map"
+grep -q 'Test-Driven Development' "$memory_map"
+grep -q 'Behavior-Driven Development' "$memory_map"
+grep -q 'docs/decisions/' "$memory_map"
 {% endif -%}
 verification_step "Generated configuration contract" \
   "${platform_python[@]}" - <<'PY'
