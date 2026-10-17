@@ -49,19 +49,21 @@ csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-pla
 ```
 
 1. **`status`**：回報 `update` 時，照 `next_command` 走；它已帶上 `--to` 與 `--expected-sha`。beta 或指定版本一定要帶這兩個旗標，否則 CLI 會改用最新 stable。
-2. **`--check`**：不修改 target，在 `../<repo>-csarc-update-report/` 寫出 stage-1 plan（`csarc-update-plan.json`）、報告 JSON 與 Markdown。有更新時 exit 1，已是最新時 0，錯誤時 2。報告的 `Items requiring your decision` 列出要處理的項目。
+2. **`--check`**：不修改 target，在 `../<repo>-csarc-update-report/` 寫出 stage-1 plan（`csarc-update-plan.json`）、報告 JSON 與 Markdown。有更新時 exit 1，已是最新時 0，錯誤時 2。報告的 `Items requiring your decision` 列出要處理的項目。`--data` 明確確認的值若與 CLI 推導值相同（例如 `release_ownership`），計畫與不傳值時完全相同。
 3. **看衝突內容**：每個 `file-conflict` 在報告資料夾的 `conflicts/` 下有三個檔案：`conflicts/base/<path>`（目前版本的 render）、`conflicts/current/<path>`（target 現在的內容，也就是 `keep-current` 的結果）、`conflicts/new/<path>`（新版本以同一份設定 render 的結果，也就是 `take-new` 的結果）。某一側沒有檔案就是該側不存在。Jinja 模板已 render 完成，不必讀模板原始碼或試套用。`conflicts/` 每次規劃都會整個重寫。
 4. **`--finalize-plan`**：一次寫出不可變的 `csarc-update-final-plan.json`。
    - 必須重帶 `--check` 用過的每個 `--to`、`--expected-sha`、`--data`、`--report-dir`，以及 `--from-release`、`--accept-legacy`、`--allow-unreleased`；CLI 會重新規劃並比對 stage-1 plan，任何輸入不同就停止，要求重新 `--check`。不能和 `--check`、`--json`、`--dry-run` 一起用。
    - 每個 `update-conflict` 恰好一個 `--decision <path>=keep-current|take-new|custom:<file>`，缺少、重複或不是衝突的路徑都會停止；沒有衝突時不帶 `--decision`。
    - `custom:<file>` 是該路徑**最終的完整檔案內容**，不是 patch。`<file>` 是絕對路徑或相對於執行指令時所在目錄的路徑，必須是 target repo 外的一般檔案（不能是 symlink），且不能含 conflict marker。內容會複製進 final plan，之後改 `<file>` 不會影響已寫出的 plan。不要放在 `conflicts/` 底下，因為那裡每次規劃都會重寫。
    - target 必須是乾淨的工作樹：產品準備變更與 pin 變更都要先 commit。
-5. **`--apply-plan`**：只接受 final plan 路徑，`--to`、`--data`、`--decision` 等會改變輸入的旗標一律拒絕；`--report-dir` 只能等於 final plan 所在資料夾。沒有 `--yes` 時會顯示 plan 並詢問 `Apply this plan? [y/N]`；agent 或沒有終端輸入時要加 `--yes`。套用前重新觀察工具版本與 live facts，任何不同或驗證失敗都會在寫入前停止，target 不變。
+   - 產品 ignore 規則（例如 `.gitignore` 的 `data/`）會隱藏新版要放的檔案時，`--check` 以該 ignore 檔為 subject 列出 blocking 的 `file-conflict`，訊息寫出被隱藏的路徑與規則。在該 ignore 檔加上例外（例如 `!.csarc/site/data/`）：它本身是衝突時寫在它的 `custom:<file>` 決定裡，否則以產品 commit 加入後重新 `--check`。`--finalize-plan` 會依決定後的內容再檢查一次，仍會隱藏時拒絕寫入。
+   - 決定若讓保留的檔案繼續引用本次要退役的檔案，`--finalize-plan` 會拒絕；改用 `take-new`、`custom`，或先在產品裡移除那個引用。
+5. **`--apply-plan`**：只接受 final plan 路徑，`--to`、`--data`、`--decision` 等會改變輸入的旗標一律拒絕；`--report-dir` 只能等於 final plan 所在資料夾。沒有 `--yes` 時會顯示 plan 並詢問 `Apply this plan? [y/N]`；agent 或沒有終端輸入時要加 `--yes`。套用前重新觀察工具版本與 live facts，任何不同或驗證失敗都會在寫入前停止，target 不變；驗證失敗的訊息寫出失敗的 verify 步驟與原因（`Project verification failed: ...`）。
 6. **commit 與驗證**：套用成功後檢查 diff，commit 到同一個分支，執行 `./.csarc/scripts/verify-fast` 與產品原有檢查，再開 PR。
 
 ### 失敗後重試
 
-final plan 不可變，不要刪除或修改。要重新決定（例如 apply 停在 ignore 規則或驗證，或改了產品檔案）時，保留舊資料夾，用新的報告資料夾重跑：
+final plan 不可變，不要刪除或修改。要重新決定（例如 apply 的驗證失敗、live facts 改變，或改了產品檔案）時，保留舊資料夾，用新的報告資料夾重跑：
 
 ```bash
 csarc update . --to <tag> --expected-sha <full-sha> --check --json --report-dir ../<repo>-csarc-update-report-2
@@ -91,13 +93,16 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 ### 保留的舊檔與過時連結
 
+- 仍被使用的舊檔：新版本不再產生的檔案若仍被保留的檔案以完整路徑引用，或是工具會自動讀取的設定（`zizmor.yml`、`.gitleaks.toml`、`.pre-commit-config.yaml`），計畫改列 `preserve`／`product-owned`，不會刪除；之後由產品自行維護。搬到 `.csarc/scripts/` 的 script 若仍被產品以舊路徑呼叫，舊路徑留下轉呼叫 wrapper（`overwrite`／`compatibility-shim`）。
 - `retire-modified`：新版本不再產生、但內容和舊 render 不同的檔案（例如根目錄的 `scripts/verify`）會原地保留，新的版本在 `.csarc/scripts/`。保留的舊檔不再由 CSARC 呼叫或更新；確認沒有產品檔案、文件或 workflow 還在引用後，另開 commit 刪除，避免有人誤用舊版。
 - 搬移：報告的 `move` 列是 update 搬動的路徑（例如 `CLAUDE.md` 移到 `.claude/CLAUDE.md`、`scripts/` 移到 `.csarc/scripts/`）。用 `keep-current` 或 `custom` 保留的產品文件（例如 `docs/README.md`）可能還連到舊路徑；套用後依 `move` 列搜尋舊路徑，另開 commit 修正連結。
+- 網站內容：專案維護的 `docs/site/content/`、`docs/site/data/navigation.json` 與 `docs/site/theme.css` 原封不動保留；舊位置的 `site/content/`、`site/data/navigation.json`、`docs/site-theme.css` 以 `move` 搬到新位置，`docs/index.html`／`docs/index.en.html` 依保留的內容重建。
+- `docs/README.md` 是專案自己的文件入口，可以 `keep-current`；CSARC 的文件地圖在 `.csarc/docs/documentation-policy.md`，verify 只檢查那裡。
 
 ### 套用時的附帶訊息
 
 - `CODEOWNERS validation failed: ... is missing, invisible, or lacks repository access`：CODEOWNERS 指定的 team 不存在、看不到或沒有 repository 權限。update 已完成；請擁有者補 team 權限，或之後以 `--data code_owner=...` 更新。
-- repository settings：update 只執行 `.csarc/scripts/apply-repository-settings.sh plan`，從不套用設定。push 後由擁有者執行 `plan`，審閱後再 `apply`。
+- repository settings：update 只執行 `.csarc/scripts/apply-repository-settings.sh plan`，從不套用設定。只有 origin 不是 GitHub repository 時才印 `Repository settings plan needs a GitHub origin remote`；其他失敗印 `Repository settings plan failed (exit N): <原因>`，例如 CODEOWNERS 驗證失敗。push 後由擁有者執行 `plan`，審閱後再 `apply`。
 
 ### 平行執行
 

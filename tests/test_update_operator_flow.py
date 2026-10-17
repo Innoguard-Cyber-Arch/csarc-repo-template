@@ -367,3 +367,24 @@ def test_pin_commit_is_required_only_while_the_stage1_plan_lists_drift(
         encoding="utf-8"
     )
     assert "`--pin-commit` 只在**被 finalize 的那份 stage-1 plan**" in spec
+
+
+@pytest.mark.parametrize(
+    "relative", ["site/content/_index.zh-tw.md", "site/content/_index.en.md"]
+)
+def test_root_site_names_generated_site_paths(relative: str) -> None:
+    """AC8: the root site describes generated projects with current paths.
+
+    Generated projects keep site prose, navigation, and theme under
+    ``docs/site/`` and rebuild with ``.csarc/scripts/build-repo-site``; the
+    legacy ``docs/site-theme.css`` path no longer exists after an update.
+    """
+    text = (ROOT / relative).read_text(encoding="utf-8")
+    assert "docs/site-theme.css" not in text
+    for path in (
+        "docs/site/content/_index.zh-tw.md",
+        "docs/site/data/navigation.json",
+        "docs/site/theme.css",
+        "./.csarc/scripts/build-repo-site",
+    ):
+        assert path in text, path

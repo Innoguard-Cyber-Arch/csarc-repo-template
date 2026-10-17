@@ -869,9 +869,9 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 {{< disclosure key="docs-site-access" title="存取與維護邊界" >}}
 `noindex` 與 `robots.txt` 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。
 
-renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc/config.yml` key，不另定義第二份網站專用清單。專案文字寫在 `site/content/_index.zh-tw.md`／`_index.en.md`，樣式覆寫留在 `docs/site-theme.css`，產生的 `docs/index.html`／`docs/index.en.html` 不直接編輯。
+renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc/config.yml` key，不另定義第二份網站專用清單。生成專案的文字寫在 `docs/site/content/_index.zh-tw.md`／`_index.en.md`，導覽在 `docs/site/data/navigation.json`，樣式覆寫留在 `docs/site/theme.css`，以 `./.csarc/scripts/build-repo-site` 重建；產生的 `docs/index.html`／`docs/index.en.html` 不直接編輯。
 
-**自訂本頁（根網站）主題（Issue #527）：**上述 `.csarc/config.yml`／`docs/site-theme.css` 是生成專案自己 repo-site 的路徑；fork 或 vendor 這份公版本身、想調整這份根 repo-site 配色的維護者，改用 `site/theme.css`。範圍嚴格限制在 `site/static/styles.css` 既有 `:root` 顏色 token，以及既有 class 的窄範圍視覺屬性，不開放新增 HTML、JavaScript 或版面配置；由一般 PR review 把關，不建立額外驗證工具。此檔一律存在、一律被引擎內嵌，預設為空白覆寫，因此預設輸出保持公版配色不變：
+**自訂本頁（根網站）主題（Issue #527）：**上述 `.csarc/config.yml`／`docs/site/theme.css` 是生成專案自己 repo-site 的路徑；fork 或 vendor 這份公版本身、想調整這份根 repo-site 配色的維護者，改用 `site/theme.css`。範圍嚴格限制在 `site/static/styles.css` 既有 `:root` 顏色 token，以及既有 class 的窄範圍視覺屬性，不開放新增 HTML、JavaScript 或版面配置；由一般 PR review 把關，不建立額外驗證工具。此檔一律存在、一律被引擎內嵌，預設為空白覆寫，因此預設輸出保持公版配色不變：
 
 ```css
 :root {
@@ -889,7 +889,7 @@ renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc
 - **自動保存完整聊天：**會混入未確認假設、敏感脈絡與噪音。
 {{< /disclosure >}}
 
-<aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-repo-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>site/</code> 與 renderer，專案保有 <code>site/content/_index.zh-tw.md</code>、<code>_index.en.md</code> 與 <code>docs/site-theme.css</code></li><li><strong>網站存取：</strong><code>noindex</code>／<code>robots.txt</code> 只能降低誤分享，不是登入保護；需要限制讀者時，優先評估 Cloudflare Pages＋Access，host、身分提供者、資料政策與組織 owner 另案核准</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">存取 #79</a>／<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">網站 #178</a></li></ul></aside>
+<aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-repo-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>.csarc/site/</code> 與 <code>.csarc/scripts/</code> 的 renderer，專案保有 <code>docs/site/content/_index.zh-tw.md</code>、<code>_index.en.md</code>、<code>docs/site/data/navigation.json</code> 與 <code>docs/site/theme.css</code>；舊版位置由 update 原樣搬移並列為 move</li><li><strong>網站存取：</strong><code>noindex</code>／<code>robots.txt</code> 只能降低誤分享，不是登入保護；需要限制讀者時，優先評估 Cloudflare Pages＋Access，host、身分提供者、資料政策與組織 owner 另案核准</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">存取 #79</a>／<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">網站 #178</a></li></ul></aside>
 {{< /basic >}}
 {{< /slide >}}
 
