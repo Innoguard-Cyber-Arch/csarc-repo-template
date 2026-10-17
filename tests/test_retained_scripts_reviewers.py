@@ -12,15 +12,22 @@ import re
 from pathlib import Path
 
 import pytest
-from test_cli import commit, make_template, write_executable
+from test_cli import commit, git, make_template, write_executable
 from test_operator_run_regressions import (
     legacy_consumer,
+    main,
     read_json,
     update,
     write,
 )
 
-from csarc_cli import cli, final_plan, governance_migration, lifecycle_report
+from csarc_cli import (
+    cli,
+    file_transition,
+    final_plan,
+    governance_migration,
+    lifecycle_report,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 LEGACY_VERIFY = (
@@ -65,6 +72,27 @@ def test_retained_script_uses_lists_removed_and_moved_files(
     ]
     # A move with a compatibility shim is not passed in, so it never counts.
     assert cli.retained_script_uses(tmp_path, ("scripts/verify",), (), ()) == []
+
+
+def test_a_path_under_a_shell_root_variable_is_a_use() -> None:
+    """AC1: ``$repo_root/scripts/x`` runs ``scripts/x`` like ``./scripts/x``."""
+    for line in (
+        b'validator="$repo_root/scripts/validate-pr-policy"\n',
+        b'"${ROOT}/scripts/validate-pr-policy" --check\n',
+    ):
+        assert file_transition.content_uses(
+            "scripts/test-pr-policy", line, ["scripts/validate-pr-policy"]
+        ) == ("scripts/validate-pr-policy",)
+    for line in (
+        b'"$repo_root/.csarc/scripts/validate-pr-policy"\n',
+        b'"$repo_root/scripts/validate-pr-policy-v2"\n',
+    ):
+        assert (
+            file_transition.content_uses(
+                "scripts/test-pr-policy", line, ["scripts/validate-pr-policy"]
+            )
+            == ()
+        )
 
 
 def test_kept_script_with_lost_uses_blocks_and_finalize_refuses() -> None:
@@ -112,15 +140,18 @@ def test_finalize_rejects_a_kept_script_that_reads_a_moved_file() -> None:
 
 
 @pytest.mark.large
-def test_kept_legacy_verify_calling_a_removed_script_blocks_the_plan(
+def test_kept_legacy_verify_blocks_until_retired_by_decision(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """AC1/R1: a kept ``scripts/verify`` never loses ``test-pr-policy``.
 
     The old template rendered both scripts; the product changed
     ``scripts/verify`` so it is kept as ``retire-modified``, while the new
-    template drops ``scripts/test-pr-policy``. ``--check`` blocks on the
-    kept script and ``--finalize-plan`` writes no plan.
+    template drops ``scripts/test-pr-policy`` and verifies from
+    ``.csarc/scripts/verify``. ``--check`` blocks on the kept script and
+    ``--finalize-plan`` without a decision writes no plan. A
+    ``--decision scripts/verify=take-new`` retires it as the new release
+    does, so the update applies with no product commit.
     """
     probe, _sha = make_template(tmp_path / "probe")
     verify = (probe / "template/scripts/verify").read_text(encoding="utf-8")
@@ -139,6 +170,7 @@ def test_kept_legacy_verify_calling_a_removed_script_blocks_the_plan(
     template = source / "template"
     (template / "scripts/verify").unlink()
     (template / "scripts/test-pr-policy").unlink()
+    write_executable(template / ".csarc/scripts/verify", verify)
     new_sha = commit(source, "test: drop legacy verify scripts")
     reports = tmp_path / "reports"
     capsys.readouterr()
@@ -166,6 +198,121 @@ def test_kept_legacy_verify_calling_a_removed_script_blocks_the_plan(
     assert "scripts/test-pr-policy" in capsys.readouterr().err
     assert not (reports / final_plan.FINAL_PLAN_BASENAME).exists()
     assert (project / "scripts/test-pr-policy").is_file()
+    # keep-current is not a retirement; only take-new clears the block.
+    assert (
+        update(
+            project,
+            new_sha,
+            "--finalize-plan",
+            "--report-dir",
+            str(reports),
+            "--decision",
+            "scripts/verify=keep-current",
+        )
+        != 0
+    )
+    assert not (reports / final_plan.FINAL_PLAN_BASENAME).exists()
+    capsys.readouterr()
+
+    assert (
+        update(
+            project,
+            new_sha,
+            "--finalize-plan",
+            "--report-dir",
+            str(reports),
+            "--decision",
+            "scripts/verify=take-new",
+        )
+        == 0
+    ), capsys.readouterr().err
+    final = read_json(reports / "csarc-update-report.json")
+    assert final["status"] != "blocked"
+    [row] = [r for r in final["files"] if r["path"] == "scripts/verify"]
+    assert (row["reason"], row["decision"]) == ("retire-modified", "take-new")
+    assert not [
+        r for r in final["required_actions"] if r["kind"] == "retire-modified"
+    ]
+    head = git_head(project)
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--apply-plan",
+                str(reports / final_plan.FINAL_PLAN_BASENAME),
+                "--yes",
+            ]
+        )
+        == 0
+    ), capsys.readouterr().err
+    assert git_head(project) == head
+    assert not (project / "scripts/verify").exists()
+    assert not (project / "scripts/test-pr-policy").exists()
+    assert (project / ".csarc/scripts/verify").is_file()
+
+
+def git_head(project: Path) -> str:
+    """Return the target's HEAD: the update writes no product commit."""
+    return git(project, "rev-parse", "HEAD")
+
+
+def test_finalize_refuses_to_retire_a_file_something_kept_uses(
+    tmp_path: Path,
+) -> None:
+    """AC1/R1: retiring the kept script must not break another kept file."""
+    write_executable(tmp_path / "scripts/verify", LEGACY_VERIFY)
+    write(
+        tmp_path / ".github/workflows/product-ci.yml",
+        "jobs:\n  ci:\n    steps:\n      - run: ./scripts/verify\n",
+    )
+    files = cli.Plan(
+        (),
+        (),
+        (),
+        (".github/workflows/product-ci.yml",),
+        (),
+        (),
+        (),
+        retained=("scripts/verify",),
+    )
+    with pytest.raises(cli.CliError) as error:
+        cli.reject_retired_uses(tmp_path, files, ("scripts/verify",), {})
+    assert ".github/workflows/product-ci.yml uses scripts/verify" in str(
+        error.value
+    )
+    # Decided content that no longer calls it, or nothing retired, passes.
+    cli.reject_retired_uses(
+        tmp_path,
+        files,
+        (),
+        {},
+    )
+    with pytest.raises(cli.CliError):
+        cli.reject_retired_uses(
+            tmp_path,
+            cli.Plan((), (), (), (), (), (), (), retained=("scripts/verify",)),
+            ("scripts/verify",),
+            {"ci.yml": b"run: ./scripts/verify\n"},
+        )
+
+
+def test_only_take_new_retires_a_kept_file() -> None:
+    """AC1: a retire-modified path takes take-new; conflicts stay apart."""
+    choices = {
+        "scripts/verify": ("take-new", None),
+        "docs/README.md": ("keep-current", None),
+    }
+    conflicts, retired = cli.split_retirement_decisions(
+        choices, ("scripts/verify",)
+    )
+    assert retired == ("scripts/verify",)
+    assert conflicts == {"docs/README.md": ("keep-current", None)}
+    with pytest.raises(cli.CliError) as error:
+        cli.split_retirement_decisions(
+            {"scripts/verify": ("keep-current", None)}, ("scripts/verify",)
+        )
+    assert "take-new" in str(error.value)
 
 
 # --- AC2: a retired reviewer list asks the owner to confirm ---------------

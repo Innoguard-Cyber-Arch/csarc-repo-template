@@ -3278,10 +3278,11 @@ def retained_use_action(
         "message": "The new release no longer renders this script, but it "
         "differs from the trusted old render, so it is kept. It still runs "
         f"or reads files this update removes or moves: {used}, so it would "
-        "fail after the update. Delete it, or change it in a product commit "
-        "so it no longer uses these paths (for example, call the "
-        ".csarc/scripts/ version), then run csarc update --check again; "
-        "the target was not changed.",
+        "fail after the update. Retire it as the new release does with "
+        f"csarc update --finalize-plan --decision {path}=take-new (the "
+        ".csarc/scripts/ version replaces it), or change it in a product "
+        "commit so it no longer uses these paths and run csarc update "
+        "--check again; the target was not changed.",
         "subject": path,
     }
 
@@ -3306,7 +3307,14 @@ def decidable_conflicts_only(
     """
     blocking = [action for action in actions if action["blocking"]]
     return bool(blocking) and all(
-        action["kind"] == "file-conflict" and action["subject"] in files.manual
+        (
+            action["kind"] == "file-conflict"
+            and action["subject"] in files.manual
+        )
+        or (
+            action["kind"] == "retire-modified"
+            and action["subject"] in files.retained
+        )
         for action in blocking
     )
 
@@ -3342,8 +3350,9 @@ def lifecycle_next_steps(
                 "--finalize-plan --decision "
                 "PATH=keep-current|take-new|custom:FILE",
                 "text": "Decide every blocking file conflict in one final "
-                "plan, with one --decision per conflict and any --data "
-                "options used for this plan:",
+                "plan, with one --decision per conflict (a blocking "
+                "retire-modified script takes PATH=take-new to retire it) "
+                "and any --data options used for this plan:",
             },
             {
                 "command": f"csarc update {plan.target} --apply-plan {final}",
@@ -9941,12 +9950,16 @@ def run_update_candidate(
     skip_tasks: bool,
     resolutions: Mapping[str, bytes | None] | None = None,
     stage: Path | None = None,
+    retire: Collection[str] = (),
 ) -> UpdateRun:
     """Run the one shared three-way update in a disposable candidate.
 
     ``resolutions`` are the conflict decisions a final plan recorded
     (#1067): Copier must report exactly those conflicts, and each one is
     replaced by its recorded bytes (or removed) before anything else runs.
+    ``retire`` lists kept ``retire-modified`` files the final plan retires
+    with ``take-new`` (Issue #1157); they are removed last, after the
+    compatibility shims the plan reviewed are written.
 
     Both ``update --check`` (``skip_tasks=True`` on a working-tree clone)
     and the apply path (``skip_tasks=False`` on the committed target) run
@@ -10096,6 +10109,7 @@ def run_update_candidate(
     shims = write_compatibility_shims(
         candidate, inputs.layout_moves, retained, inputs.payload
     )
+    retire_kept_files(candidate, retire, retained)
     stage_payload(candidate, inputs.payload)
     return UpdateRun(
         candidate,
@@ -10109,6 +10123,20 @@ def run_update_candidate(
         shims,
         restored,
     )
+
+
+def retire_kept_files(
+    candidate: Path, retire: Collection[str], retained: Collection[str]
+) -> None:
+    """Remove the kept files a final plan retires (Issue #1157)."""
+    for name in sorted(set(retire)):
+        if name not in retained:
+            raise CliError(
+                f"The final plan retires {name}, but the update no longer "
+                "keeps it as a retire-modified file; the target was not "
+                "changed. Create a new plan."
+            )
+        checked_destination(candidate, name).unlink()
 
 
 def restore_rendered_payload(
@@ -10798,21 +10826,97 @@ def update_retained_uses(
     ]
 
 
-def reject_retained_uses(report: Mapping[str, object]) -> None:
+def reject_retained_uses(
+    report: Mapping[str, object], retired: Collection[str] = ()
+) -> None:
     """Stop a final plan while a kept legacy script loses its files.
 
-    No file decision resolves it (Issue #1157): the script has to be
-    deleted or changed in a product commit, and a new ``--check`` plans
-    again.
+    The ``take-new`` decision retires the script as the new release does
+    (Issue #1157); otherwise it has to change in a product commit, and a
+    new ``--check`` plans again. ``retired`` lists the decided scripts.
     """
     actions = cast(list[Mapping[str, object]], report["required_actions"])
     blocked = [
         str(row["message"])
         for row in actions
-        if row["kind"] == "retire-modified" and row["blocking"] is True
+        if row["kind"] == "retire-modified"
+        and row["blocking"] is True
+        and row["subject"] not in retired
     ]
     if blocked:
         raise CliError(" ".join(blocked))
+
+
+def split_retirement_decisions(
+    choices: Mapping[str, tuple[str, Path | None]],
+    retained: Collection[str],
+) -> tuple[dict[str, tuple[str, Path | None]], tuple[str, ...]]:
+    """Split ``--decision`` values into conflict choices and retirements.
+
+    A kept ``retire-modified`` file takes only ``take-new``: retire it as
+    the new release does (Issue #1157). Leaving it out keeps it.
+    """
+    kept = set(retained)
+    retired = sorted(name for name in choices if name in kept)
+    wrong = [name for name in retired if choices[name][0] != "take-new"]
+    if wrong:
+        raise CliError(
+            "A retire-modified file is kept unless you retire it with "
+            "--decision PATH=take-new; leave it out to keep it ("
+            + ", ".join(wrong)
+            + "). The target was not changed."
+        )
+    conflicts = {
+        name: choice for name, choice in choices.items() if name not in kept
+    }
+    return conflicts, tuple(retired)
+
+
+def reject_retired_uses(
+    target: Path,
+    files: Plan,
+    retired: Sequence[str],
+    resolutions: Mapping[str, bytes | None],
+) -> None:
+    """Stop a final plan that retires a file something it keeps uses.
+
+    Retiring a kept legacy script must not break another file the plan
+    keeps: an untouched, product-owned, merged, still-retained, or decided
+    file that runs or reads it (Issue #1157).
+    """
+    if not retired:
+        return
+    kept = {
+        *files.preserve,
+        *files.merge,
+        *files.product_owned,
+        *files.retained,
+    } - {*retired, *resolutions}
+    findings = [
+        f"{name} uses {', '.join(used)}"
+        for name in sorted(kept)
+        if (target / name).is_file()
+        and not (target / name).is_symlink()
+        and (
+            used := file_transition.content_uses(
+                name, (target / name).read_bytes(), retired
+            )
+        )
+    ]
+    findings.extend(
+        f"{name} uses {', '.join(used)}"
+        for name, content in sorted(resolutions.items())
+        if content is not None
+        and (used := file_transition.content_uses(name, content, retired))
+    )
+    if findings:
+        raise CliError(
+            "The plan keeps a file that uses a retired file: "
+            + "; ".join(findings)
+            + ". Keep the retired file, or change that use in a product "
+            "commit and run csarc update --check again; the target was not "
+            "changed."
+        )
 
 
 def update_release_writer_moves(
@@ -11428,7 +11532,12 @@ def write_update_final_plan(
     try:
         stage1 = final_plan.load_stage1(stage1_path)
         file_choices = final_plan.parse_file_decisions(args.decision)
-        final_plan.require_complete_decisions(planning.conflicts, file_choices)
+        conflict_choices, retired = split_retirement_decisions(
+            file_choices, planning.retained
+        )
+        final_plan.require_complete_decisions(
+            planning.conflicts, conflict_choices
+        )
     except final_plan.FinalPlanError as error:
         raise CliError(str(error)) from error
     stage1_planning = stage1.get("planning")
@@ -11445,10 +11554,12 @@ def write_update_final_plan(
             "--check again and review it before deciding."
         )
     pins = final_pin_decisions(target, stage1, args.pin_commit)
-    resolutions = {
+    resolutions: dict[str, bytes | None] = {
         name: decision_content(target, name, choice, custom, context.new_side)
-        for name, (choice, custom) in sorted(file_choices.items())
+        for name, (choice, custom) in sorted(conflict_choices.items())
     }
+    # A retired kept file resolves to no file (Issue #1157).
+    resolutions.update(dict.fromkeys(retired))
     reject_decided_uses(
         resolutions,
         (*context.run_inputs.retiring, *planning.delete),
@@ -11462,7 +11573,22 @@ def write_update_final_plan(
     )
     reject_decided_ignore_rules(target, context.run_inputs.payload, resolutions)
     reject_release_writer_moves(context.update_report)
-    reject_retained_uses(context.update_report)
+    reject_retained_uses(context.update_report, retired)
+    reject_retired_uses(
+        target,
+        planned_update_files(
+            target,
+            planning,
+            context.run_inputs.layout_moves,
+            context.run_inputs.retiring,
+        ),
+        retired,
+        {
+            name: content
+            for name, content in resolutions.items()
+            if name not in retired
+        },
+    )
     approved = resolution_transitions(target, context.transitions, resolutions)
     stage1_sha256 = str(stage1["plan_sha256"])
     try:
@@ -11745,6 +11871,18 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
         }
     except final_plan.FinalPlanError as error:
         raise CliError(f"{error} The target was not changed.") from error
+    # A decided retire-modified file is retired, not a Copier conflict
+    # (Issue #1157).
+    retire = tuple(
+        name
+        for name, content in sorted(resolutions.items())
+        if name in planning.retained and content is None
+    )
+    resolutions = {
+        name: content
+        for name, content in resolutions.items()
+        if name not in planning.retained
+    }
     target_snapshot = cast(
         dict[str, object], cast(dict[str, Any], sealed["live_facts"])["target"]
     )
@@ -11758,6 +11896,7 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
             working_tree=False,
             skip_tasks=False,
             resolutions=resolutions,
+            retire=retire,
         )
         if applied.returncode != 0 or applied.conflicts:
             raise CliError(
