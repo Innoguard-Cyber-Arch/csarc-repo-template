@@ -7,6 +7,13 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.35.1-beta.1] - 2026-10-18
+
+### Bug Fixes
+
+* fix(release): define a measurable operator run pass rule (9eb2863)
+* fix(cli): block kept scripts that lose files and flag reviewer changes (115524e)
+
 ## [0.35.0-beta.1] - 2026-10-17
 
 ### Features
