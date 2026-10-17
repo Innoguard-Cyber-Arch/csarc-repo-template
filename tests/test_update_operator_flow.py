@@ -407,7 +407,7 @@ def test_documented_update_flags_match_the_cli(
                 "### 保留的舊檔與過時連結",
                 "### 其他衝突與並存檔案",
                 "### 產品自有的 workflow audit",
-                "### 放寬的設定（`widened`）",
+                "### 放寬的設定",
                 "### 套用時的附帶訊息",
                 "### 平行執行",
             ),
