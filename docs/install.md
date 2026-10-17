@@ -49,13 +49,14 @@ csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-pla
 ```
 
 1. **`status`**：回報 `update` 時，照 `next_command` 走；它已帶上 `--to` 與 `--expected-sha`。beta 或指定版本一定要帶這兩個旗標，否則 CLI 會改用最新 stable。
-2. **`--check`**：不修改 target，在 `../<repo>-csarc-update-report/` 寫出 stage-1 plan（`csarc-update-plan.json`）、報告 JSON 與 Markdown。有更新時 exit 1，已是最新時 0，錯誤時 2。報告的 `Items requiring your decision` 列出要處理的項目。`--data` 明確確認的值若與 CLI 推導值相同（例如 `release_ownership`），計畫與不傳值時完全相同。
+2. **`--check`**：不修改 target，在 `../<repo>-csarc-update-report/` 寫出 stage-1 plan（`csarc-update-plan.json`）、報告 JSON 與 Markdown。有更新時 exit 1，已是最新時 0，錯誤時 2。報告的 `Items requiring your decision` 列出要處理的項目。`--data` 明確確認的值若與 CLI 推導值相同（例如 `release_ownership`），計畫與不傳值時完全相同。報告的 Settings 有 `widened` 列（例如 `admin_bypass`）時，`--finalize-plan` 前要由擁有者明確決定，見下方「放寬的設定」。
 3. **看衝突內容**：每個 `file-conflict` 在報告資料夾的 `conflicts/` 下有三個檔案：`conflicts/base/<path>`（目前版本的 render）、`conflicts/current/<path>`（target 現在的內容，也就是 `keep-current` 的結果）、`conflicts/new/<path>`（新版本以同一份設定 render 的結果，也就是 `take-new` 的結果）。某一側沒有檔案就是該側不存在。Jinja 模板已 render 完成，不必讀模板原始碼或試套用。`conflicts/` 每次規劃都會整個重寫。
 4. **`--finalize-plan`**：一次寫出不可變的 `csarc-update-final-plan.json`。
    - 必須重帶 `--check` 用過的每個 `--to`、`--expected-sha`、`--data`、`--report-dir`，以及 `--from-release`、`--accept-legacy`、`--allow-unreleased`；CLI 會重新規劃並比對 stage-1 plan，任何輸入不同就停止，要求重新 `--check`。不能和 `--check`、`--json`、`--dry-run` 一起用。
    - 每個 `update-conflict` 恰好一個 `--decision <path>=keep-current|take-new|custom:<file>`，缺少、重複或不是衝突的路徑都會停止；沒有衝突時不帶 `--decision`。
    - `custom:<file>` 是該路徑**最終的完整檔案內容**，不是 patch。`<file>` 是絕對路徑或相對於執行指令時所在目錄的路徑，必須是 target repo 外的一般檔案（不能是 symlink），且不能含 conflict marker。內容會複製進 final plan，之後改 `<file>` 不會影響已寫出的 plan。不要放在 `conflicts/` 底下，因為那裡每次規劃都會重寫。
    - target 必須是乾淨的工作樹：產品準備變更與 pin 變更都要先 commit。
+   - `.gitignore` 衝突的報告列會列出 current 沒有、新版有的忽略規則；用 `keep-current` 或以 current 為底的 `custom:<file>` 保留產品 `.gitignore` 時，見下方「`.gitignore` 缺少模板規則」。
    - 產品 ignore 規則（例如 `.gitignore` 的 `data/`）會隱藏新版要放的檔案時，`--check` 以該 ignore 檔為 subject 列出 blocking 的 `file-conflict`，訊息寫出被隱藏的路徑與規則。在該 ignore 檔加上例外（例如 `!.csarc/site/data/`）：它本身是衝突時寫在它的 `custom:<file>` 決定裡，否則以產品 commit 加入後重新 `--check`。`--finalize-plan` 會依決定後的內容再檢查一次，仍會隱藏時拒絕寫入。
    - 決定若讓保留的檔案繼續引用本次要退役的檔案，`--finalize-plan` 會拒絕；改用 `take-new`、`custom`，或先在產品裡移除那個引用。
 5. **`--apply-plan`**：只接受 final plan 路徑，`--to`、`--data`、`--decision` 等會改變輸入的旗標一律拒絕；`--report-dir` 只能等於 final plan 所在資料夾。沒有 `--yes` 時會顯示 plan 並詢問 `Apply this plan? [y/N]`；agent 或沒有終端輸入時要加 `--yes`。套用前重新觀察工具版本與 live facts，任何不同或驗證失敗都會在寫入前停止，target 不變；驗證失敗的訊息寫出失敗的 verify 步驟與原因（`Project verification failed: ...`）。
@@ -75,7 +76,7 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 ### Action pin 漂移
 
-`--check` 會唯讀比對產品自有 workflow 與新版模板的 Action pin，逐項列在 plan 的 `action_pin_preflight` 與報告的 `product.action_pins`。`product-pin-newer`（產品 pin 比模板新、同一 major）不擋，CLI 會把模板 workflow 對齊產品 pin；其他原因產生 blocking 的 `action-pin`。規則只有一條：`--pin-commit` 只在被 finalize 的那份 stage-1 plan 仍列出 blocking pin 時必填，沒列出時傳入會被拒絕。所以標準做法是：
+`--check` 會唯讀比對產品自有 workflow 與新版模板的 Action pin，逐項列在 plan 的 `action_pin_preflight` 與報告的 `product.action_pins`。`product-pin-newer`（產品 pin 比模板新、同一 major）不擋，CLI 會把模板 workflow 對齊產品 pin；其他原因產生 blocking 的 `action-pin`。blocking 列的訊息寫出產品與模板 pin 的版本 tag（取自 pin 後面的 `# vX.Y.Z` 註解）與 `major upgrade: yes|no|unknown`：`yes` 是跨 major 升級，先讀 upstream 的變更；任一側沒有 tag 或不是版本號時寫 `unknown`，這時到 upstream 查該 SHA 對應的 tag 再判斷。規則只有一條：`--pin-commit` 只在被 finalize 的那份 stage-1 plan 仍列出 blocking pin 時必填，沒列出時傳入會被拒絕。所以標準做法是：
 
 1. 在產品 workflow 以一個只改這些 pin 的 commit 更新 pin（可能是 major 升級，請先讀 upstream 變更）。
 2. 重新 `--check`；新的 stage-1 plan 不再列出這些 pin。
@@ -90,6 +91,52 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 1. 在 update 前另開一個產品 commit，把產品 job 原樣搬到產品自有的 workflow（例如 `.github/workflows/product-ci.yml`），保留原本的觸發條件。
 2. 重新 `--check`，該模板 workflow 的衝突改用 `take-new`。
 3. 搬出的 job 現在屬於產品 workflow，會進入 Action pin 比對；新的 blocking `action-pin` 依上一節處理。
+
+### 其他衝突與並存檔案
+
+擁有權依手冊 5.1：workflow、`AGENTS.md` 的 managed block 與 `.claude/CLAUDE.md` 屬模板；`.gitignore` 共同維護；產品程式與文件內容屬專案。
+
+- **模板 workflow 有在地修正，但不是產品 job**：比對 `conflicts/base/<path>` 與 `conflicts/current/<path>`，差異就是在地修改。含產品 job 時依上一節。只是修補模板行為（例如舊版缺少 checker 時略過的 guard、舊 bug 的 workaround）時選 `take-new`：檔案屬模板，新版會取代舊行為，`keep-current` 則會留下引用已移除 script 的舊 workflow。選之前看 `conflicts/new/<path>`；新版仍缺同一個修正時，也不要保留改過的模板 workflow，`take-new` 後到模板 repository 開 Issue 回報。範例：舊版 `governance-comment.yml` 只多了「checker 不存在就略過」的 guard，新版把它改寫成 reviewer assignment，決定是 `take-new`。
+- **`AGENTS.md` 沒有 CSARC managed block**：`<!-- BEGIN CSARC MANAGED BLOCK -->` 到 `<!-- END CSARC MANAGED BLOCK -->` 這一段屬模板，block 外的文字屬專案。用 `custom:<file>`：current 全文不動，最後空一行接上 `conflicts/new/AGENTS.md` 的整段 managed block，結果與 `adopt` 寫入的格式相同；current 已有一段 managed block 時，只把那一段換成新版。不要用 `take-new`（會丟掉產品指引）或 `keep-current`（少了 CSARC 入口）。範例（在 target 根目錄執行，再以 `--decision AGENTS.md=custom:../AGENTS.custom.md` 決定）：
+
+  ```bash
+  report=../<repo>-csarc-update-report
+  { cat AGENTS.md; echo; sed -n '/<!-- BEGIN CSARC MANAGED BLOCK -->/,/<!-- END CSARC MANAGED BLOCK -->/p' "$report/conflicts/new/AGENTS.md"; } > ../AGENTS.custom.md
+  ```
+
+- **根目錄 `CLAUDE.md` 與 `.claude/CLAUDE.md` 並存**：`.claude/CLAUDE.md` 屬模板，只匯入 `AGENTS.md`；AI 規則以 `AGENTS.md` 為唯一來源。update 把舊的根目錄 `CLAUDE.md` 列為 `retire-modified` 時，它只是保留的舊檔，CSARC 不再讀取或更新。Claude Code 可能兩份都載入；內容不一致時以 `AGENTS.md` 為準。處理方式：把根目錄 `CLAUDE.md` 裡仍需要的產品指引搬到 `AGENTS.md` 的 managed block 外；產品文件若依賴根目錄 `CLAUDE.md`，改指向 `AGENTS.md`；最後另開 commit 刪除根目錄 `CLAUDE.md`。
+- **`.gitignore` 缺少模板規則**：`.gitignore` 共同維護，衝突的報告列會在最後列出 current 沒有、新版有的忽略規則（`The current file lacks these template ignore rules ...`）。`keep-current` 會漏掉它們；以 current 為底的 `custom:<file>` 要把專案需要的規則加進去。最常見的是 `dist/`：`./.csarc/scripts/verify-fast` 會產生 `dist/repo-site/`，少了這條規則，verify 後工作樹會變 dirty。刻意不收某條規則時，在 PR 寫明理由。套用並執行 verify 後看 `git status`；仍有新的未追蹤產物時，另開 commit 補規則。
+
+### 產品自有的 workflow audit
+
+新版模板的 `ci.yml`、`pr-policy.yml`、`pr-review.yml`、`pr-policy-writes.yml`、`governance-comment.yml`、`dependabot-auto-merge.yml`、`dependabot-merge.yml` 刻意使用 `pull_request_target` 或 `workflow_run`。信任邊界如下：
+
+- `pull_request_target` 讓 required check、reviewer 指派與 Dependabot 同步的 workflow 定義來自可信 base，PR 不能改寫檢查自己的程式。PR policy 與 review 只 checkout 可信 base，權限唯讀；reviewer 指派只 checkout base，PR 作者與編號通過嚴格格式檢查後才呼叫 API；Dependabot 同步先驗證 GitHub 簽署的 Dependabot head 與只改 workflow 的 diff，只執行 base 的同步程式，並以 exact-SHA lease push。CI 讀取 proposed head 來驗證，但沒有 secret 與寫入權限。
+- `workflow_run` 把治理寫入與 Dependabot 合併留在 default branch 的 workflow；它只 checkout default branch 的 commit，不 checkout 觸發 run 的 head、不下載它的 artifact，只把 GitHub 提供的 PR 編號與 head SHA 當資料；寫入前重新驗證 exact head。
+- 模板 repository 用 zizmor 稽核同一組 workflow，每個 `dangerous-triggers` 例外的理由寫在模板 repository 根目錄的 `zizmor.yml`。
+
+產品自己跑 zizmor 或同類 audit 時，這些 workflow 會出現 high 等級的 `dangerous-triggers`，結果可能由綠轉紅。這不是 update 失敗；CSARC 不會修改產品的 audit 設定，也不替產品新增 ignore。由產品擁有者從下列選項決定，agent 只在 PR 列出 audit 前後的結果與選項：
+
+1. 讓產品 audit 只掃產品自有的 workflow（例如 `.github/workflows/product-ci.yml`）；模板 workflow 依手冊 5.1 屬模板，隨核准的 Release 更新。
+2. 讀過上面的信任邊界後，在產品 audit 設定為這些模板 workflow 加上 `dangerous-triggers` 例外並寫明理由，以獨立的產品 commit 提交。
+3. 擁有者決定前，update PR 保持未合併。不要為了讓 audit 變綠而修改模板 workflow 的觸發條件。
+
+### 放寬的設定（`widened`）
+
+報告 Settings 裡 class 為 `widened` 的列表示治理範圍比以前寬，Impact analysis 也會列出 `Widened settings`。目前只有 `admin_bypass`：舊設定沒有這個鍵時遷移為 `always`（admin 可用 exact-head 授權取代同行核准，beta 與 stable 都適用），該列的 note 寫出原本的範圍。這一列不會讓 `--check` 變成 blocking，但 `--finalize-plan` 前必須由擁有者明確決定，agent 不能代為接受：
+
+1. 接受較寬的範圍：重新 `--check` 並加 `--data admin_bypass=always`，該列改為明確選擇（`decision`，原本就是 `always` 時為 `exact`）。
+2. 維持原本的範圍：重新 `--check` 並加 `--data admin_bypass=<note 寫的原值>`（`off` 或 `beta-only`），該列改為 `exact`。
+
+`--finalize-plan` 要重帶同一個 `--data`；在 PR 記錄擁有者的決定。恢復方式：已經套用 `always` 之後才要改回時，在新的分支重新規劃，照同樣流程 finalize 與 apply；推送後由擁有者執行 repository settings 的 `plan`，審閱後再 `apply`，讓 Ruleset 也回到原本的範圍。
+
+```bash
+csarc update . --to <tag> --expected-sha <full-sha> --check --json --data admin_bypass=beta-only --report-dir ../<repo>-csarc-update-report-2
+csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --data admin_bypass=beta-only --decision <path>=keep-current --report-dir ../<repo>-csarc-update-report-2
+csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-plan.json --yes
+```
+
+`beta-only` 換成 note 寫的原值；`--decision` 依該次報告的衝突照常給，沒有衝突時不帶。
 
 ### 保留的舊檔與過時連結
 
