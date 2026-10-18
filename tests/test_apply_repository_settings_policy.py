@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import settings_support
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_SOURCE = ROOT / "scripts" / "apply-repository-settings.sh"
 CONFIG_READER_SOURCE = ROOT / "scripts" / "csarc_config.py"
@@ -126,19 +128,21 @@ case "$1" in
 esac
 """
 
-CONFIG_CSARC_OWNED = """\
-project_mode: existing
-release_ownership: csarc-owned
-governance_mode: managed
-"""
+# Schema 2 settings (SPEC-009, Issue #1071): every intent is stated;
+# project_mode is provenance, not a setting.
+CONFIG_CSARC_OWNED = settings_support.settings_text(
+    release_ownership="csarc-owned", governance_mode="managed"
+)
 
-CONFIG_VERIFICATION_ONLY_ALL_DISABLED = """\
-project_mode: existing
-release_ownership: verification-only
-governance_mode: observe
-"""
+CONFIG_VERIFICATION_ONLY_ALL_DISABLED = settings_support.settings_text(
+    release_ownership="verification-only", governance_mode="observe"
+)
 
-CONFIG_LEGACY_NO_POLICY_KEYS = "languages: []\n"
+CONFIG_LEGACY_NO_POLICY_KEYS = "languages: []\nrelease_ownership: csarc-owned\n"
+
+CONFIG_MISSING_RELEASE_OWNERSHIP = settings_support.settings_text(
+    release_ownership=None
+)
 
 
 def _make_repo(tmp_path: Path, config_yaml: str) -> Path:
@@ -379,11 +383,19 @@ def test_enabled_policies_are_still_applied_and_checked(
         assert f"label create {label['name']}" in full_log
 
 
-def test_legacy_config_without_policy_keys_defaults_every_area_on(
+def test_legacy_config_fails_closed_before_any_policy_write(
     tmp_path: Path,
 ) -> None:
-    """A pre-#532 .csarc/config.yml keeps applying every policy area."""
-    repo = _make_repo(tmp_path, CONFIG_LEGACY_NO_POLICY_KEYS)
+    """A pre-schema-2 file is migrated by `csarc update`, never guessed."""
+    legacy = _make_repo(tmp_path / "legacy", CONFIG_LEGACY_NO_POLICY_KEYS)
+    legacy_result = _run(
+        legacy, tmp_path / "legacy", "plan", log_path=tmp_path / "legacy.log"
+    )
+    legacy_output = legacy_result.stdout + legacy_result.stderr
+    assert legacy_result.returncode == 1, legacy_output
+    assert "legacy settings schema" in legacy_output
+
+    repo = _make_repo(tmp_path, CONFIG_CSARC_OWNED)
 
     plan_log = tmp_path / "gh-plan.log"
     plan_result = _run(repo, tmp_path, "plan", log_path=plan_log)
@@ -409,11 +421,31 @@ def test_legacy_config_without_policy_keys_defaults_every_area_on(
     )
 
 
+def test_missing_release_ownership_fails_closed_before_any_write(
+    tmp_path: Path,
+) -> None:
+    """A config without an owner never defaults to csarc-owned (#1068)."""
+    repo = _make_repo(tmp_path, CONFIG_MISSING_RELEASE_OWNERSHIP)
+
+    apply_log = tmp_path / "gh-apply.log"
+    result = _run(repo, tmp_path, "apply", log_path=apply_log)
+    output = result.stdout + result.stderr
+    assert result.returncode == 1, output
+    assert "CSARC settings error" in output
+    assert "missing persistent settings release_ownership" in output
+    assert "csarc update --data KEY=VALUE" in output
+    assert not apply_log.exists() or "--method" not in apply_log.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_governance_mode_is_readable_through_csarc_config(
     tmp_path: Path,
 ) -> None:
     """The single governance switch round-trips through the config reader."""
-    repo = _make_repo(tmp_path, "languages: []\ngovernance_mode: observe\n")
+    repo = _make_repo(
+        tmp_path, settings_support.settings_text(governance_mode="observe")
+    )
     result = subprocess.run(
         [sys.executable, "scripts/csarc_config.py", "governance_mode"],
         cwd=repo,

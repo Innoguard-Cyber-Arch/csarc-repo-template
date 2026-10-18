@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-21
-- **來源 Issue：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)
+- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）
 - **實作 PR：**[#860](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/860)
 
 ## 問題與限制
@@ -22,6 +22,144 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 - 平台固定檔保留在 `.github/`；root `SECURITY.md` 提供 scanner discovery 所需的 repository-wide policy，與 `.github/SECURITY.md` 的人類通報流程分工；root `AGENTS.md` 只作自動探索入口，詳細規則放 `.csarc/docs/agent-workflow.md`，`.claude/CLAUDE.md` 只引用 root 入口。
 - 專案文件、ADR、spec 與網站內容屬於產品，保留在 `docs/`。網站來源固定在 `docs/site/`，產物仍是 `docs/index.html` 與 `docs/index.en.html`；renderer 與資產放 `.csarc/site/`。
 - 產品程式、測試與語言 manifest 留在慣用 root 路徑，不移入 `.csarc`。
+- 公版擁有的 runtime、fixture 與必要測試只放 `.csarc/`；`.csarc/` 以外只允許下方 allowlist 列出的 GitHub、scanner、agent 固定位置、語言工具設定與產品 starter。
+
+## Runtime 與產品工具邊界
+
+- 生成專案的 `.csarc/scripts/verify` 與 `verify-fast` 只驗證產品與自己的設定，不執行也不下發公版自測（`test-*`、`security-smoke` 與 `.csarc/tests/`）。同一批案例由公版 CI 安裝到代表性 render 執行，案例數不得減少；診斷改由 `csarc status` 提供。
+- 產品 lint、format、type check、test discovery 與 coverage 不收集 `.csarc/`。`.csarc/.ignore` 讓遵守 ignore 檔的工具（Ruff、ty 等）跳過控制層的 Python 檔，Git 照常追蹤這些檔案；pytest 預設不遞迴進入點開頭的目錄。產品 manifest（`pyproject.toml`、`package.json`、`Cargo.toml`、`go.mod`）不寫 `.csarc`，也不把它列入套件、workspace 或 coverage 來源，所以採用既有專案時不必修改產品 manifest。代價是 ripgrep 這類工具搜尋整個 repository 時也會略過 `.csarc` 的 Python 檔，需要時直接指定檔案路徑。
+- `.csarc/scripts` 的模組層 import 只載入入口必定需要的模組，其他 sibling 在命令第一次使用時才載入。合法 render 少了選用模組（例如 `documentation_mode` 不是 `template-and-content` 時的網站模組），其餘入口仍可獨立載入與執行。
+- 本機與 hosted 驗證證據使用同一個正規化 record（`local_verification.normalized_record`），欄位與驗證規則相同，只保留各自的 trust label：`self-attested-local` 或 `github-hosted`（與合併 evidence payload 同一個標籤）。
+
+## 固定位置 allowlist
+
+fresh render 在 `.csarc/` 以外只能產生下列路徑（`*` 代表專案名稱、套件名稱或檔名）。新增項目必須先修改本 ADR；`tests/test_generated_layout_allowlist.py` 拿模板來源與代表性 render 對照這份清單。
+
+```text
+# GitHub fixed locations
+.github/CODEOWNERS
+.github/ISSUE_TEMPLATE/*.yml
+.github/SECURITY.md
+.github/dependabot.yml
+.github/pull_request_template.md
+.github/workflows/*.yml
+# Scanner and agent discovery
+SECURITY.md
+AGENTS.md
+.claude/CLAUDE.md
+# Language tool settings, manifests, and lockfiles
+.gitignore
+.node-version
+.python-version
+Cargo.lock
+Cargo.toml
+Dockerfile
+biome.json
+docker-compose.yml
+go.mod
+package.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+pyproject.toml
+rust-toolchain.toml
+tsconfig.build.json
+tsconfig.json
+uv.lock
+vitest.config.ts
+# Product-owned starters and documentation
+CHANGELOG.md
+LICENSE
+README.md
+README.*.md
+cmd/*/main.go
+docs/README.md
+docs/adr/README.md
+docs/index.html
+docs/index.*.html
+docs/site/content/_index.*.md
+docs/site/data/navigation.json
+docs/site/theme.css
+docs/specs/SPEC-001-example.md
+internal/*/*.go
+src/*/__init__.py
+src/lib.rs
+tests/test_smoke.py
+typescript/src/index.ts
+typescript/tests/index.test.ts
+```
+
+## 依選項 render 的 payload（#1077）
+
+每支下發的 script、workflow 與操作文件都必須有一個由已啟用選項帶來的呼叫者：workflow、`verify`／`verify-fast`、其他已 render 的 script、pinned CLI，或 render 後的 agent／操作入口文件（`AGENTS.md`、`.csarc/docs/agent-workflow.md`、`.csarc/docs/csarc.md`）。沒有呼叫者就不 render。`copier.yml` 的 `_exclude` 是唯一的條件來源；`csarc update` 以新舊 render 的差集退役選項不再 render 的 CSARC 檔（只退役與可信舊 render 位元組相同者，改過的檔案仍列為衝突），所以 root CLI 與模板共用同一組規則。
+
+- 公版自測（`test-*`、`security-smoke` 與 `.csarc/tests/`）不下發；來源在模板 repository 的 `tests/generated_self_tests/`，由公版 CI 安裝到代表性 render 執行，案例數不減。
+- `verification-only` 與 `product-owned` 不下發 CSARC Release publisher；`csarc-owned` 只有一組 publisher，hosted 時另有 `release.yml`。任何 render 都只有一組 `verify`／`verify-fast`。
+- 既有專案採用（`project_mode: existing`）不下發 starter code、product manifest、lockfile、語言工具設定、容器 starter 或產品 test／script；只新增 `.csarc/` runtime 與本 ADR 的平台固定位置。
+- `.csarc/docs/ci-policy.md` 與 `.csarc/docs/security-scanner-readiness.md` 是描述整個模板的參考文件：它們不構成呼叫者，可提到其他選項才 render 的 script，但不得提到任何 render 都不存在的 `.csarc/scripts/` 路徑。依專案選項精簡的操作指南由 #1081 取代 `ci-policy.md`。
+
+下表列出 `.csarc/` 與 `.github/` 內依選項 render 的路徑與保留條件；`tests/test_generated_payload.py` 拿它對照 `copier.yml`，並以 render matrix 驗證呼叫者、allowlist、單一 verifier／publisher、existing adopt 與 import。
+
+```text
+# path | rendered when
+.csarc/docs/documentation-policy.md | documentation_mode != 'off'
+.csarc/docs/milestone-description.md | 'milestones' in lifecycle
+.csarc/scripts/build-repo-site | documentation_mode == 'template-and-content'
+.csarc/scripts/build_repo_site.py | documentation_mode == 'template-and-content'
+.csarc/scripts/check-governance-drift | 'governance-drift' in scheduled_checks
+.csarc/scripts/check-release-drift | release_ownership == 'csarc-owned' and verification_mode == 'hosted' and (project_mode == 'new' or csarc_release_workflow | default(false))
+.csarc/scripts/check-repo-site-navigation | documentation_mode == 'template-and-content'
+.csarc/scripts/check-repo-site-translations | documentation_mode == 'template-and-content'
+.csarc/scripts/check-repo-site-versions | documentation_mode == 'template-and-content'
+.csarc/scripts/check-scope-gate | verification_mode == 'hosted'
+.csarc/scripts/check-template-update | 'template-update' in scheduled_checks
+.csarc/scripts/check-trusted-verification | verification_mode == 'hosted'
+.csarc/scripts/converge-release-tag | release_ownership == 'csarc-owned'
+.csarc/scripts/detect-open-milestone | verification_mode == 'hosted'
+.csarc/scripts/install-syft | release_ownership == 'csarc-owned'
+.csarc/scripts/publish-release | release_ownership == 'csarc-owned'
+.csarc/scripts/release_bundle.py | release_ownership == 'csarc-owned'
+.csarc/scripts/release_candidate.py | release_ownership == 'csarc-owned'
+.csarc/scripts/release_writer.py | release_ownership == 'csarc-owned'
+.csarc/scripts/render_site.py | documentation_mode == 'template-and-content'
+.csarc/scripts/repo_site_blocks.py | documentation_mode == 'template-and-content'
+.csarc/scripts/request-reviewer | verification_mode == 'hosted'
+.csarc/scripts/spec_to_issue.py | verification_mode == 'hosted' or documentation_mode != 'off'
+.csarc/scripts/sync_work_item_metadata.py | verification_mode == 'hosted'
+.csarc/scripts/validate-issue-policy | verification_mode == 'hosted' and 'issues' in lifecycle
+.csarc/scripts/verification_evidence.py | verification_mode == 'hosted'
+.csarc/scripts/verify-release-candidate | release_ownership == 'csarc-owned'
+.csarc/scripts/verify_release_consumption.py | release_ownership == 'csarc-owned'
+.csarc/site | documentation_mode == 'template-and-content'
+.csarc/version.txt | not ('python' in languages or 'rust' in languages or 'typescript' in languages)
+.github/CODEOWNERS | code_owner
+.github/ISSUE_TEMPLATE/milestone-tracker.yml | 'milestones' in lifecycle
+.github/workflows/ci.yml | verification_mode == 'hosted'
+.github/workflows/codeql.yml | verification_mode == 'hosted' and enable_codeql | default(false)
+.github/workflows/dependabot-auto-merge.yml | verification_mode == 'hosted'
+.github/workflows/dependabot-merge.yml | verification_mode == 'hosted'
+.github/workflows/docker-build-scan.yml | verification_mode == 'hosted' and container
+.github/workflows/governance-comment.yml | verification_mode == 'hosted'
+.github/workflows/governance-drift.yml | 'governance-drift' in scheduled_checks
+.github/workflows/osv.yml | verification_mode == 'hosted'
+.github/workflows/pages.yml | verification_mode == 'hosted' and documentation_mode == 'template-and-content'
+.github/workflows/pr-policy-writes.yml | verification_mode == 'hosted'
+.github/workflows/pr-policy.yml | verification_mode == 'hosted'
+.github/workflows/pr-review.yml | verification_mode == 'hosted'
+.github/workflows/release-drift.yml | release_ownership == 'csarc-owned' and verification_mode == 'hosted' and (project_mode == 'new' or csarc_release_workflow | default(false))
+.github/workflows/release.yml | release_ownership == 'csarc-owned' and verification_mode == 'hosted' and (project_mode == 'new' or csarc_release_workflow | default(false))
+.github/workflows/spec-to-issue.yml | verification_mode == 'hosted'
+.github/workflows/template-update.yml | 'template-update' in scheduled_checks
+.github/workflows/work-item-lifecycle.yml | verification_mode == 'hosted' and lifecycle
+```
+
+### 模板 repository 專用工具與精簡後的共用模組（#1129）
+
+- 沒有任何生成專案 caller 的工具只留在模板 repository root，不 render：`check-repo-capabilities`、`repo_capabilities.py` 與 `policies/capability-matrix.json`。
+- 生成專案的共用模組可以比 root 少：已退役的功能（Actions quota fallback）、只有模板 repository 使用的路由，以及沒有生成專案 caller 的子命令（例如 `promotion_gate.py prepare`／`finalize`／`verify-main`、`delivery_sync.py reconcile`、`release_policy.py` 的 boundary 指令、`verification_cost.py report`）只存在 root。生成副本只能刪除 root 程式碼；保留的每個頂層定義都必須與 root 同名定義一致，例外逐一列在 `tests/test_generated_module_pruning.py` 並附理由。
+- 一個 root 模組可以在生成專案拆成依選項 render 的檔案：`release_policy.py` 只保留每個專案的 CLI 都會執行的 capability `preflight`，CSARC 發版指令放在只有 `csarc-owned` render 的 `release_candidate.py`，由 `release_policy.py` 的同一組命令列轉交。
+- 只由 hosted workflow 或 hosted PR policy 呼叫的 `check-trusted-verification`、`verification_evidence.py` 與 `detect-open-milestone` 只在 `verification_mode: hosted` render。依分支名稱就會到達的 Milestone 路由（`dev/m*`、`promote/m*`）不依 `lifecycle` 移除，因為 local 與只開 `issues` 的專案仍可能使用它們。
+
+`scripts/generated_payload.py` 量測 #1058 `Targets` 的 fixture；`tests/test_generated_payload.py` 斷言每個量測不超過記錄的上限，上限只能下降，不放寬 `Targets`。2026-10-15 重新核准後，`Targets` 只有檔案數與總 bytes：檔案數上限等於 `Targets`；bytes 上限先記錄 #1129 的實測值，由 #1081 取代 generated 文件時降到 `Targets`。`.csarc/scripts` 支數、腳本行數與 workflow 數仍會量測並印出，但只供參考，不是預算。
 
 ## 四種 inventory
 
@@ -29,7 +167,7 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 | --- | --- | --- | --- |
 | 最小新專案 | README、CHANGELOG、AGENTS、SECURITY、`.gitignore`、`docs/`、空的 `src/` 與忽略的 `dist/` 建置目錄 | `.csarc/`、`.github/`、`.claude/` | 不產生 root `scripts/`、`policies/` 或 `site/` |
 | 完整新專案 | 最小集合加語言 manifest、lockfile、`src/`、`tests/`、`typescript/`、Go 的 `go.mod`／`cmd/`／`internal/` 與選用容器檔 | 同上，加選用 workflow | root 白名單由所選語言與功能決定 |
-| 既有專案採用 | 原有產品檔、manifest、文件與驗證 hook 全數保留 | 僅新增已核准且無衝突的 CSARC／平台檔 | 同名文字差異需人工合併，特殊檔或目錄碰撞 fail closed |
+| 既有專案採用 | 原有產品檔、manifest、文件與驗證 hook 全數保留；不新增 starter、manifest、lockfile 或語言工具設定 | 僅新增已核准且無衝突的 CSARC／平台檔 | 同名文字差異需人工合併，特殊檔或目錄碰撞 fail closed |
 | 舊版專案更新 | 既有產品檔保持原位 | 已知舊 CSARC 路徑搬到新位置 | plan 明列 add／move／preserve／delete；不同內容的目的檔碰撞時不寫入 |
 
 ## 更新搬移規則
@@ -49,7 +187,7 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 
 ## Ownership 與驗證
 
-公版維護 `.csarc/`、managed workflows 與搬移映射；consuming repository 維護產品程式、manifest、`docs/adr/`、`docs/specs/`、`docs/site/content/` 與 `docs/site/theme.css`。最小與完整生成專案以 root allowlist 測試；舊版更新以搬移／碰撞回歸測試；代表性四語言專案執行完整 verifier。
+公版維護 `.csarc/`、managed workflows 與搬移映射；consuming repository 維護產品程式、manifest、`docs/adr/`、`docs/specs/`、`docs/site/content/` 與 `docs/site/theme.css`。最小與完整生成專案以 root allowlist 測試；舊版更新以搬移／碰撞回歸測試；代表性四語言專案執行完整 verifier。`documentation_mode: off` 與代表性 lifecycle／release ownership render 由生成專案自己的 verifier 驗證；公版自測、import matrix，以及產品工具不收集 `.csarc/` 的負向測試留在公版 CI。
 
 ## 重新評估條件
 

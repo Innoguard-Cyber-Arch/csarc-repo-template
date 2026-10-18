@@ -18,12 +18,23 @@ Copier update 可以更新第一層；第二層首次建立後必須保留。若
 | `documentation_mode` | `template-and-content` | 產生並更新公版呈現層，建立專案內容起始檔，驗證兩層 |
 |  | `content-only` | 不產生公版網站；只建立、保留並整理專案內容與 README |
 |  | `off` | 不產生、不整理，也不要求文件一致性 review；既有 project-owned 文件不會被刪除 |
-| `primary_language` | `en`／`zh-tw` | 決定 `README.md` 與主要入口使用的語言 |
-| `i18n` | `en-zh-tw`／`off` | 雙語時產生另一語言的 `README.<lang>.md`，並維護雙語公版入口；關閉時只保證主要語言 |
-| `project_license` | `proprietary`／`MIT`／`Apache-2.0` | 未明確選擇時一律採 `proprietary`，不得推定為開源 |
-| `copyright_holder` | 非空字串 | 寫入 `LICENSE`；不得由 GitHub 帳號、CODEOWNERS 或 commit 作者推定 |
+| `documentation_languages` | `zh-tw`／`en`／`zh-tw+en`／`en+zh-tw` | 第一個語言決定 `README.md` 與主要入口；有第二個語言時另產生 `README.<lang>.md` 並維護雙語公版入口。只管 project-owned 文件 |
 
-舊設定 `features: repo-site` 遷移為 `documentation_mode: template-and-content`，沒有 repo-site 的舊設定遷移為 `content-only`；`readme_primary_language` 遷移為 `primary_language`。遷移完成後只保留新設定。
+授權與著作權人是 create／adopt 的一次性 seed，不是設定：`project_license`（`proprietary`／`MIT`／`Apache-2.0`，未明確選擇時一律 `proprietary`，不得推定為開源；`custom` 表示產品自行管理授權，CSARC 不產生 `LICENSE`、manifest 不寫 license 欄位）與 `copyright_holder`（不得由 GitHub 帳號、CODEOWNERS 或 commit 作者推定）只寫進 `LICENSE` 與 package manifest，之後以 `LICENSE` 為準。
+
+舊設定由外部 CLI 的 migration registry 唯讀遷移：`features: repo-site` 為 `documentation_mode: template-and-content`，沒有 repo-site 為 `content-only`；`primary_language`＋`i18n`（或更早的 `readme_primary_language`）合併為 `documentation_languages`。遷移完成後只保留目前 schema。
+
+## 持久化專案記憶（Durable Project Memory）
+
+這份文件地圖由 CSARC 維護，說明跨 session、跨 agent 與跨時間都要留下的專案知識放在哪裡；`.csarc/scripts/verify` 只檢查這裡，不檢查專案擁有的 `docs/README.md` 內容。
+
+| 問題 | 位置 |
+| --- | --- |
+| 現在必須做到什麼？ | `docs/specs/` 的 living Spec-Driven Development（SDD）契約 |
+| 為什麼這樣選？ | `docs/adr/` 的 Architecture Decision Records（ADR） |
+| 行為是否仍成立？ | Test-Driven Development（TDD）、Behavior-Driven Development（BDD）、CI 與 release evidence |
+
+從舊版公版更新的專案可能仍有 project-owned `docs/decisions/`；搜尋時一併讀取，新紀錄寫入 `docs/adr/`，不自動搬移或覆寫既有內容。`docs/README.md` 是專案自己的文件入口，更新不會改寫它。
 
 ## 共同資訊架構
 

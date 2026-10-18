@@ -31,14 +31,14 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">4 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.30.7</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.35.2</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
       </header>
       <div class="language-contract" aria-label="Languages and template settings">
         <p class="language-card"><strong>Choose languages at creation or adoption</strong>Check whichever of Python, Rust, TypeScript, and Go you need; select none for the shared workflow only.</p>
-        <p class="language-card shared"><strong>One template configuration</strong>Languages, branching, and optional capabilities live in <code>.csarc/config.yml</code>, kept current by template updates.</p>
+        <p class="language-card shared"><strong>One template configuration</strong>Languages, governance, and optional capabilities live in <code>.csarc/config.yml</code>, kept current by template updates.</p>
         <p class="language-card future"><strong>Currently supported versions</strong>Python 3.14, Rust 1.98, TypeScript on Node 24 LTS, and Go 1.27 minimum (developed and verified on 1.27.1).</p>
       </div>
       <div class="product-start">
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, TypeScript, and Go independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.30.7<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.35.2<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -121,11 +121,11 @@ It only reads local files plus, once a repository is already managed, the resolv
 
 | State (`state`) | How it is detected | Next step |
 | --- | --- | --- |
-| `create` (new repository) | The target path does not exist, or exists but is an empty directory | `csarc init <path>`: preview with `--dry-run`, then confirm with `--yes --non-interactive` |
+| `create` (new repository) | The target path does not exist, is an empty directory, or holds only `.git` with no commit or tracked file | `csarc init <path>`: preview with `--dry-run`, then confirm with `--yes --non-interactive` |
 | `adopt` (existing repository) | The target already has content but no `.csarc/config.yml` | `csarc adopt <path>`: write a dry-run plan, review it, then apply with `--apply-plan` |
 | `adoption-pending` (adoption incomplete) | The local adoption checkpoint passes identity validation, but adoption is not complete | `csarc adopt <path> --finalize`: preview and continue the existing finalize flow |
 | `migrate` (legacy answers) | `.csarc/config.yml` has a non-full `_commit` and no trusted verified provenance | Review a tag or short SHA and follow `next_command` to bind it to a verified Release; restore the correct SHA for any other format |
-| `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | `csarc update <path> --check` to preview, then `csarc update <path>` |
+| `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | Follow `next_command`: `--check` with `--to`/`--expected-sha` to preview, `--finalize-plan --decision` to decide conflicts, then `--apply-plan` (see `docs/install.en.md`) |
 | `current` (nothing to do) | The Copier revision is current, and `policies/` matches the repository's live GitHub settings | No action needed |
 | `policy-only-update` (policy settings changed) | The Copier revision is current, but `policies/` (for example, whether workarounds are allowed) no longer matches the live GitHub settings | `.csarc/scripts/apply-repository-settings.sh plan` to preview, then `apply`; this **skips** a full adopt or update run |
 
@@ -158,7 +158,7 @@ The Governance step's plan table (Step 08) answers "what does the account's GitH
 | `repository_settings_inspection` | `check` mode can compare live admin-only fields | Same as `repository_admin` | DEGRADED marker; run `check` from a trusted admin checkout |
 | `immutable_releases` | Repository setting GitHub uses to sign each published Release's attestation | An admin enables it once via `apply-repository-settings.sh apply`; `GITHUB_TOKEN` still can't read it directly | No longer pre-flight-blocking (#770); `scripts/publish-release` verifies the signed attestation post-hoc and fails closed if it's missing |
 
-For a local repository without a remote, a configured CODEOWNER may first be reported as `unknown`. If CODEOWNERS is omitted with `--data code_owner=`, also pass a valid `--data repository_url=https://github.com/<owner>/<repository>`. Other configuration and package metadata still use this repository identity when documentation is disabled, so it cannot be guessed from an empty owner.
+For a local repository without a remote, a configured CODEOWNER may first be reported as `unknown`, and a valid `--data repository_url=https://github.com/<owner>/<repository>` is required. Other configuration and package metadata still use this repository identity when documentation is disabled, and it is never guessed from `code_owner`.
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="How to read a check-repo-capabilities result" >}}
@@ -734,7 +734,7 @@ The template prepares an optional CODEOWNER, chooses reviewers from live permiss
 - a fixable mismatch fails until corrected.
 
 {{< disclosure key="governance-live-status" title="This repository's own real status right now (checked 2026-09-07)" >}}
-The `Innoguard-Cyber-Arch` API reports this repository is on the Free plan with **public** visibility. GitHub already has an `enforcement: active` Ruleset named "CSARC protected branches" (created 2026-09-03), applied to `main` and `dev/m*`: all three `title`/`verify`/`review` status checks must pass, the review check evaluates `admin_bypass` and available Copilot evidence, and force-push is forbidden. This repository explicitly uses `verification_mode: hosted`, `release_trigger: manual`, `actions_fallback: admin`, and `admin_bypass: always`; admin bypass replaces only peer approval, while `actions_fallback` separately handles a proven zero-step billing block, and neither skips the remaining required evidence.
+The `Innoguard-Cyber-Arch` API reports this repository is on the Free plan with **public** visibility. GitHub already has an `enforcement: active` Ruleset named "CSARC protected branches" (created 2026-09-03), applied to `main` and `dev/m*`: all three `title`/`verify`/`review` status checks must pass, the review check evaluates `admin_bypass` and available Copilot evidence, and force-push is forbidden. This repository explicitly uses `verification_mode: hosted`, `release_trigger: manual`, and `admin_bypass: always`; admin bypass replaces only peer approval and never skips the remaining required evidence. The former `actions_fallback` is retired (Issue #1071): an Actions outage uses the governance-switch route.
 
 This maps to the "Free + public, or Pro personal + private" row in the table below, not the **private** degraded scenario the Free row describes in the "Full capability at each Free/Team/Enterprise tier" cards further down (that card describes what happens on Free + *private*, where the REST/GraphQL Ruleset-creation API refuses the request, so only the desired state can be kept while it is marked `DEGRADED`); this repository is public, so it takes the path that applies and verifies directly. If the plan or visibility changes later, rerunning `plan`/`apply`/`check` reflects the latest state -- this records the fact as of when it was checked, not a permanent guarantee, and it does not mean every repository using this template looks the same.
 {{< /disclosure >}}
@@ -760,25 +760,25 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 {{< disclosure key="governance-config" title="One configuration source and its ownership layers" >}}
 | Layer | `.csarc/config.yml` key | Default / allowed values | Generated or checked at |
 | --- | --- | --- | --- |
-| Governance intent | `governance_mode`, `lifecycle`, `actions_fallback` | `managed`/`observe`; `issues`/`milestones`; fallback defaults to `off`, with `admin` opt-in | repository policy, work-item side effects, and proven zero-step billing fallback |
+| Governance intent | `governance_mode`, `lifecycle` | `managed`/`observe`; `issues`/`milestones` | repository policy and work-item side effects |
 | Verification trust | `verification_mode` | new projects default to `local`; `hosted` is optional | local self-attestation plus audited bypass with no hosted CI, PR governance, Pages, or release workflow; or trusted GitHub-hosted checks |
-| Review intent | `admin_bypass`, `copilot_review` | admin bypass defaults to `off`, with `beta-only`/`always` opt-in; Copilot is `allowed`/`off` | exact-head `review` gate; unavailable Copilot falls back to peer approval or configured admin authorization |
+| Review intent | `admin_bypass`, `copilot_review` | admin bypass defaults to `always` for new projects, with `beta-only`/`off` available; Copilot is `allowed`/`off` | exact-head `review` gate; unavailable Copilot falls back to peer approval or configured admin authorization |
 | Release intent | `release_ownership`, `release_trigger`, `project_maturity` | three ownership modes; trigger is `main`/`manual`; maturity defaults to early | public beta/stable channels, one fixed Conventional Commits algorithm, and candidate triggering |
 | Documentation | `documentation_mode` | `template-and-content`/`content-only`/`off` | separates the presentation template from project-owned content; Pages requires hosted plus the full template and runs only for `docs/**` or manual dispatch |
-| Documentation languages | `primary_language`, `i18n` | `en`/`zh-tw`; bilingual or `off` | README and documentation entry points; bilingual mode maintains the counterpart |
-| License | `project_license`, `copyright_holder` | `proprietary` by default; `MIT` and `Apache-2.0` are available | `LICENSE`, README, package manifests, and SBOM |
-| Optional output | `features` | empty by default; currently accepts `docker` | Docker starter and build scan switch as one unit |
-| Organization policy | `code_owner` | optional `@user` or `@organization/team` | `.github/CODEOWNERS`; never a reviewer list |
-| Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection, optional security defaults, and the repo-site's visible-audience line |
-| Project choice | `project_name` | required non-empty string; defaults to `CSARC Project` | the repo-site's title and heading |
-| Project choice | `project_description` | required one-sentence purpose; rejects placeholder text | the repo-site's introduction paragraph |
+| Documentation languages | `documentation_languages` | `zh-tw`/`en`/`zh-tw+en`/`en+zh-tw` | README and documentation entry points; the first language is primary and a second one is maintained alongside it |
+| License (one-time seed, not saved) | `project_license`, `copyright_holder` | `proprietary` by default; `MIT` and `Apache-2.0` are available | written to `LICENSE`, README, and package manifests; `LICENSE` is the source afterward |
+| Optional output | `container` | `false` by default | Docker starter and build scan switch as one unit |
+| Organization policy | `code_owner` | empty by default; optional `@user` or `@organization/team` | `.github/CODEOWNERS`; never a reviewer list |
+| Live fact (not saved) | `project_visibility` | read from GitHub every time; passed explicitly only when it cannot be read | capability detection and optional security defaults |
+| One-time seed (not saved) | `project_name` | required non-empty string | written to the README and managed site data as the repo-site's title and heading |
+| One-time seed (not saved) | `project_description` | required one-sentence purpose; rejects placeholder text | written to the README and managed site data as the repo-site's introduction paragraph |
 | Project choice | `languages` | zero or more of `python`, `rust`, `typescript` | repo-site's stated-languages line |
-| Project choice | `repository_url`, `project_slug` | derived from `code_owner`/`project_name` unless overridden | repo-site's clone instructions |
-| Project choice | `enable_governance_drift_check` | `true` by default, generating the daily scheduled Action; set `false` to disable it | `true` generates `governance-drift.yml` and the drift checker; `false` generates neither |
+| Live fact and derived value (not saved) | `repository_url`, `project_slug` | `repository_url` is read from the GitHub origin/`GH_REPO` every time, and an explicit value binds one plan only; `project_slug` is derived from the repository name | repo-site's clone instructions |
+| Project choice | `scheduled_checks` | `governance-drift` by default; add `template-update` or clear the list | `governance-drift` generates the daily `governance-drift.yml` and drift checker; `template-update` generates the weekly notification |
 
 The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Plan, billing, Copilot entitlement, token permissions, and Pages availability are live `allowed`/`blocked`/`unknown` observations, not settings. Low-frequency GitHub details stay in native repository settings or `policies/` instead of expanding the CSARC schema.
 
-A generated project using `documentation_mode: template-and-content` runs the same rendering engine and components as this template repository's own root site (Issue #681), just with much leaner content. It resolves explicit `[[key]]` tokens only from the keys listed above, straight from `.csarc/config.yml`; an unknown key stops the build, so the site cannot invent a second settings schema. Project content and theme choices stay under `docs/site/content/` and `docs/site/theme.css`, owned by the consuming project. See `docs/documentation-policy.md` for the complete ownership and migration contract.
+A generated project using `documentation_mode: template-and-content` runs the same rendering engine and components as this template repository's own root site (Issue #681), just with much leaner content. It resolves explicit `[[key]]` tokens only from the keys listed above: settings from `.csarc/config.yml`, the name, description, and repository URL from the managed site data, and the license from `LICENSE`; an unknown key stops the build, so the site cannot invent a second settings schema. Project content and theme choices stay under `docs/site/content/` and `docs/site/theme.css`, owned by the consuming project. See `docs/documentation-policy.md` for the complete ownership and migration contract.
 {{< /disclosure >}}
 
 {{< disclosure key="governance-exceptions" title="How to record a temporary exception" >}}
@@ -818,7 +818,7 @@ Three places each own something different: `template/` is the single source of w
 
 {{< ops key="template-release-mode-ops" title="Single source, verification flow, and current automation boundary" >}}
 - `template/` is the only delivered source; root keeps the template repository's own GitHub governance and dogfood configuration only because that is how GitHub reads it, and `scripts/sync-paired-files.sh` generates root's paired-file copies under `template/`.
-- `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.
+- `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, governance, and optional capabilities read from it, while branch routes come from Issue and Milestone metadata; later extensions add settings here instead of creating another configuration file.
 - A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent components (modules); it never builds a combination-specific pipeline.
 - A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan; the dry-run never executes a target-owned helper or product hook and read-only inventories GitHub Issue Types and labels. The report uses `Bug`／`Feature`／`Task` for Issue work types and lowercase `bug`／`enhancement`／`documentation` for PR classification and fallback, listing safe mappings that can be accepted together and custom items that need individual review without changing remote metadata. Once a person approves that same undrifted plan, the CLI verifies an isolated candidate before writing it, and the first PR then reviews the source, plan, diff, and local results.
 - After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a dry-run preview, and only apply to the target once the candidate content and conflicts are fully verified; a conflict leaves the repository unchanged so it can be corrected, rerun, and reviewed by a normal PR and trusted-base checks.
@@ -830,9 +830,9 @@ Three places each own something different: `template/` is the single source of w
 {{< /disclosure >}}
 
 {{< disclosure key="template-release-scope" title="Single source, runtime baselines, and the root-only boundary" >}}
-Root `.csarc/config.yml` records the capabilities the template repository selects for itself. A generated repository additionally records Copier's source and revision and writes changes through `csarc update --data`. The template source does not invent `_src_path` or `_commit` values that point back to itself and would immediately go stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.
+Root `.csarc/config.yml` records the capabilities the template repository selects for itself. A generated repository additionally records Copier's source and revision and writes changes through `csarc update --data`. The template source does not invent `_src_path` or `_commit` values that point back to itself and would immediately go stale. The settings schema is a closed list ([SPEC-009](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/specs/SPEC-009-project-settings.md)) and an unknown field fails on read; a derived template that needs a new setting updates SPEC-009 first.
 
-`enable_template_update_notifications` generates `template-update.yml` and `check-template-update` only when selected. Public sources need no secret; private sources use a repository secret limited to read-only access to that template source.
+`template-update` in `scheduled_checks` generates `template-update.yml` and `check-template-update` only when selected. Public sources need no secret; private sources use a repository secret limited to read-only access to that template source.
 
 `scripts/sync-paired-files.sh` makes root the single source of paired files, and `--check` verifies copied content and executable bits. `profiles/catalog.yaml` records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period (`profiles/catalog.yaml`'s `stable_release_observation_days: 30`).
 
@@ -877,9 +877,9 @@ Root `.csarc/config.yml` records the capabilities the template repository select
 {{< disclosure key="docs-site-access" title="Access and maintenance boundaries" >}}
 `noindex` and `robots.txt` reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 
-The renderer resolves the same Rules-governance-approved `.csarc/config.yml` keys documented in the governance configuration table above; it does not define a second, site-only list. Product-specific prose lives in `site/content/_index.zh-tw.md` / `_index.en.md`, theme overrides remain in `docs/site-theme.css`, and the generated `docs/index.html` / `docs/index.en.html` is never edited directly.
+The renderer resolves the same Rules-governance-approved `.csarc/config.yml` keys documented in the governance configuration table above; it does not define a second, site-only list. A generated project keeps its prose in `docs/site/content/_index.zh-tw.md` / `_index.en.md`, its navigation in `docs/site/data/navigation.json`, and its theme overrides in `docs/site/theme.css`, rebuilds with `./.csarc/scripts/build-repo-site`, and never edits the generated `docs/index.html` / `docs/index.en.html` directly.
 
-**Custom theme for this page (the root site, Issue #527):** the `.csarc/config.yml` / `docs/site-theme.css` path above belongs to a generated project's own repo-site. A maintainer who forks or vendors this template repository itself and wants to restyle its own root repo site uses `site/theme.css` instead. Scope stays deliberately narrow: only override CSS custom properties already declared in `site/static/styles.css`'s `:root` block, plus narrow, purely-visual declarations on existing block-level classes -- no new HTML, JavaScript, or layout rules; ordinary PR review is the only gate, no extra tooling. This file always exists and is always inlined by the engine; it ships empty, so the default output keeps the template's palette unchanged:
+**Custom theme for this page (the root site, Issue #527):** the `.csarc/config.yml` / `docs/site/theme.css` path above belongs to a generated project's own repo-site. A maintainer who forks or vendors this template repository itself and wants to restyle its own root repo site uses `site/theme.css` instead. Scope stays deliberately narrow: only override CSS custom properties already declared in `site/static/styles.css`'s `:root` block, plus narrow, purely-visual declarations on existing block-level classes -- no new HTML, JavaScript, or layout rules; ordinary PR review is the only gate, no extra tooling. This file always exists and is always inlined by the engine; it ships empty, so the default output keeps the template's palette unchanged:
 
 ```css
 :root {
@@ -1059,7 +1059,7 @@ Agents do not save raw conversations. Only a user-confirmed durable architecture
           <tr><td>OSV reusable workflow + <a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">permission propagation</a></td><td><span class="tier-chip best">Corrected</span></td><td>A caller's permissions can only stay the same or shrink, never top up a called workflow; after <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> restored the required permission, the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">live run on main</a> succeeded.</td></tr>
           <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a> + <a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip partial">Product extension</span></td><td>The template's current shared baseline is an immutable GitHub Release, checksums, an SBOM, and consumer-side verification; a product that needs a registry or artifact attestation should build a real publisher, OIDC trust, and verification of its own rather than get a setting toggle with no one actually running it.</td></tr>
           <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> security baseline</td><td><span class="tier-chip optional">Plan-aware</span></td><td>Pinned Actions, OSV, <code>SECURITY.md</code>, full Git history, and working-tree secret scanning already exist; a public repository enables CodeQL by default, while private/internal opts in explicitly once GitHub Code Security is licensed.</td></tr>
-          <tr><td>Real consuming repository and adoption evidence</td><td><span class="tier-chip best">Shared lifecycle proven</span></td><td><code>ai-guardrail</code> completed v0.2.4 adoption, kept its product customization, ran a v0.3.1 Copier update, and passed two full live checks across two PRs and one Issue; Python, Rust, TypeScript, and Go each carry their own executable beta acceptance evidence. → <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a> / <a href="pilot-adoption.md">evidence</a></td></tr>
+          <tr><td>Real consuming repository and adoption evidence</td><td><span class="tier-chip best">Shared lifecycle proven</span></td><td>An existing private, CI-only consuming repository completed v0.2.4 adoption, kept its product customization, ran a v0.3.1 Copier update, and passed two full live checks across two PRs and one Issue; Python, Rust, TypeScript, and Go each carry their own executable beta acceptance evidence. → <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a> / <a href="pilot-adoption.md">evidence</a></td></tr>
         </tbody>
       </table>
 {{< /legacy >}}
@@ -1075,7 +1075,7 @@ Agents do not save raw conversations. Only a user-confirmed durable architecture
 | OSV reusable workflow | Corrected | A successful main run exists after permission propagation was fixed |
 | Artifact Attestations / SLSA | Conditional contract | Local tests retain repository, tag, digest, and signer checks; no active consumer workflow exists |
 | OpenSSF Scorecard | Plan-aware | Public enables CodeQL by default; private/internal explicitly opt in when licensed |
-| Real consuming repository | Shared lifecycle proven | `ai-guardrail` adopted v0.2.4 and updated to v0.3.1; language modules carry separate executable beta evidence |
+| Real consuming repository | Shared lifecycle proven | An existing private, CI-only consuming repository adopted v0.2.4 and updated to v0.3.1; language modules carry separate executable beta evidence |
 
 {{< disclosure key="benchmark-gap" title="Current gaps" >}}
 There is no cross-repository catalog, comprehensive hosted governance, registry publisher, or generic deployment platform. Historical live-integration runs remain audit evidence only; active workflow claims must come from files under `.github/workflows/` and current runs. Production repositories will add operational evidence without serving as disposable language test fixtures.
@@ -1141,7 +1141,7 @@ The script reads GitHub repositories, CODEOWNERS presence, and Copier adoption m
           <p>With at least 5 consuming repositories, evaluate central enforcement once either condition is met: the same class of drift appears in <strong>2 or more repositories</strong> within 30 days; over <strong>20%</strong> of update PRs across two consecutive template releases stay open past <strong>5 workdays</strong>; or manual <code>apply</code>/repair work exceeds <strong>2 hours a month</strong>. Allstar suits continuous checking and enforcing security policy; Safe Settings suits pushing repository settings from a hierarchical config. Neither substitutes for a catalog.</p>
         </article>
       </div>
-      <aside class="selection-note"><strong>Current decision</strong><span>0 consuming repositories, and no usable drift-frequency sample, so neither threshold is met. Keep Copier, JSON policy, the GitHub API, and daily drift checks; do not pre-deploy Backstage, Allstar, or Safe Settings.</span></aside>
+      <aside class="selection-note"><strong>Current decision</strong><span>The consuming repositories meet neither threshold, and there is no usable drift-frequency sample. Keep Copier, JSON policy, the GitHub API, and daily drift checks; do not pre-deploy Backstage, Allstar, or Safe Settings.</span></aside>
 {{< /legacy >}}
 
 {{< basic >}}

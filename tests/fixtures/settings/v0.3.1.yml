@@ -1,0 +1,23 @@
+# Issue #1071 AC7 fixture: answers rendered by `copier copy --defaults` from release tag v0.3.1 (legacy .copier-answers.yml).
+# Real legacy keys are kept verbatim; only the migration registry may read them.
+_commit: v0.3.1
+_src_path: .
+branch_strategy: main
+code_owner: '@Innoguard-Cyber-Arch/arch'
+coverage_mode: global
+coverage_threshold: 80
+enable_codeql: false
+enable_governance_drift_check: false
+enable_precommit: false
+enable_pypi_publishing: false
+enable_release_attestations: false
+enable_template_update_notifications: false
+language: python
+package_name: fixture_product
+project_description: A Cyber-Arch project
+project_mode: new
+project_name: Fixture Product
+project_slug: fixture-product
+project_visibility: private
+python_support_mode: latest
+use_reusable_workflow: false

@@ -31,14 +31,14 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">四個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.30.7</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.35.2</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
       </header>
       <div class="language-contract" aria-label="程式語言與公版設定">
         <p class="language-card"><strong>建立／導入時選擇程式語言</strong>Python、Rust、TypeScript、Go 需要哪些就勾哪些；都不選時只準備共通工作流程。</p>
-        <p class="language-card shared"><strong>一份公版設定</strong>模板把語言、分支與選用能力記在 <code>.csarc/config.yml</code>；更新時由公版維護，不必分散找設定。</p>
+        <p class="language-card shared"><strong>一份公版設定</strong>模板把語言、治理與選用能力記在 <code>.csarc/config.yml</code>；更新時由公版維護，不必分散找設定。</p>
         <p class="language-card future"><strong>目前支援版本</strong>Python 3.14、Rust 1.98、TypeScript 使用 Node 24 長期支援版、Go 最低 1.27（開發與驗證使用 1.27.1）。</p>
       </div>
       <div class="product-start">
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.30.7<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.35.2<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -121,11 +121,11 @@ csarc status <path> --json
 
 | 狀態（`state`） | 判斷依據 | 下一步 |
 | --- | --- | --- |
-| `create`（新 repo 建立） | 目標路徑不存在，或存在但是空目錄 | `csarc init <path>`：先 `--dry-run` 預覽，確認後加 `--yes --non-interactive` |
+| `create`（新 repo 建立） | 目標路徑不存在、是空目錄，或只有 `.git` 而沒有 commit 與 tracked 檔 | `csarc init <path>`：先 `--dry-run` 預覽，確認後加 `--yes --non-interactive` |
 | `adopt`（舊 repo 導入） | 目標已存在內容，但沒有 `.csarc/config.yml` | `csarc adopt <path>`：先寫出 dry-run 計畫，審查後用 `--apply-plan` 套用 |
 | `adoption-pending`（導入待完成） | 本機 adoption checkpoint 通過 identity 驗證，但導入尚未完成 | `csarc adopt <path> --finalize`：先預覽並完成既有 finalize 流程 |
 | `migrate`（舊版答案遷移） | `.csarc/config.yml` 的 `_commit` 不是完整 SHA，且沒有可信的 verified provenance | tag／短 SHA 先核對來源與版本，再依 `next_command` 綁回已驗證 Release；其他格式先還原正確 SHA |
-| `update`（有可用更新） | 已有 `.csarc/config.yml`，其中記錄的 Copier revision 落後目前可用版本 | `csarc update <path> --check` 預覽差異，確認後執行 `csarc update <path>` |
+| `update`（有可用更新） | 已有 `.csarc/config.yml`，其中記錄的 Copier revision 落後目前可用版本 | 依 `next_command`：帶 `--to`／`--expected-sha` 的 `--check` 預覽，`--finalize-plan --decision` 決定衝突，再 `--apply-plan` 套用（見 `docs/install.md`） |
 | `current`（已是最新，不用做事） | Copier revision 已是最新，且 `policies/` 與 GitHub 上實際設定一致 | 不需要動作 |
 | `policy-only-update`（已是最新，但政策設定變了） | Copier revision 已是最新，但 `policies/`（例如允不允許 workaround）與 GitHub 上實際設定不一致 | `.csarc/scripts/apply-repository-settings.sh plan` 預覽，確認後 `apply`；**不必**重新走一次完整 adopt／update |
 
@@ -158,7 +158,7 @@ csarc status <path> --json
 | `repository_settings_inspection` | `check` 模式能比對即時的管理員專屬欄位 | 與 `repository_admin` 相同 | DEGRADED 標記；改在具 admin 身分的可信環境執行 `check` |
 | `immutable_releases` | GitHub 用來為每個已發布 Release 簽發 attestation 的 repository 設定 | admin 透過 `apply-repository-settings.sh apply` 開啟一次；`GITHUB_TOKEN` 仍無法直接讀取 | 不再 pre-flight 卡關（#770）；`scripts/publish-release` post-hoc 驗證簽發的 attestation，缺少時 fail closed |
 
-本機 repo 尚未設定 remote 時，有值的 CODEOWNER 可以先標為 `unknown`；若用 `--data code_owner=` 省略 CODEOWNERS，則必須同時傳入合法的 `--data repository_url=https://github.com/<owner>/<repository>`。這個 repository 身分在關閉文件功能時仍會被其他設定與套件 metadata 使用，不能從空 owner 猜測。
+本機 repo 尚未設定 remote 時，有值的 CODEOWNER 可以先標為 `unknown`，而且必須傳入合法的 `--data repository_url=https://github.com/<owner>/<repository>`。這個 repository 身分在關閉文件功能時仍會被其他設定與套件 metadata 使用，不會從 `code_owner` 猜測。
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="怎麼解讀 check-repo-capabilities 的結果" >}}
@@ -726,7 +726,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 - 原本可以套用、但目前設定不一致的項目會停止，修正後才能繼續。
 
 {{< disclosure key="governance-live-status" title="這個 repo 本身現在的真實狀態（查詢日期：2026-09-07）" >}}
-`Innoguard-Cyber-Arch` API 回報這個 repository 是 Free 方案、**public** 可見度。GitHub 上已有一個 `enforcement: active` 的 Ruleset「CSARC protected branches」（建立於 2026-09-03），套用在 `main` 與 `dev/m*`：`title`／`verify`／`review` 三項狀態檢查必須通過，review check 依 `admin_bypass` 與可用的 Copilot 證據判定，且不允許 force-push。此 repo 明確使用 `verification_mode: hosted`、`release_trigger: manual`、`actions_fallback: admin` 與 `admin_bypass: always`；admin bypass 只替代同行核准，`actions_fallback` 則只處理已證明的 zero-step billing block，兩者都不會略過其他必要證據。
+`Innoguard-Cyber-Arch` API 回報這個 repository 是 Free 方案、**public** 可見度。GitHub 上已有一個 `enforcement: active` 的 Ruleset「CSARC protected branches」（建立於 2026-09-03），套用在 `main` 與 `dev/m*`：`title`／`verify`／`review` 三項狀態檢查必須通過，review check 依 `admin_bypass` 與可用的 Copilot 證據判定，且不允許 force-push。此 repo 明確使用 `verification_mode: hosted`、`release_trigger: manual` 與 `admin_bypass: always`；admin bypass 只替代同行核准，不會略過其他必要證據。原本的 `actions_fallback` 已退役（Issue #1071），Actions 中斷改走 governance-switch 路線。
 
 這對應下表「Free＋public，或 Pro 個人＋private」那一列，不是下面「Free／Team／Enterprise 各方案完整能力」卡片裡 Free 方案描述的 **private** 降級情境（那張卡片說明的是 Free＋*private* 時，REST／GraphQL 建立 Ruleset 的 API 會拒絕、只能保留期望狀態並標示 `DEGRADED`）；這個 repo 選擇公開，因此適用的是可以直接套用並驗證的那條路徑。方案或可見度之後若改變，重跑 `plan`／`apply`／`check` 就會反映最新狀態——這裡記錄的是查詢當下的事實，不是永久保證，也不代表每個使用這套公版的 repo 都跟這裡一樣。
 {{< /disclosure >}}
@@ -752,25 +752,25 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 {{< disclosure key="governance-config" title="單一設定來源與責任層級" >}}
 | 層級 | `.csarc/config.yml` key | 預設／允許值 | 產生或驗證位置 |
 | --- | --- | --- | --- |
-| 治理意圖 | `governance_mode`、`lifecycle`、`actions_fallback` | `managed`／`observe`；`issues`／`milestones`；fallback 預設 `off`、可選 `admin` | repository policy、工作項目 side effects 與經證明的 zero-step billing fallback |
+| 治理意圖 | `governance_mode`、`lifecycle` | `managed`／`observe`；`issues`／`milestones` | repository policy 與工作項目 side effects |
 | 驗證信任 | `verification_mode` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted CI、PR 治理、Pages／release workflow；或 trusted GitHub-hosted checks |
-| 審查意圖 | `admin_bypass`、`copilot_review` | admin bypass 預設 `off`、可選 `beta-only`／`always`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到同行核准或設定允許的管理員授權 |
+| 審查意圖 | `admin_bypass`、`copilot_review` | admin bypass 新專案預設 `always`、可選 `beta-only`／`off`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到同行核准或設定允許的管理員授權 |
 | 發版意圖 | `release_ownership`、`release_trigger`、`project_maturity` | ownership 三選一；trigger 為 `main`／`manual`；成熟度預設 early | 公開 beta／stable 通道、固定 Conventional Commits 演算法與發版候選觸發 |
 | 文件治理 | `documentation_mode` | `template-and-content`／`content-only`／`off` | 文件模板與 project-owned 內容分層；Pages 只在 hosted＋完整模板時啟用，且只因 `docs/**` 或手動觸發 |
-| 文件語言 | `primary_language`、`i18n` | `en`／`zh-tw`；雙語並行或 `off` | README 與文件入口；雙語時維護另一語言版 |
-| 授權 | `project_license`、`copyright_holder` | 預設 `proprietary`；也可選 `MIT`／`Apache-2.0` | `LICENSE`、README、套件 manifest 與 SBOM |
-| 選配產物 | `features` | 預設空白；目前可加入 `docker` | Docker starter 與 build scan 一起啟閉 |
-| 組織政策 | `code_owner` | 可省略的 `@user` 或 `@organization/team` | `.github/CODEOWNERS`；不作為 reviewer 名單 |
-| 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及 repo-site 的可見受眾欄位 |
-| 專案選擇 | `project_name` | 必填非空字串；預設 `CSARC Project` | repo-site 的標題與頁首 |
-| 專案選擇 | `project_description` | 必填一句話用途說明，拒絕佔位文字 | repo-site 的簡介段落 |
+| 文件語言 | `documentation_languages` | `zh-tw`／`en`／`zh-tw+en`／`en+zh-tw` | README 與文件入口；第一個是主要語言，有第二個時維護另一語言版 |
+| 授權（一次性 seed，不保存） | `project_license`、`copyright_holder` | 預設 `proprietary`；也可選 `MIT`／`Apache-2.0` | 寫入 `LICENSE`、README 與套件 manifest，之後以 `LICENSE` 為準 |
+| 選配產物 | `container` | 預設 `false` | Docker starter 與 build scan 一起啟閉 |
+| 組織政策 | `code_owner` | 預設空值；可選 `@user` 或 `@organization/team` | `.github/CODEOWNERS`；不作為 reviewer 名單 |
+| 即時事實（不保存） | `project_visibility` | 每次由 GitHub 讀取；讀不到時才需明確傳入 | 能力偵測與選配安全預設 |
+| 一次性 seed（不保存） | `project_name` | 必填非空字串 | 寫入 README 與受管的網站資料，作為 repo-site 的標題與頁首 |
+| 一次性 seed（不保存） | `project_description` | 必填一句話用途說明，拒絕佔位文字 | 寫入 README 與受管的網站資料，作為 repo-site 的簡介段落 |
 | 專案選擇 | `languages` | 零到多個 `python`、`rust`、`typescript` | repo-site 的「使用語言」欄位 |
-| 專案選擇 | `repository_url`、`project_slug` | 未覆寫時由 `code_owner`／`project_name` 推導 | repo-site 的複製（clone）指引 |
-| 專案選配 | `enable_governance_drift_check` | 預設 `true`，產生每日排程 Action；可設為 `false` 關閉 | `true` 生成 `governance-drift.yml` 與 drift checker；`false` 兩者皆不產生 |
+| 即時事實與推導值（不保存） | `repository_url`、`project_slug` | `repository_url` 每次取自 GitHub origin／`GH_REPO`，明確值只綁單次 plan；`project_slug` 由 repository 名稱推導 | repo-site 的複製（clone）指引 |
+| 專案選配 | `scheduled_checks` | 預設 `governance-drift`；可加 `template-update` 或清空 | `governance-drift` 生成每日 `governance-drift.yml` 與 drift checker；`template-update` 生成每週通知 |
 
 公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。方案、帳務、Copilot entitlement、token 權限與 Pages 可用性不是設定值，而是 `allowed`／`blocked`／`unknown` 的即時偵測結果。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
 
-`documentation_mode: template-and-content` 的生成專案與這個公版根網站使用同一套渲染引擎與元件（Issue #681），只是內容精簡許多；只從上表 key 讀取明確的 `[[key]]` token，直接對照 `.csarc/config.yml`，未知 key 會讓建置直接失敗，因此網站不會另建第二份設定 schema。專案文字與樣式選擇留在 `docs/site/content/` 與 `docs/site/theme.css`，由專案自行維護；完整責任與遷移規則見 `docs/documentation-policy.md`。
+`documentation_mode: template-and-content` 的生成專案與這個公版根網站使用同一套渲染引擎與元件（Issue #681），只是內容精簡許多；只從上表 key 讀取明確的 `[[key]]` token：設定值對照 `.csarc/config.yml`，名稱、說明與 repository URL 對照受管的網站資料，授權對照 `LICENSE`；未知 key 會讓建置直接失敗，因此網站不會另建第二份設定 schema。專案文字與樣式選擇留在 `docs/site/content/` 與 `docs/site/theme.css`，由專案自行維護；完整責任與遷移規則見 `docs/documentation-policy.md`。
 {{< /disclosure >}}
 
 {{< disclosure key="governance-exceptions" title="暫時例外怎麼留下紀錄" >}}
@@ -810,7 +810,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 
 {{< ops key="template-release-mode-ops" title="單一來源、驗證流程與目前自動化邊界" >}}
 - `template/` 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理與 dogfood 設定，配對檔案由 `scripts/sync-paired-files.sh` 從 root 產生 `template/` 副本。
-- `.csarc/config.yml` 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。
+- `.csarc/config.yml` 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、治理與選用能力都從這裡讀取，分支路線則由 Issue 與 Milestone metadata 推導；後續擴充也增加設定項目，不另建第二份設定檔。
 - 新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自元件（模組），不建立組合專屬流程。
 - 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan；dry-run 不執行 target-owned helper 或 product hook，並唯讀盤點 GitHub Issue Types 與 labels。報告以 `Bug`／`Feature`／`Task` 作為 Issue 工作類型，以小寫 `bug`／`enhancement`／`documentation` 作為 PR 分類與 fallback，列出可安全整批接受的對應和需要逐項確認的自訂項目，但不會改動遠端 metadata。人核准同一份未漂移的 plan 後，CLI 才在隔離候選執行驗證，通過後寫入；第一張 PR 再由人核對來源、plan、diff 與本機結果。
 - 第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先用 dry-run 預覽，候選內容與衝突全部驗證完成才修改 target，若有衝突就保持 repo 不變，修正後重跑，再由一般 PR 與 trusted-base checks 審查。
@@ -822,9 +822,9 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 {{< /disclosure >}}
 
 {{< disclosure key="template-release-scope" title="單一來源、版本基線與 root-only 邊界" >}}
-Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外記錄 Copier 的來源與版本，並透過 `csarc update --data` 寫回變更。模板來源不會偽造指回自己、且很快就過期的 `_src_path`／`_commit`。繼承公版可在同一份 YAML 加 namespaced 欄位，不複製 CSARC 已有設定。
+Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外記錄 Copier 的來源與版本，並透過 `csarc update --data` 寫回變更。模板來源不會偽造指回自己、且很快就過期的 `_src_path`／`_commit`。設定 schema 是封閉清單（[SPEC-009](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/specs/SPEC-009-project-settings.md)），未知欄位會在讀取時直接失敗；繼承公版需要新設定時，先更新 SPEC-009。
 
-`enable_template_update_notifications` 開啟時才產生 `template-update.yml` 與 `check-template-update`；公開來源不需 secret，private 來源才使用限於唯讀模板存取的 repository secret。
+`scheduled_checks` 含 `template-update` 時才產生 `template-update.yml` 與 `check-template-update`；公開來源不需 secret，private 來源才使用限於唯讀模板存取的 repository secret。
 
 `scripts/sync-paired-files.sh` 讓 root 成為成對檔案的單一來源，`--check` 驗證副本內容與可執行位元。`profiles/catalog.yaml` 保存語言基線與驗收證據；Python 與 Node 基線各自觀察三十天後才前進（`profiles/catalog.yaml` 的 `stable_release_observation_days: 30`）。
 
@@ -869,9 +869,9 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 {{< disclosure key="docs-site-access" title="存取與維護邊界" >}}
 `noindex` 與 `robots.txt` 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。
 
-renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc/config.yml` key，不另定義第二份網站專用清單。專案文字寫在 `site/content/_index.zh-tw.md`／`_index.en.md`，樣式覆寫留在 `docs/site-theme.css`，產生的 `docs/index.html`／`docs/index.en.html` 不直接編輯。
+renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc/config.yml` key，不另定義第二份網站專用清單。生成專案的文字寫在 `docs/site/content/_index.zh-tw.md`／`_index.en.md`，導覽在 `docs/site/data/navigation.json`，樣式覆寫留在 `docs/site/theme.css`，以 `./.csarc/scripts/build-repo-site` 重建；產生的 `docs/index.html`／`docs/index.en.html` 不直接編輯。
 
-**自訂本頁（根網站）主題（Issue #527）：**上述 `.csarc/config.yml`／`docs/site-theme.css` 是生成專案自己 repo-site 的路徑；fork 或 vendor 這份公版本身、想調整這份根 repo-site 配色的維護者，改用 `site/theme.css`。範圍嚴格限制在 `site/static/styles.css` 既有 `:root` 顏色 token，以及既有 class 的窄範圍視覺屬性，不開放新增 HTML、JavaScript 或版面配置；由一般 PR review 把關，不建立額外驗證工具。此檔一律存在、一律被引擎內嵌，預設為空白覆寫，因此預設輸出保持公版配色不變：
+**自訂本頁（根網站）主題（Issue #527）：**上述 `.csarc/config.yml`／`docs/site/theme.css` 是生成專案自己 repo-site 的路徑；fork 或 vendor 這份公版本身、想調整這份根 repo-site 配色的維護者，改用 `site/theme.css`。範圍嚴格限制在 `site/static/styles.css` 既有 `:root` 顏色 token，以及既有 class 的窄範圍視覺屬性，不開放新增 HTML、JavaScript 或版面配置；由一般 PR review 把關，不建立額外驗證工具。此檔一律存在、一律被引擎內嵌，預設為空白覆寫，因此預設輸出保持公版配色不變：
 
 ```css
 :root {
@@ -889,7 +889,7 @@ renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc
 - **自動保存完整聊天：**會混入未確認假設、敏感脈絡與噪音。
 {{< /disclosure >}}
 
-<aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-repo-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>site/</code> 與 renderer，專案保有 <code>site/content/_index.zh-tw.md</code>、<code>_index.en.md</code> 與 <code>docs/site-theme.css</code></li><li><strong>網站存取：</strong><code>noindex</code>／<code>robots.txt</code> 只能降低誤分享，不是登入保護；需要限制讀者時，優先評估 Cloudflare Pages＋Access，host、身分提供者、資料政策與組織 owner 另案核准</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">存取 #79</a>／<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">網站 #178</a></li></ul></aside>
+<aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-repo-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>.csarc/site/</code> 與 <code>.csarc/scripts/</code> 的 renderer，專案保有 <code>docs/site/content/_index.zh-tw.md</code>、<code>_index.en.md</code>、<code>docs/site/data/navigation.json</code> 與 <code>docs/site/theme.css</code>；舊版位置由 update 原樣搬移並列為 move</li><li><strong>網站存取：</strong><code>noindex</code>／<code>robots.txt</code> 只能降低誤分享，不是登入保護；需要限制讀者時，優先評估 Cloudflare Pages＋Access，host、身分提供者、資料政策與組織 owner 另案核准</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">存取 #79</a>／<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">網站 #178</a></li></ul></aside>
 {{< /basic >}}
 {{< /slide >}}
 
@@ -1051,7 +1051,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
           <tr><td>OSV reusable workflow＋<a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">權限傳遞</a></td><td><span class="tier-chip best">已修正</span></td><td>呼叫端權限只能維持或縮小，不能替被呼叫 workflow 補權限；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> 補回必要權限後，<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">main 線上 run</a> 已成功。</td></tr>
           <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip partial">產品擴充</span></td><td>公版目前以 immutable GitHub Release、checksum、SBOM 與消費端驗證作共同基線；需要 registry 或 artifact attestation 的產品，應另案建立真實 publisher、OIDC 信任與驗證，不只提供無執行者的設定開關。</td></tr>
           <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip optional">方案感知</span></td><td>已有 pinned Actions、OSV、<code>SECURITY.md</code>、完整 Git 歷史與工作樹 secret scan；public repo 預設啟用 CodeQL，private／internal 則依 GitHub Code Security 授權明確 opt-in。</td></tr>
-          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">共用生命週期已證明</span></td><td><code>ai-guardrail</code> 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、Rust、TypeScript 與 Go 另有各自可執行的 beta 驗收證據。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
+          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">共用生命週期已證明</span></td><td>既有的 private、CI-only consuming repo 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、Rust、TypeScript 與 Go 另有各自可執行的 beta 驗收證據。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
         </tbody>
       </table>
 {{< /legacy >}}
@@ -1067,7 +1067,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 | OSV reusable workflow | 已修正 | 權限傳遞修正後已有成功 main run |
 | Artifact Attestations／SLSA | Conditional contract | 本機測試保留 repository、tag、digest 與 signer 核對；目前沒有 active consumer workflow |
 | OpenSSF Scorecard | 方案感知 | public 預設 CodeQL；private/internal 依授權 opt-in |
-| 真實 consuming repo | 共用生命週期已證明 | `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 update；語言模組另有可執行 beta 證據 |
+| 真實 consuming repo | 共用生命週期已證明 | 既有的 private、CI-only consuming repo 已完成 v0.2.4 導入與 v0.3.1 update；語言模組另有可執行 beta 證據 |
 
 {{< disclosure key="benchmark-gap" title="現階段缺口" >}}
 沒有跨 repo catalog、全面託管治理、registry publisher 或通用部署平台。歷史 live-integration run 只保留為稽核證據；現行能力必須同時有 `.github/workflows/` 內的 active file 與近期 run。真實產品 repo 繼續累積營運證據，但不作為一次性的語言測試 fixture。
@@ -1133,7 +1133,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
           <p>至少 5 個 consuming repo 後，滿足任一條才評估中央 enforcement：30 天內同類漂移出現於 <strong>2 個以上 repo</strong>；連續兩個模板 release 都有超過 <strong>20%</strong> 的 update PR 逾 <strong>5 個工作天</strong>；或每月人工 <code>apply</code>／修正超過 <strong>2 小時</strong>。Allstar 適合持續檢查與執行安全政策；Safe Settings 適合用階層設定檔統一下發 repository settings。兩者不取代 catalog。</p>
         </article>
       </div>
-      <aside class="selection-note"><strong>目前決定</strong><span>0 個 consuming repo，且沒有可用的漂移頻率樣本，不達任一門檻。維持 Copier／JSON policy／GitHub API／每日漂移檢查；不預先部署 Backstage、Allstar 或 Safe Settings。</span></aside>
+      <aside class="selection-note"><strong>目前決定</strong><span>consuming repo 不達任一門檻，也沒有可用的漂移頻率樣本。維持 Copier／JSON policy／GitHub API／每日漂移檢查；不預先部署 Backstage、Allstar 或 Safe Settings。</span></aside>
 {{< /legacy >}}
 
 {{< basic >}}

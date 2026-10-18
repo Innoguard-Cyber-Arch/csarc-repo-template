@@ -124,29 +124,74 @@ validate_large_test_justification() {
   fi
 }
 
+validate_requirement_trace() {
+  # SPEC-010: the trusted lifecycle checks a Ready work pull request's trace.
+  local default=true
+  [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]] && default=false
+  [[ "${PR_DRAFT:-false}" != "true" && "${promotion:-false}" != "true" &&
+    "${PR_REQUIREMENT_TRACE_REQUIRED:-$default}" == "true" ]] || return 0
+  python3 "$script_dir/pr_lifecycle.py" trace --repo "$GITHUB_REPOSITORY" \
+    --pr-number "$PR_NUMBER" --head-sha "${PR_HEAD_SHA:-}" || exit 1
+}
+
+validate_governance_route() {
+  # Issue #1069: changing .csarc/scripts or relaxing a governance value only
+  # lands through the governance-switch route. This trusted base reads both
+  # configurations and decides; the candidate's own rules never run here.
+  # A promotion re-lands work that was already routed into its branch.
+  if [[ "${promotion:-false}" == "true" ]]; then
+    return 0
+  fi
+  local scratch files_json candidate_config
+  scratch="$(mktemp -d)"
+  files_json="$scratch/pull-files.json"
+  candidate_config="$scratch/candidate-config.yml"
+  if [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]]; then
+    if [[ "${PR_CANDIDATE_CONFIG+x}" != "x" ]]; then
+      rm -rf "$scratch"
+      return 0
+    fi
+    printf '%s\n' "${PR_CHANGED_FILES_JSON:-[[]]}" >"$files_json"
+    printf '%s\n' "$PR_CANDIDATE_CONFIG" >"$candidate_config"
+  else
+    if ! gh api --paginate --slurp \
+      "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+      >"$files_json"; then
+      rm -rf "$scratch"
+      echo "Cannot read the pull request file list for the governance route."
+      exit 1
+    fi
+    if ! gh api "repos/$GITHUB_REPOSITORY/contents/.csarc/config.yml?ref=$PR_HEAD_SHA" \
+      --jq '.content' |
+      python3 -c 'import base64, sys; sys.stdout.buffer.write(base64.b64decode(sys.stdin.read()))' \
+        >"$candidate_config"; then
+      rm -rf "$scratch"
+      echo "Cannot read the candidate configuration for the governance route."
+      exit 1
+    fi
+  fi
+  if ! python3 "$script_dir/trusted_executor.py" route \
+    --base-config "$repo_root/.csarc/config.yml" \
+    --candidate-config "$candidate_config" \
+    --pull-files "$files_json" \
+    --labels "${PR_LABELS:-}" \
+    --enforce; then
+    rm -rf "$scratch"
+    exit 1
+  fi
+  rm -rf "$scratch"
+}
+
 # Delivery routing is derived from trusted Issue and Milestone metadata.
 branch_strategy="delivery"
 release_ownership="${PR_RELEASE_OWNERSHIP:-}"
 if [[ -z "$release_ownership" ]]; then
-  # release_ownership is a hidden (when: false) Copier question: its computed
-  # default is used while rendering but Copier never persists it to the
-  # answers file, so it is absent from every generated .csarc/config.yml
-  # unless an adoption flow explicitly wrote it. Fall back to the same
-  # project_mode-based formula copier.yml's own default expression uses.
-  if [[ -f .csarc/config.yml ]] &&
-    release_ownership="$(python3 scripts/csarc_config.py release_ownership 2>/dev/null)" &&
-    [[ -n "$release_ownership" ]]; then
-    :
-  else
-    project_mode="new"
-    if [[ -f .csarc/config.yml ]]; then
-      project_mode="$(python3 scripts/csarc_config.py project_mode 2>/dev/null || echo new)"
-    fi
-    if [[ "$project_mode" != "existing" ]]; then
-      release_ownership="csarc-owned"
-    else
-      release_ownership="verification-only"
-    fi
+  # The saved release_ownership is the only authority (Issue #1068): the
+  # shared reader fails closed with a stable error that points to
+  # `csarc update` when the value is missing, unknown, or contradictory,
+  # instead of re-deriving an owner from project_mode or defaults.
+  if ! release_ownership="$(python3 scripts/csarc_config.py release_ownership)"; then
+    exit 1
   fi
 fi
 if [[ "$release_ownership" != "csarc-owned" &&
@@ -324,6 +369,7 @@ if [[ "$pr_draft" != "true" ]] && grep -Eq "$unchecked_task_pattern" <<<"${PR_BO
   exit 1
 fi
 validate_large_test_justification
+validate_governance_route
 
 if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
   issue_state="$PR_ISSUE_STATE"
@@ -520,6 +566,7 @@ if [[ "${tracker_promotion:-false}" != "true" ]] && [[ "$pr_draft" != "true" ]] 
   echo "Issue #${issue_number} still has unchecked acceptance tasks."
   exit 1
 fi
+validate_requirement_trace
 if [[ "${tracker_promotion:-false}" == "true" ]]; then
   if [[ "$issue_title" != "Milestone ${promotion_milestone}: "* ]]; then
     echo "A Milestone ${promotion_milestone} promotion must reference its own tracker Issue."

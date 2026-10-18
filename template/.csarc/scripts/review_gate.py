@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Decide whether a pull request's exact head has earned review.
 
-The configured human fallback is either solo or peer. When explicitly allowed,
-a clean Copilot review of the exact head can satisfy either mode; otherwise the
-human rule applies. The audited admin-bypass authorization remains limited
-to its existing route. The Ruleset keeps native approval count at zero and
-makes this ``review`` check required for every pull request.
+``check``, ``status``, and ``pr_lifecycle.py merge`` share `decide` and its
+reason codes (Issue #1082). A clean exact-head Copilot review satisfies self
+or peer review only when allowed, the Ruleset shape can run it, and no valid
+admin-bypass marker exists; otherwise the result equals ``off``.
 
 Copilot never submits ``APPROVED``; a clean review is a ``COMMENTED``
 review whose body states that it generated no comments. The gate remains
@@ -32,9 +31,11 @@ import importlib
 import json
 import re
 import sys
+import urllib.parse
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Protocol
 
 if __package__ in {None, ""}:
@@ -48,7 +49,6 @@ else:
 COPILOT_LOGINS = {"copilot-pull-request-reviewer[bot]", "copilot"}
 CLEAN_BODY = re.compile(r"(?i)\bgenerated (?:no|0) (?:new )?comments\b")
 SUPPRESSED_BODY = re.compile(r"(?i)\bsuppressed\b")
-UNLIMITED = "unlimited"
 
 CommentLoader = Callable[[object], list[dict[str, Any]]]
 
@@ -65,6 +65,13 @@ class GitHubReader(Protocol):
         ...
 
 
+class LevelDecision(Protocol):
+    """The resolved release level and its human review mode."""
+
+    level: str
+    review: str
+
+
 @dataclass(frozen=True)
 class CopilotReview:
     """Copilot's verdict on one exact head."""
@@ -75,24 +82,15 @@ class CopilotReview:
     findings: list[dict[str, Any]] = field(default_factory=list)
 
 
-def review_settings(path: Path | None = None) -> tuple[str, str]:
-    """Return the normalized Copilot mode and compatibility level cap.
-
-    The new schema deliberately has no release-level cap: an explicitly
-    allowed clean exact-head Copilot review can satisfy either human mode.
-    """
+def review_settings(path: Path | None = None) -> str:
+    """Return ``copilot`` when Copilot evidence is allowed, else ``human``."""
     config_path = path or csarc_config.CONFIG_FILE
     if not config_path.exists():
-        return "human", UNLIMITED
+        return "human"
+    # Schema 2 always states copilot_review; legacy review keys are read
+    # only by the pinned CLI's migration registry (SPEC-009, Issue #1071).
     config = csarc_config.load_config(config_path)
-    configured = config.get("copilot_review")
-    if configured is None:
-        configured = (
-            "allowed" if config.get("pr_review_mode") == "copilot" else "off"
-        )
-    mode = "copilot" if configured == "allowed" else "human"
-    level = UNLIMITED
-    return str(mode), str(level)
+    return "copilot" if config["copilot_review"] == "allowed" else "human"
 
 
 def is_copilot(review: dict[str, Any]) -> bool:
@@ -143,6 +141,10 @@ def copilot_verdict(
                 else "Copilot has not reviewed this pull request yet"
             ),
         )
+    if review.get("state") == "DISMISSED":
+        return CopilotReview(
+            "pending", "Copilot's review of the current head was dismissed"
+        )
     comments = comments_for(review["id"])
     findings = [
         {
@@ -178,24 +180,12 @@ def copilot_verdict(
     return CopilotReview("clean", "Copilot found no issues", review)
 
 
-def level_allows_copilot(max_level: str, level: str) -> tuple[bool, str]:
-    """Return whether the configured cap lets Copilot approve this level."""
-    if release_level.level_allows_copilot(max_level, level):
-        return True, ""
-    return (
-        False,
-        f"copilot_review_max_level={max_level} does not allow Copilot to "
-        f"approve a {level} pull request; a maintainer approval is required",
+def _lifecycle() -> ModuleType:
+    return importlib.import_module(
+        "pr_lifecycle"
+        if __package__ in {None, ""}
+        else f"{__package__}.pr_lifecycle"
     )
-
-
-def _pr_context(
-    github: GitHubReader, repo: str, pr_number: int
-) -> dict[str, Any]:
-    pull = github.get(repo, f"pulls/{pr_number}")
-    if not isinstance(pull, dict):
-        raise RuntimeError("Pull request is unavailable")
-    return pull
 
 
 def _comments_for(
@@ -209,230 +199,312 @@ def _comments_for(
     return load
 
 
-def evaluate(  # noqa: C901
+def copilot_route(github: GitHubReader, repo: str, branch: str) -> str:
+    """Return whether the Ruleset shape can run the Copilot route.
+
+    Only shapes A and E1 (#1058 decision 4) need zero native approvals with
+    stale-review dismissal and thread resolution. Shape C, other shapes, or
+    an unreadable Ruleset degrade to ``off``; entitlement is never probed.
+    """
+    try:
+        rules = github.get(
+            repo, f"rules/branches/{urllib.parse.quote(branch, safe='')}"
+        )
+    except RuntimeError:
+        return "unavailable"
+    pull = [
+        item.get("parameters")
+        for item in (rules if isinstance(rules, list) else [])
+        if isinstance(item, dict) and item.get("type") == "pull_request"
+    ]
+    shaped = (
+        bool(pull)
+        and all(
+            isinstance(item, dict)
+            and type(item.get("required_approving_review_count")) is int
+            and item["required_approving_review_count"] == 0
+            for item in pull
+        )
+        and any(item.get("dismiss_stale_reviews_on_push") for item in pull)
+        and any(item.get("required_review_thread_resolution") for item in pull)
+    )
+    return "available" if shaped else "unavailable"
+
+
+def _admin_bypass_state(
+    github: GitHubReader,
+    repo: str,
+    pull: dict[str, Any],
+    default_branch: str | None,
+) -> tuple[str, str]:
+    """Return ``absent``, ``valid``, or ``invalid`` (with why, #781)."""
+    lifecycle = _lifecycle()
+    if (
+        lifecycle.ADMIN_BYPASS_MARKER
+        not in str(pull.get("body") or "").splitlines()
+    ):
+        # Cheap check first: most pull requests never opt in.
+        return "absent", ""
+    try:
+        if default_branch is None:
+            repository = github.get(repo, "")
+            default_branch = (
+                repository.get("default_branch")
+                if isinstance(repository, dict)
+                else None
+            )
+            if not isinstance(default_branch, str):
+                return "invalid", "The repository default branch is unavailable"
+        opted_in = lifecycle.admin_bypass_opt_in(
+            github, repo, {"default_branch": default_branch}, pull
+        )
+    except RuntimeError as error:
+        return "invalid", str(error)
+    return ("valid", "") if opted_in else ("absent", "")
+
+
+def review_inputs(
+    github: GitHubReader,
+    repo: str,
+    pr_number: int,
+    pull: dict[str, Any],
+    mode: str,
+    level: LevelDecision,
+    *,
+    actor: str = "",
+    default_branch: str | None = None,
+    admin_bypass: str | None = None,
+) -> dict[str, Any]:
+    """Read every live input of `decide`; merge adds its actor and route."""
+    lifecycle = _lifecycle()
+    head_sha = str((pull.get("head") or {}).get("sha") or "")
+    author = str((pull.get("user") or {}).get("login") or "").casefold()
+    reviews = github.pages(repo, f"pulls/{pr_number}/reviews?per_page=100")
+    labels = {
+        str(label.get("name") or "").casefold()
+        for label in pull.get("labels", [])
+        if isinstance(label, dict)
+    }
+    inputs: dict[str, Any] = {
+        "repository": repo,
+        "pull_request": pr_number,
+        "head_sha": head_sha,
+        "draft": pull.get("draft") is not False,
+        "mode": mode,
+        "release_level": level.level,
+        "required_review": level.review,
+        "approval": lifecycle.exact_head_approval(
+            github,
+            repo,
+            lifecycle.current_reviews(reviews),
+            head_sha,
+            {author, actor.casefold()} - {""},
+        ),
+        "admin_bypass": "absent",
+        "admin_bypass_reason": "",
+        "admin_authorization": None,
+        "hotfix": level.review == "peer" and "hotfix" in labels,
+        "hotfix_authorization": None,
+        "hotfix_reason": "",
+        "copilot_route": "unavailable",
+        "copilot": None,
+    }
+    if level.review == "self":
+        state, reason = (
+            (admin_bypass, "")
+            if admin_bypass is not None
+            else _admin_bypass_state(github, repo, pull, default_branch)
+        )
+        inputs.update(admin_bypass=state, admin_bypass_reason=reason)
+        if state == "valid":
+            # Only a live `role_name` of `admin` may replace peer approval.
+            inputs["admin_authorization"] = (
+                lifecycle.find_exact_head_authorization(
+                    github, repo, pr_number, head_sha, require_admin=True
+                )
+            )
+    if inputs["hotfix"]:
+        authorization = lifecycle.find_exact_head_authorization(
+            github, repo, pr_number, head_sha
+        )
+        if authorization is not None:
+            try:
+                evidence = lifecycle.hotfix_emergency_evidence(
+                    github, repo, pull, authorization
+                )
+            except RuntimeError as error:
+                inputs["hotfix_reason"] = str(error)
+            else:
+                inputs["hotfix_authorization"] = authorization
+                inputs["hotfix_reason"] = str(evidence["reason"])
+    if mode == "copilot":
+        inputs["copilot_route"] = copilot_route(
+            github, repo, str((pull.get("base") or {}).get("ref") or "")
+        )
+        inputs["copilot"] = copilot_verdict(
+            reviews, head_sha, _comments_for(github, repo, pr_number)
+        )
+    return inputs
+
+
+def _binding(inputs: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    """Bind accepted evidence to its exact repository, head, and author."""
+    return {
+        "repository": inputs["repository"],
+        "pull_request": inputs["pull_request"],
+        "head_sha": inputs["head_sha"],
+        "id": item.get("id"),
+        "author": (item.get("user") or {}).get("login"),
+        "state": item.get("state"),
+        "commit_id": item.get("commit_id"),
+        "at": item.get("submitted_at") or item.get("created_at"),
+        "url": item.get("html_url"),
+        "admin_bypass": inputs["admin_bypass"],
+    }
+
+
+def decide(inputs: dict[str, Any]) -> dict[str, Any]:  # noqa: C901
+    """Return the one review decision shared by every entry point."""
+    result = {
+        key: inputs[key]
+        for key in (
+            "repository",
+            "head_sha",
+            "mode",
+            "release_level",
+            "required_review",
+            "admin_bypass",
+        )
+    }
+    verdict = inputs["copilot"]
+    if verdict is not None:
+        result["copilot"] = {
+            "state": verdict.state,
+            "reason": verdict.reason,
+            "route": inputs["copilot_route"],
+            "review_url": (verdict.review or {}).get("html_url"),
+            "findings": verdict.findings,
+        }
+
+    def done(
+        state: str,
+        code: str,
+        reason: str,
+        source: str | None = None,
+        item: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        result.update(
+            state=state,
+            passed=state == "success",
+            source=source,
+            code=code,
+            reason=reason,
+            evidence=_binding(inputs, item) if item is not None else None,
+        )
+        return result
+
+    approval = inputs["approval"]
+    if approval is not None:
+        return done(
+            "success",
+            "maintainer-approval",
+            "An independent maintainer approved the exact head: "
+            + str(approval.get("html_url") or ""),
+            "maintainer",
+            approval,
+        )
+    if inputs["draft"]:
+        return done(
+            "pending",
+            "draft",
+            "Draft pull requests are not reviewed; mark it ready for review",
+        )
+    bypass = inputs["admin_bypass"]
+    if bypass == "invalid":
+        return done(
+            "failure",
+            "admin-bypass-invalid",
+            "Admin bypass does not apply here: "
+            + inputs["admin_bypass_reason"],
+        )
+    if bypass == "valid":
+        authorization = inputs["admin_authorization"]
+        if authorization is None:
+            return done(
+                "pending",
+                "admin-bypass-unauthorized",
+                "Admin bypass applies but no exact-head maintainer "
+                "authorization comment from a live admin was found",
+            )
+        return done(
+            "success",
+            "admin-bypass-authorized",
+            "Admin bypass exact-head authorization: "
+            + str(authorization.get("html_url") or ""),
+            "admin-bypass",
+            authorization,
+        )
+    copilot_code = ""
+    if verdict is not None and inputs["copilot_route"] == "available":
+        if verdict.state == "clean" and verdict.review is not None:
+            return done(
+                "success",
+                "copilot-clean",
+                "Copilot reviewed the exact head and found no issues: "
+                + str(verdict.review.get("html_url") or ""),
+                "copilot",
+                verdict.review,
+            )
+        if verdict.state in {"changes", "unrecognized"}:
+            copilot_code = f"copilot-{verdict.state}"
+    if inputs["hotfix"] and inputs["hotfix_reason"]:
+        authorization = inputs["hotfix_authorization"]
+        if authorization is None:
+            return done("failure", "hotfix-invalid", inputs["hotfix_reason"])
+        return done(
+            "success",
+            "hotfix-emergency-authorized",
+            "Admin emergency authorization covers the exact head; "
+            "post-review is required: " + inputs["hotfix_reason"],
+            "hotfix-emergency",
+            authorization,
+        )
+    required = (
+        f"The {inputs['release_level']} release level requires an "
+        "independent maintainer approval of the exact head"
+        if inputs["required_review"] == "peer"
+        else "No self-review authorization exists for the exact head. Get "
+        "an independent maintainer approval, or use the configured audited "
+        "admin-bypass path when it applies"
+    )
+    if copilot_code:
+        return done("failure", copilot_code, f"{verdict.reason}. {required}")
+    return done("pending", "approval-required", required)
+
+
+def evaluate(
     github: GitHubReader,
     repo: str,
     pr_number: int,
     config: Path | None = None,
 ) -> dict[str, Any]:
     """Return the review decision for the pull request's current head."""
-    lifecycle = importlib.import_module(
-        "pr_lifecycle"
-        if __package__ in {None, ""}
-        else f"{__package__}.pr_lifecycle"
-    )
-    mode, max_level = review_settings(config)
-    pull = _pr_context(github, repo, pr_number)
-    level_decision = release_level.resolve_pull(
+    pull = github.get(repo, f"pulls/{pr_number}")
+    if not isinstance(pull, dict):
+        raise RuntimeError("Pull request is unavailable")
+    level = release_level.resolve_pull(
         github, repo, pull, release_level.load_settings(config)
     )
-    head_sha = str((pull.get("head") or {}).get("sha") or "")
-    author = str((pull.get("user") or {}).get("login") or "").casefold()
-    result: dict[str, Any] = {
-        "mode": mode,
-        "release_level": level_decision.level,
-        "required_review": level_decision.review,
-        "head_sha": head_sha,
-        "state": "pending",
-        "passed": False,
-        "source": None,
-        "reason": "",
-    }
-    reviews = github.pages(repo, f"pulls/{pr_number}/reviews?per_page=100")
-    approval = lifecycle.exact_head_approval(
-        github,
-        repo,
-        lifecycle.current_reviews(reviews),
-        head_sha,
-        author,
+    return decide(
+        review_inputs(
+            github, repo, pr_number, pull, review_settings(config), level
+        )
     )
-    if approval is not None:
-        result.update(
-            state="success",
-            passed=True,
-            source="maintainer",
-            reason="An independent maintainer approved the exact head: "
-            + str(approval.get("html_url") or ""),
-        )
-        return result
-    if pull.get("draft") is not False:
-        result["reason"] = (
-            "Draft pull requests are not reviewed; mark it ready for review"
-        )
-        return result
-    verdict = None
-    if mode == "copilot":
-        verdict = copilot_verdict(
-            reviews, head_sha, _comments_for(github, repo, pr_number)
-        )
-        result["copilot"] = {
-            "state": verdict.state,
-            "reason": verdict.reason,
-            "review_url": (verdict.review or {}).get("html_url"),
-            "findings": verdict.findings,
-        }
-        if verdict.state in {"changes", "unrecognized"}:
-            result["state"] = "failure"
-        allowed, cap_reason = level_allows_copilot(
-            max_level, level_decision.level
-        )
-        if allowed and verdict.state == "clean":
-            result.update(
-                state="success",
-                passed=True,
-                source="copilot",
-                reason="Copilot reviewed the exact head and found no issues: "
-                + str((verdict.review or {}).get("html_url") or ""),
-            )
-            return result
-        if not allowed:
-            result["reason"] = cap_reason
-    if level_decision.review == "peer":
-        labels = {
-            str(label.get("name") or "").casefold()
-            for label in pull.get("labels", [])
-            if isinstance(label, dict)
-        }
-        if "hotfix" in labels:
-            authorization = lifecycle.find_exact_head_authorization(
-                github, repo, pr_number, head_sha
-            )
-            if authorization is not None:
-                try:
-                    evidence = lifecycle.hotfix_emergency_evidence(
-                        github, repo, pull, authorization
-                    )
-                except RuntimeError as error:
-                    result["state"] = "failure"
-                    result["reason"] = str(error)
-                else:
-                    result.update(
-                        state="success",
-                        passed=True,
-                        source="hotfix-emergency",
-                        reason=(
-                            "Admin emergency authorization covers the exact "
-                            "head; post-review is required: "
-                            f"{evidence['reason']}"
-                        ),
-                    )
-                    return result
-        result["reason"] = (
-            result["reason"]
-            or f"The {level_decision.level} release level requires an "
-            "independent maintainer approval of the exact head"
-        )
-        return result
-    bypass_authorization, bypass_reason = (
-        _admin_bypass_authorization(github, repo, pr_number, head_sha, pull)
-        if level_decision.review == "self"
-        else (None, "")
-    )
-    if bypass_authorization is not None:
-        result.update(
-            state="success",
-            passed=True,
-            source="admin-bypass",
-            reason="Admin bypass exact-head authorization: "
-            + str(bypass_authorization.get("html_url") or ""),
-        )
-        return result
-    if not result["reason"]:
-        reason = (
-            verdict.reason
-            if verdict is not None
-            else "No self-review authorization exists for the exact head"
-        )
-        result["reason"] = (
-            f"{reason}. Get an independent maintainer approval, or use the "
-            "configured audited admin-bypass path when it applies."
-            + (f" {bypass_reason}" if bypass_reason else "")
-        )
-    if bypass_reason.startswith("Admin bypass does not apply here:"):
-        result["state"] = "failure"
-    return result
-
-
-def _admin_bypass_authorization(
-    github: GitHubReader,
-    repo: str,
-    pr_number: int,
-    head_sha: str,
-    pull: dict[str, Any],
-) -> tuple[dict[str, Any] | None, str]:
-    """Return the configured admin-bypass authorization for this head.
-
-    Mirrors `pr_lifecycle.merge_snapshot`'s admin-bypass path (marker,
-    route, exact-head authorization) without needing a lease: this gate
-    runs on every push, well before any lease is acquired. Any rejection
-    inside `admin_bypass_opt_in` (malformed marker, wrong route, or invalid
-    Issue) means this path simply does not apply here, not
-    that the check should error.
-
-    The second return value explains *why* there is no authorization, so
-    `evaluate()` can surface it instead of always falling back to the same
-    Copilot-shaped message (Issue #781): a PR that never opted in (no
-    marker) gets an empty reason, since the generic message already fits;
-    a PR that opted in but was rejected -- a closed or Milestoned Issue, a
-    malformed marker, an unauthorized comment author, or simply no
-    matching exact-head comment at all -- gets the specific reason instead
-    of looking identical to "Copilot has not reviewed this pull request
-    yet."
-    """
-    lifecycle = importlib.import_module(
-        "pr_lifecycle"
-        if __package__ in {None, ""}
-        else f"{__package__}.pr_lifecycle"
-    )
-    marker_count = (
-        str(pull.get("body") or "")
-        .splitlines()
-        .count(lifecycle.ADMIN_BYPASS_MARKER)
-    )
-    if marker_count == 0:
-        # Cheap check first: skip every further API call (default branch,
-        # route validation) for the overwhelming majority of pull requests,
-        # which never opt into admin bypass at all. No separate
-        # release-channel gate here: `admin_bypass_opt_in` itself does not
-        # check it either (its safety comes from the marker,
-        # route, and live Ruleset shape), so adding one only here would let
-        # this check and `pr_lifecycle.py merge` disagree about which heads
-        # are actually mergeable.
-        return None, ""
-    try:
-        repository = github.get(repo, "")
-        default_branch = (
-            repository.get("default_branch")
-            if isinstance(repository, dict)
-            else None
-        )
-        if not isinstance(default_branch, str):
-            return None, "The repository default branch is unavailable"
-        opted_in = lifecycle.admin_bypass_opt_in(
-            github, repo, {"default_branch": default_branch}, pull
-        )
-    except RuntimeError as error:
-        return None, f"Admin bypass does not apply here: {error}"
-    if not opted_in:
-        return None, ""
-    authorization = lifecycle.find_exact_head_authorization(
-        github, repo, pr_number, head_sha
-    )
-    if authorization is None:
-        return None, (
-            "Admin bypass applies but no exact-head maintainer "
-            "authorization comment was found"
-        )
-    return authorization, ""
 
 
 def unresolved_threads(repo: str, pr_number: int) -> list[dict[str, Any]]:
     """Return unresolved review threads through GraphQL."""
-    lifecycle = importlib.import_module(
-        "pr_lifecycle"
-        if __package__ in {None, ""}
-        else f"{__package__}.pr_lifecycle"
-    )
+    lifecycle = _lifecycle()
     owner, name = repo.split("/", 1)
     query = (
         "query($owner:String!,$name:String!,$number:Int!){repository("
@@ -500,11 +572,7 @@ def publish_check(
     run_id: int,
 ) -> None:
     """Publish one three-state review check from the trusted workflow."""
-    lifecycle = importlib.import_module(
-        "pr_lifecycle"
-        if __package__ in {None, ""}
-        else f"{__package__}.pr_lifecycle"
-    )
+    lifecycle = _lifecycle()
     state = decision.get("state")
     head_sha = decision.get("head_sha")
     run_url = lifecycle.actions_run_url(details_url, repo)
@@ -562,11 +630,7 @@ def publish_check(
 def main(argv: list[str] | None = None) -> int:
     """Run one review-gate command."""
     args = parser().parse_args(argv)
-    lifecycle = importlib.import_module(
-        "pr_lifecycle"
-        if __package__ in {None, ""}
-        else f"{__package__}.pr_lifecycle"
-    )
+    lifecycle = _lifecycle()
     github = lifecycle.GitHub()
     try:
         decision = evaluate(github, args.repo, args.pr, args.config)

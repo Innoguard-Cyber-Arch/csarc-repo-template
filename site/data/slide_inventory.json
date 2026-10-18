@@ -1,0 +1,30 @@
+{
+  "slides": [
+    {"key": "index", "track": "index"},
+    {"key": "install"},
+    {"key": "about", "track": "about"},
+    {"key": "flow", "track": "flow"},
+    {"key": "files", "track": "files"},
+    {"key": "method", "track": "method"},
+    {"key": "agents", "track": "agents"},
+    {"key": "contract", "track": "contract"},
+    {"key": "languages", "track": "languages"},
+    {"key": "supply", "track": "supply"},
+    {"key": "pr", "track": "pr"},
+    {"key": "deploy", "track": "deploy"},
+    {"key": "governance", "track": "governance"},
+    {"key": "template-release", "track": "template-release"},
+    {"key": "docs-site", "track": "docs-site"},
+    {"key": "bridge", "audience": "maintainer"},
+    {"key": "similar-tools"},
+    {"key": "testing", "audience": "maintainer"},
+    {"key": "rollout", "track": "rollout", "audience": "archive"},
+    {"key": "access-control", "audience": "archive"},
+    {"key": "principles", "audience": "archive"},
+    {"key": "benchmark", "audience": "archive"},
+    {"key": "fleet-inventory", "audience": "archive"},
+    {"key": "fleet-governance-thresholds", "audience": "archive"},
+    {"key": "spec-format", "audience": "archive"},
+    {"key": "governance-audit-trail", "audience": "archive"}
+  ]
+}

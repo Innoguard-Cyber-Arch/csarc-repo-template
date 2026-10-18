@@ -47,7 +47,9 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     assert "RELEASE_LEVEL: ${{ steps.route.outputs.channel }}" in source
     assert '--phase "$RELEASE_LEVEL"' in source
     assert "release_level.py annotate-pr" not in source
-    assert "release_level.py annotate-release" in source
+    # Issue #1074: the draft body is written by the one Release writer.
+    assert "release_level.py annotate-release" not in source
+    assert '--included-work "$RUNNER_TEMP/release-levels.md"' in source
     assert "release_policy.py detect" in source
     assert "mode == 'blocked'" in source
     assert "release_policy.py prepare-candidate" not in source
@@ -84,9 +86,7 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     assert names.index(
         "Reject an unmaterialized merged delivery"
     ) < names.index("Detect the available release path")
-    assert names.index(
-        "Record included work in the draft Release"
-    ) < names.index("Bind, upload, and publish the release")
+    assert "Record included work in the draft Release" not in names
 
     settings = (ROOT / "scripts/apply-repository-settings.sh").read_text(
         encoding="utf-8"
@@ -128,6 +128,8 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     assert '"$repo_root/scripts/converge-release-tag"' in publish
     assert '"$repo_root/scripts/verify-release-candidate"' in publish
     assert "scripts/install-syft" in publish
+    assert 'release_level.py" annotate-release' in publish
+    assert "release_writer.py" in publish
     # A shell double-quoted --jq argument must escape its own literal quotes,
     # so the merged-commit comparison reads as \"$sha\" in the script.
     assert r".merge_commit_sha == \"$sha\"" in publish
@@ -711,19 +713,23 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
 def test_release_drift_check_ships_with_release_ownership() -> None:
     """Only a hosted repository that owns release.yml needs its drift check.
 
-    Reuses release.yml's project and verification mode conditions instead
-    of adding a second Copier option -- consistent with the
+    Reuses release.yml's ownership, project, and verification mode
+    conditions instead of adding a second Copier option -- consistent with the
     release-security-and-dependencies ADR's "本節也不新增 Copier 選項"
     principle for this same capability pairing.
     """
     copier = (ROOT / "copier.yml").read_text(encoding="utf-8")
     assert (
-        "{% if project_mode == 'new' and verification_mode == 'hosted' %}"
+        "{% if release_ownership == 'csarc-owned' and verification_mode == "
+        "'hosted' and (project_mode == 'new' or csarc_release_workflow | "
+        "default(false)) %}"
         "__keep_release_drift_workflow__"
         "{% else %}.github/workflows/release-drift.yml{% endif %}" in copier
     )
     assert (
-        "{% if project_mode == 'new' and verification_mode == 'hosted' %}"
+        "{% if release_ownership == 'csarc-owned' and verification_mode == "
+        "'hosted' and (project_mode == 'new' or csarc_release_workflow | "
+        "default(false)) %}"
         "__keep_release_drift_script__"
         "{% else %}.csarc/scripts/check-release-drift{% endif %}" in copier
     )

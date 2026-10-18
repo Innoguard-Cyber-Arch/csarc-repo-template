@@ -16,6 +16,7 @@ unset CSARC_VERIFICATION_SUBJECT_ROOT
 cd "$repo_root"
 
 verification_step "Repository site render" ./scripts/build-repo-site --check
+verification_step "Handbook render" ./scripts/build-handbook --check
 verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
 verification_step "Static-validation fixtures" ./scripts/test-static-validation
 verification_step "Paired-file drift" ./scripts/sync-paired-files.sh --check

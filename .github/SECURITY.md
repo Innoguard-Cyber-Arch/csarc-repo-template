@@ -8,14 +8,21 @@ branches.
 
 ## Reporting a vulnerability
 
-Open a GitHub Issue at
-https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/new.
-Maintainers receive notifications for new Issues.
+Report suspected vulnerabilities privately through this maintainer-approved
+channel:
 
-GitHub Issues are public. Do not post secrets, credentials, personal data, or
-other sensitive details. Provide only the non-sensitive information needed to
-describe the concern. This policy does not invent an acknowledgement or
-resolution SLA.
+<!-- csarc-security-reporting-channel:start -->
+justyn.jt.chen@tw.ey.com
+<!-- csarc-security-reporting-channel:end -->
+
+This repository is public. Do not open a GitHub Issue, Discussion, or pull
+request for a suspected vulnerability, and do not post exploit details,
+secrets, credentials, personal data, or other sensitive information in any
+public channel. This policy does not invent an acknowledgement or resolution
+SLA.
+
+Maintainers handle private reports as described in
+[`docs/security-response.md`](../docs/security-response.md).
 
 ## Scope
 

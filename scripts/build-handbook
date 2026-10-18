@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Render docs/handbook/index.html and manifest.json from handbook.md
+# (Issue #1081); pass --check to fail when the outputs are stale.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The appendix parses Issue forms with PyYAML, so run in the locked project
+# environment instead of whatever python3 is first on PATH (Issue #1139).
+exec uv run --locked --project "$repo_root" python3 \
+  "$repo_root/scripts/build_handbook.py" --root "$repo_root" "$@"

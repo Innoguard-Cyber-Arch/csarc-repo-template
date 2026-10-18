@@ -133,9 +133,10 @@ def settings_from_mapping(config: dict[str, object]) -> Settings:
         raise ValueError(
             "default_release_level must be one of " + ", ".join(LEVELS)
         )
-    bypass = config.get("admin_bypass")
-    if bypass is None:
-        bypass = "always" if config.get("review") == "solo" else "off"
+    # Schema 2 always states admin_bypass (SPEC-009); only a repository
+    # without CSARC settings reaches the strictest default here. Retired
+    # review keys are never read (Issue #1071).
+    bypass = config.get("admin_bypass", "off")
     if bypass not in {"off", "beta-only", "always"}:
         raise ValueError("admin_bypass must be off, beta-only, or always")
     reviews = dict(DEFAULT_REVIEW)
@@ -379,21 +380,6 @@ def release_batch_markdown(batch: dict[str, object]) -> str:
         ]
     )
     return "\n".join(lines)
-
-
-def level_allows_copilot(max_level: str, level: str) -> bool:
-    """Apply the optional Copilot ceiling to one resolved level."""
-    if max_level == "unlimited":
-        return True
-    normalized = {
-        "alpha": "beta",
-        "early": "stable",
-        "formal": "stable",
-        "release": "stable",
-    }.get(max_level, max_level)
-    if normalized not in LEVEL_RANK or level not in LEVEL_RANK:
-        raise ValueError("invalid Copilot release-level limit")
-    return LEVEL_RANK[level] <= LEVEL_RANK[normalized]
 
 
 def _permission(github: GitHubReader, repo: str, login: object) -> str | None:

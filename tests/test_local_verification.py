@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
+import json
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+import settings_support
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -36,7 +39,7 @@ def repository(tmp_path: Path, mode: str = "local") -> Path:
     config = tmp_path / ".csarc/config.yml"
     config.parent.mkdir()
     config.write_text(
-        f"languages: []\nverification_mode: {mode}\n",
+        settings_support.settings_text(verification_mode=mode),
         encoding="utf-8",
     )
     (tmp_path / "tracked.txt").write_text("base\n", encoding="utf-8")
@@ -161,7 +164,10 @@ def test_uncommitted_local_project_passes_without_merge_evidence(
     """Initial validation is useful before a repository has a first commit."""
     config = tmp_path / ".csarc/config.yml"
     config.parent.mkdir()
-    config.write_text("verification_mode: local\n", encoding="utf-8")
+    config.write_text(
+        settings_support.settings_text(verification_mode="local"),
+        encoding="utf-8",
+    )
     monkeypatch.chdir(tmp_path)
 
     assert local_verification.record("fast", ["source"], "main") is None
@@ -176,3 +182,114 @@ def test_dirty_local_project_passes_without_merge_evidence(
     (repo / "tracked.txt").write_text("dirty\n", encoding="utf-8")
 
     assert local_verification.record("fast", ["source"], "main") is None
+
+
+def test_local_evidence_is_a_canonical_merge_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #1073: the merge hashes recorded local evidence unchanged."""
+    repo = repository(tmp_path)
+    monkeypatch.chdir(repo)
+    payload = local_verification.record("fast", ["source"], "main")
+    assert payload is not None
+    merge_trace = importlib.import_module("merge_trace")
+    data = merge_trace.canonical_bytes(payload)
+    assert merge_trace.parse_canonical(data) == payload
+    assert merge_trace.payload_schema(payload) == 1
+    assert str(payload["completed_at"]).endswith("Z")
+
+
+def _local_payload(
+    repo: Path, **changes: object
+) -> tuple[dict[str, object], Path]:
+    """Record one local result and rewrite selected payload fields."""
+    payload = local_verification.record("fast", ["source"], "main")
+    assert payload is not None
+    path = local_verification.evidence_path(str(payload["head_sha"]))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.update(changes)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return payload, path
+
+
+def _require_local(
+    payload: dict[str, object], **kwargs: object
+) -> dict[str, object]:
+    """Validate recorded local evidence for the recorded candidate."""
+    return local_verification.require(
+        head_sha=str(payload["head_sha"]),
+        tree_sha=str(payload["tree_sha"]),
+        base_ref="main",
+        base_sha=str(payload["base_sha"]),
+        required_tier="fast",
+        **kwargs,
+    )
+
+
+def test_local_freshness_uses_the_shared_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #1075: local evidence expires on the same inclusive boundary."""
+    repo = repository(tmp_path)
+    monkeypatch.chdir(repo)
+    completed = datetime(2026, 10, 14, 12, tzinfo=UTC)
+    payload, _ = _local_payload(repo, completed_at="2026-10-14T12:00:00Z")
+
+    assert _require_local(payload, now=completed + timedelta(hours=24))
+    with pytest.raises(RuntimeError, match="stale; re-run verification"):
+        _require_local(payload, now=completed + timedelta(hours=24, seconds=1))
+    with pytest.raises(RuntimeError, match="in the future"):
+        _require_local(payload, now=completed - timedelta(minutes=5, seconds=1))
+    with pytest.raises(RuntimeError, match="cannot exceed the trusted"):
+        _require_local(
+            payload, now=completed + timedelta(hours=30), max_age_hours=48
+        )
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (None, "completion time is missing"),
+        ("2026-10-14T12:00:00", "completion time has no timezone"),
+        ("not-a-time", "completion time is malformed"),
+    ],
+)
+def test_local_missing_or_naive_completion_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    value: object,
+    message: str,
+) -> None:
+    """Local evidence without an aware completion time never counts."""
+    repo = repository(tmp_path)
+    monkeypatch.chdir(repo)
+    payload, _ = _local_payload(repo, completed_at=value)
+    with pytest.raises(RuntimeError, match=message):
+        _require_local(payload)
+
+
+def test_local_evidence_cannot_carry_its_own_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A candidate-written `max_age_hours` field is rejected, not honored."""
+    repo = repository(tmp_path)
+    monkeypatch.chdir(repo)
+    payload, _ = _local_payload(
+        repo, completed_at="2000-01-01T00:00:00Z", max_age_hours=1e9
+    )
+    with pytest.raises(RuntimeError, match="malformed"):
+        _require_local(payload)
+
+
+def test_local_revalidation_replaces_stale_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-running the suite on the same head records fresh evidence again."""
+    repo = repository(tmp_path)
+    monkeypatch.chdir(repo)
+    payload, _ = _local_payload(repo, completed_at="2000-01-01T00:00:00Z")
+    with pytest.raises(RuntimeError, match="stale"):
+        _require_local(payload)
+    rerun = local_verification.record("fast", ["source"], "main")
+    assert rerun is not None
+    assert _require_local(rerun)["completed_at"] == rerun["completed_at"]

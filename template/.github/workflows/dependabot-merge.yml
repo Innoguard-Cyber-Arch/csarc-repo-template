@@ -31,6 +31,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
+      outcome: ${{ steps.resolve.outputs.outcome }}
       number: ${{ steps.resolve.outputs.number }}
       head_sha: ${{ steps.identity.outputs.head_sha }}
     steps:
@@ -46,17 +47,26 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        # Issue #1087: zero exact open Dependabot pull requests is an ordinary
+        # no-op (success, no writes); many, incomplete, or contradictory
+        # candidates fail closed. Closed or merged records are never reused.
         run: |
-          pr_number="$(
-            python3 .csarc/scripts/sync_work_item_metadata.py \
-              --repo "$GITHUB_REPOSITORY" \
-              --resolve-head-sha "$HEAD_SHA" \
-              --head-repository "$HEAD_REPOSITORY" \
-              --head-branch "$HEAD_BRANCH"
-          )"
-          echo "number=$pr_number" >> "$GITHUB_OUTPUT"
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            --paginate \
+            --slurp \
+            "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/pulls" \
+            > "$RUNNER_TEMP/associated-pulls.json"
+          python3 .csarc/scripts/authenticate_dependabot_head.py resolve-merge-candidate \
+            --base-repo "$GITHUB_REPOSITORY" \
+            --head-sha "$HEAD_SHA" \
+            --head-repository "$HEAD_REPOSITORY" \
+            --head-branch "$HEAD_BRANCH" \
+            --pulls-json "$RUNNER_TEMP/associated-pulls.json" \
+            --github-output "$GITHUB_OUTPUT"
       - name: Bind the exact live Dependabot identity
         id: identity
+        if: ${{ steps.resolve.outputs.outcome == 'merge' }}
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -85,7 +95,11 @@ jobs:
   merge:
     name: lifecycle exact-head merge
     needs: resolve-pr
-    if: ${{ needs.resolve-pr.result == 'success' }}
+    if: >-
+      ${{
+        needs.resolve-pr.result == 'success' &&
+        needs.resolve-pr.outputs.outcome == 'merge'
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -208,6 +222,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$(python3 .csarc/scripts/csarc_config.py release_ownership)" == "csarc-owned" ]]; then
+          release_ownership="$(python3 .csarc/scripts/csarc_config.py release_ownership)"
+          if [[ "$release_ownership" == "csarc-owned" ]]; then
             gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
           fi

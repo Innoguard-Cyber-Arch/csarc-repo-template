@@ -33,13 +33,15 @@ Markdown 中的明確 `[[key]]` token 直接從 `.csarc/config.yml` 讀取；未
 
 Issue #436 盤點時發現：內部網站（`docs/site-content.md` 生成的手冊）已經在讀 `project_name`、`project_description`、`languages`、`repository_url`、`project_slug` 等 `.csarc/config.yml` key，但「規則治理」頁的 `governance-config` 核准清單只列出 `branch_strategy`、`code_owner`、`reviewers`、`project_visibility`、`enable_governance_drift_check`，兩邊已經走樣。Issue #474 把這些既有、已被消費、卻未核准登記的 key 一併補進同一份 `governance-config` 表格，不建立第二份平行 schema；`branch_strategy` 的 delivery／main 分流本來就已經切換手冊內容（標準／維運模式切換），只是先前沒有對應測試證明。
 
+> 2026-10-14（Issue #1091）：本段是歷史紀錄。`branch_strategy`、`reviewers` 與 `enable_governance_drift_check` 已在 Issue #1071 退役（branch route 改由 Issue／Milestone metadata 推導，reviewer 由 live collaborator 權限決定，排程改為 `scheduled_checks`），`docs/site-content.md` 也已退役；現行設定鍵見 [SPEC-009](../specs/SPEC-009-project-settings.md)。
+
 `project_visibility`（可見受眾）原本已核准卻完全沒被內部網站讀取；本次在 `template/docs/site-content.md.jinja` 的「責任邊界」段落加入 `[[project_visibility]]`，讓手冊明確標示目前設定的儲存庫可見度。「規則治理」與「內部網站」（`docs-site-access`）兩處說明過去各自重複列出同一批 key，現在只有 `governance-config` 表格是唯一列表，`docs-site-access` 改為指回該表格，避免兩份定義各自漂移；`tests/test_render_site.py` 的 `test_internal_site_keys_are_documented_once` 把這個「只定義一次」的要求變成可執行的回歸測試。
 
 ## 2026-08-25 Hugo 正式切換
 
 Issue #205 以兩次真實 spike 重新檢查第 3 點。mdBook 的書本導覽與現有卡片式簡報衝突；Hugo 0.165.0 的自訂單頁 output format 則能保留既有視覺，並把輸出直接交給未修改的 `scripts/render_site.py`。因此只局部取代「不導入 Hugo」的限制，保留單檔、離線 `file://`、零外部 runtime asset 與 checked-in output 的全部契約。
 
-Issue #209 經維護者實際檢視後，Hugo source 收斂到通用的 `site/` 結構，正式取代手寫 `site/index.html`，並輸出 `docs/index.html` 與 `docs/index.en.html`。Hugo publish directory 固定在已忽略的 `dist/`，不會掃描或覆寫 `docs/adr/`、`docs/specs/` 與其他既有文件。舊頁移到 `site/legacy/index.html`，只作文字、圖片與視覺回歸基準；仍被基準頁引用的樣式、互動與資產保留在 `site/static/`，確認不再使用後才移除。
+Issue #209 經維護者實際檢視後，Hugo source 收斂到通用的 `site/` 結構，正式取代手寫 `site/index.html`，並輸出 `docs/index.html` 與 `docs/index.en.html`。Hugo publish directory 固定在已忽略的 `dist/`，不會掃描或覆寫 `docs/adr/`、`docs/specs/` 與其他既有文件。舊頁移到 `site/legacy/index.html`，只作文字、圖片與視覺回歸基準；仍被基準頁引用的樣式、互動與資產保留在 `site/static/`，確認不再使用後才移除。這份快照已由下方「2026-10-13 退役 legacy parity fixture」取代並刪除。
 
 ## 2026-09-03 移除 Hugo，改用純 Python 渲染引擎
 
@@ -206,11 +208,21 @@ Issue #919 把 Issue #900 的單一 `repo-site` feature 拆成明確的兩層契
 
 共同資訊架構只定義五種讀者任務：開始使用、日常使用、精確參考、理解與維運、專案生命週期。這些是內容角色，不是固定目錄；一個檔案可以涵蓋多個角色，沒有內容時不建立空頁。README 改成主流套件常見的短入口，不再複製完整治理或架構文件，也不要求與深度文件逐字對稱；只要求公開事實、命令、連結、支援狀態與授權不矛盾。
 
-語言由 `primary_language: en|zh-tw` 與 `i18n: off|en-zh-tw` 共同決定。雙語時 `README.md` 使用主要語言並維護另一份 `README.<lang>.md`；完整模板模式也保留雙語呈現入口。授權是同一層核心設定：`project_license` 未宣告時採 `proprietary`，以 `LICENSE` 的 all-rights-reserved 文字及各套件生態的封閉授權慣例同步，不能從帳號或 CODEOWNERS 推定 holder。開源選項限定為模板能內建完整法律文本並可驗證的 `MIT` 與 `Apache-2.0`；不接受任意 SPDX expression，避免產生無對應 `LICENSE` 或錯誤多重授權的宣告。
+語言當時由 `primary_language: en|zh-tw` 與 `i18n: off|en-zh-tw` 共同決定；Issue #1071 起合併為 `documentation_languages`（見 [SPEC-009](../specs/SPEC-009-project-settings.md)）。雙語時 `README.md` 使用主要語言並維護另一份 `README.<lang>.md`；完整模板模式也保留雙語呈現入口。授權是同一層核心設定：`project_license` 未宣告時採 `proprietary`，以 `LICENSE` 的 all-rights-reserved 文字及各套件生態的封閉授權慣例同步，不能從帳號或 CODEOWNERS 推定 holder。開源選項限定為模板能內建完整法律文本並可驗證的 `MIT` 與 `Apache-2.0`；不接受任意 SPDX expression，避免產生無對應 `LICENSE` 或錯誤多重授權的宣告。
 
 每個非 Draft 候選由本機 AI 比對 changed paths、specs、公開介面、設定、測試與文件，記錄 `aligned`、`not-applicable`、`drift` 或 `inconclusive` 並綁定 exact head；後兩者阻擋交付，`not-applicable` 必須說明理由。GitHub 只在既有 PR policy job 做確定性的欄位與 SHA 檢查，不新增 hosted AI job、workflow 或第二套測試矩陣；新的 push 會使舊紀錄失效。完整細節由 `docs/documentation-policy.md` 維護。
 
 此決定保留 portable、離線、project-owned 內容不覆寫與可重建輸出的既有契約；取代 Issue #526 要求 README 與首頁內容逐字對齊，以及 Issue #900 以 `features: repo-site` 作為文件能力開關的部分。
+
+## 2026-10-13 退役 legacy parity fixture（Issue #1088）
+
+`site/legacy/index.html` 是 Hugo 移植前的只讀快照，`scripts/check-repo-site-parity --keys-only` 只拿它確認沒有 slide key 消失；Issue #590 已決定不比對文字。快照本身很大，又容易讓人把過去的呈現細節當成現行契約。真正要保護的是 slide 清單、雙語結構與 renderer 行為，因此本節取代「2026-08-25 Hugo 正式切換」中「舊頁作為文字、圖片與視覺回歸基準」的安排。
+
+**決定**：刪除 `site/legacy/index.html`、只服務該快照的 `scripts/check-repo-site-parity`，以及只在快照內執行的 `site/static/app.js`（Markdown 引擎從未引用它），並移除 `release-please-config.json` 中指向快照的 extra-files 項目。結構契約改由 checked-in、可直接閱讀的 `site/data/slide_inventory.json` 記錄：依序列出每張 slide 的 `key`，以及有宣告時的 `track` 與 `audience`。`scripts/check-repo-site-inventory` 確認 `site/content/_index.zh-tw.md` 與 `_index.en.md` 宣告的 slide 和 inventory 完全一致（含順序），也確認兩份渲染輸出的 slide section 依序對應；只比結構，不比文字，也不要求 HTML 逐位元組相同。新增、移除、重排或改 track 的 slide 必須在同一個變更更新 inventory。`./scripts/build-repo-site` 在 build 與 `--check` 都會執行這項檢查，取代原本的 keys-only parity。
+
+**沿用**：navigation 寬度、引擎／模板版本範圍、生成輸出逐位元組重建，以及既有的 accessibility／interaction 測試都不變。舊快照在 keys-only 模式要求的 slide（`capability` 已改名為 `index`）全部列在 inventory 中，`tests/test_repo_site_inventory.py` 會檢查這一點。content 中仍保留的 `parity="supplemental"`／`parity="new"` 屬性已沒有檢查程式使用，留待後續另開 Issue 決定是否清除。
+
+**驗證**：`tests/test_repo_site_inventory.py` 涵蓋真實來源與渲染輸出通過檢查、單一語言重排或改 track 時失敗、渲染輸出少 section 時失敗，以及 inventory 拒絕重複 key 與未知欄位；`tests/test_config_guidance.py` 確認快照、`app.js` 與舊比較程式都已移除，且 build 入口、引擎與 bundler 都沒有引用。
 
 ## 互動決策收納
 
@@ -251,6 +263,7 @@ Issue #919 把 Issue #900 的單一 `repo-site` feature 拆成明確的兩層契
 後續 renderer 實作至少驗證：
 
 - 從 repository 來源重建 `docs/index.html` 後逐位元組一致。
+- 雙語 slide 的 key、track、audience 與順序符合 `site/data/slide_inventory.json`（Issue #1088）。
 - HTML 不含 runtime 外部 stylesheet、script、font 或 image；外部超連結可以存在。
 - `file://` 開啟時簡報內容、鍵盤操作與內嵌媒體可用。
 - 常用窄螢幕與簡報尺寸維持可讀；不為此先加入大型視覺測試平台。

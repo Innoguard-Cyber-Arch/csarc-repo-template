@@ -1,12 +1,16 @@
 import json
 import re
 import runpy
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
+import settings_support
 
 ROOT = Path(__file__).parents[1]
 SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "build_repo_site.py"))
 RENDER_SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "render_site.py"))
-PARITY_MODULE = runpy.run_path(str(ROOT / "scripts" / "check-repo-site-parity"))
 AUDIT_TRAIL_GENERATOR_MODULE = runpy.run_path(
     str(ROOT / "scripts" / "generate_audit_trail.py")
 )
@@ -33,8 +37,6 @@ _substitute_version_tokens = SITE_MODULE["_substitute_version_tokens"]
 _substitute_config_tokens = SITE_MODULE["_substitute_config_tokens"]
 _load_downstream_config = SITE_MODULE["_load_downstream_config"]
 render = RENDER_SITE_MODULE["render"]
-parse_parity = PARITY_MODULE["parse"]
-compare_parity = PARITY_MODULE["compare"]
 
 
 def _empty_data(**overrides: object) -> object:
@@ -1064,20 +1066,33 @@ def test_substitute_version_tokens_ignores_unrelated_bracket_text() -> None:
     assert text == "see `[[key]]` for details"
 
 
-def test_substitute_config_tokens_resolves_known_keys_only() -> None:
+def test_substitute_config_tokens_resolves_known_keys_only(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     # Issue #681 decision N: a downstream project's minimal repo-site uses
     # this to reach `.csarc/config.yml` facts at build time.
     config = {
         "project_name": "Demo Project",
         "languages": ["python", "typescript"],
-        "project_visibility": "private",
+        "documentation_languages": "zh-tw+en",
     }
     text = _substitute_config_tokens(
-        "[[project_name]] uses [[languages]] ([[project_visibility]])",
+        "[[project_name]] uses [[languages]] ([[documentation_languages]])",
         config,
         lang="en",
     )
-    assert text == "Demo Project uses python, typescript (private)"
+    assert text == "Demo Project uses python, typescript (zh-tw+en)"
+    # Live facts and retired settings are not site tokens (SPEC-009); an
+    # older project-owned page keeps building, but each one is reported
+    # with its replacement (Issue #1090).
+    for retired in ("project_visibility", "review", "features"):
+        assert (
+            _substitute_config_tokens(f"[[{retired}]]", config, lang="en")
+            == f"[[{retired}]]"
+        )
+        assert f"Retired site content setting [[{retired}]]" in (
+            capsys.readouterr().err
+        )
 
 
 def test_substitute_config_tokens_uses_zh_tw_list_separator() -> None:
@@ -1707,10 +1722,11 @@ def _write_minimal_downstream_fixture(root: Path) -> None:
             f'title="[[project_name]]" subtitle="[[project_description]]" '
             f'class="dense" legacy="false" >}}}}\n'
             f'{{{{< standard key="index-standard" title="s" >}}}}\n'
-            f"Languages: [[languages]]. Visibility: [[project_visibility]].\n"
+            f"Languages: [[languages]]. "
+            f"Docs: [[documentation_languages]].\n"
             f"{{{{< /standard >}}}}\n\n"
             f'{{{{< ops key="index-ops" title="o" >}}}}\n'
-            f"Owner: [[code_owner]]. Review: [[review]]. "
+            f"Owner: [[code_owner]]. Bypass: [[admin_bypass]]. "
             f"Lifecycle: [[lifecycle]]. "
             f"Clone: [[repository_url]].\n"
             f"{{{{< /ops >}}}}\n"
@@ -1723,17 +1739,23 @@ def _write_minimal_downstream_fixture(root: Path) -> None:
         (ROOT / "scripts/csarc_config.py").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    (scripts / "repository_facts.py").write_text(
+        (ROOT / "scripts/repository_facts.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     config_dir = root / ".csarc"
     config_dir.mkdir()
-    (config_dir / "config.yml").write_text(
-        "project_name: Demo Project\n"
-        "project_description: A demo downstream project.\n"
-        "languages: ['python', 'typescript']\n"
-        "lifecycle: ['issues', 'milestones']\n"
-        "review: peer\n"
-        "project_visibility: private\n"
-        "code_owner: '@example-org/demo-team'\n"
-        "repository_url: https://github.com/example-org/demo-project\n",
+    settings_support.write_settings(
+        config_dir / "config.yml",
+        languages=["python", "typescript"],
+        lifecycle=["issues", "milestones"],
+        admin_bypass="off",
+        code_owner="@example-org/demo-team",
+    )
+    # One-time seeds come from the native manifest (SPEC-009).
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "Demo Project"\n'
+        'description = "A demo downstream project."\n',
         encoding="utf-8",
     )
 
@@ -1742,12 +1764,28 @@ def test_minimal_downstream_fixture_builds_without_optional_data_files(
     tmp_path: Path,
 ) -> None:
     _write_minimal_downstream_fixture(tmp_path)
+    # The repository URL is read from the local origin remote (SPEC-009).
+    for command in (
+        ["init", "-q"],
+        [
+            "remote",
+            "add",
+            "origin",
+            "git@github.com:example-org/demo-project.git",
+        ],
+    ):
+        subprocess.run(  # noqa: S603
+            [shutil.which("git") or "git", "-C", str(tmp_path), *command],
+            check=True,
+            capture_output=True,
+        )
     outputs = build(
         tmp_path, tmp_path / "dist/repo-site", theme_href="docs/site-theme.css"
     )
     zh_tw = outputs["zh-tw"].read_text(encoding="utf-8")
     en = outputs["en"].read_text(encoding="utf-8")
 
+    assert "Clone: https://github.com/example-org/demo-project." in zh_tw
     assert "{{<" not in zh_tw
     assert "{{<" not in en
     assert '<link rel="stylesheet" href="../../docs/site-theme.css">' in zh_tw
@@ -1757,9 +1795,9 @@ def test_minimal_downstream_fixture_builds_without_optional_data_files(
     assert "Demo Project" in zh_tw
     assert "python、typescript" in zh_tw
     assert "python, typescript" in en
-    assert "private" in zh_tw
+    assert "zh-tw+en" in zh_tw
     assert "@example-org/demo-team" in zh_tw
-    assert "peer" in zh_tw
+    assert "Bypass: off" in zh_tw
     assert "issues、milestones" in zh_tw
     assert "https://github.com/example-org/demo-project" in zh_tw
 
@@ -1784,16 +1822,3 @@ def test_real_content_slide_ids_match_navigation_items(tmp_path: Path) -> None:
     ids = set(re.findall(r'data-content-key="([^"]*)"', text))
     for item in data.navigation["items"]:
         assert item["key"] in ids
-
-
-def test_real_content_keeps_repo_site_key_parity(tmp_path: Path) -> None:
-    """No slide key silently vanishes or appears unacknowledged (Issue #586).
-
-    Only the key set is checked here (`keys_only=True`), matching what
-    `scripts/build-repo-site --check` wires into CI. The exact-text
-    comparison is not part of this regression; see Issue #590.
-    """
-    outputs = build(ROOT, tmp_path / "dist/repo-site")
-    legacy = parse_parity(ROOT / "site/legacy/index.html", candidate=False)
-    candidate = parse_parity(outputs["zh-tw"], candidate=True)
-    assert compare_parity(legacy, candidate, keys_only=True) == []

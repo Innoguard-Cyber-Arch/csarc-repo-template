@@ -13,7 +13,7 @@ GitHub plan、visibility、organization policy、actor role 與 workflow token s
 
 自 #918 起，admin bypass 與發布成熟度解耦。`.csarc/config.yml` 的
 `admin_bypass: off|beta-only|always` 是唯一現行設定；本 repo 使用 `always`，生成專案
-預設 `off`。即使是 `always`，required checks、path-risk 升級、可信證據、remote lease、
+預設也是 `always`（#1064）。即使是 `always`，required checks、path-risk 升級、可信證據、remote lease、
 即時 admin 權限與 exact-head 授權都不能省略。`project_maturity: early|formal` 只靠明確
 standalone stable 宣告改變，不能自動開啟或關閉 bypass。這項決定取代下方把 bypass
 稱為 alpha 階段暫時措施的敘述；下方內容保留為歷史脈絡。
@@ -263,7 +263,7 @@ release branch 與 quota fallback 不變。回退方式是 revert #913，恢復 
 
 在既有下游 repository 以目前 workflow、`GITHUB_TOKEN` 與公開 GitHub API 實測後，
 每日治理漂移檢查改為新專案預設啟用；不引入 PAT、額外 GitHub App、secret 或專用測試
-repository。明確設定 `enable_governance_drift_check: false` 仍是支援的 opt-out，Copier
+repository。明確不選 `governance-drift`（Issue #1071 起為 `scheduled_checks`；舊 `enable_governance_drift_check: false` 由 migration registry 對應）仍是支援的 opt-out，Copier
 update 必須保留既有的 `false`，只在計畫中提供一次啟用建議與影響，不得靜默翻轉。
 
 檢查結果維持能力感知語意：可讀且不符 policy 才是 actionable drift；目前 workflow

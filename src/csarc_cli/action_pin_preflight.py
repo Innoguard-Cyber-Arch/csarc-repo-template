@@ -1,0 +1,873 @@
+"""Read-only product action pin preflight for ``csarc update`` (#1065).
+
+A consumer's verification fails when a product-owned workflow pins a
+GitHub Action at a different commit than the template-managed workflows
+(``check_action_pins.py``). An update that bumps a template pin therefore
+breaks verification long after the plan was approved. This module lists
+that drift before any Copier render, plan, or target write:
+
+- the new pins are read from the template source at the exact reviewed
+  commit through Git only; nothing is rendered;
+- ownership comes from the template's own workflow names and the
+  ``_exclude`` conditions evaluated against the reviewed answers;
+- every product-owned workflow pin of an action the template also pins is
+  compared with the template's single full-SHA pin.
+
+The preflight never writes product files. A drift item is resolved by a
+manual product commit; :func:`validate_pin_decisions` accepts only
+decisions that name every item and read back from that commit, and
+:func:`unlisted_pin_changes` proves a pin commit changed nothing else.
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import re
+import subprocess
+import tempfile
+from collections.abc import Callable, Collection, Mapping, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path, PurePosixPath
+
+import yaml  # type: ignore[import-untyped]
+
+SCHEMA_VERSION = 1
+FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+# The same pin shape scripts/check_action_pins.py governs; a quoted or
+# tag-pinned reference is outside that check and therefore never drifts.
+USES = re.compile(
+    r"^\s*(?:-\s+)?uses:\s*([\w.-]+/[\w.-]+(?:/[\w./-]+)?)@([0-9a-f]{40})"
+)
+WORKFLOW_DIRECTORY = ".github/workflows"
+WORKFLOW_SUFFIXES = (".yml", ".yaml")
+TEMPLATE_SUFFIX = ".jinja"
+REASON_TEMPLATE_PIN_CHANGED = "template-pin-changed"
+REASON_PRODUCT_PIN_DIVERGED = "product-pin-diverged"
+# Issue #1083: a product pin newer than the template's within the same
+# major release is kept; the update aligns the template workflows to it.
+REASON_PRODUCT_PIN_NEWER = "product-pin-newer"
+REASONS = (
+    REASON_TEMPLATE_PIN_CHANGED,
+    REASON_PRODUCT_PIN_DIVERGED,
+    REASON_PRODUCT_PIN_NEWER,
+)
+# The readable release tag after a full-SHA pin, for example `# v10.3.0`.
+TAG_COMMENT = re.compile(r"@[0-9a-f]{40}\s+#\s*(\S+)")
+SEMVER_TAG = re.compile(r"v?(\d+)\.(\d+)(?:\.(\d+))?")
+ITEM_KEYS = ("action", "file", "line", "new_sha", "old_sha", "reason")
+DECISION_KEYS = (*ITEM_KEYS, "commit_sha")
+
+GitRunner = Callable[[list[str]], subprocess.CompletedProcess[str]]
+
+
+class PinPreflightError(ValueError):
+    """Raised when pins cannot be read or verified; the update stops."""
+
+
+@dataclass(frozen=True)
+class PinDrift:
+    """One product-owned pin that disagrees with the new template pin."""
+
+    file: str
+    line: int
+    action: str
+    old_sha: str
+    new_sha: str
+    reason: str
+
+    def as_dict(self) -> dict[str, object]:
+        """Return the stable machine-readable item."""
+        return {
+            "action": self.action,
+            "file": self.file,
+            "line": self.line,
+            "new_sha": self.new_sha,
+            "old_sha": self.old_sha,
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class PinPreflight:
+    """The complete read-only preflight result for one update."""
+
+    source_sha: str
+    product_workflows: tuple[str, ...]
+    items: tuple[PinDrift, ...]
+    # (action, template SHA, product SHA, template tag, product tag) for
+    # every kept newer product pin (#1083).
+    aligned: tuple[tuple[str, str, str, str, str], ...] = ()
+    # (file, line) -> (product tag, template tag) read from the `# vX.Y.Z`
+    # comments. It only words the report message (#1154) and is never part
+    # of the plan payload, so the plan schema does not change.
+    versions: Mapping[tuple[str, int], tuple[str | None, str | None]] = field(
+        default_factory=dict, compare=False
+    )
+
+    @property
+    def blocking(self) -> tuple[PinDrift, ...]:
+        """Return the items that need a product pin commit."""
+        return tuple(
+            item
+            for item in self.items
+            if item.reason != REASON_PRODUCT_PIN_NEWER
+        )
+
+    @property
+    def state(self) -> str:
+        """Return ``drift`` when a blocking item exists, else ``clean``."""
+        return "drift" if self.blocking else "clean"
+
+    def as_dict(self) -> dict[str, object]:
+        """Return the plan payload; an empty ``items`` list means no drift."""
+        payload: dict[str, object] = {
+            "items": [item.as_dict() for item in self.items],
+            "product_workflows": list(self.product_workflows),
+            "schema_version": SCHEMA_VERSION,
+            "source_sha": self.source_sha,
+            "state": self.state,
+        }
+        if self.aligned:
+            payload["aligned"] = [list(entry) for entry in self.aligned]
+        return payload
+
+
+def parse_pins(text: str) -> list[tuple[int, str, str]]:
+    """Return every full-SHA ``uses:`` pin as (1-based line, action, sha)."""
+    pins: list[tuple[int, str, str]] = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        match = USES.match(line)
+        if match is not None:
+            pins.append((number, match.group(1), match.group(2)))
+    return pins
+
+
+def pin_tag(line: str) -> str | None:
+    """Return the readable release tag written after one pin, if any."""
+    match = TAG_COMMENT.search(line)
+    return match.group(1) if match else None
+
+
+def semver(tag: str | None) -> tuple[int, int, int] | None:
+    """Parse ``vMAJOR.MINOR[.PATCH]``; anything else is unknown."""
+    match = SEMVER_TAG.fullmatch(tag or "")
+    if match is None:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3) or 0))
+
+
+def version_note(old_tag: str | None, new_tag: str | None) -> str:
+    """Name both release tags and whether the change is a major upgrade.
+
+    A missing or non-semver tag on either side makes the major judgement
+    ``unknown`` instead of a guess (#1154).
+    """
+    old_version, new_version = semver(old_tag), semver(new_tag)
+    if old_version is None or new_version is None:
+        major = "unknown"
+    elif new_version[0] > old_version[0]:
+        major = "yes"
+    else:
+        major = "no"
+    return (
+        f"product tag {old_tag or 'unknown'}, template tag "
+        f"{new_tag or 'unknown'}, major upgrade: {major}"
+    )
+
+
+def template_tags(
+    files: Mapping[str, str], pins: Mapping[str, str]
+) -> dict[str, str]:
+    """Return the one release tag the template writes after each pin.
+
+    An action whose template lines disagree on (or omit) the tag has no
+    trusted tag, so its product pins are never judged newer.
+    """
+    seen: dict[str, set[str | None]] = {}
+    for text in files.values():
+        for line in text.splitlines():
+            match = USES.match(line)
+            if match is not None and pins.get(match.group(1)) == match.group(2):
+                seen.setdefault(match.group(1), set()).add(pin_tag(line))
+    result: dict[str, str] = {}
+    for action, tags in seen.items():
+        (tag,) = tags if len(tags) == 1 else (None,)
+        if tag is not None:
+            result[action] = tag
+    return result
+
+
+def newer_product_pins(
+    target_files: Mapping[str, str],
+    product: Sequence[str],
+    new_pins: Mapping[str, str],
+    tags: Mapping[str, str],
+) -> dict[str, tuple[str, str, str]]:
+    """Return actions whose product pins are newer in the same major.
+
+    Every product line of the action must pin the same SHA with a semver
+    tag in the template's major release and above the template's tag;
+    anything ambiguous or unparsable keeps the blocking drift (#1083).
+    """
+    found: dict[str, set[tuple[str, str | None]]] = {}
+    for path in product:
+        for line in target_files[path].splitlines():
+            match = USES.match(line)
+            if match is not None and match.group(1) in new_pins:
+                found.setdefault(match.group(1), set()).add(
+                    (match.group(2), pin_tag(line))
+                )
+    result: dict[str, tuple[str, str, str]] = {}
+    for action, occurrences in found.items():
+        if len(occurrences) != 1:
+            continue
+        sha, tag = next(iter(occurrences))
+        template_tag = tags.get(action)
+        product_version, template_version = semver(tag), semver(template_tag)
+        if (
+            sha != new_pins[action]
+            and tag is not None
+            and template_tag is not None
+            and product_version is not None
+            and template_version is not None
+            and product_version[0] == template_version[0]
+            and product_version > template_version
+        ):
+            result[action] = (sha, tag, template_tag)
+    return result
+
+
+def template_pins(files: Mapping[str, str]) -> dict[str, str]:
+    """Return the single trusted pin per action across template workflows.
+
+    The template's own ``check_action_pins.py`` keeps every pin of one
+    action identical; disagreement means no single new SHA can be trusted.
+    """
+    seen: dict[str, set[str]] = {}
+    for text in files.values():
+        for _line, action, sha in parse_pins(text):
+            seen.setdefault(action, set()).add(sha)
+    ambiguous = sorted(action for action, shas in seen.items() if len(shas) > 1)
+    if ambiguous:
+        raise PinPreflightError(
+            "Template source pins disagree for "
+            + ", ".join(ambiguous)
+            + "; no single trusted new SHA exists."
+        )
+    return {action: next(iter(shas)) for action, shas in seen.items()}
+
+
+def _render_excludes(
+    entries: Sequence[object], answers: Mapping[str, object]
+) -> list[str]:
+    """Render Copier ``_exclude`` entries with the reviewed answers."""
+    from jinja2.sandbox import SandboxedEnvironment
+
+    environment = SandboxedEnvironment(autoescape=False)
+    rendered: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, str):
+            raise PinPreflightError("Template _exclude entries must be text.")
+        try:
+            rendered.append(
+                environment.from_string(entry).render(dict(answers)).strip()
+            )
+        except Exception as error:
+            raise PinPreflightError(
+                f"Cannot evaluate template _exclude entry {entry!r}: {error}"
+            ) from error
+    return [item for item in rendered if item]
+
+
+def _excluded(path: str, patterns: Sequence[str]) -> bool:
+    """Match the plain gitwildmatch subset Copier exclusions use."""
+    for pattern in patterns:
+        anchored = pattern.lstrip("/").rstrip("/")
+        if not anchored:
+            continue
+        if path == anchored or path.startswith(anchored + "/"):
+            return True
+        if "/" in pattern.strip("/"):
+            if fnmatch.fnmatchcase(path, anchored):
+                return True
+        elif any(
+            fnmatch.fnmatchcase(part, anchored)
+            for part in PurePosixPath(path).parts
+        ):
+            return True
+    return False
+
+
+def managed_workflows(
+    template_files: Mapping[str, str],
+    copier_config: Mapping[str, object],
+    answers: Mapping[str, object],
+) -> set[str]:
+    """Return the target workflow paths the template renders for answers."""
+    raw_excludes = copier_config.get("_exclude", [])
+    if not isinstance(raw_excludes, list):
+        raise PinPreflightError("Template _exclude must be a list.")
+    excludes = _render_excludes(raw_excludes, answers)
+    managed: set[str] = set()
+    for name in template_files:
+        output = name.removesuffix(TEMPLATE_SUFFIX)
+        if "{{" in output or "{%" in output:
+            raise PinPreflightError(
+                f"Template workflow name {name!r} is templated; ownership "
+                "cannot be resolved without a render."
+            )
+        path = f"{WORKFLOW_DIRECTORY}/{output}"
+        if not _excluded(path, excludes):
+            managed.add(path)
+    return managed
+
+
+def _git_text(git: GitRunner, command: list[str], detail: str) -> str:
+    result = git(command)
+    if result.returncode != 0:
+        output = (result.stderr or result.stdout).strip() or "git failed"
+        raise PinPreflightError(f"{detail}: {output}")
+    return result.stdout
+
+
+def _clone_url(source: str) -> str:
+    if source.startswith("gh:"):
+        return f"https://github.com/{source.removeprefix('gh:')}.git"
+    return source
+
+
+def _source_repository(
+    git: GitRunner, source: str, sha: str, scratch: Path
+) -> list[str]:
+    """Return a Git command prefix for a repository holding ``sha``."""
+    local = Path(source).expanduser()
+    if local.is_dir():
+        repository = local.resolve()
+    else:
+        repository = scratch / "source.git"
+        _git_text(
+            git,
+            ["git", "init", "--quiet", "--bare", str(repository)],
+            "Cannot prepare the template pin source",
+        )
+        _git_text(
+            git,
+            [
+                "git",
+                "-C",
+                str(repository),
+                "fetch",
+                "--quiet",
+                "--depth",
+                "1",
+                "--no-tags",
+                _clone_url(source),
+                sha,
+            ],
+            "Template pin source is unreachable",
+        )
+    base = ["git", "-C", str(repository)]
+    resolved = _git_text(
+        git,
+        [*base, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"],
+        "Template pin source does not contain the reviewed commit",
+    ).strip()
+    if resolved != sha:
+        raise PinPreflightError(
+            f"Template pin source resolved {resolved!r}, not the reviewed "
+            f"commit {sha}."
+        )
+    return base
+
+
+def _read_copier_config(
+    git: GitRunner, base: list[str], sha: str
+) -> dict[str, object]:
+    names = _git_text(
+        git,
+        [*base, "ls-tree", "--name-only", sha, "--", "copier.yml"],
+        "Cannot list the template configuration",
+    ).split()
+    if names != ["copier.yml"]:
+        raise PinPreflightError(
+            "Template source has no copier.yml at the reviewed commit."
+        )
+    text = _git_text(
+        git,
+        [*base, "cat-file", "blob", f"{sha}:copier.yml"],
+        "Cannot read the template configuration",
+    )
+    try:
+        config = yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        raise PinPreflightError(
+            f"Template copier.yml cannot be parsed: {error}"
+        ) from error
+    if not isinstance(config, dict):
+        raise PinPreflightError("Template copier.yml must be a mapping.")
+    return config
+
+
+def _read_template_workflows(
+    git: GitRunner, base: list[str], sha: str, subdirectory: object
+) -> dict[str, str]:
+    if not isinstance(subdirectory, str):
+        raise PinPreflightError("Template _subdirectory must be text.")
+    prefix = PurePosixPath(subdirectory.strip("/"), WORKFLOW_DIRECTORY)
+    listing = _git_text(
+        git,
+        [*base, "ls-tree", "-z", sha, f"{prefix.as_posix()}/"],
+        "Cannot list template workflows",
+    )
+    files: dict[str, str] = {}
+    for record in filter(None, listing.split("\0")):
+        meta, _tab, path = record.partition("\t")
+        mode, kind, _object = meta.split()
+        name = PurePosixPath(path).name
+        if kind != "blob" or mode not in {"100644", "100755"}:
+            continue
+        if name.removesuffix(TEMPLATE_SUFFIX).endswith(WORKFLOW_SUFFIXES):
+            files[name] = _git_text(
+                git,
+                [*base, "cat-file", "blob", f"{sha}:{path}"],
+                f"Cannot read template workflow {path}",
+            )
+    return files
+
+
+def read_template_source(
+    git: GitRunner, source: str, sha: str
+) -> tuple[dict[str, object], dict[str, str]]:
+    """Read ``copier.yml`` and template workflows at one exact commit.
+
+    Returns the parsed Copier configuration and the template workflow files
+    keyed by their name inside the template workflow directory. Nothing is
+    checked out or rendered; every blob is read from the verified commit.
+    """
+    if FULL_SHA.fullmatch(sha) is None:
+        raise PinPreflightError(
+            f"Template revision {sha!r} is not a full commit SHA; the pin "
+            "source cannot be verified."
+        )
+    with tempfile.TemporaryDirectory(prefix="csarc-pin-source-") as scratch:
+        base = _source_repository(git, source, sha, Path(scratch))
+        config = _read_copier_config(git, base, sha)
+        files = _read_template_workflows(
+            git, base, sha, config.get("_subdirectory", "")
+        )
+    return config, files
+
+
+def _target_workflows(target: Path) -> dict[str, str]:
+    """Read every target workflow file, failing closed on unsafe entries."""
+    directory = target / WORKFLOW_DIRECTORY
+    if directory.is_symlink():
+        raise PinPreflightError(
+            f"{WORKFLOW_DIRECTORY} is a symlink; workflow pins cannot be "
+            "verified."
+        )
+    if not directory.is_dir():
+        return {}
+    files: dict[str, str] = {}
+    for path in sorted(directory.iterdir()):
+        if not path.name.endswith(WORKFLOW_SUFFIXES):
+            continue
+        relative = f"{WORKFLOW_DIRECTORY}/{path.name}"
+        if path.is_symlink() or not path.is_file():
+            raise PinPreflightError(
+                f"{relative} is not a regular file; its pins cannot be parsed."
+            )
+        try:
+            files[relative] = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            raise PinPreflightError(
+                f"{relative} cannot be parsed as UTF-8 text: {error}"
+            ) from error
+    return files
+
+
+def evaluate(
+    target_files: Mapping[str, str],
+    managed: set[str],
+    new_pins: Mapping[str, str],
+    source_sha: str,
+    tags: Mapping[str, str] | None = None,
+) -> PinPreflight:
+    """Compare product-owned pins with the new template pins."""
+    product = sorted(path for path in target_files if path not in managed)
+    newer = newer_product_pins(target_files, product, new_pins, tags or {})
+    current_template: dict[str, set[str]] = {}
+    for path, text in target_files.items():
+        if path in managed:
+            for _line, action, sha in parse_pins(text):
+                current_template.setdefault(action, set()).add(sha)
+    items: list[PinDrift] = []
+    versions: dict[tuple[str, int], tuple[str | None, str | None]] = {}
+    for path in product:
+        lines = target_files[path].splitlines()
+        for line, action, sha in parse_pins(target_files[path]):
+            new_sha = new_pins.get(action)
+            if new_sha is None or new_sha == sha:
+                continue
+            versions[(path, line)] = (
+                pin_tag(lines[line - 1]),
+                (tags or {}).get(action),
+            )
+            reason = (
+                REASON_PRODUCT_PIN_NEWER
+                if action in newer
+                else REASON_TEMPLATE_PIN_CHANGED
+                if sha in current_template.get(action, set())
+                else REASON_PRODUCT_PIN_DIVERGED
+            )
+            items.append(PinDrift(path, line, action, sha, new_sha, reason))
+    aligned = tuple(
+        (action, new_pins[action], sha, template_tag, tag)
+        for action, (sha, tag, template_tag) in sorted(newer.items())
+    )
+    return PinPreflight(
+        source_sha, tuple(product), tuple(items), aligned, versions
+    )
+
+
+def run_preflight(
+    target: Path,
+    source: str,
+    sha: str,
+    answers: Mapping[str, object],
+    git: GitRunner,
+) -> PinPreflight:
+    """Run the complete read-only preflight for one reviewed revision."""
+    config, files = read_template_source(git, source, sha)
+    new_pins = template_pins(files)
+    for action, pin in new_pins.items():
+        if FULL_SHA.fullmatch(pin) is None:
+            raise PinPreflightError(
+                f"Template pin for {action} is not a full commit SHA."
+            )
+    managed = managed_workflows(files, config, answers)
+    return evaluate(
+        _target_workflows(target),
+        managed,
+        new_pins,
+        sha,
+        template_tags(files, new_pins),
+    )
+
+
+def excluding(
+    preflight: PinPreflight, retired: Collection[str]
+) -> PinPreflight:
+    """Drop workflows the update retires; they are not product-owned.
+
+    A legacy workflow the trusted old render generated and the new release
+    no longer renders is deleted by the reviewed plan, so pinning it again
+    would only turn a clean retirement into a kept, modified copy (#1083).
+    """
+    gone = set(retired)
+    items = tuple(item for item in preflight.items if item.file not in gone)
+    kept = {item.action for item in items}
+    return PinPreflight(
+        preflight.source_sha,
+        tuple(path for path in preflight.product_workflows if path not in gone),
+        items,
+        tuple(entry for entry in preflight.aligned if entry[0] in kept),
+        {
+            key: value
+            for key, value in preflight.versions.items()
+            if key[0] not in gone
+        },
+    )
+
+
+def align_text(text: str, aligned: Sequence[Sequence[str]]) -> str:
+    """Return one workflow text with every aligned template pin raised."""
+    updated = text
+    for (
+        action,
+        template_sha,
+        product_sha,
+        template_tag,
+        product_tag,
+    ) in aligned:
+        updated = re.sub(
+            rf"({re.escape(action)}@){template_sha}(\s+#\s*){re.escape(template_tag)}(?=\s|$)",
+            rf"\g<1>{product_sha}\g<2>{product_tag}",
+            updated,
+        )
+        updated = updated.replace(
+            f"{action}@{template_sha}", f"{action}@{product_sha}"
+        )
+    return updated
+
+
+def is_aligned_workflow(name: str) -> bool:
+    """Return whether ``align_pins`` rewrites the file at ``name``."""
+    path = Path(name)
+    return path.parent.as_posix() == WORKFLOW_DIRECTORY and path.name.endswith(
+        WORKFLOW_SUFFIXES
+    )
+
+
+def align_content(
+    name: str, content: bytes | None, aligned: Sequence[Sequence[str]]
+) -> bytes | None:
+    """Return the bytes ``align_pins`` leaves at ``name`` (Issue #1153).
+
+    The apply raises template pins after it resolves every conflict, so the
+    reviewed take-new side must already carry the aligned pins; otherwise
+    ``conflicts/new`` would differ from what take-new writes.
+    """
+    if content is None or not aligned or not is_aligned_workflow(name):
+        return content
+    try:
+        # Read and write the way ``align_pins`` does: text mode translates
+        # line endings, and an unchanged file is never rewritten.
+        text = content.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    except UnicodeDecodeError:
+        return content
+    updated = align_text(text, aligned)
+    return content if updated == text else updated.encode("utf-8")
+
+
+def align_pins(root: Path, aligned: Sequence[Sequence[str]]) -> list[str]:
+    """Raise every remaining template pin to the kept newer product pin.
+
+    The generated pin check requires one SHA per action across the
+    repository, so the template workflows adopt the product's same-major
+    newer pin (and its tag) instead of the product being downgraded.
+    Returns the workflow files that changed.
+    """
+    changed: list[str] = []
+    directory = root / WORKFLOW_DIRECTORY
+    if not aligned or not directory.is_dir():
+        return changed
+    for path in sorted(directory.iterdir()):
+        if not path.name.endswith(WORKFLOW_SUFFIXES) or not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        updated = align_text(text, aligned)
+        if updated != text:
+            path.write_text(updated, encoding="utf-8")
+            changed.append(f"{WORKFLOW_DIRECTORY}/{path.name}")
+    return changed
+
+
+def repair_commands(items: Sequence[PinDrift]) -> list[str]:
+    """Return one manual repair instruction per drift item."""
+    return [
+        f"{item.file}:{item.line}: change {item.action}@{item.old_sha} to "
+        f"{item.action}@{item.new_sha}"
+        for item in items
+    ]
+
+
+def drift_error(preflight: PinPreflight) -> str:
+    """Explain why an update refuses to plan for apply with drift."""
+    lines = [
+        "Product action pins drift from the new template pins; the target "
+        "was not changed. Commit these product pin changes, then rerun the "
+        "update:",
+        *(f"  - {line}" for line in repair_commands(preflight.items)),
+    ]
+    return "\n".join(lines)
+
+
+def _item_key(item: Mapping[str, object]) -> tuple[object, ...]:
+    return tuple(item.get(key) for key in ITEM_KEYS)
+
+
+def _read_back_decision(
+    decision: Mapping[str, object], git: GitRunner, target: Path
+) -> None:
+    """Prove one decision's commit exists, is merged, and pins the line."""
+    commit = decision["commit_sha"]
+    if not isinstance(commit, str) or FULL_SHA.fullmatch(commit) is None:
+        raise PinPreflightError(
+            "A pin decision commit must be a full lowercase commit SHA."
+        )
+    base = ["git", "-C", str(target)]
+    resolved = _git_text(
+        git,
+        [*base, "rev-parse", "--verify", "--quiet", f"{commit}^{{commit}}"],
+        f"Pin commit {commit} cannot be read back",
+    ).strip()
+    if resolved != commit:
+        raise PinPreflightError(f"Pin commit {commit} cannot be read back.")
+    ancestry = git([*base, "merge-base", "--is-ancestor", commit, "HEAD"])
+    if ancestry.returncode != 0:
+        raise PinPreflightError(
+            f"Pin commit {commit} is not in the target's history."
+        )
+    text = _git_text(
+        git,
+        [*base, "cat-file", "blob", f"{commit}:{decision['file']}"],
+        f"Pin commit {commit} has no {decision['file']}",
+    )
+    pinned = [pin for pin in parse_pins(text) if pin[0] == decision["line"]]
+    if pinned != [(decision["line"], decision["action"], decision["new_sha"])]:
+        raise PinPreflightError(
+            f"Pin commit {commit} does not pin {decision['action']}@"
+            f"{decision['new_sha']} at {decision['file']}:"
+            f"{decision['line']}."
+        )
+
+
+def validate_pin_decisions(
+    items: Sequence[Mapping[str, object]],
+    decisions: Sequence[Mapping[str, object]],
+    git: GitRunner,
+    target: Path,
+) -> list[dict[str, object]]:
+    """Accept only complete manual pin decisions that read back by SHA.
+
+    Every preflight item needs exactly one decision with identical fields
+    plus ``commit_sha``; the commit must be in the target's history and
+    must pin the new SHA on the recorded line. Returns the normalized
+    decisions in item order.
+    """
+    expected = {_item_key(item) for item in items}
+    if len(expected) != len(items):
+        raise PinPreflightError("Preflight items must be unique.")
+    accepted: dict[tuple[object, ...], dict[str, object]] = {}
+    for decision in decisions:
+        if set(decision) != set(DECISION_KEYS):
+            raise PinPreflightError(
+                "A pin decision must carry exactly "
+                + ", ".join(DECISION_KEYS)
+                + "."
+            )
+        key = _item_key(decision)
+        where = f"{decision.get('file')}:{decision.get('line')}"
+        if key not in expected:
+            raise PinPreflightError(
+                f"Pin decision for {where} is not a preflight item."
+            )
+        if key in accepted:
+            raise PinPreflightError(f"Pin decision for {where} is duplicated.")
+        _read_back_decision(decision, git, target)
+        accepted[key] = {name: decision[name] for name in DECISION_KEYS}
+    missing = [key for key in expected if key not in accepted]
+    if missing:
+        raise PinPreflightError(
+            "Every preflight item needs a committed pin decision; missing "
+            + ", ".join(sorted(f"{key[1]}:{key[2]}" for key in missing))
+            + "."
+        )
+    return [accepted[_item_key(item)] for item in items]
+
+
+_HUNK = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+
+@dataclass
+class _FileDiff:
+    """The zero-context changes Git reports for one file."""
+
+    path: str
+    headers: list[str]
+    removed: list[tuple[int, str]]
+    added: list[tuple[int, str]]
+
+
+def _parse_patch(patch: str) -> list[_FileDiff]:
+    """Split a ``--unified=0`` patch into per-file line changes."""
+    files: list[_FileDiff] = []
+    current: _FileDiff | None = None
+    removed_at = added_at = 0
+    for raw in patch.splitlines():
+        if raw.startswith("diff --git "):
+            current = _FileDiff(raw.partition(" b/")[2] or raw, [], [], [])
+            files.append(current)
+            removed_at = added_at = 0
+        elif current is None:
+            continue
+        elif (match := _HUNK.match(raw)) is not None:
+            removed_at, added_at = int(match.group(1)), int(match.group(2))
+        elif not removed_at and not added_at:
+            current.headers.append(raw)
+        elif raw.startswith("-"):
+            current.removed.append((removed_at, raw[1:]))
+            removed_at += 1
+        elif raw.startswith("+"):
+            current.added.append((added_at, raw[1:]))
+            added_at += 1
+    return files
+
+
+def _unlisted_in_file(
+    change: _FileDiff, allowed: Mapping[tuple[str, int], Mapping[str, object]]
+) -> list[str]:
+    # Only index and ---/+++ headers are expected; a mode change, new,
+    # deleted, or binary file is never a listed pin edit.
+    unlisted = [
+        f"{change.path}: {header}"
+        for header in change.headers
+        if not header.startswith(("index ", "--- ", "+++ "))
+    ]
+    if len(change.removed) != len(change.added):
+        return [*unlisted, f"{change.path}: lines added or removed"]
+    for (old_line, before), (new_line, after) in zip(
+        change.removed, change.added, strict=True
+    ):
+        item = allowed.get((change.path, new_line))
+        if (
+            item is None
+            or old_line != new_line
+            or f"{item['action']}@{item['old_sha']}" not in before
+            or _pin_code(before).replace(
+                str(item["old_sha"]), str(item["new_sha"])
+            )
+            != _pin_code(after)
+        ):
+            unlisted.append(f"{change.path}:{new_line}")
+    return unlisted
+
+
+def _pin_code(line: str) -> str:
+    """Return one ``uses:`` line without its trailing comment.
+
+    The readable release tag after a pin (``# v1.2.3``) changes together
+    with the SHA by convention, so a listed pin edit may update it (#1083).
+    """
+    return line.partition(" #")[0].rstrip()
+
+
+def unlisted_pin_changes(
+    items: Sequence[Mapping[str, object]],
+    git: GitRunner,
+    target: Path,
+    commit: str,
+) -> list[str]:
+    """Return every change in one pin commit outside the preflight list.
+
+    An allowed change replaces exactly one listed line, keeping the line
+    identical except for the old SHA becoming the new SHA. An empty list
+    proves the commit modified nothing beyond the preflight items.
+    """
+    if FULL_SHA.fullmatch(commit) is None:
+        raise PinPreflightError("A pin commit must be a full commit SHA.")
+    allowed = {
+        (str(item["file"]), int(str(item["line"]))): item for item in items
+    }
+    patch = _git_text(
+        git,
+        [
+            "git",
+            "-C",
+            str(target),
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--no-renames",
+            "--unified=0",
+            f"{commit}^",
+            commit,
+        ],
+        f"Cannot read pin commit {commit}",
+    )
+    return [
+        entry
+        for change in _parse_patch(patch)
+        for entry in _unlisted_in_file(change, allowed)
+    ]

@@ -239,8 +239,7 @@ def test_ci_skips_non_actionable_pr_events_before_runner() -> None:
         .from_string(template_source)
         .render(
             languages=["python", "typescript", "rust"],
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
         )
     )
     expected = (
@@ -280,13 +279,11 @@ def test_hosted_verification_sets_up_each_profile_toolchain_first() -> None:
     rendered_templates = (
         template.render(
             languages=["python", "typescript", "rust"],
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
         ),
         template.render(
             languages=["typescript", "rust"],
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
         ),
     )
 
@@ -361,8 +358,7 @@ def test_hosted_setup_skips_unowned_language_toolchains() -> None:
         .from_string(template_source)
         .render(
             languages=["python", "typescript", "rust"],
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
         )
     )
     generated = {str(step.get("name")): step for step in ci_steps(rendered)}
@@ -442,16 +438,18 @@ def test_reused_release_validation_installs_only_owned_package_tools() -> None:
     ):
         rendered = template.render(
             languages=[language],
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
         )
         setup = {
             str(step.get("name")): step
             for step in ci_steps(rendered)
             if str(step.get("name", "")).startswith("Set up ")
         }
+        # The trusted-policy Python setup always runs (Issue #1111/#1069).
         actual = {
-            name for name, step in setup.items() if candidate in step["if"]
+            name
+            for name, step in setup.items()
+            if candidate in step.get("if", "")
         }
         assert actual == expected
 
@@ -544,7 +542,7 @@ def test_local_verification_reuses_the_hosted_path_planner() -> None:
         ),
         (
             "template/.csarc/scripts/verify-fast.jinja",
-            "python3 .csarc/scripts/ci_tier.py",
+            'python3 "$control_root/.csarc/scripts/ci_tier.py"',
             "python3 .csarc/scripts/local_verification.py record",
         ),
     ):
@@ -586,7 +584,7 @@ def test_full_dispatch_skips_redundant_fast_checks() -> None:
         ("scripts/verify-fast", '"$control_root/scripts/verify-template.sh"'),
         (
             "template/.csarc/scripts/verify-fast.jinja",
-            "./.csarc/scripts/verify",
+            '"$control_root/.csarc/scripts/verify"',
         ),
     ):
         source = (REPO_ROOT / path).read_text(encoding="utf-8")
@@ -966,9 +964,22 @@ def test_long_policy_regressions_run_only_in_full() -> None:
     assert expected <= direct_regression_commands(
         "scripts/verify-stage-regression-tests"
     )
-    assert expected <= direct_regression_commands(
-        "template/.csarc/scripts/verify.jinja"
-    )
+
+
+def test_generated_verification_runs_no_template_self_tests() -> None:
+    """Generated verify paths spend no time on template self-tests (#1070).
+
+    The same cases stay in the template's CI through
+    tests/test_generated_self_tests.py, which runs them against a render.
+    """
+    for path in (
+        "template/.csarc/scripts/verify-fast.jinja",
+        "template/.csarc/scripts/verify.jinja",
+    ):
+        source = (REPO_ROOT / path).read_text(encoding="utf-8")
+        assert direct_regression_commands(path) == set()
+        assert ".csarc/tests" not in source
+        assert "security-smoke" not in source
 
 
 def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:
@@ -1003,8 +1014,7 @@ def _render_generated(path: str, languages: list[str]) -> str:
         .from_string(source)
         .render(
             languages=languages,
-            python_support_mode="latest",
-            python_min_version="3.12",
+            python_floor="latest",
             release_trigger="manual",
             release_ownership="csarc-owned",
             project_slug="go-fixture",

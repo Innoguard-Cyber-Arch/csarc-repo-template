@@ -61,7 +61,7 @@ jobs:
               --destination "$RUNNER_TEMP/trusted-executor"
             echo "executor=trusted-base" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning title=Trusted verification executor::This pull request base predates the trusted executor (Issue #1086); verification runs the candidate entry point and is recorded as candidate-legacy until the base is synchronized."
+            echo "::warning title=Trusted verification executor::This pull request base predates the trusted executor; verification runs the candidate entry point and is recorded as candidate-legacy until the base is synchronized."
             echo "executor=candidate-legacy" >> "$GITHUB_OUTPUT"
           fi
       - name: Check out the exact candidate

@@ -8,7 +8,7 @@ active。版本、發版與成品責任的完整盤點見中央模板的
 ## 審查與合併資格
 
 本文件在每個 repository 內都是審查、required checks、合併資格、admin bypass 與
-quota fallback 的唯一規範來源；`AGENTS.md` 與 README 只連到這裡，不另寫第二套例外。任何 PR 都必須符合
+Actions 中斷路線的唯一規範來源；`AGENTS.md` 與 README 只連到這裡，不另寫第二套例外。任何 PR 都必須符合
 下方對應交付路徑、目前 head 的審查或明確授權，以及該風險層級的 local self-attested 或 hosted
 trusted evidence；草稿不具合併資格。有 Milestone 的工作繼承 tracker 核准，standalone、hotfix 與
 release recovery 則依本文件各自的 Issue 核可 gate。所有 fallback 都必須使用本文件明列
@@ -23,7 +23,7 @@ branch，最後由一張受審查的交付 PR 送回 `main`。
 
 Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成
 repo 啟用；生成 repo 預設產生治理漂移排程（`governance-drift.yml`）並每日執行，
-可用 `enable_governance_drift_check: false` 關閉。本模板 source repo 保留同一支
+可從 `scheduled_checks` 移除 `governance-drift` 關閉。本模板 source repo 保留同一支
 `scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
 
 `dev/i<Issue>-*` 只適用於 Issue 已寫明獨立環境、soak／canary 目標與停止條件的例外。
@@ -145,7 +145,8 @@ ready／draft、授權或 metadata，必須先取得 remote lease，並透過 `s
 
 一般有獨立 reviewer 的 PR，不需要再留一則重複的授權留言。`scripts/pr_lifecycle.py`
 會把獨立 maintainer 對**目前 head SHA** 的最新有效 `APPROVED` review 直接視為合併授權；
-它會即時確認 reviewer 仍有 `maintain`／`admin` 權限、不是執行 merge 的帳號，而且 review
+它以即時 `role_name` 確認 reviewer 為 `maintain`／`admin`（不讀 legacy `permission`，缺漏即
+`unknown` 並拒絕）、不是 PR 作者或執行 merge 的帳號，而且 review
 的 `commit_id` 正好等於目前 head。任何後續 push 都會產生新 SHA，使舊 approval 自然
 失效；`CHANGES_REQUESTED`、新的 Draft 事件、未解決的 blocking comment、未完成 checklist
 或 required check 仍會 fail closed。
@@ -153,7 +154,7 @@ ready／draft、授權或 metadata，必須先取得 remote lease，並透過 `s
 目前設定允許的 admin `pull_request` bypass 也只能由 lifecycle 在上述
 exact-head approval 成立、GitHub 回報 `mergeable_state=clean`、必要檢查逐項重驗成功，且
 live bypass actor 清單精確等於 repo 宣告值時使用；其他 bypass 形狀仍降級為 human-only。
-這條路徑會在最後一次 merge snapshot 前自動留下 `bypass-trace:`。沒有獨立 review 的
+這條路徑會在合併成功並讀回之後，把帶 `merge=<SHA> evidence=<locator>` 的 `bypass-trace:` 寫進 PR 唯一的 evidence summary（#1073）。沒有獨立 review 的
 admin self-merge 仍必須使用取得 lease 後的 exact-head maintainer 授權留言。
 
 ### Lease 續租不作廢既有授權（#1017）
@@ -180,8 +181,9 @@ exact-head 與 actor 綁定。續租條件不成立時工具會拒絕，並說�
 
 `.csarc/config.yml` 用兩個互不重疊的選項描述審核意圖：`admin_bypass` 可選
 `off`、`beta-only` 或 `always`；`copilot_review` 可選 `allowed` 或 `off`。
-`allowed` 是明確 opt-in，不是 Copilot entitlement 或額度已存在的宣告。舊的
-`review`／per-level review 設定只在更新時轉成等價的 `admin_bypass`，不再是現行設定面。
+`allowed` 是明確 opt-in，不是 Copilot entitlement 或額度已存在的宣告。更新保留已存或
+明確傳入的 `admin_bypass`；缺值寫成 `always` 並在報告列為 `widened`（附恢復指令），
+舊 `review`／per-level review 等鍵列為 `retired`，其他治理值只會 `exact` 或 `narrowed`。
 
 - `admin_bypass: off` 要求獨立 maintainer approval；`beta-only` 只允許 beta；`always`
   同時允許 beta 與 stable。所有模式都不把靜態 reviewer 名單當作權限來源。
@@ -192,7 +194,9 @@ exact-head 與 actor 綁定。續租條件不成立時工具會拒絕，並說�
   1. 獨立 maintainer 對**目前 head SHA** 的有效 `APPROVED`（沿用 #719 判斷，人工審核路徑
      仍然有效）；或
   2. Copilot 對**目前 head SHA** 的最新審核沒有任何 inline comment、內文沒有被隱藏的
-     低信心意見（suppressed comments），且內文明確寫出沒有產生意見；或
+     低信心意見（suppressed comments），且內文明確寫出沒有產生意見；self／peer 皆適用，
+     但 PR 有有效 admin-bypass 標記，或 Ruleset 不是 0 個原生 approval 的 A／E1 形狀時
+     不採用，結果與 `copilot_review: off` 相同；或
   3.（#775／#826／#905／#918）這是一張符合 `admin_bypass_opt_in` 條件（PR body恰好一次
      `Admin bypass / 管理員略過審核` 標記、Milestone-less Issue 的 direct-to-main
      路由、既有 `dev/mN` Issue 路由、經 `require_routine_route()` 完整驗證的正式
@@ -206,7 +210,8 @@ exact-head 與 actor 綁定。續租條件不成立時工具會拒絕，並說�
   workflow 會把判定發布成獨立的三態 check-run：Draft、尚未審核或只審過舊 head 時為
   `queued`（pending）；exact-head 審核符合上列條件時為 `success`；已留下意見、內文格式
   無法辨識或授權路由無效時才是 `failure`。發布 job 本身只在判定或 GitHub API 寫入失敗
-  時失敗，避免把預期等待誤報成自動化故障。
+  時失敗，避免把預期等待誤報成自動化故障。`review`、`status` 與 `pr_lifecycle.py merge`
+  共用 `review_gate.decide()` 的同一判定與 reason code（#1082）。
   一般 PR 仍使用 PR base 的可信 publisher；正式 current-main sync 因為目的就是把新治理
   帶進較舊的 delivery base，改用 GitHub API 解析出的 current default-branch commit 作為
   可信 publisher。該 evaluator 仍以 exact head 與 `require_routine_route()` 驗證 sync
@@ -227,9 +232,9 @@ exact-head 與 actor 綁定。續租條件不成立時工具會拒絕，並說�
 3. 重複直到 `status` 回報 `copilot.state = clean`，`review` check 轉綠。
 4. 依上方 single-writer 規則取得 lease，`scripts/pr_lifecycle.py merge` 以
    `authorization_source=copilot` 合併；lifecycle 在合併前重新驗證同一個 exact-head
-   Copilot 審核、required checks、Draft、checklist 與 lease，並自動留下
-   `copilot-review-trace: review=<URL> head=<SHA> actor=<login>`（admin bypass 另外留下
-   `bypass-trace: ... reason=exact-head-copilot-review`）。
+   Copilot 審核、required checks、Draft、checklist 與 lease，合併讀回後在 evidence summary 寫入
+   `copilot-review-trace: review=<URL> head=<SHA> actor=<login> merge=<SHA> evidence=<locator>`
+   （admin bypass 另外留下 `bypass-trace: ... reason=exact-head-copilot-review`）。
 
 自動合併由本機 agent 經 lifecycle 執行，不用 workflow 的 `GITHUB_TOKEN` 合併：
 `GITHUB_TOKEN` 的合併不會觸發後續 `push` workflow（例如 release），也會繞過 lease；
@@ -348,9 +353,16 @@ tag；release intent 的 commit range 則維持從 delivery 可達的最新 tag 
 `.csarc/config.yml` 的 `project_maturity: early|formal` 只描述整個專案的成熟度。
 預設永遠是 `early`；只有一張明確宣告此變更的 standalone stable PR 才能改成
 `formal`。成熟度不改寫 beta/stable 通道，也不從版本號或 branch 自動推斷。
+`early` 專案的 breaking 變更（`type!:` 或 `BREAKING CHANGE:` footer）從 `0.y.z`
+升為 `0.(y+1).0`，維持 0.x；`formal` 專案仍依 SemVer 升 MAJOR（Issue #1085）。
+beta 與 stable 對同一條 candidate line 使用同一規則，main 已插入較高 stable 時以它為
+基準重新計算，已發布的 core 與 `.N` 不重用也不倒退。成熟度一律讀 current `main`
+（trusted base）的 `.csarc/config.yml`，candidate 不能改寫自己的 bump 規則；main
+無法取得或設定無法解析時直接失敗，不套用預設值。含 breaking 變更的 CHANGELOG
+另列 `Migration notes`：最低版本、回復方式，以及每個 commit 的 footer 說明。
 
 `admin_bypass: off|beta-only|always` 控制 admin 是否可用 exact-head 自我授權取代
-同行核准。本 repo 設為 `always`；生成專案預設 `off`，可明確選擇另外兩種模式。
+同行核准。本 repo 設為 `always`；生成專案預設也是 `always`，可明確選擇另外兩種模式。
 無論設定值為何，bypass 都不能略過 release-level/path-risk 選出的 suite、required
 checks、候選版本檢查、remote lease、即時 admin 身分或 exact-head 綁定。實際使用由
 `scripts/pr_lifecycle.py` 寫入：
@@ -361,7 +373,9 @@ bypass-trace: release_level=<beta|stable> route=<beta|stable|hotfix> actor=<gith
 
 GitHub 的 Ruleset bypass 是整個 ruleset 層級的能力，因此 required checks 保持在
 沒有 bypass actor 的獨立 Ruleset；review 規則才依 `admin_bypass` 決定是否包含 admin
-角色。`--admin` 不是直接操作捷徑，所有自動合併仍只經 lifecycle single-writer。
+角色。local 搭配 `beta-only`／`always` 採 E1 備援形狀（0 個原生核准、只有 admin 角色
+bypass actor）；Ruleset 讀取不完整時 lifecycle 判為 `inconclusive`，只能人工合併。admin
+專用檢查只接受即時 `role_name: admin`，不讀 legacy `permission`。`--admin` 不是直接操作捷徑，所有自動合併仍只經 lifecycle single-writer。
 
 ### 已取代：每件工作的四層發布模型（#745）
 
@@ -616,6 +630,25 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
    recovery Issue 核可 gate（#743）」。這與第 2 步的 PR review 是兩道獨立關卡：真正
    緊急、找不到第二人核准時，admin self-approval 保證這條路徑不會因為等待核准而卡死。
 
+#### Hotfix 事後紀錄（#1139）
+
+上面第 3 步要保留的內容，以下表為固定欄位；本節只規定要記什麼與放哪裡，不改變上述路由、
+審查與核可規則。紀錄寫在 hotfix Issue 的「補充」，或 PR 的 `## Requirement evidence`
+（逐項對應 Issue 的風險 ID）；不另開 Issue 表單或紀錄檔。
+
+| 欄位 | 內容 |
+| --- | --- |
+| 原因 | 缺陷的直接原因與觸發條件 |
+| 影響範圍 | 受影響的版本、功能、repository 或使用者，以及發生期間 |
+| Exact base／head | 修正 PR 合併時的 base SHA 與 head SHA，以及合併後的 `main` commit |
+| 為何不能等 Milestone | 不立即修正的具體後果；說不出來就改走一般 Issue 或 Milestone |
+| 授權來源 | Issue 核可留言與 PR exact-head 授權或 review 的連結；admin bypass 時連到自動建立的同儕複核 Issue |
+| 驗證證據 | full run 連結、rollback 說明，以及是否發版與 Release 讀回結果 |
+| 後續 Issue | 根因修正、測試補強或流程調整的 Issue 編號；沒有時寫明理由 |
+
+這份紀錄不取代 #743 的 Issue 核可。若內容涉及尚未公開的漏洞，公開紀錄只寫修正範圍，細節留在
+私密管道（見 `docs/security-response.md`）。
+
 ### Release recovery
 
 `release-recovery` 標籤（`policies/labels.json`）標出「`main` 缺少一次應有發版、需要直接對
@@ -862,7 +895,7 @@ path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成�
 
 新專案預設 `verification_mode: local`；既有 repository 沒有此欄位時維持 `hosted`，避免更新時靜默降低保護。兩種模式共用同一個 `ci_tier.py` router，以及同一組 focused／fast／full 驗證入口；切換模式不增加第二套 runner、matrix 或測試清單。
 
-`local` 模式不產生 `ci.yml`、`pr-policy.yml`、`pr-policy-writes.yml`、`pr-review.yml`、reviewer assignment、spec sync、work-item lifecycle、Pages、OSV、CodeQL、Docker scan、Dependabot auto-merge、release 或 release-drift workflow，required-checks Ruleset 與 Pages policy 也保持 disabled，因此不會建立永遠等不到的 check、在 `main` 重跑完整驗證或製造無意義告警。Issue／PR／Milestone 操作改用既有本機 wrapper；外部協作者若直接在 GitHub UI 修改 metadata，local mode 不會即時自動修正，只能由人工或可選的低頻 governance drift check 發現。repo-local 發版工具仍保留，需要可信 release provenance 或 Pages deployment 時先切換成 `hosted` 再更新模板。fast／full 成功後只做常數時間的 metadata 寫入：已 commit 且 clean 的候選會把 exact head/tree、base、tier、scopes、command、success 與 24 小時 freshness 綁到 Git metadata；尚未建立 commit 或仍有未提交修改時，測試結果維持成功但不產生可合併的證明。`pr_lifecycle.py` 在 merge 前重新讀取 GitHub metadata、review、lease 與這份證明，執行既有 PR policy checker，並留下清楚標為 `self-attested-local` 的 trace，再使用受控 admin bypass。
+`local` 模式不產生 `ci.yml`、`pr-policy.yml`、`pr-policy-writes.yml`、`pr-review.yml`、reviewer assignment、spec sync、work-item lifecycle、Pages、OSV、CodeQL、Docker scan、Dependabot auto-merge、release 或 release-drift workflow，required-checks Ruleset 與 Pages policy 也保持 disabled，因此不會建立永遠等不到的 check、在 `main` 重跑完整驗證或製造無意義告警。Issue／PR／Milestone 操作改用既有本機 wrapper；外部協作者若直接在 GitHub UI 修改 metadata，local mode 不會即時自動修正，只能由人工或可選的低頻 governance drift check 發現。repo-local 發版工具仍保留，需要可信 release provenance 或 Pages deployment 時先切換成 `hosted` 再更新模板。fast／full 成功後只做常數時間的 metadata 寫入：已 commit 且 clean 的候選會把 exact head/tree、base、tier、scopes、command、success 與 24 小時 freshness 綁到 Git metadata；尚未建立 commit 或仍有未提交修改時，測試結果維持成功但不產生可合併的證明。`pr_lifecycle.py` 在 merge 前重新讀取 GitHub metadata、review、lease 與這份證明，執行既有 PR policy checker，再使用受控 admin bypass，合併讀回後留下清楚標為 `self-attested-local` 的 trace（#1073）。
 
 hosted 模式仍保留 required `verify`／`title`／`review`。實作中與一般 push 前只跑變更 owner 的 focused checks；`verify-fast` 是可選的廣泛診斷，不因 trusted plan 選到 `full` 就再於本機跑一次 aggregate suite。required `verify` 在 exact candidate 執行所選 fast／full，並提供唯一的正常 merge evidence；本機 full 只留給本文件明定的 Actions／發布 fallback 或明確診斷，且不會在 fallback 邊界外取代 hosted evidence。Draft 的 CI、policy、review 與 reviewer assignment 都在 runner 前略過；`PR policy writes` 只接續上游 `success`／`failure`，不為 `skipped`／`cancelled` 開 runner。Pages 只在 `documentation_mode: template-and-content` 時產生，採 Actions deployment，僅回應 `docs/**` 變更或手動 dispatch。`policies/pages.json` 的 `enabled` 是維護者的 desired-state 選擇，不是能力判定：public repository 在 GitHub Free 可以發布 Pages，但不代表必須發布；`enabled=true` 時 `plan` 顯示 ENABLE／UPDATE／NO-OP，`enabled=false` 是明確 opt-out，live 仍已發布時顯示 DISABLE，`check` 雙向比對 desired 與 live，`apply` 依同一動作建立、更新或停用站台後再以 `check` 讀回（#985）。private repository 缺少 GitHub Enterprise Cloud 時仍回報 `DEGRADED`，無法判讀的 Pages API 錯誤一律失敗，不視為已發布或 compliant。`release_trigger: manual` 完全不註冊 push trigger；本模板 root 採此設定。
 
@@ -927,14 +960,15 @@ Jobs API，並重用 `scripts/pr_lifecycle.py` 的 required-check producer selec
    release level 相互一致，且 tree 等於 exact head 的 Git tree；
 5. check、run、job 與 execution step 都真正 `success`；`neutral`、`skipped`、zero-step 或同名 classic status
    均不能滿足 `verify`；
-6. 完成時間不超過 24 小時，且不能超前目前時間超過 5 分鐘。
+6. 完成時間不超過 24 小時（恰好 24 小時仍有效），且不能超前目前時間超過 5 分鐘；缺少或沒有時區的時間一律 fail
+   closed。local、hosted、merge、release、promotion 與 fallback 都只呼叫 `scripts/evidence_freshness.py` 的同一個
+   判定；期限是受信任 script 的常數，不寫入 evidence，呼叫端只能縮短不能放寬（#1075）；威脅模型與 24 小時理由見 [`docs/adr/verification-evidence-freshness.md`](adr/verification-evidence-freshness.md)。
 
-quota fallback 永遠不能替代缺少或失敗的 `verify`。新專案預設 `actions_fallback: off`；只有明確設為
-`admin`，且 exact head 已有上述可信成功證據時，其他確認為 GitHub billing zero-step 的 required check
-才可沿用 quota fallback。真正執行失敗或狀態未知仍 fail closed。Ruleset 的 admin bypass 無法把來源 check
-改寫成成功結果，因此這是刻意保留的唯一預期紅燈例外，不得用合成綠燈掩蓋「實際上未執行」的事實。
-這項例外只在帳務失敗時有效，所以 lifecycle 必須重驗 exact head／base、review policy、適用本機 suite、
-remote lease 並留下 bypass trace。release 先解析唯一 merged-main source
+`actions_fallback` 與它開放的 routine quota fallback 已退役（SPEC-009、Issue #1071、#1058 決定 3）：
+`pr_lifecycle.py merge --quota-fallback-note-url` 與 `promotion_gate.py note-quota-fallback`／
+`finalize-quota-fallback` 一律在任何寫入前拒絕，GitHub billing zero-step 的 required check 不再有例外。
+Actions 中斷時改走 governance-switch 路線，required checks、exact-head 授權與 remote lease 照常要求；
+Ruleset 的 admin bypass 也不能把來源 check 改寫成成功結果。release 先解析唯一 merged-main source
 PR，且只有 main tree 與 source head tree 完全相同時才重用證據；來源不唯一、tree 漂移、證據過期或任何欄位
 無法驗證時，release workflow 對 exact main tree 重新執行 hosted full verification，而不是退回 unsigned
 trailer。
@@ -942,6 +976,134 @@ trailer。
 workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 script／tests 則屬 exact candidate tree，
 與一般 CI 相同，仍由 review、CODEOWNERS 與 required checks 防止惡意弱化。這個邊界不宣稱 candidate 自己的
 測試內容不可修改，只證明可信 runner 確實對該 exact tree 執行 workflow 指定的 command/toolchain 並成功。
+
+### Base-commit merge 與驗證政策（#1069）
+
+合併與驗證在 hosted 與 local 兩種模式都只依 trusted base 的政策決定。`scripts/trusted_executor.py`
+（generated project 為 `.csarc/scripts/trusted_executor.py`，兩份 byte-identical）是共用的 base policy：
+
+- **Hosted verify（template）**：generated `ci.yml` 已移植上節 #1086 的 trusted executor：prepare 依 layout
+  暫存 `.csarc/scripts` 的 `verify`／`verify-fast`、router、config reader、`verification-step` 與
+  `trusted_executor.py`，Execute 以 `CSARC_VERIFICATION_SUBJECT_ROOT` 對 exact candidate 執行，並加上
+  non-authoritative self-test；`scripts/check_jinja_workflow_drift.py` 不再宣告 root-only 區塊。
+
+- **Local lifecycle**：`scripts/pr_lifecycle.py check`／`merge` 先以 lease 的 `base_sha` 建立 detached
+  trusted base checkout，再由那份 base 的 lifecycle 重新執行；gate、router（`ci_tier.py`）、config reader 與
+  `validate-pr-policy` 都來自 base，candidate checkout 只當作被驗的 exact head。輸出第一行記錄
+  `runs from trusted base <sha>`。啟動程式本身仍是操作者執行的 entry point；要完全不經 candidate 程式碼，
+  可先 `git worktree add --detach <path> <base_sha>`，再從 candidate worktree 以
+  `CSARC_TRUSTED_BASE_SHA=<base_sha> python3 <path>/scripts/pr_lifecycle.py merge ...` 執行。
+- **Governance-switch route**：改動 `.csarc/scripts/`、放寬治理值（`admin_bypass`、`verification_mode`、
+  `governance_mode`、`copilot_review` 往寬鬆方向，關閉 `enable_codeql`，移除 `lifecycle` 或
+  `scheduled_checks` 項目，調低 `coverage_threshold`）、變更設定 schema，或無法
+  取得完整變更清單時，PR 必須帶 `governance-switch` label。hosted 由 trusted base 的 `validate-pr-policy`
+  經 API 讀取 candidate 設定與檔案清單判定，local 由 lifecycle 對 exact head 判定；兩者共用同一個
+  `route` 規則。這條 route 不放寬任何控制：required checks、exact-head 授權與 remote lease 照常要求，
+  也不能用 quota fallback 取代 required checks。`csarc update` PR 一律走這條 route。
+- **Current-schema reader**：base reader 以共用的 current-only `csarc_config.py` 只讀 schema 2
+  （SPEC-009，Issue #1071）：legacy、未知 schema、退役或未知鍵、缺少的意圖一律 fail closed，不補預設；
+  legacy 設定只由外部 pinned CLI 的 migration registry 讀取。它只讀不寫；新的 schema 必須先由 trusted base
+  的 reader 支援，writer 才切換（#1058 決定 8）。candidate 自己的 parser 與 route 只在 lifecycle 的
+  `policy_self_test` 以 non-authoritative 方式重播，差異只列在輸出，不改變 base 的決定。
+- **Release channel floor**：delivery branch（`dev/m*`、`dev/i*`）是 beta，floor 為 fast；其他 base
+  （standalone、hotfix、release recovery 指向 `main`）是 stable，floor 為 full；`hotfix`、`release-recovery`、
+  `promotion` label 也要求 full。`verify-fast` 取 floor 與 path tier 中較強者；`verification_mode: local`
+  時直接升級成 full，hosted mode 的本機執行只提示 floor，正式證據仍由 hosted `verify` 提供。local merge
+  要求的證據 tier 同樣是 release level 與 trusted router path tier 中較強者。
+
+限制：同 #1086，trusted base 防的是 candidate 改 gate 讓自己通過，不是對惡意測試碼的 sandbox；
+最終仍靠 required checks、read-only 權限與人工審查。
+
+### 合併綁定驗證 tree 與 durable trace（#1073）
+
+`scripts/pr_lifecycle.py merge`（所有合法 route、兩種 `verification_mode`）依序：
+
+1. 讀 `policies/merge-trailers.json`（generated：`.csarc/policies/merge-trailers.json`），缺少或格式不符就拒絕合併。
+2. 以 GitHub compare 確認 lease 的 `base_sha` 是 head 的祖先（`ahead` 或 `identical`）。head 落後 base
+   時拒絕：先合併最新 base，hosted 由 `verify` 在新 head 重跑（#468 的 base-only re-merge），local 重跑
+   `verify-fast`。接著讀回 head commit 的 tree，必須等於 lease 與證據綁定的 tree。
+3. 把證據 payload（local：既有的本機證據；hosted：`require_trusted_verification()` 推導的正規化事實）以
+   canonical bytes 寫進每張 PR 唯一的 summary 留言（第一行 `csarc-merge-evidence: v1`、`status: attempt`）。
+   沒有就建立，已有且仍是 `attempt` 就原地取代 payload；這是合併前唯一的寫入。
+4. 以 squash 合併，message 先保留 PR commits 的 `BREAKING CHANGE:` footer，再以空行接固定 trailer：
+
+   ```text
+   CSARC-Evidence: https://github.com/<owner>/<repo>/pull/<N>#issuecomment-<id>
+   CSARC-Evidence-SHA256: sha256:<64 hex>
+   CSARC-Evidence-Tree: <verified tree>
+   CSARC-Trust: github-hosted | self-attested-local
+   CSARC-Route: issue | sync | dependabot | release-recovery | hotfix | release-follow-up | milestone | isolated
+   CSARC-Approval: review | comment | copilot | hotfix-emergency
+   CSARC-Authorization: <approval URL>
+   ```
+
+5. 讀回 merge commit：tree 必須等於證據綁定的 tree，trailer 必須與合併前算出的相同。不符時把 summary
+   狀態改成 `tree-mismatch` 或 `trailer-mismatch` 並以非 0 結束。
+6. 成功時把 summary 狀態改成 `merged`，狀態段寫入 `merge-trace: result=traced merge=<SHA> evidence=<locator> ...`
+   與（適用時）帶同樣 `merge=`／`evidence=` 的 `bypass-trace`、`copilot-review-trace`、`local-verification-trace`。
+   之後 payload 不再改變。
+
+canonical payload 與 digest、summary 的保存方式與 Actions 資料到期後的限制、governance baseline 規則都記在
+[staged delivery ADR](adr/staged-delivery-and-verification.md)。trailer 是合併後的稽核紀錄，不是證據，不能
+滿足 `verify` 或任何合併、發版閘門。GitHub UI 合併、`merge_mode: human-only` 之後的人工合併與
+`gh pr merge --admin` 例外不是合法 route，沒有 trailer；人工貼的 `bypass-trace` 只作參考。
+
+`csarc status`（`--json` 相同）推導 governance baseline（`resolved`、`confirmed`、`not-installed`、
+`inconclusive`），並分類 baseline 之後 default branch 的每個 first-parent 合併：`traced`、`untraced`（只提示）、
+`tree-mismatch`、`evidence-missing`、`evidence-digest-mismatch`、`trailer-invalid` 或讀不到 GitHub 的
+`inconclusive`；`untraced` 以外的合併發現是阻擋項目，status 以 1 結束；`inconclusive` baseline 沒有檢查任何合併，
+在 status 只是提示，只在 `merge_trace.py audit --strict` 阻擋。
+`inconclusive` baseline 以一次性的 `csarc status --confirm-governance-baseline <SHA>` 從輸出列出的候選中確認。
+發版路徑使用 `python3 scripts/merge_trace.py audit --strict`：`untraced` 也阻擋，`csarc-owned` 的發版可以
+fail closed（接入 publisher 由 #1074 負責）。本機證據的 `completed_at` 改成 `YYYY-MM-DDTHH:MM:SSZ`，讓合併可以
+不經轉換直接雜湊。
+
+### 單一 maintainer 的可稽核合併路徑（#1076）
+
+`scripts/pr_lifecycle.py check|merge` 依 base branch 的 effective rules 與寫入者讀回，把每個方案形狀歸到
+唯一一條 route（#1058 決定 4、5、10、27）：
+
+| 形狀 | `protection` | route | 說明 |
+| --- | --- | --- | --- |
+| A（hosted）、E1（local＋`beta-only`／`always`）、C（local＋`off`）的 Ruleset 完整讀回且相符 | `enforced` | allowed | `server_enforcement=ruleset`；合併者身分見下方 |
+| 沒有任何 `pull_request`／`required_status_checks` 規則，API 完整讀回恰好一個寫入者，而且就是合併者 | `single-writer` | allowed | `server_enforcement=none`；agent 以唯一維護者身分執行，不另建 write 帳號 |
+| 沒有 Ruleset，另有寫入者（collaborator、可寫 team 成員或可寫 deploy key） | `multiple-writers` | manual-only | 人工在 GitHub 合併，記為 `untraced`，`csarc-owned` 發版 fail closed |
+| Ruleset 或寫入者讀取失敗、分頁不完整、team 成員不可見、缺 `role_name` 或未知角色 | `inconclusive`／`unknown` | manual-only | 同上；不猜測、不讀 legacy `permission` |
+| Ruleset 形狀不符、未生效、未驗證的 bypass，或沒有 Ruleset 時 `mergeable_state` 不是 `clean`（含 `unstable`） | `blocked` | blocked | 先修正條件，lifecycle 不合併 |
+
+合併者（執行 lifecycle 的身分）與授權者（留下 exact-head 授權或 approval 的人）分開判斷
+（#1058 決定 27）。有 Ruleset 的一般 agent route（獨立 maintainer approval 或 Copilot review 授權）要求合併者
+即時 `role_name` 恰為 `write`；`maintain`、`admin`、自訂角色或讀不到都改判 `blocked`，不合併。GitHub App
+合併者（例如 `github-actions[bot]`）只有 installation 權限、沒有 repository role，記為 `app`。admin bypass 與
+emergency hotfix route 的合併者就是 live admin 授權者本人（#918／#1064），照常允許並記為
+`admin-authorizer`，表示這不是獨立 agent 身分路線；single-writer route 記為 `sole-maintainer`。`check` 輸出
+`merge_identity`，`merge-trace` 帶 `identity=<agent-write|app|admin-authorizer|sole-maintainer>`。
+
+寫入者讀回包含 `collaborators?affiliation=all`（每一列都要有 `role_name`；`read`／`triage` 不算寫入者，
+`write`／`maintain`／`admin` 算，其他值為 `inconclusive`）、每個 deploy key 的 `read_only`，organization
+repository 另讀 repository teams：每個可寫 team 的成員都必須讀得到，且已出現在 collaborator 讀回中。
+`check` 的 JSON 輸出 `protection`、`merge_permission` 與 `server_enforcement`。
+
+這條路線只把「缺少平台強制」換成「完整讀回證明只有一人能寫入」，其他控制都不略過：exact-head 授權
+（#918：admin bypass 只取代 approval）、lease、head 包含 base、verified tree、durable summary 與 trailer
+照常執行。hosted 模式從 trusted base 的 `policies/rulesets-required-checks.json`（generated：
+`.csarc/policies/rulesets-required-checks.json`）讀出 required checks 逐項重驗；local 模式照樣要求 exact-head
+本機證據（`self-attested-local`，#908）。合併讀回後，summary 的 `merge-trace` 帶 `server_enforcement=none`，
+並加一行 `single-writer-trace: writer=<login> server_enforcement=none ...`，明記沒有 Ruleset 參與，不宣稱
+伺服器曾經阻擋。`admin_bypass: off` 的 single-writer repository 沒有獨立 reviewer，lifecycle 會拒絕；改用
+`beta-only`／`always` 或人工合併。限制：GitHub App 安裝不在讀回範圍；Free private 的 `rules/branches`
+實際回應未經 live 驗證，讀取錯誤一律 `unknown`，只能人工合併。
+
+**local Dependabot route**：local 模式沒有 hosted eligibility workflow。`--require-dependabot-head` 在 local
+模式改為重驗 GitHub 簽章的 Dependabot head（或 #1052 的 sync child），再從簽章 commit 的
+`updated-dependencies` 讀出每個 `update-type`：只接受 `semver-minor`／`semver-patch`，major、缺漏或未知值
+只能人工合併；PR、head 或簽章身分不符一律拒絕。授權用合併者本人的 exact-head 授權留言（bot 產生的 body
+不需要 marker）；`CSARC-Route: dependabot` 與發布層級不變，summary 另寫
+`dependabot-trace: kind=<direct|sync-child> update_types=<...> route=dependabot release_level=<level>`。
+
+**Admin bypass marker**：`scripts/pr_lifecycle.py edit --admin-bypass-marker add|remove` 在 lease 內插入或
+移除 `Admin bypass / 管理員略過審核` 這一行。近似的複本（清單符號、多餘空白）會正規化成恰好一行，插在
+PR template 的說明註解之後；寫入後讀回不符就失敗，不當作成功。
 
 ### Risk-owned execution 與有限證據沿用（#812）
 
@@ -1040,11 +1202,19 @@ check 清單對得上。
 ### Dependabot 依賴更新的發版與 template 同步（#755）
 
 **`uvx --from git+...@<sha>` 不吃 `uv.lock`（實測，2026-09-18）**：本機對 `git+file://` 本地來源、當下
-`pyproject.toml` 宣告 `copier>=9.17,<10`、`uv.lock` 鎖定 `copier==9.17.2` 的狀態實測
+`pyproject.toml` 宣告 `copier>=9.17,<10`、`uv.lock` 鎖定 `copier==9.17.2` 的狀態（#1067 前）實測
 `uvx --from "git+file://<repo>@<sha>" python -c "import copier; print(copier.__version__)"`，實際裝出
 `9.18.2`（範圍內當下最新版），不是 lock 檔鎖定的版本。結論：`uvx --from git+URL@<sha>` 安裝時直接依
 `pyproject.toml` 的版本範圍重新解析，不讀取目標 repo 的 `uv.lock`——`uv.lock` 只服務這個 repo 自己的
 `uv sync`／`uv run` 情境。
+
+**Copier 與 Jinja2 改為 exact pin（#1067）**：正因 `uvx --from git+URL@<sha>` 只看 `pyproject.toml`，
+同一個 CSARC Release 若宣告版本範圍，就可能在不同時間 render 出不同結果，`csarc update` 的 final plan 也
+無法重播。`pyproject.toml` 因此直接宣告 `copier==<版本>` 與 `jinja2==<版本>`，生成專案的
+`template-update.yml` 以 `uv tool install copier==<同一版本> --with jinja2==<同一版本>` 使用同一組
+pin；`tests/test_update_final_plan.py` 讀回 `pyproject.toml`、`uv.lock`、執行環境與 workflow 四處一致。
+這兩個依賴的 Dependabot bump 會改動 `pyproject.toml` 本身，適用下段「改動宣告的版本範圍」的情況；其餘
+runtime 依賴仍維持範圍宣告。
 
 因此 root 的 `.github/dependabot.yml` 的 `uv` 區段**維持現行 `build(deps)` 前綴，不區分 runtime／dev 依賴**：
 一般（非安全性）runtime 依賴的版本 bump，只要新版本仍落在既有範圍內，`uvx` 使用者下次執行就會自動拿到最新
@@ -1092,7 +1262,11 @@ PR 內自動同步——選擇後者，理由記錄於本 Issue 討論（維護�
    `dependabot-merge-eligible` check；它不是 Ruleset required context，也不能單獨授權合併。
 
    `.github/workflows/dependabot-merge.yml` 從 default branch 接續 `CI`／`PR policy`／`PR review`／上述 eligibility
-   workflow 的 completed event。它先以唯讀 required-check 狀態避免提早取得 lease，再由
+   workflow 的 completed event。它先以唯讀 lookup（`authenticate_dependabot_head.py resolve-merge-candidate`，
+   讀完所有分頁，#1087）找出唯一符合 open、同 repo、`main` base、exact head 與 `dependabot[bot]` Bot 身分的 PR：
+   零個符合（含只剩 closed／merged 紀錄或 head 已移動）時以穩定 no-op reason 成功結束，不取 lease、不寫 merge
+   trace、不 merge 也不 dispatch release；多個候選、identity 不完整或狀態矛盾則 fail closed，不任選一張。
+   接著以唯讀 required-check 狀態避免提早取得 lease，再由
    `scripts/pr_lifecycle.py acquire → check → merge` 重新驗證 live PR、Bot account type、同 repo ref、current commit
    簽章（或 exact sync-child parent）、eligibility check 的 GitHub Actions App／workflow／event、review、Ruleset 與
    required checks；`check` 與 `merge` 都重新讀取同一份 mutable state，REST merge 另帶 exact `sha`。任何漂移都
@@ -1173,14 +1347,14 @@ event、權限、環境與呼叫；分類與驗證規則留在本機可測的 sc
 只發布 merge 前已在原 PR 受審的候選，不需要也不允許 Actions 另建或自行核准版本 PR。
 
 上表只列本 repo 自己的 active automation。生成 repo 另有一個選用能力：開啟
-`enable_template_update_notifications` 才產生 `template-update.yml`
+`scheduled_checks` 的 `template-update` 才產生 `template-update.yml`
 （`schedule`／`workflow_dispatch`、`contents: read`＋`issues: write`、10 分鐘
 timeout，只呼叫 `scripts/check-template-update`）。公開模板來源不需要 secret；
 來源為 private repository 時，才由唯讀的 `CSARC_TEMPLATE_READ_TOKEN` repository
 secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
 `pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
 
-生成 repo 另有一個選用容器能力（Issue #554／#900 決定）：在 `features` 選入 `docker` 才產生
+生成 repo 另有一個選用容器能力（Issue #554／#900 決定）：設定 `container: true` 才產生
 `Dockerfile`、`docker-compose.yml` 兩份起始範本，以及
 `.github/workflows/docker-build-scan.yml`（`pull_request`，限 Dockerfile／
 docker-compose.yml／已選語言原始碼路徑變更，另加 `workflow_dispatch`；
@@ -1371,6 +1545,15 @@ repo 的 full 入口是單一 `scripts/verify`，沒有本模板這種多階段�
 --check` 與 `scripts/check-update-conflicts` 兩者都乾淨），並確認上游變更沒有觸及上方
 條件 4 列出的路徑。
 
+### Requirement evidence（SPEC-010）
+
+每張 work Issue 的「補充」帶 `#### 風險與控制` 區塊（`| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |`；M18 規劃格式的 6 欄表頭也接受），「完成條件」的頂層 checkbox 依序是 AC1…ACn。PR body 只有一節 `## Requirement evidence`：`Issue: #N`、`Coverage: sha256:…` 與 `| ID | 證據 |` 表，為每個 AC 與風險 ID 各填一列。證據只接受 head 上的 `path` 或 `path::name`、`check:<name>`（合併時要求 exact head 的 check 成功）、`manual: <https URL> <理由>`、只限風險的 `accepted: <理由>`，以及只限 `R0` 的 `scope:docs`。
+
+- 不完整時 PR 不能離開 Draft：`scripts/pr_lifecycle.py state --state ready` 預檢、base 的 `validate-pr-policy`（非 Draft 時執行 `scripts/pr_lifecycle.py trace`）與 `merge_snapshot` 用同一個 `risk_controls.py`；沒有寬限期與 opt-out，不新增 workflow 或 required check。
+- `R0` 只在 PR 全部變更都是 docs、而且沒有改到 `AGENTS.md`、`SECURITY.md`、`.github/SECURITY.md` 或 CI policy 時有效；`R0` 與 `accepted:` 在 Ready 與合併輸出各列一行，單人維護者可自行接受 `high` 但永遠可見。
+- Issue 的 AC 或風險控制在 Ready 後增刪、重排或改寫時 coverage digest 改變，合併前會被擋下；錯誤訊息列出新的 digest，重新對應證據後寫入。合併的 canonical evidence payload 保存 Issue body digest、coverage digest 與每個 ID 的證據。
+- release、sync、Dependabot／automation 與 promotion PR 不檢查本節。安裝 CSARC CLI 時，`csarc risk suggest --open` 列出缺少區塊的 open Issue，`csarc issue create` 在建立前引導，`csarc risk register` 唯讀產生登錄冊。
+
 ### Acceptance-checklist 驗證時機（#573）
 
 歷史案例 #430（PR #448）示範過一種重試風暴：作者在 13 小時內邊做邊 push、邊勾
@@ -1529,7 +1712,7 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 | Static assets and paired files | `scripts/verify-stage-static-assets` | repo-site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` scope 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
 | Python environment | `scripts/verify-stage-python-environment` | `uv.lock` 與 `pyproject.toml` 一致、環境可從鎖定版本安裝 | fast 的 `uv sync --locked` 是同一份鎖定契約；`uv lock --check` 只在 full 額外執行 |
 | Python quality | `scripts/verify-stage-python-quality` | 格式、lint、靜態型別 | fast 對相同原始碼跑相同三個命令，兩者呼叫同一份工具鏈設定，無額外邏輯 |
-| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate／base-only-remerge／gh-issue-create／gh-issue-develop／check-branch-fresh／PR-policy-status／release-drift／audit-fleet-adoption／create-milestone／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`）；較長的 shell lifecycle fixtures 留在 full，routine fast 由同一 Python suite 的窄版 policy 測試涵蓋。base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/gh-issue-develop`（建立遠端 ref 前擋不合規分支，只在尚無 open PR 時修復錯名，見 #932）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status、`scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）與 `scripts/create-milestone`（原子建立 Milestone 與其 tracker Issue，見 `docs/milestone-description.md`；#572）七支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`scripts/test-check-release-drift`（mock `gh`，驗證上方「發版存量漂移偵測（`release-drift.yml`，#605）」一節的 drift 判定邏輯）也只掛在這個 full 專屬階段——`scripts/check-release-drift` 本身像 `release.yml` 一樣逐位元組下發到 `template/`，但比照 `release.yml`／`ci.yml` 沒有生成 repo 端本機再測試的既有慣例（下發前的 root 測試已足夠證明這份靜態、無 Jinja 條件式的實作正確），不隨腳本一起下發、也不掛進生成 repo 的 `scripts/verify`；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
+| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／scope-drift-gate／base-only-remerge／gh-issue-create／gh-issue-develop／check-branch-fresh／PR-policy-status／release-drift／audit-fleet-adoption／create-milestone／`verify-template.sh` 聚合自我測試；生成 repo 的公版自測（來源 `tests/generated_self_tests/`，不再下發，#1077）由 `tests/test_generated_self_tests.py`（`large`）安裝到代表性 render 執行且案例數不減，生成 repo 自己的 `verify`／`verify-fast` 不執行公版自測（#1070）；`tests/test_generated_payload.py`（`large`）以 render matrix 驗證每個選項只下發有呼叫者的 payload | fast 只跑 `pytest -m "not large"`（略過 `large`）；較長的 shell lifecycle fixtures 留在 full，routine fast 由同一 Python suite 的窄版 policy 測試涵蓋。base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/gh-issue-develop`（建立遠端 ref 前擋不合規分支，只在尚無 open PR 時修復錯名，見 #932）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status、`scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）與 `scripts/create-milestone`（原子建立 Milestone 與其 tracker Issue，見 `docs/milestone-description.md`；#572）七支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`scripts/test-check-release-drift`（mock `gh`，驗證上方「發版存量漂移偵測（`release-drift.yml`，#605）」一節的 drift 判定邏輯）也只掛在這個 full 專屬階段——`scripts/check-release-drift` 本身像 `release.yml` 一樣逐位元組下發到 `template/`，但比照 `release.yml`／`ci.yml` 沒有生成 repo 端本機再測試的既有慣例（下發前的 root 測試已足夠證明這份靜態、無 Jinja 條件式的實作正確），不隨腳本一起下發、也不掛進生成 repo 的 `scripts/verify`；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
 | Package smoke test | `scripts/verify-stage-package-smoke` | wheel 可建置、已發布入口可從建置產物執行 | fast 不跑這個階段，也不執行真實 Copier；由 full 的代表 create canary 與本階段證明 |
 | GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | workflow 權限與注入稽核（zizmor） | root `verify-fast` 在 workflow scope 直接執行；full 仍執行同一支 stage，不依賴未啟用的 merge queue 或後續 promotion 補跑 |
 
@@ -1897,6 +2080,10 @@ capability-matrix.json` 與 repo-site「安裝說明」頁維運模式下的能�
 
 **明確保留 GitHub Actions 為預設／建議路徑，不是全面棄用**：`verify`／`title`／`review` 三個 required status check 仍然、也必須繼續只由 hosted Actions 產生；CodeQL 上傳到 GitHub 原生 code-scanning 介面同樣不在本節適用範圍。
 
+**單一 tree-bound Release writer（#1074）：** `scripts/publish-release` 是 hosted 與本機 fallback 唯一建立或更新 tag、draft Release、成品與 immutable Release 的入口；Release body 的 included-work 紀錄也改由 `publish --included-work` 在同一個 writer 內寫入，`release.yml` 不再自己編輯 Release。`stage`／`publish` 寫入前先跑 `scripts/release_writer.py preflight`：checkout 必須是 exact candidate 且 tracked tree 未修改；依已儲存的 `release_ownership` 決定模式——`csarc-owned` 以 `merge_trace.py` 的 strict audit 檢查 governance baseline 之後的每筆 merge，缺 trailer、payload／record 不符或 tree 不符都 fail closed；`product-owned` 只回報 drift、不寫入；`verification-only` 沒有 CSARC Release 可阻擋、也不寫入。除了 `release.yml` 之外還有 workflow 會寫 Release（例如舊版 `release-please.yml`）時同樣停止，先移除第二個 writer。遠端 tag 指向其他 commit、沒有 tag 的未知 draft／Release、或已公開但仍可變的 Release 都讓 writer 停止，不移動或重用 immutable tag；同一 candidate 重跑則冪等，已公開時 `publish` 只做 `rerun-verify`。
+
+每次寫入都在同一把遠端 release lease 下進行：lease 是每個 tag 一條 `refs/heads/csarc/leases/release-<sha256(tag)>` branch，指向記錄 holder（`actions:<run id>` 或 `local:<login>`）、candidate、tree 與到期時間的 lease commit。取得用原子 create；同一 holder 重試或過期回收只能 fast-forward 更新，所以兩個 writer 不可能同時認為自己持有；每個寫入前都重新確認仍持有且未過期，結束時只刪除仍指向自己 lease 的 ref。lease 預設一小時；被中斷的 run 留下的 lease 過期後即可由下一個 writer 回收，不需要手動刪 ref。
+
 ### hosted 發版路徑的已知限制，本機路徑升格為標準程序（2026-09-03）
 
 上一段原本建議「一般情況下仍走 hosted `release.yml`」；當天稍後的補發版嘗試（接續 #587）證明這個建議不成立，予以修正：
@@ -1947,7 +2134,7 @@ gh release create "$tag" --target "$sha" \
 只有一份實作，呼應 #589 決定本身的第一原則（單一 repo-local 腳本被兩種呼叫方式共用）。
 `scripts/publish-release` 之後唯二對同一 Release 的寫入是 `gh release edit "$tag"
 --draft` 與 `gh release edit "$tag" --draft=false --latest`（`cmd_publish`／
-`revert_to_draft_on_failure`），兩者都不帶 `--notes`／`--notes-file`，不會覆寫或附加任何
+`revert_to_draft_on_failure`），兩者都不帶 `--notes`／`--included-work`，不會覆寫或附加任何
 自由格式文字到 `--generate-notes` 已寫入的內容。
 
 **最低必要欄位——已經是結構保證，不是待補的規範：**
@@ -1993,7 +2180,7 @@ Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 
 3. 真正值得防的風險——未來有人繞過 `converge-release-tag`、另開一個呼叫路徑，各自帶
    不同 flag（例如漏掉 `--generate-notes`，或加上覆寫用的 `--notes`）——是程式碼結構
    層級的問題，用回歸測試斷言「整個 repo 只有一個 `gh release create` 呼叫點，且該
-   呼叫點的 flag 組合不變、沒有其他地方對 Release 呼叫 `--notes`／`--notes-file`」就能
+   呼叫點的 flag 組合不變、沒有其他地方對 Release 呼叫 `--notes`／`--included-work`」就能
    可靠涵蓋，不需要解析或驗證產生出來的自由格式文字內容本身。
    `tests/test_release_notes_format.py` 落地這個斷言，掛在 `scripts/verify-fast`
    既有的 `uv run pytest` 範圍內，每次 PR 都跑，不需要另外的 full-tier 專屬階段。
@@ -2032,4 +2219,4 @@ Release-publish-record: operator=<@handle> commit=<sha> command="<command>" resu
 API 或通知寫入本身失敗才回報 failure。Drift 事實由追蹤 Issue 承接，不以故意失敗的排程
 run 重複表達。
 
-**下發到 `template/`**：`.github/workflows/release-drift.yml` 與 `scripts/check-release-drift` 透過 `scripts/sync-paired-files.sh` 與 root 保持逐位元組同步，並在 `copier.yml` 重用既有 `.github/workflows/release.yml` 的 `project_mode == 'new'` exclude 條件，不新增第二個 Copier 選項——生成 repo 只要擁有 `release.yml`（`release_ownership == csarc-owned`）就會同時擁有這支漂移檢查，兩者不會分開存在。
+**下發到 `template/`**：`.github/workflows/release-drift.yml` 與 `scripts/check-release-drift` 透過 `scripts/sync-paired-files.sh` 與 root 保持逐位元組同步，並在 `copier.yml` 重用既有 `.github/workflows/release.yml` 的 `release_ownership == 'csarc-owned' and project_mode == 'new'` exclude 條件，不新增第二個 Copier 選項——生成 repo 只要擁有 `release.yml`（`release_ownership == csarc-owned`）就會同時擁有這支漂移檢查，兩者不會分開存在。

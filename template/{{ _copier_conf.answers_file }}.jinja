@@ -1,2 +1,30 @@
-# CSARC repository settings. Managed by Copier; change through csarc update.
-{{ _copier_answers|to_nice_yaml -}}
+# CSARC repository settings (SPEC-009 schema 2). Change them only through csarc update --data KEY=VALUE.
+{#- Issue #1071: persist only intent that cannot be safely reconstructed, plus the two keys Copier needs. One-time seeds, live repository facts, derived context, and project_mode are recorded by the pinned CLI in .csarc/provenance.json. #}
+{%- set saved = {
+  "schema_version": 2,
+  "admin_bypass": admin_bypass,
+  "code_owner": code_owner,
+  "container": container,
+  "copilot_review": copilot_review,
+  "coverage_mode": coverage_mode,
+  "coverage_threshold": coverage_threshold,
+  "documentation_languages": documentation_languages,
+  "documentation_mode": documentation_mode,
+  "enable_codeql": enable_codeql,
+  "github_project_url": github_project_url,
+  "governance_mode": governance_mode,
+  "languages": languages,
+  "lifecycle": lifecycle,
+  "project_maturity": project_maturity,
+  "project_verification_hook": project_verification_hook,
+  "python_floor": python_floor,
+  "release_ownership": release_ownership,
+  "release_trigger": release_trigger,
+  "scheduled_checks": scheduled_checks,
+  "security_reporting_channel": security_reporting_channel,
+  "verification_mode": verification_mode,
+} %}
+{%- for key in ["_commit", "_src_path"] if key in _copier_answers %}
+{%- set _ = saved.update({key: _copier_answers[key]}) %}
+{%- endfor %}
+{{ saved|to_nice_yaml -}}

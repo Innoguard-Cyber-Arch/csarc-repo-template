@@ -18,7 +18,10 @@ export PR_HEAD_REPOSITORY="acme/project"
 export PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 export PR_NUMBER="41"
 export PR_POLICY_FIXTURE=true
+export PR_FIXTURE_BASE_CONFIG="$repo_root/.csarc/config.yml"
 export PR_DOCUMENTATION_REVIEW_CUTOVER_PR=999999
+# SPEC-010 requirement-trace cases opt in per case below.
+export PR_REQUIREMENT_TRACE_REQUIRED=false
 # Issue #551: scripts/validate-pr-policy's non-blocking Milestone-safeguard
 # reminder calls `gh issue comment`; capture those calls here (append-mode,
 # cleared per case below) instead of the generic overwrite-based logging
@@ -135,6 +138,12 @@ case "$*" in
       --arg author "${PR_COMMIT_AUTHOR:-github-actions[bot]}" \
       --arg committer "${PR_COMMITTER:-web-flow}" \
       '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}, commit: {verification: {verified: true, reason: "valid"}}}]]'
+    exit 0
+    ;;
+  *"/contents/.csarc/config.yml?ref="*)
+    [[ "${PR_CANDIDATE_CONFIG_STATE:-valid}" == "api-error" ]] && exit 1
+    python3 -c 'import base64, sys; print(base64.b64encode(open(sys.argv[1], "rb").read()).decode())' \
+      "${PR_CANDIDATE_CONFIG_FILE:-$PR_FIXTURE_BASE_CONFIG}"
     exit 0
     ;;
   *"--slurp"*"/pulls/"*"/files?per_page=100"*)
@@ -1287,6 +1296,203 @@ if ! PR_CHANGED_FILES_JSON="$large_files_json" \
   PR_ISSUE_TITLE="Add verified report workflow" \
     "$validator" >/dev/null 2>&1; then
   echo "PR policy rejected a justified new large test."
+  exit 1
+fi
+
+# Issue #1069: the trusted base routes .csarc/scripts changes, relaxed
+# governance values, and schema changes through the governance-switch label.
+base_config_text="$(cat "$PR_FIXTURE_BASE_CONFIG")"
+governance_case() {
+  PR_BRANCH_STRATEGY="main" \
+    PR_TITLE="feat(api): add report" \
+    PR_BASE="main" \
+    PR_HEAD="feat/42-report" \
+    PR_BODY="Closes #42" \
+    PR_ISSUE_STATE="open" \
+    PR_ISSUE_TITLE="Add verified report workflow" \
+    "$validator" >/dev/null 2>&1
+}
+case_count=$((case_count + 1))
+if ! PR_CANDIDATE_CONFIG="$base_config_text" PR_LABELS="enhancement" \
+  governance_case; then
+  echo "PR policy rejected an ordinary change with an unchanged configuration."
+  exit 1
+fi
+case_count=$((case_count + 1))
+if PR_CANDIDATE_CONFIG="$base_config_text"$'\ngovernance_mode: observe' \
+  PR_LABELS="enhancement" governance_case; then
+  echo "PR policy accepted a relaxed governance value without governance-switch."
+  exit 1
+fi
+case_count=$((case_count + 1))
+if ! PR_CANDIDATE_CONFIG="$base_config_text"$'\ngovernance_mode: observe' \
+  PR_LABELS="enhancement,governance-switch" governance_case; then
+  echo "PR policy rejected a declared governance switch."
+  exit 1
+fi
+case_count=$((case_count + 1))
+if PR_CANDIDATE_CONFIG="$base_config_text" \
+  PR_CHANGED_FILES_JSON='[[{"filename":".csarc/scripts/verify-fast","status":"modified"}]]' \
+  PR_LABELS="enhancement" governance_case; then
+  echo "PR policy accepted a .csarc/scripts change without governance-switch."
+  exit 1
+fi
+case_count=$((case_count + 1))
+if PR_CANDIDATE_CONFIG="$base_config_text"$'\nschema_version: 9' \
+  PR_LABELS="enhancement,governance-switch" governance_case; then
+  echo "PR policy accepted a configuration schema the trusted base cannot read."
+  exit 1
+fi
+case_count=$((case_count + 1))
+if ! PR_POLICY_FIXTURE=false \
+  PR_NUMBER="42" \
+  PR_LIVE_LABELS="enhancement" \
+  PR_LIVE_BODY="Closes #42" \
+  PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+  PR_LABELS="enhancement" governance_case; then
+  echo "PR policy rejected a live candidate configuration equal to its base."
+  exit 1
+fi
+case_count=$((case_count + 1))
+if PR_POLICY_FIXTURE=false \
+  PR_NUMBER="42" \
+  PR_LIVE_LABELS="enhancement" \
+  PR_LIVE_BODY="Closes #42" \
+  PR_CANDIDATE_CONFIG_STATE="api-error" \
+  PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+  PR_LABELS="enhancement" governance_case; then
+  echo "PR policy accepted an unreadable candidate configuration."
+  exit 1
+fi
+
+# SPEC-010 (Issue #1079): a Ready work pull request maps every acceptance
+# criterion and risk of its Issue to exact-head evidence. A stub `gh` serves
+# the read-only GitHub reads of `pr_lifecycle.py trace` from fixture files.
+trace_dir="$fixture/trace"
+mkdir -p "$trace_dir/bin" "$trace_dir/api"
+cat > "$trace_dir/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+endpoint="${*: -1}"
+name="$(printf '%s' "$endpoint" | LC_ALL=C tr -c 'A-Za-z0-9' '_')"
+[[ -f "$TRACE_API/$name.json" ]] || exit 1
+cat "$TRACE_API/$name.json"
+SH
+chmod +x "$trace_dir/bin/gh"
+trace_fixture() {
+  # Usage: trace_fixture SCENARIO; writes the Issue, PR, files and contents.
+  rm -f "$trace_dir/api/"*.json
+  python3 - "$trace_dir/api" "$1" "$repo_root/scripts" <<'PY'
+import base64, json, re, sys
+api, scenario, scripts = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.path.insert(0, scripts)
+import risk_controls
+repo, head = "acme/project", "a" * 40
+def write(endpoint, payload):
+    name = re.sub(r"[^A-Za-z0-9]", "_", f"repos/{repo}/{endpoint}")
+    with open(f"{api}/{name}.json", "w", encoding="utf-8") as stream:
+        json.dump(payload, stream)
+risk_rows = "| R1 | correctness | high | Report regresses | Regression test | Focused test | @contributor |"
+if scenario.startswith("r0"):
+    risk_rows = "| R0 | none | — | Wording only | Docs-only change | scope:docs | @contributor |"
+acceptance = ["AC1：Report renders", "AC2：Report links work"]
+if scenario == "mislabeled":
+    acceptance = list(reversed(acceptance))
+issue_body = (
+    "### 問題\n\nReport.\n\n### 完成條件\n\n"
+    + "".join(f"- [x] {item}\n" for item in acceptance)
+    + "\n### 補充\n\n#### 風險與控制\n\n"
+    "| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |\n"
+    "| --- | --- | --- | --- | --- | --- | --- |\n" + risk_rows + "\n"
+)
+out = []
+expected = risk_controls.coverage_digest(
+    risk_controls.parse_acs(issue_body, out), risk_controls.parse_risks(issue_body, out)
+)
+evidence = {
+    "AC1": "tests/test_report.py::test_report_renders",
+    "AC2": "check:verify",
+    "R1": "accepted: Single maintainer accepts this residual risk",
+}
+if scenario.startswith("r0"):
+    evidence = {"AC1": "check:verify", "AC2": "check:verify", "R0": "scope:docs"}
+if scenario == "unknown":
+    evidence["R9"] = "check:verify"
+if scenario == "missing-file":
+    evidence["AC1"] = "tests/test_absent.py"
+if scenario == "missing-name":
+    evidence["AC1"] = "tests/test_report.py::test_absent"
+coverage = "sha256:" + "0" * 64 if scenario == "stale" else expected
+section = (
+    f"\n\n## Requirement evidence\n\nIssue: #42\nCoverage: {coverage}\n\n"
+    "| ID | 證據 |\n| --- | --- |\n"
+    + "".join(f"| {key} | {value} |\n" for key, value in evidence.items())
+)
+pr_body = "Closes #42" + ("" if scenario == "no-section" else section)
+assignee = "someone-else" if scenario == "owner" else "contributor"
+write("pulls/41", {
+    "number": 41, "state": "open", "merged": False, "body": pr_body,
+    "base": {"ref": "main"}, "head": {"ref": "feat/42-report", "sha": head},
+})
+write("issues/42", {"number": 42, "body": issue_body, "assignees": [{"login": assignee}]})
+files = {"r0-agents": "AGENTS.md", "r0-script": "scripts/report.py"}.get(scenario, "docs/report.md")
+write("pulls/41/files?per_page=100", [[{"filename": files}]])
+content = base64.b64encode(b"def test_report_renders():\n    pass\n").decode()
+write(f"contents/tests/test_report.py?ref={head}", {"type": "file", "content": content})
+write(f"contents/tests?ref={head}", [{"type": "file"}])
+PY
+}
+trace_case() {
+  PR_REQUIREMENT_TRACE_REQUIRED=true \
+    TRACE_API="$trace_dir/api" \
+    PATH="$trace_dir/bin:$PATH" \
+    PR_CANDIDATE_CONFIG="$base_config_text" \
+    PR_LABELS="enhancement" \
+    governance_case
+}
+while IFS='|' read -r scenario expected; do
+  case_count=$((case_count + 1))
+  trace_fixture "$scenario"
+  if trace_case; then
+    result=pass
+  else
+    result=fail
+  fi
+  if [[ "$result" != "$expected" ]]; then
+    echo "Requirement trace scenario $scenario should $expected but did $result."
+    exit 1
+  fi
+done <<'CASES'
+complete|pass
+no-section|fail
+stale|fail
+mislabeled|fail
+unknown|fail
+missing-file|fail
+missing-name|fail
+owner|fail
+r0-docs|pass
+r0-agents|fail
+r0-script|fail
+CASES
+case_count=$((case_count + 1))
+trace_fixture no-section
+if ! PR_DRAFT=true trace_case; then
+  echo "Requirement trace blocked a Draft pull request."
+  exit 1
+fi
+case_count=$((case_count + 1))
+trace_fixture complete
+trace_output="$(
+  PR_REQUIREMENT_TRACE_REQUIRED=true TRACE_API="$trace_dir/api" \
+    PATH="$trace_dir/bin:$PATH" PR_CANDIDATE_CONFIG="$base_config_text" \
+    PR_LABELS="enhancement" PR_BRANCH_STRATEGY="main" \
+    PR_TITLE="feat(api): add report" PR_BASE="main" PR_HEAD="feat/42-report" \
+    PR_BODY="Closes #42" PR_ISSUE_STATE="open" \
+    PR_ISSUE_TITLE="Add verified report workflow" "$validator" 2>&1
+)"
+if [[ "$trace_output" != *"requirement-trace: #42 self-accepted: R1(high)"* ]]; then
+  echo "Requirement trace did not list the self-accepted high risk."
   exit 1
 fi
 

@@ -51,25 +51,33 @@ attestation verification.
    entirely and run `.csarc/scripts/apply-repository-settings.sh plan`, then
    `apply` after the confirmation in step 5 — never rerun a full adopt or
    update just to change a policy setting. For a release-specific request,
-   pass both `--to` and `--expected-sha`.
+   pass both `--to` and `--expected-sha`. For `update`, follow the complete
+   check, finalize, and apply flow in
+   [`install.en.md`](install.en.md#update-an-adopted-repo) (繁體中文：
+   [`install.md`](install.md#更新已導入的-repo)): how to read each conflict's
+   base, current, and new sides, which flags `--finalize-plan` repeats, the
+   `custom:FILE` rules, `--apply-plan --yes`, retries, Action pin drift, and
+   running one `csarc` at a time.
 
-   For `create` or `adopt`, offer exactly two setup paths: accept the
-   recommended defaults, or customize the applicable questions. In the
-   customized path, read `copier.yml` from the same verified full SHA and use
-   its existing choices, defaults, help text, and conditions as the only
-   question schema. Group the applicable questions for conversation as:
-   identity/languages/run and verification; branch/CODEOWNER/reviewers; PR
-   review source, admin bypass, project maturity, and verification; optional
-   coverage/CodeQL/Docker/update notifications; and repository/Actions/labels/
-   Ruleset policy. Keep `reviewers`, `code_owner`, `pr_review_mode`,
-   `admin_bypass`, `project_maturity`, and verification as distinct
-   decisions. Do not ask hidden, derived, or conditionally inapplicable
-   questions. Pass every confirmed override through the existing repeatable
-   `--data KEY=VALUE` option; do not create another schema or configuration
-   layer. Run the matching dry-run with `--json`, summarize its resolved
-   answers and plan, then wait for step 5 confirmation. For `update`, preserve
-   saved `.csarc/config.yml` answers and ask only about newly introduced
-   questions or changes the user explicitly requests.
+   For `create` or `adopt`, the CLI owns the setup questions (SPEC-009 §9,
+   Issue #1078): it asks only for values no repository fact decides and
+   never asks again for a detected or `--data` value. In a terminal, let the
+   user answer the CLI directly. As an agent, ask the user only for the
+   inputs a `--non-interactive` dry-run reports as missing (its one-line
+   `csarc:` error names every `--data KEY=`), plus the work mode: offer
+   `solo-local` (default), `solo-hosted`, `team`, or `custom` and pass it as
+   `--preset`; it only expands into overridable saved settings. Pass every
+   confirmed override through the repeatable `--data KEY=VALUE` option; do
+   not read `copier.yml` as a question schema or create another
+   configuration layer. When `admin_bypass` resolves to `off` or `beta-only`,
+   relay the approval-route result; pass `--confirm-second-approver` or
+   `--confirm-copilot-entitlement` only after the user confirms that fact.
+   Run the matching dry-run with `--json`, summarize its resolved answers,
+   setup warnings, and plan, then wait for step 5 confirmation. For `update`,
+   preserve saved `.csarc/config.yml` answers; it asks nothing and changes a
+   setting only through an explicit `--data`. Branch routes
+   come from Issue and Milestone metadata, and reviewers are chosen from
+   live `maintain`/`admin` collaborators, so neither is a question.
 
    For `adopt`, also read `adoption.work_item_mapping` from that same plan.
    Explain that native `Bug`／`Feature`／`Task` are Issue Types, while lowercase
@@ -102,9 +110,10 @@ attestation verification.
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
    overwrite, preserve, automatic merge, manual merge, or unable to determine.
-   Review the generated Markdown report (its own new/edited/removed file
-   counts, impact analysis, and items requiring a decision) and machine
-   plan, including the work-item mapping suggestions, exact project
+   Adopt and update write a SPEC-008 report outside the repository: read
+   its Markdown (file-change counts, impact analysis, and items requiring a
+   decision) but treat the report JSON beside it as authoritative, together
+   with the machine plan, including the work-item mapping suggestions, exact project
    verification hook path, and its initial `not-run` state, then report
    the terminal's separate Milestone
    description classifications: upgrade, current, or manual review. Neither

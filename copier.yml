@@ -1,6 +1,10 @@
 _min_copier_version: "9.17.0"
 _subdirectory: template
 _templates_suffix: .jinja
+# Issue #1071: a template reference to a removed setting fails the render
+# instead of silently rendering an empty value.
+_envops:
+  undefined: jinja2.StrictUndefined
 _answers_file: .csarc/config.yml
 _exclude:
   - "copier.yaml"
@@ -12,31 +16,33 @@ _exclude:
   - ".DS_Store"
   - ".svn"
   - "{% if documentation_mode == 'off' or project_mode == 'existing' %}/README.md{% else %}__keep_project_readme__{% endif %}"
-  - "{% if documentation_mode == 'off' or i18n == 'off' %}/README.{{ 'en' if primary_language == 'zh-tw' else 'zh-tw' }}.md{% else %}__keep_project_readme_secondary__{% endif %}"
+  - "{% if documentation_mode == 'off' or '+' not in documentation_languages %}/README.{{ 'en' if documentation_languages.split('+')[0] == 'zh-tw' else 'zh-tw' }}.md{% else %}__keep_project_readme_secondary__{% endif %}"
   - "{% if project_mode == 'existing' %}/CHANGELOG.md{% else %}__keep_project_changelog__{% endif %}"
-  - "{% if enable_precommit %}__keep_precommit__{% else %}.csarc/scripts/pre-commit{% endif %}"
-  - "{% if enable_template_update_notifications %}__keep_template_update_workflow__{% else %}.github/workflows/template-update.yml{% endif %}"
-  - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}.csarc/scripts/check-template-update{% endif %}"
-  - "{% if enable_governance_drift_check %}__keep_governance_drift_workflow__{% else %}.github/workflows/governance-drift.yml{% endif %}"
-  - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}.csarc/scripts/check-governance-drift{% endif %}"
+  - "{% if 'template-update' in scheduled_checks %}__keep_template_update_workflow__{% else %}.github/workflows/template-update.yml{% endif %}"
+  - "{% if 'template-update' in scheduled_checks %}__keep_template_update_script__{% else %}.csarc/scripts/check-template-update{% endif %}"
+  - "{% if 'governance-drift' in scheduled_checks %}__keep_governance_drift_workflow__{% else %}.github/workflows/governance-drift.yml{% endif %}"
+  - "{% if 'governance-drift' in scheduled_checks %}__keep_governance_drift_script__{% else %}.csarc/scripts/check-governance-drift{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_ci_workflow__{% else %}.github/workflows/ci.yml{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_pr_policy_workflow__{% else %}.github/workflows/pr-policy.yml{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_pr_policy_writes_workflow__{% else %}.github/workflows/pr-policy-writes.yml{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_pr_review_workflow__{% else %}.github/workflows/pr-review.yml{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_reviewer_assignment_workflow__{% else %}.github/workflows/governance-comment.yml{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_spec_sync_workflow__{% else %}.github/workflows/spec-to-issue.yml{% endif %}"
-  - "{% if verification_mode == 'hosted' %}__keep_work_item_lifecycle_workflow__{% else %}.github/workflows/work-item-lifecycle.yml{% endif %}"
+  - "{% if verification_mode == 'hosted' and lifecycle %}__keep_work_item_lifecycle_workflow__{% else %}.github/workflows/work-item-lifecycle.yml{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_osv_workflow__{% else %}.github/workflows/osv.yml{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_dependabot_merge_workflow__{% else %}.github/workflows/dependabot-merge.yml{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_dependabot_auto_merge_workflow__{% else %}.github/workflows/dependabot-auto-merge.yml{% endif %}"
-  - "{% if project_mode == 'new' and verification_mode == 'hosted' %}__keep_release_workflow__{% else %}.github/workflows/release.yml{% endif %}"
-  - "{% if project_mode == 'new' and verification_mode == 'hosted' %}__keep_release_drift_workflow__{% else %}.github/workflows/release-drift.yml{% endif %}"
-  - "{% if project_mode == 'new' and verification_mode == 'hosted' %}__keep_release_drift_script__{% else %}.csarc/scripts/check-release-drift{% endif %}"
+  # Issue #1083: an existing project whose legacy template-generated
+  # release writer migrated to CSARC ownership renders the same hosted
+  # release workflow; the CLI passes csarc_release_workflow for it.
+  - "{% if release_ownership == 'csarc-owned' and verification_mode == 'hosted' and (project_mode == 'new' or csarc_release_workflow | default(false)) %}__keep_release_workflow__{% else %}.github/workflows/release.yml{% endif %}"
+  - "{% if release_ownership == 'csarc-owned' and verification_mode == 'hosted' and (project_mode == 'new' or csarc_release_workflow | default(false)) %}__keep_release_drift_workflow__{% else %}.github/workflows/release-drift.yml{% endif %}"
+  - "{% if release_ownership == 'csarc-owned' and verification_mode == 'hosted' and (project_mode == 'new' or csarc_release_workflow | default(false)) %}__keep_release_drift_script__{% else %}.csarc/scripts/check-release-drift{% endif %}"
   - "{% if verification_mode == 'hosted' and documentation_mode == 'template-and-content' %}__keep_pages_workflow__{% else %}.github/workflows/pages.yml{% endif %}"
   - "{% if verification_mode == 'hosted' and enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
-  - "{% if 'docker' in features %}__keep_dockerfile__{% else %}Dockerfile{% endif %}"
-  - "{% if 'docker' in features %}__keep_docker_compose__{% else %}docker-compose.yml{% endif %}"
-  - "{% if verification_mode == 'hosted' and 'docker' in features %}__keep_docker_workflow__{% else %}.github/workflows/docker-build-scan.yml{% endif %}"
+  - "{% if container %}__keep_dockerfile__{% else %}Dockerfile{% endif %}"
+  - "{% if container %}__keep_docker_compose__{% else %}docker-compose.yml{% endif %}"
+  - "{% if verification_mode == 'hosted' and container %}__keep_docker_workflow__{% else %}.github/workflows/docker-build-scan.yml{% endif %}"
   - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site__{% else %}.csarc/site{% endif %}"
   - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_builder__{% else %}.csarc/scripts/build-repo-site{% endif %}"
   - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_python__{% else %}.csarc/scripts/build_repo_site.py{% endif %}"
@@ -46,7 +52,7 @@ _exclude:
   - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_translation_check__{% else %}.csarc/scripts/check-repo-site-translations{% endif %}"
   - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_version_check__{% else %}.csarc/scripts/check-repo-site-versions{% endif %}"
   - "{% if documentation_mode == 'template-and-content' %}__keep_repo_site_content__{% else %}docs/site{% endif %}"
-  - "{% if documentation_mode == 'template-and-content' and i18n == 'en-zh-tw' %}__keep_secondary_site_content__{% else %}docs/site/content/_index.{{ 'en' if primary_language == 'zh-tw' else 'zh-tw' }}.md{% endif %}"
+  - "{% if documentation_mode == 'template-and-content' and '+' in documentation_languages %}__keep_secondary_site_content__{% else %}docs/site/content/_index.{{ 'en' if documentation_languages.split('+')[0] == 'zh-tw' else 'zh-tw' }}.md{% endif %}"
   - "{% if documentation_mode != 'off' %}__keep_docs_map__{% else %}docs/README.md{% endif %}"
   - "{% if documentation_mode != 'off' %}__keep_docs_specs__{% else %}docs/specs{% endif %}"
   - "{% if documentation_mode != 'off' %}__keep_docs_decisions__{% else %}docs/adr{% endif %}"
@@ -70,6 +76,58 @@ _exclude:
   - "{% if 'rust' in languages %}__keep_rust_source__{% else %}/src/lib.rs{% endif %}"
   - "{% if not ('python' in languages or 'rust' in languages or 'typescript' in languages) %}__keep_ci_version__{% else %}.csarc/version.txt{% endif %}"
   - "{% if code_owner %}__keep_codeowners__{% else %}.github/CODEOWNERS{% endif %}"
+  # Issue #1078: a product-owned license is never rendered by CSARC.
+  - "{% if (project_license | default('')) == 'custom' %}/LICENSE{% else %}__keep_license__{% endif %}"
+  # Issue #1077: every rendered script, workflow, and operations document
+  # has a caller that the selected options enable. The generated-layout ADR
+  # (docs/adr/generated-repository-layout.md) lists these payload rules.
+  - "{% if verification_mode == 'hosted' %}__keep_reviewer_assignment_script__{% else %}.csarc/scripts/request-reviewer{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_work_item_metadata_script__{% else %}.csarc/scripts/sync_work_item_metadata.py{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_scope_gate_script__{% else %}.csarc/scripts/check-scope-gate{% endif %}"
+  # Issue #1129: hosted-evidence readers and the open-Milestone nudge only
+  # run from hosted workflows and the hosted PR policy.
+  - "{% if verification_mode == 'hosted' %}__keep_trusted_verification_check__{% else %}.csarc/scripts/check-trusted-verification{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_verification_evidence__{% else %}.csarc/scripts/verification_evidence.py{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_open_milestone_detector__{% else %}.csarc/scripts/detect-open-milestone{% endif %}"
+  - "{% if verification_mode == 'hosted' and 'issues' in lifecycle %}__keep_issue_policy_script__{% else %}.csarc/scripts/validate-issue-policy{% endif %}"
+  - "{% if verification_mode == 'hosted' or documentation_mode != 'off' %}__keep_spec_script__{% else %}.csarc/scripts/spec_to_issue.py{% endif %}"
+  - "{% if 'milestones' in lifecycle %}__keep_milestone_format__{% else %}.csarc/docs/milestone-description.md{% endif %}"
+  - "{% if 'milestones' in lifecycle %}__keep_milestone_tracker_form__{% else %}.github/ISSUE_TEMPLATE/milestone-tracker.yml{% endif %}"
+  - "{% if documentation_mode != 'off' %}__keep_documentation_policy__{% else %}.csarc/docs/documentation-policy.md{% endif %}"
+  - "{% if release_ownership == 'csarc-owned' %}__keep_publish_release__{% else %}.csarc/scripts/publish-release{% endif %}"
+  - "{% if release_ownership == 'csarc-owned' %}__keep_release_writer__{% else %}.csarc/scripts/release_writer.py{% endif %}"
+  - "{% if release_ownership == 'csarc-owned' %}__keep_release_bundle__{% else %}.csarc/scripts/release_bundle.py{% endif %}"
+  - "{% if release_ownership == 'csarc-owned' %}__keep_converge_release_tag__{% else %}.csarc/scripts/converge-release-tag{% endif %}"
+  - "{% if release_ownership == 'csarc-owned' %}__keep_install_syft__{% else %}.csarc/scripts/install-syft{% endif %}"
+  - "{% if release_ownership == 'csarc-owned' %}__keep_verify_release_candidate__{% else %}.csarc/scripts/verify-release-candidate{% endif %}"
+  - "{% if release_ownership == 'csarc-owned' %}__keep_verify_release_consumption__{% else %}.csarc/scripts/verify_release_consumption.py{% endif %}"
+  # Issue #1129: release_policy.py keeps only the capability preflight every
+  # project's CLI runs; the CSARC release commands render for their owner.
+  - "{% if release_ownership == 'csarc-owned' %}__keep_release_candidate__{% else %}.csarc/scripts/release_candidate.py{% endif %}"
+  # An adopted repository keeps its own product starters, manifests,
+  # lockfiles, and tool settings; only CSARC runtime is added (#1058 decision 25).
+  - "{% if (project_mode | default('')) == 'existing' %}/src{% else %}__keep_new_src__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}/tests{% else %}__keep_new_tests__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}/cmd{% else %}__keep_new_cmd__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}/internal{% else %}__keep_new_internal__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}/typescript{% else %}__keep_new_typescript__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}go.mod{% else %}__keep_new_go_mod__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}pyproject.toml{% else %}__keep_new_pyproject_toml__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}.python-version{% else %}__keep_new__python_version__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}package.json{% else %}__keep_new_package_json__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}pnpm-workspace.yaml{% else %}__keep_new_pnpm_workspace_yaml__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}.node-version{% else %}__keep_new__node_version__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}biome.json{% else %}__keep_new_biome_json__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}tsconfig.json{% else %}__keep_new_tsconfig_json__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}tsconfig.build.json{% else %}__keep_new_tsconfig_build_json__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}vitest.config.ts{% else %}__keep_new_vitest_config_ts__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}Cargo.toml{% else %}__keep_new_Cargo_toml__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}rust-toolchain.toml{% else %}__keep_new_rust_toolchain_toml__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}Dockerfile{% else %}__keep_new_Dockerfile__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}docker-compose.yml{% else %}__keep_new_docker_compose_yml__{% endif %}"
+# Copier also evaluates these patterns while it lists files the old side
+# removed, before every answer is loaded; the defaults keep that internal
+# pass working under StrictUndefined without changing any rendered path.
 _skip_if_exists:
   - "src/**/*.py"
   - "tests/**/*.py"
@@ -84,19 +142,19 @@ _skip_if_exists:
   - "docs/site/content/_index.zh-tw.md"
   - "docs/site/content/_index.en.md"
   - "docs/site/data/navigation.json"
-  - "{% if project_mode == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
-  - "{% if project_mode == 'existing' %}/README.{{ 'en' if primary_language == 'zh-tw' else 'zh-tw' }}.md{% else %}__overwrite_secondary_readme__{% endif %}"
-  - "{% if project_mode == 'existing' %}/LICENSE{% else %}__overwrite_license__{% endif %}"
-  - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_scanner_policy__{% endif %}"
-  - "{% if project_mode == 'existing' %}/.github/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
-  - "{% if project_mode == 'existing' %}go.mod{% else %}__overwrite_go_manifest__{% endif %}"
-  - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
-  - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
-  - "{% if project_mode == 'existing' %}Cargo.toml{% else %}__overwrite_rust_manifest__{% endif %}"
-  - "{% if project_mode == 'existing' %}Dockerfile{% else %}__overwrite_dockerfile__{% endif %}"
-  - "{% if project_mode == 'existing' %}docker-compose.yml{% else %}__overwrite_docker_compose__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}/README.{{ 'en' if (documentation_languages | default('')).split('+')[0] == 'zh-tw' else 'zh-tw' }}.md{% else %}__overwrite_secondary_readme__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}/LICENSE{% else %}__overwrite_license__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}/SECURITY.md{% else %}__overwrite_scanner_policy__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}/.github/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}go.mod{% else %}__overwrite_go_manifest__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}Cargo.toml{% else %}__overwrite_rust_manifest__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}Dockerfile{% else %}__overwrite_dockerfile__{% endif %}"
+  - "{% if (project_mode | default('')) == 'existing' %}docker-compose.yml{% else %}__overwrite_docker_compose__{% endif %}"
 _tasks:
-  - command: "uv lock --python {{ '3.14' if (python_support_mode | default('latest')) == 'latest' else (python_min_version | default('3.12')) }}"
+  - command: "uv lock --python {{ '3.14' if python_floor == 'latest' else python_floor }}"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'python' in languages }}"
   - command: "pnpm install --lockfile-only --ignore-scripts"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'typescript' in languages }}"
@@ -286,6 +344,10 @@ project_description:
   default: "Source code and delivery automation for {{ project_name }}."
   validator: "{% if not project_description | default('', true) | trim or project_description | trim | lower in ['a cyber-arch project', 'todo', 'tbd', 'placeholder'] or '<' in project_description %}Enter the approved project purpose without placeholder text.{% endif %}"
 
+# SPEC-009 (Issue #1071) classifies every question below. Only persistent
+# intent is saved to .csarc/config.yml (see the answers file template);
+# one-time seeds, live repository facts, derived context, and the immutable
+# project_mode are recorded by the pinned CLI in .csarc/provenance.json.
 documentation_mode:
   type: str
   help: Apply the CSARC documentation presentation and content starter, organize project-owned content only, or leave documentation unmanaged
@@ -295,21 +357,30 @@ documentation_mode:
     Do not manage documentation: 'off'
   default: "{{ 'content-only' if project_mode == 'existing' else 'template-and-content' }}"
 
-primary_language:
+documentation_languages:
   type: str
-  help: Language used by README.md and the primary documentation entry point
+  help: Languages of project-owned documentation; the first is primary and a second is maintained alongside it
   choices:
     繁體中文 (Traditional Chinese): zh-tw
     English: en
-  default: zh-tw
+    繁體中文 with English: zh-tw+en
+    English with 繁體中文: en+zh-tw
+  default: zh-tw+en
 
-i18n:
+# Render-derived values (never saved): the primary and optional secondary
+# language split from documentation_languages. Copier also evaluates
+# `_exclude` while it rebuilds an older release's side of an update, where
+# these new computed values do not exist, so the exclusion and skip rules
+# above read documentation_languages directly.
+documentation_primary_language:
   type: str
-  help: Maintain English and Traditional Chinese documentation together, or use only the primary language
-  choices:
-    Maintain English and Traditional Chinese: en-zh-tw
-    Primary language only: 'off'
-  default: en-zh-tw
+  default: "{{ documentation_languages.split('+')[0] }}"
+  when: false
+
+documentation_secondary_language:
+  type: str
+  default: "{{ documentation_languages.split('+')[1] if '+' in documentation_languages else '' }}"
+  when: false
 
 project_license:
   type: str
@@ -318,19 +389,15 @@ project_license:
     Proprietary, all rights reserved: proprietary
     MIT License: MIT
     Apache License 2.0: Apache-2.0
+    Product-owned license (CSARC renders no LICENSE): custom
   default: proprietary
 
 copyright_holder:
   type: str
   help: Copyright holder written to LICENSE and package metadata
-  default: "{{ project_name }}"
-  validator: "{% if not copyright_holder | trim %}Enter the copyright holder; it is never inferred from repository ownership.{% endif %}"
-
-language:
-  type: str
-  help: Deprecated compatibility value for repositories created before language modules became multi-select
-  default: python
-  when: false
+  default: "{{ '' if project_license == 'custom' else project_name }}"
+  when: "{{ project_license != 'custom' }}"
+  validator: "{% if project_license != 'custom' and not copyright_holder | trim %}Enter the copyright holder; it is never inferred from repository ownership.{% endif %}"
 
 languages:
   type: str
@@ -341,7 +408,7 @@ languages:
     Python: python
     Rust: rust
     TypeScript: typescript
-  default: "{{ [] if language == 'ci' else language.split('-') }}"
+  default: [python]
 
 governance_mode:
   type: str
@@ -360,14 +427,6 @@ lifecycle:
     Milestone reconciliation and work-item closure: milestones
   default: [issues, milestones]
 
-actions_fallback:
-  type: str
-  help: Permit audited admin merge only for a proven zero-step Actions billing block
-  choices:
-    Keep hosted checks mandatory: 'off'
-    Allow the audited admin fallback: admin
-  default: 'off'
-
 verification_mode:
   type: str
   help: Use self-attested local checks by default, or trusted GitHub-hosted verification when available
@@ -383,7 +442,7 @@ admin_bypass:
     Never bypass human approval: 'off'
     Allow only beta work: beta-only
     Allow beta and stable work: always
-  default: 'off'
+  default: always
 
 copilot_review:
   type: str
@@ -401,13 +460,10 @@ release_trigger:
     Manual dispatch only: manual
   default: main
 
-features:
-  type: str
-  help: Optional generated project capabilities
-  multiselect: true
-  choices:
-    Docker starter and build scan: docker
-  default: []
+container:
+  type: bool
+  help: Add the Docker starter and its build scan
+  default: false
 
 package_name:
   type: str
@@ -419,7 +475,7 @@ package_name:
 code_owner:
   type: str
   help: Optional GitHub user or team used by CODEOWNERS
-  default: "@Innoguard-Cyber-Arch/arch"
+  default: ""
   validator: "{% if code_owner and not code_owner | regex_search('^@(?:(?![A-Za-z0-9-]*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$') %}Use an @user or @organization/team value, or leave it empty.{% endif %}"
 
 project_run_command:
@@ -441,46 +497,33 @@ project_verification_hook:
   when: "{{ project_mode == 'existing' }}"
   validator: "{% set hook = project_verification_hook | default('', true) | trim %}{% if hook and (hook != project_verification_hook or hook.startswith('/') or '..' in hook.split('/') or not (hook | regex_search('^[A-Za-z0-9._/-]+$'))) %}Use a safe repository-relative executable path without spaces, shell syntax, or parent traversal.{% endif %}"
 
-work_item_mapping_review:
+# K2 (#1080): optional organization/user ProjectV2 whose Roadmap dates
+# `csarc issue create` and `csarc issue sync-project` maintain. It is never
+# asked (no question-count change); set it once with --data. Empty disables
+# every Project API call, and repository Projects stay disabled.
+github_project_url:
   type: str
-  help: Confirm how the observed Issue Type and label suggestions were reviewed
-  choices:
-    Review before applying adoption: pending
-    Accept safe suggestions and preserve ambiguous items: accept-safe
-    Confirm every suggestion was reviewed individually: review-individually
-  default: pending
-  when: "{{ project_mode == 'existing' }}"
+  help: Optional full organization or user GitHub Project (ProjectV2) URL for Roadmap dates
+  default: ""
+  when: false
+  validator: "{% if github_project_url and not github_project_url | regex_search('^https://github\\.com/(orgs|users)/[A-Za-z0-9-]+/projects/[1-9][0-9]*$') %}Use https://github.com/orgs/<org>/projects/<n> or https://github.com/users/<user>/projects/<n>, or leave it empty.{% endif %}"
 
 repository_url:
   type: str
   help: Canonical GitHub repository URL used by badges and package metadata
-  default: "https://github.com/{{ code_owner.split('/')[0] | replace('@', '') }}/{{ project_slug }}"
+  default: ""
   validator: "{% if not repository_url | default('', true) | regex_search('^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') %}Use https://github.com/owner/repository without a trailing slash or .git suffix.{% endif %}"
 
-security_reporting_channel:
+python_floor:
   type: str
-  help: Organization-approved vulnerability reporting instructions
-  default: "Open a GitHub Issue at {{ repository_url }}/issues/new; maintainers receive notifications for new Issues."
-  validator: "{% if not security_reporting_channel | default('', true) | trim or security_reporting_channel | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in security_reporting_channel %}Enter the approved reporting channel without placeholder text; do not invent an email address or SLA.{% endif %}"
-
-python_support_mode:
-  type: str
-  help: Use the reviewed latest stable Python release, or declare an older minimum supported release
+  help: Oldest Python release the project supports; latest follows the reviewed latest stable release (3.14)
   choices:
     Latest stable only (Python 3.14): latest
-    Declare a minimum supported version: minimum
+    Python 3.12 or later: "3.12"
+    Python 3.13 or later: "3.13"
+    Python 3.14 or later: "3.14"
   default: latest
   when: "{{ 'python' in languages }}"
-
-python_min_version:
-  type: str
-  help: Oldest Python feature release that this project promises to support
-  choices:
-    - "3.12"
-    - "3.13"
-    - "3.14"
-  default: "3.12"
-  when: "{{ 'python' in languages and python_support_mode == 'minimum' }}"
 
 coverage_mode:
   type: str
@@ -496,15 +539,14 @@ coverage_threshold:
   default: 80
   validator: "{% if coverage_threshold < 1 or coverage_threshold > 100 %}Use an integer from 1 to 100.{% endif %}"
 
-enable_precommit:
-  type: bool
-  help: Add optional local hooks run through .csarc/scripts/pre-commit; CI remains authoritative
-  default: false
-
-enable_template_update_notifications:
-  type: bool
-  help: Check weekly for a newer Copier template release and maintain one notification Issue
-  default: false
+scheduled_checks:
+  type: str
+  help: Scheduled checks to run; disable governance-drift only when another approved control owns drift monitoring
+  multiselect: true
+  choices:
+    Governance drift check: governance-drift
+    Weekly template update notification: template-update
+  default: [governance-drift]
 
 project_visibility:
   type: str
@@ -515,16 +557,24 @@ project_visibility:
     Internal (GitHub Enterprise Cloud only): internal
   default: private
 
+# Issue #1084: a public repository must name a maintainer-approved private
+# reporting channel outside GitHub (an email address, a mailto: link, or a
+# non-GitHub https:// URL); GitHub Issues, Discussions, and GitHub private
+# vulnerability reporting are never assumed. The public default is empty so
+# an unanswered or dropped legacy answer fails closed in
+# template/.github/SECURITY.md.jinja. Private and internal repositories keep
+# the Issue instructions because those Issues are not world-readable.
+security_reporting_channel:
+  type: str
+  help: Maintainer-approved vulnerability reporting channel; a public repository needs a private channel outside GitHub (email address, mailto link, or non-GitHub https URL)
+  default: "{{ '' if project_visibility == 'public' else 'Open a GitHub Issue at ' ~ repository_url ~ '/issues/new; maintainers receive notifications for new Issues.' }}"
+  validator: '{% set channel = security_reporting_channel | default("", true) | trim %}{% if not channel or channel | lower in ["todo", "tbd", "placeholder"] or "<" in channel %}Enter the approved reporting channel without placeholder text; do not invent an email address or SLA.{% elif project_visibility == "public" and (channel | regex_search("(?i)^https?://(?:[^/?#]*[.@])?github[.]com(?:[:/?#]|$)") or not (channel | regex_search("^(?:mailto:)?[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:[.][A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*[.][A-Za-z]{2,}$") or channel | regex_search("^https://[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:[.][A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*[.][A-Za-z]{2,}(?::[0-9]{1,5})?(?:[/?#][^ <>]*)?$"))) %}A public repository needs one maintainer-approved private reporting channel outside GitHub: an email address, a mailto: link, or a non-GitHub https:// URL. GitHub Issues, Discussions, and other github.com routes are public or unverified and are rejected.{% endif %}'
+
 enable_codeql:
   type: bool
   help: Enable CodeQL SAST on public repositories or private/internal repositories licensed for GitHub Code Security
   default: "{{ project_visibility == 'public' and ('go' in languages or 'python' in languages or 'typescript' in languages) }}"
   when: "{{ 'go' in languages or 'python' in languages or 'typescript' in languages }}"
-
-enable_governance_drift_check:
-  type: bool
-  help: Run the scheduled governance drift check; disable it only when another approved control owns drift monitoring
-  default: true
 
 project_maturity:
   type: str

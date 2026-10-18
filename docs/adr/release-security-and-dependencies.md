@@ -139,7 +139,8 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | 檔案 | 責任 |
 | --- | --- |
 | `.github/workflows/release.yml` | 一支 GitHub event／permission wrapper；root 與新生成 repo 的發布入口；發布階段呼叫 `scripts/publish-release`，不保留自己的一份邏輯 |
-| `scripts/publish-release`（#589；attestation 驗證見 #770） | 發布階段的單一實作：`stage`／`resolve`／`publish`／`rerun-verify` 子命令，涵蓋驗證並暫存已合併候選、判定 tag／Release 狀態、build 成品、單一固定版本 agent prompt 與 SBOM、上傳並公開、驗證重跑，以及發布失敗時把仍可變的 Release 收回 draft；`publish`／`rerun-verify` 確認 GitHub 回報 immutable 後，另外重用 `scripts/verify_release_consumption.py` 對每個上傳成品核對 release attestation（#770）；`release.yml` 與本機／agent 執行呼叫同一份腳本 |
+| `scripts/publish-release`（#589；attestation 驗證見 #770） | 發布階段的單一實作：`stage`／`resolve`／`publish`／`rerun-verify` 子命令，涵蓋驗證並暫存已合併候選、判定 tag／Release 狀態、build 成品、單一固定版本 agent prompt 與 SBOM、上傳並公開、驗證重跑，以及發布失敗時把仍可變的 Release 收回 draft；`publish`／`rerun-verify` 確認 GitHub 回報 immutable 後，另外重用 `scripts/verify_release_consumption.py` 對每個上傳成品核對 release attestation（#770）；`release.yml` 與本機／agent 執行呼叫同一份腳本；#1074 起是唯一的 tree-bound Release writer（含 draft body），寫入前經 `scripts/release_writer.py` preflight 並持有遠端 release lease |
+| `scripts/release_writer.py`（#1074） | writer preflight 與 lease：exact candidate checkout、依 `release_ownership` 分流（`csarc-owned` 以 strict merge-trace audit fail closed、`product-owned` 只回報 drift、`verification-only` 不寫入）、拒絕第二個寫 Release 的 workflow、遠端 tag／Release 衝突停止且不移動 immutable tag；每個 tag 一把原子建立、fast-forward 更新的 lease ref |
 | `scripts/render_release_prompt.py`（#877） | 以 exact release tag／full SHA 產生唯一的 status-first `release-prompt.txt`，指向同 SHA 的安裝指南與 `copier.yml`；問題與答案仍由 Copier 和既有 `--data` 契約管理 |
 | `scripts/install-syft`（#589） | 本機／agent 發布路徑產生 SPDX SBOM 的直接 CLI 等效：抓取與 `release.yml` 的 `anchore/sbom-action` 相同 pin 版本的 Syft 二進位並驗證 checksum |
 | `scripts/verify-release-candidate` | 只驗證既有在途的舊式 `release/v*` 候選；新工作不建立這類 PR |

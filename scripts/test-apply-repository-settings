@@ -33,8 +33,10 @@ trap 'rm -rf "$fixture_root"' EXIT
 mkdir -p "$fixture_root/bin"
 case_count=0
 
-test_repo="Innoguard-Cyber-Arch/test-repo"
-test_owner="Innoguard-Cyber-Arch"
+# Owner-neutral fixture identity (#1061): this self-test also ships to
+# consuming repositories, so it never assumes the template organization.
+test_repo="example-org/test-repo"
+test_owner="example-org"
 test_branch="main"
 
 cat >"$fixture_root/bin/gh" <<EOF
@@ -42,8 +44,8 @@ cat >"$fixture_root/bin/gh" <<EOF
 set -euo pipefail
 
 repo_root="$repo_root"
-test_repo="$test_repo"
-test_owner="$test_owner"
+test_repo="\${STUB_REPO:-$test_repo}"
+test_owner="\${STUB_OWNER:-$test_owner}"
 test_branch="$test_branch"
 args="\$*"
 
@@ -144,9 +146,28 @@ EOF
 chmod +x "$fixture_root/bin/gh"
 export REPO_ROOT="$repo_root"
 
+# Build an isolated repository root with a chosen CODEOWNERS body, so no case
+# depends on the host repository's own owner (#1061). An empty body means an
+# empty CODEOWNERS file; "-" means the file is absent.
+make_owner_root() {
+  local root="$1" codeowners="$2"
+  mkdir -p "$root/scripts" "$root/policies" "$root/.github" "$root/.csarc"
+  cp "$script_path" "$root/scripts/apply-repository-settings.sh"
+  cp "$repo_root/scripts/csarc_config.py" "$root/scripts/csarc_config.py"
+  cp -R "$repo_root/policies/." "$root/policies/"
+  cp "$repo_root/.csarc/config.yml" "$root/.csarc/config.yml"
+  if [[ "$codeowners" != "-" ]]; then
+    printf '%s' "$codeowners" >"$root/.github/CODEOWNERS"
+  fi
+}
+
+neutral_root="$fixture_root/neutral-owner"
+make_owner_root "$neutral_root" "* @$test_owner/arch
+"
+
 run_check() {
   status=0
-  output="$(PATH="$fixture_root/bin:$PATH" GH_REPO="$test_repo" "$script_path" check 2>&1)" || status=$?
+  output="$(PATH="$fixture_root/bin:$PATH" GH_REPO="$test_repo" "$neutral_root/scripts/apply-repository-settings.sh" check 2>&1)" || status=$?
 }
 
 # Case 1: every new field matches its declared policy; check exits clean.
@@ -238,6 +259,7 @@ case_count=$((case_count + 1))
 mismatch_root="$fixture_root/org-mismatch"
 mkdir -p "$mismatch_root/scripts" "$mismatch_root/policies" "$mismatch_root/.github" "$mismatch_root/.csarc"
 cp "$script_path" "$mismatch_root/scripts/apply-repository-settings.sh"
+cp "$repo_root/scripts/csarc_config.py" "$mismatch_root/scripts/csarc_config.py"
 cp -R "$repo_root/policies/." "$mismatch_root/policies/"
 cp "$repo_root/.csarc/config.yml" "$mismatch_root/.csarc/config.yml"
 printf '* @Other-Org/arch\n' >"$mismatch_root/.github/CODEOWNERS"
@@ -255,6 +277,7 @@ case_count=$((case_count + 1))
 personal_root="$fixture_root/personal-owner"
 mkdir -p "$personal_root/scripts" "$personal_root/policies" "$personal_root/.github" "$personal_root/.csarc"
 cp "$script_path" "$personal_root/scripts/apply-repository-settings.sh"
+cp "$repo_root/scripts/csarc_config.py" "$personal_root/scripts/csarc_config.py"
 cp -R "$repo_root/policies/." "$personal_root/policies/"
 cp "$repo_root/.csarc/config.yml" "$personal_root/.csarc/config.yml"
 printf '* @outside-user\n' >"$personal_root/.github/CODEOWNERS"
@@ -300,5 +323,56 @@ if [[ "$status" == 0 ]]; then
 fi
 grep -qF "Cannot inspect GitHub Pages settings for $test_repo." <<<"$output"
 grep -qF "gh: Server Error (HTTP 500)" <<<"$output"
+
+# Case 10 (#1061): owner matrix. Every legal owner shape -- a personal
+# login, a team of the repository's own organization, an empty or absent
+# CODEOWNERS, and a repository in an organization other than the template's --
+# is accepted; malformed values and owners that contradict the live
+# repository fail closed.
+run_owner_plan() {
+  local root="$1"
+  shift
+  status=0
+  output="$(env PATH="$fixture_root/bin:$PATH" "$@" "$root/scripts/apply-repository-settings.sh" plan 2>&1)" || status=$?
+}
+owner_case=0
+expect_owner() {
+  local expected="$1" repo="$2" owner="$3" codeowners="$4" root
+  owner_case=$((owner_case + 1))
+  root="$fixture_root/owner-matrix-$owner_case"
+  make_owner_root "$root" "$codeowners"
+  run_owner_plan "$root" GH_REPO="$repo" STUB_REPO="$repo" STUB_OWNER="$owner" USER_PERMISSION=write
+  if [[ "$expected" == accept && "$status" != 0 ]]; then
+    echo "plan rejected a legal owner for $repo: ${codeowners:-<empty>}"
+    printf '%s\n' "$output"
+    exit 1
+  fi
+  if [[ "$expected" == reject && "$status" == 0 ]]; then
+    echo "plan accepted an invalid or contradictory owner for $repo: $codeowners"
+    exit 1
+  fi
+  if [[ "$expected" == reject ]]; then
+    grep -qF "CODEOWNERS validation failed:" <<<"$output"
+  fi
+}
+case_count=$((case_count + 1))
+expect_owner accept "$test_repo" "$test_owner" "* @outside-user
+"
+expect_owner accept "$test_repo" "$test_owner" "* @$test_owner/arch
+"
+expect_owner accept "$test_repo" "$test_owner" ""
+expect_owner accept "$test_repo" "$test_owner" "-"
+expect_owner accept "another-org/product" "another-org" "* @another-org/arch
+"
+expect_owner accept "another-org/product" "another-org" "* @outside-user
+"
+for invalid_owner in '@bad--user' '@bad-' 'missing-at-sign' '@org/team/extra'; do
+  expect_owner reject "$test_repo" "$test_owner" "* $invalid_owner
+"
+done
+expect_owner reject "another-org/product" "another-org" "* @$test_owner/arch
+"
+expect_owner reject "$test_repo" "$test_owner" "* @$test_owner/missing-team
+"
 
 echo "apply-repository-settings check cases passed: $case_count"

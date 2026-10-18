@@ -93,6 +93,7 @@ allowlist 由生成測試驗證：
 .github/workflows/work-item-lifecycle.yml
 SECURITY.md
 .claude/CLAUDE.md
+.csarc/.ignore（讓產品 lint／type check 工具略過 CSARC 控制層）
 .csarc/config.yml（唯一由使用者維護的 CSARC 設定）
 .csarc/docs/*（CSARC 操作文件）
 .csarc/policies/*.json（公版管理的唯讀政策）
@@ -100,7 +101,7 @@ SECURITY.md
 .csarc/release-please-manifest.json（工具維護的版本狀態）
 .csarc/scripts/*（CSARC adapter，見下方清單）
 .csarc/site/*（網站引擎與共用資產）
-.csarc/tests/*（公版自測）
+.csarc/tests/*（舊版下發的公版自測；新版不再下發）
 .csarc/version.txt（無語言模組或只選 Go 時的版本面）
 .gitignore
 AGENTS.md（自動探索入口）
@@ -124,7 +125,7 @@ docs/site/content/*、docs/site/data/navigation.json、docs/site/theme.css
 .csarc/scripts/install-*
 .csarc/scripts/lint-workflows-shell
 .csarc/scripts/pr_lifecycle.py
-.csarc/scripts/pre-commit（只在啟用時存在，執行期間才產生工具設定）
+.csarc/scripts/pre-commit（只在舊版啟用 `enable_precommit` 時存在；新版不再產生）
 .csarc/scripts/promotion_gate.py
 .csarc/scripts/publish-release
 .csarc/scripts/release_*.py
@@ -134,19 +135,18 @@ docs/site/content/*、docs/site/data/navigation.json、docs/site/theme.css
 .csarc/scripts/scan-secrets（執行期間才產生 Gitleaks 設定）
 .csarc/scripts/spec_to_issue.py
 .csarc/scripts/sync_*.py
-.csarc/scripts/test-*（test-apply-repository-settings、test-issue-triage、test-pr-policy、
-  test-worktree-cleanup）
+.csarc/scripts/test-*、.csarc/scripts/security-smoke（舊版下發的公版自測；新版不再下發）
 .csarc/scripts/validate-*
 .csarc/scripts/verify*
 ```
 
 ### 只在你開了對應功能時才存在，才需要一併刪
 
-- `.csarc/scripts/pre-commit` — 只在 `.csarc/config.yml` 的 `enable_precommit: true` 時存在；不持久保存 `.pre-commit-config.yaml`。
+- `.csarc/scripts/pre-commit` — 只在舊版 `enable_precommit: true` 時存在；設定已退役（SPEC-009），新版不再產生，不持久保存 `.pre-commit-config.yaml`。
 - `.github/workflows/template-update.yml`、`.csarc/scripts/check-template-update` — 只在
-  `enable_template_update_notifications: true` 時存在。
+  `scheduled_checks` 含 `template-update` 時存在。
 - `.github/workflows/governance-drift.yml`、`.csarc/scripts/check-governance-drift` — 只在
-  `enable_governance_drift_check: true` 時存在。
+  `scheduled_checks` 含 `governance-drift` 時存在。
 - `.github/workflows/codeql.yml` — 只在 `enable_codeql: true` 時存在。
 
 ### 只在 `project_mode: existing`（`csarc adopt` 到既有 repo）時，這幾個反而不存在
