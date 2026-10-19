@@ -1872,7 +1872,7 @@ Journey 08 與本文件既有規則決定。
 
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
 | --- | --- | --- | --- | --- |
-| 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
+| 版本意圖 | PR title 表達 major／minor／patch／no-release；branch 內 commit 的最高型別必須等於 PR title 型別，否則物化結果在 squash 後不成立，合併前由 `verify-delivery-version --pr-title` 檢查（#1137） | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
 | 精確版本與 CHANGELOG | 原 Milestone work PR 的 final release-only commit materialize 下一個 beta；宣告 checkpoints 時只有 terminal Issue 的 PR materialize | promotion bridge materialize stable 與 CHANGELOG | standalone／hotfix 原 PR materialize stable | manual 只重跑同一流程，不另開版本來源 |
 | CI | beta 的最低組合是 fast，路徑風險可升 full | stable 一律 full | release workflow 重用 exact candidate 的可信證據，缺少時只補跑所需 tier | 不重複已具備且仍有效的 routine suite |
 | 成品／checksum／SBOM | 合併進 `dev/m*` 後從精確 commit 發 beta prerelease；deferred checkpoint work 不發布 | 合併後從精確 main commit 發 stable | stable 候選合併後從精確 commit建立 | draft Release 先上傳、下載重驗，成功才公開 |

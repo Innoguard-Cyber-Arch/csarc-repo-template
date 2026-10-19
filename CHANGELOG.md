@@ -7,6 +7,13 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.35.3] - 2026-10-19
+
+### Bug Fixes
+
+* fix(release): check the PR title type against the materialized release (e428db0)
+* fix(release): run the PR title type check in generated projects (72e10b8)
+
 ## [0.35.2] - 2026-10-18
 
 ### Included prereleases

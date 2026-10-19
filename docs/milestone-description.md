@@ -52,6 +52,8 @@ terminal Issue 必須列在同一行的 Issue 清單裡。`tracker_errors()` 會
 
 - terminal Issue 的 PR 照常在同一張 PR 物化 beta 版本與 CHANGELOG。`release_policy.py`
   從上一個 tag 起算，所以這一版會聚合上次 checkpoint 之後所有已合併的 work，只發布一次。
+  branch 內 commit 的最高型別必須等於 PR 標題型別，否則 `prepare-candidate --sha HEAD`
+  的物化結果在 squash 後不成立；合併前 `verify-delivery-version --pr-title` 會擋下不一致（#1137）。
 - 其他 work Issue（包含沒有列在任何 checkpoint 的 Issue）是 `deferred`：PR 不執行
   `prepare-candidate`，也不得改動版本檔；Release workflow 對這次 merge 回報
   `deferred`，不建立版本、tag 或 Release。
