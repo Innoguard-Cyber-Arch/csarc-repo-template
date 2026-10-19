@@ -157,7 +157,12 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 ### Reviewer 指派改變（`reviewers`）
 
-舊設定的 `reviewers` 與 `.github/REVIEWERS` 已退役：Settings 那一列仍是 `retired`，note 寫出原本的 reviewer、新的指派方式與恢復方式；`Items requiring your decision` 另列一列非 blocking 的 `setting-decision`（subject `reviewers`）。新版本在每個 ready PR 從具 maintain 或 admin 權限、且不是作者的協作者中輪流請求一位 reviewer。這一列和 `widened` 一樣不會讓 `--check` 變成 blocking，但 `--finalize-plan` 前必須由擁有者確認，agent 不能代為接受。要維持原本的 reviewer，只給他們 maintain 或 admin 權限，或用 `--data code_owner=<owners>` 把他們設為 code owner，讓 GitHub 在每個 PR 請求他們審查；在 PR 記錄擁有者的決定。
+舊設定的 `reviewers` 與 `.github/REVIEWERS` 已退役：Settings 那一列仍是 `retired`，note 寫出原本的 reviewer、新的指派方式與恢復方式；`Items requiring your decision` 另列一列非 blocking 的 `setting-decision`（subject `reviewers`）。新版本在每個 ready PR 從具 maintain 或 admin 權限、且不是作者的協作者中輪流請求一位 reviewer。這一列和 `widened` 一樣不會讓 `--check` 變成 blocking，但 `--finalize-plan` 要求擁有者的回答，沒有回答就拒絕寫入。回答用一次性的 `--data reviewers=<回答>`，不會寫進 `.csarc/config.yml`；`--check` 帶上後報告依回答更新，`--finalize-plan` 重帶同一個值：
+
+1. 擁有者確認新的指派方式：`--data reviewers=accept`。這一列從 `Items requiring your decision` 消失，Settings 的 `reviewers` 列 source 記為 `explicit`。要維持原本的 reviewer，只給他們 maintain 或 admin 權限，或同時用 `--data code_owner=<owners>` 把他們設為 code owner，讓 GitHub 在每個 PR 請求他們審查。
+2. 擁有者不在場（例如 operator run）：`--data reviewers=pending`。可以照常 finalize 與 apply，但這一列留在 final plan 與報告，訊息寫明待擁有者決定；update PR 保持 Draft，在 PR 列出這個待決定項目。擁有者之後決定接受時在 PR 留下決定；要改回原本的 reviewer 時依第 1 點調整權限，或在之後的 `csarc update` 帶 `--data code_owner=<owners>`。
+
+agent 不能代為接受：只有擁有者在這次對話或 PR 明確確認後才帶 `accept`，其他情況帶 `pending`。
 
 ### 保留的舊檔與過時連結
 
