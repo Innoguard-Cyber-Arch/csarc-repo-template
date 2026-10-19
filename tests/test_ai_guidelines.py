@@ -362,7 +362,7 @@ def test_governance_records_cite_existing_policy_sections() -> None:
         "凍結 `main`",
         "Sync 協調",
         "Tag／Release 讀回",  # noqa: RUF001
-        "Feature parent 與 sub-Issue 收尾",
+        "主 Issue 與 sub-Issue 收尾",
         "Tracker 關閉順序",
     ):
         assert required in steps, required

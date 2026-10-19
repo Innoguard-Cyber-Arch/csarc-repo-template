@@ -65,7 +65,7 @@ Milestone 8 收尾階段 #546–#550 五張 Issue／PR 全部沒有掛 Milestone
 Milestone 後續變更不會同步既有 open PR 的缺口。許多 Issue／PR 本來就與任何 Milestone
 無關，因此只有明確的 Issue→PR 關係會自動同步，不從標題或目前有哪些 Milestone 猜測。
 Milestone preflight 與 lifecycle reconciliation 另以原生 `parent_issue_url` 驗證
-Feature parent 與 sub-issues 位於同一個 delivery bucket，防止 #939 類型的遺漏復發。
+parent Issue 與 sub-issues 位於同一個 delivery bucket，防止 #939 類型的遺漏復發。
 
 - `scripts/gh-issue-create`：本機開 Issue 當下，若沒有帶 `--milestone`／`-m`，且
   `scripts/detect-open-milestone` 判定目前恰好只有一個 open Milestone，會印出提示；
