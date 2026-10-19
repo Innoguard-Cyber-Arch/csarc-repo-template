@@ -361,6 +361,13 @@ beta 與 stable 對同一條 candidate line 使用同一規則，main 已插入�
 無法取得或設定無法解析時直接失敗，不套用預設值。含 breaking 變更的 CHANGELOG
 另列 `Migration notes`：最低版本、回復方式，以及每個 commit 的 footer 說明。
 
+`early` → `formal` 的切換步驟（Issue #1105）：切換 PR 只改 `project_maturity`，
+因為成熟度讀 current `main`，這張 PR 本身仍依 `early` 規劃（例如 `0.y.z`，或不含
+可發版 commit 時不發版）。合併後 `main` 宣告 `formal`，之後第一個可發版的 release
+不論 bump 大小都規劃為 `1.0.0`（beta 為 `1.0.0-beta.N`），再之後依 SemVer 前進；
+不會再產生無法通過 `formal` 規則的 `0.x`。`formal` → `early` 的降級或已在 `1.x`
+的 `early` 設定沒有合法版本，規劃直接失敗，不倒退 core、不移動既有 tag。
+
 `admin_bypass: off|beta-only|always` 控制 admin 是否可用 exact-head 自我授權取代
 同行核准。本 repo 設為 `always`；生成專案預設也是 `always`，可明確選擇另外兩種模式。
 無論設定值為何，bypass 都不能略過 release-level/path-risk 選出的 suite、required
