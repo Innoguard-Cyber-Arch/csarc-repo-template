@@ -115,6 +115,7 @@ docs/site/content/*、docs/site/data/navigation.json、docs/site/theme.css
 ```
 .csarc/scripts/__init__.py
 .csarc/scripts/apply-repository-settings.sh
+.csarc/scripts/authenticate_dependabot_*.py
 .csarc/scripts/check-*
 .csarc/scripts/ci_tier.py
 .csarc/scripts/cleanup-worktrees
@@ -124,7 +125,7 @@ docs/site/content/*、docs/site/data/navigation.json、docs/site/theme.css
 .csarc/scripts/detect-*
 .csarc/scripts/install-*
 .csarc/scripts/lint-workflows-shell
-.csarc/scripts/pr_lifecycle.py
+.csarc/scripts/pr_lifecycle*.py
 .csarc/scripts/pre-commit（只在舊版啟用 `enable_precommit` 時存在；新版不再產生）
 .csarc/scripts/promotion_gate.py
 .csarc/scripts/publish-release

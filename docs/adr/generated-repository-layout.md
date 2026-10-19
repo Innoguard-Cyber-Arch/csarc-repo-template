@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-21
-- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）
+- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）、[#1177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1177)（2026-10-19 補充 hosted 專用 sibling 與 payload 餘裕提醒）
 - **實作 PR：**[#860](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/860)
 
 ## 問題與限制
@@ -103,6 +103,7 @@ typescript/tests/index.test.ts
 # path | rendered when
 .csarc/docs/documentation-policy.md | documentation_mode != 'off'
 .csarc/docs/milestone-description.md | 'milestones' in lifecycle
+.csarc/scripts/authenticate_dependabot_hosted.py | verification_mode == 'hosted'
 .csarc/scripts/build-repo-site | documentation_mode == 'template-and-content'
 .csarc/scripts/build_repo_site.py | documentation_mode == 'template-and-content'
 .csarc/scripts/check-governance-drift | 'governance-drift' in scheduled_checks
@@ -115,7 +116,7 @@ typescript/tests/index.test.ts
 .csarc/scripts/check-trusted-verification | verification_mode == 'hosted'
 .csarc/scripts/converge-release-tag | release_ownership == 'csarc-owned'
 .csarc/scripts/detect-open-milestone | verification_mode == 'hosted'
-.csarc/scripts/install-syft | release_ownership == 'csarc-owned'
+.csarc/scripts/pr_lifecycle_hosted.py | verification_mode == 'hosted'
 .csarc/scripts/publish-release | release_ownership == 'csarc-owned'
 .csarc/scripts/release_bundle.py | release_ownership == 'csarc-owned'
 .csarc/scripts/release_candidate.py | release_ownership == 'csarc-owned'
@@ -124,6 +125,7 @@ typescript/tests/index.test.ts
 .csarc/scripts/repo_site_blocks.py | documentation_mode == 'template-and-content'
 .csarc/scripts/request-reviewer | verification_mode == 'hosted'
 .csarc/scripts/spec_to_issue.py | verification_mode == 'hosted' or documentation_mode != 'off'
+.csarc/scripts/sync_milestone_state_hosted.py | verification_mode == 'hosted'
 .csarc/scripts/sync_work_item_metadata.py | verification_mode == 'hosted'
 .csarc/scripts/validate-issue-policy | verification_mode == 'hosted' and 'issues' in lifecycle
 .csarc/scripts/verification_evidence.py | verification_mode == 'hosted'
@@ -158,6 +160,13 @@ typescript/tests/index.test.ts
 - 生成專案的共用模組可以比 root 少：已退役的功能（Actions quota fallback）、只有模板 repository 使用的路由，以及沒有生成專案 caller 的子命令（例如 `promotion_gate.py prepare`／`finalize`／`verify-main`、`delivery_sync.py reconcile`、`release_policy.py` 的 boundary 指令、`verification_cost.py report`）只存在 root。生成副本只能刪除 root 程式碼；保留的每個頂層定義都必須與 root 同名定義一致，例外逐一列在 `tests/test_generated_module_pruning.py` 並附理由。
 - 一個 root 模組可以在生成專案拆成依選項 render 的檔案：`release_policy.py` 只保留每個專案的 CLI 都會執行的 capability `preflight`，CSARC 發版指令放在只有 `csarc-owned` render 的 `release_candidate.py`，由 `release_policy.py` 的同一組命令列轉交。
 - 只由 hosted workflow 或 hosted PR policy 呼叫的 `check-trusted-verification`、`verification_evidence.py` 與 `detect-open-milestone` 只在 `verification_mode: hosted` render。依分支名稱就會到達的 Milestone 路由（`dev/m*`、`promote/m*`）不依 `lifecycle` 移除，因為 local 與只開 `issues` 的專案仍可能使用它們。
+
+### 恢復 payload 餘裕（#1177）
+
+- 共用模組中只有 hosted 會執行的部分拆到只在 `verification_mode: hosted` render 的同名 sibling：`pr_lifecycle_hosted.py`（hosted check run、可信 `verify` evidence 與 hosted Dependabot eligibility 的讀取）、`sync_milestone_state_hosted.py`（PR／merge queue 的 `Milestone approval`、scope 與 standalone Issue approval gate、work-item reconciliation）與 `authenticate_dependabot_hosted.py`（hosted Dependabot workflow 的命令列）。原模組保留同名轉交函式與完整命令列，第一次呼叫時才載入 sibling；local 專案從不呼叫這些函式。`tests/test_generated_module_pruning.py` 逐一列出轉交的名稱。
+- 四個 pinned 工具安裝器與 Syft 安裝器合併成一支 `install-tool <tool>`，版本、digest 與 cache 路徑不變。
+- 生成專案從不 render `verify-template.sh`，生成副本因此不保留只檢查模板 repository toolchain 的程式碼。
+- `scripts/generated_payload.py` 在任一 fixture 距離 `Targets` 剩不到 1 個檔案或 20 KB 時印出 `WARNING`；提醒不改變 `Targets`，也不改變 exit status。
 
 `scripts/generated_payload.py` 量測 #1058 `Targets` 的 fixture；`tests/test_generated_payload.py` 斷言每個量測不超過記錄的上限，上限只能下降，不放寬 `Targets`。2026-10-15 重新核准後，`Targets` 只有檔案數與總 bytes：檔案數上限等於 `Targets`；bytes 上限先記錄 #1129 的實測值，由 #1081 取代 generated 文件時降到 `Targets`。`.csarc/scripts` 支數、腳本行數與 workflow 數仍會量測並印出，但只供參考，不是預算。
 

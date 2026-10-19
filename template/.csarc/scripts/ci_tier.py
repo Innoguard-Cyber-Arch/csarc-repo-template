@@ -243,8 +243,7 @@ def classify(  # noqa: C901
             full
             or "dependency" in scopes
             or any(
-                Path(path).name
-                in {"install-osv-scanner", "verify-dependencies"}
+                Path(path).name in {"install-tool", "verify-dependencies"}
                 for path in changed_files
             )
         ),
