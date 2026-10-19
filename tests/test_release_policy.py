@@ -1428,6 +1428,110 @@ def test_delivery_title_check_keeps_matching_existing_routes(
     assert beta["version"] == "0.2.0-beta.1"
 
 
+def test_delivery_version_rejects_a_breaking_marker_without_migration_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #1104: `!` without a footer must not publish empty notes."""
+    base_sha, feature_sha = _title_fixture(
+        tmp_path, monkeypatch, "feat!: drop the legacy layout"
+    )
+    for role in ("none", "deferred"):
+        with pytest.raises(ValueError, match="no branch commit records"):
+            verify_delivery_version(
+                tmp_path,
+                base_sha,
+                feature_sha,
+                phase="beta",
+                checkpoint_role=role,
+                pr_title="feat!: drop the legacy layout",
+            )
+    with pytest.raises(SystemExit, match="BREAKING CHANGE: <how to migrate>"):
+        main(
+            [
+                "verify-delivery-version",
+                "--root",
+                str(tmp_path),
+                "--base-sha",
+                base_sha,
+                "--head-sha",
+                feature_sha,
+                "--phase",
+                "beta",
+                "--checkpoint-role",
+                "deferred",
+                "--pr-title",
+                "feat!: drop the legacy layout",
+            ]
+        )
+    # A breaking title over non-breaking commits needs the footer too, and
+    # an empty footer carries no migration text.
+    git(tmp_path, "checkout", "-q", "-b", "empty", base_sha)
+    commit_change(tmp_path, "x", "feat: add x\n\nBREAKING CHANGE:\n")
+    empty_sha = git(tmp_path, "rev-parse", "HEAD")
+    for title in ("feat!: add x", "feat: add x"):
+        with pytest.raises(ValueError, match="no branch commit records"):
+            verify_delivery_version(
+                tmp_path,
+                base_sha,
+                empty_sha,
+                phase="beta",
+                checkpoint_role="deferred",
+                pr_title=title,
+            )
+
+    git(tmp_path, "checkout", "-q", "work")
+    commit_change(
+        tmp_path,
+        "notes",
+        "docs: record the migration\n\nBREAKING CHANGE: move layout/ to\n"
+        "src/ before upgrading\nCo-Authored-By: A <a@example.invalid>",
+    )
+    documented_sha = git(tmp_path, "rev-parse", "HEAD")
+    deferred = verify_delivery_version(
+        tmp_path,
+        base_sha,
+        documented_sha,
+        phase="beta",
+        checkpoint_role="deferred",
+        pr_title="feat!: drop the legacy layout",
+    )
+    assert deferred["status"] == "deferred"
+    # Non-breaking work is unaffected by the migration check.
+    git(tmp_path, "checkout", "-q", "-b", "plain", base_sha)
+    commit_change(tmp_path, "y", "fix: repair y")
+    plain_sha = git(tmp_path, "rev-parse", "HEAD")
+    assert (
+        verify_delivery_version(
+            tmp_path,
+            base_sha,
+            plain_sha,
+            phase="beta",
+            checkpoint_role="deferred",
+            pr_title="fix: repair y",
+        )["status"]
+        == "deferred"
+    )
+
+
+def test_breaking_notes_read_every_footer_and_stop_at_trailers() -> None:
+    """Footers end at blank lines or the next token, one note per footer."""
+    notes = MODULE["_breaking_notes"]
+    assert notes("BREAKING CHANGE: run\n  csarc update\nRefs: #1") == [
+        "run csarc update"
+    ]
+    squash = (
+        "BREAKING CHANGE: clients must call /v2\n"
+        "BREAKING-CHANGE: the old flag is gone\n\n"
+        "CSARC-Evidence: https://example.invalid\nCSARC-Trust: github-hosted"
+    )
+    assert notes(squash) == [
+        "clients must call /v2",
+        "the old flag is gone",
+    ]
+    assert notes("BREAKING CHANGE:\n\nCo-Authored-By: A") == []
+    assert notes("body only") == []
+
+
 def test_delivery_version_rejects_a_stale_release_worthy_branch(
     tmp_path: Path,
 ) -> None:
@@ -2966,3 +3070,31 @@ def test_breaking_candidate_writes_migration_notes(tmp_path: Path) -> None:
     assert "run csarc update with CLI 0.5.0 or later." in entry
     assert "no BREAKING CHANGE footer was recorded" in entry
     assert "### Bug Fixes" not in entry
+
+
+def test_squashed_breaking_footers_reach_the_migration_notes(
+    tmp_path: Path,
+) -> None:
+    """Issue #1104: a squash body's footers become the migration bullets."""
+    init_maturity_repo(tmp_path, "early", "0.4.2")
+    squash = commit_change(
+        tmp_path,
+        "a",
+        "feat!: drop the legacy layout (#7)\n\n"
+        "BREAKING CHANGE: move layout/ to src/ before upgrading\n"
+        "BREAKING-CHANGE: rerun csarc update\n\n"
+        "CSARC-Evidence: https://example.invalid/pull/7#issuecomment-1\n"
+        "CSARC-Trust: github-hosted",
+    )
+    commit_change(tmp_path, "b", "fix: repair a typo")
+
+    prepare_release_candidate(tmp_path, "HEAD", phase="beta")
+
+    changelog = (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+    entry = changelog.split("## [0.5.0-beta.1]", 1)[1].split("\n## ", 1)[0]
+    short = squash[:7]
+    assert f"* {short}: move layout/ to src/ before upgrading" in entry
+    assert f"* {short}: rerun csarc update" in entry
+    assert "CSARC" not in entry.split("### Migration notes", 1)[1]
+    assert "no BREAKING CHANGE footer was recorded" not in entry
+    assert "* fix: repair a typo" in entry

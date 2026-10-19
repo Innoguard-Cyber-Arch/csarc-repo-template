@@ -63,7 +63,8 @@ COMMENT_LOCATOR = re.compile(
     r"#issuecomment-(?P<comment>[1-9][0-9]*)"
 )
 TRAILER_LINE = re.compile(r"^(CSARC-[A-Za-z0-9-]+): (.+)$")
-BREAKING_FOOTER = re.compile(r"^BREAKING[ -]CHANGE:")
+BREAKING_FOOTER = re.compile(r"^(BREAKING[ -]CHANGE):[ \t]*(.*)$")
+FOOTER_TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9-]*(?:: | #)")
 ANSWER_COMMIT = re.compile(r"(?m)^_commit:[ \t]*['\"]?([^'\"\s]*)['\"]?[ \t]*$")
 NOT_FOUND = re.compile(r"\(HTTP 404\)\s*$")
 SUMMARY_MARKER = "csarc-merge-evidence: v1"
@@ -392,13 +393,29 @@ def build_trailers(
 
 
 def breaking_footers(messages: Iterable[str]) -> list[str]:
-    """Collect each `BREAKING CHANGE:` footer line from the PR commits."""
+    """Collect each `BREAKING CHANGE:` footer from the PR commits.
+
+    A footer keeps its continuation lines until a blank line or the next
+    footer token, joined into one line, so a multi-line migration note
+    survives the squash whole (Issue #1104).
+    """
     footers: list[str] = []
     for message in messages:
-        for line in message.splitlines():
+        current: list[str] | None = None
+        for line in [*message.splitlines(), ""]:
             stripped = line.strip()
-            if BREAKING_FOOTER.match(stripped) and stripped not in footers:
-                footers.append(stripped)
+            match = BREAKING_FOOTER.match(stripped)
+            if current is not None and (
+                not stripped or match or FOOTER_TOKEN.match(stripped)
+            ):
+                footer = " ".join(" ".join(current).split())
+                if footer not in footers:
+                    footers.append(footer)
+                current = None
+            if match:
+                current = [f"{match.group(1)}:", match.group(2)]
+            elif current is not None:
+                current.append(stripped)
     return footers
 
 
