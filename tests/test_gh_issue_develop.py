@@ -66,3 +66,27 @@ def test_rejects_zero_leading_zero_and_non_numeric(
     assert result.returncode == 1
     assert "provide an Issue number or GitHub Issue URL" in result.stderr
     assert not (tmp_path / "gh.log").exists()
+
+
+def test_no_shell_case_glob_requires_two_digits() -> None:
+    # A `[1-9][0-9]*)` case pattern without a lone `[1-9]` skips 1-9.
+    offenders = []
+    for directory in (
+        ROOT / "scripts",
+        ROOT / "template" / ".csarc" / "scripts",
+    ):
+        for path in sorted(directory.iterdir()):
+            if not path.is_file() or path.suffix == ".py":
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for number, line in enumerate(text.splitlines(), 1):
+                stripped = line.strip()
+                if not stripped.endswith(")") or "[[" in stripped:
+                    continue
+                alternatives = stripped[:-1].split("|")
+                if (
+                    "[1-9][0-9]*" in alternatives
+                    and "[1-9]" not in alternatives
+                ):
+                    offenders.append(f"{path.relative_to(ROOT)}:{number}")
+    assert offenders == []
