@@ -949,8 +949,18 @@ result。Execute step 名稱在 trusted executor 執行時附上 `executor=trust
 
 限制：同一 job 內 candidate 測試碼仍與 trusted 入口共用 GitHub-hosted VM，trusted executor 防的是「改 gate 讓
 自己通過」，不是對惡意測試碼的 sandbox；保護仍靠 read-only `permissions`、不帶 secrets、`persist-credentials:
-false` 與人工審查。`release/v*` 的「Validate the guided release candidate」仍執行 candidate 的
-`scripts/verify-release-candidate`（read-only token），留待後續 Issue 處理。
+false` 與人工審查。
+
+`release/v*` 進 `main` 的 guided release candidate 走同一個邊界（#1106）。checkout candidate 之前，
+`trusted_executor.py prepare --control-set release` 從 trusted base 複製 `scripts/verify-release-candidate` 與同目錄
+所有 Python module，同樣設成唯讀並記下 manifest。「Validate the guided release candidate」是唯一拿到 read-only
+`GH_TOKEN` 的 release step：它排在任何 candidate code 執行之前，先比對 manifest，再以
+`CSARC_RELEASE_SUBJECT_ROOT` 指向 candidate checkout 執行 trusted 副本；release follow-up 與版本重算都由 trusted
+module 讀 candidate tree，candidate 改自己的驗證 script 不會改變結果，base 沒有 staged 副本時直接失敗。打包會執行
+candidate 的 build code，所以拆到 Execute 之後的「Package the guided release candidate」，用 trusted
+`release_bundle.py --root` 在 exact candidate 的乾淨 worktree 打包，這個 step 不帶 token。兩個 step 都屬於同一個
+`verify` job，不新增 required check。同一次修正也讓 `verify-release-candidate` 的檢查改在一般 subshell 執行：
+原本包在 `if ( ... )` 條件裡，Bash 會忽略 `set -e`，只有最後一個指令的失敗才算數。
 
 `verify` 的 job-level guard 在 runner 排程前只排除 Draft PR 活動。轉成 Ready、非 Draft 的新 head／`edited`、
 任何 `labeled`／`unlabeled`、merge queue 與手動執行都會啟動並回報名為 `verify` 的 check。這個 guard 只節省非必要

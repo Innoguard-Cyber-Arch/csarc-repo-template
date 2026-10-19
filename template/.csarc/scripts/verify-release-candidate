@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Issue #1106: hosted CI runs a trusted-base copy of this script staged
+# outside the candidate checkout and names that checkout through
+# CSARC_RELEASE_SUBJECT_ROOT. Every check below loads its Python from this
+# script's own directory and only reads the candidate tree as data.
+repo_root="${CSARC_RELEASE_SUBJECT_ROOT:-$(cd "$script_dir/../.." && pwd)}"
+# Packaging runs candidate build code, so hosted CI defers it to a later
+# step without a token (CSARC_RELEASE_CANDIDATE_BUNDLE=false here).
+build_bundle="${CSARC_RELEASE_CANDIDATE_BUNDLE:-true}"
 candidate_json="${1:?Usage: verify-release-candidate PR_JSON_FILE}"
 status_url="${STATUS_URL:-$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID}"
 publish_candidate_status="${CSARC_PUBLISH_CANDIDATE_STATUS:-true}"
@@ -29,7 +37,11 @@ publish_status pending 'Validating the generated version commit'
 status_file="$(mktemp "$RUNNER_TEMP/release-candidate-status.XXXXXX")"
 status_description="candidate ${candidate_sha:0:12}: failure"
 status=failure
-if (
+# Issue #1106: run the checks as a plain subshell. Inside an `if (...)`
+# condition Bash ignores `set -e`, so a failed check before the last
+# command could never fail the candidate.
+set +e
+(
   set -euo pipefail
   pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number")"
   base_sha="$(jq -r '.base.sha' <<<"$pr")"
@@ -69,7 +81,7 @@ if (
     "$candidate_sha" "$source_sha" "$base_sha" \
     >"$status_file"
 
-  python3 "$candidate_worktree/.csarc/scripts/release_policy.py" verify-release-follow-up \
+  python3 "$script_dir/release_policy.py" verify-release-follow-up \
     --repo "$GITHUB_REPOSITORY" \
     --head "$head_ref" \
     --head-repo "$(jq -r '.head.repo.full_name' <<<"$pr")" \
@@ -81,16 +93,23 @@ if (
     --root "$candidate_worktree"
 
   cd "$candidate_worktree"
-  python3 .csarc/scripts/release_policy.py verify-candidate-version \
+  python3 "$script_dir/release_policy.py" verify-candidate-version \
+    --root "$candidate_worktree" \
     --base-sha "$base_sha"
   version="$(jq -r '.["."]' .csarc/release-please-manifest.json)"
   if [[ "$actor" != 'github-actions[bot]' ]]; then
     test "$head_ref" = "release/v$version"
     test "$(jq -r .title <<<"$pr")" = "chore(main): release $version"
   fi
-  python3 .csarc/scripts/release_bundle.py candidate \
-    --output "$RUNNER_TEMP/release-candidate-assets"
-); then
+  if [[ "$build_bundle" == true ]]; then
+    python3 "$script_dir/release_bundle.py" candidate \
+      --root "$candidate_worktree" \
+      --output "$RUNNER_TEMP/release-candidate-assets"
+  fi
+)
+checks_status=$?
+set -e
+if [[ "$checks_status" -eq 0 ]]; then
   status=success
 fi
 if [[ -s "$status_file" ]]; then

@@ -7,6 +7,20 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.36.0-beta.1] - 2026-10-19
+
+### Features
+
+* feat(project): target the completion date once an Issue is done (39d3e7d)
+
+### Bug Fixes
+
+* fix(scripts): accept single-digit Issue numbers in gh-issue-develop (3c60ee1)
+* fix(milestone): accept tracker sections from the Issue form (8a15971)
+* fix(release): keep breaking change footers whole through squash merges (772b660)
+* fix(release): graduate a formal 0.x line to 1.0.0 (ea99446)
+* fix(ci): validate guided release candidates from the trusted base (87ac0a8)
+
 ## [0.35.3] - 2026-10-19
 
 ### Bug Fixes

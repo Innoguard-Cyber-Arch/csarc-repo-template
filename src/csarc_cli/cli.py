@@ -3149,6 +3149,7 @@ def update_required_actions(
     ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
     writer_moves: Sequence[Mapping[str, str]] = (),
     retained_uses: Sequence[Mapping[str, str]] = (),
+    product_calls: Sequence[Mapping[str, str]] = (),
     conflict_uses: Mapping[str, Sequence[str]] = MappingProxyType({}),
 ) -> list[dict[str, object]]:
     """Derive the update required actions this release can evaluate."""
@@ -3248,21 +3249,48 @@ def update_required_actions(
     )
     actions.extend(reviewer_assignment_actions(files, settings))
     uses = retained_uses_by_script(retained_uses)
+    calls = retained_uses_by_script(product_calls)
     actions.extend(
-        retained_use_action(path, uses[path])
-        if path in uses
-        else {
-            "blocking": False,
-            "command": None,
-            "kind": "retire-modified",
-            "message": "The new release no longer renders this file, but it "
-            "differs from the trusted old render; it is kept. Delete it "
-            "yourself once its changes are no longer needed.",
-            "subject": path,
-        }
+        with_product_calls(
+            retained_use_action(path, uses[path])
+            if path in uses
+            else {
+                "blocking": False,
+                "command": None,
+                "kind": "retire-modified",
+                "message": "The new release no longer renders this file, but "
+                "it differs from the trusted old render; it is kept. Delete it "
+                "yourself once its changes are no longer needed.",
+                "subject": path,
+            },
+            calls.get(path, ()),
+        )
         for path in files.retained
     )
     return actions
+
+
+def with_product_calls(
+    action: dict[str, object], calls: Sequence[Mapping[str, str]]
+) -> dict[str, object]:
+    """Name the product checks a kept legacy script runs (Issue #1169).
+
+    Retiring the script (``take-new`` or deleting it) stops CSARC verify
+    from running the checks the product added to it, so the row lists
+    them and points to the product verification hook.
+    """
+    if not calls:
+        return action
+    listed = "; ".join(f"`{row['call']}`" for row in calls)
+    return {
+        **action,
+        "message": f"{action['message']} It also runs product checks the "
+        f"new verifier does not run: {listed}. Before retiring it, move "
+        "them in a product preparation commit into the product verification "
+        "hook (project_verification_hook, or scripts/verify-product when no "
+        "hook is set) and run csarc update --check again; otherwise CSARC "
+        "verify silently stops running them.",
+    }
 
 
 def reviewer_assignment_actions(
@@ -3542,6 +3570,9 @@ def lifecycle_report_model(  # noqa: C901
             conflict_uses=conflict_uses,
             writer_moves=update_release_writer_moves(plan.update),
             retained_uses=update_retained_uses(plan.update),
+            product_calls=update_retained_uses(
+                plan.update, "retained_product_calls"
+            ),
         )
     if adoption is not None:
         applicable = adoption.get("applicable") is True
@@ -10867,11 +10898,57 @@ def retained_script_uses(
     return rows
 
 
-def update_retained_uses(
-    update: Mapping[str, object] | None,
+def retained_product_calls(
+    target: Path,
+    old_stage: Path,
+    retained: Sequence[str],
+    generated: Collection[str],
 ) -> list[dict[str, str]]:
-    """Return the recorded retained-script uses from one plan."""
-    rows = (update or {}).get("retained_uses")
+    """Return the product checks a product added to a kept legacy script.
+
+    A kept ``retire-modified`` script such as a legacy ``scripts/verify``
+    may run product tests the product added to it; once the script is
+    retired, CSARC verify no longer runs them (Issue #1169). A call is a
+    line the trusted old render (``old_stage``) lacks that runs a test
+    runner or a product file: one that exists in the target but neither
+    render (``generated``) produced.
+    """
+
+    def is_product_file(name: str) -> bool:
+        path = target / name
+        return (
+            name not in generated
+            and ".." not in Path(name).parts
+            and path.is_file()
+            and not path.is_symlink()
+        )
+
+    rows: list[dict[str, str]] = []
+    for script in sorted(set(retained)):
+        path = target / script
+        if path.is_symlink() or not path.is_file():
+            continue
+        content = path.read_bytes()
+        if not (path.stat().st_mode & 0o111 or content.startswith(b"#!")):
+            continue
+        old = old_stage / script
+        old_content = (
+            old.read_bytes() if old.is_file() and not old.is_symlink() else None
+        )
+        rows.extend(
+            {"call": call, "script": script}
+            for call in file_transition.added_product_calls(
+                script, content, old_content, is_product_file
+            )
+        )
+    return rows
+
+
+def update_retained_uses(
+    update: Mapping[str, object] | None, key: str = "retained_uses"
+) -> list[dict[str, str]]:
+    """Return the recorded retained-script rows under ``key`` in one plan."""
+    rows = (update or {}).get(key)
     if not isinstance(rows, list):
         return []
     return [
@@ -12327,6 +12404,14 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                 layout_moves, {*planning.retained, *planning.shims}
             ),
         )
+        # A kept legacy script may run product checks the new verifier
+        # never runs; list them so they move to the hook (Issue #1169).
+        product_calls = retained_product_calls(
+            target,
+            old_stage,
+            planning.retained,
+            {*rendered, *stage_files},
+        )
         # take-new decisions resolve to the reviewed new-side render, with
         # the template pins the apply aligns to kept newer product pins
         # already raised, so conflicts/new is what take-new writes (#1153).
@@ -12365,6 +12450,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             "ignored_payload": ignored_payload,
             "release_writer_moves": writer_moves,
             "retained_uses": retained_uses,
+            "retained_product_calls": product_calls,
             "answers_changed": answers_changed,
             "capabilities_changed": capabilities_changed,
             "planning": planning.as_dict(),
