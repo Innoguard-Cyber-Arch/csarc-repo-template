@@ -3157,6 +3157,7 @@ def update_required_actions(
     retained_uses: Sequence[Mapping[str, str]] = (),
     product_calls: Sequence[Mapping[str, str]] = (),
     conflict_uses: Mapping[str, Sequence[str]] = MappingProxyType({}),
+    reviewer_answer: str | None = None,
 ) -> list[dict[str, object]]:
     """Derive the update required actions this release can evaluate."""
     live = {} if observed is None else observed
@@ -3257,7 +3258,9 @@ def update_required_actions(
         for item in pin_items
         if item.get("reason") == action_pin_preflight.REASON_PRODUCT_PIN_NEWER
     )
-    actions.extend(reviewer_assignment_actions(files, settings))
+    actions.extend(
+        reviewer_assignment_actions(files, settings, reviewer_answer)
+    )
     uses = retained_uses_by_script(retained_uses)
     calls = retained_uses_by_script(product_calls)
     actions.extend(
@@ -3303,43 +3306,118 @@ def with_product_calls(
     }
 
 
-def reviewer_assignment_actions(
+def reviewer_assignment_changes(
     files: Plan, settings: Sequence[Mapping[str, object]]
+) -> bool:
+    """Return whether the plan retires the reviewer list (#1157)."""
+    return any(
+        row["key"] == governance_migration.REVIEWERS_KEY
+        and row["class"] == "retired"
+        for row in settings
+    ) or governance_migration.REVIEWERS_FILE in {
+        *files.remove,
+        *files.delete,
+        *files.retained,
+    }
+
+
+def reviewer_assignment_actions(
+    files: Plan,
+    settings: Sequence[Mapping[str, object]],
+    answer: str | None = None,
 ) -> list[dict[str, object]]:
     """Ask the owner to confirm the reviewer assignment change (#1157).
 
     Retiring ``reviewers`` or ``.github/REVIEWERS`` changes who reviews
     pull requests. The setting row stays ``retired`` and its note explains
     the new behavior; this row asks the owner to confirm it, the way a
-    ``widened`` row needs an explicit owner decision.
+    ``widened`` row needs an explicit owner decision. ``--data
+    reviewers=accept`` resolves the row; ``pending`` keeps it open and
+    says so (Issue #1168).
     """
     key = governance_migration.REVIEWERS_KEY
-    path = governance_migration.REVIEWERS_FILE
+    if answer == governance_migration.REVIEWERS_ACCEPT or not (
+        reviewer_assignment_changes(files, settings)
+    ):
+        return []
     retired = [
         row
         for row in settings
         if row["key"] == key and row["class"] == "retired"
     ]
-    if not retired and path not in {
-        *files.remove,
-        *files.delete,
-        *files.retained,
-    }:
-        return []
     before = retired[0]["before"] if retired else None
+    if answer == governance_migration.REVIEWERS_PENDING:
+        lead = (
+            "Reviewer assignment changes and the owner's confirmation is "
+            "pending (--data reviewers=pending); keep the update pull "
+            "request in draft until the owner decides: "
+        )
+    else:
+        lead = (
+            "Reviewer assignment changes and the owner must confirm it "
+            "before --finalize-plan, which needs --data reviewers=accept "
+            "(owner confirmed) or --data reviewers=pending (owner not "
+            "available): "
+        )
     return [
         {
             "blocking": False,
-            "command": None,
+            "command": "csarc update --data reviewers=accept",
             "kind": "setting-decision",
-            "message": "Reviewer assignment changes and the owner must "
-            "confirm it before --finalize-plan: "
+            "message": lead
             + governance_migration.reviewers_note(before).removeprefix(
                 "Retired; "
             ),
             "subject": key,
         }
     ]
+
+
+def reviewers_answer(explicit_data: dict[str, str]) -> str | None:
+    """Remove and return the one-time ``--data reviewers`` answer (#1168).
+
+    The retired key is never rendered or saved; it only records the
+    owner's answer to the reviewer assignment change.
+    """
+    answer = explicit_data.pop(governance_migration.REVIEWERS_KEY, None)
+    if answer is not None and answer not in (
+        governance_migration.REVIEWERS_ANSWERS
+    ):
+        raise CliError(
+            "--data reviewers must be accept (the owner confirmed the "
+            "reviewer assignment change) or pending (the owner is not "
+            "available)."
+        )
+    return answer
+
+
+def check_reviewers_answer(
+    files: Plan,
+    settings: Sequence[Mapping[str, object]],
+    answer: str | None,
+    *,
+    finalize: bool,
+) -> None:
+    """Refuse a reviewers answer the plan does not need or lacks (#1168).
+
+    ``--finalize-plan`` records the owner's answer, so it refuses a plan
+    that retires the reviewer list without ``--data reviewers``.
+    """
+    changes = reviewer_assignment_changes(files, settings)
+    if answer is not None and not changes:
+        raise CliError(
+            "--data reviewers answers a reviewer assignment change, and "
+            "this update does not retire the reviewer list; leave it out."
+        )
+    if finalize and changes and answer is None:
+        raise CliError(
+            "This update retires the reviewer list, so --finalize-plan "
+            "needs the owner's answer: --data reviewers=accept once the "
+            "owner confirms the new reviewer assignment, or --data "
+            "reviewers=pending when the owner is not available (keep the "
+            "update pull request in draft until the owner decides). The "
+            "target was not changed."
+        )
 
 
 def retained_uses_by_script(
@@ -3530,6 +3608,7 @@ def lifecycle_report_model(  # noqa: C901
     ] = MappingProxyType({}),
     ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
     conflict_uses: Mapping[str, Sequence[str]] = MappingProxyType({}),
+    reviewer_answer: str | None = None,
 ) -> dict[str, object]:
     """Build the single SPEC-008 report object for one adopt or update plan.
 
@@ -3583,6 +3662,7 @@ def lifecycle_report_model(  # noqa: C901
             product_calls=update_retained_uses(
                 plan.update, "retained_product_calls"
             ),
+            reviewer_answer=reviewer_answer,
         )
     if adoption is not None:
         applicable = adoption.get("applicable") is True
@@ -12215,6 +12295,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     saved_settings = load_saved_settings(target)
     saved_answers = dict(saved_settings.answers)
     explicit_data = parse_settings_data(args.data)
+    reviewer_answer = reviewers_answer(explicit_data)
     decisions = {
         **saved_settings.decisions,
         **explicit_decisions(explicit_data),
@@ -12591,7 +12672,15 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         generated_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
         plan_path=report_directory / UPDATE_PLAN_BASENAME,
         before=current_answers,
-        explicit=tuple(explicit_data),
+        # An accepted reviewer change marks the retired row explicit.
+        explicit=(
+            *explicit_data,
+            *(
+                (governance_migration.REVIEWERS_KEY,)
+                if reviewer_answer == governance_migration.REVIEWERS_ACCEPT
+                else ()
+            ),
+        ),
         previous=current_revision,
         target_head=report_head,
         target_changes=report_changes,
@@ -12608,6 +12697,13 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                 )
             ),
         ),
+        reviewer_answer=reviewer_answer,
+    )
+    check_reviewers_answer(
+        files,
+        cast(list[Mapping[str, object]], update_report["settings"]),
+        reviewer_answer,
+        finalize=args.finalize_plan,
     )
     if args.finalize_plan:
         print_plan(decided_summary_plan(plan, args.decision))

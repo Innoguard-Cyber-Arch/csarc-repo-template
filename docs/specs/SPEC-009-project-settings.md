@@ -136,7 +136,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 | `release_settings_owner` | — | Release 衍生觀察 |
 | `release_workflow` | — | Release 衍生觀察 |
 | `review` | `admin_bypass` | `solo` 等價 `always`，`peer` 等價 `off` |
-| `reviewers` | — | 輪派由 live `maintain`／`admin` collaborator 承接 |
+| `reviewers` | — | 輪派由 live `maintain`／`admin` collaborator 承接；update 以一次性 `--data reviewers=accept` 或 `pending` 記錄擁有者對指派改變的回答，不寫入設定（#1168） |
 | `use_reusable_workflow` | — | 退役 |
 | `work_item_mapping_review` | — | 改為 adopt 的一次性輸入，不寫入設定 |
 | `workflow_ref` | — | 退役 |

@@ -45,6 +45,9 @@ DATA_KEYS = (
     | set(settings_schema.LIVE_KEYS)
     | set(settings_schema.ONE_TIME_INPUTS)
 )
+# The retired ``reviewers`` key is update's one-time owner answer to the
+# reviewer assignment change (Issue #1168); it is never rendered or saved.
+HINT_DATA_KEYS = DATA_KEYS | {governance_migration.REVIEWERS_KEY}
 RETIRED = set(settings_schema.RETIRED_SETTINGS) - set(
     settings_schema.ONE_TIME_INPUTS
 )
@@ -352,7 +355,7 @@ def test_cli_hints_suggest_only_current_keys_and_flags() -> None:
     for path in HINT_SOURCES:
         text = path.read_text(encoding="utf-8")
         for key in re.findall(r"--data[ =]`?([a-z_]+)=", text):
-            assert key in DATA_KEYS, (path.name, key)
+            assert key in HINT_DATA_KEYS, (path.name, key)
         for hint in re.findall(
             r"csarc (?:init|adopt|update|status)\b[^\"'`\n]*", text
         ):
