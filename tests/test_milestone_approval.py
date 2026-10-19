@@ -947,3 +947,132 @@ def test_preflight_never_raises_when_the_hygiene_check_is_unavailable(
 
     assert result.allowed
     assert "Stale delivery branch check unavailable" in result.summary
+
+
+# Issue #1160: the tracker Issue form renders every field as an H3 heading,
+# while `scripts/create-milestone` writes H2 headings.
+_FORM_TRACKER_BODY = (
+    "### Proposal\n\nShip the reviewed batch.\n\n"
+    "### Release level / 發布層級\n\nstable\n\n"
+    "### Completion evidence\n\n<!-- Fill after release. -->\n\n"
+    "### Early termination\n\n<!-- Fill only when stopped. -->\n\n"
+    "### Promotion\n\n<!-- Fill when ready to promote. -->\n\n"
+    "### References\n\n_No response_\n"
+)
+# The Milestone 19 tracker (#1180) shape: H2 sections with H3 subsections
+# nested inside Proposal, including a lookalike `### Promotion`.
+_NESTED_TRACKER_BODY = (
+    "## Proposal\n\n"
+    "### Release level / 發布層級\n\nbeta\n\n"
+    "### Problem\n\nShip the reviewed batch.\n\n"
+    "### Checkpoints\n\n- Checkpoint A (beta): #81; terminal #81\n\n"
+    "### Checkpoint A — Scope\n\n- #81 delivers the batch.\n\n"
+    "#### Detail\n\nNested deeper still.\n\n"
+    "### Promotion\n\n- [ ] Lookalike nested in Proposal.\n\n"
+    "### References\n\n- #1058 preserved.\n\n"
+    "## Completion evidence\n\n<!-- Fill after release. -->\n\n"
+    "## Early termination\n\n<!-- Fill only when stopped. -->\n\n"
+    "## Promotion\n\n- [x] All other Milestone Issues are closed.\n"
+)
+
+
+def _with_body(body: str, *comments: dict[str, Any]) -> dict[str, Any]:
+    value = snapshot(*comments)
+    value["issues"][0]["body"] = body
+    value["issues"].append(
+        {"number": 81, "title": "Work", "milestone": {"number": 8}}
+    )
+    return value
+
+
+@pytest.mark.parametrize(
+    "body",
+    [snapshot()["issues"][0]["body"], _FORM_TRACKER_BODY, _NESTED_TRACKER_BODY],
+    ids=["create-milestone-h2", "issue-form-h3", "nested-h3-in-h2"],
+)
+def test_tracker_sections_accept_h2_and_h3_headings(
+    body: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both creation paths pass preflight and the approval check (#1160)."""
+    approved = _with_body(body, comment(1, "reviewer", "/milestone approve"))
+    assert tracker_errors(approved) == []
+    assert approval_decision(approved).allowed
+
+    unapproved = _with_body(body)
+    assert not approval_decision(unapproved).allowed
+
+    monkeypatch.setitem(
+        preflight.__globals__, "load_snapshot", lambda repo, number: approved
+    )
+    _stub_stale_branch_report(monkeypatch, _NO_STALE_BRANCHES)
+    assert preflight("acme/project", 8).allowed
+
+    empty = _with_body(body.replace("Ship the reviewed batch.", "<!-- -->"))
+    if body is _NESTED_TRACKER_BODY:
+        # The nested subsections still give Proposal real content.
+        assert tracker_errors(empty) == []
+    else:
+        assert tracker_errors(empty) == [
+            "The lifecycle Issue needs a non-empty Proposal section"
+        ]
+
+
+def test_tracker_section_boundaries_follow_heading_levels() -> None:
+    """R1: same-named H2 or H3 only, ending at a same-or-higher heading."""
+    section = MODULE["_section"]
+
+    # An H3 section stops at the next H3 and never swallows the next field.
+    assert section(_FORM_TRACKER_BODY, "Proposal") == "Ship the reviewed batch."
+    assert section(_FORM_TRACKER_BODY, "Promotion") == (
+        "<!-- Fill when ready to promote. -->"
+    )
+
+    # An H2 section keeps its nested H3/H4 subsections, and an H2 heading
+    # wins over a same-named H3 nested elsewhere.
+    proposal = section(_NESTED_TRACKER_BODY, "Proposal")
+    assert proposal is not None
+    assert "### Checkpoints" in proposal
+    assert "#### Detail" in proposal
+    assert "### References" in proposal
+    assert "## Completion evidence" not in proposal
+    assert section(_NESTED_TRACKER_BODY, "Promotion") == (
+        "- [x] All other Milestone Issues are closed."
+    )
+    assert MODULE["promotion_complete"](_NESTED_TRACKER_BODY)
+    assert not MODULE["promotion_complete"](_FORM_TRACKER_BODY)
+
+    # An H3 section keeps a nested H4 and ends at a higher-level heading.
+    assert section(
+        "### Promotion\n\n#### Note\n\n- [x] a\n## Next\n", "Promotion"
+    ) == ("#### Note\n\n- [x] a")
+
+    # Other levels and merely similar names are never accepted.
+    assert section("#### Proposal\n\nDeep.\n", "Proposal") is None
+    assert section("# Proposal\n\nTop.\n", "Proposal") is None
+    assert section("### Proposal notes\n\nNot it.\n", "Proposal") is None
+
+
+def test_tracker_section_writers_keep_the_heading_level() -> None:
+    """Rewrites of a form-created tracker stay at its own H3 level."""
+    replace = MODULE["_replace_section"]
+    remove = MODULE["_remove_section"]
+    append = MODULE["append_completion_evidence"]
+    url = "https://github.com/acme/project/releases/tag/v1.0.0"
+
+    appended = append(_FORM_TRACKER_BODY, url)
+    assert (
+        f"### Completion evidence\n\n{url}\n\n### Early termination" in appended
+    )
+    assert MODULE["_section"](appended, "Completion evidence") == url
+    assert append(_NESTED_TRACKER_BODY, url).count(url) == 1
+
+    replaced = replace(_FORM_TRACKER_BODY, "Promotion", "- [x] Done.")
+    assert "### Promotion\n\n- [x] Done.\n\n### References" in replaced
+    assert MODULE["promotion_complete"](replaced)
+
+    added = replace(_FORM_TRACKER_BODY, "Reconciliation", "Table.")
+    assert added.endswith("_No response_\n\n## Reconciliation\n\nTable.\n\n")
+    assert remove(added, "Reconciliation") == _FORM_TRACKER_BODY
+    assert "### Early termination" not in remove(
+        _FORM_TRACKER_BODY, "Early termination"
+    )
