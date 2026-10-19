@@ -58,7 +58,7 @@ csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-pla
    - target 必須是乾淨的工作樹。本頁要求的產品準備變更（例如下方的產品 job 搬移、Action pin、ignore 例外、把舊 `scripts/verify` 裡的產品測試搬到產品驗證 hook）以獨立的產品準備 commit 在 `--finalize-plan` 前提交，提交後重新 `--check`；在 PR 逐條列出這些 commit 與依據的章節。
    - `.gitignore` 衝突的報告列會列出 current 沒有、新版有的忽略規則；用 `keep-current` 或以 current 為底的 `custom:<file>` 保留產品 `.gitignore` 時，見下方「`.gitignore` 缺少模板規則」。
    - 產品 ignore 規則（例如 `.gitignore` 的 `data/`）會隱藏新版要放的檔案時，`--check` 以該 ignore 檔為 subject 列出 blocking 的 `file-conflict`，訊息寫出被隱藏的路徑與規則。在該 ignore 檔加上例外（例如 `!.csarc/site/data/`）：它本身是衝突時寫在它的 `custom:<file>` 決定裡，否則以產品 commit 加入後重新 `--check`。`--finalize-plan` 會依決定後的內容再檢查一次，仍會隱藏時拒絕寫入。
-   - 決定若讓保留的檔案繼續引用本次要退役的檔案，`--finalize-plan` 會拒絕；改用 `take-new`、`custom`，或先在產品裡移除那個引用。
+   - 決定若讓保留的檔案繼續引用本次要退役的檔案，`--finalize-plan` 會拒絕；改用 `take-new`、`custom`，或先在產品裡移除那個引用。衝突的 current 內容（例如模板 workflow 裡的產品 job）已引用要退役的檔案時，`--check` 就在該檔的 `file-conflict` 列寫出被引用的檔案；要保留這個行為，依下方「模板 workflow 的衝突裡有產品 job」以產品準備 commit 把產品 job 搬到產品 workflow，重新 `--check` 後該檔改用 `take-new`，被引用的檔案就留給產品。
 5. **`--apply-plan`**：只接受 final plan 路徑，`--to`、`--data`、`--decision` 等會改變輸入的旗標一律拒絕；`--report-dir` 只能等於 final plan 所在資料夾。沒有 `--yes` 時會顯示 plan 並詢問 `Apply this plan? [y/N]`；agent 或沒有終端輸入時要加 `--yes`。套用前重新觀察工具版本與 live facts，任何不同或驗證失敗都會在寫入前停止，target 不變；驗證失敗的訊息寫出失敗的 verify 步驟與原因（`Project verification failed: ...`）。
 6. **commit 與驗證**：套用成功後檢查 diff，commit 到同一個分支，再在這個已 commit、乾淨的 head 執行 `./.csarc/scripts/verify-fast` 與產品原有檢查（本機結果綁定 exact head，未 commit 的結果不算證據），最後開 PR。
 
@@ -158,6 +158,14 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 ### Reviewer 指派改變（`reviewers`）
 
 舊設定的 `reviewers` 與 `.github/REVIEWERS` 已退役：Settings 那一列仍是 `retired`，note 寫出原本的 reviewer、新的指派方式與恢復方式；`Items requiring your decision` 另列一列非 blocking 的 `setting-decision`（subject `reviewers`）。新版本在每個 ready PR 從具 maintain 或 admin 權限、且不是作者的協作者中輪流請求一位 reviewer。這一列和 `widened` 一樣不會讓 `--check` 變成 blocking，但 `--finalize-plan` 前必須由擁有者確認，agent 不能代為接受。要維持原本的 reviewer，只給他們 maintain 或 admin 權限，或用 `--data code_owner=<owners>` 把他們設為 code owner，讓 GitHub 在每個 PR 請求他們審查；在 PR 記錄擁有者的決定。
+
+### 既有 repo 的 README 與 LICENSE
+
+既有 repo（`project_mode=existing`）的 README 與 LICENSE 屬於產品（手冊 5.1、附錄 B.9）。update 不新增 `README.md`、`README.en.md`、`README.zh-tw.md` 或 `LICENSE`，也不改寫已有的這些檔案。
+
+- 沒有 `LICENSE`：報告 Settings 的 `project_license` 為 `custom`、`copyright_holder` 為空，表示授權由產品管理，不會由專案名推導著作權人。verify 依 provenance 記錄的 `custom` 接受沒有 `LICENSE`。
+- 已有 `LICENSE`：原檔保留，不論內容是不是 CSARC 的 starter。
+- 要由 CSARC 加入 starter `LICENSE`：擁有者在 `--check` 與 `--finalize-plan` 都帶 `--data project_license=<proprietary|MIT|Apache-2.0>` 與 `--data copyright_holder=<法定著作權人>`；只帶授權、沒帶著作權人時，update 在寫入前停止。也可以由產品 commit 自行加入 `LICENSE`。
 
 ### 保留的舊檔與過時連結
 

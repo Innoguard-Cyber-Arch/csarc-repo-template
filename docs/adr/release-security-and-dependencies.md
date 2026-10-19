@@ -3,7 +3,7 @@
 - **狀態：**Accepted
 - **日期：**2026-09-01
 - **備註：**#430 candidate 實作；#871 將 Milestone 版本候選併入 promotion PR；#918 以 beta／stable 雙通道與獨立專案成熟度取代四層版本模型；#925 將所有 CSARC-owned 版本候選移入原交付 PR；#996 以事前宣告的 Milestone checkpoint 取代逐件 beta
-- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)、[#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918)、[#925](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/925)、[#996](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/996)
+- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)、[#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918)、[#925](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/925)、[#996](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/996)、[#1068](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1068)、[#1074](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1074)、[#1083](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1083)
 - **實作 PRs：**[#448](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/448)、[#463](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/463)、[#471](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/471)
 
 ## 問題與限制
@@ -85,9 +85,9 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 
 | Repository 類型 | 唯一 release owner | 模板行為 |
 | --- | --- | --- |
-| `csarc-repo-template` root | CSARC | candidate `release.yml` 預計發布模板／CLI 的 GitHub Release 成品；待預設分支實跑證明後才算 active |
+| `csarc-repo-template` root | CSARC | root `release.yml`（`release_trigger: manual`）只發布已在合併 PR 物化並審查的候選，經唯一 writer `scripts/publish-release` 建立 immutable GitHub Release 成品（#1074）；已實際發布到 stable v0.35.2（Milestone 18） |
 | 新生成 repo | 該 repo 內的 CSARC baseline | Copier 產生同一個薄 workflow；版本從該 repo 的 `0.1.0` 獨立開始 |
-| 既有 repo | product owner | Copier 不產生 `release.yml`、不按檔名猜測、不 dispatch 或覆寫既有發布流程 |
+| 既有 repo | 已保存的 `release_ownership`（`csarc-owned`／`product-owned`／`verification-only`，SPEC-009，#1068） | 只有 `csarc-owned` render CSARC `release.yml`；所選的 product-owned Release writer 即使由舊 render 產生也保留為唯一 writer、不退役（#1083，SPEC-008）；沒有已存 owner、唯一 writer 又與舊 template workflow byte-identical 時，update 才改為 `csarc-owned`（#1083）。Copier 不按檔名猜測、不 dispatch 或覆寫產品發布流程 |
 
 這個界線解決 #369 的重複 tag／Release owner 問題。Registry publishing 與 production-side artifact attestation 由 #439 判定零 active 消費者後移除設定面，不因 GitHub Release 啟用就自動取得 token 或 OIDC 權限。
 

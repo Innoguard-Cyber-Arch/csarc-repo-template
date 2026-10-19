@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issues：**[Issue #177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)、[Issue #178](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178)、[Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919)
+- **來源 Issues：**[Issue #177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)、[Issue #178](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178)、[Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919), [#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071), [#1088](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1088), [#1091](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1091)
 - **實作 PRs：**[#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)、[#187](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/187)
 
 ## 問題與限制
@@ -166,7 +166,7 @@ Issue #681 使用者要求：Standard／Ops 分層、雙語鉤稽、簡報式構
 
 **決定**：延續 Issue #681 決定 N，下游 repo-site 仍只包含首頁、安裝與關於三頁；root Journey 不搬到生成專案。所有會發到下游的 Markdown 文件（包含 `AGENTS.md`、README 與 `docs/`）若使用 repo 內相對連結，目的檔案與錨點都必須由同一個生成專案實際產生，不得把中央模板網站或 GitHub blob 頁面當成下游規範來源。
 
-下游 work-item 與 Copier 更新契約由 `docs/csarc.md` 承載；驗證分級、審查、合併資格、Alpha self-merge 與 quota fallback 由 `docs/ci-policy.md` 承載。`AGENTS.md` 與雙語 README 只連到這兩份下游既有文件。生成專案回歸測試會解析這些文件的相對連結，並驗證 Markdown 標題與 HTML `id`／`name` 錨點實際存在。
+下游 work-item 與 Copier 更新契約由 `docs/csarc.md` 承載；驗證分級、審查、合併資格、admin bypass 與 Actions 中斷時的 governance-switch 路線由 `docs/ci-policy.md` 承載（Alpha self-merge 已由 #918 的 `admin_bypass` 取代，quota fallback 已隨 #1071 退役）。`AGENTS.md` 與雙語 README 只連到這兩份下游既有文件。生成專案回歸測試會解析這些文件的相對連結，並驗證 Markdown 標題與 HTML `id`／`name` 錨點實際存在。
 
 ## 2026-09-22 repo-site 改為選配（Issue #900）
 

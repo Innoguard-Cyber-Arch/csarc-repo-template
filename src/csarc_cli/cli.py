@@ -2987,13 +2987,31 @@ CONFLICT_SIDES_DIRECTORY = "conflicts"
 CONFLICT_SIDES = ("base", "current", "new")
 
 
+# The documented remedy when kept content uses a file the plan retires: a
+# product preparation commit moves the product job out of the template file
+# (Issue #1170). Names both language editions of the install guide section.
+PRODUCT_JOB_MOVE_REMEDY = (
+    "move the product job or step that uses it, unchanged, into a "
+    "product-owned workflow (for example .github/workflows/product-ci.yml) "
+    "in a product preparation commit, run csarc update --check again, and "
+    "decide this file with take-new; see docs/install.md "
+    '"模板 workflow 的衝突裡有產品 job" (docs/install.en.md "A template '
+    'workflow conflict that contains product jobs")'
+)
+
+
 def update_conflict_message(
-    path: str, missing_ignore_rules: Sequence[str] = ()
+    path: str,
+    missing_ignore_rules: Sequence[str] = (),
+    retired_uses: Sequence[str] = (),
 ) -> str:
     """Point one update conflict at its sides and its decision (#1147).
 
     An ignore-file conflict also names the template rules the current file
-    lacks, so keeping it does not silently drop them (#1154 AC3).
+    lacks, so keeping it does not silently drop them (#1154 AC3). A
+    conflict whose current content uses a file the plan retires names that
+    use and the product-job move, because ``--finalize-plan`` refuses to
+    keep it (Issue #1170).
     """
     sides = ", ".join(
         f"{CONFLICT_SIDES_DIRECTORY}/{side}/{path}" for side in CONFLICT_SIDES
@@ -3014,7 +3032,39 @@ def update_conflict_message(
             + ", ".join(missing_ignore_rules)
             + "."
         )
+    if retired_uses:
+        message += (
+            " The current file uses "
+            + ", ".join(retired_uses)
+            + ", which this update removes, so --finalize-plan refuses "
+            "keep-current or a custom file that keeps that use. To keep "
+            "that behavior, " + PRODUCT_JOB_MOVE_REMEDY + "."
+        )
     return message
+
+
+def conflict_retired_uses(
+    sides: Mapping[str, Mapping[str, bytes | None]],
+    removals: Sequence[str],
+    moved: Sequence[str] = (),
+) -> dict[str, list[str]]:
+    """Return, per conflict, the planned removals its current side uses.
+
+    ``keep-current`` records the current side, which ``reject_decided_uses``
+    would refuse, so ``--check`` lists the use now (Issue #1170).
+    """
+    result: dict[str, list[str]] = {}
+    for path, contents in sides.items():
+        current = contents.get("current")
+        if current is None:
+            continue
+        candidates = (
+            (*removals, *moved) if current.startswith(b"#!") else removals
+        )
+        used = file_transition.content_uses(path, current, candidates)
+        if used:
+            result[path] = list(used)
+    return result
 
 
 IGNORE_FILE_NAMES = frozenset({".gitignore"})
@@ -3106,6 +3156,7 @@ def update_required_actions(
     writer_moves: Sequence[Mapping[str, str]] = (),
     retained_uses: Sequence[Mapping[str, str]] = (),
     product_calls: Sequence[Mapping[str, str]] = (),
+    conflict_uses: Mapping[str, Sequence[str]] = MappingProxyType({}),
 ) -> list[dict[str, object]]:
     """Derive the update required actions this release can evaluate."""
     live = {} if observed is None else observed
@@ -3151,7 +3202,9 @@ def update_required_actions(
             "blocking": True,
             "command": None,
             "kind": "file-conflict",
-            "message": update_conflict_message(path, ignore_gaps.get(path, ())),
+            "message": update_conflict_message(
+                path, ignore_gaps.get(path, ()), conflict_uses.get(path, ())
+            ),
             "subject": path,
         }
         for path in files.manual
@@ -3476,6 +3529,7 @@ def lifecycle_report_model(  # noqa: C901
         tuple[str, int], tuple[str | None, str | None]
     ] = MappingProxyType({}),
     ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
+    conflict_uses: Mapping[str, Sequence[str]] = MappingProxyType({}),
 ) -> dict[str, object]:
     """Build the single SPEC-008 report object for one adopt or update plan.
 
@@ -3523,6 +3577,7 @@ def lifecycle_report_model(  # noqa: C901
             ignored=update_ignored_payload(plan.update),
             pin_versions=pin_versions,
             ignore_gaps=ignore_gaps,
+            conflict_uses=conflict_uses,
             writer_moves=update_release_writer_moves(plan.update),
             retained_uses=update_retained_uses(plan.update),
             product_calls=update_retained_uses(
@@ -9324,6 +9379,40 @@ def require_repository_identity(
         )
 
 
+def existing_license_seed(
+    target: Path,
+    answers: Mapping[str, object],
+    explicit_data: Mapping[str, str],
+) -> dict[str, object]:
+    """Keep an existing repository's license product-owned (Issue #1166).
+
+    Handbook 5.1 and appendix B.9: an existing repository keeps its own
+    LICENSE, and an update never seeds one. LICENSE is the native source
+    of ``project_license`` (SPEC-009); a repository without one owns its
+    license terms, so the new side renders ``custom`` and no LICENSE, and
+    no copyright holder is inferred from the project name. Only an
+    explicit ``--data project_license=...`` adds the starter, and then the
+    copyright holder must be stated too.
+    """
+    if answers.get("project_mode") != "existing" or is_regular_file(
+        target / "LICENSE"
+    ):
+        return {}
+    chosen = explicit_data.get("project_license")
+    if chosen is None:
+        return {"project_license": "custom", "copyright_holder": ""}
+    if (
+        chosen != "custom"
+        and not explicit_data.get("copyright_holder", "").strip()
+    ):
+        raise CliError(
+            "Adding a LICENSE to an existing repository needs the legal "
+            "holder: pass --data copyright_holder=<holder> with "
+            "--data project_license. The target was not changed."
+        )
+    return {}
+
+
 def resolve_derived_context(
     target: Path,
     answers: Mapping[str, object],
@@ -11121,9 +11210,10 @@ def reject_decided_uses(
         raise CliError(
             "The decided content keeps a use of a file this plan removes: "
             + "; ".join(findings)
-            + ". Choose take-new or a custom file without that use, or move "
-            "the use into a product file and run csarc update --check "
-            "again; the target was not changed."
+            + ". Choose take-new or a custom file without that use. To keep "
+            "that behavior, "
+            + PRODUCT_JOB_MOVE_REMEDY
+            + "; the target was not changed."
         )
 
 
@@ -12026,7 +12116,8 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
                 ),
             },
         )
-        verify_project(candidate)
+        # Verification sees the provenance this update lands: a recorded
+        # `custom` license is what accepts an absent LICENSE (#1166).
         write_provenance(
             candidate,
             resolved,
@@ -12034,6 +12125,7 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
             answers=answers,
             final_plan_sha256=digest,
         )
+        verify_project(candidate)
         artifacts, delete_paths = candidate_patch_effects(candidate)
         apply_update_transitions(
             target,
@@ -12117,6 +12209,11 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     candidate_answers.update(derived_values)
     update_data.update(derived_values)
     observed.update(derived_differences)
+    license_seed = existing_license_seed(
+        target, candidate_answers, explicit_data
+    )
+    candidate_answers.update(license_seed)
+    update_data.update(license_seed)
     # The release owner the repository evidence derives without any
     # explicit choice; confirming that value with --data must plan exactly
     # like leaving it out (Issue #1146 AC1).
@@ -12468,6 +12565,16 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         observed=observed,
         pin_versions=pins.versions,
         ignore_gaps=missing_ignore_rules(conflict_sides),
+        conflict_uses=conflict_retired_uses(
+            conflict_sides,
+            (*run_inputs.retiring, *planning.delete),
+            tuple(
+                source
+                for source, _destination in effective_layout_moves(
+                    layout_moves, {*planning.retained, *planning.shims}
+                )
+            ),
+        ),
     )
     if args.finalize_plan:
         print_plan(plan)
@@ -12568,8 +12675,8 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         candidate = applied.candidate
         pin_answer_commit(candidate, str(status["target_sha"]))
         persist_release_answers(candidate, answers, decisions)
-        verify_project(candidate)
         write_provenance(candidate, target_revision, previous, answers=answers)
+        verify_project(candidate)
         artifacts, delete_paths = candidate_patch_effects(candidate)
         apply_update_transitions(
             target,
