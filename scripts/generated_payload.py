@@ -80,6 +80,10 @@ CEILINGS: dict[str, dict[str, int]] = {
 }
 # Ceilings still above their Target (none after #1081).
 OPEN_TARGET_GAPS: frozenset[tuple[str, str]] = frozenset()
+# Issue #1177: a render whose remaining room under its Target drops below
+# one file or 20 KB is flagged in the output. The warning never changes a
+# Target or the exit status; it asks the change to free room first.
+HEADROOM_WARNING: dict[str, int] = {"files": 1, "bytes": 20_000}
 # #1058 Targets, documentation budget: solo `.csarc/docs` in total,
 # `ci-policy.md` for solo and hosted csarc-owned python, `agent-workflow.md`
 # in a local render, and `milestone-description.md` wherever it renders.
@@ -130,6 +134,25 @@ def measure(project: Path) -> dict[str, int]:
         "agent_workflow_bytes": agent.stat().st_size if agent.is_file() else 0,
         "milestone_description_lines": doc_lines("milestone-description.md"),
     }
+
+
+def headroom_warnings(results: dict[str, dict[str, int]]) -> list[str]:
+    """Return one warning per fixture whose Target headroom is low (#1177)."""
+    warnings = []
+    for name, values in results.items():
+        low = [
+            f"{measure} {TARGETS[name][measure] - values[measure]:,} "
+            f"(< {minimum:,})"
+            for measure, minimum in HEADROOM_WARNING.items()
+            if TARGETS[name][measure] - values[measure] < minimum
+        ]
+        if low:
+            warnings.append(
+                f"WARNING: {name} headroom under its Target is low: "
+                + ", ".join(low)
+                + "; free room before adding generated payload."
+            )
+    return warnings
 
 
 def template_copy(destination: Path) -> Path:
@@ -200,6 +223,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         docs = f"{values['docs_lines']:,} / {values['docs_bytes']:,}"
         write(f"| {name} | " + " | ".join(cells) + f" | {docs} |\n")
+    for warning in headroom_warnings(results):
+        write(f"\n{warning}\n")
     return 0
 
 
