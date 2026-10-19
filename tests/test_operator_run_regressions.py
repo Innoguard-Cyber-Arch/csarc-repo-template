@@ -889,3 +889,162 @@ def test_take_new_writes_the_reviewed_new_side_with_product_pins(
         == 0
     ), capsys.readouterr().err
     assert (project / workflow).read_bytes() == new_side
+
+
+# --- Issue #1170: name the remedy for a product job using a retired file ----
+
+TEMPLATE_CI = ".github/workflows/ci.yml"
+TEMPLATE_CI_JOB = "  verify:\n    runs-on: ubuntu-latest\n    steps:\n"
+PRODUCT_ZIZMOR_JOB = (
+    "  audit:\n    runs-on: ubuntu-latest\n    steps:\n"
+    "      - run: uvx --from zizmor==1.29.0 zizmor --config zizmor.yml .\n"
+)
+
+
+def assert_names_the_product_job_move(message: str) -> None:
+    """The remedy is the documented product preparation commit."""
+    assert "product preparation commit" in message
+    assert "product-owned workflow" in message
+    assert "docs/install.md" in message
+    assert "模板 workflow 的衝突裡有產品 job" in message
+    assert "A template workflow conflict that contains product jobs" in message
+
+
+def test_check_names_the_remedy_for_a_conflict_using_a_removal() -> None:
+    """AC1: the blocking conflict row names the use and the job move."""
+    sides = {
+        TEMPLATE_CI: {
+            "base": b"jobs:\n" + TEMPLATE_CI_JOB.encode(),
+            "current": (
+                "jobs:\n" + TEMPLATE_CI_JOB + PRODUCT_ZIZMOR_JOB
+            ).encode(),
+            "new": b"jobs:\n  verify: {}\n",
+        },
+        ".gitignore": {"base": None, "current": b"dist/\n", "new": None},
+    }
+    uses = cli.conflict_retired_uses(sides, ("zizmor.yml",))
+    assert uses == {TEMPLATE_CI: ["zizmor.yml"]}
+    files = cli.Plan((), (), (), (), (), (TEMPLATE_CI,), ())
+    [row] = cli.update_required_actions(files, (), conflict_uses=uses)
+    assert row["kind"] == "file-conflict"
+    assert row["blocking"] is True
+    assert row["subject"] == TEMPLATE_CI
+    assert "The current file uses zizmor.yml" in str(row["message"])
+    assert_names_the_product_job_move(str(row["message"]))
+    # A conflict without such a use keeps the plain message.
+    [plain] = cli.update_required_actions(files, ())
+    assert "product preparation commit" not in str(plain["message"])
+
+
+def test_finalize_refusal_names_the_product_job_move() -> None:
+    """AC2: the finalize refusal names the same remedy; it still refuses."""
+    with pytest.raises(cli.CliError) as error:
+        cli.reject_decided_uses(
+            {TEMPLATE_CI: ("jobs:\n" + PRODUCT_ZIZMOR_JOB).encode()},
+            ("zizmor.yml",),
+        )
+    assert f"{TEMPLATE_CI} uses zizmor.yml" in str(error.value)
+    assert_names_the_product_job_move(str(error.value))
+    assert "target was not changed" in str(error.value)
+
+
+@pytest.mark.large
+def test_product_zizmor_job_in_template_ci_is_listed_at_check(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC1-AC3 through check -> refused finalize -> remedy -> finalize.
+
+    The old template rendered ``zizmor.yml`` and ``ci.yml``; the product
+    added its zizmor job to the template ``ci.yml``. The new release drops
+    ``zizmor.yml`` and rewrites ``ci.yml``, so the conflict keeps a use of
+    a retired file. ``--check`` lists it with the product-job move; after
+    that product preparation commit, take-new finalizes and ``zizmor.yml``
+    stays product-owned.
+    """
+    project, source = legacy_consumer(
+        tmp_path,
+        {
+            "zizmor.yml": "rules:\n  dangerous-triggers:\n    ignore: []\n",
+            TEMPLATE_CI: "on: pull_request\njobs:\n" + TEMPLATE_CI_JOB,
+        },
+    )
+    write(
+        project / TEMPLATE_CI,
+        "on: pull_request\njobs:\n" + TEMPLATE_CI_JOB + PRODUCT_ZIZMOR_JOB,
+    )
+    commit(project, "test: product zizmor job in the template ci")
+    template = source / "template"
+    (template / "zizmor.yml").unlink()
+    # The new release adds its own job where the product added one, so the
+    # three-way update cannot merge them.
+    write(
+        template / TEMPLATE_CI,
+        "on: pull_request_target\njobs:\n"
+        + TEMPLATE_CI_JOB
+        + "  policy:\n    runs-on: ubuntu-latest\n    steps:\n"
+        + "      - run: ./.csarc/scripts/verify-fast\n",
+    )
+    new_sha = commit(source, "test: retire zizmor.yml, rewrite ci")
+    reports = tmp_path / "reports"
+    capsys.readouterr()
+
+    assert (
+        update(project, new_sha, "--check", "--report-dir", str(reports)) == 1
+    ), capsys.readouterr().err
+    report = read_json(reports / "csarc-update-report.json")
+    [row] = [
+        row
+        for row in report["required_actions"]
+        if row["kind"] == "file-conflict" and row["subject"] == TEMPLATE_CI
+    ]
+    assert row["blocking"] is True
+    assert "The current file uses zizmor.yml" in row["message"]
+    assert_names_the_product_job_move(row["message"])
+    capsys.readouterr()
+
+    # Existing protection: keep-current is still refused, with the remedy.
+    assert (
+        update(
+            project,
+            new_sha,
+            "--finalize-plan",
+            "--report-dir",
+            str(reports),
+            "--decision",
+            f"{TEMPLATE_CI}=keep-current",
+        )
+        != 0
+    )
+    refusal = capsys.readouterr().err
+    assert f"{TEMPLATE_CI} uses zizmor.yml" in refusal
+    assert_names_the_product_job_move(refusal)
+    assert not (reports / final_plan.FINAL_PLAN_BASENAME).exists()
+
+    # The remedy: move the job unchanged into a product workflow.
+    write(
+        project / PRODUCT_WORKFLOW,
+        "on: pull_request\njobs:\n" + PRODUCT_ZIZMOR_JOB,
+    )
+    write(project / TEMPLATE_CI, "on: pull_request\njobs:\n" + TEMPLATE_CI_JOB)
+    commit(project, "test: move the product zizmor job")
+    retry = tmp_path / "reports-2"
+    assert update(project, new_sha, "--check", "--report-dir", str(retry)) in {
+        0,
+        1,
+    }, capsys.readouterr().err
+    stage1 = read_json(retry / "csarc-update-plan.json")
+    assert "zizmor.yml" in stage1["files"]["product_owned"]
+    # The template ci.yml is back to the old render, so it takes the new
+    # release without a decision.
+    assert stage1["files"]["manual_merge"] == []
+    capsys.readouterr()
+    assert (
+        update(
+            project,
+            new_sha,
+            "--finalize-plan",
+            "--report-dir",
+            str(retry),
+        )
+        == 0
+    ), capsys.readouterr().err
