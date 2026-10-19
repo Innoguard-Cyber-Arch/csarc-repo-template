@@ -3,8 +3,8 @@
 - **狀態：**Accepted
 - **日期：**2026-09-01
 - **備註：**#430 candidate 實作；#871 將 Milestone 版本候選併入 promotion PR；#918 以 beta／stable 雙通道與獨立專案成熟度取代四層版本模型；#925 將所有 CSARC-owned 版本候選移入原交付 PR；#996 以事前宣告的 Milestone checkpoint 取代逐件 beta
-- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)、[#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918)、[#925](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/925)、[#996](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/996)
-- **實作 PRs：**[#448](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/448)、[#463](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/463)、[#471](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/471)
+- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)、[#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918)、[#925](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/925)、[#996](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/996)、[#1085](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1085)、[#1158](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1158)、[#1174](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1174)
+- **實作 PRs：**[#448](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/448)、[#463](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/463)、[#471](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/471)、[#1096](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1096)、[#1159](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1159)
 
 ## 問題與限制
 
@@ -57,6 +57,20 @@ CSARC 過去在版本、發版與供應鏈責任上有多套並存或半途而�
 
 - Promotion 以 squash 合併後，main commit 追不到 delivery branch 的 beta tag；beta core 高於 main 的 stable 時，從 main HEAD 算出的版本會低於 bridge 物化的版本，Release 因此被擋（M17 PR #1024 的 run 36032783769）。
 - `release.yml` 在 stable route 找出唯一的 `promote/m*` 來源 PR，以它的 head 執行 `release_policy.py plan --source-sha`；bridge tree 必須與合併後的 tree 完全相同，否則 fail closed。沒有 promotion 來源時行為不變，#1018 的 CHANGELOG 規則、exact-candidate 與供應鏈驗證都不變。
+
+### 2026-10-13：early 成熟度的 breaking 變更升 MINOR（#1085）
+
+- 擁有者在 #1058 決定 18 確認：`project_maturity: early` 時，breaking 變更（`type!:` 或 `BREAKING CHANGE:` footer）從 `0.y.z` 升為 `0.(y+1).0`，維持 0.x；`formal` 仍依 SemVer 升 MAJOR。
+- 理由：early 專案的公開介面仍在變動，每次 breaking 都升 MAJOR 會很快把版本推到沒有意義的高數字，也會讓使用者誤以為介面已穩定；0.x 本身就表示「MINOR 可能不相容」。
+- 成熟度一律讀 current `main`（trusted base）的 `.csarc/config.yml`，candidate 不能改寫自己的 bump 規則；`early` → `formal` 的切換與第一個 `1.0.0` 由 #1105 規劃。精確規則、`Migration notes` 與 footer 檢查見 [`docs/ci-policy.md`](../ci-policy.md)「Beta／stable 發布通道與 admin bypass（#918）」。
+- 重新評估：專案改為 `formal` 時，這條規則不再適用；若 0.x 的 MINOR 被使用者誤當成相容更新而造成實際升級失敗，重新評估是否改為更明顯的標示。
+
+### 2026-10-18：stable promotion 的 operator-independence 證據（#1158）
+
+- Milestone stable promotion 除了 consumer 重跑與 exact-head hosted full，還需要一次 operator-independence run：沒有參與實作的人或全新 agent session，只靠以 release tag 固定的已發布文件完成同一個升級。它證明的是文件足以讓別人獨立完成，不是程式能跑。
+- Pass 條件以可檢查的欄位判定（不需實作者協助、沒有無依據猜測、其餘不清楚之處都有追蹤 Issue、產品檢查沒有 regression），不靠主觀描述；執行者條件、步驟、欄位與 pass 條件以 [`docs/pilot-adoption.md`](../pilot-adoption.md)「Operator-independence run」為唯一來源，本 ADR 不重抄。
+- Kill criteria 7 修訂（擁有者 2026-10-18 選項 B）：pilot 原則上不能有 A4 preflight 清單以外的產品修改；例外是 `docs/install.md` 寫明、不改變產品行為的產品準備 commit（例如把模板 workflow 內的產品 job 原樣搬到產品 workflow），逐筆記錄並附行為不變的證據時仍算證據。理由：這類 commit 是文件要求的升級步驟本身，排除它們會讓照文件操作的 run 永遠不成立；其他產品修改仍不算。記錄欄位同樣以 `docs/pilot-adoption.md` 為準。
+- 重新評估：operator run 經常因為產品準備 commit 的範圍爭議而無法判定，或 `docs/install.md` 要求的產品準備變更開始改變產品行為時。
 
 CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑：
 

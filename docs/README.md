@@ -54,6 +54,9 @@
 - [`portable-repo-site.md`](adr/portable-repo-site.md)
 - [`template-policy-manifest.md`](adr/template-policy-manifest.md)
 - [`milestone-due-date-write-workaround.md`](adr/milestone-due-date-write-workaround.md)
+- [`trusted-base-gate.md`](adr/trusted-base-gate.md)
+- [`review-provider-and-ruleset-shapes.md`](adr/review-provider-and-ruleset-shapes.md)
+- [`private-vulnerability-reporting.md`](adr/private-vulnerability-reporting.md)
 
 2026-08-24 的完整 GitHub 盤點、2026-08-25 的 work-item metadata normalization 與每條決策線對照，見 [`history-audit-2026-08.md`](history-audit-2026-08.md)。
 
