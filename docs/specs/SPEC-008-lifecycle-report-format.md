@@ -58,7 +58,7 @@ tracking: none
 - `summary`：`files` 依 action 計數、`settings` 依 class 計數（全部列出，包含 0）、`required_actions` 為 {`blocking`、`non_blocking`}；計數必須等於對應列的數量。
 - `settings`：每列 {`key`、`before`、`after`、`class`、`source`、`note`}，依 key 排序且不重複；只列出 `REPORT_SETTING_KEYS` 允許的鍵，值保留 JSON 型別。
 - `files`：每列 {`path`、`action`、`reason`、`from`、`decision`}，先依 action 順序、再依 path 排序；只有 `move` 有 `from`。
-- `product`：{`release_ownership`、`code_owner`、`work_item_mapping`、`release_writers`、`version_surfaces`、`action_pins`、`reviewer_rotation`、`behavior_changes`}；後五項保留給後續 Issue，尚未實作時為 `null`。`action_pins` 由 Issue #1065 填入：update（不含 reinstall）為產品 Action pin preflight 的列，每列 {`file`、`line`、`action`、`old_sha`、`new_sha`、`reason`}，`reason` 為 `template-pin-changed`（產品 pin 等於目前受管 workflow 的 pin）或 `product-pin-diverged`；沒有漂移時為 `[]`，adopt 為 `null`。每列另產生 blocking 的 `action-pin`，`subject` 為 `file:line`。
+- `product`：{`release_ownership`、`code_owner`、`work_item_mapping`、`release_writers`、`version_surfaces`、`action_pins`、`reviewer_rotation`、`behavior_changes`}；後五項保留給後續 Issue，尚未實作時為 `null`。`code_owner` 是 adopt 對設定的 owner 所做的即時 repository 驗證 {`reason`、`state`、`value`}（`state` 為 `not-configured`、`verified`、`unknown` 或 `blocked`）；update 不即時驗證，為 `null`（reinstall 沿用 adopt 的驗證），設定的值只在 Settings 的 `code_owner` 列，由套用後的 repository settings `plan` 驗證（Issue #1167）。`action_pins` 由 Issue #1065 填入：update（不含 reinstall）為產品 Action pin preflight 的列，每列 {`file`、`line`、`action`、`old_sha`、`new_sha`、`reason`}，`reason` 為 `template-pin-changed`（產品 pin 等於目前受管 workflow 的 pin）或 `product-pin-diverged`；沒有漂移時為 `[]`，adopt 為 `null`。每列另產生 blocking 的 `action-pin`，`subject` 為 `file:line`。
 - `required_actions`：每列 {`kind`、`subject`、`blocking`、`message`、`command`}。
 - `verification`：{`candidate`、`hook`、`render_parity`}；`render_parity` 只有 `state`。update（不含 reinstall）由 Issue #1063 的共用規劃器填入：以舊 template 實際詢問的答案與可信快照重建的舊側 render，與 target 逐檔相同為 `equal`，否則為 `diverged`；adopt 與 reinstall 為 `null`。
 - `next_steps`：每列 {`text`、`command`}，由 operation 與 status 算出。update 為 `blocked` 且 blocking 項目全是 `file-conflict` 時，依序列出帶 `--to`／`--expected-sha` 的 `--finalize-plan --decision` 指令與 `--apply-plan <報告目錄>/csarc-update-final-plan.json`（Issue #1147）。
@@ -126,7 +126,7 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
   4. `## Impact analysis`：有 `widened` 設定時第一列固定為 `Widened settings: ... See Settings.`；`setup` 不是 `null` 時另列工作模式、提問數與 approval route，並以 H3 `### Warnings` 列出每個 WARNING（沒有時印 `None.`）。
   5. `## File changes`：`preserve` 只計數，逐列清單只在 JSON。
   6. `## Settings`
-  7. `## Product state`：H3 只在 JSON 值不是 `null` 時出現，順序為 `### Release writers`、`### Version surfaces`、`### Action pins`、`### Reviewer rotation`、`### Behavior changes`、`### Work-item mapping`。
+  7. `## Product state`：`- CODEOWNER verification:` 一列在 `product.code_owner` 不是 `null` 時寫出 `value` 與 `state`；是 `null`（update）時寫 `not run by this operation`，並引用 Settings 的 `code_owner` 值（沒有值時寫 no `code_owner` is configured），不再顯示 `(none)` 而與 Settings 矛盾（Issue #1167，只改 Markdown 措辭，報告形狀與 `2.2.0` 不變）。H3 只在 JSON 值不是 `null` 時出現，順序為 `### Release writers`、`### Version surfaces`、`### Action pins`、`### Reviewer rotation`、`### Behavior changes`、`### Work-item mapping`。
   8. `## Verification`
   9. `## Next steps`
 - heading、標籤與詞彙值固定為英文，不依文件語言設定在地化，作為測試與 agent 搜尋的穩定錨點。值的格式：布林值 `true`／`false`、`null` 為 `(none)`、list 以 `, ` 連接，不出現 Python repr。
