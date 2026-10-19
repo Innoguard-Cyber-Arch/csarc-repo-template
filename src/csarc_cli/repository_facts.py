@@ -71,7 +71,6 @@ LANGUAGE_COMMANDS = {
     "rust": "cargo test --locked",
     "go": "go build ./...",
 }
-NO_LANGUAGE_COMMAND = "./.csarc/scripts/verify"
 PACKAGE_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
 _GITHUB_REMOTE = re.compile(
     r"^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/|gh:)"
@@ -416,9 +415,13 @@ def derive_run_command(
     The command composes the template's per-language command, in template
     order, and resolves only when every selected language has its native
     manifest; a Python package that is ambiguous leaves it ambiguous.
+    Without a language there is no native manifest to read, so the command
+    is unknown rather than the CSARC verifier (#1165).
     """
     if not languages:
-        return known(NO_LANGUAGE_COMMAND, "languages")
+        return unknown(
+            "no native manifest declares a product command", "languages"
+        )
     selected = [item for item in LANGUAGE_MANIFESTS if item[0] in languages]
     for language, manifest in selected:
         if not (root / manifest).is_file():

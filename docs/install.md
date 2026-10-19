@@ -150,7 +150,7 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 選 `product-owned` 後，若 `--check` 列出 blocking 的 `release-writer`，表示保留的 writer 用到這次要搬進 `.csarc/` 的檔案（訊息逐項寫出 `原路徑 -> 新路徑`），`--finalize-plan` 會拒絕。這時只有兩條路：改選 `csarc-owned`，或先以產品準備 commit 讓 writer 不再使用這些路徑，再重新 `--check`；後者會產生產品 diff。agent 依上面的判斷方式在 PR 寫出選擇、理由與 `release-writer` 訊息，合併前由擁有者確認。`verification-only`（CSARC 只驗證、不管理發布）只在擁有者明確要求時使用。
 
-**`project_run_command`**：產品最短的啟動或呼叫指令（`package_name` 規則相同）。CLI 能從 native manifest（`pyproject.toml`、`package.json`、`Cargo.toml`、`go.mod`）唯一推導時不保存這個值；update 使用的值記在 `.csarc/provenance.json` 的 render context，`.csarc/config.yml` 不會列出它。推導結果與記錄值不同、或無法唯一推導時，報告列出 `setting-decision`，記錄值繼續保留：
+**`project_run_command`**：產品最短的啟動或呼叫指令（`package_name` 規則相同）。CLI 能從 native manifest（`pyproject.toml`、`package.json`、`Cargo.toml`、`go.mod`）唯一推導時不保存這個值；update 使用的值記在 `.csarc/provenance.json` 的 render context，`.csarc/config.yml` 不會列出它。推導結果與記錄值不同、或無法唯一推導時，報告列出 `setting-decision`，記錄值繼續保留。沒有 native manifest（例如 container-first repository）時無法推導，CSARC 驗證器 `./.csarc/scripts/verify` 不會被當成產品指令；在明確決定前，生成的 README「快速開始」只說明尚未記錄產品指令：
 
 - 不傳 `--data`：沿用記錄值，產品行為不變。
 - 要改用其他指令：以 `--data project_run_command=<command>` 明確決定。這個值寫進 `.csarc/config.yml`，之後的 update 一律優先使用它，不再依 manifest 推導。

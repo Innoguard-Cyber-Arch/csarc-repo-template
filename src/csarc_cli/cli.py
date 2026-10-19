@@ -2583,6 +2583,12 @@ def plan_status(
 
 def observed_setting_note(key: str, value: object) -> str:
     """Return the report note for one observed difference (#1068, #1072)."""
+    if key in settings_schema.DECISION_SETTINGS and value is None:
+        return (
+            "No native manifest determines this value, and the CSARC "
+            "verifier is not a product command. Pass "
+            f"`--data {key}=<value>` once to decide."
+        )
     if key in settings_schema.DECISION_SETTINGS:
         shown = (
             ", ".join(f"`{redact(item)}`" for item in value)
@@ -3123,7 +3129,11 @@ def update_required_actions(
             "command": f"csarc update --data {key}=<value>",
             "kind": "setting-decision",
             "message": (
-                "The native manifests do not confirm the recorded value; "
+                "No native manifest determines this value; pass the "
+                "product command explicitly once."
+                if key in settings_schema.DECISION_SETTINGS
+                and live[key] is None
+                else "The native manifests do not confirm the recorded value; "
                 "it is kept until you pass one explicitly."
                 if key in settings_schema.DECISION_SETTINGS
                 else "Live GitHub facts suggest a value that differs from "
@@ -9295,8 +9305,9 @@ def resolve_derived_context(
     manifests resolve uniquely fills a key nothing recorded; a recorded
     value the manifests contradict, or several candidates, keeps the
     recorded value and is reported until one explicit decision is passed.
-    Several candidates with nothing recorded fail closed before any write,
-    and an unobservable value keeps what the last render recorded.
+    Several candidates with nothing recorded fail closed before any write.
+    An unobservable run command keeps what the last render recorded, and
+    is reported as ``None`` so the report asks for one decision (#1165).
     """
     languages = sorted(selected_languages(dict(answers)))
     derived = repository_facts.derive_context(target, languages, decisions)
@@ -9321,6 +9332,8 @@ def resolve_derived_context(
                     "once to decide. The target was not changed."
                 )
             differences[key] = candidates
+        elif key == "project_run_command":
+            differences[key] = None
     return values, differences
 
 
