@@ -11038,6 +11038,39 @@ def split_retirement_decisions(
     return conflicts, tuple(retired)
 
 
+def decided_summary_plan(
+    plan: ResolvedPlan, values: Sequence[str] | None
+) -> ResolvedPlan:
+    """Show the finalize summary with retirement decisions applied.
+
+    A kept ``retire-modified`` file decided ``take-new`` is retired by the
+    final plan, so the terminal summary lists it under ``Remove`` instead of
+    ``Retained modified files`` (Issue #1164). Invalid decisions leave the
+    summary unchanged; ``write_update_final_plan`` reports them.
+    """
+    if plan.files is None or not values:
+        return plan
+    try:
+        choices = final_plan.parse_file_decisions(values)
+    except final_plan.FinalPlanError:
+        return plan
+    retired = {
+        name
+        for name in plan.files.retained
+        if choices.get(name, ("", None))[0] == final_plan.DECISION_TAKE
+    }
+    if not retired:
+        return plan
+    files = replace(
+        plan.files,
+        remove=tuple(sorted({*plan.files.remove, *retired})),
+        retained=tuple(
+            name for name in plan.files.retained if name not in retired
+        ),
+    )
+    return replace(plan, files=files)
+
+
 def reject_retired_uses(
     target: Path,
     files: Plan,
@@ -12564,7 +12597,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         ),
     )
     if args.finalize_plan:
-        print_plan(plan)
+        print_plan(decided_summary_plan(plan, args.decision))
         return write_update_final_plan(
             args,
             FinalPlanContext(
