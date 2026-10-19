@@ -58,7 +58,7 @@ csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-pla
    - target 必須是乾淨的工作樹。本頁要求的產品準備變更（例如下方的產品 job 搬移、Action pin、ignore 例外、把舊 `scripts/verify` 裡的產品測試搬到產品驗證 hook）以獨立的產品準備 commit 在 `--finalize-plan` 前提交，提交後重新 `--check`；在 PR 逐條列出這些 commit 與依據的章節。
    - `.gitignore` 衝突的報告列會列出 current 沒有、新版有的忽略規則；用 `keep-current` 或以 current 為底的 `custom:<file>` 保留產品 `.gitignore` 時，見下方「`.gitignore` 缺少模板規則」。
    - 產品 ignore 規則（例如 `.gitignore` 的 `data/`）會隱藏新版要放的檔案時，`--check` 以該 ignore 檔為 subject 列出 blocking 的 `file-conflict`，訊息寫出被隱藏的路徑與規則。在該 ignore 檔加上例外（例如 `!.csarc/site/data/`）：它本身是衝突時寫在它的 `custom:<file>` 決定裡，否則以產品 commit 加入後重新 `--check`。`--finalize-plan` 會依決定後的內容再檢查一次，仍會隱藏時拒絕寫入。
-   - 決定若讓保留的檔案繼續引用本次要退役的檔案，`--finalize-plan` 會拒絕；改用 `take-new`、`custom`，或先在產品裡移除那個引用。
+   - 決定若讓保留的檔案繼續引用本次要退役的檔案，`--finalize-plan` 會拒絕；改用 `take-new`、`custom`，或先在產品裡移除那個引用。衝突的 current 內容（例如模板 workflow 裡的產品 job）已引用要退役的檔案時，`--check` 就在該檔的 `file-conflict` 列寫出被引用的檔案；要保留這個行為，依下方「模板 workflow 的衝突裡有產品 job」以產品準備 commit 把產品 job 搬到產品 workflow，重新 `--check` 後該檔改用 `take-new`，被引用的檔案就留給產品。
 5. **`--apply-plan`**：只接受 final plan 路徑，`--to`、`--data`、`--decision` 等會改變輸入的旗標一律拒絕；`--report-dir` 只能等於 final plan 所在資料夾。沒有 `--yes` 時會顯示 plan 並詢問 `Apply this plan? [y/N]`；agent 或沒有終端輸入時要加 `--yes`。套用前重新觀察工具版本與 live facts，任何不同或驗證失敗都會在寫入前停止，target 不變；驗證失敗的訊息寫出失敗的 verify 步驟與原因（`Project verification failed: ...`）。
 6. **commit 與驗證**：套用成功後檢查 diff，commit 到同一個分支，再在這個已 commit、乾淨的 head 執行 `./.csarc/scripts/verify-fast` 與產品原有檢查（本機結果綁定 exact head，未 commit 的結果不算證據），最後開 PR。
 
