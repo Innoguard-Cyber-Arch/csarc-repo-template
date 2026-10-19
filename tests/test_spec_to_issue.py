@@ -161,6 +161,30 @@ def test_repository_adrs_follow_the_validated_contract() -> None:
             validate_adr(decision)
 
 
+@pytest.mark.parametrize("layer", ["", "template"])
+def test_adr_readme_rules_example_and_validator_agree(
+    tmp_path: Path, layer: str
+) -> None:
+    """#1138 AC1: the README list, its example and the validator agree."""
+    root = Path(__file__).parents[1] / layer
+    script = "scripts" if not layer else ".csarc/scripts"
+    module = runpy.run_path(str(root / script / "spec_to_issue.py"))
+    sections = module["ADR_SECTIONS"]
+    assert sections == SPEC_MODULE["ADR_SECTIONS"]
+    readme = (root / "docs/adr/README.md").read_text(encoding="utf-8")
+    rules = readme.split("```markdown", 1)[0]
+    listed = re.findall(r"(?m)^- `## (.+?)`", rules)
+    assert tuple(listed) == sections
+    example = readme.split("```markdown\n", 1)[1].split("```", 1)[0]
+    assert tuple(re.findall(r"(?m)^## (.+?)$", example)) == sections
+    for section in sections:
+        body = example.split(f"## {section}\n", 1)[1].split("\n## ", 1)[0]
+        assert body.strip(), section
+    decision = tmp_path / "choose-a-durable-option.md"
+    decision.write_text(example, encoding="utf-8")
+    module["validate_adr"](decision)
+
+
 def test_rejects_adr_without_pull_request_source(tmp_path: Path) -> None:
     decision = tmp_path / "portable-baseline.md"
     decision.write_text(

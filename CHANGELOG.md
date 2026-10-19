@@ -7,6 +7,149 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.35.2] - 2026-10-18
+
+### Included prereleases
+
+* v0.31.0-beta.1
+* v0.32.0-beta.1
+* v0.32.1-beta.1
+* v0.33.0-beta.1
+* v0.34.0-beta.1
+* v0.35.0-beta.1
+* v0.35.1-beta.1
+
+### Features
+
+* feat(cli): share one SPEC-008 lifecycle report for adopt and update (61473fe)
+* feat(cli): preflight product action pin drift before update planning (8498b61)
+* feat(cli): replay update decisions through an immutable final plan (064c351)
+* feat(verification): share one trusted evidence freshness policy (e749be1)
+* feat(lifecycle): give a single maintainer an audited merge route (5c2a3a6)
+* feat(template): decouple generated verification from template self-tests (89ddb28)
+* feat(config): persist only settings that cannot be safely reconstructed (669e54b)
+* feat(release): publish local releases through one tree-bound writer (4079c19)
+* feat(settings): detect repository facts without changing saved intent (f4fbdc8)
+* feat(template): render only the payload each option uses (074e7a9)
+* feat(trace): trace Issue requirements to risks and exact-head evidence (1edc08d)
+* feat(cli): ask only undetectable setup questions before rendering (e4d4526)
+* feat(issue): sync configured GitHub Project roadmap dates (14c98b1)
+* feat(docs): generate a project-scoped operations guide for each render (47409ef)
+* feat(templates): add missing workflow templates for decisions, pilots and merges (67b1bbd)
+* feat(docs): add shared governance templates for promotion, hotfix and commits (a787141)
+* feat(cli): guide operators through the update flow (30783a8)
+* feat(update): document remaining operator decisions (b72c00f)
+
+### Bug Fixes
+
+* fix(security): require private reporting for public repositories (a10a1d3)
+* fix(release): bump minor for early-maturity breaking changes (22ee184)
+* fix(template): remove organization owner defaults (4a5ce86)
+* fix(cli): rebuild legacy old side and share one update plan (9638488)
+* fix(cli): migrate legacy governance settings and default admin bypass to always (f1ab734)
+* fix(cli): apply only approved update file transitions (28501e4)
+* fix(cli): keep saved settings authoritative in update and runtime reads (bcbd264)
+* fix(ci): decide merges and verification from the trusted base policy (25302cb)
+* fix(lifecycle): bind merges to the verified tree and a durable trace (47f1923)
+* fix(ci): skip Dependabot exact merge when no open pull request matches (2fcd48d)
+* fix(lifecycle): keep an inconclusive governance baseline a status notice (1df16c8)
+* fix(ci): read the final schema 2 settings in the trusted base (58276d3)
+* fix(template): keep rulesets, site tokens and hints on the current schema (080d06d)
+* fix(review): share one review decision across gate, status, and merge (363e9a0)
+* fix(cli): apply pilot-proven legacy update plans as reviewed (52b029b)
+* fix(release): rematerialize the Checkpoint 3 beta as 0.32.1-beta.1 (340d35a)
+* fix(update): close operator-run planning defects (28d49a9)
+* fix(cli): close update plan and report gaps from the beta.5 run (f8d0699)
+* fix(cli): block kept scripts that lose files and flag reviewer changes (115524e)
+* fix(release): define a measurable operator run pass rule (49ab647)
+
+## [0.35.1-beta.1] - 2026-10-18
+
+### Bug Fixes
+
+* fix(release): define a measurable operator run pass rule (9eb2863)
+* fix(cli): block kept scripts that lose files and flag reviewer changes (115524e)
+
+## [0.35.0-beta.1] - 2026-10-17
+
+### Features
+
+* feat(update): show pin tags and missing ignore rules (fd81be1)
+
+### Bug Fixes
+
+* fix(cli): close update plan and report gaps from the beta.5 run (f8d0699)
+
+## [0.34.0-beta.1] - 2026-10-17
+
+### Features
+
+* feat(cli): guide operators through check, finalize, and apply (4624471)
+
+### Bug Fixes
+
+* fix(update): close operator-run planning defects (28d49a9)
+
+## [0.33.0-beta.1] - 2026-10-16
+
+### Features
+
+* feat(docs): add shared governance templates for promotion, hotfix and commits (27bf125)
+* feat(templates): add missing workflow templates for decisions, pilots and merges (67b1bbd)
+* feat(handbook): list every template in appendix B by execution flow (b9eac9c)
+* feat(handbook): show generated template formats in appendix B (4739584)
+
+## [0.32.1-beta.1] - 2026-10-16
+
+### Bug Fixes
+
+* fix(review): share one review decision across gate, status, and merge (363e9a0)
+* fix(cli): apply pilot-proven legacy update plans as reviewed (52b029b)
+* fix(release): revert the mismatched 0.33.0-beta.1 materialization (0f5fd7f)
+
+## [0.32.0-beta.1] - 2026-10-15
+
+### Features
+
+* feat(verification): share one trusted evidence freshness policy (e749be1)
+* feat(lifecycle): give a single maintainer an audited merge route (5c2a3a6)
+* feat(template): decouple generated verification from template self-tests (89ddb28)
+* feat(config): persist only settings that cannot be safely reconstructed (669e54b)
+* feat(release): publish local releases through one tree-bound writer (4079c19)
+* feat(settings): detect repository facts without changing saved intent (f4fbdc8)
+* feat(template): render only the payload each option uses (074e7a9)
+* feat(trace): trace Issue requirements to risks and exact-head evidence (1edc08d)
+* feat(cli): ask only undetectable setup questions before rendering (e4d4526)
+* feat(issue): sync configured GitHub Project roadmap dates (14c98b1)
+
+### Bug Fixes
+
+* fix(ci): read the final schema 2 settings in the trusted base (58276d3)
+* fix(template): keep rulesets, site tokens and hints on the current schema (080d06d)
+* fix(template): keep CSARC bytecode out of renders and update plans (c756e7d)
+
+## [0.31.0-beta.1] - 2026-10-14
+
+### Features
+
+* feat(cli): share one SPEC-008 lifecycle report for adopt and update (61473fe)
+* feat(cli): preflight product action pin drift before update planning (8498b61)
+* feat(cli): replay update decisions through an immutable final plan (e989277)
+
+### Bug Fixes
+
+* fix(security): require private reporting for public repositories (a10a1d3)
+* fix(release): bump minor for early-maturity breaking changes (22ee184)
+* fix(template): remove organization owner defaults (4a5ce86)
+* fix(cli): rebuild legacy old side and share one update plan (9638488)
+* fix(cli): migrate legacy governance settings and default admin bypass to always (f1ab734)
+* fix(cli): apply only approved update file transitions (28501e4)
+* fix(cli): keep saved settings authoritative in update and runtime reads (bcbd264)
+* fix(ci): decide merges and verification from the trusted base policy (25302cb)
+* fix(lifecycle): bind merges to the verified tree and a durable trace (47f1923)
+* fix(ci): skip Dependabot exact merge when no open pull request matches (2fcd48d)
+* fix(lifecycle): keep an inconclusive governance baseline a status notice (1df16c8)
+
 ## [0.30.7] - 2026-10-14
 
 ### Bug Fixes

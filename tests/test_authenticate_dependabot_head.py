@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -512,3 +514,200 @@ def test_cli_exports_exact_snapshot_for_an_unauthenticated_head(
     assert "eligible=false\n" in written
     assert f"base_sha={BASE_SHA}\n" in written
     assert f"head_sha={HEAD_SHA}\n" in written
+
+
+# Issue #1087: exact-merge candidate lookup (zero / one / many).
+MERGE_BRANCH = "dependabot/github_actions/main/actions-checkout-7"
+MOVED_SHA = "e" * 40
+
+
+def _associated(number: object = 7, **overrides: object) -> dict:
+    record: dict = {
+        "number": number,
+        "state": "open",
+        "merged_at": None,
+        "closed_at": None,
+        **_pull_request(),
+    }
+    record.update(overrides)
+    return record
+
+
+def _resolve(pulls: object, **event: str) -> tuple[str, int | None, str]:
+    return dependabot_auth.resolve_merge_candidate(
+        pulls,
+        event.get("base_repo", REPO),
+        event.get("head_sha", HEAD_SHA),
+        event.get("head_repository", REPO),
+        event.get("head_branch", MERGE_BRANCH),
+    )
+
+
+def test_merge_candidate_with_zero_pull_requests_is_a_stable_no_op() -> None:
+    """No associated pull request at all is ordinary "no work"."""
+    assert _resolve([[]]) == (
+        "no-op",
+        None,
+        "no-open-exact-dependabot-pull-request",
+    )
+
+
+def test_merge_candidate_never_substitutes_a_closed_or_merged_record() -> None:
+    """Closed-only history is a no-op, never a stale replacement."""
+    closed = _associated(state="closed", closed_at="2026-10-01T00:00:00Z")
+    merged = _associated(
+        number=8,
+        state="closed",
+        merged_at="2026-10-01T00:00:00Z",
+        head=None,
+    )
+    assert _resolve([[closed, merged]])[:2] == ("no-op", None)
+
+
+def test_merge_candidate_resolves_exactly_one_open_identity() -> None:
+    """One exact open Dependabot record keeps the exact-merge path."""
+    assert _resolve([[_associated()]]) == (
+        "merge",
+        7,
+        "exact open pull request #7",
+    )
+
+
+def test_merge_candidate_moved_head_is_a_no_op() -> None:
+    """A run for an old head never selects the PR's newer head."""
+    moved = _associated()
+    moved["head"] = {**moved["head"], "sha": MOVED_SHA}
+    assert _resolve([[moved]])[:2] == ("no-op", None)
+
+
+def test_merge_candidate_wrong_actor_or_repository_is_a_no_op() -> None:
+    """Records outside the Dependabot identity are never matches."""
+    human = _associated(user={"login": "someone", "type": "User"})
+    fork = _associated(number=9)
+    fork["head"] = {
+        **fork["head"],
+        "repo": {"full_name": "someone/csarc-repo-template"},
+    }
+    other_base = _associated(number=10)
+    other_base["base"] = {**other_base["base"], "ref": "dev/m1-x"}
+    assert _resolve([[human, fork, other_base]])[:2] == ("no-op", None)
+
+
+def test_merge_candidate_event_outside_identity_is_a_no_op() -> None:
+    """A fork-triggered or non-Dependabot-branch event has no work."""
+    assert _resolve(
+        [[_associated()]], head_repository="someone/csarc-repo-template"
+    ) == ("no-op", None, "event-outside-dependabot-identity")
+    assert _resolve([[_associated()]], head_branch="feature/x")[:2] == (
+        "no-op",
+        None,
+    )
+
+
+def test_merge_candidate_many_matches_fail_closed() -> None:
+    """Never pick one of several exact open matches."""
+    with pytest.raises(dependabot_auth.MergeCandidateError, match="#7, #8"):
+        _resolve([[_associated(7)], [_associated(8)]])
+
+
+def test_merge_candidate_incomplete_open_identity_fails_closed() -> None:
+    """An open record that cannot be ruled out must not be skipped."""
+    incomplete = _associated()
+    del incomplete["user"]
+    with pytest.raises(dependabot_auth.MergeCandidateError, match="incomplete"):
+        _resolve([[incomplete]])
+    with pytest.raises(dependabot_auth.MergeCandidateError, match="incomplete"):
+        _resolve([[_associated(number="7")]])
+    with pytest.raises(dependabot_auth.MergeCandidateError, match="state"):
+        _resolve([[{"number": 7}]])
+    with pytest.raises(dependabot_auth.MergeCandidateError, match="SHA"):
+        _resolve([[_associated()]], head_sha="not-a-sha")
+
+
+def test_merge_candidate_contradictory_state_fails_closed() -> None:
+    """Open records that also claim closure, or diverge, fail closed."""
+    merged_open = _associated(merged_at="2026-10-01T00:00:00Z")
+    with pytest.raises(dependabot_auth.MergeCandidateError, match="closed"):
+        _resolve([[merged_open]])
+    renamed = _associated(title="other snapshot")
+    with pytest.raises(
+        dependabot_auth.MergeCandidateError, match="conflicting"
+    ):
+        _resolve([[_associated()], [renamed]])
+
+
+def test_merge_candidate_reads_every_paginated_page() -> None:
+    """A match on a later page is found; a duplicate across pages is one."""
+    filler = [
+        _associated(number=100 + index, state="closed") for index in range(30)
+    ]
+    assert _resolve([filler, [_associated()]])[:2] == ("merge", 7)
+    assert _resolve([[_associated()], [_associated()]])[:2] == ("merge", 7)
+    assert _resolve([_associated()])[:2] == ("merge", 7)
+    with pytest.raises(dependabot_auth.MergeCandidateError, match="malformed"):
+        _resolve([[_associated()], _associated()])
+    with pytest.raises(dependabot_auth.MergeCandidateError, match="not a list"):
+        _resolve({"pulls": []})
+
+
+def _resolve_cli(tmp_path: Path, pulls: object) -> tuple[int, str]:
+    pulls_path = tmp_path / "pulls.json"
+    pulls_path.write_text(json.dumps(pulls), encoding="utf-8")
+    output = tmp_path / "github-output"
+    exit_code = dependabot_auth.main(
+        [
+            "resolve-merge-candidate",
+            "--base-repo",
+            REPO,
+            "--head-sha",
+            HEAD_SHA,
+            "--head-repository",
+            REPO,
+            "--head-branch",
+            MERGE_BRANCH,
+            "--pulls-json",
+            str(pulls_path),
+            "--github-output",
+            str(output),
+        ]
+    )
+    return exit_code, output.read_text(encoding="utf-8")
+
+
+def test_resolve_cli_no_op_succeeds_without_a_merge_target(
+    tmp_path: Path,
+) -> None:
+    """AC1: zero matches exit 0 with a stable reason and no PR number."""
+    exit_code, written = _resolve_cli(tmp_path, [[]])
+    assert exit_code == 0
+    assert written == (
+        "outcome=no-op\n"
+        "reason=no-open-exact-dependabot-pull-request\n"
+        "number=\n"
+        "head_sha=\n"
+    )
+
+
+def test_resolve_cli_exports_the_single_exact_candidate(
+    tmp_path: Path,
+) -> None:
+    """AC2: one match exports the exact number and head for revalidation."""
+    exit_code, written = _resolve_cli(tmp_path, [[_associated()]])
+    assert exit_code == 0
+    assert written == (
+        "outcome=merge\n"
+        "reason=exact open pull request #7\n"
+        "number=7\n"
+        f"head_sha={HEAD_SHA}\n"
+    )
+
+
+def test_resolve_cli_fails_closed_on_many_candidates(tmp_path: Path) -> None:
+    """AC3: several matches exit nonzero and export no merge target."""
+    exit_code, written = _resolve_cli(
+        tmp_path, [[_associated(7), _associated(8)]]
+    )
+    assert exit_code == 1
+    assert written.startswith("outcome=fail-closed\n")
+    assert "number=\n" in written
+    assert "head_sha=\n" in written

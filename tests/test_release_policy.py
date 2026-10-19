@@ -2750,3 +2750,219 @@ def test_main_retention_plan_command_requires_a_token_and_never_deletes(
         "1.1.0-beta.1",
     }
     assert payload["delete"] == []
+
+
+# --- Issue #1085: early-maturity breaking changes ------------------------
+
+
+@pytest.mark.parametrize(
+    ("version", "messages", "maturity", "expected"),
+    [
+        ("0.4.2", ["feat!: drop legacy keys"], "early", "0.5.0"),
+        ("0.4.2", ["fix: x\n\nBREAKING CHANGE: new schema"], "early", "0.5.0"),
+        ("0.4.2-beta.3", ["refactor(cli)!: rename flag"], "early", "0.5.0"),
+        ("0.4.2", ["feat: add"], "early", "0.5.0"),
+        ("0.4.2", ["fix: repair"], "early", "0.4.3"),
+        ("0.4.2", ["docs: explain"], "early", None),
+        ("1.2.3", ["feat!: drop legacy keys"], "formal", "2.0.0"),
+        ("1.2.3", ["fix: x\n\nBREAKING-CHANGE: y"], "formal", "2.0.0"),
+        ("1.2.3", ["feat: add"], "formal", "1.3.0"),
+        ("0.4.2", ["feat!: drop legacy keys"], None, "1.0.0"),
+        # An inconsistent early 1.x line keeps MAJOR so phase validation
+        # fails closed instead of silently staying on 1.x.
+        ("1.2.3", ["feat!: drop legacy keys"], "early", "2.0.0"),
+    ],
+)
+def test_bump_version_maturity_matrix(
+    version: str,
+    messages: list[str],
+    maturity: str | None,
+    expected: str | None,
+) -> None:
+    """Early 0.x breaking bumps MINOR; formal keeps the SemVer MAJOR bump."""
+    assert bump_version(version, messages, maturity=maturity) == expected
+
+
+def init_maturity_repo(root: Path, maturity: str, version: str) -> None:
+    """Create a released baseline that declares ``project_maturity``."""
+    git(root, "init", "-b", "main")
+    git(root, "config", "user.name", "Release Test")
+    git(root, "config", "user.email", "release@example.invalid")
+    (root / ".csarc").mkdir()
+    (root / ".csarc/config.yml").write_text(
+        f"project_maturity: {maturity}\n", encoding="utf-8"
+    )
+    (root / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {".": {"component": "demo"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_release_surfaces(root, version)
+    git(root, "add", ".")
+    git(root, "commit", "-m", f"chore(main): release {version}")
+    git(root, "tag", f"v{version}")
+
+
+def commit_change(root: Path, name: str, message: str) -> str:
+    """Commit one file change with ``message`` and return its sha."""
+    (root / name).write_text(f"{message}\n", encoding="utf-8")
+    git(root, "add", ".")
+    git(root, "commit", "-m", message)
+    return git(root, "rev-parse", "HEAD")
+
+
+@pytest.mark.parametrize(
+    ("maturity", "baseline", "beta", "stable"),
+    [
+        ("early", "0.4.2", "0.5.0-beta.1", "0.5.0"),
+        ("formal", "1.2.3", "2.0.0-beta.1", "2.0.0"),
+    ],
+)
+def test_breaking_plan_uses_one_core_policy_for_beta_and_stable(
+    tmp_path: Path, maturity: str, baseline: str, beta: str, stable: str
+) -> None:
+    """Beta and stable plan the same maturity-aware core for one line."""
+    init_maturity_repo(tmp_path, maturity, baseline)
+    head = commit_change(tmp_path, "cli", "feat(cli)!: rename the schema key")
+
+    assert release_plan(tmp_path, head, phase="beta") == (f"v{beta}", beta)
+    assert release_plan(tmp_path, head, phase="stable") == (
+        f"v{stable}",
+        stable,
+    )
+    assert release_plan(tmp_path, head) == (f"v{stable}", stable)
+
+
+def test_early_breaking_beta_never_reuses_or_lowers_a_published_core(
+    tmp_path: Path,
+) -> None:
+    """An existing beta advances N; a later breaking change moves forward."""
+    init_maturity_repo(tmp_path, "early", "0.4.2")
+    first = commit_change(tmp_path, "a", "feat!: drop the legacy layout")
+    tree = git(tmp_path, "rev-parse", "HEAD^{tree}")
+    elsewhere = git(tmp_path, "commit-tree", tree, "-m", "beta elsewhere")
+    git(tmp_path, "tag", "v0.5.0-beta.1", elsewhere)
+
+    assert release_plan(tmp_path, first, phase="beta") == (
+        "v0.5.0-beta.2",
+        "0.5.0-beta.2",
+    )
+
+    git(tmp_path, "tag", "v0.5.0-beta.2", first)
+    second = commit_change(tmp_path, "b", "fix!: require the new CLI")
+    assert release_plan(tmp_path, second, phase="beta") == (
+        "v0.6.0-beta.1",
+        "0.6.0-beta.1",
+    )
+    assert release_plan(tmp_path, second, phase="stable") == (
+        "v0.6.0",
+        "0.6.0",
+    )
+    git(tmp_path, "tag", "v0.6.0-beta.1", second)
+    docs = commit_change(tmp_path, "c", "docs: describe the migration")
+    assert release_plan(tmp_path, docs, phase="beta") is None
+
+
+def test_early_breaking_beta_recomputes_above_an_inserted_main_stable(
+    tmp_path: Path,
+) -> None:
+    """A stable published on main meanwhile raises the early beta core."""
+    init_maturity_repo(tmp_path, "early", "0.24.0")
+    git(tmp_path, "checkout", "-b", "delivery")
+    git(tmp_path, "checkout", "main")
+    write_release_surfaces(tmp_path, "0.25.4")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(main): release 0.25.4")
+    git(tmp_path, "tag", "v0.25.4")
+    git(tmp_path, "checkout", "delivery")
+    commit_change(tmp_path, "schema", "feat!: replace the config schema")
+
+    assert release_plan(tmp_path, "HEAD", phase="beta") == (
+        "v0.26.0-beta.1",
+        "0.26.0-beta.1",
+    )
+
+
+@pytest.mark.parametrize(
+    ("main_maturity", "candidate_maturity", "baseline", "expected"),
+    [
+        ("early", "formal", "0.4.2", "0.5.0-beta.1"),
+        ("formal", "early", "1.2.3", "2.0.0-beta.1"),
+    ],
+)
+def test_candidate_cannot_change_its_own_maturity_policy(
+    tmp_path: Path,
+    main_maturity: str,
+    candidate_maturity: str,
+    baseline: str,
+    expected: str,
+) -> None:
+    """Current main's project_maturity wins over the candidate's edit."""
+    init_maturity_repo(tmp_path, main_maturity, baseline)
+    git(tmp_path, "checkout", "-b", "delivery")
+    (tmp_path / ".csarc/config.yml").write_text(
+        f"project_maturity: {candidate_maturity}\n", encoding="utf-8"
+    )
+    commit_change(tmp_path, "cli", "feat!: drop the legacy layout")
+
+    assert release_plan(tmp_path, "HEAD", phase="beta") == (
+        f"v{expected}",
+        expected,
+    )
+
+
+def test_maturity_fails_closed_without_a_readable_main_policy(
+    tmp_path: Path,
+) -> None:
+    """Unreadable or unavailable main policy never falls back silently."""
+    init_maturity_repo(tmp_path, "early", "0.4.2")
+    git(tmp_path, "checkout", "-b", "delivery")
+    git(tmp_path, "checkout", "main")
+    (tmp_path / ".csarc/config.yml").write_text(
+        "- orphan list item\n", encoding="utf-8"
+    )
+    commit_change(tmp_path, "main", "chore: corrupt main policy")
+    git(tmp_path, "checkout", "delivery")
+    commit_change(tmp_path, "cli", "feat!: drop the legacy layout")
+
+    with pytest.raises(ValueError, match="authoritative project_maturity"):
+        release_plan(tmp_path, "HEAD", phase="beta")
+
+    git(tmp_path, "branch", "-D", "main")
+    with pytest.raises(
+        ValueError, match="origin/main and main are unavailable"
+    ):
+        release_plan(tmp_path, "HEAD", phase="stable")
+
+
+def test_breaking_candidate_writes_migration_notes(tmp_path: Path) -> None:
+    """CHANGELOG lists breaking behavior, minimum version, and recovery."""
+    init_maturity_repo(tmp_path, "early", "0.4.2")
+    commit_change(
+        tmp_path,
+        "a",
+        "fix(cli): read the new key\n\nBREAKING CHANGE: run csarc update\n"
+        "with CLI 0.5.0 or later.",
+    )
+    commit_change(tmp_path, "b", "feat!: drop the legacy layout")
+
+    result = prepare_release_candidate(tmp_path, "HEAD", phase="beta")
+
+    assert result["version"] == "0.5.0-beta.1"
+    changelog = (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+    entry = changelog.split("## [0.5.0-beta.1]", 1)[1].split("\n## ", 1)[0]
+    assert "### Breaking Changes" in entry
+    assert "* fix(cli): read the new key" in entry
+    assert "* feat!: drop the legacy layout" in entry
+    assert "### Migration notes" in entry
+    assert (
+        "Minimum version for the changed behavior: 0.5.0-beta.1; "
+        "to recover, stay on or reinstall v0.4.2." in entry
+    )
+    assert "run csarc update with CLI 0.5.0 or later." in entry
+    assert "no BREAKING CHANGE footer was recorded" in entry
+    assert "### Bug Fixes" not in entry

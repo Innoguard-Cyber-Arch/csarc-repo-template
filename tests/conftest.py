@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+# Generated-project self-tests run only inside a real render
+# (tests/test_generated_self_tests.py installs them there, #1077); the root
+# suite never collects them in place.
+collect_ignore = ["generated_self_tests"]
+
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Tag large cases so the run's JUnit XML reports them without a recount.

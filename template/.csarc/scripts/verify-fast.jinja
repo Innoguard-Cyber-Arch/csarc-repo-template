@@ -1,4 +1,4 @@
-{% set python_target = "3.14" if python_support_mode == "latest" else python_min_version -%}
+{% set python_target = "3.14" if python_floor == "latest" else python_floor -%}
 {% set has_python = "python" in languages -%}
 {% set has_typescript = "typescript" in languages -%}
 {% set has_rust = "rust" in languages -%}
@@ -6,15 +6,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cache_root="$("$repo_root/.csarc/scripts/resolve-cache-root")"
+# control_root holds this entry point, its router, and its stage gate;
+# repo_root is the tree under verification. Hosted CI stages the control
+# set from the trusted base and points CSARC_VERIFICATION_SUBJECT_ROOT at
+# the exact candidate.
+control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$control_root/.csarc/scripts/verification-step"
+repo_root="$(verification_subject_root "$control_root")"
+# Pass the subject only to control-set children, never to nested fixtures.
+unset CSARC_VERIFICATION_SUBJECT_ROOT
+cache_root="$("$control_root/.csarc/scripts/resolve-cache-root")"
 if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
   export UV_CACHE_DIR="$cache_root/uv"
 else
   export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
 fi
 cd "$repo_root"
-source "$repo_root/.csarc/scripts/verification-step"
 
 plan_root="$(mktemp -d)"
 trap 'rm -rf "$plan_root"' EXIT
@@ -66,7 +73,7 @@ extra_scopes="${CSARC_CI_SCOPES:-}"
 if [[ "${CSARC_RUN_OSV:-false}" == "true" ]]; then
   extra_scopes="${extra_scopes:+$extra_scopes,}dependency"
 fi
-python3 .csarc/scripts/ci_tier.py \
+python3 "$control_root/.csarc/scripts/ci_tier.py" \
   --event pull_request \
   --base "$base" \
   --head "${branch:-HEAD}" \
@@ -103,13 +110,31 @@ for requested in "${CSARC_VERIFICATION_SUITE:-fast}" "${CSARC_CI_TIER:-}"; do
     suite="$requested"
   fi
 done
+# The release channel sets a verification floor: delivery branches carry
+# beta work, while standalone, hotfix, and release-recovery work on main is
+# stable and needs full evidence. Local verification takes the stronger of
+# that floor and the path tier; hosted CI passes its own resolved tier.
+floor_plan="$(python3 "$control_root/.csarc/scripts/trusted_executor.py" channel-floor \
+  --base "$base" --labels "${CSARC_CI_LABELS:-}" --path-tier "$plan_tier")"
+channel_floor="${floor_plan#*floor=}"
+channel_floor="${channel_floor%% *}"
+if [[ "$channel_floor" == "full" && "$suite" != "full" ]]; then
+{% if verification_mode == "local" -%}
+  if [[ -z "${CSARC_CI_TIER:-}" ]]; then
+    suite=full
+  fi
+{% else -%}
+  echo "Release channel floor for base $base is full; hosted verify supplies that evidence."
+{% endif -%}
+fi
 echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite scopes=${scope_csv:-none}"
 {% if has_python %}export UV_PYTHON="${CSARC_PYTHON_VERSION:-{{ python_target }}}"
 {% endif -%}
 case "$suite" in
   fast) ;;
   full)
-    ./.csarc/scripts/verify
+    CSARC_VERIFICATION_SUBJECT_ROOT="$repo_root" \
+      "$control_root/.csarc/scripts/verify"
     exit 0
     ;;
   *)

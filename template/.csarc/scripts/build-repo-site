@@ -7,6 +7,9 @@ if (($# > 1)) || { (($# == 1)) && [[ "$1" != "--check" ]]; }; then
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# The build runs as a Copier task inside every render; it must not leave
+# bytecode caches next to the CSARC runtime it imports.
+export PYTHONDONTWRITEBYTECODE=1
 
 # Issue #681 decision N: this repo-site engine replaces the retired
 # docs/site-content.md handbook renderer. A repository generated before
@@ -23,16 +26,14 @@ fi
 python3 "$repo_root/.csarc/scripts/check-repo-site-navigation"
 python3 "$repo_root/.csarc/scripts/check-repo-site-versions"
 
-primary_language="$(python3 "$repo_root/.csarc/scripts/csarc_config.py" primary_language)"
-i18n="$(python3 "$repo_root/.csarc/scripts/csarc_config.py" i18n)"
+# documentation_languages lists the primary language first and, when the
+# project maintains both, the secondary one after a "+" (SPEC-009).
+documentation_languages="$(python3 "$repo_root/.csarc/scripts/csarc_config.py" documentation_languages)"
+primary_language="${documentation_languages%%+*}"
 site_languages=("$primary_language")
-if [[ "$i18n" == "en-zh-tw" ]]; then
+if [[ "$documentation_languages" == *+* ]]; then
   python3 "$repo_root/.csarc/scripts/check-repo-site-translations"
-  if [[ "$primary_language" == "zh-tw" ]]; then
-    site_languages+=(en)
-  else
-    site_languages+=(zh-tw)
-  fi
+  site_languages+=("${documentation_languages#*+}")
 fi
 language_csv="$(IFS=,; echo "${site_languages[*]}")"
 
@@ -78,7 +79,7 @@ for alternative in docs/index.en.html docs/index.zh-tw.html; do
   done
   if [[ "$keep" == "false" && -f "$repo_root/$alternative" ]]; then
     if (($# == 1)); then
-      printf '%s is stale for the selected i18n mode; rebuild the repo site.\n' \
+      printf '%s is stale for the selected documentation languages; rebuild the repo site.\n' \
         "$alternative" >&2
       exit 1
     fi

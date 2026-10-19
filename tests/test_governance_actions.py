@@ -184,11 +184,11 @@ def test_reviewer_assignment_accepts_a_bot_author(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("option", "enabled"),
-    [({}, True), ({"enable_governance_drift_check": False}, False)],
+    [({}, True), ({"scheduled_checks": []}, False)],
 )
 @pytest.mark.large
 def test_copier_governance_drift_option_is_complete(
-    tmp_path: Path, option: dict[str, bool], enabled: bool
+    tmp_path: Path, option: dict[str, object], enabled: bool
 ) -> None:
     """Generate the default-on workflow while preserving an explicit opt-out."""
     source = tmp_path / "source"
@@ -214,10 +214,10 @@ def test_copier_governance_drift_option_is_complete(
         skip_tasks=True,
     )
 
-    # The default local-first mode keeps reviewer selection local and omits
-    # the event-driven hosted workflow.
+    # The default local-first mode omits the event-driven hosted workflow
+    # and, with no caller left, its reviewer-assignment script (#1077).
     assert not (project / ".github/workflows/governance-comment.yml").exists()
-    assert (project / ".csarc/scripts/request-reviewer").is_file()
+    assert not (project / ".csarc/scripts/request-reviewer").exists()
     assert not (project / ".csarc/REVIEWERS").exists()
     assert (
         project / ".github/workflows/governance-drift.yml"
@@ -295,7 +295,9 @@ def test_update_preserves_governance_drift_opt_out_and_recommends_once(
     answers, update_data = cli.update_plan_answers(saved, {}, repository)
     recommendation = cli.governance_drift_update_recommendation(saved, {})
 
-    assert answers["enable_governance_drift_check"] is False
+    # SPEC-009 migrates the retired toggle to scheduled_checks exactly.
+    assert answers["scheduled_checks"] == []
+    assert "enable_governance_drift_check" not in answers
     assert "enable_governance_drift_check" not in update_data
     assert recommendation is not None
     plan = cli.ResolvedPlan(
@@ -325,7 +327,7 @@ def test_update_preserves_governance_drift_opt_out_and_recommends_once(
     assert capsys.readouterr().out.count("Recommendation:") == 1
     assert (
         cli.governance_drift_update_recommendation(
-            saved, {"enable_governance_drift_check": "false"}
+            saved, {"scheduled_checks": ""}
         )
         is None
     )
@@ -374,7 +376,7 @@ def test_docs_reflect_restored_governance_actions() -> None:
     for path in (
         ROOT / "README.md",
         ROOT / "docs/ci-policy.md",
-        ROOT / "template/.csarc/docs/ci-policy.md",
+        ROOT / "template/.csarc/docs/ci-policy.md.jinja",
     ):
         text = path.read_text(encoding="utf-8")
         assert stale_archived_list not in text, path
@@ -399,6 +401,6 @@ def test_docs_reflect_restored_governance_actions() -> None:
         drift_codes
     )
     assert (
-        "enable_governance_drift_check=true generates the daily workflow"
+        "scheduled_checks: [governance-drift] generates the daily workflow"
         in drift_codes
     )

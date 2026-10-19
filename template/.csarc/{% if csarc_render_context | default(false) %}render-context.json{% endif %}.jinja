@@ -1,0 +1,13 @@
+{#- Issue #1071: rendered only when the pinned CLI asks for it; the CLI moves this resolved context into .csarc/provenance.json and removes the file before any comparison or write. #}
+{{ {
+  "copyright_holder": copyright_holder,
+  "package_name": package_name,
+  "project_description": project_description,
+  "project_license": project_license,
+  "project_mode": project_mode,
+  "project_name": project_name,
+  "project_run_command": project_run_command,
+  "project_slug": project_slug,
+  "project_visibility": project_visibility,
+  "repository_url": repository_url,
+}|tojson }}

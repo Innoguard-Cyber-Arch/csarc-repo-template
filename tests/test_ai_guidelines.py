@@ -1,5 +1,8 @@
 """Structural tests for the generated AI-guidance contract."""
 
+import re
+import runpy
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -37,7 +40,10 @@ def test_generated_guidance_has_one_source_and_real_commands(
         "project_name": "Guidance fixture",
         "verification_mode": "hosted",
         "documentation_mode": "template-and-content",
-        "i18n": "en-zh-tw",
+        "documentation_secondary_language": "en",
+        "python_floor": "latest",
+        "lifecycle": ["issues", "milestones"],
+        "release_ownership": "csarc-owned",
     }
     entry = environment.from_string(TEMPLATE.read_text(encoding="utf-8"))
     workflow = environment.from_string(
@@ -56,9 +62,9 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert "never store raw chat transcripts" in rendered
     assert "single detailed CSARC workflow" in rendered
     assert "`.claude/CLAUDE.md` only imports the root entry point" in rendered
-    assert ".csarc/docs/csarc.md#工作流程" in rendered
-    assert ".csarc/docs/ci-policy.md#審查與合併資格" in rendered
-    assert ".csarc/docs/ci-policy.md#驗證分級與實測成本" in rendered
+    assert "](csarc.md#工作流程)" in rendered
+    assert "](ci-policy.md#審查與合併資格)" in rendered
+    assert "](ci-policy.md#驗證分級)" in rendered
     assert "docs/index.html#" not in rendered
     assert "docs/index.html#work" not in rendered
     assert "review requirements, merge eligibility" in rendered
@@ -72,12 +78,32 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert (
         "do not rerun the aggregate suite solely because" not in local_rendered
     )
+    # Issue #1077: guidance names only payload the selected options render.
+    narrow = workflow.render(
+        **{
+            **context,
+            "verification_mode": "local",
+            "documentation_mode": "off",
+            "lifecycle": [],
+            "release_ownership": "verification-only",
+        }
+    )
+    for absent in (
+        "milestone-description.md",
+        "documentation-policy.md",
+        "publish-release",
+        "build-repo-site",
+        "security-smoke",
+    ):
+        assert absent not in narrow, absent
+    assert "publish-release" in rendered
+    assert "milestone-description.md" in rendered
     assert ".csarc/scripts/gh-issue-develop" in rendered
     assert ".csarc/scripts/finalization-queue announce" in rendered
     assert "READY_TO_FINALIZE" in rendered
     assert "ARCHIVE_READY" in rendered
     assert "never rename or delete an open PR's head" in rendered
-    assert ".csarc/docs/csarc.md#公版更新" in rendered
+    assert "](csarc.md#公版更新)" in rendered
     assert "automation are suspended" not in rendered
     assert ("Python setup:" in rendered) is python_command
     assert ("TypeScript setup:" in rendered) is typescript_command
@@ -131,7 +157,7 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     readme = zh_tw_readme_matches[0].read_text(encoding="utf-8")
     assert "一般情況下不能自行合併" not in readme
     assert "AGENTS.md" in readme
-    assert ".csarc/docs/ci-policy.md#審查與合併資格" in (
+    assert "](ci-policy.md#審查與合併資格)" in (
         WORKFLOW_TEMPLATE.read_text(encoding="utf-8")
     )
 
@@ -150,15 +176,27 @@ def test_security_scanner_policy_and_guidance_are_shared() -> None:
     assert "## Threat Model and Trust Boundaries" not in disclosure
 
     readiness = READINESS.read_text(encoding="utf-8")
-    assert readiness == (
+    # Issue #1081: generated repositories get a project-scoped readiness
+    # page without this repository's inventory or measurements.
+    generated = (
         ROOT / "template/.csarc/docs/security-scanner-readiness.md"
     ).read_text(encoding="utf-8")
+    for required in (
+        "Codex Security",
+        "Claude Security",
+        "unavailable / not established",
+        "never runs an AI security scanner",
+        "`.github/SECURITY.md`",
+    ):
+        assert required in generated, required
+    for absent in ("security-smoke", "verify-template", "src/csarc_cli"):
+        assert absent not in generated, absent
     for required in (
         "Codex Security",
         "Claude / Anthropic",
         "unavailable / not established",
         "./scripts/security-smoke",
-        "./.csarc/scripts/security-smoke",
+        "template CI runs the same owner self-tests",
         "does not run an AI security scanner",
     ):
         assert required in readiness
@@ -169,6 +207,179 @@ def test_security_scanner_policy_and_guidance_are_shared() -> None:
     assert ".csarc/docs/security-scanner-readiness.md" in (
         WORKFLOW_TEMPLATE.read_text(encoding="utf-8")
     )
-    assert "{% if project_mode == 'existing' %}/SECURITY.md" in (
-        ROOT / "copier.yml"
+    assert (
+        "{% if (project_mode | default('')) == 'existing' %}/SECURITY.md"
+        in (ROOT / "copier.yml").read_text(encoding="utf-8")
+    )
+
+
+TITLE_CHECKS = (
+    ROOT / "scripts/validate-pr-policy",
+    ROOT / "template/.csarc/scripts/validate-pr-policy",
+)
+CONVENTION = re.compile(
+    r"Pull request titles use `type\(scope\): summary` in ASCII: type is one "
+    r"of (?P<types>[^;]+); the scope is optional lowercase "
+    r"`\[(?P<scope>[^\]]+)\]`; `!` before the colon marks a breaking change; "
+    r"the `title` check enforces this\. The squash commit and any release "
+    r"notes take this title, and release intent reads its type \(`!` major, "
+    r"`feat` minor, `fix` or `revert` patch, others none\)"
+)
+
+
+def _documented_convention(text: str) -> tuple[tuple[str, ...], str]:
+    match = CONVENTION.search(text)
+    assert match is not None, "PR title convention sentence is missing"
+    return tuple(re.findall(r"`([a-z]+)`", match["types"])), match["scope"]
+
+
+def _title_rule(script: Path) -> str:
+    match = re.search(
+        r'if \[\[ ! "\$PR_TITLE" =~ (.+?) \]\]; then',
+        script.read_text(encoding="utf-8"),
+    )
+    assert match is not None, script
+    return match.group(1)
+
+
+def _title_check_accepts(rule: str, title: str) -> bool:
+    # Run the exact Bash pattern the `title` check uses, then its ASCII guard.
+    script = (
+        f'[[ "$1" =~ {rule} ]] || exit 1; '
+        "printf '%s' \"$1\" | LC_ALL=C grep -q '[^ -~]' && exit 1; exit 0"
+    )
+    result = subprocess.run(  # noqa: S603
+        ["bash", "-c", script, "title-check", title],  # noqa: S607
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def test_pr_title_convention_matches_the_title_check() -> None:
+    """Issue #1139 AC3: the documented PR title rule is the `title` check."""
+    environment = Environment(autoescape=False, undefined=StrictUndefined)  # noqa: S701
+    workflow = environment.from_string(
+        WORKFLOW_TEMPLATE.read_text(encoding="utf-8")
+    )
+    base = {
+        "copilot_review": "disallowed",
+        "languages": [],
+        "project_name": "Title fixture",
+        "documentation_mode": "off",
+        "lifecycle": [],
+        "release_ownership": "verification-only",
+    }
+    sources = [(ROOT / "AGENTS.md").read_text(encoding="utf-8")] + [
+        workflow.render(**base, verification_mode=mode)
+        for mode in ("local", "hosted")
+    ]
+    documented = {_documented_convention(text) for text in sources}
+    assert len(documented) == 1
+    types, scope = next(iter(documented))
+
+    for script in TITLE_CHECKS:
+        rule = _title_rule(script)
+        group = re.match(r"\^\(([a-z|]+)\)", rule)
+        assert group is not None
+        assert tuple(group.group(1).split("|")) == types
+        assert f"[{scope}]" in rule
+        for kind in types:
+            assert _title_check_accepts(rule, f"{kind}: add one summary")
+            assert _title_check_accepts(rule, f"{kind}(a.b_c/d-1): summary")
+            assert _title_check_accepts(rule, f"{kind}(cli)!: break it")
+        for title in (
+            "feature: add one summary",
+            "feat(CLI): uppercase scope",
+            "feat add one summary",
+            "feat: 中文標題",
+        ):
+            assert not _title_check_accepts(rule, title), title
+
+    # The documented intent mapping is the one release planning applies.
+    release_intent = runpy.run_path(str(ROOT / "scripts/release_policy.py"))[
+        "release_intent"
+    ]
+    expected = {"feat": "minor", "fix": "patch", "revert": "patch"}
+    for kind in types:
+        assert release_intent(f"{kind}: summary") == expected.get(
+            kind, "no-release"
+        )
+        assert release_intent(f"{kind}(x)!: summary") == "major"
+
+
+def test_security_response_procedure_stays_private() -> None:
+    """Issue #1139 AC4: report handling never moves details into public."""
+    policy = (ROOT / ".github/SECURITY.md").read_text(encoding="utf-8")
+    procedure = (ROOT / "docs/security-response.md").read_text(encoding="utf-8")
+
+    assert "(../docs/security-response.md)" in policy
+    # The procedure keeps the policy's no-SLA promise and private routing.
+    assert "does not invent an acknowledgement or resolution" in policy
+    assert "不對外承諾確認或修正時間" in procedure
+    assert "不放在公開 Issue、PR、Discussion" in procedure
+    assert "只寫修正範圍" in procedure
+    assert "修正前不公開" in procedure
+    # Root-only: generated projects receive no new file or reference.
+    assert not list((ROOT / "template").rglob("security-response*"))
+    assert "security-response" not in (
+        ROOT / "template/.github/SECURITY.md.jinja"
     ).read_text(encoding="utf-8")
+
+
+def _section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"(?ms)^(#+) {re.escape(heading)}\n(?P<body>.*?)(?=^#{{1,4}} |\Z)",
+        text,
+    )
+    assert match is not None, heading
+    return match["body"]
+
+
+def test_governance_records_cite_existing_policy_sections() -> None:
+    """Issue #1139 AC1/AC2: lists order steps and cite real ci-policy rules."""
+    policy = (ROOT / "docs/ci-policy.md").read_text(encoding="utf-8")
+    headings = set(re.findall(r"(?m)^#+ (.+?)\s*$", policy))
+    checklist = _section(
+        (ROOT / "docs/milestone-description.md").read_text(encoding="utf-8"),
+        "Promotion checklist",
+    )
+    hotfix = _section(policy, "Hotfix 事後紀錄（#1139）")  # noqa: RUF001
+
+    response = (ROOT / "docs/security-response.md").read_text(encoding="utf-8")
+    for text in (checklist, hotfix, response):
+        for cited in re.findall(r"「([^」]+)」", text):
+            if cited in {
+                "補充",
+                "見私密紀錄",
+                "不在公開位置揭露",
+                "強化某參數的輸入驗證",
+            }:
+                continue
+            assert cited in headings, cited
+
+    steps = re.findall(r"(?m)^\d+\. \*\*([^*]+)\*\*", checklist)
+    for required in (
+        "凍結 `main`",
+        "Sync 協調",
+        "Tag／Release 讀回",  # noqa: RUF001
+        "Feature parent 與 sub-Issue 收尾",
+        "Tracker 關閉順序",
+    ):
+        assert required in steps, required
+    assert "scripts/finalization-queue announce" in checklist
+
+    fields = re.findall(r"(?m)^\| ([^|]+?) \|", hotfix)
+    assert fields[2:] == [
+        "原因",
+        "影響範圍",
+        "Exact base／head",  # noqa: RUF001
+        "為何不能等 Milestone",
+        "授權來源",
+        "驗證證據",
+        "後續 Issue",
+    ]
+    assert "Requirement evidence" in hotfix
+    assert "不另開 Issue 表單" in hotfix
+    # The template copy stays within budget and is not changed by #1139.
+    template = ROOT / "template/.csarc/docs/milestone-description.md"
+    assert "Promotion checklist" not in template.read_text(encoding="utf-8")

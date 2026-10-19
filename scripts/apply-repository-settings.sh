@@ -76,18 +76,25 @@ fi
 # One governance mode replaces the four policy-area toggles. Release settings
 # are derived from the selected owner rather than repeated in user config.
 config_reader="$repo_root/scripts/csarc_config.py"
+# A saved setting is authoritative (Issue #1068): an unreadable, unknown,
+# or contradictory value stops before any settings write instead of falling
+# back to a default. Only a key the reader normalizes for older answers
+# files (governance_mode) may be absent; release_ownership never is.
 policy_config_value() {
-  local key="$1" fallback_value="$2" value
-  if [[ -f "$repo_root/.csarc/config.yml" ]] &&
-    value="$(python3 "$config_reader" "$key" 2>/dev/null)" &&
-    [[ -n "$value" ]]; then
-    printf '%s' "$value"
-  else
-    printf '%s' "$fallback_value"
+  local key="$1" value
+  if [[ ! -f "$repo_root/.csarc/config.yml" ]]; then
+    echo "CSARC settings error: .csarc/config.yml is missing; run csarc update before reading $key." >&2
+    return 1
   fi
+  value="$(python3 "$config_reader" "$key")" || return 1
+  if [[ -z "$value" ]]; then
+    echo "CSARC settings error: $key in .csarc/config.yml is empty." >&2
+    return 1
+  fi
+  printf '%s' "$value"
 }
-governance_mode="$(policy_config_value governance_mode managed)"
-release_ownership="$(policy_config_value release_ownership csarc-owned)"
+governance_mode="$(policy_config_value governance_mode)" || exit 1
+release_ownership="$(policy_config_value release_ownership)" || exit 1
 if [[ "$governance_mode" != "managed" && "$governance_mode" != "observe" ]]; then
   echo "Invalid governance_mode in .csarc/config.yml: $governance_mode (expected managed or observe)." >&2
   exit 1

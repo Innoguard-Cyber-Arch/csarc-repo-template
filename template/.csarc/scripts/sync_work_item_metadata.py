@@ -448,7 +448,7 @@ def main() -> int:
     except MetadataError:
         LOGGER.warning(
             "::notice::Could not post the Milestone safeguard reminder "
-            "(non-blocking, Issue #551)."
+            "(non-blocking)."
         )
     return 0
 

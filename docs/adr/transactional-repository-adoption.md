@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250), [#714](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/714), [#715](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/715), [#716](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/716), [#831](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/831)
+- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250), [#714](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/714), [#715](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/715), [#716](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/716), [#831](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/831), [#1062](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1062)
 - **實作 PR：**[#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231)
 
 ## 問題與限制
@@ -17,7 +17,7 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 
 既有導入採兩階段流程：
 
-1. `adopt` 在沒有 `--apply-plan` 時預設為 dry-run，只讀目標 repo，並在 repo 外原子更新純 Markdown 導入報告（獨立版本號記錄在報告內，見 [#530](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/530)）與 machine-readable plan；明確的 `--dry-run` 仍相容。初始 plan 可從核准 Release 建立靜態候選，但不得執行 target-owned policy helper 或 product hook，驗證狀態明列為等待授權。只有未 staged 的 tracked modifications 且全由 plan 明列為 `preserve` 時，dirty paths 才可連同原始 bytes 建立候選並套用同一份 plan；其他 dirty tree 只產生 review-only plan。`adopt --finalize` 使用相同安全預設。
+1. `adopt` 在沒有 `--apply-plan` 時預設為 dry-run，只讀目標 repo，並在 repo 外原子更新 machine-readable plan 與 [SPEC-008](../specs/SPEC-008-lifecycle-report-format.md) 報告（report JSON 是唯一來源，Markdown 只由它 render；格式版本記錄在報告內，見 [#530](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/530)、[#1062](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1062)）。machine plan 的契約與 digest 不含報告狀態；套用成功後，報告寫回被重播的 plan 所在目錄並轉為 `applied`；明確的 `--dry-run` 仍相容。初始 plan 可從核准 Release 建立靜態候選，但不得執行 target-owned policy helper 或 product hook，驗證狀態明列為等待授權。只有未 staged 的 tracked modifications 且全由 plan 明列為 `preserve` 時，dirty paths 才可連同原始 bytes 建立候選並套用同一份 plan；其他 dirty tree 只產生 review-only plan。`adopt --finalize` 使用相同安全預設。
 2. `adopt --apply-plan` 先顯示保存的 plan 並取得確認，再重新驗證 Release、repo identity、HEAD、working tree、所有實際 render inputs（包含未寫入 Copier answers 的條件式衍生值）、檔案決策與 digest；在暫存 clone 產生完整候選，執行 `./scripts/verify` 與獨立的 `project_verification_hook`，再以通過 `git apply --check` 的同一份 patch 寫入目標。hook 只接受 repo 內存在、可執行的相對檔案，不透過 shell，且不得解析成或重新進入 canonical `scripts/verify`；未設定時才沿用 `scripts/verify-product`。路徑與來源綁入授權前 plan，執行結果與原因則在授權後產生；失敗不寫入 target。`update --check` 只驗證 hook 設定、不執行 hook，正式 update 也只套用已在暫存 clone 通過驗證的 patch。若靜態 binding 不同，錯誤會列出精確 JSON path 與前後值，同時維持 fail closed。
 
 `status` 與 `update --check` 的 policy／capability inspection 也不得執行 target checkout 內的 shell 或 Python。CLI 只從已驗證 Release 重新產生完整 helper closure，再把 target 當成資料與 GitHub context 檢查；unreleased 或無法驗證的來源回報 unavailable／unknown，不把 target helper 當成可信執行入口。
@@ -74,6 +74,35 @@ resumable 流程。這是因為重新安裝沒有已驗證的舊版本可以重�
 人工合併，即使專案從未碰過它。這維持了「project-owned 檔案一律保留，不自動
 覆寫或刪除」的既有原則（維持安全），但比一般 update 更容易需要人工確認
 （維持能力有限）；不預先假設之後會補上三方比對，需要時應開新 Issue 決定。
+
+## Update 只套用核准的檔案轉換（#1066，2026-10-14）
+
+一般 `update` 的新增、修改、搬移、刪除與退役都由同一份核准 plan 決定。Copier
+會刪除舊 render 有、新 render 沒有的檔案，不論專案是否改過它；CLI 因此在
+暫存 clone 內把這類刪除還原，只有內容與可信舊側 render byte-identical 時才
+退役，改過的檔案保留並以 `conflict`／`retire-modified` 列出。repository 已有的
+產品發版狀態（`.csarc/version.txt`、`.csarc/release-please-manifest.json`、
+`CHANGELOG.md` 與其搬移前的舊路徑）一律回到 target 的內容，template seed 與
+update migration 都不能改寫。寫入前，候選的實際檔案效果必須與核准集合完全
+相同；寫入以備份加逐檔原子替換的 transaction 進行，任一步失敗都還原成
+byte-identical base，不產生 `.rej` 或 conflict marker。adopt 與重新安裝仍使用
+上節的 `write_candidate_patch`。
+
+## Update 衝突以可重播的 final plan 套用（#1067，2026-10-14）
+
+#1058 decision 19 決定：`csarc update --check` 的 stage-1 plan 標為
+`replayable: false`，只供審閱；人工決定寫入同一個 repo 外資料夾的不可變
+`csarc-update-final-plan.json`，再以 `csarc update --apply-plan` 套用。final plan
+保存每個衝突決定的確切內容、action pin 決定、設定變更列、Copier 新舊兩側輸入、
+工具版本、live facts、規劃結果與核准的檔案轉換，並以各區段 digest 與整份
+digest 綁定。套用時不再詢問、不取當下 default，也不重算可變 context；
+repository、visibility、origin、權限、Release、target 狀態或工具版本與 plan
+不同時，在寫入前停止。成功後 provenance 記錄 final plan digest，重跑同一份
+plan 是明確的 no-op。決定不寫進 target（不新增 committed conflict resolution
+或 pending state）。Copier 與 Jinja2 因此改為 exact pin，生成專案的
+template-update workflow 使用同一組版本；版本範圍會讓同一個 Release 在不同時間
+render 出不同結果，plan 就無法重播。#219 的 plan → confirm → apply 由此完成；
+#416 的「修改 target 後重跑」改為重新產生 plan，失敗仍保持 byte-identical。
 
 ## 評估過的替代方案
 

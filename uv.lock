@@ -104,10 +104,11 @@ wheels = [
 
 [[package]]
 name = "csarc-repo-template"
-version = "0.30.7"
+version = "0.35.2"
 source = { editable = "." }
 dependencies = [
     { name = "copier" },
+    { name = "jinja2" },
     { name = "pyyaml" },
 ]
 
@@ -124,7 +125,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "copier", specifier = ">=9.17,<10" },
+    { name = "copier", specifier = "==9.18.2" },
+    { name = "jinja2", specifier = "==3.1.6" },
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
 ]
 

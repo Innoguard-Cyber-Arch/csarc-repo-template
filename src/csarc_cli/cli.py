@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import collections
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -13,17 +16,44 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Generator, Mapping, Sequence
+import tomllib
+from collections.abc import (
+    Callable,
+    Collection,
+    Generator,
+    Mapping,
+    Sequence,
+)
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
+from dataclasses import field as dataclass_field
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Literal, NoReturn, Protocol, cast, overload
+from pathlib import Path, PurePosixPath
+from types import MappingProxyType
+from typing import Any, Literal, NoReturn, Protocol, cast, overload
 from urllib.parse import quote
 
 import yaml  # type: ignore[import-untyped]
 
-from csarc_cli import release_phase
+from csarc_cli import (
+    action_pin_preflight,
+    file_transition,
+    final_plan,
+    governance_migration,
+    lifecycle_report,
+    merge_trace,
+    project_roadmap,
+    release_phase,
+    repository_facts,
+    risk_tools,
+    settings_schema,
+    setup_plan,
+    update_plan,
+)
+from csarc_cli.lifecycle_report import (
+    LIFECYCLE_REPORT_FORMAT_VERSION,
+    redact,
+)
 
 CANONICAL_SOURCE = (
     "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git"
@@ -32,7 +62,12 @@ CANONICAL_REPOSITORY = "Innoguard-Cyber-Arch/csarc-repo-template"
 CANONICAL_REPOSITORY_ID = 1_340_899_393
 MINIMUM_GH_VERSION = "2.93.0"
 GH_INSTALL_URL = "https://github.com/cli/cli#installation"
-DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
+# CODEOWNERS is opt-in: create and adopt never assume an organization or team
+# (#1061). LEGACY_DEFAULT_OWNER is the value earlier releases applied when no
+# owner was given; it is only used to preserve what an existing repository
+# already rendered when its saved answers predate the code_owner question.
+DEFAULT_OWNER = ""
+LEGACY_DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
 CONFIG_FILE = Path(".csarc/config.yml")
 LEGACY_ANSWERS_FILE = Path(".copier-answers.yml")
 # Pre-dates CONFIG_FILE: a derived projection of a subset of Copier's own
@@ -42,12 +77,20 @@ LEGACY_ANSWERS_FILE = Path(".copier-answers.yml")
 LEGACY_PROFILE_FILE = Path(".csarc/profile.json")
 PROVENANCE_FILE = Path(".csarc/provenance.json")
 PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
-ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
+# SPEC-008 report files. Each name below carries ``.json`` (the only
+# source) and ``.md`` (rendered from that JSON) beside the machine plan.
+ADOPTION_REPORT_BASENAME = "csarc-adoption-report"
 ADOPTION_PLAN_BASENAME = "csarc-adoption-plan.json"
-# Version of the adoption report's own Markdown template, independent from
-# the CLI package version. Bump this when the report's structure or field
-# set changes; README.md displays the same value (#530).
-ADOPTION_REPORT_TEMPLATE_VERSION = "1.1.0"
+UPDATE_REPORT_BASENAME = "csarc-update-report"
+# The default update report folder as docs/install.md names it: commands run
+# from inside the target (``.``), and ``lifecycle_report_directory`` writes
+# the folder next to it as ``<repo>-csarc-update-report`` (Issue #1153).
+UPDATE_FINAL_PLAN_HINT = (
+    f"../<repo>-{UPDATE_REPORT_BASENAME}/{final_plan.FINAL_PLAN_BASENAME}"
+)
+UPDATE_PLAN_BASENAME = "csarc-update-plan.json"
+# The 1.1.0 Markdown-only report name, removed after the new set is written.
+LEGACY_ADOPTION_REPORT_NAME = "csarc-adoption-dry-run.md"
 AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -62,47 +105,14 @@ GITHUB_REPOSITORY_URL = re.compile(
 )
 REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
 RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
+# SPEC-009 (Issue #1071): every resolved schema 2 intent plus the seeds,
+# live facts, derived context, and immutable project_mode a render consumed.
+# Retired keys are reported through governance_migration.RETIRED_SETTINGS.
 REPORT_SETTING_KEYS = frozenset(
     {
-        "actions_fallback",
-        "admin_bypass",
-        "code_owner",
-        "copilot_review",
-        "copyright_holder",
-        "coverage_mode",
-        "coverage_threshold",
-        "default_release_level",
-        "documentation_mode",
-        "enable_codeql",
-        "enable_governance_drift_check",
-        "enable_precommit",
-        "enable_template_update_notifications",
-        "features",
-        "governance_mode",
-        "i18n",
-        "language",
-        "languages",
-        "lifecycle",
-        "package_name",
-        "primary_language",
-        "project_description",
-        "project_license",
-        "project_maturity",
-        "project_mode",
-        "project_name",
-        "project_run_command",
-        "project_slug",
-        "project_verification_hook",
-        "project_visibility",
-        "python_min_version",
-        "python_support_mode",
-        "release_ownership",
-        "release_trigger",
-        "repository_url",
-        "review",
-        "security_reporting_channel",
-        "verification_mode",
-        "work_item_mapping_review",
+        *settings_schema.INTENT_SETTINGS,
+        *settings_schema.DECISION_SETTINGS,
+        *settings_schema.CONTEXT_KEYS,
     }
 )
 WORK_ITEM_DEFAULTS = (
@@ -180,7 +190,11 @@ INSTALL_STATE_NEXT_COMMAND = {
     ),
     INSTALL_STATE_ADOPTION_PENDING: "csarc adopt <path> --finalize",
     INSTALL_STATE_UPDATE: (
-        "csarc update <path> --check to preview, then csarc update <path>"
+        "csarc update . --to <release> --expected-sha <full SHA> "
+        "--check --json to preview; then the same command with "
+        "--finalize-plan --decision PATH=keep-current|take-new|custom:FILE "
+        "(one per listed conflict) instead of --check --json; then csarc "
+        f"update . --apply-plan {UPDATE_FINAL_PLAN_HINT} --yes"
     ),
     INSTALL_STATE_CURRENT: "no action needed",
     INSTALL_STATE_POLICY_ONLY: (
@@ -326,6 +340,14 @@ class Plan:
     manual: tuple[str, ...]
     unknown: tuple[str, ...]
     move: tuple[str, ...] = ()
+    delete: tuple[str, ...] = ()
+    # Update only (#1066): modified files the new render no longer produces
+    # stay in place, and product release state is never rewritten.
+    retained: tuple[str, ...] = ()
+    product_owned: tuple[str, ...] = ()
+    # Update only (#1083): CSARC forwarding wrappers at moved scripts' old
+    # paths that product files still call.
+    shims: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -339,6 +361,11 @@ class RepositoryContext:
     source: str
     verified: bool
     reason: str | None = None
+    # The shared detector's facts (Issue #1072). They stay out of the plan
+    # identity below so an adoption plan's repository binding is unchanged.
+    facts: Mapping[str, Mapping[str, object]] = dataclass_field(
+        default_factory=dict, compare=False
+    )
 
     def as_dict(self) -> dict[str, object]:
         """Return a stable JSON-safe repository context."""
@@ -366,6 +393,9 @@ class ResolvedPlan:
     files: Plan | None = None
     update: dict[str, object] | None = None
     adoption: dict[str, object] | None = None
+    # Setup questions, work mode, warnings, and approval route (#1078);
+    # only init and adopt plans carry one.
+    setup: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return the stable machine-readable plan representation."""
@@ -376,6 +406,12 @@ class ResolvedPlan:
             "release_capabilities": self.capabilities,
             "release_ownership": release_ownership(self.answers),
             "repository": self.repository.as_dict(),
+            # Shared detector output (Issue #1072): every live fact with its
+            # known or unknown state. Informational; apply binds `repository`.
+            "repository_facts": {
+                name: dict(fact)
+                for name, fact in sorted(self.repository.facts.items())
+            },
             "schema_version": 1,
             "target": str(self.target),
             "template": {
@@ -399,10 +435,19 @@ class ResolvedPlan:
                 "remove": list(self.files.remove),
                 "unknown": list(self.files.unknown),
             }
+            if self.mode == "update":
+                # Template-deleted paths are an update-only effect; adopt
+                # plan bytes and digests stay unchanged.
+                files_payload = cast(dict[str, object], result["files"])
+                files_payload["delete"] = list(self.files.delete)
+                files_payload["product_owned"] = list(self.files.product_owned)
+                files_payload["retained"] = list(self.files.retained)
         if self.update is not None:
             result.update(self.update)
         if self.adoption is not None:
             result["adoption"] = self.adoption
+        if self.setup is not None:
+            result["setup"] = self.setup
         return result
 
 
@@ -1090,6 +1135,43 @@ def slugify(value: str) -> str:
     return slug or "csarc-project"
 
 
+# Namespaces whose files only CSARC renders. copier.yml `_exclude` decides
+# which of them a given set of options renders (#1077); an update retires a
+# byte-identical file the new options no longer render.
+CSARC_OWNED_PREFIXES = (
+    ".csarc/docs/",
+    ".csarc/policies/",
+    ".csarc/scripts/",
+    ".csarc/site/",
+    ".csarc/tests/",
+    ".github/ISSUE_TEMPLATE/",
+    ".github/workflows/",
+)
+
+
+def product_release_workflow(answers: Mapping[str, object]) -> tuple[str, ...]:
+    """Return the selected product-owned release workflow, if any (#1083)."""
+    workflow = answers.get("release_workflow")
+    if answers.get("release_ownership") != "product-owned" or not (
+        isinstance(workflow, str) and workflow
+    ):
+        return ()
+    return (workflow,)
+
+
+def option_retirements(
+    old_render: Mapping[str, object], new_render: Mapping[str, object]
+) -> tuple[str, ...]:
+    """Return CSARC-owned old-render files the new options no longer render."""
+    return tuple(
+        sorted(
+            name
+            for name in old_render
+            if name.startswith(CSARC_OWNED_PREFIXES) and name not in new_render
+        )
+    )
+
+
 # CodeQL-analyzed modules; copier.yml's enable_codeql uses the same set.
 CODEQL_LANGUAGES = frozenset({"go", "python", "typescript"})
 
@@ -1220,8 +1302,18 @@ def copier_copy(
     data: Mapping[str, object],
     *,
     skip_tasks: bool,
-) -> None:
-    """Render one immutable template revision into a staging directory."""
+    persist_answers: bool = True,
+    decisions: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """Render one immutable template revision into a staging directory.
+
+    ``persist_answers=False`` keeps Copier's rendered answers file exactly
+    as the template recorded it, so the caller can read which questions the
+    template actually asked. Otherwise the template's resolved render
+    context (SPEC-009 seeds, live facts, derived context, and project_mode)
+    is returned for provenance, and the settings file is rewritten in its
+    canonical schema with only explicit one-time ``decisions`` added.
+    """
     command = [
         sys.executable,
         "-m",
@@ -1236,8 +1328,11 @@ def copier_copy(
     if skip_tasks:
         command.append("--skip-tasks")
     data_file = stage.parent / f".{stage.name}-copier-data.yml"
+    render_data = dict(data)
+    if persist_answers:
+        render_data[settings_schema.RENDER_CONTEXT_FLAG] = True
     data_file.write_text(
-        yaml.safe_dump(dict(data), sort_keys=True), encoding="utf-8"
+        yaml.safe_dump(render_data, sort_keys=True), encoding="utf-8"
     )
     command.extend(["--data-file", str(data_file)])
     command.extend([source, str(stage)])
@@ -1255,11 +1350,36 @@ def copier_copy(
                 or "unknown Copier error"
             )
         )
+    if not persist_answers:
+        return {}
     try:
+        context = take_render_context(stage)
         pin_answer_commit(stage, revision.sha)
-        persist_release_answers(stage, data)
+        persist_release_answers(stage, data, decisions)
     except CliError as error:
         raise CliError(f"Copier {phase} failed: {error}") from error
+    return context
+
+
+def take_render_context(stage: Path) -> dict[str, object]:
+    """Read and remove the render context a schema 2 template wrote.
+
+    A template that predates SPEC-009 writes none, which returns ``{}``.
+    """
+    path = stage / settings_schema.RENDER_CONTEXT_FILE
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CliError("The template render context is unreadable.") from error
+    finally:
+        path.unlink(missing_ok=True)
+    if not isinstance(payload, dict) or set(payload) - set(
+        settings_schema.CONTEXT_KEYS
+    ):
+        raise CliError("The template render context has an unknown shape.")
+    return {str(key): value for key, value in payload.items()}
 
 
 def pin_answer_commit(target: Path, commit: str) -> None:
@@ -1320,14 +1440,64 @@ def read_copier_answers(path: Path) -> dict[str, object]:
     return {
         str(key): value
         for key, value in payload.items()
-        if isinstance(key, str) and not key.startswith("_")
+        if isinstance(key, str)
+        and not key.startswith("_")
+        and key != settings_schema.SCHEMA_KEY
     }
 
 
-def persist_release_answers(
-    target: Path, answers: Mapping[str, object]
+def explicit_decisions(
+    explicit_data: Mapping[str, object],
+) -> dict[str, object]:
+    """Return the one-time derived decisions passed with ``--data``."""
+    return {
+        key: value
+        for key, value in explicit_data.items()
+        if key in settings_schema.DECISION_SETTINGS
+    }
+
+
+def parse_settings_data(values: list[str]) -> dict[str, str]:
+    """Parse ``--data``; retired keys are checked against the render."""
+    return parse_data(values)
+
+
+def reject_retired_data_for(
+    stage: Path, explicit_data: Mapping[str, object]
 ) -> None:
-    """Persist release answers in the rendered template's schema."""
+    """Refuse retired ``--data`` once a schema 2 render is known.
+
+    Runs right after the side-effect-free preview render and before any
+    target write; an older target template still asks legacy questions.
+    """
+    path = config_path(stage)
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except OSError, yaml.YAMLError:
+        return
+    if (
+        not isinstance(payload, dict)
+        or settings_schema.SCHEMA_KEY not in payload
+    ):
+        return
+    try:
+        settings_schema.reject_retired_data(explicit_data)
+    except settings_schema.SettingsSchemaError as error:
+        raise CliError(str(error)) from error
+
+
+def persist_release_answers(
+    target: Path,
+    answers: Mapping[str, object],
+    decisions: Mapping[str, object] | None = None,
+) -> None:
+    """Persist release answers in the rendered template's schema.
+
+    A schema 2 render (SPEC-009) is rewritten canonically: its persistent
+    intent, the resolved release owner (#1068), and only the explicit
+    one-time ``decisions`` for derived values; seeds and facts never land
+    in the settings file.
+    """
     path = safe_copier_config_path(target)
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -1335,6 +1505,23 @@ def persist_release_answers(
         raise CliError(f"Cannot read Copier answers from {path}.") from error
     if not isinstance(payload, dict):
         raise CliError(f"Copier answers in {path} must be a mapping.")
+    if settings_schema.SCHEMA_KEY in payload:
+        values = {str(key): value for key, value in payload.items()}
+        values["release_ownership"] = release_ownership(answers)
+        for key, value in (decisions or {}).items():
+            if key in settings_schema.DECISION_SETTINGS:
+                values[key] = value
+        try:
+            text = settings_schema.config_text(values)
+        except settings_schema.SettingsSchemaError as error:
+            raise CliError(str(error)) from error
+        atomic_replace_text(
+            target,
+            path.relative_to(target).as_posix(),
+            text,
+            mode=stat.S_IMODE(path.lstat().st_mode),
+        )
+        return
     config_reader = managed_script(target, "csarc_config.py")
     simplified_schema = config_reader.is_file() and (
         "ACTIONS_FALLBACK_MODES" in config_reader.read_text(encoding="utf-8")
@@ -1583,9 +1770,14 @@ def pending_adoption_data(
     unknown_files: tuple[str, ...],
     target_head: str,
     work_item_mapping: dict[str, object],
+    render_context: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    """Build the checkpoint needed to resume one exact adoption."""
-    return {
+    """Build the checkpoint needed to resume one exact adoption.
+
+    Schema 2 settings omit seeds and live facts (SPEC-009), so the
+    checkpoint carries the resolved render context finalize replays.
+    """
+    payload: dict[str, object] = {
         "answers_sha256": hashlib.sha256(answers_path.read_bytes()).hexdigest(),
         "managed_files": [
             {"fingerprint": file_fingerprint(target / name), "path": name}
@@ -1612,6 +1804,9 @@ def pending_adoption_data(
         },
         "work_item_mapping": work_item_mapping,
     }
+    if render_context:
+        payload["render_context"] = dict(sorted(render_context.items()))
+    return payload
 
 
 def write_pending_adoption(target: Path, payload: dict[str, object]) -> None:
@@ -1971,6 +2166,7 @@ def provenance_data(
     *,
     applied_at: str | None = None,
     answers: Mapping[str, object] | None = None,
+    final_plan_sha256: str | None = None,
 ) -> dict[str, object]:
     """Build the auditable state recorded after a successful operation."""
     result: dict[str, object] = {
@@ -1994,6 +2190,9 @@ def provenance_data(
         result["previous"] = previous
     if answers is not None:
         result["release"] = release_contract(answers)
+    if final_plan_sha256 is not None:
+        # The replayed update final plan this state came from (#1067).
+        result["final_plan_sha256"] = final_plan_sha256
     return result
 
 
@@ -2004,24 +2203,55 @@ def write_provenance(
     *,
     applied_at: str | None = None,
     answers: Mapping[str, object] | None = None,
+    final_plan_sha256: str | None = None,
 ) -> None:
-    """Atomically persist verified release provenance."""
+    """Atomically persist verified release provenance.
+
+    When the target holds schema 2 settings (SPEC-009), the record also
+    binds the immutable project_mode, the resolved render context taken
+    from ``answers``, and digests of both, so status and update detect a
+    hand edit or a missing record before any write (Issue #1071).
+    """
+    payload = provenance_data(
+        revision,
+        previous,
+        applied_at=applied_at,
+        answers=answers,
+        final_plan_sha256=final_plan_sha256,
+    )
+    config = target / CONFIG_FILE
+    if answers is not None and config.is_file():
+        config_bytes = config.read_bytes()
+        try:
+            raw = yaml.safe_load(config_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, yaml.YAMLError) as error:
+            raise CliError(f"Cannot read {CONFIG_FILE}.") from error
+        if isinstance(raw, dict) and settings_schema.SCHEMA_KEY in raw:
+            payload["settings"] = settings_schema.settings_record(
+                settings_schema.context_from(answers), config_bytes
+            )
     atomic_replace_text(
         target,
         PROVENANCE_FILE.as_posix(),
-        json.dumps(
-            provenance_data(
-                revision,
-                previous,
-                applied_at=applied_at,
-                answers=answers,
-            ),
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
         mode=0o666,
     )
+
+
+def load_saved_settings(target: Path) -> settings_schema.SavedSettings:
+    """Read legacy answers or verified schema 2 settings before any write.
+
+    An unknown schema, a hand-edited settings file or provenance record, a
+    missing record, or a contradictory project_mode fails closed here
+    (Issue #1071 AC4/AC6) with one stable error.
+    """
+    path = config_path(target)
+    try:
+        return settings_schema.read_saved_settings(
+            path, read_provenance(target)
+        )
+    except settings_schema.SettingsSchemaError as error:
+        raise CliError(str(error)) from error
 
 
 def read_provenance(target: Path) -> dict[str, object] | None:
@@ -2205,7 +2435,12 @@ def legacy_layout_pairs(
     stage: Path,
     target: Path,
 ) -> tuple[tuple[str, str], ...]:
-    """Return only known generated paths that need the one-time layout move."""
+    """Return only known generated paths that need the one-time layout move.
+
+    A destination the target already has means the move happened in an
+    earlier update; a legacy file left beside it is the customized copy
+    that update kept, never a second move onto that destination (#1083).
+    """
     pairs: set[tuple[str, str]] = set()
     staged = project_files(stage)
     existing = project_files(target)
@@ -2219,7 +2454,7 @@ def legacy_layout_pairs(
         for new in staged:
             if new.startswith(new_prefix):
                 old = old_prefix + new.removeprefix(new_prefix)
-                if old in existing:
+                if old in existing and new not in existing:
                     pairs.add((old, new))
     exact = {
         ".copier-answers.yml": ".csarc/config.yml",
@@ -2242,14 +2477,15 @@ def legacy_layout_pairs(
         "version.txt": ".csarc/version.txt",
     }
     for old, new in exact.items():
-        if old in existing and new in staged:
+        if old in existing and new in staged and new not in existing:
             pairs.add((old, new))
     for old in existing:
         if old.startswith("site/content/"):
             destination = "docs/site/content/" + old.removeprefix(
                 "site/content/"
             )
-            pairs.add((old, destination))
+            if destination not in existing:
+                pairs.add((old, destination))
     return tuple(sorted(pairs))
 
 
@@ -2345,451 +2581,1223 @@ def plan_status(
     )
 
 
-def printable(value: object) -> str:
-    """Escape control characters without exposing file content."""
-    return str(value).replace("\n", r"\n").replace("\r", r"\r")
-
-
-def markdown_code(value: object) -> str:
-    """Return a CommonMark code span using a non-conflicting delimiter."""
-    rendered = printable(value)
-    longest = max(
-        (len(match.group()) for match in re.finditer(r"`+", rendered)),
-        default=0,
-    )
-    delimiter = "`" * (longest + 1)
-    padding = (
-        " "
-        if rendered.startswith("`")
-        or rendered.endswith("`")
-        or (rendered.strip() and rendered != rendered.strip())
-        else ""
-    )
-    return f"{delimiter}{padding}{rendered}{padding}{delimiter}"
-
-
-def markdown_text(value: object) -> str:
-    """Escape backticks that appear in plain Markdown text."""
-    return printable(value).replace("`", r"\`")
-
-
-def markdown_table_code(value: object) -> str:
-    """Return a safe CommonMark code span for a table cell."""
-    return markdown_code(printable(value).replace("|", r"\|"))
-
-
-def report_settings(data: dict[str, object]) -> str:
-    """Return known non-secret settings used for rendering."""
-    return ", ".join(
-        markdown_code(f"{key}={printable(value)}")
-        for key, value in sorted(data.items())
-        if key in REPORT_SETTING_KEYS
+def observed_setting_note(key: str, value: object) -> str:
+    """Return the report note for one observed difference (#1068, #1072)."""
+    if key in settings_schema.DECISION_SETTINGS:
+        shown = (
+            ", ".join(f"`{redact(item)}`" for item in value)
+            if isinstance(value, list)
+            else f"`{redact(value)}`"
+        )
+        return (
+            f"The native manifests resolve {shown}; the recorded value is "
+            f"kept. Pass `--data {key}=<value>` once to decide."
+        )
+    if key in settings_schema.INTENT_SETTINGS:
+        return (
+            f"Live GitHub facts suggest `{redact(value)}`; the saved intent "
+            "stays unchanged. Pass `--data "
+            f"{key}=<value>` only to change it."
+        )
+    return (
+        f"Live GitHub facts suggest `{redact(value)}`; the saved value is "
+        f"kept. Pass `--data {key}=<value>` to change it."
     )
 
 
-def adoption_report_markdown(  # noqa: C901
-    target: Path,
-    revision: Revision,
-    repository: RepositoryContext,
-    data: dict[str, object],
-    plan: Plan,
-    generated_at: str,
-    adoption: dict[str, object] | None = None,
-) -> str:
-    """Render the complete, shareable adoption decision report.
+def report_setting_rows(
+    after: Mapping[str, object],
+    before: Mapping[str, object] | None,
+    explicit: Collection[str] = (),
+    observed: Mapping[str, object] | None = None,
+) -> list[dict[str, object]]:
+    """Return allowlisted SPEC-008 setting rows with JSON-typed values.
 
-    The report is pure Markdown (#530): no PDF or other binary artifact is
-    produced. Its own structure is versioned independently from the CLI
-    package through ``ADOPTION_REPORT_TEMPLATE_VERSION``, recorded in the
-    report itself and displayed in README.md.
+    ``before`` is ``None`` for adoption: every resolved setting is new.
+    Keys outside ``REPORT_SETTING_KEYS`` and the retired legacy keys never
+    appear (#950). An update classifies migrated governance keys and
+    retired legacy keys with the approved mapping (#1064). A live fact in
+    ``observed`` that differs from the kept saved value is noted on its row
+    (#1068).
     """
-    status, reason = plan_status(plan, adoption)
-    release = release_contract(data)
-    workflow = release["selected_workflow"] or "(none)"
-    inputs = ", ".join(cast(list[str], release["required_inputs"])) or "(none)"
-    new_count = len(plan.add)
-    edited_count = len(plan.overwrite) + len(plan.merge)
-    removed_count = len(plan.remove)
-    detail_counts = (
-        ("Add", len(plan.add)),
-        ("Overwrite", len(plan.overwrite)),
-        ("Remove", len(plan.remove)),
-        ("Preserve", len(plan.preserve)),
-        ("Automatic merge", len(plan.merge)),
-        ("Manual merge", len(plan.manual)),
-        ("Unable to determine", len(plan.unknown)),
+    previous = {} if before is None else before
+    live = {} if observed is None else observed
+    migrated = (
+        {}
+        if before is None
+        else governance_migration.setting_classes(before, after, explicit)
     )
+    # A retired key is reported only when the saved file still has it.
+    retired = (
+        set(governance_migration.RETIRED_SETTINGS)
+        - settings_schema.RELEASE_OBSERVATIONS
+    ) & set(previous)
+    reportable = REPORT_SETTING_KEYS | retired
+    keys = sorted(
+        key for key in set(previous) | set(after) if key in reportable
+    )
+    rows: list[dict[str, object]] = []
+    for key in keys:
+        old = previous.get(key)
+        new = after.get(key)
+        source = "explicit" if key in explicit else "derived"
+        note: str | None = None
+        if key in migrated:
+            setting_class, note = migrated[key]
+            if setting_class == "retired":
+                new = None
+        elif before is None or key not in previous:
+            setting_class = "new"
+        elif key not in after:
+            setting_class = "retired"
+        elif old == new:
+            setting_class = "unchanged"
+            source = "explicit" if key in explicit else "saved"
+        else:
+            setting_class = "decision"
+        if key in live and note is None:
+            note = observed_setting_note(key, live[key])
+        rows.append(
+            {
+                "after": redact(new),
+                "before": redact(old),
+                "class": setting_class,
+                "key": key,
+                "note": note,
+                "source": source,
+            }
+        )
+    return rows
 
-    owner: dict[str, object] = {}
-    owner_state = "unknown"
-    hook: dict[str, object] = {}
-    working_tree = "unknown"
-    applied = False
-    if adoption is not None:
-        raw_owner = adoption.get("code_owner")
-        owner = raw_owner if isinstance(raw_owner, dict) else {}
-        owner_state = str(owner.get("state", "unknown"))
-        raw_hook = adoption.get("project_verification_hook")
-        hook = raw_hook if isinstance(raw_hook, dict) else {}
-        working_tree = (
-            "clean"
-            if adoption.get("clean")
+
+def setup_setting_rows(
+    rows: Sequence[dict[str, object]], setup: Mapping[str, object]
+) -> list[dict[str, object]]:
+    """Give adopt rows the source and note the setup planner recorded.
+
+    A TTY answer or an explicit ``--data`` value is ``explicit``; a
+    detection, a work-mode expansion, or a suggested default stays
+    ``derived`` with a note naming where the value came from (#1078).
+    """
+    raw = setup.get("sources")
+    sources = raw if isinstance(raw, dict) else {}
+    result: list[dict[str, object]] = []
+    for row in rows:
+        entry = sources.get(row["key"])
+        updated = dict(row)
+        if isinstance(entry, dict) and entry.get("source") in {
+            "explicit",
+            "derived",
+        }:
+            updated["source"] = entry["source"]
+            note = entry.get("note")
+            if isinstance(note, str) and updated.get("note") is None:
+                updated["note"] = note
+        result.append(updated)
+    return result
+
+
+def setup_decision_actions(
+    setup: Mapping[str, object] | None, answers: Mapping[str, object]
+) -> list[dict[str, object]]:
+    """Return adopt's non-blocking decisions for suggested intent (#1078).
+
+    A non-interactive adopt takes the suggested value of an intent no
+    unique source decides; the report asks the reviewer to confirm it.
+    """
+    if setup is None:
+        return []
+    raw = setup.get("suggested")
+    suggested = raw if isinstance(raw, list) else []
+    actions: list[dict[str, object]] = []
+    for key in sorted(str(item) for item in suggested):
+        if key not in REPORT_SETTING_KEYS:
+            continue
+        value = answers.get(key)
+        shown = ", ".join(map(str, value)) if isinstance(value, list) else value
+        actions.append(
+            {
+                "blocking": False,
+                "command": f"csarc adopt --data {key}=<value>",
+                "kind": "setting-decision",
+                "message": (
+                    f"No unique source decides {key}; this plan uses the "
+                    f"suggested `{redact(shown)}`. Confirm it, or plan again "
+                    "with an explicit value."
+                ),
+                "subject": key,
+            }
+        )
+    return actions
+
+
+def report_file_rows(
+    files: Plan,
+    preserved_dirty: Collection[str] = (),
+    *,
+    update: bool = False,
+) -> list[dict[str, object]]:
+    """Map one file plan onto the closed SPEC-008 action vocabulary.
+
+    An update's three-way conflicts are ``update-conflict`` rows; adopt and
+    reinstall keep their two-way ``manual-merge`` rows.
+    """
+    rows: list[tuple[str, str, str, str | None, str | None]] = []
+    rows.extend((path, "add", "template", None, None) for path in files.add)
+    rows.extend(
+        (
+            path,
+            "overwrite",
+            lifecycle_report.COMPATIBILITY_SHIM
+            if path in files.shims
+            else "template",
+            None,
+            None,
+        )
+        for path in files.overwrite
+    )
+    rows.extend(
+        (path, "overwrite", "automatic-merge", None, None)
+        for path in files.merge
+    )
+    for move in files.move:
+        source, _separator, destination = move.partition(" -> ")
+        rows.append((destination, "move", "layout-migration", source, None))
+    rows.extend(
+        (path, "retire", "obsolete-generated", None, None)
+        for path in files.remove
+    )
+    rows.extend(
+        (path, "remove", "template-deleted", None, None)
+        for path in files.delete
+    )
+    rows.extend(
+        (
+            path,
+            "preserve",
+            "dirty-preserved"
+            if path in preserved_dirty
             else (
-                "dirty; exact preserved state"
-                if adoption.get("applicable") is True
-                else "dirty; review only"
-            )
-        )
-        applied = adoption.get("applied") is True
-
-    snapshot = ["## Snapshot", "", f"- Target: {markdown_code(target)}"]
-    if adoption is not None:
-        snapshot.append(
-            f"- Target HEAD: {markdown_code(adoption.get('target_head'))}"
-        )
-        snapshot.append(f"- Working tree: {working_tree}")
-    snapshot.append(
-        f"- Repository: {markdown_code(repository.repository or '(none)')}"
-    )
-    snapshot.append(
-        f"- Repository visibility: {markdown_code(repository.visibility)} "
-        f"({markdown_code(repository.source)})"
-    )
-    if adoption is not None:
-        changes = adoption.get("target_changes")
-        if isinstance(changes, list) and changes:
-            snapshot.append(
-                "- Working-tree entries: "
-                + ", ".join(markdown_code(value) for value in changes)
-            )
-    snapshot.extend(
-        [
-            f"- Template source: {markdown_code(revision.source)}",
-            f"- Template: {markdown_code(revision.label)} / "
-            f"{markdown_code(revision.sha)}",
-            "- Release verification: "
-            + (
-                "verified immutable release"
-                if revision.verified
-                else "UNVERIFIED"
+                "product-owned" if path in files.product_owned else "untouched"
             ),
-            f"- Release ownership: {markdown_code(release['ownership'])}",
-            f"- Selected release workflow: {markdown_code(workflow)}",
-            f"- Required release inputs: {markdown_code(inputs)}",
-            f"- Release ownership reason: {release['reason']}",
-            "- Release repository settings: "
-            f"{markdown_code(release['settings_owner'])} / immutable Releases "
-            f"{markdown_code(release['immutable_releases'])}",
-        ]
+            None,
+            None,
+        )
+        for path in files.preserve
     )
-    if adoption is not None:
-        snapshot.extend(
-            [
-                f"- CODEOWNER verification: {markdown_code(owner_state)}",
-                "- Project verification hook: "
-                f"{markdown_code(hook.get('path') or '(none)')}",
-                "- Project verification hook configured: "
-                f"{markdown_code(str(hook.get('configured') is True).lower())}",
-                "- Project verification result: "
-                f"{markdown_code(hook.get('result'))}",
-                "- Project verification reason: "
-                f"{markdown_code(hook.get('reason'))}",
-                "- Candidate verification: "
-                f"{markdown_code(adoption.get('verification'))}",
-                f"- Adoption applied: {markdown_code(str(applied).lower())}",
-            ]
+    rows.extend(
+        (path, "conflict", "retire-modified", None, "keep-current")
+        for path in files.retained
+    )
+    rows.extend(
+        (
+            path,
+            "conflict",
+            "update-conflict" if update else "manual-merge",
+            None,
+            "pending",
         )
-        if applied:
-            snapshot.append(
-                f"- Adopted at: {markdown_code(adoption.get('applied_at'))}"
-            )
-    snapshot.append(f"- Settings: {report_settings(data)}")
-    snapshot.append(f"- Generated: {markdown_code(generated_at)}")
-
-    summary_lines = [
-        "## Summary of file changes",
-        "",
-        "| Change | Files |",
-        "| --- | ---: |",
-        f"| New files | {new_count} |",
-        f"| Edited files | {edited_count} |",
-        f"| Removed files | {removed_count} |",
-        f"| Preserved files | {len(plan.preserve)} |",
+        for path in files.manual
+    )
+    rows.extend(
+        (path, "conflict", "undetermined", None, "pending")
+        for path in files.unknown
+    )
+    order = list(lifecycle_report.FILE_ACTIONS)
+    return [
+        {
+            "action": action,
+            "decision": decision,
+            "from": source,
+            "path": path,
+            "reason": reason,
+        }
+        for path, action, reason, source, decision in sorted(
+            rows, key=lambda row: (order.index(row[1]), row[0])
+        )
     ]
 
-    detail_lines = [
-        "## Expected file effects",
-        "",
-        "| Effect | Files |",
-        "| --- | ---: |",
-        *(f"| {label} | {count} |" for label, count in detail_counts),
-    ]
 
-    impact_lines = [
-        "## Impact analysis",
-        "",
-        f"- This plan changes {new_count + edited_count + removed_count} "
-        f"file(s) in {markdown_code(target)}: {new_count} new, "
-        f"{edited_count} edited, {removed_count} removed; "
-        f"{len(plan.preserve)} file(s) stay preserved.",
-        f"- Release ownership is {markdown_code(release['ownership'])} using "
-        f"workflow {markdown_code(workflow)}; {release['reason']}",
-    ]
-    if adoption is not None:
-        impact_lines.extend(
-            [
-                f"- Working tree before adoption: {working_tree}.",
-                f"- CODEOWNER verification: {markdown_code(owner_state)}.",
-                "- Candidate verification: "
-                f"{markdown_code(adoption.get('verification'))}.",
-            ]
+def candidate_verification_state(value: object) -> dict[str, object]:
+    """Split the legacy candidate verification string into state and reason."""
+    text = str(value)
+    if text in {"passed", "pending-authorization", "deferred-manual-merge"}:
+        return {"reason": None, "state": text}
+    if text == "not-run-dirty":
+        return {
+            "reason": "The dirty working tree can only be reviewed.",
+            "state": "not-run",
+        }
+    if text.startswith("failed"):
+        reason = text.removeprefix("failed").removeprefix(":").strip()
+        return {"reason": reason or None, "state": "failed"}
+    return {
+        "reason": f"Unrecognized verification result: {text}",
+        "state": "failed",
+    }
+
+
+def adoption_required_actions(  # noqa: C901
+    plan: ResolvedPlan,
+) -> list[dict[str, object]]:
+    """Derive adopt required actions from the plan's target evidence."""
+    actions: list[dict[str, object]] = []
+    adoption = plan.adoption or {}
+
+    def add(
+        kind: str,
+        subject: str,
+        message: str,
+        *,
+        blocking: bool,
+        command: str | None = None,
+    ) -> None:
+        actions.append(
+            {
+                "blocking": blocking,
+                "command": command,
+                "kind": kind,
+                "message": message,
+                "subject": subject,
+            }
         )
 
-    mapping_lines: list[str] = []
-    mapping: dict[str, object] = {}
-    if adoption is not None:
-        raw_mapping = adoption.get("work_item_mapping")
-        mapping = raw_mapping if isinstance(raw_mapping, dict) else {}
-    if mapping:
-        mapping_lines = [
-            "## Work-item mapping guidance",
-            "",
-            "This is read-only guidance. Adoption does not rename or delete "
-            "GitHub labels. Review the safe suggestions interactively; keep "
-            "custom labels unless you explicitly decide otherwise.",
-            "",
-            "| Work kind | Issue Type | Issue label | PR / fallback label |",
-            "| --- | --- | --- | --- |",
-        ]
-        defaults = mapping.get("defaults")
-        if isinstance(defaults, list):
-            for item in defaults:
-                if not isinstance(item, dict):
-                    continue
-                issue_label = item.get("issue_label") or "(none)"
-                mapping_lines.append(
-                    f"| {markdown_table_code(item.get('kind'))} | "
-                    f"{markdown_table_code(item.get('issue_type'))} | "
-                    f"{markdown_table_code(issue_label)} | "
-                    f"{markdown_table_code(item.get('pr_label'))} |"
-                )
-        mapping_lines.extend(
-            (
-                "",
-                "Inspection: "
-                f"{markdown_code(mapping.get('state', 'unknown'))} — "
-                + markdown_text(mapping.get("reason", "No details available.")),
-                "Issue Types: "
-                f"{markdown_code(mapping.get('issue_type_state', 'unknown'))}; "
-                "labels: "
-                f"{markdown_code(mapping.get('label_state', 'unknown'))}.",
-                "Review choice: "
-                f"{markdown_code(mapping.get('review', 'pending'))}.",
-            )
+    if adoption.get("mapping_reviewed") is False:
+        add(
+            "mapping-review",
+            "work_item_mapping_review",
+            "Work-item mapping suggestions are pending review; plan again "
+            "with an explicit review choice (or review-individually).",
+            blocking=False,
+            command="csarc adopt --data work_item_mapping_review=accept-safe",
         )
-        issue_types = mapping.get("issue_types")
-        if isinstance(issue_types, list) and issue_types:
-            mapping_lines.extend(
-                (
-                    "",
-                    "### Existing Issue Types",
-                    "",
-                    "| Existing | Enabled | Color | Description | Suggestion | "
-                    "Target |",
-                    "| --- | --- | --- | --- | --- | --- |",
-                )
-            )
-            for item in issue_types:
-                if not isinstance(item, dict):
-                    continue
-                color = item.get("color") or "(none)"
-                description = item.get("description") or "(none)"
-                enabled = str(item.get("enabled") is True).lower()
-                mapping_lines.append(
-                    f"| {markdown_table_code(item.get('source'))} | "
-                    f"{markdown_table_code(enabled)} | "
-                    f"{markdown_table_code(color)} | "
-                    f"{markdown_table_code(description)} | "
-                    f"{markdown_table_code(item.get('action'))} | "
-                    f"{markdown_table_code(item.get('target') or '(none)')} |"
-                )
-        labels = mapping.get("labels")
-        if isinstance(labels, list) and labels:
-            mapping_lines.extend(
-                (
-                    "",
-                    "### Existing labels",
-                    "",
-                    "| Existing | Color | Description | Suggestion | "
-                    "Issue Type | Canonical label |",
-                    "| --- | --- | --- | --- | --- | --- |",
-                )
-            )
-            for item in labels:
-                if not isinstance(item, dict):
-                    continue
-                color = item.get("color") or "(none)"
-                description = item.get("description") or "(none)"
-                issue_type = item.get("issue_type") or "(none)"
-                mapping_lines.append(
-                    f"| {markdown_table_code(item.get('source'))} | "
-                    f"{markdown_table_code(color)} | "
-                    f"{markdown_table_code(description)} | "
-                    f"{markdown_table_code(item.get('action'))} | "
-                    f"{markdown_table_code(issue_type)} | "
-                    f"{markdown_table_code(item.get('target') or '(none)')} |"
-                )
-
-    decision_items: list[str] = []
-    if adoption is not None and adoption.get("mapping_reviewed") is False:
-        decision_items.append(
-            "- Work-item mapping suggestions are pending review; rerun the "
-            "dry-run with `--data work_item_mapping_review=accept-safe` or "
-            "`review-individually`."
-        )
-    if adoption is not None and owner_state in {"blocked", "unknown"}:
-        decision_items.append(
-            f"- CODEOWNER {markdown_code(owner.get('value', 'unknown'))} "
-            f"verification is {markdown_code(owner_state)} - "
-            f"{markdown_text(owner.get('reason', 'No details available.'))}."
-        )
-    if adoption is not None and hook.get("result") == "failed":
-        decision_items.append(
-            "- Project verification hook "
-            f"{markdown_code(hook.get('path') or '(none)')} failed - "
-            f"{markdown_text(hook.get('reason', 'No details available.'))}."
-        )
+    raw_mapping = adoption.get("work_item_mapping")
+    mapping = raw_mapping if isinstance(raw_mapping, dict) else {}
     for group, item_kind in (
         (mapping.get("issue_types"), "Issue Type"),
         (mapping.get("labels"), "label"),
     ):
         if not isinstance(group, list):
             continue
-        decision_items.extend(
-            "- Existing "
-            f"{item_kind} {markdown_code(item.get('source'))} has no safe "
-            "automatic mapping; preserve it unless you explicitly choose a "
-            "target."
-            for item in group
-            if isinstance(item, dict)
-            and item.get("action") == "decision-required"
+        for item in group:
+            if isinstance(item, dict) and (
+                item.get("action") == "decision-required"
+            ):
+                add(
+                    "mapping-decision",
+                    str(item.get("source")),
+                    f"Existing {item_kind} has no safe automatic mapping; "
+                    "preserve it unless you explicitly choose a target.",
+                    blocking=False,
+                )
+    raw_owner = adoption.get("code_owner")
+    owner = raw_owner if isinstance(raw_owner, dict) else {}
+    # An unverifiable (unknown) CODEOWNER is shown in Product state but is
+    # not a required action: no answer can resolve it before the push.
+    if owner.get("state") == "blocked":
+        add(
+            "code-owner",
+            str(owner.get("value") or "(none)"),
+            f"CODEOWNER verification is {owner.get('state')}: "
+            f"{owner.get('reason', 'No details available.')}",
+            blocking=True,
+            command="csarc adopt --data code_owner=<@user-or-@org/team>",
         )
-    attention = (
-        (path, "template and repository contain different UTF-8 text")
-        for path in plan.manual
-    )
-    unknown = (
-        (
+    raw_hook = adoption.get("project_verification_hook")
+    hook = raw_hook if isinstance(raw_hook, dict) else {}
+    if hook.get("result") == "failed":
+        add(
+            "verification",
+            str(hook.get("path") or "project verification hook"),
+            f"Project verification hook failed: {hook.get('reason')}",
+            blocking=True,
+        )
+    candidate = candidate_verification_state(adoption.get("verification"))
+    if plan.adoption is not None and candidate["state"] == "failed":
+        add(
+            "verification",
+            "candidate",
+            f"Candidate verification failed: {candidate['reason']}",
+            blocking=True,
+        )
+    if plan.adoption is not None and adoption.get("verification") == (
+        "not-run-dirty"
+    ):
+        add(
+            "working-tree",
+            str(plan.target),
+            "Only unstaged tracked modifications that the plan preserves can "
+            "be applied; commit, stash, or remove the other changes.",
+            blocking=True,
+        )
+    if (
+        plan.adoption is not None
+        and adoption.get("applicable") is not True
+        and adoption.get("mapping_reviewed") is not False
+        and not any(action["blocking"] for action in actions)
+    ):
+        add(
+            "verification",
+            "candidate",
+            "The machine plan is not applicable; candidate verification is "
+            f"{adoption.get('verification', 'unknown')}.",
+            blocking=True,
+        )
+    files = plan.files or Plan((), (), (), (), (), (), ())
+    for path in files.manual:
+        add(
+            "file-conflict",
             path,
-            "file type, executable bit, link target, or non-text content "
+            "Template and repository contain different UTF-8 text; merge "
+            "it manually.",
+            blocking=False,
+        )
+    for path in files.unknown:
+        add(
+            "file-conflict",
+            path,
+            "File type, executable bit, link target, or non-text content "
             "differs; a directory, ancestor, or special-file collision is "
-            "also possible",
+            "also possible.",
+            blocking=False,
         )
-        for path in plan.unknown
-    )
-    decision_items.extend(
-        f"- {markdown_code(path)} - {item_reason}."
-        for path, item_reason in (*attention, *unknown)
-    )
-    decision_lines = ["## Items requiring your decision", ""]
-    if decision_items:
-        decision_lines.extend(decision_items)
-    else:
-        decision_lines.append(
-            "- No known file conflicts. This does not guarantee semantic or "
-            "runtime compatibility."
-        )
+    return actions
 
-    lines = [
-        "# CSARC adoption dry-run",
-        "",
-        f"> **Decision: {status}.** {reason}",
-        "",
-        f"Report template version: `{ADOPTION_REPORT_TEMPLATE_VERSION}`",
-        "",
-        *snapshot,
-        "",
-        *summary_lines,
-        "",
-        *detail_lines,
-        "",
-        *impact_lines,
-        "",
-        *mapping_lines,
-        *(("",) if mapping_lines else ()),
-        *decision_lines,
+
+def update_pin_items(
+    update: Mapping[str, object] | None,
+) -> list[dict[str, object]] | None:
+    """Return the preflight drift items recorded in an update plan."""
+    preflight = (update or {}).get("action_pin_preflight")
+    if not isinstance(preflight, dict):
+        return None
+    items = preflight.get("items")
+    if not isinstance(items, list):
+        return None
+    return [dict(item) for item in items if isinstance(item, dict)]
+
+
+CONFLICT_SIDES_DIRECTORY = "conflicts"
+CONFLICT_SIDES = ("base", "current", "new")
+
+
+def update_conflict_message(
+    path: str, missing_ignore_rules: Sequence[str] = ()
+) -> str:
+    """Point one update conflict at its sides and its decision (#1147).
+
+    An ignore-file conflict also names the template rules the current file
+    lacks, so keeping it does not silently drop them (#1154 AC3).
+    """
+    sides = ", ".join(
+        f"{CONFLICT_SIDES_DIRECTORY}/{side}/{path}" for side in CONFLICT_SIDES
+    )
+    message = (
+        "Template and repository changes overlap in the three-way update. "
+        f"Compare {sides} in this report folder (base: the recorded "
+        "release's render; current: this repository; new: the target "
+        "release's render; a missing file means that side has none), then "
+        f"decide it with csarc update --finalize-plan --decision {path}="
+        "keep-current|take-new|custom:FILE."
+    )
+    if missing_ignore_rules:
+        message += (
+            " The current file lacks these template ignore rules; "
+            "keep-current leaves them out, so add the ones the project "
+            "needs to a custom:FILE decision: "
+            + ", ".join(missing_ignore_rules)
+            + "."
+        )
+    return message
+
+
+IGNORE_FILE_NAMES = frozenset({".gitignore"})
+
+
+def ignore_rules(content: bytes | None) -> list[str]:
+    """Return the non-comment, non-blank rules of one ignore file."""
+    if content is None:
+        return []
+    rules: list[str] = []
+    for line in content.decode("utf-8", errors="replace").splitlines():
+        rule = line.strip()
+        if rule and not rule.startswith("#"):
+            rules.append(rule)
+    return rules
+
+
+def missing_ignore_rules(
+    sides: Mapping[str, Mapping[str, bytes | None]],
+) -> dict[str, list[str]]:
+    """Return, per ignore-file conflict, new-side rules current lacks.
+
+    ``keep-current`` records the current side, so these are exactly the
+    template rules that decision would leave out (#1154 AC3).
+    """
+    result: dict[str, list[str]] = {}
+    for path, contents in sides.items():
+        if PurePosixPath(path).name not in IGNORE_FILE_NAMES:
+            continue
+        current = set(ignore_rules(contents.get("current")))
+        missing = list(
+            dict.fromkeys(
+                rule
+                for rule in ignore_rules(contents.get("new"))
+                if rule not in current
+            )
+        )
+        if missing:
+            result[path] = missing
+    return result
+
+
+def update_ignored_payload(
+    update: Mapping[str, object] | None,
+) -> list[dict[str, str]]:
+    """Return the hidden rendered files recorded in an update plan."""
+    rows = (update or {}).get("ignored_payload")
+    if not isinstance(rows, list):
+        return []
+    return [
+        {str(key): str(value) for key, value in row.items()}
+        for row in rows
+        if isinstance(row, dict)
     ]
-    if plan.merge:
-        lines.extend(
-            (
-                "",
-                "## Automatic merges",
-                "",
-                *(
-                    f"- {markdown_code(path)} - fixed CSARC adoption policy."
-                    for path in plan.merge
-                ),
+
+
+def ignored_payload_actions(
+    hidden: Sequence[Mapping[str, str]],
+) -> list[dict[str, object]]:
+    """Return one blocking row per ignore file that hides rendered files."""
+    by_source: dict[str, list[Mapping[str, str]]] = {}
+    for row in hidden:
+        by_source.setdefault(row["source"], []).append(row)
+    return [
+        {
+            "blocking": True,
+            "command": None,
+            "kind": "file-conflict",
+            "message": "Ignore rules hide rendered CSARC files, so the "
+            f"update cannot deliver them: {ignored_text(rows)}. Except "
+            "those paths in this file (in its --decision when it is a "
+            "conflict), then create a new plan.",
+            "subject": source,
+        }
+        for source, rows in sorted(by_source.items())
+    ]
+
+
+def update_required_actions(
+    files: Plan,
+    settings: Sequence[Mapping[str, object]],
+    pin_items: Sequence[Mapping[str, object]] = (),
+    observed: Mapping[str, object] | None = None,
+    ignored: Sequence[Mapping[str, str]] = (),
+    pin_versions: Mapping[
+        tuple[str, int], tuple[str | None, str | None]
+    ] = MappingProxyType({}),
+    ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
+    writer_moves: Sequence[Mapping[str, str]] = (),
+    retained_uses: Sequence[Mapping[str, str]] = (),
+) -> list[dict[str, object]]:
+    """Derive the update required actions this release can evaluate."""
+    live = {} if observed is None else observed
+    actions: list[dict[str, object]] = [
+        {
+            "blocking": False,
+            "command": f"csarc update --data {row['key']}=<value>",
+            "kind": "setting-decision",
+            "message": "The saved value changes without an explicit choice; "
+            "confirm the new value or pass the one to keep.",
+            "subject": str(row["key"]),
+        }
+        for row in settings
+        if row["class"] == "decision" and row["source"] != "explicit"
+    ]
+    # A saved intent the live facts no longer suggest is only a row note
+    # (#1058 decision 15, Issue #1072 AC4); live facts and contradicted
+    # derived context ask for one explicit decision.
+    actions.extend(
+        {
+            "blocking": False,
+            "command": f"csarc update --data {key}=<value>",
+            "kind": "setting-decision",
+            "message": (
+                "The native manifests do not confirm the recorded value; "
+                "it is kept until you pass one explicitly."
+                if key in settings_schema.DECISION_SETTINGS
+                else "Live GitHub facts suggest a value that differs from "
+                "the saved setting; the saved value is kept until you pass "
+                "one explicitly."
+            ),
+            "subject": key,
+        }
+        for key in sorted(live)
+        if key not in settings_schema.INTENT_SETTINGS
+    )
+    actions.extend(
+        {
+            "blocking": True,
+            "command": None,
+            "kind": "file-conflict",
+            "message": update_conflict_message(path, ignore_gaps.get(path, ())),
+            "subject": path,
+        }
+        for path in files.manual
+    )
+    actions.extend(ignored_payload_actions(ignored))
+    actions.extend(release_writer_actions(writer_moves))
+    actions.extend(
+        {
+            "blocking": False,
+            "command": None,
+            "kind": "file-conflict",
+            "message": "File type, link target, or a directory collision "
+            "differs from the new release; inspect it before updating.",
+            "subject": path,
+        }
+        for path in files.unknown
+    )
+    actions.extend(
+        {
+            "blocking": True,
+            "command": None,
+            "kind": "action-pin",
+            "message": f"Product workflow pins {item['action']}@"
+            f"{item['old_sha']}; the new template pins {item['new_sha']} "
+            f"({item['reason']}; "
+            + action_pin_preflight.version_note(
+                *pin_versions.get(
+                    (str(item["file"]), cast(int, item["line"])),
+                    (None, None),
+                )
             )
+            + "). Commit that pin change, then create a new plan.",
+            "subject": f"{item['file']}:{item['line']}",
+        }
+        for item in pin_items
+        if item.get("reason") != action_pin_preflight.REASON_PRODUCT_PIN_NEWER
+    )
+    actions.extend(
+        {
+            "blocking": False,
+            "command": None,
+            "kind": "action-pin",
+            "message": f"Product workflow keeps {item['action']}@"
+            f"{item['old_sha']}, newer than the template pin "
+            f"{item['new_sha']} in the same major release "
+            f"({item['reason']}); the update aligns the template workflows "
+            "to the product pin.",
+            "subject": f"{item['file']}:{item['line']}",
+        }
+        for item in pin_items
+        if item.get("reason") == action_pin_preflight.REASON_PRODUCT_PIN_NEWER
+    )
+    actions.extend(reviewer_assignment_actions(files, settings))
+    uses = retained_uses_by_script(retained_uses)
+    actions.extend(
+        retained_use_action(path, uses[path])
+        if path in uses
+        else {
+            "blocking": False,
+            "command": None,
+            "kind": "retire-modified",
+            "message": "The new release no longer renders this file, but it "
+            "differs from the trusted old render; it is kept. Delete it "
+            "yourself once its changes are no longer needed.",
+            "subject": path,
+        }
+        for path in files.retained
+    )
+    return actions
+
+
+def reviewer_assignment_actions(
+    files: Plan, settings: Sequence[Mapping[str, object]]
+) -> list[dict[str, object]]:
+    """Ask the owner to confirm the reviewer assignment change (#1157).
+
+    Retiring ``reviewers`` or ``.github/REVIEWERS`` changes who reviews
+    pull requests. The setting row stays ``retired`` and its note explains
+    the new behavior; this row asks the owner to confirm it, the way a
+    ``widened`` row needs an explicit owner decision.
+    """
+    key = governance_migration.REVIEWERS_KEY
+    path = governance_migration.REVIEWERS_FILE
+    retired = [
+        row
+        for row in settings
+        if row["key"] == key and row["class"] == "retired"
+    ]
+    if not retired and path not in {
+        *files.remove,
+        *files.delete,
+        *files.retained,
+    }:
+        return []
+    before = retired[0]["before"] if retired else None
+    return [
+        {
+            "blocking": False,
+            "command": None,
+            "kind": "setting-decision",
+            "message": "Reviewer assignment changes and the owner must "
+            "confirm it before --finalize-plan: "
+            + governance_migration.reviewers_note(before).removeprefix(
+                "Retired; "
+            ),
+            "subject": key,
+        }
+    ]
+
+
+def retained_uses_by_script(
+    rows: Sequence[Mapping[str, str]],
+) -> dict[str, list[Mapping[str, str]]]:
+    """Group the recorded retained-script uses by the retained script."""
+    grouped: dict[str, list[Mapping[str, str]]] = {}
+    for row in rows:
+        grouped.setdefault(row["script"], []).append(row)
+    return grouped
+
+
+def retained_use_action(
+    path: str, uses: Sequence[Mapping[str, str]]
+) -> dict[str, object]:
+    """Return the blocking row for a kept script the plan would break."""
+    used = ", ".join(
+        f"{row['path']} -> {row['destination']}"
+        if row["destination"]
+        else f"{row['path']} (removed)"
+        for row in uses
+    )
+    return {
+        "blocking": True,
+        "command": None,
+        "kind": "retire-modified",
+        "message": "The new release no longer renders this script, but it "
+        "differs from the trusted old render, so it is kept. It still runs "
+        f"or reads files this update removes or moves: {used}, so it would "
+        "fail after the update. Retire it as the new release does with "
+        f"csarc update --finalize-plan --decision {path}=take-new (the "
+        ".csarc/scripts/ version replaces it), or change it in a product "
+        "commit so it no longer uses these paths and run csarc update "
+        "--check again; the target was not changed.",
+        "subject": path,
+    }
+
+
+APPLIED_NEXT_STEPS = (
+    {
+        "command": None,
+        "text": "No plan remains to apply. Review the repository changes, "
+        "then open a pull request.",
+    },
+)
+
+
+def decidable_conflicts_only(
+    actions: Sequence[Mapping[str, object]], files: Plan
+) -> bool:
+    """Return whether every blocking row is a planned, decidable conflict.
+
+    Only these are resolved by ``--finalize-plan --decision`` (Issue #1147);
+    any other blocking row, such as ignore rules hiding rendered files
+    outside the conflicts, needs a product change and a new plan first.
+    """
+    blocking = [action for action in actions if action["blocking"]]
+    return bool(blocking) and all(
+        (
+            action["kind"] == "file-conflict"
+            and action["subject"] in files.manual
         )
-    if adoption is not None and adoption.get("applied") is True:
-        lines.extend(
-            (
-                "",
-                "## Adoption applied",
-                "",
-                "Formal adoption completed at "
-                f"{markdown_code(adoption.get('applied_at'))}. This report "
-                "was updated in place to record the post-adoption state; no "
-                "plan remains to apply.",
-                "",
+        or (
+            action["kind"] == "retire-modified"
+            and action["subject"] in files.retained
+        )
+        for action in blocking
+    )
+
+
+def lifecycle_next_steps(
+    operation: str,
+    status: str,
+    *,
+    applicable: bool,
+    plan: ResolvedPlan,
+    plan_path: Path | None,
+    conflicts_only: bool = False,
+) -> list[dict[str, object]]:
+    """Return the next steps for one unapplied report status."""
+    if status == "current":
+        return [{"command": None, "text": "No update is available."}]
+    steps: list[dict[str, object]] = []
+    if (
+        status == "blocked"
+        and operation == "update"
+        and plan_path is not None
+        and conflicts_only
+    ):
+        # Only file conflicts block: they are decided in one final plan,
+        # not by editing the target (Issue #1147).
+        release = (
+            f"--to {plan.revision.label} --expected-sha {plan.revision.sha}"
+        )
+        final = plan_path.parent / final_plan.FINAL_PLAN_BASENAME
+        return [
+            {
+                "command": f"csarc update {plan.target} {release} "
+                "--finalize-plan --decision "
+                "PATH=keep-current|take-new|custom:FILE",
+                "text": "Decide every blocking file conflict in one final "
+                "plan, with one --decision per conflict (a blocking "
+                "retire-modified script takes PATH=take-new to retire it) "
+                "and any --data options used for this plan:",
+            },
+            {
+                "command": f"csarc update {plan.target} --apply-plan {final}",
+                "text": "Review the final plan, then apply it exactly as "
+                "recorded:",
+            },
+        ]
+    if status == "blocked":
+        return [
+            {
+                "command": None,
+                "text": "Do not apply this plan. Resolve the blocking items, "
+                "then create a new plan.",
+            }
+        ]
+    if status == "review-required":
+        steps.append(
+            {
+                "command": None,
+                "text": "Resolve each item under Items requiring your "
+                "decision; an answer given with --data needs a new plan.",
+            }
+        )
+    if operation == "adopt" and applicable and plan_path is not None:
+        finalize = " --finalize" if plan.mode == "adopt-finalize" else ""
+        steps.append(
+            {
+                "command": f"csarc adopt{finalize} --apply-plan {plan_path}",
+                "text": "Apply exactly this reviewed machine plan:",
+            }
+        )
+    elif operation == "update":
+        steps.append(
+            {
+                "command": f"csarc update {plan.target} --to "
+                f"{plan.revision.label} --expected-sha {plan.revision.sha}",
+                "text": "Apply the same reviewed release, repeating any "
+                "--data options used for this plan:",
+            }
+        )
+    return steps
+
+
+RISK_CONTROLS_PATH = ".csarc/scripts/risk_controls.py"
+
+
+def risk_behavior_changes(files: Plan) -> list[dict[str, object]] | None:
+    """Report the SPEC-010 gate an update starts enforcing (#1079)."""
+    if RISK_CONTROLS_PATH not in files.add:
+        return None
+    return [
+        {
+            "subject": "risk-controls",
+            "before": "Ready pull requests are not checked for risk controls",
+            "after": (
+                "Ready pull requests require the linked Issue to carry a "
+                "valid risk-controls block and every acceptance criterion "
+                "and risk to map to exact-head evidence (SPEC-010)"
+            ),
+            "note": (
+                "Run csarc risk suggest --open to list open Issues without "
+                "one; there is no grace period."
+            ),
+        }
+    ]
+
+
+def lifecycle_report_model(  # noqa: C901
+    plan: ResolvedPlan,
+    *,
+    operation: str,
+    plan_name: str,
+    plan_sha256: str,
+    generated_at: str,
+    plan_path: Path | None = None,
+    before: Mapping[str, object] | None = None,
+    explicit: Collection[str] = (),
+    previous: Revision | None = None,
+    target_head: str | None = None,
+    target_changes: Sequence[str] | None = None,
+    observed: Mapping[str, object] | None = None,
+    pin_versions: Mapping[
+        tuple[str, int], tuple[str | None, str | None]
+    ] = MappingProxyType({}),
+    ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
+) -> dict[str, object]:
+    """Build the single SPEC-008 report object for one adopt or update plan.
+
+    Every other report output (Markdown, terminal summaries) derives from
+    this object; it is validated before it is returned.
+    """
+    files = plan.files or Plan((), (), (), (), (), (), ())
+    adoption = plan.adoption
+    preserved_dirty: Collection[str] = ()
+    if adoption is not None:
+        raw_preserved = adoption.get("preserved_dirty_paths")
+        if isinstance(raw_preserved, list):
+            preserved_dirty = {str(path) for path in raw_preserved}
+    settings = report_setting_rows(
+        plan.answers,
+        before if operation == "update" else None,
+        explicit,
+        observed if operation == "update" else None,
+    )
+    setup = plan.setup if operation == "adopt" else None
+    if setup is not None:
+        settings = setup_setting_rows(settings, setup)
+    if operation == "update":
+        violations = governance_migration.governance_row_violations(settings)
+        if violations:
+            raise CliError(
+                "Governance settings changed outside the approved migration "
+                "mapping (" + ", ".join(violations) + "); pass an explicit "
+                "--data value for each key and create a new plan."
             )
-        )
-    elif adoption is not None and adoption.get("applicable") is not True:
-        lines.extend(
-            (
-                "",
-                "## Next step",
-                "",
-                "Do not apply this plan. Resolve the reported gate and create "
-                "a new dry-run plan.",
-                "",
-            )
-        )
+    file_rows = report_file_rows(
+        files,
+        preserved_dirty,
+        update=operation == "update" and adoption is None,
+    )
+    if operation == "adopt" or adoption is not None:
+        actions = adoption_required_actions(plan)
+        actions.extend(setup_decision_actions(setup, plan.answers))
     else:
-        lines.extend(
-            (
-                "",
-                "## If you approve",
-                "",
-                "Apply only this machine plan with `csarc adopt --apply-plan`. "
-                "The CLI rebuilds and verifies the candidate before changing "
-                "the target. It does not apply settings, push, or open a pull "
-                "request.",
-                "",
-                "Review this report and the terminal plan before applying it.",
-                "",
+        actions = update_required_actions(
+            files,
+            settings,
+            update_pin_items(plan.update) or (),
+            observed=observed,
+            ignored=update_ignored_payload(plan.update),
+            pin_versions=pin_versions,
+            ignore_gaps=ignore_gaps,
+            writer_moves=update_release_writer_moves(plan.update),
+            retained_uses=update_retained_uses(plan.update),
+        )
+    if adoption is not None:
+        applicable = adoption.get("applicable") is True
+    else:
+        applicable = not any(action["blocking"] for action in actions)
+    has_changes = any(
+        row["action"] not in {"preserve"} for row in file_rows
+    ) or any(row["class"] != "unchanged" for row in settings)
+    if plan.update is not None:
+        has_changes = plan.update.get("update_available") is True
+    status = lifecycle_report.derive_status(
+        operation, actions, has_changes=has_changes
+    )
+    if status == "blocked":
+        applicable = False
+    reasons = {
+        "blocked": "At least one blocking item must be resolved before a "
+        "new plan can be applied.",
+        "current": "The repository already matches the selected release.",
+        "ready": "No known file conflicts; semantic and runtime conflicts "
+        "remain possible.",
+        "review-required": "Answer the listed decisions before relying on "
+        "this plan.",
+    }
+    head = target_head
+    changes: object = None if target_changes is None else list(target_changes)
+    working_tree: str | None = None
+    if adoption is not None:
+        head = cast(str | None, adoption.get("target_head"))
+        raw_changes = adoption.get("target_changes")
+        changes = list(raw_changes) if isinstance(raw_changes, list) else None
+        working_tree = (
+            "clean"
+            if adoption.get("clean")
+            else (
+                "dirty-preserved"
+                if adoption.get("applicable") is True
+                else "dirty-review-only"
             )
         )
-    return "\n".join(lines)
+    elif target_changes is not None:
+        working_tree = "clean" if not target_changes else "dirty-review-only"
+    owner: dict[str, object] | None = None
+    mapping: dict[str, object] | None = None
+    hook: dict[str, object] | None = None
+    candidate: dict[str, object] | None = None
+    if adoption is not None:
+        raw_owner = adoption.get("code_owner")
+        if isinstance(raw_owner, dict):
+            owner = {
+                key: raw_owner.get(key) for key in ("reason", "state", "value")
+            }
+        raw_mapping = adoption.get("work_item_mapping")
+        if isinstance(raw_mapping, dict) and raw_mapping:
+            mapping = dict(raw_mapping)
+        candidate = candidate_verification_state(adoption.get("verification"))
+        raw_hook = adoption.get("project_verification_hook")
+    else:
+        raw_hook = (plan.update or {}).get("project_verification_hook")
+    if isinstance(raw_hook, dict):
+        hook = {
+            key: raw_hook.get(key)
+            for key in ("configured", "path", "reason", "result")
+        }
+    render_parity: dict[str, object] | None = None
+    planning = (plan.update or {}).get("planning")
+    if isinstance(planning, dict):
+        render_parity = {"state": planning.get("render_parity")}
+    report: dict[str, object] = {
+        "applicable": applicable,
+        "applied_at": None,
+        "files": file_rows,
+        "final_plan": None,
+        "generated_at": generated_at,
+        "next_steps": lifecycle_next_steps(
+            operation,
+            status,
+            applicable=applicable,
+            plan=plan,
+            plan_path=plan_path,
+            conflicts_only=decidable_conflicts_only(actions, files),
+        ),
+        "operation": operation,
+        "plan": {
+            "mode": plan.mode,
+            "path": plan_name,
+            "replayable": operation == "adopt",
+            "schema_version": plan.as_dict()["schema_version"],
+            "sha256": plan_sha256,
+        },
+        "product": {
+            "action_pins": update_pin_items(plan.update)
+            if operation == "update" and adoption is None
+            else None,
+            "behavior_changes": risk_behavior_changes(files)
+            if operation == "update" and adoption is None
+            else None,
+            "code_owner": owner,
+            "release_ownership": release_contract(plan.answers),
+            "release_writers": None,
+            "reviewer_rotation": None,
+            "version_surfaces": None,
+            "work_item_mapping": mapping,
+        },
+        "release": {
+            "from": None
+            if previous is None
+            else {
+                "sha": previous.sha,
+                "tag": previous.label,
+                "verification": "verified"
+                if previous.verified
+                else "unverified",
+            },
+            "source": plan.revision.source,
+            "to": {
+                "guide_url": plan.revision.guide_url,
+                "sha": plan.revision.sha,
+                "tag": plan.revision.label,
+                "verification": "verified"
+                if plan.revision.verified
+                else "unverified",
+            },
+        },
+        "report_format_version": LIFECYCLE_REPORT_FORMAT_VERSION,
+        "required_actions": actions,
+        "settings": settings,
+        "setup": None
+        if setup is None
+        else {
+            "approval_route": setup.get("approval_route"),
+            "questions": setup.get("questions", []),
+            "warnings": setup.get("warnings", []),
+            "work_mode": setup.get("work_mode"),
+        },
+        "status": status,
+        "status_reason": reasons[status],
+        "summary": lifecycle_report.summary_counts(
+            settings, file_rows, actions
+        ),
+        "target": {
+            "changes": changes,
+            "head": head,
+            "path": str(plan.target),
+            "repository": plan.repository.repository,
+            "visibility": plan.repository.visibility,
+            "visibility_source": plan.repository.source,
+            "working_tree": working_tree,
+        },
+        "verification": {
+            "candidate": candidate,
+            "hook": hook,
+            "render_parity": render_parity,
+        },
+    }
+    redacted = cast(dict[str, object], redact(report))
+    try:
+        lifecycle_report.validate_report(redacted)
+    except lifecycle_report.LifecycleReportError as error:
+        raise CliError(f"Lifecycle report is invalid: {error}") from error
+    return redacted
 
 
-def adoption_report_directory(target: Path, requested: Path | None) -> Path:
+def lifecycle_report_directory(
+    target: Path, requested: Path | None, operation: str
+) -> Path:
     """Resolve a report directory that cannot dirty the target repository."""
+    label = "adoption" if operation == "adopt" else "update"
     directory = (
         Path(os.path.abspath(requested.expanduser()))
         if requested is not None
-        else target.parent / f"{target.name}-csarc-adoption-report"
+        else target.parent / f"{target.name}-csarc-{label}-report"
     )
     if directory == target or target in directory.parents:
         raise CliError(
-            "Adoption reports must be written outside the target repo."
+            f"{label.capitalize()} reports must be written outside the "
+            "target repo."
         )
     return directory
+
+
+def adoption_report_directory(target: Path, requested: Path | None) -> Path:
+    """Resolve the adoption report directory outside the target."""
+    return lifecycle_report_directory(target, requested, "adopt")
+
+
+def applied_report_directory(
+    target: Path, plan_path: Path, requested: Path | None
+) -> Path:
+    """Return the replayed plan's directory for the applied report rewrite.
+
+    The applied report must replace the report the user reviewed beside the
+    plan, never a report in another directory.
+    """
+    directory = plan_path.parent
+    if (
+        requested is not None
+        and adoption_report_directory(target, requested).resolve() != directory
+    ):
+        raise CliError(
+            "--report-dir must match the directory of the applied plan; the "
+            "applied report is written beside that plan."
+        )
+    return directory
+
+
+def remove_legacy_adoption_report(root: Path, relative_directory: Path) -> None:
+    """Delete a 1.1.0 Markdown report so one directory holds one report.
+
+    Only a regular file is removed, through a no-follow directory
+    descriptor; a symlink or special file is kept and reported (#529, #716).
+    """
+    relative_name = (
+        relative_directory / LEGACY_ADOPTION_REPORT_NAME
+    ).as_posix()
+    with atomic_parent_directory(root, relative_name) as (directory_fd, name):
+        try:
+            mode = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        if not stat.S_ISREG(mode.st_mode):
+            print(
+                "Warning: kept non-regular legacy report "
+                f"{root / relative_name}.",
+                file=sys.stderr,
+            )
+            return
+        os.unlink(name, dir_fd=directory_fd)
+
+
+def write_lifecycle_reports(
+    directory: Path,
+    *,
+    operation: str,
+    plan_name: str,
+    plan_payload: Mapping[str, object] | None,
+    report: Mapping[str, object],
+    emit: bool,
+) -> tuple[Path, Path, Path]:
+    """Write the machine plan, report JSON, and Markdown outside the target.
+
+    The Markdown is rendered only from the serialized report JSON, after
+    both have been validated, so no partial or divergent set is written.
+    """
+    basename = (
+        ADOPTION_REPORT_BASENAME
+        if operation == "adopt"
+        else UPDATE_REPORT_BASENAME
+    )
+    try:
+        report_text = lifecycle_report.report_json(report)
+        markdown = lifecycle_report.render_markdown(json.loads(report_text))
+    except lifecycle_report.LifecycleReportError as error:
+        raise CliError(f"Lifecycle report is invalid: {error}") from error
+    filesystem_root = Path(directory.anchor)
+    relative_directory = directory.relative_to(filesystem_root)
+    plan_path = directory / plan_name
+    json_path = directory / f"{basename}.json"
+    markdown_path = directory / f"{basename}.md"
+    if plan_payload is not None:
+        atomic_replace_text(
+            filesystem_root,
+            (relative_directory / plan_name).as_posix(),
+            json.dumps(plan_payload, indent=2, sort_keys=True) + "\n",
+        )
+    atomic_replace_text(
+        filesystem_root,
+        (relative_directory / json_path.name).as_posix(),
+        report_text,
+    )
+    atomic_replace_text(
+        filesystem_root,
+        (relative_directory / markdown_path.name).as_posix(),
+        markdown,
+    )
+    if operation == "adopt":
+        remove_legacy_adoption_report(filesystem_root, relative_directory)
+    if emit:
+        print(f"Markdown report: {markdown_path}")
+        print(f"Report JSON: {json_path}")
+        print(f"Machine plan: {plan_path}")
+    return markdown_path, json_path, plan_path
+
+
+def applied_lifecycle_report(
+    report: Mapping[str, object],
+    plan_sha256: str,
+    applied_at: str,
+    *,
+    final_plan_sha256: str | None = None,
+) -> dict[str, object]:
+    """Mark a report applied while keeping it bound to the replayed plan."""
+    try:
+        return lifecycle_report.mark_applied(
+            report,
+            applied_at=applied_at,
+            plan_sha256=plan_sha256,
+            next_steps=APPLIED_NEXT_STEPS,
+            final_plan_sha256=final_plan_sha256,
+        )
+    except lifecycle_report.LifecycleReportError as error:
+        raise CliError(f"Cannot mark the report applied: {error}") from error
 
 
 def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
     """Return a tamper-evident plan ready for persistence."""
     payload = plan.as_dict()
+    if plan.mode == "update":
+        # The update stage-1 plan is a preview whose conflicts still need
+        # decisions; only the final plan replays (#1067).
+        payload["replayable"] = False
     encoded = json.dumps(
         payload, sort_keys=True, separators=(",", ":")
     ).encode()
@@ -2874,11 +3882,11 @@ def create_atomic_temporary(
 def atomic_replace_text(
     root: Path,
     relative_name: str,
-    content: str,
+    content: str | bytes,
     *,
     mode: int = 0o600,
 ) -> None:
-    """Replace text through no-follow directory and temporary descriptors."""
+    """Replace text or bytes through no-follow descriptors."""
     temporary_name: str | None = None
     with atomic_parent_directory(root, relative_name) as (
         directory_fd,
@@ -2890,8 +3898,13 @@ def atomic_replace_text(
                 directory_fd, destination_name, mode
             )
 
-            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
-                output.write(content)
+            data = (
+                content
+                if isinstance(content, bytes)
+                else content.encode("utf-8")
+            )
+            with os.fdopen(descriptor, "wb") as output:
+                output.write(data)
                 output.flush()
                 os.fsync(output.fileno())
             os.replace(
@@ -3196,12 +4209,9 @@ def code_owner_verification(  # noqa: C901
 def mark_adoption_applied(plan: ResolvedPlan, applied_at: str) -> ResolvedPlan:
     """Return a copy of one adoption plan tagged with its applied state.
 
-    Formal adoption must update the same adoption report in place once it
-    completes, recording both the pre-adoption (dry-run) and post-adoption
-    state (#529). The report's detailed Markdown format is rendered by
-    ``adoption_report_markdown`` (#530); this only tags the existing plan
-    so that renderer can record that the plan was actually applied, and
-    when.
+    The rewritten machine plan keeps its existing ``adoption.applied``
+    contract (#529); the SPEC-008 report records the applied state itself,
+    bound to the approved plan digest (#1062).
     """
     if plan.adoption is None:
         raise CliError("Adoption report requires target state.")
@@ -3213,49 +4223,40 @@ def mark_adoption_applied(plan: ResolvedPlan, applied_at: str) -> ResolvedPlan:
 
 def write_adoption_reports(
     plan: ResolvedPlan,
-    requested_directory: Path | None,
+    directory: Path,
     *,
     emit: bool = True,
-) -> tuple[Path, Path]:
-    """Atomically replace the latest adoption Markdown report and plan.
+    approved_sha256: str | None = None,
+    applied_at: str | None = None,
+) -> tuple[Path, Path, Path]:
+    """Write the adoption plan and its SPEC-008 report set.
 
-    Dry-run and the post-apply update that follows (adopt --apply-plan,
-    adopt --finalize --apply-plan) both call this on the same report
-    directory and basename, so the applied state is recorded in place in
-    the same versioned Markdown file rather than a separate artifact
-    (#529, #530).
+    Dry-run writes the plan and an unapplied report. A successful
+    ``--apply-plan`` rewrites the same set in the replayed plan's directory,
+    marking the report applied and binding it to the approved plan digest.
     """
     if plan.files is None or plan.adoption is None:
         raise CliError("Adoption report requires file and target state.")
-    directory = adoption_report_directory(plan.target, requested_directory)
-    markdown_path = directory / f"{ADOPTION_REPORT_BASENAME}.md"
-    plan_path = directory / ADOPTION_PLAN_BASENAME
-    filesystem_root = Path(directory.anchor)
-    relative_directory = directory.relative_to(filesystem_root)
-    generated_at = str(plan.adoption["generated_at"])
-    atomic_replace_text(
-        filesystem_root,
-        (relative_directory / markdown_path.name).as_posix(),
-        adoption_report_markdown(
-            plan.target,
-            plan.revision,
-            plan.repository,
-            plan.answers,
-            plan.files,
-            generated_at,
-            plan.adoption,
-        ),
+    payload = adoption_plan_payload(plan)
+    plan_sha256 = approved_sha256 or str(payload["plan_sha256"])
+    report = lifecycle_report_model(
+        plan,
+        operation="adopt",
+        plan_name=ADOPTION_PLAN_BASENAME,
+        plan_sha256=plan_sha256,
+        generated_at=str(plan.adoption["generated_at"]),
+        plan_path=directory / ADOPTION_PLAN_BASENAME,
     )
-    atomic_replace_text(
-        filesystem_root,
-        (relative_directory / plan_path.name).as_posix(),
-        json.dumps(adoption_plan_payload(plan), indent=2, sort_keys=True)
-        + "\n",
+    if applied_at is not None:
+        report = applied_lifecycle_report(report, plan_sha256, applied_at)
+    return write_lifecycle_reports(
+        directory,
+        operation="adopt",
+        plan_name=ADOPTION_PLAN_BASENAME,
+        plan_payload=payload,
+        report=report,
+        emit=emit,
     )
-    if emit:
-        print(f"Markdown report: {markdown_path}")
-        print(f"Machine plan: {plan_path}")
-    return markdown_path, plan_path
 
 
 def print_group(title: str, paths: tuple[str, ...]) -> None:
@@ -3362,6 +4363,7 @@ def print_plan(plan: ResolvedPlan) -> None:
     print("Settings:")
     for key, value in sorted(plan.answers.items()):
         print(f"  {key}={value}")
+    print_setup(plan.setup)
     if plan.adoption is not None:
         owner = plan.adoption.get("code_owner")
         if isinstance(owner, dict):
@@ -3392,6 +4394,8 @@ def print_plan(plan: ResolvedPlan) -> None:
         print_group("Remove", plan.files.remove)
         print_group("Move", plan.files.move)
         print_group("Preserve", plan.files.preserve)
+        print_group("Product release state (kept)", plan.files.product_owned)
+        print_group("Retained modified files", plan.files.retained)
         print_group("Automatic merge", plan.files.merge)
         print_group("Manual merge", plan.files.manual)
         print_group("Unable to determine", plan.files.unknown)
@@ -3405,6 +4409,346 @@ def print_plan(plan: ResolvedPlan) -> None:
     print_update_recommendation(plan.update)
 
 
+def print_setup(setup: Mapping[str, object] | None) -> None:
+    """Print the work mode, question count, approval route, and warnings."""
+    if setup is None:
+        return
+    questions = setup.get("questions")
+    asked = questions if isinstance(questions, list) else []
+    print(
+        f"Work mode: {setup.get('work_mode')} (expanded into the settings "
+        "above; the name is not saved)"
+    )
+    print(f"Setup questions asked: {len(asked)}")
+    suggested = setup.get("suggested")
+    if isinstance(suggested, list) and suggested:
+        print("Suggested defaults used: " + ", ".join(map(str, suggested)))
+    route = setup.get("approval_route")
+    if isinstance(route, dict):
+        confirmation = route.get("confirmation")
+        print(
+            f"Approval route: {route.get('state')} - {route.get('reason')}"
+            + (f" (confirmed: {confirmation})" if confirmation else "")
+        )
+    warnings = setup.get("warnings")
+    for row in warnings if isinstance(warnings, list) else []:
+        if isinstance(row, dict):
+            command = row.get("command")
+            print(
+                f"WARNING {row.get('code')} ({row.get('subject')}): "
+                f"{row.get('message')}"
+                + (f" Fix: {command}" if command else "")
+            )
+
+
+def setup_interactive(args: argparse.Namespace) -> bool:
+    """Ask setup questions only on a TTY without --non-interactive/--json."""
+    return (
+        sys.stdin.isatty()
+        and not getattr(args, "non_interactive", False)
+        and not getattr(args, "json", False)
+    )
+
+
+def manifest_description(target: Path) -> tuple[str, str] | None:
+    """Return the first product manifest description and its file."""
+    readers: tuple[tuple[str, Callable[[str], object]], ...] = (
+        (
+            "pyproject.toml",
+            lambda text: (
+                tomllib.loads(text).get("project", {}).get("description")
+            ),
+        ),
+        ("package.json", lambda text: json.loads(text).get("description")),
+        (
+            "Cargo.toml",
+            lambda text: (
+                tomllib.loads(text).get("package", {}).get("description")
+            ),
+        ),
+    )
+    for name, read in readers:
+        path = target / name
+        if not is_regular_file(path):
+            continue
+        try:
+            value = read(path.read_text(encoding="utf-8"))
+        except (
+            OSError,
+            UnicodeDecodeError,
+            ValueError,
+            AttributeError,
+        ):
+            continue
+        if isinstance(value, str) and value.strip():
+            return value.strip(), name
+    return None
+
+
+LICENSE_HOLDER = re.compile(
+    r"^\s*Copyright\s+\(c\)\s+(?:\d{4}(?:-\d{4})?\s+)?(?P<holder>.+?)"
+    r"(?:\.\s*All rights reserved\.)?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+DISCLOSURE_POLICIES = (".github/SECURITY.md", "SECURITY.md", "docs/SECURITY.md")
+
+
+def license_holder(target: Path) -> str | None:
+    """Return the `Copyright (c)` holder named by an existing LICENSE."""
+    path = target / "LICENSE"
+    if not is_regular_file(path):
+        return None
+    try:
+        match = LICENSE_HOLDER.search(path.read_text(encoding="utf-8"))
+    except OSError, UnicodeDecodeError:
+        return None
+    return match.group("holder").strip() if match else None
+
+
+def detected_disclosure_channel(target: Path) -> str | None:
+    """Return the one private channel the product's policy names, if any."""
+    texts: list[str] = []
+    for name in DISCLOSURE_POLICIES:
+        path = target / name
+        if is_regular_file(path):
+            with suppress(OSError, UnicodeDecodeError):
+                texts.append(path.read_text(encoding="utf-8"))
+    channels = setup_plan.disclosure_channels(texts)
+    return channels[0] if len(channels) == 1 else None
+
+
+LANGUAGE_MANIFESTS = repository_facts.LANGUAGE_MANIFESTS
+
+
+def adoption_detections(
+    target: Path, explicit: Mapping[str, str]
+) -> list[setup_plan.Detection]:
+    """Return what adopt can detect before asking (Issue #1072 rules).
+
+    Only values without a unique native source become questions: a missing
+    manifest description, a LICENSE the plan would create, and ambiguous
+    package or run-command derivations.
+    """
+    detections: list[setup_plan.Detection] = []
+    languages = detect_languages(target)
+    if "languages" in explicit:
+        languages = parse_languages(explicit["languages"])
+    elif "language" in explicit:
+        # The legacy single key an older template still asks (SPEC-009).
+        legacy = explicit["language"]
+        languages = [] if legacy == "ci" else legacy.split("-")
+    else:
+        detections.append(
+            setup_plan.Detection(
+                "languages",
+                languages,
+                "manifests: "
+                + (
+                    ", ".join(
+                        manifest
+                        for name, manifest in LANGUAGE_MANIFESTS
+                        if name in languages
+                    )
+                    or "none"
+                ),
+            )
+        )
+    description = manifest_description(target)
+    detections.append(
+        setup_plan.Detection(
+            "project_description", description[0], description[1]
+        )
+        if description is not None
+        else setup_plan.Detection(
+            "project_description", None, "no manifest description", "unknown"
+        )
+    )
+    if is_regular_file(target / "LICENSE"):
+        holder = license_holder(target)
+        if holder is not None:
+            detections.append(
+                setup_plan.Detection("copyright_holder", holder, "LICENSE")
+            )
+    else:
+        detections.append(
+            setup_plan.Detection(
+                "copyright_holder",
+                None,
+                "no LICENSE; the plan would create one",
+                "unknown",
+            )
+        )
+    selected = languages
+    # An ambiguous run command only follows an ambiguous package, so the
+    # package is the one question; the command derives from the answer.
+    entry = repository_facts.derive_context(target, selected).get(
+        "package_name"
+    )
+    if entry is not None and entry["state"] == repository_facts.AMBIGUOUS:
+        candidates = entry.get("candidates")
+        detections.append(
+            setup_plan.Detection(
+                "package_name",
+                None,
+                "native manifests",
+                "ambiguous",
+                tuple(map(str, candidates))
+                if isinstance(candidates, list)
+                else (),
+            )
+        )
+    return detections
+
+
+def plan_setup(
+    session: setup_plan.Session,
+    mode: str,
+    target: Path,
+    explicit: Mapping[str, str],
+    preset: str | None,
+) -> setup_plan.SetupResult:
+    """Ask the local setup questions, or fail on missing script input."""
+    try:
+        if mode == "init":
+            result = setup_plan.plan_init(session, explicit, preset)
+        else:
+            result = setup_plan.plan_adopt(
+                session,
+                explicit,
+                preset,
+                adoption_detections(target, explicit),
+                release_ownership=str(
+                    explicit.get("release_ownership", "product-owned")
+                ),
+                dockerfile=is_regular_file(target / "Dockerfile"),
+            )
+        session.require_complete(mode)
+    except setup_plan.SetupError as error:
+        raise CliError(str(error)) from error
+    return result
+
+
+def plan_repository_setup(
+    session: setup_plan.Session,
+    setup: setup_plan.SetupResult,
+    target: Path,
+    explicit: Mapping[str, str],
+    repository: RepositoryContext,
+    mode: str,
+) -> RepositoryContext:
+    """Ask for an unresolvable repository and a public reporting channel."""
+    try:
+        if session.interactive and repository.repository is None:
+            setup_plan.plan_repository(
+                session,
+                setup,
+                explicit,
+                resolved=False,
+                visibility_known=repository.source == "explicit",
+            )
+            asked = setup.values.get("project_visibility")
+            if isinstance(asked, str):
+                repository = repository_context(target, asked)
+        setup_plan.plan_security_channel(
+            session,
+            setup,
+            explicit,
+            visibility=repository.visibility,
+            detected=(
+                detected_disclosure_channel(target) if mode == "adopt" else None
+            ),
+        )
+        session.require_complete(mode)
+    except setup_plan.SetupError as error:
+        raise CliError(str(error)) from error
+    return repository
+
+
+def setup_inputs(
+    setup: setup_plan.SetupResult, explicit: Mapping[str, str]
+) -> dict[str, object]:
+    """Merge setup answers under explicit --data, in base_data's types."""
+    inputs: dict[str, object] = {
+        key: ",".join(map(str, value))
+        if key == "languages" and isinstance(value, list)
+        else value
+        for key, value in setup.values.items()
+    }
+    inputs.update(explicit)
+    return inputs
+
+
+def finish_setup(
+    session: setup_plan.Session,
+    setup: setup_plan.SetupResult,
+    data: Mapping[str, object],
+    explicit: Mapping[str, str],
+    repository: RepositoryContext,
+    mode: str,
+    args: argparse.Namespace,
+) -> dict[str, object]:
+    """Reject invalid combinations, run the approval preflight, and warn."""
+    errors = setup_plan.invalid_combinations(data, explicit, mode=mode)
+    if errors:
+        raise CliError(" ".join(errors) + " Nothing was rendered or written.")
+    approval: dict[str, object] | None = None
+    try:
+        if setup_plan.preflight_applies(data):
+            state, reason = setup_plan.approval_route(
+                detector_api, repository.repository, repository.owner_type
+            )
+            approval = setup_plan.resolve_approval(
+                session,
+                data,
+                state,
+                reason,
+                confirm_second=bool(
+                    getattr(args, "confirm_second_approver", False)
+                ),
+                confirm_copilot=bool(
+                    getattr(args, "confirm_copilot_entitlement", False)
+                ),
+            )
+    except setup_plan.SetupError as error:
+        raise CliError(str(error)) from error
+    facts = repository.facts
+    role_fact = facts.get("permissions", {})
+    plan_fact = facts.get("plan", {})
+    runner_role = (
+        str(role_fact.get("value"))
+        if role_fact.get("state") == repository_facts.KNOWN
+        else None
+    )
+    plan_name = (
+        str(plan_fact.get("value"))
+        if plan_fact.get("state") == repository_facts.KNOWN
+        else None
+    )
+    single_writer: bool | None = None
+    if (
+        data.get("project_visibility") == "private"
+        and plan_name == "free"
+        and data.get("release_ownership") == "csarc-owned"
+    ):
+        single_writer = setup_plan.single_writer_observed(
+            detector_api, repository.repository, repository.owner_type
+        )
+    warnings = setup_plan.setup_warnings(
+        data,
+        approval=approval,
+        runner_role=runner_role,
+        plan_name=plan_name,
+        single_writer=single_writer,
+    )
+    return setup_plan.setup_record(
+        setup,
+        session,
+        warnings=warnings,
+        approval=approval,
+        explicit=explicit,
+    )
+
+
 def confirm(args: argparse.Namespace) -> bool:
     """Require explicit approval before writing files."""
     if args.yes:
@@ -3413,7 +4757,14 @@ def confirm(args: argparse.Namespace) -> bool:
         raise CliError(
             "--non-interactive requires --yes before files may change."
         )
-    return input("Apply this plan? [y/N] ").strip().lower() in {"y", "yes"}
+    try:
+        answer = input("Apply this plan? [y/N] ")
+    except EOFError as error:
+        raise CliError(
+            "No confirmation could be read; pass --yes to apply without a "
+            "prompt. Nothing was changed."
+        ) from error
+    return answer.strip().lower() in {"y", "yes"}
 
 
 def checked_destination(root: Path, relative_name: str) -> Path:
@@ -3861,6 +5212,18 @@ def prepare_adoption_candidate(
                     planned.unknown,
                     target_head,
                     work_item_mapping,
+                    {
+                        **settings_schema.context_from(answers),
+                        **(
+                            {
+                                "work_item_mapping_review": answers[
+                                    "work_item_mapping_review"
+                                ]
+                            }
+                            if "work_item_mapping_review" in answers
+                            else {}
+                        ),
+                    },
                 ),
             )
             verification = "deferred-manual-merge"
@@ -4286,6 +5649,56 @@ def managed_script(root: Path, name: str) -> Path:
     return current if current.is_file() else root / "scripts" / name
 
 
+VERIFY_STEP_FAILED = "[verify-step] FAILED "
+
+
+def verification_failure(lines: Sequence[str]) -> str:
+    """Name the failed verify step from its output (Issue #1146 AC5).
+
+    ``verification_step`` and the canonical verifier's error trap print a
+    ``[verify-step] FAILED`` line; the first one names the step that
+    stopped the run. Without one, the last output line is the best reason.
+    """
+    for line in lines:
+        if line.startswith(VERIFY_STEP_FAILED):
+            return line.removeprefix(VERIFY_STEP_FAILED).strip()
+    for line in reversed(lines):
+        if line.strip():
+            return f"no step reported a failure; last output: {line.strip()}"
+    return "no step reported a failure and the verifier printed nothing"
+
+
+def run_verification_streaming(
+    command: list[str],
+    cwd: Path,
+    environment: Mapping[str, str],
+    status_fd: int,
+) -> tuple[int, str]:
+    """Run the verifier, echo its output, and name a failed step."""
+    tail: collections.deque[str] = collections.deque(maxlen=200)
+    failed: list[str] = []
+    with subprocess.Popen(  # noqa: S603
+        command,
+        cwd=cwd,
+        env=dict(environment),
+        pass_fds=(status_fd,),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+    ) as process:
+        assert process.stdout is not None  # noqa: S101
+        for line in process.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            text = line.rstrip("\n")
+            tail.append(text)
+            if text.startswith(VERIFY_STEP_FAILED) and not failed:
+                failed.append(text)
+        returncode = process.wait()
+    return returncode, verification_failure([*failed, *tail])
+
+
 def verify_project(target: Path) -> dict[str, object]:
     """Run canonical verification and one validated project hook."""
     configuration = project_verification_configuration(target)
@@ -4315,18 +5728,14 @@ def verify_project(target: Path) -> dict[str, object]:
         environment.pop("_CSARC_PROJECT_VERIFICATION_STATUS_FILE", None)
         status_fd = status_file.fileno()
         environment["_CSARC_PROJECT_VERIFICATION_STATUS_FD"] = str(status_fd)
-        result = subprocess.run(  # noqa: S603
-            [str(verify)],
-            cwd=target,
-            check=False,
-            env=environment,
-            pass_fds=(status_fd,),
+        returncode, failure = run_verification_streaming(
+            [str(verify)], target, environment, status_fd
         )
         status_file.seek(0)
         hook_statuses = tuple(status_file.read().splitlines())
     expected_statuses = (
         ("not-run", "started", "passed")
-        if project_hook is not None and result.returncode == 0
+        if project_hook is not None and returncode == 0
         else (
             ("not-run",)
             if project_hook is None or hook_statuses == ("not-run",)
@@ -4342,7 +5751,7 @@ def verify_project(target: Path) -> dict[str, object]:
         raise ProjectVerificationError(
             "Project verification hook status is invalid.", hook
         )
-    if result.returncode != 0:
+    if returncode != 0:
         if hook_statuses == ("not-run", "started", "failed"):
             hook = project_verification_evidence(
                 configuration,
@@ -4357,10 +5766,13 @@ def verify_project(target: Path) -> dict[str, object]:
         hook = project_verification_evidence(
             configuration,
             "not-run",
-            "Canonical project verification failed before the hook ran.",
+            "Canonical project verification failed before the hook ran: "
+            f"{failure}",
         )
         raise ProjectVerificationError(
-            "Project verification failed.",
+            f"Project verification failed: {failure}. Rerun "
+            f"{verify.relative_to(target).as_posix()} in the candidate "
+            "layout to see the full output.",
             hook,
         )
     if project_hook is not None:
@@ -4382,50 +5794,90 @@ def settings_plan(target: Path) -> None:
     if not settings.is_file():
         print("Repository settings plan unavailable: script is missing.")
         return
-    result = run([str(settings), "plan"], cwd=target, check=False)
-    if result.returncode != 0:
+    result = run([str(settings), "plan"], cwd=target, capture=True, check=False)
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    if result.returncode == 0:
+        return
+    # Only an unidentified origin is a missing remote; any other failure
+    # names its own reason (Issue #1146 AC6).
+    if target_repository(target) is None:
         print(
-            "Repository settings plan needs a GitHub remote; "
+            "Repository settings plan needs a GitHub origin remote; "
             "no settings were applied."
         )
+        return
+    lines = [
+        line.strip()
+        for line in (result.stderr or result.stdout or "").splitlines()
+        if line.strip()
+    ]
+    reason = lines[-1].rstrip(".") if lines else "no output"
+    print(
+        f"Repository settings plan failed (exit {result.returncode}): "
+        f"{reason}; no settings were applied."
+    )
 
 
-def target_repository(target: Path) -> str | None:
-    """Return the GitHub origin of an existing target, when discoverable."""
-    root = run_git(
-        ["git", "-C", str(target), "rev-parse", "--show-toplevel"],
-        repository=target,
-        capture=True,
-        check=False,
-    )
-    is_repository_root = (
-        root.returncode == 0
-        and Path(root.stdout.strip()).resolve() == target.resolve()
-    )
-    if is_repository_root:
+def detector_git(target: Path) -> repository_facts.Runner:
+    """Return the shared detector's Git reader for one target."""
+
+    def read(arguments: Sequence[str]) -> tuple[int, str, str]:
         result = run_git(
-            ["git", "-C", str(target), "remote", "get-url", "origin"],
+            ["git", "-C", str(target), *arguments],
             repository=target,
             capture=True,
             check=False,
         )
-        if result.returncode == 0:
-            repository = github_repository(result.stdout.strip())
-            if repository is not None:
-                return repository
-    explicit_repository = os.environ.get("GH_REPO", "").strip()
-    if explicit_repository:
-        return github_repository(f"gh:{explicit_repository}")
-    return None
+        return result.returncode, result.stdout, result.stderr
+
+    return read
 
 
-def repository_context(  # noqa: C901
+def detector_api(arguments: Sequence[str]) -> tuple[int, str, str]:
+    """Serve the shared detector's read-only GitHub requests."""
+    try:
+        result = run(
+            ["gh", "api", "--method", "GET", *arguments],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return 1, "", "GitHub CLI is unavailable"
+    return result.returncode, result.stdout, result.stderr
+
+
+def target_origin(target: Path) -> dict[str, object]:
+    """Return the shared detector's origin fact for one target (#1072)."""
+    return repository_facts.observe_origin(target, detector_git(target))
+
+
+def target_repository(target: Path) -> str | None:
+    """Return the GitHub origin of an existing target, when discoverable.
+
+    Only a ``known`` origin identifies the target; an unknown or ambiguous
+    one (no origin, several other remotes) is never guessed (#1072).
+    """
+    origin = target_origin(target)
+    if origin["state"] != repository_facts.KNOWN:
+        return None
+    return repository_facts.github_slug(str(origin["value"]))
+
+
+def repository_context(
     target: Path,
     explicit_visibility: str | None,
     *,
     saved_visibility: str | None = None,
 ) -> RepositoryContext:
-    """Resolve repository owner and visibility before template rendering."""
+    """Resolve repository owner and visibility before template rendering.
+
+    The live facts come from the shared detector (Issue #1072) and ride on
+    the context; an unobservable fact stays ``unknown`` there even when the
+    render falls back to a saved, explicit, or safe default value.
+    """
     if (
         explicit_visibility is not None
         and explicit_visibility not in REPOSITORY_VISIBILITIES
@@ -4440,6 +5892,15 @@ def repository_context(  # noqa: C901
             raise CliError(
                 "Saved project_visibility must be public, private, or internal."
             )
+        facts = {
+            "origin": target_origin(target),
+            **{
+                name: repository_facts.unknown(
+                    "the repository identity is unknown"
+                )
+                for name in repository_facts.REMOTE_FACTS
+            },
+        }
         return RepositoryContext(
             repository=None,
             owner=None,
@@ -4454,56 +5915,50 @@ def repository_context(  # noqa: C901
             ),
             verified=False,
             reason="No GitHub origin or GH_REPO was found.",
+            facts=facts,
         )
 
-    try:
-        result = run(
-            ["gh", "api", "--method", "GET", f"repos/{repository}"],
-            capture=True,
-            check=False,
+    observed = repository_facts.observe_repository(repository, detector_api)
+    identity = observed["identity"]
+    if identity["state"] == repository_facts.KNOWN:
+        observed["plan"] = repository_facts.observe_plan(
+            cast(Mapping[str, object], identity["value"]), detector_api
         )
-    except FileNotFoundError:
-        result = subprocess.CompletedProcess(
-            ["gh"], 1, stdout="", stderr="GitHub CLI is unavailable"
-        )
-    failure = result.stderr.strip() or "GitHub API request failed"
-    payload: object = None
-    if result.returncode == 0:
-        try:
-            payload = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            failure = "GitHub returned invalid repository JSON"
-    if isinstance(payload, dict):
-        owner = payload.get("owner")
-        payload_visibility = payload.get("visibility")
-        full_name = payload.get("full_name")
+    facts = {
+        "origin": repository_facts.known(
+            repository_facts.repository_url(repository), "origin"
+        ),
+        **observed,
+    }
+    visibility_fact = observed["visibility"]
+    if (
+        identity["state"] == repository_facts.KNOWN
+        and visibility_fact["state"] == repository_facts.KNOWN
+    ):
+        value = cast(Mapping[str, object], identity["value"])
+        actual_visibility = str(visibility_fact["value"])
         if (
-            isinstance(owner, dict)
-            and isinstance(owner.get("login"), str)
-            and isinstance(owner.get("type"), str)
-            and isinstance(full_name, str)
-            and full_name.casefold() == repository.casefold()
-            and payload_visibility in REPOSITORY_VISIBILITIES
+            explicit_visibility is not None
+            and explicit_visibility != actual_visibility
         ):
-            actual_visibility = str(payload_visibility)
-            if (
-                explicit_visibility is not None
-                and explicit_visibility != actual_visibility
-            ):
-                raise CliError(
-                    "Explicit project_visibility does not match GitHub "
-                    f"({explicit_visibility} != {actual_visibility})."
-                )
-            return RepositoryContext(
-                repository=full_name,
-                owner=str(owner["login"]),
-                owner_type=str(owner["type"]).lower(),
-                visibility=actual_visibility,
-                source="github",
-                verified=True,
+            raise CliError(
+                "Explicit project_visibility does not match GitHub "
+                f"({explicit_visibility} != {actual_visibility})."
             )
-        failure = "GitHub returned incomplete repository metadata"
-
+        return RepositoryContext(
+            repository=str(value["repository"]),
+            owner=str(value["owner"]),
+            owner_type=str(value["owner_type"]),
+            visibility=actual_visibility,
+            source="github",
+            verified=True,
+            facts=facts,
+        )
+    failure = (
+        str(identity["reason"])
+        if identity["state"] != repository_facts.KNOWN
+        else "GitHub returned incomplete repository metadata"
+    )
     if explicit_visibility is None:
         raise CliError(
             f"Cannot confirm visibility for {repository}: {failure}. Pass "
@@ -4518,6 +5973,7 @@ def repository_context(  # noqa: C901
         source="explicit",
         verified=False,
         reason=failure,
+        facts=facts,
     )
 
 
@@ -5092,6 +6548,37 @@ def capability_preflight(
     return payload
 
 
+MULTI_SETTINGS = frozenset(
+    key
+    for key, (kind, _allowed) in settings_schema.INTENT_SETTINGS.items()
+    if kind == settings_schema.MULTI and key != "languages"
+)
+
+
+def parse_multi_setting(key: str, value: object) -> list[str]:
+    """Parse one multi-select schema 2 setting from saved or --data input."""
+    if isinstance(value, list):
+        parsed: object = value
+    else:
+        text = str(value).strip()
+        try:
+            parsed = json.loads(text) if text.startswith("[") else None
+        except json.JSONDecodeError:
+            parsed = None
+        if parsed is None:
+            parsed = [part.strip() for part in text.split(",") if part.strip()]
+    allowed = settings_schema.INTENT_SETTINGS[key][1]
+    if not isinstance(parsed, list) or any(
+        not isinstance(item, str) or item not in allowed for item in parsed
+    ):
+        raise CliError(
+            f"{key} must list only "
+            + ", ".join(allowed)
+            + " (comma-separated)."
+        )
+    return list(dict.fromkeys(parsed))
+
+
 def parse_languages(value: str) -> list[str]:
     """Parse a CLI language selection without defining combinations."""
     try:
@@ -5231,12 +6718,14 @@ def release_contract(answers: Mapping[str, object]) -> dict[str, object]:
         or not isinstance(reason, str)
         or not reason
     ):
+        # The reason is recomputed from release_ownership (SPEC-009), so the
+        # hint names only the current setting, never the retired reason key.
         raise CliError(
             "Release workflow ownership is incomplete. This is a "
-            "release_ownership/release_ownership_reason gap, not a "
-            "provenance problem; --accept-legacy does not resolve it. "
-            "Pass explicit --data release_ownership=<...> "
-            "release_ownership_reason=<...> to disambiguate."
+            "release_ownership gap, not a provenance problem; "
+            "--accept-legacy does not resolve it. Pass "
+            "--data release_ownership=csarc-owned|product-owned|"
+            "verification-only to choose the one release owner."
         )
     inputs = required_release_inputs(answers.get("release_required_inputs"))
     if ownership == "verification-only" and (workflow or inputs):
@@ -5262,6 +6751,85 @@ def release_contract(answers: Mapping[str, object]) -> dict[str, object]:
         "selected_workflow": workflow or None,
         "settings_owner": settings_owner,
     }
+
+
+CSARC_RELEASE_WORKFLOW = ".github/workflows/release.yml"
+CSARC_RELEASE_MIGRATION: dict[str, object] = {
+    "release_immutable_releases": "required",
+    "release_ownership": "csarc-owned",
+    "release_ownership_reason": (
+        "CSARC owns the only version policy and GitHub Release workflow."
+    ),
+    "release_required_inputs": [],
+    "release_settings_owner": "csarc-admin",
+    "release_workflow": CSARC_RELEASE_WORKFLOW,
+}
+
+
+def legacy_release_writer(
+    target: Path,
+    source: str,
+    old_sha: str,
+    answers: Mapping[str, object],
+) -> str | None:
+    """Return the sole Release writer when the old template generated it.
+
+    A legacy existing-mode repository without a saved release owner is
+    derived as product-owned when it has one release-writing workflow. If
+    that workflow is byte-identical to the old template's own (non-Jinja)
+    workflow, CSARC wrote it, so it is not product release machinery
+    (Issue #1083). Anything else, or an unreadable source, returns None and
+    keeps the product-owned derivation.
+    """
+    workflow = answers.get("release_workflow")
+    if (
+        answers.get("project_mode") != "existing"
+        or answers.get("release_ownership") != "product-owned"
+        or not isinstance(workflow, str)
+        or not workflow.startswith(".github/workflows/")
+    ):
+        return None
+    path = target / workflow
+    if path.is_symlink() or not path.is_file():
+        return None
+    try:
+        _config, files = action_pin_preflight.read_template_source(
+            lambda command: run_git(command, capture=True, check=False),
+            source,
+            old_sha,
+        )
+    except action_pin_preflight.PinPreflightError:
+        return None
+    legacy = files.get(PurePosixPath(workflow).name)
+    try:
+        current = path.read_text(encoding="utf-8")
+    except OSError, UnicodeDecodeError:
+        return None
+    return workflow if legacy is not None and legacy == current else None
+
+
+def implicit_release_owner(
+    target: Path,
+    candidate: Mapping[str, object],
+    saved: Mapping[str, object],
+    explicit: Mapping[str, str],
+) -> dict[str, object] | None:
+    """Return the release answers derived without an explicit owner.
+
+    A legacy repository that never saved ``release_ownership`` derives its
+    owner from repository evidence, and the legacy-writer migration reads
+    that derivation. An explicit ``--data release_ownership`` must not
+    hide it: confirming the derived ``csarc-owned`` value otherwise
+    selected the legacy writer itself and retired both release workflows
+    (Issue #1146 AC1). ``None`` means the evidence derives no owner.
+    """
+    implicit = dict(candidate)
+    if "release_ownership" not in saved and "release_ownership" in explicit:
+        implicit.pop("release_ownership", None)
+    try:
+        return resolve_release_answers(target, implicit)
+    except CliError:
+        return None
 
 
 def resolve_release_answers(  # noqa: C901
@@ -5394,7 +6962,7 @@ def resolve_release_answers(  # noqa: C901
 
 
 def base_data(
-    target: Path, mode: str, values: dict[str, str]
+    target: Path, mode: str, values: Mapping[str, object]
 ) -> dict[str, object]:
     """Build stable defaults while allowing explicit Copier answers."""
     slug = slugify(target.name)
@@ -5406,6 +6974,8 @@ def base_data(
         "project_name": target.name.replace("-", " ").replace("_", " ").title(),
         "project_slug": slug,
         "package_name": slug.replace("-", "_").replace(".", "_"),
+        # Older templates still ask the single legacy `language`; a schema 2
+        # template ignores it and never saves it (SPEC-009).
         "language": "-".join(detected_languages) or "ci",
         "languages": detected_languages,
         "code_owner": DEFAULT_OWNER,
@@ -5424,15 +6994,70 @@ def base_data(
             "or be empty."
         )
     if "languages" in values:
-        data["languages"] = parse_languages(values["languages"])
+        data["languages"] = parse_languages(str(values["languages"]))
     if "language" in values and "languages" not in values:
-        legacy = values["language"]
+        legacy = str(values["language"])
         data["languages"] = [] if legacy == "ci" else legacy.split("-")
     if "package_name" not in values:
         data["package_name"] = (
             str(data["project_slug"]).replace("-", "_").replace(".", "_")
         )
+    if mode == "adopt":
+        data.update(adoption_derived_context(target, data, values))
     return resolve_release_answers(target, data)
+
+
+def adoption_derived_context(
+    target: Path, data: Mapping[str, object], values: Mapping[str, object]
+) -> dict[str, object]:
+    """Return the derived context an adoption renders (Issue #1072).
+
+    Only an explicit ``--data`` value counts as recorded; the slug default
+    is a fallback the native manifests replace when they resolve one value
+    and several candidates fail closed until one is passed.
+    """
+    context = {
+        key: value
+        for key, value in data.items()
+        if key not in settings_schema.DECISION_SETTINGS or key in values
+    }
+    derived, _differences = resolve_derived_context(
+        target, context, explicit_decisions(values)
+    )
+    return derived
+
+
+def adoption_decisions(
+    target: Path, answers: Mapping[str, object]
+) -> dict[str, object]:
+    """Return the one-time decisions an adoption saves (SPEC-009, #1072).
+
+    A derived value is saved only when the native manifests cannot choose
+    it alone: several candidates, or an explicit value the manifests
+    contradict. The rule reads only the target and the plan answers, so a
+    dry run, its apply, and the finalize step save the same decisions.
+    """
+    languages = sorted(selected_languages(dict(answers)))
+    decisions: dict[str, object] = {}
+    package = repository_facts.derive_context(target, languages).get(
+        "package_name"
+    )
+    for key in ("package_name", "project_run_command"):
+        entry = (
+            package
+            if key == "package_name"
+            else repository_facts.derive_context(target, languages, decisions)[
+                "project_run_command"
+            ]
+        )
+        value = answers.get(key)
+        if entry is None or not isinstance(value, str):
+            continue
+        if entry["state"] == repository_facts.AMBIGUOUS or (
+            entry["state"] == repository_facts.KNOWN and entry["value"] != value
+        ):
+            decisions[key] = value
+    return decisions
 
 
 def default_security_reporting_channel(repository_url: str) -> str:
@@ -5491,8 +7116,11 @@ def validate_copy_target(
     target: Path, mode: str, *, require_clean: bool = True
 ) -> None:
     """Validate an init or adopt destination before release resolution."""
-    if mode == "init" and target.exists() and any(target.iterdir()):
-        raise CliError("init target must not exist or must be empty.")
+    if mode == "init" and not repository_target_is_new(target):
+        raise CliError(
+            "init target must not exist, must be empty, or must be an empty "
+            "Git repository (only .git, no commit or tracked file)."
+        )
     if mode != "adopt":
         return
     if not target.is_dir():
@@ -5559,6 +7187,11 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             raise CliError(
                 "Finalize plan does not match this target repository."
             )
+        report_directory = applied_report_directory(
+            target, plan_path, args.report_dir
+        )
+    else:
+        report_directory = adoption_report_directory(target, args.report_dir)
 
     pending, answers_path, pending_target_head = (
         validate_pending_adoption_identity(target)
@@ -5576,7 +7209,13 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         verification=verification,
     )
 
-    answers = resolve_release_answers(target, read_copier_answers(answers_path))
+    pending_context = pending.get("render_context")
+    finalize_answers = read_copier_answers(answers_path)
+    if isinstance(pending_context, dict):
+        # Schema 2 saves no seed or live fact; replay the checkpoint's
+        # resolved render context (SPEC-009, Issue #1071).
+        finalize_answers = {**pending_context, **finalize_answers}
+    answers = resolve_release_answers(target, finalize_answers)
     saved_visibility = answers.get("project_visibility")
     if not isinstance(saved_visibility, str):
         raise CliError("Copier answers are missing project_visibility.")
@@ -5674,6 +7313,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             stage,
             answers,
             skip_tasks=True,
+            decisions=adoption_decisions(target, answers),
         )
         preview_config_binding = copier_config_binding(stage)
         capabilities = capability_preflight(
@@ -5862,7 +7502,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
                 target, emit=not args.json
             )
         if args.dry_run:
-            write_adoption_reports(plan, args.report_dir, emit=not args.json)
+            write_adoption_reports(plan, report_directory, emit=not args.json)
             return 0
         if saved is None and not confirm(args):
             return 0
@@ -5881,6 +7521,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             stage,
             answers,
             skip_tasks=False,
+            decisions=adoption_decisions(target, answers),
         )
         if copier_config_binding(stage) != preview_config_binding:
             raise CliError(
@@ -5915,12 +7556,15 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         )
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
+    applied_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     write_adoption_reports(
-        mark_adoption_applied(
-            plan, datetime.now(UTC).replace(microsecond=0).isoformat()
-        ),
-        args.report_dir,
+        mark_adoption_applied(plan, applied_at),
+        report_directory,
         emit=not args.json,
+        approved_sha256=cast(
+            str, cast(dict[str, object], saved)["plan_sha256"]
+        ),
+        applied_at=applied_at,
     )
     print("Adoption complete.")
     return 0
@@ -6088,6 +7732,9 @@ def command_apply_adoption_plan(  # noqa: C901
     saved = read_adoption_plan(plan_path)
     if saved.get("mode") != "adopt" or saved.get("target") != str(target):
         raise CliError("Adoption plan does not match this target repository.")
+    report_directory = applied_report_directory(
+        target, plan_path, args.report_dir
+    )
     raw_adoption = saved.get("adoption")
     raw_template = saved.get("template")
     raw_answers = saved.get("answers")
@@ -6171,6 +7818,7 @@ def command_apply_adoption_plan(  # noqa: C901
             preview_stage,
             answers,
             skip_tasks=True,
+            decisions=adoption_decisions(target, answers),
         )
         preview_config_binding = copier_config_binding(preview_stage)
         preview_candidate = temporary_root / "preview-candidate"
@@ -6206,6 +7854,7 @@ def command_apply_adoption_plan(  # noqa: C901
             stage,
             answers,
             skip_tasks=False,
+            decisions=adoption_decisions(target, answers),
         )
         if copier_config_binding(stage) != preview_config_binding:
             raise CliError(
@@ -6245,6 +7894,15 @@ def command_apply_adoption_plan(  # noqa: C901
                 f"task-bearing render. Differing fields: {detail}"
             )
         fresh = authorize_adoption_candidate(fresh, candidate)
+        # The reviewed setup record (questions, work mode, warnings, and
+        # approval route) is replayed as saved; nothing is asked again.
+        saved_setup = saved.get("setup")
+        fresh = replace(
+            fresh,
+            setup=cast(dict[str, object], saved_setup)
+            if isinstance(saved_setup, dict)
+            else None,
+        )
         fresh_adoption = fresh.adoption
         if fresh_adoption is None or fresh_adoption.get("verification") not in {
             "passed",
@@ -6287,12 +7945,13 @@ def command_apply_adoption_plan(  # noqa: C901
         return 1
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
+    applied_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     write_adoption_reports(
-        mark_adoption_applied(
-            fresh, datetime.now(UTC).replace(microsecond=0).isoformat()
-        ),
-        args.report_dir,
+        mark_adoption_applied(fresh, applied_at),
+        report_directory,
         emit=not args.json,
+        approved_sha256=str(saved["plan_sha256"]),
+        applied_at=applied_at,
     )
     print("Adoption complete.")
     return 0
@@ -6320,6 +7979,13 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         raise CliError("--json requires --dry-run for init or adopt.")
     if args.json and mode == "adopt" and args.report_dir is not None:
         raise CliError("--report-dir cannot be combined with --json.")
+    explicit_data = parse_settings_data(args.data)
+    # Issue #1078: every question and every missing required input is
+    # settled before the release lookup, GitHub, or Copier runs.
+    session = setup_plan.Session(
+        interactive=setup_interactive(args), ask=input, emit=print
+    )
+    setup = plan_setup(session, mode, target, explicit_data, args.preset)
     source = args.source or CANONICAL_SOURCE
     revision = resolve_revision(
         source,
@@ -6334,44 +8000,61 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
             "immutability, attestation, and signature verification.",
             file=sys.stderr,
         )
-    explicit_data = parse_data(args.data)
     repository = repository_context(
         target, explicit_data.get("project_visibility")
     )
+    repository = plan_repository_setup(
+        session, setup, target, explicit_data, repository, mode
+    )
+    inputs = setup_inputs(setup, explicit_data)
+    data = base_data(target, mode, inputs)
+    # Init records every explicit one-time decision (SPEC-009); adoption
+    # saves one only where the native manifests cannot decide (#1072), by
+    # the same rule its apply and finalize steps replay.
+    decisions = (
+        explicit_decisions(inputs)
+        if mode == "init"
+        else adoption_decisions(target, data)
+    )
+    # The repository URL comes only from the live repository identity or an
+    # explicit answer; it is never derived from code_owner (#1061).
     if (
         repository.repository is None
-        and explicit_data.get("code_owner", DEFAULT_OWNER) == ""
         and GITHUB_REPOSITORY_URL.fullmatch(
-            explicit_data.get("repository_url", "")
+            str(inputs.get("repository_url", ""))
         )
         is None
     ):
         raise CliError(
-            "code_owner is empty and no GitHub origin or GH_REPO is "
-            "available; also pass --data "
-            "repository_url=https://github.com/owner/repository."
+            "No GitHub origin or GH_REPO identifies this repository; pass "
+            "--data repository_url=https://github.com/owner/repository."
         )
-    data = base_data(target, mode, explicit_data)
     data["project_visibility"] = repository.visibility
     if repository.repository is not None:
         data["repository_url"] = f"https://github.com/{repository.repository}"
+    setup_record = finish_setup(
+        session, setup, data, explicit_data, repository, mode, args
+    )
     with tempfile.TemporaryDirectory(prefix="csarc-plan-") as temporary:
         temporary_root = Path(temporary)
         stage = temporary_root / "preview"
         stage.mkdir()
-        copier_copy(
+        context = copier_copy(
             revision.source,
             revision,
             stage,
             data,
             skip_tasks=True,
+            decisions=decisions,
         )
+        reject_retired_data_for(stage, explicit_data)
         preview_files = {
             name: file_fingerprint(path)
             for name, path in project_files(stage).items()
         }
         answers: dict[str, object] = dict(data)
         answers.update(read_copier_answers(config_path(stage)))
+        answers.update(context)
         capabilities = capability_preflight(
             managed_script(stage, "release_policy.py"),
             target,
@@ -6390,6 +8073,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 capabilities,
                 generated_at,
             )
+            plan = replace(plan, setup=setup_record)
         else:
             plan = ResolvedPlan(
                 mode=mode,
@@ -6399,6 +8083,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 answers=answers,
                 capabilities=capabilities,
                 files=compare_stage(stage, target, adopt=False),
+                setup=setup_record,
             )
         if args.json:
             print(
@@ -6409,7 +8094,11 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         else:
             print_plan(plan)
         if mode == "adopt" and args.dry_run:
-            write_adoption_reports(plan, args.report_dir, emit=not args.json)
+            write_adoption_reports(
+                plan,
+                adoption_report_directory(target, args.report_dir),
+                emit=not args.json,
+            )
         if mode == "adopt":
             milestone_description_plan(target, emit=not args.json)
         if args.dry_run or not confirm(args):
@@ -6430,15 +8119,17 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
             validate_copy_target(target, mode, require_clean=True)
             shutil.rmtree(stage)
             stage.mkdir()
-            copier_copy(
+            rebound_context = copier_copy(
                 approved_revision.source,
                 approved_revision,
                 stage,
                 data,
                 skip_tasks=True,
+                decisions=decisions,
             )
             rebound_answers: dict[str, object] = dict(data)
             rebound_answers.update(read_copier_answers(config_path(stage)))
+            rebound_answers.update(rebound_context)
             rebound_plan = ResolvedPlan(
                 mode=mode,
                 target=target,
@@ -6447,6 +8138,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 answers=rebound_answers,
                 capabilities=capabilities,
                 files=compare_stage(stage, target, adopt=False),
+                setup=setup_record,
             )
             rebound_files = {
                 name: file_fingerprint(path)
@@ -6469,6 +8161,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 stage,
                 data,
                 skip_tasks=False,
+                decisions=decisions,
             )
             if copier_config_binding(stage) != preview_config_binding:
                 raise CliError(
@@ -6476,9 +8169,9 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                     "task-bearing render."
                 )
             validate_copy_target(target, mode, require_clean=True)
-            if target.exists():
-                target.rmdir()
-            shutil.copytree(stage, target, symlinks=True)
+            # An empty directory or an empty Git repository (only `.git`,
+            # no commit or tracked file) keeps its `.git` (Issue #1078).
+            shutil.copytree(stage, target, symlinks=True, dirs_exist_ok=True)
         else:
             raise CliError("Adoption requires a saved machine plan.")
 
@@ -6635,7 +8328,50 @@ def migrate_legacy_commit(
     }
 
 
-def current_revision(
+RAW_COPIER_UPDATE_NEXT_COMMAND = (
+    "restore the files the raw copier update changed (for example "
+    "git restore --source=HEAD --staged --worktree -- .), then run "
+    "csarc update <path> --check"
+)
+
+
+def raw_copier_update_detail(
+    target: Path, commit: str, saved: Mapping[str, object] | None
+) -> str | None:
+    """Detect a state only a raw `copier update` produces (#1058 d19).
+
+    Raw `copier update` is unsupported: it moves the Copier answers
+    ``_commit`` past the release CSARC recorded and can leave rejection
+    files. Detection is never reported as a successful migration; the only
+    supported entry point is ``csarc update``.
+    """
+    recorded = None if saved is None else saved.get("commit_sha")
+    if (
+        isinstance(recorded, str)
+        and FULL_SHA.fullmatch(recorded) is not None
+        and FULL_SHA.fullmatch(commit) is not None
+        and recorded.lower() != commit.lower()
+    ):
+        return (
+            "Detected an unsupported raw `copier update`: the Copier answers "
+            f"record _commit {commit}, but CSARC provenance records "
+            f"{recorded}. CSARC did not migrate or verify this state. "
+            f"Next: {RAW_COPIER_UPDATE_NEXT_COMMAND}."
+        )
+    rejections = sorted(
+        name for name in project_files(target) if name.endswith(".rej")
+    )
+    if rejections:
+        return (
+            "Detected Copier rejection files from an unsupported raw "
+            "`copier update` (" + ", ".join(rejections[:5]) + "). CSARC did "
+            "not migrate or verify this state. Next: "
+            f"{RAW_COPIER_UPDATE_NEXT_COMMAND}."
+        )
+    return None
+
+
+def current_revision(  # noqa: C901
     target: Path,
     source: str,
     commit: str,
@@ -6647,6 +8383,9 @@ def current_revision(
 ) -> tuple[Revision, dict[str, object] | None]:
     """Verify saved provenance or explicitly migrate a legacy installation."""
     saved = read_provenance(target)
+    raw_update = raw_copier_update_detail(target, commit, saved)
+    if raw_update is not None:
+        raise CliError(raw_update)
     source = legacy_migration_source(source, accept_legacy, from_release)
     if FULL_SHA.fullmatch(commit) is None:
         return migrate_legacy_commit(
@@ -6775,12 +8514,37 @@ def update_status(
 
 
 def repository_target_is_new(target: Path) -> bool:
-    """Return whether a target is unwritten: missing or an empty directory.
+    """Return whether a target is unwritten (Issue #1078 AC4).
 
-    Mirrors the `init` scope check in `validate_copy_target` so the two
+    A missing path, an empty directory, or a directory holding only an
+    empty Git repository (``.git`` with no commit and no tracked file) is
+    new. Mirrors the `init` scope check in `validate_copy_target` so the two
     functions never disagree about what counts as a brand-new project.
     """
-    return not target.exists() or not any(target.iterdir())
+    if not target.exists():
+        return True
+    if not target.is_dir():
+        return False
+    entries = [entry.name for entry in target.iterdir()]
+    if not entries:
+        return True
+    if entries != [".git"] or not (target / ".git").is_dir():
+        return False
+    head = run_git(
+        ["git", "-C", str(target), "rev-parse", "--verify", "--quiet", "HEAD"],
+        repository=target,
+        capture=True,
+        check=False,
+    )
+    if head.returncode == 0:
+        return False
+    tracked = run_git(
+        ["git", "-C", str(target), "ls-files", "-z"],
+        repository=target,
+        capture=True,
+        check=False,
+    )
+    return tracked.returncode == 0 and not tracked.stdout
 
 
 def run_policy_settings_check(
@@ -6824,6 +8588,11 @@ def trusted_policy_settings_check(
                 answers,
                 skip_tasks=True,
             )
+            # Copier never records the hidden release_ownership answer, so
+            # carry the saved owner into the inspected render; a missing
+            # owner stays missing and the helper fails closed (#1068).
+            if "release_ownership" in answers:
+                persist_release_answers(stage, answers)
             return run_policy_settings_check(
                 managed_script(stage, "apply-repository-settings.sh"), target
             )
@@ -6860,6 +8629,45 @@ def classify_policy_check(
     return PolicyCheckResult(False, None, output or "policy check unavailable")
 
 
+def update_next_command(
+    status: Mapping[str, object],
+    *,
+    allow_unreleased: bool = False,
+    accept_legacy: bool = False,
+    from_release: str | None = None,
+) -> str:
+    """Return the full check -> finalize -> apply sequence (Issue #1147).
+
+    Every stage names the resolved release and its full SHA, so a beta or a
+    pinned release is never silently replaced by the latest stable one and
+    `--finalize-plan` re-plans the exact release the check reviewed. The
+    commands, their flags, and the default report folder follow
+    docs/install.md: run from inside the target, the report sits next to it
+    (Issue #1153), and check and apply carry the same ``--json`` and
+    ``--yes`` as the documented sequence (Issue #1157).
+    """
+    flags = [
+        "--to",
+        str(status["target_version"]),
+        "--expected-sha",
+        str(status["target_sha"]),
+    ]
+    if from_release is not None:
+        flags += ["--from-release", from_release]
+    if accept_legacy:
+        flags.append("--accept-legacy")
+    if allow_unreleased:
+        flags.append("--allow-unreleased")
+    release = " ".join(flags)
+    return (
+        f"csarc update . {release} --check --json to preview; then "
+        f"csarc update . {release} --finalize-plan "
+        "--decision PATH=keep-current|take-new|custom:FILE (one per listed "
+        "conflict, repeating every --data used for the check); then "
+        f"csarc update . --apply-plan {UPDATE_FINAL_PLAN_HINT} --yes"
+    )
+
+
 def detect_install_state(
     target: Path,
     *,
@@ -6893,7 +8701,10 @@ def detect_install_state(
     if repository_target_is_new(target):
         return {
             "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_CREATE],
-            "reason": f"{target} does not exist or is an empty directory.",
+            "reason": (
+                f"{target} does not exist, is an empty directory, or is an "
+                "empty Git repository."
+            ),
             "state": INSTALL_STATE_CREATE,
         }
     pending_path = checked_destination(target, PENDING_ADOPTION_FILE.as_posix())
@@ -6924,6 +8735,13 @@ def detect_install_state(
         }
     current = read_answer(answers_path, "_commit")
     saved = read_provenance(target)
+    raw_update = raw_copier_update_detail(target, current, saved)
+    if raw_update is not None:
+        return {
+            "next_command": RAW_COPIER_UPDATE_NEXT_COMMAND,
+            "reason": raw_update,
+            "state": INSTALL_STATE_MIGRATE,
+        }
     if FULL_SHA.fullmatch(current) is None and (
         saved is None or saved.get("verification") != "verified"
     ):
@@ -6932,6 +8750,9 @@ def detect_install_state(
             "reason": legacy_commit_error(current),
             "state": INSTALL_STATE_MIGRATE,
         }
+    # Schema 2 settings must match their provenance digests; an unknown
+    # schema or a hand edit stops status here (Issue #1071 AC4).
+    saved_settings = load_saved_settings(target)
     status, current_revision, _target_revision, _previous = update_status(
         target,
         requested,
@@ -6944,7 +8765,12 @@ def detect_install_state(
     )
     if status["update_available"]:
         return {
-            "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_UPDATE],
+            "next_command": update_next_command(
+                status,
+                allow_unreleased=allow_unreleased,
+                accept_legacy=accept_legacy,
+                from_release=from_release,
+            ),
             "reason": (
                 f"Copier revision {status['current_sha']} is behind "
                 f"target {status['target_sha']}."
@@ -6958,7 +8784,7 @@ def detect_install_state(
         else trusted_policy_settings_check(
             target,
             current_revision,
-            read_copier_answers(answers_path),
+            dict(saved_settings.answers),
         )
     )
     policy = classify_policy_check(check_result)
@@ -7020,6 +8846,11 @@ def command_status(args: argparse.Namespace) -> int:
         channel=args.channel,
     )
     result["target"] = str(target)
+    governance = governance_audit(
+        target, getattr(args, "confirm_governance_baseline", None)
+    )
+    result["governance_baseline"] = governance["baseline"]
+    result["merge_audit"] = governance["merges"]
     if args.json:
         print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     else:
@@ -7027,22 +8858,130 @@ def command_status(args: argparse.Namespace) -> int:
         print(f"Install state: {result['state']}")
         print(f"Reason: {result['reason']}")
         print(f"Next: {result['next_command']}")
-    return 0
+        print_governance_audit(governance)
+    return 1 if governance["blocking"] else 0
+
+
+def governance_audit(  # noqa: C901
+    target: Path, confirm: str | None
+) -> dict[str, object]:
+    """Audit default-branch merges after the governance baseline (#1073)."""
+    head = run_git(
+        ["git", "-C", str(target), "rev-parse", "--verify", "HEAD^{commit}"],
+        repository=target,
+        capture=True,
+        check=False,
+    )
+    if head.returncode != 0:
+        if confirm:
+            raise CliError("No Git history exists to confirm a baseline in.")
+        return {
+            "baseline": {
+                "result": "not-installed",
+                "baseline": None,
+                "reason": "the target has no Git history",
+                "unresolved": [],
+                "candidates": [],
+            },
+            "merges": {"merges": [], "blocking": [], "untraced": []},
+            "blocking": False,
+        }
+
+    def git(arguments: list[str]) -> tuple[int, str]:
+        completed = run_git(
+            ["git", "-C", str(target), *arguments],
+            repository=target,
+            capture=True,
+            check=False,
+        )
+        return completed.returncode, completed.stdout
+
+    def api(endpoint: str) -> tuple[int, str]:
+        try:
+            completed = run(
+                ["gh", "api", "--method", "GET", endpoint],
+                capture=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return 1, "GitHub CLI is unavailable"
+        if completed.returncode != 0:
+            return completed.returncode, completed.stderr.strip()
+        return 0, completed.stdout
+
+    def identity() -> merge_trace.Identity | None:
+        code, remote = git(["remote", "get-url", "origin"])
+        name = github_repository(remote.strip()) if code == 0 else None
+        if name is None:
+            return None
+        code, text = api(f"repos/{name}")
+        try:
+            payload = json.loads(text) if code == 0 else None
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        full_name, repository_id = payload.get("full_name"), payload.get("id")
+        if not isinstance(full_name, str) or type(repository_id) is not int:
+            return None
+        return merge_trace.Identity(full_name, repository_id)
+
+    code, remote_head = git(
+        ["rev-parse", "--verify", "refs/remotes/origin/HEAD"]
+    )
+    ref = remote_head.strip() if code == 0 and remote_head.strip() else "HEAD"
+    context = merge_trace.AuditContext(
+        git,
+        api,
+        identity,
+    )
+    try:
+        return merge_trace.audit(context, ref, confirm)
+    except merge_trace.EvidenceError as error:
+        raise CliError(str(error)) from error
+
+
+def print_governance_audit(governance: Mapping[str, object]) -> None:
+    """Print the baseline and every merge finding that needs attention."""
+    baseline = cast(dict[str, object], governance["baseline"])
+    merges = cast(dict[str, object], governance["merges"])
+    print(
+        f"Governance baseline: {baseline['result']} "
+        f"{baseline.get('baseline') or '-'} ({baseline['reason']})"
+    )
+    for item in cast(list[dict[str, str]], baseline.get("unresolved") or []):
+        print(f"  unresolved {item['sha']}: {item['reason']}")
+    if baseline["result"] == "inconclusive":
+        print(
+            "  Notice: confirm one candidate with "
+            "--confirm-governance-baseline <SHA>: "
+            + ", ".join(cast(list[str], baseline["candidates"]))
+        )
+    for item in cast(list[dict[str, str]], merges["merges"]):
+        if item["finding"] != "traced":
+            kind = "Notice" if item["finding"] == "untraced" else "Blocking"
+            print(
+                f"  {kind}: merge {item['sha']} is {item['finding']} "
+                f"({item['detail']})"
+            )
 
 
 def governance_drift_update_recommendation(
     saved_answers: Mapping[str, object], explicit_data: Mapping[str, str]
 ) -> str | None:
     """Explain the new default without changing an existing saved choice."""
-    if (
-        saved_answers.get("enable_governance_drift_check") is False
-        and "enable_governance_drift_check" not in explicit_data
+    saved = saved_answers.get("scheduled_checks")
+    legacy_off = saved_answers.get("enable_governance_drift_check") is False
+    if "scheduled_checks" in explicit_data:
+        return None
+    if legacy_off or (
+        isinstance(saved, list) and "governance-drift" not in saved
     ):
         return (
-            "new projects now enable the daily governance drift check by "
-            "default; this update preserves the saved false value. Set "
-            "--data enable_governance_drift_check=true to add the scheduled "
-            "workflow and its read-only checker."
+            "new projects enable the daily governance drift check by "
+            "default; this update preserves the saved choice. Add "
+            "governance-drift with --data scheduled_checks=... to add the "
+            "scheduled workflow and its read-only checker."
         )
     return None
 
@@ -7053,46 +8992,29 @@ def migrate_simplified_settings(
     """Map the former overlapping settings to the compact public schema."""
     migrated: dict[str, object] = {}
 
-    policy_keys = (
-        "policy_repository_settings",
-        "policy_actions_permissions",
-        "policy_labels",
-        "policy_branch_ruleset",
-    )
-    policy_values = [answers.get(key, True) for key in policy_keys]
-    if all(value is True for value in policy_values):
-        governance_mode = "managed"
-    elif all(value is False for value in policy_values):
-        governance_mode = "observe"
-    else:
-        raise CliError(
-            "Legacy policy_* settings are mixed. Pass one explicit "
-            "governance_mode=managed or governance_mode=observe choice."
-        )
-
-    legacy_reviews = {
-        level: answers.get(f"release_level_{level}_review", fallback)
-        for level, fallback in (
-            ("alpha", "self"),
-            ("beta", "peer"),
-            ("early", "peer"),
-            ("formal", "peer"),
-        )
-    }
-    stable_self = any(
-        legacy_reviews[level] == "self" for level in ("early", "formal")
-    )
-    beta_self = any(
-        legacy_reviews[level] == "self" for level in ("alpha", "beta")
-    )
-    admin_bypass = (
-        "always" if stable_self else "beta-only" if beta_self else "off"
-    )
-    project_maturity = (
-        "formal"
-        if answers.get("default_release_level") == "formal"
-        else "early"
-    )
+    # Governance keys follow the approved mapping (#1058 decision 1): saved
+    # or explicit values are kept, a missing admin_bypass becomes `always`
+    # (reported as widened), and every other key is equivalent or narrower.
+    governance: dict[str, object] = {}
+    if any(
+        key not in answers and key not in explicit_data
+        for key in governance_migration.GOVERNANCE_KEYS
+    ):
+        try:
+            governance = governance_migration.legacy_governance_values(answers)
+        except governance_migration.GovernanceMigrationError as error:
+            if (
+                "governance_mode" not in explicit_data
+                and "governance_mode" not in answers
+            ):
+                raise CliError(str(error)) from error
+            governance = governance_migration.legacy_governance_values(
+                {
+                    key: value
+                    for key, value in answers.items()
+                    if key not in governance_migration.POLICY_TOGGLES
+                }
+            )
     saved_features = answers.get("features")
     if isinstance(saved_features, list):
         legacy_features = [
@@ -7113,25 +9035,35 @@ def migrate_simplified_settings(
         migrated["features"] = legacy_features
 
     defaults: dict[str, object] = {
-        "governance_mode": governance_mode,
-        "lifecycle": ["issues", "milestones"],
-        "actions_fallback": "off",
-        "verification_mode": "hosted",
-        "admin_bypass": admin_bypass,
-        "project_maturity": project_maturity,
-        "copilot_review": (
-            "allowed" if answers.get("pr_review_mode") == "copilot" else "off"
-        ),
-        "release_trigger": "main",
+        **governance,
         "features": legacy_features,
         "documentation_mode": documentation_mode,
-        "primary_language": answers.get("readme_primary_language", "zh-tw"),
-        "i18n": "en-zh-tw",
         "project_license": "proprietary",
         "copyright_holder": answers.get(
             "copyright_holder", answers.get("project_name", "")
         ),
     }
+    # SPEC-009 schema 2 successors of the retired keys (Issue #1071); a
+    # value without an exact equivalent stops before any write.
+    try:
+        defaults.update(settings_schema.migrated_intent(answers))
+    except settings_schema.MigrationDecisionError as error:
+        successors = {"python_floor", "documentation_languages"}
+        if not successors & set(explicit_data):
+            raise CliError(str(error)) from error
+        partial = {
+            key: value
+            for key, value in answers.items()
+            if key
+            not in {
+                "python_support_mode",
+                "python_min_version",
+                "primary_language",
+                "i18n",
+                "readme_primary_language",
+            }
+        }
+        defaults.update(settings_schema.migrated_intent(partial))
     for key, value in defaults.items():
         if key not in answers and key not in explicit_data:
             migrated[key] = value
@@ -7149,11 +9081,6 @@ def update_plan_answers(  # noqa: C901
     migrated_settings = migrate_simplified_settings(answers, explicit_data)
     result.update(migrated_settings)
     update_data.update(migrated_settings)
-    for level in ("alpha", "beta", "early", "formal"):
-        key = f"release_level_{level}_verification"
-        value = explicit_data.get(key, answers.get(key))
-        if isinstance(value, str) and value in {"baseline", "docs"}:
-            update_data[key] = "fast"
     release_ownership(answers)
     release_keys = {
         "release_ownership_reason",
@@ -7173,32 +9100,53 @@ def update_plan_answers(  # noqa: C901
             "project_mode cannot change during update because it owns the "
             "release boundary."
         )
-    saved_visibility = answers.get("project_visibility")
-    update_data["project_visibility"] = repository.visibility
-    if repository.repository is not None:
-        repository_url = f"https://github.com/{repository.repository}"
-        previous_url = answers.get("repository_url")
-        previous_channel = answers.get("security_reporting_channel")
-        update_data["repository_url"] = repository_url
-        if (
-            "security_reporting_channel" not in explicit_data
-            and isinstance(previous_url, str)
-            and previous_channel
-            == default_security_reporting_channel(previous_url)
-        ):
-            update_data["security_reporting_channel"] = (
-                default_security_reporting_channel(repository_url)
-            )
-    if saved_visibility != repository.visibility:
-        enabled = repository.visibility == "public" and bool(
-            selected_languages(answers) & CODEQL_LANGUAGES
+    if "code_owner" not in answers and "code_owner" not in explicit_data:
+        # Saved answers that predate code_owner were rendered with the old
+        # organization default. Keep that rendered owner instead of letting
+        # the new empty default silently drop CODEOWNERS (#1061); a saved or
+        # explicit owner is always authoritative and never rewritten here.
+        update_data["code_owner"] = LEGACY_DEFAULT_OWNER
+    # Saved visibility and origin-derived settings are authoritative (#1068):
+    # live GitHub facts only fill a value the answers file never recorded.
+    # A differing live fact is reported by observed_setting_differences and
+    # changes the saved value only through an explicit --data choice.
+    if "project_visibility" not in answers:
+        update_data.setdefault("project_visibility", repository.visibility)
+    previous_url = answers.get("repository_url")
+    if (
+        repository.repository is not None
+        and not previous_url
+        and "repository_url" not in explicit_data
+    ):
+        update_data["repository_url"] = (
+            f"https://github.com/{repository.repository}"
         )
-        if "enable_codeql" in answers and "enable_codeql" not in explicit_data:
-            update_data["enable_codeql"] = str(enabled).lower()
+    new_url = update_data.get("repository_url")
+    previous_channel = answers.get("security_reporting_channel")
+    if (
+        isinstance(new_url, str)
+        and isinstance(previous_url, str)
+        and previous_url
+        and new_url != previous_url
+        and "security_reporting_channel" not in explicit_data
+        and previous_channel == default_security_reporting_channel(previous_url)
+    ):
+        # The explicit URL change carries the repository-derived reporting
+        # channel with it; a custom channel is never rewritten.
+        update_data["security_reporting_channel"] = (
+            default_security_reporting_channel(new_url)
+        )
     for key, value in update_data.items():
         previous_value = answers.get(key)
         if key == "languages":
-            result[key] = parse_languages(str(value))
+            result[key] = (
+                list(value)
+                if isinstance(value, list)
+                else parse_languages(str(value))
+            )
+            update_data[key] = result[key]
+        elif key in MULTI_SETTINGS:
+            result[key] = parse_multi_setting(key, value)
             update_data[key] = result[key]
         elif isinstance(previous_value, bool):
             normalized = str(value).casefold()
@@ -7215,7 +9163,165 @@ def update_plan_answers(  # noqa: C901
                 raise CliError(f"{key} must be an integer value.") from error
         else:
             result[key] = value
+    # Schema 2 stores no retired key; the old side still reads them from
+    # the saved answers (Issue #1071).
+    # One-time inputs such as the work-item mapping review stay available
+    # to a reinstall plan but are never saved.
+    for key in settings_schema.retired_keys(result):
+        if key in settings_schema.ONE_TIME_INPUTS:
+            continue
+        result.pop(key, None)
+        update_data.pop(key, None)
     return result, update_data
+
+
+def codeql_entitled(repository: RepositoryContext) -> bool | None:
+    """Return whether the live facts show a CodeQL entitlement, if known.
+
+    Public repositories are entitled. Otherwise only an observed security
+    capability decides; ``None`` means the detector could not observe it.
+    """
+    if repository.visibility == "public":
+        return True
+    security = repository.facts.get("security", {})
+    if security.get("state") != repository_facts.KNOWN:
+        return None
+    features = security.get("value")
+    if not isinstance(features, Mapping):
+        return None
+    return any(
+        features.get(name) == "enabled"
+        for name in ("advanced_security", "code_security")
+    )
+
+
+def observed_setting_differences(
+    answers: Mapping[str, object],
+    explicit_data: Mapping[str, str],
+    repository: RepositoryContext,
+) -> dict[str, object]:
+    """Return live facts that differ from saved settings (#1068, #1072).
+
+    None is written. A differing live fact is reported as a setting
+    decision; a saved intent the facts no longer suggest (CodeQL after a
+    visibility or entitlement change) is only a report note and stays
+    ``unchanged``. Only a verified GitHub observation counts, and an
+    explicit --data value for the key is the approved writer, so it is
+    never reported again. A repository URL that differs is not reported
+    here: it fails closed in ``require_repository_identity``.
+    """
+    observed: dict[str, object] = {}
+    if not repository.verified or repository.source != "github":
+        return observed
+    saved_visibility = answers.get("project_visibility")
+    visibility_changed = (
+        "project_visibility" not in explicit_data
+        and isinstance(saved_visibility, str)
+        and saved_visibility != repository.visibility
+    )
+    if visibility_changed:
+        observed["project_visibility"] = repository.visibility
+    # The CodeQL choice is noted, never flipped, when visibility or the
+    # observed entitlement changes (#1058 decision 15).
+    saved_codeql = answers.get("enable_codeql")
+    analyzable = bool(selected_languages(dict(answers)) & CODEQL_LANGUAGES)
+    entitled = codeql_entitled(repository)
+    if visibility_changed:
+        suggested: bool | None = repository.visibility == "public" and (
+            analyzable
+        )
+    elif saved_codeql is True and entitled is False:
+        suggested = False
+    else:
+        suggested = None
+    if (
+        suggested is not None
+        and "enable_codeql" not in explicit_data
+        and isinstance(saved_codeql, bool)
+        and saved_codeql != suggested
+    ):
+        observed["enable_codeql"] = suggested
+    return observed
+
+
+def require_repository_identity(
+    answers: Mapping[str, object],
+    explicit_data: Mapping[str, str],
+    repository: RepositoryContext,
+) -> None:
+    """Fail closed before any write when the target is another repository.
+
+    The URL the saved settings and provenance recorded must name the
+    repository the live origin identifies (Issue #1072). A one-time
+    ``--data repository_url=...`` override approves a different recorded
+    URL for this plan only; it must still name the live repository. An
+    unknown origin (offline, no remote) cannot contradict anything.
+    """
+    if repository.repository is None:
+        return
+    live_url = repository_facts.repository_url(repository.repository)
+    override = explicit_data.get("repository_url")
+    if override is not None:
+        if not repository_facts.same_repository(override, live_url):
+            raise CliError(
+                f"--data repository_url={override} does not name the "
+                f"repository the origin identifies ({live_url}); the target "
+                "was not changed."
+            )
+        return
+    recorded = answers.get("repository_url")
+    if (
+        isinstance(recorded, str)
+        and recorded
+        and not repository_facts.same_repository(recorded, live_url)
+    ):
+        raise CliError(
+            f"The origin identifies {live_url}, but the saved settings and "
+            f"provenance record {recorded}; the target was not changed. "
+            "Check the origin remote, or approve the new identity for this "
+            f"plan only with --data repository_url={live_url}."
+        )
+
+
+def resolve_derived_context(
+    target: Path,
+    answers: Mapping[str, object],
+    decisions: Mapping[str, object],
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Resolve the derived package and run command (Issue #1072).
+
+    Returns the values to render and the differences to report. A saved
+    or explicit decision always wins. Otherwise a value the native
+    manifests resolve uniquely fills a key nothing recorded; a recorded
+    value the manifests contradict, or several candidates, keeps the
+    recorded value and is reported until one explicit decision is passed.
+    Several candidates with nothing recorded fail closed before any write,
+    and an unobservable value keeps what the last render recorded.
+    """
+    languages = sorted(selected_languages(dict(answers)))
+    derived = repository_facts.derive_context(target, languages, decisions)
+    values: dict[str, object] = {}
+    differences: dict[str, object] = {}
+    for key, entry in derived.items():
+        if key in decisions:
+            continue
+        recorded = answers.get(key)
+        state = entry["state"]
+        if state == repository_facts.KNOWN:
+            if not isinstance(recorded, str) or not recorded:
+                values[key] = entry["value"]
+            elif recorded != entry["value"]:
+                differences[key] = entry["value"]
+        elif state == repository_facts.AMBIGUOUS:
+            candidates = cast(list[str], entry["candidates"])
+            if not isinstance(recorded, str) or not recorded:
+                raise CliError(
+                    f"{key} has several candidates in the native manifests "
+                    f"({', '.join(candidates)}); pass --data {key}=<value> "
+                    "once to decide. The target was not changed."
+                )
+            differences[key] = candidates
+    return values, differences
 
 
 def _render_reinstall_plan(
@@ -7253,15 +9359,28 @@ def _render_reinstall_plan(
         allow_unreleased=args.allow_unreleased,
         channel=args.channel,
     )
+    # The reinstall fallback is reachable from csarc update, so the same
+    # product pin preflight runs before each of its renders (#1065).
+    pins = update_action_pin_preflight(
+        target, revision.source, revision.sha, candidate_answers
+    )
+    if pins.blocking:
+        if not (args.check or args.dry_run):
+            raise CliError(action_pin_preflight.drift_error(pins))
+        print(action_pin_preflight.drift_error(pins), file=sys.stderr)
     temporary_root = Path(tempfile.mkdtemp(prefix=f"csarc-reinstall-{label}-"))
     stage = temporary_root / "rendered"
     stage.mkdir()
-    copier_copy(
-        revision.source,
-        revision,
-        stage,
-        candidate_answers,
-        skip_tasks=label == "preview",
+    # The resolved render context joins the answers that provenance records
+    # after the reinstall applies (SPEC-009, Issue #1071).
+    candidate_answers.update(
+        copier_copy(
+            revision.source,
+            revision,
+            stage,
+            candidate_answers,
+            skip_tasks=label == "preview",
+        )
     )
     # The freshly rendered answers file legitimately differs from the
     # target's (new _commit/_src_path, possibly new answers) on every
@@ -7383,6 +9502,30 @@ def command_update_reinstall(  # noqa: C901
         shutil.rmtree(preview_root, ignore_errors=True)
     if adoption is None:
         raise CliError("Reinstall plan has no adoption evidence.")
+    report_directory = lifecycle_report_directory(
+        target, args.report_dir, "update"
+    )
+    plan_payload = adoption_plan_payload(preview)
+    reinstall_report = lifecycle_report_model(
+        preview,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_sha256=str(plan_payload["plan_sha256"]),
+        generated_at=generated_at,
+        plan_path=report_directory / UPDATE_PLAN_BASENAME,
+        before=candidate_answers,
+        observed=observed_setting_differences(
+            candidate_answers, {}, repository
+        ),
+    )
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=plan_payload,
+        report=reinstall_report,
+        emit=not args.json,
+    )
 
     if args.check:
         return 1
@@ -7464,12 +9607,2385 @@ def command_update_reinstall(  # noqa: C901
         shutil.rmtree(apply_root, ignore_errors=True)
     write_provenance(target, fresh.revision, answers=candidate_answers)
     settings_plan(target)
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=None,
+        report=applied_lifecycle_report(
+            reinstall_report,
+            str(plan_payload["plan_sha256"]),
+            datetime.now(UTC).replace(microsecond=0).isoformat(),
+        ),
+        emit=True,
+    )
     print("Reinstall complete.")
     return 0
 
 
+OLD_SIDE_ANSWERS_HEADER = (
+    "# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY\n"
+)
+
+
+def read_raw_answers(path: Path) -> dict[str, object]:
+    """Read a Copier answers file including its ``_`` metadata keys."""
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise CliError(f"Cannot read Copier answers from {path}.") from error
+    if not isinstance(payload, dict):
+        raise CliError(f"Copier answers in {path} must be a mapping.")
+    return {str(key): value for key, value in payload.items()}
+
+
+def render_old_side(
+    source: str,
+    revision: Revision,
+    workdir: Path,
+    saved: Mapping[str, object],
+    provenance: Mapping[str, object] | None,
+    update_data: Mapping[str, object],
+    *,
+    complete: bool = False,
+) -> tuple[update_plan.OldSideInputs, dict[str, object], Path]:
+    """Rebuild the old template render from trusted inputs only (#1063).
+
+    The first render records which questions the old template actually
+    asks. The second render, the baseline the plan compares against, uses
+    exactly the reconstructed answers plus the new-side values Copier needs
+    to evaluate the new template's exclusions for keys the old template
+    never asks; no current default reaches an old question. A render
+    failure, or a question set that changes between the two renders, means
+    a required old input is missing or untrusted; it fails closed before
+    the target is touched. Returns the old-side inputs, the new-side data,
+    and the baseline render.
+    """
+
+    def render(stage: Path, data: Mapping[str, object]) -> frozenset[str]:
+        stage.mkdir()
+        try:
+            copier_copy(
+                source,
+                revision,
+                stage,
+                data,
+                skip_tasks=True,
+                persist_answers=False,
+            )
+        except CliError as error:
+            raise CliError(
+                f"The old template {revision.label} cannot be rebuilt from "
+                f"the saved answers and trusted provenance ({error}). The "
+                "target was not changed."
+            ) from error
+        return update_plan.asked_keys(read_copier_answers(config_path(stage)))
+
+    if complete:
+        # A schema 2 target's verified provenance context plus its saved
+        # intent are exactly the answers the old render consumed (#1071);
+        # its intent-only settings file cannot list the asked seeds.
+        reconstructed = update_plan.OldSideInputs(
+            answers=dict(sorted(saved.items())),
+            sources=dict.fromkeys(saved, update_plan.OLD_SOURCE_SNAPSHOT),
+            dropped=(),
+        )
+        new_data = update_plan.new_side_data(saved, reconstructed, update_data)
+        old = reconstructed.with_context(new_data)
+        baseline = workdir / "old-baseline"
+        render(baseline, old.copier_answers())
+        return old, new_data, baseline
+    asked = render(workdir / "old-asked", saved)
+    reconstructed = update_plan.reconstruct_old_inputs(
+        saved, asked, update_plan.trusted_snapshot(provenance)
+    )
+    new_data = update_plan.new_side_data(saved, reconstructed, update_data)
+    old = reconstructed.with_context(new_data)
+    baseline = workdir / "old-baseline"
+    try:
+        update_plan.require_stable_old_inputs(
+            asked, render(baseline, old.copier_answers())
+        )
+    except update_plan.UpdatePlanningError as error:
+        raise CliError(str(error)) from error
+    return old, new_data, baseline
+
+
+def write_old_side_answers(
+    path: Path,
+    raw: Mapping[str, object],
+    old: update_plan.OldSideInputs,
+    *,
+    commit: str,
+    source: str,
+) -> None:
+    """Write the answers file Copier reads to rebuild the old side."""
+    payload: dict[str, object] = {
+        key: value for key, value in raw.items() if key.startswith("_")
+    }
+    payload["_commit"] = commit
+    payload["_src_path"] = source
+    payload.update(old.copier_answers())
+    path.write_text(
+        OLD_SIDE_ANSWERS_HEADER
+        + yaml.safe_dump(payload, allow_unicode=True, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def commit_candidate(candidate: Path, message: str) -> None:
+    """Commit every candidate change so Copier sees a clean destination."""
+    run_git(
+        ["git", "-C", str(candidate), "add", "-A"],
+        repository=candidate,
+        neutralize_filters=True,
+    )
+    run_git(
+        [
+            "git",
+            "-C",
+            str(candidate),
+            "-c",
+            "user.name=CSARC",
+            "-c",
+            "user.email=csarc@example.invalid",
+            "commit",
+            "--quiet",
+            "--no-gpg-sign",
+            "--allow-empty",
+            "-m",
+            message,
+        ],
+        repository=candidate,
+        neutralize_filters=True,
+    )
+
+
+def staged_name_status(candidate: Path, baseline: str) -> dict[str, str]:
+    """Stage the candidate and return each changed path's Git status."""
+    run_git(
+        ["git", "-C", str(candidate), "add", "-A"],
+        repository=candidate,
+        neutralize_filters=True,
+    )
+    output = run_git(
+        [
+            "git",
+            "-C",
+            str(candidate),
+            "diff",
+            "--cached",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--name-status",
+            "--no-renames",
+            "-z",
+            baseline,
+            "--",
+        ],
+        repository=candidate,
+        capture=True,
+        neutralize_filters=True,
+    ).stdout
+    tokens = [token for token in output.split("\0") if token]
+    pairs = zip(tokens[::2], tokens[1::2], strict=True)
+    return {path: status[:1] for status, path in pairs}
+
+
+@dataclass(frozen=True)
+class UpdateRun:
+    """One Copier three-way update executed in a disposable candidate."""
+
+    candidate: Path
+    baseline_head: str
+    returncode: int
+    conflicts: tuple[str, ...]
+    changes: dict[str, str]
+    output: str
+    retained: tuple[str, ...] = ()
+    product_owned: tuple[str, ...] = ()
+    shims: tuple[str, ...] = ()
+    restored: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class UpdateRunInputs:
+    """Inputs shared verbatim by the planning run and the apply run."""
+
+    raw_answers: Mapping[str, object]
+    old_side: update_plan.OldSideInputs
+    new_data: Mapping[str, object]
+    old_commit: str
+    source: str
+    target_sha: str
+    layout_moves: tuple[tuple[str, str], ...]
+    retiring: tuple[str, ...]
+    target_uses_current_config: bool
+    # Fingerprints of the trusted old render, keyed by path (#1066).
+    old_render: Mapping[str, str] = dataclass_field(default_factory=dict)
+    # Every path the new release renders; none may hide behind the
+    # repository's ignore rules (#1083).
+    payload: tuple[str, ...] = ()
+    # Kept newer product pins the template workflows adopt (#1083).
+    pin_alignment: tuple[tuple[str, ...], ...] = ()
+    # Rendered files Copier's update deleted although the reviewed new
+    # render keeps them, as {path: [base64 content, executable]} (#1083).
+    restored: Mapping[str, Sequence[object]] = dataclass_field(
+        default_factory=dict
+    )
+
+
+def baseline_paths(candidate: Path, baseline: str) -> tuple[str, ...]:
+    """Return every path the candidate's baseline commit tracks."""
+    output = run_git(
+        [
+            "git",
+            "-C",
+            str(candidate),
+            "ls-tree",
+            "-r",
+            "-z",
+            "--name-only",
+            baseline,
+        ],
+        repository=candidate,
+        capture=True,
+    ).stdout
+    return tuple(sorted(name for name in output.split("\0") if name))
+
+
+def protect_candidate_transitions(
+    candidate: Path,
+    baseline: str,
+    inputs: UpdateRunInputs,
+    early_layout_moves: tuple[tuple[str, str], ...],
+    *,
+    rebuild_site: bool = False,
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[tuple[str, str], ...]]:
+    """Keep Copier inside the transitions an update may approve (#1066).
+
+    Product release state and project-owned site content return to their
+    baseline content (relocated when the layout migration moves them), and
+    every Copier deletion the trusted old render cannot justify is undone.
+    Both the check and the apply run call this with the same inputs. With
+    ``rebuild_site`` (a run whose Copier tasks built the site from the new
+    seed) the derived site is rebuilt from restored content. Returns the
+    protected product paths, the retained modified paths, and the layout
+    moves already completed.
+    """
+    tracked = baseline_paths(candidate, baseline)
+    site_before = project_site_fingerprints(candidate)
+
+    def restore(names: Sequence[str]) -> None:
+        run_git(
+            [
+                "git",
+                "-C",
+                str(candidate),
+                "checkout",
+                baseline,
+                "--",
+                *names,
+            ],
+            repository=candidate,
+            neutralize_filters=True,
+        )
+
+    product, completed = file_transition.protect_product_state(
+        candidate, tracked, inputs.layout_moves, restore
+    )
+    if rebuild_site and project_site_fingerprints(candidate) != site_before:
+        rebuild_project_site(candidate)
+    skip = {
+        CONFIG_FILE.as_posix(),
+        LEGACY_ANSWERS_FILE.as_posix(),
+        *inputs.retiring,
+        *(source for source, _destination in early_layout_moves),
+        *(source for source, _destination in completed),
+    }
+    retained = file_transition.protect_deletions(
+        candidate, tracked, inputs.old_render, skip, restore
+    )
+    return product, retained, completed
+
+
+def project_site_fingerprints(candidate: Path) -> dict[str, str | None]:
+    """Fingerprint the project-owned repo-site sources in a candidate."""
+    names = file_transition.project_owned_state(project_files(candidate), ())
+    return {
+        name: file_transition.fingerprint(candidate / name)
+        for name in names
+        if name.startswith(file_transition.PROJECT_SITE_CONTENT_PREFIX)
+        or name in file_transition.PROJECT_SITE_FILES
+    }
+
+
+def rebuild_project_site(candidate: Path) -> None:
+    """Rebuild the derived site after project content was put back.
+
+    Copier's site build task ran on the new seed before the update restored
+    the project's own repo-site content (Issue #1146 AC3), so the derived
+    pages are built again from the content the plan keeps.
+    """
+    script = candidate / ".csarc/scripts/build-repo-site"
+    if script.is_symlink() or not script.is_file():
+        return
+    result = run(
+        ["bash", str(script)], cwd=candidate, capture=True, check=False
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or "").strip() or (result.stdout or "").strip()
+        raise CliError(
+            "Rebuilding the repo-site from the project's own site content "
+            f"failed: {detail or 'unknown error'}. The target was not changed."
+        )
+
+
+def run_update_candidate(
+    target: Path,
+    workdir: Path,
+    inputs: UpdateRunInputs,
+    *,
+    working_tree: bool,
+    skip_tasks: bool,
+    resolutions: Mapping[str, bytes | None] | None = None,
+    stage: Path | None = None,
+    retire: Collection[str] = (),
+) -> UpdateRun:
+    """Run the one shared three-way update in a disposable candidate.
+
+    ``resolutions`` are the conflict decisions a final plan recorded
+    (#1067): Copier must report exactly those conflicts, and each one is
+    replaced by its recorded bytes (or removed) before anything else runs.
+    ``retire`` lists kept ``retire-modified`` files the final plan retires
+    with ``take-new`` (Issue #1157); they are removed last, after the
+    compatibility shims the plan reviewed are written.
+
+    Both ``update --check`` (``skip_tasks=True`` on a working-tree clone)
+    and the apply path (``skip_tasks=False`` on the committed target) run
+    this same function with the same :class:`UpdateRunInputs`. The old side
+    Copier rebuilds comes only from the reconstructed answers file this
+    function writes; current defaults and migrations reach the new side
+    through the data file.
+    """
+    candidate = workdir / "candidate"
+    if working_tree:
+        clone_working_tree(target, candidate)
+        if git_changed_paths(candidate):
+            commit_candidate(candidate, "chore: snapshot the working tree")
+    else:
+        clone_target(target, candidate)
+    baseline_head = run_git(
+        ["git", "-C", str(candidate), "rev-parse", "HEAD"],
+        repository=candidate,
+        capture=True,
+    ).stdout.strip()
+    candidate_config_path = config_path(candidate)
+    migrating_legacy_config = (
+        inputs.target_uses_current_config
+        and candidate_config_path == candidate / LEGACY_ANSWERS_FILE
+    )
+    early_layout_moves = tuple(
+        move
+        for move in inputs.layout_moves
+        if move[0] == LEGACY_ANSWERS_FILE.as_posix()
+    )
+    deferred_layout_moves = tuple(
+        move for move in inputs.layout_moves if move not in early_layout_moves
+    )
+    # Copier must see the legacy generated paths in their original
+    # locations so its old-to-new comparison can remove and add them
+    # cleanly. Only the answers file moves early because Copier and the
+    # target template's finalize tasks need the canonical config path.
+    apply_layout_moves(candidate, early_layout_moves)
+    if migrating_legacy_config:
+        candidate_config_path = candidate / CONFIG_FILE
+    write_old_side_answers(
+        candidate_config_path,
+        inputs.raw_answers,
+        inputs.old_side,
+        commit=inputs.old_commit,
+        source=inputs.source,
+    )
+    for name in inputs.retiring:
+        # The legacy profile is superseded by CONFIG_FILE. Tool-specific
+        # configs are now materialized by stable adapters at runtime.
+        (candidate / name).unlink()
+    if git_changed_paths(candidate):
+        # Copier's own `update` refuses to run against a dirty destination,
+        # so commit this filesystem-only migration first; HEAD moves back
+        # to the baseline afterward so the migration and Copier's changes
+        # form one diff against the repository's real prior state.
+        commit_candidate(
+            candidate, "chore: migrate legacy repository configuration"
+        )
+    data_file = workdir / "update-data.yml"
+    data_file.write_text(
+        yaml.safe_dump(dict(inputs.new_data), sort_keys=True),
+        encoding="utf-8",
+    )
+    command = [
+        sys.executable,
+        "-m",
+        "copier",
+        "update",
+        "--trust",
+        "--defaults",
+        "--conflict",
+        "inline",
+        "--vcs-ref",
+        inputs.target_sha,
+        "--answers-file",
+        candidate_config_path.relative_to(candidate).as_posix(),
+        "--data-file",
+        str(data_file),
+    ]
+    if skip_tasks:
+        command.append("--skip-tasks")
+    command.append(str(candidate))
+    result = run(command, capture=True, check=False)
+    output = (result.stderr or "").strip() or (result.stdout or "").strip()
+    restored = restore_rendered_payload(target, candidate, inputs, stage)
+    product_owned, retained, completed_moves = protect_candidate_transitions(
+        candidate,
+        baseline_head,
+        inputs,
+        early_layout_moves,
+        rebuild_site=not skip_tasks,
+    )
+    # A retained legacy source is a modified generated file the plan keeps
+    # in place as a retire-modified conflict (#1066); it never moves onto
+    # the destination the new release renders (#1083).
+    deferred_layout_moves = effective_layout_moves(
+        tuple(
+            move
+            for move in deferred_layout_moves
+            if move not in completed_moves
+        ),
+        retained,
+    )
+    conflicts = find_conflicts(candidate)
+    copier_succeeded = result.returncode == 0
+    if resolutions is not None:
+        # Copier reports the inline conflicts it left; once each one is
+        # resolved from the plan, the run continues as a clean update.
+        copier_succeeded = copier_succeeded or bool(conflicts)
+        conflicts = resolve_recorded_conflicts(
+            candidate, conflicts, resolutions
+        )
+    if copier_succeeded and not conflicts:
+        # Copier normally performs clean legacy deletions and additions
+        # itself. Any legacy source left behind is user-modified or
+        # otherwise outside that clean update, so finish the move only when
+        # it is safe and fail closed on a different destination.
+        apply_layout_moves(candidate, deferred_layout_moves)
+        reject_ignored_payload(candidate, inputs.payload)
+    head = run_git(
+        ["git", "-C", str(candidate), "rev-parse", "HEAD"],
+        repository=candidate,
+        capture=True,
+    ).stdout.strip()
+    if head != baseline_head or conflicts:
+        # Move HEAD (and an index Copier may have left with unmerged
+        # stages) back to the baseline without touching the working tree:
+        # the migration and Copier's changes form one diff against the
+        # repository's real prior state.
+        run_git(
+            [
+                "git",
+                "-C",
+                str(candidate),
+                "reset",
+                "--quiet",
+                "--mixed",
+                baseline_head,
+            ],
+            repository=candidate,
+        )
+    # A rendered file stays visible to the plan even while an undecided
+    # .gitignore conflict would hide it; the final candidate above already
+    # failed closed if the decided ignore rules still hide it (#1083).
+    action_pin_preflight.align_pins(candidate, inputs.pin_alignment)
+    shims = write_compatibility_shims(
+        candidate, inputs.layout_moves, retained, inputs.payload
+    )
+    retire_kept_files(candidate, retire, retained)
+    stage_payload(candidate, inputs.payload)
+    return UpdateRun(
+        candidate,
+        baseline_head,
+        0 if copier_succeeded else result.returncode,
+        conflicts,
+        staged_name_status(candidate, baseline_head),
+        output,
+        retained,
+        product_owned,
+        shims,
+        restored,
+    )
+
+
+def retire_kept_files(
+    candidate: Path, retire: Collection[str], retained: Collection[str]
+) -> None:
+    """Remove the kept files a final plan retires (Issue #1157)."""
+    for name in sorted(set(retire)):
+        if name not in retained:
+            raise CliError(
+                f"The final plan retires {name}, but the update no longer "
+                "keeps it as a retire-modified file; the target was not "
+                "changed. Create a new plan."
+            )
+        checked_destination(candidate, name).unlink()
+
+
+def restore_rendered_payload(
+    target: Path,
+    candidate: Path,
+    inputs: UpdateRunInputs,
+    stage: Path | None,
+) -> tuple[str, ...]:
+    """Put back rendered files Copier's update deleted (Issue #1083).
+
+    Copier lists the files an update removes before it loads every answer,
+    so a file whose ``_exclude`` rule reads CLI-provided data (the migrated
+    CSARC release workflow) can be deleted although the reviewed new render
+    keeps it. The planning run takes such a file from that render when the
+    target still holds the unmodified old render; the plan records the
+    bytes and the apply run writes the same bytes.
+    """
+    contents: dict[str, tuple[bytes, bool]] = {}
+    for name, (encoded, executable) in inputs.restored.items():
+        contents[name] = (base64.b64decode(str(encoded)), bool(executable))
+    if stage is not None:
+        for name in inputs.payload:
+            rendered = stage / name
+            if (
+                name in contents
+                or (candidate / name).exists()
+                or (candidate / name).is_symlink()
+                or not rendered.is_file()
+                or rendered.is_symlink()
+                or inputs.old_render.get(name) is None
+                or file_transition.fingerprint(target / name)
+                != inputs.old_render.get(name)
+            ):
+                continue
+            contents[name] = (
+                rendered.read_bytes(),
+                bool(rendered.stat().st_mode & 0o111),
+            )
+    for name, (content, executable) in sorted(contents.items()):
+        path = checked_destination(candidate, name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        path.chmod(0o755 if executable else 0o644)
+    return tuple(sorted(contents))
+
+
+def restored_record(
+    stage: Path, names: Sequence[str]
+) -> dict[str, list[object]]:
+    """Return the recorded bytes of the files a planning run restored."""
+    return {
+        name: [
+            base64.b64encode((stage / name).read_bytes()).decode("ascii"),
+            bool((stage / name).stat().st_mode & 0o111),
+        ]
+        for name in sorted(names)
+    }
+
+
+SHIM_MARKER = "# CSARC compatibility shim (Issue #1083)"
+
+
+def shim_text(source: str, destination: str) -> str:
+    """Return the forwarding wrapper kept at one moved script's old path."""
+    relative = os.path.relpath(destination, os.path.dirname(source) or ".")
+    header = (
+        f"{SHIM_MARKER}: {source} moved to {destination}.\n"
+        "# csarc update removes this file once no product file calls it.\n"
+    )
+    if source.endswith(".py"):
+        # A Python caller may run the module or import it from this path.
+        return (
+            "#!/usr/bin/env python3\n" + header + "import os\n"
+            "import runpy\n"
+            "import sys\n\n"
+            "_TARGET = os.path.join(\n"
+            "    os.path.dirname(os.path.abspath(__file__)), "
+            f"{relative!r}\n"
+            ")\n"
+            'if __name__ == "__main__":\n'
+            "    sys.argv[0] = _TARGET\n"
+            '    runpy.run_path(_TARGET, run_name="__main__")\n'
+            "else:\n"
+            "    globals().update(runpy.run_path(_TARGET))\n"
+        )
+    return (
+        "#!/usr/bin/env bash\n"
+        + header
+        + 'exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/'
+        f'{relative}" "$@"\n'
+    )
+
+
+def product_references(
+    candidate: Path, source: str, payload: Collection[str]
+) -> bool:
+    """Return whether a non-CSARC file still calls one legacy path.
+
+    A file names the path itself, or it sits in the same directory and
+    names the script by its file name (for example a sibling lookup).
+    """
+    directory, _slash, name = source.rpartition("/")
+    pattern = rf"(?<![\w.-]){re.escape(name)}(?![\w.-])"
+    if name.endswith(".py"):
+        # A sibling Python file may import the moved module by name.
+        module = re.escape(name.removesuffix(".py"))
+        pattern += rf"|^\s*(?:import|from)\s+{module}\b"
+    sibling = re.compile(pattern, re.MULTILINE)
+    rendered = set(payload)
+    for relative, path in project_files(candidate).items():
+        if (
+            relative == source
+            or relative in rendered
+            or relative.startswith((".csarc/", ".git/"))
+            or not path.is_file()
+            or path.is_symlink()
+            or path.stat().st_size > 1_000_000
+        ):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if source in text or (
+            relative.rpartition("/")[0] == directory and sibling.search(text)
+        ):
+            return True
+    return False
+
+
+def write_compatibility_shims(
+    candidate: Path,
+    layout_moves: Sequence[tuple[str, str]],
+    retained: Collection[str],
+    payload: Collection[str],
+) -> tuple[str, ...]:
+    """Keep moved scripts callable at their old paths for product files.
+
+    A moved executable whose legacy path a product file still calls gets a
+    CSARC-owned forwarding wrapper there; an earlier wrapper nothing calls
+    any longer is removed (Issue #1083). Returns the wrappers written.
+    """
+    shims: list[str] = []
+    for source, destination in layout_moves:
+        target = candidate / source
+        moved = candidate / destination
+        if (
+            source in retained
+            or target.exists()
+            or target.is_symlink()
+            or not moved.is_file()
+            or not os.access(moved, os.X_OK)
+            or not product_references(candidate, source, payload)
+        ):
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(shim_text(source, destination), encoding="utf-8")
+        target.chmod(0o755)
+        shims.append(source)
+    for relative, path in sorted(project_files(candidate).items()):
+        if (
+            relative in shims
+            or relative.startswith(".csarc/")
+            or not path.is_file()
+            or path.is_symlink()
+            or path.stat().st_size > 4096
+        ):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if SHIM_MARKER in text and not product_references(
+            candidate, relative, payload
+        ):
+            path.unlink()
+    return tuple(sorted(shims))
+
+
+def present_payload(candidate: Path, payload: Sequence[str]) -> list[str]:
+    """Return the rendered payload files the candidate holds."""
+    return [
+        name
+        for name in payload
+        if (candidate / name).is_file() and not (candidate / name).is_symlink()
+    ]
+
+
+def stage_payload(candidate: Path, payload: Sequence[str]) -> None:
+    """Stage every rendered file, including one ignore rules would hide."""
+    present = present_payload(candidate, payload)
+    if present:
+        run_git(
+            ["git", "-C", str(candidate), "add", "--force", "--", *present],
+            repository=candidate,
+            neutralize_filters=True,
+        )
+
+
+def ignored_paths(
+    repository: Path, paths: Sequence[str]
+) -> list[dict[str, str]]:
+    """Return each path the repository's ignore rules hide, with its rule."""
+    if not paths:
+        return []
+    result = run_git(
+        [
+            "git",
+            "-C",
+            str(repository),
+            "check-ignore",
+            "--verbose",
+            "--",
+            *paths,
+        ],
+        repository=repository,
+        capture=True,
+        check=False,
+        neutralize_filters=True,
+    )
+    if result.returncode not in {0, 1}:
+        raise CliError(
+            "Cannot evaluate the repository ignore rules for the rendered "
+            "files; the target was not changed."
+        )
+    # Each line is `<source>:<line>:<pattern>\t<path>`; rendered paths are
+    # plain template names, so Git never quotes them.
+    hidden = []
+    for line in result.stdout.splitlines():
+        rule, _tab, path = line.partition("\t")
+        source, _colon, rest = rule.partition(":")
+        number, _colon, pattern = rest.partition(":")
+        if path:
+            hidden.append(
+                {
+                    "line": number,
+                    "path": path,
+                    "pattern": pattern,
+                    "source": source,
+                }
+            )
+    return hidden
+
+
+def ignored_text(hidden: Sequence[Mapping[str, str]]) -> str:
+    """Render hidden payload rows as ``path (source:line: pattern)``."""
+    return "; ".join(
+        f"{row['path']} ({row['source']}:{row['line']}: {row['pattern']})"
+        for row in hidden
+    )
+
+
+def reject_ignored_payload(candidate: Path, payload: Sequence[str]) -> None:
+    """Fail closed when ignore rules would hide a rendered file (#1083).
+
+    The candidate is verified with every rendered file, but Git never
+    stages an untracked ignored one, so the target would silently miss it
+    and the verified tree would differ from the written one.
+    """
+    hidden = ignored_paths(candidate, present_payload(candidate, payload))
+    if hidden:
+        raise CliError(
+            "Repository ignore rules hide rendered CSARC files, so the "
+            "update would not deliver them: "
+            + ignored_text(hidden)
+            + ". Narrow or except those rules (for a conflicted .gitignore, "
+            "in its decision), then create a new plan. The target was not "
+            "changed."
+        )
+
+
+def planned_ignored_payload(
+    target: Path,
+    payload: Sequence[str],
+    overrides: Mapping[str, bytes | None] | None = None,
+) -> list[dict[str, str]]:
+    """Return rendered files the target's ignore rules would hide.
+
+    The apply stops on such a file (``reject_ignored_payload``); this
+    evaluates the same rules before any candidate exists, so ``--check``
+    lists them and ``--finalize-plan`` rejects a decided ``.gitignore``
+    that still hides one (Issue #1146 AC4). ``overrides`` replaces the
+    content of conflicted ignore files with their recorded decisions. A
+    payload path the target already tracks is delivered regardless.
+    """
+    tracked = set(
+        run_git(
+            ["git", "-C", str(target), "ls-files", "-z"],
+            repository=target,
+            capture=True,
+            neutralize_filters=True,
+        ).stdout.split("\0")
+    )
+    candidates = sorted(name for name in payload if name not in tracked)
+    if not candidates:
+        return []
+    decided = dict(overrides or {})
+    with tempfile.TemporaryDirectory(prefix="csarc-ignore-") as temporary:
+        root = Path(temporary).resolve()
+        run_git(["git", "init", "--quiet", str(root)])
+        sources = {
+            name: path.read_bytes()
+            for name, path in project_files(target).items()
+            if PurePosixPath(name).name == ".gitignore"
+            and not path.is_symlink()
+        }
+        for name, content in decided.items():
+            if PurePosixPath(name).name == ".gitignore":
+                if content is None:
+                    sources.pop(name, None)
+                else:
+                    sources[name] = content
+        for name, content in sources.items():
+            destination = checked_destination(root, name)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(content)
+        return ignored_paths(root, candidates)
+
+
+def resolve_recorded_conflicts(
+    candidate: Path,
+    conflicts: Sequence[str],
+    resolutions: Mapping[str, bytes | None],
+) -> tuple[str, ...]:
+    """Resolve exactly the planned conflicts; return any that remain."""
+    if set(conflicts) != set(resolutions):
+        raise CliError(
+            "Update conflicts differ from the final plan (planned: "
+            + (", ".join(sorted(resolutions)) or "none")
+            + "; realized: "
+            + (", ".join(conflicts) or "none")
+            + "); the target was not changed. Create a new plan."
+        )
+    apply_conflict_resolutions(candidate, resolutions)
+    return find_conflicts(candidate)
+
+
+def apply_conflict_resolutions(
+    candidate: Path, resolutions: Mapping[str, bytes | None]
+) -> None:
+    """Replace each conflicted candidate path with its recorded content."""
+    for name, content in sorted(resolutions.items()):
+        path = checked_destination(candidate, name)
+        if content is None:
+            if path.is_symlink() or path.exists():
+                path.unlink()
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_symlink():
+            path.unlink()
+        path.write_bytes(content)
+
+
+def update_action_pin_preflight(
+    target: Path,
+    source: str,
+    sha: str,
+    answers: Mapping[str, object],
+) -> action_pin_preflight.PinPreflight:
+    """Run the read-only product pin preflight, failing closed (#1065)."""
+    try:
+        return action_pin_preflight.run_preflight(
+            target,
+            source,
+            sha,
+            answers,
+            lambda command: run_git(command, capture=True, check=False),
+        )
+    except action_pin_preflight.PinPreflightError as error:
+        raise CliError(
+            "Action pin preflight failed closed; the target was not "
+            f"changed. {error} Repair: make the template source reachable "
+            "at the reviewed commit (or pass a verified --to release) and "
+            "keep each .github/workflows file a regular UTF-8 file, then "
+            "rerun csarc update --check."
+        ) from error
+
+
+def update_conflict_sides(
+    target: Path,
+    old_stage: Path,
+    new_side: Mapping[str, bytes | None],
+    layout_moves: Sequence[tuple[str, str]],
+) -> dict[str, dict[str, bytes | None]]:
+    """Return the base, current, and new bytes of each conflict (#1147).
+
+    ``current`` and ``new`` are exactly what ``keep-current`` and
+    ``take-new`` would record; ``base`` is the recorded release's render,
+    read at its old path when the update moves the file.
+    """
+    old_names = {new: old for old, new in layout_moves}
+
+    def regular(path: Path) -> bytes | None:
+        if path.is_symlink() or not path.is_file():
+            return None
+        return path.read_bytes()
+
+    return {
+        name: {
+            "base": regular(old_stage / name)
+            if (old_stage / name).exists()
+            else regular(old_stage / old_names.get(name, name)),
+            "current": regular(target / name),
+            "new": new_content,
+        }
+        for name, new_content in sorted(new_side.items())
+    }
+
+
+def write_conflict_sides(
+    report_directory: Path,
+    sides: Mapping[str, Mapping[str, bytes | None]],
+) -> None:
+    """Write each conflict's sides under the report folder (#1147).
+
+    The ``conflicts`` folder is tool output: it is replaced on every plan so
+    no file from an earlier plan can be mistaken for the current one.
+    """
+    folder = report_directory / CONFLICT_SIDES_DIRECTORY
+    if folder.is_symlink():
+        raise CliError(
+            f"{folder} is a symlink; remove it so conflict sides can be "
+            "written."
+        )
+    if folder.is_dir():
+        shutil.rmtree(folder)
+    filesystem_root = Path(report_directory.anchor)
+    relative_directory = report_directory.relative_to(filesystem_root)
+    for name, contents in sides.items():
+        for side in CONFLICT_SIDES:
+            content = contents.get(side)
+            if content is None:
+                continue
+            atomic_replace_text(
+                filesystem_root,
+                (
+                    relative_directory / CONFLICT_SIDES_DIRECTORY / side / name
+                ).as_posix(),
+                content,
+            )
+
+
+def update_conflict_error(conflicts: Sequence[str], detail: str = "") -> str:
+    """Return the one fail-closed message for an update conflict."""
+    summary = (
+        ", ".join(conflicts)
+        if conflicts
+        else detail or ("Copier exited non-zero")
+    )
+    return (
+        f"Update needs manual conflict resolution ({summary}); the target "
+        "was not changed. Run csarc update --check, compare each file's "
+        "base, current, and new sides in the report folder, decide every "
+        "listed file with csarc update --finalize-plan --decision "
+        "PATH=keep-current|take-new|custom:FILE, then apply the final plan "
+        "with csarc update --apply-plan."
+    )
+
+
+def plan_update(
+    target: Path,
+    workdir: Path,
+    inputs: UpdateRunInputs,
+    old_stage: Path,
+    retained: Collection[str] = (),
+    product_paths: Collection[str] = (),
+    stage: Path | None = None,
+) -> update_plan.UpdatePlanning:
+    """Build the immutable planning result both check and apply review.
+
+    ``retained`` lists retirement candidates kept because they differ from
+    the trusted old render (#1066). ``product_paths`` lists generated
+    paths the product now owns (the selected product-owned release
+    workflow, #1083): Copier's deletion of one is undone and the plan
+    reports it as product-owned, not as a retirement.
+    """
+    run_result = run_update_candidate(
+        target,
+        workdir,
+        inputs,
+        working_tree=True,
+        skip_tasks=True,
+        stage=stage,
+    )
+    if run_result.returncode != 0 and not run_result.conflicts:
+        raise CliError(
+            "Copier could not plan the update ("
+            + (run_result.output or "unknown Copier error")
+            + "). The target was not changed."
+        )
+    answers_files = {CONFIG_FILE.as_posix(), LEGACY_ANSWERS_FILE.as_posix()}
+    old_files = project_files(old_stage)
+    target_files = project_files(target)
+    parity_paths = tuple(
+        sorted(
+            name
+            for name, path in old_files.items()
+            if name not in answers_files
+            and (
+                name not in target_files
+                or file_fingerprint(path)
+                != file_fingerprint(target_files[name])
+            )
+        )
+    )
+    customized = {
+        name
+        for name in parity_paths
+        if name in target_files and name not in answers_files
+    }
+    kept = {*retained, *run_result.retained}
+    owned = kept & set(product_paths)
+    kept -= owned
+    excluded = set(inputs.retiring)
+    for source_name, destination_name in effective_layout_moves(
+        inputs.layout_moves, {*kept, *run_result.shims}
+    ):
+        excluded.update((source_name, destination_name))
+    add, overwrite, merge, delete = update_plan.classify_changes(
+        run_result.changes,
+        conflicts=run_result.conflicts,
+        excluded=excluded,
+        customized=customized,
+    )
+    return update_plan.UpdatePlanning(
+        old_side=inputs.old_side,
+        new_data=dict(inputs.new_data),
+        add=add,
+        overwrite=overwrite,
+        merge=merge,
+        delete=delete,
+        conflicts=run_result.conflicts,
+        render_parity=(
+            update_plan.RENDER_PARITY_DIVERGED
+            if parity_paths
+            else update_plan.RENDER_PARITY_EQUAL
+        ),
+        parity_paths=parity_paths,
+        retained=tuple(sorted(kept)),
+        shims=run_result.shims,
+        restored=run_result.restored,
+        product_owned=tuple(
+            sorted(
+                name
+                for name in {*run_result.product_owned, *owned}
+                if name in target_files
+            )
+        ),
+    )
+
+
+def effective_layout_moves(
+    layout_moves: tuple[tuple[str, str], ...], retained: Collection[str]
+) -> tuple[tuple[str, str], ...]:
+    """Drop the layout moves whose legacy source the plan keeps (#1083).
+
+    A retained source is a modified generated file reported as a
+    retire-modified conflict: it stays where it is, and the destination the
+    new release renders is an ordinary addition, never a move target.
+    """
+    kept = set(retained)
+    return tuple(move for move in layout_moves if move[0] not in kept)
+
+
+def referenced_removals(
+    target: Path,
+    planning: update_plan.UpdatePlanning,
+    layout_moves: tuple[tuple[str, str], ...],
+    retiring: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return the planned removals a file the plan keeps still uses.
+
+    A kept file is one the plan leaves with its product content: untouched,
+    product-owned, or merged. A conflict is not kept until its decision;
+    ``--finalize-plan`` rejects a decision that keeps a use of a removal
+    (``reject_decided_uses``). A retained ``retire-modified`` file is the
+    superseded legacy layout kept only for review, so its calls into that
+    layout keep nothing alive; a retained script that still uses them blocks
+    the plan instead (``retained_script_uses``, Issue #1157). A move source
+    is excluded; its callers keep
+    working through a compatibility shim (#1083). See
+    ``file_transition.content_uses`` for what counts as a use (#1146 AC2).
+    """
+    files = planned_update_files(target, planning, layout_moves, retiring)
+    kept = {*files.preserve, *files.merge, *files.product_owned}
+    kept -= {*files.retained, *files.manual}
+    return file_transition.referenced_retirements(
+        target, (*retiring, *planning.delete), kept
+    )
+
+
+def release_writer_moves(
+    target: Path,
+    writers: Sequence[str],
+    moves: Sequence[tuple[str, str]],
+) -> list[dict[str, str]]:
+    """Return the moved files a kept product Release writer still uses.
+
+    A product-owned Release writer stays where it is (#1083), but the
+    layout migration moves the legacy release config, manifest, and version
+    file into ``.csarc/``; a writer that still names them, or a
+    release-please config that implies the moved version file, would stop
+    releasing the product (Issue #1153). Each row names the writer, the
+    used path, and its destination; the report blocks on them.
+    """
+    destinations = dict(moves)
+    rows: list[dict[str, str]] = []
+    for writer in writers:
+        path = target / writer
+        if path.is_symlink() or not path.is_file():
+            continue
+        used = set(
+            file_transition.content_uses(
+                writer, path.read_bytes(), destinations
+            )
+        )
+        for config in sorted(used):
+            source = target / config
+            if source.is_symlink() or not source.is_file():
+                continue
+            used.update(
+                name
+                for name in file_transition.release_please_version_files(
+                    source.read_bytes()
+                )
+                if name in destinations
+            )
+        rows.extend(
+            {
+                "destination": destinations[name],
+                "path": name,
+                "writer": writer,
+            }
+            for name in sorted(used)
+        )
+    return rows
+
+
+def retained_script_uses(
+    target: Path,
+    retained: Sequence[str],
+    removals: Sequence[str],
+    moves: Sequence[tuple[str, str]],
+) -> list[dict[str, str]]:
+    """Return the removed or moved files a kept legacy script still uses.
+
+    A ``retire-modified`` script stays in place, but the same plan removes
+    or moves the files it runs or reads; after the apply it fails, as a kept
+    ``scripts/verify`` that called a removed ``scripts/test-pr-policy`` and
+    read the moved ``policies/*.json`` did (Issue #1157). Each row names the
+    script, the used path, and its destination (empty when removed); the
+    report blocks on them. A move source with a compatibility shim keeps
+    working and is not in ``moves``.
+    """
+    destinations = dict(moves)
+    gone = {*removals, *destinations}
+    rows: list[dict[str, str]] = []
+    for script in sorted(set(retained)):
+        path = target / script
+        if path.is_symlink() or not path.is_file():
+            continue
+        content = path.read_bytes()
+        if not (path.stat().st_mode & 0o111 or content.startswith(b"#!")):
+            continue
+        rows.extend(
+            {
+                "destination": destinations.get(used, ""),
+                "path": used,
+                "script": script,
+            }
+            for used in file_transition.content_uses(script, content, gone)
+        )
+    return rows
+
+
+def update_retained_uses(
+    update: Mapping[str, object] | None,
+) -> list[dict[str, str]]:
+    """Return the recorded retained-script uses from one plan."""
+    rows = (update or {}).get("retained_uses")
+    if not isinstance(rows, list):
+        return []
+    return [
+        {str(key): str(value) for key, value in row.items()}
+        for row in rows
+        if isinstance(row, dict)
+    ]
+
+
+def reject_retained_uses(
+    report: Mapping[str, object], retired: Collection[str] = ()
+) -> None:
+    """Stop a final plan while a kept legacy script loses its files.
+
+    The ``take-new`` decision retires the script as the new release does
+    (Issue #1157); otherwise it has to change in a product commit, and a
+    new ``--check`` plans again. ``retired`` lists the decided scripts.
+    """
+    actions = cast(list[Mapping[str, object]], report["required_actions"])
+    blocked = [
+        str(row["message"])
+        for row in actions
+        if row["kind"] == "retire-modified"
+        and row["blocking"] is True
+        and row["subject"] not in retired
+    ]
+    if blocked:
+        raise CliError(" ".join(blocked))
+
+
+def split_retirement_decisions(
+    choices: Mapping[str, tuple[str, Path | None]],
+    retained: Collection[str],
+) -> tuple[dict[str, tuple[str, Path | None]], tuple[str, ...]]:
+    """Split ``--decision`` values into conflict choices and retirements.
+
+    A kept ``retire-modified`` file takes only ``take-new``: retire it as
+    the new release does (Issue #1157). Leaving it out keeps it.
+    """
+    kept = set(retained)
+    retired = sorted(name for name in choices if name in kept)
+    wrong = [name for name in retired if choices[name][0] != "take-new"]
+    if wrong:
+        raise CliError(
+            "A retire-modified file is kept unless you retire it with "
+            "--decision PATH=take-new; leave it out to keep it ("
+            + ", ".join(wrong)
+            + "). The target was not changed."
+        )
+    conflicts = {
+        name: choice for name, choice in choices.items() if name not in kept
+    }
+    return conflicts, tuple(retired)
+
+
+def reject_retired_uses(
+    target: Path,
+    files: Plan,
+    retired: Sequence[str],
+    resolutions: Mapping[str, bytes | None],
+) -> None:
+    """Stop a final plan that retires a file something it keeps uses.
+
+    Retiring a kept legacy script must not break another file the plan
+    keeps: an untouched, product-owned, merged, still-retained, or decided
+    file that runs or reads it (Issue #1157).
+    """
+    if not retired:
+        return
+    kept = {
+        *files.preserve,
+        *files.merge,
+        *files.product_owned,
+        *files.retained,
+    } - {*retired, *resolutions}
+    findings = [
+        f"{name} uses {', '.join(used)}"
+        for name in sorted(kept)
+        if (target / name).is_file()
+        and not (target / name).is_symlink()
+        and (
+            used := file_transition.content_uses(
+                name, (target / name).read_bytes(), retired
+            )
+        )
+    ]
+    findings.extend(
+        f"{name} uses {', '.join(used)}"
+        for name, content in sorted(resolutions.items())
+        if content is not None
+        and (used := file_transition.content_uses(name, content, retired))
+    )
+    if findings:
+        raise CliError(
+            "The plan keeps a file that uses a retired file: "
+            + "; ".join(findings)
+            + ". Keep the retired file, or change that use in a product "
+            "commit and run csarc update --check again; the target was not "
+            "changed."
+        )
+
+
+def update_release_writer_moves(
+    update: Mapping[str, object] | None,
+) -> list[dict[str, str]]:
+    """Return the recorded writer uses of moved files from one plan."""
+    rows = (update or {}).get("release_writer_moves")
+    if not isinstance(rows, list):
+        return []
+    return [
+        {str(key): str(value) for key, value in row.items()}
+        for row in rows
+        if isinstance(row, dict)
+    ]
+
+
+def release_writer_actions(
+    rows: Sequence[Mapping[str, str]],
+) -> list[dict[str, object]]:
+    """Return one blocking row per product writer that moves would break."""
+    by_writer: dict[str, list[Mapping[str, str]]] = {}
+    for row in rows:
+        by_writer.setdefault(row["writer"], []).append(row)
+    return [
+        {
+            "blocking": True,
+            "command": "csarc update --data release_ownership=csarc-owned",
+            "kind": "release-writer",
+            "message": "The product-owned Release writer is kept, but this "
+            "update moves files it uses: "
+            + ", ".join(
+                f"{row['path']} -> {row['destination']}" for row in uses
+            )
+            + ", so product releases would break. Plan again with "
+            "--data release_ownership=csarc-owned to let CSARC own the "
+            "release, or change the writer in a product commit so it no "
+            "longer uses these paths, then run csarc update --check again; "
+            "the target was not changed.",
+            "subject": writer,
+        }
+        for writer, uses in sorted(by_writer.items())
+    ]
+
+
+def reject_release_writer_moves(report: Mapping[str, object]) -> None:
+    """Stop a final plan while a kept Release writer loses moved files.
+
+    No file decision resolves it (Issue #1153): the release owner or the
+    writer itself has to change, and a new ``--check`` then plans again.
+    """
+    actions = cast(list[Mapping[str, object]], report["required_actions"])
+    blocked = [
+        str(row["message"])
+        for row in actions
+        if row["kind"] == "release-writer" and row["blocking"] is True
+    ]
+    if blocked:
+        raise CliError(" ".join(blocked))
+
+
+def reject_decided_ignore_rules(
+    target: Path,
+    payload: Sequence[str],
+    resolutions: Mapping[str, bytes | None],
+) -> None:
+    """Stop a final plan whose decided ignore rules hide rendered files.
+
+    The apply would fail closed on the same files (#1083); finalize knows
+    every decision, so it refuses before the plan exists (#1146 AC4).
+    """
+    hidden = planned_ignored_payload(target, payload, resolutions)
+    if hidden:
+        raise CliError(
+            "With the recorded decisions, ignore rules still hide rendered "
+            "CSARC files, so the apply would stop: "
+            + ignored_text(hidden)
+            + ". Except those paths (for a conflicted .gitignore, in its "
+            "--decision), then run csarc update --check again; the target "
+            "was not changed."
+        )
+
+
+def reject_decided_uses(
+    resolutions: Mapping[str, bytes | None],
+    removals: Sequence[str],
+    moved: Sequence[str] = (),
+) -> None:
+    """Stop a final plan whose decided content uses a file it removes.
+
+    keep-current or custom content for a conflict is kept by the plan, so
+    it must not call or configure a file the same plan retires or deletes
+    (Issue #1146 AC2). A kept script also must not run or read a file the
+    plan moves without a compatibility shim (Issue #1157). The operator
+    chooses take-new, a custom file without that use, or moves the product
+    use into a product file and plans again, which keeps the used file as
+    product-owned.
+    """
+    planned = tuple(removals)
+    findings = [
+        f"{name} uses {', '.join(used)}"
+        for name, content in sorted(resolutions.items())
+        if content is not None
+        and (
+            used := file_transition.content_uses(
+                name,
+                content,
+                (*planned, *moved) if content.startswith(b"#!") else planned,
+            )
+        )
+    ]
+    if findings:
+        raise CliError(
+            "The decided content keeps a use of a file this plan removes: "
+            + "; ".join(findings)
+            + ". Choose take-new or a custom file without that use, or move "
+            "the use into a product file and run csarc update --check "
+            "again; the target was not changed."
+        )
+
+
+def planned_update_files(
+    target: Path,
+    planning: update_plan.UpdatePlanning,
+    layout_moves: tuple[tuple[str, str], ...],
+    retiring: tuple[str, ...],
+) -> Plan:
+    """Project one planning result onto the shared file plan model."""
+    layout_moves = effective_layout_moves(
+        layout_moves, {*planning.retained, *planning.shims}
+    )
+    acted = set(planning.changed_paths()) | set(planning.conflicts)
+    acted.update(retiring)
+    acted.update(planning.retained)
+    for source_name, destination_name in layout_moves:
+        acted.update((source_name, destination_name))
+    return Plan(
+        planning.add,
+        planning.overwrite,
+        tuple(sorted(retiring)),
+        tuple(sorted(set(project_files(target)) - acted)),
+        planning.merge,
+        planning.conflicts,
+        (),
+        tuple(f"{old} -> {new}" for old, new in layout_moves),
+        planning.delete,
+        planning.retained,
+        planning.product_owned,
+        planning.shims,
+    )
+
+
+def update_transitions(
+    target: Path,
+    planning: update_plan.UpdatePlanning,
+    layout_moves: tuple[tuple[str, str], ...],
+    retiring: tuple[str, ...],
+) -> file_transition.ApprovedTransitions:
+    """Return the exact file transitions one reviewed plan approves."""
+    return file_transition.approved_transitions(
+        add=planning.add,
+        overwrite=planning.overwrite,
+        merge=planning.merge,
+        delete=planning.delete,
+        retire=retiring,
+        moves=effective_layout_moves(
+            layout_moves, {*planning.retained, *planning.shims}
+        ),
+        target_files=project_files(target),
+        metadata=(
+            CONFIG_FILE.as_posix(),
+            LEGACY_ANSWERS_FILE.as_posix(),
+            PROVENANCE_FILE.as_posix(),
+        ),
+        protected=planning.product_owned,
+    )
+
+
+def apply_update_transitions(
+    target: Path,
+    candidate: Path,
+    transitions: file_transition.ApprovedTransitions,
+    artifacts: Mapping[str, str],
+    delete_paths: tuple[str, ...],
+    target_snapshot: Mapping[str, object],
+) -> None:
+    """Apply exactly the approved update transitions as one transaction.
+
+    The realized candidate effects must equal the approved create, modify,
+    and delete sets before anything is written (#1066); the write then
+    restores the byte-identical base on any failure.
+    """
+    problems = file_transition.transition_divergence(
+        transitions,
+        artifacts,
+        delete_paths,
+        cast(Mapping[str, str], target_snapshot["target_files"]),
+    )
+    if problems:
+        raise CliError(
+            "Update apply diverged from the approved file transitions ("
+            + "; ".join(problems)
+            + "); the target was not changed. Create a new plan."
+        )
+    for relative_name in (*artifacts, *delete_paths):
+        checked_destination(target, relative_name)
+    validate_target_snapshot(target, target_snapshot)
+    try:
+        file_transition.apply_transaction(
+            target, candidate, artifacts, delete_paths
+        )
+    except (OSError, file_transition.TransitionError) as error:
+        raise CliError(
+            f"Update apply failed ({error}); the target was restored to "
+            "its base. Create a new plan."
+        ) from error
+
+
+FINAL_PLAN_ARGUMENTS = (
+    "accept_legacy",
+    "allow_unreleased",
+    "channel",
+    "expected_sha",
+    "from_release",
+    "to",
+)
+CONFLICT_MARKER = re.compile(rb"^(<{7}|={7}|>{7})( |$)", re.MULTILINE)
+
+
+def git_version() -> str:
+    """Return the Git version string that shapes clones and diffs."""
+    return run_git(["git", "--version"], capture=True).stdout.strip()
+
+
+def update_toolchain() -> dict[str, str]:
+    """Observe the exact-pinned toolchain, failing closed on drift."""
+    toolchain = final_plan.observe_toolchain(git_version)
+    try:
+        final_plan.require_pinned_toolchain(toolchain)
+    except final_plan.FinalPlanError as error:
+        raise CliError(f"{error} The target was not changed.") from error
+    return toolchain
+
+
+def repository_permissions(repository: RepositoryContext) -> object:
+    """Return the caller's live permissions on the GitHub repository."""
+    if not repository.verified or repository.repository is None:
+        return None
+    try:
+        result = run(
+            ["gh", "api", "--method", "GET", f"repos/{repository.repository}"],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return "unavailable"
+    if result.returncode != 0:
+        return "unavailable"
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return "unavailable"
+    permissions = (
+        payload.get("permissions") if isinstance(payload, dict) else None
+    )
+    if not isinstance(permissions, dict):
+        return "unavailable"
+    return {
+        str(key): value
+        for key, value in sorted(permissions.items())
+        if isinstance(value, bool)
+    }
+
+
+def update_live_facts(
+    target: Path,
+    repository: RepositoryContext,
+    *,
+    target_snapshot: Mapping[str, object],
+    current: Revision,
+    resolved: Revision,
+    previous: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """Return every live fact a final plan binds and apply re-observes."""
+    origin = run_git(
+        ["git", "-C", str(target), "remote", "get-url", "origin"],
+        repository=target,
+        capture=True,
+        check=False,
+    )
+    return {
+        "origin": origin.stdout.strip() if origin.returncode == 0 else None,
+        "permissions": repository_permissions(repository),
+        "release": {
+            "current": asdict(current),
+            "previous": None if previous is None else dict(previous),
+            "target": asdict(resolved),
+        },
+        "repository": repository.as_dict(),
+        "target": dict(sorted(target_snapshot.items())),
+    }
+
+
+def current_target_snapshot(target: Path) -> dict[str, object]:
+    """Return the target state an update plan binds."""
+    head, changes, status_sha256 = target_state(target)
+    return {
+        "target_changes": list(changes),
+        "target_files": target_file_snapshot(target),
+        "target_head": head,
+        "target_status_sha256": status_sha256,
+    }
+
+
+def decision_content(
+    target: Path,
+    name: str,
+    choice: str,
+    custom: Path | None,
+    new_side: Mapping[str, bytes | None],
+) -> bytes | None:
+    """Return the exact bytes one conflict decision resolves to."""
+    if choice == final_plan.DECISION_KEEP:
+        path = target / name
+        if path.is_symlink():
+            raise CliError(f"Cannot keep {name}: it is a symlink.")
+        content = path.read_bytes() if path.is_file() else None
+    elif choice == final_plan.DECISION_TAKE:
+        content = new_side.get(name)
+    else:
+        if custom is None:
+            raise CliError(f"The custom decision for {name} needs a FILE.")
+        resolved = Path(os.path.abspath(custom.expanduser()))
+        if resolved == target or target in resolved.parents:
+            raise CliError(
+                f"The custom resolution for {name} must live outside the "
+                "target repository."
+            )
+        if resolved.is_symlink() or not resolved.is_file():
+            raise CliError(
+                f"The custom resolution for {name} must be a regular file."
+            )
+        content = resolved.read_bytes()
+    if content is not None and CONFLICT_MARKER.search(content):
+        raise CliError(
+            f"The {choice} resolution for {name} still has conflict markers."
+        )
+    return content
+
+
+def resolution_transitions(
+    target: Path,
+    transitions: file_transition.ApprovedTransitions,
+    resolutions: Mapping[str, bytes | None],
+) -> file_transition.ApprovedTransitions:
+    """Add the file effects of the recorded decisions to the approval."""
+    create = set(transitions.create)
+    modify = set(transitions.modify)
+    delete = set(transitions.delete)
+    for name, content in resolutions.items():
+        path = target / name
+        exists = path.is_file() and not path.is_symlink()
+        if content is None:
+            if exists:
+                delete.add(name)
+        elif not exists:
+            create.add(name)
+        elif path.read_bytes() != content:
+            modify.add(name)
+    return file_transition.ApprovedTransitions(
+        frozenset(create),
+        frozenset(modify),
+        frozenset(delete),
+        transitions.optional,
+        transitions.protected,
+    )
+
+
+def replay_pin_decisions(
+    target: Path,
+    items: Sequence[Mapping[str, object]],
+    decisions: Sequence[Mapping[str, object]],
+    pin_commit: str,
+) -> list[dict[str, object]]:
+    """Read pin decisions back from the commit and reject extra changes."""
+
+    def git(command: list[str]) -> subprocess.CompletedProcess[str]:
+        return run_git(command, capture=True, check=False)
+
+    try:
+        accepted = action_pin_preflight.validate_pin_decisions(
+            items, decisions, git, target
+        )
+        unlisted = action_pin_preflight.unlisted_pin_changes(
+            items, git, target, pin_commit
+        )
+    except action_pin_preflight.PinPreflightError as error:
+        raise CliError(
+            f"Action pin decisions failed closed ({error}); the target was "
+            "not changed."
+        ) from error
+    if unlisted:
+        raise CliError(
+            "Pin commit changes more than the listed action pins ("
+            + ", ".join(unlisted)
+            + "); the target was not changed."
+        )
+    return accepted
+
+
+def final_pin_decisions(
+    target: Path,
+    stage1: Mapping[str, object],
+    pin_commit: str | None,
+) -> dict[str, object]:
+    """Accept the committed product pin decisions for the stage-1 items."""
+    items = [
+        item
+        for item in update_pin_items(stage1) or []
+        if item.get("reason") != action_pin_preflight.REASON_PRODUCT_PIN_NEWER
+    ]
+    if not items:
+        if pin_commit is not None:
+            raise CliError(
+                "--pin-commit was given, but the stage-1 plan lists no "
+                "action pin drift."
+            )
+        return {"commit": None, "decisions": [], "items": []}
+    if pin_commit is None:
+        raise CliError(
+            "The stage-1 plan lists action pin drift; commit the product "
+            "pin changes, then pass --pin-commit <full SHA>."
+        )
+    decisions = [dict(item, commit_sha=pin_commit) for item in items]
+    accepted = replay_pin_decisions(target, items, decisions, pin_commit)
+    return {"commit": pin_commit, "decisions": accepted, "items": items}
+
+
+def planning_record(planning: update_plan.UpdatePlanning) -> dict[str, object]:
+    """Return every field needed to rebuild one planning result exactly."""
+    return {
+        "add": list(planning.add),
+        "conflicts": list(planning.conflicts),
+        "delete": list(planning.delete),
+        "digest": planning.digest(),
+        "merge": list(planning.merge),
+        "overwrite": list(planning.overwrite),
+        "parity_paths": list(planning.parity_paths),
+        "product_owned": list(planning.product_owned),
+        "render_parity": planning.render_parity,
+        "retained": list(planning.retained),
+        "shims": list(planning.shims),
+        "restored": list(planning.restored),
+    }
+
+
+def final_report(
+    report: Mapping[str, object], digest: str
+) -> dict[str, object]:
+    """Return a finalized report that names its sealed final plan."""
+    try:
+        return lifecycle_report.with_final_plan(
+            report,
+            {
+                "mode": "update",
+                "path": final_plan.FINAL_PLAN_BASENAME,
+                "replayable": True,
+                "schema_version": final_plan.SCHEMA_VERSION,
+                "sha256": digest,
+            },
+        )
+    except lifecycle_report.LifecycleReportError as error:
+        raise CliError(f"Lifecycle report is invalid: {error}") from error
+
+
+@dataclass(frozen=True)
+class FinalPlanContext:
+    """Everything one ``update --finalize-plan`` run records."""
+
+    target: Path
+    report_directory: Path
+    plan: ResolvedPlan
+    planning: update_plan.UpdatePlanning
+    run_inputs: UpdateRunInputs
+    transitions: file_transition.ApprovedTransitions
+    update_report: Mapping[str, object]
+    target_snapshot: Mapping[str, object]
+    current: Revision
+    previous: Mapping[str, object] | None
+    explicit_data: Mapping[str, object]
+    new_side: Mapping[str, bytes | None]
+
+
+def final_plan_payload(
+    args: argparse.Namespace,
+    context: FinalPlanContext,
+    *,
+    toolchain: Mapping[str, str],
+    stage1_sha256: str,
+    file_choices: Mapping[str, tuple[str, Path | None]],
+    resolutions: Mapping[str, bytes | None],
+    approved: file_transition.ApprovedTransitions,
+    pins: Mapping[str, object],
+    report: Mapping[str, object],
+) -> dict[str, object]:
+    """Return the unsealed final plan body; every value is plain JSON."""
+    run_inputs = context.run_inputs
+    plan = context.plan
+    arguments = {name: getattr(args, name) for name in FINAL_PLAN_ARGUMENTS}
+    return {
+        "created_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+        "decisions": final_plan.exact_json(
+            {
+                "action_pins": dict(pins),
+                "files": [
+                    final_plan.resolution(name, file_choices[name][0], content)
+                    for name, content in sorted(resolutions.items())
+                ],
+                "settings": [
+                    dict(row)
+                    for row in cast(
+                        list[Mapping[str, object]], report["settings"]
+                    )
+                    if row["class"] != "unchanged"
+                ],
+            },
+            "Decisions",
+        ),
+        "derived": final_plan.exact_json(
+            {
+                "capabilities": plan.capabilities,
+                "layout_moves": [
+                    list(move) for move in run_inputs.layout_moves
+                ],
+                "old_render": dict(run_inputs.old_render),
+                "payload": list(run_inputs.payload),
+                "pin_alignment": [
+                    list(entry) for entry in run_inputs.pin_alignment
+                ],
+                "restored": {
+                    name: list(value)
+                    for name, value in run_inputs.restored.items()
+                },
+                "planning": planning_record(context.planning),
+                "retiring": list(run_inputs.retiring),
+                "transitions": approved.as_dict(),
+                "update": plan.update,
+            },
+            "Derived update context",
+        ),
+        "inputs": final_plan.exact_json(
+            {
+                "answers": plan.answers,
+                "arguments": arguments,
+                "explicit_data": dict(context.explicit_data),
+                "new_data": dict(run_inputs.new_data),
+                "old_commit": run_inputs.old_commit,
+                "old_side": {
+                    "answers": dict(run_inputs.old_side.answers),
+                    "context": dict(run_inputs.old_side.context),
+                    "dropped": list(run_inputs.old_side.dropped),
+                    "sources": dict(run_inputs.old_side.sources),
+                },
+                "raw_answers": dict(run_inputs.raw_answers),
+                "source": run_inputs.source,
+                "target_sha": run_inputs.target_sha,
+                "target_uses_current_config": (
+                    run_inputs.target_uses_current_config
+                ),
+            },
+            "Update inputs",
+        ),
+        "kind": final_plan.FINAL_PLAN_KIND,
+        "live_facts": final_plan.exact_json(
+            update_live_facts(
+                context.target,
+                plan.repository,
+                target_snapshot=context.target_snapshot,
+                current=context.current,
+                resolved=plan.revision,
+                previous=context.previous,
+            ),
+            "Live facts",
+        ),
+        "replayable": True,
+        "report": dict(report),
+        "schema_version": final_plan.SCHEMA_VERSION,
+        "stage1_plan": {
+            "path": UPDATE_PLAN_BASENAME,
+            "sha256": stage1_sha256,
+        },
+        "target": str(context.target),
+        "toolchain": dict(toolchain),
+    }
+
+
+def write_update_final_plan(
+    args: argparse.Namespace, context: FinalPlanContext
+) -> int:
+    """Record the human decisions as one immutable final plan (#1067)."""
+    target = context.target
+    report_directory = context.report_directory
+    planning = context.planning
+    stage1_path = report_directory / UPDATE_PLAN_BASENAME
+    final_path = report_directory / final_plan.FINAL_PLAN_BASENAME
+    if final_path.exists() or final_path.is_symlink():
+        raise CliError(
+            f"Final plan {final_path} already exists and is immutable; apply "
+            "it with csarc update --apply-plan, or keep it and decide again "
+            "in a new report folder: run csarc update --check with a new "
+            "--report-dir, then --finalize-plan with that same --report-dir."
+        )
+    toolchain = update_toolchain()
+    try:
+        stage1 = final_plan.load_stage1(stage1_path)
+        file_choices = final_plan.parse_file_decisions(args.decision)
+        conflict_choices, retired = split_retirement_decisions(
+            file_choices, planning.retained
+        )
+        final_plan.require_complete_decisions(
+            planning.conflicts, conflict_choices
+        )
+    except final_plan.FinalPlanError as error:
+        raise CliError(str(error)) from error
+    stage1_planning = stage1.get("planning")
+    template = stage1.get("template")
+    if (
+        not isinstance(stage1_planning, dict)
+        or stage1_planning.get("digest") != planning.digest()
+        or not isinstance(template, dict)
+        or template.get("sha") != context.plan.revision.sha
+    ):
+        raise CliError(
+            "The stage-1 plan no longer matches the update planning (the "
+            "template, inputs, or conflicts changed); run csarc update "
+            "--check again and review it before deciding."
+        )
+    pins = final_pin_decisions(target, stage1, args.pin_commit)
+    resolutions: dict[str, bytes | None] = {
+        name: decision_content(target, name, choice, custom, context.new_side)
+        for name, (choice, custom) in sorted(conflict_choices.items())
+    }
+    # A retired kept file resolves to no file (Issue #1157).
+    resolutions.update(dict.fromkeys(retired))
+    reject_decided_uses(
+        resolutions,
+        (*context.run_inputs.retiring, *planning.delete),
+        tuple(
+            source
+            for source, _destination in effective_layout_moves(
+                context.run_inputs.layout_moves,
+                {*planning.retained, *planning.shims},
+            )
+        ),
+    )
+    reject_decided_ignore_rules(target, context.run_inputs.payload, resolutions)
+    reject_release_writer_moves(context.update_report)
+    reject_retained_uses(context.update_report, retired)
+    reject_retired_uses(
+        target,
+        planned_update_files(
+            target,
+            planning,
+            context.run_inputs.layout_moves,
+            context.run_inputs.retiring,
+        ),
+        retired,
+        {
+            name: content
+            for name, content in resolutions.items()
+            if name not in retired
+        },
+    )
+    approved = resolution_transitions(target, context.transitions, resolutions)
+    stage1_sha256 = str(stage1["plan_sha256"])
+    try:
+        report = lifecycle_report.finalize_update_report(
+            context.update_report,
+            decisions={
+                name: choice for name, (choice, _) in file_choices.items()
+            },
+            stage1_sha256=stage1_sha256,
+            next_steps=[
+                {
+                    "command": (
+                        f"csarc update {target} --apply-plan {final_path}"
+                    ),
+                    "text": "Apply the final plan exactly as recorded.",
+                }
+            ],
+        )
+        sealed = final_plan.seal(
+            final_plan_payload(
+                args,
+                context,
+                toolchain=toolchain,
+                stage1_sha256=stage1_sha256,
+                file_choices=file_choices,
+                resolutions=resolutions,
+                approved=approved,
+                pins=pins,
+                report=report,
+            )
+        )
+    except (
+        final_plan.FinalPlanError,
+        lifecycle_report.LifecycleReportError,
+    ) as error:
+        raise CliError(f"Cannot create the final plan: {error}") from error
+    digest = str(sealed["final_plan_sha256"])
+    filesystem_root = Path(report_directory.anchor)
+    atomic_replace_text(
+        filesystem_root,
+        final_path.relative_to(filesystem_root).as_posix(),
+        final_plan.plan_text(sealed),
+    )
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=None,
+        report=final_report(report, digest),
+        emit=True,
+    )
+    print(f"Final plan: {final_path} (sha256 {digest}).")
+    return 0
+
+
+def reject_apply_plan_arguments(args: argparse.Namespace) -> None:
+    """Reject options that would change a recorded final plan."""
+    conflicting = [
+        flag
+        for flag, active in (
+            ("--check", args.check),
+            ("--dry-run", args.dry_run),
+            ("--json", args.json),
+            ("--finalize-plan", args.finalize_plan),
+            ("--data", bool(args.data)),
+            ("--decision", bool(args.decision)),
+            ("--pin-commit", args.pin_commit is not None),
+            ("--to", args.to is not None),
+            ("--expected-sha", args.expected_sha is not None),
+            ("--from-release", args.from_release is not None),
+            ("--accept-legacy", args.accept_legacy),
+            ("--allow-unreleased", args.allow_unreleased),
+            ("--channel", args.channel != "stable"),
+        )
+        if active
+    ]
+    if conflicting:
+        raise CliError(
+            "--apply-plan uses only the values recorded in the final plan; "
+            "remove " + ", ".join(conflicting) + "."
+        )
+
+
+def recorded_run(
+    sealed: Mapping[str, object],
+) -> tuple[
+    UpdateRunInputs,
+    update_plan.UpdatePlanning,
+    file_transition.ApprovedTransitions,
+]:
+    """Rebuild the exact update inputs a final plan recorded."""
+    inputs = cast(dict[str, Any], sealed["inputs"])
+    derived = cast(dict[str, Any], sealed["derived"])
+    old = inputs["old_side"]
+    old_side = update_plan.OldSideInputs(
+        dict(old["answers"]),
+        dict(old["sources"]),
+        tuple(old["dropped"]),
+        dict(old["context"]),
+    )
+    run_inputs = UpdateRunInputs(
+        raw_answers=dict(inputs["raw_answers"]),
+        old_side=old_side,
+        new_data=dict(inputs["new_data"]),
+        old_commit=str(inputs["old_commit"]),
+        source=str(inputs["source"]),
+        target_sha=str(inputs["target_sha"]),
+        layout_moves=tuple(
+            (str(source), str(destination))
+            for source, destination in derived["layout_moves"]
+        ),
+        retiring=tuple(derived["retiring"]),
+        target_uses_current_config=bool(inputs["target_uses_current_config"]),
+        old_render=dict(derived["old_render"]),
+        payload=tuple(derived.get("payload", ())),
+        pin_alignment=tuple(
+            tuple(str(part) for part in entry)
+            for entry in derived.get("pin_alignment", ())
+        ),
+        restored={
+            str(name): list(value)
+            for name, value in derived.get("restored", {}).items()
+        },
+    )
+    recorded = derived["planning"]
+    planning = update_plan.UpdatePlanning(
+        old_side=old_side,
+        new_data=dict(inputs["new_data"]),
+        add=tuple(recorded["add"]),
+        overwrite=tuple(recorded["overwrite"]),
+        merge=tuple(recorded["merge"]),
+        delete=tuple(recorded["delete"]),
+        conflicts=tuple(recorded["conflicts"]),
+        render_parity=str(recorded["render_parity"]),
+        parity_paths=tuple(recorded["parity_paths"]),
+        retained=tuple(recorded["retained"]),
+        shims=tuple(recorded.get("shims", ())),
+        restored=tuple(recorded.get("restored", ())),
+        product_owned=tuple(recorded["product_owned"]),
+    )
+    if planning.digest() != recorded["digest"]:
+        raise CliError(
+            "The final plan's planning record does not match its digest; "
+            "the target was not changed."
+        )
+    approved = derived["transitions"]
+    transitions = file_transition.ApprovedTransitions(
+        frozenset(approved["create"]),
+        frozenset(approved["modify"]),
+        frozenset(approved["delete"]),
+        frozenset(approved["optional"]),
+        frozenset(approved["protected"]),
+    )
+    return run_inputs, planning, transitions
+
+
+def load_final_plan(
+    args: argparse.Namespace, target: Path
+) -> tuple[dict[str, object], Path]:
+    """Read and bind one final plan to this target and report directory."""
+    plan_path = Path(os.path.abspath(args.apply_plan.expanduser()))
+    try:
+        sealed = final_plan.load(plan_path)
+    except final_plan.FinalPlanError as error:
+        raise CliError(f"{error} The target was not changed.") from error
+    if sealed["target"] != str(target):
+        raise CliError(
+            f"The final plan was created for {sealed['target']}, not "
+            f"{target}; the target was not changed."
+        )
+    report_directory = lifecycle_report_directory(
+        target, plan_path.parent, "update"
+    )
+    if (
+        args.report_dir is not None
+        and lifecycle_report_directory(target, args.report_dir, "update")
+        != report_directory
+    ):
+        raise CliError(
+            "--report-dir must match the directory of the applied final "
+            "plan; the applied report is written beside that plan."
+        )
+    return sealed, report_directory
+
+
+def require_recorded_live_facts(
+    target: Path, sealed: Mapping[str, object]
+) -> tuple[Revision, dict[str, object] | None]:
+    """Re-observe the toolchain and live facts; any difference fails."""
+    toolchain = update_toolchain()
+    drift = final_plan.live_fact_differences(
+        cast(Mapping[str, object], sealed["toolchain"]), toolchain
+    )
+    if drift:
+        raise CliError(
+            "The toolchain differs from the final plan ("
+            + ", ".join(drift)
+            + "); the target was not changed. Use the recorded versions or "
+            "create a new plan."
+        )
+    inputs = cast(dict[str, Any], sealed["inputs"])
+    arguments = inputs["arguments"]
+    saved_visibility = inputs["raw_answers"].get("project_visibility")
+    repository = repository_context(
+        target,
+        inputs["explicit_data"].get("project_visibility"),
+        saved_visibility=(
+            saved_visibility if isinstance(saved_visibility, str) else None
+        ),
+    )
+    _status, current, resolved, previous = update_status(
+        target,
+        arguments["to"],
+        expected_sha=arguments["expected_sha"],
+        allow_unreleased=arguments["allow_unreleased"],
+        accept_legacy=arguments["accept_legacy"],
+        from_release=arguments["from_release"],
+        channel=arguments["channel"],
+    )
+    observed = update_live_facts(
+        target,
+        repository,
+        target_snapshot=current_target_snapshot(target),
+        current=current,
+        resolved=resolved,
+        previous=previous,
+    )
+    changed = final_plan.live_fact_differences(
+        cast(Mapping[str, object], sealed["live_facts"]), observed
+    )
+    if changed:
+        raise CliError(
+            "Live facts differ from the final plan ("
+            + ", ".join(changed)
+            + "); the target was not changed. Keep this final plan and "
+            "create a new one: run csarc update --check with a new "
+            "--report-dir, then --finalize-plan with that same --report-dir."
+        )
+    return resolved, previous
+
+
+def command_update_apply_plan(args: argparse.Namespace) -> int:
+    """Apply one sealed final plan using only its recorded values."""
+    reject_apply_plan_arguments(args)
+    target = resolve_repository_target(args.path)
+    sealed, report_directory = load_final_plan(args, target)
+    digest = str(sealed["final_plan_sha256"])
+    provenance = read_provenance(target)
+    if provenance is not None and provenance.get("final_plan_sha256") == digest:
+        print(
+            f"Final plan {digest} is already applied to {target}; nothing "
+            "was changed."
+        )
+        return 0
+    if (target / PENDING_ADOPTION_FILE).is_file():
+        raise CliError(
+            "Adoption is pending; complete the manual merge and run "
+            "csarc adopt --finalize before update."
+        )
+    # Hand-edited or contradictory schema 2 settings stop before any write
+    # (SPEC-009, Issue #1071 AC4).
+    load_saved_settings(target)
+    resolved, previous = require_recorded_live_facts(target, sealed)
+    decisions = cast(dict[str, Any], sealed["decisions"])
+    pins = decisions["action_pins"]
+    if pins["items"]:
+        replay_pin_decisions(
+            target, pins["items"], pins["decisions"], pins["commit"]
+        )
+    inputs = cast(dict[str, Any], sealed["inputs"])
+    answers = dict(inputs["answers"])
+    validated_project_verification_hook(
+        target, project_verification_configuration(target, answers)
+    )
+    run_inputs, planning, transitions = recorded_run(sealed)
+    try:
+        resolutions = {
+            str(entry["path"]): final_plan.resolution_content(entry)
+            for entry in decisions["files"]
+        }
+    except final_plan.FinalPlanError as error:
+        raise CliError(f"{error} The target was not changed.") from error
+    # A decided retire-modified file is retired, not a Copier conflict
+    # (Issue #1157).
+    retire = tuple(
+        name
+        for name, content in sorted(resolutions.items())
+        if name in planning.retained and content is None
+    )
+    resolutions = {
+        name: content
+        for name, content in resolutions.items()
+        if name not in planning.retained
+    }
+    target_snapshot = cast(
+        dict[str, object], cast(dict[str, Any], sealed["live_facts"])["target"]
+    )
+    if not confirm(args):
+        return 0
+    with tempfile.TemporaryDirectory(prefix="csarc-update-") as temporary:
+        applied = run_update_candidate(
+            target,
+            Path(temporary).resolve(),
+            run_inputs,
+            working_tree=False,
+            skip_tasks=False,
+            resolutions=resolutions,
+            retire=retire,
+        )
+        if applied.returncode != 0 or applied.conflicts:
+            raise CliError(
+                update_conflict_error(applied.conflicts, applied.output)
+            )
+        divergence = update_plan.realized_divergence(
+            planning, applied.changes, applied.conflicts
+        )
+        if divergence:
+            raise CliError(
+                "Update apply diverged from the final plan ("
+                + "; ".join(divergence)
+                + "); the target was not changed. Create a new plan."
+            )
+        candidate = applied.candidate
+        pin_answer_commit(candidate, run_inputs.target_sha)
+        # One-time derived decisions come only from the saved schema 2 file
+        # and the plan's explicit --data, exactly as the check recorded them
+        # (SPEC-009, Issue #1071).
+        raw_answers = cast(dict[str, object], inputs["raw_answers"])
+        saved_decisions = (
+            {
+                key: raw_answers[key]
+                for key in settings_schema.DECISION_SETTINGS
+                if key in raw_answers
+            }
+            if settings_schema.SCHEMA_KEY in raw_answers
+            else {}
+        )
+        persist_release_answers(
+            candidate,
+            answers,
+            {
+                **saved_decisions,
+                **explicit_decisions(
+                    cast(dict[str, object], inputs["explicit_data"])
+                ),
+            },
+        )
+        verify_project(candidate)
+        write_provenance(
+            candidate,
+            resolved,
+            previous,
+            answers=answers,
+            final_plan_sha256=digest,
+        )
+        artifacts, delete_paths = candidate_patch_effects(candidate)
+        apply_update_transitions(
+            target,
+            candidate,
+            transitions,
+            artifacts,
+            delete_paths,
+            target_snapshot,
+        )
+    settings_plan(target)
+    apply_milestone_description_plan(milestone_description_plan(target))
+    stage1 = cast(dict[str, Any], sealed["stage1_plan"])
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=None,
+        report=applied_lifecycle_report(
+            final_report(cast(Mapping[str, object], sealed["report"]), digest),
+            str(stage1["sha256"]),
+            datetime.now(UTC).replace(microsecond=0).isoformat(),
+            final_plan_sha256=digest,
+        ),
+        emit=True,
+    )
+    print(f"Applied final plan {digest}.")
+    return 0
+
+
 def command_update(args: argparse.Namespace) -> int:  # noqa: C901
-    """Check or apply a Copier smart update."""
+    """Check, finalize, or apply a Copier smart update."""
+    if args.apply_plan is not None:
+        return command_update_apply_plan(args)
+    if (args.decision or args.pin_commit is not None) and not (
+        args.finalize_plan
+    ):
+        raise CliError("--decision and --pin-commit need --finalize-plan.")
+    if args.finalize_plan and (args.check or args.dry_run or args.json):
+        raise CliError(
+            "--finalize-plan cannot be combined with --check, --dry-run, "
+            "or --json."
+        )
     target = resolve_repository_target(args.path)
     if (target / PENDING_ADOPTION_FILE).is_file():
         raise CliError(
@@ -7479,8 +11995,15 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     answers_path = config_path(target)
     if not answers_path.is_file():
         raise CliError(f"Missing {CONFIG_FILE}; use csarc adopt first.")
-    saved_answers = read_copier_answers(answers_path)
-    explicit_data = parse_data(args.data)
+    # Unknown schemas and hand-edited or contradictory schema 2 settings
+    # stop here, before any render or write (Issue #1071 AC4/AC6).
+    saved_settings = load_saved_settings(target)
+    saved_answers = dict(saved_settings.answers)
+    explicit_data = parse_settings_data(args.data)
+    decisions = {
+        **saved_settings.decisions,
+        **explicit_decisions(explicit_data),
+    }
     saved_visibility = saved_answers.get("project_visibility")
     repository = repository_context(
         target,
@@ -7489,8 +12012,26 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             saved_visibility if isinstance(saved_visibility, str) else None
         ),
     )
+    # A target whose origin names another repository stops before any
+    # render or write (Issue #1072 AC5).
+    require_repository_identity(saved_answers, explicit_data, repository)
     candidate_answers, update_data = update_plan_answers(
         saved_answers, explicit_data, repository
+    )
+    observed = observed_setting_differences(
+        saved_answers, explicit_data, repository
+    )
+    derived_values, derived_differences = resolve_derived_context(
+        target, candidate_answers, decisions
+    )
+    candidate_answers.update(derived_values)
+    update_data.update(derived_values)
+    observed.update(derived_differences)
+    # The release owner the repository evidence derives without any
+    # explicit choice; confirming that value with --data must plan exactly
+    # like leaving it out (Issue #1146 AC1).
+    implicit_release_answers = implicit_release_owner(
+        target, candidate_answers, saved_answers, explicit_data
     )
     candidate_answers = resolve_release_answers(target, candidate_answers)
     try:
@@ -7518,40 +12059,96 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     source = status.get("source")
     if not isinstance(source, str):
         raise CliError("Update source must be a string.")
+    release_migrated = bool(
+        "release_ownership" not in saved_answers
+        and explicit_data.get("release_ownership") in {None, "csarc-owned"}
+        and implicit_release_answers is not None
+        and legacy_release_writer(
+            target, source, current_revision.sha, implicit_release_answers
+        )
+    )
+    if release_migrated:
+        # The only Release writer is the legacy template's own workflow, so
+        # the release moves to the current CSARC writer (Issue #1083); the
+        # plan retires the legacy workflow and keeps the version state.
+        candidate_answers.update(CSARC_RELEASE_MIGRATION)
+        update_data["release_ownership"] = "csarc-owned"
+    if (
+        candidate_answers.get("release_ownership") == "csarc-owned"
+        and candidate_answers.get("project_mode") == "existing"
+        and candidate_answers.get("release_workflow") == CSARC_RELEASE_WORKFLOW
+    ):
+        # copier.yml renders the hosted release workflow for an existing
+        # project only when it is the selected CSARC writer.
+        candidate_answers["csarc_release_workflow"] = True
+        update_data["csarc_release_workflow"] = True
+    # Product action pin drift is known before any render, plan, or write.
+    # A one-shot apply stops here; a reviewed plan first drops the
+    # workflows it retires, which are not product workflows (#1083).
+    pins = update_action_pin_preflight(
+        target, source, target_revision.sha, candidate_answers
+    )
+    if pins.blocking and not (args.check or args.dry_run or args.finalize_plan):
+        raise CliError(action_pin_preflight.drift_error(pins))
+    raw_answers = read_raw_answers(answers_path)
     with tempfile.TemporaryDirectory(prefix="csarc-update-plan-") as temporary:
-        stage = Path(temporary) / "project"
+        workdir = Path(temporary).resolve()
+        stage = workdir / "project"
         stage.mkdir()
-        copier_copy(
+        render_context = copier_copy(
             source,
             target_revision,
             stage,
             candidate_answers,
             skip_tasks=True,
+            decisions=decisions,
         )
+        reject_retired_data_for(stage, explicit_data)
+        if release_migrated and not (stage / CSARC_RELEASE_WORKFLOW).is_file():
+            raise CliError(
+                "This template release cannot render the CSARC release "
+                "workflow that replaces the legacy release writer; update to "
+                "a release that supports the migration. The target was not "
+                "changed."
+            )
         target_uses_current_config = (stage / CONFIG_FILE).is_file()
         # The persisted file intentionally keeps only user-owned release
         # choices. Preserve the repository-derived release contract in the
         # in-memory plan that still needs it for evidence and reporting.
         answers = dict(candidate_answers)
         answers.update(read_copier_answers(config_path(stage)))
+        answers.update(render_context)
+        # The release workflow render flag is derived each run, never a
+        # setting, so it cannot make a current repository look outdated.
+        answers.pop("csarc_release_workflow", None)
         preflight = capability_preflight(
             managed_script(stage, "release_policy.py"),
             target,
             target_revision,
             emit=False,
         )
-        current_stage = Path(temporary) / "current"
-        current_stage.mkdir()
-        current_answers = resolve_release_answers(target, saved_answers)
-        copier_copy(
+        # The old side is rebuilt only from answers the old template asked
+        # for plus a verified provenance snapshot (#1063); the derived
+        # release contract below is used for settings comparison only.
+        try:
+            current_answers = resolve_release_answers(target, saved_answers)
+        except CliError:
+            # A legacy repository whose saved answers cannot resolve one
+            # release owner (for example two legacy release writers) is
+            # compared from its saved values; the candidate side still
+            # fails closed unless an explicit owner was chosen.
+            current_answers = dict(saved_answers)
+        old_side, new_data, old_stage = render_old_side(
             source,
             current_revision,
-            current_stage,
-            current_answers,
-            skip_tasks=True,
+            workdir,
+            saved_answers,
+            previous,
+            update_data,
+            complete=saved_settings.schema == settings_schema.SCHEMA_VERSION,
         )
         current_capabilities = capability_preflight(
-            managed_script(current_stage, "release_policy.py"),
+            managed_script(old_stage, "release_policy.py"),
             target,
             current_revision,
             emit=False,
@@ -7562,21 +12159,133 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             stage,
             target,
         )
-        retirement_candidates = (
+        candidates: tuple[str, ...] = (
             LEGACY_PROFILE_FILE.as_posix(),
             ".gitleaks.toml",
             ".pre-commit-config.yaml",
             "zizmor.yml",
         )
-        retiring = tuple(
-            name
-            for name in retirement_candidates
-            if (target / name).is_file() and not (target / name).is_symlink()
+        rendered = file_transition.render_fingerprints(project_files(old_stage))
+        stage_files = project_files(stage)
+        # The selected product-owned release workflow is the product's only
+        # Release writer even when a legacy render generated it, so the
+        # update never retires or deletes it (#1083). A generated file the
+        # new render drops while a file the plan keeps still uses it is
+        # product-owned in the same way (#1146 AC2): each pass plans with
+        # the referenced removals kept, until no kept file uses a removal.
+        product_paths: tuple[str, ...] = product_release_workflow(answers)
+        for attempt in itertools.count(1):
+            old_render = {
+                name: value
+                for name, value in rendered.items()
+                if name not in product_paths
+            }
+            # Copier never deletes a file that a newly selected option
+            # excludes (for example the Release writer once ownership leaves
+            # csarc-owned, #1068), so retire every CSARC-owned file the
+            # trusted old render produced that the new render no longer
+            # contains (#1077). A product-owned workflow the old render
+            # never wrote is not a candidate, and a customized copy stays a
+            # conflict below.
+            retirement_candidates = (
+                *candidates,
+                *option_retirements(old_render, stage_files),
+            )
+            # A legacy file retires only when it is byte-identical to the
+            # trusted old render; a modified one stays as a conflict (#1066).
+            retiring, retained = file_transition.split_retirements(
+                (
+                    name
+                    for name in retirement_candidates
+                    if (target / name).is_file()
+                    and not (target / name).is_symlink()
+                ),
+                target,
+                old_render,
+            )
+            run_inputs = UpdateRunInputs(
+                raw_answers=raw_answers,
+                old_side=old_side,
+                new_data=new_data,
+                old_commit=current_revision.sha,
+                source=source,
+                target_sha=str(status["target_sha"]),
+                layout_moves=layout_moves,
+                retiring=retiring,
+                target_uses_current_config=target_uses_current_config,
+                old_render=old_render,
+                payload=tuple(sorted(stage_files)),
+                pin_alignment=action_pin_preflight.excluding(
+                    pins, retiring
+                ).aligned,
+            )
+            planning_root = workdir / f"planning-{attempt}"
+            planning_root.mkdir()
+            planning = plan_update(
+                target,
+                planning_root,
+                run_inputs,
+                old_stage,
+                retained,
+                product_paths,
+                stage,
+            )
+            referenced = referenced_removals(
+                target, planning, layout_moves, retiring
+            )
+            if set(referenced) <= set(product_paths):
+                break
+            product_paths = tuple(sorted({*product_paths, *referenced}))
+        if planning.restored:
+            run_inputs = replace(
+                run_inputs, restored=restored_record(stage, planning.restored)
+            )
+        # A workflow this update retires is not a product workflow, so its
+        # pins never ask for a product commit (#1083).
+        pins = action_pin_preflight.excluding(pins, retiring)
+        if pins.blocking and not (args.check or args.dry_run):
+            raise CliError(action_pin_preflight.drift_error(pins))
+        files = planned_update_files(target, planning, layout_moves, retiring)
+        transitions = update_transitions(
+            target, planning, layout_moves, retiring
         )
-        files = update_file_plan(
-            compare_stage(stage, target, adopt=False),
-            layout_moves,
-            retiring,
+        # Rendered files the target's ignore rules would hide stop the
+        # apply; list them now (Issue #1146 AC4).
+        ignored_payload = planned_ignored_payload(target, run_inputs.payload)
+        # A kept product Release writer must not lose the files the layout
+        # migration moves (Issue #1153).
+        writer_moves = release_writer_moves(
+            target,
+            product_release_workflow(answers),
+            effective_layout_moves(
+                layout_moves, {*planning.retained, *planning.shims}
+            ),
+        )
+        # A kept legacy script must not lose the files the same plan
+        # removes or moves without a shim (Issue #1157).
+        retained_uses = retained_script_uses(
+            target,
+            planning.retained,
+            (*retiring, *planning.delete),
+            effective_layout_moves(
+                layout_moves, {*planning.retained, *planning.shims}
+            ),
+        )
+        # take-new decisions resolve to the reviewed new-side render, with
+        # the template pins the apply aligns to kept newer product pins
+        # already raised, so conflicts/new is what take-new writes (#1153).
+        new_side = {
+            name: action_pin_preflight.align_content(
+                name,
+                (stage / name).read_bytes()
+                if (stage / name).is_file() and not (stage / name).is_symlink()
+                else None,
+                run_inputs.pin_alignment,
+            )
+            for name in planning.conflicts
+        }
+        conflict_sides = update_conflict_sides(
+            target, old_stage, new_side, layout_moves
         )
     hook_configuration = project_verification_configuration(target, answers)
     validated_project_verification_hook(target, hook_configuration)
@@ -7596,8 +12305,13 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     )
     status.update(
         {
+            "action_pin_preflight": pins.as_dict(),
+            "ignored_payload": ignored_payload,
+            "release_writer_moves": writer_moves,
+            "retained_uses": retained_uses,
             "answers_changed": answers_changed,
             "capabilities_changed": capabilities_changed,
+            "planning": planning.as_dict(),
             "status": "outdated" if update_available else "current",
             "update_available": update_available,
             "project_verification_hook": hook,
@@ -7630,6 +12344,51 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         files=files,
         update=status,
     )
+    if target_snapshot:
+        report_head = cast(str, target_snapshot["target_head"])
+        report_changes = cast(list[str], target_snapshot["target_changes"])
+    else:
+        report_head, report_changes_tuple, _digest = target_state(target)
+        report_changes = list(report_changes_tuple)
+    report_directory = lifecycle_report_directory(
+        target, args.report_dir, "update"
+    )
+    plan_payload = adoption_plan_payload(plan)
+    update_report = lifecycle_report_model(
+        plan,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_sha256=str(plan_payload["plan_sha256"]),
+        generated_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
+        plan_path=report_directory / UPDATE_PLAN_BASENAME,
+        before=current_answers,
+        explicit=tuple(explicit_data),
+        previous=current_revision,
+        target_head=report_head,
+        target_changes=report_changes,
+        observed=observed,
+        pin_versions=pins.versions,
+        ignore_gaps=missing_ignore_rules(conflict_sides),
+    )
+    if args.finalize_plan:
+        print_plan(plan)
+        return write_update_final_plan(
+            args,
+            FinalPlanContext(
+                target=target,
+                report_directory=report_directory,
+                plan=plan,
+                planning=planning,
+                run_inputs=run_inputs,
+                transitions=transitions,
+                update_report=update_report,
+                target_snapshot=target_snapshot,
+                current=current_revision,
+                previous=previous,
+                explicit_data=explicit_data,
+                new_side=new_side,
+            ),
+        )
     if args.check:
         if args.json:
             print(
@@ -7639,45 +12398,39 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             )
         else:
             print_plan(plan)
+        write_conflict_sides(report_directory, conflict_sides)
+        write_lifecycle_reports(
+            report_directory,
+            operation="update",
+            plan_name=UPDATE_PLAN_BASENAME,
+            plan_payload=plan_payload,
+            report=update_report,
+            emit=not args.json,
+        )
         return 1 if status["update_available"] else 0
+    write_conflict_sides(report_directory, conflict_sides)
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=plan_payload,
+        report=update_report,
+        emit=True,
+    )
 
-    with tempfile.TemporaryDirectory(
-        prefix="csarc-update-preview-"
-    ) as temporary:
-        data_file = Path(temporary) / "data.yml"
-        data_file.write_text(
-            yaml.safe_dump(update_data, sort_keys=True), encoding="utf-8"
-        )
-        preview = run(
-            [
-                sys.executable,
-                "-m",
-                "copier",
-                "update",
-                "--trust",
-                "--defaults",
-                "--pretend",
-                "--vcs-ref",
-                str(status["target_sha"]),
-                "--answers-file",
-                answers_path.relative_to(target).as_posix(),
-                "--data-file",
-                str(data_file),
-                str(target),
-            ],
-            capture=True,
-            check=False,
-        )
-    if preview.returncode != 0:
-        raise CliError(preview.stderr.strip() or preview.stdout.strip())
     print_plan(plan)
-    print("Copier smart-update preview:")
     print(
-        preview.stdout.strip()
-        or "  (Copier returned no preview details; files may still change.)"
+        "Update planning digest: "
+        f"{planning.digest()} (old side "
+        f"{old_side.as_dict()['answers_sha256']}, render parity "
+        f"{planning.render_parity})."
     )
     milestone_plan = milestone_description_plan(target)
-    if args.dry_run or not confirm(args):
+    if args.dry_run:
+        return 0
+    if planning.conflicts:
+        raise CliError(update_conflict_error(planning.conflicts))
+    if not confirm(args):
         return 0
 
     validate_repository_context(
@@ -7691,161 +12444,56 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     validate_target_snapshot(target, target_snapshot)
     with tempfile.TemporaryDirectory(prefix="csarc-update-") as temporary:
         temporary_root = Path(temporary).resolve()
-        candidate = temporary_root / "candidate"
-        clone_target(target, candidate)
-        baseline_head = run_git(
-            ["git", "-C", str(candidate), "rev-parse", "HEAD"],
-            repository=candidate,
-            capture=True,
-        ).stdout.strip()
-        candidate_config_path = config_path(candidate)
-        migrating_legacy_config = (
-            target_uses_current_config
-            and candidate_config_path == candidate / LEGACY_ANSWERS_FILE
+        # The apply run reuses the reviewed planning inputs verbatim; only
+        # template tasks, which the side-effect-free plan skips, differ.
+        applied = run_update_candidate(
+            target,
+            temporary_root,
+            run_inputs,
+            working_tree=False,
+            skip_tasks=False,
         )
-        early_layout_moves = tuple(
-            move
-            for move in layout_moves
-            if move[0] == LEGACY_ANSWERS_FILE.as_posix()
-        )
-        deferred_layout_moves = tuple(
-            move for move in layout_moves if move not in early_layout_moves
-        )
-        retiring_files = tuple(candidate / name for name in retiring)
-        # Copier must see the legacy generated paths in their original
-        # locations so its old-to-new comparison can remove and add them
-        # cleanly. Only the answers file moves early because Copier and the
-        # target template's finalize tasks need the canonical config path.
-        apply_layout_moves(candidate, early_layout_moves)
-        if migrating_legacy_config:
-            # apply_layout_moves() migrated the answers file before Copier's
-            # finalize tasks read the one canonical configuration path.
-            candidate_config_path = candidate / CONFIG_FILE
-        seeding_verification_mode = "verification_mode" not in saved_answers
-        if seeding_verification_mode:
-            # Copier reconstructs both revisions from the saved answers.
-            # Seed this new conditional answer before the three-way update
-            # so legacy projects retain their hosted workflow files.
-            source = candidate_config_path.read_text(encoding="utf-8")
-            separator = "" if source.endswith("\n") else "\n"
-            candidate_config_path.write_text(
-                source
-                + separator
-                + "verification_mode: "
-                + str(candidate_answers["verification_mode"])
-                + "\n",
-                encoding="utf-8",
-            )
-        for retiring_file in retiring_files:
-            # The legacy profile is superseded by CONFIG_FILE. Tool-specific
-            # configs are now materialized by stable adapters at runtime.
-            retiring_file.unlink()
-        if (
-            migrating_legacy_config
-            or retiring_files
-            or seeding_verification_mode
-        ):
-            # Copier's own `update` refuses to run against a dirty
-            # destination, so commit this filesystem-only migration before
-            # invoking it; HEAD is moved back afterward (see below) without
-            # touching the working tree or index, so the migration still
-            # ends up part of the same uncommitted diff
-            # candidate_patch_effects() computes against baseline_head,
-            # alongside whatever Copier itself changes, and reaches the
-            # real target in one patch.
-            run_git(
-                ["git", "-C", str(candidate), "add", "-A"],
-                repository=candidate,
-                neutralize_filters=True,
-            )
-            run_git(
-                [
-                    "git",
-                    "-C",
-                    str(candidate),
-                    "-c",
-                    "user.name=CSARC",
-                    "-c",
-                    "user.email=csarc@example.invalid",
-                    "commit",
-                    "--quiet",
-                    "--no-gpg-sign",
-                    "-m",
-                    "chore: migrate legacy repository configuration",
-                ],
-                repository=candidate,
-                neutralize_filters=True,
-            )
-        data_file = temporary_root / "data.yml"
-        data_file.write_text(
-            yaml.safe_dump(update_data, sort_keys=True), encoding="utf-8"
-        )
-        result = run(
-            [
-                sys.executable,
-                "-m",
-                "copier",
-                "update",
-                "--trust",
-                "--defaults",
-                "--conflict",
-                "inline",
-                "--vcs-ref",
-                str(status["target_sha"]),
-                "--answers-file",
-                candidate_config_path.relative_to(candidate).as_posix(),
-                "--data-file",
-                str(data_file),
-                str(candidate),
-            ],
-            check=False,
-        )
-        conflicts = find_conflicts(candidate)
-        if result.returncode != 0 or conflicts:
-            detail = (
-                ", ".join(conflicts) if conflicts else "Copier exited non-zero"
-            )
+        if applied.returncode != 0 or applied.conflicts:
             raise CliError(
-                f"Update needs manual conflict resolution ({detail}); "
-                "the target was not changed. Resolve the listed files in "
-                "the target or template, then rerun the update."
+                update_conflict_error(applied.conflicts, applied.output)
             )
-        # Copier normally performs clean legacy deletions and additions
-        # itself. Any legacy source left behind is user-modified or otherwise
-        # outside that clean update, so finish the move only when it is safe
-        # and fail closed on a different destination.
-        apply_layout_moves(candidate, deferred_layout_moves)
-        if migrating_legacy_config or retiring_files:
-            # Move HEAD back to the pre-migration commit without touching
-            # the working tree or index (see above): the migration and
-            # whatever Copier changed on top of it now both show up as one
-            # uncommitted diff against the repository's real prior state.
-            run_git(
-                [
-                    "git",
-                    "-C",
-                    str(candidate),
-                    "reset",
-                    "--soft",
-                    baseline_head,
-                ],
-                repository=candidate,
+        divergence = update_plan.realized_divergence(
+            planning, applied.changes, applied.conflicts
+        )
+        if divergence:
+            raise CliError(
+                "Update apply diverged from the reviewed plan ("
+                + "; ".join(divergence)
+                + "); the target was not changed. Create a new plan."
             )
+        candidate = applied.candidate
         pin_answer_commit(candidate, str(status["target_sha"]))
-        persist_release_answers(candidate, answers)
+        persist_release_answers(candidate, answers, decisions)
         verify_project(candidate)
         write_provenance(candidate, target_revision, previous, answers=answers)
         artifacts, delete_paths = candidate_patch_effects(candidate)
-        write_candidate_patch(
-            candidate,
+        apply_update_transitions(
             target,
-            temporary_root / "update.patch",
-            artifacts=artifacts,
-            target_snapshot=target_snapshot,
-            delete_paths=delete_paths,
+            candidate,
+            transitions,
+            artifacts,
+            delete_paths,
+            target_snapshot,
         )
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
+    write_lifecycle_reports(
+        report_directory,
+        operation="update",
+        plan_name=UPDATE_PLAN_BASENAME,
+        plan_payload=None,
+        report=applied_lifecycle_report(
+            update_report,
+            str(plan_payload["plan_sha256"]),
+            datetime.now(UTC).replace(microsecond=0).isoformat(),
+        ),
+        emit=True,
+    )
     return 0
 
 
@@ -7889,6 +12537,31 @@ def parser() -> argparse.ArgumentParser:
             "--data", action="append", default=[], metavar="KEY=VALUE"
         )
         subparser.add_argument("--json", action="store_true")
+        # Issue #1078: one-time setup inputs; none of them is saved.
+        subparser.add_argument(
+            "--preset",
+            choices=setup_plan.WORK_MODES,
+            help=(
+                "work mode to expand into saved settings (default "
+                f"{setup_plan.DEFAULT_WORK_MODE}); explicit --data wins"
+            ),
+        )
+        subparser.add_argument(
+            "--confirm-second-approver",
+            action="store_true",
+            help=(
+                "one-time: another maintainer can approve when the approval "
+                "route read is inconclusive"
+            ),
+        )
+        subparser.add_argument(
+            "--confirm-copilot-entitlement",
+            action="store_true",
+            help=(
+                "one-time: the repository has Copilot code review "
+                "entitlement for a Copilot-only approval route"
+            ),
+        )
         if name == "adopt":
             subparser.add_argument(
                 "--apply-plan",
@@ -7930,7 +12603,42 @@ def parser() -> argparse.ArgumentParser:
     update.add_argument("--check", action="store_true")
     update.add_argument("--json", action="store_true")
     update.add_argument(
+        "--report-dir",
+        type=Path,
+        metavar="PATH",
+        help=(
+            "write the update plan and report outside the repo "
+            "(planned, then applied)"
+        ),
+    )
+    update.add_argument(
         "--data", action="append", default=[], metavar="KEY=VALUE"
+    )
+    update.add_argument(
+        "--finalize-plan",
+        action="store_true",
+        help=(
+            "record conflict and pin decisions as the immutable final plan "
+            "beside the stage-1 plan"
+        ),
+    )
+    update.add_argument(
+        "--decision",
+        action="append",
+        default=[],
+        metavar="PATH=keep-current|take-new|custom:FILE",
+        help="decide one stage-1 conflict (with --finalize-plan)",
+    )
+    update.add_argument(
+        "--pin-commit",
+        metavar="FULL_SHA",
+        help="product commit that resolves the listed action pin drift",
+    )
+    update.add_argument(
+        "--apply-plan",
+        type=Path,
+        metavar="PATH",
+        help="apply one unchanged final plan from --finalize-plan",
     )
     add_write_options(update)
 
@@ -7954,7 +12662,140 @@ def parser() -> argparse.ArgumentParser:
     status.add_argument("--accept-legacy", action="store_true")
     status.add_argument("--allow-unreleased", action="store_true")
     status.add_argument("--json", action="store_true")
+    status.add_argument(
+        "--confirm-governance-baseline",
+        metavar="FULL_SHA",
+        help=(
+            "one-time: accept one listed candidate when the governance "
+            "baseline is inconclusive"
+        ),
+    )
+    issue = subparsers.add_parser(
+        "issue", help="create a governed Issue (SPEC-010 risk block)"
+    )
+    issue_commands = issue.add_subparsers(dest="issue_command", required=True)
+    issue_create = issue_commands.add_parser(
+        "create",
+        help="check or guide the risk block, then run gh issue create",
+    )
+    issue_create.add_argument("--body-out", type=Path, metavar="FILE")
+    issue_create.add_argument(
+        "--target-date",
+        default="",
+        metavar="YYYY-MM-DD",
+        help="Project target when the Issue has no Milestone due date",
+    )
+    issue_create.add_argument(
+        "gh_arguments", nargs=argparse.REMAINDER, metavar="-- GH_ARGS"
+    )
+    sync_project = issue_commands.add_parser(
+        "sync-project",
+        help="sync Roadmap dates to the configured github_project_url",
+    )
+    selection = sync_project.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--issue", type=int)
+    selection.add_argument("--milestone", type=int)
+    sync_project.add_argument("--target-date", default="", metavar="YYYY-MM-DD")
+    sync_project.add_argument("--repo", default="", metavar="OWNER/NAME")
+    sync_project.add_argument(
+        "--yes", action="store_true", help="confirm listed date overwrites"
+    )
+    risk = subparsers.add_parser(
+        "risk", help="read-only risk suggestions, register, and backfill"
+    )
+    risk_commands = risk.add_subparsers(dest="risk_command", required=True)
+    risk_suggest = risk_commands.add_parser("suggest")
+    target = risk_suggest.add_mutually_exclusive_group(required=True)
+    target.add_argument("--issue", type=int)
+    target.add_argument("--open", action="store_true")
+    risk_register = risk_commands.add_parser("register")
+    risk_register.add_argument("--milestone", type=int)
+    risk_register.add_argument(
+        "--state", choices=("open", "closed", "all"), default="open"
+    )
+    risk_backfill = risk_commands.add_parser("backfill")
+    risk_backfill.add_argument("--milestone", type=int)
+    risk_backfill.add_argument("--out", type=Path, metavar="FILE")
+    risk_backfill.add_argument("--verify", type=Path, metavar="FILE")
+    risk_backfill.add_argument("--digest", metavar="SHA256")
+    for command in (risk_suggest, risk_register, risk_backfill):
+        command.add_argument("--repo", default="", metavar="OWNER/NAME")
+        command.add_argument("--json", action="store_true")
     return result
+
+
+def command_risk(args: argparse.Namespace) -> int:  # noqa: C901
+    """Run `csarc issue create` or one read-only `csarc risk` command."""
+    if args.command == "issue" and args.issue_command == "sync-project":
+        return project_roadmap.command_sync(
+            args.repo,
+            issue=args.issue,
+            milestone=args.milestone,
+            target_date=args.target_date,
+            confirm=args.yes,
+            ask=input if sys.stdin.isatty() else None,
+        )
+    if args.command == "issue":
+        gh_arguments = list(args.gh_arguments)
+        if gh_arguments[:1] == ["--"]:
+            gh_arguments = gh_arguments[1:]
+        url = project_roadmap.configured_project_url()
+        if not url or args.body_out is not None:
+            # An empty github_project_url never calls a Project API (#1080).
+            return risk_tools.issue_create(gh_arguments, args.body_out)
+        target = (
+            project_roadmap.checked_date(args.target_date)
+            if args.target_date
+            else ""
+        )
+        before, after = project_roadmap.create_hooks(url, target)
+        return risk_tools.issue_create(
+            gh_arguments, None, before=before, after=after
+        )
+    if args.risk_command == "suggest":
+        found = risk_tools.suggest(args.repo, issue=args.issue)
+        if args.json:
+            print(json.dumps(found, ensure_ascii=False, indent=2))
+        for item in [] if args.json else found:
+            print(
+                f"#{item['issue']}: "
+                + (
+                    f"exempt ({item['exempt_reason']})"
+                    if item["exempt_reason"]
+                    else "; ".join(item["problems"]) or "valid"
+                )
+            )
+            if item["suggestion"]:
+                print(item["suggestion"])
+        return 0
+    if args.risk_command == "register":
+        data = risk_tools.register(
+            args.repo, milestone=args.milestone, state=args.state
+        )
+        print(
+            json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
+            if args.json
+            else risk_tools.render_register(data),
+            end="\n" if args.json else "",
+        )
+        return 0
+    if args.verify is not None:
+        if not args.digest:
+            raise CliError("--verify needs the saved --digest")
+        problems = risk_tools.verify_backfill(args.verify, args.digest)
+        for line in problems:
+            print(f"risk backfill: {line}", file=sys.stderr)
+        return 1 if problems else 0
+    if args.milestone is None:
+        raise CliError("risk backfill needs --milestone or --verify")
+    manifest = risk_tools.backfill(args.repo, args.milestone)
+    data = risk_tools.canonical(manifest)
+    if args.out is not None:
+        args.out.write_bytes(data)
+    elif args.json:
+        print(data.decode("utf-8"))
+    print(f"digest: {risk_tools.manifest_digest(manifest)}")
+    return 0
 
 
 def main(arguments: list[str] | None = None) -> int:
@@ -7967,10 +12808,18 @@ def main(arguments: list[str] | None = None) -> int:
             return command_copy(args, args.command)
         if args.command == "status":
             return command_status(args)
+        if args.command in {"issue", "risk"}:
+            return command_risk(args)
         if args.json and not args.check:
             raise CliError("--json is only valid with update --check.")
         return command_update(args)
-    except (CliError, OSError, subprocess.SubprocessError) as error:
+    except (
+        CliError,
+        risk_tools.RiskToolError,
+        project_roadmap.ProjectSyncError,
+        OSError,
+        subprocess.SubprocessError,
+    ) as error:
         if getattr(args, "json", False):
             print(
                 json.dumps(

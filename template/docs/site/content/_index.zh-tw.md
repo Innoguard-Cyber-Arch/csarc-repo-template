@@ -21,7 +21,7 @@ fit = "符合畫面"
 {{< standard key="index-mode-standard" title="這個 repo 目前的治理設定" >}}
 這個 repo 使用 [csarc-repo-template](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template) 建立與維護，工作方式跟程式碼一樣可版本化、驗證與升級：
 
-<div class="capability-map"><div class="capability-node"><h3>使用語言</h3><p>[[languages]]</p></div><div class="capability-node"><h3>管理員略過審核</h3><p>[[admin_bypass]]；Copilot [[copilot_review]]</p></div><div class="capability-node"><h3>可見度</h3><p>[[project_visibility]]</p></div><div class="capability-node"><h3>下一步</h3><p>切換「安裝說明」看怎麼開始，或切換「關於」看這個治理基線做了什麼。</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>使用語言</h3><p>[[languages]]</p></div><div class="capability-node"><h3>管理員略過審核</h3><p>[[admin_bypass]]；Copilot [[copilot_review]]</p></div><div class="capability-node"><h3>文件模式</h3><p>[[documentation_mode]]</p></div><div class="capability-node"><h3>下一步</h3><p>切換「安裝說明」看怎麼開始，或切換「關於」看這個治理基線做了什麼。</p></div></div>
 {{< /standard >}}
 
 {{< ops key="index-mode-ops" title="設定來源" >}}
@@ -34,10 +34,9 @@ fit = "符合畫面"
 | 工作項目自動化 | `[[lifecycle]]` |
 | 發版觸發 | `[[release_trigger]]` |
 | 文件模式 | `[[documentation_mode]]` |
-| 文件語言 | `[[primary_language]]`；i18n `[[i18n]]` |
+| 文件語言 | `[[documentation_languages]]` |
 | 授權 | `[[project_license]]` |
-| 選配功能 | `[[features]]` |
-| 可見度 | `[[project_visibility]]` |
+| 容器 | `[[container]]` |
 | 使用語言 | `[[languages]]` |
 
 執行 `csarc status` 可確認目前是否已是最新版本；有更新可用時，會先讓你看過差異再套用，不會靜默覆寫本專案已寫的內容。
@@ -71,7 +70,7 @@ git clone [[repository_url]]
 
 - **`AGENTS.md`：** agent 開始工作前一律先讀這份；人類貢獻者的等效說明在 README。
 - **`.csarc/policies/*.json`：** 分支保護、必要檢查、標籤等期望設定，由 `.csarc/scripts/apply-repository-settings.sh` 套用與驗證。
-- **`.csarc/config.yml`：** 這個 repo 的實際選擇（語言、分支策略、負責人等），由 `csarc update` 持續同步公版更新，同時保留這裡的專案內容。
+- **`.csarc/config.yml`：** 這個 repo 的實際選擇（語言、文件模式、負責人等），由 `csarc update` 持續同步公版更新，同時保留這裡的專案內容。
 
 這個網站本身就是同一套原則的示範：`docs/index.html` 內嵌所有樣式與程式，下載後可離線打開，不需要另外架站。
 {{< /ops >}}

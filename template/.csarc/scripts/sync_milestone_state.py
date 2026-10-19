@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib
+import importlib.util
 import json
 import re
 import shutil
@@ -15,17 +16,85 @@ import urllib.parse
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    stale_branch_detection = importlib.import_module("stale_branch_detection")
-    release_level = importlib.import_module("release_level")
-else:
-    stale_branch_detection = importlib.import_module(
-        f"{__package__}.stale_branch_detection"
-    )
-    release_level = importlib.import_module(f"{__package__}.release_level")
+
+
+def _load_sibling(name: str) -> ModuleType:
+    """Load one script module that sits beside this file."""
+    path = Path(__file__).resolve().with_name(f"{name}.py")
+    cached = sys.modules.get(name)
+    cached_file = getattr(cached, "__file__", None)
+    if (
+        cached is not None
+        and cached_file
+        and Path(cached_file).resolve() == path
+    ):
+        return cached
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ModuleNotFoundError(f"Sibling module is unavailable: {path}")
+    module = importlib.util.module_from_spec(spec)
+    # Register a first load so nested imports share it; a same-named module
+    # from another directory keeps its registration.
+    if cached is None:
+        sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        if sys.modules.get(name) is module:
+            del sys.modules[name]
+        raise
+    return module
+
+
+class SiblingModule:
+    """Import one sibling script module only when a command first uses it.
+
+    A rendered command must not require modules that only other commands
+    use, so optional siblings stay unloaded until an attribute is read.
+    The sibling always comes from this file's own directory, as an eager
+    import beside it would, even if `sys.path` changed in the meantime.
+    Attribute writes and deletes reach the loaded module, which keeps
+    monkeypatching and module-level state on the real module.
+    """
+
+    def __init__(self, name: str) -> None:
+        """Remember the sibling module name without importing it."""
+        object.__setattr__(self, "_sibling_name", name)
+        object.__setattr__(self, "_sibling_module", None)
+
+    def _sibling(self) -> ModuleType:
+        module = object.__getattribute__(self, "_sibling_module")
+        if module is None:
+            name = object.__getattribute__(self, "_sibling_name")
+            if __package__ in {None, ""}:
+                module = _load_sibling(name)
+            else:
+                module = importlib.import_module(f"{__package__}.{name}")
+            object.__setattr__(self, "_sibling_module", module)
+        return module
+
+    def __getattr__(self, attribute: str) -> object:
+        """Load the sibling on first use and read one attribute."""
+        return getattr(self._sibling(), attribute)
+
+    def __setattr__(self, attribute: str, value: object) -> None:
+        """Write one attribute on the loaded sibling module."""
+        setattr(self._sibling(), attribute, value)
+
+    def __delattr__(self, attribute: str) -> None:
+        """Delete one attribute from the loaded sibling module."""
+        delattr(self._sibling(), attribute)
+
+
+# Issue-body helpers such as gh-issue-edit import this module; the branch and
+# release siblings load only when a Milestone command first needs them.
+stale_branch_detection: Any = SiblingModule("stale_branch_detection")
+release_level: Any = SiblingModule("release_level")
 
 CHECK_NAME = "Milestone approval"
 TRACKER_SECTIONS = (
@@ -744,37 +813,6 @@ def _vocabulary_approval_records(
             vocabulary, normalized, command, author, objections, resolved
         )
     return approvals, objections, resolved, admin_approvals, stale
-
-
-def _admin_self_approval(
-    command: str,
-    author: str,
-    author_type: str | None,
-    permission: str | None,
-    proposer: str | None,
-) -> str | None:
-    """Return the reason for one valid tracker admin self-approval, if any."""
-    return _vocabulary_admin_self_approval(
-        _TRACKER_VOCABULARY, command, author, author_type, permission, proposer
-    )
-
-
-def _record_objection(
-    command: str, author: str, url: object, objections: dict[str, str]
-) -> None:
-    """Record one tracker objection comment, keyed by its own permalink."""
-    _vocabulary_record_objection(
-        _TRACKER_VOCABULARY, command, command, author, url, objections
-    )
-
-
-def _record_resolution(
-    command: str, author: str, objections: dict[str, str], resolved: set[str]
-) -> None:
-    """Record one tracker objection withdrawal by its original author."""
-    _vocabulary_record_resolution(
-        _TRACKER_VOCABULARY, command, command, author, objections, resolved
-    )
 
 
 def _approval_records(
@@ -1765,36 +1803,6 @@ def check_merge_group(
     return decision
 
 
-def record_promotion_evidence(
-    repo: str, tracker_number: int, evidence_url: str
-) -> Decision:
-    """Append one promotion merge evidence URL onto a tracker Issue."""
-    issue = json.loads(run_gh(["api", f"repos/{repo}/issues/{tracker_number}"]))
-    body = issue.get("body")
-    if not isinstance(body, str):
-        return Decision(False, "The lifecycle Issue body is missing")
-    try:
-        new_body = append_completion_evidence(body, evidence_url)
-    except RuntimeError as error:
-        return Decision(False, str(error))
-    if new_body == body:
-        return Decision(
-            True, f"Promotion evidence already recorded on #{tracker_number}"
-        )
-    run_gh(
-        [
-            "issue",
-            "edit",
-            str(tracker_number),
-            "--repo",
-            repo,
-            "--body",
-            new_body,
-        ]
-    )
-    return Decision(True, f"Recorded promotion evidence on #{tracker_number}")
-
-
 def complete_release(  # noqa: C901
     repo: str,
     main_sha: str,
@@ -2091,10 +2099,6 @@ def main() -> None:
     queue_mode.add_argument("--read-only", action="store_true")
     queue_mode.add_argument("--publish-only", action="store_true")
     subparsers.add_parser("check-promotion")
-    record = subparsers.add_parser("record-promotion-evidence")
-    record.add_argument("--repo", required=True)
-    record.add_argument("--tracker", required=True, type=int)
-    record.add_argument("--evidence-url", required=True)
     complete = subparsers.add_parser("complete-release")
     complete.add_argument("--repo", required=True)
     complete.add_argument("--main-sha", required=True)
@@ -2129,7 +2133,7 @@ def main() -> None:
         raise SystemExit(1)
 
 
-def _dispatch(args: argparse.Namespace) -> Decision:  # noqa: C901
+def _dispatch(args: argparse.Namespace) -> Decision:
     """Route one parsed subcommand to its handler function."""
     if args.command == "check-pr":
         decision = check_pr(args.repo, args.pr, record_check=not args.read_only)
@@ -2149,10 +2153,6 @@ def _dispatch(args: argparse.Namespace) -> Decision:  # noqa: C901
         )
     if args.command == "check-promotion":
         return promotion_decision(sys.stdin.read())
-    if args.command == "record-promotion-evidence":
-        return record_promotion_evidence(
-            args.repo, args.tracker, args.evidence_url
-        )
     if args.command == "complete-release":
         return complete_release(
             args.repo,

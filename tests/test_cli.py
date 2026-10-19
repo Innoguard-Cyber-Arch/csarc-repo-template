@@ -13,12 +13,67 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import settings_support
 import yaml
 
 import csarc_cli.cli as cli
-from csarc_cli.cli import CliError, main
+from csarc_cli import lifecycle_report, settings_schema
+from csarc_cli.cli import CliError
+from csarc_cli.cli import main as cli_main
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def main(arguments: list[str] | None = None) -> int:
+    """Run the CLI with the explicit setup seeds a script passes (#1078)."""
+    return cli_main(settings_support.seeded_setup(arguments))
+
+
+def adoption_report_object(
+    target: Path,
+    revision: cli.Revision,
+    repository: cli.RepositoryContext,
+    answers: dict[str, object],
+    files: cli.Plan,
+    generated_at: str,
+    adoption: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Build one SPEC-008 adoption report object for a synthetic plan."""
+    plan = cli.ResolvedPlan(
+        mode="adopt",
+        target=target,
+        revision=revision,
+        repository=repository,
+        answers=answers,
+        capabilities={},
+        files=files,
+        adoption=adoption,
+    )
+    return cli.lifecycle_report_model(
+        plan,
+        operation="adopt",
+        plan_name=cli.ADOPTION_PLAN_BASENAME,
+        plan_sha256="0" * 64,
+        generated_at=generated_at,
+    )
+
+
+def render_adoption_report(
+    target: Path,
+    revision: cli.Revision,
+    repository: cli.RepositoryContext,
+    answers: dict[str, object],
+    files: cli.Plan,
+    generated_at: str,
+    adoption: dict[str, object] | None = None,
+) -> str:
+    """Render the Markdown report only through its serialized JSON."""
+    report = adoption_report_object(
+        target, revision, repository, answers, files, generated_at, adoption
+    )
+    return lifecycle_report.render_markdown(
+        json.loads(lifecycle_report.report_json(report))
+    )
 
 
 def test_copier_migration_only_removes_known_root_test_copies(
@@ -400,6 +455,8 @@ def initialize_project(tmp_path: Path) -> tuple[Path, Path, str]:
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -501,6 +558,8 @@ def initialize_pending_adoption(
         "--allow-unreleased",
         "--data",
         f"language={language}",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
     ]
     assert main(arguments) == 0
     plan = (
@@ -639,12 +698,25 @@ class FakeReleaseClient:
 
 
 @pytest.mark.large
-def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
-    """Init previews without writes, then creates and verifies the project."""
+@pytest.mark.parametrize("empty_git", [False, True])
+def test_init_dry_run_and_apply_pin_full_sha(
+    tmp_path: Path, empty_git: bool
+) -> None:
+    """Init previews without writes, then creates and verifies the project.
+
+    Issue #1078 AC4: an empty Git repository (only ``.git``, no commit or
+    tracked file) is an init target too, and keeps its ``.git``.
+    """
     source, first_sha = make_template(tmp_path)
     project = tmp_path / "new-project"
+    if empty_git:
+        project.mkdir()
+        git(project, "init", "-b", "main")
+        assert cli.detect_install_state(project)["state"] == "create"
     arguments = [
         "init",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -656,7 +728,9 @@ def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     ]
 
     assert main([*arguments, "--dry-run"]) == 0
-    assert not project.exists()
+    assert project.exists() == empty_git
+    if empty_git:
+        assert sorted(path.name for path in project.iterdir()) == [".git"]
     assert main([*arguments, "--yes", "--non-interactive"]) == 0
     answers = (project / ".copier-answers.yml").read_text(encoding="utf-8")
     assert f"_commit: {first_sha}" in answers
@@ -666,6 +740,7 @@ def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     )
     assert provenance["commit_sha"] == first_sha
     assert provenance["verification"] == "development-unreleased"
+    assert (project / ".git").is_dir() == empty_git
 
 
 @pytest.mark.large
@@ -679,6 +754,8 @@ def test_init_copier_tasks_wait_for_approval(
     project = tmp_path / "new-project"
     arguments = [
         "init",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -722,6 +799,8 @@ def test_init_revalidates_revision_after_confirmation(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -768,6 +847,8 @@ def test_adoption_copier_tasks_wait_for_each_approval(
     commit(project, "test: pending product")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -855,6 +936,8 @@ def test_failed_copier_task_does_not_create_init_target(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -901,6 +984,8 @@ def test_copier_task_cannot_rewrite_bound_configuration(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -1537,18 +1622,16 @@ def test_work_item_mapping_distinguishes_issue_type_fallbacks(
     ]
 
 
-def test_work_item_mapping_review_uses_the_copier_question_path() -> None:
-    """Keep mapping approval in the existing flat Copier answer schema."""
+def test_work_item_mapping_review_is_a_one_time_adopt_input() -> None:
+    """SPEC-009: the mapping review is an adopt input, never a setting."""
     config = yaml.safe_load((ROOT / "copier.yml").read_text(encoding="utf-8"))
-    question = config["work_item_mapping_review"]
 
-    assert question["default"] == "pending"
-    assert set(question["choices"].values()) == {
-        "pending",
-        "accept-safe",
-        "review-individually",
-    }
-    assert question["when"] == "{{ project_mode == 'existing' }}"
+    assert "work_item_mapping_review" not in config
+    assert "work_item_mapping_review" in settings_schema.RETIRED_SETTINGS
+    # Adopt still accepts it as a one-time --data input.
+    assert cli.parse_settings_data(
+        ["work_item_mapping_review=accept-safe"]
+    ) == {"work_item_mapping_review": "accept-safe"}
 
 
 @pytest.mark.large
@@ -1582,6 +1665,8 @@ def test_adopt_requires_the_copier_work_item_mapping_review_choice(
     commit(project, "test: mapping review product")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -1640,6 +1725,8 @@ def test_adopt_without_a_mapping_question_stays_review_only(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -1714,8 +1801,12 @@ def test_release_ownership_matrix_uses_explicit_workflow_contracts(
     root_answers = yaml.safe_load(
         (ROOT / cli.CONFIG_FILE).read_text(encoding="utf-8")
     )
+    # project_mode is provenance, not a saved setting (SPEC-009); the
+    # template repository adopts its own baseline.
     root_contract = cli.release_contract(
-        cli.resolve_release_answers(ROOT, root_answers)
+        cli.resolve_release_answers(
+            ROOT, {**root_answers, "project_mode": "existing"}
+        )
     )
     assert root_contract["ownership"] == "csarc-owned"
     assert root_contract["immutable_releases"] == "required"
@@ -1880,6 +1971,8 @@ def test_init_json_uses_one_complete_resolved_plan(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(target),
                 "--source",
                 str(source),
@@ -1890,6 +1983,8 @@ def test_init_json_uses_one_complete_resolved_plan(
                 "language=python",
                 "--data",
                 f"project_visibility={visibility}",
+                "--data",
+                "security_reporting_channel=security@example.com",
                 "--dry-run",
                 "--json",
             ]
@@ -1904,7 +1999,11 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["answers"]["project_visibility"] == visibility
     assert payload["answers"]["enable_codeql"] is enabled
     assert payload["answers"]["review"] == "peer"
-    assert payload["answers"]["copilot_review"] == "off"
+    # The non-interactive solo-local work mode expands into these (#1078).
+    assert payload["answers"]["copilot_review"] == "allowed"
+    assert payload["answers"]["lifecycle"] == []
+    assert payload["setup"]["work_mode"] == "solo-local"
+    assert payload["setup"]["questions"] == []
     assert payload["answers"]["features"] == ["repo-site"]
     assert "reviewers" not in payload["answers"]
     assert payload["release_ownership"] == "csarc-owned"
@@ -2071,6 +2170,8 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     commit(project, "test: legacy product")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -2089,16 +2190,16 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     assert git(project, "status", "--porcelain") == before
     assert not (project / ".copier-answers.yml").exists()
     report_dir = tmp_path / "legacy-product-csarc-adoption-report"
-    markdown = report_dir / "csarc-adoption-dry-run.md"
+    markdown = report_dir / "csarc-adoption-report.md"
     assert markdown.is_file()
     assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
     report_text = markdown.read_text(encoding="utf-8")
-    assert "Decision: Review required" in report_text
+    assert "Status: Review required" in report_text
     assert (
-        f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
+        f"Report format version: `{cli.LIFECYCLE_REPORT_FORMAT_VERSION}`"
         in report_text
     )
-    assert "## Work-item mapping guidance" in report_text
+    assert "### Work-item mapping" in report_text
     assert "Inspection: `unknown`" in report_text
     assert main([*arguments, "--dry-run"]) == 0
     assert git(project, "status", "--porcelain") == before
@@ -2164,9 +2265,9 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
         cli.ADOPTION_REPORT_BASENAME + ".md"
     )
     finalize_markdown = finalize_report.read_text(encoding="utf-8")
-    assert "## Work-item mapping guidance" in finalize_markdown
-    assert "Adoption applied: `false`" in finalize_markdown
-    assert "## Adoption applied" not in finalize_markdown
+    assert "### Work-item mapping" in finalize_markdown
+    assert "- Applied: `(none)`" in finalize_markdown
+    assert "Status: Adopted" not in finalize_markdown
     assert git(project, "status", "--porcelain") == pending_status
     assert (
         main(
@@ -2202,9 +2303,9 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     # Finalize records the post-adoption state in the same report file
     # (formerly a separate pending-adoption run; merged by Issue #998).
     after_markdown = finalize_report.read_text(encoding="utf-8")
-    assert "Decision: Adopted" in after_markdown
-    assert "Adoption applied: `true`" in after_markdown
-    assert "## Adoption applied" in after_markdown
+    assert "Status: Adopted" in after_markdown
+    assert "- Applied: `(none)`" not in after_markdown
+    assert "> **Status: Adopted.**" in after_markdown
     applied = json.loads(
         finalize_plan_path(project).read_text(encoding="utf-8")
     )
@@ -2936,6 +3037,8 @@ def test_real_typescript_adoption_requires_product_readme_when_documented(
     before_head = git(project, "rev-parse", "HEAD")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(ROOT),
@@ -3025,6 +3128,8 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     commit(project, "test: product collision fixture")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(ROOT),
@@ -3032,7 +3137,7 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         revision,
         "--allow-unreleased",
         "--data",
-        "language=ci",
+        "languages=[]",
         "--data",
         "security_reporting_channel=Use the synthetic fixture's "
         "private reporting channel.",
@@ -3043,7 +3148,7 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "--data",
         "project_verification_hook=scripts/verify-skills",
         "--data",
-        "features=[]",
+        "container=false",
         "--data",
         "work_item_mapping_review=accept-safe",
     ]
@@ -3210,6 +3315,8 @@ def test_adoption_report_classifies_unknown_content(
     report_dir = tmp_path / "reports"
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -3225,36 +3332,36 @@ def test_adoption_report_classifies_unknown_content(
     assert main(arguments) == 0
     output = capsys.readouterr().out
     assert (
-        f"Markdown report: {report_dir / 'csarc-adoption-dry-run.md'}" in output
+        f"Markdown report: {report_dir / 'csarc-adoption-report.md'}" in output
     )
     assert "PDF report:" not in output
     assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
-    report = (report_dir / "csarc-adoption-dry-run.md").read_text(
+    report = (report_dir / "csarc-adoption-report.md").read_text(
         encoding="utf-8"
     )
-    assert "Decision: Unable to determine" in report
+    assert "Status: Review required" in report
     assert (
-        f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
+        f"Report format version: `{cli.LIFECYCLE_REPORT_FORMAT_VERSION}`"
         in report
     )
     assert "- Repository: `(none)`" in report
     assert "- Repository visibility: `private` (`safe-default`)" in report
     assert f"- Template source: `{source}`" in report
     assert (
-        "`managed.txt` - template and repository contain different UTF-8 text"
-        in report
+        "`file-conflict` `managed.txt` - Template and repository contain "
+        "different UTF-8 text" in report
     )
     assert (
-        "`binary.dat` - file type, executable bit, link target, or non-text "
-        "content differs" in report
+        "`file-conflict` `binary.dat` - File type, executable bit, link "
+        "target, or non-text content differs" in report
     )
-    assert "| Preserve | 1 |" in report
-    assert "| Manual merge | 2 |" in report
-    assert "| Unable to determine | 1 |" in report
-    assert "| Remove | 0 |" in report
+    assert "| `preserve` | 1 |" in report
+    assert "| `conflict` | 3 |" in report
+    assert "| `binary.dat` | `conflict` | `undetermined` |" in report
+    assert "| `remove` | 0 |" in report
     assert "## Summary of file changes" in report
-    assert "| Edited files | 0 |" in report
-    assert "| Removed files | 0 |" in report
+    assert "| `overwrite` | 0 |" in report
+    assert "| `retire` | 0 |" in report
     assert "## Impact analysis" in report
     assert "## Items requiring your decision" in report
     assert git(project, "status", "--porcelain") == before
@@ -3292,6 +3399,8 @@ def test_adoption_reports_ignore_predictable_temporary_symlinks(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -3324,19 +3433,27 @@ def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     project.mkdir()
     with pytest.raises(CliError, match="outside the target repo"):
         cli.adoption_report_directory(project, project / "reports")
-    settings = cli.report_settings(
+    rows = cli.report_setting_rows(
         {
             "language": "python",
+            "languages": ["python"],
             "coverage_mode": "diff",
             "enable_pypi_publishing": True,
             "api_token": "secret",
-        }
+        },
+        None,
     )
-    assert "language=python" in settings
-    assert "coverage_mode=diff" in settings
-    assert "enable_pypi_publishing" not in settings
-    assert "api_token" not in settings
-    assert "secret" not in settings
+    # Retired keys appear only as `retired` rows of a saved file (#1071).
+    assert [row["key"] for row in rows] == ["coverage_mode", "languages"]
+    assert rows[1] == {
+        "after": ["python"],
+        "before": None,
+        "class": "new",
+        "key": "languages",
+        "note": None,
+        "source": "derived",
+    }
+    assert "secret" not in json.dumps(rows)
 
 
 def test_adoption_outputs_share_all_resolved_settings(
@@ -3363,8 +3480,7 @@ def test_adoption_outputs_share_all_resolved_settings(
         "copyright_holder": "Example Organization",
         "documentation_mode": "off",
         "enable_codeql": False,
-        "i18n": "off",
-        "primary_language": "en",
+        "documentation_languages": "en",
         "project_license": "proprietary",
         "project_maturity": "early",
         "project_run_command": "pnpm run build",
@@ -3406,7 +3522,7 @@ def test_adoption_outputs_share_all_resolved_settings(
     assert plan.as_dict()["answers"] == dict(sorted(answers.items()))
     cli.print_plan(plan)
     terminal = capsys.readouterr().out
-    report = cli.adoption_report_markdown(
+    report = render_adoption_report(
         target,
         revision,
         repository,
@@ -3417,11 +3533,14 @@ def test_adoption_outputs_share_all_resolved_settings(
 
     for key, value in expected.items():
         assert f"  {key}={value}" in terminal
-        assert f"`{key}={value}`" in report
-    assert "`LICENSE` - template and repository contain different" in report
-    assert (
-        "`package.json` - template and repository contain different" in report
-    )
+        assert (
+            f"| `{key}` | `(none)` | {lifecycle_report.cell(value)} | `new` |"
+            in report
+        )
+    assert "`True`" not in report
+    assert "`False`" not in report
+    assert "`file-conflict` `LICENSE` - Template and repository" in report
+    assert "`file-conflict` `package.json` - Template and repository" in report
     assert "unknown_secret" not in report
     assert "do-not-report" not in report
 
@@ -3437,7 +3556,10 @@ def test_report_settings_cover_every_public_copier_question() -> None:
         if isinstance(key, str) and not key.startswith("_")
     }
 
-    assert question_names <= cli.REPORT_SETTING_KEYS
+    # Render-derived template variables are never resolved settings.
+    assert question_names - set(settings_schema.RENDER_KEYS) <= (
+        cli.REPORT_SETTING_KEYS
+    )
 
 
 def test_dangling_reusable_workflow_option_stays_removed() -> None:
@@ -3456,11 +3578,10 @@ def test_dangling_reusable_workflow_option_stays_removed() -> None:
     assert "use_reusable_workflow" not in question_names
     assert "workflow_ref" not in question_names
 
-    settings = cli.report_settings(
-        {"use_reusable_workflow": True, "workflow_ref": "a" * 40}
+    rows = cli.report_setting_rows(
+        {"use_reusable_workflow": True, "workflow_ref": "a" * 40}, None
     )
-    assert "use_reusable_workflow" not in settings
-    assert "workflow_ref" not in settings
+    assert rows == []
 
 
 @pytest.mark.parametrize(
@@ -3512,7 +3633,7 @@ def test_adoption_markdown_reports_repository_context(
 ) -> None:
     """Record GitHub, explicit, and no-origin report context."""
     source = "https://example.invalid/template.git"
-    report = cli.adoption_report_markdown(
+    report = render_adoption_report(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, source),
         context,
@@ -3530,7 +3651,7 @@ def test_adoption_markdown_reports_repository_context(
 
 def test_adoption_report_records_template_version(tmp_path: Path) -> None:
     """Record the report's own independently-versioned template number."""
-    report = cli.adoption_report_markdown(
+    report = render_adoption_report(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
         cli.RepositoryContext(
@@ -3544,7 +3665,7 @@ def test_adoption_report_records_template_version(tmp_path: Path) -> None:
     )
 
     assert (
-        f"Report template version: `{cli.ADOPTION_REPORT_TEMPLATE_VERSION}`"
+        f"Report format version: `{cli.LIFECYCLE_REPORT_FORMAT_VERSION}`"
         in report
     )
 
@@ -3568,7 +3689,7 @@ def test_readmes_describe_mapping_and_display_report_template_version(
     readme_name: str,
 ) -> None:
     """Keep both READMEs aligned with the mapping and report contracts."""
-    marker = "ADOPTION_REPORT_TEMPLATE_VERSION"
+    marker = "LIFECYCLE_REPORT_FORMAT_VERSION"
     readme = (ROOT / readme_name).read_text(encoding="utf-8")
     lines_mentioning_constant = [
         line for line in readme.splitlines() if marker in line
@@ -3578,13 +3699,18 @@ def test_readmes_describe_mapping_and_display_report_template_version(
         "is caught here."
     )
     assert any(
-        cli.ADOPTION_REPORT_TEMPLATE_VERSION in line
+        cli.LIFECYCLE_REPORT_FORMAT_VERSION in line
         for line in lines_mentioning_constant
     ), (
-        "README.md's displayed adoption report template version "
+        "README.md's displayed lifecycle report format version "
         f"({lines_mentioning_constant}) does not match {marker} "
-        f"({cli.ADOPTION_REPORT_TEMPLATE_VERSION})."
+        f"({cli.LIFECYCLE_REPORT_FORMAT_VERSION})."
     )
+    spec = (ROOT / "docs/specs/SPEC-008-lifecycle-report-format.md").read_text(
+        encoding="utf-8"
+    )
+    assert f"`{cli.LIFECYCLE_REPORT_FORMAT_VERSION}`" in spec
+    assert marker in spec
     assert "work_item_mapping_review=accept-safe" in readme
     assert "review-individually" in readme
 
@@ -3602,7 +3728,7 @@ def test_adoption_report_computes_new_edited_removed_counts(
         manual=("conflict.txt",),
         unknown=("weird.bin",),
     )
-    report = cli.adoption_report_markdown(
+    report = render_adoption_report(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
         cli.RepositoryContext(
@@ -3615,31 +3741,25 @@ def test_adoption_report_computes_new_edited_removed_counts(
         "2026-08-24T00:00:00+00:00",
     )
 
-    # 3 new, (1 overwrite + 1 automatic merge) = 2 edited, 2 removed.
+    # 3 add, (1 overwrite + 1 automatic merge) = 2 overwrite, 2 retired.
     assert "## Summary of file changes" in report
-    assert "| New files | 3 |" in report
-    assert "| Edited files | 2 |" in report
-    assert "| Removed files | 2 |" in report
-    assert "| Preserved files | 4 |" in report
-    assert "## Expected file effects" in report
-    assert "| Add | 3 |" in report
-    assert "| Overwrite | 1 |" in report
-    assert "| Remove | 2 |" in report
-    assert "| Preserve | 4 |" in report
-    assert "| Automatic merge | 1 |" in report
-    assert "| Manual merge | 1 |" in report
-    assert "| Unable to determine | 1 |" in report
+    assert "| `add` | 3 |" in report
+    assert "| `overwrite` | 2 |" in report
+    assert "| `move` | 0 |" in report
+    assert "| `remove` | 0 |" in report
+    assert "| `retire` | 2 |" in report
+    assert "| `preserve` | 4 |" in report
+    assert "| `conflict` | 2 |" in report
     assert "## Impact analysis" in report
     assert (
-        "This plan changes 7 file(s) in "
-        f"`{tmp_path}`: 3 new, 2 edited, 2 removed; 4 file(s) stay "
-        "preserved." in report
+        "- Files changed by this plan: 7; conflicts: 2; preserved: 4." in report
     )
+    assert "| `AGENTS.md` | `overwrite` | `automatic-merge` |" in report
     assert "## Items requiring your decision" in report
-    assert "`conflict.txt` - template and repository contain different" in (
+    assert "`file-conflict` `conflict.txt` - Template and repository" in (
         report
     )
-    assert "`weird.bin` - file type, executable bit" in report
+    assert "`file-conflict` `weird.bin` - File type, executable bit" in report
 
 
 def test_adoption_report_zero_removed_files_is_explicit(tmp_path: Path) -> None:
@@ -3653,7 +3773,7 @@ def test_adoption_report_zero_removed_files_is_explicit(tmp_path: Path) -> None:
         manual=(),
         unknown=(),
     )
-    report = cli.adoption_report_markdown(
+    report = render_adoption_report(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
         cli.RepositoryContext(
@@ -3666,10 +3786,10 @@ def test_adoption_report_zero_removed_files_is_explicit(tmp_path: Path) -> None:
         "2026-08-24T00:00:00+00:00",
     )
 
-    assert "| New files | 1 |" in report
-    assert "| Edited files | 0 |" in report
-    assert "| Removed files | 0 |" in report
-    assert "| Remove | 0 |" in report
+    assert "| `add` | 1 |" in report
+    assert "| `overwrite` | 0 |" in report
+    assert "| `remove` | 0 |" in report
+    assert "| `retire` | 0 |" in report
 
 
 def test_adoption_report_guides_work_item_mapping(tmp_path: Path) -> None:
@@ -3716,7 +3836,7 @@ def test_adoption_report_guides_work_item_mapping(tmp_path: Path) -> None:
         "review": "review-individually",
         "state": "available",
     }
-    report = cli.adoption_report_markdown(
+    report = render_adoption_report(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
         cli.RepositoryContext(
@@ -3735,26 +3855,34 @@ def test_adoption_report_guides_work_item_mapping(tmp_path: Path) -> None:
         {"work_item_mapping": mapping},
     )
 
-    assert "## Work-item mapping guidance" in report
-    assert "| `Bug` | `Bug` | `(none)` | `bug` |" in report
+    assert "### Work-item mapping" in report
+    assert "| `(none)` | `Bug` | `Bug` | `bug` |" in report
     assert "Review choice: `review-individually`." in report
     assert "`` An unexpected `problem` ``" in report
-    assert "| `Bug` | `D73A4A` | `Project defects` | `map`" in report
-    assert "| `team\\|backend` | `123456` |" in report
     assert (
-        "``Backend `owner`\\|routing\\nrule`` | `decision-required`" in report
+        "| `map` | `D73A4A` | `Project defects` | `Bug` | `Bug` | `bug` |"
+        in report
     )
-    assert "Existing Issue Type `Chore` has no safe automatic mapping" in report
+    assert "| `team\\|backend` | `(none)` |" in report
     assert (
-        "Existing label `team|backend` has no safe automatic mapping" in report
+        "| `decision-required` | `123456` | "
+        "``Backend `owner`\\|routing\\nrule`` |" in report
+    )
+    assert (
+        "`mapping-decision` `Chore` - Existing Issue Type has no safe "
+        "automatic mapping" in report
+    )
+    assert (
+        "`mapping-decision` `team|backend` - Existing label has no safe "
+        "automatic mapping" in report
     )
 
 
 def test_markdown_code_preserves_backticks_and_spaces() -> None:
     """Choose a CommonMark delimiter without changing meaningful spaces."""
-    assert cli.markdown_code("`value`") == "`` `value` ``"
-    assert cli.markdown_code(" value ") == "`  value  `"
-    assert cli.markdown_code(" ") == "` `"
+    assert lifecycle_report.markdown_code("`value`") == "`` `value` ``"
+    assert lifecycle_report.markdown_code(" value ") == "`  value  `"
+    assert lifecycle_report.markdown_code(" ") == "` `"
 
 
 def test_work_item_mapping_metadata_stays_in_plan_drift_binding() -> None:
@@ -3820,7 +3948,7 @@ def test_adoption_report_lists_codeowner_blocked_as_decision_item(
     tmp_path: Path,
 ) -> None:
     """Surface a blocked CODEOWNER as an explicit decision, not just prose."""
-    report = cli.adoption_report_markdown(
+    report = render_adoption_report(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, "https://example.invalid/t.git"),
         cli.RepositoryContext(
@@ -3855,9 +3983,11 @@ def test_adoption_report_lists_codeowner_blocked_as_decision_item(
 
     assert "## Items requiring your decision" in report
     assert (
-        "- CODEOWNER `@owner/missing-team` verification is `blocked` - "
-        "Team is not attached to the target repository." in report
+        "- **Blocking** `code-owner` `@owner/missing-team` - CODEOWNER "
+        "verification is blocked: Team is not attached to the target "
+        "repository." in report
     )
+    assert "Status: Blocked." in report
 
 
 def test_adopt_help_describes_report_directory(
@@ -4077,6 +4207,8 @@ def test_adopt_applies_exact_plan_over_preserved_dirty_file(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4106,11 +4238,11 @@ def test_adopt_applies_exact_plan_over_preserved_dirty_file(
     )
     assert "components.yaml" in payload["files"]["preserve"]
     assert not hook_runs.exists()
-    markdown = plan.with_name("csarc-adoption-dry-run.md").read_text(
+    markdown = plan.with_name("csarc-adoption-report.md").read_text(
         encoding="utf-8"
     )
-    assert "Decision: Ready to adopt" in markdown
-    assert "Working tree: dirty; exact preserved state" in markdown
+    assert "Status: Ready to adopt" in markdown
+    assert "Working tree: `dirty-preserved`" in markdown
     assert (
         main(
             [
@@ -4155,6 +4287,8 @@ def test_adopt_rejects_dirty_path_not_classified_as_preserve(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4173,10 +4307,10 @@ def test_adopt_rejects_dirty_path_not_classified_as_preserve(
     assert payload["adoption"]["verification"] == "not-run-dirty"
     assert payload["adoption"]["preserved_dirty_paths"] == []
     assert "managed.txt" in payload["files"]["manual_merge"]
-    markdown = (report_dir / "csarc-adoption-dry-run.md").read_text(
+    markdown = (report_dir / "csarc-adoption-report.md").read_text(
         encoding="utf-8"
     )
-    assert "Decision: Not ready to adopt" in markdown
+    assert "Status: Blocked" in markdown
     assert "Do not apply this plan" in markdown
     assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
     assert (
@@ -4219,6 +4353,8 @@ def test_adopt_blocks_hook_mutation_of_preserved_dirty_file(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4375,6 +4511,8 @@ def test_adopt_rejects_non_modified_dirty_state_without_running_hook(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4464,6 +4602,8 @@ def test_adopt_rejects_preserved_dirty_file_drift(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4535,6 +4675,8 @@ def test_adopt_rejects_race_between_comparison_and_snapshot(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4588,6 +4730,8 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
 
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         "--source",
         str(source),
         "--to",
@@ -4596,17 +4740,23 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
         "--data",
         "language=python",
         "--dry-run",
+        "--report-dir",
+        str(tmp_path / "custom reports"),
     ]
     assert main(arguments) == 0
     assert lockfile_calls == []
-    report_dir = project.parent / f"{project.name}-csarc-adoption-report"
-    markdown_path = report_dir / "csarc-adoption-dry-run.md"
+    default_dir = project.parent / f"{project.name}-csarc-adoption-report"
+    report_dir = tmp_path / "custom reports"
+    markdown_path = report_dir / "csarc-adoption-report.md"
+    report_path = report_dir / "csarc-adoption-report.json"
     plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
+    before_report = json.loads(report_path.read_text(encoding="utf-8"))
     before_markdown = markdown_path.read_text(encoding="utf-8")
-    assert "Decision: Ready to adopt" in before_markdown
-    assert "Adoption applied: `false`" in before_markdown
-    assert "## If you approve" in before_markdown
-    assert "## Adoption applied" not in before_markdown
+    assert before_markdown == lifecycle_report.render_markdown(before_report)
+    assert "Status: Ready to adopt" in before_markdown
+    assert "- Applied: `(none)`" in before_markdown
+    assert "Apply exactly this reviewed machine plan:" in before_markdown
+    assert "Status: Adopted" not in before_markdown
     before_payload = json.loads(plan_path.read_text(encoding="utf-8"))
     assert before_payload["target"] == str(project)
     assert cli.PROVENANCE_FILE.as_posix() in before_payload["files"]["add"]
@@ -4615,6 +4765,29 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     ]
     assert "applied" not in before_payload["adoption"]
     assert "uv.lock" in before_payload["files"]["add"]
+    assert before_report["status"] == "ready"
+    assert before_report["plan"]["sha256"] == before_payload["plan_sha256"]
+    head_before = git(project, "rev-parse", "HEAD")
+
+    # The applied report belongs beside the reviewed plan, never elsewhere.
+    assert (
+        main(
+            [
+                "adopt",
+                "--apply-plan",
+                str(plan_path),
+                *replay_authorization(plan_path),
+                "--report-dir",
+                str(tmp_path / "elsewhere"),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    assert git(project, "rev-parse", "HEAD") == head_before
+    assert not (project / cli.PROVENANCE_FILE).exists()
+    assert json.loads(report_path.read_text(encoding="utf-8")) == before_report
 
     assert (
         main(
@@ -4634,14 +4807,25 @@ def test_adopt_apply_plan_updates_report_to_applied_state(
     assert (project / cli.PROVENANCE_FILE).is_file()
 
     after_markdown = markdown_path.read_text(encoding="utf-8")
-    assert "Decision: Adopted" in after_markdown
-    assert "Adoption applied: `true`" in after_markdown
-    assert "## Adoption applied" in after_markdown
-    assert "## If you approve" not in after_markdown
+    assert "Status: Adopted" in after_markdown
+    assert "- Applied: `(none)`" not in after_markdown
+    assert "> **Status: Adopted.**" in after_markdown
+    assert "Apply exactly this reviewed machine plan:" not in after_markdown
     after_payload = json.loads(plan_path.read_text(encoding="utf-8"))
     assert after_payload["adoption"]["applied"] is True
     assert isinstance(after_payload["adoption"]["applied_at"], str)
-    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
+    after_report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert after_report["status"] == "applied"
+    assert after_report["applied_at"] == after_payload["adoption"]["applied_at"]
+    # Bound to the digest the user approved, not the rewritten plan file.
+    assert after_report["plan"]["sha256"] == before_payload["plan_sha256"]
+    assert after_markdown == lifecycle_report.render_markdown(after_report)
+    assert not default_dir.exists()
+    assert sorted(path.name for path in report_dir.iterdir()) == [
+        "csarc-adoption-plan.json",
+        "csarc-adoption-report.json",
+        "csarc-adoption-report.md",
+    ]
 
 
 @pytest.mark.large
@@ -4683,6 +4867,8 @@ def test_adopt_rejects_mapping_drift_during_task_bearing_render(
     monkeypatch.setattr(cli, "inspect_work_item_mapping", inspect)
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -4737,6 +4923,8 @@ def test_unreleased_replay_rejects_self_digested_authority_before_execution(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -4819,6 +5007,8 @@ def test_unreleased_replay_decline_prevents_source_execution(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -5019,6 +5209,8 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
     commit(project, "test: baseline")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -5107,6 +5299,8 @@ def test_adopt_rechecks_target_after_confirmation(
     commit(project, "test: baseline")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -5160,6 +5354,8 @@ def test_adopt_rechecks_repository_context_after_confirmation(
     commit(project, "test: context drift product")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -5404,6 +5600,8 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -5432,10 +5630,10 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
         "source": "explicit",
     }
     assert payload["adoption"]["verification"] == "pending-authorization"
-    markdown = plan_path.with_name("csarc-adoption-dry-run.md").read_text(
+    markdown = plan_path.with_name("csarc-adoption-report.md").read_text(
         encoding="utf-8"
     )
-    assert "Decision: Ready to adopt" in markdown
+    assert "Status: Ready to adopt" in markdown
     assert not plan_path.with_name("csarc-adoption-dry-run.pdf").exists()
     assert (
         main(
@@ -5477,6 +5675,8 @@ def test_invalid_project_hook_blocks_pending_adoption_without_writes(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -5532,6 +5732,8 @@ def test_adoption_records_and_replays_explicit_project_hook(
     commit(project, "test: explicit project hook")
     arguments = [
         "adopt",
+        "--data",
+        "repository_url=https://github.com/example-org/product",
         str(project),
         "--source",
         str(source),
@@ -5555,15 +5757,13 @@ def test_adoption_records_and_replays_explicit_project_hook(
         "result": "not-run",
         "source": "explicit",
     }
-    markdown = (report_dir / "csarc-adoption-dry-run.md").read_text(
+    markdown = (report_dir / "csarc-adoption-report.md").read_text(
         encoding="utf-8"
     )
-    assert "Project verification hook: `scripts/verify-skills`" in markdown
-    assert "Project verification hook configured: `true`" in markdown
-    assert "Project verification result: `not-run`" in markdown
     assert (
-        "Project verification reason: `Candidate verification runs only "
-        "after plan approval.`" in markdown
+        "- Project verification hook: `scripts/verify-skills` (configured "
+        "`true`, result `not-run`) - Candidate verification runs only after "
+        "plan approval." in markdown
     )
     assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
 
@@ -6014,6 +6214,8 @@ def test_adopt_reports_file_directory_collisions_without_writes(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -6064,6 +6266,8 @@ def test_adopt_dry_run_rejects_symlink_ancestor_without_writes(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -6291,8 +6495,9 @@ def test_cli_requires_repository_identity_for_ownerless_target(
         data: dict[str, object],
         *,
         skip_tasks: bool,
+        decisions: object = None,
     ) -> None:
-        del source, resolved, destination, skip_tasks
+        del source, resolved, destination, skip_tasks, decisions
         received.update(data)
         raise CliError("stop after pre-Copier validation")
 
@@ -6319,6 +6524,106 @@ def test_cli_requires_repository_identity_for_ownerless_target(
         assert received["repository_url"] == expected_url
         assert received["code_owner"] == ""
         assert received["documentation_mode"] == "off"
+
+
+def test_create_and_adopt_defaults_carry_no_organization_owner(
+    tmp_path: Path,
+) -> None:
+    """Neither the CLI nor Copier assumes a template organization (#1061)."""
+    questions = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / "copier.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert questions["code_owner"]["default"] == ""
+    assert questions["repository_url"]["default"] == ""
+    assert "code_owner" not in questions["repository_url"]["default"]
+    assert cli.DEFAULT_OWNER == ""
+    for mode in ("init", "adopt"):
+        assert cli.base_data(tmp_path, mode, {})["code_owner"] == ""
+
+
+@pytest.mark.parametrize(
+    ("repository", "code_owner", "repository_url", "expected_url"),
+    [
+        # A live identity is authoritative whatever the owner says.
+        (
+            "outside-user/product",
+            "@another-org/team",
+            None,
+            "outside-user/product",
+        ),
+        ("another-org/product", "@outside-user", None, "another-org/product"),
+        ("another-org/product", "", None, "another-org/product"),
+        # Without a live identity only an explicit URL is used.
+        (None, "@another-org/team", "https://github.com/x/y", "x/y"),
+        # An owner alone never produces a URL.
+        (None, "@another-org/team", None, None),
+        (None, "@outside-user", None, None),
+    ],
+)
+def test_repository_url_is_never_derived_from_code_owner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    repository: str | None,
+    code_owner: str,
+    repository_url: str | None,
+    expected_url: str | None,
+) -> None:
+    """Changing code_owner never changes the planned repository URL."""
+    revision = cli.Revision("development", "a" * 40, str(tmp_path))
+    monkeypatch.setattr(
+        cli, "resolve_revision", lambda *args, **kwargs: revision
+    )
+    monkeypatch.setattr(
+        cli,
+        "repository_context",
+        lambda *args, **kwargs: cli.RepositoryContext(
+            repository,
+            repository.split("/")[0] if repository else None,
+            "Organization" if repository else None,
+            "private",
+            "github" if repository else "safe-default",
+            repository is not None,
+        ),
+    )
+    received: dict[str, object] = {}
+
+    def capture_copy(
+        source: str,
+        resolved: cli.Revision,
+        destination: Path,
+        data: dict[str, object],
+        *,
+        skip_tasks: bool,
+        decisions: object = None,
+    ) -> None:
+        del source, resolved, destination, skip_tasks, decisions
+        received.update(data)
+        raise CliError("stop after pre-Copier validation")
+
+    monkeypatch.setattr(cli, "copier_copy", capture_copy)
+    arguments = [
+        "init",
+        str(tmp_path / "product"),
+        "--data",
+        f"code_owner={code_owner}",
+        "--dry-run",
+    ]
+    if repository_url is not None:
+        arguments.extend(["--data", f"repository_url={repository_url}"])
+    assert main(arguments) == 2
+
+    if expected_url is None:
+        error = capsys.readouterr().err
+        assert "repository_url=https://github.com/owner/repository" in error
+        assert received == {}
+    else:
+        assert (
+            received["repository_url"] == f"https://github.com/{expected_url}"
+        )
+        assert received["code_owner"] == code_owner
 
 
 @pytest.mark.large
@@ -6430,6 +6735,8 @@ def test_adoption_preserves_executable_and_checked_patch_symlink(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -6535,6 +6842,258 @@ def test_legacy_update_conflict_leaves_target_unchanged(
     assert cli.target_file_snapshot(project) == expected_files
 
 
+def committed_generated_project(tmp_path: Path) -> tuple[Path, Path]:
+    """Return a template source and a committed generated project."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    return source, project
+
+
+def update_check_plan(
+    project: Path,
+    target_sha: str,
+    report_dir: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Run one JSON update check and return its plan and report."""
+    exit_code = main(
+        [
+            "update",
+            str(project),
+            "--check",
+            "--json",
+            "--to",
+            target_sha,
+            "--allow-unreleased",
+            "--report-dir",
+            str(report_dir),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1, captured.out
+    plan = json.loads(captured.out.strip().splitlines()[-1])
+    report = json.loads(
+        (report_dir / "csarc-update-report.json").read_text(encoding="utf-8")
+    )
+    return plan, report
+
+
+@pytest.mark.large
+def test_update_check_and_apply_share_one_planning_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC2/AC3: check and apply report the same normalized diff and digest."""
+    source, project = committed_generated_project(tmp_path)
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: product file")
+    (source / "template" / "added.txt").write_text(
+        "new template file\n", encoding="utf-8"
+    )
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    target_sha = commit(source, "test: template version two")
+
+    checked, check_report = update_check_plan(
+        project, target_sha, tmp_path / "check-report", capsys
+    )
+    files = cast_mapping(checked["files"])
+    assert files["add"] == ["added.txt"]
+    assert "managed.txt" in files["overwrite"]
+    assert "product.txt" in files["preserve"]
+    assert files["manual_merge"] == []
+    planning = cast_mapping(checked["planning"])
+    assert planning["conflicts"] == []
+    assert planning["render_parity"] == "equal"
+    assert check_report["verification"]["render_parity"] == {"state": "equal"}
+
+    apply_dir = tmp_path / "apply-report"
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                target_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--report-dir",
+                str(apply_dir),
+            ]
+        )
+        == 0
+    )
+    applied_plan = json.loads(
+        (apply_dir / cli.UPDATE_PLAN_BASENAME).read_text(encoding="utf-8")
+    )
+    applied_report = json.loads(
+        (apply_dir / "csarc-update-report.json").read_text(encoding="utf-8")
+    )
+    assert applied_plan["planning"]["digest"] == planning["digest"]
+    assert applied_plan["files"] == checked["files"]
+    assert applied_report["status"] == "applied"
+    assert applied_report["files"] == check_report["files"]
+    assert (project / "added.txt").read_text(encoding="utf-8") == (
+        "new template file\n"
+    )
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "template version two\n"
+    )
+
+
+def cast_mapping(value: object) -> dict[str, object]:
+    """Narrow one JSON object for the assertions below."""
+    assert isinstance(value, dict)
+    return value
+
+
+@pytest.mark.large
+def test_update_check_reports_the_conflicts_apply_refuses(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC2/AC3: check lists the exact conflict set apply fails closed on."""
+    source, project = committed_generated_project(tmp_path)
+    (project / "managed.txt").write_text(
+        "project customization\n", encoding="utf-8"
+    )
+    commit(project, "test: customized managed file")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    target_sha = commit(source, "test: conflicting template update")
+
+    checked, report = update_check_plan(
+        project, target_sha, tmp_path / "check-report", capsys
+    )
+    assert cast_mapping(checked["planning"])["conflicts"] == ["managed.txt"]
+    assert cast_mapping(checked["files"])["manual_merge"] == ["managed.txt"]
+    assert report["status"] == "blocked"
+    assert report["applicable"] is False
+    conflict_rows = [
+        row for row in report["files"] if row["action"] == "conflict"
+    ]
+    assert conflict_rows == [
+        {
+            "action": "conflict",
+            "decision": "pending",
+            "from": None,
+            "path": "managed.txt",
+            "reason": "update-conflict",
+        }
+    ]
+    assert [
+        (action["kind"], action["subject"], action["blocking"])
+        for action in report["required_actions"]
+        if action["kind"] == "file-conflict"
+    ] == [("file-conflict", "managed.txt", True)]
+    expected_files = cli.target_file_snapshot(project)
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                target_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--report-dir",
+                str(tmp_path / "apply-report"),
+            ]
+        )
+        == 2
+    )
+    error = capsys.readouterr().err
+    assert "manual conflict resolution (managed.txt)" in error
+    assert "the target was not changed" in error
+    assert cli.target_file_snapshot(project) == expected_files
+
+
+def test_update_planning_fails_closed_without_trusted_old_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC3: an old render that cannot be rebuilt stops before any write."""
+
+    def broken_copy(*_args: object, **_kwargs: object) -> None:
+        raise CliError("Copier preview render failed: missing code_owner")
+
+    monkeypatch.setattr(cli, "copier_copy", broken_copy)
+    revision = cli.Revision(source="local", sha="a" * 40, label="v0.3.1")
+    with pytest.raises(CliError, match="cannot be rebuilt") as error:
+        cli.render_old_side("local", revision, tmp_path, {}, None, {})
+    assert "The target was not changed" in str(error.value)
+
+
+@pytest.mark.large
+def test_raw_copier_update_is_detected_not_migrated(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC5: a raw copier update is reported with the managed entry point."""
+    source, project = committed_generated_project(tmp_path)
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    target_sha = commit(source, "test: template version two")
+    answers = cli.config_path(project)
+    answers.write_text(
+        re.sub(
+            r"(?m)^_commit: .*$",
+            f"_commit: {target_sha}",
+            answers.read_text(encoding="utf-8"),
+        ),
+        encoding="utf-8",
+    )
+    commit(project, "test: raw copier update")
+
+    assert main(["status", str(project), "--json", "--allow-unreleased"]) == 0
+    output = capsys.readouterr().out
+    status = json.loads(output.strip().splitlines()[-1])
+    assert status["state"] == cli.INSTALL_STATE_MIGRATE
+    assert "unsupported raw `copier update`" in status["reason"]
+    assert "did not migrate" in status["reason"]
+    assert "csarc update" in status["next_command"]
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--check",
+                "--to",
+                target_sha,
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    error = capsys.readouterr().err
+    assert "unsupported raw `copier update`" in error
+    assert "csarc update <path> --check" in error
+
+
+def test_copier_rejection_files_are_detected_as_raw_update(
+    tmp_path: Path,
+) -> None:
+    """AC5: leftover .rej files are a raw copier update signature."""
+    (tmp_path / "managed.txt.rej").write_text("rejected\n", encoding="utf-8")
+    detail = cli.raw_copier_update_detail(tmp_path, "a" * 40, None)
+    assert detail is not None
+    assert "managed.txt.rej" in detail
+    assert "did not migrate" in detail
+    clean = tmp_path / "clean"
+    clean.mkdir()
+    assert cli.raw_copier_update_detail(clean, "a" * 40, None) is None
+    assert (
+        cli.raw_copier_update_detail(clean, "a" * 40, {"commit_sha": "A" * 40})
+        is None
+    )
+
+
 class LocalGitReleaseClient:
     """A ReleaseClient backed by real local git tags (Issue #744 tests).
 
@@ -6608,6 +7167,8 @@ def initialize_verified_project(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--to",
                 "v0.1.0",
@@ -6615,6 +7176,10 @@ def initialize_verified_project(
                 "--non-interactive",
                 "--data",
                 "language=ci",
+                # The fixture template renders no README; keep its own
+                # default instead of the CLI's new-project content-only.
+                "--data",
+                "documentation_mode=off",
             ]
         )
         == 0
@@ -6942,9 +7507,7 @@ def test_v0_15_6_generated_layout_migration_contract(tmp_path: Path) -> None:
             ".csarc/docs/milestone-description.md"
         ),
         "policies/actions.json": ".csarc/policies/actions.json",
-        "policies/capability-matrix.json": (
-            ".csarc/policies/capability-matrix.json"
-        ),
+        "policies/labels.json": ".csarc/policies/labels.json",
         "release-please-config.json": ".csarc/release-please-config.json",
         "scripts/ci_tier.py": ".csarc/scripts/ci_tier.py",
         "scripts/release_policy.py": ".csarc/scripts/release_policy.py",
@@ -7038,6 +7601,8 @@ def test_previous_release_to_current_managed_file_migration(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(ROOT),
@@ -7230,15 +7795,14 @@ def test_update_migrates_complete_legacy_layout_in_one_patch(
       field it held already lives in the unified answers) are removed in
       the same patch.
     """
-    source, project, _ = initialize_project(tmp_path)
-    product_tool = project / "scripts/product-tool"
-    product_tool.write_text("project owned\n", encoding="utf-8")
-    for name in (".gitleaks.toml", ".pre-commit-config.yaml", "zizmor.yml"):
-        (project / name).write_text(
-            "legacy generated config\n", encoding="utf-8"
-        )
-    (project / ".csarc/profile.json").write_text(
-        json.dumps(
+    # The retired files are byte-identical to the old template's render,
+    # the only state in which an update may retire them (#1066).
+    source, _first_sha = make_template(tmp_path)
+    legacy_files = {
+        ".gitleaks.toml": "legacy generated config\n",
+        ".pre-commit-config.yaml": "legacy generated config\n",
+        "zizmor.yml": "legacy generated config\n",
+        ".csarc/profile.json": json.dumps(
             {
                 "schema_version": 1,
                 "template_mode": "existing",
@@ -7252,8 +7816,38 @@ def test_update_migrates_complete_legacy_layout_in_one_patch(
                 },
             }
         ),
-        encoding="utf-8",
+    }
+    for name, content in legacy_files.items():
+        path = source / "template" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    legacy_sha = commit(source, "test: legacy generated configs")
+    project = tmp_path / "new-project"
+    assert (
+        main(
+            [
+                "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                legacy_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "language=ci",
+            ]
+        )
+        == 0
     )
+    for name in legacy_files:
+        (source / "template" / name).unlink()
+    product_tool = project / "scripts/product-tool"
+    product_tool.parent.mkdir(parents=True, exist_ok=True)
+    product_tool.write_text("project owned\n", encoding="utf-8")
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
@@ -7316,6 +7910,23 @@ def test_update_migrates_complete_legacy_layout_in_one_patch(
     assert not (project / ".pre-commit-config.yaml").exists()
     assert not (project / "zizmor.yml").exists()
     assert product_tool.read_text(encoding="utf-8") == "project owned\n"
+    report_dir = project.parent / f"{project.name}-csarc-update-report"
+    saved_plan = json.loads(
+        (report_dir / cli.UPDATE_PLAN_BASENAME).read_text(encoding="utf-8")
+    )
+    report = json.loads(
+        (report_dir / "csarc-update-report.json").read_text(encoding="utf-8")
+    )
+    assert report["operation"] == "update"
+    assert report["status"] == "applied"
+    assert report["plan"]["sha256"] == saved_plan["plan_sha256"]
+    assert report["plan"]["replayable"] is False
+    actions = {(row["action"], row["reason"]) for row in report["files"]}
+    assert ("move", "layout-migration") in actions
+    assert ("retire", "obsolete-generated") in actions
+    assert (report_dir / "csarc-update-report.md").read_text(
+        encoding="utf-8"
+    ) == lifecycle_report.render_markdown(report)
 
 
 @pytest.mark.large
@@ -7375,6 +7986,24 @@ def test_update_check_validates_hook_without_running_it(
     }
     assert not (project / "hook-ran").exists()
     assert git(project, "status", "--porcelain") == ""
+    # Every update plan also writes the SPEC-008 set outside the target.
+    report_dir = project.parent / f"{project.name}-csarc-update-report"
+    saved_plan = json.loads(
+        (report_dir / cli.UPDATE_PLAN_BASENAME).read_text(encoding="utf-8")
+    )
+    assert saved_plan.pop("plan_sha256")
+    # The stage-1 plan is a preview only; the final plan replays (#1067).
+    assert saved_plan.pop("replayable") is False
+    assert saved_plan == payload
+    report = json.loads(
+        (report_dir / "csarc-update-report.json").read_text(encoding="utf-8")
+    )
+    assert report["status"] in {"ready", "review-required"}
+    assert report["applied_at"] is None
+    assert report["verification"]["hook"]["path"] == "scripts/verify-product"
+    assert (report_dir / "csarc-update-report.md").read_text(
+        encoding="utf-8"
+    ) == lifecycle_report.render_markdown(report)
 
     # The same read-only check must reject an unsafe hook without writes.
     # Every unsafe/unusable path shape is owned by the direct validator
@@ -7464,6 +8093,16 @@ def test_update_hook_failure_leaves_target_unchanged(
     assert git(project, "status", "--porcelain") == ""
     assert cli.target_file_snapshot(project) == before_files
     assert not (project / "hook-ran").exists()
+    # A failed apply keeps the planned report; it never claims success.
+    report = json.loads(
+        (
+            project.parent
+            / f"{project.name}-csarc-update-report"
+            / "csarc-update-report.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert report["status"] != "applied"
+    assert report["applied_at"] is None
 
 
 @pytest.mark.large
@@ -7481,8 +8120,21 @@ def test_update_verification_failure_does_not_claim_candidate_preserved(
     base = commit(project, "test: generated project")
     before_files = cli.target_file_snapshot(project)
 
-    (source / "template" / "managed.txt").unlink()
-    revision = commit(source, "test: remove required managed file")
+    # Issue #1151: a retired managed file still referenced by a kept file
+    # stays product-owned since #1146, so removing one no longer fails
+    # verification. Ship a template verifier that fails one named step.
+    verify_script = source / "template" / "scripts" / "verify"
+    verify_text = verify_script.read_text(encoding="utf-8")
+    assert "test -f managed.txt\n" in verify_text
+    write_executable(
+        verify_script,
+        verify_text.replace(
+            "test -f managed.txt\n",
+            "printf '[verify-step] FAILED template-required-check\\n'\n"
+            "exit 1\n",
+        ),
+    )
+    revision = commit(source, "test: fail a required verify step")
     temporary_root = tmp_path / "temporary"
     temporary_root.mkdir()
     monkeypatch.setattr(cli.tempfile, "tempdir", str(temporary_root))
@@ -7502,7 +8154,8 @@ def test_update_verification_failure_does_not_claim_candidate_preserved(
         == 2
     )
     error = capsys.readouterr().err
-    assert "Project verification failed." in error
+    # Issue #1146 AC5: the failure names the verify step that stopped it.
+    assert "Project verification failed: template-required-check." in error
     assert "preserved" not in error.lower()
     assert list(temporary_root.iterdir()) == []
     assert git(project, "rev-parse", "HEAD") == base
@@ -7635,7 +8288,10 @@ def test_update_repository_rename_preserves_custom_security_channel(
     explicit_channel: str | None,
     expected_channel: str,
 ) -> None:
-    """Only move a repository-derived reporting channel to the new URL."""
+    """Only move a repository-derived reporting channel to the new URL.
+
+    The saved URL changes only through an explicit --data choice (#1068).
+    """
     answers: dict[str, object] = {
         "language": "python",
         "project_mode": "new",
@@ -7643,11 +8299,9 @@ def test_update_repository_rename_preserves_custom_security_channel(
         "repository_url": "https://github.com/old/repository",
         "security_reporting_channel": saved_channel,
     }
-    explicit_data = (
-        {"security_reporting_channel": explicit_channel}
-        if explicit_channel is not None
-        else {}
-    )
+    explicit_data = {"repository_url": "https://github.com/new/repository"}
+    if explicit_channel is not None:
+        explicit_data["security_reporting_channel"] = explicit_channel
     repository = cli.RepositoryContext(
         "new/repository",
         "new",
@@ -7665,6 +8319,58 @@ def test_update_repository_rename_preserves_custom_security_channel(
     assert result["security_reporting_channel"] == expected_channel
     if saved_channel == expected_channel and explicit_channel is None:
         assert "security_reporting_channel" not in update_data
+
+
+@pytest.mark.parametrize(
+    "saved_owner",
+    [
+        "@outside-user",
+        "@another-org/maintainers",
+        "",
+        "@Innoguard-Cyber-Arch/arch",
+    ],
+)
+def test_update_preserves_saved_code_owner(saved_owner: str) -> None:
+    """Removing the create default never rewrites a saved owner (#1061)."""
+    repository = cli.RepositoryContext(
+        "another-org/product",
+        "another-org",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+    answers: dict[str, object] = {
+        "project_mode": "existing",
+        "project_visibility": "private",
+        "code_owner": saved_owner,
+    }
+
+    result, update_data = cli.update_plan_answers(answers, {}, repository)
+
+    assert result["code_owner"] == saved_owner
+    assert "code_owner" not in update_data
+
+
+def test_update_keeps_rendered_owner_for_answers_without_code_owner() -> None:
+    """Answers predating code_owner keep the owner they were rendered with."""
+    repository = cli.RepositoryContext(
+        None, None, None, "private", "saved", False
+    )
+    answers: dict[str, object] = {
+        "project_mode": "existing",
+        "project_visibility": "private",
+    }
+
+    result, update_data = cli.update_plan_answers(answers, {}, repository)
+    assert update_data["code_owner"] == cli.LEGACY_DEFAULT_OWNER
+    assert result["code_owner"] == cli.LEGACY_DEFAULT_OWNER
+
+    result, update_data = cli.update_plan_answers(
+        answers, {"code_owner": "@outside-user"}, repository
+    )
+    assert update_data["code_owner"] == "@outside-user"
+    assert result["code_owner"] == "@outside-user"
 
 
 def test_update_changes_release_ownership_without_project_mode_change() -> None:
@@ -7725,10 +8431,14 @@ def test_update_normalizes_retired_verification_suite_names() -> None:
 
     answers, update_data = cli.update_plan_answers(saved, {}, repository)
 
-    assert answers["release_level_alpha_verification"] == "fast"
-    assert answers["release_level_early_verification"] == "fast"
-    assert update_data["release_level_alpha_verification"] == "fast"
-    assert update_data["release_level_early_verification"] == "fast"
+    # SPEC-009 retires the per-level suites; schema 2 never stores them
+    # (Issue #1071), and the old side still reads the saved legacy values.
+    for key in (
+        "release_level_alpha_verification",
+        "release_level_early_verification",
+    ):
+        assert key not in answers
+        assert key not in update_data
     assert answers["verification_mode"] == "hosted"
     assert update_data["verification_mode"] == "hosted"
 
@@ -7752,10 +8462,11 @@ def test_update_migrates_documentation_language_and_license_settings() -> None:
         {},
     )
 
-    assert migrated["features"] == ["docker"]
+    assert migrated["container"] is True
     assert migrated["documentation_mode"] == "template-and-content"
-    assert migrated["primary_language"] == "en"
-    assert migrated["i18n"] == "en-zh-tw"
+    # SPEC-009: readme_primary_language + the old bilingual default.
+    assert migrated["documentation_languages"] == "en+zh-tw"
+    assert "primary_language" not in migrated
     assert migrated["project_license"] == "proprietary"
     assert migrated["copyright_holder"] == "Legacy Project"
 
@@ -7771,6 +8482,8 @@ def test_same_revision_update_ignores_derived_release_answers(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(ROOT),
@@ -7782,7 +8495,7 @@ def test_same_revision_update_ignores_derived_release_answers(
                 "--data",
                 "project_mode=new",
                 "--data",
-                "language=ci",
+                "languages=[]",
                 "--data",
                 "project_visibility=private",
                 "--data",
@@ -7916,18 +8629,20 @@ def test_update_check_tolerates_pre_schema_existing_adoption(
 
 
 @pytest.mark.large
-def test_update_recomputes_visibility_defaults_from_github(
+def test_update_keeps_saved_visibility_when_github_differs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Migrate stale private defaults when GitHub reports a public repo."""
+    """Report, never apply, a live visibility change (#1068)."""
     source, first_sha = make_template(tmp_path)
     project = tmp_path / "public-project"
     assert (
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -7950,9 +8665,11 @@ def test_update_recomputes_visibility_defaults_from_github(
     monkeypatch.setattr(
         cli,
         "repository_context",
+        # The same repository the init recorded; only visibility moved
+        # (a different repository fails closed, Issue #1072 AC5).
         lambda *args, **kwargs: cli.RepositoryContext(
-            "owner/repo",
-            "owner",
+            "example-org/product",
+            "example-org",
             "organization",
             "public",
             "github",
@@ -7975,11 +8692,29 @@ def test_update_recomputes_visibility_defaults_from_github(
         == 1
     )
     payload = json.loads(capsys.readouterr().out)
+    # The fixture template drops derived release keys, so the plan stays
+    # outdated; the live visibility itself changes no saved answer.
     assert payload["status"] == "outdated"
-    assert payload["update_available"] is True
-    assert payload["answers_changed"] is True
-    assert payload["answers"]["project_visibility"] == "public"
-    assert payload["answers"]["enable_codeql"] is True
+    assert payload["repository"]["visibility"] == "public"
+    assert payload["answers"]["project_visibility"] == "private"
+    assert payload["answers"]["enable_codeql"] is False
+    report = json.loads(
+        (
+            project.parent
+            / f"{project.name}-csarc-update-report"
+            / f"{cli.UPDATE_REPORT_BASENAME}.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert report["status"] == "review-required"
+    assert {
+        (action["kind"], action["subject"])
+        for action in report["required_actions"]
+    } >= {("setting-decision", "project_visibility")}
+    visibility_row = next(
+        row for row in report["settings"] if row["key"] == "project_visibility"
+    )
+    assert visibility_row["after"] == "private"
+    assert "Live GitHub facts suggest `public`" in visibility_row["note"]
 
 
 @pytest.mark.large
@@ -8824,6 +9559,8 @@ def test_copy_uses_resolved_canonical_source(
         main(
             [
                 "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(tmp_path / "canonical-source"),
                 "--source",
                 source,
@@ -9636,6 +10373,8 @@ def test_adopt_dry_run_ignores_legacy_provenance_temporary_symlink(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -9679,6 +10418,8 @@ def test_adopt_dry_run_ignores_legacy_pending_temporary_symlink(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -9727,6 +10468,8 @@ def test_adopt_dry_run_rejects_report_directory_symlink_ancestor(
         main(
             [
                 "adopt",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
                 str(project),
                 "--source",
                 str(source),
@@ -9982,11 +10725,12 @@ def test_generated_project_only_ships_product_tests() -> None:
         for path in template_tests.rglob("*")
         if path.is_file()
     ) == ["test_smoke.py.jinja"]
-    csarc_tests = ROOT / "template/.csarc/tests"
+    # Template self-tests run only in template CI against renders (#1077).
+    assert not (ROOT / "template/.csarc/tests").exists()
+    assert not list((ROOT / "template/.csarc/scripts").glob("test-*"))
     assert sorted(
-        path.relative_to(csarc_tests).as_posix()
-        for path in csarc_tests.rglob("*")
-        if path.is_file()
+        path.name
+        for path in (ROOT / "tests/generated_self_tests/csarc_tests").iterdir()
     ) == [
         "test_authenticate_dependabot_head.py",
         "test_verification_evidence.py",
@@ -10000,3 +10744,440 @@ def test_generated_project_only_ships_product_tests() -> None:
         encoding="utf-8"
     )
     assert "pyyaml" not in pyproject.lower()
+
+
+# Issue #1073: governance baseline and merge-trailer audit in `csarc status`.
+TRAILER_CONTRACT = (ROOT / "policies/merge-trailers.json").read_text(
+    encoding="utf-8"
+)
+GENERATED_CONTRACT = ".csarc/policies/merge-trailers.json"
+AUDIT_REVIEW = "https://github.com/owner/repo/pull/7#pullrequestreview-1"
+
+
+def audit_repository(tmp_path: Path) -> Path:
+    """Create one empty repository with a fixed origin."""
+    repo = tmp_path / "audited"
+    repo.mkdir()
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.name", "Audit Test")
+    git(repo, "config", "user.email", "audit@example.invalid")
+    git(repo, "remote", "add", "origin", "https://github.com/owner/repo.git")
+    return repo
+
+
+def write_files(repo: Path, files: dict[str, str | None]) -> None:
+    """Write or delete fixture files relative to the repository."""
+    for name, content in files.items():
+        path = repo / name
+        if content is None:
+            path.unlink()
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+
+def answers(commit_sha: str | None) -> str:
+    """Render minimal answers with an optional `_commit`."""
+    head = f"_commit: {commit_sha}\n" if commit_sha else ""
+    return head + "verification_mode: hosted\n"
+
+
+def provenance(
+    commit_sha: str,
+    *,
+    verification: str = "verified",
+    tag: str = "v0.31.0-beta.1",
+) -> str:
+    """Render one saved installation provenance record."""
+    return json.dumps(
+        {
+            "commit_sha": commit_sha,
+            "release_tag": tag,
+            "repository": cli.CANONICAL_REPOSITORY,
+            "repository_id": cli.CANONICAL_REPOSITORY_ID,
+            "schema_version": 1,
+            "verification": verification,
+        }
+    )
+
+
+def stub_github(
+    monkeypatch: pytest.MonkeyPatch,
+    responses: dict[str, tuple[int, str]],
+) -> list[str]:
+    """Serve `gh api` reads from fixtures; Git keeps running for real."""
+    requested: list[str] = []
+    original = cli.run
+
+    def fake_run(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        if command[:4] != ["gh", "api", "--method", "GET"]:
+            return original(command, **kwargs)  # ty: ignore[invalid-argument-type]
+        requested.append(command[4])
+        code, text = responses.get(command[4], (1, "gh: Not Found (HTTP 404)"))
+        return subprocess.CompletedProcess(
+            command,
+            code,
+            stdout=text if code == 0 else "",
+            stderr="" if code == 0 else text,
+        )
+
+    monkeypatch.setattr(cli, "run", fake_run)
+    return requested
+
+
+SOURCE_A = "1" * 40
+SOURCE_B = "2" * 40
+
+
+def baseline_history(repo: Path, scenario: str) -> dict[str, str]:
+    """Build one first-parent history and return its named commits."""
+    shas: dict[str, str] = {}
+    write_files(repo, {"README.md": "legacy\n"})
+    shas["legacy"] = commit(repo, "chore: legacy history")
+    if scenario == "release-init":
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_A),
+                ".csarc/provenance.json": provenance(SOURCE_A),
+                GENERATED_CONTRACT: TRAILER_CONTRACT,
+            },
+        )
+        shas["baseline"] = commit(repo, "chore: csarc init")
+    elif scenario == "adopt-then-update":
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_A),
+                ".csarc/provenance.json": provenance(SOURCE_A),
+            },
+        )
+        shas["adopt"] = commit(repo, "chore: csarc adopt older release")
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_B),
+                ".csarc/provenance.json": provenance(SOURCE_B),
+                GENERATED_CONTRACT: TRAILER_CONTRACT,
+            },
+        )
+        shas["baseline"] = commit(repo, "chore: csarc update")
+    elif scenario == "legacy-without-provenance":
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_A),
+                GENERATED_CONTRACT: TRAILER_CONTRACT,
+            },
+        )
+        shas["unresolved"] = commit(repo, "chore: copy template files")
+    elif scenario == "raw-copier-update":
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_A),
+                ".csarc/provenance.json": provenance(SOURCE_A),
+            },
+        )
+        shas["install"] = commit(repo, "chore: csarc init older release")
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_B),
+                GENERATED_CONTRACT: TRAILER_CONTRACT,
+            },
+        )
+        shas["unresolved"] = commit(repo, "chore: raw copier update")
+        write_files(repo, {".csarc/provenance.json": provenance(SOURCE_B)})
+        shas["contains"] = commit(repo, "chore: csarc update repairs it")
+    elif scenario == "allow-unreleased":
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(SOURCE_A),
+                ".csarc/provenance.json": provenance(
+                    SOURCE_A, verification="development-unreleased"
+                ),
+                GENERATED_CONTRACT: TRAILER_CONTRACT,
+            },
+        )
+        shas["unresolved"] = commit(repo, "chore: csarc init unreleased")
+    elif scenario in {"template-source", "template-fork"}:
+        write_files(
+            repo,
+            {
+                ".csarc/config.yml": answers(None),
+                "policies/merge-trailers.json": TRAILER_CONTRACT,
+            },
+        )
+        shas["baseline" if scenario == "template-source" else "unresolved"] = (
+            commit(repo, "feat: add the merge trailer writer")
+        )
+    elif scenario == "not-installed":
+        write_files(repo, {".csarc/config.yml": answers(SOURCE_A)})
+        commit(repo, "chore: config only")
+    return shas
+
+
+@pytest.mark.parametrize(
+    ("scenario", "identity", "expected"),
+    [
+        ("release-init", None, "resolved"),
+        ("adopt-then-update", None, "resolved"),
+        ("legacy-without-provenance", None, "inconclusive"),
+        ("raw-copier-update", None, "inconclusive"),
+        ("allow-unreleased", None, "inconclusive"),
+        ("template-source", cli.CANONICAL_REPOSITORY, "resolved"),
+        ("template-fork", "fork/csarc-repo-template", "inconclusive"),
+        ("not-installed", None, "not-installed"),
+    ],
+)
+def test_status_governance_baseline_rules(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scenario: str,
+    identity: str | None,
+    expected: str,
+) -> None:
+    """Each baseline rule and result comes from the first-parent history."""
+    repo = audit_repository(tmp_path)
+    shas = baseline_history(repo, scenario)
+    responses: dict[str, tuple[int, str]] = {}
+    if identity is not None:
+        responses["repos/owner/repo"] = (
+            0,
+            json.dumps(
+                {
+                    "full_name": identity,
+                    "id": cli.CANONICAL_REPOSITORY_ID
+                    if identity == cli.CANONICAL_REPOSITORY
+                    else 99,
+                }
+            ),
+        )
+    stub_github(monkeypatch, responses)
+    result = cli.governance_audit(repo, None)
+    baseline = result["baseline"]
+    assert isinstance(baseline, dict)
+    assert baseline["result"] == expected
+    # An inconclusive baseline audits no merge: a notice in status, and
+    # blocking only on the strict release path.
+    assert result["blocking"] is False
+    from csarc_cli import merge_trace
+
+    def fixture_git(arguments: list[str]) -> tuple[int, str]:
+        completed = subprocess.run(  # noqa: S603
+            ["git", "-C", str(repo), *arguments],  # noqa: S607
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return completed.returncode, completed.stdout
+
+    def fixture_api(endpoint: str) -> tuple[int, str]:
+        return responses.get(endpoint, (1, "gh: Not Found (HTTP 404)"))
+
+    def fixture_identity() -> object:
+        if identity is None:
+            return None
+        number = (
+            cli.CANONICAL_REPOSITORY_ID
+            if identity == cli.CANONICAL_REPOSITORY
+            else 99
+        )
+        return merge_trace.Identity(identity, number)
+
+    strict = merge_trace.audit(
+        merge_trace.AuditContext(fixture_git, fixture_api, fixture_identity),
+        "HEAD",
+        strict=True,
+    )
+    assert strict["blocking"] is (expected == "inconclusive")
+    monkeypatch.setattr(
+        cli,
+        "detect_install_state",
+        lambda *_args, **_kwargs: {
+            "state": "current",
+            "reason": "fixture",
+            "next_command": "none",
+        },
+    )
+    assert main(["status", str(repo), "--json"]) == 0
+    if expected == "resolved":
+        assert baseline["baseline"] == shas["baseline"]
+    if scenario == "raw-copier-update":
+        assert baseline["candidates"] == [shas["unresolved"], shas["contains"]]
+        assert "updated-outside-csarc" in baseline["unresolved"][0]["reason"]
+    if scenario == "allow-unreleased":
+        assert "development-unreleased" in baseline["unresolved"][0]["reason"]
+    if expected == "inconclusive":
+        candidate = baseline["candidates"][0]
+        confirmed = cli.governance_audit(repo, candidate)
+        assert confirmed["baseline"]["result"] == "confirmed"
+        assert confirmed["baseline"]["baseline"] == candidate
+        assert confirmed["blocking"] is False
+        with pytest.raises(CliError, match="not a candidate"):
+            cli.governance_audit(repo, shas["legacy"])
+
+
+def test_baseline_range_that_starts_after_a_contains_commit_is_resolved() -> (
+    None
+):
+    """A range whose start already contains the writer needs no search."""
+    from csarc_cli import merge_trace
+
+    derived = merge_trace.derive_baseline(
+        "contains", [("a" * 40, "unresolved", "later edit")]
+    )
+    assert derived["result"] == "resolved"
+    assert derived["baseline"] is None
+
+
+def traced_commit(
+    repo: Path,
+    name: str,
+    *,
+    locator: str,
+    tree_override: str | None = None,
+    drop: str = "",
+    payload_tree: str | None = None,
+) -> tuple[str, str]:
+    """Commit one squash-like change with trailers and its record body."""
+    from csarc_cli import merge_trace
+
+    write_files(repo, {f"{name}.txt": f"{name}\n"})
+    git(repo, "add", ".")
+    tree = git(repo, "write-tree")
+    payload = {
+        "trust": "github-hosted",
+        "head_sha": "a" * 40,
+        "schema_version": 1,
+        "tree_sha": payload_tree or tree,
+    }
+    data = merge_trace.canonical_bytes(payload)
+    record = merge_trace.envelope(data, trust="github-hosted", route="issue")
+    contract = merge_trace.validate_contract(json.loads(TRAILER_CONTRACT))
+    values = {
+        "CSARC-Evidence": locator,
+        "CSARC-Evidence-SHA256": record["digest"],
+        "CSARC-Evidence-Tree": tree_override or tree,
+        "CSARC-Trust": "github-hosted",
+        "CSARC-Route": "issue",
+        "CSARC-Approval": "review",
+        "CSARC-Authorization": AUDIT_REVIEW,
+    }
+    pairs = merge_trace.build_trailers(contract, values)
+    pairs = [pair for pair in pairs if pair[0] != drop]
+    message = f"fix: {name} (#7)\n\n" + merge_trace.squash_message([], pairs)
+    parent = git(repo, "rev-parse", "HEAD")
+    sha = git(repo, "commit-tree", tree, "-p", parent, "-m", message)
+    git(repo, "reset", "--hard", sha)
+    return sha, merge_trace.summary_comment(record, data, "merged")
+
+
+def test_status_classifies_merge_trailer_findings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every finding class is reported; only untraced is a notice."""
+    repo = audit_repository(tmp_path)
+    write_files(repo, {"README.md": "start\n"})
+    commit(repo, "chore: legacy history before adoption")
+    pre_baseline, _ = traced_commit(
+        repo,
+        "before",
+        locator="https://github.com/owner/repo/pull/7#issuecomment-9",
+    )
+    shas = baseline_history(repo, "release-init")
+
+    def comment(number: int) -> str:
+        return f"https://github.com/owner/repo/pull/7#issuecomment-{number}"
+
+    responses: dict[str, tuple[int, str]] = {}
+    expected: list[tuple[str, str]] = []
+
+    write_files(repo, {"plain.txt": "plain\n"})
+    expected.append((commit(repo, "fix: plain UI merge"), "untraced"))
+    sha, body = traced_commit(repo, "traced", locator=comment(101))
+    responses["repos/owner/repo/issues/comments/101"] = (
+        0,
+        json.dumps({"body": body}),
+    )
+    expected.append((sha, "traced"))
+    sha, _ = traced_commit(repo, "deleted", locator=comment(102))
+    expected.append((sha, "evidence-missing"))
+    sha, body = traced_commit(repo, "edited", locator=comment(103))
+    responses["repos/owner/repo/issues/comments/103"] = (
+        0,
+        json.dumps({"body": body.replace('"issue"', '"sync"')}),
+    )
+    expected.append((sha, "evidence-digest-mismatch"))
+    sha, body = traced_commit(
+        repo, "moved", locator=comment(104), tree_override="f" * 40
+    )
+    expected.append((sha, "tree-mismatch"))
+    sha, _ = traced_commit(
+        repo, "partial", locator=comment(105), drop="CSARC-Approval"
+    )
+    expected.append((sha, "trailer-invalid"))
+    sha, _ = traced_commit(repo, "offline", locator=comment(106))
+    responses["repos/owner/repo/issues/comments/106"] = (
+        1,
+        "gh: Server Error (HTTP 502)",
+    )
+    expected.append((sha, "inconclusive"))
+
+    stub_github(monkeypatch, responses)
+    result = cli.governance_audit(repo, None)
+    assert result["baseline"]["baseline"] == shas["baseline"]
+    merges = result["merges"]
+    assert [(item["sha"], item["finding"]) for item in merges["merges"]] == (
+        expected
+    )
+    assert pre_baseline not in {item["sha"] for item in merges["merges"]}
+    assert merges["untraced"] == [expected[0][0]]
+    assert [item["finding"] for item in merges["blocking"]] == [
+        "evidence-missing",
+        "evidence-digest-mismatch",
+        "tree-mismatch",
+        "trailer-invalid",
+        "inconclusive",
+    ]
+    assert result["blocking"] is True
+
+    monkeypatch.setattr(
+        cli,
+        "detect_install_state",
+        lambda *_args, **_kwargs: {
+            "state": "current",
+            "reason": "fixture",
+            "next_command": "none",
+        },
+    )
+    assert main(["status", str(repo), "--json"]) == 1
+
+    git(repo, "reset", "--hard", expected[0][0])
+    assert main(["status", str(repo), "--json"]) == 0
+
+
+def test_release_path_audit_fails_closed_on_untraced_merges(
+    tmp_path: Path,
+) -> None:
+    """`merge_trace.py audit --strict` blocks an untraced merge (#1073 AC5)."""
+    from csarc_cli import merge_trace
+
+    repo = audit_repository(tmp_path)
+    baseline_history(repo, "release-init")
+    assert merge_trace.main(["audit", "--root", str(repo), "--strict"]) == 0
+    write_files(repo, {"ui.txt": "merged in the GitHub UI\n"})
+    untraced = commit(repo, "fix: merged without the lifecycle")
+    context = merge_trace.local_context(repo)
+    relaxed = merge_trace.audit(context, "HEAD")
+    assert relaxed["blocking"] is False
+    assert relaxed["merges"]["untraced"] == [untraced]
+    strict = merge_trace.audit(context, "HEAD", strict=True)
+    assert strict["blocking"] is True
+    assert merge_trace.main(["audit", "--root", str(repo), "--strict"]) == 1
+    assert merge_trace.CANONICAL_REPOSITORY == cli.CANONICAL_REPOSITORY
+    assert merge_trace.CANONICAL_REPOSITORY_ID == cli.CANONICAL_REPOSITORY_ID

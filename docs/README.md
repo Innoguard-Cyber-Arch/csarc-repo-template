@@ -34,6 +34,9 @@
 - [`SPEC-005-continuous-verification-evidence.md`](specs/SPEC-005-continuous-verification-evidence.md) — verification tiers、regressions 與 evidence
 - [`SPEC-006-trusted-release-provenance.md`](specs/SPEC-006-trusted-release-provenance.md) — release、security、dependencies 與 provenance
 - [`SPEC-007-portable-repo-site-documentation.md`](specs/SPEC-007-portable-repo-site-documentation.md) — canonical docs 與 portable presentation
+- [`SPEC-008-lifecycle-report-format.md`](specs/SPEC-008-lifecycle-report-format.md) — adopt／update 共用的 lifecycle report 格式
+- [`SPEC-009-project-settings.md`](specs/SPEC-009-project-settings.md) — 只保存無法安全重建的設定、provenance 與 migration registry
+- [`SPEC-010-issue-risk-controls.md`](specs/SPEC-010-issue-risk-controls.md) — Issue 風險與控制區塊、AC 對應與 exact-head requirement evidence
 
 `tracking: issue` 或預設值會同步 Task Issue；`tracking: story` 同步可容納 native subissues 的 Feature parent；`tracking: none` 用於已存在、仍需持續維護但不應新建 work item 的 current spec。Milestone 另作有 due date 的 delivery／release bucket，不再兼任 story identity。
 
@@ -43,6 +46,7 @@
 - [`template-lifecycle-and-ownership.md`](adr/template-lifecycle-and-ownership.md)
 - [`capability-aware-governance.md`](adr/capability-aware-governance.md)
 - [`staged-delivery-and-verification.md`](adr/staged-delivery-and-verification.md)
+- [`verification-evidence-freshness.md`](adr/verification-evidence-freshness.md)
 - [`release-security-and-dependencies.md`](adr/release-security-and-dependencies.md)
 - [`selective-ci-automation-adoption.md`](adr/selective-ci-automation-adoption.md)
 - [`spec-story-and-work-items.md`](adr/spec-story-and-work-items.md)
@@ -62,10 +66,13 @@
 | 網站來源 | `site/` | 分開維護雙語 Markdown、純 Python 渲染引擎、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
 | 操作契約 | `docs/agent-install.md`、`docs/milestone-description.md` | 已發布且可能由固定版本 URL 讀取的介面；路徑保持穩定 |
 | 文件治理 | `docs/documentation-policy.md` | 文件模板／內容責任、資訊架構、i18n、README、AI 一致性 review 與授權同步 |
-| Scanner readiness | `docs/security-scanner-readiness.md` | Provider capability、policy chain、真實 attack surface、精確命令與離線 smoke 邊界；以 paired copy 下發至 `.csarc/docs/` |
+| 產品手冊 | `docs/handbook/` | 核准的產品政策與使用者承諾：`handbook.md` 是權威來源，`index.html` 由 `scripts/build-handbook` 生成，`approved/` 保存核准原檔，`manifest.json` 記錄 digest；生成專案以完整 SHA 連結 |
+| Scanner readiness | `docs/security-scanner-readiness.md` | Provider capability、policy chain、真實 attack surface、精確命令與離線 smoke 邊界；生成專案另有精簡的 `.csarc/docs/` 版本 |
+| 稽核證據 | `docs/evidence/m18-risk-backfill.json` | K1 之前合併的 Milestone 18 work PR 的 backfill manifest（SPEC-010）；canonical bytes，不手改 |
 | Runbook | `docs/live-integration.md`、`docs/artifact-consumption.md` | 維護者執行線上驗證或排查交付鏈時使用 |
+| Runbook | `docs/security-response.md` | 收到私密漏洞通報後的記錄、修正與公開步驟；入口規則見 `.github/SECURITY.md` |
 | Runbook | `docs/uninstall.md` | repository owner 決定不再採用 CSARC 時的自助解除安裝指南 |
-| 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據 |
+| 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據；pilot 與 operator-independence run 的紀錄格式 |
 
 ## 新決策如何進來
 

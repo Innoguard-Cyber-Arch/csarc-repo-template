@@ -12,28 +12,38 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+ROOT_CONFIG = ROOT / ".csarc/config.yml"
 
 
 def test_root_uses_public_copier_setting_names() -> None:
-    """Keep root dogfood values on the same public setting schema."""
+    """Keep root dogfood values on the same public schema 2 settings."""
     copier = yaml.safe_load((ROOT / "copier.yml").read_text(encoding="utf-8"))
-    config = yaml.safe_load(
-        (ROOT / ".csarc/config.yml").read_text(encoding="utf-8")
-    )
+    config = yaml.safe_load(ROOT_CONFIG.read_text(encoding="utf-8"))
     question_names = {key for key in copier if not key.startswith("_")}
 
-    assert set(config) <= question_names
+    assert config["schema_version"] == 2
+    assert set(config) - {"schema_version"} <= question_names
     assert "_src_path" not in config
     assert "_commit" not in config
-    assert config["project_slug"] == "csarc-repo-template"
-    repository_url = config["repository_url"]
-    assert isinstance(repository_url, str)
-    assert repository_url.endswith("/csarc-repo-template")
+    # Seeds and live facts are read from native sources, never saved
+    # (SPEC-009, Issue #1071).
+    for seed in (
+        "project_name",
+        "project_slug",
+        "project_description",
+        "project_license",
+        "copyright_holder",
+        "project_visibility",
+        "repository_url",
+        "project_mode",
+    ):
+        assert seed not in config
     assert config["languages"] == ["python"]
+    # The import package differs from the distribution name, so it is a
+    # saved one-time decision.
     assert config["package_name"] == "csarc_cli"
     assert config["governance_mode"] == "managed"
     assert config["lifecycle"] == ["issues", "milestones"]
-    assert config["actions_fallback"] == "admin"
     assert config["verification_mode"] == "hosted"
     assert config["admin_bypass"] == "always"
     assert config["project_maturity"] == "early"
@@ -41,19 +51,16 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["release_ownership"] == "csarc-owned"
     assert config["release_trigger"] == "manual"
     assert config["documentation_mode"] == "template-and-content"
-    assert config["primary_language"] == "zh-tw"
-    assert config["i18n"] == "en-zh-tw"
-    assert config["project_license"] == "proprietary"
-    assert config["copyright_holder"] == "Innoguard Cyber Arch"
-    assert config["features"] == []
+    assert config["documentation_languages"] == "zh-tw+en"
+    assert config["container"] is False
+    assert config["scheduled_checks"] == []
+    assert config["python_floor"] == "latest"
     assert not any(key.startswith("release_level_") for key in config)
 
 
 def test_root_public_identity_claims_are_consistent() -> None:
     """Keep root configuration and public-facing sources aligned."""
-    config = yaml.safe_load(
-        (ROOT / ".csarc/config.yml").read_text(encoding="utf-8")
-    )
+    config = yaml.safe_load(ROOT_CONFIG.read_text(encoding="utf-8"))
     pages = json.loads(
         (ROOT / "policies/pages.json").read_text(encoding="utf-8")
     )
@@ -67,11 +74,10 @@ def test_root_public_identity_claims_are_consistent() -> None:
     ]
     robots = (ROOT / "docs/robots.txt").read_text(encoding="utf-8")
 
-    assert config["project_visibility"] == "public"
-    assert (
-        "public repository's GitHub Issues"
-        in config["security_reporting_channel"]
-    )
+    # Issue #1084 / #1058 decision 20: a public repository reports privately
+    # through the maintainer-approved channel outside GitHub. Visibility is
+    # a live fact, not a saved setting (SPEC-009).
+    assert config["security_reporting_channel"] == "justyn.jt.chen@tw.ey.com"
     assert pages == {"enabled": True, "build_type": "workflow"}
 
     for text in readmes + site_sources:
@@ -86,191 +92,150 @@ def test_root_public_identity_claims_are_consistent() -> None:
     assert "does not restrict access or sharing" in robots
 
 
+def run_reader(
+    tmp_path: Path, source: str, key: str
+) -> subprocess.CompletedProcess[str]:
+    """Run the root current-only reader against one settings file."""
+    path = tmp_path / ".csarc/config.yml"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(source, encoding="utf-8")
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(exist_ok=True)
+    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts)
+    return subprocess.run(  # noqa: S603
+        [sys.executable, scripts / "csarc_config.py", key],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def with_setting(key: str, value: str) -> str:
+    """Return the root settings with one top-level value replaced."""
+    lines = ROOT_CONFIG.read_text(encoding="utf-8").splitlines()
+    result: list[str] = []
+    skipping = False
+    for line in lines:
+        if skipping and line.startswith("- "):
+            continue
+        skipping = False
+        if line.startswith(f"{key}:"):
+            result.append(f"{key}: {value}" if value else f"{key}:")
+            skipping = True
+            continue
+        result.append(line)
+    return "\n".join(result) + "\n"
+
+
 @pytest.mark.parametrize(
-    ("source", "message"),
+    ("key", "value", "message"),
     [
-        ("branch_strategy: trunk\n", "Invalid branch_strategy"),
-        ("governance_mode: partial\n", "Invalid governance_mode"),
-        ("actions_fallback: automatic\n", "Invalid actions_fallback"),
-        ("verification_mode: automatic\n", "Invalid verification_mode"),
-        ("review: anyone\n", "Invalid review"),
-        ("copilot_review: required\n", "Invalid copilot_review"),
-        ("release_trigger: tag\n", "Invalid release_trigger"),
-        ("lifecycle:\n- projects\n", "Invalid lifecycle"),
-        ("features:\n- website\n", "Invalid features"),
-        ("documentation_mode: website\n", "Invalid documentation_mode"),
-        ("primary_language: fr\n", "Invalid primary_language"),
-        ("i18n: all\n", "Invalid i18n"),
-        ("project_license: unknown\n", "Invalid project_license"),
-        ("copyright_holder: ''\n", "Invalid copyright_holder"),
-        ("languages:\n- java\n", "Invalid languages"),
-        ("languages:\n- python\n- python\n", "Duplicate languages"),
-        ("coverage_threshold: 0\n", "Invalid coverage_threshold"),
-        ("release_ownership: somebody\n", "Invalid release_ownership"),
-        (
-            "release_ownership: verification-only\n"
-            "release_workflow: .github/workflows/release.yml\n",
-            "cannot select a workflow",
-        ),
-        (
-            "release_ownership: csarc-owned\n"
-            "release_workflow: .github/workflows/release.yml\n"
-            "release_required_inputs: []\n"
-            "release_ownership_reason: CSARC owns release.\n"
-            "release_settings_owner: product-admin\n"
-            "release_immutable_releases: product-defined\n",
-            "settings do not match ownership",
-        ),
-        (
-            "policy_repository_settings: maybe\n",
-            "Invalid policy_repository_settings",
-        ),
-        (
-            "policy_branch_ruleset: 1\n",
-            "Invalid policy_branch_ruleset",
-        ),
-        (
-            "release_levels_enabled: maybe\n",
-            "Invalid release_levels_enabled",
-        ),
-        ("admin_bypass: sometimes\n", "Invalid admin_bypass"),
-        ("project_maturity: mature\n", "Invalid project_maturity"),
-        (
-            "release_level_beta_review: optional\n",
-            "Invalid release_level_beta_review",
-        ),
-        (
-            "release_level_stable_verification: smoke\n",
-            "Invalid release_level_stable_verification",
-        ),
+        ("governance_mode", "partial", "governance_mode is 'partial'"),
+        ("verification_mode", "automatic", "verification_mode is"),
+        ("copilot_review", "required", "copilot_review is"),
+        ("release_trigger", "tag", "release_trigger is"),
+        ("lifecycle", "\n- projects", "lifecycle must be a list"),
+        ("documentation_mode", "website", "documentation_mode is"),
+        ("documentation_languages", "fr", "documentation_languages is"),
+        ("languages", "\n- java", "languages must be a list"),
+        ("languages", "\n- python\n- python", "languages repeats a value"),
+        ("coverage_threshold", "0", "coverage_threshold must be an integer"),
+        ("release_ownership", "somebody", "release_ownership is"),
+        ("admin_bypass", "sometimes", "admin_bypass is"),
+        ("project_maturity", "mature", "project_maturity is"),
+        ("python_floor", "'3.11'", "python_floor is"),
+        ("container", "maybe", "container must be true or false"),
+        ("code_owner", "nobody", "code_owner must be"),
+        ("schema_version", "3", "accepts only schema 2"),
     ],
 )
 def test_managed_setting_errors_are_diagnostic(
-    tmp_path: Path, source: str, message: str
+    tmp_path: Path, key: str, value: str, message: str
 ) -> None:
-    """Reject invalid managed values while leaving extension keys available."""
-    path = tmp_path / ".csarc/config.yml"
-    path.parent.mkdir()
-    path.write_text(source, encoding="utf-8")
-    scripts = tmp_path / "scripts"
-    scripts.mkdir()
-    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts)
-
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, scripts / "csarc_config.py", "languages"],
-        cwd=tmp_path,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    """Reject invalid schema 2 values with one stable diagnostic."""
+    result = run_reader(tmp_path, with_setting(key, value), "languages")
 
     assert result.returncode == 1
+    assert "CSARC settings error" in result.stderr
     assert message in result.stderr
 
 
-def test_derived_templates_can_add_namespaced_settings(tmp_path: Path) -> None:
-    """Allow downstream policy extensions without creating another config."""
-    path = tmp_path / ".csarc/config.yml"
-    path.parent.mkdir()
-    path.write_text(
-        "languages: []\nacme_policy_mode: strict\n", encoding="utf-8"
-    )
-    scripts = tmp_path / "scripts"
-    scripts.mkdir()
-    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts)
-
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, scripts / "csarc_config.py", "acme_policy_mode"],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.stdout.strip() == "strict"
-
-
-def test_compact_release_ownership_needs_no_derived_settings(
-    tmp_path: Path,
-) -> None:
-    """Accept the compact release contract before all tooling is upgraded."""
-    path = tmp_path / ".csarc/config.yml"
-    path.parent.mkdir()
-    path.write_text(
-        "release_ownership: csarc-owned\nrelease_trigger: main\n",
-        encoding="utf-8",
-    )
-    scripts = tmp_path / "scripts"
-    scripts.mkdir()
-    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts)
-
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, scripts / "csarc_config.py", "release_ownership"],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.stdout.strip() == "csarc-owned"
-
-
 @pytest.mark.parametrize(
-    ("key", "expected"),
+    "extra",
     [
-        ("governance_mode", "managed"),
-        ("actions_fallback", "off"),
-        ("verification_mode", "hosted"),
-        ("review", "peer"),
-        ("copilot_review", "off"),
-        ("release_trigger", "main"),
+        "actions_fallback: admin\n",
+        "primary_language: zh-tw\n",
+        "features: []\n",
+        "project_name: Example\n",
+        "acme_policy_mode: strict\n",
     ],
 )
-def test_legacy_config_gets_safe_simplified_defaults(
-    tmp_path: Path, key: str, expected: str
+def test_retired_seed_and_unknown_keys_fail_closed(
+    tmp_path: Path, extra: str
 ) -> None:
-    """Pre-#900 answers remain readable through deterministic defaults."""
-    path = tmp_path / ".csarc/config.yml"
-    path.parent.mkdir()
-    path.write_text("languages: []\n", encoding="utf-8")
-    scripts = tmp_path / "scripts"
-    scripts.mkdir()
-    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts)
-
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, scripts / "csarc_config.py", key],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.stdout.strip() == expected
-
-
-def test_mixed_legacy_policy_toggles_require_an_explicit_choice(
-    tmp_path: Path,
-) -> None:
-    """Do not guess while collapsing an old mixed policy configuration."""
-    path = tmp_path / ".csarc/config.yml"
-    path.parent.mkdir()
-    path.write_text(
-        "languages: []\n"
-        "policy_repository_settings: false\n"
-        "policy_actions_permissions: true\n",
-        encoding="utf-8",
-    )
-    scripts = tmp_path / "scripts"
-    scripts.mkdir()
-    shutil.copy2(ROOT / "scripts/csarc_config.py", scripts)
-
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, scripts / "csarc_config.py", "governance_mode"],
-        cwd=tmp_path,
-        check=False,
-        capture_output=True,
-        text=True,
+    """Schema 2 is closed: retired, seed, and unknown keys are refused."""
+    result = run_reader(
+        tmp_path, ROOT_CONFIG.read_text(encoding="utf-8") + extra, "languages"
     )
 
     assert result.returncode == 1
-    assert "mixed" in result.stderr
+    assert "unknown or retired settings" in result.stderr
+
+
+def test_missing_intent_fails_closed(tmp_path: Path) -> None:
+    """A schema 2 file must state every persistent intent."""
+    source = "".join(
+        line
+        for line in ROOT_CONFIG.read_text(encoding="utf-8").splitlines(
+            keepends=True
+        )
+        if not line.startswith("release_ownership:")
+    )
+    result = run_reader(tmp_path, source, "release_ownership")
+
+    assert result.returncode == 1
+    assert "missing persistent settings release_ownership" in result.stderr
+
+
+def test_seed_keys_are_not_readable_settings(tmp_path: Path) -> None:
+    """A seed is read from its native source, never from the settings."""
+    result = run_reader(
+        tmp_path, ROOT_CONFIG.read_text(encoding="utf-8"), "project_name"
+    )
+
+    assert result.returncode == 1
+    assert "not a schema 2 setting" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "languages: []\n",
+        "languages: []\npolicy_repository_settings: false\n",
+        "release_ownership: csarc-owned\nrelease_trigger: main\n",
+    ],
+)
+def test_legacy_settings_never_get_runtime_defaults(
+    tmp_path: Path, source: str
+) -> None:
+    """Pre-schema-2 answers fail closed and point to the pinned CLI."""
+    result = run_reader(tmp_path, source, "governance_mode")
+
+    assert result.returncode == 1
+    assert "legacy settings schema" in result.stderr
+    assert "csarc update" in result.stderr
+
+
+def test_list_and_bool_settings_print_for_shell_callers(tmp_path: Path) -> None:
+    """Shell adapters keep reading lists and booleans in one stable form."""
+    source = ROOT_CONFIG.read_text(encoding="utf-8")
+
+    assert run_reader(tmp_path, source, "lifecycle").stdout.strip() == (
+        "issues,milestones"
+    )
+    assert run_reader(tmp_path, source, "container").stdout.strip() == "false"
+    assert (
+        run_reader(tmp_path, source, "release_ownership").stdout.strip()
+        == "csarc-owned"
+    )

@@ -43,6 +43,13 @@ body:
     id: supplement
     attributes:
       label: 補充
-      description: 選填：相關頁面、既有決策、驗證方式或影響範圍。
+      description: >-
+        相關頁面、既有決策、驗證方式或影響範圍；下方「風險與控制」區塊必填（SPEC-010）：每個風險一列並至少一個控制，Owner 是 Issue assignee；R0 只適用 docs，不得涵蓋 AGENTS.md、SECURITY.md、.github/SECURITY.md 或 CI policy；有實質風險時改寫成 R1 起的風險列。PR 離開 Draft 前，在 PR 的「Requirement evidence」把每個 AC 與風險對應到 exact-head 證據。
+      value: |
+        #### 風險與控制
+
+        | ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | R0 | none | — | TODO | TODO | scope:docs | TODO |
     validations:
       required: false

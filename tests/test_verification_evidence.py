@@ -431,6 +431,180 @@ def test_future_evidence_fails_closed() -> None:
         )
 
 
+def test_hosted_window_is_inclusive_at_exactly_24_hours() -> None:
+    """Hosted evidence uses the shared boundary: 24 hours old is fresh."""
+    check_run, workflow_run, job = evidence(
+        completed_at=NOW - timedelta(hours=24)
+    )
+    result = validate_verification_job(
+        check_run,
+        workflow_run,
+        job,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+    )
+    assert result["completed_at"] == (NOW - timedelta(hours=24)).isoformat()
+
+
+@pytest.mark.parametrize("value", [None, "", "2026-09-20T11:00:00"])
+def test_hosted_missing_or_naive_completion_fails_closed(value: object) -> None:
+    """A job without an aware completion time is never treated as fresh."""
+    check_run, workflow_run, job = evidence()
+    job["completed_at"] = value
+    with pytest.raises(RuntimeError, match="completion time"):
+        validate_verification_job(
+            check_run,
+            workflow_run,
+            job,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+        )
+
+
+def test_hosted_caller_cannot_widen_the_trusted_window() -> None:
+    """Issue #1075: a widened window fails closed instead of accepting."""
+    check_run, workflow_run, job = evidence(
+        completed_at=NOW - timedelta(hours=30)
+    )
+    with pytest.raises(RuntimeError, match="cannot exceed the trusted"):
+        validate_verification_job(
+            check_run,
+            workflow_run,
+            job,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            max_age_hours=48,
+        )
+
+
+def test_generated_reader_shares_the_window_and_tamper_rule() -> None:
+    """The `.csarc` copy keeps the same boundary and rejects widening."""
+    check_run, workflow_run, job = evidence(
+        command="./.csarc/scripts/verify-fast",
+        completed_at=NOW - timedelta(hours=24),
+    )
+    validate_template_verification_job(
+        check_run,
+        workflow_run,
+        job,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+    )
+    with pytest.raises(RuntimeError, match="stale"):
+        validate_template_verification_job(
+            check_run,
+            workflow_run,
+            job,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW + timedelta(seconds=1),
+        )
+    with pytest.raises(RuntimeError, match="cannot exceed the trusted"):
+        validate_template_verification_job(
+            check_run,
+            workflow_run,
+            job,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            max_age_hours=48,
+        )
+
+
+def test_tightened_policy_expires_a_reuse_source_until_reverified() -> None:
+    """A fresh reuse run cannot refresh an old source; a new run can."""
+    source = evidence(
+        run_id=200, check_id=7, completed_at=NOW - timedelta(hours=6)
+    )
+    current = evidence(
+        run_id=300,
+        check_id=8,
+        completed_at=NOW - timedelta(minutes=1),
+        reuse=(200, 7, 7),
+    )
+    validate_verification_job(
+        *current,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        source_evidence=(*source, TREE),
+    )
+    with pytest.raises(RuntimeError, match="stale"):
+        validate_verification_job(
+            *current,
+            repo="owner/repo",
+            head_sha=HEAD,
+            tree_sha=TREE,
+            now=NOW,
+            max_age_hours=1,
+            source_evidence=(*source, TREE),
+        )
+    rerun = evidence(
+        run_id=400, check_id=9, completed_at=NOW - timedelta(minutes=3)
+    )
+    result = validate_verification_job(
+        *rerun,
+        repo="owner/repo",
+        head_sha=HEAD,
+        tree_sha=TREE,
+        now=NOW,
+        max_age_hours=1,
+    )
+    assert result["run_id"] == 400
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("repository", "repository or exact head"),
+        ("head", "repository or exact head"),
+        ("tree", "tree does not match"),
+        ("tier", "tier is insufficient"),
+        ("runner", "ubuntu-latest"),
+        ("result", "did not complete successfully"),
+        ("toolchain", "toolchain"),
+    ],
+)
+def test_fresh_evidence_still_requires_every_identity_binding(
+    mutation: str, message: str
+) -> None:
+    """Freshness is necessary, never sufficient (Issue #1075 AC4)."""
+    check_run, workflow_run, job = evidence(completed_at=NOW)
+    kwargs: dict[str, Any] = {
+        "repo": "owner/repo",
+        "head_sha": HEAD,
+        "tree_sha": TREE,
+        "now": NOW,
+    }
+    if mutation == "repository":
+        workflow_run["repository"] = {"full_name": "other/repo"}
+    elif mutation == "head":
+        kwargs["head_sha"] = "e" * 40
+    elif mutation == "tree":
+        kwargs["tree_sha"] = "e" * 40
+    elif mutation == "tier":
+        kwargs["required_tier"] = "full"
+    elif mutation == "runner":
+        job["labels"] = ["macos-latest"]
+    elif mutation == "result":
+        job["conclusion"] = "failure"
+    elif mutation == "toolchain":
+        kwargs["expected_toolchain"] = {*ROOT_TOOLCHAIN, "java-25"}
+    with pytest.raises(RuntimeError, match=message):
+        validate_verification_job(check_run, workflow_run, job, **kwargs)
+
+
 def test_untrusted_runner_fails_closed() -> None:
     """A self-hosted label cannot impersonate the GitHub-hosted runner."""
     check_run, workflow_run, job = evidence()
@@ -1065,3 +1239,112 @@ def test_release_source_ignores_an_ordinary_squash_merge() -> None:
         resolve_release_source(MergeSourceGitHub(), "owner/repo", "c" * 40)
         == ""
     )
+
+
+# Issue #1073: one canonical payload and digest contract for both trusts.
+ROOT = Path(__file__).parents[1]
+MERGE_TRACE = runpy.run_path(str(ROOT / "scripts" / "merge_trace.py"))
+canonical_bytes = MERGE_TRACE["canonical_bytes"]
+parse_canonical = MERGE_TRACE["parse_canonical"]
+payload_digest = MERGE_TRACE["payload_digest"]
+EvidenceError = MERGE_TRACE["EvidenceError"]
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"b": "é", "a": 1}, b'{"a":1,"b":"\xc3\xa9"}'),
+        (
+            {"c": '\u0001\n\t"\\\u001f\u007f'},
+            b'{"c":"\\u0001\\n\\t\\"\\\\\\u001f\x7f"}',
+        ),
+        (
+            {"z": {"y": [1, {"b": None, "a": True}], "x": chr(0x2028)}},
+            b'{"z":{"x":"\xe2\x80\xa8","y":[1,{"a":true,"b":null}]}}',
+        ),
+        (
+            {"max": 9007199254740991, "min": -9007199254740991},
+            b'{"max":9007199254740991,"min":-9007199254740991}',
+        ),
+        (
+            {
+                "scopes": ["docs", "source"],
+                "started_at": "2026-10-14T00:00:00Z",
+            },
+            b'{"scopes":["docs","source"],"started_at":"2026-10-14T00:00:00Z"}',
+        ),
+    ],
+)
+def test_canonical_payload_matches_fixed_vectors(
+    payload: dict[str, Any], expected: bytes
+) -> None:
+    """The JCS subset is byte-exact and round-trips through the reader."""
+    assert canonical_bytes(payload) == expected
+    assert parse_canonical(expected) == payload
+    assert payload_digest(expected) == (
+        "sha256:" + __import__("hashlib").sha256(expected).hexdigest()
+    )
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"value": 1.0}, "floating-point"),
+        ({"value": 9007199254740992}, "safe integer"),
+        ({"value": -9007199254740992}, "safe integer"),
+        ({"value": "e" + chr(0x301)}, "NFC"),
+        ({"é": 1}, "non-ASCII key"),
+        ({"scopes": ["source", "docs"]}, "unsorted"),
+        ({"completed_at": "2026-10-14T00:00:00+00:00"}, "YYYY"),
+        ({"value": "\ud800"}, "valid Unicode"),
+    ],
+)
+def test_canonical_payload_rejects_values_outside_the_subset(
+    payload: dict[str, Any], message: str
+) -> None:
+    """The producer refuses instead of silently converting a value."""
+    with pytest.raises(EvidenceError, match=message):
+        canonical_bytes(payload)
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        (b'{"a":1,"a":1}', "repeats key"),
+        (b'{"a": 1}', "not canonical"),
+        (b'{"b":1,"a":1}', "not canonical"),
+        (b'\xef\xbb\xbf{"a":1}', "byte-order mark"),
+        (b'{"a":1.5}', "non-integer"),
+        (b'{"a":NaN}', "non-integer"),
+        (b'{"a":1e3}', "non-integer"),
+        (b"[1]", "not a JSON object"),
+    ],
+)
+def test_canonical_reader_requires_exact_stored_bytes(
+    data: bytes, message: str
+) -> None:
+    """Verification re-serializes the payload and needs identical bytes."""
+    with pytest.raises(EvidenceError, match=message):
+        parse_canonical(data)
+
+
+def test_merge_trace_copies_stay_byte_identical() -> None:
+    """Root, generated, and CLI copies share one contract implementation."""
+    root = (ROOT / "scripts/merge_trace.py").read_bytes()
+    assert (
+        root == (ROOT / "template/.csarc/scripts/merge_trace.py").read_bytes()
+    )
+    assert root == (ROOT / "src/csarc_cli/merge_trace.py").read_bytes()
+    assert (ROOT / "policies/merge-trailers.json").read_bytes() == (
+        ROOT / "template/.csarc/policies/merge-trailers.json"
+    ).read_bytes()
+    # Hosted workflows may run these scripts before Python 3.14 is set up.
+    for script in (
+        "merge_trace.py",
+        "pr_lifecycle.py",
+        "local_verification.py",
+    ):
+        __import__("ast").parse(
+            (ROOT / "scripts" / script).read_text(encoding="utf-8"),
+            feature_version=(3, 12),
+        )

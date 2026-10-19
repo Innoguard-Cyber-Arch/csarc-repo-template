@@ -9,12 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_security_smoke_selects_existing_offline_owners() -> None:
     """Keep the smoke as one thin selector, not a provider-specific suite."""
     root_path = ROOT / "scripts/security-smoke"
-    generated_path = ROOT / "template/.csarc/scripts/security-smoke"
     source = root_path.read_text(encoding="utf-8")
 
-    assert source == generated_path.read_text(encoding="utf-8")
+    # Generated projects never ship the selector or its owner self-tests;
+    # template CI runs them against representative renders (#1077).
+    assert not (ROOT / "template/.csarc/scripts/security-smoke").exists()
     assert root_path.stat().st_mode & S_IXUSR
-    assert generated_path.stat().st_mode & S_IXUSR
     for owner in (
         "test-pr-policy",
         "test-apply-repository-settings",
@@ -55,14 +55,16 @@ def test_policy_validators_use_generated_csarc_entrypoints() -> None:
 
 def test_capability_checks_support_personal_codeowners_in_both_layers() -> None:
     """Keep root and generated CODEOWNER probes aligned for personal repos."""
-    for relative_path in (
-        "scripts/check-repo-capabilities",
-        "template/.csarc/scripts/check-repo-capabilities",
-    ):
-        source = (ROOT / relative_path).read_text(encoding="utf-8")
-        assert "collaborators/$codeowner_user/permission" in source
-        assert "CODEOWNERS is not configured" in source
-        assert "write|push|maintain|admin" in source
+    # The capability diagnostic is a template-repository tool (#1129 AC5).
+    assert not (
+        ROOT / "template/.csarc/scripts/check-repo-capabilities"
+    ).exists()
+    source = (ROOT / "scripts/check-repo-capabilities").read_text(
+        encoding="utf-8"
+    )
+    assert "collaborators/$codeowner_user/permission" in source
+    assert "CODEOWNERS is not configured" in source
+    assert "write|push|maintain|admin" in source
 
     for relative_path in (
         "scripts/apply-repository-settings.sh",

@@ -32,6 +32,22 @@ printf '%s\n' "\$@" >"$call_log"
 EOF
 chmod +x "$stub_bin/gh"
 
+# SPEC-010 (Issue #1079): a valid work Issue body for the pass-through cases.
+body_file="$fixture_root/body.md"
+cat >"$body_file" <<'BODY'
+### 完成條件
+
+- [ ] AC1: Report renders
+
+### 補充
+
+#### 風險與控制
+
+| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1 | correctness | low | Report regresses | Focused test | Regression test | @me-user |
+BODY
+
 run_with_stub() {
   PATH="$stub_bin:$PATH" "$script_path" "$@"
 }
@@ -82,13 +98,13 @@ assert_gh_not_called
 # than reconstructing it from the parsed --title value).
 : >"$call_log"
 title_arg="Add dependency policy checks"
-run_with_stub --title "$title_arg" --body desc --label enhancement \
+run_with_stub --title "$title_arg" --body-file "$body_file" --label enhancement \
   --milestone M8 --assignee @me --repo owner/repo >/dev/null
 read_logged_args
 expected_args=(
   issue create
   --title "$title_arg"
-  --body desc
+  --body-file "$body_file"
   --label enhancement
   --milestone M8
   --assignee @me
@@ -123,14 +139,14 @@ assert_gh_not_called
 # invent -- it passes every argument through untouched and lets the real
 # `gh issue create` handle it.
 : >"$call_log"
-run_with_stub --body "no title given" >/dev/null
+run_with_stub --body-file "$body_file" >/dev/null
 read_logged_args
 no_title_args=("${logged_args[@]}")
 [[ "${#no_title_args[@]}" -eq 4 ]]
 [[ "${no_title_args[0]}" == "issue" ]]
 [[ "${no_title_args[1]}" == "create" ]]
-[[ "${no_title_args[2]}" == "--body" ]]
-[[ "${no_title_args[3]}" == "no title given" ]]
+[[ "${no_title_args[2]}" == "--body-file" ]]
+[[ "${no_title_args[3]}" == "$body_file" ]]
 
 
 # Case 6 (Issue #551): --milestone already given -- even though exactly
@@ -141,14 +157,14 @@ no_title_args=("${logged_args[@]}")
 : >"$call_log"
 milestone_given_out="$(
   OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9: Decision site and adoption experience overhaul"}]' \
-    run_with_stub --title "$title_arg" --body desc --milestone M8 2>&1
+    run_with_stub --title "$title_arg" --body-file "$body_file" --milestone M8 2>&1
 )"
 if grep -Fq 'One open Milestone is currently active' <<<"$milestone_given_out"; then
   echo "gh-issue-create printed a Milestone notice even though --milestone was already given."
   exit 1
 fi
 read_logged_args
-milestone_given_expected=(issue create --title "$title_arg" --body desc --milestone M8)
+milestone_given_expected=(issue create --title "$title_arg" --body-file "$body_file" --milestone M8)
 [[ "${#logged_args[@]}" -eq "${#milestone_given_expected[@]}" ]]
 for idx in "${!milestone_given_expected[@]}"; do
   [[ "${logged_args[$idx]}" == "${milestone_given_expected[$idx]}" ]]
@@ -162,12 +178,12 @@ done
 : >"$call_log"
 one_open_out="$(
   OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9: Decision site and adoption experience overhaul"}]' \
-    run_with_stub --title "$title_arg" --body desc 2>&1
+    run_with_stub --title "$title_arg" --body-file "$body_file" 2>&1
 )"
 grep -Fq 'One open Milestone is currently active: #9 Milestone 9: Decision site and adoption experience overhaul' <<<"$one_open_out"
 grep -Fq 'Not attached automatically (non-interactive)' <<<"$one_open_out"
 read_logged_args
-one_open_expected=(issue create --title "$title_arg" --body desc)
+one_open_expected=(issue create --title "$title_arg" --body-file "$body_file")
 [[ "${#logged_args[@]}" -eq "${#one_open_expected[@]}" ]]
 for idx in "${!one_open_expected[@]}"; do
   [[ "${logged_args[$idx]}" == "${one_open_expected[$idx]}" ]]
@@ -176,7 +192,7 @@ done
 # Case 8 (Issue #551): zero open Milestones -- nothing to suggest, no
 # notice, silent passthrough (the default OPEN_MILESTONES_JSON="[]").
 : >"$call_log"
-zero_open_out="$(run_with_stub --title "$title_arg" --body desc 2>&1)"
+zero_open_out="$(run_with_stub --title "$title_arg" --body-file "$body_file" 2>&1)"
 if grep -Fq 'One open Milestone is currently active' <<<"$zero_open_out"; then
   echo "gh-issue-create printed a Milestone notice with zero open Milestones."
   exit 1
@@ -187,11 +203,35 @@ fi
 : >"$call_log"
 two_open_out="$(
   OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9"},{"number":12,"title":"Research"}]' \
-    run_with_stub --title "$title_arg" --body desc 2>&1
+    run_with_stub --title "$title_arg" --body-file "$body_file" 2>&1
 )"
 if grep -Fq 'One open Milestone is currently active' <<<"$two_open_out"; then
   echo "gh-issue-create printed a Milestone notice with two open Milestones."
   exit 1
 fi
 
-echo "gh-issue-create cases passed: 9"
+# Case 10 (Issue #1079): a body without the risk block never reaches gh;
+# a Milestone tracker title, a promotion label, and stdin bodies work.
+: >"$call_log"
+set +e
+risk_out="$(run_with_stub --title "$title_arg" --body "Missing block" 2>&1)"
+risk_status=$?
+set -e
+[[ "$risk_status" -eq 1 ]]
+grep -Fq 'requirement-trace: RK01' <<<"$risk_out"
+assert_gh_not_called
+: >"$call_log"
+run_with_stub --title "Milestone 9: Tracker title" --body "Tracker" >/dev/null 2>&1
+read_logged_args
+[[ "${logged_args[3]}" == "Milestone 9: Tracker title" ]]
+: >"$call_log"
+run_with_stub --title "$title_arg" --label promotion --body "Promotion" >/dev/null 2>&1
+read_logged_args
+[[ "${logged_args[5]}" == "promotion" ]]
+: >"$call_log"
+run_with_stub --title "$title_arg" --body-file - <"$body_file" >/dev/null 2>&1
+read_logged_args
+[[ "${logged_args[4]}" == "--body-file" && "${logged_args[5]}" != "-" ]]
+grep -Fq '#### 風險與控制' "${logged_args[5]}"
+
+echo "gh-issue-create cases passed: 10"
