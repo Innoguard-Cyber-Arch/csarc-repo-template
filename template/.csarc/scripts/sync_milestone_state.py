@@ -261,12 +261,28 @@ def _pages(raw: str) -> list[dict[str, Any]]:
     return value
 
 
+def _section_match(body: str, heading: str) -> re.Match[str] | None:
+    """Find a tracker section under an H2 or H3 heading (#1160).
+
+    create-milestone writes `##`, the Issue form `###`. H2 wins over a
+    same-named H3; a section ends at the next same-or-higher heading.
+    Group 1 is the heading, group 2 the content.
+    """
+    for level in (2, 3):
+        match = re.search(
+            rf"(?ms)^({'#' * level} {re.escape(heading)}\s*$\n)"
+            rf"(.*?)(?=^#{{1,{level}}} |\Z)",
+            body,
+        )
+        if match is not None:
+            return match
+    return None
+
+
 def _section(body: str, heading: str) -> str | None:
-    """Return one canonical H2 section body."""
-    match = re.search(
-        rf"(?ms)^## {re.escape(heading)}\s*$\n(.*?)(?=^## |\Z)", body
-    )
-    return None if match is None else match.group(1).strip()
+    """Return one tracker section body (see `_section_match`)."""
+    match = _section_match(body, heading)
+    return None if match is None else match.group(2).strip()
 
 
 def _meaningful(text: str | None) -> bool:
@@ -278,21 +294,21 @@ def _meaningful(text: str | None) -> bool:
 
 
 def _replace_section(body: str, heading: str, content: str) -> str:
-    """Replace one H2 section's content, or append it if not present."""
-    pattern = re.compile(
-        rf"(?ms)^(## {re.escape(heading)}\s*$\n)(.*?)(?=^## |\Z)"
-    )
-    block = f"## {heading}\n\n{content.strip()}\n\n"
-    match = pattern.search(body)
+    """Replace one section's content at its own level, or append an H2."""
+    match = _section_match(body, heading)
+    level = "##" if match is None else match.group(1).split(" ", 1)[0]
+    block = f"{level} {heading}\n\n{content.strip()}\n\n"
     if match is not None:
         return body[: match.start()] + block + body[match.end() :]
     return body.rstrip("\n") + "\n\n" + block
 
 
 def _remove_section(body: str, heading: str) -> str:
-    """Return body with one whole H2 section (heading included) removed."""
-    pattern = re.compile(rf"(?ms)^## {re.escape(heading)}\s*$\n.*?(?=^## |\Z)")
-    return pattern.sub("", body, count=1).rstrip("\n") + "\n"
+    """Return body with one whole section (heading included) removed."""
+    match = _section_match(body, heading)
+    if match is not None:
+        body = body[: match.start()] + body[match.end() :]
+    return body.rstrip("\n") + "\n"
 
 
 def _fingerprint(text: str) -> str:
@@ -442,9 +458,7 @@ def append_completion_evidence(body: str, evidence_url: str) -> str:
     placeholder HTML comment) instead of overwriting it, so a promotion
     bridge merge never clobbers evidence recorded by an earlier checkpoint.
     """
-    match = re.search(
-        r"(?ms)^(## Completion evidence\s*$\n)(.*?)(?=^## |\Z)", body
-    )
+    match = _section_match(body, "Completion evidence")
     if match is None:
         raise RuntimeError(
             "The lifecycle Issue body is missing a Completion evidence section"
