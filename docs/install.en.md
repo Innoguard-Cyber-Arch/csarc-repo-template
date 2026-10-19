@@ -175,7 +175,7 @@ An existing repo (`project_mode=existing`) owns its README and LICENSE (handbook
 
 ### Messages printed by apply
 
-- `CODEOWNERS validation failed: ... is missing, invisible, or lacks repository access`: the CODEOWNERS team does not exist, is not visible, or lacks repository access. The update is complete; the owner grants the team access or later updates it with `--data code_owner=...`.
+- `CODEOWNERS validation failed: ... is missing, invisible, or lacks repository access`: the CODEOWNERS team does not exist, is not visible, or lacks repository access. The update is complete; the owner grants the team access or later updates it with `--data code_owner=...`. The `CODEOWNER verification` line under the update report's `## Product state` reads `not run by this operation`: update does not check the owner live, so the line cites the Settings `code_owner` value and this repository settings `plan` performs the check; only adopt verifies live and records a state.
 - Repository settings: update only runs `.csarc/scripts/apply-repository-settings.sh plan` and never applies settings. It prints `Repository settings plan needs a GitHub origin remote` only when origin is not a GitHub repository; any other failure prints `Repository settings plan failed (exit N): <reason>`, for example a CODEOWNERS validation failure. After the push, the owner runs `plan`, reviews it, then runs `apply`.
 
 ### Parallel runs

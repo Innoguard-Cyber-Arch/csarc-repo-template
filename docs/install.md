@@ -177,7 +177,7 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 ### 套用時的附帶訊息
 
-- `CODEOWNERS validation failed: ... is missing, invisible, or lacks repository access`：CODEOWNERS 指定的 team 不存在、看不到或沒有 repository 權限。update 已完成；請擁有者補 team 權限，或之後以 `--data code_owner=...` 更新。
+- `CODEOWNERS validation failed: ... is missing, invisible, or lacks repository access`：CODEOWNERS 指定的 team 不存在、看不到或沒有 repository 權限。update 已完成；請擁有者補 team 權限，或之後以 `--data code_owner=...` 更新。update 報告 `## Product state` 的 `CODEOWNER verification` 列寫 `not run by this operation`：update 不即時驗證 owner，那一列寫出 Settings 的 `code_owner` 值，驗證由這個 repository settings `plan` 執行；只有 adopt 會即時驗證並寫出狀態。
 - repository settings：update 只執行 `.csarc/scripts/apply-repository-settings.sh plan`，從不套用設定。只有 origin 不是 GitHub repository 時才印 `Repository settings plan needs a GitHub origin remote`；其他失敗印 `Repository settings plan failed (exit N): <原因>`，例如 CODEOWNERS 驗證失敗。push 後由擁有者執行 `plan`，審閱後再 `apply`。
 
 ### 平行執行
