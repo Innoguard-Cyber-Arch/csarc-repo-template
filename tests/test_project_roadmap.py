@@ -174,6 +174,7 @@ class FakeGitHub:
                         "target": {"date": item["target"]}
                         if item["target"]
                         else None,
+                        "status": item.get("status"),
                     }
                 )
             nodes.append({"id": "OTHER", "project": {"id": "PVT_other"}})
@@ -687,3 +688,95 @@ def test_cli_routes_sync_project(
     assert seen[0]["issue"] is None
     with pytest.raises(SystemExit):
         cli.main(["issue", "sync-project"])
+
+
+# ------------------------------------------------- #1179 completion target
+
+
+def close(fake: FakeGitHub, number: int, closed_at: str) -> None:
+    """Close one Issue fixture at ``closed_at``."""
+    fake.issues[number].update(state="closed", closed_at=closed_at)
+
+
+def test_completion_date_rule_prefers_done_over_closed_at() -> None:
+    """#1179 AC1: Done date, else closed date, else the open-Issue rule."""
+    issue = project_roadmap.IssueFacts("o/r", 1, "I_1", "2026-10-01", "B", "")
+    closed = project_roadmap.IssueFacts(
+        "o/r", 1, "I_1", "2026-10-01", "B", "2026-10-31", "2026-10-18"
+    )
+    target_for = project_roadmap.target_for
+    assert target_for(closed, "") == "2026-10-18"
+    assert target_for(closed, "2026-12-01") == "2026-10-18"
+    assert target_for(closed, "", "2026-10-19") == "2026-10-19"
+    assert target_for(issue, "", "2026-10-19") == "2026-10-19"
+    assert target_for(issue, "2026-12-01") == "2026-12-01"
+    reopened = {
+        "number": 1,
+        "node_id": "I_1",
+        "created_at": "2026-10-01T00:00:00Z",
+        "state": "open",
+        "closed_at": "2026-10-18T03:00:00Z",
+    }
+    assert project_roadmap.issue_facts(reopened, "o/r").closed == ""
+    reopened["state"] = "closed"
+    reopened["closed_at"] = "2026-10-18T23:30:00-02:00"
+    assert project_roadmap.issue_facts(reopened, "o/r").closed == "2026-10-19"
+
+
+def test_open_issue_still_targets_the_due_date(tmp_path: Path) -> None:
+    """#1179 AC3: an open Issue keeps the Milestone due date."""
+    fake = FakeGitHub()
+    fake.add_issue(41, "2026-10-15T10:00:00Z", 3)
+    fake.issues[41].update(state="open", closed_at=None)
+    assert sync(fake, issue=41, tmp=tmp_path)[0] == 0
+    assert fake.items["I_41"]["target"] == "2026-10-31"
+
+
+def test_closed_issue_targets_its_completion_date(tmp_path: Path) -> None:
+    """#1179 AC2/AC3: an empty target gets the UTC close date directly."""
+    fake = FakeGitHub()
+    fake.add_issue(41, "2026-10-15T10:00:00Z", 3)
+    close(fake, 41, "2026-10-18T09:00:00Z")
+    status, output = sync(fake, issue=41, tmp=tmp_path)
+    assert status == 0, output
+    assert fake.items["I_41"]["target"] == "2026-10-18"
+    assert "Project target 2026-10-18 (set)" in output
+    writes = (fake.add_calls, fake.set_calls)
+    status, output = sync(fake, issue=41, tmp=tmp_path)
+    assert status == 0 and "Project target 2026-10-18 (unchanged)" in output
+    assert (fake.add_calls, fake.set_calls) == writes
+
+
+def test_completion_overwrite_needs_confirmation(tmp_path: Path) -> None:
+    """#1179 AC2/AC3/R1: due -> completion is a diff, never silent."""
+    fake = FakeGitHub()
+    fake.add_issue(41, "2026-10-15T10:00:00Z", 3)
+    assert sync(fake, issue=41, tmp=tmp_path)[0] == 0
+    close(fake, 41, "2026-10-18T09:00:00Z")
+    status, output = sync(fake, issue=41, tmp=tmp_path)
+    assert status == 1 and "nothing was written" in output
+    assert "Project target 2026-10-31 -> 2026-10-18" in output
+    status, _output = sync(fake, issue=41, tmp=tmp_path, ask=lambda _p: "n")
+    assert status == 1 and fake.items["I_41"]["target"] == "2026-10-31"
+    # Done on a later day (#1058: closed 10-18, Done 10-19) wins.
+    fake.items["I_41"]["status"] = {
+        "name": "Done",
+        "updatedAt": "2026-10-19T02:00:00Z",
+    }
+    status, output = sync(fake, issue=41, tmp=tmp_path, confirm=True)
+    assert status == 0 and fake.items["I_41"]["target"] == "2026-10-19"
+    assert sync(fake, issue=41, tmp=tmp_path)[0] == 0
+
+
+def test_milestone_sync_dates_only_complete_issues_by_completion(
+    tmp_path: Path,
+) -> None:
+    """#1179 AC2: --milestone mixes open (due) and closed (completion)."""
+    fake = FakeGitHub()
+    fake.add_issue(41, "2026-10-15T10:00:00Z", 3)
+    fake.add_issue(42, "2026-10-16T10:00:00Z", 3)
+    close(fake, 42, "2026-10-20T00:00:00Z")
+    status, output = sync(fake, milestone=3, tmp=tmp_path)
+    assert status == 0, output
+    assert fake.items["I_41"]["target"] == "2026-10-31"
+    assert fake.items["I_42"]["target"] == "2026-10-20"
