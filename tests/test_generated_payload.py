@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+import warnings
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import cast
@@ -124,7 +125,6 @@ ENTRY_FILES = (
 )
 RELEASE_ONLY = {
     "converge-release-tag",
-    "install-syft",
     "publish-release",
     "release_bundle.py",
     "release_candidate.py",
@@ -553,10 +553,16 @@ def measured() -> dict[str, dict[str, int]]:
 
 
 def test_payload_never_grows_past_its_recorded_ceiling() -> None:
-    """Targets: measures only shrink; the ceiling never relaxes a Target."""
-    for name, values in measured().items():
+    """Targets: measures only shrink; the ceiling never relaxes a Target.
+
+    Low headroom (#1177) is reported as a warning, never as a failure.
+    """
+    values_by_fixture = measured()
+    for name, values in values_by_fixture.items():
         for measure, ceiling in generated_payload.CEILINGS[name].items():
             assert values[measure] <= ceiling, (name, measure, values[measure])
+    for warning in generated_payload.headroom_warnings(values_by_fixture):
+        warnings.warn(warning, UserWarning, stacklevel=1)
 
 
 def test_ceilings_equal_targets() -> None:

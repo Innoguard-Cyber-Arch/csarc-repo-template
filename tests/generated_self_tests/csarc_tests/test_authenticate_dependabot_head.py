@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / ".csarc" / "scripts"))
 
 dependabot_auth = importlib.import_module("authenticate_dependabot_head")
+# Issue #1177: the merge-candidate command line renders only in hosted mode.
+dependabot_hosted = importlib.import_module("authenticate_dependabot_hosted")
 
 REPO = "Innoguard-Cyber-Arch/csarc-repo-template"
 BASE_SHA = "a" * 40
@@ -534,7 +536,7 @@ def _associated(number: object = 7, **overrides: object) -> dict:
 
 
 def _resolve(pulls: object, **event: str) -> tuple[str, int | None, str]:
-    return dependabot_auth.resolve_merge_candidate(
+    return dependabot_hosted.resolve_merge_candidate(
         pulls,
         event.get("base_repo", REPO),
         event.get("head_sha", HEAD_SHA),
@@ -606,7 +608,7 @@ def test_merge_candidate_event_outside_identity_is_a_no_op() -> None:
 
 def test_merge_candidate_many_matches_fail_closed() -> None:
     """Never pick one of several exact open matches."""
-    with pytest.raises(dependabot_auth.MergeCandidateError, match="#7, #8"):
+    with pytest.raises(dependabot_hosted.MergeCandidateError, match="#7, #8"):
         _resolve([[_associated(7)], [_associated(8)]])
 
 
@@ -614,24 +616,28 @@ def test_merge_candidate_incomplete_open_identity_fails_closed() -> None:
     """An open record that cannot be ruled out must not be skipped."""
     incomplete = _associated()
     del incomplete["user"]
-    with pytest.raises(dependabot_auth.MergeCandidateError, match="incomplete"):
+    with pytest.raises(
+        dependabot_hosted.MergeCandidateError, match="incomplete"
+    ):
         _resolve([[incomplete]])
-    with pytest.raises(dependabot_auth.MergeCandidateError, match="incomplete"):
+    with pytest.raises(
+        dependabot_hosted.MergeCandidateError, match="incomplete"
+    ):
         _resolve([[_associated(number="7")]])
-    with pytest.raises(dependabot_auth.MergeCandidateError, match="state"):
+    with pytest.raises(dependabot_hosted.MergeCandidateError, match="state"):
         _resolve([[{"number": 7}]])
-    with pytest.raises(dependabot_auth.MergeCandidateError, match="SHA"):
+    with pytest.raises(dependabot_hosted.MergeCandidateError, match="SHA"):
         _resolve([[_associated()]], head_sha="not-a-sha")
 
 
 def test_merge_candidate_contradictory_state_fails_closed() -> None:
     """Open records that also claim closure, or diverge, fail closed."""
     merged_open = _associated(merged_at="2026-10-01T00:00:00Z")
-    with pytest.raises(dependabot_auth.MergeCandidateError, match="closed"):
+    with pytest.raises(dependabot_hosted.MergeCandidateError, match="closed"):
         _resolve([[merged_open]])
     renamed = _associated(title="other snapshot")
     with pytest.raises(
-        dependabot_auth.MergeCandidateError, match="conflicting"
+        dependabot_hosted.MergeCandidateError, match="conflicting"
     ):
         _resolve([[_associated()], [renamed]])
 
@@ -644,9 +650,13 @@ def test_merge_candidate_reads_every_paginated_page() -> None:
     assert _resolve([filler, [_associated()]])[:2] == ("merge", 7)
     assert _resolve([[_associated()], [_associated()]])[:2] == ("merge", 7)
     assert _resolve([_associated()])[:2] == ("merge", 7)
-    with pytest.raises(dependabot_auth.MergeCandidateError, match="malformed"):
+    with pytest.raises(
+        dependabot_hosted.MergeCandidateError, match="malformed"
+    ):
         _resolve([[_associated()], _associated()])
-    with pytest.raises(dependabot_auth.MergeCandidateError, match="not a list"):
+    with pytest.raises(
+        dependabot_hosted.MergeCandidateError, match="not a list"
+    ):
         _resolve({"pulls": []})
 
 

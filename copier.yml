@@ -88,6 +88,12 @@ _exclude:
   # run from hosted workflows and the hosted PR policy.
   - "{% if verification_mode == 'hosted' %}__keep_trusted_verification_check__{% else %}.csarc/scripts/check-trusted-verification{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_verification_evidence__{% else %}.csarc/scripts/verification_evidence.py{% endif %}"
+  # Issue #1177: hosted-only code split from pr_lifecycle.py,
+  # sync_milestone_state.py, and authenticate_dependabot_head.py; local
+  # verification never calls it.
+  - "{% if verification_mode == 'hosted' %}__keep_pr_lifecycle_hosted__{% else %}.csarc/scripts/pr_lifecycle_hosted.py{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_sync_milestone_state_hosted__{% else %}.csarc/scripts/sync_milestone_state_hosted.py{% endif %}"
+  - "{% if verification_mode == 'hosted' %}__keep_authenticate_dependabot_hosted__{% else %}.csarc/scripts/authenticate_dependabot_hosted.py{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_open_milestone_detector__{% else %}.csarc/scripts/detect-open-milestone{% endif %}"
   - "{% if verification_mode == 'hosted' and 'issues' in lifecycle %}__keep_issue_policy_script__{% else %}.csarc/scripts/validate-issue-policy{% endif %}"
   - "{% if verification_mode == 'hosted' or documentation_mode != 'off' %}__keep_spec_script__{% else %}.csarc/scripts/spec_to_issue.py{% endif %}"
@@ -98,7 +104,6 @@ _exclude:
   - "{% if release_ownership == 'csarc-owned' %}__keep_release_writer__{% else %}.csarc/scripts/release_writer.py{% endif %}"
   - "{% if release_ownership == 'csarc-owned' %}__keep_release_bundle__{% else %}.csarc/scripts/release_bundle.py{% endif %}"
   - "{% if release_ownership == 'csarc-owned' %}__keep_converge_release_tag__{% else %}.csarc/scripts/converge-release-tag{% endif %}"
-  - "{% if release_ownership == 'csarc-owned' %}__keep_install_syft__{% else %}.csarc/scripts/install-syft{% endif %}"
   - "{% if release_ownership == 'csarc-owned' %}__keep_verify_release_candidate__{% else %}.csarc/scripts/verify-release-candidate{% endif %}"
   - "{% if release_ownership == 'csarc-owned' %}__keep_verify_release_consumption__{% else %}.csarc/scripts/verify_release_consumption.py{% endif %}"
   # Issue #1129: release_policy.py keeps only the capability preflight every
