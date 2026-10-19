@@ -5740,6 +5740,49 @@ def test_squash_trailers_preserve_breaking_change_footers(
     assert notes(traced_body) == notes(plain_body)
 
 
+def test_squash_keeps_multi_line_breaking_footers_whole(
+    tmp_path: Path,
+) -> None:
+    """Issue #1104: the squash body carries the full migration text."""
+    release_policy = runpy.run_path(str(SCRIPTS / "release_policy.py"))
+    main_sha = _release_repository(tmp_path)
+    (tmp_path / "api").write_text("v2\n", encoding="utf-8")
+    _release_git(tmp_path, "add", ".")
+    tree = _release_git(tmp_path, "write-tree")
+    commit_messages = [
+        "fix(cli): read the new key\n\nBREAKING CHANGE: run csarc update\n"
+        "  with CLI 0.5.0 or later.\nCo-Authored-By: A <a@example.invalid>",
+        "docs: explain the key",
+        "fix: repeat\n\nBREAKING CHANGE: run csarc update with CLI 0.5.0 "
+        "or later.",
+    ]
+    footers = merge_trace.breaking_footers(commit_messages)
+    assert footers == [
+        "BREAKING CHANGE: run csarc update with CLI 0.5.0 or later."
+    ]
+    assert merge_trace.breaking_footers(["fix: plain\n\nRefs: #1"]) == []
+    trailers = [("CSARC-Trust", "github-hosted"), ("CSARC-Route", "issue")]
+    traced = _release_git(
+        tmp_path,
+        "commit-tree",
+        tree,
+        "-p",
+        main_sha,
+        "-m",
+        "fix(cli): read the new key (#42)",
+        "-m",
+        merge_trace.squash_message(footers, trailers),
+    )
+    body = _release_git(tmp_path, "log", "-1", "--format=%b", traced)
+    assert release_policy["_breaking_notes"](body) == [
+        "run csarc update with CLI 0.5.0 or later."
+    ]
+    assert release_policy["release_plan"](tmp_path, traced) == (
+        "v1.0.0",
+        "1.0.0",
+    )
+
+
 class TracedMergeSource:
     """Serve one merged Dependabot PR to the release source resolver."""
 
