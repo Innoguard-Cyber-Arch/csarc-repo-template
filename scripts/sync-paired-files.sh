@@ -12,7 +12,6 @@ set -euo pipefail
 paired_files=(
   "SECURITY.md|template/SECURITY.md"
   "docs/documentation-policy.md|template/.csarc/docs/documentation-policy.md"
-  "scripts/authenticate_dependabot_head.py|template/.csarc/scripts/authenticate_dependabot_head.py"
   "scripts/check-trusted-verification|template/.csarc/scripts/check-trusted-verification"
   "scripts/check_license_metadata.py|template/.csarc/scripts/check_license_metadata.py"
   "scripts/csarc_config.py|template/.csarc/scripts/csarc_config.py"

@@ -25,16 +25,63 @@ GENERATED = ROOT / "template/.csarc/scripts"
 
 # Root module -> the generated files that together hold its kept code.
 SPLITS: dict[str, tuple[str, ...]] = {
+    "authenticate_dependabot_head.py": (
+        "authenticate_dependabot_head.py",
+        "authenticate_dependabot_hosted.py",
+    ),
     "delivery_sync.py": ("delivery_sync.py",),
+    "pr_lifecycle.py": ("pr_lifecycle.py", "pr_lifecycle_hosted.py"),
     "promotion_gate.py": ("promotion_gate.py",),
     "release_policy.py": ("release_policy.py", "release_candidate.py"),
-    "sync_milestone_state.py": ("sync_milestone_state.py",),
+    "sync_milestone_state.py": (
+        "sync_milestone_state.py",
+        "sync_milestone_state_hosted.py",
+    ),
     "verification_cost.py": ("verification_cost.py",),
 }
+# Issue #1177: names the first generated file only forwards to the hosted
+# file that holds the root definition. Local renders omit that file.
+FORWARDED: dict[str, frozenset[str]] = {
+    "authenticate_dependabot_head.py": frozenset({"main"}),
+    "pr_lifecycle.py": frozenset(
+        {
+            "declared_required_contexts",
+            "require_successful_checks",
+            "require_trusted_dependabot_head",
+        }
+    ),
+    "sync_milestone_state.py": frozenset(
+        {
+            "check_issue_approval",
+            "check_merge_group",
+            "check_pr",
+            "check_scope",
+            "reconcile",
+            "refresh_issue_pr_checks",
+        }
+    ),
+}
+HOSTED_FORWARDER = "loads the hosted-only sibling local renders omit (#1177)"
 # Definitions that intentionally differ from root, or exist only in the
 # generated copy; each value records why.
 GENERATED_PATHS = "generated `.csarc/` layout paths"
+NO_TEMPLATE_ISSUE = "messages name no template-repository Issue"
 ADAPTED: dict[str, dict[str, str]] = {
+    "authenticate_dependabot_head.py": {},
+    "pr_lifecycle.py": {
+        "hosted_checks": HOSTED_FORWARDER,
+        "_hosted_only": HOSTED_FORWARDER,
+        "require_trusted_verification": (
+            "drops the template-repository toolchain check; no generated "
+            "project renders verify-template.sh"
+        ),
+        "require_head_contains_base": NO_TEMPLATE_ISSUE,
+        "require_routine_quota_fallback": NO_TEMPLATE_ISSUE,
+        "resolve_release_level": GENERATED_PATHS,
+        "revalidate_release_candidate": GENERATED_PATHS,
+        "review_settings": GENERATED_PATHS,
+        "scan_writers": GENERATED_PATHS,
+    },
     "delivery_sync.py": {
         "main": "drops the `reconcile` subcommand no generated caller runs",
     },
@@ -61,6 +108,8 @@ ADAPTED: dict[str, dict[str, str]] = {
     "sync_milestone_state.py": {
         "main": "drops record-promotion-evidence (no generated caller)",
         "_dispatch": "drops record-promotion-evidence (no generated caller)",
+        "hosted_gates": HOSTED_FORWARDER,
+        "_hosted_only": HOSTED_FORWARDER,
     },
     "verification_cost.py": {
         "main": "drops the `report` command no generated caller runs",
@@ -113,10 +162,16 @@ def is_alias(node: ast.stmt, name: str) -> bool:
     )
 
 
-def definitions(*paths: Path) -> dict[str, ast.stmt]:
-    """Return the named top-level definitions of one or more modules."""
+def definitions(
+    *paths: Path, forwarded: frozenset[str] = frozenset()
+) -> dict[str, ast.stmt]:
+    """Return the named top-level definitions of one or more modules.
+
+    A `forwarded` name defined in the first module is a forwarder to the
+    real definition in a later one and is skipped.
+    """
     found: dict[str, ast.stmt] = {}
-    for path in paths:
+    for index, path in enumerate(paths):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in tree.body:
             names: list[str] = []
@@ -133,7 +188,7 @@ def definitions(*paths: Path) -> dict[str, ast.stmt]:
             ):
                 names = [node.target.id]
             for name in names:
-                if is_alias(node, name):
+                if is_alias(node, name) or (index == 0 and name in forwarded):
                     continue
                 assert name not in found, f"{name} defined twice"
                 found[name] = node
@@ -152,7 +207,12 @@ def test_every_pruned_module_declares_its_adapters() -> None:
 def test_generated_copy_only_removes_root_code(module: str) -> None:
     """Kept definitions match root unless they are declared adapters."""
     root = definitions(ROOT / "scripts" / module)
-    generated = definitions(*(GENERATED / name for name in SPLITS[module]))
+    forwarded = FORWARDED.get(module, frozenset())
+    generated = definitions(
+        *(GENERATED / name for name in SPLITS[module]), forwarded=forwarded
+    )
+    # Every forwarded name keeps its real definition in a hosted file.
+    assert forwarded <= set(generated), "forwarder without a definition"
     adapted = ADAPTED[module]
     assert set(adapted) <= set(generated), "stale adapter declaration"
     assert set(generated) - set(root) <= set(adapted), "undeclared addition"
@@ -172,8 +232,14 @@ def test_generated_copy_only_removes_root_code(module: str) -> None:
 
 
 def test_generated_copies_shrink() -> None:
-    """Pruning removed code; no generated split outgrows its root module."""
+    """Pruning removed code; no generated split outgrows its root module.
+
+    A hosted split (#1177) moves code without removing it, so only the half
+    every render receives must shrink.
+    """
     for module, files in SPLITS.items():
+        if module in FORWARDED:
+            files = files[:1]
         root_lines = len(
             (ROOT / "scripts" / module).read_text(encoding="utf-8").splitlines()
         )

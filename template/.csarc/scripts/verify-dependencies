@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 osv_scanner="${CSARC_OSV_SCANNER:-}"
 if [[ -z "$osv_scanner" ]]; then
-  osv_scanner="$("$repo_root/.csarc/scripts/install-osv-scanner")"
+  osv_scanner="$("$repo_root/.csarc/scripts/install-tool" osv-scanner)"
 fi
 if [[ ! -x "$osv_scanner" ]]; then
   echo "OSV-Scanner is not executable: $osv_scanner" >&2
