@@ -299,8 +299,11 @@ def main() -> None:
     )
     parser.add_argument("--tag")
     parser.add_argument("--output", type=Path, required=True)
+    # Issue #1106: a trusted copy staged outside the repository names the
+    # candidate tree it packages instead of its own location.
+    parser.add_argument("--root", type=Path)
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[1]
+    root = (args.root or Path(__file__).resolve().parents[1]).resolve()
     try:
         if args.action == "candidate":
             candidate(root, args.output.resolve())
