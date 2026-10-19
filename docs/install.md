@@ -150,7 +150,7 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 選 `product-owned` 後，若 `--check` 列出 blocking 的 `release-writer`，表示保留的 writer 用到這次要搬進 `.csarc/` 的檔案（訊息逐項寫出 `原路徑 -> 新路徑`），`--finalize-plan` 會拒絕。這時只有兩條路：改選 `csarc-owned`，或先以產品準備 commit 讓 writer 不再使用這些路徑，再重新 `--check`；後者會產生產品 diff。agent 依上面的判斷方式在 PR 寫出選擇、理由與 `release-writer` 訊息，合併前由擁有者確認。`verification-only`（CSARC 只驗證、不管理發布）只在擁有者明確要求時使用。
 
-**`project_run_command`**：產品最短的啟動或呼叫指令（`package_name` 規則相同）。CLI 能從 native manifest（`pyproject.toml`、`package.json`、`Cargo.toml`、`go.mod`）唯一推導時不保存這個值；update 使用的值記在 `.csarc/provenance.json` 的 render context，`.csarc/config.yml` 不會列出它。推導結果與記錄值不同、或無法唯一推導時，報告列出 `setting-decision`，記錄值繼續保留：
+**`project_run_command`**：產品最短的啟動或呼叫指令（`package_name` 規則相同）。CLI 能從 native manifest（`pyproject.toml`、`package.json`、`Cargo.toml`、`go.mod`）唯一推導時不保存這個值；update 使用的值記在 `.csarc/provenance.json` 的 render context，`.csarc/config.yml` 不會列出它。推導結果與記錄值不同、或無法唯一推導時，報告列出 `setting-decision`，記錄值繼續保留。沒有 native manifest（例如 container-first repository）時無法推導，CSARC 驗證器 `./.csarc/scripts/verify` 不會被當成產品指令；在明確決定前，生成的 README「快速開始」只說明尚未記錄產品指令：
 
 - 不傳 `--data`：沿用記錄值，產品行為不變。
 - 要改用其他指令：以 `--data project_run_command=<command>` 明確決定。這個值寫進 `.csarc/config.yml`，之後的 update 一律優先使用它，不再依 manifest 推導。
@@ -164,6 +164,14 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 agent 不能代為接受：只有擁有者在這次對話或 PR 明確確認後才帶 `accept`，其他情況帶 `pending`。
 
+### 既有 repo 的 README 與 LICENSE
+
+既有 repo（`project_mode=existing`）的 README 與 LICENSE 屬於產品（手冊 5.1、附錄 B.9）。update 不新增 `README.md`、`README.en.md`、`README.zh-tw.md` 或 `LICENSE`，也不改寫已有的這些檔案。
+
+- 沒有 `LICENSE`：報告 Settings 的 `project_license` 為 `custom`、`copyright_holder` 為空，表示授權由產品管理，不會由專案名推導著作權人。verify 依 provenance 記錄的 `custom` 接受沒有 `LICENSE`。
+- 已有 `LICENSE`：原檔保留，不論內容是不是 CSARC 的 starter。
+- 要由 CSARC 加入 starter `LICENSE`：擁有者在 `--check` 與 `--finalize-plan` 都帶 `--data project_license=<proprietary|MIT|Apache-2.0>` 與 `--data copyright_holder=<法定著作權人>`；只帶授權、沒帶著作權人時，update 在寫入前停止。也可以由產品 commit 自行加入 `LICENSE`。
+
 ### 保留的舊檔與過時連結
 
 - 仍被使用的舊檔：新版本不再產生的檔案若仍被保留的檔案以完整路徑引用，或是工具會自動讀取的設定（`zizmor.yml`、`.gitleaks.toml`、`.pre-commit-config.yaml`），計畫改列 `preserve`／`product-owned`，不會刪除；之後由產品自行維護。搬到 `.csarc/scripts/` 的 script 若仍被產品以舊路徑呼叫，舊路徑留下轉呼叫 wrapper（`overwrite`／`compatibility-shim`）。產品自有的 Release writer（`release_ownership=product-owned`）若仍使用本次要搬進 `.csarc/` 的檔案（例如 release-please 的 config、manifest 與它隱含的 `version.txt`），計畫列出 blocking 的 `release-writer`，`--finalize-plan` 拒絕寫入；改用 `--data release_ownership=csarc-owned`，或先以產品 commit 讓 writer 不再使用這些路徑，再重新 `--check`。怎麼選見「設定決定」。
@@ -174,7 +182,7 @@ agent 不能代為接受：只有擁有者在這次對話或 PR 明確確認後�
 
 ### 套用時的附帶訊息
 
-- `CODEOWNERS validation failed: ... is missing, invisible, or lacks repository access`：CODEOWNERS 指定的 team 不存在、看不到或沒有 repository 權限。update 已完成；請擁有者補 team 權限，或之後以 `--data code_owner=...` 更新。
+- `CODEOWNERS validation failed: ... is missing, invisible, or lacks repository access`：CODEOWNERS 指定的 team 不存在、看不到或沒有 repository 權限。update 已完成；請擁有者補 team 權限，或之後以 `--data code_owner=...` 更新。update 報告 `## Product state` 的 `CODEOWNER verification` 列寫 `not run by this operation`：update 不即時驗證 owner，那一列寫出 Settings 的 `code_owner` 值，驗證由這個 repository settings `plan` 執行；只有 adopt 會即時驗證並寫出狀態。
 - repository settings：update 只執行 `.csarc/scripts/apply-repository-settings.sh plan`，從不套用設定。只有 origin 不是 GitHub repository 時才印 `Repository settings plan needs a GitHub origin remote`；其他失敗印 `Repository settings plan failed (exit N): <原因>`，例如 CODEOWNERS 驗證失敗。push 後由擁有者執行 `plan`，審閱後再 `apply`。
 
 ### 平行執行

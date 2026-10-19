@@ -559,6 +559,43 @@ def test_update_statuses_and_setting_classes(tmp_path: Path) -> None:
     assert "True" not in markdown
 
 
+def test_product_state_code_owner_matches_settings(tmp_path: Path) -> None:
+    """Issue #1167 AC1/R1: the CODEOWNER line never contradicts Settings."""
+    adopt = adopt_report(tmp_path)
+    adopt_markdown = lifecycle_report.render_markdown(adopt)
+    assert "- CODEOWNER verification: `@owner` (`verified`)\n" in adopt_markdown
+
+    team = "@example-org/maintainers"
+    resolved = answers(tmp_path, code_owner=team)
+    update = update_report(tmp_path, before=resolved, after=resolved)
+    product = cast(dict[str, object], update["product"])
+    assert product["code_owner"] is None
+    settings = cast(list[dict[str, object]], update["settings"])
+    rows = {row["key"]: row for row in settings}
+    assert rows["code_owner"]["after"] == team
+    assert rows["code_owner"]["class"] == "unchanged"
+    markdown = lifecycle_report.render_markdown(update)
+    state = markdown.split("## Product state\n\n", 1)[1]
+    assert (
+        "- CODEOWNER verification: not run by this operation; configured "
+        f"`code_owner` is `{team}` (see Settings)."
+    ) in state
+    assert "CODEOWNER: (none)" not in markdown
+    assert "`(none)` (`(none)`)" not in markdown
+
+    unset = answers(tmp_path, code_owner="")
+    empty = update_report(tmp_path, before=unset, after=unset)
+    assert (
+        "- CODEOWNER verification: not run by this operation; no "
+        "`code_owner` is configured (see Settings)."
+    ) in lifecycle_report.render_markdown(empty)
+    spec = (ROOT / "docs/specs/SPEC-008-lifecycle-report-format.md").read_text(
+        encoding="utf-8"
+    )
+    assert "`- CODEOWNER verification:`" in spec
+    assert "`not run by this operation`" in spec
+
+
 def test_widened_settings_lead_the_impact_analysis(tmp_path: Path) -> None:
     report = update_report(tmp_path)
     rows = report["settings"]  # type: ignore[assignment]

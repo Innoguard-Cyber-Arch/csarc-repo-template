@@ -16,7 +16,9 @@ _exclude:
   - ".DS_Store"
   - ".svn"
   - "{% if documentation_mode == 'off' or project_mode == 'existing' %}/README.md{% else %}__keep_project_readme__{% endif %}"
-  - "{% if documentation_mode == 'off' or '+' not in documentation_languages %}/README.{{ 'en' if documentation_languages.split('+')[0] == 'zh-tw' else 'zh-tw' }}.md{% else %}__keep_project_readme_secondary__{% endif %}"
+  # Issue #1166: an existing repository owns its READMEs (handbook 5.1),
+  # so neither language's README starter is ever added to it.
+  - "{% if documentation_mode == 'off' or '+' not in documentation_languages or project_mode == 'existing' %}/README.{{ 'en' if documentation_languages.split('+')[0] == 'zh-tw' else 'zh-tw' }}.md{% else %}__keep_project_readme_secondary__{% endif %}"
   - "{% if project_mode == 'existing' %}/CHANGELOG.md{% else %}__keep_project_changelog__{% endif %}"
   - "{% if 'template-update' in scheduled_checks %}__keep_template_update_workflow__{% else %}.github/workflows/template-update.yml{% endif %}"
   - "{% if 'template-update' in scheduled_checks %}__keep_template_update_script__{% else %}.csarc/scripts/check-template-update{% endif %}"

@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250), [#714](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/714), [#715](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/715), [#716](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/716), [#831](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/831), [#1062](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1062)
+- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250), [#714](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/714), [#715](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/715), [#716](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/716), [#831](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/831), [#1062](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1062), [#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877), [#1068](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1068), [#1074](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1074), [#1083](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1083), [#1153](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1153), [#1066](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1066), [#1067](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1067)
 - **實作 PR：**[#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231)
 
 ## 問題與限制
@@ -13,7 +13,7 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 
 ## 決定
 
-三個 lifecycle 各保留一條 generic agent prompt：`init`、`adopt`、`update`。CLI 從目前 workspace 判斷位置，解析 canonical immutable Release，依序驗證 repository numeric ID、Release 狀態、tag commit、commit signature與 attestation，並把 tag 與 full SHA 寫入 plan 和 provenance。Release-specific prompt 直接攜帶相同 tag 與 full SHA。
+Prompt 只有兩層（#877）：README 的一份 bootstrap prompt 只負責找出 CLI 接受的最新 stable immutable Release 並讀取它的 `release-prompt.txt`；每個 Release 只發布這一份 status-first prompt，由 `csarc status` 判斷 `init`、`adopt` 或 `update` 等 lifecycle，不再為三個 lifecycle 各保留一條 prompt。CLI 從目前 workspace 判斷位置，解析 canonical immutable Release，依序驗證 repository numeric ID、Release 狀態、tag commit、commit signature與 attestation，並把 tag 與 full SHA 寫入 plan 和 provenance。Release-specific prompt 直接攜帶相同 tag 與 full SHA。
 
 既有導入採兩階段流程：
 
@@ -37,7 +37,7 @@ Pending checkpoint schema v2 另外保存導入前的 Git revision 與 manual-fi
 - `README.md`、`CHANGELOG.md` 由產品擁有，existing mode 不產生同名檔案。
 - `.gitignore` 保留產品順序，再附加模板尚未存在的行。
 - `AGENTS.md` 只替換 `BEGIN/END CSARC MANAGED BLOCK` 之間內容；沒有 marker 時附加管理區塊，marker 不合法時停止。
-- 產品 `.github/workflows/release.yml` 保留；existing mode 不產生第二支 CSARC release workflow，也不從檔名推測其 owner 或功能。
+- 產品 Release writer 依已保存的 `release_ownership` 處理（SPEC-009，#1068、#1083）：`product-owned` 時所選的產品 writer 保留為唯一 Release writer，即使由舊 render 產生也不退役；只有 `csarc-owned` 才 render CSARC `.github/workflows/release.yml`。另有 workflow 寫 Release 時 `release_writer.py preflight` 停止（#1074）；保留的 product-owned writer 若以完整路徑使用本次 layout 搬移的檔案，update 產生 blocking `release-writer` 並拒絕 finalize（#1153，SPEC-008）。CLI 不從檔名推測 workflow 的 owner 或功能。
 - 其他無固定語意的碰撞維持明確人工處理與 resumable checkpoint，不導入通用三方合併引擎。
 
 Release prompt 以 exact commit 從 canonical GitHub repository 執行 CLI；`uvx --python 3.14` 逐次取得隔離 runtime，不要求預先安裝全域 Python，也不修改 shell profile、`PATH` 或全域環境。Ubuntu 與 macOS 跑完整 adoption 測試；Windows 使用 WSL2，native Windows 明確 fail closed。

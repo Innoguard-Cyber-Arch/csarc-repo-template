@@ -235,6 +235,12 @@ def test_kept_legacy_verify_blocks_until_retired_by_decision(
         )
         == 0
     ), capsys.readouterr().err
+    # The terminal summary follows the decision (Issue #1164).
+    summary = capsys.readouterr().out
+    assert "Retained modified files (0):" in summary
+    assert re.search(
+        r"^Remove \(\d+\):\n(?:  .*\n)*  scripts/verify$", summary, re.M
+    )
     final = read_json(reports / "csarc-update-report.json")
     assert final["status"] != "blocked"
     [row] = [r for r in final["files"] if r["path"] == "scripts/verify"]
@@ -322,6 +328,45 @@ def test_only_take_new_retires_a_kept_file() -> None:
             {"scripts/verify": ("keep-current", None)}, ("scripts/verify",)
         )
     assert "take-new" in str(error.value)
+
+
+def test_finalize_summary_lists_a_take_new_retirement_as_removed(
+    tmp_path: Path,
+) -> None:
+    """Issue #1164 AC1/R1: the summary follows the retirement decision."""
+    files = cli.Plan(
+        (),
+        (),
+        ("scripts/old",),
+        (),
+        (),
+        ("docs/README.md",),
+        (),
+        retained=("scripts/test", "scripts/verify"),
+    )
+    plan = cli.ResolvedPlan(
+        mode="update",
+        target=tmp_path,
+        revision=cli.Revision("v1.0.0", "b" * 40, "https://example.invalid"),
+        repository=cli.RepositoryContext(
+            None, None, None, "private", "none", False
+        ),
+        answers={},
+        capabilities={},
+        files=files,
+    )
+    decided = cli.decided_summary_plan(
+        plan,
+        ["scripts/verify=take-new", "docs/README.md=take-new"],
+    )
+    assert decided.files is not None
+    assert decided.files.retained == ("scripts/test",)
+    assert decided.files.remove == ("scripts/old", "scripts/verify")
+    # A conflict decision does not move the manual merge entry.
+    assert decided.files.manual == ("docs/README.md",)
+    # No decision, keep-current, or an invalid value leaves it unchanged.
+    for values in ([], ["scripts/verify=keep-current"], ["bad"]):
+        assert cli.decided_summary_plan(plan, values) is plan
 
 
 # --- AC2: a retired reviewer list asks the owner to confirm ---------------
