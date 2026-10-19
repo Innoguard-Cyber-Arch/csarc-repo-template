@@ -50,6 +50,8 @@ jobs:
           python-version: "3.14"
       - name: Preserve the trusted verification policy
         id: trusted
+        env:
+          GUIDED_RELEASE: {% raw %}${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') }}{% endraw %}
         run: |
           mkdir -p "$RUNNER_TEMP/trusted-verification"
           cp .csarc/scripts/*.py .csarc/scripts/check-trusted-verification \
@@ -65,6 +67,14 @@ jobs:
           else
             echo "::warning title=Trusted verification executor::This pull request base predates the trusted executor; verification runs the candidate entry point and is recorded as candidate-legacy until the base is synchronized."
             echo "executor=candidate-legacy" >> "$GITHUB_OUTPUT"
+          fi
+          # Issue #1106: the guided release candidate check comes from the
+          # same trusted base; its step fails closed without this copy.
+          if [[ "$GUIDED_RELEASE" == "true" && -f .csarc/scripts/verify-release-candidate ]]; then
+            python3 .csarc/scripts/trusted_executor.py prepare \
+              --control-set release \
+              --source "$GITHUB_WORKSPACE" \
+              --destination "$RUNNER_TEMP/trusted-release"
           fi
       - name: Check out the exact candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -364,6 +374,36 @@ jobs:
             '{schema_version: 1, kind: "reuse", tier: $tier, scopes: $scopes, tree: $tree, command: $command, base: $base, base_sha: $base_sha, labels: $labels, release: $release, source_run: $source_run, source_job: $source_job, source_check: $source_check}')"
           evidence="${evidence//'%'/'%25'}"
           printf '::notice title=Trusted verification route evidence::%s\n' "$evidence"
+      - name: Validate the guided release candidate
+        # Issue #1106: only this step holds the read-only token. It runs
+        # before any candidate code in this job and executes the trusted-base
+        # copy staged before checkout; the candidate tree is only data.
+        if: {% raw %}${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
+        env:
+          CSARC_PUBLISH_CANDIDATE_STATUS: "false"
+          CSARC_RELEASE_CANDIDATE_BUNDLE: "false"
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          PR_BASE: {% raw %}${{ github.event.pull_request.base.ref }}{% endraw %}
+          PR_HEAD: {% raw %}${{ github.event.pull_request.head.ref }}{% endraw %}
+          PR_HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha }}{% endraw %}
+          PR_NUMBER: {% raw %}${{ github.event.pull_request.number }}{% endraw %}
+        run: |
+          trusted="$RUNNER_TEMP/trusted-release"
+          if [[ ! -f "$trusted/trusted-executor.json" ]]; then
+            echo "::error title=Guided release candidate::The trusted base did not stage verify-release-candidate; the candidate copy is never used."
+            exit 1
+          fi
+          python3 "$RUNNER_TEMP/trusted-verification/trusted_executor.py" \
+            verify --destination "$trusted"
+          jq -n \
+            --argjson number "$PR_NUMBER" \
+            --arg sha "$PR_HEAD_SHA" \
+            --arg head "$PR_HEAD" \
+            --arg base "$PR_BASE" \
+            '{number: $number, sha: $sha, headBranchName: $head, baseBranchName: $base}' \
+            >"$RUNNER_TEMP/release-pr.json"
+          CSARC_RELEASE_SUBJECT_ROOT="$GITHUB_WORKSPACE" \
+            "$trusted/.csarc/scripts/verify-release-candidate" "$RUNNER_TEMP/release-pr.json"
 {% if has_python %}
       - name: Set up Python {{ python_target }}
         if: {% raw %}${{ steps.sync.outputs.clean != 'true' && ((steps.reuse.outputs.reuse != 'true' && (steps.effective.outputs.suite == 'full' || steps.plan.outputs.run_project == 'true' || steps.plan.outputs.run_osv == 'true')) || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned')) }}{% endraw %}
@@ -432,24 +472,22 @@ jobs:
           else
             "$entry_root/.csarc/scripts/verify-fast"
           fi
-      - name: Validate the guided release candidate
+      - name: Package the guided release candidate
+        # Packaging runs candidate build code, so this step gets no token
+        # and runs only after the trusted checks; the bundler itself is
+        # still the trusted-base copy (Issue #1106).
         if: {% raw %}${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
         env:
-          CSARC_PUBLISH_CANDIDATE_STATUS: "false"
-          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
-          PR_BASE: {% raw %}${{ github.event.pull_request.base.ref }}{% endraw %}
-          PR_HEAD: {% raw %}${{ github.event.pull_request.head.ref }}{% endraw %}
           PR_HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha }}{% endraw %}
-          PR_NUMBER: {% raw %}${{ github.event.pull_request.number }}{% endraw %}
         run: |
-          jq -n \
-            --argjson number "$PR_NUMBER" \
-            --arg sha "$PR_HEAD_SHA" \
-            --arg head "$PR_HEAD" \
-            --arg base "$PR_BASE" \
-            '{number: $number, sha: $sha, headBranchName: $head, baseBranchName: $base}' \
-            >"$RUNNER_TEMP/release-pr.json"
-          ./.csarc/scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
+          trusted="$RUNNER_TEMP/trusted-release"
+          python3 "$RUNNER_TEMP/trusted-verification/trusted_executor.py" \
+            verify --destination "$trusted"
+          worktree="$RUNNER_TEMP/release-candidate-package"
+          git worktree add --detach --force "$worktree" "$PR_HEAD_SHA"
+          python3 "$trusted/.csarc/scripts/release_bundle.py" candidate \
+            --root "$worktree" \
+            --output "$RUNNER_TEMP/release-candidate-assets"
       - name: Candidate gate self-test (non-authoritative)
         # Runs after the required result is decided. The trusted helper
         # replays the trusted router arguments through the candidate's own

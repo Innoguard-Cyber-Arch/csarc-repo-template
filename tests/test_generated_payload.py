@@ -99,6 +99,8 @@ TEMPLATE_REPOSITORY_ONLY = (
 # runtime, so it never executes when the script is not rendered.
 RUNTIME_GATED_REFERENCES = {
     (".github/workflows/ci.yml", "verify-release-candidate"),
+    # Issue #1106: the tokenless packaging step shares the same gate.
+    (".github/workflows/ci.yml", "release_bundle.py"),
 }
 # Reference documents would describe the whole template and never make a
 # script reachable. Since #1081 every operations document is rendered per
