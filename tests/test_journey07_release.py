@@ -571,6 +571,27 @@ def test_materialization_gate_passes_the_pr_title_only_when_supported(
     assert not (tmp_path / "pwned").exists()
 
 
+def test_generated_materialization_gate_forwards_the_pr_title() -> None:
+    """Issue #1137 AC6: generated projects run the same title check."""
+    template = (ROOT / "template/.github/workflows/ci.yml.jinja").read_text(
+        encoding="utf-8"
+    )
+    for line in (
+        "PR_TITLE: {% raw %}${{ github.event.pull_request.title }}{% endraw %}",
+        """if grep -q -- '"--pr-title"' "$release_policy"; then""",
+        'title_args=(--pr-title "$PR_TITLE")',
+        '"${title_args[@]}"',
+    ):
+        assert line in template
+    scripts = ROOT / "template/.csarc/scripts"
+    parser_source = (scripts / "release_policy.py").read_text(encoding="utf-8")
+    assert '"--pr-title"' in parser_source
+    lifecycle = (scripts / "pr_lifecycle.py").read_text(encoding="utf-8")
+    assert '"--pr-title",\n                str(pull.get("title") or ""),' in (
+        lifecycle
+    )
+
+
 def test_one_issue_milestone_uses_only_work_and_promotion_prs() -> None:
     """No post-promotion version PR is needed for a CSARC-owned Milestone."""
     release = (ROOT / ".github/workflows/release.yml").read_text(

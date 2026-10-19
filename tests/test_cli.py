@@ -7614,7 +7614,7 @@ def test_previous_release_to_current_managed_file_migration(
                 "--data",
                 "project_mode=new",
                 "--data",
-                "language=ci",
+                "languages=[]",
                 "--data",
                 "project_visibility=private",
                 "--data",

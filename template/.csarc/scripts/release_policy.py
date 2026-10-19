@@ -533,6 +533,13 @@ def parser() -> argparse.ArgumentParser:
     verify_delivery.add_argument(
         "--checkpoint-role", choices=CHECKPOINT_ROLES, default="none"
     )
+    verify_delivery.add_argument(
+        "--pr-title",
+        help=(
+            "pull request title; its release intent must equal the highest "
+            "branch commit intent because the squash keeps only the title"
+        ),
+    )
     verify_promotion = subparsers.add_parser("verify-promotion-version")
     verify_promotion.add_argument("--source-sha", required=True)
     verify_promotion.add_argument("--head-sha", required=True)
