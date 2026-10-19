@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issues：**[Issue #177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)、[Issue #178](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178)、[Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919)
+- **來源 Issues：**[Issue #177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)、[Issue #178](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178)、[Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919), [#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071), [#1088](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1088), [#1091](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1091)
 - **實作 PRs：**[#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)、[#187](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/187)
 
 ## 問題與限制
