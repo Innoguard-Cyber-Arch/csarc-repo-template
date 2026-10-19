@@ -38,7 +38,7 @@ def test_render_uses_one_release_identity_and_existing_setup_contract() -> None:
 
 
 ROOT = Path(__file__).parents[1]
-COMMIT_RULE = "commit 只限 docs/install.md 指定的兩種"
+COMMIT_RULE = "commit 只限 docs/install.md 指定的三種"
 
 
 def operator_run() -> str:
@@ -75,11 +75,12 @@ def test_commit_timing_agrees_across_prompt_pilot_install_and_handbook() -> (
     run = operator_run()
     assert COMMIT_RULE in prompt
     assert COMMIT_RULE in run
-    # The prompt names both allowed commits, in order.
+    # The prompt names all three allowed commits, in order.
     preparation = prompt.index("`--finalize-plan` 前的產品準備 commit")
     applied = prompt.index("apply 成功後把結果 commit 到同一分支")
+    follow_up = prompt.index("install.md 要求的後續修正 commit")
     verify = prompt.index("已 commit 的 head 執行 `verify-fast`")
-    assert preparation < applied < verify
+    assert preparation < applied < follow_up < verify
     # The old rule forbidding every commit before step 5 is gone.
     assert "全程不要自行 stash、commit" not in prompt
     assert "全程不要自行 stash、commit" not in run
@@ -89,7 +90,7 @@ def test_commit_timing_agrees_across_prompt_pilot_install_and_handbook() -> (
     assert step3 < step4
     assert "產品準備 commit 在 `--finalize-plan` 前提交" in run[step3:step4]
     assert (
-        "在這個已 commit 的 head 執行 `./.csarc/scripts/verify-fast`"
+        "在最後一個已 commit 的 head 執行 `./.csarc/scripts/verify-fast`"
         in run[step4:]
     )
     install = (ROOT / "docs" / "install.md").read_text(encoding="utf-8")
@@ -170,3 +171,59 @@ def test_render_rejects_untrusted_release_inputs(tag: str, sha: str) -> None:
     """Reject malformed tags and non-canonical commit identifiers."""
     with pytest.raises(ValueError):
         render(tag, sha)
+
+
+def test_follow_up_commits_agree_across_prompt_pilot_and_install() -> None:
+    """Issue #1163 AC1/AC2/R1: one rule for commits made after apply.
+
+    The install guides ask for deleting kept legacy files, fixing stale
+    links, and adding ignore rules after apply. Every operator source names
+    those fixes as the third allowed commit, made after the apply result
+    commit and recorded one by one, with verification rerun on the last head.
+    """
+    prompt = render("v1.2.3", "a" * 40)
+    run = operator_run()
+    assert "指定的兩種" not in prompt
+    assert "指定的兩種" not in run
+    fixes = "刪除保留的舊檔、修正舊路徑連結、補 ignore 規則"
+    assert f"install.md 要求的後續修正 commit（{fixes}）" in prompt
+    assert "每個在 PR 逐條列出 SHA、內容與依據章節" in prompt
+    step4 = run.index("4. apply 成功後把結果 commit 到同一個分支")
+    step5 = run.index("5. 依下表記錄")
+    assert "以獨立的後續修正 commit 接著提交" in run[step4:step5]
+    assert "步驟 4 apply 之後的後續修正 commit" in run
+    assert "每個產品準備 commit 與後續修正 commit 逐條記錄 SHA" in run
+
+    install = (ROOT / "docs" / "install.md").read_text(encoding="utf-8")
+    english = (ROOT / "docs" / "install.en.md").read_text(encoding="utf-8")
+    # No section still asks for an unnamed "separate" commit.
+    assert "另開 commit" not in install
+    assert "in a separate commit" not in english
+    zh_marker = "   - **後續修正 commit**："
+    zh_rule = install.split(zh_marker, 1)[1].split("\n", 1)[0]
+    assert "唯一允許的第三種 commit" in zh_rule
+    assert "apply 結果 commit 之後提交" in zh_rule
+    assert "在 PR 逐條列出 SHA、內容與依據的章節" in zh_rule
+    assert "在新的 head 重新執行 `./.csarc/scripts/verify-fast`" in zh_rule
+    en_rule = english.split("   - **Follow-up fix commits**: ", 1)[1].split(
+        "\n", 1
+    )[0]
+    assert "the only third kind of commit allowed" in en_rule
+    assert "after the apply result commit" in en_rule
+    assert "listed in the PR with its SHA, content, and the section" in en_rule
+    assert "run `./.csarc/scripts/verify-fast`" in en_rule
+    # Each section that asks for a fix points at the same rule.
+    for phrase in (
+        "以後續修正 commit（見上方步驟 6）刪除根目錄 `CLAUDE.md`",
+        "以後續修正 commit 補規則，再重新 verify",
+        "以後續修正 commit（見上方步驟 6）刪除，避免有人誤用舊版",
+        "以後續修正 commit 修正連結",
+    ):
+        assert phrase in install, phrase
+    for phrase in (
+        "delete the root `CLAUDE.md` in a follow-up fix commit",
+        "add a rule in a follow-up fix commit for any new untracked output",
+        "delete it in a follow-up fix commit (see step 6 above)",
+        "fix the links in a follow-up fix commit",
+    ):
+        assert phrase in english, phrase
