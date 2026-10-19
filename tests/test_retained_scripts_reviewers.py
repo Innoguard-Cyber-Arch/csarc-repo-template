@@ -163,8 +163,14 @@ def test_kept_legacy_verify_blocks_until_retired_by_decision(
             "scripts/test-pr-policy": "#!/usr/bin/env bash\ntrue\n",
         },
     )
+    # The product also runs its own test from the legacy verifier
+    # (Issue #1169): --check names that call and points to the hook.
     write_executable(
-        project / "scripts/verify", legacy_verify + "echo product step\n"
+        project / "scripts/test-sync-skills", "#!/usr/bin/env bash\ntrue\n"
+    )
+    write_executable(
+        project / "scripts/verify",
+        legacy_verify + "echo product step\n./scripts/test-sync-skills\n",
     )
     commit(project, "test: product changes verify")
     template = source / "template"
@@ -187,6 +193,9 @@ def test_kept_legacy_verify_blocks_until_retired_by_decision(
     assert kept["subject"] == "scripts/verify"
     assert kept["blocking"] is True
     assert "scripts/test-pr-policy (removed)" in kept["message"]
+    assert "`./scripts/test-sync-skills`" in kept["message"]
+    assert "project_verification_hook" in kept["message"]
+    assert "echo product step" not in kept["message"]
     assert report["status"] == "blocked"
     capsys.readouterr()
     assert (
