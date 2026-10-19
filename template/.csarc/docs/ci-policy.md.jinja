@@ -66,7 +66,7 @@ Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact 
 - **Copilot 審核**：`python3 .csarc/scripts/review_gate.py status --repo <owner/repo> --pr <N>` 列出 Copilot 對目前 head 的意見與未解決 thread；修正、push、resolve，直到狀態為 `clean`。有有效 admin bypass marker，或 Ruleset 不是 0 個原生 approval 的形狀時，不採用 Copilot 證據；沒有授權或額度時 Copilot 不會審核，改走 maintainer approval。Copilot 沒有意見不代表沒有缺陷。
 {%- endif %}
 
-合併時 lifecycle 依序：確認 lease 的 base 是 head 的祖先（head 落後時先合併最新 base 並重新取得證據）、讀回 head tree 必須等於證據綁定的 tree、把 canonical 證據寫進 PR 唯一的 summary 留言（`csarc-merge-evidence: v1`）、以 squash 合併並加上 `CSARC-Evidence`、`CSARC-Evidence-SHA256`、`CSARC-Trust` 等 trailer，最後讀回 merge commit。tree 或 trailer 不符時 summary 標成 mismatch 並以非 0 結束。
+合併時 lifecycle 依序：確認 lease 的 base 是 head 的祖先（head 落後時先合併最新 base 並重新取得證據）、讀回 head tree 必須等於證據綁定的 tree、把 canonical 證據寫進 PR 唯一的 summary 留言（`csarc-merge-evidence: v1`）、以 squash 合併、保留 commits 的完整 `BREAKING CHANGE:` footer 並加上 `CSARC-Evidence`、`CSARC-Evidence-SHA256`、`CSARC-Trust` 等 trailer，最後讀回 merge commit。tree 或 trailer 不符時 summary 標成 mismatch 並以非 0 結束。
 
 依 base branch 的 effective rules 與寫入者讀回，lifecycle 只選一條 route：
 

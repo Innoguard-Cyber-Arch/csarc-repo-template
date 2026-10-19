@@ -359,7 +359,12 @@ beta 與 stable 對同一條 candidate line 使用同一規則，main 已插入�
 基準重新計算，已發布的 core 與 `.N` 不重用也不倒退。成熟度一律讀 current `main`
 （trusted base）的 `.csarc/config.yml`，candidate 不能改寫自己的 bump 規則；main
 無法取得或設定無法解析時直接失敗，不套用預設值。含 breaking 變更的 CHANGELOG
-另列 `Migration notes`：最低版本、回復方式，以及每個 commit 的 footer 說明。
+另列 `Migration notes`：最低版本、回復方式，以及每個 `BREAKING CHANGE:` footer 的說明。
+footer 延續到空行或下一個 footer token（例如 `Co-Authored-By:`、`CSARC-*`）為止。
+PR title 或任一 branch commit 帶 `!`、或有 footer 時，branch commits 至少要有一個寫了遷移
+文字的 `BREAKING CHANGE:` footer，否則 `verify-delivery-version --pr-title`（PR policy 與
+`pr_lifecycle.py merge` 的重驗，deferred work 也適用）直接失敗，不產生空白的遷移段落
+（Issue #1104）。
 
 `early` → `formal` 的切換步驟（Issue #1105）：切換 PR 只改 `project_maturity`，
 因為成熟度讀 current `main`，這張 PR 本身仍依 `early` 規劃（例如 `0.y.z`，或不含
@@ -1032,7 +1037,7 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
 3. 把證據 payload（local：既有的本機證據；hosted：`require_trusted_verification()` 推導的正規化事實）以
    canonical bytes 寫進每張 PR 唯一的 summary 留言（第一行 `csarc-merge-evidence: v1`、`status: attempt`）。
    沒有就建立，已有且仍是 `attempt` 就原地取代 payload；這是合併前唯一的寫入。
-4. 以 squash 合併，message 先保留 PR commits 的 `BREAKING CHANGE:` footer，再以空行接固定 trailer：
+4. 以 squash 合併，message 先保留 PR commits 的完整 `BREAKING CHANGE:` footer（多行併成一行），再以空行接固定 trailer：
 
    ```text
    CSARC-Evidence: https://github.com/<owner>/<repo>/pull/<N>#issuecomment-<id>
