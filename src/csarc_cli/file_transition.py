@@ -200,6 +200,54 @@ def content_uses(
     )
 
 
+# Common test runners a product adds to a legacy verifier (Issue #1169).
+_TEST_COMMAND = re.compile(
+    r"(?<![\w.-])(?:pytest|tox|nox|ctest|go test|cargo test|make test"
+    r"|(?:npm|pnpm|yarn|bun) (?:run )?test)(?![\w-])"
+)
+_ROOTED_PATH = re.compile(r"\$(?:\w+|\{\w+\})/([\w.@+~/-]+)")
+
+
+def added_product_calls(
+    name: str,
+    content: bytes,
+    old_content: bytes | None,
+    is_product_file: Callable[[str], bool],
+) -> tuple[str, ...]:
+    """Return the product checks a product added to a kept legacy script.
+
+    A product that extended a generated verifier (for example a legacy
+    ``scripts/verify`` that also runs ``./scripts/test-sync-skills``) loses
+    those checks once the script is retired, while the new verifier never
+    runs them (Issue #1169). A call is a non-comment line the trusted old
+    render did not have that runs a common test runner or names a product
+    file (``is_product_file``). Lines are returned stripped, in order.
+    """
+    lines = _reference_lines(name, content)
+    if lines is None:
+        return ()
+    try:
+        old_text = (old_content or b"").decode("utf-8")
+    except UnicodeDecodeError:
+        old_text = ""
+    old_lines = {line.strip() for line in old_text.splitlines()}
+    calls: list[str] = []
+    for line in lines:
+        text = line.strip()
+        if not text or text in old_lines or text in calls:
+            continue
+        tokens = [
+            *(token.removeprefix("./") for token in _PATH_TOKEN.findall(text)),
+            *_ROOTED_PATH.findall(text),
+        ]
+        if _TEST_COMMAND.search(text) or any(
+            "/" in token and token != name and is_product_file(token)
+            for token in tokens
+        ):
+            calls.append(text)
+    return tuple(calls)
+
+
 RELEASE_PLEASE_DEFAULT_VERSION_FILE = "version.txt"
 
 
