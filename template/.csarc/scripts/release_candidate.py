@@ -384,6 +384,12 @@ def bump_version(
     While ``maturity`` is ``early`` and the core is still ``0.y.z``, a
     breaking change advances MINOR to ``0.(y+1).0`` instead of leaving 0.x
     (Issue #1085). Every other maturity keeps the SemVer MAJOR bump.
+
+    While ``maturity`` is ``formal`` and the core is still ``0.y.z``, any
+    releasable change graduates the line to ``1.0.0`` (Issue #1105). The
+    maturity comes from trusted main, so the PR that switches ``early`` to
+    ``formal`` still plans under ``early``; the first release planned after
+    that switch merges is ``1.0.0`` instead of an invalid formal ``0.x``.
     """
     try:
         parsed = release_phase.parse_version(version)
@@ -400,6 +406,8 @@ def bump_version(
     if bump == "no-release":
         return None
     major, minor, patch = parsed.core
+    if maturity == "formal" and major == 0:
+        return "1.0.0"
     if bump == "major" and maturity == "early" and major == 0:
         bump = "minor"
     if bump == "major":

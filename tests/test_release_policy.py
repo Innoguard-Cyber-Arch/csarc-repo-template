@@ -2872,6 +2872,12 @@ def test_main_retention_plan_command_requires_a_token_and_never_deletes(
         ("1.2.3", ["fix: x\n\nBREAKING-CHANGE: y"], "formal", "2.0.0"),
         ("1.2.3", ["feat: add"], "formal", "1.3.0"),
         ("0.4.2", ["feat!: drop legacy keys"], None, "1.0.0"),
+        # A formal 0.x line graduates to 1.0.0 on any releasable change
+        # (Issue #1105); it never stays on an invalid formal 0.x core.
+        ("0.4.2", ["fix: repair"], "formal", "1.0.0"),
+        ("0.4.2", ["feat: add"], "formal", "1.0.0"),
+        ("0.4.2-beta.3", ["feat!: drop legacy keys"], "formal", "1.0.0"),
+        ("0.4.2", ["docs: explain"], "formal", None),
         # An inconsistent early 1.x line keeps MAJOR so phase validation
         # fails closed instead of silently staying on 1.x.
         ("1.2.3", ["feat!: drop legacy keys"], "early", "2.0.0"),
@@ -3041,6 +3047,110 @@ def test_maturity_fails_closed_without_a_readable_main_policy(
         ValueError, match="origin/main and main are unavailable"
     ):
         release_plan(tmp_path, "HEAD", phase="stable")
+
+
+# --- Issue #1105: early -> formal maturity switch ------------------------
+
+
+def declare_maturity(root: Path, maturity: str, message: str) -> str:
+    """Commit a ``project_maturity`` change with ``message``; return its sha."""
+    (root / ".csarc/config.yml").write_text(
+        f"project_maturity: {maturity}\n", encoding="utf-8"
+    )
+    git(root, "add", ".")
+    git(root, "commit", "-m", message)
+    return git(root, "rev-parse", "HEAD")
+
+
+def release_on_main(root: Path, version: str) -> None:
+    """Record a published stable ``version`` on the checked-out main."""
+    write_release_surfaces(root, version)
+    git(root, "add", ".")
+    git(root, "commit", "-m", f"chore(main): release {version}")
+    git(root, "tag", f"v{version}")
+
+
+def test_maturity_switch_plans_one_valid_path_to_1_0_0(tmp_path: Path) -> None:
+    """The switch PR stays early; the first release after it is 1.0.0."""
+    init_maturity_repo(tmp_path, "early", "0.4.2")
+    git(tmp_path, "checkout", "-b", "switch")
+    switch = declare_maturity(
+        tmp_path, "formal", "feat(config): declare formal maturity"
+    )
+
+    # The switch PR is planned by main's early rule, never by its own edit.
+    assert release_plan(tmp_path, switch, phase="stable") == (
+        "v0.5.0",
+        "0.5.0",
+    )
+
+    git(tmp_path, "checkout", "main")
+    git(tmp_path, "merge", "--ff-only", "switch")
+    release_on_main(tmp_path, "0.5.0")
+    git(tmp_path, "checkout", "-b", "delivery")
+    fix = commit_change(tmp_path, "cli", "fix(cli): repair the flag")
+
+    assert release_plan(tmp_path, fix, phase="beta") == (
+        "v1.0.0-beta.1",
+        "1.0.0-beta.1",
+    )
+    assert release_plan(tmp_path, fix, phase="stable") == ("v1.0.0", "1.0.0")
+    docs = commit_change(tmp_path, "docs", "docs: describe the graduation")
+    assert release_plan(tmp_path, docs, phase="stable") == ("v1.0.0", "1.0.0")
+
+    # A materialized 1.0.0 candidate is recognized, not bumped again.
+    prepared = prepare_release_candidate(tmp_path, docs, phase="stable")
+    assert prepared["version"] == "1.0.0"
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(release): 1.0.0")
+    assert release_plan(tmp_path, "HEAD", phase="stable") == (
+        "v1.0.0",
+        "1.0.0",
+    )
+
+    git(tmp_path, "tag", "v1.0.0")
+    later = commit_change(tmp_path, "after", "fix: follow-up repair")
+    assert release_plan(tmp_path, later, phase="stable") == ("v1.0.1", "1.0.1")
+
+
+def test_maturity_switch_without_a_release_still_graduates(
+    tmp_path: Path,
+) -> None:
+    """A non-releasable switch commit leaves the next release at 1.0.0."""
+    init_maturity_repo(tmp_path, "early", "0.4.2")
+    switch = declare_maturity(
+        tmp_path, "formal", "chore(config): declare formal maturity"
+    )
+    assert release_plan(tmp_path, switch, phase="stable") is None
+
+    feature = commit_change(tmp_path, "cli", "feat(cli): add the flag")
+    assert release_plan(tmp_path, feature, phase="stable") == (
+        "v1.0.0",
+        "1.0.0",
+    )
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["fix: repair the flag", "feat!: drop the legacy layout"],
+)
+def test_early_maturity_on_a_1x_line_fails_closed(
+    tmp_path: Path, message: str
+) -> None:
+    """An early 1.x line (or formal -> early downgrade) never releases."""
+    init_maturity_repo(tmp_path, "formal", "1.2.3")
+    downgrade = declare_maturity(
+        tmp_path, "early", "chore(config): declare early maturity"
+    )
+    assert release_plan(tmp_path, downgrade, phase="stable") is None
+    head = commit_change(tmp_path, "cli", message)
+
+    for phase in ("beta", "stable"):
+        with pytest.raises(
+            release_phase.ReleasePhaseError,
+            match="an early release requires major version 0",
+        ):
+            release_plan(tmp_path, head, phase=phase)
 
 
 def test_breaking_candidate_writes_migration_notes(tmp_path: Path) -> None:
