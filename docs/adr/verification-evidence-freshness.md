@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-10-14
-- **來源 Issue：**[#1075](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1075)（[#1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058) decision 12）
+- **來源 Issues：**[#1075](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1075)（[#1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058) decision 12）、[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)（quota fallback 退役）、[#1073](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1073)
 - **實作 PR：**[#1116](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1116)
 
 ## 問題與限制
@@ -43,7 +43,7 @@
    | Merge（local） | `pr_lifecycle.py merge` 在 local mode | `local_verification.require` |
    | Release | `release.yml` | `check-trusted-verification --resolve-merge-source` |
    | Promotion | `promotion_gate.py` | `check-trusted-verification --required-tier full` |
-   | Quota fallback | `pr_lifecycle.py merge` 的 quota fallback 路徑 | 成功的 `verify` 仍走 `require_trusted_verification`；fallback 不能替代 `verify` |
+   | Quota fallback（已退役） | 無；`pr_lifecycle.py merge --quota-fallback-note-url` 與 `promotion_gate.py` 的 quota 指令在任何寫入前拒絕 | 不再是 consumer（SPEC-009，#1071，#1058 決定 3）；Actions 中斷改走 governance-switch 路線，`verify` 照常經 `require_trusted_verification` |
    | Clean sync／same-head reuse | `ci.yml` reuse 與 sync step | 以原始 direct Execute 的完成時間計算，reuse run 自己的時間不能刷新期限 |
 
    不屬於 evidence freshness、因此不由本函式管理的時間窗：`finalization-queue` 的 intent 到期（只是協調提示）、remote lifecycle lease TTL，以及 `check-release-drift` 的發版落後門檻。

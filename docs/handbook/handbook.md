@@ -1,7 +1,7 @@
 +++
 title = "repo-template 技術手冊｜模板能力、操作與限制"
 lang = "zh-Hant-TW"
-status = "planned"
+status = "current"
 footer_version = "版本日期 261013 r2"
 baseline = "approved/261013r2_repo-template-handbook.html"
 baseline_sha256 = "a69d2124a549dceb9478f40055675dd4495455d34d979ca02861171dbfb3292d"
