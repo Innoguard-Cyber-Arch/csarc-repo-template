@@ -157,6 +157,14 @@ If `--check` lists a blocking `release-writer` after you choose `product-owned`,
 
 The legacy `reviewers` setting and `.github/REVIEWERS` are retired: the Settings row stays `retired`, and its note names the earlier reviewers, the new assignment, and how to restore it; `Items requiring your decision` adds one non-blocking `setting-decision` row (subject `reviewers`). The new release requests one reviewer per ready pull request, by rotation, from the collaborators with maintain or admin permission other than the author. Like a `widened` row, it does not make `--check` blocking, but the owner must confirm it before `--finalize-plan`; an agent must not accept it on the owner's behalf. To keep the earlier reviewers, give maintain or admin permission only to them, or name them as code owners with `--data code_owner=<owners>` so GitHub requests their review on every pull request; record the owner's decision in the PR.
 
+### README and LICENSE in an existing repo
+
+An existing repo (`project_mode=existing`) owns its README and LICENSE (handbook 5.1 and appendix B.9). The update adds no `README.md`, `README.en.md`, `README.zh-tw.md`, or `LICENSE`, and never rewrites the ones the repo has.
+
+- No `LICENSE`: the report's Settings show `project_license` as `custom` and an empty `copyright_holder`; the product manages its license, and no copyright holder is inferred from the project name. Verify accepts the missing `LICENSE` because provenance records `custom`.
+- An existing `LICENSE`: the file is kept, whether or not it is a CSARC starter text.
+- To have CSARC add a starter `LICENSE`, the owner passes both `--data project_license=<proprietary|MIT|Apache-2.0>` and `--data copyright_holder=<legal holder>` to `--check` and `--finalize-plan`; with a license but no holder, the update stops before any write. The product can also add its own `LICENSE` in a product commit.
+
 ### Kept legacy files and stale links
 
 - Files still in use: a file the new release no longer renders is kept as `preserve`/`product-owned` instead of being deleted when a kept file references it by full path or when it is a configuration a tool reads automatically (`zizmor.yml`, `.gitleaks.toml`, `.pre-commit-config.yaml`); the product maintains it from then on. A script moved to `.csarc/scripts/` that product files still call by its old path leaves a forwarding wrapper there (`overwrite`/`compatibility-shim`). When the product's own Release writer (`release_ownership=product-owned`) still uses files this update moves into `.csarc/` (for example a release-please config, its manifest, and the `version.txt` it implies), the plan lists a blocking `release-writer` and `--finalize-plan` refuses to write; plan with `--data release_ownership=csarc-owned`, or first change the writer in a product commit so it no longer uses those paths, then run `--check` again. See "Setting decisions" for how to choose.

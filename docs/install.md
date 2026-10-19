@@ -159,6 +159,14 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 舊設定的 `reviewers` 與 `.github/REVIEWERS` 已退役：Settings 那一列仍是 `retired`，note 寫出原本的 reviewer、新的指派方式與恢復方式；`Items requiring your decision` 另列一列非 blocking 的 `setting-decision`（subject `reviewers`）。新版本在每個 ready PR 從具 maintain 或 admin 權限、且不是作者的協作者中輪流請求一位 reviewer。這一列和 `widened` 一樣不會讓 `--check` 變成 blocking，但 `--finalize-plan` 前必須由擁有者確認，agent 不能代為接受。要維持原本的 reviewer，只給他們 maintain 或 admin 權限，或用 `--data code_owner=<owners>` 把他們設為 code owner，讓 GitHub 在每個 PR 請求他們審查；在 PR 記錄擁有者的決定。
 
+### 既有 repo 的 README 與 LICENSE
+
+既有 repo（`project_mode=existing`）的 README 與 LICENSE 屬於產品（手冊 5.1、附錄 B.9）。update 不新增 `README.md`、`README.en.md`、`README.zh-tw.md` 或 `LICENSE`，也不改寫已有的這些檔案。
+
+- 沒有 `LICENSE`：報告 Settings 的 `project_license` 為 `custom`、`copyright_holder` 為空，表示授權由產品管理，不會由專案名推導著作權人。verify 依 provenance 記錄的 `custom` 接受沒有 `LICENSE`。
+- 已有 `LICENSE`：原檔保留，不論內容是不是 CSARC 的 starter。
+- 要由 CSARC 加入 starter `LICENSE`：擁有者在 `--check` 與 `--finalize-plan` 都帶 `--data project_license=<proprietary|MIT|Apache-2.0>` 與 `--data copyright_holder=<法定著作權人>`；只帶授權、沒帶著作權人時，update 在寫入前停止。也可以由產品 commit 自行加入 `LICENSE`。
+
 ### 保留的舊檔與過時連結
 
 - 仍被使用的舊檔：新版本不再產生的檔案若仍被保留的檔案以完整路徑引用，或是工具會自動讀取的設定（`zizmor.yml`、`.gitleaks.toml`、`.pre-commit-config.yaml`），計畫改列 `preserve`／`product-owned`，不會刪除；之後由產品自行維護。搬到 `.csarc/scripts/` 的 script 若仍被產品以舊路徑呼叫，舊路徑留下轉呼叫 wrapper（`overwrite`／`compatibility-shim`）。產品自有的 Release writer（`release_ownership=product-owned`）若仍使用本次要搬進 `.csarc/` 的檔案（例如 release-please 的 config、manifest 與它隱含的 `version.txt`），計畫列出 blocking 的 `release-writer`，`--finalize-plan` 拒絕寫入；改用 `--data release_ownership=csarc-owned`，或先以產品 commit 讓 writer 不再使用這些路徑，再重新 `--check`。怎麼選見「設定決定」。
