@@ -12683,7 +12683,10 @@ def parser() -> argparse.ArgumentParser:
         "--target-date",
         default="",
         metavar="YYYY-MM-DD",
-        help="Project target when the Issue has no Milestone due date",
+        help=(
+            "Project target when the Issue has no Milestone due date "
+            "(default: start + 14 days)"
+        ),
     )
     issue_create.add_argument(
         "gh_arguments", nargs=argparse.REMAINDER, metavar="-- GH_ARGS"
