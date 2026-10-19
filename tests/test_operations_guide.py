@@ -80,7 +80,10 @@ def test_guide_shows_project_setup_only_when_configured(project: str) -> None:
     for required in (
         "`Project start`",
         "`Project target`",
-        "target 改為實際完成日",
+        "target 改為台北的實際完成日",
+        "只把 Milestone tracker 與 standalone Issue 加入",
+        "start 為台北的建立日",
+        "開始日後 14 天",
         "`project` scope",
         "寫入權",
         "csarc issue sync-project --issue <N>",
