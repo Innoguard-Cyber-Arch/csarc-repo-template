@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-25
-- **來源 Issues：**[#18](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/18), [#28](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/28), [#62](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/62), [#65](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/65), [#87](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/146), [#163](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/163), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301), [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576), [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580), [#607](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/607), [#719](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/719), [#531](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/531), [#325](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/325), [#746](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/746), [#775](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/775), [#826](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/826), [#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918), [#932](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/932)
+- **來源 Issues：**[#18](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/18), [#28](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/28), [#62](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/62), [#65](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/65), [#87](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/146), [#163](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/163), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301), [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576), [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580), [#607](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/607), [#719](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/719), [#531](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/531), [#325](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/325), [#746](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/746), [#775](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/775), [#826](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/826), [#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918), [#932](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/932), [#1064](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1064), [#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071), [#1073](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1073), [#1076](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1076), [#1080](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1080), [#1082](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1082)
 - **實作 PRs：**[#25](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/25), [#59](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/59), [#63](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/63), [#66](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/66), [#90](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/90), [#128](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/128), [#154](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/154), [#165](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/165), [#306](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/306), [#579](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/579), [#663](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/663)
 
 ## 問題與限制
@@ -20,9 +20,9 @@ standalone stable 宣告改變，不能自動開啟或關閉 bypass。這項決�
 
 所有平台相依能力使用 `allowed`、`blocked`、`unknown` 三態。先保存 desired policy，再用 plan／apply／check 或 runtime probe 取得可觀察證據；只有 allowed 才啟用較強自動化。Blocked／unknown 採最安全可攜 fallback，且必須清楚顯示限制。
 
-Free private repository 無法強制 Ruleset 或 team review 時，仍執行 repository-local checks、保留 desired policy 並輪派一位個別 reviewer，但標示 `DEGRADED`，不能宣稱有平台 merge gate。Portable baseline 不要求 PAT、GitHub App 或 organization policy 變更。
+Free private repository 無法強制 Ruleset 或 team review 時，仍執行 repository-local checks、保留 desired policy 並標示 `DEGRADED`，不能宣稱有平台 merge gate。合併路線依 live 讀回決定，不再以「輪派一位個別 reviewer」作為 fallback（[#1076](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1076)，#1058 決定 4、5、10、27）：沒有 Ruleset、API 完整讀回恰好一個寫入者而且就是合併者時，走 audited `single-writer` route（`server_enforcement=none`）；另有寫入者或任何讀取不完整時只能人工合併，記為 `untraced`。reviewer 仍可由 live `maintain`／`admin` collaborator best-effort 選取（SPEC-009），但這不是合併授權。Portable baseline 不要求 PAT、GitHub App 或 organization policy 變更。
 
-Projects 預設關閉；工作階層使用 GitHub 原生 Issue Type、subissue、dependency、Milestone 與 Development link。Issue Type 不可用時才退回 labels，並明示 degraded；不得用自訂 Project 欄位製造第二套狀態來源。
+工作階層使用 GitHub 原生 Issue Type、subissue、dependency、Milestone 與 Development link。Issue Type 不可用時才退回 labels，並明示 degraded。GitHub Project 是選用的 Roadmap 檢視：只有設定 `github_project_url` 時，受管入口才同步 `Project start`／`Project target` 日期，空值時完全不呼叫 Project API、`has_projects` 維持 `false`（[#1080](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1080)，SPEC-009 §10，#1058 決定 23）；Project 欄位不是工作狀態的第二來源。
 
 工作 branch 由 repo-local `gh-issue-develop` 在建立遠端 ref 前驗證 canonical 名稱與
 Issue 編號；錯名 ref 只在同 repository、local／remote exact head 一致、目標名稱不存在
@@ -60,71 +60,20 @@ Repository 保存 desired policies；有管理權的 operator 決定是否 apply
 | 所有缺能力都永久阻擋 | 不採用；portable baseline 在 Free private 會永遠不可交付 |
 | 提前導入 Safe Settings／Allstar | 延後；fleet 規模與漂移頻率尚未達門檻 |
 
-## 2026-09-03 release_phase 收斂 Alpha 自我核准 bypass 範圍（#607）
+## 2026-09 Alpha 自我核准與 self-merge 路線的歷史處置（#607、#719、#775、#826、#905、#913）
 
-#580 記錄並落地了目前 live 已套用的 Ruleset self-approval bypass（`RepositoryRole`
-admin、`bypass_mode: "pull_request"`，寫回 root `policies/rulesets.json`），同時發現
-它的實際涵蓋範圍比原本以為的更廣：因為 GitHub 的 `bypass_actors` 綁在整個 Ruleset
-上、不是單一 rule type，這個 bypass 連 `required_status_checks` 都一併放寬，等於
-「alpha 期間 PR 相關規則全部不擋」。#607 的問題：這個較寬的涵蓋範圍不能是永久、不分
-專案發展階段的事實，尤其是 required_status_checks 這種「必要檢查真的有沒有過」的
-保證，不該無限期依賴人工自律。
+這些段落記錄 alpha 階段逐步放寬自我核准的過程，已由 [#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918) 的 `admin_bypass: off|beta-only|always`（與 `project_maturity` 解耦，見本 ADR「決定」第一段）、[#900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900) 的設定收斂，以及 Milestone 18 的 quota fallback 退役（[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)）與單一 maintainer 合併路線（[#1076](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1076)）取代。現行規則見 `docs/ci-policy.md`「Copilot 審核模式（#752）」、admin bypass 與「單一 maintainer 的可稽核合併路徑（#1076）」各節；原文只留下列處置。
 
-維護者的決定：把這個 bypass 的權限範圍綁定專案自己的發布階段
-（`release_phase`：alpha／beta／release），而不是一個固定不變的設定。`release_phase`
-寫在新增的 `policies/project-stage.json`，是人工宣告的單一權威來源（不像
-`governance_stage` 或 `profiles/catalog.yaml` 的 `stage` 那樣分類單一 PR 或單一
-profile——三者刻意保持不同軸線，避免命名碰撞，完整區分見
-`scripts/release_phase_rulesets.py` 的 module docstring）。GitHub Ruleset 的
-`bypass_actors` 是 Ruleset 層級欄位，要讓「review 可以 bypass、
-required_status_checks 不行」同時成立，落地把兩種規則拆進兩個 Ruleset
-（`policies/rulesets.json` 與新增的 `policies/rulesets-required-checks.json`），由
-`scripts/apply-repository-settings.sh`（透過 `scripts/release_phase_rulesets.py`）
-依 `release_phase` 決定 `required_status_checks` 規則實際生效在哪個 Ruleset：alpha
-併入帶 bypass 的那個，beta 起強制留在永遠空 bypass 的那個。release 階段的自動失效是
-結構性保證：`scripts/check-bypass-lifecycle`（已接進 `./scripts/verify-fast`）fail
-closed 擋下「`release_phase` 是 `release` 但任一 Ruleset 仍有非空 `bypass_actors`」
-這個狀態，不依賴人工記得清空。alpha／beta 期間每次實際使用 bypass 合併 PR，也新增
-`bypass-trace:` 結構化留言的使用留痕要求，以及 `scripts/check-bypass-trace` 可執行的
-查核工具（比對邏輯在 `scripts/check_bypass_trace.py`）。
-
-對既有或人工合併 PR 自動判斷「哪些 PR 真的用了 bypass」（交叉核對
-review／required-check 實際狀態）維持未實作：`scripts/generate_audit_trail.py`
-（#535／#564）尚未併入 `main`，是獨立進行中
-的 Milestone 13 work，#607 刻意不依賴它，改成 operator 針對已識別的單一 PR 主動查核
-（跟 `scripts/check-pr-policy-status` 的用法一樣）；一旦該模組併入，可以再擴充做自動
-交叉核對。這整套機制與 #580 一樣是 root-only：`template/.csarc/policies/rulesets.json.jinja`
-刻意保留空的 `bypass_actors`，不帶 `policies/project-stage.json` 或第二個 Ruleset
-檔；`scripts/apply-repository-settings.sh` 對這兩個新政策檔案的存在與否是條件式
-判斷，檔案不存在時（所有既有下游 repo）行為與 #607 之前完全一致。
-
-**部分取代（Issue #744，2026-09-17）：** 上面「`release_phase` 是人工宣告的單一
-權威來源」本身不變，`policies/project-stage.json` 與這裡描述的兩個 Ruleset
-bypass 機制也繼續照原樣運作，不受 #744 影響。但 #744 的維護者決定改變了這件事
-背後的假設：版本號現在直接表示發布層級，alpha／beta 可以在任何時候發布（包含
-在早期版或正式版之後），不再是「一段只會往前走、走到 release 就結構性消失」的
-一次性期間；本節第一段暗示的單向前進假設因此不再普遍成立於版本號本身（本節
-`release_phase` 三值與其 Ruleset bypass 範圍仍是獨立、不受影響的另一條軸線）。
-審核與測試依發布層級分級、是否需要調整或取代本節的 bypass 機制本身，是 #745
-的範圍，本節在 #745 落地前維持現狀。詳見
-`docs/adr/release-security-and-dependencies.md`「版本號表示發布層級與保留規則
-（#744）」一節。
-
-## 2026-09-09 exact-head review 直接授權 lifecycle merge（#719）
-
-#240 建立的 remote lease、CAS 與 merge 前 live revalidation 保留，但一般 PR 不再要求
-maintainer 在 `APPROVED` review 之外另貼內容重複的授權留言。獨立 human maintainer 的
-review 只有在 GitHub 回報其 `commit_id` 精確等於目前 head SHA、reviewer 仍有
-`maintain`／`admin` 權限、不是執行 merge 的帳號，而且目前 decisive review 狀態仍是
-`APPROVED` 時，才直接成為合併授權；後續 push 換 SHA、`CHANGES_REQUESTED`、Draft、
-blocking comment、未完成 checklist 或 check failure 都會阻擋。Alpha 無獨立 reviewer
-的 self-merge 例外維持 #325 的 lease 後 exact-head comment，不混入一般路徑。
-
-本 repo 的 alpha Ruleset 有 #580 的已知 admin `pull_request` bypass。Lifecycle 只在 live
-bypass actor 清單精確等於已宣告值、上述 exact-head review 成立、必要 checks 重驗成功，
-且 GitHub 回報 PR `mergeable_state=clean` 時才可自動合併；未知或擴大的 bypass 仍是
-human-only。使用已知 bypass 時，lifecycle 會在最後一次 merge snapshot 前自動留下
-#607 定義的 `bypass-trace:`，讓 reviewer 的同意與實際 bypass 使用各自有可稽核證據。
+| 狀態 | 原決策 | 處置與取代者 |
+| --- | --- | --- |
+| Superseded | #607：以人工宣告的 `release_phase`（alpha／beta／release，`policies/project-stage.json`）決定 Ruleset bypass 範圍；release 階段由 `check-bypass-lifecycle` 要求清空 bypass；#744 曾部分取代其單向前進假設 | #918 以 `admin_bypass` 取代階段式 bypass，`project-stage.json` 已移除；beta／stable 只是發布通道，不再決定 bypass |
+| Preserved | #607：GitHub `bypass_actors` 綁在整個 Ruleset，因此 required checks 放在沒有 bypass actor 的獨立 Ruleset（`policies/rulesets-required-checks.json`），review 規則才依設定包含 admin 角色；每次 bypass 合併留下 `bypass-trace:` | #607 → #918；trace 現在寫進每張 PR 唯一的 durable summary（[#1073](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1073)） |
+| Preserved | #719：獨立 human maintainer 對精確 head SHA 的 `APPROVED` review 直接成為合併授權，不再要求重複授權留言；push、`CHANGES_REQUESTED`、Draft、未完成 checklist 或 check failure 都會阻擋 | #719；review 判定與合併者角色另依 [#1082](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1082)（#1058 決定 27） |
+| Superseded | #719：alpha 無獨立 reviewer 的 self-merge 只在 live bypass actor 精確等於 #580 宣告值時自動合併 | #918 的 admin bypass route；Ruleset 形狀改依 A／E1／C 判斷（[#1082](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1082)、[#1076](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1076)） |
+| Superseded（narrowed） | #775：alpha self-merge 可直接進 `main`（只限沒有 Milestone 的 Issue）、`comment` 授權納入 `effective_protection` 信任集合、`review_gate.evaluate()` 認得 exact-head 授權留言並由 `issue_comment` 重新觸發；同時保留 quota fallback 對 default branch 的禁止 | 路由與 exact-head 授權留言保留為 `admin_bypass_opt_in`（#918）；alpha 限定與 `require_routine_quota_fallback` 已隨 quota fallback 退役（#1071） |
+| Superseded（narrowed） | #826：正式 current-main delivery sync 納入 alpha self-merge（allowlist `{"issue", "sync"}`） | 路由保留為 `admin_bypass_opt_in` 的 sync route（#918）；alpha 與 quota fallback 例外已退役 |
+| Superseded（narrowed） | #905：同 repository 的 Milestone promotion 納入 alpha self-merge；拒絕替 required-check Ruleset 增加 bypass actor | promotion route 保留於 `admin_bypass_opt_in`（#918）；拒絕 required-check bypass 的結論不變 |
+| Superseded（narrowed） | #913：canonical `release/v<semver>` Guided release 納入 `review: solo` fallback | `review` 已退役（SPEC-009 §3，[#1064](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1064)、[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)）；release route 保留於 `admin_bypass_opt_in`（#918） |
 
 ## Repo 能力矩陣：把「這個 repo 本身」也納入 capability preflight（#531）
 
@@ -148,116 +97,6 @@ Issue #681/#682 決定 R 前是獨立的「進階安裝」附錄頁，後併入 
 明確保留的邊界：這套機制不重新設計 `apply-repository-settings.sh` 既有的 `DEGRADED`
 標記——矩陣裡對應既有限制的每一列，workaround 直接引用同一段既有訊息，不是另建一套
 平行說法；`apply-repository-settings.sh` 本身在這個 Issue 沒有任何邏輯變動。
-
-## 2026-09-18 修正 alpha self-merge 對 main 與既有 bypass_actors 的排除（#775）
-
-修復 #757（GraphQL schema drift）合併 PR #765 時發現：`scripts/pr_lifecycle.py merge`
-對任何直接合併進 `main` 的 alpha PR 一律失敗，導致 #758／#759／#762／#763／#765 全部
-繞過 `merge()` 本身、只借用其 `acquire`／`authorization-template`／`release` 子指令
-留痕，實際合併改用手動 `gh pr merge --admin --squash` 加人工現場打字的
-`bypass-trace:` 留言——這已經悄悄違反 `AGENTS.md` 工作迴圈第 12 步「合併寫入一律要
-透過 `scripts/pr_lifecycle.py`」。查證找到兩個各自獨立、都需要修正才能讓這條路徑真
-的可用的原因：
-
-1. `alpha_self_merge_opt_in` 依賴的 `require_routine_route`（與 #325 的 Actions
-   quota/billing 必要檢查 fallback 共用）在 `base_ref == default_branch` 時直接
-   raise。#325 完成條件明寫「default-branch promotion、hotfix 與 Release
-   eligibility 不得因這個 fallback 放寬」，但這是 2026-09-03 就存在的既有邊界，早於
-   2026-09-18 才確認的「這個 repo 的 Copilot code review 永久不可用」這個事實。維護
-   者本次決定：narrow 這個邊界，只放寬審核繞過（不動 `require_routine_route` 本體，
-   新增平行的 `require_default_branch_issue_route`，額外要求該 Issue **不得**掛
-   Milestone——有 Milestone 的仍須走自己的 `dev/mN` 分支）；`require_routine_route`
-   ／quota-fallback 對 default-branch 的禁止完全不變。
-2. 更深層的問題：`effective_protection`（#719 導入）只在 `authorization_source in
-   {"review", "copilot"}` 時，才把 live Ruleset 的非空 `bypass_actors` 當作「已驗
-   證」；alpha self-merge 的 `authorization_source` 是 `"comment"`，不在這個集合
-   裡。本 repo 正式 Ruleset（`rulesets/22178328`）目前同時具備：`pull_request` 規則
-   直接宣告 `required_approving_review_count: 0`（`pr_review_mode: copilot` 的既
-   有設定）**與** #580 的 admin `pull_request` bypass_actors——兩者原本各自為了不同
-   目的加入，#719 制定「只信任 review／copilot」的規則時沒有預料到會同時出現在同一個
-   repo。結果是 alpha self-merge（不分 main 或既有 `dev/mN` 路由）在這個 repo 從未
-   真的能讓 `pr_lifecycle.py merge` 跑出 `merge_mode == "agent"`——每次都在
-   `effective_protection` 這步被「an effective Ruleset permits an unverified
-   bypass」擋下，只能退回手動合併。維護者本次決定：把 `"comment"` 併入這個信任集合
-   （`authorization_source in {"review", "copilot", "comment"}`）——exact-head 授
-   權留言本來就已經被 `authorization()` 獨立驗證（maintainer 權限、精確 body、精確
-   head SHA），信任基礎跟 review／copilot 對等，且 `bypass_actors` 是否精確等於已宣
-   告值的檢查完全不變，只是把可以通過這項檢查的授權來源多加一種。
-3. 第三個獨立問題：即使前兩項都修好，GitHub 自己回報的 `mergeable_state` 也永遠不會
-   是 `clean`——因為 `review` 這個 required check（`scripts/review_gate.py` 的
-   `evaluate()`）只認真人 `APPROVED` review 或乾淨 Copilot review，完全不知道
-   alpha self-merge 這條路徑的存在，對任何 alpha self-merge PR 永遠回報
-   `failure`。`merge_snapshot` 自己那行 `if reviewed_bypass and
-   mergeable_state != "clean": blocked` 因此永遠擋下，不管前兩項修正對不對。
-   維護者本次決定：也讓 `evaluate()` 認得 alpha self-merge——新增
-   `pr_lifecycle.find_exact_head_authorization`（掃描全部留言找出綁定目前 head
-   SHA、通過 maintainer 權限驗證的授權留言，不像 `authorization()` 需要呼叫方先
-   指定一則特定留言的 URL），`evaluate()` 在 Copilot 未過、無真人 approval 時，
-   改用跟 `alpha_self_merge_opt_in` 相同的 marker／route 判斷（不含 release_phase
-   檢查——`alpha_self_merge_opt_in` 本身也不檢查 release_phase，兩處各自加只會讓
-   `review` check 跟 `pr_lifecycle.py merge` 對「這個 head 能不能合併」的判斷互相
-   矛盾）＋這則留言是否存在，成立就一併通過。`.github/workflows/pr-review.yml`
-   同步加上 `issue_comment: created` trigger（篩選 PR 上、開頭是 `PR lifecycle
-   merge authorization` 的留言）：貼授權留言本身不會觸發 `pull_request` 事件，
-   沒有這個 trigger 就要手動 `gh run rerun` 才會重新檢查。
-
-三項修正都只動 `alpha_self_merge` 這條路徑本身；`require_routine_quota_fallback`
-（quota/billing 必要檢查 fallback）與一般 `review`／`copilot` 授權路徑的既有行為完全
-不變。root／`template/` 的 `scripts/pr_lifecycle.py`／`scripts/review_gate.py`／
-`.github/workflows/pr-review.yml`／`tests/test_pr_lifecycle.py` 保持逐位元組同步
-（`tests/test_review_gate.py` 不在配對清單內，只在 root 維護）。
-
-## 2026-09-20 將正式 Alpha delivery sync 納入 self-merge（#826）
-
-Milestone 14 的正式 current-main sync PR #825 已通過完整本機驗證、required checks 與
-exact-head maintainer 授權，但 organization 沒有 Copilot code review 授權，`review`
-因此只能走 Alpha self-merge。#775 的 `alpha_self_merge_opt_in()` 對非 default base 已先
-呼叫 `require_routine_route()`，該函式會完整驗證同 repository、`dev/mN` base、由目前
-`main` SHA 決定的 sync branch 名稱、head 包含目前 `main`，以及 merge commit 的兩個
-parent 精確等於 base 與目前 `main`；但下一行只接受回傳值 `"issue"`，把同一函式已驗證
-完成的正式 `"sync"` route 排除。這是 allowlist 漏列，不是額外的安全邊界。
-
-決定將該 allowlist 窄幅擴充為 `{"issue", "sync"}`。`review_gate.py` 與
-`pr_lifecycle.py merge` 繼續共用 `alpha_self_merge_opt_in()`，避免 required `review` 與
-實際 merge eligibility 分歧；sync 不新增第二套判斷，也不探測 Copilot 授權。required
-checks、Milestone approval、remote lease、exact-head maintainer comment、未解決 review
-threads、live admin bypass actor 與 `mergeable_state == clean` 的驗證全部維持。
-default-branch 非 Issue PR、promotion、release、beta／early／formal 與 quota fallback 不在
-本次擴充範圍。這項決定 narrow-supersede #775 的 issue-only allowlist，同時保留 #745 的
-Alpha 自審與 required checks 邊界、#752 的無 Copilot 時 fail-closed 原則，以及 #580 的
-bypass 留痕與 live actor 驗證。
-
-## 2026-09-22 將 Alpha promotion 納入受稽核 self-merge（#905）
-
-M12 promotion PR #888 證實 #775／#826 的 Alpha self-merge allowlist 仍漏掉最終
-`promote/mN-*` 路由：exact-head 授權、Milestone approval、`title` 與 hosted full
-`verify` 都有效時，`review` 仍因 organization 沒有 Copilot code review 授權而永久
-失敗。直接替 required-check Ruleset 增加 bypass actor 會讓管理員略過所有檢查，範圍
-過大，因此拒絕。
-
-決定把 `promotion_gate.route_for()` 已分類為 `milestone`、且 head repository 與目標
-repository 相同的 Alpha promotion 納入既有 `alpha_self_merge_opt_in()`。這只讓
-exact-head maintainer authorization 成為 `review` 的合格來源；`title` 與 `verify`
-required checks 仍負責 Milestone／tracker、bridge topology、版本 materialization 與
-exact candidate 驗證，lifecycle merge 仍重驗 remote lease、required checks、未解 review
-threads 與 live admin bypass actor。beta／early／formal、release、hotfix 與 quota fallback
-不變。回退方式是 revert #905，恢復 promotion 必須等待 Copilot 或獨立 maintainer。
-
-## 2026-09-23 將 Alpha Guided release 納入 solo review fallback（#913）
-
-Standalone release PR #912 證實 #900 收斂後的 `review: solo` 仍有一個 route 漏口：
-`release/v*` 已通過 current-main freshness、hosted `verify` 與 release-candidate 驗證，
-但 organization 沒有產生 Copilot review 時，`alpha_self_merge_opt_in()` 仍把 release
-排除，因此單一管理員無法完成 Guided 發版。
-
-決定把同 repository、目標為 default branch、且名稱符合 canonical
-`release/v<semver>` 的 Alpha release candidate 納入既有 audited self-merge。這只讓
-lease 期間建立的 exact-head maintainer authorization 成為 `review` 的合格來源；
-`verify-release-candidate` 仍在 hosted CI 與 merge boundary 重驗 current `main`、
-head SHA、版本、提交與檔案範圍，required checks、未解 review threads 與 live admin
-bypass actor 也維持 fail closed。`review: peer`、beta／early／formal、fork、非 canonical
-release branch 與 quota fallback 不變。回退方式是 revert #913，恢復 Guided release
-必須等待 Copilot 或獨立 maintainer。
 
 ## 2026-09-20 下游治理漂移檢查改為預設啟用（#746）
 
@@ -322,7 +161,7 @@ Actions App、repository、workflow path、event 與 exact head。pending check 
 同一原則套用到 trusted PR-policy writer 與 release drift：approval 尚待核可時發布 pending，
 writer 成功送出決定後自身成功；release drift 成功建立或更新追蹤 Issue 後自身成功。GitHub
 API 或寫入失敗仍失敗。真實的 title／branch route／Issue binding 違規仍由 `title` 失敗，
-zero-step Actions quota 也維持 #325 的明示例外，不能用合成成功掩蓋未執行的 required check。
+原本 zero-step Actions quota 的 #325 明示例外已隨 quota fallback 退役（#1071），未執行的 required check 一律不能以合成成功掩蓋。
 
 ## 2026-09-23 保持治理升級後的 delivery sync 可用（#958）
 

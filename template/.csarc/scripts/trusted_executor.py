@@ -26,6 +26,12 @@ current-only `csarc_config` parser), the governance-switch route for changes to
 verification floor, and the materialized trusted base the local lifecycle
 re-executes from. Candidate copies of these rules only ever run as a
 non-authoritative self-test.
+
+Issue #1106: the guided release candidate check (`release/v*` into the
+default branch) also decides a required result, so `prepare --control-set
+release` stages its entry point and every Python module beside it from the
+same trusted base. The hosted job then validates the exact candidate tree
+with that copy, and candidate code never runs in the step that holds a token.
 """
 
 from __future__ import annotations
@@ -77,6 +83,13 @@ GENERATED_CONTROL_FILES = (
     ".csarc/scripts/verify-fast",
 )
 MANIFEST = "trusted-executor.json"
+# Issue #1106: the release control set is the guided candidate entry point
+# plus every Python module in the same directory, so a module it loads
+# indirectly can never fall back to a candidate copy.
+RELEASE_ENTRY = "verify-release-candidate"
+CONTROL_SET_VERIFICATION = "verification"
+CONTROL_SET_RELEASE = "release"
+CONTROL_SETS = (CONTROL_SET_VERIFICATION, CONTROL_SET_RELEASE)
 
 
 def scripts_prefix(root: Path) -> str:
@@ -89,8 +102,25 @@ def scripts_prefix(root: Path) -> str:
     )
 
 
-def control_paths(root: Path) -> list[str]:
+def release_control_paths(root: Path) -> list[str]:
+    """Return the guided release candidate control set under `root`."""
+    prefix = scripts_prefix(root)
+    paths = {f"{prefix}/{RELEASE_ENTRY}"}
+    paths.update(
+        path.relative_to(root).as_posix()
+        for path in (root / prefix).glob("*.py")
+    )
+    return sorted(paths)
+
+
+def control_paths(
+    root: Path, control_set: str = CONTROL_SET_VERIFICATION
+) -> list[str]:
     """Return the sorted relative control-set paths present under `root`."""
+    if control_set == CONTROL_SET_RELEASE:
+        return release_control_paths(root)
+    if control_set != CONTROL_SET_VERIFICATION:
+        raise RuntimeError(f"Unknown trusted control set: {control_set}")
     if scripts_prefix(root) == GENERATED_SCRIPTS:
         return sorted(GENERATED_CONTROL_FILES)
     paths = set(CONTROL_FILES)
@@ -117,7 +147,11 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def prepare(source: Path, destination: Path) -> dict[str, str]:
+def prepare(
+    source: Path,
+    destination: Path,
+    control_set: str = CONTROL_SET_VERIFICATION,
+) -> dict[str, str]:
     """Copy the trusted control set and record its manifest.
 
     The copy fails closed: a missing control file, a symbolic link, or an
@@ -127,7 +161,7 @@ def prepare(source: Path, destination: Path) -> dict[str, str]:
     if destination.exists():
         raise RuntimeError(f"Trusted executor already exists: {destination}")
     files: dict[str, str] = {}
-    for relative in control_paths(source):
+    for relative in control_paths(source, control_set):
         origin = source / relative
         if origin.is_symlink() or not origin.is_file():
             raise RuntimeError(
@@ -725,6 +759,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     stage = commands.add_parser("prepare", help="stage the trusted executor")
     stage.add_argument("--source", type=Path, required=True)
     stage.add_argument("--destination", type=Path, required=True)
+    stage.add_argument(
+        "--control-set", choices=CONTROL_SETS, default=CONTROL_SET_VERIFICATION
+    )
     check = commands.add_parser("verify", help="check the staged digests")
     check.add_argument("--destination", type=Path, required=True)
     compare = commands.add_parser(
@@ -764,7 +801,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     if args.command == "prepare":
         try:
-            files = prepare(args.source, args.destination)
+            files = prepare(args.source, args.destination, args.control_set)
         except (OSError, RuntimeError) as error:
             sys.stderr.write(f"{error}\n")
             return 1

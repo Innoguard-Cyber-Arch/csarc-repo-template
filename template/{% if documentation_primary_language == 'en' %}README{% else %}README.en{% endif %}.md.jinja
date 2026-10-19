@@ -24,10 +24,11 @@ cd {{ project_slug }}
 ## Quick start
 
 <!-- csarc-project-run-command:start -->
-```bash
+{% if project_run_command | trim != './.csarc/scripts/verify' %}```bash
 {{ project_run_command }}
 ```
-<!-- csarc-project-run-command:end -->
+{% else %}No product start command is recorded yet. `./.csarc/scripts/verify` checks the repository baseline; it does not start the product. Record the product command with `csarc update --data project_run_command=<command>`.
+{% endif %}<!-- csarc-project-run-command:end -->
 
 ## Documentation
 
