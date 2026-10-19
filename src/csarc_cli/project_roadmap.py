@@ -8,7 +8,9 @@ projection of Issue facts:
 
 * ``Project start`` is the UTC date the Issue was created;
 * ``Project target`` is the UTC date of the current Milestone ``due_on``,
-  or an explicit ``--target-date`` when the Issue has no due date.
+  or an explicit ``--target-date`` when the Issue has no due date; once
+  the Issue is complete it is the UTC completion date instead (#1179):
+  the date its Project ``Status`` became ``Done``, else its ``closed_at``.
 
 Every project, field, and item ID is resolved live and never saved. The
 sync is idempotent: an item is added by Issue/Project identity (GitHub's
@@ -43,6 +45,8 @@ CONFIG_FILE = Path(".csarc/config.yml")
 SETTING = "github_project_url"
 START_FIELD = "Project start"
 TARGET_FIELD = "Project target"
+STATUS_FIELD = "Status"
+DONE = "Done"
 REQUIRED_SCOPE = "project"
 
 PROJECT_QUERY = """
@@ -71,6 +75,9 @@ query($id: ID!) {
           }
           target: fieldValueByName(name: "Project target") {
             ... on ProjectV2ItemFieldDateValue { date }
+          }
+          status: fieldValueByName(name: "Status") {
+            ... on ProjectV2ItemFieldSingleSelectValue { name updatedAt }
           }
         }
       }
@@ -297,6 +304,7 @@ class IssueFacts:
     start: str
     milestone: str
     due: str
+    closed: str = ""
 
 
 def issue_facts(item: Mapping[str, Any], repo: str) -> IssueFacts:
@@ -315,6 +323,9 @@ def issue_facts(item: Mapping[str, Any], repo: str) -> IssueFacts:
         utc_date(str(item["created_at"])),
         str(milestone.get("title", "")),
         utc_date(str(due)) if due else "",
+        utc_date(str(item["closed_at"]))
+        if item.get("state") == "closed" and item.get("closed_at")
+        else "",
     )
 
 
@@ -349,8 +360,18 @@ def milestone_issues(
     ]
 
 
-def target_for(issue: IssueFacts, target_date: str) -> str:
-    """Return the target: the Milestone due date, else an explicit date."""
+def target_for(issue: IssueFacts, target_date: str, done: str = "") -> str:
+    """Return the target date for one Issue (SPEC-009 §10).
+
+    A complete Issue targets its completion date: the day its Project
+    ``Status`` became ``Done`` (``done``), else the day it was closed. The
+    Done date wins when both exist, because the owner's acceptance is the
+    later, deliberate completion. An open Issue targets its Milestone due
+    date, else the explicit ``--target-date``; a complete Issue ignores
+    ``--target-date`` so one Milestone-wide value cannot misdate it.
+    """
+    if done or issue.closed:
+        return done or issue.closed
     if issue.due:
         if target_date and target_date != issue.due:
             raise ProjectSyncError(
@@ -395,10 +416,18 @@ class Plan:
         return [c for c in self.changes if c.current != c.desired]
 
 
-def read_item(
-    run: Runner, project: Project, issue: IssueFacts
-) -> tuple[str | None, str | None, str | None]:
-    """Return the Issue's item in this Project and its two dates."""
+@dataclass(frozen=True)
+class Item:
+    """The Issue's item in this Project: dates and the Done date, if any."""
+
+    id: str | None = None
+    start: str | None = None
+    target: str | None = None
+    done: str = ""
+
+
+def read_item(run: Runner, project: Project, issue: IssueFacts) -> Item:
+    """Return the Issue's item in this Project and its dates."""
     data = graphql(run, ITEM_QUERY, id=issue.node_id)
     nodes = ((data.get("node") or {}).get("projectItems") or {}).get(
         "nodes"
@@ -410,25 +439,35 @@ def read_item(
         and (node.get("project") or {}).get("id") == project.id
     ]
     if not found:
-        return None, None, None
+        return Item()
     item = found[0]
-    start = (item.get("start") or {}).get("date")
-    target = (item.get("target") or {}).get("date")
-    return str(item["id"]), start, target
+    status = item.get("status") or {}
+    done = (
+        utc_date(str(status["updatedAt"]))
+        if str(status.get("name", "")).casefold() == DONE.casefold()
+        and status.get("updatedAt")
+        else ""
+    )
+    return Item(
+        str(item["id"]),
+        (item.get("start") or {}).get("date"),
+        (item.get("target") or {}).get("date"),
+        done,
+    )
 
 
 def plan_issue(
     run: Runner, project: Project, issue: IssueFacts, target_date: str = ""
 ) -> Plan:
     """Compare the Issue's projected dates with what the Project holds."""
-    target = target_for(issue, target_date)
-    item_id, start, current_target = read_item(run, project, issue)
+    item = read_item(run, project, issue)
+    target = target_for(issue, target_date, item.done)
     return Plan(
         issue,
-        item_id,
+        item.id,
         [
-            Change(START_FIELD, project.start_field, start, issue.start),
-            Change(TARGET_FIELD, project.target_field, current_target, target),
+            Change(START_FIELD, project.start_field, item.start, issue.start),
+            Change(TARGET_FIELD, project.target_field, item.target, target),
         ],
     )
 
@@ -450,11 +489,11 @@ def apply_plan(run: Runner, project: Project, plan: Plan) -> None:
             field=change.field_id,
             date=change.desired,
         )
-    _item, start, target = read_item(run, project, plan.issue)
-    if (start, target) != tuple(c.desired for c in plan.changes):
+    item = read_item(run, project, plan.issue)
+    if (item.start, item.target) != tuple(c.desired for c in plan.changes):
         raise ProjectSyncError(
-            f"#{plan.issue.number} read back start {start} and target "
-            f"{target} after the write"
+            f"#{plan.issue.number} read back start {item.start} and target "
+            f"{item.target} after the write"
         )
 
 

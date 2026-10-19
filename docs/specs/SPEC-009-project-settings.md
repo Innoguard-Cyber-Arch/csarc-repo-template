@@ -275,6 +275,7 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 - 空值：`csarc issue create` 與 `csarc issue sync-project` 完全不呼叫 Project API；repository 的 `has_projects` 維持 `false`，不新增 workflow 或 check。
 - 有值：受管入口在任何寫入前即時解析 URL，讀回 owner、project URL、`closed`、`viewerCanUpdate`，以及唯一、型別為 DATE 的 `Project start`／`Project target` 欄位；token 能回報 scopes 時要求 `project`，否則明示 `unknown`。
 - `Project start` 是 Issue 建立日的 UTC 日期；`Project target` 是目前 Milestone `due_on` 的 UTC 日期，沒有 due date 時必須明確傳入 `--target-date YYYY-MM-DD`。
+- 完成後的 target（#1179）：Issue 已關閉，或它在 Project 的 `Status` 為 `Done` 時，`Project target` 改為實際完成日的 UTC 日期，取代 Milestone due date，也不使用 `--target-date`。完成日優先取 `Status` 改成 `Done` 的日期（該欄位值的 `updatedAt`），沒有時取 Issue 的 `closed_at`；兩者都有且不同時以 Done 日期為準，因為 Done 是擁有者驗收後的完成。未關閉、也不是 Done 的 Issue（包括重新開啟的 Issue）規則不變。
 - `csarc issue sync-project --issue <N>`／`--milestone <M>` 依目前的 Milestone 冪等同步；空欄直接寫入，既有值不同時先列 diff，經確認（互動確認或 `--yes`）才覆寫。只同步 Issue，不同步 PR。
 - Issue 已建立但 Project 寫入失敗時保留 Issue，輸出單一可重跑的修復指令；加入 item 以 Issue 與 Project 的 identity upsert，重跑不產生重複 item。
 - 只有經 `csarc issue create` 建立或 `csarc issue sync-project` 明確同步的 Issue 會進 Project；UI、`scripts/gh-issue-create` 或其他工具建立的 Issue 需要時再跑 `sync-project`。
@@ -289,6 +290,7 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 - [x] conformance 測試讓本規格、`copier.yml`、CLI、root parser 與 generated parser 一致（#1071 AC7）。
 - [x] init／adopt 只詢問沒有唯一來源的輸入，preset 只展開成可覆寫的已存意圖，non-interactive 缺值在 render 前失敗，approval route preflight 為三態（#1078，§9）。
 - [x] `github_project_url` 是唯一的 Project 設定，預設空字串，只保存完整 organization／user ProjectV2 URL（#1080 AC1）。
+- [x] 已關閉或 `Status` 為 `Done` 的 Issue，`Project target` 是實際完成日；覆寫沿用 diff 與確認流程（#1179 AC1–AC3）。
 
 ## Out of scope
 
