@@ -4,7 +4,7 @@
 - **日期：**2026-09-04
 - **來源 Issue：**[#532](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/532)
 - **實作 PR：**[#637](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/637)
-- **取代者：**[#900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)
+- **取代者：**[#900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)、[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)（現行契約見 [`simplified-project-configuration.md`](simplified-project-configuration.md) 與 [SPEC-009](../specs/SPEC-009-project-settings.md)）
 
 ## 問題與限制
 
