@@ -14,7 +14,7 @@ python3 .csarc/scripts/sync_milestone_state.py preflight --repo <owner/repo> --m
 
 ## Tracker 與核可
 
-tracker 本文依序有 `Proposal`、`Completion evidence`、`Early termination`、`Promotion` 四個 H2；Release level 固定是 `stable`。只有 repository collaborator 建立的 tracker 會被信任。
+tracker 本文依序有 `Proposal`、`Completion evidence`、`Early termination`、`Promotion` 四段，H2（`##`）或表單產生的 H3（`###`）都接受，同名時以 H2 為準，段落到下一個同級或更高標題為止；Release level 固定是 `stable`。只有 repository collaborator 建立的 tracker 會被信任。
 
 | 留言 | 用途 |
 | --- | --- |

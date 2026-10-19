@@ -24,7 +24,7 @@ Milestone 物件與追蹤 Issue 兩步：一次呼叫建立兩者，追蹤 Issue
 `Milestone <編號>: <里程碑名稱>`，例如
 `Milestone 8: Interactive docs and policy alignment`。冒號後的文字必須與 GitHub
 Milestone 名稱完全相同；本文依序掛 `Proposal`／`Completion evidence`／
-`Early termination`／`Promotion` 四個 H2 段落，核准、反駁與提前終止等狀態只寫在
+`Early termination`／`Promotion` 四個段落，核准、反駁與提前終止等狀態只寫在
 Issue 內文與留言。Tracker 的 promotion 固定發布 stable；底下的 work Issue 預設在合併進
 `dev/m*` 後各自發布 beta，除非 tracker 宣告了下述 beta checkpoints。是否可由提案者自核不由版本成熟度決定，而由
 `.csarc/config.yml` 的 `admin_bypass` 決定。本 repo 設為 `always`，因此具有 `admin`
@@ -65,6 +65,9 @@ terminal Issue 必須列在同一行的 Issue 清單裡。`tracker_errors()` 會
 與說明文字，減少人工照抄漏段落的機率；`scripts/sync_milestone_state.py` 的 `tracker_errors()`
 仍在建立後把關格式是否正確——表單降低出錯機率，不取代驗證。這份表單只建立追蹤 Issue 本身，
 不是下方 GitHub Milestone 物件 `description` 使用的七段式格式，兩者不要混用同一份骨架。
+`scripts/create-milestone` 寫出的段落是 H2（`## Proposal`），Issue 表單送出後則是 H3
+（`### Proposal`），兩種都接受（#1160）：只認同名的 H2 或 H3 標題，同名時以 H2 為準，
+段落到下一個同級或更高的標題為止，所以 H2 段落裡的 `### Checkpoints` 等子段落仍屬於該段落。
 只有 repository collaborator 建立的 tracker 宣告會被信任；Milestone tracker 的
 Release level 固定是 `stable`。
 

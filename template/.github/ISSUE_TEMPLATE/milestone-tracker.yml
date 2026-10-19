@@ -18,7 +18,7 @@ body:
         `python3 .csarc/scripts/sync_milestone_state.py preflight --repo <owner/repo> --milestone <N>`
         自我驗證。下方四個段落（`Proposal`／`Completion evidence`／
         `Early termination`／`Promotion`）是 `.csarc/scripts/sync_milestone_state.py` 的
-        `tracker_errors()` 檢查的固定契約：H2 標題文字（含大小寫）不可更動、刪除或翻譯，
+        `tracker_errors()` 檢查的固定契約：標題文字（含大小寫）不可更動、刪除或翻譯，
         只有 `Proposal` 段落要求非空白的真實內容，其餘三段可以先保留說明用的 HTML 註解，
         待實際發生時再填入內容——這份表單先把骨架帶好，減少手動照抄漏段落的機率，
         `tracker_errors()` 仍會在建立後把關格式是否正確。Milestone promotion 固定走
