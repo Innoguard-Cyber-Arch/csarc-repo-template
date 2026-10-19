@@ -148,7 +148,7 @@ A `setting-decision` row under the report's `Items requiring your decision` does
 
 If `--check` lists a blocking `release-writer` after you choose `product-owned`, the kept writer uses files this update moves into `.csarc/` (the message lists each `old path -> new path`), and `--finalize-plan` refuses. Only two ways remain: choose `csarc-owned`, or first change the writer in a product preparation commit so it no longer uses those paths and run `--check` again; the latter adds a product diff. The agent records the choice, the reason under the rules above, and the `release-writer` message in the PR, and the owner confirms it before merge. Use `verification-only` (CSARC verifies but does not manage releases) only when the owner asks for it.
 
-**`project_run_command`** is the product's shortest start or invoke command (`package_name` follows the same rule). When the CLI can derive it uniquely from the native manifests (`pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`), it is not saved; the value an update uses lives in the render context of `.csarc/provenance.json`, and `.csarc/config.yml` does not list it. When the derived value differs from the recorded one, or cannot be derived uniquely, the report lists a `setting-decision` and the recorded value is kept:
+**`project_run_command`** is the product's shortest start or invoke command (`package_name` follows the same rule). When the CLI can derive it uniquely from the native manifests (`pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`), it is not saved; the value an update uses lives in the render context of `.csarc/provenance.json`, and `.csarc/config.yml` does not list it. When the derived value differs from the recorded one, or cannot be derived uniquely, the report lists a `setting-decision` and the recorded value is kept. Without a native manifest (for example a container-first repository) nothing can be derived, and the CSARC verifier `./.csarc/scripts/verify` is never taken as the product command; until one is decided, the generated README's Quick start says that no product command is recorded:
 
 - Pass no `--data`: the recorded value stays, and the product's behavior does not change.
 - To use another command, decide it explicitly with `--data project_run_command=<command>`. The value is written to `.csarc/config.yml`, and every later update uses it instead of deriving one from the manifests.
@@ -156,6 +156,14 @@ If `--check` lists a blocking `release-writer` after you choose `product-owned`,
 ### Reviewer assignment changes (`reviewers`)
 
 The legacy `reviewers` setting and `.github/REVIEWERS` are retired: the Settings row stays `retired`, and its note names the earlier reviewers, the new assignment, and how to restore it; `Items requiring your decision` adds one non-blocking `setting-decision` row (subject `reviewers`). The new release requests one reviewer per ready pull request, by rotation, from the collaborators with maintain or admin permission other than the author. Like a `widened` row, it does not make `--check` blocking, but the owner must confirm it before `--finalize-plan`; an agent must not accept it on the owner's behalf. To keep the earlier reviewers, give maintain or admin permission only to them, or name them as code owners with `--data code_owner=<owners>` so GitHub requests their review on every pull request; record the owner's decision in the PR.
+
+### README and LICENSE in an existing repo
+
+An existing repo (`project_mode=existing`) owns its README and LICENSE (handbook 5.1 and appendix B.9). The update adds no `README.md`, `README.en.md`, `README.zh-tw.md`, or `LICENSE`, and never rewrites the ones the repo has.
+
+- No `LICENSE`: the report's Settings show `project_license` as `custom` and an empty `copyright_holder`; the product manages its license, and no copyright holder is inferred from the project name. Verify accepts the missing `LICENSE` because provenance records `custom`.
+- An existing `LICENSE`: the file is kept, whether or not it is a CSARC starter text.
+- To have CSARC add a starter `LICENSE`, the owner passes both `--data project_license=<proprietary|MIT|Apache-2.0>` and `--data copyright_holder=<legal holder>` to `--check` and `--finalize-plan`; with a license but no holder, the update stops before any write. The product can also add its own `LICENSE` in a product commit.
 
 ### Kept legacy files and stale links
 

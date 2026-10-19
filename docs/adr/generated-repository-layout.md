@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-21
-- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）、[#1177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1177)（2026-10-19 補充 hosted 專用 sibling 與 payload 餘裕提醒）
+- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）、[#1177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1177)（2026-10-19 補充 hosted 專用 sibling 與 payload 餘裕提醒）；Milestone 18 對齊：[#1066](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1066)、[#1067](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1067)、[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)、[#1081](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1081)、[#1146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1146)、[#1153](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1153)、[#1157](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1157)
 - **實作 PR：**[#860](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/860)
 
 ## 問題與限制
@@ -16,7 +16,7 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 生成專案採下列 ownership 邊界：
 
 - `.csarc/config.yml` 是唯一由使用者編輯的 CSARC 設定來源；網站 `[[key]]`、政策開關、語言與交付選項都讀取它。
-- `.csarc/scripts/` 是穩定 adapter layer。腳本直接把 `.csarc/config.yml` 轉成工具參數；Gitleaks 與 pre-commit 只能吃自己的格式，因此 adapter 只在執行當下於暫存目錄產生設定，結束時刪除。生成專案不提交這兩份工具設定，也不提交未使用的 Zizmor 設定。
+- `.csarc/scripts/` 是穩定 adapter layer。腳本直接把 `.csarc/config.yml` 轉成工具參數；Gitleaks 只能吃自己的 TOML 格式，因此 `scan-secrets` 只在執行當下於暫存目錄產生設定，結束時刪除。pre-commit adapter 與 `enable_precommit` 已退役（SPEC-009 §3，#1071），`.csarc/scripts/pre-commit` 不再 render。生成專案不提交 Gitleaks、pre-commit 或未使用的 Zizmor 設定。
 - `.csarc/policies/*.json` 與 release-please config 是公版管理的唯讀政策／衍生實作資料，不是第二份使用者設定。使用者不得直接修改；變更來源仍是 `.csarc/config.yml` 或公版本身。
 - `.csarc/release-please-manifest.json` 是工具必須提交的版本狀態，不是設定來源，因此持久保存。
 - 平台固定檔保留在 `.github/`；root `SECURITY.md` 提供 scanner discovery 所需的 repository-wide policy，與 `.github/SECURITY.md` 的人類通報流程分工；root `AGENTS.md` 只作自動探索入口，詳細規則放 `.csarc/docs/agent-workflow.md`，`.claude/CLAUDE.md` 只引用 root 入口。
@@ -168,7 +168,7 @@ typescript/tests/index.test.ts
 - 生成專案從不 render `verify-template.sh`，生成副本因此不保留只檢查模板 repository toolchain 的程式碼。
 - `scripts/generated_payload.py` 在任一 fixture 距離 `Targets` 剩不到 1 個檔案或 20 KB 時印出 `WARNING`；提醒不改變 `Targets`，也不改變 exit status。
 
-`scripts/generated_payload.py` 量測 #1058 `Targets` 的 fixture；`tests/test_generated_payload.py` 斷言每個量測不超過記錄的上限，上限只能下降，不放寬 `Targets`。2026-10-15 重新核准後，`Targets` 只有檔案數與總 bytes：檔案數上限等於 `Targets`；bytes 上限先記錄 #1129 的實測值，由 #1081 取代 generated 文件時降到 `Targets`。`.csarc/scripts` 支數、腳本行數與 workflow 數仍會量測並印出，但只供參考，不是預算。
+`scripts/generated_payload.py` 量測 #1058 `Targets` 的 fixture；`tests/test_generated_payload.py` 斷言每個量測不超過記錄的上限，上限只能下降，不放寬 `Targets`。2026-10-15 重新核准後，`Targets` 只有檔案數與總 bytes：檔案數上限等於 `Targets`；#1129 先記錄的 bytes 實測上限已由 #1081 降到 `Targets`：每個 fixture 的檔案數與 bytes 上限都等於 `Targets`，沒有未達成的缺口（`test_ceilings_equal_targets`）。`.csarc/scripts` 支數、腳本行數與 workflow 數仍會量測並印出，但只供參考，不是預算。
 
 ## 四種 inventory
 
@@ -181,9 +181,9 @@ typescript/tests/index.test.ts
 
 ## 更新搬移規則
 
-`csarc update` 只搬移新模板仍認得的舊 CSARC 檔案：`scripts/`、`policies/`、兩個公版自測、網站引擎／資產、CSARC 操作文件、版本與仍需持久保存的工具狀態。舊 `.gitleaks.toml`、`.pre-commit-config.yaml` 與 `zizmor.yml` 由新 adapter 取代，plan 明列 delete。`site/content/**` 搬到 `docs/site/content/**` 且保留 consuming repository 的文字。既有專案的 root `SECURITY.md` 視為產品所有，不自動搬移或覆寫；缺少此檔案時可取得公版 scanner baseline。公版建立的新專案則由 Copier 把舊 root disclosure 更新成 scanner policy，並另外建立 `.github/SECURITY.md` 人類通報政策；#742 的一次性 root-to-`.github` move 因 #872 建立新的 root discovery contract 而不再適用。
+`csarc update` 只搬移新模板仍認得的舊 CSARC 檔案：`scripts/`、`policies/`、兩個公版自測、網站引擎／資產、CSARC 操作文件、版本與仍需持久保存的工具狀態。舊 `.gitleaks.toml`、`.pre-commit-config.yaml` 與 `zizmor.yml` 由新 adapter 取代：與可信舊側 render byte-identical、也沒有被使用時 plan 明列 delete；仍被 plan 保留的檔案以路徑引用，或保留的檔案會執行自動讀取它的工具（gitleaks、pre-commit、zizmor）時，改列 `preserve`／`product-owned`（#1146、#1157，SPEC-008）；修改過的舊檔保留為 `retire-modified`（#1066）。`site/content/**` 搬到 `docs/site/content/**` 且保留 consuming repository 的文字。既有專案的 root `SECURITY.md` 視為產品所有，不自動搬移或覆寫；缺少此檔案時可取得公版 scanner baseline。公版建立的新專案則由 Copier 把舊 root disclosure 更新成 scanner policy，並另外建立 `.github/SECURITY.md` 人類通報政策；#742 的一次性 root-to-`.github` move 因 #872 建立新的 root discovery contract 而不再適用。
 
-搬移先在隔離 candidate clone 執行，再由 Copier 更新，完整驗證通過後才以單一 patch 寫回目標。若新舊位置同時存在且內容不同，整次更新停止；若內容相同，只移除舊副本。產品自訂 `scripts/*`、`tests/*` 與其他未知檔案一律保留。
+搬移先在隔離 candidate clone 執行，再由 Copier 更新，完整驗證通過後才寫回目標。新舊位置同時存在而內容相同時只移除舊副本；內容不同時不再整次停止，而是在 plan 列為需要決定的衝突，由 `update --finalize-plan` 對每個衝突取得一個 `keep-current`／`take-new`／`custom:FILE` 決定（#1067）。套用時實際的新增、修改、搬移與刪除集合必須與核准 plan 相同，寫入以 transaction 進行，任一步失敗時 target 回到 byte-identical base（#1066，SPEC-008）。產品自訂 `scripts/*`、`tests/*` 與其他未知檔案一律保留。
 
 ## 評估過的替代方案
 
