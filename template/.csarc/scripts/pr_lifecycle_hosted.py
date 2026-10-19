@@ -1,7 +1,4 @@
-"""Hosted-only half of `pr_lifecycle.py` (#1177); local renders omit it.
-
-The shared helpers come from `pr_lifecycle.py` when it loads this file.
-"""
+"""Hosted-only half of `pr_lifecycle.py`, which lends it its globals."""
 
 from __future__ import annotations
 

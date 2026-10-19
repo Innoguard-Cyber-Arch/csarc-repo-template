@@ -112,25 +112,36 @@ risk_controls: Any = SiblingModule("risk_controls")
 verification_evidence: Any = SiblingModule("verification_evidence")
 
 
-# Hosted-only checks live in a sibling local renders omit (#1177).
+# Hosted-only code; local renders omit it (#1177).
 hosted_checks: Any = SiblingModule("pr_lifecycle_hosted")
 
 
+def _hosted_globals(name: str) -> dict[str, Any]:
+    """Return the hosted sibling namespace, sharing these globals."""
+    try:
+        shared = vars(hosted_checks._sibling())
+    except (FileNotFoundError, ModuleNotFoundError) as error:
+        raise RuntimeError(f"{name} needs verification_mode: hosted") from error
+    for key, value in globals().items():
+        shared.setdefault(key, value)
+    return shared
+
+
 def _hosted_only(name: str) -> Callable[..., object]:
-    """Forward one call to the hosted sibling, which shares these globals."""
+    """Forward one call to the hosted sibling."""
 
     def forward(*args: object, **kwargs: object) -> object:
-        try:
-            shared = vars(hosted_checks._sibling())
-        except (FileNotFoundError, ModuleNotFoundError) as error:
-            raise RuntimeError(
-                f"{name} needs verification_mode: hosted"
-            ) from error
-        for key, value in globals().items():
-            shared.setdefault(key, value)
-        return shared[name](*args, **kwargs)
+        return _hosted_globals(name)[name](*args, **kwargs)
 
     return forward
+
+
+def __getattr__(name: str) -> object:
+    """Read one hosted-only name."""
+    try:
+        return _hosted_globals(name)[name]
+    except (KeyError, RuntimeError) as error:
+        raise AttributeError(name) from error
 
 
 declared_required_contexts = _hosted_only("declared_required_contexts")

@@ -71,6 +71,8 @@ ADAPTED: dict[str, dict[str, str]] = {
     "pr_lifecycle.py": {
         "hosted_checks": HOSTED_FORWARDER,
         "_hosted_only": HOSTED_FORWARDER,
+        "_hosted_globals": HOSTED_FORWARDER,
+        "__getattr__": HOSTED_FORWARDER,
         "require_trusted_verification": (
             "drops the template-repository toolchain check; no generated "
             "project renders verify-template.sh"

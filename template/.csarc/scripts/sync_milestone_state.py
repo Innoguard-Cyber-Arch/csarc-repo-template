@@ -98,12 +98,12 @@ stale_branch_detection: Any = SiblingModule("stale_branch_detection")
 release_level: Any = SiblingModule("release_level")
 
 
-# Hosted-only gates live in a sibling local renders omit (#1177).
+# Hosted-only code; local renders omit it (#1177).
 hosted_gates: Any = SiblingModule("sync_milestone_state_hosted")
 
 
 def _hosted_only(name: str) -> Callable[..., Decision]:
-    """Forward one call to the hosted sibling, which shares these globals."""
+    """Forward one call to the hosted sibling, sharing these globals."""
 
     def forward(*args: object, **kwargs: object) -> Decision:
         try:

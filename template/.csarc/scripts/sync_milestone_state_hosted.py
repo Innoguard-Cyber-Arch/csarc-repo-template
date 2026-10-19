@@ -1,7 +1,4 @@
-"""Hosted-only half of `sync_milestone_state.py` (#1177); local renders omit it.
-
-The shared helpers come from `sync_milestone_state.py` when it loads this file.
-"""
+"""Hosted-only half of `sync_milestone_state.py`, which lends it its globals."""
 
 from __future__ import annotations
 
