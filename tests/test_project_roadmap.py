@@ -458,28 +458,34 @@ def test_issue_create_checks_first_then_adds_and_dates_the_issue(
     assert any(
         "projectV2(number" in " ".join(c) for c in fake.calls[:first_create]
     )
+    # Created 2026-10-15T23:30Z = 2026-10-16 07:30 in Taipei (#1186 AC2).
     assert fake.items["I_41"] == {
         "id": "ITEM_I_41",
-        "start": "2026-10-15",
+        "start": "2026-10-16",
         "target": "2026-10-31",
     }
     assert fake.add_calls == 1
     assert "https://github.com/o/r/issues/41" in capsys.readouterr().out
 
 
-def test_issue_without_due_date_needs_an_explicit_target() -> None:
-    """AC4: no due date and no --target-date stops before creating."""
+def test_issue_without_due_date_targets_start_plus_14_days() -> None:
+    """#1186 AC3: no due date defaults to start + 14; explicit still wins."""
     fake = FakeGitHub()
     before, after = project_roadmap.create_hooks(URL, "", run=fake)
-    with pytest.raises(ProjectSyncError, match="no Issue was created"):
-        risk_tools.issue_create(
-            ["--title", "Add report checks", "--body", BODY],
-            run=fake,
-            interactive=False,
-            before=before,
-            after=after,
-        )
-    assert not any(call[:2] == ["issue", "create"] for call in fake.calls)
+    status = risk_tools.issue_create(
+        ["--title", "Add report checks", "--body", BODY],
+        run=fake,
+        interactive=False,
+        before=before,
+        after=after,
+    )
+    assert status == 0
+    # Taipei start 2026-10-16 (created 23:30Z) + 14 calendar days.
+    assert fake.items["I_41"] == {
+        "id": "ITEM_I_41",
+        "start": "2026-10-16",
+        "target": "2026-10-30",
+    }
     before, after = project_roadmap.create_hooks(URL, "2026-12-01", run=fake)
     assert (
         risk_tools.issue_create(
@@ -491,7 +497,8 @@ def test_issue_without_due_date_needs_an_explicit_target() -> None:
         )
         == 0
     )
-    assert fake.items["I_41"]["target"] == "2026-12-01"
+    assert fake.items["I_42"]["target"] == "2026-12-01"
+    assert project_roadmap.default_target("2026-12-25") == "2027-01-08"
 
 
 def test_explicit_target_cannot_contradict_a_due_date(tmp_path: Path) -> None:
@@ -603,7 +610,7 @@ def test_partial_write_keeps_the_issue_and_retry_is_idempotent(
     )
     repairs = re.findall(r"Repair \(idempotent\): (.*)", transcript)
     assert repairs == ["csarc issue sync-project --issue 41 --repo o/r"]
-    assert fake.items["I_41"]["start"] == "2026-10-15"
+    assert fake.items["I_41"]["start"] == "2026-10-16"
     assert fake.items["I_41"]["target"] is None
     status, _output = sync(fake, issue=41, tmp=tmp_path)
     assert status == 0
@@ -780,3 +787,140 @@ def test_milestone_sync_dates_only_complete_issues_by_completion(
     assert status == 0, output
     assert fake.items["I_41"]["target"] == "2026-10-31"
     assert fake.items["I_42"]["target"] == "2026-10-20"
+
+
+# ------------------------------------------------- #1186 fixed board rules
+
+
+def tracked_milestone(fake: FakeGitHub, tracker: int = 40) -> None:
+    """Give Milestone 3 a tracker link, as `scripts/create-milestone` does."""
+    fake.milestones[3]["description"] = f"Lifecycle Issue: #{tracker}\n\nPlan"
+
+
+def graphql_calls(fake: FakeGitHub) -> list[list[str]]:
+    """Return every ProjectV2 GraphQL call (reads and writes)."""
+    return [call for call in fake.calls if call[:2] == ["api", "graphql"]]
+
+
+def test_taipei_dates_cover_the_0000_to_0800_window() -> None:
+    """#1186 AC2: start and completion use the Asia/Taipei calendar day."""
+    taipei = project_roadmap.taipei_date
+    assert taipei("2026-10-15T15:59:59Z") == "2026-10-15"  # 23:59 Taipei
+    assert taipei("2026-10-15T16:00:00Z") == "2026-10-16"  # 00:00 Taipei
+    assert taipei("2026-10-15T23:59:59Z") == "2026-10-16"  # 07:59 Taipei
+    assert taipei("2026-10-16T00:00:00Z") == "2026-10-16"  # 08:00 Taipei
+    item = {
+        "number": 1,
+        "node_id": "I_1",
+        "created_at": "2026-10-15T17:00:00Z",
+        "state": "closed",
+        "closed_at": "2026-10-18T18:30:00Z",
+        "milestone": {"title": "B", "due_on": "2026-10-31T00:00:00Z"},
+    }
+    facts = project_roadmap.issue_facts(item, "o/r")
+    assert (facts.start, facts.closed, facts.due) == (
+        "2026-10-16",
+        "2026-10-19",
+        "2026-10-31",
+    )
+
+
+def test_done_date_uses_the_taipei_day(tmp_path: Path) -> None:
+    """#1186 AC2: a Done set at 2026-10-18T20:00Z is 2026-10-19 in Taipei."""
+    fake = FakeGitHub()
+    fake.add_issue(41, "2026-10-15T10:00:00Z", 3)
+    fake.items["I_41"] = {
+        "id": "ITEM_I_41",
+        "start": None,
+        "target": None,
+        "status": {"name": "Done", "updatedAt": "2026-10-18T20:00:00Z"},
+    }
+    assert sync(fake, issue=41, tmp=tmp_path)[0] == 0
+    assert fake.items["I_41"]["target"] == "2026-10-19"
+
+
+def test_taipei_start_change_needs_confirmation(tmp_path: Path) -> None:
+    """#1186 R1: an old UTC start that now differs is a diff, never silent."""
+    fake = FakeGitHub()
+    fake.add_issue(41, "2026-10-15T23:30:00Z", 3)
+    fake.items["I_41"] = {
+        "id": "ITEM_I_41",
+        "start": "2026-10-15",
+        "target": "2026-10-31",
+    }
+    status, output = sync(fake, issue=41, tmp=tmp_path)
+    assert status == 1 and "nothing was written" in output
+    assert "Project start 2026-10-15 -> 2026-10-16" in output
+    assert fake.set_calls == 0
+    assert sync(fake, issue=41, tmp=tmp_path, confirm=True)[0] == 0
+    assert fake.items["I_41"]["start"] == "2026-10-16"
+    writes = fake.set_calls
+    assert "(unchanged)" in sync(fake, issue=41, tmp=tmp_path)[1]
+    assert fake.set_calls == writes
+
+
+def test_work_issue_and_sub_issue_stay_off_the_board(tmp_path: Path) -> None:
+    """#1186 AC1: no Project API call for a work Issue or a sub-issue."""
+    fake = FakeGitHub()
+    tracked_milestone(fake)
+    fake.add_issue(41, "2026-10-15T10:00:00Z", 3)
+    status, output = sync(fake, issue=41, tmp=tmp_path)
+    assert status == 0
+    assert "#41 skipped: it is a work Issue of Milestone 'Beta'" in output
+    assert "(tracker #40)" in output and "no Project API" in output
+    fake.add_issue(45, "2026-10-15T10:00:00Z", None)
+    fake.issues[45]["parent_issue_url"] = (
+        "https://api.github.com/repos/o/r/issues/44"
+    )
+    status, output = sync(fake, issue=45, tmp=tmp_path)
+    assert status == 0 and "#45 skipped: it is a sub-issue" in output
+    assert graphql_calls(fake) == [] and not fake.items
+
+
+def test_tracker_and_standalone_issues_go_to_the_board(tmp_path: Path) -> None:
+    """#1186 AC1: the tracker and a standalone Issue are synced."""
+    fake = FakeGitHub()
+    tracked_milestone(fake)
+    fake.add_issue(40, "2026-10-14T10:00:00Z", 3)
+    fake.add_issue(41, "2026-10-15T10:00:00Z", 3)
+    fake.add_issue(42, "2026-10-15T10:00:00Z", 3)
+    fake.issues[42]["parent_issue_url"] = (
+        "https://api.github.com/repos/o/r/issues/40"
+    )
+    status, output = sync(fake, milestone=3, tmp=tmp_path)
+    assert status == 0, output
+    assert set(fake.items) == {"I_40"}
+    assert fake.items["I_40"]["target"] == "2026-10-31"
+    assert "#41 skipped" in output and "#42 skipped" in output
+    fake.add_issue(50, "2026-10-15T10:00:00Z", None)
+    assert sync(fake, issue=50, tmp=tmp_path)[0] == 0
+    assert fake.items["I_50"] == {
+        "id": "ITEM_I_50",
+        "start": "2026-10-15",
+        "target": "2026-10-29",
+    }
+
+
+def test_issue_create_in_a_tracked_milestone_skips_the_project(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """#1186 AC1: a work Issue is created with no Project API call."""
+    fake = FakeGitHub()
+    tracked_milestone(fake)
+    out = io.StringIO()
+    before, after = project_roadmap.create_hooks(URL, "", run=fake, out=out)
+    status = risk_tools.issue_create(
+        ["--title", "Add report checks", "--body", BODY, "--milestone", "Beta"],
+        run=fake,
+        interactive=False,
+        before=before,
+        after=after,
+    )
+    capsys.readouterr()
+    assert status == 0, out.getvalue()
+    assert 41 in fake.issues and not fake.items
+    assert graphql_calls(fake) == []
+    assert not any(
+        call[:3] == ["api", "--include", "rate_limit"] for call in fake.calls
+    )
+    assert "#41 skipped: it is a work Issue" in out.getvalue()

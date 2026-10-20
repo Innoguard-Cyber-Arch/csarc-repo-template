@@ -235,6 +235,12 @@ def test_kept_legacy_verify_blocks_until_retired_by_decision(
         )
         == 0
     ), capsys.readouterr().err
+    # The terminal summary follows the decision (Issue #1164).
+    summary = capsys.readouterr().out
+    assert "Retained modified files (0):" in summary
+    assert re.search(
+        r"^Remove \(\d+\):\n(?:  .*\n)*  scripts/verify$", summary, re.M
+    )
     final = read_json(reports / "csarc-update-report.json")
     assert final["status"] != "blocked"
     [row] = [r for r in final["files"] if r["path"] == "scripts/verify"]
@@ -322,6 +328,45 @@ def test_only_take_new_retires_a_kept_file() -> None:
             {"scripts/verify": ("keep-current", None)}, ("scripts/verify",)
         )
     assert "take-new" in str(error.value)
+
+
+def test_finalize_summary_lists_a_take_new_retirement_as_removed(
+    tmp_path: Path,
+) -> None:
+    """Issue #1164 AC1/R1: the summary follows the retirement decision."""
+    files = cli.Plan(
+        (),
+        (),
+        ("scripts/old",),
+        (),
+        (),
+        ("docs/README.md",),
+        (),
+        retained=("scripts/test", "scripts/verify"),
+    )
+    plan = cli.ResolvedPlan(
+        mode="update",
+        target=tmp_path,
+        revision=cli.Revision("v1.0.0", "b" * 40, "https://example.invalid"),
+        repository=cli.RepositoryContext(
+            None, None, None, "private", "none", False
+        ),
+        answers={},
+        capabilities={},
+        files=files,
+    )
+    decided = cli.decided_summary_plan(
+        plan,
+        ["scripts/verify=take-new", "docs/README.md=take-new"],
+    )
+    assert decided.files is not None
+    assert decided.files.retained == ("scripts/test",)
+    assert decided.files.remove == ("scripts/old", "scripts/verify")
+    # A conflict decision does not move the manual merge entry.
+    assert decided.files.manual == ("docs/README.md",)
+    # No decision, keep-current, or an invalid value leaves it unchanged.
+    for values in ([], ["scripts/verify=keep-current"], ["bad"]):
+        assert cli.decided_summary_plan(plan, values) is plan
 
 
 # --- AC2: a retired reviewer list asks the owner to confirm ---------------
@@ -441,3 +486,116 @@ def test_status_next_command_uses_the_install_guide_flags(guide: str) -> None:
     static = cli.INSTALL_STATE_NEXT_COMMAND[cli.INSTALL_STATE_UPDATE]
     assert "--check --json" in static
     assert static.endswith("--yes")
+
+
+# --- Issue #1168: an executable owner answer to the reviewer change -------
+
+RETIRED_REVIEWERS = [
+    {
+        "key": "reviewers",
+        "before": "@reviewer-one",
+        "after": None,
+        "class": "retired",
+        "source": "derived",
+        "note": None,
+    }
+]
+
+
+def test_reviewers_answer_is_a_one_time_input_never_rendered() -> None:
+    """AC1/R1: --data reviewers is removed before any render or save."""
+    data = {"reviewers": "accept", "code_owner": "@owner"}
+    assert cli.reviewers_answer(data) == "accept"
+    assert data == {"code_owner": "@owner"}
+    assert cli.reviewers_answer({"reviewers": "pending"}) == "pending"
+    assert cli.reviewers_answer({}) is None
+    with pytest.raises(cli.CliError) as error:
+        cli.reviewers_answer({"reviewers": "@reviewer-one"})
+    assert "accept" in str(error.value)
+    assert "pending" in str(error.value)
+
+
+def test_accept_resolves_the_row_and_pending_keeps_it_open() -> None:
+    """AC1/R1: accept resolves the row; pending says the owner is away."""
+    assert (
+        cli.update_required_actions(
+            EMPTY_PLAN, RETIRED_REVIEWERS, reviewer_answer="accept"
+        )
+        == []
+    )
+    [open_row] = cli.update_required_actions(EMPTY_PLAN, RETIRED_REVIEWERS)
+    assert "--data reviewers=accept" in str(open_row["message"])
+    assert "--data reviewers=pending" in str(open_row["message"])
+    assert open_row["command"] == "csarc update --data reviewers=accept"
+    [pending] = cli.update_required_actions(
+        EMPTY_PLAN, RETIRED_REVIEWERS, reviewer_answer="pending"
+    )
+    assert pending["kind"] == "setting-decision"
+    assert pending["blocking"] is False
+    assert "confirmation is pending" in str(pending["message"])
+    assert "draft" in str(pending["message"])
+
+
+def test_accept_marks_the_retired_reviewers_row_explicit() -> None:
+    """AC1: the accepted answer is recorded on the Settings row."""
+    [row] = cli.report_setting_rows(
+        {}, {"reviewers": "@reviewer-one"}, explicit=("reviewers",)
+    )
+    assert row["key"] == "reviewers"
+    assert row["class"] == "retired"
+    assert row["after"] is None
+    assert row["source"] == "explicit"
+    [derived] = cli.report_setting_rows({}, {"reviewers": "@reviewer-one"})
+    assert derived["source"] == "derived"
+
+
+@pytest.mark.parametrize("files", [EMPTY_PLAN])
+def test_finalize_needs_an_answer_only_for_a_reviewer_change(
+    files: cli.Plan,
+) -> None:
+    """AC1/R1: finalize refuses a missing answer; a stray answer fails."""
+    with pytest.raises(cli.CliError) as error:
+        cli.check_reviewers_answer(
+            files, RETIRED_REVIEWERS, None, finalize=True
+        )
+    message = str(error.value)
+    assert "--data reviewers=accept" in message
+    assert "--data reviewers=pending" in message
+    assert "target was not changed" in message
+    # --check only reports; an answer satisfies finalize.
+    cli.check_reviewers_answer(files, RETIRED_REVIEWERS, None, finalize=False)
+    for answer in ("accept", "pending"):
+        cli.check_reviewers_answer(
+            files, RETIRED_REVIEWERS, answer, finalize=True
+        )
+    # The file retiring alone is also a reviewer change.
+    deleted = cli.Plan(
+        (), (), (), (), (), (), (), delete=(".github/REVIEWERS",)
+    )
+    with pytest.raises(cli.CliError):
+        cli.check_reviewers_answer(deleted, [], None, finalize=True)
+    # No reviewer change: no answer is needed, and one is refused.
+    cli.check_reviewers_answer(files, [], None, finalize=True)
+    with pytest.raises(cli.CliError) as stray:
+        cli.check_reviewers_answer(files, [], "accept", finalize=False)
+    assert "does not retire the reviewer list" in str(stray.value)
+
+
+@pytest.mark.parametrize(
+    ("guide", "owner_away"),
+    [
+        ("docs/install.md", "擁有者不在場"),
+        ("docs/install.en.md", "The owner is not available"),
+    ],
+)
+def test_install_guide_documents_the_reviewers_answers(
+    guide: str, owner_away: str
+) -> None:
+    """AC1/R1: the guide names exactly the answers the CLI accepts."""
+    text = (ROOT / guide).read_text(encoding="utf-8")
+    # Both headings start with "### Reviewer " in either language.
+    section = text.split("\n### Reviewer ", 1)[1].split("\n### ", 1)[0]
+    documented = set(re.findall(r"--data reviewers=([a-z]+)", section))
+    assert documented == set(governance_migration.REVIEWERS_ANSWERS)
+    assert owner_away in section
+    assert "--finalize-plan" in section
