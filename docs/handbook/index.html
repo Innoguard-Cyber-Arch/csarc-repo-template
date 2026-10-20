@@ -1292,7 +1292,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 | Release | &lt;tag 與完整 SHA&gt; |
 | 步驟紀錄 | &lt;每一步的指令、exit code 與結果摘要&gt; |
 | 衝突與決定 | &lt;每個衝突的決定，以及依據手冊哪一節&gt; |
-| 產品 diff 摘要 | &lt;套用後產品檔案的變更。只能是 install.md 列出的產品準備 commit（例如產品 job 搬移、Action pin）與 apply 結果；每個產品準備 commit 逐條記錄 SHA、內容與依據的 install.md 章節，沒有時寫 `none`。`take-new` 退役的舊檔不列在這裡&gt; |
+| 產品 diff 摘要 | &lt;套用後產品檔案的變更。只能是 install.md 列出的產品準備 commit（例如產品 job 搬移、Action pin）、apply 結果與後續修正 commit（例如刪除舊檔、修正舊路徑連結、補 ignore 規則）；每個產品準備 commit 與後續修正 commit 逐條記錄 SHA、內容與依據的 install.md 章節，沒有時寫 `none`。`take-new` 退役的舊檔不列在這裡&gt; |
 | Native checks | &lt;每個產品原有檢查的指令，以及在 `main` 與 branch 的結果&gt; |
 | 產品檢查變化 | &lt;結果與 `main` 不同的每個產品檢查，標 `待擁有者決定`（附文件章節與列出的選項）或 `regression`；沒有時寫 `none`&gt; |
 | 無依據猜測 | &lt;會改變產品行為或治理範圍、卻找不到文件依據的猜測；沒有時寫 `none`&gt; |

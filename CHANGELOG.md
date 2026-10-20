@@ -7,6 +7,23 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.37.0-beta.1] - 2026-10-19
+
+### Features
+
+* feat(project): apply fixed team board rules to Project sync (d6fa8c8)
+
+### Bug Fixes
+
+* fix(update): list product tests a retired legacy verifier runs (cd9df1a)
+* fix(update): name the product-job move for a retired-file use (f379ba5)
+* fix(update): allow recorded follow-up fix commits after apply (488eaa2)
+* fix(update): keep existing repositories free of starter files (22955cc)
+* fix(update): list take-new retirements as removed in the finalize summary (1b3e5a0)
+* fix(update): ask for the run command when no manifest exists (6df261e)
+* fix(report): explain the CODEOWNER line in update reports (2a68923)
+* fix(update): record the owner's answer to a reviewer change (beea097)
+
 ## [0.36.0-beta.1] - 2026-10-19
 
 ### Features
