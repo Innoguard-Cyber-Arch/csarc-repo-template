@@ -507,7 +507,7 @@ def _milestone_errors(milestone: dict[str, Any]) -> list[str]:
 def _parent_membership_errors(
     issues: list[dict[str, Any]], milestone_number: int
 ) -> list[str]:
-    """Require native Feature parents to share their sub-issue Milestone."""
+    """Require native parent Issues to share their sub-issue Milestone."""
     members = {
         issue.get("number")
         for issue in issues
@@ -530,7 +530,7 @@ def _parent_membership_errors(
         if parent not in members and isinstance(child, int):
             missing.setdefault(parent, []).append(child)
     return [
-        f"Feature parent #{parent} must share Milestone {milestone_number} "
+        f"Parent Issue #{parent} must share Milestone {milestone_number} "
         f"with sub-issue(s) {', '.join(f'#{child}' for child in children)}"
         for parent, children in sorted(missing.items())
     ]
@@ -1437,7 +1437,7 @@ def _parent_number(issue: dict[str, Any]) -> int | None:
 
 
 def _parent_status(issue: dict[str, Any], sub_statuses: list[str]) -> str:
-    """Return a Feature parent's status from its sub-issues and checklist."""
+    """Return a parent Issue's status from its sub-issues and checklist."""
     if issue.get("state") != "closed":
         return "Pending"
     if issue.get("state_reason") == "not_planned":
@@ -1454,8 +1454,9 @@ def _delivery_statuses(
 ) -> tuple[dict[int, str], dict[int, list[int]]]:
     """Return every linked Issue's delivery status and its sub-issues.
 
-    A Feature parent never has its own delivering pull request (#962 keeps
-    it in the Milestone; a promotion may not close it). It is delivered once
+    A parent Issue (a main Issue with sub-issues, #1174) may have no
+    delivering pull request of its own (#962 keeps it in the Milestone; a
+    promotion may not close it). It is delivered once
     every sub-issue in this Milestone is settled and its own acceptance
     checklist is complete (#1026). Leaf work keeps the strict per-Issue
     closing pull request evidence required since #816.

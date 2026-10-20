@@ -127,8 +127,8 @@ def comment(
     }
 
 
-def test_feature_parent_must_share_the_sub_issue_milestone() -> None:
-    """A delivery cannot omit the Feature that its work Issue belongs to."""
+def test_parent_issue_must_share_the_sub_issue_milestone() -> None:
+    """A delivery cannot omit the main Issue that its sub-Issue belongs to."""
     value = snapshot()
     value["issues"].append(
         {
@@ -139,10 +139,23 @@ def test_feature_parent_must_share_the_sub_issue_milestone() -> None:
     )
 
     assert tracker_errors(value) == [
-        "Feature parent #81 must share Milestone 8 with sub-issue(s) #82"
+        "Parent Issue #81 must share Milestone 8 with sub-issue(s) #82"
     ]
 
-    value["issues"].append({"number": 81, "title": "Parent Feature"})
+    value["issues"].append({"number": 81, "title": "Main Issue"})
+    assert tracker_errors(value) == []
+
+
+def test_main_issues_need_no_feature_parent() -> None:
+    """Issue #1174: main Issues attach to the Milestone without any parent."""
+    value = snapshot()
+    value["issues"].extend(
+        [
+            {"number": 83, "title": "Deliver the first main Issue"},
+            {"number": 84, "title": "Deliver the second main Issue"},
+        ]
+    )
+
     assert tracker_errors(value) == []
 
 

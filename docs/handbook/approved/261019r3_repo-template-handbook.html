@@ -356,7 +356,7 @@
       <h1>repo-template 技術手冊</h1>
       <p class="lead"><code>repo-template</code>（<code>Innoguard-Cyber-Arch/csarc-repo-template</code>）是架構組維護的 Repository 模板；<code>csarc</code> 是呼叫模板能力的 CLI 名稱。本手冊定義產品政策、使用者承諾、操作方式及限制。</p>
       <p class="compact"><strong>適用範圍：</strong>本手冊描述首個完整實作本文能力的 stable release；實際使用版本、來源與 full SHA 以該 Release 的 <code>release-prompt.txt</code> 為準。候選版本未通過手冊、SPEC、Repository 規則、程式與測試的一致性檢查前，不得宣稱已提供本文能力。</p>
-      <p class="compact"><strong>目前狀態：</strong>M18 stable（預訂 2026-10-31）的目標產品契約；發布前屬規劃內容，v0.30.x 尚未提供本文標示的新 CLI、Ready、migration 與 Roadmap 能力。版本：2026-10-13；核准 SHA-256 見 #1058。</p>
+      <p class="compact"><strong>目前狀態：</strong>M18 已於 2026-10-18 發布 stable（v0.35.2）；本文的 CLI、Ready、migration 與 Roadmap 能力自 v0.35.x 起提供。版本：2026-10-19；核准 SHA-256 見 manifest。</p>
 
       <h2>1. repo-template 的功能與使用方式</h2>
       <h3>1.1 repo-template 會替專案做什麼</h3>
@@ -422,7 +422,7 @@
       </table>
       <p class="compact mt-3"><strong>責任與邊界：</strong>AI 產生的程式碼由指派 agent、實際主導修改的人負責；合併者可以是同一人或 reviewer。repo-template 不承諾無人監督開發，也不取代產品測試、部署核准、法遵判斷或 GitHub 付費能力。</p>
     </div>
-    <footer class="page-footer"><span>第 1 章 · repo-template 的功能與使用方式</span><span>版本日期 261013 r2</span><span>1 / 10</span></footer>
+    <footer class="page-footer"><span>第 1 章 · repo-template 的功能與使用方式</span><span>版本日期 261019 r3</span><span>1 / 10</span></footer>
   </section>
 
   <section class="sheet" id="installation">
@@ -460,7 +460,7 @@ push 或建立 PR。</pre>
         <p><strong>操作分工：</strong>Prompt 是使用者入口；外部薄型 CLI 負責可信 bootstrap、狀態判讀與交易式導入；導入後由 Repository 內的 <code>.csarc/scripts/</code> 執行日常規則與驗證。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261013 r2</span><span>2 / 10</span></footer>
+    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261019 r3</span><span>2 / 10</span></footer>
   </section>
 
   <section class="sheet" id="adoption-lifecycle">
@@ -538,7 +538,7 @@ push 或建立 PR。</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261013 r2</span><span>3 / 10</span></footer>
+    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261019 r3</span><span>3 / 10</span></footer>
   </section>
 
   <section class="sheet" id="daily-workflow">
@@ -613,7 +613,7 @@ push 或建立 PR。</pre>
         <p><strong>合併、核准與設定：</strong>agent 不執行 <code>gh pr merge</code>、UI／auto-merge、force-push、push 到 main／<code>dev/m*</code>，也不改名有 open PR 的分支；不代發核准、Milestone approval 或 exact-head 授權。設定只以 <code>csarc update --data KEY=VALUE</code> 變更，不手改 <code>.csarc/config.yml</code>／<code>.csarc/scripts</code>，不直接執行 <code>copier update</code>。模板更新都走 governance-switch；新專案預設 <code>admin_bypass: always</code> 只取代同行核准，不能略過驗證、required checks 或 lifecycle。local 的 <code>csarc-owned</code> 發版由 maintainer 執行。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261013 r2</span><span>4 / 10</span></footer>
+    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261019 r3</span><span>4 / 10</span></footer>
   </section>
 
   <section class="sheet" id="daily-operation">
@@ -655,12 +655,12 @@ push 或建立 PR。</pre>
       </table>
 
       <h3 class="mt-3">3.4 GitHub Project Roadmap</h3>
-      <p class="compact">設定完整的 organization／user <code>github_project_url</code> 後，只有以 <code>csarc issue create</code> 建立或 <code>csarc issue sync-project</code> 明確同步的 Issue 會加入 Project；UI、hotfix、其他工具建立的 Issue 與 PR 不會自動加入。Project 須事先各有一個 DATE 欄位 <code>Project start</code>／<code>Project target</code>；start 採 Issue 建立日的 UTC 日期，target 投影 Milestone due date，沒有 due date 時須提供 target date。Milestone 或歸屬改變後要重跑同步；既有值不同時先列差異，經確認才覆寫。工具即時查詢 ID，要求 <code>project</code> scope 與 Project 寫入權；不確定時回報 unknown。失敗時保留 Issue，以 <code>csarc issue sync-project --issue &lt;N&gt;</code> 冪等修復。Repository Projects 分頁維持關閉。</p>
+      <p class="compact">設定完整的 organization／user <code>github_project_url</code> 後，以 <code>csarc issue create</code> 建立或 <code>csarc issue sync-project</code> 同步的 Issue 中，只有 Milestone tracker 與 standalone Issue（沒有 parent、不屬於有 tracker 的 Milestone）會加入 Project；work issue、sub-issue、PR 與其他方式建立的 Issue 不加入。Project 須事先各有一個 DATE 欄位 <code>Project start</code>／<code>Project target</code>；start 採 Issue 建立日的台北日期，target 投影 Milestone due date，沒有時為 start 後 14 天（可指定 target date）；Issue 關閉或 <code>Status</code> 為 Done 後，target 改為台北的實際完成日。Milestone 或歸屬改變後要重跑同步；既有值不同時先列差異，經確認才覆寫。工具即時查詢 ID，要求 <code>project</code> scope 與 Project 寫入權；不確定時回報 unknown。失敗時保留 Issue，以 <code>csarc issue sync-project --issue &lt;N&gt;</code> 冪等修復。Repository Projects 分頁維持關閉。</p>
 
       <h3 class="mt-3">3.5 交接</h3>
       <p class="compact">交接內容至少包含 Issue、目前 branch／head、已完成與未完成 AC、測試及證據、外部等待條件、下一個安全動作。不得只留下聊天摘要；以 <code>csarc risk suggest --open</code> 列出缺少或無效風險區塊的 open Issue 與建議，以 <code>csarc risk register --state all --json</code> 交接目前風險、控制與證據狀態。</p>
     </div>
-    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261013 r2</span><span>5 / 10</span></footer>
+    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261019 r3</span><span>5 / 10</span></footer>
   </section>
 
   <section class="sheet" id="test-inventory">
@@ -704,7 +704,7 @@ push 或建立 PR。</pre>
         <p><strong>使用原則：</strong>正式 tier 只有 Fast 與 Full；實際要求取發布通道下限（Milestone 為 Fast，standalone／hotfix 為 Full）與路徑風險中較強者。local 與 hosted 使用同一套判斷；沒有 Milestone 的工作每張 PR 都跑 Full。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261013 r2</span><span>6 / 10</span></footer>
+    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261019 r3</span><span>6 / 10</span></footer>
   </section>
 
   <section class="sheet" id="delivery-controls">
@@ -749,7 +749,7 @@ push 或建立 PR。</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261013 r2</span><span>7 / 10</span></footer>
+    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261019 r3</span><span>7 / 10</span></footer>
   </section>
 
   <section class="sheet" id="repository-map">
@@ -792,7 +792,7 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">5.3 權威文件</h3>
       <p class="compact">本手冊是 repo-template 的產品政策與使用者承諾，隨 Release 放在模板 repository 的 <code>docs/handbook/</code>；生成專案不內含手冊，<code>.csarc/docs/csarc.md</code> 以 full SHA 連結所安裝版本。SPEC／ADR 保存精確契約與理由；<code>AGENTS.md</code>／CI policy 是 agent 的可執行規則。內容必須符合手冊，衝突即為 drift。</p>
     </div>
-    <footer class="page-footer"><span>第 5 章 · 導入後的 Repository</span><span>版本日期 261013 r2</span><span>8 / 10</span></footer>
+    <footer class="page-footer"><span>第 5 章 · 導入後的 Repository</span><span>版本日期 261019 r3</span><span>8 / 10</span></footer>
   </section>
 
   <section class="sheet" id="updates-and-limits">
@@ -840,7 +840,7 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">6.4 已知限制</h3>
       <p class="compact">repo-template 不提供通用部署、registry publishing、正式環境憑證或所有產品的 E2E，也無法阻止具權限者繞過工具直接修改 GitHub。UI 或 <code>gh pr merge --admin</code> 合併會略過 lifecycle，記為 untraced，並擋下下一次 <code>csarc-owned</code> 發版；local 搭配 <code>beta-only</code>／<code>always</code> 時，非 admin 寫入者也可能在 UI 合併。durable summary 也可被編輯或刪除，只能由 default branch 的 digest 發現。local 證據信任程度低於 hosted；不可觀察狀態一律回報 unknown。</p>
     </div>
-    <footer class="page-footer"><span>第 6 章 · 更新、故障與限制</span><span>版本日期 261013 r2</span><span>9 / 10</span></footer>
+    <footer class="page-footer"><span>第 6 章 · 更新、故障與限制</span><span>版本日期 261019 r3</span><span>9 / 10</span></footer>
   </section>
 
   <section class="sheet" id="appendix">
@@ -899,7 +899,7 @@ push 或建立 PR。</pre>
         <p><strong>使用原則：</strong>本手冊定義「有哪些能力、如何使用、限制在哪裡」；Repository 內文件與工具提供目前版本的精確執行方式。兩者不一致就是 drift，不能自行選擇較寬鬆的說法。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>附錄 · 快速參考</span><span>版本日期 261013 r2</span><span>10 / 10</span></footer>
+    <footer class="page-footer"><span>附錄 · 快速參考</span><span>版本日期 261019 r3</span><span>10 / 10</span></footer>
   </section>
 </main>
 </body>

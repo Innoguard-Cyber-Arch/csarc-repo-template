@@ -10,7 +10,7 @@ Milestone 只代表有真實 due date 的 delivery／release；沒有排程就�
 python3 .csarc/scripts/sync_milestone_state.py preflight --repo <owner/repo> --milestone <N>
 ```
 
-它確認 due date、tracker 標題與 `Lifecycle Issue: #N` 連結一致，並以原生 `parent_issue_url` 確認 Milestone 內的 sub-issue 都能找到同一 Milestone 的 Feature parent。表單降低漏段落的機率，`sync_milestone_state.py` 仍在建立後檢查格式。
+它確認 due date、tracker 標題與 `Lifecycle Issue: #N` 連結一致，並以原生 `parent_issue_url` 確認 Milestone 內的 sub-issue 都能找到同一 Milestone 的 parent Issue。表單降低漏段落的機率，`sync_milestone_state.py` 仍在建立後檢查格式。
 
 ## Tracker 與核可
 
@@ -38,7 +38,7 @@ GitHub Milestone 物件的 `description` 使用下列七段，不與 tracker 表
 
 ## Outcome
 
-完成後可觀察的價值，並連回對應 Feature parent。
+完成後可觀察的價值，並連回對應的主 Issue 或 spec。
 
 ## Acceptance criteria
 
@@ -46,7 +46,7 @@ GitHub Milestone 物件的 `description` 使用下列七段，不與 tracker 表
 
 ## Plan
 
-1. #<leaf-issue> — 第一個可獨立交付的 Task／Bug 與目的。
+1. #<main-issue> — 第一張可獨立交付的主 Issue 與目的。
 
 ## Out of scope
 
@@ -61,7 +61,7 @@ maintainer 如何端到端驗證 outcome。
 - #<issue> — 沿用、取代或駁回的既有決策與理由；沒有候選時記錄 bounded search 範圍。
 ```
 
-所有直接屬於 delivery scope 的 Issue 與 PR 都掛入 Milestone；研究或 Feature 擴展成這次 delivery 時，原始 Feature parent 也要掛入。
+結構固定為一張 tracker、多張直接掛入 Milestone 的主 Issue（不設 Feature parent），只有必要時才在主 Issue 下開 sub-Issue。主 Issue、sub-Issue 與 PR 都掛入 Milestone。
 
 ## 收尾
 
