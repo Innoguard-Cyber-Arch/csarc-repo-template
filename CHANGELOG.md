@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.38.1-beta.1] - 2026-10-20
+
+### Bug Fixes
+
+* fix(release): consider all eligible drift releases (#1200) (4c69db4)
+
 ## [0.38.0-beta.1] - 2026-10-20
 
 ### Features
