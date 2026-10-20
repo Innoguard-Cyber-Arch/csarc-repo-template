@@ -780,7 +780,8 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
     assert "RELEASE_DRIFT_HOURS" in script
     assert "24" in script
     assert "Release-publish-record" in script
-    assert 'latest_release.get("immutable") is not True' in script
+    assert 'release.get("immutable") is not True' in script
+    assert "for release in releases" in script
     assert 'gh api "repos/$repo/actions/workflows/release.yml/runs' in script
     assert 'gh api "repos/$repo/actions/runs/$last_run_id/jobs' in script
     assert "Local publish record (audit only)" in script

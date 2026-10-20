@@ -2231,12 +2231,12 @@ Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 
 
 **偵測條件（兩者同時成立才判定為 drift）：**
 
-1. `main` HEAD 未被最新 immutable stable GitHub Release 的精確 target 涵蓋，也沒有被最新一次成功 `release.yml` run 明確判定為 `no-release`。
-2. 過去 N 小時內，既沒有有效的 immutable stable Release，也沒有明確的 `no-release` run。
+1. `main` HEAD 未被可用的 immutable stable／beta GitHub Release 精確 target 涵蓋，也沒有被最新一次成功 `release.yml` run 明確判定為 `no-release`。
+2. 過去 N 小時內，既沒有有效的 immutable stable／beta Release，也沒有明確的 `no-release` run。
 
-最新 eligible Release 必須由 GitHub API 明確回報 `immutable=true`；其 `target_commitish` 必須是精確 40 字元 SHA，且等於 `main` HEAD，或經 GitHub compare API 證明為其 ancestor；`published_at` 還必須不早於目前 `main` commit。精確 target 會持續視為涵蓋該 HEAD；ancestor target 只算 N 小時內的近期發布活動，不能永久掩蓋較新的 `main`。mutable Release、draft、非 ancestor target、移動中的 branch ref 或比目前 `main` 更早發布的 Release 都不能壓掉告警。這使 immutable GitHub Release 本身成為首要發布事實，不再要求一條已知會被 #123 fail closed 的 hosted run 偽裝成成功。
+Detector 會檢查 GitHub API 回傳的 Release 集合，而不是只看最新一筆，避免較新的 off-main delivery beta 遮蔽仍涵蓋 `main` 的 stable Release。每筆 eligible Release 都必須由 GitHub API 明確回報 `immutable=true`；其 `target_commitish` 必須是精確 40 字元 SHA，且等於 `main` HEAD，或經 GitHub compare API 證明為其 ancestor；`published_at` 還必須不早於目前 `main` commit。精確 target 會持續視為涵蓋該 HEAD；ancestor target 只算 N 小時內的近期發布活動，不能永久掩蓋較新的 `main`。mutable Release、draft、非 ancestor target、移動中的 branch ref 或比目前 `main` 更早發布的 Release 都不能壓掉告警。這使 immutable GitHub Release 本身成為首要發布事實，不再要求一條已知會被 #123 fail closed 的 hosted run 偽裝成成功。
 
-`release.yml` 在每次 push 到 `main` 後都會執行，但 workflow 的綠燈本身不是發布證據：`release_policy.py` 明確判定 `no-release` 時會成功結束；若 release-worthy commit 未在 merge 前物化，workflow 必須失敗，不能用人工指示或第二張 PR 把它視為成功。Detector 會讀取該 success run 的 job steps；只有「Plan the next version from repository history」成功，且後續「Detect the available release path」因 plan 為 `no-release` 而 skipped，才把該 run 視為健康證據。真正的發布仍只能由上段的 immutable stable Release 證明。
+`release.yml` 在每次 push 到 `main` 後都會執行，但 workflow 的綠燈本身不是發布證據：`release_policy.py` 明確判定 `no-release` 時會成功結束；若 release-worthy commit 未在 merge 前物化，workflow 必須失敗，不能用人工指示或第二張 PR 把它視為成功。Detector 會讀取該 success run 的 job steps；只有「Plan the next version from repository history」成功，且後續「Detect the available release path」因 plan 為 `no-release` 而 skipped，才把該 run 視為健康證據。真正的發布仍只能由上段的 eligible immutable Release 證明。
 
 **N 預設 24 小時**，可用 `RELEASE_DRIFT_HOURS` 環境變數或 workflow 的 `hours` workflow_dispatch input 覆寫。`release.yml` 正常在 push 後幾分鐘內就有結果；24 小時涵蓋「一整天沒有任何 release 相關 push」的正常空窗期，不誤報安靜的一天，同時仍能在同一個工作日內就被發現，不會像 #587 一樣拖過一整個週末。失敗或未發布的 run 不是活動證據，因此重跑不會重新起算門檻。
 
@@ -2246,7 +2246,7 @@ Changes／Features／Bug Fixes）列出 commit 層級的變更；GitHub Release 
 Release-publish-record: operator=<@handle> commit=<sha> command="<command>" result=<result>
 ```
 
-這筆文字能補足本機執行缺少 hosted log 的公開稽核脈絡，但 commit 訊息與 Issue／PR 留言都是可變、可重播的聲明，無法證明 GitHub 上的 Release 狀態。`scripts/check-release-drift` 仍會讀取、驗證格式並在摘要與追蹤 Issue 顯示最新一筆作為診斷資訊，但不讓它改變 drift 結果；讀取稽核資料若失敗只會留下 warning 並當作無紀錄，不得阻斷權威判定與告警。有效紀錄只接受 `operator`、`commit`、`command`、`result` 四欄，其中 `command` 最長 512 字元且不得含反引號，以免稽核文字撐爆 Issue body 或跳脫行內 code。只有 GitHub API 回報的 immutable stable Release，或 job steps 證明明確判定 `no-release` 的成功 `release.yml` run，能抑制告警。
+這筆文字能補足本機執行缺少 hosted log 的公開稽核脈絡，但 commit 訊息與 Issue／PR 留言都是可變、可重播的聲明，無法證明 GitHub 上的 Release 狀態。`scripts/check-release-drift` 仍會讀取、驗證格式並在摘要與追蹤 Issue 顯示最新一筆作為診斷資訊，但不讓它改變 drift 結果；讀取稽核資料若失敗只會留下 warning 並當作無紀錄，不得阻斷權威判定與告警。有效紀錄只接受 `operator`、`commit`、`command`、`result` 四欄，其中 `command` 最長 512 字元且不得含反引號，以免稽核文字撐爆 Issue body 或跳脫行內 code。只有 GitHub API 回報的 eligible immutable stable／beta Release，或 job steps 證明明確判定 `no-release` 的成功 `release.yml` run，能抑制告警。
 
 **這支 workflow 只偵測與通知，不接手發版**：既不會自動觸發 `release.yml` 重跑，也不會自動執行 `scripts/publish-release`；是否接手仍由人或 agent 判斷，維持 #589 既有的「人或 agent 主動決定啟用」設計原則。
 偵測到 drift 且成功建立或更新追蹤 Issue 後，workflow 以 success 結束；只有偵測器、GitHub
