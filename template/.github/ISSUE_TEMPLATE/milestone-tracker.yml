@@ -80,6 +80,7 @@ body:
         「補充」，不要寫成合併前必須勾選的項目。建立當下留下下方註解即可，待其餘 Issue
         關閉後再具體化。
       value: |
+        - [ ] ADR 與文件已對齊（promotion PR 紀錄）。
         <!-- 待其餘 Milestone Issue 關閉後具體化，只能描述合併前可驗證的條件。 -->
     validations:
       required: true

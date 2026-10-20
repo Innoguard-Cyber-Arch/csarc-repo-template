@@ -377,6 +377,18 @@ def test_options_select_one_verifier_and_at_most_one_publisher(
     assert (
         project / ".github/ISSUE_TEMPLATE/milestone-tracker.yml"
     ).is_file() is milestones
+    ci_policy = (project / ".csarc/docs/ci-policy.md").read_text(
+        encoding="utf-8"
+    )
+    agent_workflow = (project / ".csarc/docs/agent-workflow.md").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "## Milestone promotion 的 ADR 與文件對齊" in ci_policy
+    ) is milestones
+    assert ("batch-level ADR and documentation review" in agent_workflow) is (
+        milestones
+    )
     documentation = data.get("documentation_mode") != "off"
     assert (
         project / ".csarc/docs/documentation-policy.md"

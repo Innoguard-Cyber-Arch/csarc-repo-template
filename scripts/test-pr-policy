@@ -199,6 +199,7 @@ verification-only|release/v1.2.3
 CASES
 
 release_documentation_body=$'## 文件一致性\n\n- Status: aligned\n- Reviewed head: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`\n- Reason: Release documentation matches the exact candidate.'
+promotion_alignment_body=$'Refs #42\n\n## ADR 與文件對齊\n\n- Status: aligned\n- Reviewed head: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`\n- Reason: Tracker decisions, owner decisions, ADR changes, and exclusions match the docs.'
 case_count=$((case_count + 1))
 if ! PR_DOCUMENTATION_REVIEW_REQUIRED="true" \
   PR_DOCUMENTATION_REVIEW_CUTOVER_PR="1" \
@@ -937,7 +938,7 @@ PR_TITLE="feat!: promote milestone seven bridge" \
 PR_LABELS="enhancement,promotion" \
 PR_BASE="main" \
 PR_HEAD="promote/m7-staged-ci" \
-PR_BODY="Refs #42" \
+PR_BODY="$promotion_alignment_body" \
 PR_ISSUE_STATE="open" \
 PR_ISSUE_TITLE="Milestone 7: Staged CI rollout" \
 PR_ISSUE_MILESTONE_NUMBER="7" \

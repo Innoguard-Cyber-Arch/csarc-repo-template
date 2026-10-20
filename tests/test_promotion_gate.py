@@ -165,13 +165,23 @@ def _promotion_event_path(
     base: str,
     head: str,
     labels: list[str],
+    body: str | None = None,
+    head_sha: str = "a" * 40,
 ) -> Path:
     """Write one minimal `pull_request` webhook payload for `check_route`."""
+    if body is None:
+        body = (
+            "## ADR 與文件對齊\n\n"
+            "- Status: `aligned`\n"
+            f"- Reviewed head: `{head_sha}`\n"
+            "- Reason: Tracker and owner decisions match the ADRs and docs.\n"
+        )
     event = {
         "pull_request": {
             "base": {"ref": base},
-            "head": {"ref": head},
+            "head": {"ref": head, "sha": head_sha},
             "labels": [{"name": name} for name in labels],
+            "body": body,
         }
     }
     event_path = tmp_path / "event.json"
@@ -222,6 +232,67 @@ def test_check_route_succeeds_for_every_recognized_route(
     outputs = github_output.read_text(encoding="utf-8")
     assert f"route={expected_kind}" in outputs
     assert expected_kind in summary.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ("## 文件一致性\n\n- Status: `aligned`\n", "ADR 與文件對齊"),
+        (
+            "## ADR 與文件對齊\n\n"
+            "- Status: `drift`\n"
+            f"- Reviewed head: `{'a' * 40}`\n"
+            "- Reason: One decision is missing.\n",
+            "drift",
+        ),
+        (
+            "## ADR 與文件對齊\n\n"
+            "- Status: `aligned`\n"
+            f"- Reviewed head: `{'b' * 40}`\n"
+            "- Reason: Checked all decisions.\n",
+            "exact 40-character PR head",
+        ),
+    ],
+)
+def test_milestone_route_rejects_invalid_alignment_record(
+    tmp_path: Path, body: str, message: str
+) -> None:
+    """A promotion cannot omit, fail, or reuse an old alignment review."""
+    event_path = _promotion_event_path(
+        tmp_path,
+        base="main",
+        head="promote/m7-staged-ci",
+        labels=["promotion"],
+        body=body,
+    )
+    arguments = SimpleNamespace(
+        event="pull_request",
+        event_path=event_path,
+        branch_strategy="delivery",
+        github_output=None,
+        summary=None,
+    )
+    with pytest.raises(RuntimeError, match=message):
+        check_route(arguments)
+
+
+def test_non_promotion_route_ignores_alignment_record(tmp_path: Path) -> None:
+    """Ordinary pull requests keep their existing documentation contract."""
+    event_path = _promotion_event_path(
+        tmp_path,
+        base="main",
+        head="feat/601-promotion-status-check",
+        labels=[],
+        body="",
+    )
+    arguments = SimpleNamespace(
+        event="pull_request",
+        event_path=event_path,
+        branch_strategy="delivery",
+        github_output=None,
+        summary=None,
+    )
+    check_route(arguments)
 
 
 def test_check_route_blocks_an_unrecognized_branch_targeting_main(
@@ -1575,12 +1646,18 @@ def test_prepare_builds_checkpoint_and_recovery_issue_evidence(
     (tmp_path / "tracked.txt").write_text("candidate\n", encoding="utf-8")
     run_git("commit", "-am", "candidate")
     head_sha = run_git("rev-parse", "HEAD")
+    promotion_body = (
+        "Closes #99\n\n## ADR 與文件對齊\n\n"
+        "- Status: `aligned`\n"
+        f"- Reviewed head: `{head_sha}`\n"
+        "- Reason: Tracker and owner decisions match the docs.\n"
+    )
     event = {
         "number": 99,
         "pull_request": {
             "number": 99,
             "title": "feat: promote staged CI",
-            "body": "Closes #99",
+            "body": promotion_body,
             "labels": [{"name": "promotion"}],
             "base": {"ref": "main", "sha": base_sha},
             "head": {
@@ -1670,7 +1747,7 @@ def test_prepare_builds_checkpoint_and_recovery_issue_evidence(
     assert evidence["promotion_pull_request"] == {
         "number": 99,
         "title": "feat: promote staged CI",
-        "body_sha256": hashlib.sha256(b"Closes #99").hexdigest(),
+        "body_sha256": hashlib.sha256(promotion_body.encode()).hexdigest(),
         "closing_issue": 99,
         "labels": ["promotion"],
     }

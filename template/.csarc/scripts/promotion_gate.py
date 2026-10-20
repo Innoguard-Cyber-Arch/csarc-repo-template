@@ -21,9 +21,13 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     csarc_config = importlib.import_module("csarc_config")
     delivery_sync = importlib.import_module("delivery_sync")
+    documentation_review = importlib.import_module("documentation_review")
 else:
     csarc_config = importlib.import_module(f"{__package__}.csarc_config")
     delivery_sync = importlib.import_module(f"{__package__}.delivery_sync")
+    documentation_review = importlib.import_module(
+        f"{__package__}.documentation_review"
+    )
 
 CLOSING_ISSUE = re.compile(
     r"(?<!\w)(?a:Closes|Fixes|Resolves)[ \t]+#([1-9][0-9]*)(?!\w)",
@@ -36,6 +40,10 @@ ISOLATED_BRANCH = re.compile(r"^dev/i([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
 WORK_BRANCH = re.compile(
     r"^(?:feat|fix|docs|refactor|test|build|ci|chore|revert)/"
     r"([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$"
+)
+PROMOTION_ALIGNMENT = re.compile(
+    r"(?ms)^##[ \t]+ADR 與文件對齊[ \t]*\n"
+    r"(?P<body>.*?)(?=^##[ \t]+|\Z)"
 )
 CONVENTIONAL_TITLE = re.compile(
     r"^(feat|fix|docs|refactor|test|build|ci|chore|revert)"
@@ -136,6 +144,30 @@ def route_for(  # noqa: C901
     return Route("invalid-main-route", True)
 
 
+def validate_promotion_alignment(body: str, head_sha: str) -> None:
+    """Require one passing exact-head ADR/docs record for a promotion."""
+    match = PROMOTION_ALIGNMENT.search(body)
+    if match is None:
+        raise RuntimeError(
+            "Milestone promotion requires an `## ADR 與文件對齊` section "
+            "with Status, Reviewed head, and Reason fields"
+        )
+    try:
+        documentation_review.validate_review(
+            match.group("body"), head_sha, "content-only"
+        )
+    except ValueError as error:
+        raise RuntimeError(
+            f"ADR and documentation alignment: {error}"
+        ) from error
+
+
+def check_alignment(args: argparse.Namespace) -> None:
+    """Validate one promotion alignment record from a local policy gate."""
+    validate_promotion_alignment(args.body, args.head_sha)
+    print("ADR and documentation alignment is valid.")  # noqa: T201
+
+
 def check_route(args: argparse.Namespace) -> None:
     """Report the `promotion` required check for one ordinary pull request.
 
@@ -181,6 +213,11 @@ def check_route(args: argparse.Namespace) -> None:
             "type/<issue-number>-short-slug topic branch or the matching "
             "promotion route. This check is read-only; GitHub closes an "
             "open pull request when its head branch is renamed"
+        )
+    if route.kind == "milestone":
+        validate_promotion_alignment(
+            str(pull_request.get("body") or ""),
+            str((pull_request.get("head") or {}).get("sha") or ""),
         )
     write_summary(args.summary, [f"- Promotion route — {route.kind}"])
     print(f"Promotion route: {route.kind}")  # noqa: T201
@@ -646,6 +683,10 @@ def parser() -> argparse.ArgumentParser:
     intent_command.add_argument("--bridge-head-sha")
     intent_command.add_argument("--titles-json")
     intent_command.set_defaults(handler=check_promotion_intent)
+    alignment_command = commands.add_parser("check-alignment")
+    alignment_command.add_argument("--body", required=True)
+    alignment_command.add_argument("--head-sha", required=True)
+    alignment_command.set_defaults(handler=check_alignment)
     route_command = commands.add_parser("check-route")
     route_command.add_argument("--event", required=True)
     route_command.add_argument("--event-path", type=Path, required=True)

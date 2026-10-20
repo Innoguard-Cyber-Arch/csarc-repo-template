@@ -147,6 +147,10 @@ def test_milestone_tracker_form_matches_the_lifecycle_contract() -> None:
         == tracker_sections
     )
     assert fields[1]["attributes"]["options"] == ["stable"]
+    assert (
+        "- [ ] ADR 與文件已對齊（promotion PR 紀錄）。"  # noqa: RUF001
+        in fields[4]["attributes"]["value"]
+    )
     assert fields[5]["attributes"]["label"] == "References"
     assert [field["validations"]["required"] for field in fields] == [
         True,
