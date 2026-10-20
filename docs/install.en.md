@@ -149,14 +149,27 @@ A `setting-decision` row under the report's `Items requiring your decision` does
 
 If `--check` lists a blocking `release-writer` after you choose `product-owned`, the kept writer uses files this update moves into `.csarc/` (the message lists each `old path -> new path`), and `--finalize-plan` refuses. Only two ways remain: choose `csarc-owned`, or first change the writer in a product preparation commit so it no longer uses those paths and run `--check` again; the latter adds a product diff. The agent records the choice, the reason under the rules above, and the `release-writer` message in the PR, and the owner confirms it before merge. Use `verification-only` (CSARC verifies but does not manage releases) only when the owner asks for it.
 
-**`project_run_command`** is the product's shortest start or invoke command (`package_name` follows the same rule). When the CLI can derive it uniquely from the native manifests (`pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`), it is not saved; the value an update uses lives in the render context of `.csarc/provenance.json`, and `.csarc/config.yml` does not list it. When the derived value differs from the recorded one, or cannot be derived uniquely, the report lists a `setting-decision` and the recorded value is kept:
+**`project_run_command`** is the product's shortest start or invoke command (`package_name` follows the same rule). When the CLI can derive it uniquely from the native manifests (`pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`), it is not saved; the value an update uses lives in the render context of `.csarc/provenance.json`, and `.csarc/config.yml` does not list it. When the derived value differs from the recorded one, or cannot be derived uniquely, the report lists a `setting-decision` and the recorded value is kept. Without a native manifest (for example a container-first repository) nothing can be derived, and the CSARC verifier `./.csarc/scripts/verify` is never taken as the product command; until one is decided, the generated README's Quick start says that no product command is recorded:
 
 - Pass no `--data`: the recorded value stays, and the product's behavior does not change.
 - To use another command, decide it explicitly with `--data project_run_command=<command>`. The value is written to `.csarc/config.yml`, and every later update uses it instead of deriving one from the manifests.
 
 ### Reviewer assignment changes (`reviewers`)
 
-The legacy `reviewers` setting and `.github/REVIEWERS` are retired: the Settings row stays `retired`, and its note names the earlier reviewers, the new assignment, and how to restore it; `Items requiring your decision` adds one non-blocking `setting-decision` row (subject `reviewers`). The new release requests one reviewer per ready pull request, by rotation, from the collaborators with maintain or admin permission other than the author. Like a `widened` row, it does not make `--check` blocking, but the owner must confirm it before `--finalize-plan`; an agent must not accept it on the owner's behalf. To keep the earlier reviewers, give maintain or admin permission only to them, or name them as code owners with `--data code_owner=<owners>` so GitHub requests their review on every pull request; record the owner's decision in the PR.
+The legacy `reviewers` setting and `.github/REVIEWERS` are retired: the Settings row stays `retired`, and its note names the earlier reviewers, the new assignment, and how to restore it; `Items requiring your decision` adds one non-blocking `setting-decision` row (subject `reviewers`). The new release requests one reviewer per ready pull request, by rotation, from the collaborators with maintain or admin permission other than the author. Like a `widened` row, it does not make `--check` blocking, but `--finalize-plan` needs the owner's answer and refuses to write without one. Give it as the one-time `--data reviewers=<answer>`, which is never saved to `.csarc/config.yml`; with it, `--check` reports the answer, and `--finalize-plan` repeats the same value:
+
+1. The owner confirms the new assignment: `--data reviewers=accept`. The row leaves `Items requiring your decision`, and the Settings `reviewers` row records source `explicit`. To keep the earlier reviewers, give maintain or admin permission only to them, or also pass `--data code_owner=<owners>` to name them as code owners so GitHub requests their review on every pull request.
+2. The owner is not available (for example in an operator run): `--data reviewers=pending`. Finalize and apply proceed, but the row stays in the final plan and report with a message that the owner's decision is pending; keep the update pull request in draft and list this pending item in it. When the owner later accepts, record that decision in the PR; to return to the earlier reviewers, adjust permissions as in item 1, or pass `--data code_owner=<owners>` to a later `csarc update`.
+
+An agent must not accept on the owner's behalf: pass `accept` only after the owner explicitly confirms in this conversation or in the PR, and `pending` otherwise.
+
+### README and LICENSE in an existing repo
+
+An existing repo (`project_mode=existing`) owns its README and LICENSE (handbook 5.1 and appendix B.9). The update adds no `README.md`, `README.en.md`, `README.zh-tw.md`, or `LICENSE`, and never rewrites the ones the repo has.
+
+- No `LICENSE`: the report's Settings show `project_license` as `custom` and an empty `copyright_holder`; the product manages its license, and no copyright holder is inferred from the project name. Verify accepts the missing `LICENSE` because provenance records `custom`.
+- An existing `LICENSE`: the file is kept, whether or not it is a CSARC starter text.
+- To have CSARC add a starter `LICENSE`, the owner passes both `--data project_license=<proprietary|MIT|Apache-2.0>` and `--data copyright_holder=<legal holder>` to `--check` and `--finalize-plan`; with a license but no holder, the update stops before any write. The product can also add its own `LICENSE` in a product commit.
 
 ### Kept legacy files and stale links
 
@@ -168,7 +181,7 @@ The legacy `reviewers` setting and `.github/REVIEWERS` are retired: the Settings
 
 ### Messages printed by apply
 
-- `CODEOWNERS validation failed: ... is missing, invisible, or lacks repository access`: the CODEOWNERS team does not exist, is not visible, or lacks repository access. The update is complete; the owner grants the team access or later updates it with `--data code_owner=...`.
+- `CODEOWNERS validation failed: ... is missing, invisible, or lacks repository access`: the CODEOWNERS team does not exist, is not visible, or lacks repository access. The update is complete; the owner grants the team access or later updates it with `--data code_owner=...`. The `CODEOWNER verification` line under the update report's `## Product state` reads `not run by this operation`: update does not check the owner live, so the line cites the Settings `code_owner` value and this repository settings `plan` performs the check; only adopt verifies live and records a state.
 - Repository settings: update only runs `.csarc/scripts/apply-repository-settings.sh plan` and never applies settings. It prints `Repository settings plan needs a GitHub origin remote` only when origin is not a GitHub repository; any other failure prints `Repository settings plan failed (exit N): <reason>`, for example a CODEOWNERS validation failure. After the push, the owner runs `plan`, reviews it, then runs `apply`.
 
 ### Parallel runs

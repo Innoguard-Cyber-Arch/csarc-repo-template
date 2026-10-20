@@ -1054,6 +1054,36 @@ def _mapping_lines(mapping: Mapping[str, object]) -> list[str]:
     return lines
 
 
+def _code_owner_line(
+    report: Mapping[str, object], owner: Mapping[str, object] | None
+) -> str:
+    """Render the live CODEOWNER check, or say why it did not run (#1167).
+
+    ``product.code_owner`` is the live repository check that only adopt
+    performs. Update keeps it ``null``, so the line names the configured
+    ``code_owner`` setting instead of implying that no owner is set.
+    """
+    if owner is not None:
+        return (
+            f"- CODEOWNER verification: {code(_field(owner, 'value'))} "
+            f"({code(_field(owner, 'state'))})"
+        )
+    configured: object = None
+    for row in cast(list[Mapping[str, object]], report["settings"]):
+        if row.get("key") == "code_owner":
+            configured = row.get("after")
+    setting = (
+        f"configured `code_owner` is {code(configured)}"
+        if isinstance(configured, str) and configured
+        else "no `code_owner` is configured"
+    )
+    return (
+        "- CODEOWNER verification: not run by this operation; "
+        f"{setting} (see Settings). The repository settings plan "
+        "validates it."
+    )
+
+
 def _product_lines(report: Mapping[str, object]) -> list[str]:
     product = cast(Mapping[str, object], report["product"])
     ownership = _optional_mapping(product["release_ownership"])
@@ -1066,8 +1096,7 @@ def _product_lines(report: Mapping[str, object]) -> list[str]:
         f"{code(_field(ownership, 'required_inputs'))}",
         "- Release ownership reason: "
         f"{markdown_text(display(_field(ownership, 'reason')))}",
-        f"- CODEOWNER: {code(_field(owner, 'value'))} "
-        f"({code(_field(owner, 'state'))})",
+        _code_owner_line(report, owner),
     ]
     for key, title in PRODUCT_SUBSECTIONS:
         value = product[key]

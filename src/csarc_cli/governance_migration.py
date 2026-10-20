@@ -57,6 +57,13 @@ GOVERNANCE_CLASSES = frozenset(
 # note explains the new behavior and how to restore it, like ``widened``.
 REVIEWERS_KEY = "reviewers"
 REVIEWERS_FILE = ".github/REVIEWERS"
+# The owner's answer to that change (Issue #1168): the one-time update
+# input ``--data reviewers=<answer>``, never saved. ``accept`` records the
+# owner's confirmation; ``pending`` lets an operator finish the plan while
+# the owner is away, and the row stays open in the report.
+REVIEWERS_ACCEPT = "accept"
+REVIEWERS_PENDING = "pending"
+REVIEWERS_ANSWERS = (REVIEWERS_ACCEPT, REVIEWERS_PENDING)
 
 
 def reviewers_note(before: object) -> str:

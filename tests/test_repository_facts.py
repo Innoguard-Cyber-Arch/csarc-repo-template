@@ -15,6 +15,7 @@ import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import jinja2
 import pytest
 
 from csarc_cli import cli, repository_facts, settings_schema
@@ -334,9 +335,8 @@ def test_run_command_composes_native_manifests(tmp_path: Path) -> None:
     missing = repository_facts.derive_run_command(root, ["go"], package)
     assert missing["state"] == repository_facts.UNKNOWN
     assert "go.mod" in str(missing["reason"])
-    assert repository_facts.derive_run_command(root, [], package)["value"] == (
-        repository_facts.NO_LANGUAGE_COMMAND
-    )
+    no_language = repository_facts.derive_run_command(root, [], package)
+    assert no_language["state"] == repository_facts.UNKNOWN
     write_package(root, "other")
     write_pyproject(root, "suite")
     ambiguous = repository_facts.derive_context(root, ["python"])
@@ -582,3 +582,87 @@ def test_update_identity_check_runs_before_any_render(
     assert cli.main(["update", str(root), "--check"]) != 0
     assert config.read_bytes() == before
     assert sorted(path.name for path in root.iterdir()) == [".csarc", ".git"]
+
+
+def test_no_manifest_run_command_asks_for_a_decision(tmp_path: Path) -> None:
+    """Issue #1165 AC1: no manifest lists a decision, never the verifier."""
+    root = tmp_path / "container-first"
+    root.mkdir()
+    (root / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    command = repository_facts.derive_context(root, [])["project_run_command"]
+    assert command["state"] == repository_facts.UNKNOWN
+    assert command["value"] is None
+    # Nothing recorded (a legacy consumer) and a recorded value both stay
+    # unresolved and ask for one decision.
+    for answers in (
+        {"languages": []},
+        {"languages": [], "project_run_command": "./infrastructure/run.sh"},
+    ):
+        values, differences = cli.resolve_derived_context(root, answers, {})
+        assert values == {}
+        assert differences == {"project_run_command": None}
+        # The render falls back to the template default when nothing is
+        # recorded; the row still carries the decision note.
+        rendered = {
+            "project_run_command": answers.get(
+                "project_run_command", "./.csarc/scripts/verify"
+            )
+        }
+        rows = cli.report_setting_rows(rendered, answers, (), differences)
+        row = next(r for r in rows if r["key"] == "project_run_command")
+        assert "not a product command" in str(row["note"])
+        actions = cli.update_required_actions(
+            cli.Plan((), (), (), (), (), (), ()), rows, observed=differences
+        )
+        decision = next(
+            action
+            for action in actions
+            if action["subject"] == "project_run_command"
+        )
+        assert decision["kind"] == "setting-decision"
+        assert decision["command"] == (
+            "csarc update --data project_run_command=<value>"
+        )
+    # An explicit decision resolves it and the report stops asking.
+    values, differences = cli.resolve_derived_context(
+        root,
+        {"languages": []},
+        {"project_run_command": "./infrastructure/run.sh"},
+    )
+    assert values == {}
+    assert differences == {}
+
+
+@pytest.mark.parametrize(
+    "readme",
+    [
+        "{% if documentation_primary_language == 'en' %}README"
+        "{% else %}README.en{% endif %}.md.jinja",
+        "{% if documentation_primary_language == 'zh-tw' %}README"
+        "{% else %}README.zh-tw{% endif %}.md.jinja",
+    ],
+)
+def test_readme_never_presents_the_verifier_as_the_start_command(
+    readme: str,
+) -> None:
+    """Issue #1165 AC2: no product command means no start command block."""
+    template = jinja2.Environment(autoescape=True).from_string(
+        (ROOT / "template" / readme).read_text(encoding="utf-8")
+    )
+    context = {
+        "documentation_mode": "content-only",
+        "documentation_primary_language": "en",
+        "languages": [],
+        "project_license": "MIT",
+    }
+    fallback = template.render(
+        context, project_run_command="./.csarc/scripts/verify"
+    )
+    quick_start = fallback.split("csarc-project-run-command:start -->", 1)[1]
+    quick_start = quick_start.split("<!-- csarc-project-run-command:end", 1)[0]
+    assert "```" not in quick_start
+    assert "--data project_run_command=<command>" in quick_start
+    product = template.render(
+        context, project_run_command="./infrastructure/run.sh"
+    )
+    assert "```bash\n./infrastructure/run.sh\n```" in product
