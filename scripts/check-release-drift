@@ -16,11 +16,11 @@ set -euo pipefail
 # locally with no arguments beyond `gh` authentication.
 #
 # Detection condition (both must hold):
-#   (a) `main` HEAD is not covered by the latest stable GitHub Release or an
+#   (a) `main` HEAD is not covered by an eligible GitHub Release or an
 #       explicit `no-release` result from the last successful `release.yml`
 #       run -- i.e. main has advanced past the last authoritative
 #       release-path activity.
-#   (b) No valid stable Release or explicit `no-release` run was observed in
+#   (b) No valid Release or explicit `no-release` run was observed in
 #       the last N hours (wall clock from "now").
 #
 # `release.yml` triggers on every push to main and completes successfully for
@@ -28,7 +28,7 @@ set -euo pipefail
 # instructions. The latter publishes nothing, so a green conclusion alone is
 # not health evidence. The Actions jobs API exposes the plan branch through
 # the next step: "Detect the available release path" is skipped only for
-# `no-release`. Any other successful run still needs an immutable stable
+# `no-release`. Any other successful run still needs an immutable eligible
 # Release to prove publication.
 #
 # N defaults to 24 hours: release.yml normally finishes within minutes of
@@ -38,12 +38,12 @@ set -euo pipefail
 # --hours, or the RELEASE_DRIFT_HOURS environment variable (the workflow
 # also exposes it as a workflow_dispatch input).
 #
-# The latest Release (stable or beta pre-release, Issue #918)
-# covers main when GitHub marks it immutable, its tag is a legal
-# beta/stable release-channel version, its exact target SHA is
-# main or an ancestor, and it was published no earlier than the current
-# main commit. Mutable Releases, drafts, non-ancestor targets, and older
-# releases are ignored.
+# A Release (stable or beta pre-release, Issue #918) covers main when GitHub
+# marks it immutable, its tag is a legal beta/stable release-channel version,
+# its exact target SHA is main or an ancestor, and it was published no earlier
+# than the current main commit. The detector checks the available Release set
+# so a newer off-main beta cannot hide an older exact-main Release. Mutable
+# Releases, drafts, non-ancestor targets, and older releases are ignored.
 #
 # `Release-publish-record` text remains useful audit evidence when found in a
 # commit message, a trusted tracking-Issue comment, or a trusted merged
@@ -166,13 +166,47 @@ if [[ -n "$last_run_id" ]] && ! gh api "repos/$repo/actions/runs/$last_run_id/jo
   printf '[]\n' >"$last_run_steps_file"
 fi
 
-latest_release_json="$(gh api "repos/$repo/releases?per_page=100" --jq '([.[] | select(.draft == false and .published_at != null)] | sort_by(.published_at) | reverse | .[0]) | if . == null then {} else {tag_name, target_commitish, published_at, draft, prerelease, immutable, html_url} end')"
 main_sha="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["sha"])' "$main_commit_json")"
-release_target="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("target_commitish", ""))' "$latest_release_json")"
-release_compare_json="{}"
-if [[ "$release_target" =~ ^[0-9a-f]{40}$ ]]; then
-  release_compare_json="$(gh api "repos/$repo/compare/$release_target...$main_sha" --jq '{status: .status}')"
-fi
+releases_file="$work_dir/releases.json"
+gh api "repos/$repo/releases?per_page=100" \
+  --jq '[.[] | select(.draft == false and .published_at != null) | {tag_name, target_commitish, published_at, draft, prerelease, immutable, html_url}]' \
+  >"$releases_file"
+
+release_targets_file="$work_dir/release-targets.txt"
+python3 - "$releases_file" "$main_commit_json" <<'PY' >"$release_targets_file"
+import json
+import re
+import sys
+from datetime import datetime
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    releases = json.load(source)
+main_date = datetime.fromisoformat(
+    json.loads(sys.argv[2])["date"].replace("Z", "+00:00")
+)
+targets = {
+    release.get("target_commitish")
+    for release in releases
+    if release.get("immutable") is True
+    and isinstance(release.get("published_at"), str)
+    and datetime.fromisoformat(release["published_at"].replace("Z", "+00:00")) >= main_date
+    and re.fullmatch(r"[0-9a-f]{40}", str(release.get("target_commitish") or ""))
+}
+print("\n".join(sorted(targets)))
+PY
+
+release_compares_file="$work_dir/release-compares.jsonl"
+: >"$release_compares_file"
+while IFS= read -r release_target; do
+  [[ -n "$release_target" ]] || continue
+  if [[ "$release_target" == "$main_sha" ]]; then
+    compare_json='{"status":"identical"}'
+  else
+    compare_json="$(gh api "repos/$repo/compare/$release_target...$main_sha" --jq '{status: .status}')"
+  fi
+  printf '{"target":"%s","compare":%s}\n' "$release_target" "$compare_json" \
+    >>"$release_compares_file"
+done <"$release_targets_file"
 
 release_prs_file="$work_dir/release-prs.json"
 if ! gh pr list \
@@ -236,8 +270,8 @@ result_file="$work_dir/result.json"
 
 python3 - "$result_file" "$repo" "$branch" "$hours" "$now_iso" "$since_iso" \
   "$marker_prefix" "$title" "$commits_file" "$comments_file" "$release_prs_file" \
-  "$last_run_steps_file" \
-  <<'PY' "$main_commit_json" "$last_run_json" "$latest_release_json" "$release_compare_json"
+  "$last_run_steps_file" "$releases_file" "$release_compares_file" \
+  <<'PY' "$main_commit_json" "$last_run_json"
 import json
 import re
 import sys
@@ -245,9 +279,8 @@ from datetime import datetime
 
 (result_path, repo, branch, hours_raw, now_raw, since_raw,
  marker_prefix, title, commits_path, comments_path, release_prs_path,
- last_run_steps_path) = sys.argv[1:13]
-(main_commit_raw, last_run_raw, latest_release_raw,
- release_compare_raw) = sys.argv[13:17]
+ last_run_steps_path, releases_path, release_compares_path) = sys.argv[1:15]
+(main_commit_raw, last_run_raw) = sys.argv[15:17]
 
 
 def parse_time(value: str) -> datetime:
@@ -256,8 +289,19 @@ def parse_time(value: str) -> datetime:
 
 main_commit = json.loads(main_commit_raw)
 last_run = json.loads(last_run_raw) or None
-latest_release = json.loads(latest_release_raw)
-release_compare = json.loads(release_compare_raw)
+with open(releases_path, encoding="utf-8") as source:
+    releases = sorted(
+        json.load(source),
+        key=lambda release: str(release.get("published_at") or ""),
+        reverse=True,
+    )
+with open(release_compares_path, encoding="utf-8") as source:
+    release_compares = {
+        item["target"]: item["compare"].get("status")
+        for line in source
+        if line.strip()
+        for item in (json.loads(line),)
+    }
 with open(commits_path, encoding="utf-8") as source:
     commits = json.load(source)
 with open(comments_path, encoding="utf-8") as source:
@@ -394,44 +438,58 @@ for pull in release_prs:
 
 record = max(candidates, key=lambda item: parse_time(item["time"])) if candidates else None
 
-release_covers_main = False
-release_time = None
-release_reason = "none found"
-if latest_release:
-    release_tag = latest_release.get("tag_name")
-    release_sha = latest_release.get("target_commitish")
-    published_at = latest_release.get("published_at")
-    compare_status = release_compare.get("status")
-    release_version_pattern = re.compile(
-        r"v?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
-        r"(?:-beta\.[1-9][0-9]*)?"
-    )
-    if latest_release.get("draft") is not False:
-        release_reason = "ignored: draft"
-    elif latest_release.get("immutable") is not True:
-        release_reason = "ignored: release is not immutable"
-    elif not release_version_pattern.fullmatch(str(release_tag or "")):
-        # Issue #918: a `-beta.N` suffix is the only public pre-release
-        # version too, not only a plain X.Y.Z tag.
-        release_reason = "ignored: tag is not a legal release-phase version"
-    elif bool(re.search(r"-beta\.[1-9][0-9]*$", str(release_tag or ""))) != (
-        latest_release.get("prerelease") is True
+release_version_pattern = re.compile(
+    r"v?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"(?:-beta\.[1-9][0-9]*)?"
+)
+
+
+def evaluate_release(release: dict[str, object]) -> tuple[bool, datetime | None, str]:
+    release_tag = release.get("tag_name")
+    release_sha = release.get("target_commitish")
+    published_at = release.get("published_at")
+    compare_status = release_compares.get(str(release_sha or ""))
+    if release.get("draft") is not False:
+        return False, None, "ignored: draft"
+    if release.get("immutable") is not True:
+        return False, None, "ignored: release is not immutable"
+    if not release_version_pattern.fullmatch(str(release_tag or "")):
+        return False, None, "ignored: tag is not a legal release-phase version"
+    if bool(re.search(r"-beta\.[1-9][0-9]*$", str(release_tag or ""))) != (
+        release.get("prerelease") is True
     ):
-        release_reason = "ignored: prerelease flag does not match tag shape"
-    elif not sha_pattern.fullmatch(str(release_sha or "")):
-        release_reason = "ignored: target is not an exact commit SHA"
-    elif compare_status not in {"identical", "ahead"}:
-        release_reason = "ignored: target is not main or its ancestor"
-    elif not isinstance(published_at, str) or parse_time(published_at) < parse_time(main_date):
-        release_reason = "ignored: published before the current main commit"
-    else:
-        release_covers_main = compare_status == "identical"
-        release_time = parse_time(published_at)
-        release_reason = (
-            "valid release evidence (covers main)"
-            if release_covers_main
-            else "valid recent release evidence (target is an ancestor of main)"
-        )
+        return False, None, "ignored: prerelease flag does not match tag shape"
+    if not sha_pattern.fullmatch(str(release_sha or "")):
+        return False, None, "ignored: target is not an exact commit SHA"
+    if not isinstance(published_at, str) or parse_time(published_at) < parse_time(main_date):
+        return False, None, "ignored: published before the current main commit"
+    if compare_status not in {"identical", "ahead"}:
+        return False, None, "ignored: target is not main or its ancestor"
+    release_covers_main = compare_status == "identical"
+    return (
+        release_covers_main,
+        parse_time(published_at),
+        "valid release evidence (covers main)"
+        if release_covers_main
+        else "valid recent release evidence (target is an ancestor of main)",
+    )
+
+
+evaluated_releases = [
+    (release, *evaluate_release(release))
+    for release in releases
+]
+selected_release = next(
+    (item for item in evaluated_releases if item[1]),
+    next((item for item in evaluated_releases if item[2] is not None), None),
+)
+diagnostic_release = selected_release or (
+    evaluated_releases[0] if evaluated_releases else None
+)
+latest_release = diagnostic_release[0] if diagnostic_release else {}
+release_covers_main = diagnostic_release[1] if diagnostic_release else False
+release_time = diagnostic_release[2] if diagnostic_release else None
+release_reason = diagnostic_release[3] if diagnostic_release else "none found"
 
 released_shas = (
     {last_success_sha}
@@ -461,14 +519,14 @@ else:
     lines.append("Last successful release.yml run: none found")
 if latest_release:
     lines.append(
-        "Latest eligible GitHub Release: "
+        "Selected eligible GitHub Release: "
         f"{latest_release.get('tag_name')} target "
         f"{latest_release.get('target_commitish')} at "
         f"{latest_release.get('published_at')} "
         f"({latest_release.get('html_url')}; {release_reason})"
     )
 else:
-    lines.append("Latest eligible GitHub Release: none found")
+    lines.append("Selected eligible GitHub Release: none found")
 if record:
     lines.append(
         "Local publish record (audit only): "
@@ -482,7 +540,7 @@ lines.append(
     + (
         "DRIFT DETECTED"
         if drift
-        else "no drift (latest eligible GitHub Release covers main)"
+        else "no drift (an eligible GitHub Release covers main)"
         if release_covers_main
         else "no drift (current main explicitly requires no release)"
         if not main_advanced
@@ -508,19 +566,19 @@ if drift:
         else "- 本機發版紀錄（僅供稽核，不影響判定）：找不到符合格式的紀錄"
     )
     release_evidence = (
-        "- 最新 eligible GitHub Release：`{tag}` target `{target}`，{published}（{reason}）".format(
+        "- 選用的 eligible GitHub Release：`{tag}` target `{target}`，{published}（{reason}）".format(
             tag=latest_release.get("tag_name"),
             target=latest_release.get("target_commitish"),
             published=latest_release.get("published_at"),
             reason=release_reason,
         )
         if latest_release
-        else "- 最新 eligible GitHub Release：找不到"
+        else "- 選用的 eligible GitHub Release：找不到"
     )
     issue_body = f"""### 問題
 
 排程執行的 `scripts/check-release-drift` 偵測到 `main` 已經前進，但過去 {hours:g} 小時內
-沒有找到有效的 stable GitHub Release 或明確的 `no-release` run。這代表發版流程可能已經
+沒有找到有效的 eligible immutable GitHub Release 或明確的 `no-release` run。這代表發版流程可能已經
 停擺，且過去沒有人會自動被通知——見 #587（2026-09-03，同樣的狀況拖了超過 8 小時才被人工
 發現 Releases 頁面停在舊版本）與 #605（本檢查本身的設計背景）。此通知不會自動觸發
 `release.yml` 重跑，也不會自動執行本機發版；是否接手仍由人或 agent 判斷。
