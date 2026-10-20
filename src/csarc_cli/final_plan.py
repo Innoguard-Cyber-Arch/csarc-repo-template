@@ -36,7 +36,7 @@ SCHEMA_VERSION = 1
 # with the exact versions that created it. ``pyproject.toml`` pins both to
 # these versions and the generated template-update workflow installs the
 # same Copier pin (#1058 decision 19); tests read all three back.
-PINNED_TOOLS = {"copier": "9.18.2", "jinja2": "3.1.6"}
+PINNED_TOOLS = {"copier": "9.19.1", "jinja2": "3.1.6"}
 CSARC_DISTRIBUTION = "csarc-repo-template"
 
 DECISION_KEEP = "keep-current"
