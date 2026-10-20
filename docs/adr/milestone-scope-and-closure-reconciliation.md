@@ -192,15 +192,6 @@ Reconciliation 段落反映關閉當下的即時狀態；`closure_decision()` �
 | Staleness 判定同時綁定 Milestone description（Acceptance criteria／Plan）編輯 | 不採用（本次範圍內）；那是不同的 GitHub 物件，且每次 regenerate 都重新抓即時資料，真正需要攔截的只有「regenerate 之後、關閉之前，tracker body 本身又被動過」這個時間窗口 |
 | 立刻把 scope-gate／reconciliation 自動觸發寫進 `.github/workflows/milestone-lifecycle.yml` | 延後；本次先落地 `sync_milestone_state.py` 的機制本身並補齊測試，觸發時機留給後續 Issue 決定，避免這次治理變更的 diff 範圍失控 |
 
-## 重新評估條件
-
-若這個 organization 未來真的擁有第二個真人帳號、且 native required review 不再會複製
-`#512`／`#518`／`#546`／`#549`／`#550` 的 self-lock，重新評估是否要為 work PR 加上核可
-機制。若 reconciliation 的 staleness 判定在實務上被證明不足以涵蓋「Milestone
-description 被編輯後、tracker body 沒有對應更新」的情境，重新評估是否要把 Milestone
-description 一併納入雜湊來源。若決定要自動觸發 scope-gate 或 reconciliation
-重新產生，屆時再擴充 `.github/workflows/milestone-lifecycle.yml`。
-
 ## `#743`：沒有 Milestone 的 Issue 本身需要核可
 
 - **狀態：**Accepted
@@ -329,3 +320,12 @@ Issue 視為歷史紀錄，依當時規則的結案處置為準。
 - **下游專案：**`template/.csarc/scripts/` 使用同一個截止時間。下游 repo 實際開始套用
   `#816` 的時間取決於它何時 Copier update，截止點之後、更新之前關閉的 Issue 仍會被現行
   規則判定；這是保守方向（不會放寬更多），因此不為每個下游 repo 另設截止點。
+
+## 重新評估條件
+
+若這個 organization 未來真的擁有第二個真人帳號、且 native required review 不再會複製
+`#512`／`#518`／`#546`／`#549`／`#550` 的 self-lock，重新評估是否要為 work PR 加上核可
+機制。若 reconciliation 的 staleness 判定在實務上被證明不足以涵蓋「Milestone
+description 被編輯後、tracker body 沒有對應更新」的情境，重新評估是否要把 Milestone
+description 一併納入雜湊來源。若決定要自動觸發 scope-gate 或 reconciliation
+重新產生，屆時再擴充 `.github/workflows/milestone-lifecycle.yml`。

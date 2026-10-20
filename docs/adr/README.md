@@ -7,6 +7,7 @@
 - 作為穩定識別的 lowercase kebab-case 檔名
 - `狀態` 與 `日期`（YYYY-MM-DD）
 - `來源 Issue` 與 `實作 PR` 連結（多筆時寫成 `來源 Issues`、`實作 PRs`）
+- `docs/README.md` 的 `## Decision records` 索引列出每份 `docs/adr/*.md`
 - `## 問題與限制`：問題與已確認限制
 - `## 決定`：採用方案與理由，以及 ownership、更新與驗證方式
 - `## 評估過的替代方案`：評估但未採用的選項與原因
@@ -14,7 +15,7 @@
 
 需要時可另加段落（例如 `## Ownership 與驗證`），但不能取代上列四個段落。檢查不另外強制 ownership 或 fallback 段落，因為依舊範例寫成的既有紀錄（含 `docs/decisions/`）更新後仍要通過；這兩項寫在「決定」與「重新評估條件」裡。
 
-狀態使用 `Proposed`、`Accepted`、`Superseded` 或 `Rejected`。仍有部分已接受內容但存在後續缺口時，保留 `Accepted` 並在本文以 `Unresolved` 標示缺口；不要為了顯示最新狀態而刪除先前理由。每份非範例紀錄至少連回一張 Issue 與一張 PR。
+狀態使用 `Proposed`、`Accepted`、`Superseded` 或 `Rejected`；`Superseded` 必須另以 `取代者` metadata 指向後繼決定。仍有部分已接受內容但存在後續缺口時，保留 `Accepted` 並在本文以 `Unresolved` 標示缺口；不要為了顯示最新狀態而刪除先前理由。每份非範例紀錄至少連回一張 Issue 與一張 PR。
 
 Agent 不得自動保存完整聊天逐字稿。使用者確認 durable constraint 或 trade-off 後，先回查既有 decision records 與 open／closed Issues，再把精簡摘要寫入工作單；只有經 PR 審查的內容才成為本目錄的 canonical decision。
 

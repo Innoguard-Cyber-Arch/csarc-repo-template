@@ -389,6 +389,13 @@ Release 收回 draft。
 - **批次於 promotion 邊界統一發版**（#183，靠專屬 `promotion.yml`）：否決。前提是恢復已判定不恢復的 promotion workflow；現行 #429 standalone／main-only 路徑加 #400 的 Milestone 批次交付已承接原本想解決的「批次」需求，不需要獨立的批次發版邊界或額外 workflow。
 - **在 CSARC 側直接串接 registry publishing／production-side attestation**：否決（見 #439）。零 active 消費者的情況下維持這些能力，只會留下「看起來能用、實際不會產生結果」的設定選項，違反本 ADR「不留下承諾不了結果的選項」的安全原則；有真實需求時應由消費端產品自行決定 owner 與權限，而非公版預先假設。
 
+## Fallback
+
+- Actions 無法發布時，保留原交付 PR 已審查的候選；由維護者或 agent 透過同一 `scripts/publish-release` 補跑，不能另開版本 PR 或手動建立 tag。
+- 版本候選失敗或 base 前進時，在原交付 branch 更新 base 並重新執行 `prepare-candidate`；新的 release-only commit 必須再次通過 exact-tree 驗證。
+- draft 發布失敗可安全重跑；若 Release 已 immutable，只能驗證既有內容，不能覆寫。
+- 需要 registry、production-side attestation 或部署時，#439 已移除設定面而非保留 conditional 選項；先開新 Issue／ADR 定義 owner、權限、復原與消費端驗證，不擴張這支 baseline workflow。
+
 ## 重新評估條件
 
 以下任一情況發生時，應重新檢視本 ADR 的決定而非局部繞過：
@@ -397,10 +404,3 @@ Release 收回 draft。
 - 有消費端產品提出真實的 registry publishing 或 production-side attestation 需求，需要決定是否、以及如何在不違反「單一 tag／Release writer」原則下擴充 `release.yml` 或另開專用 workflow。
 - `release.yml` 的候選驗證（`scripts/verify-release-candidate`）或 bundle 驗證（`scripts/release_bundle.py`）在 default branch 首次 live run 後發現與本 ADR 假設不符的落地行為，需要更新 Current-state 契約或決定本身。
 - 既有 repo 保留的 product-owned release workflow 出現與本 ADR 的 ownership 邊界（#369）衝突的新情境，例如 product workflow 本身改變 trigger 或 input contract，需要重新檢視 #369 的 ownership schema 是否仍夠用。
-
-## Fallback
-
-- Actions 無法發布時，保留原交付 PR 已審查的候選；由維護者或 agent 透過同一 `scripts/publish-release` 補跑，不能另開版本 PR 或手動建立 tag。
-- 版本候選失敗或 base 前進時，在原交付 branch 更新 base 並重新執行 `prepare-candidate`；新的 release-only commit 必須再次通過 exact-tree 驗證。
-- draft 發布失敗可安全重跑；若 Release 已 immutable，只能驗證既有內容，不能覆寫。
-- 需要 registry、production-side attestation 或部署時，#439 已移除設定面而非保留 conditional 選項；先開新 Issue／ADR 定義 owner、權限、復原與消費端驗證，不擴張這支 baseline workflow。

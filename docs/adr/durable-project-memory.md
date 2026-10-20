@@ -62,10 +62,6 @@ Root 維護本 repo 的真實 specs、decisions 與 history ledger。Copier temp
 | 只維護網站 | 不採用；presentation 不是 canonical source，且會把內容與版型耦合 |
 | 保存完整對話 | 不採用；噪音、隱私與未確認推論風險高 |
 
-## 重新評估條件
-
-當 spec 數量或跨 repo 導覽已使 bounded search 與 Markdown index 無法在可接受時間內工作，且有真實查找失敗資料時，再評估搜尋索引、catalog 或專用 spec tooling。新增工具前仍須保留 repository-local、可審查與可匯出的基線。
-
 ## 外部參考
 
 - [OpenAI: Run long horizon tasks with Codex](https://developers.openai.com/blog/run-long-horizon-tasks-with-codex)
@@ -75,3 +71,7 @@ Root 維護本 repo 的真實 specs、decisions 與 history ledger。Copier temp
 - [Kubernetes KEP template](https://github.com/kubernetes/enhancements/blob/master/keps/NNNN-kep-template/README.md)
 - [Rust RFC process](https://github.com/rust-lang/rfcs/blob/master/README.md)
 - [Cucumber BDD](https://github.com/cucumber/docs/blob/main/content/docs/bdd/_index.md)
+
+## 重新評估條件
+
+當 spec 數量或跨 repo 導覽已使 bounded search 與 Markdown index 無法在可接受時間內工作，且有真實查找失敗資料時，再評估搜尋索引、catalog 或專用 spec tooling。新增工具前仍須保留 repository-local、可審查與可匯出的基線。

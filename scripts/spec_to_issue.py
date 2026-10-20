@@ -161,7 +161,7 @@ def validate_unique_ids(specs: list[Spec]) -> None:
         seen[spec.spec_id] = spec.path
 
 
-def validate_adr(path: Path) -> None:
+def validate_adr(path: Path) -> None:  # noqa: C901
     """Validate one durable Architecture Decision Record."""
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md", path.name):
         raise SpecError(f"{path}: ADR filename must be a stable slug")
@@ -175,6 +175,10 @@ def validate_adr(path: Path) -> None:
         raise SpecError(
             f"{path}: ADR status must be one of {sorted(ADR_STATUSES)}"
         )
+    if status.group(1) == "Superseded" and not re.search(
+        rf"^- \*\*取代者{FULLWIDTH_COLON}\*\*\S.+$", text, re.MULTILINE
+    ):
+        raise SpecError(f"{path}: a Superseded ADR must name its successor")
     date = re.search(
         rf"^- \*\*日期{FULLWIDTH_COLON}\*\*(\d{{4}}-\d{{2}}-\d{{2}})\s*$",
         text,
@@ -189,6 +193,13 @@ def validate_adr(path: Path) -> None:
     for section in ADR_SECTIONS:
         if not re.search(rf"^## {re.escape(section)}\s*$", text, re.MULTILINE):
             raise SpecError(f"{path}: add an '## {section}' section")
+    headings = re.findall(r"^## (.+?)\s*$", text, re.MULTILINE)
+    positions = [headings.index(section) for section in ADR_SECTIONS]
+    if positions != sorted(positions) or headings[-1] != ADR_SECTIONS[-1]:
+        raise SpecError(
+            f"{path}: ADR sections must follow {ADR_SECTIONS} and end with "
+            f"'## {ADR_SECTIONS[-1]}'"
+        )
     if not re.search(
         rf"^- \*\*來源 Issues?{FULLWIDTH_COLON}\*\*[^\n]*"
         r"https://github\.com/[^/\s)]+/[^/\s)]+/issues/[1-9]\d*",
@@ -203,6 +214,38 @@ def validate_adr(path: Path) -> None:
         re.MULTILINE,
     ):
         raise SpecError(f"{path}: add an implementation PR URL")
+
+
+def validate_adr_index(
+    adrs: list[Path], index_path: Path = Path("docs/README.md")
+) -> None:
+    """Require the documentation map to list every current ADR."""
+    current = sorted(path for path in adrs if path.parent == Path("docs/adr"))
+    if not current:
+        return
+    if not index_path.is_file():
+        raise SpecError(f"{index_path}: add a '## Decision records' section")
+    text = index_path.read_text(encoding="utf-8")
+    section = re.search(
+        r"^## Decision records\s*$\n(.*?)(?=^## |\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if section is None:
+        raise SpecError(f"{index_path}: add a '## Decision records' section")
+    targets = {
+        Path(unquote(urldefrag(target).url)).as_posix()
+        for target in MARKDOWN_LINK.findall(section.group(1))
+    }
+    missing = [
+        path.name
+        for path in current
+        if (Path("adr") / path.name).as_posix() not in targets
+    ]
+    if missing:
+        raise SpecError(
+            f"{index_path}: ADR index is missing {', '.join(missing)}"
+        )
 
 
 def validate_local_links(paths: list[Path], repo_root: Path) -> None:
@@ -466,6 +509,7 @@ def main() -> int:
         adrs = discover_adrs() if not args.paths else []
         for adr in adrs:
             validate_adr(adr)
+        validate_adr_index(adrs)
         if not specs:
             raise SpecError("no spec files found in docs/specs")
         validate_unique_ids(specs)
