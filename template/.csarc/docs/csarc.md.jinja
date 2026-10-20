@@ -24,7 +24,7 @@
 | 排程檢查 | {% if scheduled_checks %}`{{ scheduled_checks | join('`、`') }}`{% else %}未啟用{% endif %} | {% if 'governance-drift' in scheduled_checks %}每日比對 repository 設定；{% endif %}{% if 'template-update' in scheduled_checks %}每週提醒新的 CSARC Release；{% endif %}{% if not scheduled_checks %}需要時手動執行 `./.csarc/scripts/apply-repository-settings.sh check` 與 `csarc update --check --json`{% else %}結果只開立或更新提醒 Issue{% endif %} |
 
 {%- if github_project_url | default('') %}
-| Project Roadmap | `{{ github_project_url }}` | `csarc issue create` 與 `csarc issue sync-project` 把 Issue 建立日與 Milestone due date 以 UTC 投影到這個 ProjectV2；Issue 關閉或 `Status` 為 `Done` 後，target 改為實際完成日；既有值不同時先確認；設定步驟見下方 |
+| Project Roadmap | `{{ github_project_url }}` | `csarc issue create` 與 `csarc issue sync-project` 只把 Milestone tracker 與 standalone Issue 加入這個 ProjectV2（work issue 與 sub-issue 略過並說明原因）；start 為台北的建立日，target 為 Milestone due date，沒有時為開始日後 14 天；Issue 關閉或 `Status` 為 `Done` 後，target 改為台北的實際完成日；既有值不同時先確認；設定步驟見下方 |
 {%- endif %}
 
 ## 工作流程
