@@ -101,12 +101,6 @@ write 帳號。另有寫入者為 `multiple-writers`，任何讀取不完整（�
 重新評估條件：GitHub 提供可讀的 App 安裝寫入者清單、Free private 的 `rules/branches` 行為經 live 驗證，或
 單人維護的 repository 升級到可強制 private Ruleset 的方案。
 
-## 重新評估條件
-
-若 host platform 提供有 ownership、dirty-state 保護與可稽核 lifecycle 的原生 worktree 管理，可替代部分本機步驟；GitHub work item、repository memory 與合併門禁仍保留。若每個 automation 取得獨立最小權限 GitHub App identity，或 GitHub 提供可原子更新的原生 PR lease，可取代目前以 remote ref 與 audit comment 組成的互斥層。
-
-當真實 backlog 出現足量、可獨立驗收的非同步工作，且可先訂出 AI credits／Actions 成本上限，再驗證 Agents 產生的 branch 與 PR 能通過本 repo policy 時，重新評估把 Agents 頁籤列為升級執行層。
-
 ## Copilot code review 作為可選審核路徑（#752，2026-09-18）
 
 現行契約：審核意圖只有 `admin_bypass: off|beta-only|always` 與 `copilot_review: allowed|off`（[SPEC-009](../specs/SPEC-009-project-settings.md)、[`simplified-project-configuration.md`](simplified-project-configuration.md)）。Ruleset 只有 A（hosted）、E1（local＋`beta-only`／`always`）與 C（local＋`off`）三種形狀；Copilot 對 exact head 的乾淨審核只在 0 個原生必要核准的 A／E1 形狀、而且 PR 沒有有效 admin-bypass 標記時才是 `review` 證據，其他情況與 `copilot_review: off` 相同（[#1082](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1082)，#1058 決定 4–6）。`review` check、`review_gate.py status` 與 `pr_lifecycle.py merge` 共用同一個判定。規則細節見 `docs/ci-policy.md`「Copilot 審核模式（#752）」與「單一 maintainer 的可稽核合併路徑（#1076）」。
@@ -124,3 +118,9 @@ write 帳號。另有寫入者為 `multiple-writers`，任何讀取不完整（�
 | Preserved | #719、#240：exact-head 真人 approval 仍是合併授權，lease、live state 重驗與 fail closed 同樣適用於 Copilot；#557：不採用原生 auto-merge 或 workflow 合併 | #752 |
 
 重新評估條件：Copilot 審核品質或費用不可接受，或 GitHub 改變 Copilot review 的 API 形狀（例如不再以內文說明「沒有意見」）時。
+
+## 重新評估條件
+
+若 host platform 提供有 ownership、dirty-state 保護與可稽核 lifecycle 的原生 worktree 管理，可替代部分本機步驟；GitHub work item、repository memory 與合併門禁仍保留。若每個 automation 取得獨立最小權限 GitHub App identity，或 GitHub 提供可原子更新的原生 PR lease，可取代目前以 remote ref 與 audit comment 組成的互斥層。
+
+當真實 backlog 出現足量、可獨立驗收的非同步工作，且可先訂出 AI credits／Actions 成本上限，再驗證 Agents 產生的 branch 與 PR 能通過本 repo policy 時，重新評估把 Agents 頁籤列為升級執行層。
