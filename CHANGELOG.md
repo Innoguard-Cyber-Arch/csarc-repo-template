@@ -7,6 +7,17 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.38.0-beta.1] - 2026-10-20
+
+### Features
+
+* feat(governance): require promotion documentation alignment (56db8d9)
+
+### Bug Fixes
+
+* fix(governance): record M18 decisions and the Milestone Issue structure (8e60ce2)
+* fix(governance): enforce ADR index, order and supersession (e84845a)
+
 ## [0.37.0-beta.1] - 2026-10-19
 
 ### Features
