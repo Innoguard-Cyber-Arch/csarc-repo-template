@@ -576,6 +576,8 @@ if [[ "${tracker_promotion:-false}" == "true" ]]; then
     echo "The tracker Issue Milestone must match the delivery branch number."
     exit 1
   fi
+  python3 .csarc/scripts/promotion_gate.py check-alignment \
+    --body "${PR_BODY:-}" --head-sha "${PR_HEAD_SHA:-}"
   if ! printf '%s' "$issue_body" | python3 .csarc/scripts/sync_milestone_state.py check-promotion; then
     exit 1
   fi

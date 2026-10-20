@@ -363,6 +363,7 @@ grep -Fq 'Milestone #100 (due 2026-12-01) is ready: https://github.com/acme/proj
 [[ "$(state_field '.issues["900"].body')" == *'## Completion evidence'* ]]
 [[ "$(state_field '.issues["900"].body')" == *'## Early termination'* ]]
 [[ "$(state_field '.issues["900"].body')" == *'## Promotion'* ]]
+[[ "$(state_field '.issues["900"].body')" == *'- [ ] ADR 與文件已對齊（promotion PR 紀錄）。'* ]]
 [[ "$(state_field '.issues["900"].labels | length')" == "0" ]]
 [[ "$(state_field '.issues["900"].type.name')" == "Feature" ]]
 [[ "$(state_field '.issues["900"].assignee')" == "@me" ]]

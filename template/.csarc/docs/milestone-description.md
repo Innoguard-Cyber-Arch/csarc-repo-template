@@ -67,6 +67,7 @@ maintainer 如何端到端驗證 outcome。
 
 - 關閉最後一張 Issue 前，勾選所有已驗證的 acceptance items；否則 lifecycle 讓未完成的 story 保持開啟。
 - 背景 reconcile 只在 tracker、Milestone 事件與 Issue 改掛 Milestone 時同步狀態；tracker 尚未核准是正常治理狀態，以 notice 呈現，PR 的核准 check 仍維持失敗。
+- promotion PR 先依 [CI/CD 規範](ci-policy.md#milestone-promotion-的-adr-與文件對齊) 完成整批 ADR 與文件對齊紀錄，並綁定 exact head。
 - `Promotion` 段落只寫合併前可驗證的條件；tracker 關閉與 branch／worktree 清理寫在補充的 post-merge runbook。`promote/m<編號>-<簡稱>` PR 以 `Closes #<tracker>` 關閉 tracker，合併後回填 `Completion evidence`。
 - 以 `completed` 收尾前執行 `python3 .csarc/scripts/sync_milestone_state.py regenerate-reconciliation --repo <owner/repo> --milestone <N>`。它在 tracker 產生 `Reconciliation` 段落，逐列標示每張 Issue 是 `Delivered`、`Not planned`、`Pending`、`Closed without a merged PR` 或 `Acceptance incomplete or missing`。tracker 其他段落之後被編輯會讓段落過期；任一列不是已交付或不在計畫內時，拒絕以 `completed` 收尾。以 `not_planned` 提前終止不宣稱交付，不受這項檢查限制。
 

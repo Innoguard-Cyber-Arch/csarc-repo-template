@@ -55,6 +55,12 @@ Milestone 關閉後補掛不能用 `gh issue edit --milestone <名稱>`，改以
 gh api repos/{owner}/{repo}/issues/{n} --method PATCH -f milestone=<number>
 ```
 
+{% if 'milestones' in lifecycle -%}
+## Milestone promotion 的 ADR 與文件對齊
+
+Milestone promotion PR 的 body 必須有獨立的 `## ADR 與文件對齊` 段落，以 `Status`、`Reviewed head`、`Reason` 記錄 tracker 決定、擁有者決定、新增或修改的 ADR，以及刻意不寫成 ADR 的決定與理由。內容正確性由 agent 比對；gate 只接受 exact-head 的 `aligned` 或有具體理由的 `not-applicable`，並阻擋 `drift`、`inconclusive`、缺段落與 head 不符。這項規則只套用 Milestone promotion route，`check-route` 與正式 preflight 共用同一驗證器。
+
+{%- endif %}
 ## PR lifecycle single-writer
 
 Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact head 直接建立 Draft PR。之後的 Ready／Draft、授權、metadata 與合併寫入，都先取得 remote lease，再經 `.csarc/scripts/pr_lifecycle.py`；`.csarc/scripts/verify` 會拒絕另一套寫入者。Issue body 改用 `.csarc/scripts/gh-issue-edit` 編輯，它會在既有核可將失效時先提醒；它無法攔截 GitHub UI 或直接 API 編輯。

@@ -875,6 +875,18 @@ fingerprint-binding（#632）」一節的「留言編輯本身的過期判斷（
 的 `Milestone approval` 是 comment refresh 用的非 Ruleset check，由 #875 另行處理，不在 #876 偷改其
 觸發或狀態語意。
 
+### Milestone promotion 的 ADR 與文件對齊（#1176）
+
+Milestone promotion PR 的 body 必須有獨立的 `## ADR 與文件對齊` 段落，以 `Status`、
+`Reviewed head`、`Reason` 三個欄位記錄整批決策的文件落點。`Reason` 至少逐項說明 tracker
+決定、擁有者決定、新增或修改的 ADR，以及刻意不寫成 ADR 的決定與理由；內容正確性由 agent
+比對，gate 不猜測文件語意。`Status` 只接受 `aligned` 或有具體理由的 `not-applicable`；
+`drift`、`inconclusive`、缺段落或非 exact-head 的 40 字元 SHA 都阻擋 promotion。
+
+這項規則只套用 `promotion_gate.route_for()` 分類為 `milestone` 的 route。`title` job 內的
+`check-route` 先提供快速錯誤，正式 promotion preflight 的 `prepare` 再用相同驗證器重查；一般
+工作 PR、isolated canary、hotfix、release recovery 與沒有啟用 Milestone 的生成專案不受影響。
+
 ### Required check producer 綁定（#835）
 
 Ruleset 對 `title`、`verify`、`review` 不只比對 context 名稱，也逐項綁定 GitHub Actions
