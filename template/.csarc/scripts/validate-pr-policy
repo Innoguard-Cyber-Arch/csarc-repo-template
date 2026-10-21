@@ -301,6 +301,10 @@ if [[ "$branch_strategy" == "delivery" ]]; then
     promotion=true
     promotion_issue="${BASH_REMATCH[1]}"
   fi
+  if [[ -n "$promotion_milestone" && ! -f .csarc/scripts/promotion_gate.py ]]; then
+    echo "A Milestone promotion needs lifecycle: milestones."
+    exit 1
+  fi
   if [[ "$promotion" == "true" && ",${PR_LABELS:-}," != *,promotion,* ]]; then
     echo "A delivery promotion must use the promotion label."
     exit 1

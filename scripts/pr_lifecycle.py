@@ -111,6 +111,39 @@ risk_controls: Any = SiblingModule("risk_controls")
 verification_evidence: Any = SiblingModule("verification_evidence")
 
 
+def require_milestones() -> None:
+    """Fail when the render omits the Milestone scripts (#1208)."""
+    try:
+        promotion_gate.route_for  # noqa: B018 - loads the sibling
+    except (FileNotFoundError, ModuleNotFoundError) as error:
+        raise RuntimeError(
+            "This Milestone route needs `lifecycle: milestones`"
+        ) from error
+
+
+def main_route_kind(base_ref: str, head_ref: str, labels: set[str]) -> str:
+    """Classify a route; without Milestones, keep the other recorded kinds."""
+    try:
+        require_milestones()
+    except RuntimeError:
+        pass
+    else:
+        return promotion_gate.route_for(base_ref, head_ref, labels).kind
+    if base_ref != "main":
+        return "not-applicable"
+    if head_ref.startswith(("release-please--", "release/v")):
+        return "release-follow-up"
+    if "release-recovery" in labels:
+        if RECOVERY_BRANCH.fullmatch(head_ref) and "hotfix" not in labels:
+            return "release-recovery"
+        return "invalid-main-route"
+    if ISOLATED_BRANCH.fullmatch(head_ref) and "promotion" in labels:
+        return "isolated"
+    if head_ref.startswith("fix/") and "hotfix" in labels:
+        return "hotfix"
+    return "not-applicable"
+
+
 LEASE_SCHEMA = 2
 MAX_TTL_SECONDS = 7200
 MIN_OPERATION_SECONDS = 30
@@ -122,6 +155,8 @@ ACTOR = re.compile(r"[A-Za-z0-9_.-]+(?:\[bot\])?")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 DELIVERY_BRANCH = re.compile(r"^dev/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
 PROMOTION_BRANCH = re.compile(r"^promote/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
+ISOLATED_BRANCH = re.compile(r"^dev/i([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
+RECOVERY_BRANCH = re.compile(r"^fix/([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
 RELEASE_BRANCH = re.compile(
     r"^release/v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
     r"(?:-beta\.[1-9]\d*)?$"
@@ -1613,6 +1648,7 @@ def require_routine_route(  # noqa: C901
             )
         return "issue"
     main_sha = branch_sha(github, repo, str(lease["default_branch"]))
+    require_milestones()
     expected_sync = promotion_gate.delivery_sync.sync_branch_name(
         base_ref, main_sha
     )
@@ -1744,8 +1780,8 @@ def admin_bypass_opt_in(
             for item in pull.get("labels", [])
             if isinstance(item, dict)
         }
-        route = promotion_gate.route_for(str(base_ref), head_ref, labels)
-        if RELEASE_BRANCH.fullmatch(head_ref) or route.kind == "milestone":
+        kind = main_route_kind(str(base_ref), head_ref, labels)
+        if RELEASE_BRANCH.fullmatch(head_ref) or kind == "milestone":
             head_repo = head.get("repo") or {}
             head_repo_name = str(head_repo.get("full_name") or "")
             if head_repo_name.casefold() != repo.casefold():
@@ -4116,7 +4152,7 @@ def trailer_route(
         return "dependabot"
     if head_ref.startswith("sync/main-to-"):
         return "sync"
-    kind = promotion_gate.route_for(base_ref, head_ref, set(labels)).kind
+    kind = main_route_kind(base_ref, head_ref, set(labels))
     if kind in {
         "hotfix",
         "isolated",
