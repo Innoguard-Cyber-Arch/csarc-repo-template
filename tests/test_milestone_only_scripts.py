@@ -253,3 +253,17 @@ def test_publish_release_skips_milestone_completion_without_milestones(
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout == "skipped\n"
+
+
+def test_stale_branch_detector_does_not_keep_a_milestone_script() -> None:
+    """R2: an unchanged CSARC file must not keep a removal alive (#1146).
+
+    The update plan keeps a removed file that a kept file names as a path;
+    the stale-branch detector is often unchanged across releases, so its
+    prose must not name a Milestone script path.
+    """
+    from csarc_cli import file_transition
+
+    name = ".csarc/scripts/stale_branch_detection.py"
+    content = (ROOT / "template" / name).read_bytes()
+    assert file_transition.content_uses(name, content, MILESTONE_SCRIPTS) == ()

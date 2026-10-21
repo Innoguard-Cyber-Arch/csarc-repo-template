@@ -30,7 +30,7 @@ state):
 
 Reused from two call sites (Issue #667's explicit design, not a new
 standalone scheduled workflow):
-  - `.csarc/scripts/sync_milestone_state.py preflight` -- a
+  - `sync_milestone_state.py preflight` (rendered with Milestones) -- a
     review-candidate list surfaced every time Milestone metadata is validated.
   - `.csarc/scripts/release_policy.py preflight` -- the same list surfaced as
     advisory, non-blocking output alongside the existing release
