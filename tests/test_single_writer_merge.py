@@ -444,6 +444,40 @@ def test_ruleset_agent_route_actor_must_hold_only_write(
         )
 
 
+@pytest.mark.parametrize(
+    ("role", "approver", "identity", "mode"),
+    [
+        ("maintain", "agent", "approver", "agent"),
+        ("admin", "agent", "approver", "agent"),
+        ("write", "agent", "agent-write", "agent"),
+        # Only the approving account itself may merge with maintain/admin.
+        ("maintain", "reviewer", "agent-maintain", "human-only"),
+        ("triage", "agent", "agent-triage", "human-only"),
+    ],
+)
+def test_1211_ruleset_route_accepts_the_independent_approver(
+    role: str, approver: str, identity: str, mode: str
+) -> None:
+    """#1211 AC5: the approver may merge with maintain or admin."""
+
+    class Role:
+        def get(self, _repo: str, path: str) -> object:
+            assert path == "collaborators/agent/permission"
+            return {"role_name": role, "user": {"login": "agent"}}
+
+    merge_identity = MODULE["merge_identity"]
+    result = merge_identity(
+        Role(), "o/r", "agent", "enforced", "review", approver
+    )
+    assert result[0] == identity
+    assert bool(result[1]) is (mode != "agent")
+    # Any other authorization source keeps the write-only agent route.
+    if role != "write":
+        assert merge_identity(
+            Role(), "o/r", "agent", "enforced", "copilot", "agent"
+        )[1]
+
+
 def test_admin_bypass_route_runs_as_the_live_admin_authorizer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -486,6 +520,9 @@ def test_app_actor_and_non_agent_routes_skip_the_role_read() -> None:
     assert merge_identity(
         NoReads(), "o/r", "owner", "single-writer", "comment"
     ) == ("sole-maintainer", "")
+    assert merge_identity(
+        NoReads(), "o/r", "owner", "independent-approval", "review"
+    ) == ("independent-approval", "")
     assert merge_identity(NoReads(), "o/r", "a", "inconclusive", "review") == (
         "none",
         "",
@@ -497,6 +534,7 @@ def test_every_protection_state_has_one_explicit_route() -> None:
     assert MERGE_ROUTES == {
         "enforced": "allowed",
         "single-writer": "allowed",
+        "independent-approval": "allowed",
         "inconclusive": "manual-only",
         "multiple-writers": "manual-only",
         "unknown": "manual-only",
@@ -934,3 +972,144 @@ def test_free_private_with_two_writers_stays_manual_only(
     assert snapshot["protection"] == "multiple-writers"
     assert snapshot["merge_mode"] == "human-only"
     assert snapshot["merge_permission"] == "manual-only"
+
+
+MULTIPLE_WRITERS = {
+    "collaborators": [
+        {"login": "agent", "role_name": "write"},
+        {"login": "reviewer", "role_name": "maintain"},
+        {"login": "collaborator", "role_name": "write"},
+    ]
+}
+
+
+def approved_multi_writer(github: SingleWriterGitHub) -> SingleWriterGitHub:
+    """Serve a multi-writer branch whose head a maintainer approved."""
+    github.reviews = FakeGitHub("a" * 40).reviews
+    github.body = "Closes #42"
+    github.head_committer = "collaborator"
+    github.head_pusher = "collaborator"
+    github.writers = writer_stub(**MULTIPLE_WRITERS)
+    return github
+
+
+def test_1211_multi_writer_merges_on_an_independent_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1211 AC6: an exact-head approval replaces the sole-writer proof."""
+    bind_remote_lease(monkeypatch)
+    use_local_mode(monkeypatch)
+    github = approved_multi_writer(SingleWriterGitHub())
+
+    snapshot = merge_snapshot(github, lease_fixture())
+
+    assert snapshot["protection"] == "independent-approval"
+    assert snapshot["server_enforcement"] == "none"
+    assert snapshot["merge_permission"] == "allowed"
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["merge_identity"] == "independent-approval"
+    assert snapshot["authorization_source"] == "review"
+    assert snapshot["authorization_actor"] == "reviewer"
+
+
+@pytest.mark.parametrize(
+    "case", ["no-approval", "pusher-approved", "incomplete", "unclean"]
+)
+def test_1211_multi_writer_without_independent_approval_stays_manual(
+    monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    """#1211 AC6: without an independent approval nothing else changes."""
+    bind_remote_lease(monkeypatch)
+    use_local_mode(monkeypatch)
+    github = approved_multi_writer(SingleWriterGitHub())
+    if case == "no-approval":
+        # Admin bypass authorization alone keeps the manual-only route.
+        github.reviews = []
+        github.body = f"Closes #42\n\n{ADMIN_BYPASS_MARKER}"
+        github.authorization_actor = "agent"
+        snapshot = merge_snapshot(github, lease_fixture(), AUTHORIZATION_URL)
+        assert snapshot["protection"] == "multiple-writers"
+        assert snapshot["merge_permission"] == "manual-only"
+        return
+    if case == "pusher-approved":
+        github.head_pusher = "reviewer"
+        with pytest.raises(RuntimeError, match="independent maintainer"):
+            merge_snapshot(github, lease_fixture())
+        return
+    if case == "incomplete":
+        github.writers = writer_stub(
+            failures={"collaborators": RuntimeError("HTTP 403")}
+        )
+        expected = ("inconclusive", "manual-only")
+    else:
+        github.mergeable_state = "unstable"
+        expected = ("blocked", "blocked")
+    snapshot = merge_snapshot(github, lease_fixture())
+    assert (snapshot["protection"], snapshot["merge_permission"]) == expected
+    assert snapshot["merge_mode"] == "human-only"
+
+
+def test_1211_private_free_multi_writer_merges_by_the_approver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1211 AC6 with #1210: a Free private 403 means no Ruleset.
+
+    The protection result is stubbed so this does not depend on #1210's
+    detection code; the approver runs the lifecycle as the merge actor.
+    """
+    bind_remote_lease(monkeypatch)
+    use_local_mode(monkeypatch)
+    monkeypatch.setitem(
+        merge_snapshot.__globals__,
+        "effective_protection",
+        lambda *_args, **_kwargs: (
+            "none",
+            "the Free private rules API returned 403 (no Ruleset, #1210)",
+            set(),
+            False,
+            False,
+        ),
+    )
+    github = approved_multi_writer(SingleWriterGitHub())
+    github.authenticated_actor = "reviewer"
+    github.actor_role = "maintain"
+    lease = {**lease_fixture(), "actor": "reviewer"}
+
+    snapshot = merge_snapshot(github, lease)
+
+    assert snapshot["protection"] == "independent-approval"
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["merge_identity"] == "independent-approval"
+    assert snapshot["authorization_actor"] == "reviewer"
+
+
+def test_1211_independent_approval_merge_keeps_the_g4_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#1211 AC3/AC6: the trace names both the approver and the merger."""
+    github = run_traced_merge(
+        tmp_path,
+        monkeypatch,
+        traced_snapshot(
+            protection="independent-approval",
+            server_enforcement="none",
+            merge_permission="allowed",
+            merge_identity="independent-approval",
+            authorization_actor="reviewer",
+        ),
+    )
+    summary = merge_trace.parse_summary(github.comment_edits[-1][1])
+    assert summary.status == "merged"
+    assert summary.lines[0].endswith(
+        "actor=agent server_enforcement=none identity=independent-approval"
+    )
+    assert any(
+        line.startswith(
+            "independent-approval-trace: approver=reviewer merger=agent "
+            "server_enforcement=none"
+        )
+        for line in summary.lines
+    )
+    assert not any(
+        line.startswith("single-writer-trace:") for line in summary.lines
+    )

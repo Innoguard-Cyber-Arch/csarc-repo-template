@@ -3861,6 +3861,9 @@ def test_1211_approver_may_be_the_merge_actor(
     assert snapshot["review_decision"]["passed"]
     assert snapshot["authorization_source"] == "review"
     assert snapshot["authorization_actor"] == "reviewer"
+    # AC5: the Ruleset route accepts the maintain/admin approver as merger.
+    assert snapshot["merge_identity"] == "approver"
+    assert snapshot["merge_mode"] == "agent"
     github.head_pusher = "reviewer"
     with pytest.raises(RuntimeError, match="exact head"):
         merge_snapshot(github, lease)

@@ -241,6 +241,7 @@ NON_WRITE_TEAM_PERMISSIONS = frozenset({"pull", "triage"})
 MERGE_ROUTES = {
     "enforced": "allowed",
     "single-writer": "allowed",
+    "independent-approval": "allowed",
     "inconclusive": "manual-only",
     "multiple-writers": "manual-only",
     "unknown": "manual-only",
@@ -2296,6 +2297,7 @@ def merge_identity(
     actor: str,
     protection: str,
     authorization_source: str,
+    approver: str = "",
 ) -> tuple[str, str]:
     """Classify the merge actor; return a refusal reason when it is unfit.
 
@@ -2307,9 +2309,14 @@ def merge_identity(
     installation permissions, never a repository role. On the admin-bypass
     and emergency-hotfix routes the actor is the live admin authorizer
     itself, and the single-writer route runs as the sole maintainer.
+    #1211 revises decision 27: the independent exact-head ``approver`` may
+    merge with `maintain` or `admin` (`approver`), and a multi-writer
+    repository without a Ruleset merges on that approval.
     """
     if protection == "single-writer":
         return "sole-maintainer", ""
+    if protection == "independent-approval":
+        return "independent-approval", ""
     if protection != "enforced":
         return "none", ""
     if authorization_source in {"comment", "hotfix-emergency"}:
@@ -2319,6 +2326,12 @@ def merge_identity(
     role = live_repository_role(github, repo, actor)
     if role == "write":
         return "agent-write", ""
+    if (
+        authorization_source == "review"
+        and role in MAINTAINER_PERMISSIONS
+        and actor.casefold() == approver.casefold()
+    ):
+        return "approver", ""
     return (
         "agent-" + role,
         f"the agent-route merge actor {actor} has role {role!r}; a Ruleset "
@@ -3121,6 +3134,15 @@ def merge_snapshot(  # noqa: C901
     if protection == "none":
         server_enforcement = "none"
         writer_state, reason = single_writer_eligibility(github, repo, actor)
+        # #1211: an independent exact-head approval lets a multi-writer
+        # repository merge; an incomplete readback stays manual-only.
+        approved = (
+            writer_state == "multiple-writers"
+            and authorization_source == "review"
+        )
+        if approved:
+            writer_state = "eligible"
+            reason = f"{authorization_actor} approved the exact head; {reason}"
         if writer_state != "eligible":
             protection = writer_state
         elif mergeable_state != "clean":
@@ -3132,11 +3154,16 @@ def merge_snapshot(  # noqa: C901
                 "without a Ruleset only a clean pull request can merge"
             )
         else:
-            protection = "single-writer"
+            protection = "independent-approval" if approved else "single-writer"
             if verification_mode != "local":
                 required_contexts = declared_required_contexts()
     identity, identity_refusal = merge_identity(
-        github, repo, actor, protection, authorization_source
+        github,
+        repo,
+        actor,
+        protection,
+        authorization_source,
+        authorization_actor,
     )
     if identity_refusal:
         protection = "blocked"
@@ -3788,7 +3815,15 @@ def trace_lines(
             f"review={snapshot['authorization_url']} "
             f"head={lease['head_sha']} actor={lease['actor']} {suffix}"
         )
-    if snapshot.get("server_enforcement") == "none":
+    if snapshot.get("protection") == "independent-approval":
+        lines.append(
+            "independent-approval-trace: "
+            f"approver={snapshot.get('authorization_actor')} "
+            f"merger={lease['actor']} server_enforcement=none "
+            f"head={lease['head_sha']} {suffix}; no Ruleset enforced this "
+            "merge, lifecycle revalidated every control"
+        )
+    elif snapshot.get("server_enforcement") == "none":
         lines.append(
             "single-writer-trace: "
             f"writer={lease['actor']} server_enforcement=none "

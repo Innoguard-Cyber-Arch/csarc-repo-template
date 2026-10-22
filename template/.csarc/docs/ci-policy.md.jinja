@@ -65,7 +65,7 @@ Milestone promotion PR 的 body 必須有獨立的 `## ADR 與文件對齊` 段�
 
 Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact head 直接建立 Draft PR。之後的 Ready／Draft、授權、metadata 與合併寫入，都先取得 remote lease，再經 `.csarc/scripts/pr_lifecycle.py`；`.csarc/scripts/verify` 會拒絕另一套寫入者。Issue body 改用 `.csarc/scripts/gh-issue-edit` 編輯，它會在既有核可將失效時先提醒；它無法攔截 GitHub UI 或直接 API 編輯。
 
-- **Exact-head 授權**：獨立 maintainer 對目前 head 的最新 `APPROVED` 直接視為授權；`review` check、`status` 與 lifecycle 共用同一判定，即時確認 reviewer 的 `role_name` 為 `maintain`／`admin` 與 review 的 `commit_id`。PR 作者與被核准 head 的最後 push 者（head commit 的 committer 與最新一筆 push 的 actor）不算獨立；讀不到最後 push 者時任何 approval 都不算數。執行合併的帳號不再被排除，維護者可以合併自己核准的協作者 PR。admin 專用檢查只接受即時 `role_name: admin`，讀不到角色時判為 `unknown` 並 fail closed。
+- **Exact-head 授權**：獨立 maintainer 對目前 head 的最新 `APPROVED` 直接視為授權；`review` check、`status` 與 lifecycle 共用同一判定，即時確認 reviewer 的 `role_name` 為 `maintain`／`admin` 與 review 的 `commit_id`。PR 作者與被核准 head 的最後 push 者（head commit 的 committer 與最新一筆 push 的 actor）不算獨立；讀不到最後 push 者時任何 approval 都不算數。執行合併的帳號不再被排除，維護者可以合併自己核准的協作者 PR；有 Ruleset 時合併者須為 `write`，或就是具 `maintain`／`admin` 的核准者本人。admin 專用檢查只接受即時 `role_name: admin`，讀不到角色時判為 `unknown` 並 fail closed。
 - **Lease 續租**：lease 最多兩小時。要保住既有授權時以 `acquire --renew <lease.json>` 續租；先 release 再 acquire 會讓舊授權失效。
 - **Admin bypass marker**：自核時以 `pr_lifecycle.py edit --admin-bypass-marker add` 在 PR body 加入唯一一行 `Admin bypass / 管理員略過審核`。
 {%- if copilot_review == 'allowed' %}
@@ -80,7 +80,8 @@ Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact 
 | --- | --- | --- |
 | Ruleset 完整讀回且形狀相符 | allowed | `server_enforcement=ruleset` |
 | 沒有 Ruleset（含 Free private 的「方案不支援」403），API 完整讀回只有一個寫入者，就是合併者 | allowed | `server_enforcement=none`；summary 加 `single-writer-trace` |
-| 沒有 Ruleset 且另有寫入者 | manual-only | 人工合併並記為 `untraced`{% if owned %}；CSARC 發版 fail closed{% endif %} |
+| 沒有 Ruleset、另有寫入者，且有 exact head 的獨立核准 | allowed | `server_enforcement=none`；summary 加 `independent-approval-trace` |
+| 沒有 Ruleset 且另有寫入者，沒有獨立核准 | manual-only | 人工合併並記為 `untraced`{% if owned %}；CSARC 發版 fail closed{% endif %} |
 | 讀取失敗（「方案不支援」以外的 403、404、5xx）、分頁不完整或角色不明 | manual-only | 判為 `inconclusive`／`unknown`，不猜測 |
 | Ruleset 不符或 `mergeable_state` 不是 `clean` | blocked | 先修正條件 |
 

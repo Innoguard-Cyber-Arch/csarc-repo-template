@@ -113,8 +113,15 @@ actor），不再排除執行合併的帳號。原本連合併者一起排除，
 讀不到最後 push 者（權限不足、activity 找不到這筆 push 或沒有 actor）時視為不獨立，任何 approval 都不算數，
 fail closed。approval 仍綁定 exact head，任何 push 都讓舊 approval 失效；`review` check、`status` 與 merge
 共用同一判定，`merge-trace` 照常記錄合併者（`actor=`）與核准者（`CSARC-Authorization` 指向的 review）。
-決定 27 其餘部分不變：有 Ruleset 強制時一般 agent route 的合併者仍須是即時 `write` 身分；admin bypass、
-emergency hotfix 與 single-writer route 的合併者規則照舊（#918／#1064 preserved）。
+擁有者 2026-10-23 再修訂決定 27 的合併者部分：有 Ruleset 強制時，一般 agent route 的合併者仍以即時 `write`
+為原則，但合併者本人就是 exact head 的獨立核准者（非作者、非最後 push 者）時，即時 `maintain`／`admin` 也
+允許，trace 記為 `identity=approver`；其他非 `write` 角色仍擋下。沒有 Ruleset、讀回完整但有多位寫入者
+（`multiple-writers`）時，若有 exact head 的獨立核准，lifecycle 也可合併，記為 `identity=independent-approval`
+並加一行 `independent-approval-trace`（approver 與 merger）；沒有獨立核准仍只能人工合併。理由：獨立核准已
+擋住自我核准，它取代了「唯一寫入者」證明要防的風險；伺服器仍沒有強制，所以 trace 照樣寫
+`server_enforcement=none`。與 #1210（Free private 的 rules API 403 視為沒有 Ruleset）組合後，private＋Free
+的多人 repo 可以由核准者以 lifecycle 合併。admin bypass、emergency hotfix 與 single-writer route 的合併者規則
+照舊（#918／#1064 preserved）；讀取不完整（`inconclusive`／`unknown`）仍只能人工合併。
 
 重新評估條件：GitHub 提供可直接讀取的 PR head pusher 欄位，或 activity API 改變形狀或保留期限。
 
