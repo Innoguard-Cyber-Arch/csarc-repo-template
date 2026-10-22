@@ -1928,6 +1928,23 @@ def effective_protection(
     return result
 
 
+# Issue #1210: GitHub's exact answer when a private repository on the Free
+# plan asks for branch rules; the plan cannot hold a Ruleset at all.
+RULES_PLAN_UNSUPPORTED = (
+    "Upgrade to GitHub Pro or make this repository public to enable this "
+    "feature. (HTTP 403)"
+)
+
+
+def rules_plan_unsupported(error: RuntimeError) -> bool:
+    """Return whether a rules read failed only because the plan lacks it.
+
+    Only GitHub's exact plan-unsupported 403 qualifies; every other 403,
+    404, 5xx, or unrecognized failure stays unknown and fails closed.
+    """
+    return str(error).endswith(f"gh: {RULES_PLAN_UNSUPPORTED}")
+
+
 def _effective_protection(  # noqa: C901
     github: GitHub,
     repo: str,
@@ -1944,7 +1961,18 @@ def _effective_protection(  # noqa: C901
             repo, f"rules/branches/{urllib.parse.quote(branch, safe='')}"
         )
     except RuntimeError as error:
-        return "unknown", str(error), set(), False, False
+        if not rules_plan_unsupported(error):
+            return "unknown", str(error), set(), False, False
+        # Issue #1210: the plan has no Ruleset, so the branch has none and
+        # only the audited single-writer route may still let lifecycle merge.
+        return (
+            "none",
+            "this private repository's GitHub plan does not support "
+            "Rulesets, so no Ruleset enforces review or required checks",
+            set(),
+            False,
+            False,
+        )
     if not isinstance(rules, list) or not all(
         isinstance(item, dict) for item in rules
     ):

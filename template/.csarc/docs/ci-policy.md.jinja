@@ -79,9 +79,9 @@ Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact 
 | 狀態 | route | 說明 |
 | --- | --- | --- |
 | Ruleset 完整讀回且形狀相符 | allowed | `server_enforcement=ruleset` |
-| 沒有 Ruleset，API 完整讀回只有一個寫入者，就是合併者 | allowed | `server_enforcement=none`；summary 加 `single-writer-trace` |
+| 沒有 Ruleset（含 Free private 的「方案不支援」403），API 完整讀回只有一個寫入者，就是合併者 | allowed | `server_enforcement=none`；summary 加 `single-writer-trace` |
 | 沒有 Ruleset 且另有寫入者 | manual-only | 人工合併並記為 `untraced`{% if owned %}；CSARC 發版 fail closed{% endif %} |
-| 讀取失敗、分頁不完整或角色不明 | manual-only | 判為 `inconclusive`／`unknown`，不猜測 |
+| 讀取失敗（「方案不支援」以外的 403、404、5xx）、分頁不完整或角色不明 | manual-only | 判為 `inconclusive`／`unknown`，不猜測 |
 | Ruleset 不符或 `mergeable_state` 不是 `clean` | blocked | 先修正條件 |
 
 GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；`csarc status` 把之後的這類合併列為 `untraced`。

@@ -1100,9 +1100,9 @@ fail closed（接入 publisher 由 #1074 負責）。本機證據的 `completed_
 | 形狀 | `protection` | route | 說明 |
 | --- | --- | --- | --- |
 | A（hosted）、E1（local＋`beta-only`／`always`）、C（local＋`off`）的 Ruleset 完整讀回且相符 | `enforced` | allowed | `server_enforcement=ruleset`；合併者身分見下方 |
-| 沒有任何 `pull_request`／`required_status_checks` 規則，API 完整讀回恰好一個寫入者，而且就是合併者 | `single-writer` | allowed | `server_enforcement=none`；agent 以唯一維護者身分執行，不另建 write 帳號 |
+| 沒有任何 `pull_request`／`required_status_checks` 規則（含 Free private 的「方案不支援」403，#1210），API 完整讀回恰好一個寫入者，而且就是合併者 | `single-writer` | allowed | `server_enforcement=none`；agent 以唯一維護者身分執行，不另建 write 帳號 |
 | 沒有 Ruleset，另有寫入者（collaborator、可寫 team 成員或可寫 deploy key） | `multiple-writers` | manual-only | 人工在 GitHub 合併，記為 `untraced`，`csarc-owned` 發版 fail closed |
-| Ruleset 或寫入者讀取失敗、分頁不完整、team 成員不可見、缺 `role_name` 或未知角色 | `inconclusive`／`unknown` | manual-only | 同上；不猜測、不讀 legacy `permission` |
+| Ruleset 或寫入者讀取失敗（「方案不支援」403 以外的 403、404、5xx 或無法辨識的回應）、分頁不完整、team 成員不可見、缺 `role_name` 或未知角色 | `inconclusive`／`unknown` | manual-only | 同上；不猜測、不讀 legacy `permission` |
 | Ruleset 形狀不符、未生效、未驗證的 bypass，或沒有 Ruleset 時 `mergeable_state` 不是 `clean`（含 `unstable`） | `blocked` | blocked | 先修正條件，lifecycle 不合併 |
 
 合併者（執行 lifecycle 的身分）與授權者（留下 exact-head 授權或 approval 的人）分開判斷
@@ -1125,8 +1125,13 @@ repository 另讀 repository teams：每個可寫 team 的成員都必須讀得�
 本機證據（`self-attested-local`，#908）。合併讀回後，summary 的 `merge-trace` 帶 `server_enforcement=none`，
 並加一行 `single-writer-trace: writer=<login> server_enforcement=none ...`，明記沒有 Ruleset 參與，不宣稱
 伺服器曾經阻擋。`admin_bypass: off` 的 single-writer repository 沒有獨立 reviewer，lifecycle 會拒絕；改用
-`beta-only`／`always` 或人工合併。限制：GitHub App 安裝不在讀回範圍；Free private 的 `rules/branches`
-實際回應未經 live 驗證，讀取錯誤一律 `unknown`，只能人工合併。
+`beta-only`／`always` 或人工合併。限制：GitHub App 安裝不在讀回範圍。
+
+Free private（#1210）：GitHub Free 的 private repository 不能使用 Ruleset，`rules/branches/<branch>` 回
+`Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)`。lifecycle 只把
+這個完整回應判為「沒有 Ruleset」（`protection=none`），接著照常讀回寫入者：恰好一個寫入者且就是合併者
+時走 single-writer（`identity=sole-maintainer`），多個寫入者仍是 manual-only。判定看回應內容，不只看
+狀態碼；其他 403、404、5xx 或無法辨識的回應仍是 `unknown`，只能人工合併。
 
 **local Dependabot route**：local 模式沒有 hosted eligibility workflow。`--require-dependabot-head` 在 local
 模式改為重驗 GitHub 簽章的 Dependabot head（或 #1052 的 sync child），再從簽章 commit 的

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import runpy
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
@@ -808,3 +809,128 @@ def test_marker_edit_uses_the_leased_writer_and_reads_back(
     arguments.body_file = tmp_path / "body.md"
     with pytest.raises(RuntimeError, match="not both"):
         edit_metadata(arguments, github)
+
+
+# Issue #1210: a private repository on GitHub Free cannot hold a Ruleset.
+PLAN_UNSUPPORTED = (
+    "Command failed: gh api repos/owner/repo/rules/branches/main: gh: "
+    "Upgrade to GitHub Pro or make this repository public to enable this "
+    "feature. (HTTP 403)"
+)
+TEMPLATE_MODULE = runpy.run_path(
+    str(
+        Path(__file__).resolve().parents[1]
+        / "template/.csarc/scripts/pr_lifecycle.py"
+    )
+)
+
+
+class RulesFailureGitHub:
+    """Fail the effective-rules read with one exact error message."""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    def get(self, _repo: str, path: str) -> object:
+        """Raise the configured error for the rules read."""
+        assert path == "rules/branches/main"
+        raise RuntimeError(self.message)
+
+
+@pytest.mark.parametrize(
+    "module", [MODULE, TEMPLATE_MODULE], ids=["root", "template"]
+)
+@pytest.mark.parametrize("local_mode", [False, True])
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        (PLAN_UNSUPPORTED, "none"),
+        # AC2: every other rules failure stays unknown, judged by content.
+        (
+            "Command failed: gh api repos/owner/repo/rules/branches/main: "
+            "gh: Resource not accessible by integration (HTTP 403)",
+            "unknown",
+        ),
+        (
+            "Command failed: gh api repos/owner/repo/rules/branches/main: "
+            "gh: Not Found (HTTP 404)",
+            "unknown",
+        ),
+        (
+            "Command failed: gh api repos/owner/repo/rules/branches/main: "
+            "gh: Upgrade to GitHub Pro or make this repository public to "
+            "enable this feature. (HTTP 404)",
+            "unknown",
+        ),
+        (
+            "Command failed: gh api repos/owner/repo/rules/branches/main: "
+            "gh: Server Error (HTTP 502)",
+            "unknown",
+        ),
+        (PLAN_UNSUPPORTED + "\nunexpected trailing output", "unknown"),
+        ("HTTP 403", "unknown"),
+    ],
+)
+def test_only_the_plan_unsupported_rules_answer_means_no_ruleset(
+    module: dict[str, Any], local_mode: bool, message: str, expected: str
+) -> None:
+    """AC1/AC2/AC3: root and template classify rules failures alike."""
+    protection, reason, contexts, *_flags = module["effective_protection"](
+        RulesFailureGitHub(message), "owner/repo", "main", local_mode=local_mode
+    )
+
+    if expected == "unknown" and local_mode:
+        expected = "inconclusive"
+    assert protection == expected
+    assert contexts == set()
+    if expected == "none":
+        assert "does not support Rulesets" in reason
+
+
+class FreePrivateGitHub(SingleWriterGitHub):
+    """Answer the rules read the way a private Free repository does."""
+
+    def get(self, _repo: str, path: str) -> object:
+        """Fail the rules read with GitHub's plan-unsupported 403."""
+        if path == "rules/branches/main":
+            raise RuntimeError(PLAN_UNSUPPORTED)
+        return super().get(_repo, path)
+
+
+def test_free_private_sole_writer_reaches_the_single_writer_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC1: the plan-unsupported 403 still reaches the writer readback."""
+    bind_remote_lease(monkeypatch)
+    use_local_mode(monkeypatch)
+
+    snapshot = merge_snapshot(
+        FreePrivateGitHub(), lease_fixture(), AUTHORIZATION_URL
+    )
+
+    assert snapshot["protection"] == "single-writer"
+    assert snapshot["server_enforcement"] == "none"
+    assert snapshot["merge_identity"] == "sole-maintainer"
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["merge_permission"] == "allowed"
+
+
+def test_free_private_with_two_writers_stays_manual_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC1/R1: the plan answer never skips the exactly-one-writer rule."""
+    bind_remote_lease(monkeypatch)
+    use_local_mode(monkeypatch)
+    github = FreePrivateGitHub()
+    github.writers = writer_stub(
+        collaborators=[
+            {"login": "agent", "role_name": "admin"},
+            {"login": "peer", "role_name": "write"},
+        ]
+    )
+
+    snapshot = merge_snapshot(github, lease_fixture(), AUTHORIZATION_URL)
+
+    assert snapshot["protection"] == "multiple-writers"
+    assert snapshot["merge_mode"] == "human-only"
+    assert snapshot["merge_permission"] == "manual-only"
