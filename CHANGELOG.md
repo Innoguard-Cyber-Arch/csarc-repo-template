@@ -7,6 +7,15 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.38.3-beta.1] - 2026-10-21
+
+### Bug Fixes
+
+* fix(template): render Milestone scripts only when Milestones are on (274e846)
+* fix(template): let updates remove an unused Milestone synchronizer (cf7406b)
+* fix(template): keep the detector note within the accepted payload (9d98b52)
+* fix(deps): upgrade generated vitest pins past mocker advisories (0ebd9ca)
+
 ## [0.38.2-beta.1] - 2026-10-20
 
 ### Bug Fixes

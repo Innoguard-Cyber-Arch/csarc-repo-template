@@ -99,6 +99,13 @@ _exclude:
   - "{% if verification_mode == 'hosted' %}__keep_open_milestone_detector__{% else %}.csarc/scripts/detect-open-milestone{% endif %}"
   - "{% if verification_mode == 'hosted' and 'issues' in lifecycle %}__keep_issue_policy_script__{% else %}.csarc/scripts/validate-issue-policy{% endif %}"
   - "{% if verification_mode == 'hosted' or documentation_mode != 'off' %}__keep_spec_script__{% else %}.csarc/scripts/spec_to_issue.py{% endif %}"
+  # Issue #1208: Milestone approval, promotion, and delivery sync. Hosted
+  # PR policy and release workflows call them on every render, so only a
+  # local render without Milestones omits them; callers treat a missing
+  # module as Milestones not enabled.
+  - "{% if verification_mode == 'hosted' or 'milestones' in lifecycle %}__keep_sync_milestone_state__{% else %}.csarc/scripts/sync_milestone_state.py{% endif %}"
+  - "{% if verification_mode == 'hosted' or 'milestones' in lifecycle %}__keep_promotion_gate__{% else %}.csarc/scripts/promotion_gate.py{% endif %}"
+  - "{% if verification_mode == 'hosted' or 'milestones' in lifecycle %}__keep_delivery_sync__{% else %}.csarc/scripts/delivery_sync.py{% endif %}"
   - "{% if 'milestones' in lifecycle %}__keep_milestone_format__{% else %}.csarc/docs/milestone-description.md{% endif %}"
   - "{% if 'milestones' in lifecycle %}__keep_milestone_tracker_form__{% else %}.github/ISSUE_TEMPLATE/milestone-tracker.yml{% endif %}"
   - "{% if documentation_mode != 'off' %}__keep_documentation_policy__{% else %}.csarc/docs/documentation-policy.md{% endif %}"

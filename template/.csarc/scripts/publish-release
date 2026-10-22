@@ -277,6 +277,8 @@ complete_published_milestone() {
   # is a no-op when TAG does not point at a Milestone promotion commit.
   local release_tag="$1"
   local commit_sha
+  # Absent without Milestones (#1208).
+  [[ -f "$repo_root/.csarc/scripts/sync_milestone_state.py" ]] || return 0
   commit_sha="$(git -C "$repo_root" rev-parse "${release_tag}^{commit}")"
   python3 "$repo_root/.csarc/scripts/sync_milestone_state.py" complete-release \
     --repo "$GITHUB_REPOSITORY" \
