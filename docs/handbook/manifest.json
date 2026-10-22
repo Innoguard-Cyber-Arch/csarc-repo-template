@@ -1,11 +1,11 @@
 {
   "baseline": {
-    "path": "docs/handbook/approved/261019r3_repo-template-handbook.html",
-    "sha256": "beb637a44308bdfbaaeaa9c50a9063ba1ee25a67e20943760770268b5d5eaffd"
+    "path": "docs/handbook/approved/261023r4_repo-template-handbook.html",
+    "sha256": "4fe3d231efa8c733d78bed4468ea4a75683c36c28777586e65debc8c895ea018"
   },
   "source": {
     "path": "docs/handbook/handbook.md",
-    "sha256": "0bc90ccb18250ad5f3d759ed632eaaa381a3a270854159186a9ffc078d840e5e"
+    "sha256": "f1810b4d1bf7cccb34ece72eebcc0a8846c17361a7f06b7ed11dc1ade976bfaa"
   },
   "stylesheet": {
     "path": "docs/handbook/handbook.css",
@@ -13,7 +13,7 @@
   },
   "html": {
     "path": "docs/handbook/index.html",
-    "sha256": "a51794a4001f108ca95a6ab72f0a60d3598b4fbf70ffdddd4f60a1bb23d94e19"
+    "sha256": "7bc387c6764e0dbdbff20866e0ff1ba5fded822bbca49ad843fa17c630f02683"
   },
   "status": "current",
   "sheets": 10,

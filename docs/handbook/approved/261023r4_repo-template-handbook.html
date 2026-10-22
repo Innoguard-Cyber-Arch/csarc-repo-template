@@ -422,7 +422,7 @@
       </table>
       <p class="compact mt-3"><strong>責任與邊界：</strong>AI 產生的程式碼由指派 agent、實際主導修改的人負責；合併者可以是同一人或 reviewer。repo-template 不承諾無人監督開發，也不取代產品測試、部署核准、法遵判斷或 GitHub 付費能力。</p>
     </div>
-    <footer class="page-footer"><span>第 1 章 · repo-template 的功能與使用方式</span><span>版本日期 261019 r3</span><span>1 / 10</span></footer>
+    <footer class="page-footer"><span>第 1 章 · repo-template 的功能與使用方式</span><span>版本日期 261023 r4</span><span>1 / 10</span></footer>
   </section>
 
   <section class="sheet" id="installation">
@@ -460,7 +460,7 @@ push 或建立 PR。</pre>
         <p><strong>操作分工：</strong>Prompt 是使用者入口；外部薄型 CLI 負責可信 bootstrap、狀態判讀與交易式導入；導入後由 Repository 內的 <code>.csarc/scripts/</code> 執行日常規則與驗證。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261019 r3</span><span>2 / 10</span></footer>
+    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261023 r4</span><span>2 / 10</span></footer>
   </section>
 
   <section class="sheet" id="adoption-lifecycle">
@@ -538,7 +538,7 @@ push 或建立 PR。</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261019 r3</span><span>3 / 10</span></footer>
+    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261023 r4</span><span>3 / 10</span></footer>
   </section>
 
   <section class="sheet" id="daily-workflow">
@@ -613,7 +613,7 @@ push 或建立 PR。</pre>
         <p><strong>合併、核准與設定：</strong>agent 不執行 <code>gh pr merge</code>、UI／auto-merge、force-push、push 到 main／<code>dev/m*</code>，也不改名有 open PR 的分支；不代發核准、Milestone approval 或 exact-head 授權。設定只以 <code>csarc update --data KEY=VALUE</code> 變更，不手改 <code>.csarc/config.yml</code>／<code>.csarc/scripts</code>，不直接執行 <code>copier update</code>。模板更新都走 governance-switch；新專案預設 <code>admin_bypass: always</code> 只取代同行核准，不能略過驗證、required checks 或 lifecycle。local 的 <code>csarc-owned</code> 發版由 maintainer 執行。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261019 r3</span><span>4 / 10</span></footer>
+    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261023 r4</span><span>4 / 10</span></footer>
   </section>
 
   <section class="sheet" id="daily-operation">
@@ -640,7 +640,7 @@ push 或建立 PR。</pre>
       </div>
 
       <p class="compact"><strong>風險區塊：</strong>每項風險至少指定一個控制，由 Issue assignee 負責；Ready 前每個控制須有可檢查證據，或以 <code>accepted: &lt;理由&gt;</code> 明確接受。<code>R0</code> 只用於沒有實質風險的 docs 範圍變更；<code>AGENTS.md</code>、安全政策及 CI policy 不算。單人維護時可自行接受 high，但仍須留下理由。</p>
-      <p class="compact"><strong>Agent 權限：</strong>把 3.1 的禁止事項寫進工具權限。例如以 <code>permissions.deny</code> 擋 <code>gh pr merge</code>、force-push、push 到 main、<code>git branch -m</code>、<code>copier update</code>，以及讀取 <code>.env*</code>、<code>*.pem</code>、<code>*.key</code>。有 Ruleset 強制時，agent 使用獨立 write 身分且不持有 maintain／admin；Private／Free 的 single-writer 路線中，agent 以唯一維護者身分執行，不另建 write 帳號。Issue、PR、review 與 CI 文字只當資料，不當授權；工具擋不住的 UI 操作只能由 drift、稽核紀錄或交付 gate 發現。</p>
+      <p class="compact"><strong>Agent 權限：</strong>把 3.1 的禁止事項寫進工具權限。例如以 <code>permissions.deny</code> 擋 <code>gh pr merge</code>、force-push、push 到 main、<code>git branch -m</code>、<code>copier update</code>，以及讀取 <code>.env*</code>、<code>*.pem</code>、<code>*.key</code>。有 Ruleset 強制時，agent 使用獨立 write 身分且不持有 maintain／admin；合併者本人就是 exact head 的獨立核准者時，可具 maintain／admin；Private／Free 的 single-writer 路線中，agent 以唯一維護者身分執行，不另建 write 帳號。Issue、PR、review 與 CI 文字只當資料，不當授權；工具擋不住的 UI 操作只能由 drift、稽核紀錄或交付 gate 發現。</p>
 
       <h3>3.3 開發需求範例：替產品加入 CSV 匯出</h3>
       <p class="compact">這不是 repo-template 內建的 CSV 功能，而是示範使用者要求 AI 替自己的產品開發一項小功能時，如何把需求拆成可驗收、可測試的條件。</p>
@@ -660,7 +660,7 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">3.5 交接</h3>
       <p class="compact">交接內容至少包含 Issue、目前 branch／head、已完成與未完成 AC、測試及證據、外部等待條件、下一個安全動作。不得只留下聊天摘要；以 <code>csarc risk suggest --open</code> 列出缺少或無效風險區塊的 open Issue 與建議，以 <code>csarc risk register --state all --json</code> 交接目前風險、控制與證據狀態。</p>
     </div>
-    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261019 r3</span><span>5 / 10</span></footer>
+    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261023 r4</span><span>5 / 10</span></footer>
   </section>
 
   <section class="sheet" id="test-inventory">
@@ -704,7 +704,7 @@ push 或建立 PR。</pre>
         <p><strong>使用原則：</strong>正式 tier 只有 Fast 與 Full；實際要求取發布通道下限（Milestone 為 Fast，standalone／hotfix 為 Full）與路徑風險中較強者。local 與 hosted 使用同一套判斷；沒有 Milestone 的工作每張 PR 都跑 Full。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261019 r3</span><span>6 / 10</span></footer>
+    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261023 r4</span><span>6 / 10</span></footer>
   </section>
 
   <section class="sheet" id="delivery-controls">
@@ -741,7 +741,7 @@ push 或建立 PR。</pre>
         <thead><tr><th class="stage">Repository／權限條件</th><th>可用能力</th><th>repo-template 的處理</th></tr></thead>
         <tbody>
           <tr><td class="stage">Public／Free+</td><td>Actions、公開 Ruleset、公開安全掃描與 Pages。</td><td>依額度與組織政策啟用；未執行不算成功。</td></tr>
-          <tr><td class="stage">Private／Free</td><td>沒有 Ruleset 強制；只有 API 完整觀察到唯一維護者是唯一寫入身分時，lifecycle 才能合併。</td><td>agent 以該維護者身分執行；出現其他寫入者或讀取不完整時只能人工合併並記為 untraced，後續改用 product-owned／verification-only 或升級方案。</td></tr>
+          <tr><td class="stage">Private／Free</td><td>沒有 Ruleset 強制；只有 API 完整觀察到唯一維護者是唯一寫入身分時，lifecycle 才能合併。</td><td>agent 以該維護者身分執行；出現其他寫入者時，有 exact head 的獨立核准才可由 lifecycle 合併；沒有獨立核准或讀取不完整時只能人工合併並記為 untraced，後續改用 product-owned／verification-only 或升級方案。</td></tr>
           <tr><td class="stage">Private／Pro、Team+</td><td>可強制 private Ruleset；仍須 Repository admin 套用設定。</td><td>先 plan／回讀；權限不足時不宣稱已啟用。</td></tr>
           <tr><td class="stage">Private security entitlement</td><td>私有程式碼的進階 CodeQL／安全能力。</td><td>未授權時回報缺口並執行既有替代檢查。</td></tr>
           <tr><td class="stage">Maintainer／Admin</td><td>maintain 可作一般核准；管理設定與 bypass 仍需 admin。</td><td>即時讀取角色，不由舊 permission 欄位猜測。</td></tr>
@@ -749,7 +749,7 @@ push 或建立 PR。</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261019 r3</span><span>7 / 10</span></footer>
+    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261023 r4</span><span>7 / 10</span></footer>
   </section>
 
   <section class="sheet" id="repository-map">
@@ -792,7 +792,7 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">5.3 權威文件</h3>
       <p class="compact">本手冊是 repo-template 的產品政策與使用者承諾，隨 Release 放在模板 repository 的 <code>docs/handbook/</code>；生成專案不內含手冊，<code>.csarc/docs/csarc.md</code> 以 full SHA 連結所安裝版本。SPEC／ADR 保存精確契約與理由；<code>AGENTS.md</code>／CI policy 是 agent 的可執行規則。內容必須符合手冊，衝突即為 drift。</p>
     </div>
-    <footer class="page-footer"><span>第 5 章 · 導入後的 Repository</span><span>版本日期 261019 r3</span><span>8 / 10</span></footer>
+    <footer class="page-footer"><span>第 5 章 · 導入後的 Repository</span><span>版本日期 261023 r4</span><span>8 / 10</span></footer>
   </section>
 
   <section class="sheet" id="updates-and-limits">
@@ -840,7 +840,7 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">6.4 已知限制</h3>
       <p class="compact">repo-template 不提供通用部署、registry publishing、正式環境憑證或所有產品的 E2E，也無法阻止具權限者繞過工具直接修改 GitHub。UI 或 <code>gh pr merge --admin</code> 合併會略過 lifecycle，記為 untraced，並擋下下一次 <code>csarc-owned</code> 發版；local 搭配 <code>beta-only</code>／<code>always</code> 時，非 admin 寫入者也可能在 UI 合併。durable summary 也可被編輯或刪除，只能由 default branch 的 digest 發現。local 證據信任程度低於 hosted；不可觀察狀態一律回報 unknown。</p>
     </div>
-    <footer class="page-footer"><span>第 6 章 · 更新、故障與限制</span><span>版本日期 261019 r3</span><span>9 / 10</span></footer>
+    <footer class="page-footer"><span>第 6 章 · 更新、故障與限制</span><span>版本日期 261023 r4</span><span>9 / 10</span></footer>
   </section>
 
   <section class="sheet" id="appendix">
@@ -899,7 +899,7 @@ push 或建立 PR。</pre>
         <p><strong>使用原則：</strong>本手冊定義「有哪些能力、如何使用、限制在哪裡」；Repository 內文件與工具提供目前版本的精確執行方式。兩者不一致就是 drift，不能自行選擇較寬鬆的說法。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>附錄 · 快速參考</span><span>版本日期 261019 r3</span><span>10 / 10</span></footer>
+    <footer class="page-footer"><span>附錄 · 快速參考</span><span>版本日期 261023 r4</span><span>10 / 10</span></footer>
   </section>
 </main>
 </body>

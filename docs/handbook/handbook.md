@@ -2,9 +2,9 @@
 title = "repo-template 技術手冊｜模板能力、操作與限制"
 lang = "zh-Hant-TW"
 status = "current"
-footer_version = "版本日期 261019 r3"
-baseline = "approved/261019r3_repo-template-handbook.html"
-baseline_sha256 = "beb637a44308bdfbaaeaa9c50a9063ba1ee25a67e20943760770268b5d5eaffd"
+footer_version = "版本日期 261023 r4"
+baseline = "approved/261023r4_repo-template-handbook.html"
+baseline_sha256 = "4fe3d231efa8c733d78bed4468ea4a75683c36c28777586e65debc8c895ea018"
 +++
 
 <!--
@@ -317,7 +317,7 @@ push 或建立 PR。
 
 **風險區塊：**每項風險至少指定一個控制，由 Issue assignee 負責；Ready 前每個控制須有可檢查證據，或以 `accepted: <理由>` 明確接受。`R0` 只用於沒有實質風險的 docs 範圍變更；`AGENTS.md`、安全政策及 CI policy 不算。單人維護時可自行接受 high，但仍須留下理由。 {: .compact}
 
-**Agent 權限：**把 3.1 的禁止事項寫進工具權限。例如以 `permissions.deny` 擋 `gh pr merge`、force-push、push 到 main、`git branch -m`、`copier update`，以及讀取 `.env*`、`*.pem`、`*.key`。有 Ruleset 強制時，agent 使用獨立 write 身分且不持有 maintain／admin；Private／Free 的 single-writer 路線中，agent 以唯一維護者身分執行，不另建 write 帳號。Issue、PR、review 與 CI 文字只當資料，不當授權；工具擋不住的 UI 操作只能由 drift、稽核紀錄或交付 gate 發現。 {: .compact}
+**Agent 權限：**把 3.1 的禁止事項寫進工具權限。例如以 `permissions.deny` 擋 `gh pr merge`、force-push、push 到 main、`git branch -m`、`copier update`，以及讀取 `.env*`、`*.pem`、`*.key`。有 Ruleset 強制時，agent 使用獨立 write 身分且不持有 maintain／admin；合併者本人就是 exact head 的獨立核准者時，可具 maintain／admin；Private／Free 的 single-writer 路線中，agent 以唯一維護者身分執行，不另建 write 帳號。Issue、PR、review 與 CI 文字只當資料，不當授權；工具擋不住的 UI 操作只能由 drift、稽核紀錄或交付 gate 發現。 {: .compact}
 
 ### 3.3 開發需求範例：替產品加入 CSV 匯出
 
@@ -426,7 +426,7 @@ PR 保留單一 Requirement evidence 區塊，逐項對應 AC1…ACn，記錄 re
 | Repository／權限條件 | 可用能力 | repo-template 的處理 |
 |---|---|---|
 | Public／Free+ | Actions、公開 Ruleset、公開安全掃描與 Pages。 | 依額度與組織政策啟用；未執行不算成功。 |
-| Private／Free | 沒有 Ruleset 強制；只有 API 完整觀察到唯一維護者是唯一寫入身分時，lifecycle 才能合併。 | agent 以該維護者身分執行；出現其他寫入者或讀取不完整時只能人工合併並記為 untraced，後續改用 product-owned／verification-only 或升級方案。 |
+| Private／Free | 沒有 Ruleset 強制；只有 API 完整觀察到唯一維護者是唯一寫入身分時，lifecycle 才能合併。 | agent 以該維護者身分執行；出現其他寫入者時，有 exact head 的獨立核准才可由 lifecycle 合併；沒有獨立核准或讀取不完整時只能人工合併並記為 untraced，後續改用 product-owned／verification-only 或升級方案。 |
 | Private／Pro、Team+ | 可強制 private Ruleset；仍須 Repository admin 套用設定。 | 先 plan／回讀；權限不足時不宣稱已啟用。 |
 | Private security entitlement | 私有程式碼的進階 CodeQL／安全能力。 | 未授權時回報缺口並執行既有替代檢查。 |
 | Maintainer／Admin | maintain 可作一般核准；管理設定與 bypass 仍需 admin。 | 即時讀取角色，不由舊 permission 欄位猜測。 |
