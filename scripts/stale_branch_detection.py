@@ -30,8 +30,8 @@ state):
 
 Reused from two call sites (Issue #667's explicit design, not a new
 standalone scheduled workflow):
-  - `scripts/sync_milestone_state.py preflight` -- a review-candidate list
-    surfaced every time Milestone metadata is validated.
+  - `sync_milestone_state.py preflight` -- a
+    review-candidate list surfaced every time Milestone metadata is validated.
   - `scripts/release_policy.py preflight` -- the same list surfaced as
     advisory, non-blocking output alongside the existing release
     capability/integration report; a stale-branch finding never fails a

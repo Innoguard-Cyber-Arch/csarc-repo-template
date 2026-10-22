@@ -280,12 +280,34 @@ def _is_breaking(subject: str, body: str) -> bool:
     )
 
 
-def _breaking_notes(body: str) -> str:
-    """Return the migration text of a commit's BREAKING CHANGE footer."""
-    match = re.search(
-        r"BREAKING[ -]CHANGE:[ \t]*(.+?)(?:\n[ \t]*\n|\Z)", body, re.DOTALL
-    )
-    return " ".join(match.group(1).split()) if match else ""
+BREAKING_FOOTER = re.compile(r"^BREAKING[ -]CHANGE:[ \t]*(.*)$")
+FOOTER_TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9-]*(?:: | #)")
+
+
+def _breaking_notes(body: str) -> list[str]:
+    """Return the migration text of each BREAKING CHANGE footer in a body.
+
+    A footer continues until a blank line or the next footer token, so a
+    later trailer such as ``Co-Authored-By:`` or a squash ``CSARC-*`` line
+    never becomes migration text (Issue #1104).
+    """
+    notes: list[str] = []
+    current: list[str] | None = None
+    for line in [*body.splitlines(), ""]:
+        stripped = line.strip()
+        match = BREAKING_FOOTER.match(stripped)
+        if current is not None and (
+            not stripped or match or FOOTER_TOKEN.match(stripped)
+        ):
+            text = " ".join(" ".join(current).split())
+            if text:
+                notes.append(text)
+            current = None
+        if match:
+            current = [match.group(1)]
+        elif current is not None:
+            current.append(stripped)
+    return notes
 
 
 MAIN_REFS = ("refs/remotes/origin/main", "refs/heads/main")
@@ -362,6 +384,12 @@ def bump_version(
     While ``maturity`` is ``early`` and the core is still ``0.y.z``, a
     breaking change advances MINOR to ``0.(y+1).0`` instead of leaving 0.x
     (Issue #1085). Every other maturity keeps the SemVer MAJOR bump.
+
+    While ``maturity`` is ``formal`` and the core is still ``0.y.z``, any
+    releasable change graduates the line to ``1.0.0`` (Issue #1105). The
+    maturity comes from trusted main, so the PR that switches ``early`` to
+    ``formal`` still plans under ``early``; the first release planned after
+    that switch merges is ``1.0.0`` instead of an invalid formal ``0.x``.
     """
     try:
         parsed = release_phase.parse_version(version)
@@ -378,6 +406,8 @@ def bump_version(
     if bump == "no-release":
         return None
     major, minor, patch = parsed.core
+    if maturity == "formal" and major == 0:
+        return "1.0.0"
     if bump == "major" and maturity == "early" and major == 0:
         bump = "minor"
     if bump == "major":
@@ -1093,12 +1123,12 @@ def _changelog_records(raw: str) -> list[tuple[str, str, str]]:
 
 
 def _migration_note(short_sha: str, body: str) -> str:
-    """Return one breaking commit's migration bullet."""
-    note = _breaking_notes(body) or (
+    """Return one breaking commit's migration bullets, one per footer."""
+    notes = _breaking_notes(body) or [
         "no BREAKING CHANGE footer was recorded; read the linked pull "
         "request before upgrading"
-    )
-    return f"* {short_sha}: {note}"
+    ]
+    return "\n".join(f"* {short_sha}: {note}" for note in notes)
 
 
 def _migration_section(
@@ -1384,6 +1414,38 @@ def pull_request_title_errors(
     ]
 
 
+def breaking_migration_errors(
+    root: Path, base_sha: str, head_sha: str, title: str
+) -> list[str]:
+    """Reject a breaking pull request that records no migration text.
+
+    The squash merge keeps only the title and the branch commits'
+    ``BREAKING CHANGE:`` footers, so a breaking marker (``!`` on the title
+    or a commit, or a footer) without footer text would publish an empty
+    Migration notes entry (Issue #1104).
+    """
+    raw = git_output(
+        ["log", "--format=%s%x1f%b%x1e", f"{base_sha}..{head_sha}"], root
+    )
+    breaking = release_intent(title) == "major"
+    documented = False
+    for message in raw.split("\x1e"):
+        subject, _, body = message.strip("\n").partition("\x1f")
+        if not subject:
+            continue
+        breaking = breaking or _is_breaking(subject, body)
+        documented = documented or bool(_breaking_notes(body))
+    if not breaking or documented:
+        return []
+    return [
+        "the pull request declares a breaking change, but no branch commit "
+        "records migration text in a `BREAKING CHANGE:` footer; the squash "
+        "merge keeps only those footers, so the CHANGELOG Migration notes "
+        "would be empty. Add a commit whose body ends with `BREAKING "
+        "CHANGE: <how to migrate>`, or remove the breaking marker."
+    ]
+
+
 def verify_delivery_version(
     root: Path,
     base_sha: str,
@@ -1399,8 +1461,16 @@ def verify_delivery_version(
     untouched so only the checkpoint's terminal Issue publishes the beta.
     When ``pr_title`` is given, the title's release intent must equal the
     highest branch commit intent, because the squash merge keeps only the
-    title. Callers that omit it keep the earlier interface.
+    title. A breaking title or commit must also carry migration text in a
+    ``BREAKING CHANGE:`` footer, for deferred work too. Callers that omit
+    it keep the earlier interface.
     """
+    if pr_title is not None:
+        migration_errors = breaking_migration_errors(
+            root, base_sha, head_sha, pr_title
+        )
+        if migration_errors:
+            raise ValueError(migration_errors[0])
     if pr_title is not None and checkpoint_role != "deferred":
         title_errors = pull_request_title_errors(
             root, base_sha, head_sha, pr_title

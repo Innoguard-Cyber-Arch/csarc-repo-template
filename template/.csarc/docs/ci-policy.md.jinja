@@ -55,6 +55,12 @@ Milestone 關閉後補掛不能用 `gh issue edit --milestone <名稱>`，改以
 gh api repos/{owner}/{repo}/issues/{n} --method PATCH -f milestone=<number>
 ```
 
+{% if 'milestones' in lifecycle -%}
+## Milestone promotion 的 ADR 與文件對齊
+
+Milestone promotion PR 的 body 必須有獨立的 `## ADR 與文件對齊` 段落，以 `Status`、`Reviewed head`、`Reason` 記錄 tracker 決定、擁有者決定、新增或修改的 ADR，以及刻意不寫成 ADR 的決定與理由。內容正確性由 agent 比對；gate 只接受 exact-head 的 `aligned` 或有具體理由的 `not-applicable`，並阻擋 `drift`、`inconclusive`、缺段落與 head 不符。這項規則只套用 Milestone promotion route，`check-route` 與正式 preflight 共用同一驗證器。
+
+{%- endif %}
 ## PR lifecycle single-writer
 
 Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact head 直接建立 Draft PR。之後的 Ready／Draft、授權、metadata 與合併寫入，都先取得 remote lease，再經 `.csarc/scripts/pr_lifecycle.py`；`.csarc/scripts/verify` 會拒絕另一套寫入者。Issue body 改用 `.csarc/scripts/gh-issue-edit` 編輯，它會在既有核可將失效時先提醒；它無法攔截 GitHub UI 或直接 API 編輯。
@@ -66,7 +72,7 @@ Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact 
 - **Copilot 審核**：`python3 .csarc/scripts/review_gate.py status --repo <owner/repo> --pr <N>` 列出 Copilot 對目前 head 的意見與未解決 thread；修正、push、resolve，直到狀態為 `clean`。有有效 admin bypass marker，或 Ruleset 不是 0 個原生 approval 的形狀時，不採用 Copilot 證據；沒有授權或額度時 Copilot 不會審核，改走 maintainer approval。Copilot 沒有意見不代表沒有缺陷。
 {%- endif %}
 
-合併時 lifecycle 依序：確認 lease 的 base 是 head 的祖先（head 落後時先合併最新 base 並重新取得證據）、讀回 head tree 必須等於證據綁定的 tree、把 canonical 證據寫進 PR 唯一的 summary 留言（`csarc-merge-evidence: v1`）、以 squash 合併並加上 `CSARC-Evidence`、`CSARC-Evidence-SHA256`、`CSARC-Trust` 等 trailer，最後讀回 merge commit。tree 或 trailer 不符時 summary 標成 mismatch 並以非 0 結束。
+合併時 lifecycle 依序：確認 lease 的 base 是 head 的祖先（head 落後時先合併最新 base 並重新取得證據）、讀回 head tree 必須等於證據綁定的 tree、把 canonical 證據寫進 PR 唯一的 summary 留言（`csarc-merge-evidence: v1`）、以 squash 合併、保留 commits 的完整 `BREAKING CHANGE:` footer 並加上 `CSARC-Evidence`、`CSARC-Evidence-SHA256`、`CSARC-Trust` 等 trailer，最後讀回 merge commit。tree 或 trailer 不符時 summary 標成 mismatch 並以非 0 結束。
 
 依 base branch 的 effective rules 與寫入者讀回，lifecycle 只選一條 route：
 
@@ -130,7 +136,7 @@ Draft PR 不檢查 PR 與 Issue 的 checklist 是否全勾；轉為 Ready 時對
 | stable | `X.Y.Z` | {% if 'milestones' in lifecycle %}Milestone 交付、{% endif %}standalone 或 hotfix | full |
 
 - release-worthy 的 PR 在 Draft 時執行 `python3 .csarc/scripts/release_policy.py prepare-candidate --sha HEAD --phase <beta|stable>`，版本與 CHANGELOG 是同一張 PR 的最後一個 commit；不在合併後另開版本 PR，也不手動建立 tag。
-- `project_maturity: {{ project_maturity }}`：`early` 的 breaking 變更從 `0.y.z` 升為 `0.(y+1).0`，`formal` 依 SemVer 升 MAJOR；只有明確宣告的 standalone stable PR 能改成 `formal`。含 breaking 變更的 CHANGELOG 另列 `Migration notes`。
+- `project_maturity: {{ project_maturity }}`：`early` 的 breaking 變更從 `0.y.z` 升為 `0.(y+1).0`，`formal` 依 SemVer 升 MAJOR；只有明確宣告的 standalone stable PR 能改成 `formal`。成熟度讀 current `main`，所以切換 PR 本身仍依 `early` 規劃；合併後第一個可發版的 release 規劃為 `1.0.0`（beta 為 `1.0.0-beta.N`），之後依 SemVer 前進。`formal` → `early` 的降級或已在 `1.x` 的 `early` 設定直接失敗，不倒退 core。含 breaking 變更的 CHANGELOG 另列 `Migration notes`。
 - `.csarc/scripts/publish-release` 是唯一的 Release writer：寫入前以 `release_writer.py preflight` 確認 exact candidate、tree 未修改、沒有第二個 Release workflow，並以 merge trace strict audit 檢查 governance baseline 之後的每筆合併。每個 tag 有自己的 remote release lease。
 {%- if hosted and (project_mode == 'new' or csarc_release_workflow | default(false)) %}
 - 合併後 `release.yml`（`release_trigger: {{ release_trigger }}`）呼叫同一支腳本；checksum 與 SPDX SBOM 隨 Release 上傳，失敗時 Release 保持 draft。

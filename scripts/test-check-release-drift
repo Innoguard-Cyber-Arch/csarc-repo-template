@@ -192,7 +192,20 @@ JSON
 printf '{"status": "identical"}\n' >"$fixture_root/release-compare.json"
 release_output="$(run_mocked)"
 grep -Fq "valid release evidence" <<<"$release_output"
-grep -Fq "no drift (latest eligible GitHub Release covers main)" <<<"$release_output"
+grep -Fq "no drift (an eligible GitHub Release covers main)" <<<"$release_output"
+[[ ! -s "$fixture_root/issue-calls.log" ]]
+
+# Case 2b: Issue #1200 -- a newer delivery beta that is unrelated to main
+# must not hide an older immutable stable Release that targets main exactly.
+reset_fixtures
+other_sha="cccccccccccccccccccccccccccccccccccccccc"
+cat >"$fixture_root/releases.json" <<JSON
+[{"tag_name": "v1.3.0-beta.1", "target_commitish": "$other_sha", "published_at": "2026-09-04T11:57:00Z", "draft": false, "prerelease": true, "immutable": true, "html_url": "https://example.invalid/releases/v1.3.0-beta.1"}, {"tag_name": "v1.2.3", "target_commitish": "$main_sha", "published_at": "2026-09-04T11:56:00Z", "draft": false, "prerelease": false, "immutable": true, "html_url": "https://example.invalid/releases/v1.2.3"}]
+JSON
+printf '{"status": "diverged"}\n' >"$fixture_root/release-compare.json"
+shadowed_release_output="$(run_mocked)"
+grep -Fq "Selected eligible GitHub Release: v1.2.3 target $main_sha" <<<"$shadowed_release_output"
+grep -Fq "no drift (an eligible GitHub Release covers main)" <<<"$shadowed_release_output"
 [[ ! -s "$fixture_root/issue-calls.log" ]]
 
 # Case 3: an ancestor Release is recent activity, but does not claim to
@@ -247,7 +260,6 @@ grep -Fq "DRIFT DETECTED" <<<"$beta_pr_record_output"
 
 # Case 5: a stable Release with a non-ancestor target is not evidence.
 reset_fixtures
-other_sha="cccccccccccccccccccccccccccccccccccccccc"
 cat >"$fixture_root/releases.json" <<JSON
 [{"tag_name": "v1.2.3", "target_commitish": "$other_sha", "published_at": "2026-09-04T11:56:00Z", "draft": false, "prerelease": false, "immutable": true, "html_url": "https://example.invalid/releases/v1.2.3"}]
 JSON
@@ -284,7 +296,7 @@ JSON
 printf '{"status": "identical"}\n' >"$fixture_root/release-compare.json"
 prerelease_output="$(run_mocked)"
 grep -Fq "valid release evidence" <<<"$prerelease_output"
-grep -Fq "no drift (latest eligible GitHub Release covers main)" <<<"$prerelease_output"
+grep -Fq "no drift (an eligible GitHub Release covers main)" <<<"$prerelease_output"
 [[ ! -s "$fixture_root/issue-calls.log" ]]
 
 # Case 7b: a Release whose tag has no alpha/beta suffix but whose

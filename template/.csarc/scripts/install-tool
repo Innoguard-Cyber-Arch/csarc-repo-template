@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Install one pinned scanner or linter into the shared cache and print its
+# path: install-tool actionlint|gitleaks|osv-scanner|shellcheck|syft.
+# Every download is checked against a pinned digest, or against a release
+# manifest whose own digest is pinned. The syft pin matches the
+# syft-version release.yml passes to anchore/sbom-action, so a release
+# published without Actions carries the same SBOM evidence.
+
+tool="${1:-}"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+platform="$(uname -s)-$(uname -m)"
+manifest_sha256=""
+expected_sha256=""
+member=""
+strip=0
+case "$tool" in
+  actionlint | gitleaks | syft)
+    case "$tool" in
+      actionlint)
+        version="1.7.12" label="Actionlint" x64=amd64
+        manifest_sha256="433028cf0ba3c42163ea1a668dedce30fcdbe84fe912b1a5e288c006eab8a4f5"
+        base_url="https://github.com/rhysd/actionlint/releases/download/v${version}"
+        ;;
+      gitleaks)
+        version="8.30.1" label="Gitleaks" x64=x64
+        manifest_sha256="061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae"
+        base_url="https://github.com/gitleaks/gitleaks/releases/download/v${version}"
+        ;;
+      *)
+        version="1.50.0" label="Syft" x64=amd64
+        manifest_sha256="bb8824a06c27c625fc103db5d7e9d7131ba2cc6e7c7a79318ee71686ede3c3f0"
+        base_url="https://github.com/anchore/syft/releases/download/v${version}"
+        ;;
+    esac
+    case "$platform" in
+      Darwin-arm64) arch=darwin_arm64 ;;
+      Darwin-x86_64) arch="darwin_$x64" ;;
+      Linux-aarch64 | Linux-arm64) arch=linux_arm64 ;;
+      Linux-x86_64) arch="linux_$x64" ;;
+      *) arch="" ;;
+    esac
+    manifest="${tool}_${version}_checksums.txt"
+    asset="${tool}_${version}_${arch}.tar.gz"
+    cache_key="$asset"
+    member="$tool"
+    ;;
+  osv-scanner)
+    version="2.5.1" label="OSV-Scanner"
+    manifest_sha256="40120ab7d670199f6663d76f9806b6d11ab3c402df808e5cc4e13c5cb0643356"
+    base_url="https://github.com/google/osv-scanner/releases/download/v${version}"
+    case "$platform" in
+      Darwin-arm64) arch=darwin_arm64 ;;
+      Darwin-x86_64) arch=darwin_amd64 ;;
+      Linux-aarch64 | Linux-arm64) arch=linux_arm64 ;;
+      Linux-x86_64) arch=linux_amd64 ;;
+      *) arch="" ;;
+    esac
+    manifest="osv-scanner_SHA256SUMS"
+    asset="osv-scanner_$arch"
+    cache_key="$asset"
+    ;;
+  shellcheck)
+    version="0.11.0" label="ShellCheck"
+    case "$platform" in
+      Darwin-arm64)
+        arch=darwin.aarch64
+        expected_sha256="339b930feb1ea764467013cc1f72d09cd6b869ebf1013296ba9055ab2ffbd26f"
+        ;;
+      Darwin-x86_64)
+        arch=darwin.x86_64
+        expected_sha256="c2c15e08df0e8fbc374c335b230a7ee958c313fa5714817a59aa59f1aa594f51"
+        ;;
+      Linux-aarch64 | Linux-arm64)
+        arch=linux.aarch64
+        expected_sha256="68a8133197a50beb8803f8d42f9908d1af1c5540d4bb05fdfca8c1fa47decefc"
+        ;;
+      Linux-x86_64)
+        arch=linux.x86_64
+        expected_sha256="b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6"
+        ;;
+      *) arch="" ;;
+    esac
+    base_url="https://github.com/koalaman/shellcheck/releases/download/v${version}"
+    asset="shellcheck-v${version}.${arch}.tar.gz"
+    cache_key="$arch"
+    member="shellcheck-v${version}/shellcheck"
+    strip=1
+    ;;
+  *)
+    echo "Usage: install-tool actionlint|gitleaks|osv-scanner|shellcheck|syft" >&2
+    exit 2
+    ;;
+esac
+if [[ -z "$arch" ]]; then
+  printf 'Unsupported platform. Install %s %s and place it on PATH.\n' "$label" "$version" >&2
+  exit 1
+fi
+
+cache_root="$("$repo_root/.csarc/scripts/resolve-cache-root")"
+cache_dir="$cache_root/$tool/$version/$cache_key"
+binary="$cache_dir/$tool"
+mkdir -p "$cache_dir"
+
+sha256() {
+  shasum -a 256 "$1" | awk '{print $1}'
+}
+
+# Download $1 to $2 unless $2 already has digest $3.
+fetch() {
+  if [[ ! -f "$2" ]] || [[ "$(sha256 "$2")" != "$3" ]]; then
+    curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+      "$base_url/$1" -o "$2.tmp.$$"
+    mv "$2.tmp.$$" "$2"
+  fi
+}
+
+if [[ -n "$manifest_sha256" ]]; then
+  fetch "$manifest" "$cache_dir/checksums.txt" "$manifest_sha256"
+  if [[ "$(sha256 "$cache_dir/checksums.txt")" != "$manifest_sha256" ]]; then
+    echo "$label checksum manifest does not match the pinned digest." >&2
+    exit 1
+  fi
+  expected_sha256="$(awk -v name="$asset" '$2 == name {print $1}' "$cache_dir/checksums.txt")"
+  if [[ -z "$expected_sha256" ]]; then
+    echo "$label release manifest does not contain the selected asset." >&2
+    exit 1
+  fi
+fi
+
+# OSV-Scanner ships a bare binary; every other tool ships an archive.
+download="$cache_dir/$asset"
+[[ -n "$member" ]] || download="$binary"
+fetch "$asset" "$download" "$expected_sha256"
+if [[ "$(sha256 "$download")" != "$expected_sha256" ]]; then
+  echo "$label download does not match the pinned digest." >&2
+  exit 1
+fi
+
+if [[ -n "$member" ]]; then
+  extract_dir="$(mktemp -d "$cache_dir/.extract.XXXXXX")"
+  trap 'rm -rf "$extract_dir"' EXIT
+  tar -xzf "$download" -C "$extract_dir" --strip-components "$strip" "$member"
+  install -m 0755 "$extract_dir/$tool" "$binary"
+fi
+chmod +x "$binary"
+printf '%s\n' "$binary"

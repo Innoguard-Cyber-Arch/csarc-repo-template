@@ -20,6 +20,7 @@ parse_spec_text = SPEC_MODULE["parse_spec_text"]
 sync_spec = SPEC_MODULE["sync_spec"]
 validate_unique_ids = SPEC_MODULE["validate_unique_ids"]
 validate_adr = SPEC_MODULE["validate_adr"]
+validate_adr_index = SPEC_MODULE["validate_adr_index"]
 validate_local_links = SPEC_MODULE["validate_local_links"]
 FULLWIDTH_COLON = "\N{FULLWIDTH COLON}"
 
@@ -151,6 +152,74 @@ def test_validates_adr_metadata_and_sources(tmp_path: Path) -> None:
     )
     with pytest.raises(SpecError, match="ADR status"):
         validate_adr(decision)
+
+
+@pytest.mark.parametrize("layer", ["", "template"])
+def test_rejects_adr_sections_out_of_order(tmp_path: Path, layer: str) -> None:
+    root = Path(__file__).parents[1] / layer
+    script = "scripts" if not layer else ".csarc/scripts"
+    module = runpy.run_path(str(root / script / "spec_to_issue.py"))
+    decision = tmp_path / "portable-baseline.md"
+    decision.write_text(
+        VALID_DECISION.replace("## 決定", "## TEMP")
+        .replace("## 評估過的替代方案", "## 決定")
+        .replace("## TEMP", "## 評估過的替代方案"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(module["SpecError"], match="ADR sections must follow"):
+        module["validate_adr"](decision)
+
+
+@pytest.mark.parametrize("layer", ["", "template"])
+def test_superseded_adr_requires_successor(tmp_path: Path, layer: str) -> None:
+    root = Path(__file__).parents[1] / layer
+    script = "scripts" if not layer else ".csarc/scripts"
+    module = runpy.run_path(str(root / script / "spec_to_issue.py"))
+    decision = tmp_path / "portable-baseline.md"
+    superseded = VALID_DECISION.replace(
+        f"**狀態{FULLWIDTH_COLON}**Accepted",
+        f"**狀態{FULLWIDTH_COLON}**Superseded",
+    )
+    decision.write_text(superseded, encoding="utf-8")
+
+    with pytest.raises(module["SpecError"], match="must name its successor"):
+        module["validate_adr"](decision)
+
+    decision.write_text(
+        superseded.replace(
+            f"- **日期{FULLWIDTH_COLON}**",
+            f"- **取代者{FULLWIDTH_COLON}**Current ADR\n"
+            f"- **日期{FULLWIDTH_COLON}**",
+        ),
+        encoding="utf-8",
+    )
+    module["validate_adr"](decision)
+
+
+@pytest.mark.parametrize("layer", ["", "template"])
+def test_adr_index_must_list_every_current_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layer: str
+) -> None:
+    root = Path(__file__).parents[1] / layer
+    script = "scripts" if not layer else ".csarc/scripts"
+    module = runpy.run_path(str(root / script / "spec_to_issue.py"))
+    decision = tmp_path / "docs/adr/portable-baseline.md"
+    decision.parent.mkdir(parents=True)
+    decision.write_text(VALID_DECISION, encoding="utf-8")
+    index = tmp_path / "docs/README.md"
+    index.write_text("# Docs\n\n## Decision records\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(module["SpecError"], match=r"portable-baseline\.md"):
+        module["validate_adr_index"]([Path("docs/adr/portable-baseline.md")])
+
+    index.write_text(
+        "# Docs\n\n## Decision records\n\n"
+        "- [Portable baseline](adr/portable-baseline.md)\n",
+        encoding="utf-8",
+    )
+    module["validate_adr_index"]([Path("docs/adr/portable-baseline.md")])
 
 
 def test_repository_adrs_follow_the_validated_contract() -> None:

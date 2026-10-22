@@ -89,10 +89,10 @@ Stable promotion 前要證明：沒有參與實作的人，只靠已發布的文
 1. 記錄 release tag 與完整 SHA，從 `release-prompt.txt` 取得固定版本的 `csarc`。
 2. 在 target 的乾淨 clone 開一般分支，執行 `csarc status` 與 `csarc update --check --json`。
 3. 依手冊與 `docs/install.md` 處理衝突。install.md 要求的產品準備變更（例如把模板 workflow 裡的產品 job 搬到產品 workflow、更新 blocking 的 Action pin）以獨立的產品準備 commit 在 `--finalize-plan` 前提交，再重新 `--check`；之後 `--finalize-plan`、`--apply-plan`。以 `--decision <path>=take-new` 退役保留的舊 script（install.md「保留的舊檔與過時連結」）是 plan 的決定，不是產品準備 commit，記在「衝突與決定」，不算產品 diff。
-4. apply 成功後把結果 commit 到同一個分支，在這個已 commit 的 head 執行 `./.csarc/scripts/verify-fast` 與產品原有檢查；產品原有檢查也在 `main` 跑一次對照。
+4. apply 成功後把結果 commit 到同一個分支。install.md 步驟 6 列出的後續修正（刪除保留的舊檔、修正連到舊路徑的連結、補 ignore 規則）以獨立的後續修正 commit 接著提交。在最後一個已 commit 的 head 執行 `./.csarc/scripts/verify-fast` 與產品原有檢查；產品原有檢查也在 `main` 跑一次對照。
 5. 依下表記錄。驗證通過後，可以把分支推成非 default branch 的 Draft PR，只用來承載 diff；這一步是本 run 的明確指派。
 
-`release-prompt.txt` 的「commit 只限 docs/install.md 指定的兩種」在每一步都適用：步驟 3 的產品準備 commit，以及步驟 4 apply 後的 commit。步驟 5 只另外放寬 push 非 default branch 與建立 Draft PR 這兩件事；stash、套用 GitHub settings 與 push default branch 一律不做。
+`release-prompt.txt` 的「commit 只限 docs/install.md 指定的三種」在每一步都適用：步驟 3 的產品準備 commit、步驟 4 apply 後的 commit，以及步驟 4 apply 之後的後續修正 commit。步驟 5 只另外放寬 push 非 default branch 與建立 Draft PR 這兩件事；stash、套用 GitHub settings 與 push default branch 一律不做。
 
 **必填欄位：**
 
@@ -101,7 +101,7 @@ Stable promotion 前要證明：沒有參與實作的人，只靠已發布的文
 | Release | tag 與完整 SHA |
 | 步驟紀錄 | 每一步的指令、exit code 與結果摘要 |
 | 衝突與決定 | 每個衝突的決定，以及依據手冊哪一節 |
-| 產品 diff 摘要 | 套用後產品檔案的變更。只能是 install.md 列出的產品準備 commit（例如產品 job 搬移、Action pin）與 apply 結果；每個產品準備 commit 逐條記錄 SHA、內容與依據的 install.md 章節，沒有時寫 `none`。`take-new` 退役的舊檔不列在這裡 |
+| 產品 diff 摘要 | 套用後產品檔案的變更。只能是 install.md 列出的產品準備 commit（例如產品 job 搬移、Action pin）、apply 結果與後續修正 commit（例如刪除舊檔、修正舊路徑連結、補 ignore 規則）；每個產品準備 commit 與後續修正 commit 逐條記錄 SHA、內容與依據的 install.md 章節，沒有時寫 `none`。`take-new` 退役的舊檔不列在這裡 |
 | Native checks | 每個產品原有檢查的指令，以及在 `main` 與 branch 的結果 |
 | 產品檢查變化 | 結果與 `main` 不同的每個產品檢查，標 `待擁有者決定`（附文件章節與列出的選項）或 `regression`；沒有時寫 `none` |
 | 無依據猜測 | 會改變產品行為或治理範圍、卻找不到文件依據的猜測；沒有時寫 `none` |

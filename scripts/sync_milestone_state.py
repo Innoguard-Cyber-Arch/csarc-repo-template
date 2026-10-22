@@ -234,12 +234,28 @@ def _pages(raw: str) -> list[dict[str, Any]]:
     return value
 
 
+def _section_match(body: str, heading: str) -> re.Match[str] | None:
+    """Find a tracker section under an H2 or H3 heading (#1160).
+
+    create-milestone writes `##`, the Issue form `###`. H2 wins over a
+    same-named H3; a section ends at the next same-or-higher heading.
+    Group 1 is the heading, group 2 the content.
+    """
+    for level in (2, 3):
+        match = re.search(
+            rf"(?ms)^({'#' * level} {re.escape(heading)}\s*$\n)"
+            rf"(.*?)(?=^#{{1,{level}}} |\Z)",
+            body,
+        )
+        if match is not None:
+            return match
+    return None
+
+
 def _section(body: str, heading: str) -> str | None:
-    """Return one canonical H2 section body."""
-    match = re.search(
-        rf"(?ms)^## {re.escape(heading)}\s*$\n(.*?)(?=^## |\Z)", body
-    )
-    return None if match is None else match.group(1).strip()
+    """Return one tracker section body (see `_section_match`)."""
+    match = _section_match(body, heading)
+    return None if match is None else match.group(2).strip()
 
 
 def _meaningful(text: str | None) -> bool:
@@ -251,21 +267,21 @@ def _meaningful(text: str | None) -> bool:
 
 
 def _replace_section(body: str, heading: str, content: str) -> str:
-    """Replace one H2 section's content, or append it if not present."""
-    pattern = re.compile(
-        rf"(?ms)^(## {re.escape(heading)}\s*$\n)(.*?)(?=^## |\Z)"
-    )
-    block = f"## {heading}\n\n{content.strip()}\n\n"
-    match = pattern.search(body)
+    """Replace one section's content at its own level, or append an H2."""
+    match = _section_match(body, heading)
+    level = "##" if match is None else match.group(1).split(" ", 1)[0]
+    block = f"{level} {heading}\n\n{content.strip()}\n\n"
     if match is not None:
         return body[: match.start()] + block + body[match.end() :]
     return body.rstrip("\n") + "\n\n" + block
 
 
 def _remove_section(body: str, heading: str) -> str:
-    """Return body with one whole H2 section (heading included) removed."""
-    pattern = re.compile(rf"(?ms)^## {re.escape(heading)}\s*$\n.*?(?=^## |\Z)")
-    return pattern.sub("", body, count=1).rstrip("\n") + "\n"
+    """Return body with one whole section (heading included) removed."""
+    match = _section_match(body, heading)
+    if match is not None:
+        body = body[: match.start()] + body[match.end() :]
+    return body.rstrip("\n") + "\n"
 
 
 def _fingerprint(text: str) -> str:
@@ -415,9 +431,7 @@ def append_completion_evidence(body: str, evidence_url: str) -> str:
     placeholder HTML comment) instead of overwriting it, so a promotion
     bridge merge never clobbers evidence recorded by an earlier checkpoint.
     """
-    match = re.search(
-        r"(?ms)^(## Completion evidence\s*$\n)(.*?)(?=^## |\Z)", body
-    )
+    match = _section_match(body, "Completion evidence")
     if match is None:
         raise RuntimeError(
             "The lifecycle Issue body is missing a Completion evidence section"
@@ -493,7 +507,7 @@ def _milestone_errors(milestone: dict[str, Any]) -> list[str]:
 def _parent_membership_errors(
     issues: list[dict[str, Any]], milestone_number: int
 ) -> list[str]:
-    """Require native Feature parents to share their sub-issue Milestone."""
+    """Require native parent Issues to share their sub-issue Milestone."""
     members = {
         issue.get("number")
         for issue in issues
@@ -516,7 +530,7 @@ def _parent_membership_errors(
         if parent not in members and isinstance(child, int):
             missing.setdefault(parent, []).append(child)
     return [
-        f"Feature parent #{parent} must share Milestone {milestone_number} "
+        f"Parent Issue #{parent} must share Milestone {milestone_number} "
         f"with sub-issue(s) {', '.join(f'#{child}' for child in children)}"
         for parent, children in sorted(missing.items())
     ]
@@ -1423,7 +1437,7 @@ def _parent_number(issue: dict[str, Any]) -> int | None:
 
 
 def _parent_status(issue: dict[str, Any], sub_statuses: list[str]) -> str:
-    """Return a Feature parent's status from its sub-issues and checklist."""
+    """Return a parent Issue's status from its sub-issues and checklist."""
     if issue.get("state") != "closed":
         return "Pending"
     if issue.get("state_reason") == "not_planned":
@@ -1440,8 +1454,9 @@ def _delivery_statuses(
 ) -> tuple[dict[int, str], dict[int, list[int]]]:
     """Return every linked Issue's delivery status and its sub-issues.
 
-    A Feature parent never has its own delivering pull request (#962 keeps
-    it in the Milestone; a promotion may not close it). It is delivered once
+    A parent Issue (a main Issue with sub-issues, #1174) may have no
+    delivering pull request of its own (#962 keeps it in the Milestone; a
+    promotion may not close it). It is delivered once
     every sub-issue in this Milestone is settled and its own acceptance
     checklist is complete (#1026). Leaf work keeps the strict per-Issue
     closing pull request evidence required since #816.

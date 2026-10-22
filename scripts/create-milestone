@@ -220,7 +220,7 @@ fi
 
 proposal="$(cat "$proposal_file")"
 tracker_body="$(
-  printf '## Proposal\n\n%s\n\n## Completion evidence\n\n<!-- Fill after release. -->\n\n## Early termination\n\n<!-- Fill only when stopped early. -->\n\n## Promotion\n\n<!-- Fill when ready to promote. -->\n' \
+  printf '## Proposal\n\n%s\n\n## Completion evidence\n\n<!-- Fill after release. -->\n\n## Early termination\n\n<!-- Fill only when stopped early. -->\n\n## Promotion\n\n- [ ] ADR 與文件已對齊（promotion PR 紀錄）。\n\n<!-- Fill when ready to promote. -->\n' \
     "$proposal"
 )"
 

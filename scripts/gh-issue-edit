@@ -9,7 +9,19 @@ import sys
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 
-from sync_milestone_state import body_edit_warning, load_issue_snapshot, run_gh
+try:
+    from sync_milestone_state import (
+        body_edit_warning,
+        load_issue_snapshot,
+        run_gh,
+    )
+except ModuleNotFoundError as error:
+    if error.name != "sync_milestone_state":
+        raise
+    # Local renders without Milestones read no approval (#1208).
+    APPROVAL_CHECK = False
+else:
+    APPROVAL_CHECK = True
 
 _BODY_FLAGS = {"--body", "-b", "--body-file", "-F", "--attach"}
 _VALUE_FLAGS = {
@@ -101,7 +113,7 @@ def main(arguments: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if arguments is None else arguments)
     body_edit, repo, targets = _edit_context(arguments)
     warnings: list[str] = []
-    if body_edit:
+    if body_edit and APPROVAL_CHECK:
         for target in targets:
             try:
                 warning = _warning_for_target(target, repo)

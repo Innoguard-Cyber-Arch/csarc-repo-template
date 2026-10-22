@@ -537,7 +537,8 @@ def parser() -> argparse.ArgumentParser:
         "--pr-title",
         help=(
             "pull request title; its release intent must equal the highest "
-            "branch commit intent because the squash keeps only the title"
+            "branch commit intent because the squash keeps only the title; "
+            "a breaking title or commit needs a BREAKING CHANGE footer"
         ),
     )
     verify_promotion = subparsers.add_parser("verify-promotion-version")

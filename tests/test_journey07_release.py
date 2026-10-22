@@ -100,11 +100,19 @@ def test_release_workflow_only_publishes_premerged_candidates() -> None:
     candidate = (ROOT / "scripts/verify-release-candidate").read_text(
         encoding="utf-8"
     )
-    assert "release_bundle.py candidate" in candidate
+    assert '"$script_dir/release_bundle.py" candidate' in candidate
     assert "verify-candidate-version" in candidate
     assert 'base_sha="$(jq -r' in candidate
     assert "./scripts/verify-template.sh" not in candidate
-    assert "status=failure\nif (" in candidate
+    # Issue #1106: the checks run as a plain subshell so `set -e` still
+    # fails a check that is not the last command.
+    assert "status=failure\n" in candidate
+    assert "if (\n" not in candidate
+    assert "checks_status=$?" in candidate
+    assert (
+        '"$script_dir/release_policy.py" verify-release-follow-up' in candidate
+    )
+    assert "$candidate_worktree/scripts/" not in candidate
     assert 'publish_status "$status"' in candidate
     assert (
         "# shellcheck disable=SC2329 # Invoked indirectly by the EXIT trap.\n"
@@ -398,10 +406,13 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
 
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "CSARC_PUBLISH_CANDIDATE_STATUS" in ci
+    # Issue #1106: the workflow runs the trusted-base copy, never the
+    # candidate's own script.
     assert (
-        './scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"'
-        in ci
-    )
+        '"$trusted/scripts/verify-release-candidate" '
+        '"$RUNNER_TEMP/release-pr.json"'
+    ) in ci
+    assert "./scripts/verify-release-candidate" not in ci
 
 
 def test_guided_candidate_validation_is_csarc_owned_only() -> None:
@@ -769,7 +780,8 @@ def test_release_drift_script_documents_its_authoritative_sources() -> None:
     assert "RELEASE_DRIFT_HOURS" in script
     assert "24" in script
     assert "Release-publish-record" in script
-    assert 'latest_release.get("immutable") is not True' in script
+    assert 'release.get("immutable") is not True' in script
+    assert "for release in releases" in script
     assert 'gh api "repos/$repo/actions/workflows/release.yml/runs' in script
     assert 'gh api "repos/$repo/actions/runs/$last_run_id/jobs' in script
     assert "Local publish record (audit only)" in script

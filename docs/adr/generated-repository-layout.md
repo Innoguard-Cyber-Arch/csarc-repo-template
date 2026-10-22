@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-21
-- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）
+- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）、[#1177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1177)（2026-10-19 補充 hosted 專用 sibling 與 payload 餘裕提醒）、[#1208](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1208)（2026-10-21 補充只在 Milestone 或 hosted render 的 Milestone script）；Milestone 18 對齊：[#1066](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1066)、[#1067](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1067)、[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)、[#1081](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1081)、[#1146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1146)、[#1153](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1153)、[#1157](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1157)
 - **實作 PR：**[#860](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/860)
 
 ## 問題與限制
@@ -16,7 +16,7 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 生成專案採下列 ownership 邊界：
 
 - `.csarc/config.yml` 是唯一由使用者編輯的 CSARC 設定來源；網站 `[[key]]`、政策開關、語言與交付選項都讀取它。
-- `.csarc/scripts/` 是穩定 adapter layer。腳本直接把 `.csarc/config.yml` 轉成工具參數；Gitleaks 與 pre-commit 只能吃自己的格式，因此 adapter 只在執行當下於暫存目錄產生設定，結束時刪除。生成專案不提交這兩份工具設定，也不提交未使用的 Zizmor 設定。
+- `.csarc/scripts/` 是穩定 adapter layer。腳本直接把 `.csarc/config.yml` 轉成工具參數；Gitleaks 只能吃自己的 TOML 格式，因此 `scan-secrets` 只在執行當下於暫存目錄產生設定，結束時刪除。pre-commit adapter 與 `enable_precommit` 已退役（SPEC-009 §3，#1071），`.csarc/scripts/pre-commit` 不再 render。生成專案不提交 Gitleaks、pre-commit 或未使用的 Zizmor 設定。
 - `.csarc/policies/*.json` 與 release-please config 是公版管理的唯讀政策／衍生實作資料，不是第二份使用者設定。使用者不得直接修改；變更來源仍是 `.csarc/config.yml` 或公版本身。
 - `.csarc/release-please-manifest.json` 是工具必須提交的版本狀態，不是設定來源，因此持久保存。
 - 平台固定檔保留在 `.github/`；root `SECURITY.md` 提供 scanner discovery 所需的 repository-wide policy，與 `.github/SECURITY.md` 的人類通報流程分工；root `AGENTS.md` 只作自動探索入口，詳細規則放 `.csarc/docs/agent-workflow.md`，`.claude/CLAUDE.md` 只引用 root 入口。
@@ -103,6 +103,7 @@ typescript/tests/index.test.ts
 # path | rendered when
 .csarc/docs/documentation-policy.md | documentation_mode != 'off'
 .csarc/docs/milestone-description.md | 'milestones' in lifecycle
+.csarc/scripts/authenticate_dependabot_hosted.py | verification_mode == 'hosted'
 .csarc/scripts/build-repo-site | documentation_mode == 'template-and-content'
 .csarc/scripts/build_repo_site.py | documentation_mode == 'template-and-content'
 .csarc/scripts/check-governance-drift | 'governance-drift' in scheduled_checks
@@ -114,8 +115,10 @@ typescript/tests/index.test.ts
 .csarc/scripts/check-template-update | 'template-update' in scheduled_checks
 .csarc/scripts/check-trusted-verification | verification_mode == 'hosted'
 .csarc/scripts/converge-release-tag | release_ownership == 'csarc-owned'
+.csarc/scripts/delivery_sync.py | verification_mode == 'hosted' or 'milestones' in lifecycle
 .csarc/scripts/detect-open-milestone | verification_mode == 'hosted'
-.csarc/scripts/install-syft | release_ownership == 'csarc-owned'
+.csarc/scripts/pr_lifecycle_hosted.py | verification_mode == 'hosted'
+.csarc/scripts/promotion_gate.py | verification_mode == 'hosted' or 'milestones' in lifecycle
 .csarc/scripts/publish-release | release_ownership == 'csarc-owned'
 .csarc/scripts/release_bundle.py | release_ownership == 'csarc-owned'
 .csarc/scripts/release_candidate.py | release_ownership == 'csarc-owned'
@@ -124,6 +127,8 @@ typescript/tests/index.test.ts
 .csarc/scripts/repo_site_blocks.py | documentation_mode == 'template-and-content'
 .csarc/scripts/request-reviewer | verification_mode == 'hosted'
 .csarc/scripts/spec_to_issue.py | verification_mode == 'hosted' or documentation_mode != 'off'
+.csarc/scripts/sync_milestone_state.py | verification_mode == 'hosted' or 'milestones' in lifecycle
+.csarc/scripts/sync_milestone_state_hosted.py | verification_mode == 'hosted'
 .csarc/scripts/sync_work_item_metadata.py | verification_mode == 'hosted'
 .csarc/scripts/validate-issue-policy | verification_mode == 'hosted' and 'issues' in lifecycle
 .csarc/scripts/verification_evidence.py | verification_mode == 'hosted'
@@ -157,9 +162,22 @@ typescript/tests/index.test.ts
 - 沒有任何生成專案 caller 的工具只留在模板 repository root，不 render：`check-repo-capabilities`、`repo_capabilities.py` 與 `policies/capability-matrix.json`。
 - 生成專案的共用模組可以比 root 少：已退役的功能（Actions quota fallback）、只有模板 repository 使用的路由，以及沒有生成專案 caller 的子命令（例如 `promotion_gate.py prepare`／`finalize`／`verify-main`、`delivery_sync.py reconcile`、`release_policy.py` 的 boundary 指令、`verification_cost.py report`）只存在 root。生成副本只能刪除 root 程式碼；保留的每個頂層定義都必須與 root 同名定義一致，例外逐一列在 `tests/test_generated_module_pruning.py` 並附理由。
 - 一個 root 模組可以在生成專案拆成依選項 render 的檔案：`release_policy.py` 只保留每個專案的 CLI 都會執行的 capability `preflight`，CSARC 發版指令放在只有 `csarc-owned` render 的 `release_candidate.py`，由 `release_policy.py` 的同一組命令列轉交。
-- 只由 hosted workflow 或 hosted PR policy 呼叫的 `check-trusted-verification`、`verification_evidence.py` 與 `detect-open-milestone` 只在 `verification_mode: hosted` render。依分支名稱就會到達的 Milestone 路由（`dev/m*`、`promote/m*`）不依 `lifecycle` 移除，因為 local 與只開 `issues` 的專案仍可能使用它們。
+- 只由 hosted workflow 或 hosted PR policy 呼叫的 `check-trusted-verification`、`verification_evidence.py` 與 `detect-open-milestone` 只在 `verification_mode: hosted` render。依分支名稱就會到達的 Milestone 路由（`dev/m*`、`promote/m*`）不依 `lifecycle` 移除，因為 local 與只開 `issues` 的專案仍可能使用它們；local render 的這項例外已由 #1208 取代（見下方）。
 
-`scripts/generated_payload.py` 量測 #1058 `Targets` 的 fixture；`tests/test_generated_payload.py` 斷言每個量測不超過記錄的上限，上限只能下降，不放寬 `Targets`。2026-10-15 重新核准後，`Targets` 只有檔案數與總 bytes：檔案數上限等於 `Targets`；bytes 上限先記錄 #1129 的實測值，由 #1081 取代 generated 文件時降到 `Targets`。`.csarc/scripts` 支數、腳本行數與 workflow 數仍會量測並印出，但只供參考，不是預算。
+### 恢復 payload 餘裕（#1177）
+
+- 共用模組中只有 hosted 會執行的部分拆到只在 `verification_mode: hosted` render 的同名 sibling：`pr_lifecycle_hosted.py`（hosted check run、可信 `verify` evidence 與 hosted Dependabot eligibility 的讀取）、`sync_milestone_state_hosted.py`（PR／merge queue 的 `Milestone approval`、scope 與 standalone Issue approval gate、work-item reconciliation）與 `authenticate_dependabot_hosted.py`（hosted Dependabot workflow 的命令列）。原模組保留同名轉交函式與完整命令列，第一次呼叫時才載入 sibling；local 專案從不呼叫這些函式。`tests/test_generated_module_pruning.py` 逐一列出轉交的名稱。
+- 四個 pinned 工具安裝器與 Syft 安裝器合併成一支 `install-tool <tool>`，版本、digest 與 cache 路徑不變。
+- 生成專案從不 render `verify-template.sh`，生成副本因此不保留只檢查模板 repository toolchain 的程式碼。
+- `scripts/generated_payload.py` 在任一 fixture 距離 `Targets` 剩不到 1 個檔案或 20 KB 時印出 `WARNING`；提醒不改變 `Targets`，也不改變 exit status。
+
+### 只服務 Milestone 的 script（#1208）
+
+- `sync_milestone_state.py`（Milestone 核准、收尾與 reconciliation）、`promotion_gate.py`（Milestone promotion）與 `delivery_sync.py`（delivery branch 與 main 的同步）只在 `'milestones' in lifecycle` 時 render。hosted 的 PR policy、merge queue 與 release workflow 在每個 hosted 專案都會呼叫它們（包括 standalone Issue approval 與 head 必須包含 main 的檢查），所以 `verification_mode: hosted` 一律保留；只有未啟用 Milestone 的 local render 省略這三支。
+- 這取代 #1129 對 local render 的例外：未啟用 Milestone 的 local 專案不再支援 `dev/m*`、`promote/m*` 路由。呼叫端把缺少的模組視為未啟用 Milestone：`pr_lifecycle.py` 仍分類 hotfix、release recovery、release follow-up 與 isolated 路由，Milestone delivery 的 routine sync 以清楚訊息失敗；`validate-pr-policy` 拒絕 Milestone promotion 並說明需要 `lifecycle: milestones`；`publish-release` 略過 Milestone 收尾；`gh-issue-edit` 不檢查 approval（沒有任何 local 檢查讀取 Issue approval）。
+- 既有專案 update 時，這三支的移除列在 update plan；產品檔案仍在使用的那一支依 #1146 保留為 product-owned。
+
+`scripts/generated_payload.py` 量測 #1058 `Targets` 的 fixture；`tests/test_generated_payload.py` 斷言每個量測不超過記錄的上限，上限只能下降，不放寬 `Targets`。2026-10-15 重新核准後，`Targets` 只有檔案數與總 bytes：檔案數上限等於 `Targets`；#1129 先記錄的 bytes 實測上限已由 #1081 降到 `Targets`：每個 fixture 的檔案數與 bytes 上限都等於 `Targets`，沒有未達成的缺口（`test_ceilings_equal_targets`）。`.csarc/scripts` 支數、腳本行數與 workflow 數仍會量測並印出，但只供參考，不是預算。
 
 ## 四種 inventory
 
@@ -172,9 +190,9 @@ typescript/tests/index.test.ts
 
 ## 更新搬移規則
 
-`csarc update` 只搬移新模板仍認得的舊 CSARC 檔案：`scripts/`、`policies/`、兩個公版自測、網站引擎／資產、CSARC 操作文件、版本與仍需持久保存的工具狀態。舊 `.gitleaks.toml`、`.pre-commit-config.yaml` 與 `zizmor.yml` 由新 adapter 取代，plan 明列 delete。`site/content/**` 搬到 `docs/site/content/**` 且保留 consuming repository 的文字。既有專案的 root `SECURITY.md` 視為產品所有，不自動搬移或覆寫；缺少此檔案時可取得公版 scanner baseline。公版建立的新專案則由 Copier 把舊 root disclosure 更新成 scanner policy，並另外建立 `.github/SECURITY.md` 人類通報政策；#742 的一次性 root-to-`.github` move 因 #872 建立新的 root discovery contract 而不再適用。
+`csarc update` 只搬移新模板仍認得的舊 CSARC 檔案：`scripts/`、`policies/`、兩個公版自測、網站引擎／資產、CSARC 操作文件、版本與仍需持久保存的工具狀態。舊 `.gitleaks.toml`、`.pre-commit-config.yaml` 與 `zizmor.yml` 由新 adapter 取代：與可信舊側 render byte-identical、也沒有被使用時 plan 明列 delete；仍被 plan 保留的檔案以路徑引用，或保留的檔案會執行自動讀取它的工具（gitleaks、pre-commit、zizmor）時，改列 `preserve`／`product-owned`（#1146、#1157，SPEC-008）；修改過的舊檔保留為 `retire-modified`（#1066）。`site/content/**` 搬到 `docs/site/content/**` 且保留 consuming repository 的文字。既有專案的 root `SECURITY.md` 視為產品所有，不自動搬移或覆寫；缺少此檔案時可取得公版 scanner baseline。公版建立的新專案則由 Copier 把舊 root disclosure 更新成 scanner policy，並另外建立 `.github/SECURITY.md` 人類通報政策；#742 的一次性 root-to-`.github` move 因 #872 建立新的 root discovery contract 而不再適用。
 
-搬移先在隔離 candidate clone 執行，再由 Copier 更新，完整驗證通過後才以單一 patch 寫回目標。若新舊位置同時存在且內容不同，整次更新停止；若內容相同，只移除舊副本。產品自訂 `scripts/*`、`tests/*` 與其他未知檔案一律保留。
+搬移先在隔離 candidate clone 執行，再由 Copier 更新，完整驗證通過後才寫回目標。新舊位置同時存在而內容相同時只移除舊副本；內容不同時不再整次停止，而是在 plan 列為需要決定的衝突，由 `update --finalize-plan` 對每個衝突取得一個 `keep-current`／`take-new`／`custom:FILE` 決定（#1067）。套用時實際的新增、修改、搬移與刪除集合必須與核准 plan 相同，寫入以 transaction 進行，任一步失敗時 target 回到 byte-identical base（#1066，SPEC-008）。產品自訂 `scripts/*`、`tests/*` 與其他未知檔案一律保留。
 
 ## 評估過的替代方案
 

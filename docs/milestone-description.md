@@ -1,9 +1,14 @@
 # Delivery Milestone description
 
 下列內文以繁體中文示範；實際 description 請使用專案團隊慣用的語言。
-保留英文 H2 標題，讓人與自動化都能辨識結構。Feature parent Issue 保存 SDD
-story；Milestone 只保留足以理解、排程與驗收一次 delivery／release 的內容，
-完整設計細節請連回 Feature、spec 或決策紀錄。建立時必須填入真實 due date。
+保留英文 H2 標題，讓人與自動化都能辨識結構。Milestone 只保留足以理解、排程與驗收
+一次 delivery／release 的內容，完整設計細節請連回主 Issue、spec 或決策紀錄。建立時
+必須填入真實 due date。
+
+Milestone 的 Issue 結構固定為三層（擁有者 2026-10-19 決定，見
+`docs/adr/spec-story-and-work-items.md`）：一張 lifecycle tracker Issue；多張主 Issue
+直接掛入 Milestone，不另設 Feature parent；只有主 Issue 無法以單一完成條件與單一份
+證據收尾時，才在它底下開 sub-Issue，sub-Issue 與 parent 掛在同一 Milestone。
 
 在既有或新建的 Milestone 底下指派工作前，先執行
 `python3 scripts/sync_milestone_state.py preflight --repo <owner/repo>
@@ -24,7 +29,7 @@ Milestone 物件與追蹤 Issue 兩步：一次呼叫建立兩者，追蹤 Issue
 `Milestone <編號>: <里程碑名稱>`，例如
 `Milestone 8: Interactive docs and policy alignment`。冒號後的文字必須與 GitHub
 Milestone 名稱完全相同；本文依序掛 `Proposal`／`Completion evidence`／
-`Early termination`／`Promotion` 四個 H2 段落，核准、反駁與提前終止等狀態只寫在
+`Early termination`／`Promotion` 四個段落，核准、反駁與提前終止等狀態只寫在
 Issue 內文與留言。Tracker 的 promotion 固定發布 stable；底下的 work Issue 預設在合併進
 `dev/m*` 後各自發布 beta，除非 tracker 宣告了下述 beta checkpoints。是否可由提案者自核不由版本成熟度決定，而由
 `.csarc/config.yml` 的 `admin_bypass` 決定。本 repo 設為 `always`，因此具有 `admin`
@@ -65,6 +70,9 @@ terminal Issue 必須列在同一行的 Issue 清單裡。`tracker_errors()` 會
 與說明文字，減少人工照抄漏段落的機率；`scripts/sync_milestone_state.py` 的 `tracker_errors()`
 仍在建立後把關格式是否正確——表單降低出錯機率，不取代驗證。這份表單只建立追蹤 Issue 本身，
 不是下方 GitHub Milestone 物件 `description` 使用的七段式格式，兩者不要混用同一份骨架。
+`scripts/create-milestone` 寫出的段落是 H2（`## Proposal`），Issue 表單送出後則是 H3
+（`### Proposal`），兩種都接受（#1160）：只認同名的 H2 或 H3 標題，同名時以 H2 為準，
+段落到下一個同級或更高的標題為止，所以 H2 段落裡的 `### Checkpoints` 等子段落仍屬於該段落。
 只有 repository collaborator 建立的 tracker 宣告會被信任；Milestone tracker 的
 Release level 固定是 `stable`。
 
@@ -125,7 +133,7 @@ gate 實際接上合併流程；沒有宣告的 work PR（現況的絕大多數�
 
 ## Outcome
 
-說明這次 delivery 完成後可觀察的價值，並連回對應 Feature parent。
+說明這次 delivery 完成後可觀察的價值，並連回對應的主 Issue、spec 或決策紀錄。
 
 ## Acceptance criteria
 
@@ -133,8 +141,8 @@ gate 實際接上合併流程；沒有宣告的 work PR（現況的絕大多數�
 
 ## Plan
 
-1. #<leaf-issue> — 第一個可獨立交付的 Task／Bug 與目的。
-2. #<leaf-issue> — 後續工作；只有真實順序限制才另設 native dependency。
+1. #<main-issue> — 第一張可獨立交付的主 Issue 與目的。
+2. #<main-issue> — 後續工作；只有真實順序限制才另設 native dependency。
 
 ## Out of scope
 
@@ -151,23 +159,24 @@ gate 實際接上合併流程；沒有宣告的 work PR（現況的絕大多數�
 ```
 
 所有直接屬於 delivery scope 的 Issue 與其 pull requests 都掛入 Milestone；研究或 Feature
-擴展成這個 delivery 時，原始 Feature parent 也必須掛入，不能因為報表會同時列出 parent、
-subissue 與 PR 就排除真實成員。Milestone 必須代表有真實期限的 delivery／release；沒有
+Issue 擴展成這個 delivery 時，原 Issue 本身成為一張主 Issue 並掛入；主 Issue 有
+sub-Issue 時，parent 與 sub-Issue 都掛入，不能因為報表會同時列出 parent、sub-Issue
+與 PR 就排除真實成員。Milestone 必須代表有真實期限的 delivery／release；沒有
 排程就不要建立 Milestone，也不要把它當 release label。
 `sync_milestone_state.py preflight` 與 lifecycle reconciliation 會以 GitHub 原生
 `parent_issue_url` 驗證這項關係；Milestone 內的 sub-issue 若找不到同一 Milestone 的
-Feature parent，會直接回報錯誤。
+parent Issue，會直接回報錯誤。
 
 已評估（Issue #555）改用 GitHub 原生 sub-issues（`parent`／`subIssuesSummary` 欄位與對應新增
 ／移除 sub-issue REST 端點）取代上方純文字 `References` 列點，讓 tracker 直接掛住底下 work
 Issue；結論是**不採用**，理由記錄於 `docs/adr/spec-story-and-work-items.md`：GitHub 的
 sub-issue 關聯是單一 parent（一張 Issue 同時只能有一個 parent），這個 repo 已經把這個唯一的
-parent 欄位用在 Feature／Task／Bug 既有階層（例如 #586、#590 皆已是 Feature #524 的
+parent 欄位用在主 Issue／sub-Issue 階層（例如 #586、#590 皆已是 #524 的
 sub-issue）；若同時把 tracker 設成這些 work Issue 的 parent 會直接衝突，GitHub 不支援雙
-parent。退而求其次只掛「未被 Feature 收編」的頂層 leaf Issue，又會讓 sub-issue 進度條與
-`load_snapshot()` 既有的 `milestone=N` 查詢兩者涵蓋的集合系統性不一致（前者漏掉巢狀 Feature
-底下的 work Issue），比現況的 `References` 列點更容易誤導。`milestone=N` 查詢已經是完整、經
-測試驗證的 tracker↔work-Issue 連結來源，維持現況即可，不引入第二套會與既有 Feature 階層衝突
+parent。退而求其次只掛頂層主 Issue，又會讓 sub-issue 進度條與
+`load_snapshot()` 既有的 `milestone=N` 查詢兩者涵蓋的集合系統性不一致（前者漏掉主 Issue
+底下的 sub-Issue），比現況的 `References` 列點更容易誤導。`milestone=N` 查詢已經是完整、經
+測試驗證的 tracker↔work-Issue 連結來源，維持現況即可，不引入第二套會與既有 parent 階層衝突
 又不完整的關聯機制。
 關閉最後一張 Issue 前，須勾選所有已驗證的 acceptance items；否則 lifecycle
 workflow 會讓未完成的 story 保持開啟。
@@ -176,7 +185,7 @@ workflow 會讓未完成的 story 保持開啟。
 留言會成功 no-op；Milestone 已關閉時，work Issue 只有被 reopen 或移入／移出 Milestone
 才會重新評估（#1005）。已關閉的 Milestone 若沒有未完成的 work Issue、tracker 也已關閉
 （或是沒有 tracker 的早期 Milestone），而只剩 tracker 缺漏、label／Type、due date、
-Feature parent 等 metadata 規則不符，背景 run 以 notice 回報並保留關閉，不回溯 reopen。
+parent Issue 掛勾等 metadata 規則不符，背景 run 以 notice 回報並保留關閉，不回溯 reopen。
 tracker 尚未核准、核准失效或有未解反駁屬於正常治理狀態：背景 run 以
 notice 呈現並成功結束，但 PR 上的核准 check 仍維持失敗。tracker 缺漏／格式錯誤、API 或
 狀態寫入錯誤才讓背景 run 失敗。
@@ -251,26 +260,29 @@ acceptance 未完成的 Issue 仍然阻擋）；
 
 1. **開始前**：tracker `Promotion` 段落每一項都有 exact-head 證據，其餘 Milestone Issue 已關閉
    或明確 `not_planned`（`title` 以 `promotion_decision()` 檢查；「Promotion route 併入 PR policy（#601、#876）」）。
-2. **凍結 `main`**：通知所有可能合併進 `main` 的 session，執行
+2. **ADR 與文件對齊**：完成 promotion PR 的整批決策紀錄並綁定 exact head
+   （「Milestone promotion 的 ADR 與文件對齊（#1176）」）。
+3. **凍結 `main`**：通知所有可能合併進 `main` 的 session，執行
    `scripts/finalization-queue announce --issue <tracker> --base main`，`status` 回報 `ready` 才繼續。
    promotion 合併前 `main` 每多一個 commit，就要重做下一步的 sync 與 bridge（「現行交付路徑」）。
-3. **Sync 協調**：delivery branch 不含 current `main` 時，以正式
+4. **Sync 協調**：delivery branch 不含 current `main` 時，以正式
    `sync/main-to-mN-<slug>-<main 短 SHA>` PR 帶入；雙父 merge commit 依序是 delivery tip 與
    current `main`，衝突時保留 delivery 端內容，並在合併前跑受影響 owner 的 focused checks
    （「現行交付路徑」）。
-4. **Bridge 與版本**：`promote/m<編號>-<簡稱>` 的 head 是同樣雙父的 bridge commit；依上文
+5. **Bridge 與版本**：`promote/m<編號>-<簡稱>` 的 head 是同樣雙父的 bridge commit；依上文
    以 `release_policy.py plan`／`prepare-candidate --phase stable` 物化版本並 amend 回 bridge。
    PR body 用 `Refs #<tracker>`，掛 `promotion` label 與由 tracker Type 推導的分類 label。
-5. **合併**：取得 lease 後以 `scripts/pr_lifecycle.py merge` 合併；授權必須綁定目前 exact head
+6. **合併**：取得 lease 後以 `scripts/pr_lifecycle.py merge` 合併；授權必須綁定目前 exact head
    （「PR lifecycle single-writer」「Beta／stable 發布通道與 admin bypass（#918）」）。
-6. **Tag／Release 讀回**：確認 stable tag 指向 promotion commit、Release 頁面與成品存在；
+7. **Tag／Release 讀回**：確認 stable tag 指向 promotion commit、Release 頁面與成品存在；
    hosted 發版失敗時改用本機 `scripts/publish-release`（「Release 發版不依賴 Actions 健康度的 fallback（#589，2026-09-03）」）。只有讀回成功才能宣稱已發版。
-7. **Feature parent 與 sub-Issue 收尾**：Milestone 內每張 sub-Issue 已關閉且 acceptance 全勾；
-   Feature parent 勾完 acceptance 後以 `completed` 關閉（#1026）。
-8. **Tracker 關閉順序**：Release 讀回 → Feature parent 關閉 → `complete-release` 回填
+8. **主 Issue 與 sub-Issue 收尾**：Milestone 內每張主 Issue 與 sub-Issue 已關閉且 acceptance
+   全勾；有 sub-Issue、自己沒有 closing PR 的主 Issue 勾完 acceptance 後以 `completed` 關閉
+   （#1026）。主 Issue 不設 Feature parent，沒有 sub-Issue 時這一步只確認每張主 Issue 已關閉。
+9. **Tracker 關閉順序**：Release 讀回 → 尚未關閉的 parent 主 Issue 關閉 → `complete-release` 回填
    `Completion evidence`、重算 `Reconciliation` 並關閉 tracker 與 Milestone（`publish-release`
    自動呼叫；中斷時以相同參數重跑）。核准之後到收尾完成前不要編輯或留言 tracker，否則
    核准過期。
-9. **解除凍結與清理**：讀回 tracker 與 Milestone 都已關閉後，執行
+10. **解除凍結與清理**：讀回 tracker 與 Milestone 都已關閉後，執行
    `scripts/finalization-queue leave --issue <tracker>`，再依 `AGENTS.md` 第 13 步清理 delivery
    branch 與 worktree。

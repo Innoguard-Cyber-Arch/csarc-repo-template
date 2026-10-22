@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issue：**[#223](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/223)
+- **來源 Issues：**[#223](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/223), [#1081](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1081), [#1138](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1138), [#1139](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1139), [#1173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1173)
 - **實作 PRs：**[#58](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/58), [#147](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/147), [#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185), [#228](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/228)
 
 ## 問題與限制
@@ -28,7 +28,7 @@
 
 - **決定（#1058 決定 24）**：核准的技術手冊是 repo-template 的產品政策與使用者承諾來源。`docs/handbook/handbook.md` 是可編輯的權威來源，`docs/handbook/index.html` 由 `./scripts/build-handbook` 生成；`docs/handbook/approved/` 保存擁有者核准的 HTML 原檔，`docs/handbook/manifest.json` 記錄核准原檔、來源與生成頁的 SHA-256。
 - **分層**：手冊定義產品政策與承諾；`docs/specs/`／`docs/adr/` 提供精確契約與理由；`AGENTS.md`／`docs/ci-policy.md` 提供可執行規則；生成內容、程式與測試提供證據。下層不能推翻手冊，衝突即為 drift，由每張 leaf 與 promotion 的 documentation review 對 exact head 判定 `aligned` 或 `drift`。`AGENTS.md` 仍是 AI 工作指示唯一的可執行來源，手冊不直接對 agent 下指令。
-- **核准與變更**：`tests/test_handbook.py` 要求生成頁與核准原檔的 DOM 事件序列（標籤、屬性、文字）完全相同，因此文字、planned 標記與 A4 版面都不會在轉換中改變。修改手冊內容必須取得新的擁有者核准，並在同一個變更中替換 `approved/` 原檔與 digest。M18 stable 發布前，手冊描述的新能力一律是 planned（front matter `status = "planned"`）。
+- **核准與變更**：`tests/test_handbook.py` 要求生成頁主體與核准原檔的 DOM 事件序列（標籤、屬性、文字）完全相同，因此主體的文字、planned 標記與 A4 版面都不會在轉換中改變。主體之後附加的模板附錄頁（`class="sheet annex"`）不屬於核准原檔，也不受主體 10 張 A4 的限制，另行檢查位置、連結與列印溢出（擁有者 2026-10-16 決定，#1138、#1139）。修改手冊主體內容必須取得新的擁有者核准，並在同一個變更中替換 `approved/` 原檔與 digest。M18 stable 發布前，手冊描述的新能力一律是 planned（front matter `status = "planned"`）；M18 stable（v0.35.2）發布後，front matter 改為 `status = "current"`（#1173），只影響 manifest 與測試，不改變生成頁。主體內「目前狀態」一句屬核准內容，改寫仍需新的擁有者核准。
 - **生成專案**：不內含手冊；`.csarc/docs/csarc.md` 只描述該 render 啟用的能力，並以所安裝 Release 的完整 SHA 連結手冊。
 
 ## 歷史 disposition
@@ -62,10 +62,6 @@ Root 維護本 repo 的真實 specs、decisions 與 history ledger。Copier temp
 | 只維護網站 | 不採用；presentation 不是 canonical source，且會把內容與版型耦合 |
 | 保存完整對話 | 不採用；噪音、隱私與未確認推論風險高 |
 
-## 重新評估條件
-
-當 spec 數量或跨 repo 導覽已使 bounded search 與 Markdown index 無法在可接受時間內工作，且有真實查找失敗資料時，再評估搜尋索引、catalog 或專用 spec tooling。新增工具前仍須保留 repository-local、可審查與可匯出的基線。
-
 ## 外部參考
 
 - [OpenAI: Run long horizon tasks with Codex](https://developers.openai.com/blog/run-long-horizon-tasks-with-codex)
@@ -75,3 +71,7 @@ Root 維護本 repo 的真實 specs、decisions 與 history ledger。Copier temp
 - [Kubernetes KEP template](https://github.com/kubernetes/enhancements/blob/master/keps/NNNN-kep-template/README.md)
 - [Rust RFC process](https://github.com/rust-lang/rfcs/blob/master/README.md)
 - [Cucumber BDD](https://github.com/cucumber/docs/blob/main/content/docs/bdd/_index.md)
+
+## 重新評估條件
+
+當 spec 數量或跨 repo 導覽已使 bounded search 與 Markdown index 無法在可接受時間內工作，且有真實查找失敗資料時，再評估搜尋索引、catalog 或專用 spec tooling。新增工具前仍須保留 repository-local、可審查與可匯出的基線。

@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">4 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.35.3</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.39.0</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, TypeScript, and Go independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.35.3<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.39.0<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -367,7 +367,8 @@ Only tools this template directly integrates, executes, or produces into the rep
 - **Overall:** turn the request into one Issue that can be completed and verified independently.
 - **Work branch:** when implementation starts, create one short-lived `type/<Issue>-short-slug` branch per Issue and do not mix unrelated work into it.
 - **Milestone:** create one only when several Issues share an outcome, deadline, or delivery batch, and give it one lifecycle tracking Issue.
-  - When research or a Feature expands into that delivery, attach the originating Feature, its leaf Issues, and their PRs to the same Milestone.
+  - Structure it as one tracking Issue → several main Issues attached directly to the Milestone (no Feature parent) → a Sub-issue under a main Issue only when needed.
+  - When research or a Feature expands into that delivery, the originating Issue becomes one of the main Issues; main Issues, Sub-issues, and their PRs all belong to the same Milestone.
   - Title it `Milestone <number>: <Milestone title>`; the text after the colon must exactly match the Milestone title.
   - Keep approvals, objections, and early termination in the body or comments, not the title.
   - Work may start only after at least one person other than the proposer agrees and no objection remains unresolved.

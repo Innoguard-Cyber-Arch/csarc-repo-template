@@ -1428,6 +1428,110 @@ def test_delivery_title_check_keeps_matching_existing_routes(
     assert beta["version"] == "0.2.0-beta.1"
 
 
+def test_delivery_version_rejects_a_breaking_marker_without_migration_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #1104: `!` without a footer must not publish empty notes."""
+    base_sha, feature_sha = _title_fixture(
+        tmp_path, monkeypatch, "feat!: drop the legacy layout"
+    )
+    for role in ("none", "deferred"):
+        with pytest.raises(ValueError, match="no branch commit records"):
+            verify_delivery_version(
+                tmp_path,
+                base_sha,
+                feature_sha,
+                phase="beta",
+                checkpoint_role=role,
+                pr_title="feat!: drop the legacy layout",
+            )
+    with pytest.raises(SystemExit, match="BREAKING CHANGE: <how to migrate>"):
+        main(
+            [
+                "verify-delivery-version",
+                "--root",
+                str(tmp_path),
+                "--base-sha",
+                base_sha,
+                "--head-sha",
+                feature_sha,
+                "--phase",
+                "beta",
+                "--checkpoint-role",
+                "deferred",
+                "--pr-title",
+                "feat!: drop the legacy layout",
+            ]
+        )
+    # A breaking title over non-breaking commits needs the footer too, and
+    # an empty footer carries no migration text.
+    git(tmp_path, "checkout", "-q", "-b", "empty", base_sha)
+    commit_change(tmp_path, "x", "feat: add x\n\nBREAKING CHANGE:\n")
+    empty_sha = git(tmp_path, "rev-parse", "HEAD")
+    for title in ("feat!: add x", "feat: add x"):
+        with pytest.raises(ValueError, match="no branch commit records"):
+            verify_delivery_version(
+                tmp_path,
+                base_sha,
+                empty_sha,
+                phase="beta",
+                checkpoint_role="deferred",
+                pr_title=title,
+            )
+
+    git(tmp_path, "checkout", "-q", "work")
+    commit_change(
+        tmp_path,
+        "notes",
+        "docs: record the migration\n\nBREAKING CHANGE: move layout/ to\n"
+        "src/ before upgrading\nCo-Authored-By: A <a@example.invalid>",
+    )
+    documented_sha = git(tmp_path, "rev-parse", "HEAD")
+    deferred = verify_delivery_version(
+        tmp_path,
+        base_sha,
+        documented_sha,
+        phase="beta",
+        checkpoint_role="deferred",
+        pr_title="feat!: drop the legacy layout",
+    )
+    assert deferred["status"] == "deferred"
+    # Non-breaking work is unaffected by the migration check.
+    git(tmp_path, "checkout", "-q", "-b", "plain", base_sha)
+    commit_change(tmp_path, "y", "fix: repair y")
+    plain_sha = git(tmp_path, "rev-parse", "HEAD")
+    assert (
+        verify_delivery_version(
+            tmp_path,
+            base_sha,
+            plain_sha,
+            phase="beta",
+            checkpoint_role="deferred",
+            pr_title="fix: repair y",
+        )["status"]
+        == "deferred"
+    )
+
+
+def test_breaking_notes_read_every_footer_and_stop_at_trailers() -> None:
+    """Footers end at blank lines or the next token, one note per footer."""
+    notes = MODULE["_breaking_notes"]
+    assert notes("BREAKING CHANGE: run\n  csarc update\nRefs: #1") == [
+        "run csarc update"
+    ]
+    squash = (
+        "BREAKING CHANGE: clients must call /v2\n"
+        "BREAKING-CHANGE: the old flag is gone\n\n"
+        "CSARC-Evidence: https://example.invalid\nCSARC-Trust: github-hosted"
+    )
+    assert notes(squash) == [
+        "clients must call /v2",
+        "the old flag is gone",
+    ]
+    assert notes("BREAKING CHANGE:\n\nCo-Authored-By: A") == []
+    assert notes("body only") == []
+
+
 def test_delivery_version_rejects_a_stale_release_worthy_branch(
     tmp_path: Path,
 ) -> None:
@@ -2768,6 +2872,12 @@ def test_main_retention_plan_command_requires_a_token_and_never_deletes(
         ("1.2.3", ["fix: x\n\nBREAKING-CHANGE: y"], "formal", "2.0.0"),
         ("1.2.3", ["feat: add"], "formal", "1.3.0"),
         ("0.4.2", ["feat!: drop legacy keys"], None, "1.0.0"),
+        # A formal 0.x line graduates to 1.0.0 on any releasable change
+        # (Issue #1105); it never stays on an invalid formal 0.x core.
+        ("0.4.2", ["fix: repair"], "formal", "1.0.0"),
+        ("0.4.2", ["feat: add"], "formal", "1.0.0"),
+        ("0.4.2-beta.3", ["feat!: drop legacy keys"], "formal", "1.0.0"),
+        ("0.4.2", ["docs: explain"], "formal", None),
         # An inconsistent early 1.x line keeps MAJOR so phase validation
         # fails closed instead of silently staying on 1.x.
         ("1.2.3", ["feat!: drop legacy keys"], "early", "2.0.0"),
@@ -2939,6 +3049,110 @@ def test_maturity_fails_closed_without_a_readable_main_policy(
         release_plan(tmp_path, "HEAD", phase="stable")
 
 
+# --- Issue #1105: early -> formal maturity switch ------------------------
+
+
+def declare_maturity(root: Path, maturity: str, message: str) -> str:
+    """Commit a ``project_maturity`` change with ``message``; return its sha."""
+    (root / ".csarc/config.yml").write_text(
+        f"project_maturity: {maturity}\n", encoding="utf-8"
+    )
+    git(root, "add", ".")
+    git(root, "commit", "-m", message)
+    return git(root, "rev-parse", "HEAD")
+
+
+def release_on_main(root: Path, version: str) -> None:
+    """Record a published stable ``version`` on the checked-out main."""
+    write_release_surfaces(root, version)
+    git(root, "add", ".")
+    git(root, "commit", "-m", f"chore(main): release {version}")
+    git(root, "tag", f"v{version}")
+
+
+def test_maturity_switch_plans_one_valid_path_to_1_0_0(tmp_path: Path) -> None:
+    """The switch PR stays early; the first release after it is 1.0.0."""
+    init_maturity_repo(tmp_path, "early", "0.4.2")
+    git(tmp_path, "checkout", "-b", "switch")
+    switch = declare_maturity(
+        tmp_path, "formal", "feat(config): declare formal maturity"
+    )
+
+    # The switch PR is planned by main's early rule, never by its own edit.
+    assert release_plan(tmp_path, switch, phase="stable") == (
+        "v0.5.0",
+        "0.5.0",
+    )
+
+    git(tmp_path, "checkout", "main")
+    git(tmp_path, "merge", "--ff-only", "switch")
+    release_on_main(tmp_path, "0.5.0")
+    git(tmp_path, "checkout", "-b", "delivery")
+    fix = commit_change(tmp_path, "cli", "fix(cli): repair the flag")
+
+    assert release_plan(tmp_path, fix, phase="beta") == (
+        "v1.0.0-beta.1",
+        "1.0.0-beta.1",
+    )
+    assert release_plan(tmp_path, fix, phase="stable") == ("v1.0.0", "1.0.0")
+    docs = commit_change(tmp_path, "docs", "docs: describe the graduation")
+    assert release_plan(tmp_path, docs, phase="stable") == ("v1.0.0", "1.0.0")
+
+    # A materialized 1.0.0 candidate is recognized, not bumped again.
+    prepared = prepare_release_candidate(tmp_path, docs, phase="stable")
+    assert prepared["version"] == "1.0.0"
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(release): 1.0.0")
+    assert release_plan(tmp_path, "HEAD", phase="stable") == (
+        "v1.0.0",
+        "1.0.0",
+    )
+
+    git(tmp_path, "tag", "v1.0.0")
+    later = commit_change(tmp_path, "after", "fix: follow-up repair")
+    assert release_plan(tmp_path, later, phase="stable") == ("v1.0.1", "1.0.1")
+
+
+def test_maturity_switch_without_a_release_still_graduates(
+    tmp_path: Path,
+) -> None:
+    """A non-releasable switch commit leaves the next release at 1.0.0."""
+    init_maturity_repo(tmp_path, "early", "0.4.2")
+    switch = declare_maturity(
+        tmp_path, "formal", "chore(config): declare formal maturity"
+    )
+    assert release_plan(tmp_path, switch, phase="stable") is None
+
+    feature = commit_change(tmp_path, "cli", "feat(cli): add the flag")
+    assert release_plan(tmp_path, feature, phase="stable") == (
+        "v1.0.0",
+        "1.0.0",
+    )
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["fix: repair the flag", "feat!: drop the legacy layout"],
+)
+def test_early_maturity_on_a_1x_line_fails_closed(
+    tmp_path: Path, message: str
+) -> None:
+    """An early 1.x line (or formal -> early downgrade) never releases."""
+    init_maturity_repo(tmp_path, "formal", "1.2.3")
+    downgrade = declare_maturity(
+        tmp_path, "early", "chore(config): declare early maturity"
+    )
+    assert release_plan(tmp_path, downgrade, phase="stable") is None
+    head = commit_change(tmp_path, "cli", message)
+
+    for phase in ("beta", "stable"):
+        with pytest.raises(
+            release_phase.ReleasePhaseError,
+            match="an early release requires major version 0",
+        ):
+            release_plan(tmp_path, head, phase=phase)
+
+
 def test_breaking_candidate_writes_migration_notes(tmp_path: Path) -> None:
     """CHANGELOG lists breaking behavior, minimum version, and recovery."""
     init_maturity_repo(tmp_path, "early", "0.4.2")
@@ -2966,3 +3180,31 @@ def test_breaking_candidate_writes_migration_notes(tmp_path: Path) -> None:
     assert "run csarc update with CLI 0.5.0 or later." in entry
     assert "no BREAKING CHANGE footer was recorded" in entry
     assert "### Bug Fixes" not in entry
+
+
+def test_squashed_breaking_footers_reach_the_migration_notes(
+    tmp_path: Path,
+) -> None:
+    """Issue #1104: a squash body's footers become the migration bullets."""
+    init_maturity_repo(tmp_path, "early", "0.4.2")
+    squash = commit_change(
+        tmp_path,
+        "a",
+        "feat!: drop the legacy layout (#7)\n\n"
+        "BREAKING CHANGE: move layout/ to src/ before upgrading\n"
+        "BREAKING-CHANGE: rerun csarc update\n\n"
+        "CSARC-Evidence: https://example.invalid/pull/7#issuecomment-1\n"
+        "CSARC-Trust: github-hosted",
+    )
+    commit_change(tmp_path, "b", "fix: repair a typo")
+
+    prepare_release_candidate(tmp_path, "HEAD", phase="beta")
+
+    changelog = (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+    entry = changelog.split("## [0.5.0-beta.1]", 1)[1].split("\n## ", 1)[0]
+    short = squash[:7]
+    assert f"* {short}: move layout/ to src/ before upgrading" in entry
+    assert f"* {short}: rerun csarc update" in entry
+    assert "CSARC" not in entry.split("### Migration notes", 1)[1]
+    assert "no BREAKING CHANGE footer was recorded" not in entry
+    assert "* fix: repair a typo" in entry

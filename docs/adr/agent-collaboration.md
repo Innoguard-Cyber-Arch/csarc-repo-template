@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-25
-- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241), [#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308), [#938](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/938), [#1076](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1076)
+- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241), [#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308), [#938](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/938), [#1076](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1076), [#1064](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1064), [#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071), [#1073](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1073), [#1082](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1082)
 - **實作 PRs：**[#127](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/127), [#147](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/147), [#158](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/158), [#173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/173), [#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)
 
 ## 問題與限制
@@ -19,7 +19,7 @@ GitHub Agents 頁籤可把 repository 工作交給 cloud coding agents，但 ses
 - Agent 預設在非雲端同步的本機檔案系統操作 active checkout、worktree、environment 與 cache。若起始路徑由 File Provider 管理，例行工作不要求使用者額外確認或設定；agent 改用本機 checkout 並保留既有變更。
 - 建立 worktree 的 agent 在 merge／abandon 後負責 scoped 安全清理；每次 agent 啟動只讀 worktree metadata，不執行全 repo 內容與網路掃描。全域 dry-run 保留為明確的 repository maintenance。
 - Delegated agent 執行範圍內檢查並回報；PR owner 或 integrating agent 對每個最終 candidate tree 執行一次完整驗證。
-- 本機驗證 attestation 只有在精確 quota-only 條件與 human authorization 下成立，且只綁定一個 SHA。
+- 本機驗證證據只在 `verification_mode: local` 成立：以 exact head、tree、base、tier、scope 與 freshness 綁定的 `self-attested-local` evidence，由 merge lifecycle 重驗後走有 trace 的 admin bypass（#908、[#1073](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1073)）；hosted 模式仍以 required `verify` 為唯一正常 merge evidence。原本「quota-only 條件＋human authorization」的本機 attestation 已隨 quota fallback 退役（#1071）。
 - GitHub Issue、PR、review 與 CI 維持協作與治理基線；Agents 頁籤已評估但暫不納入，不新增 setup workflow、custom agent 或 repository policy。
 - PR lifecycle 寫入以 repository remote ref 作 atomic single-writer lease；每張 PR 同時取得依 destination branch 決定的 lane lease。Lease 綁定 PR、base、完整 head SHA、期限與不公開的隨機 capability；只有可驗證的過期 lease 可被 atomic 回收。Agent 的 Ready／Draft、label／milestone、authorization preparation 與 merge 一律走 `scripts/pr_lifecycle.py`，其他 task 維持唯讀；無法在取得精確 PR/head 前綁定 lease 的 Release Please writer fail closed 為 human-only。
 - Merge 前在 lease 內重讀 live timeline、comments、reviews、checklists 與 effective Ruleset。無法證明 review、last-push approval、required checks 與 no bypass 時，agent 不合併；GitHub Free private 的 fallback 是 human-only manual merge，唯一例外是下方 #1076 的 audited single-writer route。
@@ -101,23 +101,26 @@ write 帳號。另有寫入者為 `multiple-writers`，任何讀取不完整（�
 重新評估條件：GitHub 提供可讀的 App 安裝寫入者清單、Free private 的 `rules/branches` 行為經 live 驗證，或
 單人維護的 repository 升級到可強制 private Ruleset 的方案。
 
+## Copilot code review 作為可選審核路徑（#752，2026-09-18）
+
+現行契約：審核意圖只有 `admin_bypass: off|beta-only|always` 與 `copilot_review: allowed|off`（[SPEC-009](../specs/SPEC-009-project-settings.md)、[`simplified-project-configuration.md`](simplified-project-configuration.md)）。Ruleset 只有 A（hosted）、E1（local＋`beta-only`／`always`）與 C（local＋`off`）三種形狀；Copilot 對 exact head 的乾淨審核只在 0 個原生必要核准的 A／E1 形狀、而且 PR 沒有有效 admin-bypass 標記時才是 `review` 證據，其他情況與 `copilot_review: off` 相同（[#1082](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1082)，#1058 決定 4–6）。`review` check、`review_gate.py status` 與 `pr_lifecycle.py merge` 共用同一個判定。規則細節見 `docs/ci-policy.md`「Copilot 審核模式（#752）」與「單一 maintainer 的可稽核合併路徑（#1076）」。
+
+#752 的 exact-head 證據與 fail-closed 行為保留；其餘原文已被 #900、#918 與 Milestone 18 取代，只留下列歷史處置。
+
+| 狀態 | 原決策 | 處置與取代者 |
+| --- | --- | --- |
+| Superseded | 新增 `pr_review_mode`（`copilot`／`human`）與 `copilot_review_max_level`；新專案、`csarc adopt` 與本 repo 預設 `copilot`，`copier update` 對既有專案預設 `human` | [#900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900) 改為 `copilot_review`（`allowed`／`off`）；舊鍵由 SPEC-009 migration 轉換（`copilot` → `allowed`，有 level cap 時收窄為 `off`） |
+| Superseded | #900 曾以 `review`（`solo`／`peer`）表示自審或同行審核 | `review` 已退役（SPEC-009 §3，[#1064](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1064)、[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)）：`solo` 等價 `admin_bypass: always`，`peer` 等價 `off` |
+| Superseded（narrowed） | Copilot 模式下 Ruleset 自動請 Copilot 審核，Copilot 沒有意見即可通過 `review` | `copilot_review: allowed` 仍加入 `copilot_code_review` 規則，但 Copilot 證據只在 A／E1 形狀成立；C 形狀或有 admin-bypass 標記時不採用（[#1082](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1082)） |
+| Preserved | `review` 接受 Copilot 對 exact head 沒有意見，或獨立 maintainer 對 exact head 的 approval；本機 agent 修正意見後由 `scripts/pr_lifecycle.py` 在 lease 下合併並留痕 | #752；合併者角色另依 #1058 決定 27 判斷 |
+| Preserved（部分取代 #241） | Copilot code review 納入可選基線並消耗 premium requests；GitHub Agents 頁籤與 Copilot coding agent 仍暫緩，修正者仍是本機 agent | #752 |
+| Superseded | #745 以 `copilot_review_max_level` 設定 Copilot 可通過的層級上限 | #900 移除 level cap；[#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918) 以 beta／stable 雙通道與 `admin_bypass` 取代 per-level 設定 |
+| Preserved | #719、#240：exact-head 真人 approval 仍是合併授權，lease、live state 重驗與 fail closed 同樣適用於 Copilot；#557：不採用原生 auto-merge 或 workflow 合併 | #752 |
+
+重新評估條件：Copilot 審核品質或費用不可接受，或 GitHub 改變 Copilot review 的 API 形狀（例如不再以內文說明「沒有意見」）時。
+
 ## 重新評估條件
 
 若 host platform 提供有 ownership、dirty-state 保護與可稽核 lifecycle 的原生 worktree 管理，可替代部分本機步驟；GitHub work item、repository memory 與合併門禁仍保留。若每個 automation 取得獨立最小權限 GitHub App identity，或 GitHub 提供可原子更新的原生 PR lease，可取代目前以 remote ref 與 audit comment 組成的互斥層。
 
 當真實 backlog 出現足量、可獨立驗收的非同步工作，且可先訂出 AI credits／Actions 成本上限，再驗證 Agents 產生的 branch 與 PR 能通過本 repo policy 時，重新評估把 Agents 頁籤列為升級執行層。
-
-## Copilot code review 作為可選審核路徑（#752，2026-09-18）
-
-> 2026-09-22：本節的 exact-head 證據與 fail-closed 行為保留；`pr_review_mode` 與 `copilot_review_max_level` 已由 #900 的 `review: solo|peer` 與 `copilot_review: allowed|off` 取代。Copilot 可在兩種人工 fallback 下通過，不從帳戶方案推測 entitlement。現行契約見 [`simplified-project-configuration.md`](simplified-project-configuration.md)。
-
-維護者決定新增可選的 PR 審核模式 `pr_review_mode`（`copilot`／`human`），新專案、`csarc adopt` 與本 repo 預設 `copilot`；`copier update` 對既有專案預設 `human`，不悄悄改變既有審核方式。Copilot 模式下 Ruleset 自動請 Copilot 審核每次 push，required check `review` 接受「Copilot 對 exact head 沒有意見」或「獨立 maintainer 對 exact head 的 approval」。本機 agent 修正 Copilot 意見並 push，直到 Copilot 沒有意見，再由 `scripts/pr_lifecycle.py` 在 lease 下合併並留痕。規則細節見 `docs/ci-policy.md`「Copilot 審核模式（#752）」。
-
-與既有決策的關係：
-
-- #241：部分取代。Copilot code review 納入可選基線並消耗 premium requests；GitHub Agents 頁籤與 Copilot coding agent 仍維持暫緩，修正者仍是本機 agent。上方「重新評估條件」對 Agents 頁籤的要求不變。
-- #745：部分取代。「需要另一人」可由 Copilot 通過滿足，並以 `copilot_review_max_level` 設定上限（預設無上限）；層級判斷要等 #745 落地，在那之前設定上限會讓 Copilot 路徑 fail closed。
-- #719、#240：保留。exact-head 真人 approval 仍是合併授權；lease、live state 重驗與 fail closed 同樣適用於 Copilot 授權。
-- #557：保留。原生 auto-merge 受 organization 封鎖，也因 `GITHUB_TOKEN` 合併不觸發後續 workflow 而不採用 workflow 合併。
-
-重新評估條件：Copilot 審核品質或費用不可接受、GitHub 改變 Copilot review 的 API 形狀（例如不再以內文說明「沒有意見」），或 #745 落地需要依層級判斷時。

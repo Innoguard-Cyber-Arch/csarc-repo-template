@@ -3,8 +3,8 @@
 - **狀態：**Accepted
 - **日期：**2026-09-01
 - **備註：**#430 candidate 實作；#871 將 Milestone 版本候選併入 promotion PR；#918 以 beta／stable 雙通道與獨立專案成熟度取代四層版本模型；#925 將所有 CSARC-owned 版本候選移入原交付 PR；#996 以事前宣告的 Milestone checkpoint 取代逐件 beta
-- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)、[#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918)、[#925](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/925)、[#996](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/996)
-- **實作 PRs：**[#448](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/448)、[#463](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/463)、[#471](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/471)
+- **來源 Issues：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)、[#871](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/871)、[#877](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/877)、[#918](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/918)、[#925](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/925)、[#996](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/996)、[#1068](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1068)、[#1074](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1074)、[#1083](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1083)、[#1085](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1085)、[#1158](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1158)、[#1174](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1174)
+- **實作 PRs：**[#448](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/448)、[#463](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/463)、[#471](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/471)、[#1096](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1096)、[#1159](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1159)
 
 ## 問題與限制
 
@@ -58,6 +58,20 @@ CSARC 過去在版本、發版與供應鏈責任上有多套並存或半途而�
 - Promotion 以 squash 合併後，main commit 追不到 delivery branch 的 beta tag；beta core 高於 main 的 stable 時，從 main HEAD 算出的版本會低於 bridge 物化的版本，Release 因此被擋（M17 PR #1024 的 run 36032783769）。
 - `release.yml` 在 stable route 找出唯一的 `promote/m*` 來源 PR，以它的 head 執行 `release_policy.py plan --source-sha`；bridge tree 必須與合併後的 tree 完全相同，否則 fail closed。沒有 promotion 來源時行為不變，#1018 的 CHANGELOG 規則、exact-candidate 與供應鏈驗證都不變。
 
+### 2026-10-13：early 成熟度的 breaking 變更升 MINOR（#1085）
+
+- 擁有者在 #1058 決定 18 確認：`project_maturity: early` 時，breaking 變更（`type!:` 或 `BREAKING CHANGE:` footer）從 `0.y.z` 升為 `0.(y+1).0`，維持 0.x；`formal` 仍依 SemVer 升 MAJOR。
+- 理由：early 專案的公開介面仍在變動，每次 breaking 都升 MAJOR 會很快把版本推到沒有意義的高數字，也會讓使用者誤以為介面已穩定；0.x 本身就表示「MINOR 可能不相容」。
+- 成熟度一律讀 current `main`（trusted base）的 `.csarc/config.yml`，candidate 不能改寫自己的 bump 規則；`early` → `formal` 的切換與第一個 `1.0.0` 由 #1105 規劃。精確規則、`Migration notes` 與 footer 檢查見 [`docs/ci-policy.md`](../ci-policy.md)「Beta／stable 發布通道與 admin bypass（#918）」。
+- 重新評估：專案改為 `formal` 時，這條規則不再適用；若 0.x 的 MINOR 被使用者誤當成相容更新而造成實際升級失敗，重新評估是否改為更明顯的標示。
+
+### 2026-10-18：stable promotion 的 operator-independence 證據（#1158）
+
+- Milestone stable promotion 除了 consumer 重跑與 exact-head hosted full，還需要一次 operator-independence run：沒有參與實作的人或全新 agent session，只靠以 release tag 固定的已發布文件完成同一個升級。它證明的是文件足以讓別人獨立完成，不是程式能跑。
+- Pass 條件以可檢查的欄位判定（不需實作者協助、沒有無依據猜測、其餘不清楚之處都有追蹤 Issue、產品檢查沒有 regression），不靠主觀描述；執行者條件、步驟、欄位與 pass 條件以 [`docs/pilot-adoption.md`](../pilot-adoption.md)「Operator-independence run」為唯一來源，本 ADR 不重抄。
+- Kill criteria 7 修訂（擁有者 2026-10-18 選項 B）：pilot 原則上不能有 A4 preflight 清單以外的產品修改；例外是 `docs/install.md` 寫明、不改變產品行為的產品準備 commit（例如把模板 workflow 內的產品 job 原樣搬到產品 workflow），逐筆記錄並附行為不變的證據時仍算證據。理由：這類 commit 是文件要求的升級步驟本身，排除它們會讓照文件操作的 run 永遠不成立；其他產品修改仍不算。記錄欄位同樣以 `docs/pilot-adoption.md` 為準。
+- 重新評估：operator run 經常因為產品準備 commit 的範圍爭議而無法判定，或 `docs/install.md` 要求的產品準備變更開始改變產品行為時。
+
 CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑：
 
 1. 工作 PR 以 Conventional Commits 表達 major／minor／patch／no-release 意圖。
@@ -85,9 +99,9 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 
 | Repository 類型 | 唯一 release owner | 模板行為 |
 | --- | --- | --- |
-| `csarc-repo-template` root | CSARC | candidate `release.yml` 預計發布模板／CLI 的 GitHub Release 成品；待預設分支實跑證明後才算 active |
+| `csarc-repo-template` root | CSARC | root `release.yml`（`release_trigger: manual`）只發布已在合併 PR 物化並審查的候選，經唯一 writer `scripts/publish-release` 建立 immutable GitHub Release 成品（#1074）；已實際發布到 stable v0.35.2（Milestone 18） |
 | 新生成 repo | 該 repo 內的 CSARC baseline | Copier 產生同一個薄 workflow；版本從該 repo 的 `0.1.0` 獨立開始 |
-| 既有 repo | product owner | Copier 不產生 `release.yml`、不按檔名猜測、不 dispatch 或覆寫既有發布流程 |
+| 既有 repo | 已保存的 `release_ownership`（`csarc-owned`／`product-owned`／`verification-only`，SPEC-009，#1068） | 只有 `csarc-owned` render CSARC `release.yml`；所選的 product-owned Release writer 即使由舊 render 產生也保留為唯一 writer、不退役（#1083，SPEC-008）；沒有已存 owner、唯一 writer 又與舊 template workflow byte-identical 時，update 才改為 `csarc-owned`（#1083）。Copier 不按檔名猜測、不 dispatch 或覆寫產品發布流程 |
 
 這個界線解決 #369 的重複 tag／Release owner 問題。Registry publishing 與 production-side artifact attestation 由 #439 判定零 active 消費者後移除設定面，不因 GitHub Release 啟用就自動取得 token 或 OIDC 權限。
 
@@ -375,6 +389,13 @@ Release 收回 draft。
 - **批次於 promotion 邊界統一發版**（#183，靠專屬 `promotion.yml`）：否決。前提是恢復已判定不恢復的 promotion workflow；現行 #429 standalone／main-only 路徑加 #400 的 Milestone 批次交付已承接原本想解決的「批次」需求，不需要獨立的批次發版邊界或額外 workflow。
 - **在 CSARC 側直接串接 registry publishing／production-side attestation**：否決（見 #439）。零 active 消費者的情況下維持這些能力，只會留下「看起來能用、實際不會產生結果」的設定選項，違反本 ADR「不留下承諾不了結果的選項」的安全原則；有真實需求時應由消費端產品自行決定 owner 與權限，而非公版預先假設。
 
+## Fallback
+
+- Actions 無法發布時，保留原交付 PR 已審查的候選；由維護者或 agent 透過同一 `scripts/publish-release` 補跑，不能另開版本 PR 或手動建立 tag。
+- 版本候選失敗或 base 前進時，在原交付 branch 更新 base 並重新執行 `prepare-candidate`；新的 release-only commit 必須再次通過 exact-tree 驗證。
+- draft 發布失敗可安全重跑；若 Release 已 immutable，只能驗證既有內容，不能覆寫。
+- 需要 registry、production-side attestation 或部署時，#439 已移除設定面而非保留 conditional 選項；先開新 Issue／ADR 定義 owner、權限、復原與消費端驗證，不擴張這支 baseline workflow。
+
 ## 重新評估條件
 
 以下任一情況發生時，應重新檢視本 ADR 的決定而非局部繞過：
@@ -383,10 +404,3 @@ Release 收回 draft。
 - 有消費端產品提出真實的 registry publishing 或 production-side attestation 需求，需要決定是否、以及如何在不違反「單一 tag／Release writer」原則下擴充 `release.yml` 或另開專用 workflow。
 - `release.yml` 的候選驗證（`scripts/verify-release-candidate`）或 bundle 驗證（`scripts/release_bundle.py`）在 default branch 首次 live run 後發現與本 ADR 假設不符的落地行為，需要更新 Current-state 契約或決定本身。
 - 既有 repo 保留的 product-owned release workflow 出現與本 ADR 的 ownership 邊界（#369）衝突的新情境，例如 product workflow 本身改變 trigger 或 input contract，需要重新檢視 #369 的 ownership schema 是否仍夠用。
-
-## Fallback
-
-- Actions 無法發布時，保留原交付 PR 已審查的候選；由維護者或 agent 透過同一 `scripts/publish-release` 補跑，不能另開版本 PR 或手動建立 tag。
-- 版本候選失敗或 base 前進時，在原交付 branch 更新 base 並重新執行 `prepare-candidate`；新的 release-only commit 必須再次通過 exact-tree 驗證。
-- draft 發布失敗可安全重跑；若 Release 已 immutable，只能驗證既有內容，不能覆寫。
-- 需要 registry、production-side attestation 或部署時，#439 已移除設定面而非保留 conditional 選項；先開新 Issue／ADR 定義 owner、權限、復原與消費端驗證，不擴張這支 baseline workflow。

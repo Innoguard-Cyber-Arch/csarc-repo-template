@@ -1,10 +1,10 @@
 +++
 title = "repo-template 技術手冊｜模板能力、操作與限制"
 lang = "zh-Hant-TW"
-status = "planned"
-footer_version = "版本日期 261013 r2"
-baseline = "approved/261013r2_repo-template-handbook.html"
-baseline_sha256 = "a69d2124a549dceb9478f40055675dd4495455d34d979ca02861171dbfb3292d"
+status = "current"
+footer_version = "版本日期 261019 r3"
+baseline = "approved/261019r3_repo-template-handbook.html"
+baseline_sha256 = "beb637a44308bdfbaaeaa9c50a9063ba1ee25a67e20943760770268b5d5eaffd"
 +++
 
 <!--
@@ -24,7 +24,7 @@ An approved wording change replaces approved/ with the newly approved copy in th
 
 **適用範圍：**本手冊描述首個完整實作本文能力的 stable release；實際使用版本、來源與 full SHA 以該 Release 的 `release-prompt.txt` 為準。候選版本未通過手冊、SPEC、Repository 規則、程式與測試的一致性檢查前，不得宣稱已提供本文能力。 {: .compact}
 
-**目前狀態：**M18 stable（預訂 2026-10-31）的目標產品契約；發布前屬規劃內容，v0.30.x 尚未提供本文標示的新 CLI、Ready、migration 與 Roadmap 能力。版本：2026-10-13；核准 SHA-256 見 #1058。 {: .compact}
+**目前狀態：**M18 已於 2026-10-18 發布 stable（v0.35.2）；本文的 CLI、Ready、migration 與 Roadmap 能力自 v0.35.x 起提供。版本：2026-10-19；核准 SHA-256 見 manifest。 {: .compact}
 
 ## 1. repo-template 的功能與使用方式
 
@@ -333,7 +333,7 @@ push 或建立 PR。
 
 ### 3.4 GitHub Project Roadmap {: .mt-3}
 
-設定完整的 organization／user `github_project_url` 後，只有以 `csarc issue create` 建立或 `csarc issue sync-project` 明確同步的 Issue 會加入 Project；UI、hotfix、其他工具建立的 Issue 與 PR 不會自動加入。Project 須事先各有一個 DATE 欄位 `Project start`／`Project target`；start 採 Issue 建立日的 UTC 日期，target 投影 Milestone due date，沒有 due date 時須提供 target date。Milestone 或歸屬改變後要重跑同步；既有值不同時先列差異，經確認才覆寫。工具即時查詢 ID，要求 `project` scope 與 Project 寫入權；不確定時回報 unknown。失敗時保留 Issue，以 `csarc issue sync-project --issue <N>` 冪等修復。Repository Projects 分頁維持關閉。 {: .compact}
+設定完整的 organization／user `github_project_url` 後，以 `csarc issue create` 建立或 `csarc issue sync-project` 同步的 Issue 中，只有 Milestone tracker 與 standalone Issue（沒有 parent、不屬於有 tracker 的 Milestone）會加入 Project；work issue、sub-issue、PR 與其他方式建立的 Issue 不加入。Project 須事先各有一個 DATE 欄位 `Project start`／`Project target`；start 採 Issue 建立日的台北日期，target 投影 Milestone due date，沒有時為 start 後 14 天（可指定 target date）；Issue 關閉或 `Status` 為 Done 後，target 改為台北的實際完成日。Milestone 或歸屬改變後要重跑同步；既有值不同時先列差異，經確認才覆寫。工具即時查詢 ID，要求 `project` scope 與 Project 寫入權；不確定時回報 unknown。失敗時保留 Issue，以 `csarc issue sync-project --issue <N>` 冪等修復。Repository Projects 分頁維持關閉。 {: .compact}
 
 ### 3.5 交接 {: .mt-3}
 

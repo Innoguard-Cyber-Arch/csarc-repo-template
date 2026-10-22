@@ -1,9 +1,9 @@
 """Handbook source, generated page and print layout (Issue #1081).
 
-AC1: the owner-approved r2 baseline is kept byte-for-byte and its digest is
+AC1: the owner-approved r3 baseline is kept byte-for-byte and its digest is
 pinned. AC2: the Markdown source renders to a page whose visible content and
-structure equal the baseline, carries the planned status and names no
-consumer. AC6: the generated main body still prints as 10 A4 sheets with no
+structure equal the baseline and names no consumer. AC6: the generated main
+body still prints as 10 A4 sheets with no
 overflow.
 
 An approved handbook edit replaces the baseline copy under
@@ -36,9 +36,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 HANDBOOK = ROOT / "docs/handbook"
 APPROVED_SHA256 = (
-    "a69d2124a549dceb9478f40055675dd4495455d34d979ca02861171dbfb3292d"
+    "beb637a44308bdfbaaeaa9c50a9063ba1ee25a67e20943760770268b5d5eaffd"
 )
-BASELINE = HANDBOOK / "approved/261013r2_repo-template-handbook.html"
+BASELINE = HANDBOOK / "approved/261019r3_repo-template-handbook.html"
 GENERATED = HANDBOOK / "index.html"
 SHEETS = 10
 

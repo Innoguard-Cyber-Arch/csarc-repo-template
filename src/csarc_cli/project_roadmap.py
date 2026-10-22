@@ -4,11 +4,17 @@
 full organization or user ProjectV2 URL (#1058 decision 23, SPEC-009 §10).
 An empty value disables everything here, so no Project API is ever called.
 Repository Projects stay disabled; the external ProjectV2 is only a
-projection of Issue facts:
+projection of Issue facts, with fixed board rules (#1186):
 
-* ``Project start`` is the UTC date the Issue was created;
+* only Milestone trackers and standalone Issues (no parent, not in a
+  Milestone that has a tracker) are added; work Issues and sub-issues are
+  skipped with a reason and never written;
+* ``Project start`` is the Asia/Taipei date the Issue was created;
 * ``Project target`` is the UTC date of the current Milestone ``due_on``,
-  or an explicit ``--target-date`` when the Issue has no due date.
+  else an explicit ``--target-date``, else the start date plus 14 calendar
+  days; once the Issue is complete it is the Asia/Taipei completion date
+  instead (#1179): the date its Project ``Status`` became ``Done``, else
+  its ``closed_at``.
 
 Every project, field, and item ID is resolved live and never saved. The
 sync is idempotent: an item is added by Issue/Project identity (GitHub's
@@ -28,7 +34,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -43,7 +49,14 @@ CONFIG_FILE = Path(".csarc/config.yml")
 SETTING = "github_project_url"
 START_FIELD = "Project start"
 TARGET_FIELD = "Project target"
+STATUS_FIELD = "Status"
+DONE = "Done"
 REQUIRED_SCOPE = "project"
+# The board's day boundary (#1186): Taiwan has no DST, so a fixed +08:00
+# offset equals Asia/Taipei without depending on a tz database.
+TAIPEI = timezone(timedelta(hours=8), "Asia/Taipei")
+DEFAULT_TARGET_DAYS = 14
+TRACKER_LINK = re.compile(r"(?mi)^Lifecycle Issue:\s*#([0-9]+)\s*$")
 
 PROJECT_QUERY = """
 query($login: String!, $number: Int!) {
@@ -71,6 +84,9 @@ query($id: ID!) {
           }
           target: fieldValueByName(name: "Project target") {
             ... on ProjectV2ItemFieldDateValue { date }
+          }
+          status: fieldValueByName(name: "Status") {
+            ... on ProjectV2ItemFieldSingleSelectValue { name updatedAt }
           }
         }
       }
@@ -277,6 +293,27 @@ def utc_date(timestamp: str) -> str:
     return moment.astimezone(UTC).date().isoformat()
 
 
+def taipei_date(timestamp: str) -> str:
+    """Return the Asia/Taipei calendar date of one GitHub timestamp."""
+    moment = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return moment.astimezone(TAIPEI).date().isoformat()
+
+
+def default_target(start: str) -> str:
+    """Return the fixed fallback target: start plus 14 calendar days."""
+    return (
+        date.fromisoformat(start) + timedelta(days=DEFAULT_TARGET_DAYS)
+    ).isoformat()
+
+
+def milestone_tracker(milestone: Mapping[str, Any]) -> int | None:
+    """Return the tracker number a Milestone description links, if any."""
+    found = TRACKER_LINK.search(str(milestone.get("description") or ""))
+    return int(found[1]) if found else None
+
+
 def checked_date(value: str) -> str:
     """Validate one explicit ``--target-date``."""
     try:
@@ -297,6 +334,8 @@ class IssueFacts:
     start: str
     milestone: str
     due: str
+    closed: str = ""
+    skip: str = ""
 
 
 def issue_facts(item: Mapping[str, Any], repo: str) -> IssueFacts:
@@ -308,14 +347,39 @@ def issue_facts(item: Mapping[str, Any], repo: str) -> IssueFacts:
         )
     milestone = item.get("milestone") or {}
     due = milestone.get("due_on")
+    number = int(item["number"])
     return IssueFacts(
         repo,
-        int(item["number"]),
+        number,
         str(item["node_id"]),
-        utc_date(str(item["created_at"])),
+        taipei_date(str(item["created_at"])),
         str(milestone.get("title", "")),
         utc_date(str(due)) if due else "",
+        taipei_date(str(item["closed_at"]))
+        if item.get("state") == "closed" and item.get("closed_at")
+        else "",
+        board_skip(item, milestone, number),
     )
+
+
+def board_skip(
+    item: Mapping[str, Any], milestone: Mapping[str, Any], number: int
+) -> str:
+    """Return why an Issue stays off the board, or '' when it belongs.
+
+    The board holds only Milestone trackers and standalone Issues (#1186).
+    """
+    tracker = milestone_tracker(milestone)
+    if tracker == number:
+        return ""
+    if item.get("parent_issue_url"):
+        return "it is a sub-issue (it has a parent Issue)"
+    if tracker is not None:
+        return (
+            f"it is a work Issue of Milestone {milestone.get('title')!r} "
+            f"(tracker #{tracker})"
+        )
+    return ""
 
 
 def read_issue(run: Runner, repo: str, number: int) -> IssueFacts:
@@ -349,8 +413,19 @@ def milestone_issues(
     ]
 
 
-def target_for(issue: IssueFacts, target_date: str) -> str:
-    """Return the target: the Milestone due date, else an explicit date."""
+def target_for(issue: IssueFacts, target_date: str, done: str = "") -> str:
+    """Return the target date for one Issue (SPEC-009 §10).
+
+    A complete Issue targets its completion date: the day its Project
+    ``Status`` became ``Done`` (``done``), else the day it was closed. The
+    Done date wins when both exist, because the owner's acceptance is the
+    later, deliberate completion. An open Issue targets its Milestone due
+    date, else the explicit ``--target-date``, else its start date plus 14
+    calendar days; a complete Issue ignores ``--target-date`` so one
+    Milestone-wide value cannot misdate it.
+    """
+    if done or issue.closed:
+        return done or issue.closed
     if issue.due:
         if target_date and target_date != issue.due:
             raise ProjectSyncError(
@@ -358,12 +433,7 @@ def target_for(issue: IssueFacts, target_date: str) -> str:
                 f"{issue.due}; that is the target, so drop --target-date"
             )
         return issue.due
-    if not target_date:
-        raise ProjectSyncError(
-            f"#{issue.number} has no Milestone due date; pass "
-            "--target-date YYYY-MM-DD"
-        )
-    return target_date
+    return target_date or default_target(issue.start)
 
 
 @dataclass(frozen=True)
@@ -395,10 +465,18 @@ class Plan:
         return [c for c in self.changes if c.current != c.desired]
 
 
-def read_item(
-    run: Runner, project: Project, issue: IssueFacts
-) -> tuple[str | None, str | None, str | None]:
-    """Return the Issue's item in this Project and its two dates."""
+@dataclass(frozen=True)
+class Item:
+    """The Issue's item in this Project: dates and the Done date, if any."""
+
+    id: str | None = None
+    start: str | None = None
+    target: str | None = None
+    done: str = ""
+
+
+def read_item(run: Runner, project: Project, issue: IssueFacts) -> Item:
+    """Return the Issue's item in this Project and its dates."""
     data = graphql(run, ITEM_QUERY, id=issue.node_id)
     nodes = ((data.get("node") or {}).get("projectItems") or {}).get(
         "nodes"
@@ -410,25 +488,35 @@ def read_item(
         and (node.get("project") or {}).get("id") == project.id
     ]
     if not found:
-        return None, None, None
+        return Item()
     item = found[0]
-    start = (item.get("start") or {}).get("date")
-    target = (item.get("target") or {}).get("date")
-    return str(item["id"]), start, target
+    status = item.get("status") or {}
+    done = (
+        taipei_date(str(status["updatedAt"]))
+        if str(status.get("name", "")).casefold() == DONE.casefold()
+        and status.get("updatedAt")
+        else ""
+    )
+    return Item(
+        str(item["id"]),
+        (item.get("start") or {}).get("date"),
+        (item.get("target") or {}).get("date"),
+        done,
+    )
 
 
 def plan_issue(
     run: Runner, project: Project, issue: IssueFacts, target_date: str = ""
 ) -> Plan:
     """Compare the Issue's projected dates with what the Project holds."""
-    target = target_for(issue, target_date)
-    item_id, start, current_target = read_item(run, project, issue)
+    item = read_item(run, project, issue)
+    target = target_for(issue, target_date, item.done)
     return Plan(
         issue,
-        item_id,
+        item.id,
         [
-            Change(START_FIELD, project.start_field, start, issue.start),
-            Change(TARGET_FIELD, project.target_field, current_target, target),
+            Change(START_FIELD, project.start_field, item.start, issue.start),
+            Change(TARGET_FIELD, project.target_field, item.target, target),
         ],
     )
 
@@ -450,11 +538,11 @@ def apply_plan(run: Runner, project: Project, plan: Plan) -> None:
             field=change.field_id,
             date=change.desired,
         )
-    _item, start, target = read_item(run, project, plan.issue)
-    if (start, target) != tuple(c.desired for c in plan.changes):
+    item = read_item(run, project, plan.issue)
+    if (item.start, item.target) != tuple(c.desired for c in plan.changes):
         raise ProjectSyncError(
-            f"#{plan.issue.number} read back start {start} and target "
-            f"{target} after the write"
+            f"#{plan.issue.number} read back start {item.start} and target "
+            f"{item.target} after the write"
         )
 
 
@@ -492,6 +580,18 @@ def repair_command(
     if target_date:
         command += f" --target-date {target_date}"
     return command + f" --repo {repo}"
+
+
+def on_board(issues: list[IssueFacts], out: TextIO) -> list[IssueFacts]:
+    """Return the Issues the board holds; explain each one it skips."""
+    for issue in issues:
+        if issue.skip:
+            out.write(
+                f"#{issue.number} skipped: {issue.skip}; only Milestone "
+                "trackers and standalone Issues go to the Project, so no "
+                "Project write was made.\n"
+            )
+    return [issue for issue in issues if not issue.skip]
 
 
 def sync(
@@ -542,9 +642,13 @@ ISSUE_URL = re.compile(
 
 def precheck_create(
     run: Runner, url: str, repo: str, milestone: str, target_date: str
-) -> Project:
-    """Verify the Project and the target before `gh issue create` runs."""
-    project = resolve_project(run, url)
+) -> Project | None:
+    """Verify the Project and the target before `gh issue create` runs.
+
+    Returns None when the new Issue cannot belong on the board: a Milestone
+    that already has a tracker makes it a work Issue (#1186), so no Project
+    API is called at all.
+    """
     due = ""
     if milestone:
         pages = json.loads(
@@ -568,6 +672,8 @@ def precheck_create(
             raise ProjectSyncError(
                 f"Milestone {milestone!r} is not one open Milestone of {repo}"
             )
+        if milestone_tracker(found[0]) is not None:
+            return None
         due = (
             utc_date(str(found[0]["due_on"])) if found[0].get("due_on") else ""
         )
@@ -576,12 +682,7 @@ def precheck_create(
             f"Milestone {milestone!r} is due {due}; that is the target, so "
             "drop --target-date"
         )
-    if not due and not target_date:
-        raise ProjectSyncError(
-            "the new Issue has no Milestone due date; pass --target-date "
-            "YYYY-MM-DD before `--`"
-        )
-    return project
+    return resolve_project(run, url)
 
 
 def issue_reference(output: str) -> tuple[str, int]:
@@ -626,7 +727,7 @@ def create_hooks(
     dates. A failure after creation keeps the Issue and prints one repair
     command; nothing is ever deleted.
     """
-    state: dict[str, Project] = {}
+    state: dict[str, Project | None] = {}
 
     def before(arguments: list[str]) -> None:
         repo = option_value(arguments, "--repo", "-R") or current_repo(run)
@@ -647,13 +748,20 @@ def create_hooks(
         stream = out or sys.stdout
         repo, number = issue_reference(output)
         try:
-            issue = read_issue(run, repo, number)
-            status = sync(
-                run,
-                state["project"],
-                [issue],
-                target_date=target_date,
-                out=stream,
+            issues = on_board([read_issue(run, repo, number)], stream)
+            project = state.get("project")
+            if issues and project is None:
+                project = resolve_project(run, url)
+            status = (
+                sync(
+                    run,
+                    project,
+                    issues,
+                    target_date=target_date,
+                    out=stream,
+                )
+                if issues and project is not None
+                else 0
             )
         except ProjectSyncError as error:
             stream.write(f"Project sync failed: {error}\n")
@@ -693,12 +801,19 @@ def command_sync(
     target = checked_date(target_date) if target_date else ""
     repo = repo or current_repo(run)
     try:
-        project = resolve_project(run, url)
-        issues = (
+        issues = on_board(
             [read_issue(run, repo, issue)]
             if issue is not None
-            else milestone_issues(run, repo, int(milestone or 0))
+            else milestone_issues(run, repo, int(milestone or 0)),
+            stream,
         )
+        if not issues:
+            stream.write(
+                "No selected Issue belongs on the Project; no Project API "
+                "was called.\n"
+            )
+            return 0
+        project = resolve_project(run, url)
         return sync(
             run,
             project,

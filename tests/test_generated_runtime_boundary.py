@@ -160,7 +160,8 @@ def test_issue_edit_loads_only_the_issue_approval_module(
     tmp_path: Path,
 ) -> None:
     """`gh-issue-edit` loads its approval helper and nothing else."""
-    project = minimal_render(tmp_path)
+    # The helper renders only with Milestones or hosted checks (#1208).
+    project = minimal_render(tmp_path, "sync_milestone_state.py")
     code, loaded = probe(
         project, project / ".csarc/scripts/gh-issue-edit", "csarc_import_probe"
     )

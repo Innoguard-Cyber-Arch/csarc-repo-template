@@ -90,7 +90,7 @@ def test_no_generic_or_duplicate_issue_entrypoint() -> None:
 def test_milestone_tracker_form_matches_the_lifecycle_contract() -> None:
     """The tracker form's skeleton must stay in lockstep with tracker_errors().
 
-    Issue #555: a dedicated Issue form pre-fills the four H2 sections
+    Issue #555: a dedicated Issue form pre-fills the four tracker sections
     `scripts/sync_milestone_state.py`'s `tracker_errors()` requires, so a
     missing or misspelled section is caught by the form itself instead of
     only after the Issue already exists. This test ties the form's field
@@ -130,7 +130,7 @@ def test_milestone_tracker_form_matches_the_lifecycle_contract() -> None:
         "promotion",
         "references",
     ]
-    # The first four field labels are the literal H2 headings tracker_errors()
+    # The first four field labels are the literal headings tracker_errors()
     # searches for; they must match TRACKER_SECTIONS verbatim, in order.
     assert (
         tuple(
@@ -147,6 +147,10 @@ def test_milestone_tracker_form_matches_the_lifecycle_contract() -> None:
         == tracker_sections
     )
     assert fields[1]["attributes"]["options"] == ["stable"]
+    assert (
+        "- [ ] ADR 與文件已對齊（promotion PR 紀錄）。"  # noqa: RUF001
+        in fields[4]["attributes"]["value"]
+    )
     assert fields[5]["attributes"]["label"] == "References"
     assert [field["validations"]["required"] for field in fields] == [
         True,
@@ -158,13 +162,17 @@ def test_milestone_tracker_form_matches_the_lifecycle_contract() -> None:
     ]
 
 
-def test_milestone_tracker_form_skeleton_round_trips_through_parser() -> None:
+@pytest.mark.parametrize("marker", ["###", "##"])
+def test_milestone_tracker_form_skeleton_round_trips_through_parser(
+    marker: str,
+) -> None:
     """Render the form's default output the way GitHub would, then parse it.
 
     Builds the Issue body exactly as GitHub Issue Forms renders it (each
-    non-markdown field becomes `## <label>\\n\\n<value>\\n\\n`, in field
+    non-markdown field becomes `### <label>\\n\\n<value>\\n\\n`, in field
     order) from the form's own pre-filled `value` defaults, with nothing
-    edited by a user yet. Confirms every required section is found by
+    edited by a user yet; the `##` variant is what `scripts/create-milestone`
+    writes (Issue #1160). Confirms every required section is found by
     `_section()`, and that a still-untouched Proposal placeholder is
     correctly rejected by `_meaningful()` -- the form reduces hand-copy
     error but the fail-closed check downstream still catches a submission
@@ -182,7 +190,7 @@ def test_milestone_tracker_form_skeleton_round_trips_through_parser() -> None:
 
     fields = [item for item in root_form["body"] if item["type"] != "markdown"]
     rendered = "".join(
-        f"## {field['attributes']['label']}\n\n"
+        f"{marker} {field['attributes']['label']}\n\n"
         f"{field['attributes'].get('value', '')}\n\n"
         for field in fields
     )

@@ -2583,6 +2583,12 @@ def plan_status(
 
 def observed_setting_note(key: str, value: object) -> str:
     """Return the report note for one observed difference (#1068, #1072)."""
+    if key in settings_schema.DECISION_SETTINGS and value is None:
+        return (
+            "No native manifest determines this value, and the CSARC "
+            "verifier is not a product command. Pass "
+            f"`--data {key}=<value>` once to decide."
+        )
     if key in settings_schema.DECISION_SETTINGS:
         shown = (
             ", ".join(f"`{redact(item)}`" for item in value)
@@ -2981,13 +2987,31 @@ CONFLICT_SIDES_DIRECTORY = "conflicts"
 CONFLICT_SIDES = ("base", "current", "new")
 
 
+# The documented remedy when kept content uses a file the plan retires: a
+# product preparation commit moves the product job out of the template file
+# (Issue #1170). Names both language editions of the install guide section.
+PRODUCT_JOB_MOVE_REMEDY = (
+    "move the product job or step that uses it, unchanged, into a "
+    "product-owned workflow (for example .github/workflows/product-ci.yml) "
+    "in a product preparation commit, run csarc update --check again, and "
+    "decide this file with take-new; see docs/install.md "
+    '"模板 workflow 的衝突裡有產品 job" (docs/install.en.md "A template '
+    'workflow conflict that contains product jobs")'
+)
+
+
 def update_conflict_message(
-    path: str, missing_ignore_rules: Sequence[str] = ()
+    path: str,
+    missing_ignore_rules: Sequence[str] = (),
+    retired_uses: Sequence[str] = (),
 ) -> str:
     """Point one update conflict at its sides and its decision (#1147).
 
     An ignore-file conflict also names the template rules the current file
-    lacks, so keeping it does not silently drop them (#1154 AC3).
+    lacks, so keeping it does not silently drop them (#1154 AC3). A
+    conflict whose current content uses a file the plan retires names that
+    use and the product-job move, because ``--finalize-plan`` refuses to
+    keep it (Issue #1170).
     """
     sides = ", ".join(
         f"{CONFLICT_SIDES_DIRECTORY}/{side}/{path}" for side in CONFLICT_SIDES
@@ -3008,7 +3032,39 @@ def update_conflict_message(
             + ", ".join(missing_ignore_rules)
             + "."
         )
+    if retired_uses:
+        message += (
+            " The current file uses "
+            + ", ".join(retired_uses)
+            + ", which this update removes, so --finalize-plan refuses "
+            "keep-current or a custom file that keeps that use. To keep "
+            "that behavior, " + PRODUCT_JOB_MOVE_REMEDY + "."
+        )
     return message
+
+
+def conflict_retired_uses(
+    sides: Mapping[str, Mapping[str, bytes | None]],
+    removals: Sequence[str],
+    moved: Sequence[str] = (),
+) -> dict[str, list[str]]:
+    """Return, per conflict, the planned removals its current side uses.
+
+    ``keep-current`` records the current side, which ``reject_decided_uses``
+    would refuse, so ``--check`` lists the use now (Issue #1170).
+    """
+    result: dict[str, list[str]] = {}
+    for path, contents in sides.items():
+        current = contents.get("current")
+        if current is None:
+            continue
+        candidates = (
+            (*removals, *moved) if current.startswith(b"#!") else removals
+        )
+        used = file_transition.content_uses(path, current, candidates)
+        if used:
+            result[path] = list(used)
+    return result
 
 
 IGNORE_FILE_NAMES = frozenset({".gitignore"})
@@ -3099,6 +3155,9 @@ def update_required_actions(
     ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
     writer_moves: Sequence[Mapping[str, str]] = (),
     retained_uses: Sequence[Mapping[str, str]] = (),
+    product_calls: Sequence[Mapping[str, str]] = (),
+    conflict_uses: Mapping[str, Sequence[str]] = MappingProxyType({}),
+    reviewer_answer: str | None = None,
 ) -> list[dict[str, object]]:
     """Derive the update required actions this release can evaluate."""
     live = {} if observed is None else observed
@@ -3123,7 +3182,11 @@ def update_required_actions(
             "command": f"csarc update --data {key}=<value>",
             "kind": "setting-decision",
             "message": (
-                "The native manifests do not confirm the recorded value; "
+                "No native manifest determines this value; pass the "
+                "product command explicitly once."
+                if key in settings_schema.DECISION_SETTINGS
+                and live[key] is None
+                else "The native manifests do not confirm the recorded value; "
                 "it is kept until you pass one explicitly."
                 if key in settings_schema.DECISION_SETTINGS
                 else "Live GitHub facts suggest a value that differs from "
@@ -3140,7 +3203,9 @@ def update_required_actions(
             "blocking": True,
             "command": None,
             "kind": "file-conflict",
-            "message": update_conflict_message(path, ignore_gaps.get(path, ())),
+            "message": update_conflict_message(
+                path, ignore_gaps.get(path, ()), conflict_uses.get(path, ())
+            ),
             "subject": path,
         }
         for path in files.manual
@@ -3193,62 +3258,166 @@ def update_required_actions(
         for item in pin_items
         if item.get("reason") == action_pin_preflight.REASON_PRODUCT_PIN_NEWER
     )
-    actions.extend(reviewer_assignment_actions(files, settings))
-    uses = retained_uses_by_script(retained_uses)
     actions.extend(
-        retained_use_action(path, uses[path])
-        if path in uses
-        else {
-            "blocking": False,
-            "command": None,
-            "kind": "retire-modified",
-            "message": "The new release no longer renders this file, but it "
-            "differs from the trusted old render; it is kept. Delete it "
-            "yourself once its changes are no longer needed.",
-            "subject": path,
-        }
+        reviewer_assignment_actions(files, settings, reviewer_answer)
+    )
+    uses = retained_uses_by_script(retained_uses)
+    calls = retained_uses_by_script(product_calls)
+    actions.extend(
+        with_product_calls(
+            retained_use_action(path, uses[path])
+            if path in uses
+            else {
+                "blocking": False,
+                "command": None,
+                "kind": "retire-modified",
+                "message": "The new release no longer renders this file, but "
+                "it differs from the trusted old render; it is kept. Delete it "
+                "yourself once its changes are no longer needed.",
+                "subject": path,
+            },
+            calls.get(path, ()),
+        )
         for path in files.retained
     )
     return actions
 
 
-def reviewer_assignment_actions(
+def with_product_calls(
+    action: dict[str, object], calls: Sequence[Mapping[str, str]]
+) -> dict[str, object]:
+    """Name the product checks a kept legacy script runs (Issue #1169).
+
+    Retiring the script (``take-new`` or deleting it) stops CSARC verify
+    from running the checks the product added to it, so the row lists
+    them and points to the product verification hook.
+    """
+    if not calls:
+        return action
+    listed = "; ".join(f"`{row['call']}`" for row in calls)
+    return {
+        **action,
+        "message": f"{action['message']} It also runs product checks the "
+        f"new verifier does not run: {listed}. Before retiring it, move "
+        "them in a product preparation commit into the product verification "
+        "hook (project_verification_hook, or scripts/verify-product when no "
+        "hook is set) and run csarc update --check again; otherwise CSARC "
+        "verify silently stops running them.",
+    }
+
+
+def reviewer_assignment_changes(
     files: Plan, settings: Sequence[Mapping[str, object]]
+) -> bool:
+    """Return whether the plan retires the reviewer list (#1157)."""
+    return any(
+        row["key"] == governance_migration.REVIEWERS_KEY
+        and row["class"] == "retired"
+        for row in settings
+    ) or governance_migration.REVIEWERS_FILE in {
+        *files.remove,
+        *files.delete,
+        *files.retained,
+    }
+
+
+def reviewer_assignment_actions(
+    files: Plan,
+    settings: Sequence[Mapping[str, object]],
+    answer: str | None = None,
 ) -> list[dict[str, object]]:
     """Ask the owner to confirm the reviewer assignment change (#1157).
 
     Retiring ``reviewers`` or ``.github/REVIEWERS`` changes who reviews
     pull requests. The setting row stays ``retired`` and its note explains
     the new behavior; this row asks the owner to confirm it, the way a
-    ``widened`` row needs an explicit owner decision.
+    ``widened`` row needs an explicit owner decision. ``--data
+    reviewers=accept`` resolves the row; ``pending`` keeps it open and
+    says so (Issue #1168).
     """
     key = governance_migration.REVIEWERS_KEY
-    path = governance_migration.REVIEWERS_FILE
+    if answer == governance_migration.REVIEWERS_ACCEPT or not (
+        reviewer_assignment_changes(files, settings)
+    ):
+        return []
     retired = [
         row
         for row in settings
         if row["key"] == key and row["class"] == "retired"
     ]
-    if not retired and path not in {
-        *files.remove,
-        *files.delete,
-        *files.retained,
-    }:
-        return []
     before = retired[0]["before"] if retired else None
+    if answer == governance_migration.REVIEWERS_PENDING:
+        lead = (
+            "Reviewer assignment changes and the owner's confirmation is "
+            "pending (--data reviewers=pending); keep the update pull "
+            "request in draft until the owner decides: "
+        )
+    else:
+        lead = (
+            "Reviewer assignment changes and the owner must confirm it "
+            "before --finalize-plan, which needs --data reviewers=accept "
+            "(owner confirmed) or --data reviewers=pending (owner not "
+            "available): "
+        )
     return [
         {
             "blocking": False,
-            "command": None,
+            "command": "csarc update --data reviewers=accept",
             "kind": "setting-decision",
-            "message": "Reviewer assignment changes and the owner must "
-            "confirm it before --finalize-plan: "
+            "message": lead
             + governance_migration.reviewers_note(before).removeprefix(
                 "Retired; "
             ),
             "subject": key,
         }
     ]
+
+
+def reviewers_answer(explicit_data: dict[str, str]) -> str | None:
+    """Remove and return the one-time ``--data reviewers`` answer (#1168).
+
+    The retired key is never rendered or saved; it only records the
+    owner's answer to the reviewer assignment change.
+    """
+    answer = explicit_data.pop(governance_migration.REVIEWERS_KEY, None)
+    if answer is not None and answer not in (
+        governance_migration.REVIEWERS_ANSWERS
+    ):
+        raise CliError(
+            "--data reviewers must be accept (the owner confirmed the "
+            "reviewer assignment change) or pending (the owner is not "
+            "available)."
+        )
+    return answer
+
+
+def check_reviewers_answer(
+    files: Plan,
+    settings: Sequence[Mapping[str, object]],
+    answer: str | None,
+    *,
+    finalize: bool,
+) -> None:
+    """Refuse a reviewers answer the plan does not need or lacks (#1168).
+
+    ``--finalize-plan`` records the owner's answer, so it refuses a plan
+    that retires the reviewer list without ``--data reviewers``.
+    """
+    changes = reviewer_assignment_changes(files, settings)
+    if answer is not None and not changes:
+        raise CliError(
+            "--data reviewers answers a reviewer assignment change, and "
+            "this update does not retire the reviewer list; leave it out."
+        )
+    if finalize and changes and answer is None:
+        raise CliError(
+            "This update retires the reviewer list, so --finalize-plan "
+            "needs the owner's answer: --data reviewers=accept once the "
+            "owner confirms the new reviewer assignment, or --data "
+            "reviewers=pending when the owner is not available (keep the "
+            "update pull request in draft until the owner decides). The "
+            "target was not changed."
+        )
 
 
 def retained_uses_by_script(
@@ -3438,6 +3607,8 @@ def lifecycle_report_model(  # noqa: C901
         tuple[str, int], tuple[str | None, str | None]
     ] = MappingProxyType({}),
     ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
+    conflict_uses: Mapping[str, Sequence[str]] = MappingProxyType({}),
+    reviewer_answer: str | None = None,
 ) -> dict[str, object]:
     """Build the single SPEC-008 report object for one adopt or update plan.
 
@@ -3485,8 +3656,13 @@ def lifecycle_report_model(  # noqa: C901
             ignored=update_ignored_payload(plan.update),
             pin_versions=pin_versions,
             ignore_gaps=ignore_gaps,
+            conflict_uses=conflict_uses,
             writer_moves=update_release_writer_moves(plan.update),
             retained_uses=update_retained_uses(plan.update),
+            product_calls=update_retained_uses(
+                plan.update, "retained_product_calls"
+            ),
+            reviewer_answer=reviewer_answer,
         )
     if adoption is not None:
         applicable = adoption.get("applicable") is True
@@ -9283,6 +9459,40 @@ def require_repository_identity(
         )
 
 
+def existing_license_seed(
+    target: Path,
+    answers: Mapping[str, object],
+    explicit_data: Mapping[str, str],
+) -> dict[str, object]:
+    """Keep an existing repository's license product-owned (Issue #1166).
+
+    Handbook 5.1 and appendix B.9: an existing repository keeps its own
+    LICENSE, and an update never seeds one. LICENSE is the native source
+    of ``project_license`` (SPEC-009); a repository without one owns its
+    license terms, so the new side renders ``custom`` and no LICENSE, and
+    no copyright holder is inferred from the project name. Only an
+    explicit ``--data project_license=...`` adds the starter, and then the
+    copyright holder must be stated too.
+    """
+    if answers.get("project_mode") != "existing" or is_regular_file(
+        target / "LICENSE"
+    ):
+        return {}
+    chosen = explicit_data.get("project_license")
+    if chosen is None:
+        return {"project_license": "custom", "copyright_holder": ""}
+    if (
+        chosen != "custom"
+        and not explicit_data.get("copyright_holder", "").strip()
+    ):
+        raise CliError(
+            "Adding a LICENSE to an existing repository needs the legal "
+            "holder: pass --data copyright_holder=<holder> with "
+            "--data project_license. The target was not changed."
+        )
+    return {}
+
+
 def resolve_derived_context(
     target: Path,
     answers: Mapping[str, object],
@@ -9295,8 +9505,9 @@ def resolve_derived_context(
     manifests resolve uniquely fills a key nothing recorded; a recorded
     value the manifests contradict, or several candidates, keeps the
     recorded value and is reported until one explicit decision is passed.
-    Several candidates with nothing recorded fail closed before any write,
-    and an unobservable value keeps what the last render recorded.
+    Several candidates with nothing recorded fail closed before any write.
+    An unobservable run command keeps what the last render recorded, and
+    is reported as ``None`` so the report asks for one decision (#1165).
     """
     languages = sorted(selected_languages(dict(answers)))
     derived = repository_facts.derive_context(target, languages, decisions)
@@ -9321,6 +9532,8 @@ def resolve_derived_context(
                     "once to decide. The target was not changed."
                 )
             differences[key] = candidates
+        elif key == "project_run_command":
+            differences[key] = None
     return values, differences
 
 
@@ -10812,11 +11025,57 @@ def retained_script_uses(
     return rows
 
 
-def update_retained_uses(
-    update: Mapping[str, object] | None,
+def retained_product_calls(
+    target: Path,
+    old_stage: Path,
+    retained: Sequence[str],
+    generated: Collection[str],
 ) -> list[dict[str, str]]:
-    """Return the recorded retained-script uses from one plan."""
-    rows = (update or {}).get("retained_uses")
+    """Return the product checks a product added to a kept legacy script.
+
+    A kept ``retire-modified`` script such as a legacy ``scripts/verify``
+    may run product tests the product added to it; once the script is
+    retired, CSARC verify no longer runs them (Issue #1169). A call is a
+    line the trusted old render (``old_stage``) lacks that runs a test
+    runner or a product file: one that exists in the target but neither
+    render (``generated``) produced.
+    """
+
+    def is_product_file(name: str) -> bool:
+        path = target / name
+        return (
+            name not in generated
+            and ".." not in Path(name).parts
+            and path.is_file()
+            and not path.is_symlink()
+        )
+
+    rows: list[dict[str, str]] = []
+    for script in sorted(set(retained)):
+        path = target / script
+        if path.is_symlink() or not path.is_file():
+            continue
+        content = path.read_bytes()
+        if not (path.stat().st_mode & 0o111 or content.startswith(b"#!")):
+            continue
+        old = old_stage / script
+        old_content = (
+            old.read_bytes() if old.is_file() and not old.is_symlink() else None
+        )
+        rows.extend(
+            {"call": call, "script": script}
+            for call in file_transition.added_product_calls(
+                script, content, old_content, is_product_file
+            )
+        )
+    return rows
+
+
+def update_retained_uses(
+    update: Mapping[str, object] | None, key: str = "retained_uses"
+) -> list[dict[str, str]]:
+    """Return the recorded retained-script rows under ``key`` in one plan."""
+    rows = (update or {}).get(key)
     if not isinstance(rows, list):
         return []
     return [
@@ -10870,6 +11129,39 @@ def split_retirement_decisions(
         name: choice for name, choice in choices.items() if name not in kept
     }
     return conflicts, tuple(retired)
+
+
+def decided_summary_plan(
+    plan: ResolvedPlan, values: Sequence[str] | None
+) -> ResolvedPlan:
+    """Show the finalize summary with retirement decisions applied.
+
+    A kept ``retire-modified`` file decided ``take-new`` is retired by the
+    final plan, so the terminal summary lists it under ``Remove`` instead of
+    ``Retained modified files`` (Issue #1164). Invalid decisions leave the
+    summary unchanged; ``write_update_final_plan`` reports them.
+    """
+    if plan.files is None or not values:
+        return plan
+    try:
+        choices = final_plan.parse_file_decisions(values)
+    except final_plan.FinalPlanError:
+        return plan
+    retired = {
+        name
+        for name in plan.files.retained
+        if choices.get(name, ("", None))[0] == final_plan.DECISION_TAKE
+    }
+    if not retired:
+        return plan
+    files = replace(
+        plan.files,
+        remove=tuple(sorted({*plan.files.remove, *retired})),
+        retained=tuple(
+            name for name in plan.files.retained if name not in retired
+        ),
+    )
+    return replace(plan, files=files)
 
 
 def reject_retired_uses(
@@ -11031,9 +11323,10 @@ def reject_decided_uses(
         raise CliError(
             "The decided content keeps a use of a file this plan removes: "
             + "; ".join(findings)
-            + ". Choose take-new or a custom file without that use, or move "
-            "the use into a product file and run csarc update --check "
-            "again; the target was not changed."
+            + ". Choose take-new or a custom file without that use. To keep "
+            "that behavior, "
+            + PRODUCT_JOB_MOVE_REMEDY
+            + "; the target was not changed."
         )
 
 
@@ -11936,7 +12229,8 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
                 ),
             },
         )
-        verify_project(candidate)
+        # Verification sees the provenance this update lands: a recorded
+        # `custom` license is what accepts an absent LICENSE (#1166).
         write_provenance(
             candidate,
             resolved,
@@ -11944,6 +12238,7 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
             answers=answers,
             final_plan_sha256=digest,
         )
+        verify_project(candidate)
         artifacts, delete_paths = candidate_patch_effects(candidate)
         apply_update_transitions(
             target,
@@ -12000,6 +12295,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     saved_settings = load_saved_settings(target)
     saved_answers = dict(saved_settings.answers)
     explicit_data = parse_settings_data(args.data)
+    reviewer_answer = reviewers_answer(explicit_data)
     decisions = {
         **saved_settings.decisions,
         **explicit_decisions(explicit_data),
@@ -12027,6 +12323,11 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     candidate_answers.update(derived_values)
     update_data.update(derived_values)
     observed.update(derived_differences)
+    license_seed = existing_license_seed(
+        target, candidate_answers, explicit_data
+    )
+    candidate_answers.update(license_seed)
+    update_data.update(license_seed)
     # The release owner the repository evidence derives without any
     # explicit choice; confirming that value with --data must plan exactly
     # like leaving it out (Issue #1146 AC1).
@@ -12271,6 +12572,14 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                 layout_moves, {*planning.retained, *planning.shims}
             ),
         )
+        # A kept legacy script may run product checks the new verifier
+        # never runs; list them so they move to the hook (Issue #1169).
+        product_calls = retained_product_calls(
+            target,
+            old_stage,
+            planning.retained,
+            {*rendered, *stage_files},
+        )
         # take-new decisions resolve to the reviewed new-side render, with
         # the template pins the apply aligns to kept newer product pins
         # already raised, so conflicts/new is what take-new writes (#1153).
@@ -12309,6 +12618,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             "ignored_payload": ignored_payload,
             "release_writer_moves": writer_moves,
             "retained_uses": retained_uses,
+            "retained_product_calls": product_calls,
             "answers_changed": answers_changed,
             "capabilities_changed": capabilities_changed,
             "planning": planning.as_dict(),
@@ -12362,16 +12672,41 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         generated_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
         plan_path=report_directory / UPDATE_PLAN_BASENAME,
         before=current_answers,
-        explicit=tuple(explicit_data),
+        # An accepted reviewer change marks the retired row explicit.
+        explicit=(
+            *explicit_data,
+            *(
+                (governance_migration.REVIEWERS_KEY,)
+                if reviewer_answer == governance_migration.REVIEWERS_ACCEPT
+                else ()
+            ),
+        ),
         previous=current_revision,
         target_head=report_head,
         target_changes=report_changes,
         observed=observed,
         pin_versions=pins.versions,
         ignore_gaps=missing_ignore_rules(conflict_sides),
+        conflict_uses=conflict_retired_uses(
+            conflict_sides,
+            (*run_inputs.retiring, *planning.delete),
+            tuple(
+                source
+                for source, _destination in effective_layout_moves(
+                    layout_moves, {*planning.retained, *planning.shims}
+                )
+            ),
+        ),
+        reviewer_answer=reviewer_answer,
+    )
+    check_reviewers_answer(
+        files,
+        cast(list[Mapping[str, object]], update_report["settings"]),
+        reviewer_answer,
+        finalize=args.finalize_plan,
     )
     if args.finalize_plan:
-        print_plan(plan)
+        print_plan(decided_summary_plan(plan, args.decision))
         return write_update_final_plan(
             args,
             FinalPlanContext(
@@ -12469,8 +12804,8 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         candidate = applied.candidate
         pin_answer_commit(candidate, str(status["target_sha"]))
         persist_release_answers(candidate, answers, decisions)
-        verify_project(candidate)
         write_provenance(candidate, target_revision, previous, answers=answers)
+        verify_project(candidate)
         artifacts, delete_paths = candidate_patch_effects(candidate)
         apply_update_transitions(
             target,
@@ -12683,7 +13018,10 @@ def parser() -> argparse.ArgumentParser:
         "--target-date",
         default="",
         metavar="YYYY-MM-DD",
-        help="Project target when the Issue has no Milestone due date",
+        help=(
+            "Project target when the Issue has no Milestone due date "
+            "(default: start + 14 days)"
+        ),
     )
     issue_create.add_argument(
         "gh_arguments", nargs=argparse.REMAINDER, metavar="-- GH_ARGS"
