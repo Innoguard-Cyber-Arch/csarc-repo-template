@@ -7,6 +7,45 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.39.0] - 2026-10-23
+
+### Included prereleases
+
+* v0.36.0-beta.1
+* v0.37.0-beta.1
+* v0.38.0-beta.1
+* v0.38.1-beta.1
+* v0.38.2-beta.1
+* v0.38.3-beta.1
+
+### Features
+
+* feat(project): target the completion date once an Issue is done (39d3e7d)
+* feat(project): apply fixed team board rules to Project sync (d6fa8c8)
+* feat(governance): require promotion documentation alignment (4cd255d)
+
+### Bug Fixes
+
+* fix(scripts): accept single-digit Issue numbers in gh-issue-develop (3c60ee1)
+* fix(milestone): accept tracker sections from the Issue form (8a15971)
+* fix(release): keep breaking change footers whole through squash merges (772b660)
+* fix(release): graduate a formal 0.x line to 1.0.0 (ea99446)
+* fix(ci): validate guided release candidates from the trusted base (b1467e3)
+* fix(update): list product tests a retired legacy verifier runs (cd9df1a)
+* fix(update): name the product-job move for a retired-file use (f379ba5)
+* fix(update): keep existing repositories free of starter files (22955cc)
+* fix(update): list take-new retirements as removed in the finalize summary (1b3e5a0)
+* fix(update): ask for the run command when no manifest exists (6df261e)
+* fix(report): explain the CODEOWNER line in update reports (2a68923)
+* fix(update): record the owner's answer to a reviewer change (beea097)
+* fix(update): allow recorded follow-up fix commits after apply (75643b9)
+* fix(governance): record M18 decisions and the Milestone Issue structure (8e60ce2)
+* fix(governance): enforce ADR index, order and supersession (e84845a)
+* fix(release): consider all eligible drift releases (667c9bb)
+* fix(deps): apply pending M19 updates (aa85d2a)
+* fix(deps): upgrade generated vitest pins past mocker advisories (0ebd9ca)
+* fix(template): render Milestone scripts only when Milestones are on (f3f2134)
+
 ## [0.38.3-beta.1] - 2026-10-21
 
 ### Bug Fixes
