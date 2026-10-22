@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-25
-- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241), [#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308), [#938](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/938), [#1076](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1076), [#1064](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1064), [#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071), [#1073](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1073), [#1082](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1082)
+- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241), [#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308), [#938](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/938), [#1076](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1076), [#1064](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1064), [#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071), [#1073](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1073), [#1082](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1082), [#1211](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1211)
 - **實作 PRs：**[#127](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/127), [#147](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/147), [#158](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/158), [#173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/173), [#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)
 
 ## 問題與限制
@@ -100,6 +100,23 @@ write 帳號。另有寫入者為 `multiple-writers`，任何讀取不完整（�
 
 重新評估條件：GitHub 提供可讀的 App 安裝寫入者清單、Free private 的 `rules/branches` 行為經 live 驗證，或
 單人維護的 repository 升級到可強制 private Ruleset 的方案。
+
+## 2026-10-22 核准獨立性只排除作者與最後 push 者（#1211）
+
+擁有者 2026-10-22 修訂 #1058 決定 27 的核准部分：exact-head approval 只排除 PR 作者，以及被核准 head 的最後
+push 者（head commit 的 GitHub committer，加上 head branch activity 中 `after` 等於該 head 的最新一筆 push 的
+actor），不再排除執行合併的帳號。原本連合併者一起排除，是因為 agent 以維護者帳號執行時，無法分辨「維護者
+核准」與「agent 以維護者身分核准」；但 agent 要讓自己的成果被核准，必定先 push 那個 head，所以排除最後 push
+者就能擋住自我核准，不必連合併者一起排除。這也符合 GitHub 本身「作者不能核准自己、最後 push 者不能核准」的
+做法：維護者審完協作者的 PR 後，可以用自己的身分合併。
+
+讀不到最後 push 者（權限不足、activity 找不到這筆 push 或沒有 actor）時視為不獨立，任何 approval 都不算數，
+fail closed。approval 仍綁定 exact head，任何 push 都讓舊 approval 失效；`review` check、`status` 與 merge
+共用同一判定，`merge-trace` 照常記錄合併者（`actor=`）與核准者（`CSARC-Authorization` 指向的 review）。
+決定 27 其餘部分不變：有 Ruleset 強制時一般 agent route 的合併者仍須是即時 `write` 身分；admin bypass、
+emergency hotfix 與 single-writer route 的合併者規則照舊（#918／#1064 preserved）。
+
+重新評估條件：GitHub 提供可直接讀取的 PR head pusher 欄位，或 activity API 改變形狀或保留期限。
 
 ## Copilot code review 作為可選審核路徑（#752，2026-09-18）
 

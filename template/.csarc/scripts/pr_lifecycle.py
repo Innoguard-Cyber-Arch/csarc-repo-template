@@ -1869,7 +1869,8 @@ def exact_head_approval(
 ) -> dict[str, Any] | None:
     """Return the newest independent maintainer approval for this head.
 
-    ``actor`` names every account that cannot approve (author and merger).
+    ``actor`` names every account that cannot approve: the author and the
+    head's last pusher (#1211), never the merger by itself.
     Ignores `author_association` for the same reason `authorization()`
     does (Issue #785): the live `role_name` is the source of truth.
     """

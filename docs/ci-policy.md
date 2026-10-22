@@ -146,8 +146,12 @@ ready／draft、授權或 metadata，必須先取得 remote lease，並透過 `s
 一般有獨立 reviewer 的 PR，不需要再留一則重複的授權留言。`scripts/pr_lifecycle.py`
 會把獨立 maintainer 對**目前 head SHA** 的最新有效 `APPROVED` review 直接視為合併授權；
 它以即時 `role_name` 確認 reviewer 為 `maintain`／`admin`（不讀 legacy `permission`，缺漏即
-`unknown` 並拒絕）、不是 PR 作者或執行 merge 的帳號，而且 review
-的 `commit_id` 正好等於目前 head。任何後續 push 都會產生新 SHA，使舊 approval 自然
+`unknown` 並拒絕）、不是 PR 作者，也不是被核准 head 的最後 push 者，而且 review
+的 `commit_id` 正好等於目前 head。最後 push 者取 head commit 的 GitHub committer，以及 head
+branch activity 中 `after` 等於該 head 的最新一筆 push 的 actor；讀不到（權限不足、找不到這筆
+push 或沒有 actor）時視為不獨立，任何 approval 都不算數（#1211）。執行 merge 的帳號不再被排除：
+維護者審完協作者的 PR 後可以用自己的身分合併；agent 以維護者帳號 push 過 head 時，該維護者的
+approval 仍不獨立。任何後續 push 都會產生新 SHA，使舊 approval 自然
 失效；`CHANGES_REQUESTED`、新的 Draft 事件、未解決的 blocking comment、未完成 checklist
 或 required check 仍會 fail closed。
 
@@ -1106,7 +1110,8 @@ fail closed（接入 publisher 由 #1074 負責）。本機證據的 `completed_
 | Ruleset 形狀不符、未生效、未驗證的 bypass，或沒有 Ruleset 時 `mergeable_state` 不是 `clean`（含 `unstable`） | `blocked` | blocked | 先修正條件，lifecycle 不合併 |
 
 合併者（執行 lifecycle 的身分）與授權者（留下 exact-head 授權或 approval 的人）分開判斷
-（#1058 決定 27）。有 Ruleset 的一般 agent route（獨立 maintainer approval 或 Copilot review 授權）要求合併者
+（#1058 決定 27）。#1211 修訂其中的核准獨立性：approval 只排除 PR 作者與被核准 exact head 的最後
+push 者，不再排除合併者本人（見「Exact-head review 即為合併授權（#719）」）；下列合併者角色限制不變。有 Ruleset 的一般 agent route（獨立 maintainer approval 或 Copilot review 授權）要求合併者
 即時 `role_name` 恰為 `write`；`maintain`、`admin`、自訂角色或讀不到都改判 `blocked`，不合併。GitHub App
 合併者（例如 `github-actions[bot]`）只有 installation 權限、沒有 repository role，記為 `app`。admin bypass 與
 emergency hotfix route 的合併者就是 live admin 授權者本人（#918／#1064），照常允許並記為
