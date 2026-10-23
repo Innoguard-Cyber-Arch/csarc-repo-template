@@ -14,24 +14,24 @@ PR lifecycle lease or live GitHub checks.
 EOF
 }
 
-fail() {
-  echo "ERROR: $*" >&2
+bad() {
+  echo "ERROR: Bad $1: $2. ${3:-Fix it}." >&2
   exit 2
 }
 
 require_value() {
   local flag="$1"
   shift
-  (($#)) || fail "$flag requires a value"
+  (($#)) || bad "$flag" "no value" "Add one"
 }
 
 validate_issue() {
-  [[ "$1" =~ ^[1-9][0-9]*$ ]] || fail "--issue must be a positive integer"
+  [[ "$1" =~ ^[1-9][0-9]*$ ]] || bad --issue "not a positive integer"
 }
 
 validate_base() {
   git check-ref-format --branch "$1" >/dev/null 2>&1 ||
-    fail "--base must be a valid branch name"
+    bad --base "not a branch name"
 }
 
 command="${1:-}"
@@ -66,20 +66,20 @@ while (($#)); do
       exit 0
       ;;
     *)
-      fail "unknown argument: $1"
+      bad "argument '$1'" "unknown" "Run with --help"
       ;;
   esac
 done
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
-  fail "run this command inside a Git worktree"
+  bad worktree "not in a Git worktree" "Run it in one"
 common_dir="$(git rev-parse --git-common-dir)"
 if [[ "$common_dir" != /* ]]; then
   common_dir="$repo_root/$common_dir"
 fi
 queue_dir="$common_dir/csarc/finalization-queue"
 now="${CSARC_FINALIZATION_QUEUE_NOW:-$(date -u +%s)}"
-[[ "$now" =~ ^[0-9]+$ ]] || fail "current time must be an integer epoch"
+[[ "$now" =~ ^[0-9]+$ ]] || bad time "not an integer epoch"
 
 active_records() {
   local filter_base="${1:-}"
@@ -103,6 +103,7 @@ show_status() {
   local wanted_base="${2:-}"
   local records own_record first_issue first_base
 
+  # message-pattern: allow-begin X5 status report
   if [[ -n "$wanted_issue" ]]; then
     own_record="$(active_records | awk -F '\t' -v issue="$wanted_issue" '$1 == issue { print; exit }')"
     if [[ -z "$own_record" ]]; then
@@ -126,27 +127,28 @@ show_status() {
     echo "Issue #$wanted_issue is first for base $first_base."
   elif [[ -n "$wanted_issue" ]]; then
     echo "STATUS: wait"
-    echo "Issue #$wanted_issue follows #$first_issue for base $first_base; this is advisory and does not block commands."
+    echo "Issue #$wanted_issue follows #$first_issue for base $first_base; this is advisory."
   else
     echo "STATUS: listed"
   fi
   echo $'issue\tbase\tbranch\thead\tannounced\texpires'
+  # message-pattern: allow-end
   printf '%s\n' "$records"
 }
 
 case "$command" in
   announce)
     [[ -n "$issue" && -n "$base" ]] ||
-      fail "announce requires --issue and --base"
+      bad announce "--issue or --base is missing" "Add both"
     validate_issue "$issue"
     validate_base "$base"
     [[ "$ttl_minutes" =~ ^[1-9][0-9]*$ ]] ||
-      fail "--ttl-minutes must be a positive integer"
-    ((ttl_minutes <= 1440)) || fail "--ttl-minutes cannot exceed 1440"
+      bad --ttl-minutes "not a positive integer"
+    ((ttl_minutes <= 1440)) || bad --ttl-minutes "over 1440" "Lower it"
     branch="$(git symbolic-ref --quiet --short HEAD)" ||
-      fail "announce requires a checked-out branch"
+      bad announce "HEAD is not a branch" "Check one out"
     [[ -z "$(git status --porcelain --untracked-files=all)" ]] ||
-      fail "announce requires a clean worktree"
+      bad announce "it requires a clean worktree" "Commit changes"
     head="$(git rev-parse HEAD)"
     expires=$((now + ttl_minutes * 60))
     mkdir -p "$queue_dir"
@@ -162,16 +164,16 @@ case "$command" in
   status)
     [[ -z "$issue" ]] || validate_issue "$issue"
     [[ -z "$base" ]] || validate_base "$base"
-    [[ "$ttl_minutes" == 90 ]] || fail "--ttl-minutes is only valid with announce"
+    [[ "$ttl_minutes" == 90 ]] || bad --ttl-minutes "only announce takes it" "Drop it"
     show_status "$issue" "$base"
     ;;
   leave)
-    [[ -n "$issue" ]] || fail "leave requires --issue"
-    [[ -z "$base" ]] || fail "--base is not valid with leave"
-    [[ "$ttl_minutes" == 90 ]] || fail "--ttl-minutes is only valid with announce"
+    [[ -n "$issue" ]] || bad leave "--issue is missing" "Add it"
+    [[ -z "$base" ]] || bad --base "leave does not take it" "Drop it"
+    [[ "$ttl_minutes" == 90 ]] || bad --ttl-minutes "only announce takes it" "Drop it"
     validate_issue "$issue"
     rm -f "$queue_dir/$issue.tsv"
-    echo "Removed finalization intent for Issue #$issue."
+    echo "OK: Removed finalization intent for Issue #$issue."
     ;;
   *)
     usage >&2

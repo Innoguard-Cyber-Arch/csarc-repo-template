@@ -19,11 +19,15 @@ fail() {
   exit 1
 }
 
+repair() {
+  fail "Repair failed: $1. ${2:-Retry}."
+}
+
 require_value() {
   local flag="$1"
   local index="$2"
   if (( index + 1 >= ${#args[@]} )); then
-    fail "$flag requires a value"
+    fail "Bad $flag: no value. Add one."
   fi
 }
 
@@ -92,19 +96,19 @@ git_binary="${GIT_BINARY:-git}"
 
 if [[ "$passthrough" == "true" ]]; then
   if [[ -n "$repair_from" ]]; then
-    fail "--repair-from cannot be combined with --help or --list"
+    fail "Bad --repair-from: --help and --list exclude it. Drop one."
   fi
   exec "$gh_binary" issue develop "${args[@]}"
 fi
 
-[[ -n "$issue_number" ]] || fail "provide an Issue number or GitHub Issue URL"
-[[ -n "$branch_name" ]] || fail "provide --name type/<issue-number>-short-slug"
+[[ -n "$issue_number" ]] || fail "No Issue: none given. Pass an Issue number or URL."
+[[ -n "$branch_name" ]] || fail "No branch: none given. Pass --name type/<issue-number>-short-slug."
 if [[ ! "$branch_name" =~ $work_branch_pattern ]]; then
-  fail "branch '$branch_name' must match type/<issue-number>-short-slug"
+  fail "Bad branch '$branch_name': it must match type/<issue-number>-short-slug. Rename it."
 fi
 branch_issue="${BASH_REMATCH[2]}"
 if [[ "$branch_issue" != "$issue_number" ]]; then
-  fail "branch '$branch_name' belongs to Issue #$branch_issue, not #$issue_number"
+  fail "Bad branch '$branch_name': it belongs to Issue #$branch_issue, not #$issue_number. Rename it."
 fi
 
 if [[ -z "$repair_from" ]]; then
@@ -112,22 +116,22 @@ if [[ -z "$repair_from" ]]; then
 fi
 
 [[ -z "$repair_incompatible" ]] ||
-  fail "$repair_incompatible is not valid with --repair-from"
-[[ "$repair_from" != "$branch_name" ]] || fail "old and new branch names are identical"
+  fail "Bad option: $repair_incompatible is not valid with --repair-from. Drop it."
+[[ "$repair_from" != "$branch_name" ]] || repair "old and new names match" "Pick a new name"
 "$git_binary" check-ref-format --branch "$repair_from" >/dev/null 2>&1 ||
-  fail "repair source '$repair_from' is not a valid branch name"
+  repair "'$repair_from' is not a branch name" "Fix it"
 current_branch="$($git_binary symbolic-ref --quiet --short HEAD)" ||
-  fail "repair requires a checked-out local branch"
+  repair "no local branch is checked out" "Check one out"
 [[ "$current_branch" == "$repair_from" ]] ||
-  fail "checked-out branch '$current_branch' is not repair source '$repair_from'"
+  repair "'$current_branch' is not '$repair_from'" "Check out '$repair_from'"
 
 current_repo="$($gh_binary repo view --json nameWithOwner --jq .nameWithOwner)" ||
-  fail "cannot resolve the repository for the current checkout"
+  repair "gh cannot resolve this checkout" "Run 'gh auth status'"
 if [[ -n "$repo" ]]; then
   selected_repo="$($gh_binary repo view "$repo" --json nameWithOwner --jq .nameWithOwner)" ||
-    fail "cannot resolve repository '$repo'"
+    repair "gh cannot resolve '$repo'" "Fix --repo"
   [[ "$selected_repo" == "$current_repo" ]] ||
-    fail "repair is limited to the current same-repository checkout ($current_repo)"
+    repair "it is limited to the current same-repository checkout '$current_repo'" "Fix --repo"
   repo="$selected_repo"
 else
   repo="$current_repo"
@@ -136,54 +140,54 @@ fi
 if ! "$git_binary" fetch --no-tags origin \
   "+refs/heads/$repair_from:refs/remotes/origin/$repair_from" \
   >/dev/null 2>&1; then
-  fail "cannot fetch origin/$repair_from"
+  repair "cannot fetch 'origin/$repair_from'"
 fi
 local_sha="$($git_binary rev-parse "refs/heads/$repair_from")"
 remote_sha="$($git_binary rev-parse "refs/remotes/origin/$repair_from")"
 [[ "$local_sha" == "$remote_sha" ]] ||
-  fail "local and origin/$repair_from do not point at the same exact head"
+  repair "local and origin/$repair_from do not point at the same exact head" "Sync them"
 
 if "$git_binary" show-ref --verify --quiet "refs/heads/$branch_name"; then
-  fail "local target branch '$branch_name' already exists"
+  repair "local target branch '$branch_name' already exists" "Pick a new name"
 fi
 set +e
 "$git_binary" ls-remote --exit-code --heads origin "refs/heads/$branch_name" >/dev/null 2>&1
 remote_target_exit=$?
 set -e
 if [[ "$remote_target_exit" -eq 0 ]]; then
-  fail "remote target branch '$branch_name' already exists"
+  repair "remote target branch '$branch_name' already exists" "Pick a new name"
 elif [[ "$remote_target_exit" -ne 2 ]]; then
-  fail "cannot determine whether remote target branch '$branch_name' exists"
+  repair "cannot check remote branch '$branch_name'"
 fi
 
 repo_owner="${repo%%/*}"
 open_prs="$($gh_binary pr list --repo "$repo" --state open \
   --head "$repo_owner:$repair_from" --limit 1 --json number --jq length)" ||
-  fail "cannot determine whether '$repair_from' has an open pull request"
+  repair "cannot check '$repair_from' for an open PR"
 [[ "$open_prs" =~ ^[0-9]+$ ]] ||
-  fail "open pull request query returned an invalid count"
+  repair "the open PR count is bad"
 [[ "$open_prs" == "0" ]] ||
-  fail "branch '$repair_from' has an open pull request; GitHub closes an open PR when its head branch is renamed"
+  repair "GitHub closes an open PR when its head branch is renamed" "Close the PR first"
 
 encoded_old="$(jq -rn --arg value "$repair_from" '$value | @uri')"
 rename_payload="$($gh_binary api --method POST \
   "repos/$repo/branches/$encoded_old/rename" -f "new_name=$branch_name")" ||
-  fail "GitHub did not rename '$repair_from'"
+  repair "GitHub did not rename '$repair_from'"
 if ! jq -e --arg name "$branch_name" --arg sha "$local_sha" \
   '.name == $name and .commit.sha == $sha' <<<"$rename_payload" >/dev/null; then
-  fail "GitHub rename response did not preserve the expected branch and exact head"
+  repair "the rename lost the branch or exact head" "Check it on GitHub"
 fi
 
 if ! "$git_binary" fetch --no-tags origin \
   "+refs/heads/$branch_name:refs/remotes/origin/$branch_name" \
   >/dev/null 2>&1; then
-  fail "remote branch was renamed, but origin/$branch_name could not be fetched"
+  repair "cannot fetch renamed 'origin/$branch_name'" "Run 'git fetch'"
 fi
 if ! "$git_binary" branch -m "$branch_name"; then
-  fail "remote branch is now '$branch_name', but the local branch rename failed"
+  repair "remote is '$branch_name', local rename failed" "Run 'git branch -m $branch_name'"
 fi
 if ! "$git_binary" branch --set-upstream-to="origin/$branch_name" "$branch_name" >/dev/null; then
-  fail "local branch was renamed, but its upstream could not be updated"
+  repair "upstream update failed" "Run 'git branch -u origin/$branch_name'"
 fi
 if "$git_binary" show-ref --verify --quiet "refs/remotes/origin/$repair_from"; then
   "$git_binary" update-ref -d "refs/remotes/origin/$repair_from"
@@ -192,6 +196,6 @@ fi
 updated_local_sha="$($git_binary rev-parse "refs/heads/$branch_name")"
 updated_remote_sha="$($git_binary rev-parse "refs/remotes/origin/$branch_name")"
 [[ "$updated_local_sha" == "$local_sha" && "$updated_remote_sha" == "$local_sha" ]] ||
-  fail "renamed local and remote branches no longer match the original exact head"
+  repair "branches no longer match the original exact head" "Check both"
 
-echo "Renamed $repair_from to $branch_name at $local_sha."
+echo "OK: Renamed '$repair_from' to '$branch_name' at '$local_sha'."

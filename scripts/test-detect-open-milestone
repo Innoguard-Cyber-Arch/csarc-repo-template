@@ -101,4 +101,4 @@ case_count=$((case_count + 1))
 STUB_MILESTONES_JSON='[]' run_with_stub >/dev/null || true
 grep -Fq 'repos/{owner}/{repo}/milestones' "$call_log"
 
-echo "detect-open-milestone cases passed: $case_count"
+echo "OK: detect-open-milestone cases passed: $case_count."

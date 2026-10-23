@@ -85,7 +85,7 @@ done
 if (( title_found )); then
   if ! title_error="$("$script_dir/validate-issue-title" "$title" 2>&1)"; then
     printf '%s\n' "$title_error" >&2
-    echo "Blocked locally: not calling 'gh issue create' -- fix the title and retry." >&2
+    echo "ERROR: Issue creation blocked: the title is invalid, so 'gh issue create' was not called. Fix the title and retry." >&2
     exit 1
   fi
 fi
@@ -140,7 +140,7 @@ while (( i < ${#args[@]} )); do
 done
 if (( body_given && ! risk_exempt )) &&
   ! printf '%s\n' "$body_text" | python3 "$script_dir/risk_controls.py"; then
-  echo "Blocked locally: not calling 'gh issue create' -- add the SPEC-010 risk block (csarc issue create --body-out <file> guides it)." >&2
+  echo "ERROR: Issue creation blocked: the body has no SPEC-010 risk block. Add it with 'csarc issue create --body-out <file>'." >&2
   exit 1
 fi
 
@@ -184,7 +184,7 @@ if (( ! milestone_given )) &&
   detected="$("$script_dir/detect-open-milestone" "${detect_repo_args[@]:-}" 2>/dev/null)"; then
   detected_number="${detected%%$'\t'*}"
   detected_title="${detected#*$'\t'}"
-  echo "One open Milestone is currently active: #${detected_number} ${detected_title}" >&2
+  echo "WARNING: Milestone not set: one open Milestone is active, #${detected_number} ${detected_title}. Attach it if this Issue belongs to it." >&2
   if [[ -t 0 ]]; then
     milestone_reply=""
     read -r -p "Attach --milestone \"${detected_title}\" to this Issue? [y/N] " milestone_reply || milestone_reply=""
@@ -192,7 +192,7 @@ if (( ! milestone_given )) &&
       args+=(--milestone "$detected_title")
     fi
   else
-    echo "Not attached automatically (non-interactive); pass --milestone \"${detected_title}\" if this Issue belongs to it." >&2
+    echo "WARNING: Milestone not attached: the session is non-interactive. Pass --milestone '${detected_title}' if this Issue belongs to it." >&2
   fi
 fi
 

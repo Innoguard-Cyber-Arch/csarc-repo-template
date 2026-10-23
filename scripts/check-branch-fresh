@@ -50,37 +50,39 @@ set -Eeuo pipefail
 #      fetch failed, or origin still has no <branch> after a fresh fetch).
 
 if [[ $# -ne 1 ]]; then
+  # message-pattern: allow X3 usage
   echo "usage: $(basename "$0") <branch>" >&2
   exit 2
 fi
 branch="$1"
 
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo "ERROR: not inside a Git working tree" >&2
+  echo "ERROR: No worktree: this is not a Git working tree. Run it inside one." >&2
   exit 2
 fi
 if ! git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
-  echo "ERROR: no local branch named '$branch' (refs/heads/$branch not found)" >&2
+  echo "ERROR: Branch '$branch' is missing: there is no local branch named '$branch'. Check the name." >&2
   exit 2
 fi
 if ! git remote get-url origin >/dev/null 2>&1; then
-  echo "ERROR: no 'origin' remote configured" >&2
+  echo "ERROR: Remote is missing: no 'origin' remote is configured. Add 'origin'." >&2
   exit 2
 fi
 
-echo "Fetching origin/$branch..." >&2
+echo "NOTICE: Fetching 'origin/$branch'."
 if ! git fetch origin "$branch" >/dev/null 2>&1; then
-  echo "ERROR: 'git fetch origin $branch' failed -- check network access and that '$branch' exists on origin" >&2
+  echo "ERROR: Fetch failed: 'git fetch origin $branch' did not succeed. Check network access and that '$branch' exists on origin." >&2
   exit 2
 fi
 if ! git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
-  echo "ERROR: origin has no '$branch' branch (refs/remotes/origin/$branch not found after fetch) -- it may not be pushed yet" >&2
+  echo "ERROR: Remote branch is missing: origin has no '$branch' after the fetch. Push '$branch' first." >&2
   exit 2
 fi
 
 local_tip="$(git rev-parse "refs/heads/$branch")"
 origin_tip="$(git rev-parse "refs/remotes/origin/$branch")"
 
+# message-pattern: allow-begin X5 STATUS report; agents read the STATUS line
 if [[ "$local_tip" == "$origin_tip" ]]; then
   echo "STATUS: up-to-date"
   echo "local $branch and origin/$branch both point at $local_tip."
@@ -113,4 +115,5 @@ fi
   echo "  gh pr view --json headRefOid   # confirm what the PR actually points at"
   echo "Only after confirming you want to discard local-only history: git reset --hard origin/$branch"
 } >&2
+# message-pattern: allow-end
 exit 1

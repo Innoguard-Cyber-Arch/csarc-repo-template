@@ -96,7 +96,7 @@ def _target(target: str, repo: str | None) -> tuple[str, int]:
     parts = [part for part in urlparse(target).path.split("/") if part]
     if len(parts) >= 4 and parts[2] == "issues" and parts[3].isdigit():
         return f"{parts[0]}/{parts[1]}", int(parts[3])
-    raise ValueError(f"Unsupported Issue target: {target}")
+    raise ValueError(f"Bad Issue target '{target}': unsupported. Fix it.")
 
 
 def _warning_for_target(target: str, repo: str | None) -> str | None:
@@ -123,8 +123,8 @@ def main(arguments: list[str] | None = None) -> int:
                 subprocess.CalledProcessError,
             ) as error:
                 sys.stderr.write(
-                    f"NOTICE: could not check approval for {target}: {error}; "
-                    "continuing.\n"
+                    f"WARNING: Approval check skipped for {target}: {error}. "
+                    "Recheck later.\n"
                 )
                 continue
             if warning:
@@ -137,12 +137,12 @@ def main(arguments: list[str] | None = None) -> int:
                 raise SystemExit(1)
         else:
             sys.stderr.write(
-                "Non-interactive session: continuing; re-approval will be "
-                "required.\n"
+                "WARNING: Edit continues: the session is non-interactive. "
+                "Request re-approval.\n"
             )
     executable = shutil.which("gh")
     if executable is None:
-        raise RuntimeError("GitHub CLI (gh) is required")
+        raise RuntimeError("No gh: it is not on PATH. Install it.")
     result = subprocess.run(  # noqa: S603
         [executable, "issue", "edit", *arguments], check=False
     )

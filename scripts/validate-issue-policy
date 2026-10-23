@@ -49,7 +49,7 @@ fi
 case "$issue_class" in
   feature|task|bug|enhancement|documentation|duplicate) ;;
   *)
-    echo "Select one Issue classification: feature, task, bug, documentation, or duplicate."
+    echo "ERROR: No Issue type: none is selected. Select feature, task, bug, documentation, or duplicate." >&2
     exit 1
     ;;
 esac
@@ -61,19 +61,23 @@ case "$issue_class" in
   task|documentation) native_type="Task" ;;
 esac
 native_type_available=false
+no_types() {
+  # message-pattern: allow X1 Actions annotation
+  echo "::notice::Native Issue Types are unavailable; the $1 label remains authoritative."
+}
 if [[ -n "$native_type" ]]; then
   if python3 scripts/pr_lifecycle.py issue-edit \
     --repo "$GITHUB_REPOSITORY" \
     --issue-number "$ISSUE_NUMBER" --type "$native_type" >/dev/null 2>&1; then
     native_type_available=true
   else
-    echo "::notice::Native Issue Types are unavailable; the ${issue_class} label remains authoritative."
+    no_types "$issue_class"
   fi
 elif ! python3 scripts/pr_lifecycle.py issue-edit \
   --repo "$GITHUB_REPOSITORY" \
   --issue-number "$ISSUE_NUMBER" \
   --remove-type >/dev/null 2>&1; then
-  echo "::notice::Native Issue Types are unavailable; the duplicate label remains authoritative."
+  no_types duplicate
 fi
 
 # A native Type owns the Issue's work kind. Keep only labels that add

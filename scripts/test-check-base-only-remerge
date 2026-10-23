@@ -107,7 +107,7 @@ upstream_dir_sha="$(git -C "$repo" rev-parse HEAD)"
 own_names="$(git -C "$repo" diff --name-only "$base_sha" "$own_dir_sha")"
 upstream_names="$(git -C "$repo" diff --name-only "$base_sha" "$upstream_dir_sha")"
 if comm -12 <(sort -u <<<"$own_names") <(sort -u <<<"$upstream_names") | grep -q .; then
-  echo "fixture bug: own and upstream diffs unexpectedly share a file name" >&2
+  echo "ERROR: Fixture is broken: own and upstream diffs share a file name. Fix the fixture." >&2
   exit 1
 fi
 
@@ -119,4 +119,4 @@ set -e
 grep -Fq 'REQUIRES-FULL-RERUN' <<<"$conflict_out"
 grep -Fq 'conflict' <<<"$conflict_out"
 
-echo "Base-only re-merge cases passed: 4"
+echo "OK: Base-only re-merge cases passed: 4."

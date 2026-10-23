@@ -57,11 +57,11 @@ if [[ -z "$integration_ref" ]]; then
   integration_ref="${integration_ref:-origin/main}"
 fi
 if ! git rev-parse --verify --quiet "$integration_ref^{commit}" >/dev/null; then
-  echo "Integration ref does not exist: $integration_ref" >&2
+  echo "ERROR: Bad ref '$integration_ref': missing. Run 'git fetch'." >&2
   exit 2
 fi
 if ! command -v gh >/dev/null; then
-  echo "GitHub CLI is required to verify merged pull requests." >&2
+  echo "ERROR: No gh: merge checks need it. Install it." >&2
   exit 2
 fi
 
@@ -71,7 +71,7 @@ canonical_path() (
 
 for index in "${!selected_paths[@]}"; do
   if ! selected_paths[index]="$(canonical_path "${selected_paths[index]}")"; then
-    echo "Worktree does not exist: ${selected_paths[$index]}" >&2
+    echo "ERROR: Bad worktree '${selected_paths[$index]}': missing. Fix --worktree." >&2
     exit 2
   fi
 done
@@ -100,7 +100,7 @@ merged_pr_reaches_ref() {
       gh api "repos/{owner}/{repo}/commits/$sha/pulls" \
         --jq '.[] | [.state, (.merge_commit_sha // "-")] | join("|")'
     )"; then
-      echo "Could not verify pull requests for commit $sha." >&2
+      echo "ERROR: PR lookup failed for '$sha': gh failed. Retry." >&2
       return 2
     fi
     while IFS='|' read -r state merge_sha; do

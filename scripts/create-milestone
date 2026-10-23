@@ -117,41 +117,41 @@ while (($#)); do
 done
 
 if [[ -z "$repo" || ! "$repo" =~ ^[^/[:space:]]+/[^/[:space:]]+$ ]]; then
-  echo "Provide --repo as owner/repo." >&2
+  echo "ERROR: Repository is missing: no --repo given. Provide --repo as owner/repo." >&2
   exit 2
 fi
 if [[ -z "$title" ]]; then
-  echo "Provide --title." >&2
+  echo "ERROR: Title is missing: no --title given. Provide --title." >&2
   exit 2
 fi
 if [[ ! "$due_on" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-  echo "Provide --due-on as a real date, YYYY-MM-DD -- it may not be empty." >&2
+  echo "ERROR: Due date is invalid: --due-on is empty or not a date. Provide --due-on as YYYY-MM-DD." >&2
   exit 2
 fi
 if [[ -z "$proposal_file" || ! -s "$proposal_file" ]]; then
-  echo "Provide --proposal-file pointing at a non-empty file." >&2
+  echo "ERROR: Proposal is missing: --proposal-file is absent or empty. Provide a non-empty --proposal-file." >&2
   exit 2
 fi
 if [[ "$issue_type" != "Feature" ]]; then
-  echo "--type must be Feature for a Milestone lifecycle Issue." >&2
+  echo "ERROR: Type is invalid: --type must be Feature for a Milestone lifecycle Issue. Use --type Feature." >&2
   exit 2
 fi
 if [[ -n "$description_file" && ! -f "$description_file" ]]; then
-  echo "--description-file does not exist: $description_file" >&2
+  echo "ERROR: Description is missing: --description-file does not exist: '$description_file'. Fix the path." >&2
   exit 2
 fi
 command -v gh >/dev/null || {
-  echo "GitHub CLI (gh) is required." >&2
+  echo "ERROR: GitHub CLI is missing: gh is not on PATH. Install it." >&2
   exit 1
 }
 command -v python3 >/dev/null || {
-  echo "python3 is required to run the preflight check." >&2
+  echo "ERROR: Python is missing: the preflight check needs python3. Install it." >&2
   exit 1
 }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "Creating Milestone in $repo (due $due_on)..." >&2
+echo "NOTICE: Creating Milestone in '$repo' (due $due_on)."
 milestone_number="$(
   gh api --method POST "repos/$repo/milestones" \
     --raw-field "title=$title" \
@@ -159,12 +159,12 @@ milestone_number="$(
     --jq '.number'
 )"
 if [[ -z "$milestone_number" ]]; then
-  echo "GitHub did not return a Milestone number; nothing else was created." >&2
+  echo "ERROR: Milestone creation failed: GitHub returned no Milestone number, and nothing else was created. Retry." >&2
   exit 1
 fi
-echo "Created Milestone #$milestone_number." >&2
+echo "OK: Created Milestone #$milestone_number."
 
-echo "Verifying due date..." >&2
+echo "NOTICE: Verifying the due date."
 # A second read here (rather than trusting the POST response above) is
 # deliberate: it proves preflight and any other later reader will see the
 # same durably-stored value this script just checked, not only what one
@@ -224,7 +224,7 @@ tracker_body="$(
     "$proposal"
 )"
 
-echo "Creating tracker Issue \"$tracker_title\"..." >&2
+echo "NOTICE: Creating tracker Issue '$tracker_title'."
 # Capture stderr too (not just the URL on stdout): on failure this lets us
 # tell a --milestone name-match problem (no match, or more than one
 # Milestone sharing "$title") apart from a problem with the Issue itself
@@ -265,9 +265,9 @@ EOF
 fi
 tracker_url="$(tail -n1 <<<"$tracker_cmd_output")"
 tracker_number="${tracker_url##*/}"
-echo "Created tracker $tracker_url." >&2
+echo "OK: Created tracker $tracker_url."
 
-echo "Verifying tracker Milestone attachment..." >&2
+echo "NOTICE: Verifying the tracker Milestone attachment."
 if ! attached_milestone_number="$(
   gh api "repos/$repo/issues/$tracker_number" --jq '.milestone.number // empty'
 )"; then
@@ -303,8 +303,7 @@ else
   extra_description="$(
     printf '## Acceptance criteria\n\n- [ ] TODO: describe acceptance criteria\n'
   )"
-  echo "No --description-file given: wrote a placeholder Acceptance criteria section." >&2
-  echo "Fill in Problem/Outcome/Plan/Out of scope/Verification/References by hand before closing (see docs/milestone-description.md)." >&2
+  echo "WARNING: Milestone description is a placeholder: no --description-file given. Fill in Problem, Outcome, Plan, Out of scope, Verification, and References before closing (see 'docs/milestone-description.md')." >&2
 fi
 milestone_description="$(
   printf 'Lifecycle Issue: #%s\n\n%s' "$tracker_number" "$extra_description"
@@ -312,7 +311,7 @@ milestone_description="$(
 gh api --method PATCH "repos/$repo/milestones/$milestone_number" \
   --raw-field "description=$milestone_description" >/dev/null
 
-echo "Running preflight validation..." >&2
+echo "NOTICE: Running preflight validation."
 if ! preflight_output="$(
   python3 "$script_dir/sync_milestone_state.py" preflight \
     --repo "$repo" --milestone "$milestone_number" 2>&1
@@ -330,4 +329,4 @@ EOF
 fi
 
 echo "$preflight_output"
-echo "Milestone #$milestone_number (due $due_on) is ready: $tracker_url"
+echo "OK: Milestone #$milestone_number (due $due_on) is ready: $tracker_url."
