@@ -146,8 +146,12 @@ ready／draft、授權或 metadata，必須先取得 remote lease，並透過 `s
 一般有獨立 reviewer 的 PR，不需要再留一則重複的授權留言。`scripts/pr_lifecycle.py`
 會把獨立 maintainer 對**目前 head SHA** 的最新有效 `APPROVED` review 直接視為合併授權；
 它以即時 `role_name` 確認 reviewer 為 `maintain`／`admin`（不讀 legacy `permission`，缺漏即
-`unknown` 並拒絕）、不是 PR 作者或執行 merge 的帳號，而且 review
-的 `commit_id` 正好等於目前 head。任何後續 push 都會產生新 SHA，使舊 approval 自然
+`unknown` 並拒絕）、不是 PR 作者，也不是被核准 head 的最後 push 者，而且 review
+的 `commit_id` 正好等於目前 head。最後 push 者取 head commit 的 GitHub committer，以及 head
+branch activity 中 `after` 等於該 head 的最新一筆 push 的 actor；讀不到（權限不足、找不到這筆
+push 或沒有 actor）時視為不獨立，任何 approval 都不算數（#1211）。執行 merge 的帳號不再被排除：
+維護者審完協作者的 PR 後可以用自己的身分合併；agent 以維護者帳號 push 過 head 時，該維護者的
+approval 仍不獨立。任何後續 push 都會產生新 SHA，使舊 approval 自然
 失效；`CHANGES_REQUESTED`、新的 Draft 事件、未解決的 blocking comment、未完成 checklist
 或 required check 仍會 fail closed。
 
@@ -1101,17 +1105,24 @@ fail closed（接入 publisher 由 #1074 負責）。本機證據的 `completed_
 | --- | --- | --- | --- |
 | A（hosted）、E1（local＋`beta-only`／`always`）、C（local＋`off`）的 Ruleset 完整讀回且相符 | `enforced` | allowed | `server_enforcement=ruleset`；合併者身分見下方 |
 | 沒有任何 `pull_request`／`required_status_checks` 規則（含 Free private 的「方案不支援」403，#1210），API 完整讀回恰好一個寫入者，而且就是合併者 | `single-writer` | allowed | `server_enforcement=none`；agent 以唯一維護者身分執行，不另建 write 帳號 |
-| 沒有 Ruleset，另有寫入者（collaborator、可寫 team 成員或可寫 deploy key） | `multiple-writers` | manual-only | 人工在 GitHub 合併，記為 `untraced`，`csarc-owned` 發版 fail closed |
+| 沒有 Ruleset，另有寫入者，且有對 exact head 的獨立 maintainer approval（#1211） | `independent-approval` | allowed | `server_enforcement=none`；寫入者讀回仍須完整、`mergeable_state` 仍須 `clean`；summary 加 `independent-approval-trace` |
+| 沒有 Ruleset，另有寫入者（collaborator、可寫 team 成員或可寫 deploy key），沒有獨立 approval | `multiple-writers` | manual-only | 人工在 GitHub 合併，記為 `untraced`，`csarc-owned` 發版 fail closed |
 | Ruleset 或寫入者讀取失敗（「方案不支援」403 以外的 403、404、5xx 或無法辨識的回應）、分頁不完整、team 成員不可見、缺 `role_name` 或未知角色 | `inconclusive`／`unknown` | manual-only | 同上；不猜測、不讀 legacy `permission` |
 | Ruleset 形狀不符、未生效、未驗證的 bypass，或沒有 Ruleset 時 `mergeable_state` 不是 `clean`（含 `unstable`） | `blocked` | blocked | 先修正條件，lifecycle 不合併 |
 
 合併者（執行 lifecycle 的身分）與授權者（留下 exact-head 授權或 approval 的人）分開判斷
-（#1058 決定 27）。有 Ruleset 的一般 agent route（獨立 maintainer approval 或 Copilot review 授權）要求合併者
-即時 `role_name` 恰為 `write`；`maintain`、`admin`、自訂角色或讀不到都改判 `blocked`，不合併。GitHub App
+（#1058 決定 27）。#1211 修訂其中的核准獨立性：approval 只排除 PR 作者與被核准 exact head 的最後
+push 者，不再排除合併者本人（見「Exact-head review 即為合併授權（#719）」）。有 Ruleset 的一般 agent route（獨立 maintainer approval 或 Copilot review 授權）要求合併者
+即時 `role_name` 恰為 `write`；唯一例外是合併者本人就是 exact head 的獨立 maintainer approver：此時即時
+`maintain`／`admin` 也允許，記為 `approver`（擁有者 2026-10-23，#1211）。其他 `maintain`、`admin`、自訂角色或
+讀不到都改判 `blocked`，不合併。GitHub App
 合併者（例如 `github-actions[bot]`）只有 installation 權限、沒有 repository role，記為 `app`。admin bypass 與
 emergency hotfix route 的合併者就是 live admin 授權者本人（#918／#1064），照常允許並記為
-`admin-authorizer`，表示這不是獨立 agent 身分路線；single-writer route 記為 `sole-maintainer`。`check` 輸出
-`merge_identity`，`merge-trace` 帶 `identity=<agent-write|app|admin-authorizer|sole-maintainer>`。
+`admin-authorizer`，表示這不是獨立 agent 身分路線；single-writer route 記為 `sole-maintainer`，
+independent-approval route 記為 `independent-approval`。`check` 輸出 `merge_identity`，`merge-trace` 帶
+`identity=<agent-write|approver|app|admin-authorizer|sole-maintainer|independent-approval>`；
+independent-approval route 另加一行 `independent-approval-trace: approver=<login> merger=<login>
+server_enforcement=none ...`，同時記錄核准者與合併者。
 
 寫入者讀回包含 `collaborators?affiliation=all`（每一列都要有 `role_name`；`read`／`triage` 不算寫入者，
 `write`／`maintain`／`admin` 算，其他值為 `inconclusive`）、每個 deploy key 的 `read_only`，organization
@@ -1130,8 +1141,8 @@ repository 另讀 repository teams：每個可寫 team 的成員都必須讀得�
 Free private（#1210）：GitHub Free 的 private repository 不能使用 Ruleset，`rules/branches/<branch>` 回
 `Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)`。lifecycle 只把
 這個完整回應判為「沒有 Ruleset」（`protection=none`），接著照常讀回寫入者：恰好一個寫入者且就是合併者
-時走 single-writer（`identity=sole-maintainer`），多個寫入者仍是 manual-only。判定看回應內容，不只看
-狀態碼；其他 403、404、5xx 或無法辨識的回應仍是 `unknown`，只能人工合併。
+時走 single-writer（`identity=sole-maintainer`）；多個寫入者時，有 exact head 的獨立核准才走
+`independent-approval`（#1211），否則 manual-only。判定看回應內容，不只看狀態碼；其他 403、404、5xx 或無法辨識的回應仍是 `unknown`，只能人工合併。
 
 **local Dependabot route**：local 模式沒有 hosted eligibility workflow。`--require-dependabot-head` 在 local
 模式改為重驗 GitHub 簽章的 Dependabot head（或 #1052 的 sync child），再從簽章 commit 的

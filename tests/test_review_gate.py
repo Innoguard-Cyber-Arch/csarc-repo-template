@@ -53,6 +53,22 @@ def approval(login: str, commit: str = HEAD) -> dict[str, Any]:
     }
 
 
+def push(
+    login: str,
+    after: str = HEAD,
+    at: str = "2026-09-18T01:30:00Z",
+    kind: str = "push",
+) -> dict[str, Any]:
+    """Return one branch activity fixture (#1211)."""
+    return {
+        "after": after,
+        "ref": "refs/heads/fix/42-lifecycle",
+        "timestamp": at,
+        "activity_type": kind,
+        "actor": {"login": login, "type": "User"},
+    }
+
+
 class FakeGitHub:
     """Serve one pull request, its reviews, and Copilot's comments."""
 
@@ -77,6 +93,9 @@ class FakeGitHub:
         self.role_name: str | None = None
         # Ruleset shape A/E1 by default; 1 approval models shape C.
         self.required_approvals: object = 0
+        # Issue #1211: who committed and last pushed the exact head.
+        self.head_committer: str | None = "agent"
+        self.head_pushes: list[dict[str, Any]] | None = [push("agent")]
 
     def get(self, repo: str, path: str) -> object:  # noqa: C901
         """Return one REST fixture."""
@@ -142,6 +161,25 @@ class FakeGitHub:
             }
         if path == "milestones/7":
             return {"number": 7, "title": "Delivery"}
+        if path == f"commits/{HEAD}":
+            return {
+                "sha": HEAD,
+                "committer": (
+                    {"login": self.head_committer}
+                    if self.head_committer is not None
+                    else None
+                ),
+            }
+        if path.startswith("activity?ref="):
+            if self.head_pushes is None:
+                raise RuntimeError("HTTP 403: Resource not accessible")
+            assert repo == self.head_repo
+            assert path == (
+                "activity?ref=refs%2Fheads%2F"
+                + self.head_ref.replace("/", "%2F")
+                + "&per_page=100"
+            )
+            return self.head_pushes
         match = re.fullmatch(r"collaborators/([^/]+)/permission", path)
         if match:
             response: dict[str, object] = {
@@ -1075,8 +1113,8 @@ def entry_point_outputs(
     level = review_gate.release_level.resolve_pull(
         github, "o/r", pull, review_gate.release_level.load_settings(path)
     )
-    # Merge reads the same inputs, adding only its own actor as an excluded
-    # approver and the lease's default branch.
+    # Merge reads the same inputs, adding its own actor (no longer an
+    # excluded approver, #1211) and the lease's default branch.
     merge = review_gate.decide(
         review_gate.review_inputs(
             github,
@@ -1234,3 +1272,132 @@ def test_evidence_binds_exact_head_and_invalidates_on_change(
     )
     assert not after_dismissal["passed"]
     assert after_dismissal["evidence"] is None
+
+
+def merge_decision(
+    github: FakeGitHub, merger: str, tmp_path: Path
+) -> dict[str, Any]:
+    """Return the merge-time decision with ``merger`` as the lease actor."""
+    pull = github.get("o/r", "pulls/7")
+    assert isinstance(pull, dict)
+    path = config(tmp_path, "copilot_review: off\nadmin_bypass: off\n")
+    level = review_gate.release_level.resolve_pull(
+        github, "o/r", pull, review_gate.release_level.load_settings(path)
+    )
+    return review_gate.decide(
+        review_gate.review_inputs(
+            github,
+            "o/r",
+            7,
+            pull,
+            review_gate.review_settings(path),
+            level,
+            actor=merger,
+            default_branch="main",
+        )
+    )
+
+
+def test_1211_reviewer_may_merge_a_collaborator_pull_request(
+    tmp_path: Path,
+) -> None:
+    """AC1/AC2: author collaborator, maintainer approves and merges."""
+    github = FakeGitHub([approval("maintainer")])
+    github.head_committer = "author"
+    github.head_pushes = [push("author")]
+    result = merge_decision(github, "maintainer", tmp_path)
+    assert result["passed"]
+    assert result["code"] == "maintainer-approval"
+    assert result["evidence"]["author"] == "maintainer"
+    assert result["evidence"]["commit_id"] == HEAD
+
+
+@pytest.mark.parametrize(
+    ("committer", "pushes"),
+    [
+        # The agent pushed the head under the maintainer's account.
+        ("author", [push("maintainer")]),
+        # The maintainer committed the head someone else pushed.
+        ("maintainer", [push("author")]),
+        # Only the newest push of the exact head names the last pusher.
+        (
+            "author",
+            [
+                push("author", at="2026-09-18T01:00:00Z"),
+                push(
+                    "Maintainer", at="2026-09-18T01:40:00Z", kind="force_push"
+                ),
+            ],
+        ),
+    ],
+)
+def test_1211_last_pusher_or_committer_cannot_approve(
+    tmp_path: Path, committer: str, pushes: list[dict[str, Any]]
+) -> None:
+    """AC1/AC2: the head's last pusher or committer is not independent."""
+    github = FakeGitHub([approval("maintainer")])
+    github.head_committer = committer
+    github.head_pushes = pushes
+    for merger in ("maintainer", "other"):
+        result = merge_decision(github, merger, tmp_path)
+        assert not result["passed"]
+        assert result["code"] == "approval-required"
+
+
+def test_1211_author_still_cannot_approve(tmp_path: Path) -> None:
+    """AC1: the pull request author never approves its own work."""
+    github = FakeGitHub([approval("author")])
+    github.head_committer = "author"
+    github.head_pushes = [push("author")]
+    assert not merge_decision(github, "maintainer", tmp_path)["passed"]
+
+
+def test_1211_head_change_after_approval_needs_reapproval(
+    tmp_path: Path,
+) -> None:
+    """AC1/AC2: an approval of an earlier head never covers a new push."""
+    github = FakeGitHub([approval("maintainer", commit="c" * 40)])
+    github.head_committer = "author"
+    github.head_pushes = [push("author", after="c" * 40), push("author")]
+    result = merge_decision(github, "maintainer", tmp_path)
+    assert not result["passed"]
+    assert result["evidence"] is None
+
+
+@pytest.mark.parametrize(
+    ("pushes", "head_repo", "reason"),
+    [
+        (None, "o/r", "could not be read"),
+        ([], "o/r", "no push of the exact head"),
+        ([push("author", after="c" * 40)], "o/r", "no push of the exact head"),
+        ([push("author", kind="branch_deletion")], "o/r", "no push"),
+        ([{**push("author"), "actor": None}], "o/r", "has no actor"),
+        ([push("author")], None, "head repository or branch is unknown"),
+    ],
+)
+def test_1211_unknown_last_pusher_fails_closed(
+    tmp_path: Path,
+    pushes: list[dict[str, Any]] | None,
+    head_repo: str | None,
+    reason: str,
+) -> None:
+    """AC1: an undeterminable last pusher makes the approval non-independent."""
+    github = FakeGitHub([approval("maintainer")])
+    github.head_committer = "author"
+    github.head_pushes = pushes
+    github.head_repo = head_repo
+    result = merge_decision(github, "maintainer", tmp_path)
+    assert not result["passed"]
+    assert result["code"] == "approval-required"
+    assert reason in result["reason"]
+
+
+def test_1211_pusher_is_read_only_when_an_approval_could_count(
+    tmp_path: Path,
+) -> None:
+    """No approval candidate means no extra pusher API reads."""
+    github = FakeGitHub([])
+    github.head_pushes = None
+    result = merge_decision(github, "maintainer", tmp_path)
+    assert result["code"] == "approval-required"
+    assert "independence is unknown" not in result["reason"]

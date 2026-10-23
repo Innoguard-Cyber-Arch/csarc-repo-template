@@ -233,6 +233,9 @@ class FakeGitHub:
             "bypass_actors": [],
         }
         self.mergeable_state = "clean"
+        # Issue #1211: the head's GitHub committer and last pusher.
+        self.head_committer = "agent"
+        self.head_pusher = "agent"
 
     def viewer(self, explicit_actor: str = "") -> str:
         """Return the task's authenticated actor."""
@@ -280,6 +283,20 @@ class FakeGitHub:
             return self.commit_payloads[path]
         if path == "":
             return {"default_branch": self.default_branch}
+        if path == f"commits/{self.head}":
+            return {
+                "sha": self.head,
+                "committer": {"login": self.head_committer},
+            }
+        if path.startswith("activity?ref="):
+            return [
+                {
+                    "after": self.head,
+                    "timestamp": "2026-08-25T01:00:10Z",
+                    "activity_type": "push",
+                    "actor": {"login": self.head_pusher, "type": "User"},
+                }
+            ]
         pull_match = re.fullmatch(r"pulls/([1-9][0-9]*)", path)
         if pull_match:
             pull = self.pull()
@@ -3805,7 +3822,7 @@ def test_commented_review_does_not_clear_requested_changes(
 def test_executing_actor_cannot_approve_its_own_merge(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A shared execution identity cannot also supply independent review."""
+    """An executing identity that pushed the head cannot approve it (#1211)."""
     bind_remote_lease(monkeypatch)
     github = FakeGitHub("a" * 40)
     github.reviews = [
@@ -3822,6 +3839,34 @@ def test_executing_actor_cannot_approve_its_own_merge(
     ]
     with pytest.raises(RuntimeError, match="exact head"):
         merge_snapshot(github, lease_fixture())
+
+
+def test_1211_approver_may_be_the_merge_actor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #1211: the merger is no longer an excluded approver.
+
+    A collaborator wrote and pushed the head; the maintainer who approved
+    it runs the lifecycle. The shared review decision accepts the approval
+    and the snapshot keeps both identities for the merge trace.
+    """
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.authenticated_actor = "reviewer"
+    github.actor_role = "maintain"
+    github.head_committer = "collaborator"
+    github.head_pusher = "collaborator"
+    lease = {**lease_fixture(), "actor": "reviewer"}
+    snapshot = merge_snapshot(github, lease)
+    assert snapshot["review_decision"]["passed"]
+    assert snapshot["authorization_source"] == "review"
+    assert snapshot["authorization_actor"] == "reviewer"
+    # AC5: the Ruleset route accepts the maintain/admin approver as merger.
+    assert snapshot["merge_identity"] == "approver"
+    assert snapshot["merge_mode"] == "agent"
+    github.head_pusher = "reviewer"
+    with pytest.raises(RuntimeError, match="exact head"):
+        merge_snapshot(github, lease)
 
 
 def test_new_head_invalidates_an_earlier_approval(

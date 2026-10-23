@@ -263,6 +263,59 @@ def _admin_bypass_state(
     return ("valid", "") if opted_in else ("absent", "")
 
 
+def head_pushers(
+    github: GitHubReader, repo: str, pull: dict[str, Any]
+) -> tuple[set[str], str]:
+    """Return the accounts that last pushed or committed the exact head.
+
+    Issue #1211 (revising #1058 decision 27): an approval is independent
+    unless its reviewer authored the pull request or last pushed the
+    approved head. The merge actor is no longer excluded; an agent that
+    pushes under a maintainer's account still makes that maintainer's
+    approval non-independent. The head commit's GitHub committer and the
+    actor of the newest branch activity whose ``after`` is the head are
+    excluded. When no such push is readable the pusher is unknown and the
+    second element names why: no approval counts as independent then.
+    """
+    head = pull.get("head") or {}
+    sha = str(head.get("sha") or "")
+    ref = str(head.get("ref") or "")
+    head_repo = str((head.get("repo") or {}).get("full_name") or "")
+    if not sha or not ref or not head_repo:
+        return set(), "the pull request head repository or branch is unknown"
+    branch = urllib.parse.quote(f"refs/heads/{ref}", safe="")
+    try:
+        commit = github.get(repo, f"commits/{sha}")
+        activity = github.get(head_repo, f"activity?ref={branch}&per_page=100")
+    except RuntimeError as error:
+        return set(), f"the head pusher could not be read: {error}"
+    pushers: set[str] = set()
+    committer = commit.get("committer") if isinstance(commit, dict) else None
+    if isinstance(committer, dict) and isinstance(committer.get("login"), str):
+        pushers.add(committer["login"].casefold())
+    pushes = [
+        item
+        for item in (activity if isinstance(activity, list) else [])
+        if isinstance(item, dict)
+        and item.get("after") == sha
+        and item.get("activity_type") != "branch_deletion"
+        and isinstance(item.get("timestamp"), str)
+    ]
+    if not pushes:
+        return set(), "no push of the exact head was found on its branch"
+    lifecycle = _lifecycle()
+    newest = max(
+        pushes,
+        key=lambda item: lifecycle.parse_time(item["timestamp"], "Push"),
+    )
+    actor = newest.get("actor")
+    login = actor.get("login") if isinstance(actor, dict) else None
+    if not isinstance(login, str) or not login:
+        return set(), "the last push of the exact head has no actor"
+    pushers.add(login.casefold())
+    return pushers, ""
+
+
 def review_inputs(
     github: GitHubReader,
     repo: str,
@@ -275,11 +328,26 @@ def review_inputs(
     default_branch: str | None = None,
     admin_bypass: str | None = None,
 ) -> dict[str, Any]:
-    """Read every live input of `decide`; merge adds its actor and route."""
+    """Read every live input of `decide`; merge adds its actor and route.
+
+    The merge ``actor`` no longer limits who may approve (#1211): only the
+    pull request author and the head's last pusher are excluded.
+    """
     lifecycle = _lifecycle()
     head_sha = str((pull.get("head") or {}).get("sha") or "")
     author = str((pull.get("user") or {}).get("login") or "").casefold()
     reviews = github.pages(repo, f"pulls/{pr_number}/reviews?per_page=100")
+    states = lifecycle.current_reviews(reviews)
+    pushers: set[str] = set()
+    unknown_pusher = ""
+    if any(
+        login != author
+        and review.get("state") == "APPROVED"
+        and review.get("commit_id") == head_sha
+        for login, review in states.items()
+    ):
+        # Read the pusher only when an approval could count.
+        pushers, unknown_pusher = head_pushers(github, repo, pull)
     labels = {
         str(label.get("name") or "").casefold()
         for label in pull.get("labels", [])
@@ -293,13 +361,16 @@ def review_inputs(
         "mode": mode,
         "release_level": level.level,
         "required_review": level.review,
-        "approval": lifecycle.exact_head_approval(
+        "approval": None
+        if unknown_pusher
+        else lifecycle.exact_head_approval(
             github,
             repo,
-            lifecycle.current_reviews(reviews),
+            states,
             head_sha,
-            {author, actor.casefold()} - {""},
+            ({author} | pushers) - {""},
         ),
+        "approval_independence": unknown_pusher,
         "admin_bypass": "absent",
         "admin_bypass_reason": "",
         "admin_authorization": None,
@@ -477,6 +548,12 @@ def decide(inputs: dict[str, Any]) -> dict[str, Any]:  # noqa: C901
         "an independent maintainer approval, or use the configured audited "
         "admin-bypass path when it applies"
     )
+    if inputs.get("approval_independence"):
+        # #1211: an unknown last pusher makes every approval non-independent.
+        required += (
+            "; an approval does not count while its independence is "
+            "unknown: " + inputs["approval_independence"]
+        )
     if copilot_code:
         return done("failure", copilot_code, f"{verdict.reason}. {required}")
     return done("pending", "approval-required", required)
