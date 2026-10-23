@@ -2617,7 +2617,7 @@ def base_policy_decision(
             )
         try:
             candidate, schema_source = executor.read_candidate_config(
-                candidate_config, labels, executor.saved_release_tag(provenance)
+                candidate_config, labels, provenance
             )
             decision = executor.classify_route(
                 [

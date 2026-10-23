@@ -1,11 +1,13 @@
-"""New settings from a template upgrade use the released schema (#1239).
+"""New settings from a template upgrade get a release inventory (#1239).
 
 The trusted base reads a candidate configuration with its own schema. When
-a template upgrade adds a setting the base does not know, the candidate is
-judged by the schema of the immutable stable release its `_commit` names,
-read from that release commit through the GitHub API, only on the
-governance-switch route. Every other case fails closed. Each contract runs
-against the root and the template copy of the shared executor.
+a template upgrade adds a setting the base does not know, the base builds a
+read-only inventory of those settings against the schema tables of the
+immutable stable release `_commit` names, parsed with `ast` from that
+release commit and never executed, only on the governance-switch route
+(docs/adr/dry-run-inventory-before-action.md). Anything unexpected fails
+closed and prints the inventory. Each contract runs against the root and
+the template copy of the shared executor.
 """
 
 from __future__ import annotations
@@ -38,13 +40,16 @@ SCHEMA_PATH = "template/.csarc/scripts/csarc_config.py"
 CURRENT_SCHEMA = (REPO_ROOT / "scripts" / "csarc_config.py").read_text(
     encoding="utf-8"
 )
-# The released reader knows one setting the trusted base does not.
-NEWER_SCHEMA = CURRENT_SCHEMA + (
-    '\nINTENT_SETTINGS["future_flag"] = (KIND_BOOL, ())\n'
-    'OPTIONAL_DEFAULTS["future_flag"] = False\n'
-    'ALLOWED_KEYS = ALLOWED_KEYS | {"future_flag"}\n'
+ANCHOR = '    "single_writer_merger": (KIND_TEXT, ()),\n'
+# The released reader declares one setting the trusted base does not.
+NEWER_SCHEMA = CURRENT_SCHEMA.replace(
+    ANCHOR, ANCHOR + '    "future_flag": (KIND_BOOL, ()),\n', 1
 )
 LABELS = {"governance-switch"}
+NEXT_STEPS = (
+    "Add the governance-switch label, confirm the upgrade targets a "
+    "published stable CSARC release, or merge by hand."
+)
 
 
 def endpoints(
@@ -89,21 +94,28 @@ def executor_fixture(request: pytest.FixtureRequest) -> dict[str, Any]:
     return runpy.run_path(str(COPIES[request.param]))
 
 
-def upgraded(path: Path, **overrides: object) -> Path:
+def upgraded(path: Path, value: object = True, **overrides: object) -> Path:
     """Write a candidate that an upgrade gave one new setting."""
     return write_config(
         path,
-        f"_commit: {COMMIT}\n" + config_text(future_flag=True, **overrides),
+        f"_commit: {COMMIT}\n" + config_text(future_flag=value, **overrides),
     )
 
 
-def test_release_schema_reads_new_settings(
+def saved(tmp_path: Path, tag: object = TAG) -> Path:
+    """Write the candidate provenance that names one release tag."""
+    path = tmp_path / "provenance.json"
+    path.write_text(json.dumps({"release_tag": tag}), encoding="utf-8")
+    return path
+
+
+def test_release_inventory_reads_new_settings(
     executor: dict[str, Any], tmp_path: Path
 ) -> None:
     """AC1/AC3: label + stable immutable release judge the new setting."""
     path = upgraded(tmp_path / "candidate.yml")
     config, source = executor["read_candidate_config"](
-        path, LABELS, TAG, api_from(endpoints())
+        path, LABELS, saved(tmp_path), api_from(endpoints())
     )
     assert config["future_flag"] is True
     assert source == f"release:{TAG}"
@@ -113,21 +125,64 @@ def test_release_schema_reads_new_settings(
 
 
 @pytest.mark.parametrize(
-    ("labels", "tag", "payloads", "why"),
+    ("labels", "tag", "payloads", "why", "item"),
     [
-        (set(), TAG, endpoints(), "the PR has no governance-switch label"),
-        (LABELS, TAG, endpoints(prerelease=True), "not a published immutable"),
-        (LABELS, TAG, endpoints(draft=True), "not a published immutable"),
-        (LABELS, TAG, endpoints(immutable=False), "not a published immutable"),
-        (LABELS, TAG, {}, "GitHub cannot read"),
-        (LABELS, "v9.1.0-beta.1", endpoints(), "not a stable CSARC release"),
-        (LABELS, None, endpoints(), "not a stable CSARC release"),
-        (LABELS, TAG, endpoints(commit="c" * 40), "does not point to _commit"),
+        (
+            set(),
+            TAG,
+            endpoints(),
+            "the PR has no governance-switch label",
+            "future_flag not checked",
+        ),
+        (
+            LABELS,
+            TAG,
+            endpoints(prerelease=True),
+            "not a published immutable",
+            "future_flag not checked",
+        ),
+        (
+            LABELS,
+            TAG,
+            endpoints(draft=True),
+            "not a published immutable",
+            "future_flag not checked",
+        ),
+        (
+            LABELS,
+            TAG,
+            endpoints(immutable=False),
+            "not a published immutable",
+            "future_flag not checked",
+        ),
+        (LABELS, TAG, {}, "GitHub cannot read", "future_flag not checked"),
+        (
+            LABELS,
+            "v9.1.0-beta.1",
+            endpoints(),
+            "not a stable CSARC release",
+            "future_flag not checked",
+        ),
+        (
+            LABELS,
+            None,
+            endpoints(),
+            "not a stable CSARC release",
+            "future_flag not checked",
+        ),
+        (
+            LABELS,
+            TAG,
+            endpoints(commit="c" * 40),
+            "does not point to _commit",
+            "future_flag not checked",
+        ),
         (
             LABELS,
             TAG,
             endpoints(CURRENT_SCHEMA),
-            "unknown or retired settings future_flag",
+            "the inventory has unexpected items",
+            f"future_flag unknown to {TAG}",
         ),
     ],
 )
@@ -138,17 +193,51 @@ def test_unverifiable_new_settings_fail_closed(
     tag: object,
     payloads: dict[str, object],
     why: str,
+    item: str,
 ) -> None:
     """AC2/AC3: a missing label or unverifiable release stays closed."""
     path = upgraded(tmp_path / "candidate.yml")
     with pytest.raises(ValueError, match="come from a newer CSARC") as error:
-        executor["read_candidate_config"](path, labels, tag, api_from(payloads))
+        executor["read_candidate_config"](
+            path, labels, saved(tmp_path, tag), api_from(payloads)
+        )
     message = str(error.value)
     assert why in message
-    assert message.endswith(
-        "Add the governance-switch label, confirm the upgrade targets a "
-        "published stable CSARC release, or merge by hand."
+    assert f"Inventory: {item}. " in message
+    assert message.endswith(NEXT_STEPS)
+
+
+def test_wrong_value_shape_prints_the_inventory(
+    executor: dict[str, Any], tmp_path: Path
+) -> None:
+    """A value that does not match the released kind stops with the list."""
+    path = upgraded(tmp_path / "candidate.yml", value="yes")
+    with pytest.raises(ValueError) as error:
+        executor["read_candidate_config"](
+            path, LABELS, saved(tmp_path), api_from(endpoints())
+        )
+    assert (
+        f"Inventory: future_flag bool from {TAG}, value does not match. "
+        in str(error.value)
     )
+
+
+def test_release_schema_code_is_never_executed(
+    executor: dict[str, Any], tmp_path: Path
+) -> None:
+    """The release reader is parsed with `ast`; its code never runs."""
+    marker = tmp_path / "executed"
+    hostile = (
+        f"open({str(marker)!r}, 'w').write('ran')\n"
+        "raise SystemExit('ran')\n" + NEWER_SCHEMA
+    )
+    path = upgraded(tmp_path / "candidate.yml")
+    config, source = executor["read_candidate_config"](
+        path, LABELS, saved(tmp_path), api_from(endpoints(hostile))
+    )
+    assert (config["future_flag"], source) == (True, f"release:{TAG}")
+    assert not marker.exists()
+    assert "exec(" not in COPIES["root"].read_text(encoding="utf-8")
 
 
 def test_existing_settings_never_ask_github(
@@ -162,7 +251,9 @@ def test_existing_settings_never_ask_github(
     assert (source, config["admin_bypass"]) == ("base", "off")
     invalid = write_config(tmp_path / "bad.yml", config_text(admin_bypass="x"))
     with pytest.raises(ValueError, match="admin_bypass is 'x'"):
-        executor["read_candidate_config"](invalid, LABELS, TAG, api_from({}))
+        executor["read_candidate_config"](
+            invalid, LABELS, saved(tmp_path), api_from({})
+        )
 
 
 def stub_gh(tmp_path: Path, payloads: dict[str, object]) -> dict[str, str]:
@@ -227,6 +318,7 @@ def test_hosted_route_reads_the_release_schema(
         "ERROR: Trusted base cannot read the configuration: settings "
         "future_flag come from a newer CSARC template release"
     )
+    assert "Inventory: future_flag not checked." in refused.stderr
 
 
 @pytest.mark.parametrize("layout", ["root", "template"])

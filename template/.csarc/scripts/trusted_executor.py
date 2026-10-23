@@ -37,6 +37,7 @@ with that copy, and candidate code never runs in the step that holds a token.
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
 import contextlib
 import hashlib
@@ -49,8 +50,7 @@ import stat
 import subprocess
 import sys
 import tempfile
-import types
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -414,88 +414,117 @@ def read_config(path: Path) -> dict[str, object]:
 
 # Issue #1239: a template upgrade can add settings this base cannot read.
 RELEASES = "repos/Innoguard-Cyber-Arch/csarc-repo-template"
-RELEASE_SCHEMA = "template/.csarc/scripts/csarc_config.py"
 
 
-def gh_api(endpoint: str) -> dict[str, Any]:
-    """Read one GitHub REST object, failing closed."""
-    result = subprocess.run(  # noqa: S603 - fixed gh arguments
-        ["gh", "api", endpoint],  # noqa: S607
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    with contextlib.suppress(ValueError):
-        if not result.returncode and isinstance(
-            payload := json.loads(result.stdout), dict
-        ):
-            return payload
-    raise RuntimeError(f"GitHub cannot read {endpoint}")
+def gh_api(endpoint: str) -> Any:  # noqa: ANN401
+    """Read one GitHub REST object; any failure raises."""
+    command = ["gh", "api", endpoint]
+    result = subprocess.run(command, capture_output=True, check=True)  # noqa: S603
+    return json.loads(result.stdout)
 
 
-def saved_release_tag(path: Path | None) -> object:
-    """Return the release tag the candidate's provenance names, if any."""
-    with contextlib.suppress(OSError, ValueError, AttributeError):
-        return json.loads(path.read_text("utf-8") if path else "{}").get(
-            "release_tag"
-        )
-    return None
+class _Names(ast.NodeTransformer):
+    """Inline string constants such as `KIND_TEXT`."""
+
+    def __init__(self, names: dict[str, Any]) -> None:
+        self.names = names
+
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        value = self.names.get(node.id)
+        return ast.Constant(value) if isinstance(value, str) else node
 
 
-def release_schema(
-    tag: object, commit: object, api: Callable[[str], Any]
-) -> types.ModuleType:
-    """Load the settings reader of one immutable stable CSARC release."""
+def release_settings(tag: object, commit: object, api: Any) -> dict[str, Any]:  # noqa: ANN401
+    """Read one immutable stable release's settings tables with `ast`."""
     if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", str(tag)):
         raise RuntimeError(f"{tag!r} is not a stable CSARC release tag")
     release = api(f"{RELEASES}/releases/tags/{tag}")
-    if [release.get(key) for key in ("tag_name", "draft", "prerelease")] != [
+    if (release["tag_name"], release["draft"], release["prerelease"]) != (
         tag,
         False,
         False,
-    ] or not (release.get("published_at") and release.get("immutable")):
+    ) or not (release.get("published_at") and release.get("immutable")):
         raise RuntimeError(f"{tag} is not a published immutable stable release")
     target = api(f"{RELEASES}/git/ref/tags/{tag}")["object"]
-    while target.get("type") == "tag":
+    while target["type"] == "tag":
         target = api(f"{RELEASES}/git/tags/{target['sha']}")["object"]
-    if SHA.fullmatch(str(commit)) is None or target.get("sha") != commit:
+    if SHA.fullmatch(str(commit)) is None or target["sha"] != commit:
         raise RuntimeError(f"{tag} does not point to _commit {commit}")
-    source = api(f"{RELEASES}/contents/{RELEASE_SCHEMA}?ref={commit}")
-    module = types.ModuleType("csarc_release_config")
-    # The code comes from the immutable stable release, never the PR.
-    exec(base64.b64decode(source["content"]), vars(module))  # noqa: S102
-    if module.SCHEMA_VERSION != CURRENT_SCHEMA:
+    path = "template/.csarc/scripts/csarc_config.py"
+    source = api(f"{RELEASES}/contents/{path}?ref={commit}")["content"]
+    names: dict[str, Any] = {}
+    for node in ast.parse(base64.b64decode(source)).body:
+        target = (
+            getattr(node, "target", None) or getattr(node, "targets", [0])[0]
+        )
+        with contextlib.suppress(AttributeError, ValueError, TypeError):
+            value = _Names(names).visit(node.value)  # ty: ignore[unresolved-attribute]
+            names[target.id] = ast.literal_eval(value)
+    if names.get("SCHEMA_VERSION") != CURRENT_SCHEMA:
         raise RuntimeError(f"{tag} writes another schema")
-    return module
+    return {**names["INTENT_SETTINGS"], **names.get("DECISION_SETTINGS", {})}
 
 
 def read_candidate_config(
     path: Path,
     labels: set[str],
-    tag: object = None,
-    api: Callable[[str], Any] = gh_api,
+    provenance: Path | None = None,
+    api: Any = gh_api,  # noqa: ANN401
 ) -> tuple[dict[str, object], str]:
-    """Read the candidate settings and name the schema that judged them."""
+    """Read the candidate settings and name the schema that judged them.
+
+    Unknown settings get a read-only inventory against the release `_commit`
+    names; anything unexpected stops (dry-run inventory before action).
+    """
     try:
         return read_config(path), "base"
     except csarc_config.SettingsError:
         values = csarc_config.parse_settings_text(path.read_text("utf-8"), path)
-        new = ", ".join(sorted(set(values) - csarc_config.ALLOWED_KEYS))
+        new = sorted(set(values) - csarc_config.ALLOWED_KEYS)
         if not new:
             raise
+    known: dict[str, Any] = {}
+    tag, why = None, f"the PR has no {GOVERNANCE_SWITCH_LABEL} label"
     try:
-        if GOVERNANCE_SWITCH_LABEL not in labels:
-            raise RuntimeError(f"the PR has no {GOVERNANCE_SWITCH_LABEL} label")
-        module = release_schema(tag, values.get("_commit"), api)
-        return module.load_config(path), f"release:{tag}"
+        if GOVERNANCE_SWITCH_LABEL in labels:
+            why = "the inventory has unexpected items"
+            saved = provenance.read_text("utf-8") if provenance else "{}"
+            tag = json.loads(saved).get("release_tag")
+            known = release_settings(tag, values.get("_commit"), api)
     except Exception as error:  # every failure stays closed
-        raise ValueError(
-            f"settings {new} come from a newer CSARC template release than "
-            f"this base reads, and the release schema cannot verify them: "
-            f"{error}. Add the {GOVERNANCE_SWITCH_LABEL} label, confirm the "
-            "upgrade targets a published stable CSARC release, or merge by "
-            "hand."
-        ) from error
+        why = str(error) or type(error).__name__
+    items = []
+    for key in new:
+        spec, value = known.get(key), values[key]
+        ok = isinstance(spec, tuple) and len(spec) == 2
+        kind, allowed = spec if ok else (None, ())
+        matches = {
+            "bool": type(value) is bool,
+            "int": type(value) is int,
+            "text": type(value) is str,
+            "choice": value in allowed,
+            "multi": type(value) is list and set(value) <= set(allowed),
+        }.get(str(kind))
+        items.append(
+            f"{key} not checked"
+            if not known
+            else f"{key} unknown to {tag}"
+            if matches is None
+            else f"{key} {kind} from {tag}, value "
+            + ("matches" if matches else "does not match")
+        )
+    if known and all(item.endswith(" matches") for item in items):
+        csarc_config.validate_config(
+            {key: values[key] for key in values if key not in new}, path
+        )
+        return values, f"release:{tag}"
+    raise ValueError(
+        f"settings {', '.join(new)} come from a newer CSARC template release "
+        f"than this base reads, and the release schema cannot verify them: "
+        f"{why}. Inventory: {'; '.join(items)}. Add the "
+        f"{GOVERNANCE_SWITCH_LABEL} label, confirm the upgrade targets a "
+        "published stable CSARC release, or merge by hand."
+    )
 
 
 def governance_relaxations(  # noqa: C901
@@ -785,9 +814,7 @@ def _route_command(args: argparse.Namespace) -> int:
     try:
         base = read_config(args.base_config)
         candidate, source = read_candidate_config(
-            args.candidate_config,
-            labels,
-            saved_release_tag(args.candidate_provenance),
+            args.candidate_config, labels, args.candidate_provenance
         )
     except (OSError, ValueError) as error:
         sys.stderr.write(

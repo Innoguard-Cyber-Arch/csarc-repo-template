@@ -61,6 +61,7 @@
 - [`milestone-scope-and-closure-reconciliation.md`](adr/milestone-scope-and-closure-reconciliation.md)
 - [`simplified-project-configuration.md`](adr/simplified-project-configuration.md)
 - [`transactional-repository-adoption.md`](adr/transactional-repository-adoption.md)
+- [`dry-run-inventory-before-action.md`](adr/dry-run-inventory-before-action.md)
 
 2026-08-24 的完整 GitHub 盤點、2026-08-25 的 work-item metadata normalization 與每條決策線對照，見 [`history-audit-2026-08.md`](history-audit-2026-08.md)。
 
