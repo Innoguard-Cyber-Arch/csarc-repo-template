@@ -188,3 +188,28 @@ def test_checker_messages_follow_the_patterns() -> None:
     """The checker's own messages conform in full mode."""
     result = run(ROOT, "--all", "scripts/check-message-style")
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("entry", "call"),
+    [
+        ("scripts/verify-fast", "./scripts/check-message-style --base"),
+        (
+            "scripts/verify-stage-repository-contracts",
+            "./scripts/check-message-style",
+        ),
+        (
+            "template/.csarc/scripts/verify-fast.jinja",
+            "./.csarc/scripts/check-message-style --base",
+        ),
+        (
+            "template/.csarc/scripts/verify.jinja",
+            "./.csarc/scripts/check-message-style",
+        ),
+    ],
+)
+def test_verification_entry_points_run_the_check(entry: str, call: str) -> None:
+    """Fast and full verification run the check in root and generated repos."""
+    text = (ROOT / entry).read_text(encoding="utf-8")
+    assert 'verification_step "Message pattern check"' in text
+    assert call in text

@@ -246,6 +246,23 @@ def test_tampered_candidate_gate_cannot_decide_the_result(
     assert "[verify-template] START Repository contracts" in trusted.stdout
     assert "check-update-conflicts subject=unset" in log
     assert "scan-secrets subject=unset" in log
+    assert "check-message-style subject=unset" in log
+
+
+def test_failing_message_pattern_check_fails_the_fast_gate(
+    tmp_path: Path, executor: Path
+) -> None:
+    """A nonconforming changed message fails the required verify (#1219)."""
+    candidate = candidate_repository(
+        tmp_path, tamper_gate=False, failing_check="check-message-style"
+    )
+
+    result, log = run_entry(
+        executor / "scripts" / "verify-fast", candidate, tmp_path
+    )
+
+    assert result.returncode != 0
+    assert "check-message-style subject=unset" in log
 
 
 def test_tampered_candidate_stage_cannot_skip_its_checks(

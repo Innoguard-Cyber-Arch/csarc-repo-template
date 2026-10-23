@@ -23,7 +23,7 @@
 1. 正式採用英文寫作指引 `docs/writing-guide.en.md`。規則以模板自有文字撰寫，只註明參考 ASD-STE100 Issue 9；不收錄 STE 規則原文或詞典，不宣稱 STE 合規。專案術語以 `site/data/glossary.toml` 與現行規格為準。
 2. 採用中文寫作指引 `docs/writing-guide.md`。它整合 speak-human-tw v1.4.0（commit `72279f8`）的規則重點，保留 MIT 授權聲明（Copyright (c) 2026 Raymond Hou）並註明版本；完整規則以連結指向原專案。標點以教育部《重訂標點符號手冊》為準。下游可以自行使用該 skill 校稿，模板不安裝、也不依賴它。
 3. 模板替下游決定寫作風格：模板擁有的文字一律遵守；指引經 root `AGENTS.md` 與生成專案的 `AGENTS.md` 以連結交給 agent，不重抄規則；下游既有的內容層文件只收到檢查提示，不會被自動改寫。
-4. 腳本訊息採用固定句型（error、warning、notice、success 各一種），例外只限英文指引列出的條件，並在原始碼中逐筆記錄理由。訊息檢查腳本與 CI gate 由後續 Issue 實作。
+4. 腳本訊息採用固定句型（error、warning、notice、success 各一種），例外只限英文指引列出的條件，並在原始碼中逐筆記錄理由。`scripts/check-message-style`（生成專案為 `.csarc/scripts/check-message-style`）在 fast 與 full verify 檢查相對 base 新增或修改的訊息行，`--all` 供全量盤點（#1219）。
 5. 不安裝第三方工具或社群 skill，包括 Vale、LanguageTool 與商業 STE 檢查器。
 6. 指引屬於文件模板層。生成專案在 `.csarc/docs/` 收到英文指引；文件語言含繁體中文時另外收到中文指引。中文指引與 root 版本逐位元組相同，由 `scripts/sync-paired-files.sh --check` 驗證；英文指引只在術語來源與相關連結上不同，由 `tests/test_writing_guides.py` 驗證。
 
