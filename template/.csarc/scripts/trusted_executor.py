@@ -37,6 +37,8 @@ with that copy, and candidate code never runs in the step that holds a token.
 from __future__ import annotations
 
 import argparse
+import ast
+import base64
 import contextlib
 import hashlib
 import importlib
@@ -51,6 +53,7 @@ import tempfile
 from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -420,6 +423,137 @@ def read_config(path: Path) -> dict[str, object]:
     return csarc_config.load_config(path)
 
 
+# Issue #1239: a template upgrade can add settings this base cannot read.
+RELEASES = "repos/Innoguard-Cyber-Arch/csarc-repo-template"
+
+
+def gh_api(endpoint: str) -> Any:  # noqa: ANN401
+    """Read one GitHub REST object; any failure raises."""
+    command = ["gh", "api", endpoint]
+    result = subprocess.run(command, capture_output=True, check=True)  # noqa: S603
+    return json.loads(result.stdout)
+
+
+class _Names(ast.NodeTransformer):
+    """Inline string constants such as `KIND_TEXT`."""
+
+    def __init__(self, names: dict[str, Any]) -> None:
+        self.names = names
+
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        value = self.names.get(node.id)
+        return ast.Constant(value) if isinstance(value, str) else node
+
+
+def release_settings(tag: object, commit: object, api: Any) -> dict[str, Any]:  # noqa: ANN401
+    """Read one immutable stable release's settings tables with `ast`."""
+    if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", str(tag)):
+        raise RuntimeError(
+            f"Release tag is invalid: {tag!r} is not a stable CSARC release "
+            "tag. Upgrade from a published vX.Y.Z release."
+        )
+    release = api(f"{RELEASES}/releases/tags/{tag}")
+    if (release["tag_name"], release["draft"], release["prerelease"]) != (
+        tag,
+        False,
+        False,
+    ) or not (release.get("published_at") and release.get("immutable")):
+        raise RuntimeError(
+            f"Release {tag} is unusable: it is not a published immutable "
+            "stable release. Upgrade from a published stable release."
+        )
+    target = api(f"{RELEASES}/git/ref/tags/{tag}")["object"]
+    while target["type"] == "tag":
+        target = api(f"{RELEASES}/git/tags/{target['sha']}")["object"]
+    if SHA.fullmatch(str(commit)) is None or target["sha"] != commit:
+        raise RuntimeError(
+            f"Release {tag} does not match the settings: the tag does not "
+            f"point to _commit {commit}. Rerun the upgrade from that release."
+        )
+    path = "template/.csarc/scripts/csarc_config.py"
+    source = api(f"{RELEASES}/contents/{path}?ref={commit}")["content"]
+    names: dict[str, Any] = {}
+    for node in ast.parse(base64.b64decode(source)).body:
+        target = (
+            getattr(node, "target", None) or getattr(node, "targets", [0])[0]
+        )
+        with contextlib.suppress(AttributeError, ValueError, TypeError):
+            value = _Names(names).visit(node.value)  # ty: ignore[unresolved-attribute]
+            names[target.id] = ast.literal_eval(value)
+    if names.get("SCHEMA_VERSION") != CURRENT_SCHEMA:
+        raise RuntimeError(
+            f"Release {tag} is unusable: it writes another schema. Upgrade "
+            f"from a release that writes schema {CURRENT_SCHEMA}."
+        )
+    return {**names["INTENT_SETTINGS"], **names.get("DECISION_SETTINGS", {})}
+
+
+def read_candidate_config(
+    path: Path,
+    labels: set[str],
+    provenance: Path | None = None,
+    api: Any = gh_api,  # noqa: ANN401
+) -> tuple[dict[str, object], str]:
+    """Read the candidate settings and name the schema that judged them.
+
+    Unknown settings get a read-only inventory against the release `_commit`
+    names; anything unexpected stops (dry-run inventory before action).
+    """
+    try:
+        return read_config(path), "base"
+    except csarc_config.SettingsError:
+        values = csarc_config.parse_settings_text(path.read_text("utf-8"), path)
+        new = sorted(set(values) - csarc_config.ALLOWED_KEYS)
+        if not new:
+            raise
+    known: dict[str, Any] = {}
+    tag, why = None, f"the PR has no {GOVERNANCE_SWITCH_LABEL} label"
+    try:
+        if GOVERNANCE_SWITCH_LABEL in labels:
+            why = "the inventory has unexpected items"
+            saved = provenance.read_text("utf-8") if provenance else "{}"
+            tag = json.loads(saved).get("release_tag")
+            known = release_settings(tag, values.get("_commit"), api)
+    except Exception as error:  # every failure stays closed
+        why = str(error) or type(error).__name__
+    items = []
+    for key in new:
+        spec, value = known.get(key), values[key]
+        ok = isinstance(spec, tuple) and len(spec) == 2
+        kind, allowed = spec if ok else (None, ())
+        matches = {
+            "bool": type(value) is bool,
+            "int": type(value) is int,
+            "text": type(value) is str,
+            "choice": value in allowed,
+            "multi": type(value) is list and set(value) <= set(allowed),
+        }.get(str(kind))
+        items.append(
+            f"{key} not checked"
+            if not known
+            else f"{key} unknown to {tag}"
+            if matches is None
+            else f"{key} {kind} from {tag}, value "
+            + ("matches" if matches else "does not match")
+        )
+    if known and all(item.endswith(" matches") for item in items):
+        csarc_config.validate_config(
+            {key: values[key] for key in values if key not in new}, path
+        )
+        seen = ",".join(f"{key}:{known[key][0]}:{tag}" for key in new)
+        source = f"release:{tag} inventory={seen}"
+        # message-pattern: allow X1 stdout carries the JSON route decision
+        sys.stderr.write(f"NOTICE: schema_source={source}: accepted.\n")
+        return values, source
+    raise ValueError(
+        f"settings {', '.join(new)} come from a newer CSARC template release "
+        f"than this base reads, and the release schema cannot verify them: "
+        f"{why.rstrip('.')}. Inventory: {'; '.join(items)}. Add the "
+        f"{GOVERNANCE_SWITCH_LABEL} label, confirm the upgrade targets a "
+        "published stable CSARC release, or merge by hand."
+    )
+
+
 def governance_relaxations(  # noqa: C901
     base: dict[str, object], candidate: dict[str, object]
 ) -> list[str]:
@@ -708,9 +842,12 @@ def policy_self_test(
 
 def _route_command(args: argparse.Namespace) -> int:
     """Print or enforce one base-policy route."""
+    labels = {label for label in args.labels.split(",") if label}
     try:
         base = read_config(args.base_config)
-        candidate = read_config(args.candidate_config)
+        candidate, _ = read_candidate_config(
+            args.candidate_config, labels, args.candidate_provenance
+        )
     except (OSError, ValueError) as error:
         sys.stderr.write(f"ERROR: {error}\n")
         return 1
@@ -731,9 +868,7 @@ def _route_command(args: argparse.Namespace) -> int:
         sys.stdout.writelines(f"- {reason}\n" for reason in decision.reasons)
     if args.enforce:
         try:
-            require_route(
-                decision, {label for label in args.labels.split(",") if label}
-            )
+            require_route(decision, labels)
         except RuntimeError as error:
             sys.stderr.write(f"ERROR: {error}\n")
             return 1
@@ -807,6 +942,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     route = commands.add_parser("route", help="select the base-policy route")
     route.add_argument("--base-config", type=Path, required=True)
     route.add_argument("--candidate-config", type=Path, required=True)
+    route.add_argument("--candidate-provenance", type=Path)
     changed = route.add_mutually_exclusive_group()
     changed.add_argument("--changed-files", type=Path)
     changed.add_argument("--pull-files", type=Path)
