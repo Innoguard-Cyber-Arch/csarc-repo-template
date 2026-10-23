@@ -77,7 +77,7 @@ def test_table_output_carries_the_warning(
     assert generated_payload.main(["solo-default"]) == 0
     captured = capsys.readouterr()
     assert "| solo-default |" in captured.out
-    assert "| pr-lifecycle (≤ 257,000) |" in captured.out
+    assert "| pr-lifecycle (≤ 266,000) |" in captured.out
     assert "WARNING" not in captured.out
     assert captured.err.startswith("WARNING: solo-default payload headroom")
 

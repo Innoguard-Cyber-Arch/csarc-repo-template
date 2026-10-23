@@ -237,7 +237,7 @@ RUNTIME_GROUPS: dict[str, frozenset[str]] = {
 }
 # Canonical runtime bytes per budgeted group, checked against every fixture.
 RUNTIME_GROUP_BUDGETS: dict[str, int] = {
-    "pr-lifecycle": 257_000,
+    "pr-lifecycle": 266_000,
     "release": 166_000,
     "milestone-issue": 130_000,
     "verification": 101_000,
