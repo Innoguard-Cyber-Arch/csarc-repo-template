@@ -877,7 +877,7 @@ def test_milestone_release_boundary_rejects_invalid_scope(
         evidence.pop("milestone_promotion")
     else:
         evidence["milestone_promotion"] = promotion
-    with pytest.raises(ValueError, match=r"milestone|checkpoint"):
+    with pytest.raises(ValueError, match=r"Milestone|Checkpoint"):
         aggregate_release_boundaries([evidence], "main", "promotion")
 
 
@@ -2221,7 +2221,7 @@ def test_candidate_freshness_follows_current_base_release_intent(
         with pytest.raises(
             ValueError,
             match=(
-                rf"candidate {candidate_sha} was built from {source_sha}, "
+                rf"candidate {candidate_sha}: built from {source_sha}, "
                 rf"but base {current_base_sha} adds release-worthy"
             ),
         ):

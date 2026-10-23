@@ -1844,7 +1844,7 @@ def test_fresh_lease_warns_that_an_earlier_authorization_is_stranded(
     acquire(arguments, github)
     error = capsys.readouterr().err
     assert "issuecomment-99" in error
-    assert "a new authorization is required" in error
+    assert "so it is void. Post a new one" in error
     release_refs(read_lease(arguments.output))
 
 
@@ -3579,7 +3579,7 @@ def test_alpha_work_branch_rejects_malformed_issue_milestone(
         return original_get(repo, path)
 
     monkeypatch.setattr(github, "get", malformed_issue)
-    with pytest.raises(RuntimeError, match="Issue Milestone is invalid"):
+    with pytest.raises(RuntimeError, match="Issue: invalid Milestone"):
         merge_snapshot(
             github,
             lease,
@@ -5616,7 +5616,7 @@ def test_single_summary_is_replaced_before_and_frozen_after_merge(
         run_merge(tmp_path, github)
 
     github.comments.append(dict(github.comments[0]))
-    with pytest.raises(RuntimeError, match="More than one"):
+    with pytest.raises(RuntimeError, match="more than one"):
         run_merge(tmp_path, github)
 
 
