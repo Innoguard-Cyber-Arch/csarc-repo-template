@@ -88,7 +88,12 @@ MATRIX: dict[str, dict[str, object]] = {
 # automated caller, so each one needs a reason here. The capability
 # diagnostic (#531) had none and is no longer rendered (#1129 AC5); it stays
 # a template-repository tool under root `scripts/`.
-OPERATOR_ENTRY_POINTS: dict[str, str] = {}
+OPERATOR_ENTRY_POINTS: dict[str, str] = {
+    # Owner decision 2026-10-23 (#1219 option A): shipped now as a manual
+    # `--all` inventory; #1221 wires it into generated verify and removes
+    # this entry once every template message conforms.
+    "check-message-style": "manual message inventory until #1221",
+}
 # Template-repository tools that no generated caller reaches (#1129).
 TEMPLATE_REPOSITORY_ONLY = (
     ".csarc/scripts/check-repo-capabilities",
