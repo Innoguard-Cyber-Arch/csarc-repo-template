@@ -4,11 +4,15 @@ import argparse
 import importlib.util
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
 
-MODULE_PATH = Path(__file__).parents[1] / "scripts" / "pr_lifecycle.py"
+ROOT = Path(__file__).parents[1]
+MODULE_PATH = ROOT / "scripts" / "pr_lifecycle.py"
+# Issue #1230: the generated copy forwards close-work to its hosted sibling.
+GENERATED_PATH = ROOT / "template" / ".csarc" / "scripts" / "pr_lifecycle.py"
 WORKFLOW_PATH = (
     Path(__file__).parents[1]
     / ".github"
@@ -18,10 +22,28 @@ WORKFLOW_PATH = (
     # for that merged workflow's own structural regression tests.
     / "work-item-lifecycle.yml"
 )
-SPEC = importlib.util.spec_from_file_location("work_pr_closure", MODULE_PATH)
-assert SPEC and SPEC.loader
-MODULE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(MODULE)
+
+
+def load(name: str, path: Path) -> ModuleType:
+    """Load one lifecycle module from its file."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+MODULES = {
+    "root": load("work_pr_closure", MODULE_PATH),
+    "generated": load("work_pr_closure_generated", GENERATED_PATH),
+}
+
+
+@pytest.fixture(params=sorted(MODULES))
+def lifecycle(request: pytest.FixtureRequest) -> ModuleType:
+    """Return the root module or the generated hosted copy."""
+    return MODULES[request.param]
+
 
 HEAD = "a" * 40
 MERGE = "b" * 40
@@ -94,12 +116,12 @@ def test_closed_event_checks_out_the_merge_commit() -> None:
 
 
 def test_exact_merged_work_pr_closes_once_and_can_rerun(
-    capsys: pytest.CaptureFixture[str],
+    lifecycle: ModuleType, capsys: pytest.CaptureFixture[str]
 ) -> None:
     github = FakeGitHub()
 
-    MODULE.close_work_issue(arguments(), github)
-    MODULE.close_work_issue(arguments(), github)
+    lifecycle.close_work_issue(arguments(), github)
+    lifecycle.close_work_issue(arguments(), github)
 
     assert github.writes == ["comment", "close"]
     assert f'"head_sha":"{HEAD}"' in github.comments[0]["body"]
@@ -108,13 +130,13 @@ def test_exact_merged_work_pr_closes_once_and_can_rerun(
 
 @pytest.mark.parametrize("head_ref", ["fix/42-hotfix", "feat/42-standalone"])
 def test_default_branch_routes_keep_github_native_closure(
-    head_ref: str, capsys: pytest.CaptureFixture[str]
+    lifecycle: ModuleType, head_ref: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     github = FakeGitHub()
     github.pull["base"] = {"ref": "main"}
     github.pull["head"]["ref"] = head_ref
 
-    MODULE.close_work_issue(arguments(), github)
+    lifecycle.close_work_issue(arguments(), github)
 
     assert github.writes == []
     assert "GitHub-native" in capsys.readouterr().out
@@ -140,25 +162,27 @@ def test_default_branch_routes_keep_github_native_closure(
     ],
 )
 def test_invalid_or_drifted_merge_fails_without_writing(
-    change: Callable[[FakeGitHub], None], message: str
+    lifecycle: ModuleType, change: Callable[[FakeGitHub], None], message: str
 ) -> None:
     github = FakeGitHub()
     change(github)
 
     with pytest.raises(RuntimeError, match=message):
-        MODULE.close_work_issue(arguments(), github)
+        lifecycle.close_work_issue(arguments(), github)
 
     assert github.writes == []
 
 
-def test_closed_unmerged_and_unknown_prior_closure_fail_closed() -> None:
+def test_closed_unmerged_and_unknown_prior_closure_fail_closed(
+    lifecycle: ModuleType,
+) -> None:
     unmerged = FakeGitHub()
     unmerged.pull.update(merged=False)
     with pytest.raises(RuntimeError, match="identity"):
-        MODULE.close_work_issue(arguments(), unmerged)
+        lifecycle.close_work_issue(arguments(), unmerged)
 
     closed = FakeGitHub()
     closed.issue.update(state="closed", state_reason="completed")
     with pytest.raises(RuntimeError, match="without matching evidence"):
-        MODULE.close_work_issue(arguments(), closed)
+        lifecycle.close_work_issue(arguments(), closed)
     assert unmerged.writes == closed.writes == []
