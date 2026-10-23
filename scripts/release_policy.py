@@ -83,7 +83,10 @@ class Capability:
     def __post_init__(self) -> None:
         """Reject states outside the public tri-state contract."""
         if self.state not in STATES:
-            raise ValueError(f"invalid capability state: {self.state}")
+            raise ValueError(
+                f"Capability state {self.state}: invalid. Use a state from "
+                "'release_policy.py'."
+            )
 
 
 class GitHubAPI:
@@ -94,7 +97,7 @@ class GitHubAPI:
     ) -> None:
         """Create a client restricted to an HTTPS API origin."""
         if urllib.parse.urlparse(base_url).scheme != "https":
-            raise ValueError("GitHub API URL must use HTTPS")
+            raise ValueError("GitHub API URL: not HTTPS. Use HTTPS.")
         self.token = token
         self.base_url = base_url.rstrip("/")
 
@@ -198,7 +201,9 @@ def select_release_mode(
             f"Actions pull requests are {pull_requests.state}; prepare a "
             "reviewed version candidate locally",
         )
-    raise AssertionError("release mode selection is incomplete")
+    raise AssertionError(
+        "Release mode selection: incomplete. Fix the selector."
+    )
 
 
 def release_intent(title: str) -> str:
@@ -289,9 +294,11 @@ def release_follow_up_errors(  # noqa: C901
         component = package["component"]
         release_type = package.get("release-type", config.get("release-type"))
         if not isinstance(component, str) or not component:
-            raise ValueError("release component is missing")
+            raise ValueError("Release component: missing. Add it.")
         if release_type not in {"simple", "python", "node", "rust"}:
-            raise ValueError("release type is unsupported")
+            raise ValueError(
+                "Release type: unsupported. Edit 'release-please-config.json'."
+            )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"release-please configuration is invalid: {error}")
         return errors
@@ -414,8 +421,8 @@ def project_maturity(root: Path) -> str | None:
     if not main_ref:
         if (root / ".csarc/config.yml").is_file():
             raise ValueError(
-                "cannot determine the authoritative project_maturity: "
-                "origin/main and main are unavailable"
+                "project_maturity: origin/main and main are unavailable. "
+                "Run 'git fetch origin main'."
             )
         return None
     listed = git_output(
@@ -440,11 +447,13 @@ def project_maturity(root: Path) -> str | None:
                 # main without one fails closed (Issue #1071).
                 value = declared.get("project_maturity")
                 if value not in {"early", "formal"}:
-                    raise ValueError("legacy main declares no project_maturity")
+                    raise ValueError(
+                        "Legacy main: no project_maturity. Declare it."
+                    )
     except (subprocess.CalledProcessError, ValueError) as error:
         raise ValueError(
-            "cannot read the authoritative project_maturity from "
-            f"{main_ref}:.csarc/config.yml"
+            "project_maturity: unreadable in "
+            f"{main_ref}:.csarc/config.yml. Fix the file."
         ) from error
     return None if value is None else str(value)
 
@@ -472,7 +481,10 @@ def bump_version(
     try:
         parsed = release_phase.parse_version(version)
     except release_phase.ReleasePhaseError as error:
-        raise ValueError(f"invalid semantic version: {version}") from error
+        raise ValueError(
+            f"Semantic version {version}: invalid. Use "
+            "'<major>.<minor>.<patch>'."
+        ) from error
     bump = "no-release"
     for message in messages:
         subject, _, body = message.partition("\n")
@@ -507,7 +519,10 @@ def milestone_boundary(  # noqa: C901
         or set(promotion) != {"mode", "declared_issues"}
         or not isinstance(issues, list)
     ):
-        raise ValueError("milestone release boundary schema is invalid")
+        raise ValueError(
+            "Milestone release boundary: invalid schema. Rerun "
+            "'release_policy.py boundary'."
+        )
     issue_numbers: list[int] = []
     normalized_issues: list[dict[str, object]] = []
     for issue in issues:
@@ -518,29 +533,46 @@ def milestone_boundary(  # noqa: C901
             or int(issue["number"]) < 1
             or not isinstance(issue.get("title"), str)
         ):
-            raise ValueError("milestone included Issue is invalid")
+            raise ValueError(
+                "Milestone included Issue: invalid. Rerun 'release_policy.py "
+                "boundary'."
+            )
         issue_numbers.append(int(issue["number"]))
         normalized_issues.append(
             {"number": int(issue["number"]), "title": issue["title"]}
         )
     if issue_numbers != sorted(set(issue_numbers)):
-        raise ValueError("milestone included Issues are not canonical")
+        raise ValueError(
+            "Milestone included Issues: not canonical. Rerun "
+            "'release_policy.py boundary'."
+        )
     pull_request_issues: set[int] = set()
     for pull_request in included_pull_requests:
         if "issue" not in pull_request:
-            raise ValueError("milestone pull request has no Issue binding")
+            raise ValueError(
+                "Milestone pull request: no Issue binding. Rerun "
+                "'release_policy.py boundary'."
+            )
         number = pull_request["issue"]
         if number is not None and (type(number) is not int or number < 1):
-            raise ValueError("milestone pull-request Issue binding is invalid")
+            raise ValueError(
+                "Milestone pull request: invalid Issue binding. Rerun "
+                "'release_policy.py boundary'."
+            )
         if isinstance(number, int):
             pull_request_issues.add(number)
     if issue_numbers != sorted(pull_request_issues):
-        raise ValueError("milestone Issue evidence does not match its PRs")
+        raise ValueError(
+            "Milestone Issue evidence: differs from its PRs. Rerun "
+            "'release_policy.py boundary'."
+        )
     mode = promotion.get("mode")
     declared = promotion.get("declared_issues")
     if mode == "final":
         if declared is not None:
-            raise ValueError("final milestone promotion declares Issues")
+            raise ValueError(
+                "Final Milestone promotion: declares Issues. Remove them."
+            )
     elif mode == "checkpoint":
         if (
             not isinstance(declared, list)
@@ -549,9 +581,15 @@ def milestone_boundary(  # noqa: C901
             or declared != sorted(set(declared))
             or declared != issue_numbers
         ):
-            raise ValueError("checkpoint Issue evidence is invalid")
+            raise ValueError(
+                "Checkpoint Issue evidence: invalid. Rerun 'release_policy.py "
+                "boundary'."
+            )
     else:
-        raise ValueError("milestone promotion mode is invalid")
+        raise ValueError(
+            "Milestone promotion: invalid mode. Rerun 'release_policy.py "
+            "boundary'."
+        )
     return promotion, normalized_issues
 
 
@@ -560,7 +598,7 @@ def aggregate_release_boundaries(  # noqa: C901
 ) -> dict[str, object]:
     """Combine verified main boundaries into one deterministic release batch."""
     if not boundaries:
-        raise ValueError("release boundary contains no source evidence")
+        raise ValueError("Release boundary: no source evidence. Add it.")
     summaries: list[dict[str, object]] = []
     pull_requests: dict[int, dict[str, object]] = {}
     highest = "no-release"
@@ -583,7 +621,8 @@ def aggregate_release_boundaries(  # noqa: C901
                 or not isinstance(release, dict)
             ):
                 raise ValueError(
-                    "release boundary has invalid direct-main evidence"
+                    "Release boundary: invalid direct-main evidence. Rerun "
+                    "'release_policy.py boundary'."
                 )
             route_kind = "main-strategy"
             milestone = None
@@ -603,7 +642,8 @@ def aggregate_release_boundaries(  # noqa: C901
                 or not isinstance(release, dict)
             ):
                 raise ValueError(
-                    "release boundary has invalid promotion evidence"
+                    "Release boundary: invalid promotion evidence. Rerun "
+                    "'release_policy.py boundary'."
                 )
             route_kind = str(route["kind"])
             milestone = route.get("milestone")
@@ -614,45 +654,64 @@ def aggregate_release_boundaries(  # noqa: C901
             boundary_main = str(post_merge["main_sha"])
         intent = release.get("intent")
         if not isinstance(intent, str) or intent not in INTENT_RANK:
-            raise ValueError("release boundary has invalid SemVer intent")
+            raise ValueError(
+                "Release boundary: invalid SemVer intent. Rerun "
+                "'release_policy.py boundary'."
+            )
         if evidence.get("kind") == "main-strategy" and evidence.get(
             "eligible"
         ) is not (intent != "no-release"):
             raise ValueError(
-                "release boundary has invalid direct-main evidence"
+                "Release boundary: invalid direct-main evidence. Rerun "
+                "'release_policy.py boundary'."
             )
         if INTENT_RANK[intent] > INTENT_RANK[highest]:
             highest = intent
         included = release.get("included_pull_requests")
         if not isinstance(included, list) or not included:
-            raise ValueError("release boundary has no included pull requests")
+            raise ValueError(
+                "Release boundary: no included pull requests. Add them."
+            )
         boundary_highest = "no-release"
         for pull_request in included:
             if not isinstance(pull_request, dict):
-                raise ValueError("release boundary has an invalid pull request")
+                raise ValueError(
+                    "Release boundary: invalid pull request. Rerun "
+                    "'release_policy.py boundary'."
+                )
             number = pull_request.get("number")
             title = pull_request.get("title")
             recorded_intent = pull_request.get("intent")
             if not isinstance(number, int) or not isinstance(title, str):
-                raise ValueError("release boundary pull request is incomplete")
+                raise ValueError(
+                    "Release boundary: incomplete pull request. Rerun "
+                    "'release_policy.py boundary'."
+                )
             actual_intent = release_intent(title)
             if recorded_intent != actual_intent:
                 raise ValueError(
-                    "release boundary pull-request intent is invalid"
+                    "Release boundary: invalid pull-request intent. Rerun "
+                    "'release_policy.py boundary'."
                 )
             if INTENT_RANK[actual_intent] > INTENT_RANK[boundary_highest]:
                 boundary_highest = actual_intent
             pull_requests[number] = pull_request
         if intent != boundary_highest:
-            raise ValueError("release boundary batch intent is invalid")
+            raise ValueError(
+                "Release boundary: invalid batch intent. Rerun "
+                "'release_policy.py boundary'."
+            )
         if route_kind == "milestone":
             if type(milestone) is not int or milestone < 1:
-                raise ValueError("milestone release boundary is incomplete")
+                raise ValueError(
+                    "Milestone release boundary: incomplete. Rerun "
+                    "'release_policy.py boundary'."
+                )
             promotion, included_issues = milestone_boundary(evidence, included)
         else:
             if "milestone_promotion" in evidence:
                 raise ValueError(
-                    "non-milestone boundary has milestone promotion data"
+                    "Non-Milestone boundary: has promotion data. Remove it."
                 )
             promotion = None
         summary: dict[str, object] = {
@@ -720,7 +779,10 @@ def simple_release_boundary(
             else "main-strategy pull request is a no-release change"
         )
     else:
-        raise ValueError(f"invalid simple release boundary: {kind}")
+        raise ValueError(
+            f"Simple release boundary {kind}: invalid. Rerun "
+            "'release_policy.py boundary'."
+        )
     return {
         "schema_version": 1,
         "kind": kind,
@@ -1229,7 +1291,8 @@ def fetch_all_releases(api: GitHubAPI, repo: str) -> list[dict[str, object]]:
         if not (200 <= status < 300) or not isinstance(payload, list):
             detail = status or "unavailable"
             raise RuntimeError(
-                f"cannot list releases for {repo} (HTTP {detail})"
+                f"Releases of {repo}: cannot list them (HTTP {detail}). Run "
+                "'gh auth status' and rerun."
             )
         if not payload:
             break
@@ -1304,7 +1367,7 @@ def git_output(arguments: list[str], root: Path) -> str:
     """Run a read-only Git query."""
     executable = shutil.which("git")
     if executable is None:
-        raise RuntimeError("Git is required for release planning")
+        raise RuntimeError("Git: not found. Install Git for release planning.")
     result = subprocess.run(  # noqa: S603
         [executable, *arguments],
         cwd=root,
@@ -1457,8 +1520,8 @@ def release_plan(  # noqa: C901
             ]
             if higher_stable_tags:
                 raise ValueError(
-                    "cannot determine the authoritative stable version: "
-                    "origin/main and main are unavailable"
+                    "Stable version: origin/main and main are unavailable. "
+                    "Run 'git fetch origin main'."
                 )
         if main_ref:
             try:
@@ -1481,8 +1544,7 @@ def release_plan(  # noqa: C901
                 release_phase.ReleasePhaseError,
             ) as error:
                 raise ValueError(
-                    "cannot determine the authoritative stable version "
-                    "from main"
+                    "Stable version: unreadable from main. Fix main."
                 ) from error
             main_tag = f"v{main_version}"
             main_tags = git_output(
@@ -1511,8 +1573,7 @@ def release_plan(  # noqa: C901
             if stable.is_prerelease or tag_version != main_version:
                 if stable.core > release_phase.parse_version(base_core).core:
                     raise ValueError(
-                        "authoritative main version has no matching reachable "
-                        "stable tag"
+                        "Main version: no reachable stable tag. Fetch tags."
                     )
             elif stable.core > release_phase.parse_version(base_core).core:
                 base_core = stable.core_string()
@@ -1548,7 +1609,8 @@ def release_plan_report(
         }
         if len(trees) != 1:
             raise ValueError(
-                "release source tree does not match the merged commit"
+                "Release source tree: differs from merge. Compare 'git "
+                "rev-parse <merge>^{tree}'."
             )
     planned = release_plan(root, source_sha or sha, phase=phase)
     if planned is None:
@@ -1574,7 +1636,7 @@ def release_plan_report(
         if checkpoint_role == "deferred":
             if materialized:
                 raise ValueError(
-                    "deferred checkpoint work must not materialize a version"
+                    "Deferred checkpoint work: has a version. Remove it."
                 )
             status = "deferred"
             reason = "checkpoint work defers its release to the terminal Issue"
@@ -1591,7 +1653,7 @@ def verify_candidate_version(root: Path, base_sha: str) -> tuple[str, str, str]:
     """Recompute the candidate version from its current base commit."""
     executable = shutil.which("git")
     if executable is None:
-        raise RuntimeError("Git is required for release planning")
+        raise RuntimeError("Git: not found. Install Git for release planning.")
     candidate_sha = git_output(["rev-parse", "HEAD"], root)
     source_sha = git_output(["merge-base", candidate_sha, base_sha], root)
     candidate_manifest = json.loads(
@@ -1628,9 +1690,9 @@ def verify_candidate_version(root: Path, base_sha: str) -> tuple[str, str, str]:
             f"{sha[:12]} {subject}" for sha, subject in release_worthy
         )
         raise ValueError(
-            f"release candidate {candidate_sha} was built from {source_sha}, "
-            f"but current base {base_sha} adds release-worthy commits: "
-            f"{commits}; update the same Release PR and revalidate"
+            f"Release candidate {candidate_sha}: built from {source_sha}, "
+            f"but base {base_sha} adds release-worthy commits: "
+            f"{commits}. Update the same Release PR and revalidate."
         )
     with tempfile.TemporaryDirectory(prefix="csarc-release-base-") as path:
         worktree = Path(path) / "worktree"
@@ -1666,7 +1728,9 @@ def verify_candidate_version(root: Path, base_sha: str) -> tuple[str, str, str]:
                 text=True,
             )
     if planned is None:
-        raise ValueError("candidate base has no release-worthy commits")
+        raise ValueError(
+            "Candidate base: no release-worthy commits. Do not release."
+        )
     _, expected = planned
     verify_release_version(root, expected)
     return expected, candidate_sha, source_sha
@@ -1690,7 +1754,7 @@ def _replace_toml_version(
         )
     updated, count = block.subn(rf"\g<1>{version}\g<2>", source, count=1)
     if count != 1:
-        raise ValueError(f"cannot locate governed version in {path.name}")
+        raise ValueError(f"Governed version: not found in {path.name}. Add it.")
     path.write_text(updated, encoding="utf-8")
 
 
@@ -1750,7 +1814,10 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
     elif release_type == "rust":
         _replace_toml_version(root / "Cargo.toml", "package", version)
     else:
-        raise ValueError(f"unsupported release type: {release_type}")
+        raise ValueError(
+            f"Release type {release_type}: unsupported. Edit "
+            "'release-please-config.json'."
+        )
 
     for item in package.get("extra-files", []):
         if isinstance(item, str):
@@ -1760,9 +1827,15 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
             value = item.get("path")
             jsonpath = str(item.get("jsonpath", ""))
         else:
-            raise ValueError("release extra-file entry is invalid")
+            raise ValueError(
+                "Release extra-file: invalid entry. Edit "
+                "'release-please-config.json'."
+            )
         if not isinstance(value, str):
-            raise ValueError("release extra-file path is invalid")
+            raise ValueError(
+                "Release extra-file: invalid path. Edit "
+                "'release-please-config.json'."
+            )
         path = root / value
         target_version = _target_version(version, value)
         if kind == "generic":
@@ -1781,7 +1854,7 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
                     changed = changed or count == 1
                 lines.append(line)
             if not changed:
-                raise ValueError(f"{value} has no release version marker")
+                raise ValueError(f"{value}: no release version marker. Add it.")
             path.write_text("".join(lines), encoding="utf-8")
         elif kind == "toml" and jsonpath == "$.project.version":
             _replace_toml_version(path, "project", target_version)
@@ -1790,12 +1863,18 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
         elif kind == "toml" and jsonpath.startswith("$.package["):
             match = re.search(r'name\.value=="([^"]+)"', jsonpath)
             if match is None:
-                raise ValueError(f"unsupported release jsonpath: {jsonpath}")
+                raise ValueError(
+                    f"Release jsonpath {jsonpath}: unsupported. Edit "
+                    "'release-please-config.json'."
+                )
             _replace_toml_version(
                 path, "package", target_version, package_name=match.group(1)
             )
         else:
-            raise ValueError(f"unsupported release extra-file: {value}")
+            raise ValueError(
+                f"Release extra-file {value}: unsupported. Edit "
+                "'release-please-config.json'."
+            )
 
     cargo_manifest = root / "Cargo.toml"
     cargo_lock = root / "Cargo.lock"
@@ -1804,7 +1883,7 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
             cargo_package = tomllib.load(source).get("package", {})
         cargo_name = cargo_package.get("name")
         if not isinstance(cargo_name, str) or not cargo_name:
-            raise ValueError("Cargo.toml has no package name")
+            raise ValueError("Cargo.toml: no package name. Add it.")
         _replace_toml_version(
             cargo_lock, "package", version, package_name=cargo_name
         )
@@ -1961,10 +2040,14 @@ def prepare_release_candidate(
     """Write a local candidate; never create a PR, tag, or GitHub Release."""
     planned = release_plan(root, sha, phase=phase)
     if planned is None:
-        raise ValueError("no release-worthy Conventional Commits")
+        raise ValueError(
+            "Release: no release-worthy Conventional Commits. Do not release."
+        )
     tag, version = planned
     if tag in git_output(["tag", "--points-at", sha], root).splitlines():
-        raise ValueError(f"{tag} already identifies this commit")
+        raise ValueError(
+            f"Tag {tag}: already on this commit. Do not release again."
+        )
     _write_release_version(root, version)
     _write_changelog(root, changelog_sha or sha, version)
     errors = release_version_errors(root, version)
@@ -1989,12 +2072,13 @@ def _promotion_baseline_tree(root: Path, source_sha: str, head_sha: str) -> str:
         return source_tree
     if len(parents) != 3 or parents[1] != source_sha:
         raise ValueError(
-            "promotion head must have the delivery source as its first parent"
+            "Promotion head: first parent is not the delivery source. Recreate "
+            "the bridge."
         )
 
     executable = shutil.which("git")
     if executable is None:
-        raise RuntimeError("Git is required for release planning")
+        raise RuntimeError("Git: not found. Install Git for release planning.")
     merged = subprocess.run(  # noqa: S603
         [executable, "merge-tree", "--write-tree", source_sha, parents[2]],
         cwd=root,
@@ -2007,7 +2091,9 @@ def _promotion_baseline_tree(root: Path, source_sha: str, head_sha: str) -> str:
         return git_output(["rev-parse", f"{first_line}^{{tree}}"], root)
     if re.fullmatch(r"[0-9a-f]{40,64}", first_line):
         return source_tree
-    raise RuntimeError("Git could not reconstruct the promotion baseline")
+    raise RuntimeError(
+        "Promotion baseline: Git cannot rebuild it. Fetch full history."
+    )
 
 
 def verify_promotion_version(
@@ -2032,8 +2118,8 @@ def verify_promotion_version(
     if planned is None:
         if head_tree != baseline_tree:
             raise ValueError(
-                f"a no-release {context} must preserve its deterministic "
-                "baseline tree"
+                f"No-release {context}: baseline tree changed. Revert the "
+                "non-release changes."
             )
         return {
             "status": "no-release",
@@ -2044,7 +2130,7 @@ def verify_promotion_version(
 
     executable = shutil.which("git")
     if executable is None:
-        raise RuntimeError("Git is required for release planning")
+        raise RuntimeError("Git: not found. Install Git for release planning.")
     with tempfile.TemporaryDirectory(prefix="csarc-promotion-version-") as path:
         worktree = Path(path) / "worktree"
         subprocess.run(  # noqa: S603
@@ -2106,9 +2192,10 @@ def verify_promotion_version(
             ["diff", "--name-only", baseline_tree, head_sha], root
         ).splitlines()
         raise ValueError(
-            f"{context} release materialization is not exact; expected "
+            f"{context} release materialization: not exact: expected "
             f"{expected_paths or ['no changed files']}, got "
-            f"{actual_paths or ['no changed files']}"
+            f"{actual_paths or ['no changed files']}. Rerun "
+            "'prepare-candidate'."
         )
     return {
         **payload,
@@ -2243,8 +2330,8 @@ def verify_delivery_version(
             root, base_sha
         ):
             raise ValueError(
-                "deferred checkpoint work must not materialize a version; "
-                "only the checkpoint's terminal Issue releases the beta"
+                "Deferred checkpoint work: materializes a version. Only the "
+                "terminal Issue releases the beta."
             )
         return {
             "status": "deferred",
@@ -2254,15 +2341,15 @@ def verify_delivery_version(
         }
     if git_output(["merge-base", base_sha, head_sha], root) != base_sha:
         raise ValueError(
-            "release-worthy delivery must contain the current destination "
-            "base before materialization"
+            "Release-worthy delivery: lacks the destination base. Merge "
+            "it before materialization."
         )
     parents = git_output(
         ["rev-list", "--parents", "-n", "1", head_sha], root
     ).split()
     if len(parents) != 2:
         raise ValueError(
-            "release-worthy delivery must end in one release-only commit"
+            "Release-worthy delivery: no final release-only commit. Add it."
         )
     payload = verify_promotion_version(
         root,
@@ -2621,7 +2708,10 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             or any(not isinstance(commit, dict) for commit in page)
             for page in commit_pages
         ):
-            raise SystemExit("release follow-up commit response is invalid")
+            raise SystemExit(
+                "ERROR: Release follow-up commit: invalid response. Run 'gh "
+                "auth status' and rerun."
+            )
         commits = [commit for page in commit_pages for commit in page]
         errors = release_follow_up_errors(
             args.root.resolve(),
@@ -2636,7 +2726,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         )
         if errors:
             raise SystemExit("; ".join(errors))
-        print("Release follow-up source is verified.")  # noqa: T201
+        print("OK: Release follow-up source is verified.")  # noqa: T201
         return 0
     if args.command == "boundary":
         write_boundary(
@@ -2669,7 +2759,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         errors = release_boundary_errors(evidence, args.sha)
         if errors:
             raise SystemExit("; ".join(errors))
-        print("Release source boundary is verified.")  # noqa: T201
+        print("OK: Release source boundary is verified.")  # noqa: T201
         return 0
     if args.command == "plan":
         try:
@@ -2697,8 +2787,8 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
         if not token:
             raise SystemExit(
-                "retention-plan requires GH_TOKEN or GITHUB_TOKEN to list "
-                "Releases"
+                "ERROR: retention-plan: no token to list Releases. Set "
+                "GH_TOKEN or GITHUB_TOKEN."
             )
         api = GitHubAPI(
             token, os.environ.get("GITHUB_API_URL", "https://api.github.com")
@@ -2719,7 +2809,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         ) as error:
             raise SystemExit(str(error)) from error
         print(  # noqa: T201
-            f"Release candidate {candidate_sha} from source {source_sha} "
+            f"OK: Release candidate {candidate_sha} from source {source_sha} "
             f"matches current base {args.base_sha} decision {version}."
         )
         return 0
@@ -2729,10 +2819,13 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             if args.tag is not None:
                 version = args.tag.removeprefix("v")
                 if not release_phase.is_valid_version(version):
-                    raise ValueError(f"invalid release tag: {args.tag}")
+                    raise ValueError(
+                        f"Release tag {args.tag}: invalid. Use "
+                        "'v<major>.<minor>.<patch>'."
+                    )
                 phase = release_phase.parse_version(version).release_kind
             if phase is None:
-                raise ValueError("release phase is required")
+                raise ValueError("Release phase: missing. Pass --phase.")
             if args.command == "verify-delivery-version":
                 payload = verify_delivery_version(
                     args.root.resolve(),
@@ -2751,8 +2844,8 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
                 )
             if args.tag is not None and payload.get("tag") != args.tag:
                 raise ValueError(
-                    f"{args.command} planned {payload.get('tag')}, "
-                    f"expected {args.tag}"
+                    f"{args.command}: planned {payload.get('tag')}, "
+                    f"expected {args.tag}. Fix the tag."
                 )
         except (
             ValueError,
@@ -2769,7 +2862,10 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         if tag is not None:
             candidate_version = tag.removeprefix("v")
             if not release_phase.is_valid_version(candidate_version):
-                raise SystemExit(f"invalid release tag: {tag}")
+                raise SystemExit(
+                    f"ERROR: Release tag {tag}: invalid. Use "
+                    "'v<major>.<minor>.<patch>'."
+                )
             expected = candidate_version
         try:
             version = verify_release_version(args.root.resolve(), expected)
@@ -2779,7 +2875,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             tomllib.TOMLDecodeError,
         ) as error:
             raise SystemExit(str(error)) from error
-        print(f"Release version {version} is consistent.")  # noqa: T201
+        print(f"OK: Release version {version} is consistent.")  # noqa: T201
         return 0
     if args.command == "preflight":
         policies = preflight_policy_observations(args.repo)
@@ -2828,7 +2924,9 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             args.github_output,
         )
         return 0
-    raise SystemExit(f"unsupported command: {args.command}")
+    raise SystemExit(
+        f"ERROR: Command {args.command}: unsupported. Run with --help."
+    )
 
 
 if __name__ == "__main__":

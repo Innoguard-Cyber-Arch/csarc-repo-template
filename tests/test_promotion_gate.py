@@ -309,9 +309,7 @@ def test_check_route_blocks_an_unrecognized_branch_targeting_main(
         github_output=None,
         summary=None,
     )
-    with pytest.raises(
-        RuntimeError, match="GitHub closes an open pull request"
-    ):
+    with pytest.raises(RuntimeError, match="a head rename closes this one"):
         check_route(arguments)
 
 
@@ -386,7 +384,7 @@ def test_promotion_title_cannot_downgrade_batch_intent() -> None:
         titles_json=json.dumps(["fix(api): retry", "feat(ui): add report"]),
     )
 
-    with pytest.raises(RuntimeError, match=r"highest SemVer intent \(minor\)"):
+    with pytest.raises(RuntimeError, match=r"highest intent \(minor\)"):
         check_promotion_intent(arguments)
 
     arguments.title = "feat(delivery): promote milestone"
@@ -543,7 +541,7 @@ def test_repeated_syncs_require_per_sync_reviewed_provenance(
             12 if main_sha == old_main else None
         ),
     )
-    with pytest.raises(RuntimeError, match="reviewed merge provenance"):
+    with pytest.raises(RuntimeError, match="no reviewed merge"):
         included_pull_requests(
             "owner/repo",
             current_main,
@@ -670,7 +668,7 @@ def test_legacy_short_sync_requires_empty_canonical_reaffirmation(
         == expected
     )
     canonical_tree["sha"] = "drift"
-    with pytest.raises(RuntimeError, match="reviewed merge provenance"):
+    with pytest.raises(RuntimeError, match="no reviewed merge"):
         included_pull_requests(
             "owner/repo",
             main_sha,
@@ -683,7 +681,7 @@ def test_legacy_short_sync_requires_empty_canonical_reaffirmation(
     canonical_base_data = canonical["base"]
     assert isinstance(canonical_base_data, dict)
     canonical_base_data["sha"] = "drift"
-    with pytest.raises(RuntimeError, match="reviewed merge provenance"):
+    with pytest.raises(RuntimeError, match="no reviewed merge"):
         included_pull_requests(
             "owner/repo",
             main_sha,
@@ -924,7 +922,7 @@ def test_checkpoint_allows_only_declared_completed_work() -> None:
     assert milestone_included_issues(issues, 4, included_prs, [1]) == [
         {"number": 1, "title": "Completed work"}
     ]
-    with pytest.raises(RuntimeError, match="do not match"):
+    with pytest.raises(RuntimeError, match="differ from the candidate work"):
         milestone_included_issues(issues, 4, included_prs, [1, 2])
 
 
@@ -1193,28 +1191,28 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
             None,
             "bridge source main",
             "source-tree",
-            "Milestones differ",
+            "Milestone differs from the Issue",
         ),
         (
             "promote/m8-other",
             7,
             "bridge source main",
             "source-tree",
-            "Milestones differ",
+            "Milestone differs from the Issue",
         ),
         (
             "promote/m7-staged-ci",
             7,
             "bridge main source",
             "source-tree",
-            "merge current main",
+            "not main merged into delivery",
         ),
         (
             "promote/m7-staged-ci",
             7,
             "bridge source main",
             "different-tree",
-            "preserve the bridge tree",
+            "bridge tree changed",
         ),
     ],
 )
@@ -1604,7 +1602,7 @@ def test_note_quota_fallback_is_retired() -> None:
         branch_strategy="delivery",
         blocked_run_url=["https://github.com/owner/repo/actions/runs/200"],
     )
-    with pytest.raises(RuntimeError, match="quota fallback was retired"):
+    with pytest.raises(RuntimeError, match="Quota fallback: retired"):
         note_quota_fallback(args)
 
 
@@ -2277,7 +2275,7 @@ def test_quota_main_refetches_the_unique_squash_source(
         return {}
 
     monkeypatch.setitem(verify_quota_main.__globals__, "github_get", fake_get)
-    with pytest.raises(RuntimeError, match="merged promotion"):
+    with pytest.raises(RuntimeError, match="Merged promotion"):
         verify_quota_main(
             SimpleNamespace(
                 evidence=source,
@@ -2351,7 +2349,7 @@ def test_zero_step_run_reads_all_jobs_and_rejects_changed_billing_marker(
     monkeypatch.setitem(
         require_zero_step_run.__globals__, "github_get", fake_get
     )
-    with pytest.raises(RuntimeError, match="zero-step billing gate"):
+    with pytest.raises(RuntimeError, match="not a zero-step billing block"):
         require_zero_step_run(
             "https://github.com/owner/repo/actions/runs/200",
             "owner/repo",
@@ -2395,9 +2393,7 @@ def test_zero_step_run_requires_exact_run_and_pull_request(
     monkeypatch.setitem(
         require_zero_step_run.__globals__, "github_get", fake_get
     )
-    with pytest.raises(
-        RuntimeError, match=r"failed PR head|another pull request"
-    ):
+    with pytest.raises(RuntimeError, match=r"failed PR head|another PR"):
         require_zero_step_run(
             "https://github.com/owner/repo/actions/runs/200",
             "owner/repo",
@@ -2418,7 +2414,7 @@ def test_preflight_binding_rejects_tampered_canary() -> None:
         "repository": "owner/repo",
         "canary": {"state": "allowed", "environment": "canary"},
     }
-    with pytest.raises(RuntimeError, match="live reconstruction"):
+    with pytest.raises(RuntimeError, match="differs from live state"):
         require_same_preflight(evidence, rebuilt)
 
 
@@ -2432,7 +2428,7 @@ def test_preflight_binding_rejects_changed_pull_request_body() -> None:
         "promotion_pull_request": {"body_sha256": "changed"},
         "tracking_issue_state": {"body_sha256": "issue"},
     }
-    with pytest.raises(RuntimeError, match="live reconstruction"):
+    with pytest.raises(RuntimeError, match="differs from live state"):
         require_same_preflight(evidence, rebuilt)
 
 
@@ -2450,7 +2446,7 @@ def test_preflight_binding_rejects_changed_checkpoint_scope() -> None:
             "declared_issues": [1, 2],
         }
     }
-    with pytest.raises(RuntimeError, match="live reconstruction"):
+    with pytest.raises(RuntimeError, match="differs from live state"):
         require_same_preflight(evidence, rebuilt)
 
 

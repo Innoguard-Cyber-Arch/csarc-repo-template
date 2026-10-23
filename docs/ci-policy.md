@@ -1610,8 +1610,8 @@ repo 的 full 入口是單一 `scripts/verify`，沒有本模板這種多階段�
 checklist。`pr-policy.yml` 的觸發清單（`opened`／`edited`／`synchronize`／
 `reopened`／`ready_for_review`／`labeled` 等）讓幾乎每個動作都重新執行整支
 `scripts/validate-pr-policy`，其中包含兩個 acceptance-checklist 檢查——PR 本文自己
-的完成清單（「Complete every pull request checklist item...」）與連結 Issue 的
-acceptance criteria（「Issue #N still has unchecked acceptance tasks.」）。在工作
+的完成清單（「PR checklist: unchecked items...」）與連結 Issue 的
+acceptance criteria（「Issue #N: unchecked acceptance tasks. Complete them.」）。在工作
 真的還沒做完的中間狀態，這兩個檢查必然失敗；13 小時內因此重跑了 49 次，不是規則擋
 下的，只是恰好沒被更早發現。
 

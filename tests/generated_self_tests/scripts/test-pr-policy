@@ -543,7 +543,7 @@ if milestone_output="$(
   echo "PR policy accepted a delivery branch for another Milestone."
   exit 1
 fi
-grep -Fq "Issue #42 Milestone is 8; expected base 'dev/m8-', not 'dev/m7-staged-ci'." <<<"$milestone_output"
+grep -Fq "ERROR: Issue #42 Milestone 8: base 'dev/m7-staged-ci' is wrong. Use 'dev/m8-'." <<<"$milestone_output"
 
 case_count=$((case_count + 1))
 if base_chain_output="$(
@@ -562,7 +562,7 @@ if base_chain_output="$(
   echo "PR policy accepted an orphan stacked pull request."
   exit 1
 fi
-grep -Fq "Base branch feat/41-parent must have exactly one open pull request; expected final base 'main'." <<<"$base_chain_output"
+grep -Fq "ERROR: Base branch feat/41-parent: not exactly one open PR. Chain it to 'main'." <<<"$base_chain_output"
 
 case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="main" \

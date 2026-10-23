@@ -131,14 +131,18 @@ def settings_from_mapping(config: dict[str, object]) -> Settings:
     )
     if default_level not in LEVELS:
         raise ValueError(
-            "default_release_level must be one of " + ", ".join(LEVELS)
+            "default_release_level: value is invalid. Use one of "
+            + ", ".join(LEVELS)
+            + "."
         )
     # Schema 2 always states admin_bypass (SPEC-009); only a repository
     # without CSARC settings reaches the strictest default here. Retired
     # review keys are never read (Issue #1071).
     bypass = config.get("admin_bypass", "off")
     if bypass not in {"off", "beta-only", "always"}:
-        raise ValueError("admin_bypass must be off, beta-only, or always")
+        raise ValueError(
+            "admin_bypass: value is invalid. Use off, beta-only, or always."
+        )
     reviews = dict(DEFAULT_REVIEW)
     if bypass in {"beta-only", "always"}:
         reviews["beta"] = "self"
@@ -179,7 +183,7 @@ def declared_level(body: object) -> str | None:
     value = LEGACY_LEVEL_ALIASES.get(value, value)
     if value not in LEVELS:
         raise ValueError(
-            f"{DECLARATION_HEADING} must be one of {', '.join(LEVELS)}"
+            f"{DECLARATION_HEADING}: value is invalid. Use {', '.join(LEVELS)}."
         )
     return value
 
@@ -188,13 +192,15 @@ def _checkpoint_line(line: str) -> tuple[str, list[int], int]:
     """Parse one checkpoint declaration into its name, Issues, and terminal."""
     match = _CHECKPOINT.fullmatch(line)
     if match is None:
-        raise ValueError(f"Invalid checkpoint declaration: {line}")
+        raise ValueError(
+            f"Invalid checkpoint declaration: {line}. Fix the line."
+        )
     issues = [int(number) for number in re.findall(r"#(\d+)", match["issues"])]
     terminal = int(match["terminal"])
     if len(set(issues)) != len(issues) or terminal not in issues:
         raise ValueError(
-            f"Checkpoint {match['name']} must list unique Issues "
-            "including its terminal Issue"
+            f"Checkpoint {match['name']}: Issues repeat or omit the "
+            "terminal Issue. List each Issue once."
         )
     return match["name"], issues, terminal
 
@@ -219,16 +225,18 @@ def declared_checkpoints(body: object) -> dict[int, str] | None:
             continue
         name, issues, terminal = _checkpoint_line(line)
         if name in names:
-            raise ValueError(f"Checkpoint {name} is declared twice")
+            raise ValueError(f"Checkpoint {name}: declared twice. Remove one.")
         names.add(name)
         for number in issues:
             if number in roles:
                 raise ValueError(
-                    f"Issue #{number} belongs to more than one checkpoint"
+                    f"Issue #{number}: in more than one checkpoint. Keep one."
                 )
             roles[number] = "terminal" if number == terminal else "deferred"
     if not roles:
-        raise ValueError("Checkpoints section declares no checkpoint")
+        raise ValueError(
+            "Checkpoints section: no checkpoint. Add one or remove it."
+        )
     return roles
 
 
@@ -237,23 +245,25 @@ def stronger_suite(first: str, second: str) -> str:
     first = LEGACY_SUITE_ALIASES.get(first, first)
     second = LEGACY_SUITE_ALIASES.get(second, second)
     if first not in SUITE_RANK or second not in SUITE_RANK:
-        raise ValueError("unknown verification suite")
+        raise ValueError("Suite: name is unknown. Use fast or full.")
     return max((first, second), key=SUITE_RANK.__getitem__)
 
 
 def required_suite(level: str, path_tier: str, settings: Settings) -> str:
     """Combine the work-level floor with the path-selected test tier."""
     if level not in LEVELS:
-        raise ValueError(f"unknown release level: {level}")
+        raise ValueError(f"Release level {level}: unknown. Use beta or stable.")
     if path_tier not in {*SUITES, *LEGACY_SUITE_ALIASES}:
-        raise ValueError(f"unknown path verification tier: {path_tier}")
+        raise ValueError(f"Path tier {path_tier}: unknown. Use fast or full.")
     return stronger_suite(settings.suites[level], path_tier)
 
 
 def highest_level(levels: list[str]) -> str:
     """Return the highest declared level, failing on an empty batch."""
     if not levels or any(level not in LEVEL_RANK for level in levels):
-        raise ValueError("release batch has invalid or missing levels")
+        raise ValueError(
+            "Release batch: levels are invalid. Fix the release-level notes."
+        )
     return max(levels, key=LEVEL_RANK.__getitem__)
 
 
@@ -267,7 +277,9 @@ def _work_item(
     title = item.get("title")
     url = item.get("html_url")
     if type(number) is not int or not isinstance(title, str):
-        raise RuntimeError(f"GitHub returned invalid {kind} data")
+        raise RuntimeError(
+            f"GitHub {kind} data: invalid. Run 'gh auth status' and rerun."
+        )
     if not isinstance(url, str):
         url = ""
     row: dict[str, object] = {
@@ -331,7 +343,8 @@ def release_batch(
                 or issue.get("pull_request") is not None
             ):
                 raise RuntimeError(
-                    f"Closing reference #{numbers[0]} is not an Issue"
+                    f"Closing reference #{numbers[0]}: not an Issue. Edit the "
+                    "PR body."
                 )
             decision = resolve_issue(github, repo, issue, settings)
             key, row = _work_item("Issue", issue, decision)
@@ -342,7 +355,9 @@ def release_batch(
 
     ordered = [items[key] for key in sorted(items)]
     if not ordered:
-        raise RuntimeError("No unreleased work items were found")
+        raise RuntimeError(
+            "Release batch: no unreleased work. Merge work first."
+        )
     return {
         "level": highest_level([str(item["level"]) for item in ordered]),
         "items": ordered,
@@ -353,7 +368,10 @@ def release_batch_markdown(batch: dict[str, object]) -> str:
     """Render release-level evidence for a version PR and Release notes."""
     items = batch.get("items")
     if not isinstance(items, list):
-        raise ValueError("release batch has invalid work items")
+        raise ValueError(
+            "Release batch: work items are invalid. Run 'gh auth status' and "
+            "rerun."
+        )
     lines = [
         f"<!-- {_BATCH_MARKER}:start -->",
         "## Included work and release levels",
@@ -363,7 +381,10 @@ def release_batch_markdown(batch: dict[str, object]) -> str:
     ]
     for item in items:
         if not isinstance(item, dict):
-            raise ValueError("release batch has an invalid work item")
+            raise ValueError(
+                "Release batch: a work item is invalid. Run 'gh auth status' "
+                "and rerun."
+            )
         label = f"{item['kind']} #{item['number']}: {item['title']}"
         url = str(item.get("url") or "")
         if url:
@@ -423,7 +444,9 @@ def _tracker_for(
     if not isinstance(milestone, dict) or not isinstance(
         milestone.get("title"), str
     ):
-        raise RuntimeError("GitHub returned invalid Milestone data")
+        raise RuntimeError(
+            "GitHub Milestone data: invalid. Run 'gh auth status' and rerun."
+        )
     title = f"Milestone {milestone_number}: {milestone['title']}"
     candidates = [
         item
@@ -433,7 +456,10 @@ def _tracker_for(
         if item.get("title") == title and "pull_request" not in item
     ]
     if len(candidates) != 1:
-        raise RuntimeError(f"Milestone {milestone_number} needs one tracker")
+        raise RuntimeError(
+            f"Milestone {milestone_number}: no single tracker. Keep one "
+            "tracker Issue."
+        )
     return candidates[0]
 
 
@@ -446,7 +472,9 @@ def resolve_issue(
     """Resolve one Issue, including Milestone inheritance and trust."""
     number = issue.get("number")
     if type(number) is not int or number < 1:
-        raise RuntimeError("GitHub returned invalid Issue data")
+        raise RuntimeError(
+            "GitHub Issue data: invalid. Run 'gh auth status' and rerun."
+        )
     if not settings.enabled:
         level = settings.default_level
         return Decision(
@@ -491,7 +519,7 @@ def _release_pull_level(pull: dict[str, Any]) -> str | None:
         return None
     match = _RELEASE_VERSION.search(str(pull.get("title") or ""))
     if match is None:
-        raise RuntimeError("Release pull request title has no release version")
+        raise RuntimeError("Release PR title: no version. Fix the title.")
     version = ".".join(match.group(index) for index in (1, 2, 3))
     if match.group(4):
         version += f"-{match.group(4).lower()}.{match.group(5)}"
@@ -566,7 +594,7 @@ def resolve_pull(
         }
     )
     if len(numbers) > 1:
-        raise RuntimeError("Pull request closes more than one Issue")
+        raise RuntimeError("Pull request: closes several Issues. Close one.")
     if not numbers:
         milestone = pull.get("milestone")
         if isinstance(milestone, dict) and type(milestone.get("number")) is int:
@@ -581,7 +609,9 @@ def resolve_pull(
         )
     issue = github.get(repo, f"issues/{numbers[0]}")
     if not isinstance(issue, dict) or issue.get("pull_request") is not None:
-        raise RuntimeError(f"Closing reference #{numbers[0]} is not an Issue")
+        raise RuntimeError(
+            f"Closing reference #{numbers[0]}: not an Issue. Edit the PR body."
+        )
     return resolve_issue(github, repo, issue, settings)
 
 
@@ -608,7 +638,9 @@ def checkpoint_role(
         return "none"
     issue = github.get(repo, f"issues/{numbers[0]}")
     if not isinstance(issue, dict) or issue.get("pull_request") is not None:
-        raise RuntimeError(f"Closing reference #{numbers[0]} is not an Issue")
+        raise RuntimeError(
+            f"Closing reference #{numbers[0]}: not an Issue. Edit the PR body."
+        )
     milestone = issue.get("milestone")
     if (
         not isinstance(milestone, dict)
@@ -628,7 +660,10 @@ def checkpoint_role_for_commit(
     """Resolve the checkpoint role of the pull request merged as `sha`."""
     payload = github.get(repo, f"commits/{sha}/pulls")
     if not isinstance(payload, list):
-        raise RuntimeError("GitHub returned invalid commit pull requests")
+        raise RuntimeError(
+            "GitHub commit pull requests: invalid. Run 'gh auth status' and "
+            "rerun."
+        )
     merged = [
         pull
         for pull in payload
@@ -652,7 +687,9 @@ def resolve_pr(
     """Load and resolve one pull request."""
     pull = github.get(repo, f"pulls/{pr_number}")
     if not isinstance(pull, dict):
-        raise RuntimeError("GitHub returned invalid pull-request data")
+        raise RuntimeError(
+            "GitHub pull-request data: invalid. Run 'gh auth status' and rerun."
+        )
     return resolve_pull(github, repo, pull, settings)
 
 
@@ -680,13 +717,18 @@ class GitHubCLI:
         """Read and flatten a paginated GitHub REST collection."""
         payload = self._run(["--paginate", "--slurp", f"repos/{repo}/{path}"])
         if not isinstance(payload, list):
-            raise RuntimeError("GitHub returned an invalid collection")
+            raise RuntimeError(
+                "GitHub collection: invalid. Run 'gh auth status' and rerun."
+            )
         pages = (
             payload if payload and isinstance(payload[0], list) else [payload]
         )
         items = [item for page in pages for item in page]
         if not all(isinstance(item, dict) for item in items):
-            raise RuntimeError("GitHub returned an invalid collection item")
+            raise RuntimeError(
+                "GitHub collection item: invalid. Run 'gh auth status' and "
+                "rerun."
+            )
         return items
 
     def write(
@@ -744,7 +786,10 @@ def unreleased_pulls(
     for commit in _git_lines(root, ["rev-list", "--reverse", revision]):
         payload = github.get(repo, f"commits/{commit}/pulls")
         if not isinstance(payload, list):
-            raise RuntimeError("GitHub returned invalid commit pull requests")
+            raise RuntimeError(
+                "GitHub commit pull requests: invalid. Run 'gh auth status' "
+                "and rerun."
+            )
         for pull in payload:
             if (
                 not isinstance(pull, dict)
@@ -780,7 +825,7 @@ def release_batch_from_git(
     if not pointed:
         return {"level": settings.default_level, "items": []}
     if len(pointed) != 1:
-        raise RuntimeError("Release commit points at multiple version tags")
+        raise RuntimeError("Release commit: several version tags. Keep one.")
     level = release_phase.parse_version(pointed[0]).release_kind
     return {"level": level, "items": []}
 
@@ -803,11 +848,14 @@ def annotate_pull_request(
         == actor.casefold()
     ]
     if len(matches) > 1:
-        raise RuntimeError("Release pull request has duplicate level notes")
+        raise RuntimeError("Release PR: duplicate level notes. Delete one.")
     if matches:
         comment_id = matches[0].get("id")
         if type(comment_id) is not int:
-            raise RuntimeError("Release-level comment has no numeric ID")
+            raise RuntimeError(
+                "Release-level comment: no numeric ID. Run 'gh auth status' "
+                "and rerun."
+            )
         payload = github.write(
             repo, "PATCH", f"issues/comments/{comment_id}", body
         )
@@ -818,7 +866,10 @@ def annotate_pull_request(
     if not isinstance(payload, dict) or not isinstance(
         payload.get("html_url"), str
     ):
-        raise RuntimeError("Release-level comment response is invalid")
+        raise RuntimeError(
+            "Release-level comment: invalid response. Run 'gh auth status' and "
+            "rerun."
+        )
     return str(payload["html_url"])
 
 
@@ -844,7 +895,7 @@ def annotate_release(
         or type(payload.get("id")) is not int
     ):
         raise RuntimeError(
-            "Release-level notes require one mutable draft Release"
+            "Release-level notes: need one mutable draft Release. Create it."
         )
     body = str(payload.get("body") or "")
     pattern = re.compile(
@@ -955,6 +1006,7 @@ def main(argv: list[str] | None = None) -> int:
             _write_batch_outputs(
                 batch, args.markdown_output, args.github_output
             )
+            # message-pattern: allow X1 JSON output
             sys.stdout.write(json.dumps(batch, sort_keys=True) + "\n")
             return 0
         if args.command == "checkpoint-role":
@@ -962,6 +1014,7 @@ def main(argv: list[str] | None = None) -> int:
                 github, args.repo, args.sha, args.base_branch
             )
             _write_role_output("role", role, args.github_output)
+            # message-pattern: allow X1 JSON output
             sys.stdout.write(json.dumps({"role": role}) + "\n")
             return 0
         if args.command == "annotate-pr":
@@ -972,6 +1025,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.actor,
                 args.body_file.read_text(encoding="utf-8"),
             )
+            # message-pattern: allow X1 URL output for callers
             sys.stdout.write(url + "\n")
             return 0
         if args.command == "annotate-release":
@@ -986,13 +1040,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "resolve-issue":
             issue = github.get(args.repo, f"issues/{args.issue}")
             if not isinstance(issue, dict):
-                raise RuntimeError("GitHub returned invalid Issue data")
+                raise RuntimeError(
+                    "GitHub Issue data: invalid. Run 'gh auth status' and "
+                    "rerun."
+                )
             decision = resolve_issue(github, args.repo, issue, settings)
             path_tier = None
         else:
             pull = github.get(args.repo, f"pulls/{args.pr}")
             if not isinstance(pull, dict):
-                raise RuntimeError("GitHub returned invalid pull-request data")
+                raise RuntimeError(
+                    "GitHub pull-request data: invalid. Run 'gh auth status' "
+                    "and rerun."
+                )
             decision = resolve_pull(github, args.repo, pull, settings)
             path_tier = args.path_tier
             role = checkpoint_role(github, args.repo, pull)
@@ -1003,8 +1063,9 @@ def main(argv: list[str] | None = None) -> int:
             payload["checkpoint"] = role
             _write_role_output("checkpoint", role, args.github_output)
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
-        sys.stderr.write(f"release-level resolution failed closed: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
+    # message-pattern: allow X1 JSON output
     sys.stdout.write(json.dumps(payload, sort_keys=True) + "\n")
     return 0
 

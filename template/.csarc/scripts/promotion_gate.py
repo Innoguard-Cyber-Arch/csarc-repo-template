@@ -106,7 +106,7 @@ class GitHubCLIAPI:
             or not path.startswith(prefix)
         ):
             raise RuntimeError(
-                "Promotion sync evidence only supports GitHub reads"
+                "Promotion sync evidence: GitHub reads only. Use GitHub."
             )
         return 200, github_get(self.repo, path.removeprefix(prefix), "")
 
@@ -149,8 +149,8 @@ def validate_promotion_alignment(body: str, head_sha: str) -> None:
     match = PROMOTION_ALIGNMENT.search(body)
     if match is None:
         raise RuntimeError(
-            "Milestone promotion requires an `## ADR 與文件對齊` section "
-            "with Status, Reviewed head, and Reason fields"
+            "Milestone promotion: no '## ADR 與文件對齊' section. Add it "
+            "with Status, Reviewed head, and Reason fields."
         )
     try:
         documentation_review.validate_review(
@@ -158,14 +158,14 @@ def validate_promotion_alignment(body: str, head_sha: str) -> None:
         )
     except ValueError as error:
         raise RuntimeError(
-            f"ADR and documentation alignment: {error}"
+            f"ADR and documentation alignment: {error}. Fix the section."
         ) from error
 
 
 def check_alignment(args: argparse.Namespace) -> None:
     """Validate one promotion alignment record from a local policy gate."""
     validate_promotion_alignment(args.body, args.head_sha)
-    print("ADR and documentation alignment is valid.")  # noqa: T201
+    print("OK: ADR and documentation alignment is valid.")  # noqa: T201
 
 
 def check_route(args: argparse.Namespace) -> None:
@@ -196,11 +196,10 @@ def check_route(args: argparse.Namespace) -> None:
             ["- Promotion route — blocked: no recognized route targets `main`"],
         )
         raise RuntimeError(
-            "Only a promotion, hotfix, release recovery, or release "
-            "follow-up branch/label combination may target main; use a "
-            "type/<issue-number>-short-slug topic branch or the matching "
-            "promotion route. This check is read-only; GitHub closes an "
-            "open pull request when its head branch is renamed"
+            "Route to main: not a promotion, hotfix, release recovery, or "
+            "release follow-up. Open a new pull request from a "
+            "'type/<issue-number>-short-slug' branch; a head rename "
+            "closes this one."
         )
     if route.kind == "milestone":
         validate_promotion_alignment(
@@ -208,7 +207,7 @@ def check_route(args: argparse.Namespace) -> None:
             str((pull_request.get("head") or {}).get("sha") or ""),
         )
     write_summary(args.summary, [f"- Promotion route — {route.kind}"])
-    print(f"Promotion route: {route.kind}")  # noqa: T201
+    print(f"NOTICE: Promotion route is {route.kind}.")  # noqa: T201
 
 
 def pull_request_issue_number(pull_request: dict[str, Any]) -> int:
@@ -216,20 +215,25 @@ def pull_request_issue_number(pull_request: dict[str, Any]) -> int:
     head = pull_request.get("head")
     head_ref = head.get("ref") if isinstance(head, dict) else None
     if not isinstance(head_ref, str):
-        raise RuntimeError("Included pull request head is incomplete")
+        raise RuntimeError(
+            "Included pull request: incomplete head. Run 'gh auth status' and "
+            "rerun."
+        )
     match = WORK_BRANCH.fullmatch(head_ref)
     if match is None:
-        raise RuntimeError("Included pull request is not a work Issue")
+        raise RuntimeError(
+            "Included pull request: not a work Issue. Fix its branch."
+        )
     branch_issue = int(match.group(1))
     body = pull_request.get("body")
     if not isinstance(body, str):
         raise RuntimeError(
-            "Included pull request does not close its branch Issue"
+            "Included pull request: does not close its Issue. Edit its PR body."
         )
     closing_issues = {int(number) for number in CLOSING_ISSUE.findall(body)}
     if branch_issue not in closing_issues:
         raise RuntimeError(
-            "Included pull request does not close its branch Issue"
+            "Included pull request: does not close its Issue. Edit its PR body."
         )
     return branch_issue
 
@@ -262,16 +266,21 @@ def sync_pull_request_main_sha(
         or not isinstance(head_sha, str)
         or not same_repository(pull_request, repo)
     ):
-        raise RuntimeError("Included sync pull request has invalid provenance")
+        raise RuntimeError(
+            "Included sync pull request: invalid provenance. Recreate the sync "
+            "branch from main."
+        )
     sync_commit = github_get(repo, f"git/commits/{head_sha}", token)
     if not isinstance(sync_commit, dict):
         raise RuntimeError(
-            "Included sync pull request has invalid commit shape"
+            "Included sync pull request: invalid commit shape. Recreate the "
+            "sync branch from main."
         )
     parents = sync_commit.get("parents")
     if not isinstance(parents, list) or len(parents) != 2:
         raise RuntimeError(
-            "Included sync pull request has invalid commit shape"
+            "Included sync pull request: invalid commit shape. Recreate the "
+            "sync branch from main."
         )
     main_parent = parents[1]
     delivery_parent = parents[0]
@@ -279,7 +288,10 @@ def sync_pull_request_main_sha(
         main_parent.get("sha") if isinstance(main_parent, dict) else None
     )
     if not isinstance(synced_main_sha, str):
-        raise RuntimeError("Included sync pull request has invalid provenance")
+        raise RuntimeError(
+            "Included sync pull request: invalid provenance. Recreate the sync "
+            "branch from main."
+        )
     expected_ref = delivery_sync.sync_branch_name(
         delivery_branch, synced_main_sha
     )
@@ -290,7 +302,10 @@ def sync_pull_request_main_sha(
     } or not delivery_sync.includes_main(
         delivery_sync.compare(api, repo, synced_main_sha, current_main_sha)
     ):
-        raise RuntimeError("Included sync pull request has invalid provenance")
+        raise RuntimeError(
+            "Included sync pull request: invalid provenance. Recreate the sync "
+            "branch from main."
+        )
     if head_ref == legacy_ref:
         base_sha = base.get("sha")
         delivery_parent_sha = (
@@ -316,7 +331,8 @@ def sync_pull_request_main_sha(
             or sync_tree_sha != main_tree_sha
         ):
             raise RuntimeError(
-                "Included legacy sync pull request has invalid provenance"
+                "Legacy sync pull request: invalid provenance. Recreate the "
+                "sync branch from main."
             )
     return synced_main_sha
 
@@ -423,11 +439,16 @@ def check_promotion_intent(args: argparse.Namespace) -> None:
         if not isinstance(titles, list) or any(
             not isinstance(title, str) for title in titles
         ):
-            raise RuntimeError("Promotion title fixture must be a string list")
+            raise RuntimeError(
+                "Promotion title fixture: not a string list. Pass a JSON "
+                "string list."
+            )
     else:
         token = os.environ.get("GH_TOKEN", "")
         if not token:
-            raise RuntimeError("GH_TOKEN is required to inspect promotion work")
+            raise RuntimeError(
+                "GH_TOKEN: not set. Set it to inspect promotion work."
+            )
         included = included_pull_requests(
             args.repo,
             args.base_sha,
@@ -440,16 +461,16 @@ def check_promotion_intent(args: argparse.Namespace) -> None:
         titles = [str(item["title"]) for item in included]
     if not titles:
         raise RuntimeError(
-            "Delivery promotion contains no merged pull requests"
+            "Delivery promotion: no merged PRs. Merge work first."
         )
     expected = highest_release_intent(titles)
     actual = release_intent(args.title)
     if actual != expected:
         raise RuntimeError(
-            "Promotion pull-request title must declare the batch's highest "
-            f"SemVer intent ({expected})"
+            "Promotion title: wrong SemVer intent. Use the batch's "
+            f"highest intent ({expected})."
         )
-    print(f"Promotion release intent is {expected}.")  # noqa: T201
+    print(f"NOTICE: Promotion release intent is {expected}.")  # noqa: T201
 
 
 def included_pull_requests(  # noqa: C901
@@ -476,16 +497,22 @@ def included_pull_requests(  # noqa: C901
             repo, f"compare/{base_sha}...{head_sha}?{query}", token
         )
         if not isinstance(comparison, dict):
-            raise RuntimeError("GitHub returned an invalid commit comparison")
+            raise RuntimeError(
+                "GitHub commit comparison: invalid. Run 'gh auth status' and "
+                "rerun."
+            )
         commits = comparison.get("commits", [])
         if not isinstance(commits, list):
-            raise RuntimeError("GitHub returned an invalid commit list")
+            raise RuntimeError(
+                "GitHub commit list: invalid. Run 'gh auth status' and rerun."
+            )
         for commit in commits:
             sha = commit.get("sha") if isinstance(commit, dict) else None
             if not isinstance(sha, str):
                 if bridge_head_sha is not None:
                     raise RuntimeError(
-                        "GitHub returned invalid bridge commit provenance"
+                        "Bridge commit provenance: invalid. Run 'gh auth "
+                        "status' and rerun."
                     )
                 continue
             if sha == bridge_head_sha:
@@ -494,7 +521,8 @@ def included_pull_requests(  # noqa: C901
             pull_requests = github_get(repo, f"commits/{sha}/pulls", token)
             if not isinstance(pull_requests, list):
                 raise RuntimeError(
-                    "GitHub returned an invalid associated pull-request list"
+                    "GitHub associated pull requests: invalid. Run 'gh auth "
+                    "status' and rerun."
                 )
             matched = False
             for pull_request in pull_requests:
@@ -564,13 +592,17 @@ def included_pull_requests(  # noqa: C901
                     "same-Milestone" if milestone is not None else "eligible"
                 )
                 raise RuntimeError(
-                    f"Bridge commit {sha} has no {scope} merged PR"
+                    f"Bridge commit {sha}: no {scope} merged PR. Merge it "
+                    "through a PR."
                 )
         if len(commits) < 100:
             break
         page += 1
     if not saw_bridge_head:
-        raise RuntimeError("GitHub comparison omitted the promotion bridge")
+        raise RuntimeError(
+            "GitHub comparison: no promotion bridge. Push the promote/m* "
+            "branch."
+        )
     for number, synced_main_sha in sync_pull_requests.items():
         verified_sync = (
             delivery_sync.merged_sync_pr_number(
@@ -596,7 +628,8 @@ def included_pull_requests(  # noqa: C901
             )
         ):
             raise RuntimeError(
-                "Included sync pull request lacks reviewed merge provenance"
+                "Included sync pull request: no reviewed merge. Merge it "
+                "through a reviewed PR."
             )
     return [included[number] for number in sorted(included)]
 
@@ -610,7 +643,7 @@ def github_get(repo: str, path: str, token: str) -> object:
         executable = shutil.which("gh")
         if executable is None:
             raise RuntimeError(
-                "GH_TOKEN or an authenticated GitHub CLI is required"
+                "GitHub credentials: none. Set GH_TOKEN or run 'gh auth login'."
             )
         result = subprocess.run(  # noqa: S603
             [executable, "api", resource],

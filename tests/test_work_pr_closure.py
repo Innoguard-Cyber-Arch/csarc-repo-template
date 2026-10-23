@@ -124,18 +124,18 @@ def test_default_branch_routes_keep_github_native_closure(
     ("change", "message"),
     [
         (lambda github: github.pull.update(merged=False), "identity"),
-        (lambda github: github.pull["head"].update(sha="c" * 40), "head SHA"),
+        (lambda github: github.pull["head"].update(sha="c" * 40), "or head"),
         (
             lambda github: github.pull.update(body="Closes #99"),
-            "matching Issue",
+            "does not close its Issue",
         ),
         (
             lambda github: github.pull.update(body="Closes #42\nCloses #43"),
-            "matching Issue",
+            "does not close its Issue",
         ),
         (
             lambda github: github.pull["base"].update(ref="dev/m9-other"),
-            "disagree",
+            "disagrees",
         ),
     ],
 )

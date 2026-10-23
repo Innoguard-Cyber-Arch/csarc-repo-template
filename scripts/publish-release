@@ -175,7 +175,7 @@ writer_preflight() {
     --for "$purpose")" || status=$?
   printf '%s\n' "$writer_decision" >&2
   if [[ "$status" -eq 3 ]]; then
-    echo "CSARC is not this project's Release writer; nothing was written." >&2
+    echo "WARNING: Release writer: not CSARC, so nothing was written. Publish with the project's writer." >&2
     write_output "writer=none"
   fi
   return "$status"
@@ -224,7 +224,7 @@ poll_immutable_and_verify() {
       return
     fi
     if [[ "$attempt" == 12 ]]; then
-      echo "Release did not become immutable and verifiable within 60 seconds." >&2
+      echo "ERROR: Release: not immutable and verifiable in 60 seconds. Check it and rerun." >&2
       return 1
     fi
     sleep 5
@@ -266,7 +266,7 @@ verify_release_attestation() {
       --commit "$commit_sha"
   done
   if [[ "$found" != 1 ]]; then
-    echo "No uploaded release assets were found to verify against the attestation." >&2
+    echo "ERROR: Attestation check: no uploaded release assets. Upload them and rerun." >&2
     return 1
   fi
 }

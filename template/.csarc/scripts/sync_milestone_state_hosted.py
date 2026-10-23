@@ -257,7 +257,10 @@ def refresh_pr_checks(snapshot: dict[str, Any]) -> int:
         )
         head_sha = pull.get("head", {}).get("sha")
         if not isinstance(head_sha, str) or not head_sha:
-            raise RuntimeError("GitHub returned an invalid pull-request head")
+            raise RuntimeError(
+                "GitHub pull-request head: invalid. Run 'gh auth status' and "
+                "rerun."
+            )
         _record_check(repo, head_sha, decision)
         count += 1
     return count
@@ -268,7 +271,9 @@ def check_pr(repo: str, number: int, *, record_check: bool = True) -> Decision:
     pull = json.loads(run_gh(["api", f"repos/{repo}/pulls/{number}"]))
     head_sha = pull.get("head", {}).get("sha")
     if not isinstance(head_sha, str) or not head_sha:
-        raise RuntimeError("GitHub returned an invalid pull-request head")
+        raise RuntimeError(
+            "GitHub pull-request head: invalid. Run 'gh auth status' and rerun."
+        )
     decision = _pull_decision(repo, pull)
     if record_check:
         _record_check(repo, head_sha, decision)
@@ -309,7 +314,8 @@ def _pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
     milestone_number = milestone.get("number")
     if not isinstance(milestone_number, int):
         raise RuntimeError(
-            "GitHub returned invalid pull-request lifecycle data"
+            "GitHub pull-request lifecycle data: invalid. Run 'gh auth status' "
+            "and rerun."
         )
     return approval_decision(load_snapshot(repo, milestone_number))
 
@@ -382,6 +388,7 @@ def _unchanged_lifecycle(
     # keeps its closure; report the gaps instead of reopening history.
     summary = "; ".join(errors)
     notice = summary.replace("%", "%25").replace("\n", "%0A")
+    # message-pattern: allow X1 workflow annotation
     print(f"::notice title=Closed Milestone governance gaps::{notice}")  # noqa: T201
     return Decision(True, f"Closed Milestone keeps its closure: {summary}")
 
@@ -420,6 +427,7 @@ def reconcile(
                 .replace("\r", "%0D")
                 .replace("\n", "%0A")
             )
+            # message-pattern: allow X1 workflow annotation
             print(  # noqa: T201
                 f"::notice title=Milestone governance status::{notice}"
             )

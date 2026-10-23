@@ -581,7 +581,7 @@ def test_declared_checkpoints_map_terminal_and_deferred_issues() -> None:
     [
         ("- Checkpoint A (stable): #1; terminal #1", "Invalid checkpoint"),
         ("- Checkpoint A (beta): #1, #2; terminal #3", "terminal Issue"),
-        ("- Checkpoint A (beta): #1, #1; terminal #1", "unique Issues"),
+        ("- Checkpoint A (beta): #1, #1; terminal #1", "Issues repeat or omit"),
         ("Checkpoint A covers #1", "Invalid checkpoint"),
     ],
 )
