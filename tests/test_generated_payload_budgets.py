@@ -160,6 +160,18 @@ def test_every_fixture_has_every_budget() -> None:
         assert set(budgets) == keys
 
 
+def test_runtime_group_budgets_match_the_adr() -> None:
+    """#1248 raised only pr-lifecycle; every other group keeps #1231's cap."""
+    assert generated_payload.RUNTIME_GROUP_BUDGETS == {
+        "pr-lifecycle": 266_000,
+        "release": 166_000,
+        "milestone-issue": 130_000,
+        "verification": 101_000,
+        "settings-drift": 87_000,
+        "dependabot": 18_000,
+    }
+
+
 def test_budget_failures_name_each_exceeded_measure() -> None:
     """A fixture over a budget or with unassigned runtime is reported."""
     name = "consumer-b"
