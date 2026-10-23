@@ -2062,6 +2062,48 @@ def prepare_release_candidate(
     }
 
 
+STABLE_TAG = re.compile(r"v\d+\.\d+\.\d+")
+
+
+def generated_payload_churn(
+    root: Path, sha: str, version: str
+) -> dict[str, object] | None:
+    """Return the advisory generated-payload churn of a stable candidate.
+
+    Issue #1231: only the template repository carries
+    `scripts/generated_payload.py`, and only a stable candidate reports
+    churn, measured against the previous stable tag reachable from `sha`.
+    The measuring code is loaded only from this script's own directory,
+    and only when that directory belongs to `root`, so a trusted-base run
+    against another checkout (for example the Dependabot sync job) never
+    imports or renders candidate code. The report never blocks: any
+    failure becomes `available: false`.
+    """
+    here = Path(__file__).resolve().parent
+    if "-" in version or not (here / "generated_payload.py").is_file():
+        return None
+    if here.parent != root.resolve():
+        return {
+            "available": False,
+            "reason": "churn runs only from the repository's own scripts",
+        }
+    try:
+        tags = git_output(
+            ["tag", "--merged", sha, "--sort=-v:refname"], root
+        ).splitlines()
+        since = next((tag for tag in tags if STABLE_TAG.fullmatch(tag)), None)
+        if since is None:
+            return {"available": False, "reason": "no earlier stable tag"}
+        sys.path.insert(0, str(here))
+        try:
+            payload_module = importlib.import_module("generated_payload")
+        finally:
+            sys.path.remove(str(here))
+        return payload_module.churn(since, root=root)
+    except Exception as error:  # advisory: any failure is reported, not raised
+        return {"available": False, "reason": str(error)}
+
+
 def _promotion_baseline_tree(root: Path, source_sha: str, head_sha: str) -> str:
     """Return the deterministic pre-release tree for a promotion head."""
     source_tree = git_output(["rev-parse", f"{source_sha}^{{tree}}"], root)
@@ -2781,6 +2823,11 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             )
         except (ValueError, json.JSONDecodeError) as error:
             raise SystemExit(str(error)) from error
+        churn = generated_payload_churn(
+            args.root.resolve(), args.sha, str(payload["version"])
+        )
+        if churn is not None:
+            payload["generated_payload_churn"] = churn
         write_plan_report(payload, None, None)
         return 0
     if args.command == "retention-plan":

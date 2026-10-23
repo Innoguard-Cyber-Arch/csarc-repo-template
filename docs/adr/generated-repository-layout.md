@@ -196,7 +196,7 @@ typescript/tests/index.test.ts
 - Python（副檔名 `.py`，或 shebang 含 `python`）：以 `ast.parse` 解析，移除 module、class 與 function 的 docstring，以 `ast.unparse` 輸出，每行去掉前後空白後計 bytes 加 1 個換行。註解、空行、縮排、格式換行與引號風格都不計。
 - 其他 runtime（shell）：非空白、不以 `#` 開頭的行，去掉前後空白後計 bytes 加 1。
 
-總閘數字由 #1058 的 bytes `Targets` 換算，不另訂：在換算基準 `cd0b69d`（#1227 合併後、本 Issue 核准時的 `dev/m20-writing-guidelines`），每個 fixture 的新上限＝舊 `Targets` −（原始 bytes − canonical bytes），再向下取整到 1,000 B。換算點的餘裕因此與舊規則相同（只因取整少不到 1,000 B），舊的原始 bytes 數字沒有調高；之後只能下調。原始總 bytes 仍會印出供參考，不再是預算。
+canonical bytes 以 lock 的 Python 3.14 計算，因為 `ast.unparse` 的輸出可能隨 Python 版本改變。總閘數字由 #1058 的 bytes `Targets` 換算，不另訂：在換算基準 `cd0b69d`（#1227 合併後、本 Issue 核准時的 `dev/m20-writing-guidelines`），每個 fixture 的新上限＝舊 `Targets` −（原始 bytes − canonical bytes），再向下取整到 1,000 B。換算點的餘裕因此與舊規則相同（只因取整少不到 1,000 B），舊的原始 bytes 數字沒有調高；之後只能下調。原始總 bytes 仍會印出供參考，不再是預算。
 
 | Fixture | 舊 `Targets` bytes | `cd0b69d` 原始 | `cd0b69d` canonical | 新總閘 | 換算點餘裕（舊／新） |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -206,17 +206,17 @@ typescript/tests/index.test.ts
 | consumer-a | 1,050,000 | 993,740 | 764,616 | 820,000 | 56,260／55,384 |
 | consumer-b | 1,050,000 | 984,913 | 756,226 | 821,000 | 65,087／64,774 |
 
-**2. 檔案數上限收緊。** 新上限＝min（舊 `Targets`，本 Issue 實作 head 的實測值＋6）。以 `cd0b69d`＋#1219＋#1220 實測：solo-default 92、solo-python 95（不變，實測＋6 會超過舊值）、hosted 126（原 137）、consumer-a 112（原 121）、consumer-b 108（原 117）。
+**2. 檔案數上限收緊。** 新上限＝min（舊 `Targets`，本 Issue 實作 head 的實測值＋6）。以實作 base `096987b`（含 #1219、#1220、#1230）實測：solo-default 92、solo-python 95（不變，實測＋6 會超過舊值）、hosted 126（原 137）、consumer-a 112（原 121）、consumer-b 108（原 117）。
 
 **3. 攻擊面預算。** 每個 fixture 的 `.github/workflows` 中，(a) 頂層或任一 job 的 `permissions` 有 `write` 或為 `write-all` 的 workflow 數，(b) 觸發條件含 `pull_request_target` 的 workflow 數，上限等於實測值、沒有緩衝：hosted 10／5、consumer-a 9／5、consumer-b 7／5、solo 0／0。新增一個具寫入權限或 `pull_request_target` 的 workflow 必須修訂本節並由擁有者核准。
 
 **4. Agent 文件 token 預算。** 量 `AGENTS.md` 加 `.csarc/docs/*.md` 的估計 token：中日韓字與全形標點每字 1 token，其餘字元每 4 個 1 token（無條件進位）。上限＝實作 head 實測值×1.05，向上取整到 500：solo-default 13,500、solo-python 13,500、hosted 15,500、consumer-a 15,000、consumer-b 15,000。它取代 #1058 文件預算中 solo `.csarc/docs` 60 KB 與 `agent-workflow.md` 12 KB 兩個 bytes 上限；行數上限（600、300、360、90、90 行）保留。
 
-**5. Runtime 能力分帳。** `scripts/generated_payload.py` 以封閉對照表把每支 `.csarc/scripts` 歸入一組：PR lifecycle 與 review、release、Milestone 與 Issue、verification、settings 與 drift、Dependabot。沒有歸組的 script 讓測試失敗，新功能因此必須記到某一組。每組上限＝實作 head 上該組在所有 fixture 中最大的 canonical code bytes ×1.03，向上取整到 1,000。以 `cd0b69d`＋#1219＋#1220 實測：PR lifecycle 257,000、release 166,000、Milestone 與 Issue 130,000、verification 101,000、settings 與 drift 87,000、Dependabot 18,000。組間不得自行挪用；調整任何一組的上限要修訂本節並由擁有者核准。分組加總可以略高於總閘，總量仍由總閘決定。
+**5. Runtime 能力分帳。** `scripts/generated_payload.py` 以封閉對照表把每支 `.csarc/scripts` 歸入一組：PR lifecycle 與 review、release、Milestone 與 Issue、verification、settings 與 drift、Dependabot。沒有歸組的 script 讓測試失敗，新功能因此必須記到某一組。每組上限＝實作 head 上該組在所有 fixture 中最大的 canonical code bytes ×1.03，向上取整到 1,000。以實作 base `096987b`（含 #1219、#1220、#1230）實測：PR lifecycle 257,000、release 166,000、Milestone 與 Issue 130,000、verification 101,000、settings 與 drift 87,000、Dependabot 18,000。只在 `documentation_mode: site` render 的網站引擎另記一組 docs-site；沒有任何 fixture 選這個模式，所以只量測、不設上限。組間不得自行挪用；調整任何一組的上限要修訂本節並由擁有者核准。分組加總可以略高於總閘，總量仍由總閘決定。
 
 **6. 餘裕提醒與底線。** #1177 的提醒保留，改用總閘的單位：任一 fixture 距離總閘不到 1 個檔案或 20,000 B 時印出 `WARNING`，不改變 exit status。Milestone 20 Checkpoint Scripts 的 hosted 至少保留 5,000 B（擁有者 2026-10-23 決定）同樣改用 canonical bytes 判斷。分項預算超過即失敗，沒有提醒區間。
 
-**7. 發版 churn（只提醒）。** `scripts/generated_payload.py churn --since <tag>` 用上一個 stable tag 的 `copier.yml` 與 `template/` 和目前的 working tree，以同一組 fixture 各 render 一次，列出新增、刪除、修改的檔案數與增刪行數。stable 的 `release_policy.py prepare-candidate` 在模板 repository 把結果放進候選報告的 `generated_payload_churn` 欄位；計算失敗只記 `available: false` 與原因，不改變 exit status，也不擋任何發版。生成專案的 `release_policy.py` 副本不含這段程式。
+**7. 發版 churn（只提醒）。** `scripts/generated_payload.py churn --since <tag>` 用上一個 stable tag 的 `copier.yml` 與 `template/` 和目前的 working tree，以同一組 fixture 各 render 一次，列出新增、刪除、修改的檔案數與增刪行數。stable 的 `release_policy.py prepare-candidate` 在模板 repository 把結果放進候選報告的 `generated_payload_churn` 欄位；計算失敗只記 `available: false` 與原因，不改變 exit status，也不擋任何發版。量測程式只從執行中的 `release_policy.py` 所在的 `scripts/` 載入，而且只在這個目錄屬於 `--root` 時執行；以可信 base 對另一份 checkout 執行（例如 Dependabot 同步 job）時只記 `available: false`，不載入或 render candidate 的程式。生成專案的 `release_policy.py` 副本不含這段程式。
 
 **8. 與既有決定的關係。** #1227 的 docstring 摘要規則保留，本 Issue 不還原；在新度量下 docstring 與註解不再占預算，是否還原生成副本的完整 docstring 另開 Issue 決定。#1177 的 hosted sibling、#1208 的 Milestone script 規則與 #1129 的精簡規則都保留。每個預算都只能下調；任何上調都要修訂本節並由擁有者核准。
 
