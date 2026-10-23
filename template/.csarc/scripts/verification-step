@@ -39,7 +39,7 @@ verification_step() {
   local command
 
   if [[ ! "$heartbeat_seconds" =~ ^[1-9][0-9]*$ ]]; then
-    echo "CSARC_VERIFICATION_HEARTBEAT_SECONDS must be a positive integer." >&2
+    echo "ERROR: Bad heartbeat: not a positive integer. Fix CSARC_VERIFICATION_HEARTBEAT_SECONDS." >&2
     return 2
   fi
 

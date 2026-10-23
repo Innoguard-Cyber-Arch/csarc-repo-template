@@ -9,7 +9,7 @@ if [[ -x scripts/test-pr-policy ]]; then
 elif [[ -x .csarc/scripts/test-pr-policy ]]; then
   owner_root=".csarc/scripts"
 else
-  echo "Cannot find the CSARC security owner tests." >&2
+  echo "ERROR: Security owner tests are missing: no test-pr-policy found. Run it from the repository root." >&2
   exit 2
 fi
 

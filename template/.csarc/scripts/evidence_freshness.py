@@ -33,11 +33,13 @@ def policy_max_age_hours(requested: object = None) -> float:
         or not math.isfinite(requested)
         or requested <= 0
     ):
-        raise RuntimeError("Verification freshness window is invalid")
+        raise RuntimeError(
+            "Verification freshness window is invalid: not > 0. Fix it."
+        )
     if requested > DEFAULT_MAX_AGE_HOURS:
         raise RuntimeError(
-            "Verification freshness window cannot exceed the trusted "
-            f"{DEFAULT_MAX_AGE_HOURS:g}-hour policy"
+            "Verification freshness window is too wide: the limit is "
+            f"{DEFAULT_MAX_AGE_HOURS:g} hours. Lower it."
         )
     return float(requested)
 
@@ -47,16 +49,15 @@ def reference_time(now: datetime | None = None) -> datetime:
     if now is None:
         return datetime.now(UTC)
     if not isinstance(now, datetime) or now.tzinfo is None:
-        raise RuntimeError(
-            "Verification freshness reference time has no timezone"
-        )
+        raise RuntimeError("Reference time has no timezone: unsafe. Fix it.")
     return now.astimezone(UTC)
 
 
 def completion_time(value: object, subject: str) -> datetime:
     """Parse one required, timezone-aware completion time into UTC."""
+    what = f"{subject} completion time"
     if value is None or value == "":
-        raise RuntimeError(f"{subject} completion time is missing")
+        raise RuntimeError(f"{what} is missing: empty. Retry.")
     if isinstance(value, datetime):
         parsed = value
     elif isinstance(value, str):
@@ -64,12 +65,12 @@ def completion_time(value: object, subject: str) -> datetime:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as error:
             raise RuntimeError(
-                f"{subject} completion time is malformed"
+                f"{what} is malformed: no ISO. Retry."
             ) from error
     else:
-        raise RuntimeError(f"{subject} completion time is malformed")
+        raise RuntimeError(f"{what} is malformed: no text. Retry.")
     if parsed.tzinfo is None:
-        raise RuntimeError(f"{subject} completion time has no timezone")
+        raise RuntimeError(f"{what} has no timezone: unsafe. Retry.")
     return parsed.astimezone(UTC)
 
 
@@ -91,10 +92,11 @@ def require_fresh(
     current = reference_time(now)
     completed = completion_time(completed_at, subject)
     if completed - current > MAX_CLOCK_SKEW:
-        raise RuntimeError(f"{subject} completion time is in the future")
+        raise RuntimeError(
+            f"{subject} completion time is in the future: skew. Retry."
+        )
     if current - completed > window:
         raise RuntimeError(
-            f"{subject} evidence is stale; re-run verification on the "
-            "exact head"
+            f"{subject} evidence is stale: too old. Re-verify the exact head."
         )
     return completed

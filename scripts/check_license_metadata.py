@@ -28,13 +28,13 @@ def validate_license_file(path: Path, kind: str, holder: str) -> None:
     """Validate the human-readable license file."""
     license_text = path.read_text(encoding="utf-8")
     if holder not in license_text:
-        raise ValueError("LICENSE does not name copyright_holder")
+        raise ValueError("Bad LICENSE: it lacks copyright_holder. Fix it.")
     if kind == "proprietary":
         if "All rights reserved" not in license_text:
-            raise ValueError("proprietary LICENSE must reserve all rights")
+            raise ValueError("Bad LICENSE: it must reserve all rights. Fix it.")
         return
     if not license_text.startswith(f"{kind.split('-')[0]} License"):
-        raise ValueError(f"LICENSE does not contain {kind}")
+        raise ValueError(f"Bad LICENSE: it lacks {kind}. Fix it.")
 
 
 def manifests(root: Path) -> Manifests:
@@ -57,7 +57,7 @@ def require_custom(root: Path, found: Manifests) -> None:
         found_keys = (k for m in found.values() for k in LICENSE_KEYS if k in m)
         custom = bool(found) and next(found_keys, None) is None
     if not custom:
-        raise ValueError("LICENSE is missing")
+        raise ValueError("LICENSE is missing: no custom license. Add it.")
 
 
 def validate_manifests(found: Manifests, project_license: str) -> None:
@@ -67,20 +67,20 @@ def validate_manifests(found: Manifests, project_license: str) -> None:
     npm = "UNLICENSED" if proprietary else project_license
     python = found.get("pyproject.toml")
     if python is not None and python.get("license") != spdx:
-        raise ValueError("pyproject.toml license does not match LICENSE")
+        raise ValueError("Bad pyproject.toml: does not match LICENSE. Fix it.")
     if python is not None and "LICENSE" not in python.get("license-files", []):
-        raise ValueError("pyproject.toml must package LICENSE")
+        raise ValueError("Bad pyproject.toml: LICENSE unpackaged. Fix it.")
     node = found.get("package.json")
     if node is not None and node.get("license") != npm:
-        raise ValueError("package.json license does not match LICENSE")
+        raise ValueError("Bad package.json: does not match LICENSE. Fix it.")
     if node is not None and proprietary and node.get("private") is not True:
-        raise ValueError("proprietary npm packages must set private=true")
+        raise ValueError("Bad package.json: private is not true. Fix it.")
     cargo = found.get("Cargo.toml")
     if cargo is not None and proprietary:
         if cargo.get("license-file") != "LICENSE" or "license" in cargo:
-            raise ValueError("Cargo.toml proprietary license is inconsistent")
+            raise ValueError("Bad Cargo.toml: proprietary mismatch. Fix it.")
     elif cargo is not None and cargo.get("license") != project_license:
-        raise ValueError("Cargo.toml license does not match LICENSE")
+        raise ValueError("Bad Cargo.toml: does not match LICENSE. Fix it.")
 
 
 def validate(root: Path) -> None:
@@ -95,7 +95,7 @@ def validate(root: Path) -> None:
     if project_license == "custom":
         return  # A product-owned license text: CSARC does not interpret it.
     if not isinstance(holder, str) or not holder.strip():
-        raise ValueError("LICENSE does not name a copyright holder")
+        raise ValueError("Bad LICENSE: it names no copyright holder. Fix it.")
     validate_license_file(root / "LICENSE", project_license, holder)
     validate_manifests(manifests(root), project_license)
 
@@ -105,9 +105,9 @@ def main() -> int:
     try:
         validate(Path.cwd())
     except (KeyError, OSError, ValueError, tomllib.TOMLDecodeError) as error:
-        sys.stderr.write(f"License metadata invalid: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
-    sys.stdout.write("License metadata is synchronized.\n")
+    sys.stdout.write("OK: License metadata is synchronized.\n")
     return 0
 
 

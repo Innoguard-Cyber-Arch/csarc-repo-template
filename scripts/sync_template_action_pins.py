@@ -79,7 +79,8 @@ def pin_changes(
             continue
         if len(old.get(action, set())) != 1 or len(new.get(action, set())) != 1:
             raise AmbiguousPinError(
-                f"{action}: the root bump has no single old and new pin"
+                f"{action} bump is ambiguous: no single old and new pin. "
+                "Bump it by hand."
             )
         (old_pin,) = old[action]
         (new_pin,) = new[action]

@@ -77,7 +77,7 @@ def run_gh(arguments: list[str]) -> str:
     """Run GitHub CLI without a shell (default transport; tests replace it)."""
     executable = shutil.which("gh")
     if executable is None:
-        raise RuntimeError("GitHub CLI (gh) is required")
+        raise RuntimeError("GitHub CLI (gh) is required: missing. Install it.")
     result = subprocess.run(  # noqa: S603
         [executable, *arguments],
         check=True,
@@ -91,11 +91,11 @@ def _pages(raw: str) -> list[dict[str, Any]]:
     """Flatten a `gh api --paginate --slurp` response."""
     value = json.loads(raw)
     if not isinstance(value, list):
-        raise RuntimeError("GitHub returned an invalid collection")
+        raise RuntimeError("GitHub collection is invalid: bad JSON. Retry.")
     if value and isinstance(value[0], list):
         value = [item for page in value for item in page]
     if not all(isinstance(item, dict) for item in value):
-        raise RuntimeError("GitHub returned an invalid collection item")
+        raise RuntimeError("GitHub item is invalid: bad JSON. Retry.")
     return value
 
 
@@ -148,7 +148,7 @@ def _open_pull_request_heads(repo: str, gh: RunGh) -> set[str]:
     )
     pulls = json.loads(raw)
     if not isinstance(pulls, list):
-        raise RuntimeError("GitHub returned an invalid pull request list")
+        raise RuntimeError("GitHub PR list is invalid: bad JSON. Retry.")
     return {
         pull["headRefName"]
         for pull in pulls

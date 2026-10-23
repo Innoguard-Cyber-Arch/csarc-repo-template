@@ -7,7 +7,7 @@ if [[ -z "$osv_scanner" ]]; then
   osv_scanner="$("$repo_root/scripts/install-osv-scanner")"
 fi
 if [[ ! -x "$osv_scanner" ]]; then
-  echo "OSV-Scanner is not executable: $osv_scanner" >&2
+  echo "ERROR: OSV-Scanner is unusable: '$osv_scanner' is not executable. Fix it." >&2
   exit 1
 fi
 
@@ -17,7 +17,7 @@ for candidate in uv.lock pnpm-lock.yaml package-lock.json yarn.lock Cargo.lock g
   [[ -f "$candidate" ]] && lockfiles+=(--lockfile "$candidate")
 done
 if [[ "${#lockfiles[@]}" -eq 0 ]]; then
-  echo "No supported dependency lockfile is present; OSV scan is not applicable."
+  echo "NOTICE: OSV scan skipped: no supported lockfile is present."
   exit 0
 fi
 exec "$osv_scanner" scan source "${lockfiles[@]}"

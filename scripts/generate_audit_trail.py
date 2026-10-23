@@ -245,7 +245,9 @@ def _run_gh_graphql(variables: dict[str, str], retries: int) -> JsonObject:
     """Run one paged GraphQL request, retrying without persisting output."""
     executable = shutil.which("gh")
     if executable is None:
-        raise AuditTrailError("GitHub CLI (gh) is required")
+        raise AuditTrailError(
+            "GitHub CLI (gh) is required: not found. Install it."
+        )
     arguments = [executable, "api", "graphql", "-f", f"query={GRAPHQL_QUERY}"]
     for name, value in variables.items():
         arguments += ["-F", f"{name}={value}"]
@@ -263,7 +265,7 @@ def _run_gh_graphql(variables: dict[str, str], retries: int) -> JsonObject:
                 return json.loads(completed.stdout)
             except json.JSONDecodeError as error:
                 raise AuditTrailError(
-                    "gh api graphql returned invalid JSON"
+                    "GraphQL failed: invalid JSON. Retry."
                 ) from error
         failure = completed.stderr.strip()
     raise AuditTrailError(failure or "gh api graphql failed")
@@ -290,7 +292,9 @@ def fetch_pull_request_nodes(
         payload = _run_gh_graphql(variables, retries)
         search = payload.get("data", {}).get("search")
         if not isinstance(search, dict):
-            raise AuditTrailError("graphql: missing search connection")
+            raise AuditTrailError(
+                "GraphQL failed: no search connection. Retry."
+            )
         nodes.extend(search.get("nodes", []))
         page_info = search.get("pageInfo", {})
         if limit and len(nodes) >= limit:
@@ -306,7 +310,9 @@ def load_fixture_nodes(path: Path) -> list[JsonObject]:
     """Load pre-fetched PR nodes for fixture-driven, network-free runs."""
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
-        raise AuditTrailError("fixture must be a JSON array of PR nodes")
+        raise AuditTrailError(
+            "Fixture is invalid: not a JSON array of PRs. Fix it."
+        )
     return data
 
 
@@ -456,7 +462,9 @@ def _default_repo() -> str:
     """Resolve `owner/name` for the current repository's `origin` remote."""
     executable = shutil.which("gh")
     if executable is None:
-        raise AuditTrailError("GitHub CLI (gh) is required")
+        raise AuditTrailError(
+            "GitHub CLI (gh) is required: not found. Install it."
+        )
     completed = subprocess.run(  # noqa: S603
         [
             executable,
