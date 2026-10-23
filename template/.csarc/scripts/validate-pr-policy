@@ -142,10 +142,11 @@ validate_governance_route() {
   if [[ "${promotion:-false}" == "true" ]]; then
     return 0
   fi
-  local scratch files_json candidate_config
+  local scratch files_json candidate_config provenance
   scratch="$(mktemp -d)"
   files_json="$scratch/pull-files.json"
   candidate_config="$scratch/candidate-config.yml"
+  provenance="$scratch/candidate-provenance.json"
   if [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]]; then
     if [[ "${PR_CANDIDATE_CONFIG+x}" != "x" ]]; then
       rm -rf "$scratch"
@@ -169,10 +170,14 @@ validate_governance_route() {
       echo "Cannot read the candidate configuration for the governance route."
       exit 1
     fi
+    # Issue #1239: names the release whose schema may judge new settings.
+    gh api -H "Accept: application/vnd.github.raw+json" >"$provenance" \
+      "repos/$GITHUB_REPOSITORY/contents/.csarc/provenance.json?ref=$PR_HEAD_SHA" || true
   fi
   if ! python3 "$script_dir/trusted_executor.py" route \
     --base-config "$repo_root/.csarc/config.yml" \
     --candidate-config "$candidate_config" \
+    --candidate-provenance "$provenance" \
     --pull-files "$files_json" \
     --labels "${PR_LABELS:-}" \
     --enforce; then
