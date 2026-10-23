@@ -1019,7 +1019,7 @@ def main(argv: list[str] | None = None) -> int:
             payload["checkpoint"] = role
             _write_role_output("checkpoint", role, args.github_output)
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
-        sys.stderr.write(f"release-level resolution failed closed: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     sys.stdout.write(json.dumps(payload, sort_keys=True) + "\n")
     return 0

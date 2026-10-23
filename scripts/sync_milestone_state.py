@@ -36,7 +36,9 @@ def _load_sibling(name: str) -> ModuleType:
         return cached
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise ModuleNotFoundError(f"Sibling module is unavailable: {path}")
+        raise ModuleNotFoundError(
+            f"Sibling module {path}: unavailable. Restore it."
+        )
     module = importlib.util.module_from_spec(spec)
     # Register a first load so nested imports share it; a same-named module
     # from another directory keeps its registration.
@@ -148,7 +150,7 @@ def run_gh(arguments: list[str]) -> str:
     """Run GitHub CLI without a shell."""
     executable = shutil.which("gh")
     if executable is None:
-        raise RuntimeError("GitHub CLI (gh) is required")
+        raise RuntimeError("GitHub CLI: 'gh' not found. Install it.")
     result = subprocess.run(  # noqa: S603
         [executable, *arguments],
         check=True,
@@ -170,7 +172,9 @@ class _SnapshotGitHub:
             login = urllib.parse.unquote(path.split("/", 2)[1])
             permission = _collaborator_permission(repo, login)
             if permission is None:
-                raise RuntimeError("collaborator permission is unavailable")
+                raise RuntimeError(
+                    "Collaborator permission: unavailable. Retry."
+                )
             return {"permission": permission}
         if path.startswith("milestones/"):
             number = int(path.split("/", 1)[1])
@@ -189,7 +193,7 @@ class _SnapshotGitHub:
             for issue in self.snapshot.get("issues", []):
                 if issue.get("number") == number:
                     return issue
-        raise RuntimeError(f"snapshot has no {path}")
+        raise RuntimeError(f"Snapshot: no {path}. Fix the snapshot.")
 
     def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
         """Return the snapshot's Milestone Issue collection."""
@@ -200,7 +204,7 @@ class _SnapshotGitHub:
             query = urllib.parse.parse_qs(urllib.parse.urlsplit(path).query)
             milestone_number = int(query["milestone"][0])
             return list(load_snapshot(repo, milestone_number)["issues"])
-        raise RuntimeError(f"snapshot has no {path}")
+        raise RuntimeError(f"Snapshot: no {path}. Fix the snapshot.")
 
 
 def _admin_self_approval_allowed(
@@ -226,11 +230,11 @@ def _pages(raw: str) -> list[dict[str, Any]]:
     """Flatten a paginated GitHub REST response."""
     value = json.loads(raw)
     if not isinstance(value, list):
-        raise RuntimeError("GitHub returned an invalid collection")
+        raise RuntimeError("GitHub collection: invalid. Retry.")
     if value and isinstance(value[0], list):
         value = [item for page in value for item in page]
     if not all(isinstance(item, dict) for item in value):
-        raise RuntimeError("GitHub returned an invalid collection item")
+        raise RuntimeError("GitHub collection item: invalid. Retry.")
     return value
 
 
@@ -434,7 +438,7 @@ def append_completion_evidence(body: str, evidence_url: str) -> str:
     match = _section_match(body, "Completion evidence")
     if match is None:
         raise RuntimeError(
-            "The lifecycle Issue body is missing a Completion evidence section"
+            "Lifecycle Issue: no Completion evidence section. Add it."
         )
     heading = match.group(1)
     kept = re.sub(r"(?s)<!--.*?-->", "", match.group(2)).strip()
@@ -1550,10 +1554,10 @@ def regenerate_reconciliation(snapshot: dict[str, Any]) -> str:
     """
     item = tracker(snapshot)
     if item is None:
-        raise RuntimeError("No unique lifecycle Issue found to reconcile")
+        raise RuntimeError("Lifecycle Issue: none or several found. Keep one.")
     body = item.get("body")
     if not isinstance(body, str):
-        raise RuntimeError("The lifecycle Issue body is missing")
+        raise RuntimeError("Lifecycle Issue: body missing. Write it.")
     base = _remove_section(body, RECONCILIATION_HEADING)
     fingerprint = _fingerprint(base)
     items = sorted(
@@ -1757,7 +1761,7 @@ def refresh_pr_checks(snapshot: dict[str, Any]) -> int:
         )
         head_sha = pull.get("head", {}).get("sha")
         if not isinstance(head_sha, str) or not head_sha:
-            raise RuntimeError("GitHub returned an invalid pull-request head")
+            raise RuntimeError("GitHub pull-request head: invalid. Retry.")
         _record_check(repo, head_sha, decision)
         count += 1
     return count
@@ -1768,7 +1772,7 @@ def check_pr(repo: str, number: int, *, record_check: bool = True) -> Decision:
     pull = json.loads(run_gh(["api", f"repos/{repo}/pulls/{number}"]))
     head_sha = pull.get("head", {}).get("sha")
     if not isinstance(head_sha, str) or not head_sha:
-        raise RuntimeError("GitHub returned an invalid pull-request head")
+        raise RuntimeError("GitHub pull-request head: invalid. Retry.")
     decision = _pull_decision(repo, pull)
     if record_check:
         _record_check(repo, head_sha, decision)
@@ -1817,7 +1821,7 @@ def _pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
     milestone_number = milestone.get("number")
     if not isinstance(milestone_number, int):
         raise RuntimeError(
-            "GitHub returned invalid pull-request lifecycle data"
+            "GitHub pull-request lifecycle data: invalid. Retry."
         )
     return approval_decision(load_snapshot(repo, milestone_number))
 
@@ -2101,6 +2105,7 @@ def _unchanged_lifecycle(
     # keeps its closure; report the gaps instead of reopening history.
     summary = "; ".join(errors)
     notice = summary.replace("%", "%25").replace("\n", "%0A")
+    # message-pattern: allow X1 workflow annotation
     print(f"::notice title=Closed Milestone governance gaps::{notice}")  # noqa: T201
     return Decision(True, f"Closed Milestone keeps its closure: {summary}")
 
@@ -2139,6 +2144,7 @@ def reconcile(
                 .replace("\r", "%0D")
                 .replace("\n", "%0A")
             )
+            # message-pattern: allow X1 workflow annotation
             print(  # noqa: T201
                 f"::notice title=Milestone governance status::{notice}"
             )

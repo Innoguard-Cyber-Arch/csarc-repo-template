@@ -1288,8 +1288,8 @@ def warn_prior_authorization(github: GitHub, lease: dict[str, Any]) -> None:
         )
     except RuntimeError as error:
         sys.stderr.write(
-            "PR lifecycle notice: could not check earlier authorizations: "
-            f"{error}\n"
+            f"WARNING: Earlier authorizations: not checked ({error}). "
+            "Check the PR comments by hand.\n"
         )
         return
     if prior is None or parse_time(
@@ -1297,11 +1297,10 @@ def warn_prior_authorization(github: GitHub, lease: dict[str, Any]) -> None:
     ) >= parse_time(lease["acquired_at"], "Lease"):
         return
     sys.stderr.write(
-        "PR lifecycle warning: exact-head authorization "
-        f"{prior.get('html_url') or 'comment'} predates this fresh lease and "
-        "will not be accepted; a new authorization is required. To keep an "
-        "authorization valid, renew a still-live lease with "
-        "`acquire --renew <lease.json>` instead of releasing it.\n"
+        "WARNING: Authorization "
+        f"{prior.get('html_url') or 'comment'}: predates this fresh lease, "
+        "so it is void. Post a new one; next time renew a live lease with "
+        "'acquire --renew <lease.json>'.\n"
     )
 
 
@@ -4715,7 +4714,7 @@ def main() -> None:
         else:
             release(args, github)
     except (RuntimeError, json.JSONDecodeError) as error:
-        sys.stderr.write(f"ERROR: PR lifecycle blocked: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         raise SystemExit(1) from error
 
 

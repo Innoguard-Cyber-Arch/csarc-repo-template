@@ -68,7 +68,7 @@ class Capability:
     def __post_init__(self) -> None:
         """Reject states outside the public tri-state contract."""
         if self.state not in STATES:
-            raise ValueError(f"invalid capability state: {self.state}")
+            raise ValueError(f"Capability state {self.state}: invalid. Fix it.")
 
 
 def select_release_mode(
@@ -109,7 +109,9 @@ def select_release_mode(
             f"Actions pull requests are {pull_requests.state}; prepare a "
             "reviewed version candidate locally",
         )
-    raise AssertionError("release mode selection is incomplete")
+    raise AssertionError(
+        "Release mode selection: incomplete. Fix the selector."
+    )
 
 
 def unknown_capabilities(reason: str) -> dict[str, Capability]:
@@ -568,8 +570,8 @@ def release_candidate() -> ModuleType:
         if error.name != name:
             raise
         raise SystemExit(
-            "This release command needs release_ownership: csarc-owned; "
-            ".csarc/scripts/release_candidate.py is not rendered here"
+            "ERROR: Release command: needs release_ownership: csarc-owned. "
+            "Set it and rerun Copier."
         ) from error
 
 

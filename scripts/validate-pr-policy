@@ -6,15 +6,12 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 cd "$repo_root"
 
 if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?:\ .+ ]]; then
-  echo "Use: type(scope): short English summary"
-  echo "Allowed types: feat, fix, docs, refactor, test, build, ci, chore, revert"
-  echo "Scope is optional and must use lowercase letters, numbers, '.', '_', '/', or '-'."
+  echo "ERROR: PR title: not 'type(scope): summary'. Use type feat, fix, docs, refactor, test, build, ci, chore, or revert, and an optional scope of lowercase letters, numbers, '.', '_', '/', or '-'." >&2
   exit 1
 fi
 pr_title_type="${BASH_REMATCH[1]}"
 if printf '%s' "$PR_TITLE" | LC_ALL=C grep -q '[^ -~]'; then
-  echo "PR title must use ASCII characters only."
-  echo "The PR body may be written in Chinese."
+  echo "ERROR: PR title: non-ASCII characters. Use ASCII only; the PR body can use Chinese." >&2
   exit 1
 fi
 
@@ -25,7 +22,7 @@ else
   if ! pr_payload="$(${GH_BINARY:-gh} api --method GET \
     "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER")" || \
     [[ -z "$pr_payload" ]]; then
-    echo "Cannot read live pull request metadata."
+    echo "ERROR: Pull request metadata: cannot read it. Retry the check." >&2
     exit 1
   fi
   if ! jq -e '
@@ -38,7 +35,7 @@ else
     (.milestone == null or ((.milestone | type) == "object" and (.milestone.number | type) == "number" and .milestone.number > 0 and .milestone.number == (.milestone.number | floor))) and
     has("body") and (.body == null or (.body | type) == "string")
   ' <<<"$pr_payload" >/dev/null; then
-    echo "Live pull request metadata is incomplete or malformed."
+    echo "ERROR: Pull request metadata: incomplete or malformed. Retry the check." >&2
     exit 1
   fi
   PR_LABELS="$(jq -r '[.labels[].name] | join(",")' <<<"$pr_payload")"
@@ -56,7 +53,7 @@ elif [[ "$pr_title_type" == "fix" || "$pr_title_type" == "revert" ]]; then
   release_intent="patch"
 fi
 release_message="Release intent: ${release_intent}; exact version is allocated at the reviewed release boundary."
-echo "$release_message"
+echo "NOTICE: $release_message"
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   echo "$release_message" >> "$GITHUB_STEP_SUMMARY"
 fi
@@ -70,11 +67,11 @@ for label in bug enhancement documentation; do
   fi
 done
 if (( selected_count != 1 )); then
-  echo "Select exactly one PR label: bug, enhancement, or documentation."
+  echo "ERROR: PR label: not exactly one classification label. Select bug, enhancement, or documentation." >&2
   exit 1
 fi
 if [[ ",${PR_LABELS:-}," == *,duplicate,* ]]; then
-  echo "The duplicate label is an Issue disposition and cannot classify a pull request."
+  echo "ERROR: PR label: 'duplicate' is an Issue disposition. Remove it." >&2
   exit 1
 fi
 
@@ -86,7 +83,7 @@ validate_documentation_review() {
   fi
   local cutover="${PR_DOCUMENTATION_REVIEW_CUTOVER_PR:-1}"
   if [[ ! "$cutover" =~ ^[0-9]+$ ]]; then
-    echo "PR_DOCUMENTATION_REVIEW_CUTOVER_PR must be a non-negative integer."
+    echo "ERROR: PR_DOCUMENTATION_REVIEW_CUTOVER_PR: not a non-negative integer. Fix it." >&2
     exit 1
   fi
   if [[ "${PR_DRAFT:-false}" != "true" && "$required" == "true" &&
@@ -115,7 +112,7 @@ validate_large_test_justification() {
     gh api --paginate --slurp \
       "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100"
   )"; then
-    echo "Cannot read the pull request file list for the large-test check."
+    echo "ERROR: Large-test check: cannot read the file list. Retry the check." >&2
     exit 1
   fi
   if ! PR_BODY="${PR_BODY:-}" python3 "$script_dir/verification_cost.py" \
@@ -158,7 +155,7 @@ validate_governance_route() {
       "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
       >"$files_json"; then
       rm -rf "$scratch"
-      echo "Cannot read the pull request file list for the governance route."
+      echo "ERROR: Governance route: cannot read the file list. Retry the check." >&2
       exit 1
     fi
     if ! gh api "repos/$GITHUB_REPOSITORY/contents/.csarc/config.yml?ref=$PR_HEAD_SHA" \
@@ -166,7 +163,7 @@ validate_governance_route() {
       python3 -c 'import base64, sys; sys.stdout.buffer.write(base64.b64decode(sys.stdin.read()))' \
         >"$candidate_config"; then
       rm -rf "$scratch"
-      echo "Cannot read the candidate configuration for the governance route."
+      echo "ERROR: Governance route: cannot read the candidate configuration. Retry the check." >&2
       exit 1
     fi
   fi
@@ -197,19 +194,19 @@ fi
 if [[ "$release_ownership" != "csarc-owned" &&
   "$release_ownership" != "product-owned" &&
   "$release_ownership" != "verification-only" ]]; then
-  echo "release_ownership must be csarc-owned, product-owned, or verification-only."
+  echo "ERROR: release_ownership: invalid value. Use csarc-owned, product-owned, or verification-only." >&2
   exit 1
 fi
 delivery_cutover_issue="${PR_DELIVERY_CUTOVER_ISSUE:-0}"
 if [[ ! "$delivery_cutover_issue" =~ ^[0-9]+$ ]]; then
-  echo "PR_DELIVERY_CUTOVER_ISSUE must be a non-negative integer."
+  echo "ERROR: PR_DELIVERY_CUTOVER_ISSUE: not a non-negative integer. Fix it." >&2
   exit 1
 fi
 
 release_recovery=false
 if [[ ",${PR_LABELS:-}," == *,release-recovery,* ]]; then
   if [[ "$pr_title_type" != "fix" || "$PR_HEAD" != fix/* || "$PR_BASE" != "main" || ",${PR_LABELS:-}," == *,hotfix,* ]]; then
-    echo "A release recovery must be a fix/* branch targeting main with a fix title, and cannot also be a hotfix."
+    echo "ERROR: Release recovery: invalid route. Use a fix/* branch to main with a fix title and no hotfix label." >&2
     exit 1
   fi
   release_recovery=true
@@ -217,7 +214,7 @@ fi
 
 if [[ ",${PR_LABELS:-}," == *,hotfix,* ]] && \
   [[ "$pr_title_type" != "fix" || "$PR_HEAD" != fix/* || "$PR_BASE" != "main" ]]; then
-  echo "A hotfix must be a fix/* branch targeting main with a fix title."
+  echo "ERROR: Hotfix: invalid route. Use a fix/* branch to main with a fix title." >&2
   exit 1
 fi
 
@@ -225,14 +222,14 @@ if [[ "$PR_BASE" == "main" ]] &&
   [[ "$PR_HEAD" == release-please--* || "$PR_HEAD" == release/v* ]]; then
   validate_documentation_review
   if [[ "$release_ownership" != "csarc-owned" ]]; then
-    echo "Release ownership is $release_ownership; CSARC release follow-up policy is not applicable."
+    echo "NOTICE: Release ownership is $release_ownership, so the CSARC release follow-up policy does not apply."
     exit 0
   fi
   if [[ "$PR_HEAD" == release/v* ]]; then
     guided_version="${PR_HEAD#release/v}"
     if [[ ! "$guided_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[1-9][0-9]*)?$ ]] ||
       [[ "$PR_TITLE" != "chore(main): release $guided_version" ]]; then
-      echo "A guided release must use release/v<version> and the matching chore(main) title."
+      echo "ERROR: Guided release: invalid route. Use release/v<version> and the matching chore(main) title." >&2
       exit 1
     fi
   fi
@@ -270,7 +267,7 @@ if [[ "$branch_strategy" == "delivery" ]]; then
     if [[ "$PR_BASE" == "dev/${BASH_REMATCH[1]}" ]]; then
       exit 0
     fi
-    echo "A main sync branch must target its matching delivery branch."
+    echo "ERROR: Main sync branch: wrong base. Target its matching delivery branch." >&2
     exit 1
   fi
 
@@ -278,7 +275,7 @@ if [[ "$branch_strategy" == "delivery" ]]; then
     if [[ "$PR_BASE" == "main" ]]; then
       exit 0
     fi
-    echo "Automated maintenance must target main in delivery mode."
+    echo "ERROR: Automated maintenance: wrong base. Target main." >&2
     exit 1
   fi
 
@@ -291,7 +288,7 @@ if [[ "$branch_strategy" == "delivery" ]]; then
     promotion_milestone="${BASH_REMATCH[1]}"
   elif [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^promote/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
     if [[ ",${PR_LABELS:-}," != *,promotion,* ]]; then
-      echo "A promotion bridge must use the promotion label."
+      echo "ERROR: Promotion bridge: no promotion label. Add it." >&2
       exit 1
     fi
     promotion=true
@@ -302,15 +299,15 @@ if [[ "$branch_strategy" == "delivery" ]]; then
     promotion_issue="${BASH_REMATCH[1]}"
   fi
   if [[ -n "$promotion_milestone" && ! -f scripts/promotion_gate.py ]]; then
-    echo "A Milestone promotion needs lifecycle: milestones."
+    echo "ERROR: Milestone promotion: needs lifecycle: milestones. Set it." >&2
     exit 1
   fi
   if [[ "$promotion" == "true" && ",${PR_LABELS:-}," != *,promotion,* ]]; then
-    echo "A delivery promotion must use the promotion label."
+    echo "ERROR: Delivery promotion: no promotion label. Add it." >&2
     exit 1
   fi
   if [[ "$PR_HEAD" == dev/m* && "$release_ownership" == "csarc-owned" ]]; then
-    echo "A CSARC-owned Milestone must use a promote/m* bridge so its version is reviewed in the delivery PR."
+    echo "ERROR: CSARC-owned Milestone: no promote/m* bridge. Use one so the delivery PR reviews the version." >&2
     exit 1
   fi
   if [[ "$tracker_promotion" == "true" && "$release_ownership" == "csarc-owned" ]]; then
@@ -326,31 +323,31 @@ if [[ "${promotion:-false}" == "true" ]]; then
     tracker_issue_pattern='([Rr][Ee][Ff][Ss])[[:space:]]+#([0-9]+)([^0-9]|$)'
     closing_issue_pattern='(Closes|Fixes|Resolves)[[:space:]]+#[0-9]+([^0-9]|$)'
     if [[ ! "${PR_BODY:-}" =~ $tracker_issue_pattern ]]; then
-      echo "A Milestone promotion must reference its tracker with Refs #N."
+      echo "ERROR: Milestone promotion: no tracker reference. Add 'Refs #N'." >&2
       exit 1
     fi
     issue_number="${BASH_REMATCH[2]}"
     if [[ "${PR_BODY:-}" =~ $closing_issue_pattern ]]; then
-      echo "A Milestone promotion must not close its tracker before release succeeds."
+      echo "ERROR: Milestone promotion: closes its tracker before release. Use 'Refs #N'." >&2
       exit 1
     fi
   else
     closing_issue_pattern='(Closes|Fixes|Resolves)[[:space:]]+#([0-9]+)([^0-9]|$)'
     if [[ ! "${PR_BODY:-}" =~ $closing_issue_pattern ]]; then
-      echo "A delivery promotion must close its promotion Issue."
+      echo "ERROR: Delivery promotion: does not close its promotion Issue. Add 'Closes #N'." >&2
       exit 1
     fi
     issue_number="${BASH_REMATCH[2]}"
   fi
 else
   if [[ ! "$PR_HEAD" =~ $branch_pattern ]]; then
-    echo "Use branch: type/<issue-number>-short-slug"
+    echo "ERROR: Branch: invalid name. Use 'type/<issue-number>-short-slug'." >&2
     exit 1
   fi
   issue_number="${BASH_REMATCH[2]}"
   issue_link_pattern="(Closes|Fixes|Resolves)[[:space:]]+#${issue_number}([^[:alnum:]_]|$)"
   if [[ ! "${PR_BODY:-}" =~ $issue_link_pattern ]]; then
-    echo "PR body must include Closes #${issue_number}."
+    echo "ERROR: PR body: no closing keyword. Add 'Closes #${issue_number}'." >&2
     exit 1
   fi
 fi
@@ -365,11 +362,12 @@ unchecked_task_pattern='^[[:space:]]*-[[:space:]]+\[[[:space:]]*\]'
 # "Acceptance-checklist 驗證時機（#573）" section.
 pr_draft="${PR_DRAFT:-false}"
 if [[ "$pr_draft" == "true" ]]; then
+  # message-pattern: allow X1 workflow annotation
   echo "::notice::Skipping acceptance-checklist validation while the pull request is a draft; it revalidates in full when marked ready for review."
 fi
 validate_documentation_review
 if [[ "$pr_draft" != "true" ]] && grep -Eq "$unchecked_task_pattern" <<<"${PR_BODY:-}"; then
-  echo "Complete every pull request checklist item before using a closing keyword."
+  echo "ERROR: PR checklist: unchecked items. Complete every item." >&2
   exit 1
 fi
 validate_large_test_justification
@@ -406,19 +404,19 @@ else
   fi
 fi
 if [[ "$issue_state" != "open" ]]; then
-  echo "Issue #${issue_number} must exist and remain open until merge."
+  echo "ERROR: Issue #${issue_number}: missing or closed. Reopen it until merge." >&2
   exit 1
 fi
 if [[ -z "$pr_assignees" ]]; then
-  echo "Assign the pull request to its human author."
+  echo "ERROR: Pull request: no assignee. Assign its human author." >&2
   exit 1
 fi
 if [[ -n "${PR_AUTHOR:-}" && ",${pr_assignees}," != *",${PR_AUTHOR},"* ]]; then
-  echo "The pull request author must be an assignee."
+  echo "ERROR: Pull request: author is not an assignee. Assign the author." >&2
   exit 1
 fi
 if [[ "$pr_milestone_number" != "$issue_milestone_number" ]]; then
-  echo "The pull request Milestone must match Issue #${issue_number}."
+  echo "ERROR: Pull request Milestone: differs from Issue #${issue_number}. Match it." >&2
   exit 1
 fi
 if [[ "$pr_milestone_number" == "0" && "$issue_milestone_number" == "0" && "${PR_POLICY_READ_ONLY:-false}" != "true" ]]; then
@@ -457,6 +455,7 @@ Neither this pull request nor Issue #${issue_number} has a Milestone, and exactl
 If this work belongs to it, attach the Milestone to the Issue (see docs/ci-policy.md, section \"Milestone 掛勾與持續同步\", for the closed-Milestone REST API workaround) and to this pull request. Otherwise no action is needed -- many Issues and pull requests are not tied to any Milestone."
       if ! gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
         --body "$reminder_body" >/dev/null 2>&1; then
+        # message-pattern: allow X1 workflow annotation
         echo "::notice::Could not post the Milestone safeguard reminder (non-blocking, Issue #551)."
       fi
     fi
@@ -471,7 +470,7 @@ for label in bug enhancement documentation; do
   fi
 done
 if (( issue_selected_count > 1 )); then
-  echo "Issue #${issue_number} has conflicting classification labels."
+  echo "ERROR: Issue #${issue_number}: conflicting classification labels. Keep one." >&2
   exit 1
 fi
 issue_expected_label=""
@@ -487,21 +486,21 @@ case "$issue_type" in
     ;;
   "") issue_expected_label="$issue_selected_label" ;;
   *)
-    echo "Issue #${issue_number} has an unsupported native Type."
+    echo "ERROR: Issue #${issue_number}: unsupported native Type. Use Bug, Feature, or Task." >&2
     exit 1
     ;;
 esac
 if [[ -n "$issue_type" && -n "$issue_selected_label" && "$issue_selected_label" != "documentation" ]]; then
-  echo "Issue #${issue_number} must not duplicate its native Type with a work-kind label."
+  echo "ERROR: Issue #${issue_number}: work-kind label repeats its Type. Remove the label." >&2
   exit 1
 fi
 if [[ -z "$issue_expected_label" || "$selected_label" != "$issue_expected_label" ]]; then
-  echo "The pull request classification label must match Issue #${issue_number}'s Type or fallback label."
+  echo "ERROR: PR label: differs from Issue #${issue_number}'s Type or label. Match it." >&2
   exit 1
 fi
 development_cutover_pr="${PR_DEVELOPMENT_CUTOVER_PR:-1}"
 if [[ ! "$development_cutover_pr" =~ ^[0-9]+$ || ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
-  echo "PR_DEVELOPMENT_CUTOVER_PR and PR_NUMBER must be non-negative integers."
+  echo "ERROR: PR_DEVELOPMENT_CUTOVER_PR or PR_NUMBER: not a non-negative integer. Fix it." >&2
   exit 1
 fi
 if [[ "${promotion:-false}" != "true" ]] && (( PR_NUMBER >= development_cutover_pr )); then
@@ -527,7 +526,7 @@ if [[ "${promotion:-false}" != "true" ]] && (( PR_NUMBER >= development_cutover_
           -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){number closingIssuesReferences(first:100){nodes{number repository{nameWithOwner}} pageInfo{hasNextPage}}}}}' \
           -f owner="$repo_owner" -f name="$repo_name" -F number="$PR_NUMBER"
       )" || [[ -z "$closing_issues" ]]; then
-        echo "Cannot read the live pull request closing Issue relationship."
+        echo "ERROR: Closing Issue relationship: cannot read it. Retry the check." >&2
         exit 1
       fi
     fi
@@ -549,7 +548,7 @@ if [[ "${promotion:-false}" != "true" ]] && (( PR_NUMBER >= development_cutover_
           (.repository.nameWithOwner | type == "string") and
           ((.repository.nameWithOwner | ascii_downcase) == ($repo | ascii_downcase)))
       ' <<<"$closing_issues" >/dev/null; then
-      echo "PR #${PR_NUMBER} must have exactly one authoritative closing Issue relationship to ${GITHUB_REPOSITORY}#${issue_number}."
+      echo "ERROR: PR #${PR_NUMBER}: not exactly one closing Issue link to ${GITHUB_REPOSITORY}#${issue_number}. Fix the PR body." >&2
       exit 1
     fi
   else
@@ -561,23 +560,23 @@ if [[ "${promotion:-false}" != "true" ]] && (( PR_NUMBER >= development_cutover_
         <<<"${PR_BODY:-}"
     )
     if (( ${#body_closing_issues[@]} != 1 )) || [[ "${body_closing_issues[0]}" != "$issue_number" ]]; then
-      echo "A non-default routine pull request must have exactly one live closing keyword for Issue #${issue_number}."
+      echo "ERROR: PR body: not exactly one closing keyword for Issue #${issue_number}. Fix it." >&2
       exit 1
     fi
   fi
 fi
 if [[ "${tracker_promotion:-false}" != "true" ]] && [[ "$pr_draft" != "true" ]] && [[ "$issue_has_unchecked" == "true" ]]; then
-  echo "Issue #${issue_number} still has unchecked acceptance tasks."
+  echo "ERROR: Issue #${issue_number}: unchecked acceptance tasks. Complete them." >&2
   exit 1
 fi
 validate_requirement_trace
 if [[ "${tracker_promotion:-false}" == "true" ]]; then
   if [[ "$issue_title" != "Milestone ${promotion_milestone}: "* ]]; then
-    echo "A Milestone ${promotion_milestone} promotion must reference its own tracker Issue."
+    echo "ERROR: Milestone ${promotion_milestone} promotion: wrong tracker Issue. Reference its own tracker." >&2
     exit 1
   fi
   if [[ "$issue_milestone_number" != "$promotion_milestone" ]]; then
-    echo "The tracker Issue Milestone must match the delivery branch number."
+    echo "ERROR: Tracker Issue Milestone: differs from the delivery branch. Fix it." >&2
     exit 1
   fi
   python3 scripts/promotion_gate.py check-alignment \
@@ -593,19 +592,19 @@ fi
 if [[ "${promotion:-false}" == "true" ]]; then
     if [[ "${tracker_promotion:-false}" != "true" ]]; then
       if [[ ",${issue_labels:-}," != *,promotion,* ]]; then
-        echo "A delivery promotion must close an Issue labeled promotion."
+        echo "ERROR: Delivery promotion: closed Issue has no promotion label. Add it." >&2
         exit 1
       fi
       if [[ -n "${promotion_milestone:-}" && "$issue_milestone_number" != "$promotion_milestone" ]]; then
-        echo "The promotion Issue Milestone must match the delivery branch number."
+        echo "ERROR: Promotion Issue Milestone: differs from the delivery branch. Fix it." >&2
         exit 1
       fi
       if [[ -n "${promotion_issue:-}" && "$issue_number" != "$promotion_issue" ]]; then
-        echo "An isolated delivery branch must match its promotion Issue number."
+        echo "ERROR: Isolated delivery branch: number differs from its Issue. Fix it." >&2
         exit 1
       fi
       if [[ -z "${promotion_milestone:-}" && "$issue_milestone_number" != "0" ]]; then
-        echo "A standalone promotion Issue must not belong to a Milestone."
+        echo "ERROR: Standalone promotion Issue: has a Milestone. Remove it." >&2
         exit 1
       fi
     fi
@@ -623,7 +622,7 @@ if [[ "${promotion:-false}" == "true" ]]; then
           --titles-json "$PR_INCLUDED_TITLES_JSON"
       else
         if [[ -z "${PR_BASE_SHA:-}" || -z "${PR_HEAD_SHA:-}" ]]; then
-          echo "Promotion intent validation requires exact base and head SHAs."
+          echo "ERROR: Promotion intent: no exact base and head SHAs. Set PR_BASE_SHA and PR_HEAD_SHA." >&2
           exit 1
         fi
         delivery_branch="$PR_HEAD"
@@ -654,13 +653,13 @@ if (( delivery_cutover_issue > 0 && issue_number < delivery_cutover_issue )); th
     fi
     if [[ "$PR_HEAD" == fix/* && ",${PR_LABELS:-}," == *,hotfix,* ]]; then
       if [[ "$issue_milestone_number" != "0" ]]; then
-        echo "A direct hotfix must not belong to a Milestone."
+        echo "ERROR: Direct hotfix: has a Milestone. Remove it." >&2
         exit 1
       fi
       exit 0
     fi
     if [[ "$issue_milestone_number" != "0" ]]; then
-      echo "Milestone work must target its dev/m<Milestone>-* delivery branch."
+      echo "ERROR: Milestone work: wrong base. Target its dev/m<Milestone>-* branch." >&2
       exit 1
     fi
     expected_base_kind="exact"
@@ -680,7 +679,7 @@ if (( delivery_cutover_issue > 0 && issue_number < delivery_cutover_issue )); th
     else
       issue_milestone_description="${issue_milestone_number}"
     fi
-    echo "Issue #${issue_number} Milestone is ${issue_milestone_description}; expected base '${expected_base}', not '${PR_BASE}'."
+    echo "ERROR: Issue #${issue_number} Milestone ${issue_milestone_description}: base '${PR_BASE}' is wrong. Use '${expected_base}'." >&2
     exit 1
 fi
 
@@ -688,7 +687,7 @@ base_branch="$PR_BASE"
 seen_bases="|"
 while true; do
   if [[ "$base_branch" == "dev/next" || "$base_branch" == "promote/next" ]]; then
-    echo "Legacy standalone delivery branches are not valid pull request bases."
+    echo "ERROR: PR base: legacy standalone delivery branch. Use a current base." >&2
     exit 1
   fi
   if [[ "$expected_base_kind" == "exact" && "$base_branch" == "$expected_base" ]]; then
@@ -698,7 +697,7 @@ while true; do
     break
   fi
   if [[ "$seen_bases" == *"|${base_branch}|"* ]]; then
-    echo "Pull request base chain contains a cycle at ${base_branch}."
+    echo "ERROR: PR base chain: cycle at ${base_branch}. Fix the bases." >&2
     exit 1
   fi
   seen_bases+="${base_branch}|"
@@ -709,7 +708,7 @@ while true; do
       -f head="${GITHUB_REPOSITORY%%/*}:${base_branch}" \
       --jq '.[].base.ref'
   )"; then
-    echo "Cannot inspect the open pull request for base branch ${base_branch}."
+    echo "ERROR: Base branch ${base_branch}: cannot read its open PR. Retry the check." >&2
     exit 1
   fi
   parent_bases=()
@@ -717,7 +716,7 @@ while true; do
     [[ -n "$parent_base" ]] && parent_bases+=("$parent_base")
   done <<<"$parent_output"
   if (( ${#parent_bases[@]} != 1 )); then
-    echo "Base branch ${base_branch} must have exactly one open pull request; expected final base '${expected_base}'."
+    echo "ERROR: Base branch ${base_branch}: not exactly one open PR. Chain it to '${expected_base}'." >&2
     exit 1
   fi
   base_branch="${parent_bases[0]}"
