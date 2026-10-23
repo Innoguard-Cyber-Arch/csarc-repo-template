@@ -7,6 +7,13 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.40.0] - 2026-10-23
+
+### Features
+
+* feat(review): let a reviewer merge a pull request they approved (3e89b17)
+* feat(lifecycle): let the independent approver merge without write-only (6fc9fa8)
+
 ## [0.39.1] - 2026-10-23
 
 ### Bug Fixes
