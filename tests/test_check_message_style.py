@@ -89,11 +89,12 @@ def test_conforming_new_messages_pass(repo: Path, checker: Path) -> None:
         repo,
         "tool.py",
         'print(f"NOTICE: Checking {name}.")\n'
-        'raise SystemExit("ERROR: Load failed: bad JSON. Fix the file.")\n',
+        'raise SystemExit("ERROR: Load failed: bad JSON. Fix the file.")\n'
+        'raise ValueError(f"Parse failed: {name} is empty. Fill it.")\n',
     )
     result = run(repo, "--base", "main", checker=checker)
     assert result.returncode == 0, result.stderr
-    assert "OK: Message pattern check passed for 6 messages." in result.stdout
+    assert "OK: Message pattern check passed for 7 messages." in result.stdout
 
 
 @pytest.mark.parametrize("checker", CHECKERS, ids=["root", "template"])
@@ -181,7 +182,7 @@ def test_missing_base_is_a_notice_and_bad_base_fails(tmp_path: Path) -> None:
     assert result.stdout.startswith("NOTICE: ")
     failed = run(tmp_path, "--base", "missing")
     assert failed.returncode == 1
-    assert failed.stderr.startswith("ERROR: Message pattern check stopped")
+    assert failed.stderr.startswith("ERROR: Base 'missing' is unknown")
 
 
 def test_checker_messages_follow_the_patterns() -> None:
@@ -213,3 +214,57 @@ def test_verification_entry_points_run_the_check(entry: str, call: str) -> None:
     text = (ROOT / entry).read_text(encoding="utf-8")
     assert 'verification_step "Message pattern check"' in text
     assert call in text
+
+
+@pytest.mark.parametrize("checker", CHECKERS, ids=["root", "template"])
+def test_raised_exception_text_has_no_prefix(repo: Path, checker: Path) -> None:
+    """Exception text uses the unprefixed ERROR body; a prefix is flagged."""
+    append(
+        repo,
+        "tool.py",
+        'raise RuntimeError("ERROR: Lease failed: no comment. Retry.")\n'
+        'raise KeyError("lease is missing")\n',
+    )
+    result = run(repo, "--base", "main", checker=checker)
+    assert result.returncode == 1
+    assert "tool.py:3: exception text carries a prefix" in result.stderr
+    assert "tool.py:4: sentence does not end with a period (M3)" in (
+        result.stderr
+    )
+    assert "  expected: <what failed>: <why>. <what to do next>." in (
+        result.stderr
+    )
+
+
+@pytest.mark.parametrize("checker", CHECKERS, ids=["root", "template"])
+def test_block_exception_covers_a_report(repo: Path, checker: Path) -> None:
+    """A reasoned X5 block allows its lines; bad blocks are flagged."""
+    append(
+        repo,
+        "tool",
+        "# message-pattern: allow-begin X5 rows of one status table\n"
+        'echo "  name   state"\n'
+        'echo "  main   clean"\n'
+        "# message-pattern: allow-end\n"
+        'echo "after the block"\n'
+        "# message-pattern: allow-begin X5\n"
+        'echo "  row"\n'
+        "# message-pattern: allow-end\n"
+        "# message-pattern: allow-begin X5 never closed block\n"
+        'echo "  open row"\n',
+    )
+    result = run(repo, "--base", "main", checker=checker)
+    assert result.returncode == 1
+    errors = [x for x in result.stderr.splitlines() if x.startswith(".csarc")]
+    assert [x.split(": ")[0:2] for x in errors] == [
+        [".csarc/scripts/tool:9", "block exception needs X5 and a reason"],
+        [".csarc/scripts/tool:12", "unmatched allow-begin or allow-end"],
+        [
+            ".csarc/scripts/tool:8",
+            "missing ERROR, WARNING, NOTICE, or OK prefix",
+        ],
+        [
+            ".csarc/scripts/tool:13",
+            "missing ERROR, WARNING, NOTICE, or OK prefix",
+        ],
+    ]
