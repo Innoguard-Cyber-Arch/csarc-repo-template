@@ -13,10 +13,12 @@ FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 def render(tag: str, sha: str) -> str:
     """Return one status-first prompt bound to an immutable release."""
     if not tag.startswith("v") or any(character.isspace() for character in tag):
-        raise ValueError("release tag must be a non-space v-prefixed value")
+        raise ValueError(
+            "Bad release tag: not a non-space v-prefixed value. Fix it."
+        )
     if FULL_SHA.fullmatch(sha) is None:
         raise ValueError(
-            "release SHA must be 40 lowercase hexadecimal characters"
+            "Bad release SHA: not 40 lowercase hex characters. Fix it."
         )
 
     source = f"git+https://github.com/{REPOSITORY}.git@{sha}"

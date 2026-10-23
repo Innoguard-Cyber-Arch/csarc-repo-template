@@ -112,9 +112,11 @@ def _load_config(root: Path) -> dict[str, object]:
         # never from saved settings (SPEC-009, Issue #1071).
         facts = reader["project_facts"](root)
     except (KeyError, OSError, SyntaxError, ValueError) as error:
-        raise BundleError(f"Cannot read {config_path}: {error}") from error
+        raise BundleError(
+            f"Cannot read {config_path}: {error}. Fix it."
+        ) from error
     if not isinstance(config, dict):
-        raise BundleError(f"Invalid configuration in {config_path}")
+        raise BundleError(f"Bad {config_path}: not a mapping. Fix it.")
     return {**facts, **config}
 
 
@@ -135,7 +137,7 @@ def _substitute_config(markdown: str, config: dict[str, object]) -> str:
         if key in RETIRED_CONFIG_TOKENS:
             raise BundleError(retired_token_message(key))
         if key not in config:
-            raise BundleError(f"Unknown site content setting: {key}")
+            raise BundleError(f"Unknown site content setting: {key}. Drop it.")
         return _config_text(config[key])
 
     return _CONFIG_TOKEN.sub(replace, markdown)
@@ -163,7 +165,7 @@ def _inline_markdown(text: str) -> str:
         decoded_target = html_module.unescape(target).strip()
         parsed = urlsplit(decoded_target)
         if parsed.scheme and parsed.scheme not in {"http", "https", "mailto"}:
-            raise BundleError(f"Unsupported Markdown link: {decoded_target}")
+            raise BundleError(f"Bad Markdown link: {decoded_target}. Fix it.")
         attributes = ""
         if parsed.scheme in {"http", "https"}:
             attributes = ' target="_blank" rel="noreferrer"'
@@ -271,7 +273,7 @@ def _render_markdown(markdown: str) -> tuple[str, str]:  # noqa: C901
         paragraph.append(line.strip())
 
     if in_code:
-        raise BundleError("Unclosed Markdown code fence")
+        raise BundleError("Markdown code fence is open: no end. Close it.")
     close_details()
     if section_open:
         output.append("</section>")
@@ -285,13 +287,15 @@ def _inject_markdown(html: str, *, root: Path) -> str:
     if not any(present):
         return html
     if not all(present):
-        raise BundleError("Site shell has an incomplete Markdown marker set")
+        raise BundleError("Site shell: incomplete Markdown marker set. Fix it.")
 
     content_path = root / "docs/site-content.md"
     try:
         markdown = content_path.read_text(encoding="utf-8")
     except OSError as error:
-        raise BundleError(f"Cannot read {content_path}: {error}") from error
+        raise BundleError(
+            f"Cannot read {content_path}: {error}. Fix it."
+        ) from error
     config = _load_config(root)
     content, navigation = _render_markdown(_substitute_config(markdown, config))
     if (root / "docs/site-content.js").is_file():
@@ -319,17 +323,17 @@ def _asset_path(root: Path, parent: Path, url: str) -> Path | None:
 
     parsed = urlsplit(url)
     if parsed.scheme or parsed.netloc:
-        raise BundleError(f"External runtime asset is not allowed: {url}")
+        raise BundleError(f"External runtime asset: {url}. Use a local one.")
 
     asset = (parent / unquote(parsed.path)).resolve()
     try:
         asset.relative_to(root.resolve())
     except ValueError as error:
         raise BundleError(
-            f"Asset escapes the repository root: {url}"
+            f"Asset escapes the repository root: {url}. Move it."
         ) from error
     if not asset.is_file():
-        raise BundleError(f"Asset does not exist: {url}")
+        raise BundleError(f"Asset does not exist: {url}. Add it.")
     return asset
 
 
@@ -345,7 +349,7 @@ def _data_uri(asset: Path) -> str:
 def _inline_css(css: str, stylesheet: Path, root: Path) -> str:
     """Inline every local CSS asset and reject imports."""
     if _CSS_IMPORT.search(css):
-        raise BundleError(f"CSS @import is not allowed: {stylesheet}")
+        raise BundleError(f"Bad CSS @import: {stylesheet}. Inline it.")
 
     def replace(match: re.Match[str]) -> str:
         url = match.group("url").strip()
@@ -364,7 +368,7 @@ def _validate_content_schema(script: Path, content: str) -> None:
     if version != SUPPORTED_CONTENT_SCHEMA:
         raise BundleError(
             "Unsupported docs/site-content.js schemaVersion: "
-            f"{version}; expected {SUPPORTED_CONTENT_SCHEMA}"
+            f"{version}; expected {SUPPORTED_CONTENT_SCHEMA}. Migrate it."
         )
 
 
@@ -373,11 +377,11 @@ def _inline_stylesheets(html: str, source: Path, root: Path) -> str:
         url = match.group("url")
         asset = _asset_path(root, source.parent, url)
         if asset is None:
-            raise BundleError(f"Stylesheet must be a local file: {url}")
+            raise BundleError(f"Remote stylesheet: {url}. Use a local file.")
         css = _inline_css(asset.read_text(encoding="utf-8"), asset, root)
         if "</style>" in css.lower():
             raise BundleError(
-                f"Stylesheet contains a closing style tag: {asset}"
+                f"Stylesheet contains a closing style tag: {asset}. Fix it."
             )
         return f'<style data-bundled-from="{url}">\n{css.rstrip()}\n</style>'
 
@@ -389,11 +393,11 @@ def _inline_scripts(html: str, source: Path, root: Path) -> str:
         url = match.group("url")
         asset = _asset_path(root, source.parent, url)
         if asset is None:
-            raise BundleError(f"Script must be a local file: {url}")
+            raise BundleError(f"Script must be a local file: {url}. Fix it.")
         content = asset.read_text(encoding="utf-8")
         _validate_content_schema(asset, content)
         if "</script>" in content.lower():
-            raise BundleError(f"Script contains a closing script tag: {asset}")
+            raise BundleError(f"Script has '</script>': {asset}. Remove it.")
         return (
             f'<script data-bundled-from="{url}">\n{content.rstrip()}\n</script>'
         )
@@ -431,7 +435,7 @@ def render(source: Path, *, root: Path) -> str:
         source.relative_to(root)
     except ValueError as error:
         raise BundleError(
-            "Site source must be inside the repository root"
+            "Site source is outside the repository root: unsafe. Move it."
         ) from error
 
     html = source.read_text(encoding="utf-8")
@@ -443,7 +447,7 @@ def render(source: Path, *, root: Path) -> str:
 
     if _STYLESHEET.search(html) or _SCRIPT.search(html):
         raise BundleError(
-            "Bundle still contains a runtime stylesheet or script"
+            "Bundle is not self-contained: a runtime asset remains. Fix it."
         )
     return f"{html.rstrip()}\n"
 
@@ -470,19 +474,19 @@ def main() -> int:
     try:
         bundled = render(source, root=root)
     except (BundleError, OSError, UnicodeError) as error:
-        sys.stderr.write(f"site bundle failed: {error}\n")
+        sys.stderr.write(f"ERROR: Site bundle failed: {error}\n")
         return 1
 
     if args.check:
         try:
             current = output.read_text(encoding="utf-8")
         except OSError as error:
-            sys.stderr.write(f"site bundle is missing: {error}\n")
+            sys.stderr.write(f"ERROR: Site bundle is missing: {error}\n")
             return 1
         if current != bundled:
             sys.stderr.write(
-                "docs/index.html is stale; run "
-                "`uv run --no-project python scripts/render_site.py`.\n"
+                "ERROR: docs/index.html is stale: the source changed. Run "
+                "'uv run --no-project python scripts/render_site.py'.\n"
             )
             return 1
         return 0

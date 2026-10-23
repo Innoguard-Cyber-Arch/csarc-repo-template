@@ -97,7 +97,9 @@ def gh_json(
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as error:
-        raise MigrationError("GitHub returned invalid JSON") from error
+        raise MigrationError(
+            "GitHub response is invalid: it is not JSON. Retry."
+        ) from error
 
 
 def release_identity_errors(
@@ -206,7 +208,7 @@ def _release_json(
     if payload is None:
         return None
     if not isinstance(payload, dict):
-        raise MigrationError(f"{tag}: invalid Release response")
+        raise MigrationError(f"{tag}: Release response is invalid. Retry.")
     return payload
 
 
@@ -239,7 +241,9 @@ def _verify_assets(
     if not isinstance(repository, dict) or not isinstance(
         repository.get("id"), int
     ):
-        raise MigrationError("GitHub repository identity is invalid")
+        raise MigrationError(
+            "GitHub repository identity is invalid: bad response. Retry."
+        )
     repository_id = repository["id"]
     verification = gh_json(
         ["release", "verify", tag, "--repo", repo, "--format", "json"],
@@ -406,7 +410,8 @@ def _publish_one(  # noqa: C901
         tag_commit = _tag_commit(repo, item.replacement_tag, root, run=run)
         if existing.get("isDraft") is not True or tag_commit != item.commit:
             raise MigrationError(
-                f"{item.replacement_tag}: existing draft identity is invalid"
+                f"{item.replacement_tag}: existing draft identity is invalid. "
+                "Inspect the draft."
             )
     else:
         run(
@@ -569,7 +574,8 @@ def apply_plan(repo: str, root: Path, plan: Mapping[str, object]) -> None:
     """Create and verify all replacement Releases without deleting history."""
     if repo != REPOSITORY:
         raise MigrationError(
-            f"this one-time migration only supports {REPOSITORY}"
+            f"Repository is unsupported: this migration only supports "
+            f"{REPOSITORY}. Use '--repo {REPOSITORY}'."
         )
     errors = plan_identity_errors(plan)
     if errors:
@@ -593,7 +599,10 @@ def delete_sources(
 ) -> None:
     """Delete the exact source set only after every replacement is verified."""
     if not confirmed:
-        raise MigrationError("--confirm-exact-deletion is required")
+        raise MigrationError(
+            "Deletion is unconfirmed: a flag is missing. Pass "
+            "'--confirm-exact-deletion'."
+        )
     replacements = {
         item.replacement_tag: inspect_release(
             repo, item.replacement_tag, item.commit, root, run=run
@@ -632,9 +641,11 @@ def delete_sources(
             cwd=root,
         )
         if _release_json(repo, item.source_tag, root, run=run) is not None:
-            raise MigrationError(f"{item.source_tag}: Release still exists")
+            raise MigrationError(
+                f"{item.source_tag}: Release still exists. Retry."
+            )
         if _tag_commit(repo, item.source_tag, root, run=run) is not None:
-            raise MigrationError(f"{item.source_tag}: tag still exists")
+            raise MigrationError(f"{item.source_tag}: tag still exists. Retry.")
 
 
 def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
@@ -661,10 +672,14 @@ def main(arguments: list[str] | None = None) -> int:
                 print(json.dumps(payload, indent=2, sort_keys=True))  # noqa: T201
             return 0
         if args.plan is None:
-            raise MigrationError("--plan is required")
+            raise MigrationError(
+                "Plan is missing: '--plan' is required. Pass it."
+            )
         payload = json.loads(args.plan.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
-            raise MigrationError("migration plan must be a JSON object")
+            raise MigrationError(
+                "Migration plan is invalid: it is not a JSON object. Fix it."
+            )
         if args.action == "apply":
             apply_plan(args.repo, root, payload)
         else:
@@ -681,7 +696,9 @@ def main(arguments: list[str] | None = None) -> int:
         subprocess.CalledProcessError,
         ValueError,
     ) as error:
-        sys.stderr.write(f"Historical release migration failed: {error}\n")
+        sys.stderr.write(
+            f"ERROR: Historical release migration failed: {error}\n"
+        )
         return 1
     return 0
 

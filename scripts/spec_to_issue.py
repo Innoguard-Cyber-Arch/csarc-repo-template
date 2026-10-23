@@ -56,7 +56,7 @@ def _parse_front_matter(
     path: Path, lines: list[str]
 ) -> tuple[dict[str, str], int]:
     if not lines or lines[0].strip() != "---":
-        raise SpecError(f"{path}: front matter must start with ---")
+        raise SpecError(f"{path}: front matter must start with '---'. Fix it.")
 
     try:
         end = next(
@@ -65,14 +65,14 @@ def _parse_front_matter(
             if line.strip() == "---"
         )
     except StopIteration as error:
-        raise SpecError(f"{path}: front matter must end with ---") from error
+        raise SpecError(f"{path}: unclosed front matter. Fix it.") from error
 
     metadata: dict[str, str] = {}
     for line in lines[1:end]:
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         if ":" not in line:
-            raise SpecError(f"{path}: invalid front-matter line: {line}")
+            raise SpecError(f"{path}: bad front-matter line: {line}. Fix it.")
         key, value = line.split(":", 1)
         metadata[key.strip()] = value.strip().strip('"').strip("'")
 
@@ -83,20 +83,26 @@ def _validate_metadata(path: Path, metadata: dict[str, str]) -> None:
     required = {"id", "title", "owner", "priority", "estimate", "status"}
     missing = sorted(required - metadata.keys())
     if missing:
-        raise SpecError(f"{path}: missing metadata: {', '.join(missing)}")
+        raise SpecError(f"{path}: lacks {', '.join(missing)}. Add it.")
     if not SPEC_ID.fullmatch(metadata["id"]):
-        raise SpecError(f"{path}: id must match SPEC-<number>")
+        raise SpecError(f"{path}: id must match 'SPEC-<number>'. Fix it.")
     if metadata["priority"] not in PRIORITIES:
-        raise SpecError(f"{path}: priority must be one of {sorted(PRIORITIES)}")
+        raise SpecError(
+            f"{path}: priority must be one of {sorted(PRIORITIES)}. Fix it."
+        )
     if metadata["status"] not in STATUSES:
-        raise SpecError(f"{path}: status must be one of {sorted(STATUSES)}")
+        raise SpecError(
+            f"{path}: status must be one of {sorted(STATUSES)}. Fix it."
+        )
     if metadata.get("tracking", "issue") not in TRACKING:
-        raise SpecError(f"{path}: tracking must be one of {sorted(TRACKING)}")
+        raise SpecError(
+            f"{path}: tracking must be one of {sorted(TRACKING)}. Fix it."
+        )
 
 
 def _validate_body(path: Path, body: str) -> None:
     if not body:
-        raise SpecError(f"{path}: spec body is empty")
+        raise SpecError(f"{path}: spec body is empty. Write it.")
     required_sections = (
         "Problem",
         "Outcome",
@@ -114,11 +120,9 @@ def _validate_body(path: Path, body: str) -> None:
         )
     ]
     if missing_sections:
-        raise SpecError(f"{path}: add an '## {missing_sections[0]}' section")
+        raise SpecError(f"{path}: no '## {missing_sections[0]}'. Add it.")
     if not re.search(r"^- \[[ xX]\] ", body, flags=re.MULTILINE):
-        raise SpecError(
-            f"{path}: add at least one acceptance criterion checkbox"
-        )
+        raise SpecError(f"{path}: no acceptance criterion checkbox. Add one.")
 
 
 def parse_spec_text(path: Path, text: str) -> Spec:
@@ -156,7 +160,7 @@ def validate_unique_ids(specs: list[Spec]) -> None:
         if previous is not None:
             raise SpecError(
                 f"{spec.path}: duplicate id {spec.spec_id}; "
-                f"first used by {previous}"
+                f"first used by {previous}. Rename one."
             )
         seen[spec.spec_id] = spec.path
 
@@ -164,7 +168,7 @@ def validate_unique_ids(specs: list[Spec]) -> None:
 def validate_adr(path: Path) -> None:  # noqa: C901
     """Validate one durable Architecture Decision Record."""
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md", path.name):
-        raise SpecError(f"{path}: ADR filename must be a stable slug")
+        raise SpecError(f"{path}: ADR filename is not a slug. Rename it.")
     text = path.read_text(encoding="utf-8")
     status = re.search(
         rf"^- \*\*狀態{FULLWIDTH_COLON}\*\*(\w+)\s*$",
@@ -173,32 +177,32 @@ def validate_adr(path: Path) -> None:  # noqa: C901
     )
     if status is None or status.group(1) not in ADR_STATUSES:
         raise SpecError(
-            f"{path}: ADR status must be one of {sorted(ADR_STATUSES)}"
+            f"{path}: ADR status must be one of {sorted(ADR_STATUSES)}. Fix it."
         )
     if status.group(1) == "Superseded" and not re.search(
         rf"^- \*\*取代者{FULLWIDTH_COLON}\*\*\S.+$", text, re.MULTILINE
     ):
-        raise SpecError(f"{path}: a Superseded ADR must name its successor")
+        raise SpecError(f"{path}: ADR must name its successor. Add it.")
     date = re.search(
         rf"^- \*\*日期{FULLWIDTH_COLON}\*\*(\d{{4}}-\d{{2}}-\d{{2}})\s*$",
         text,
         re.MULTILINE,
     )
     if date is None:
-        raise SpecError(f"{path}: ADR date must use YYYY-MM-DD")
+        raise SpecError(f"{path}: ADR date must use 'YYYY-MM-DD'. Fix it.")
     try:
         dt.date.fromisoformat(date.group(1))
     except ValueError as error:
-        raise SpecError(f"{path}: ADR date is invalid") from error
+        raise SpecError(f"{path}: ADR date is invalid. Fix it.") from error
     for section in ADR_SECTIONS:
         if not re.search(rf"^## {re.escape(section)}\s*$", text, re.MULTILINE):
-            raise SpecError(f"{path}: add an '## {section}' section")
+            raise SpecError(f"{path}: no '## {section}'. Add it.")
     headings = re.findall(r"^## (.+?)\s*$", text, re.MULTILINE)
     positions = [headings.index(section) for section in ADR_SECTIONS]
     if positions != sorted(positions) or headings[-1] != ADR_SECTIONS[-1]:
         raise SpecError(
             f"{path}: ADR sections must follow {ADR_SECTIONS} and end with "
-            f"'## {ADR_SECTIONS[-1]}'"
+            f"'## {ADR_SECTIONS[-1]}'. Fix it."
         )
     if not re.search(
         rf"^- \*\*來源 Issues?{FULLWIDTH_COLON}\*\*[^\n]*"
@@ -206,14 +210,14 @@ def validate_adr(path: Path) -> None:  # noqa: C901
         text,
         re.MULTILINE,
     ):
-        raise SpecError(f"{path}: add a source Issue URL")
+        raise SpecError(f"{path}: no source Issue URL. Add it.")
     if not re.search(
         rf"^- \*\*實作 PRs?{FULLWIDTH_COLON}\*\*[^\n]*"
         r"https://github\.com/[^/\s)]+/[^/\s)]+/pull/[1-9]\d*",
         text,
         re.MULTILINE,
     ):
-        raise SpecError(f"{path}: add an implementation PR URL")
+        raise SpecError(f"{path}: no implementation PR URL. Add it.")
 
 
 def validate_adr_index(
@@ -224,7 +228,7 @@ def validate_adr_index(
     if not current:
         return
     if not index_path.is_file():
-        raise SpecError(f"{index_path}: add a '## Decision records' section")
+        raise SpecError(f"{index_path}: no '## Decision records'. Add it.")
     text = index_path.read_text(encoding="utf-8")
     section = re.search(
         r"^## Decision records\s*$\n(.*?)(?=^## |\Z)",
@@ -232,7 +236,7 @@ def validate_adr_index(
         re.MULTILINE | re.DOTALL,
     )
     if section is None:
-        raise SpecError(f"{index_path}: add a '## Decision records' section")
+        raise SpecError(f"{index_path}: no '## Decision records'. Add it.")
     targets = {
         Path(unquote(urldefrag(target).url)).as_posix()
         for target in MARKDOWN_LINK.findall(section.group(1))
@@ -244,7 +248,7 @@ def validate_adr_index(
     ]
     if missing:
         raise SpecError(
-            f"{index_path}: ADR index is missing {', '.join(missing)}"
+            f"{index_path}: ADR index is missing {', '.join(missing)}. Add it."
         )
 
 
@@ -261,7 +265,7 @@ def validate_local_links(paths: list[Path], repo_root: Path) -> None:
             target = (path.parent / target_text).resolve()
             if not target.is_relative_to(root) or not target.exists():
                 raise SpecError(
-                    f"{path}: linked file does not exist: {raw_target}"
+                    f"{path}: linked file does not exist: {raw_target}. Fix it."
                 )
 
 
@@ -314,7 +318,7 @@ def run_gh(arguments: list[str]) -> str:
     gh_binary = shutil.which("gh")
     if gh_binary is None:
         raise RuntimeError(
-            "GitHub CLI (gh) is required for Issue synchronization"
+            "GitHub CLI is missing: Issue sync needs 'gh'. Install it."
         )
     # The executable is resolved locally.
     # Arguments are passed without a shell.
@@ -367,12 +371,12 @@ def sync_spec(
         LOGGER.info("skip untracked current spec: %s", spec.path)
         return
     if not assignee or "\n" in assignee:
-        raise SpecError("Issue assignee must be a non-empty GitHub login")
+        raise SpecError("Issue assignee is empty: use a GitHub login. Set it.")
 
     repo_root = Path.cwd().resolve()
     absolute_path = spec.path.resolve()
     if not absolute_path.is_relative_to(repo_root):
-        raise SpecError(f"{spec.path}: spec must be inside the repository")
+        raise SpecError(f"{spec.path}: spec is outside the repo. Move it.")
     relative_path = absolute_path.relative_to(repo_root)
     source_url = (
         f"{server_url}/{repo}/blob/{source_ref}/{relative_path.as_posix()}"
@@ -438,7 +442,9 @@ def discover_specs(paths: list[str]) -> list[Path]:
         candidates = [Path(item) for item in paths]
         missing = [str(path) for path in candidates if not path.is_file()]
         if missing:
-            raise SpecError(f"spec file does not exist: {', '.join(missing)}")
+            raise SpecError(
+                f"spec file does not exist: {', '.join(missing)}. Fix it."
+            )
         return candidates
     return sorted(Path("docs/specs").glob("*.md"))
 
@@ -457,12 +463,12 @@ def load_labels(path: Path) -> list[dict[str, str]]:
     """Load the repository label policy used by Issue synchronization."""
     raw: object = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, list):
-        raise SpecError(f"{path}: labels policy must be a list")
+        raise SpecError(f"{path}: labels policy must be a list. Fix it.")
 
     labels: list[dict[str, str]] = []
     for item in raw:
         if not isinstance(item, dict):
-            raise SpecError(f"{path}: every label must be an object")
+            raise SpecError(f"{path}: every label must be an object. Fix it.")
         name = item.get("name")
         color = item.get("color")
         description = item.get("description")
@@ -475,7 +481,7 @@ def load_labels(path: Path) -> list[dict[str, str]]:
             or not description
         ):
             raise SpecError(
-                f"{path}: every label needs name, color, and description"
+                f"{path}: a label lacks name, color, or description. Fix it."
             )
         labels.append(
             {"name": name, "color": color, "description": description}
@@ -511,7 +517,9 @@ def main() -> int:
             validate_adr(adr)
         validate_adr_index(adrs)
         if not specs:
-            raise SpecError("no spec files found in docs/specs")
+            raise SpecError(
+                "no spec files found: docs/specs is empty. Add one."
+            )
         validate_unique_ids(specs)
         validate_local_links([spec.path for spec in specs] + adrs, Path.cwd())
         for spec in specs:

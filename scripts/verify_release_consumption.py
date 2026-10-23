@@ -21,7 +21,7 @@ class VerificationError(RuntimeError):
 def mapping(value: object, label: str) -> Mapping[str, object]:
     """Return a JSON object or fail with its policy location."""
     if not isinstance(value, dict):
-        raise VerificationError(f"Missing or invalid {label}.")
+        raise VerificationError(f"Bad {label}: not an object. Discard it.")
     return cast("Mapping[str, object]", value)
 
 
@@ -40,7 +40,7 @@ def subject_digest(
     """Read a digest from the uniquely identified attestation subject."""
     raw_subjects = statement.get("subject")
     if not isinstance(raw_subjects, list):
-        raise VerificationError("Release attestation has no subjects.")
+        raise VerificationError("Bad attestation: no subjects. Discard it.")
     matches = [
         mapping(subject, "release subject")
         for subject in raw_subjects
@@ -48,14 +48,14 @@ def subject_digest(
     ]
     if len(matches) != 1:
         raise VerificationError(
-            f"Release attestation must contain exactly one {key}={value!r}."
+            f"Bad attestation: not one {key}={value!r}. Discard it."
         )
     digest = mapping(matches[0].get("digest"), "release subject digest").get(
         algorithm
     )
     if not isinstance(digest, str) or not digest:
         raise VerificationError(
-            f"Release subject {value!r} has no {algorithm} digest."
+            f"Bad subject {value!r}: no {algorithm} digest. Discard it."
         )
     return digest.lower()
 
@@ -76,17 +76,17 @@ def verify_consumption(
     certificate = mapping(signature.get("certificate"), "certificate")
     signer = certificate.get("subjectAlternativeName")
     if signer != RELEASE_SIGNER:
-        raise VerificationError("Release signer identity mismatch.")
+        raise VerificationError("Bad signer identity: mismatch. Discard it.")
 
     timestamps = result.get("verifiedTimestamps")
     if not isinstance(timestamps, list) or not timestamps:
         raise VerificationError(
-            "Release attestation has no verified timestamp."
+            "Bad attestation: no verified timestamp. Discard it."
         )
 
     statement = mapping(result.get("statement"), "statement")
     if statement.get("predicateType") != RELEASE_PREDICATE:
-        raise VerificationError("Release attestation predicate mismatch.")
+        raise VerificationError("Bad attestation: wrong predicate. Discard it.")
     predicate = mapping(statement.get("predicate"), "release predicate")
     expected_predicate = {
         "repository": repository,
@@ -95,17 +95,21 @@ def verify_consumption(
     }
     for key, expected in expected_predicate.items():
         if str(predicate.get(key)) != expected:
-            raise VerificationError(f"Release {key} identity mismatch.")
+            raise VerificationError(
+                f"Release {key} identity mismatch: wrong value. Discard it."
+            )
 
     expected_purl = f"pkg:github/{repository}@{tag}"
     attested_commit = subject_digest(statement, "uri", expected_purl, "sha1")
     if attested_commit != commit.lower():
-        raise VerificationError("Release commit identity mismatch.")
+        raise VerificationError("Bad commit identity: mismatch. Discard it.")
 
     actual_digest = sha256(artifact)
     attested_digest = subject_digest(statement, "name", artifact.name, "sha256")
     if attested_digest != actual_digest:
-        raise VerificationError("Downloaded artifact digest mismatch.")
+        raise VerificationError(
+            "Downloaded artifact digest mismatch: it changed. Discard it."
+        )
 
     return {
         "artifact": artifact.name,
@@ -147,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             commit=args.commit,
         )
     except (OSError, json.JSONDecodeError, VerificationError) as error:
-        sys.stderr.write(f"Release consumption verification failed: {error}\n")
+        sys.stderr.write(f"ERROR: Release consumption failed: {error}\n")
         return 1
     serialized = json.dumps(evidence, indent=2, sort_keys=True) + "\n"
     if args.output is None:

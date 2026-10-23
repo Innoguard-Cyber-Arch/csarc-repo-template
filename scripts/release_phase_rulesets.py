@@ -63,7 +63,7 @@ def check_ruleset_bypass(rulesets: list[JsonObject]) -> list[str]:
 def _load_json(path: Path) -> JsonObject:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError(f"{path}: expected a JSON object")
+        raise ValueError(f"{path}: not a JSON object. Fix it.")
     return payload
 
 
@@ -88,7 +88,9 @@ def _main(argv: list[str]) -> int:
         )
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as error:
         print(  # noqa: T201
-            f"Cannot load Ruleset policy: {error}", file=sys.stderr
+            f"ERROR: Cannot load Ruleset policy: {str(error).rstrip('.')}. "
+            "Fix the policy files.",
+            file=sys.stderr,
         )
         return 1
     if args.command == "assemble":
@@ -96,9 +98,13 @@ def _main(argv: list[str]) -> int:
         return 0
     violations = check_ruleset_bypass(rulesets)
     if violations:
-        print("; ".join(violations), file=sys.stderr)  # noqa: T201
+        print(  # noqa: T201
+            f"ERROR: Ruleset bypass check failed: {'; '.join(violations)}. "
+            "Fix the Rulesets.",
+            file=sys.stderr,
+        )
         return 1
-    print("Ruleset bypass boundaries are valid.")  # noqa: T201
+    print("OK: Ruleset bypass boundaries are valid.")  # noqa: T201
     return 0
 
 
