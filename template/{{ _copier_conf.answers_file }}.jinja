@@ -22,8 +22,11 @@
   "release_trigger": release_trigger,
   "scheduled_checks": scheduled_checks,
   "security_reporting_channel": security_reporting_channel,
+  "single_writer_merger": single_writer_merger | default(''),
   "verification_mode": verification_mode,
 } %}
+{#- Issue #1233: omit the empty opt-in so older trusted-base readers accept the file. #}
+{%- if not saved.single_writer_merger %}{%- set _ = saved.pop("single_writer_merger") %}{%- endif %}
 {%- for key in ["_commit", "_src_path"] if key in _copier_answers %}
 {%- set _ = saved.update({key: _copier_answers[key]}) %}
 {%- endfor %}
