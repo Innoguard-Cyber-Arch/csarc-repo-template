@@ -60,12 +60,15 @@ def declared_required_contexts() -> set[tuple[str, int]]:
         ) from error
     rules = policy.get("rules") if isinstance(policy, dict) else None
     if not isinstance(rules, list):
-        raise RuntimeError("Required checks: malformed declaration. Fix it.")
+        raise RuntimeError(
+            "Required checks: malformed declaration. Fix '.csarc/config.yml'."
+        )
     contexts: set[tuple[str, int]] = set()
     for rule in rules:
         if not isinstance(rule, dict):
             raise RuntimeError(
-                "Required checks: malformed declaration. Fix it."
+                "Required checks: malformed declaration. Fix "
+                "'.csarc/config.yml'."
             )
         if rule.get("type") != "required_status_checks":
             continue
@@ -77,7 +80,8 @@ def declared_required_contexts() -> set[tuple[str, int]]:
         )
         if not isinstance(items, list):
             raise RuntimeError(
-                "Required checks: malformed declaration. Fix it."
+                "Required checks: malformed declaration. Fix "
+                "'.csarc/config.yml'."
             )
         for item in items:
             if (
@@ -88,7 +92,8 @@ def declared_required_contexts() -> set[tuple[str, int]]:
                 or item["integration_id"] <= 0
             ):
                 raise RuntimeError(
-                    "Required checks: malformed declaration. Fix it."
+                    "Required checks: malformed declaration. Fix "
+                    "'.csarc/config.yml'."
                 )
             contexts.add((item["context"], item["integration_id"]))
     if not contexts:
@@ -139,7 +144,8 @@ def trusted_check_run_matches_context(
         payload = github.get(repo, f"actions/runs/{run_id}")
         if not isinstance(payload, dict):
             raise RuntimeError(
-                "Required check: malformed Actions run. Rerun it."
+                "Required check: malformed Actions run. Rerun it in GitHub "
+                "Actions."
             )
         run_cache[run_id] = payload
     run = run_cache[run_id]
@@ -265,7 +271,8 @@ def require_trusted_verification(  # noqa: C901
     check_run = selected.get(identity)
     if check_run is None:
         raise RuntimeError(
-            "Verify check: no trusted producer on the exact head. Rerun it."
+            "Verify check: no trusted producer on the exact head. Rerun "
+            "'verify' on the exact head."
         )
     run_url = actions_run_url(str(check_run.get("details_url") or ""), repo)
     run_id = int(run_url.rsplit("/", 1)[1])
@@ -274,7 +281,9 @@ def require_trusted_verification(  # noqa: C901
     tree = commit.get("tree") if isinstance(commit, dict) else None
     tree_sha = tree.get("sha") if isinstance(tree, dict) else None
     if not isinstance(tree_sha, str):
-        raise RuntimeError("Exact-head Git tree: unavailable. Retry.")
+        raise RuntimeError(
+            "Exact-head Git tree: unavailable. Run 'gh auth status' and rerun."
+        )
     jobs = github.collection(
         repo,
         f"actions/runs/{run_id}/jobs?filter=latest&per_page=100",
@@ -287,7 +296,8 @@ def require_trusted_verification(  # noqa: C901
     ]
     if len(matching_jobs) != 1:
         raise RuntimeError(
-            "Trusted verify check: no unique Actions job. Rerun it."
+            "Trusted verify check: no unique Actions job. Rerun 'verify' on "
+            "the exact head."
         )
     job = matching_jobs[0]
     annotations = (
@@ -492,7 +502,10 @@ def authoritative_check_runs(
             or type(app_id) is not int
             or app_id <= 0
         ):
-            raise RuntimeError("Check run: malformed identity. Rerun it.")
+            raise RuntimeError(
+                "Check run: malformed identity. Rerun the check in GitHub "
+                "Actions."
+            )
         identity = (name, app_id)
         identities.append((name, app_id, check_id))
         latest_ids[identity] = max(latest_ids.get(identity, 0), check_id)
@@ -587,7 +600,7 @@ def require_successful_checks(  # noqa: C901
             raise RuntimeError(
                 "Exact head: non-quota check failures: "
                 + ", ".join(sorted(non_quota_failures))
-                + ". Fix them."
+                + ". Fix the failed jobs."
             )
     if not missing:
         return "quota-fallback" if quota_run_urls else "success"

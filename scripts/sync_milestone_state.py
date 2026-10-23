@@ -37,7 +37,7 @@ def _load_sibling(name: str) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise ModuleNotFoundError(
-            f"Sibling module {path}: unavailable. Restore it."
+            f"Sibling module {path}: unavailable. Run 'csarc update'."
         )
     module = importlib.util.module_from_spec(spec)
     # Register a first load so nested imports share it; a same-named module
@@ -173,7 +173,8 @@ class _SnapshotGitHub:
             permission = _collaborator_permission(repo, login)
             if permission is None:
                 raise RuntimeError(
-                    "Collaborator permission: unavailable. Retry."
+                    "Collaborator permission: unavailable. Run 'gh auth "
+                    "status' and rerun."
                 )
             return {"permission": permission}
         if path.startswith("milestones/"):
@@ -230,11 +231,15 @@ def _pages(raw: str) -> list[dict[str, Any]]:
     """Flatten a paginated GitHub REST response."""
     value = json.loads(raw)
     if not isinstance(value, list):
-        raise RuntimeError("GitHub collection: invalid. Retry.")
+        raise RuntimeError(
+            "GitHub collection: invalid. Run 'gh auth status' and rerun."
+        )
     if value and isinstance(value[0], list):
         value = [item for page in value for item in page]
     if not all(isinstance(item, dict) for item in value):
-        raise RuntimeError("GitHub collection item: invalid. Retry.")
+        raise RuntimeError(
+            "GitHub collection item: invalid. Run 'gh auth status' and rerun."
+        )
     return value
 
 
@@ -1761,7 +1766,10 @@ def refresh_pr_checks(snapshot: dict[str, Any]) -> int:
         )
         head_sha = pull.get("head", {}).get("sha")
         if not isinstance(head_sha, str) or not head_sha:
-            raise RuntimeError("GitHub pull-request head: invalid. Retry.")
+            raise RuntimeError(
+                "GitHub pull-request head: invalid. Run 'gh auth status' and "
+                "rerun."
+            )
         _record_check(repo, head_sha, decision)
         count += 1
     return count
@@ -1772,7 +1780,9 @@ def check_pr(repo: str, number: int, *, record_check: bool = True) -> Decision:
     pull = json.loads(run_gh(["api", f"repos/{repo}/pulls/{number}"]))
     head_sha = pull.get("head", {}).get("sha")
     if not isinstance(head_sha, str) or not head_sha:
-        raise RuntimeError("GitHub pull-request head: invalid. Retry.")
+        raise RuntimeError(
+            "GitHub pull-request head: invalid. Run 'gh auth status' and rerun."
+        )
     decision = _pull_decision(repo, pull)
     if record_check:
         _record_check(repo, head_sha, decision)
@@ -1821,7 +1831,8 @@ def _pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
     milestone_number = milestone.get("number")
     if not isinstance(milestone_number, int):
         raise RuntimeError(
-            "GitHub pull-request lifecycle data: invalid. Retry."
+            "GitHub pull-request lifecycle data: invalid. Run 'gh auth status' "
+            "and rerun."
         )
     return approval_decision(load_snapshot(repo, milestone_number))
 

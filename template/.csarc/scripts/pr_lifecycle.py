@@ -45,7 +45,7 @@ def _load_sibling(name: str) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise ModuleNotFoundError(
-            f"Sibling module {path}: unavailable. Restore it."
+            f"Sibling module {path}: unavailable. Run 'csarc update'."
         )
     module = importlib.util.module_from_spec(spec)
     # Register a first load so nested imports share it; a same-named module
@@ -283,13 +283,20 @@ def canonical_json(value: object) -> str:
 def parse_time(value: object, label: str) -> datetime:
     """Parse an aware GitHub timestamp or fail closed."""
     if not isinstance(value, str):
-        raise RuntimeError(f"{label}: no timestamp. Retry.")
+        raise RuntimeError(
+            f"{label}: no timestamp. Run 'gh auth status' and rerun."
+        )
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
-        raise RuntimeError(f"{label}: invalid timestamp. Retry.") from error
+        raise RuntimeError(
+            f"{label}: invalid timestamp. Run 'gh auth status' and rerun."
+        ) from error
     if parsed.tzinfo is None:
-        raise RuntimeError(f"{label}: timestamp has no timezone. Retry.")
+        raise RuntimeError(
+            f"{label}: timestamp has no timezone. Run 'gh auth status' and "
+            "rerun."
+        )
     return parsed.astimezone(UTC)
 
 
@@ -330,7 +337,9 @@ class GitHub:
         """Return a verified user, or an explicitly supplied App actor."""
         if explicit_actor:
             if ACTOR.fullmatch(explicit_actor) is None:
-                raise RuntimeError("GitHub actor: invalid --actor. Fix it.")
+                raise RuntimeError(
+                    "GitHub actor: invalid --actor. Pass a GitHub login."
+                )
             return explicit_actor
         try:
             payload = json.loads(run(["gh", "api", "user"]))
@@ -365,7 +374,8 @@ class GitHub:
         )
         if not isinstance(payload, list):
             raise RuntimeError(
-                f"GitHub collection {endpoint}: not a list. Retry."
+                f"GitHub collection {endpoint}: not a list. Run 'gh auth "
+                "status' and rerun."
             )
         pages = (
             payload if payload and isinstance(payload[0], list) else [payload]
@@ -373,7 +383,8 @@ class GitHub:
         items = [item for page in pages for item in page]
         if not all(isinstance(item, dict) for item in items):
             raise RuntimeError(
-                f"GitHub collection {endpoint}: invalid entries. Retry."
+                f"GitHub collection {endpoint}: invalid entries. Run 'gh auth "
+                "status' and rerun."
             )
         return items
 
@@ -400,7 +411,8 @@ class GitHub:
         )
         if not isinstance(payload, list):
             raise RuntimeError(
-                f"GitHub collection {path}: not paginated. Retry."
+                f"GitHub collection {path}: not paginated. Run 'gh auth "
+                "status' and rerun."
             )
         items: list[dict[str, Any]] = []
         for page in payload:
@@ -408,16 +420,19 @@ class GitHub:
                 page.get(key), list
             ):
                 raise RuntimeError(
-                    f"GitHub collection {path}: no {key}. Retry."
+                    f"GitHub collection {path}: no {key}. Run 'gh auth status' "
+                    "and rerun."
                 )
             if response_sha is not None and page.get("sha") != response_sha:
                 raise RuntimeError(
-                    f"GitHub collection {path}: another SHA. Retry."
+                    f"GitHub collection {path}: another SHA. Run 'gh auth "
+                    "status' and rerun."
                 )
             entries = page[key]
             if not all(isinstance(item, dict) for item in entries):
                 raise RuntimeError(
-                    f"GitHub collection {path}: invalid entries. Retry."
+                    f"GitHub collection {path}: invalid entries. Run 'gh auth "
+                    "status' and rerun."
                 )
             items.extend(entries)
         return items
@@ -452,7 +467,9 @@ class GitHub:
         )
         result = json.loads(payload)
         if not isinstance(result, dict):
-            raise RuntimeError("GitHub merge: invalid response. Retry.")
+            raise RuntimeError(
+                "GitHub merge: invalid response. Check the PR state on GitHub."
+            )
         return result
 
     def comment(self, repo: str, pr_number: int, body: str) -> dict[str, Any]:
@@ -471,7 +488,10 @@ class GitHub:
         )
         result = json.loads(payload)
         if not isinstance(result, dict):
-            raise RuntimeError("GitHub comment: invalid response. Retry.")
+            raise RuntimeError(
+                "GitHub comment: invalid response. Run 'gh auth status' and "
+                "rerun."
+            )
         return result
 
     def edit_comment(
@@ -492,7 +512,10 @@ class GitHub:
         )
         result = json.loads(payload)
         if not isinstance(result, dict):
-            raise RuntimeError("GitHub comment: invalid response. Retry.")
+            raise RuntimeError(
+                "GitHub comment: invalid response. Run 'gh auth status' and "
+                "rerun."
+            )
         return result
 
     def create_issue(
@@ -527,7 +550,10 @@ class GitHub:
         ]
         url = run(command).splitlines()[-1].strip()
         if not url.startswith(f"https://github.com/{repo}/issues/"):
-            raise RuntimeError("Hotfix post-review Issue: invalid URL. Retry.")
+            raise RuntimeError(
+                "Hotfix post-review Issue: invalid URL. Run 'gh auth status' "
+                "and rerun."
+            )
         return {"html_url": url}
 
     def close_issue(self, repo: str, issue_number: int) -> dict[str, Any]:
@@ -548,7 +574,10 @@ class GitHub:
         )
         result = json.loads(payload)
         if not isinstance(result, dict):
-            raise RuntimeError("GitHub Issue close: invalid response. Retry.")
+            raise RuntimeError(
+                "GitHub Issue close: invalid response. Run 'gh auth status' "
+                "and rerun."
+            )
         return result
 
 
@@ -594,7 +623,10 @@ def lease_refs(pull: dict[str, Any], default_branch: str) -> list[str]:
     base = pull.get("base") or {}
     base_ref = base.get("ref")
     if not isinstance(base_ref, str) or not base_ref:
-        raise RuntimeError("Pull request: base branch unavailable. Retry.")
+        raise RuntimeError(
+            "Pull request: base branch unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     return [pr_ref(int(pull["number"])), base_lane_ref(base_ref)]
 
 
@@ -604,7 +636,10 @@ def live_pull(
     """Require one open pull request at the exact expected head."""
     payload = github.get(repo, f"pulls/{pr_number}")
     if not isinstance(payload, dict):
-        raise RuntimeError("Live pull request: invalid response. Retry.")
+        raise RuntimeError(
+            "Live pull request: invalid response. Run 'gh auth status' and "
+            "rerun."
+        )
     head = payload.get("head") or {}
     if (
         payload.get("number") != pr_number
@@ -629,7 +664,10 @@ def branch_sha(github: GitHub, repo: str, branch: str) -> str:
         else None
     )
     if not isinstance(sha, str) or SHA.fullmatch(sha) is None:
-        raise RuntimeError("Destination branch: ref unavailable. Retry.")
+        raise RuntimeError(
+            "Destination branch: ref unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     return sha
 
 
@@ -640,15 +678,22 @@ def remote_ref(ref: str) -> str | None:
         return None
     lines = output.splitlines()
     if len(lines) != 1:
-        raise RuntimeError(f"Remote lease ref {ref}: ambiguous. Inspect it.")
+        raise RuntimeError(
+            f"Remote lease ref {ref}: ambiguous. Run 'git ls-remote origin "
+            "csarc/leases'."
+        )
     try:
         sha, observed_ref = lines[0].split("\t", 1)
     except ValueError as error:
         raise RuntimeError(
-            f"Remote lease ref {ref}: invalid. Inspect it."
+            f"Remote lease ref {ref}: invalid. Run 'git ls-remote origin "
+            "csarc/leases'."
         ) from error
     if observed_ref != ref or SHA.fullmatch(sha) is None:
-        raise RuntimeError(f"Remote lease ref {ref}: invalid. Inspect it.")
+        raise RuntimeError(
+            f"Remote lease ref {ref}: invalid. Run 'git ls-remote origin "
+            "csarc/leases'."
+        )
     return sha
 
 
@@ -752,7 +797,10 @@ def read_lease(path: Path) -> dict[str, Any]:
         isinstance(commit, str) and SHA.fullmatch(commit)
         for commit in payload["reclaimed_commits"]
     ):
-        raise RuntimeError("Lease reclaim history: invalid. Inspect the lease.")
+        raise RuntimeError(
+            "Lease reclaim history: invalid. Run 'git ls-remote origin "
+            "csarc/leases'."
+        )
     validate_audit_url(payload)
     validate_refs(payload)
     return payload
@@ -770,7 +818,9 @@ def validate_refs(lease: dict[str, Any]) -> None:
         or not all(isinstance(ref, str) for ref in refs)
         or refs != expected
     ):
-        raise RuntimeError("Lease refs: invalid. Inspect the lease.")
+        raise RuntimeError(
+            "Lease refs: invalid. Run 'git ls-remote origin csarc/leases'."
+        )
 
 
 def audit_comment_id(lease: dict[str, Any]) -> str:
@@ -784,7 +834,9 @@ def audit_comment_id(lease: dict[str, Any]) -> str:
         or parsed.path.casefold() != expected.casefold()
         or match is None
     ):
-        raise RuntimeError("Lease audit URL: invalid. Inspect the lease.")
+        raise RuntimeError(
+            "Lease audit URL: invalid. Run 'git ls-remote origin csarc/leases'."
+        )
     return match.group(1)
 
 
@@ -809,7 +861,8 @@ def validate_audit_comment(lease: dict[str, Any], comment: object) -> None:
         or user.get("type") != expected_type
     ):
         raise RuntimeError(
-            "Remote lease audit comment: invalid. Inspect the lease."
+            "Remote lease audit comment: invalid. Run 'git ls-remote origin "
+            "csarc/leases'."
         )
 
 
@@ -898,14 +951,18 @@ def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
     for ref in refs:
         if remote_ref(ref) != lease["lease_commit"]:
             raise RuntimeError(
-                f"Lease ownership {ref}: changed or missing. Inspect it."
+                f"Lease ownership {ref}: changed or missing. Run 'git "
+                "ls-remote origin csarc/leases'."
             )
     repo = lease["repository"]
     head_sha = lease["head_sha"]
     lease_commit = github.get(repo, f"git/commits/{lease['lease_commit']}")
     head_commit = github.get(repo, f"git/commits/{head_sha}")
     if not isinstance(lease_commit, dict) or not isinstance(head_commit, dict):
-        raise RuntimeError("Remote lease commit: metadata unavailable. Retry.")
+        raise RuntimeError(
+            "Remote lease commit: metadata unavailable. Run 'gh auth status' "
+            "and rerun."
+        )
     parents = lease_commit.get("parents")
     tree = lease_commit.get("tree") or {}
     head_tree = head_commit.get("tree") or {}
@@ -919,7 +976,8 @@ def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
         or head_tree.get("sha") != lease["head_tree"]
     ):
         raise RuntimeError(
-            "Remote lease commit: not canonical. Inspect the lease."
+            "Remote lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
         )
     comment_id = audit_comment_id(lease)
     comment = github.get(repo, f"issues/comments/{comment_id}")
@@ -1002,18 +1060,23 @@ def canonical_remote_lease(
     """Validate one remote lease commit's canonical message, parent, tree."""
     payload = github.get(repo, f"git/commits/{commit_sha}")
     if not isinstance(payload, dict) or payload.get("sha") != commit_sha:
-        raise RuntimeError("Existing lease commit: unavailable. Retry.")
+        raise RuntimeError(
+            "Existing lease commit: unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     message = payload.get("message")
     if not isinstance(message, str) or "\n\n" not in message:
         raise RuntimeError(
-            "Existing lease commit: not canonical. Inspect the lease."
+            "Existing lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
         )
     _, encoded = message.split("\n\n", 1)
     try:
         core = json.loads(encoded)
     except json.JSONDecodeError as error:
         raise RuntimeError(
-            "Existing lease commit: not canonical. Inspect the lease."
+            "Existing lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
         ) from error
     if (
         not isinstance(core, dict)
@@ -1042,7 +1105,8 @@ def canonical_remote_lease(
         or payload.get("message") != lease_message(core)
     ):
         raise RuntimeError(
-            "Existing lease commit: not canonical. Inspect the lease."
+            "Existing lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
         )
     try:
         validate_refs(core)
@@ -1050,12 +1114,14 @@ def canonical_remote_lease(
         expires_at = parse_time(core.get("expires_at"), "Existing lease")
     except (KeyError, RuntimeError) as error:
         raise RuntimeError(
-            "Existing lease commit: not canonical. Inspect the lease."
+            "Existing lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
         ) from error
     ttl = (expires_at - acquired_at).total_seconds()
     if not 60 <= ttl <= MAX_TTL_SECONDS:
         raise RuntimeError(
-            "Existing lease commit: not canonical. Inspect the lease."
+            "Existing lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
         )
     parents = payload.get("parents")
     tree = payload.get("tree") or {}
@@ -1069,7 +1135,8 @@ def canonical_remote_lease(
         or (head.get("tree") or {}).get("sha") != core["head_tree"]
     ):
         raise RuntimeError(
-            "Existing lease commit: invalid parent or tree. Inspect the lease."
+            "Existing lease commit: invalid parent or tree. Run 'git ls-remote "
+            "origin csarc/leases'."
         )
     return core
 
@@ -1146,9 +1213,14 @@ def renewable_lease(
 def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     """Atomically acquire, or explicitly renew, the PR and lane refs."""
     if SHA.fullmatch(args.head_sha) is None:
-        raise RuntimeError("Head SHA: not 40 lowercase hex characters. Fix it.")
+        raise RuntimeError(
+            "Head SHA: not 40 lowercase hex characters. Pass 'git rev-parse "
+            "HEAD'."
+        )
     if OWNER.fullmatch(args.owner) is None:
-        raise RuntimeError("Owner: not a stable task or human ID. Fix it.")
+        raise RuntimeError(
+            "Owner: not a stable task or human ID. Pass --owner task/<name>."
+        )
     if not 60 <= args.ttl_seconds <= MAX_TTL_SECONDS:
         raise RuntimeError(
             f"Lease TTL: out of range. Use 60 to {MAX_TTL_SECONDS} seconds."
@@ -1160,17 +1232,24 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     if not isinstance(repository, dict) or not isinstance(
         repository.get("default_branch"), str
     ):
-        raise RuntimeError("Repository: default branch unavailable. Retry.")
+        raise RuntimeError(
+            "Repository: default branch unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     refs = lease_refs(pull, repository["default_branch"])
     base = pull.get("base") or {}
     if (
         not isinstance(base.get("ref"), str)
         or SHA.fullmatch(str(base.get("sha", ""))) is None
     ):
-        raise RuntimeError("Pull request: base identity unavailable. Retry.")
+        raise RuntimeError(
+            "Pull request: base identity unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     if branch_sha(github, args.repo, base["ref"]) != base["sha"]:
         raise RuntimeError(
-            "Pull request: base differs from its destination ref. Retry."
+            "Pull request: base differs from its destination ref. Run 'git "
+            "fetch origin'."
         )
     observed = {ref: remote_ref(ref) for ref in refs}
     if previous is not None:
@@ -1179,7 +1258,8 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
             for existing in observed.values()
         ):
             raise RuntimeError(
-                "Lease ownership: changed before renewal. Inspect it."
+                "Lease ownership: changed before renewal. Run 'git ls-remote "
+                "origin csarc/leases'."
             )
     else:
         for ref, existing in observed.items():
@@ -1238,7 +1318,10 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         env=commit_env,
     )
     if SHA.fullmatch(commit) is None:
-        raise RuntimeError("Lease commit: Git created an invalid one. Retry.")
+        raise RuntimeError(
+            "Lease commit: Git created an invalid one. Run 'pr_lifecycle.py "
+            "acquire' again."
+        )
     create_refs(commit, refs, observed)
     evidence = {**core, "capability": capability, "lease_commit": commit}
     try:
@@ -1256,7 +1339,8 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
             != str(evidence["actor"]).casefold()
         ):
             raise RuntimeError(
-                "Lease audit comment: invalid actor or URL. Inspect it."
+                "Lease audit comment: invalid actor or URL. Run 'git ls-remote "
+                "origin csarc/leases'."
             )
         evidence["audit_url"] = audit_url
         validate_audit_url(evidence)
@@ -1350,7 +1434,10 @@ def authorization(
     comment_id = parsed.fragment.removeprefix("issuecomment-")
     payload = github.get(repo, f"issues/comments/{comment_id}")
     if not isinstance(payload, dict):
-        raise RuntimeError("Authorization comment: invalid response. Retry.")
+        raise RuntimeError(
+            "Authorization comment: invalid response. Run 'gh auth status' and "
+            "rerun."
+        )
     body = payload.get("body")
     user = payload.get("user") or {}
     expected_body = authorization_statement(repo, pr_number, head_sha)
@@ -1364,7 +1451,8 @@ def authorization(
         or normalized_comment_body(body) != expected_body
     ):
         raise RuntimeError(
-            "Authorization: not an exact maintainer statement. Fix it."
+            "Authorization: not an exact maintainer statement. Run "
+            "'pr_lifecycle.py authorization-template'."
         )
     if not is_maintainer(github, repo, user["login"]):
         raise RuntimeError(
@@ -1476,7 +1564,8 @@ def hotfix_emergency_evidence(  # noqa: C901
         or "hotfix" not in issue_labels
     ):
         raise RuntimeError(
-            "Emergency hotfix: needs one open standalone hotfix Issue. Fix it."
+            "Emergency hotfix: needs one open standalone hotfix Issue. Link it "
+            "in the PR body."
         )
     actor = str((authorization_payload.get("user") or {}).get("login") or "")
     proposer = str((issue.get("user") or {}).get("login") or "")
@@ -1586,7 +1675,10 @@ def ensure_hotfix_post_review(
     problems: list[str] = []
     risk_controls.parse_risks(body, problems)
     if problems or not risk_controls.parse_acs(body, problems):
-        raise RuntimeError("Hotfix post-review: invalid risk block. Fix it.")
+        raise RuntimeError(
+            "Hotfix post-review: invalid risk block. Edit the Issue's "
+            "risk table."
+        )
     created = github.create_issue(repo, title, body, actor)
     url = created.get("html_url")
     if not isinstance(url, str):
@@ -1626,7 +1718,8 @@ def require_routine_route(  # noqa: C901
         or head_repo.casefold() != repo.casefold()
     ):
         raise RuntimeError(
-            "Routine fallback: needs a same-repository delivery route. Fix it."
+            "Routine fallback: needs a same-repository delivery route. Push "
+            "the branch here."
         )
     work = ISSUE_WORK_BRANCH.fullmatch(head_ref)
     if work:
@@ -1661,11 +1754,13 @@ def require_routine_route(  # noqa: C901
             actual_milestone = milestone["number"]
         else:
             raise RuntimeError(
-                "Routine work branch Issue: invalid Milestone. Fix it."
+                "Routine work branch Issue: invalid Milestone. Set its "
+                "Milestone."
             )
         if actual_milestone != expected_milestone:
             raise RuntimeError(
-                "Routine work Issue: Milestone differs from the base. Fix it."
+                "Routine work Issue: Milestone differs from the base. Retarget "
+                "the PR."
             )
         return "issue"
     main_sha = branch_sha(github, repo, str(lease["default_branch"]))
@@ -1686,7 +1781,10 @@ def require_routine_route(  # noqa: C901
         or not isinstance(base_sha, str)
         or SHA.fullmatch(base_sha) is None
     ):
-        raise RuntimeError("Routine sync commit: invalid identity. Rebuild it.")
+        raise RuntimeError(
+            "Routine sync commit: invalid identity. Recreate the sync branch "
+            "from main."
+        )
     comparison = github.get(
         repo,
         f"compare/{urllib.parse.quote(main_sha, safe='')}..."
@@ -1696,7 +1794,9 @@ def require_routine_route(  # noqa: C901
         comparison.get("status") if isinstance(comparison, dict) else None
     )
     if not isinstance(compare_status, str):
-        raise RuntimeError("Routine sync: invalid comparison. Retry.")
+        raise RuntimeError(
+            "Routine sync: invalid comparison. Run 'gh auth status' and rerun."
+        )
     if not promotion_gate.delivery_sync.includes_main(compare_status):
         raise RuntimeError("Routine sync head: lacks current main. Merge main.")
     commit = github.get(repo, f"git/commits/{head_sha}")
@@ -1708,7 +1808,8 @@ def require_routine_route(  # noqa: C901
     )
     if parent_shas != [base_sha, main_sha]:
         raise RuntimeError(
-            "Routine sync head: not main merged into the base. Rebuild it."
+            "Routine sync head: not main merged into the base. Recreate the "
+            "sync branch from main."
         )
     return "sync"
 
@@ -1737,12 +1838,13 @@ def require_default_branch_issue_route(
         or head_repo.casefold() != repo.casefold()
     ):
         raise RuntimeError(
-            "Stable route: head is in another repository. Fix it."
+            "Stable route: head is in another repository. Push the branch here."
         )
     work = ISSUE_WORK_BRANCH.fullmatch(str(head_ref)) if head_ref else None
     if work is None:
         raise RuntimeError(
-            "Stable route: head is not an Issue work branch. Fix it."
+            "Stable route: head is not an Issue work branch. Use "
+            "type/<Issue>-<slug>."
         )
     issue_number = int(work.group(1))
     closing_issues = [
@@ -1798,7 +1900,7 @@ def admin_bypass_opt_in(
             if head_repo_name.casefold() != repo.casefold():
                 raise RuntimeError(
                     "Admin bypass: release or promotion head is in another "
-                    "repository. Fix it."
+                    "repository. Push the branch here."
                 )
             return True
         require_default_branch_issue_route(github, repo, lease, pull)
@@ -2517,7 +2619,9 @@ def base_policy_decision(
         check=False,
     )
     if listing.returncode:
-        raise RuntimeError("Changed paths: cannot list them. Retry.")
+        raise RuntimeError(
+            "Changed paths: cannot list them. Run 'gh auth status' and rerun."
+        )
     base_config = repository_root() / ".csarc/config.yml"
     labels_csv = ",".join(sorted(labels))
     with tempfile.TemporaryDirectory(prefix="csarc-base-policy-") as scratch:
@@ -2538,7 +2642,8 @@ def base_policy_decision(
             )
         except (OSError, ValueError) as error:
             raise RuntimeError(
-                f"Trusted base: cannot read the configuration: {error}. Fix it."
+                f"Trusted base: cannot read the configuration: {error}. Fix "
+                "'.csarc/config.yml'."
             ) from error
         executor.require_route(decision, labels)
         changed_files = Path(scratch) / "changed-files"
@@ -2645,7 +2750,10 @@ def authenticated_dependabot_commit(
     commit = github.get(repo, f"commits/{head_sha}")
     comparison = github.get(repo, f"compare/{base_sha}...{head_sha}")
     if not isinstance(commit, dict) or not isinstance(comparison, dict):
-        raise RuntimeError("Dependabot head: metadata unavailable. Retry.")
+        raise RuntimeError(
+            "Dependabot head: metadata unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     direct, direct_reason = dependabot_auth.authenticated_dependabot_head(
         pull, commit, repo, base_sha
     )
@@ -2763,7 +2871,9 @@ def actions_run_url(details_url: str, repo: str) -> str:
         or parsed.query
         or parsed.fragment
     ):
-        raise RuntimeError("Failed check: no Actions run URL here. Rerun it.")
+        raise RuntimeError(
+            "Failed check: no Actions run URL here. Rerun it in GitHub Actions."
+        )
     return f"https://github.com/{repo}/actions/runs/{match.group(1)}"
 
 
@@ -2976,7 +3086,8 @@ def merge_snapshot(  # noqa: C901
         auth_actor = str((auth.get("user") or {}).get("login") or "")
         if auth_actor.casefold() != actor:
             raise RuntimeError(
-                "Admin bypass: authorizer is not the merge actor. Fix it."
+                "Admin bypass: authorizer is not the merge actor. Merge as the "
+                "authorizer."
             )
         if live_repository_role(github, repo, actor) != "admin":
             raise RuntimeError(
@@ -3001,7 +3112,8 @@ def merge_snapshot(  # noqa: C901
         auth_actor = str((auth.get("user") or {}).get("login") or "")
         if auth_actor.casefold() != actor:
             raise RuntimeError(
-                "Emergency hotfix authorization: not the merge actor. Fix it."
+                "Emergency hotfix authorization: not the merge actor. Merge as "
+                "the authorizer."
             )
         hotfix_evidence = hotfix_emergency_evidence(github, repo, pull, auth)
         authorization_source = "hotfix-emergency"
@@ -3024,7 +3136,8 @@ def merge_snapshot(  # noqa: C901
         issue = github.get(repo, f"issues/{issue_number}")
         if not isinstance(issue, dict) or issue.get("pull_request") is not None:
             raise RuntimeError(
-                f"Closing reference #{issue_number}: not an Issue. Fix it."
+                f"Closing reference #{issue_number}: not an Issue. Edit the PR "
+                "body."
             )
         if UNCHECKED.search(str(issue.get("body") or "")):
             raise RuntimeError(
@@ -3034,10 +3147,15 @@ def merge_snapshot(  # noqa: C901
     base = pull.get("base") or {}
     base_ref = base.get("ref")
     if not isinstance(base_ref, str):
-        raise RuntimeError("Pull request: base branch unavailable. Retry.")
+        raise RuntimeError(
+            "Pull request: base branch unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     title = pull.get("title")
     if not isinstance(title, str) or not title.strip():
-        raise RuntimeError("Pull request: title unavailable. Retry.")
+        raise RuntimeError(
+            "Pull request: title unavailable. Run 'gh auth status' and rerun."
+        )
     if verification_mode == "local":
         require_local_pull_policy(repo, pull)
     (
@@ -3268,7 +3386,9 @@ def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
     require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
     updated = live_pull(github, args.repo, args.pr_number, args.head_sha)
     if bool(updated.get("draft")) != desired:
-        raise RuntimeError("Pull request: Draft state did not change. Retry.")
+        raise RuntimeError(
+            "Pull request: Draft state did not change. Run 'gh pr view'."
+        )
 
 
 def read_body_file(body_file: Path | None) -> str | None:
@@ -3279,7 +3399,7 @@ def read_body_file(body_file: Path | None) -> str | None:
         return body_file.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as error:
         raise RuntimeError(
-            "Pull request body file: not UTF-8. Fix it."
+            "Pull request body file: not UTF-8. Save it as UTF-8."
         ) from error
 
 
@@ -3288,10 +3408,12 @@ def create_draft_pull(  # noqa: C901
 ) -> None:
     """Create one clean, pushed pull request directly in Draft state."""
     if REPOSITORY.fullmatch(args.repo) is None:
-        raise RuntimeError("Repository: invalid identity. Fix it.")
+        raise RuntimeError(
+            "Repository: invalid identity. Pass --repo owner/name."
+        )
     if not args.title.strip() or "\n" in args.title:
         raise RuntimeError(
-            "Pull request title: not one non-empty line. Fix it."
+            "Pull request title: not one non-empty line. Pass one line."
         )
     body = read_body_file(args.body_file)
     if body is None or not body.strip():
@@ -3306,7 +3428,7 @@ def create_draft_pull(  # noqa: C901
         raise RuntimeError("Worktree: not clean. Commit or stash changes.")
     head_sha = run(["git", "rev-parse", "HEAD"])
     if SHA.fullmatch(head_sha) is None:
-        raise RuntimeError("Current head commit: invalid. Fix it.")
+        raise RuntimeError("Current head commit: invalid. Run 'git log -1'.")
     if branch_sha(github, args.repo, args.head) != head_sha:
         raise RuntimeError("Remote branch: not at current HEAD. Push it.")
     branch_sha(github, args.repo, args.base)
@@ -3335,7 +3457,10 @@ def create_draft_pull(  # noqa: C901
         url,
     )
     if match is None:
-        raise RuntimeError("GitHub: no pull request URL returned. Retry.")
+        raise RuntimeError(
+            "GitHub: no pull request URL returned. Run 'gh pr list --head "
+            "<branch>'."
+        )
     pull = github.get(args.repo, f"pulls/{int(match.group(1))}")
     head = pull.get("head") if isinstance(pull, dict) else None
     base = pull.get("base") if isinstance(pull, dict) else None
@@ -3432,7 +3557,9 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
         "\n" in label or not label
         for label in args.add_label + args.remove_label
     ):
-        raise RuntimeError("Label names: empty or multi-line. Fix them.")
+        raise RuntimeError(
+            "Label names: empty or multi-line. Pass one-line names."
+        )
     expected_labels = (labels | set(args.add_label)) - set(args.remove_label)
     command = ["gh", "pr", "edit", str(args.pr_number), "--repo", args.repo]
     if requested_body is not None:
@@ -3466,7 +3593,9 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
         or not milestone_matches
         or not body_matches
     ):
-        raise RuntimeError("Pull request metadata: did not change. Retry.")
+        raise RuntimeError(
+            "Pull request metadata: did not change. Run 'gh pr view'."
+        )
 
 
 def check(args: argparse.Namespace, github: GitHub) -> None:
@@ -3648,7 +3777,8 @@ def merge_evidence(
         or payload.get("tree_sha") != lease["head_tree"]
     ):
         raise RuntimeError(
-            "Verification evidence: not bound to the leased tree. Rerun it."
+            "Verification evidence: not bound to the leased tree. Rerun "
+            "'verify' on the exact head."
         )
     trace = snapshot.get("requirement_trace")
     if isinstance(trace, dict):
@@ -3665,7 +3795,9 @@ def comment_id(url: str) -> int:
     """Return the numeric ID of one PR-comment locator."""
     match = merge_trace.COMMENT_LOCATOR.fullmatch(url)
     if match is None:
-        raise RuntimeError("Merge evidence summary: invalid URL. Fix it.")
+        raise RuntimeError(
+            "Merge evidence summary: invalid URL. Delete the marker comment."
+        )
     return int(match.group("comment"))
 
 
@@ -3908,7 +4040,8 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         != [lease["base_sha"]]
     ):
         raise RuntimeError(
-            "Merged pull request: state differs from the response. Check it."
+            "Merged pull request: state differs from the response. Run 'gh pr "
+            "view'."
         )
     commit = merge_commit if isinstance(merge_commit, dict) else {}
     merged_tree = (commit.get("tree") or {}).get("sha")
@@ -3941,7 +4074,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     if status != "merged":
         raise RuntimeError(
             f"{status}: merge commit {merge_sha} lacks the verified tree "
-            "or trailers. Inspect it."
+            "or trailers. Run 'git show --stat' on it."
         )
     hotfix_evidence = snapshot.get("hotfix_evidence")
     if isinstance(hotfix_evidence, dict):
@@ -4004,11 +4137,15 @@ def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
         *([args.issue_type] if args.issue_type else []),
     ]
     if REPOSITORY.fullmatch(args.repo) is None or args.issue_number < 1:
-        raise RuntimeError("Issue: invalid identity. Fix it.")
+        raise RuntimeError(
+            "Issue: invalid identity. Pass a positive Issue number."
+        )
     if (not values and not args.remove_type and args.body_file is None) or any(
         not value or "\n" in value for value in values
     ):
-        raise RuntimeError("Issue metadata: empty or multi-line. Fix it.")
+        raise RuntimeError(
+            "Issue metadata: empty or multi-line. Pass one-line values."
+        )
     issue = github.get(args.repo, f"issues/{args.issue_number}")
     if (
         not isinstance(issue, dict)
@@ -4052,11 +4189,17 @@ def close_work_issue(  # noqa: C901
         or args.pr_number < 1
         or SHA.fullmatch(args.head_sha) is None
     ):
-        raise RuntimeError("Work Issue closure: invalid input. Fix it.")
+        raise RuntimeError(
+            "Work Issue closure: invalid input. Pass --pr-number and "
+            "--head-sha."
+        )
     repository = github.get(args.repo, "")
     pull = github.get(args.repo, f"pulls/{args.pr_number}")
     if not isinstance(repository, dict) or not isinstance(pull, dict):
-        raise RuntimeError("Work Issue closure: state unavailable. Retry.")
+        raise RuntimeError(
+            "Work Issue closure: state unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     head = pull.get("head") or {}
     base = pull.get("base") or {}
     head_repo = head.get("repo") or {} if isinstance(head, dict) else {}
@@ -4076,14 +4219,18 @@ def close_work_issue(  # noqa: C901
         or SHA.fullmatch(merge_sha) is None
     ):
         raise RuntimeError(
-            "Merged pull request: invalid identity or head. Fix it."
+            "Merged pull request: invalid identity or head. Pass the merged PR "
+            "number and head SHA."
         )
     parse_time(pull["merged_at"], "Pull request merge")
     default_branch = repository.get("default_branch")
     base_ref = base.get("ref")
     head_ref = head.get("ref")
     if not isinstance(default_branch, str) or not isinstance(base_ref, str):
-        raise RuntimeError("Pull request: destination unavailable. Retry.")
+        raise RuntimeError(
+            "Pull request: destination unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     if base_ref == default_branch:
         sys.stdout.write(
             f"NOTICE: PR #{args.pr_number}: default-branch closing remains "
@@ -4094,7 +4241,8 @@ def close_work_issue(  # noqa: C901
     work = ISSUE_WORK_BRANCH.fullmatch(str(head_ref or ""))
     if delivery is None or work is None:
         raise RuntimeError(
-            "Merged pull request: not a Milestone work route. Check it."
+            "Merged pull request: not a Milestone work route. Run close-work "
+            "only for dev/m* work."
         )
     issue_number = int(work.group(1))
     closing_issues = [
@@ -4111,7 +4259,9 @@ def close_work_issue(  # noqa: C901
         or issue.get("number") != issue_number
         or issue.get("pull_request") is not None
     ):
-        raise RuntimeError("Work Issue: invalid identity. Fix it.")
+        raise RuntimeError(
+            "Work Issue: invalid identity. Fix the work branch name."
+        )
     expected_milestone = int(delivery.group(1))
     issue_milestone = issue.get("milestone") or {}
     pull_milestone = pull.get("milestone") or {}
@@ -4142,7 +4292,7 @@ def close_work_issue(  # noqa: C901
     ]
     if len(evidence) > 1 or (evidence and evidence != [message]):
         raise RuntimeError(
-            "Work Issue: conflicting closure evidence. Inspect it."
+            "Work Issue: conflicting closure evidence. Run 'gh issue view'."
         )
     state = issue.get("state")
     if state == "closed":
@@ -4156,7 +4306,7 @@ def close_work_issue(  # noqa: C901
         )
         return
     if state != "open":
-        raise RuntimeError("Work Issue: invalid state. Inspect it.")
+        raise RuntimeError("Work Issue: invalid state. Run 'gh issue view'.")
     if not evidence:
         github.comment(args.repo, issue_number, message)
     result = github.close_issue(args.repo, issue_number)
@@ -4165,7 +4315,9 @@ def close_work_issue(  # noqa: C901
         or result.get("state") != "closed"
         or result.get("state_reason") != "completed"
     ):
-        raise RuntimeError("Issue closure: GitHub did not confirm it. Retry.")
+        raise RuntimeError(
+            "Issue closure: GitHub did not confirm it. Run 'gh issue view'."
+        )
     sys.stdout.write(
         f"OK: Issue #{issue_number} closed by merged PR #{args.pr_number}.\n"
     )
@@ -4591,7 +4743,7 @@ def scan_writers(root: Path) -> None:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError as error:
             raise RuntimeError(
-                f"Automation file {relative}: not UTF-8. Fix it."
+                f"Automation file {relative}: not UTF-8. Save it as UTF-8."
             ) from error
         found = writer_violations(text)
         violations.extend(f"{relative}: {item}" for item in found)

@@ -68,7 +68,10 @@ class Capability:
     def __post_init__(self) -> None:
         """Reject states outside the public tri-state contract."""
         if self.state not in STATES:
-            raise ValueError(f"Capability state {self.state}: invalid. Fix it.")
+            raise ValueError(
+                f"Capability state {self.state}: invalid. Use a state from "
+                "'release_policy.py'."
+            )
 
 
 def select_release_mode(

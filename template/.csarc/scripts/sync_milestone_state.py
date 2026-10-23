@@ -38,7 +38,7 @@ def _load_sibling(name: str) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise ModuleNotFoundError(
-            f"Sibling module {path}: unavailable. Restore it."
+            f"Sibling module {path}: unavailable. Run 'csarc update'."
         )
     module = importlib.util.module_from_spec(spec)
     # Register a first load so nested imports share it; a same-named module
@@ -192,7 +192,8 @@ class _SnapshotGitHub:
             permission = _collaborator_permission(repo, login)
             if permission is None:
                 raise RuntimeError(
-                    "Collaborator permission: unavailable. Retry."
+                    "Collaborator permission: unavailable. Run 'gh auth "
+                    "status' and rerun."
                 )
             return {"permission": permission}
         if path.startswith("milestones/"):
@@ -249,11 +250,15 @@ def _pages(raw: str) -> list[dict[str, Any]]:
     """Flatten a paginated GitHub REST response."""
     value = json.loads(raw)
     if not isinstance(value, list):
-        raise RuntimeError("GitHub collection: invalid. Retry.")
+        raise RuntimeError(
+            "GitHub collection: invalid. Run 'gh auth status' and rerun."
+        )
     if value and isinstance(value[0], list):
         value = [item for page in value for item in page]
     if not all(isinstance(item, dict) for item in value):
-        raise RuntimeError("GitHub collection item: invalid. Retry.")
+        raise RuntimeError(
+            "GitHub collection item: invalid. Run 'gh auth status' and rerun."
+        )
     return value
 
 

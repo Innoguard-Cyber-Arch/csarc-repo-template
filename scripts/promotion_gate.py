@@ -290,7 +290,8 @@ def checkpoint_issue_numbers(body: str) -> list[int] | None:
         return None
     if occurrences != 1 or len(matches) != 1:
         raise RuntimeError(
-            "Checkpoint Issue marker: missing, repeated, or invalid. Fix it."
+            "Checkpoint Issue marker: missing, repeated, or invalid. Edit the "
+            "PR body."
         )
     numbers = [int(item[1:]) for item in matches[0].split(", ")]
     if numbers != sorted(set(numbers)):
@@ -305,7 +306,10 @@ def pull_request_issue_number(pull_request: dict[str, Any]) -> int:
     head = pull_request.get("head")
     head_ref = head.get("ref") if isinstance(head, dict) else None
     if not isinstance(head_ref, str):
-        raise RuntimeError("Included pull request: incomplete head. Retry.")
+        raise RuntimeError(
+            "Included pull request: incomplete head. Run 'gh auth status' and "
+            "rerun."
+        )
     match = WORK_BRANCH.fullmatch(head_ref)
     if match is None:
         raise RuntimeError(
@@ -315,12 +319,12 @@ def pull_request_issue_number(pull_request: dict[str, Any]) -> int:
     body = pull_request.get("body")
     if not isinstance(body, str):
         raise RuntimeError(
-            "Included pull request: does not close its Issue. Fix it."
+            "Included pull request: does not close its Issue. Edit its PR body."
         )
     closing_issues = {int(number) for number in CLOSING_ISSUE.findall(body)}
     if branch_issue not in closing_issues:
         raise RuntimeError(
-            "Included pull request: does not close its Issue. Fix it."
+            "Included pull request: does not close its Issue. Edit its PR body."
         )
     return branch_issue
 
@@ -364,17 +368,20 @@ def sync_pull_request_main_sha(
         or not same_repository(pull_request, repo)
     ):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Rebuild it."
+            "Included sync pull request: invalid provenance. Recreate the sync "
+            "branch from main."
         )
     sync_commit = github_get(repo, f"git/commits/{head_sha}", token)
     if not isinstance(sync_commit, dict):
         raise RuntimeError(
-            "Included sync pull request: invalid commit shape. Rebuild it."
+            "Included sync pull request: invalid commit shape. Recreate the "
+            "sync branch from main."
         )
     parents = sync_commit.get("parents")
     if not isinstance(parents, list) or len(parents) != 2:
         raise RuntimeError(
-            "Included sync pull request: invalid commit shape. Rebuild it."
+            "Included sync pull request: invalid commit shape. Recreate the "
+            "sync branch from main."
         )
     main_parent = parents[1]
     delivery_parent = parents[0]
@@ -383,7 +390,8 @@ def sync_pull_request_main_sha(
     )
     if not isinstance(synced_main_sha, str):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Rebuild it."
+            "Included sync pull request: invalid provenance. Recreate the sync "
+            "branch from main."
         )
     expected_ref = delivery_sync.sync_branch_name(
         delivery_branch, synced_main_sha
@@ -396,7 +404,8 @@ def sync_pull_request_main_sha(
         delivery_sync.compare(api, repo, synced_main_sha, current_main_sha)
     ):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Rebuild it."
+            "Included sync pull request: invalid provenance. Recreate the sync "
+            "branch from main."
         )
     if head_ref == legacy_ref:
         base_sha = base.get("sha")
@@ -423,7 +432,8 @@ def sync_pull_request_main_sha(
             or sync_tree_sha != main_tree_sha
         ):
             raise RuntimeError(
-                "Legacy sync pull request: invalid provenance. Inspect it."
+                "Legacy sync pull request: invalid provenance. Recreate the "
+                "sync branch from main."
             )
     return synced_main_sha
 
@@ -531,7 +541,8 @@ def check_promotion_intent(args: argparse.Namespace) -> None:
             not isinstance(title, str) for title in titles
         ):
             raise RuntimeError(
-                "Promotion title fixture: not a string list. Fix it."
+                "Promotion title fixture: not a string list. Pass a JSON "
+                "string list."
             )
     else:
         token = os.environ.get("GH_TOKEN", "")
@@ -587,16 +598,22 @@ def included_pull_requests(  # noqa: C901
             repo, f"compare/{base_sha}...{head_sha}?{query}", token
         )
         if not isinstance(comparison, dict):
-            raise RuntimeError("GitHub commit comparison: invalid. Retry.")
+            raise RuntimeError(
+                "GitHub commit comparison: invalid. Run 'gh auth status' and "
+                "rerun."
+            )
         commits = comparison.get("commits", [])
         if not isinstance(commits, list):
-            raise RuntimeError("GitHub commit list: invalid. Retry.")
+            raise RuntimeError(
+                "GitHub commit list: invalid. Run 'gh auth status' and rerun."
+            )
         for commit in commits:
             sha = commit.get("sha") if isinstance(commit, dict) else None
             if not isinstance(sha, str):
                 if bridge_head_sha is not None:
                     raise RuntimeError(
-                        "Bridge commit provenance: invalid. Retry."
+                        "Bridge commit provenance: invalid. Run 'gh auth "
+                        "status' and rerun."
                     )
                 continue
             if sha == bridge_head_sha:
@@ -605,7 +622,8 @@ def included_pull_requests(  # noqa: C901
             pull_requests = github_get(repo, f"commits/{sha}/pulls", token)
             if not isinstance(pull_requests, list):
                 raise RuntimeError(
-                    "GitHub associated pull requests: invalid. Retry."
+                    "GitHub associated pull requests: invalid. Run 'gh auth "
+                    "status' and rerun."
                 )
             matched = False
             for pull_request in pull_requests:
@@ -675,13 +693,17 @@ def included_pull_requests(  # noqa: C901
                     "same-Milestone" if milestone is not None else "eligible"
                 )
                 raise RuntimeError(
-                    f"Bridge commit {sha}: no {scope} merged PR. Inspect it."
+                    f"Bridge commit {sha}: no {scope} merged PR. Merge it "
+                    "through a PR."
                 )
         if len(commits) < 100:
             break
         page += 1
     if not saw_bridge_head:
-        raise RuntimeError("GitHub comparison: no promotion bridge. Retry.")
+        raise RuntimeError(
+            "GitHub comparison: no promotion bridge. Push the promote/m* "
+            "branch."
+        )
     for number, synced_main_sha in sync_pull_requests.items():
         verified_sync = (
             delivery_sync.merged_sync_pr_number(
@@ -707,7 +729,8 @@ def included_pull_requests(  # noqa: C901
             )
         ):
             raise RuntimeError(
-                "Included sync pull request: no reviewed merge. Inspect it."
+                "Included sync pull request: no reviewed merge. Merge it "
+                "through a reviewed PR."
             )
     return [included[number] for number in sorted(included)]
 
@@ -761,7 +784,8 @@ def milestone_included_issues(
             )
     elif checkpoint != actual:
         raise RuntimeError(
-            "Checkpoint Issues: differ from the candidate work. Fix them."
+            "Checkpoint Issues: differ from the candidate work. Edit '### "
+            "Checkpoints'."
         )
     invalid = [
         number
@@ -853,9 +877,15 @@ def repository_variables(repo: str, token: str) -> dict[str, str]:
             payload.get("total_count") if isinstance(payload, dict) else None
         )
         if not isinstance(items, list) or not isinstance(count, int):
-            raise RuntimeError("Repository variables: incomplete list. Retry.")
+            raise RuntimeError(
+                "Repository variables: incomplete list. Run 'gh auth status' "
+                "and rerun."
+            )
         if total is not None and count != total:
-            raise RuntimeError("Repository variables: count changed. Retry.")
+            raise RuntimeError(
+                "Repository variables: count changed. Run 'gh auth status' and "
+                "rerun."
+            )
         total = count
         for item in items:
             name = item.get("name") if isinstance(item, dict) else None
@@ -865,13 +895,22 @@ def repository_variables(repo: str, token: str) -> dict[str, str]:
                 or not isinstance(value, str)
                 or name in variables
             ):
-                raise RuntimeError("Repository variables: invalid list. Retry.")
+                raise RuntimeError(
+                    "Repository variables: invalid list. Run 'gh auth status' "
+                    "and rerun."
+                )
             variables[name] = value
         if not items and len(variables) < total:
-            raise RuntimeError("Repository variables: incomplete list. Retry.")
+            raise RuntimeError(
+                "Repository variables: incomplete list. Run 'gh auth status' "
+                "and rerun."
+            )
         page += 1
     if len(variables) != total:
-        raise RuntimeError("Repository variables: incomplete list. Retry.")
+        raise RuntimeError(
+            "Repository variables: incomplete list. Run 'gh auth status' and "
+            "rerun."
+        )
     return variables
 
 
@@ -897,7 +936,10 @@ def milestone_issues(
         )
         payload = github_get(repo, f"issues?{query}", token)
         if not isinstance(payload, list):
-            raise RuntimeError("GitHub Milestone Issue list: invalid. Retry.")
+            raise RuntimeError(
+                "GitHub Milestone Issue list: invalid. Run 'gh auth status' "
+                "and rerun."
+            )
         page_items = [item for item in payload if isinstance(item, dict)]
         issues.extend(page_items)
         if len(payload) < 100:
@@ -933,7 +975,8 @@ def promotion_bridge_source(
         return None
     if milestone is None or int(match.group(1)) != milestone:
         raise RuntimeError(
-            "Promotion bridge: Milestone differs from the Issue. Fix it."
+            "Promotion bridge: Milestone differs from the Issue. Rename "
+            "promote/m<N>."
         )
     source_ref = f"dev/m{match.group(1)}-{match.group(2)}"
     source = github_get(
@@ -946,17 +989,20 @@ def promotion_bridge_source(
         source_object.get("sha") if isinstance(source_object, dict) else None
     )
     if not isinstance(source_sha, str):
-        raise RuntimeError("Bridge source reference: invalid. Retry.")
+        raise RuntimeError(
+            "Bridge source reference: invalid. Run 'gh auth status' and rerun."
+        )
     parents = git_output("rev-list", "--parents", "-n", "1", head_sha).split()
     if parents != [head_sha, source_sha, base_sha]:
         raise RuntimeError(
-            "Promotion bridge: not main merged into delivery. Rebuild it."
+            "Promotion bridge: not main merged into delivery. Recreate it from "
+            "dev/m* and main."
         )
     source_tree = git_output("rev-parse", f"{source_sha}^{{tree}}")
     head_tree = git_output("rev-parse", f"{head_sha}^{{tree}}")
     if git_output("rev-parse", f"{candidate_sha}^{{tree}}") != head_tree:
         raise RuntimeError(
-            "Promotion candidate: bridge tree changed. Rebuild it."
+            "Promotion candidate: bridge tree changed. Recreate the bridge."
         )
     return {
         "source_ref": source_ref,
@@ -970,7 +1016,9 @@ def promotion_freshness_sha(
 ) -> str:
     """Return the reviewed promotion SHA that must contain current main."""
     if bridge is not None and not isinstance(bridge.get("source_sha"), str):
-        raise RuntimeError("Promotion bridge: invalid source SHA. Fix it.")
+        raise RuntimeError(
+            "Promotion bridge: invalid source SHA. Pass the dev/m* head SHA."
+        )
     return head_sha
 
 
@@ -1071,10 +1119,13 @@ def trusted_verification_command(repo: str, head_sha: str) -> list[str]:
         mode = os.lstat(candidate).st_mode
     except FileNotFoundError as error:
         raise RuntimeError(
-            "Evidence checker: unavailable. Restore it."
+            "Evidence checker: unavailable. Restore "
+            "'check-trusted-verification'."
         ) from error
     if not stat.S_ISREG(mode):
-        raise RuntimeError("Evidence checker: unsafe. Restore it.")
+        raise RuntimeError(
+            "Evidence checker: unsafe. Restore 'check-trusted-verification'."
+        )
     return [
         "./scripts/check-trusted-verification",
         head_sha,
@@ -1142,7 +1193,8 @@ def require_comment_url(
         or re.fullmatch(r"issuecomment-\d+", parsed.fragment) is None
     ):
         raise RuntimeError(
-            "Fallback references: not comments on the promotion PR. Fix them."
+            "Fallback references: not comments on the promotion PR. Pass the "
+            "PR comment URLs."
         )
     identifier = parsed.fragment.removeprefix("issuecomment-")
     comment = github_get(repo, f"issues/comments/{identifier}", token)
@@ -1160,7 +1212,8 @@ def require_comment_url(
         or not isinstance(user.get("login"), str)
     ):
         raise RuntimeError(
-            "Fallback comment: not an exact maintainer statement. Fix it."
+            "Fallback comment: not an exact maintainer statement. Post the "
+            "exact statement."
         )
     return comment
 
@@ -1250,7 +1303,8 @@ def require_same_preflight(
     """Reject local preflight JSON that differs from live reconstruction."""
     if preflight_binding(evidence) != preflight_binding(rebuilt):
         raise RuntimeError(
-            "Promotion preflight evidence: differs from live state. Rerun it."
+            "Promotion preflight evidence: differs from live state. Rerun "
+            "'promotion_gate.py prepare'."
         )
 
 
@@ -1266,7 +1320,8 @@ def require_run_url(url: str, repo: str) -> None:
         or parsed.fragment
     ):
         raise RuntimeError(
-            "Blocked runs: not Actions URLs of this repository. Fix them."
+            "Blocked runs: not Actions URLs of this repository. Pass this "
+            "repository's run URLs."
         )
 
 
@@ -1288,16 +1343,28 @@ def failed_pull_request_run_urls(  # noqa: C901
             payload.get("total_count") if isinstance(payload, dict) else None
         )
         if not isinstance(items, list) or not isinstance(count, int):
-            raise RuntimeError("Pull request check runs: incomplete. Retry.")
+            raise RuntimeError(
+                "Pull request check runs: incomplete. Run 'gh auth status' and "
+                "rerun."
+            )
         if total is not None and count != total:
-            raise RuntimeError("Pull request check runs: count changed. Retry.")
+            raise RuntimeError(
+                "Pull request check runs: count changed. Run 'gh auth status' "
+                "and rerun."
+            )
         total = count
         check_runs.extend(item for item in items if isinstance(item, dict))
         if not items and len(check_runs) < total:
-            raise RuntimeError("Pull request check runs: incomplete. Retry.")
+            raise RuntimeError(
+                "Pull request check runs: incomplete. Run 'gh auth status' and "
+                "rerun."
+            )
         page += 1
     if len(check_runs) != total:
-        raise RuntimeError("Pull request check runs: incomplete. Retry.")
+        raise RuntimeError(
+            "Pull request check runs: incomplete. Run 'gh auth status' and "
+            "rerun."
+        )
 
     statuses = github_get(repo, f"commits/{head_sha}/status", token)
     status_items = (
@@ -1307,7 +1374,9 @@ def failed_pull_request_run_urls(  # noqa: C901
         not isinstance(item, dict) or item.get("state") != "success"
         for item in status_items
     ):
-        raise RuntimeError("Pull request: non-success commit status. Fix it.")
+        raise RuntimeError(
+            "Pull request: non-success commit status. Fix it in its provider."
+        )
 
     run_urls: set[str] = set()
     for check in check_runs:
@@ -1332,7 +1401,8 @@ def failed_pull_request_run_urls(  # noqa: C901
             or parsed.fragment
         ):
             raise RuntimeError(
-                "Pull request: failed non-Actions check. Fix it."
+                "Pull request: failed non-Actions check. Fix it in its "
+                "provider."
             )
         run_urls.add(f"https://github.com/{repo}/actions/runs/{match.group(1)}")
     if not run_urls:
@@ -1405,16 +1475,25 @@ def require_zero_step_run(  # noqa: C901
             or type(count) is not int
             or count < 0
         ):
-            raise RuntimeError("Blocked run jobs: incomplete. Retry.")
+            raise RuntimeError(
+                "Blocked run jobs: incomplete. Run 'gh auth status' and rerun."
+            )
         if total is not None and count != total:
-            raise RuntimeError("Blocked run jobs: count changed. Retry.")
+            raise RuntimeError(
+                "Blocked run jobs: count changed. Run 'gh auth status' and "
+                "rerun."
+            )
         total = count
         jobs.extend(items)
         if not items and len(jobs) < total:
-            raise RuntimeError("Blocked run jobs: incomplete. Retry.")
+            raise RuntimeError(
+                "Blocked run jobs: incomplete. Run 'gh auth status' and rerun."
+            )
         page += 1
     if not jobs or len(jobs) != total:
-        raise RuntimeError("Blocked run jobs: incomplete. Retry.")
+        raise RuntimeError(
+            "Blocked run jobs: incomplete. Run 'gh auth status' and rerun."
+        )
     if any(
         type(job.get("id")) is not int
         or job["id"] <= 0
@@ -1444,11 +1523,13 @@ def require_zero_step_run(  # noqa: C901
             )
             if not isinstance(payload, list):
                 raise RuntimeError(
-                    "Blocked job annotations: incomplete. Retry."
+                    "Blocked job annotations: incomplete. Run 'gh auth status' "
+                    "and rerun."
                 )
             if not all(isinstance(item, dict) for item in payload):
                 raise RuntimeError(
-                    "Blocked job annotations: incomplete. Retry."
+                    "Blocked job annotations: incomplete. Run 'gh auth status' "
+                    "and rerun."
                 )
             annotations.extend(payload)
             if len(payload) < 100:
@@ -1504,7 +1585,10 @@ def rebuild_quota_preflight(
         )
         rebuilt = json.loads(output.read_text(encoding="utf-8"))
     if not isinstance(rebuilt, dict):
-        raise RuntimeError("Rebuilt promotion preflight: invalid. Rerun it.")
+        raise RuntimeError(
+            "Rebuilt promotion preflight: invalid. Rerun 'promotion_gate.py "
+            "prepare'."
+        )
     return rebuilt
 
 
@@ -1540,7 +1624,8 @@ def validate_quota_preflight(  # noqa: C901
         or not same_repository(pull, repo)
     ):
         raise RuntimeError(
-            "Live promotion: identity differs from evidence. Rerun it."
+            "Live promotion: identity differs from evidence. Rerun "
+            "'promotion_gate.py prepare'."
         )
     labels = {
         item["name"]
@@ -1551,7 +1636,8 @@ def validate_quota_preflight(  # noqa: C901
     strategy = "delivery"
     if asdict(route_for("main", str(head["ref"]), labels, strategy)) != route:
         raise RuntimeError(
-            "Live promotion: route differs from evidence. Rerun it."
+            "Live promotion: route differs from evidence. Rerun "
+            "'promotion_gate.py prepare'."
         )
     current_main = github_get(repo, "git/ref/heads/main", token)
     main_object = (
@@ -1597,7 +1683,8 @@ def validate_quota_preflight(  # noqa: C901
         != evidence.get("candidate_tree")
     ):
         raise RuntimeError(
-            "Live promotion: base, tree, or checkout changed. Rerun it."
+            "Live promotion: base, tree, or checkout changed. Rerun "
+            "'promotion_gate.py prepare'."
         )
     archive = evidence.get("candidate_archive") or {}
     try:
@@ -1612,7 +1699,8 @@ def validate_quota_preflight(  # noqa: C901
         or sha256(args.archive) != archive.get("sha256")
     ):
         raise RuntimeError(
-            "Candidate archive: differs from evidence. Rerun it."
+            "Candidate archive: differs from evidence. Rerun "
+            "'promotion_gate.py prepare'."
         )
     with tempfile.TemporaryDirectory(dir=args.archive.parent) as directory:
         rebuilt = Path(directory) / args.archive.name
@@ -1631,7 +1719,8 @@ def validate_quota_preflight(  # noqa: C901
         )
         if sha256(rebuilt) != archive.get("sha256"):
             raise RuntimeError(
-                "Candidate archive: not reproducible. Inspect it."
+                "Candidate archive: not reproducible. Rerun 'promotion_gate.py "
+                "prepare'."
             )
     require_same_preflight(
         evidence, rebuild_quota_preflight(evidence, pull, args, token)
@@ -1661,9 +1750,15 @@ def validate_quota_preflight(  # noqa: C901
             payload.get("total_count") if isinstance(payload, dict) else None
         )
         if not isinstance(runs, list) or not isinstance(count, int):
-            raise RuntimeError("Pull-request runs: incomplete list. Retry.")
+            raise RuntimeError(
+                "Pull-request runs: incomplete list. Run 'gh auth status' and "
+                "rerun."
+            )
         if total is not None and count != total:
-            raise RuntimeError("Pull-request runs: count changed. Retry.")
+            raise RuntimeError(
+                "Pull-request runs: count changed. Run 'gh auth status' and "
+                "rerun."
+            )
         total = count
         seen += len(runs)
         failed_ids.update(
@@ -1680,14 +1775,22 @@ def validate_quota_preflight(  # noqa: C901
             not in {"success", "skipped", "neutral", "failure"}
             for run in runs
         ):
-            raise RuntimeError("Pull-request run: non-quota failure. Fix it.")
+            raise RuntimeError(
+                "Pull-request run: non-quota failure. Fix the failed job."
+            )
         if not runs and seen < total:
-            raise RuntimeError("Pull-request runs: incomplete list. Retry.")
+            raise RuntimeError(
+                "Pull-request runs: incomplete list. Run 'gh auth status' and "
+                "rerun."
+            )
         if len(runs) < 100:
             break
         page += 1
     if seen != total:
-        raise RuntimeError("Pull-request runs: incomplete list. Retry.")
+        raise RuntimeError(
+            "Pull-request runs: incomplete list. Run 'gh auth status' and "
+            "rerun."
+        )
     if (
         not failed_ids
         or set(run_ids) != failed_ids
@@ -1709,7 +1812,8 @@ def validate_quota_preflight(  # noqa: C901
     }
     if not REQUIRED_QUOTA_WORKFLOWS.issubset(paths):
         raise RuntimeError(
-            "Required CI and promotion runs: not both blocked. Rerun them."
+            "Required CI and promotion runs: not both blocked. Use the normal "
+            "promotion route."
         )
     if not validate_comments:
         return {}, {}
@@ -1766,7 +1870,8 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
             body = pull_request.get("body") or ""
             if not isinstance(title, str) or not isinstance(body, str):
                 raise RuntimeError(
-                    "Promotion pull request: incomplete metadata. Retry."
+                    "Promotion pull request: incomplete metadata. Run 'gh auth "
+                    "status' and rerun."
                 )
             if route.kind == "milestone":
                 validate_promotion_alignment(
@@ -1792,7 +1897,8 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 issue_body = issue.get("body") or ""
                 if not isinstance(issue_body, str):
                     raise RuntimeError(
-                        "Promotion tracking Issue: incomplete metadata. Retry."
+                        "Promotion tracking Issue: incomplete metadata. Run "
+                        "'gh auth status' and rerun."
                     )
                 issue_title = str(issue.get("title") or "")
                 if UNCHECKED.search(issue_body):
@@ -1813,15 +1919,17 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     and issue_milestone != route.milestone
                 ):
                     raise RuntimeError(
-                        "Promotion Issue: wrong Milestone. Fix it."
+                        "Promotion Issue: wrong Milestone. Set its Milestone."
                     )
                 if route.kind == "isolated" and number != route.issue:
                     raise RuntimeError(
-                        "Isolated delivery branch: wrong Issue number. Fix it."
+                        "Isolated delivery branch: wrong Issue number. Use "
+                        "dev/i<Issue>-<slug>."
                     )
                 if route.kind == "release-recovery" and number != route.issue:
                     raise RuntimeError(
-                        "Release recovery branch: wrong Issue number. Fix it."
+                        "Release recovery branch: wrong Issue number. Use "
+                        "fix/<Issue>-<slug>."
                     )
                 if (
                     route.kind not in {"milestone", "release-recovery"}
@@ -1857,7 +1965,10 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 )
             current_main = github_get(args.repo, "git/ref/heads/main", token)
             if not isinstance(current_main, dict):
-                raise RuntimeError("GitHub main reference: invalid. Retry.")
+                raise RuntimeError(
+                    "GitHub main reference: invalid. Run 'gh auth status' and "
+                    "rerun."
+                )
             main_object = current_main.get("object")
             current_main_sha = (
                 main_object.get("sha")
@@ -1867,7 +1978,10 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
             base_sha = pull_request["base"]["sha"]
             head_sha = pull_request["head"]["sha"]
             if not isinstance(current_main_sha, str):
-                raise RuntimeError("GitHub main reference: invalid. Retry.")
+                raise RuntimeError(
+                    "GitHub main reference: invalid. Run 'gh auth status' and "
+                    "rerun."
+                )
             bridge = promotion_bridge_source(
                 args.repo,
                 head,
@@ -2044,10 +2158,13 @@ def finalize(args: argparse.Namespace) -> None:
     canary = evidence.get("canary", {})
     state = canary.get("state")
     if state == "allowed" and args.canary_result != "success":
-        raise RuntimeError("Canary: did not succeed. Fix it.")
+        raise RuntimeError(
+            "Canary: did not succeed. Fix the canary command and rerun it."
+        )
     if state not in {"allowed", "blocked", "unknown"}:
         raise RuntimeError(
-            "Promotion evidence: invalid canary state. Rerun it."
+            "Promotion evidence: invalid canary state. Rerun "
+            "'promotion_gate.py prepare'."
         )
     canary["result"] = "passed" if state == "allowed" else "artifact-only"
     evidence["full_check"] = {
@@ -2078,7 +2195,10 @@ def verify_main(args: argparse.Namespace) -> None:
     """Prove the merged main tree is the candidate that passed both gates."""
     evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
     if evidence.get("gate") != "passed":
-        raise RuntimeError("Promotion gate evidence: incomplete. Rerun it.")
+        raise RuntimeError(
+            "Promotion gate evidence: incomplete. Rerun 'promotion_gate.py "
+            "prepare'."
+        )
     expected = {
         "repository": args.repo,
         "pull_request": args.pr_number,
@@ -2087,12 +2207,14 @@ def verify_main(args: argparse.Namespace) -> None:
     for field, value in expected.items():
         if evidence.get(field) != value:
             raise RuntimeError(
-                f"Promotion evidence {field}: differs from main. Inspect it."
+                f"Promotion evidence {field}: differs from main. Rerun "
+                "'promotion_gate.py finalize'."
             )
     current_tree = git_output("rev-parse", f"{args.main_sha}^{{tree}}")
     if current_tree != evidence.get("candidate_tree"):
         raise RuntimeError(
-            "Merged main: tree differs from the verified candidate. Inspect it."
+            "Merged main: tree differs from the verified candidate. Compare "
+            "'git rev-parse main^{tree}'."
         )
     require_trusted_verification(args.repo, args.head_sha)
     evidence["post_merge"] = {
@@ -2112,14 +2234,20 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
         or evidence.get("release_eligible") is not False
         or (evidence.get("full_check") or {}).get("status") != "trusted-hosted"
     ):
-        raise RuntimeError("Quota fallback evidence: incomplete. Rerun it.")
+        raise RuntimeError(
+            "Quota fallback evidence: incomplete. Rerun 'promotion_gate.py "
+            "finalize-quota-fallback'."
+        )
     canary = evidence.get("canary")
     if (
         not isinstance(canary, dict)
         or canary.get("state") not in {"blocked", "unknown"}
         or canary.get("result") != "artifact-only"
     ):
-        raise RuntimeError("Quota fallback canary evidence: invalid. Rerun it.")
+        raise RuntimeError(
+            "Quota fallback canary evidence: invalid. Rerun 'promotion_gate.py "
+            "finalize-quota-fallback'."
+        )
     if evidence.get("post_merge") is not None:
         raise RuntimeError(
             "Quota fallback: already verified. No action needed."
@@ -2132,7 +2260,8 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     for field, value in expected.items():
         if evidence.get(field) != value:
             raise RuntimeError(
-                f"Fallback evidence {field}: differs from main. Inspect it."
+                f"Fallback evidence {field}: differs from main. Rerun "
+                "'promotion_gate.py finalize-quota-fallback'."
             )
     token = os.environ.get("GH_TOKEN", "")
     repository = github_get(args.repo, "", token)
@@ -2167,7 +2296,8 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
         or not same_repository(pull, args.repo)
     ):
         raise RuntimeError(
-            "Merged promotion: differs from evidence. Inspect it."
+            "Merged promotion: differs from evidence. Run 'gh pr view' on the "
+            "promotion PR."
         )
     commit = github_get(args.repo, f"git/commits/{main_sha}", token)
     tree = commit.get("tree") if isinstance(commit, dict) else None
@@ -2182,7 +2312,8 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
         or main_sha == evidence.get("head_sha")
     ):
         raise RuntimeError(
-            "Main: not the squash-merged candidate tree. Inspect it."
+            "Main: not the squash-merged candidate tree. Compare 'git "
+            "rev-parse main^{tree}' with the evidence."
         )
     sources: list[dict[str, Any]] = []
     page = 1
@@ -2194,7 +2325,8 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
         )
         if not isinstance(payload, list):
             raise RuntimeError(
-                "Main source pull requests: incomplete list. Retry."
+                "Main source pull requests: incomplete list. Run 'gh auth "
+                "status' and rerun."
             )
         sources.extend(item for item in payload if isinstance(item, dict))
         if len(payload) < 100:
@@ -2213,7 +2345,8 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
         or exact_sources[0].get("number") != args.pr_number
     ):
         raise RuntimeError(
-            "Main commit: no unique promotion source. Inspect it."
+            "Main commit: no unique promotion source. Run 'gh pr list --state "
+            "merged --base main'."
         )
     quota = evidence.get("quota_fallback") or {}
     run_urls = quota.get("blocked_run_urls")
@@ -2221,7 +2354,8 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
         not isinstance(url, str) for url in run_urls
     ):
         raise RuntimeError(
-            "Fallback evidence: no blocked-run binding. Rerun it."
+            "Fallback evidence: no blocked-run binding. Rerun "
+            "'promotion_gate.py finalize-quota-fallback'."
         )
     require_comment_url(
         str(quota.get("attestation_url", "")),
@@ -2255,7 +2389,8 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     current_tree = git_output("rev-parse", f"{main_sha}^{{tree}}")
     if current_tree != evidence.get("candidate_tree"):
         raise RuntimeError(
-            "Merged main: tree differs from the verified candidate. Inspect it."
+            "Merged main: tree differs from the verified candidate. Compare "
+            "'git rev-parse main^{tree}'."
         )
     require_trusted_verification(args.repo, args.head_sha)
     evidence["post_merge"] = {

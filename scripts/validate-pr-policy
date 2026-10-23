@@ -83,7 +83,7 @@ validate_documentation_review() {
   fi
   local cutover="${PR_DOCUMENTATION_REVIEW_CUTOVER_PR:-1}"
   if [[ ! "$cutover" =~ ^[0-9]+$ ]]; then
-    echo "ERROR: PR_DOCUMENTATION_REVIEW_CUTOVER_PR: not a non-negative integer. Fix it." >&2
+    echo "ERROR: PR_DOCUMENTATION_REVIEW_CUTOVER_PR: not a non-negative integer. Fix the workflow env." >&2
     exit 1
   fi
   if [[ "${PR_DRAFT:-false}" != "true" && "$required" == "true" &&
@@ -199,7 +199,7 @@ if [[ "$release_ownership" != "csarc-owned" &&
 fi
 delivery_cutover_issue="${PR_DELIVERY_CUTOVER_ISSUE:-0}"
 if [[ ! "$delivery_cutover_issue" =~ ^[0-9]+$ ]]; then
-  echo "ERROR: PR_DELIVERY_CUTOVER_ISSUE: not a non-negative integer. Fix it." >&2
+  echo "ERROR: PR_DELIVERY_CUTOVER_ISSUE: not a non-negative integer. Fix the workflow env." >&2
   exit 1
 fi
 
@@ -500,7 +500,7 @@ if [[ -z "$issue_expected_label" || "$selected_label" != "$issue_expected_label"
 fi
 development_cutover_pr="${PR_DEVELOPMENT_CUTOVER_PR:-1}"
 if [[ ! "$development_cutover_pr" =~ ^[0-9]+$ || ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
-  echo "ERROR: PR_DEVELOPMENT_CUTOVER_PR or PR_NUMBER: not a non-negative integer. Fix it." >&2
+  echo "ERROR: PR_DEVELOPMENT_CUTOVER_PR or PR_NUMBER: not a non-negative integer. Fix the workflow env." >&2
   exit 1
 fi
 if [[ "${promotion:-false}" != "true" ]] && (( PR_NUMBER >= development_cutover_pr )); then
@@ -560,7 +560,7 @@ if [[ "${promotion:-false}" != "true" ]] && (( PR_NUMBER >= development_cutover_
         <<<"${PR_BODY:-}"
     )
     if (( ${#body_closing_issues[@]} != 1 )) || [[ "${body_closing_issues[0]}" != "$issue_number" ]]; then
-      echo "ERROR: PR body: not exactly one closing keyword for Issue #${issue_number}. Fix it." >&2
+      echo "ERROR: PR body: not exactly one closing keyword for Issue #${issue_number}. Keep one 'Closes #${issue_number}'." >&2
       exit 1
     fi
   fi
@@ -576,7 +576,7 @@ if [[ "${tracker_promotion:-false}" == "true" ]]; then
     exit 1
   fi
   if [[ "$issue_milestone_number" != "$promotion_milestone" ]]; then
-    echo "ERROR: Tracker Issue Milestone: differs from the delivery branch. Fix it." >&2
+    echo "ERROR: Tracker Issue Milestone: differs from the delivery branch. Set the tracker Milestone." >&2
     exit 1
   fi
   python3 scripts/promotion_gate.py check-alignment \
@@ -596,11 +596,11 @@ if [[ "${promotion:-false}" == "true" ]]; then
         exit 1
       fi
       if [[ -n "${promotion_milestone:-}" && "$issue_milestone_number" != "$promotion_milestone" ]]; then
-        echo "ERROR: Promotion Issue Milestone: differs from the delivery branch. Fix it." >&2
+        echo "ERROR: Promotion Issue Milestone: differs from the delivery branch. Set the Issue Milestone." >&2
         exit 1
       fi
       if [[ -n "${promotion_issue:-}" && "$issue_number" != "$promotion_issue" ]]; then
-        echo "ERROR: Isolated delivery branch: number differs from its Issue. Fix it." >&2
+        echo "ERROR: Isolated delivery branch: number differs from its Issue. Use dev/i<Issue>-<slug>." >&2
         exit 1
       fi
       if [[ -z "${promotion_milestone:-}" && "$issue_milestone_number" != "0" ]]; then

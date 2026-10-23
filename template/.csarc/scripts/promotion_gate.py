@@ -215,7 +215,10 @@ def pull_request_issue_number(pull_request: dict[str, Any]) -> int:
     head = pull_request.get("head")
     head_ref = head.get("ref") if isinstance(head, dict) else None
     if not isinstance(head_ref, str):
-        raise RuntimeError("Included pull request: incomplete head. Retry.")
+        raise RuntimeError(
+            "Included pull request: incomplete head. Run 'gh auth status' and "
+            "rerun."
+        )
     match = WORK_BRANCH.fullmatch(head_ref)
     if match is None:
         raise RuntimeError(
@@ -225,12 +228,12 @@ def pull_request_issue_number(pull_request: dict[str, Any]) -> int:
     body = pull_request.get("body")
     if not isinstance(body, str):
         raise RuntimeError(
-            "Included pull request: does not close its Issue. Fix it."
+            "Included pull request: does not close its Issue. Edit its PR body."
         )
     closing_issues = {int(number) for number in CLOSING_ISSUE.findall(body)}
     if branch_issue not in closing_issues:
         raise RuntimeError(
-            "Included pull request: does not close its Issue. Fix it."
+            "Included pull request: does not close its Issue. Edit its PR body."
         )
     return branch_issue
 
@@ -264,17 +267,20 @@ def sync_pull_request_main_sha(
         or not same_repository(pull_request, repo)
     ):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Rebuild it."
+            "Included sync pull request: invalid provenance. Recreate the sync "
+            "branch from main."
         )
     sync_commit = github_get(repo, f"git/commits/{head_sha}", token)
     if not isinstance(sync_commit, dict):
         raise RuntimeError(
-            "Included sync pull request: invalid commit shape. Rebuild it."
+            "Included sync pull request: invalid commit shape. Recreate the "
+            "sync branch from main."
         )
     parents = sync_commit.get("parents")
     if not isinstance(parents, list) or len(parents) != 2:
         raise RuntimeError(
-            "Included sync pull request: invalid commit shape. Rebuild it."
+            "Included sync pull request: invalid commit shape. Recreate the "
+            "sync branch from main."
         )
     main_parent = parents[1]
     delivery_parent = parents[0]
@@ -283,7 +289,8 @@ def sync_pull_request_main_sha(
     )
     if not isinstance(synced_main_sha, str):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Rebuild it."
+            "Included sync pull request: invalid provenance. Recreate the sync "
+            "branch from main."
         )
     expected_ref = delivery_sync.sync_branch_name(
         delivery_branch, synced_main_sha
@@ -296,7 +303,8 @@ def sync_pull_request_main_sha(
         delivery_sync.compare(api, repo, synced_main_sha, current_main_sha)
     ):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Rebuild it."
+            "Included sync pull request: invalid provenance. Recreate the sync "
+            "branch from main."
         )
     if head_ref == legacy_ref:
         base_sha = base.get("sha")
@@ -323,7 +331,8 @@ def sync_pull_request_main_sha(
             or sync_tree_sha != main_tree_sha
         ):
             raise RuntimeError(
-                "Legacy sync pull request: invalid provenance. Inspect it."
+                "Legacy sync pull request: invalid provenance. Recreate the "
+                "sync branch from main."
             )
     return synced_main_sha
 
@@ -431,7 +440,8 @@ def check_promotion_intent(args: argparse.Namespace) -> None:
             not isinstance(title, str) for title in titles
         ):
             raise RuntimeError(
-                "Promotion title fixture: not a string list. Fix it."
+                "Promotion title fixture: not a string list. Pass a JSON "
+                "string list."
             )
     else:
         token = os.environ.get("GH_TOKEN", "")
@@ -487,16 +497,22 @@ def included_pull_requests(  # noqa: C901
             repo, f"compare/{base_sha}...{head_sha}?{query}", token
         )
         if not isinstance(comparison, dict):
-            raise RuntimeError("GitHub commit comparison: invalid. Retry.")
+            raise RuntimeError(
+                "GitHub commit comparison: invalid. Run 'gh auth status' and "
+                "rerun."
+            )
         commits = comparison.get("commits", [])
         if not isinstance(commits, list):
-            raise RuntimeError("GitHub commit list: invalid. Retry.")
+            raise RuntimeError(
+                "GitHub commit list: invalid. Run 'gh auth status' and rerun."
+            )
         for commit in commits:
             sha = commit.get("sha") if isinstance(commit, dict) else None
             if not isinstance(sha, str):
                 if bridge_head_sha is not None:
                     raise RuntimeError(
-                        "Bridge commit provenance: invalid. Retry."
+                        "Bridge commit provenance: invalid. Run 'gh auth "
+                        "status' and rerun."
                     )
                 continue
             if sha == bridge_head_sha:
@@ -505,7 +521,8 @@ def included_pull_requests(  # noqa: C901
             pull_requests = github_get(repo, f"commits/{sha}/pulls", token)
             if not isinstance(pull_requests, list):
                 raise RuntimeError(
-                    "GitHub associated pull requests: invalid. Retry."
+                    "GitHub associated pull requests: invalid. Run 'gh auth "
+                    "status' and rerun."
                 )
             matched = False
             for pull_request in pull_requests:
@@ -575,13 +592,17 @@ def included_pull_requests(  # noqa: C901
                     "same-Milestone" if milestone is not None else "eligible"
                 )
                 raise RuntimeError(
-                    f"Bridge commit {sha}: no {scope} merged PR. Inspect it."
+                    f"Bridge commit {sha}: no {scope} merged PR. Merge it "
+                    "through a PR."
                 )
         if len(commits) < 100:
             break
         page += 1
     if not saw_bridge_head:
-        raise RuntimeError("GitHub comparison: no promotion bridge. Retry.")
+        raise RuntimeError(
+            "GitHub comparison: no promotion bridge. Push the promote/m* "
+            "branch."
+        )
     for number, synced_main_sha in sync_pull_requests.items():
         verified_sync = (
             delivery_sync.merged_sync_pr_number(
@@ -607,7 +628,8 @@ def included_pull_requests(  # noqa: C901
             )
         ):
             raise RuntimeError(
-                "Included sync pull request: no reviewed merge. Inspect it."
+                "Included sync pull request: no reviewed merge. Merge it "
+                "through a reviewed PR."
             )
     return [included[number] for number in sorted(included)]
 

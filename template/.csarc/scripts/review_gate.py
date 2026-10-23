@@ -568,7 +568,9 @@ def evaluate(
     """Return the review decision for the pull request's current head."""
     pull = github.get(repo, f"pulls/{pr_number}")
     if not isinstance(pull, dict):
-        raise RuntimeError("Pull request: unavailable. Retry.")
+        raise RuntimeError(
+            "Pull request: unavailable. Run 'gh auth status' and rerun."
+        )
     level = release_level.resolve_pull(
         github, repo, pull, release_level.load_settings(config)
     )
@@ -662,7 +664,8 @@ def publish_check(
         or not run_url.endswith(f"/{run_id}")
     ):
         raise RuntimeError(
-            "Review check publication: invalid identity. Fix it."
+            "Review check publication: invalid identity. Pass --details-url "
+            "and --run-id."
         )
     payload: dict[str, Any] = {
         "name": "review",
@@ -703,7 +706,9 @@ def publish_check(
         or response.get("external_id") != payload["external_id"]
         or response.get("conclusion") != payload.get("conclusion")
     ):
-        raise RuntimeError("GitHub review check: invalid. Retry.")
+        raise RuntimeError(
+            "GitHub review check: invalid. Run 'gh auth status' and rerun."
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
