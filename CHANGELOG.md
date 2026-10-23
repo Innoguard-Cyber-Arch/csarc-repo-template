@@ -7,6 +7,16 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.41.0] - 2026-10-23
+
+### Features
+
+* feat(lifecycle): let a repository opt in to the single-writer merge route (34274c7)
+
+### Bug Fixes
+
+* fix(settings): list the merger in the answers template (bd45f52)
+
 ## [0.41.0-beta.1] - 2026-10-23
 
 ### Features

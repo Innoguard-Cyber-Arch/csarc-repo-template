@@ -64,6 +64,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 | `container` | `persistent-intent` | `bool` | `true`, `false` | 舊 `features: docker`／`enable_docker` 遷移 |
 | `project_verification_hook` | `persistent-intent` | `text` | `''` 或安全的 repository 相對路徑 | 空值停用 |
 | `github_project_url` | `persistent-intent` | `text` | `''` 或完整 organization／user ProjectV2 URL | 空值停用；不提問，以 `--data` 設定（§10） |
+| `single_writer_merger` | `persistent-intent` | `text` | `''` 或一個 GitHub 帳號 | 空值維持寫入者自動偵測；不提問，以 `--data` 設定（#1233，見 `docs/ci-policy.md`） |
 | `package_name` | `derived-decision` | `text` | 小寫 Python identifier | native manifest；無法唯一推導時才保存一次決定 |
 | `project_run_command` | `derived-decision` | `text` | 可執行指令 | native manifest；無法唯一推導時才保存一次決定 |
 | `project_slug` | `derived-context` | `text` | repository／distribution 名稱 | repository 名稱或 manifest `name` |
@@ -82,7 +83,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 
 <!-- csarc-settings-table:end -->
 
-`github_project_url` 由 #1080（K2）加入本表（§10）；本規格不預先保存未使用的鍵。題數、preset 展開與 transcript 由 #1078（Q3）在 §9 定義，repository detector 與唯一推導規則見 §8（#1072，Q2），payload 由 #1077（P2）定義；它們都只能使用本表的分類。
+`github_project_url` 由 #1080（K2）加入本表（§10），`single_writer_merger` 由 #1233 加入；兩者都可省略，省略等於空值；本規格不預先保存未使用的鍵。題數、preset 展開與 transcript 由 #1078（Q3）在 §9 定義，repository detector 與唯一推導規則見 §8（#1072，Q2），payload 由 #1077（P2）定義；它們都只能使用本表的分類。
 
 ### 3. 退役鍵
 
