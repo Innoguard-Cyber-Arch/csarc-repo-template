@@ -41,18 +41,7 @@ _AUTOMATED_PULL_REQUEST_HEAD_PREFIXES = (
 def scope_decision(
     snapshot: dict[str, Any], *, allow_admin_self_approval: bool | None = None
 ) -> Decision:
-    """Require independent approval only for a self-declared scope expansion.
-
-    A work Issue inherits its tracker's approval by default -- no sentinel
-    means no extra gate, exactly like today, keeping the common in-scope
-    case exactly as cheap as it already is. Only when the Issue's own body
-    contains the literal `Tracker scope: expanded` marker line does it need
-    its own non-proposer approval (or admin self-approval), evaluated with
-    the exact same `/milestone` comment vocabulary as the tracker's gate.
-    That approval is bound to this Issue's body as of the approval
-    comment's own timestamp: editing the body afterward invalidates it
-    (#632; see `_approval_is_stale()`).
-    """
+    """Require independent approval only for a self-declared scope expansion."""
     issue = snapshot.get("issue")
     if not isinstance(issue, dict):
         return Decision(False, "GitHub returned invalid Issue data")
@@ -97,15 +86,7 @@ def _issue_approval_records(
     *,
     item_updated_at: str | None = None,
 ) -> tuple[set[str], dict[str, str], set[str], dict[str, str], set[str]]:
-    """Collect standalone/hotfix Issue approvals, objections, self-approvals.
-
-    Uses `_ISSUE_VOCABULARY`: the plain, case-insensitive `Approve` /
-    `Admin-approve: <reason>` / `Object: <reason>` / `Resolve: <target>`
-    grammar the maintainer decided on 2026-09-18 (Issue #743's own
-    comments) -- deliberately independent of `_approval_records()`'s
-    tracker vocabulary, per that decision, though both now share the same
-    underlying algorithm via `_vocabulary_approval_records()`.
-    """
+    """Collect standalone/hotfix Issue approvals, objections, self-approvals."""
     return _vocabulary_approval_records(
         _ISSUE_VOCABULARY, snapshot, proposer, item_updated_at=item_updated_at
     )
@@ -118,46 +99,7 @@ def standalone_issue_approval_decision(
     require_open: bool = True,
     allow_admin_self_approval: bool | None = None,
 ) -> Decision:
-    """Require independent approval for one Issue with no Milestone (#743).
-
-    Covers standalone, hotfix, and release-recovery Issues alike -- the
-    common trait this function gates on is simply having no Milestone of
-    its own. A Milestone-scoped Issue keeps inheriting its tracker's approval
-    unchanged (see `check_issue_approval()`, which routes there before ever
-    calling this function): this function only runs for the other half of
-    the maintainer's two-point approval model -- an Issue with no Milestone
-    needs its own approval, because nothing else ever gates it.
-
-    Uses the plain, case-insensitive `Approve` / `Admin-approve: <reason>` /
-    `Object: <reason>` / `Resolve: <target>` vocabulary the maintainer
-    decided on 2026-09-18 (Issue #743's own comments) -- a deliberate,
-    independent counterpart to the tracker's and scope-expansion gate's
-    `/milestone approve` family, not a reuse of it: a slash command reads
-    oddly on an Issue that has no Milestone to invoke it against, and a
-    plain keyword needs no prior familiarity with the tracker's own syntax.
-    The two vocabularies are data (`_ISSUE_VOCABULARY` here vs.
-    `_TRACKER_VOCABULARY`), not separate algorithms: `_issue_approval_
-    records()` and `_approval_records()` are both thin wrappers around the
-    shared `_vocabulary_approval_records()`, so neither can accidentally
-    match the other's comments (each is only ever compared against its own
-    vocabulary's `normalize()`), and there is exactly one implementation of
-    the underlying algorithm to keep correct. This is what "no second
-    parallel system" means here: one shared decision engine and one shared
-    comment-matching algorithm, parameterized by two independent
-    vocabularies.
-
-    `require_open` mirrors `approval_decision()`'s own gate exactly: an
-    Issue closed out from under an already-posted `Approve` comment (mis-
-    triaged, marked duplicate, closed by an unrelated PR, etc.) must not
-    keep counting as approved. Without this check, a since-closed Issue's
-    stale-but-syntactically-valid approval would still satisfy the gate the
-    next time `check-pr` or `check-merge-group` re-evaluates it -- a
-    fail-open hole the tracker path has never had, since `approval_decision()`
-    has required `item.get("state") == "open"` since #400. There is no
-    standalone equivalent of the tracker's completed-closure path (which is
-    the only caller that ever passes `require_open=False`), so every real
-    caller keeps the default.
-    """
+    """Require independent approval for one Issue with no Milestone (#743)."""
     issue = snapshot.get("issue")
     if not isinstance(issue, dict):
         return Decision(False, "GitHub returned invalid Issue data")
@@ -198,22 +140,7 @@ def standalone_issue_approval_decision(
 def check_issue_approval(
     repo: str, number: int, *, require_open: bool = True
 ) -> Decision:
-    """Validate the standalone/hotfix/release-recovery Issue-approval gate.
-
-    A Milestone-scoped Issue defers to that Milestone's own tracker
-    approval (`approval_decision()`) -- unaffected by this Issue, exactly
-    as before #743. This is normally unreachable through `_pull_decision()`
-    itself (a pull request with a Milestone never reaches this function;
-    `.csarc/scripts/validate-pr-policy` also requires a pull request's own
-    Milestone to match its closing Issue's Milestone), but `check-issue-
-    approval` is also a standalone CLI entry point, so it re-derives the
-    right answer directly from the Issue's own Milestone field rather than
-    trusting a caller's assumption.
-
-    `require_open` is threaded straight through to
-    `standalone_issue_approval_decision()`; every real caller (the CLI, and
-    `_standalone_pull_decision()`) keeps the default `True`.
-    """
+    """Validate the standalone/hotfix/release-recovery Issue-approval gate."""
     snapshot = load_issue_snapshot(repo, number)
     issue = snapshot.get("issue")
     if not isinstance(issue, dict):
@@ -229,27 +156,7 @@ def check_issue_approval(
 
 
 def refresh_issue_pr_checks(repo: str, issue_number: int) -> Decision:
-    """Refresh the Milestone-approval check for one standalone Issue (#743).
-
-    The no-Milestone counterpart to `refresh_pr_checks()`'s tracker-wide
-    refresh: wired into `work-item-lifecycle.yml` so a fresh `Approve` /
-    `Admin-approve:` / `Object:` / `Resolve:` comment on the Issue actually
-    re-triggers "Validate Milestone approval" on its linked pull request,
-    instead of leaving a stale check-run in place until some unrelated PR
-    event happens to re-run it. Without this, the standalone/hotfix path
-    would fail *closed* (correct, never silently open) but *stuck* --
-    breaking the parity the tracker path already has via `reconcile()`'s
-    own `refresh_pr_checks()` call.
-
-    Scans every open pull request repo-wide for one whose body's closing
-    keyword(s) include this Issue number. Deliberately does not itself
-    decide "exactly one closing Issue" here -- `_standalone_pull_
-    decision()` already owns that fail-closed check when the refreshed
-    `check-pr` actually runs, so a PR referencing this Issue among several
-    still gets refreshed and correctly reported as blocked, rather than
-    silently skipped by a duplicate check here. Always returns an allowed
-    Decision: this is a best-effort refresh, not a gate in its own right.
-    """
+    """Refresh the Milestone-approval check for one standalone Issue (#743)."""
     pulls = _pages(
         run_gh(
             [

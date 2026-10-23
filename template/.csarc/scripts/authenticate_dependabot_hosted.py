@@ -69,16 +69,7 @@ def resolve_merge_candidate(  # noqa: C901
     head_repository: str,
     head_branch: str,
 ) -> tuple[str, int | None, str]:
-    """Choose the single exact open Dependabot PR for a completed run.
-
-    Returns ``(outcome, number, reason)``. ``outcome`` is ``merge`` with the
-    one exact candidate, or ``no-op`` with a stable reason code when no open
-    pull request carries the exact repository, base, head, and actor
-    identity. Closed or merged records are never substitutes. Raises
-    `MergeCandidateError` for many matches, an open record whose identity is
-    incomplete, or a matching record whose state is contradictory, so the
-    caller never picks one arbitrarily.
-    """
+    """Choose the single exact open Dependabot PR for a completed run."""
     if _SHA.fullmatch(head_sha or "") is None:
         raise MergeCandidateError("workflow event head SHA is invalid")
     if not base_repo:

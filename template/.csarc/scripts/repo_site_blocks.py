@@ -110,12 +110,7 @@ def find_container(
 
 @dataclass(frozen=True)
 class MixedNode:
-    """One segment of a slide/basic/detail/disclosure body, in source order.
-
-    `kind` is `"text"` for prose (including raw HTML lines), one of
-    `SELF_CLOSING_NAMES`, or one of `CONTAINER_NAMES`. `attrs` and `body`
-    are empty for `"text"` nodes.
-    """
+    """One segment of a slide/basic/detail/disclosure body, in source order."""
 
     kind: str
     text: str = ""
@@ -124,15 +119,7 @@ class MixedNode:
 
 
 def iter_mixed(text: str) -> list[MixedNode]:
-    """Tokenize a body into ordered prose/shortcode segments.
-
-    Splits `text` on every top-level `config-guidance` / `file-map` /
-    `similar-tools` / `testing` self-closing call and `detail` / `disclosure`
-    container block,
-    preserving document order and treating everything else as one prose
-    segment per gap (including raw HTML lines Hugo's `unsafe = true`
-    goldmark setting let authors write directly).
-    """
+    """Tokenize a body into ordered prose/shortcode segments."""
     nodes: list[MixedNode] = []
     position = 0
     for match in _MIXED_TOKEN.finditer(text):

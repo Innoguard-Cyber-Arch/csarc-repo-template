@@ -53,15 +53,7 @@ def _load_sibling(name: str) -> ModuleType:
 
 
 class SiblingModule:
-    """Import one sibling script module only when a command first uses it.
-
-    A rendered command must not require modules that only other commands
-    use, so optional siblings stay unloaded until an attribute is read.
-    The sibling always comes from this file's own directory, as an eager
-    import beside it would, even if `sys.path` changed in the meantime.
-    Attribute writes and deletes reach the loaded module, which keeps
-    monkeypatching and module-level state on the real module.
-    """
+    """Import one sibling script module only when a command first uses it."""
 
     def __init__(self, name: str) -> None:
         """Remember the sibling module name without importing it."""
@@ -262,12 +254,7 @@ def _pages(raw: str) -> list[dict[str, Any]]:
 
 
 def _section_match(body: str, heading: str) -> re.Match[str] | None:
-    """Find a tracker section under an H2 or H3 heading (#1160).
-
-    create-milestone writes `##`, the Issue form `###`. H2 wins over a
-    same-named H3; a section ends at the next same-or-higher heading.
-    Group 1 is the heading, group 2 the content.
-    """
+    """Find a tracker section under an H2 or H3 heading (#1160)."""
     for level in (2, 3):
         match = re.search(
             rf"(?ms)^({'#' * level} {re.escape(heading)}\s*$\n)"
@@ -347,48 +334,7 @@ def _approval_is_stale(
     comment_created_at: object,
     comment_updated_at: object = None,
 ) -> bool:
-    """Return whether one approval no longer binds to the current body.
-
-    This is the fingerprint-binding gate #632 adds on top of #552's
-    approval mechanism. Reconciliation's own staleness check
-    (`reconciliation_status()`) can compare a stored content hash exactly,
-    because the bot writes that hash itself right after computing it. An
-    approval comment is written by a human, not the bot, and GitHub does
-    not expose Issue body-edit history over REST at all (unlike a Git
-    diff, there is no per-revision body to hash retroactively) -- so
-    `updated_at` is the only queryable edit signal available, and it also
-    advances on Issue activity that never touched the body: a new comment,
-    a label, Milestone, or state change. This trades a higher
-    "needs re-approval" false-positive rate for never silently accepting
-    an approval that could be reading a version of the body that no longer
-    exists -- the conservative direction for a governance gate.
-
-    Missing data on either side reads as "cannot tell", not "definitely
-    stale": a caller that never supplies `item_updated_at` keeps today's
-    behavior unchanged.
-
-    `comment_updated_at` closes a gap in the item-vs-`created_at` check
-    above (#778): GitHub does not expose a comment's own body-edit history
-    any more than it does an Issue's, so a comment last edited long after
-    it was first posted could have had the approval vocabulary this script
-    currently reads back written in at any point up to that edit --
-    including well after whatever it originally said. `created_at` alone
-    cannot see that: an old, unrelated comment edited into
-    `/milestone approve` today still carries its original, untouched
-    `created_at`, so if the item itself has not been touched since around
-    then, the item-vs-`created_at` gap alone looks small and the edit goes
-    undetected. This is therefore a second, independent staleness check --
-    the comment's own edit gap -- OR'd with the first: an approval is
-    stale if either the item was updated long after the comment was
-    created, OR the comment was itself edited long after it was created.
-    Only the first check uses `item_updated_at`, so a comment edited
-    *after* a later item update does not get to look fresh purely because
-    the edit is recent -- the first check already caught that case from
-    the item side and this addition never overrides it back to fresh.
-    A comment that was never edited reports `comment_updated_at` equal to
-    `comment_created_at` (or omits it), so the second check is always
-    false there and behavior for that -- the common -- case is unchanged.
-    """
+    """Return whether one approval no longer binds to the current body."""
     updated = _parse_github_timestamp(item_updated_at)
     created = _parse_github_timestamp(comment_created_at)
     item_side_stale = (
@@ -420,14 +366,7 @@ def checklist_complete(body: str) -> bool:
 
 
 def has_scope_sentinel(body: str) -> bool:
-    """Return whether one work Issue has self-declared a scope expansion.
-
-    Detection is deliberately dumb: an exact, literal body line, matched
-    regardless of surrounding content. No natural-language judgment about
-    whether work actually exceeds the tracker's Proposal is attempted --
-    that judgment is exactly what the independent approval this triggers
-    is for.
-    """
+    """Return whether one work Issue has self-declared a scope expansion."""
     return re.search(rf"(?m)^{re.escape(SCOPE_SENTINEL)}\s*$", body) is not None
 
 
@@ -452,12 +391,7 @@ def promotion_decision(body: str) -> Decision:
 
 
 def append_completion_evidence(body: str, evidence_url: str) -> str:
-    """Append one delivery evidence URL into the Completion evidence section.
-
-    Preserves any content already present in the section (stripping only the
-    placeholder HTML comment) instead of overwriting it, so a promotion
-    bridge merge never clobbers evidence recorded by an earlier checkpoint.
-    """
+    """Append one delivery evidence URL into the Completion evidence section."""
     match = _section_match(body, "Completion evidence")
     if match is None:
         raise RuntimeError(
@@ -663,12 +597,7 @@ def tracker_errors(snapshot: dict[str, Any]) -> list[str]:
 
 
 def _collaborator_permission(repo: str, username: str) -> str | None:
-    """Return one collaborator's permission level for this repo, if known.
-
-    Unlike a comment's `author_association`, this is not affected by
-    whether the commenter's organization membership is public or private,
-    so it stays reliable under the workflow's own `GITHUB_TOKEN`.
-    """
+    """Return one collaborator's permission level for this repo, if known."""
     try:
         payload = json.loads(
             run_gh(["api", f"repos/{repo}/collaborators/{username}/permission"])
@@ -681,19 +610,7 @@ def _collaborator_permission(repo: str, username: str) -> str | None:
 
 @dataclass(frozen=True)
 class _ApprovalVocabulary:
-    """One comment grammar an approval gate reads (#743's shared algorithm).
-
-    `approve`/`admin_prefix`/`object_prefix`/`resolve_prefix` must already
-    be cased correctly for `case_sensitive`: lowercase throughout for a
-    case-insensitive vocabulary (matched against `command.lower()`), or
-    the exact literal case for the tracker's case-sensitive `/milestone`
-    family (matched against `command` unchanged). Two vocabularies never
-    cross-match each other's comments, because each is only ever compared
-    against its own `normalize()` rule -- this is what lets the tracker's
-    `/milestone approve` family and the standalone/hotfix Issue's plain
-    `Approve` family (#743) share one decision algorithm without merging
-    into one comparison.
-    """
+    """One comment grammar an approval gate reads (#743's shared algorithm)."""
 
     approve: str
     admin_prefix: str
@@ -784,22 +701,7 @@ def _vocabulary_approval_records(
     *,
     item_updated_at: str | None = None,
 ) -> tuple[set[str], dict[str, str], set[str], dict[str, str], set[str]]:
-    """Collect approvals, objections, withdrawals, and admin self-approvals.
-
-    Shared algorithm behind both `_approval_records()` (tracker) and
-    `_issue_approval_records()` (#743's standalone/hotfix Issue gate),
-    parameterized by `vocabulary`.
-
-    Also returns the authors whose approve/admin-approve comment no longer
-    binds (#632). `item_updated_at` is the tracker's (or work Issue's) own
-    `updated_at` field, read from the same snapshot as
-    `snapshot["comments"]`. When supplied, an approve/admin-approve
-    comment made stale by a later edit
-    (see `_approval_is_stale()`) is excluded from `approvals`/
-    `admin_approvals` and its author reported in the returned `stale` set
-    instead, so callers can distinguish "never approved" from "was
-    approved, then invalidated" in their own Decision message.
-    """
+    """Collect approvals, objections, withdrawals, and admin self-approvals."""
     approvals: set[str] = set()
     objections: dict[str, str] = {}
     resolved: set[str] = set()
@@ -862,10 +764,7 @@ def _approval_records(
     *,
     item_updated_at: str | None = None,
 ) -> tuple[set[str], dict[str, str], set[str], dict[str, str], set[str]]:
-    """Collect tracker approvals, objections, and admin self-approvals.
-
-    See `_vocabulary_approval_records()` for the shared algorithm.
-    """
+    """Collect tracker approvals, objections, and admin self-approvals."""
     return _vocabulary_approval_records(
         _TRACKER_VOCABULARY,
         snapshot,
@@ -886,17 +785,7 @@ def _gate_decision(
     admin_prefix: str = "Admin self-approved by",
     allow_admin_self_approval: bool = True,
 ) -> Decision:
-    """Turn one collected approval-record set into a pass/fail Decision.
-
-    Shared by the tracker's own `/milestone approve` gate and a work
-    Issue's scope-expansion gate: both read the identical comment
-    vocabulary (`/milestone approve`, `/milestone admin-approve:`,
-    `/milestone object:`, `/milestone resolve:`) via `_approval_records()`,
-    and only differ in wording. `stale` (#632) names authors whose
-    approve/admin-approve comment was invalidated by a later edit -- when
-    it is the only reason no approval currently counts, the message says
-    so explicitly instead of reading identically to "never approved".
-    """
+    """Turn one collected approval-record set into a pass/fail Decision."""
     if not approvals and admin_approvals and not allow_admin_self_approval:
         return Decision(
             False,
@@ -937,12 +826,7 @@ def approval_decision(
     allow_admin_self_approval: bool | None = None,
     bind_to_item_update: bool = True,
 ) -> Decision:
-    """Require one non-proposer approval, or an owner self-approval.
-
-    Also requires no unresolved objection. An approval is bound to the
-    tracker body as of its own comment's timestamp: editing the body
-    afterward invalidates it (#632; see `_approval_is_stale()`).
-    """
+    """Require one non-proposer approval, or an owner self-approval."""
     errors = tracker_errors(snapshot)
     item = tracker(snapshot)
     if errors or item is None:
@@ -1021,12 +905,7 @@ def _body_edit_vocabulary(
 def approval_invalidations_for_body_edit(
     snapshot: dict[str, Any], proposed_updated_at: str
 ) -> list[ApprovalEditInvalidation]:
-    """Predict approvals the proposed body edit would make stale (#799).
-
-    Both the current and proposed states use `_approval_is_stale()`; this
-    is an early warning around the existing gate, not another approval
-    decision mechanism.
-    """
+    """Predict approvals the proposed body edit would make stale (#799)."""
     issue = snapshot.get("issue")
     if not isinstance(issue, dict):
         return []
@@ -1202,15 +1081,7 @@ def _parent_status(issue: dict[str, Any], sub_statuses: list[str]) -> str:
 def _delivery_statuses(
     snapshot: dict[str, Any], tracker_number: int
 ) -> tuple[dict[int, str], dict[int, list[int]]]:
-    """Return every linked Issue's delivery status and its sub-issues.
-
-    A parent Issue (a main Issue with sub-issues, #1174) may have no
-    delivering pull request of its own (#962 keeps it in the Milestone; a
-    promotion may not close it). It is delivered once
-    every sub-issue in this Milestone is settled and its own acceptance
-    checklist is complete (#1026). Leaf work keeps the strict per-Issue
-    closing pull request evidence required since #816.
-    """
+    """Return every linked Issue's delivery status and its sub-issues."""
     items = {
         int(issue["number"]): issue
         for issue in _linked_work_items(snapshot, tracker_number)
@@ -1264,16 +1135,7 @@ def _delivery_status(issue: dict[str, Any], pulls: list[dict[str, Any]]) -> str:
 
 
 def reconciliation_status(body: str) -> Decision:
-    """Return whether the tracker's Reconciliation section is fresh.
-
-    Fresh means: the section exists, carries its own fingerprint comment,
-    and that fingerprint still matches the rest of the tracker body today.
-    `regenerate_reconciliation()` only ever rewrites the Reconciliation
-    section itself, so this fingerprint changes only when a human or agent
-    edits some other part of the tracker body after the last regeneration
-    -- exactly the edit this check exists to catch, so a stale table can
-    never be relied on to justify closing the Milestone.
-    """
+    """Return whether the tracker's Reconciliation section is fresh."""
     section = _section(body, RECONCILIATION_HEADING)
     if not isinstance(section, str) or not _meaningful(section):
         return Decision(False, "Reconciliation section is missing")
@@ -1289,15 +1151,7 @@ def reconciliation_status(body: str) -> Decision:
 
 
 def regenerate_reconciliation(snapshot: dict[str, Any]) -> str:
-    """Return the tracker body with a freshly rebuilt Reconciliation section.
-
-    Walks every Issue actually attached to this Milestone (the same set
-    `closure_decision()` already treats as authoritative) against its real
-    GitHub state: closed or not, whether a pull request that declares closing
-    it has actually merged, and whether its checklist is complete. This is a
-    genuine per-line delivery table for a human to sign off against the
-    Milestone's own Acceptance criteria, not a second evidence database.
-    """
+    """Return the tracker body with a freshly rebuilt Reconciliation section."""
     item = tracker(snapshot)
     if item is None:
         raise RuntimeError("No unique lifecycle Issue found to reconcile")
@@ -1595,24 +1449,7 @@ def complete_release(  # noqa: C901
 
 
 def preflight(repo: str, number: int) -> Decision:
-    """Validate a Milestone's own metadata before any work is dispatched.
-
-    Runs the exact due-date and tracker contract `tracker_errors()` already
-    enforces on every work-Issue pull request through `approval_decision()`,
-    but directly against a bare Milestone number -- so a missing due date or
-    a mistyped tracker title surfaces immediately after `gh api ... POST
-    milestones` / `gh issue create`, instead of waiting for the first PR to
-    fail "Validate Milestone approval" (Issue #572, landed on `main` as
-    #655; ported here directly rather than waiting for a full `main` sync
-    of this Milestone delivery branch, since #667 below depends on this
-    exact subcommand existing).
-
-    Also surfaces a repo-wide stale-delivery-branch review list (Issue
-    #667: detection only, see `stale_branch_detection`). That check is
-    unrelated to this Milestone's own metadata, so a stale-branch finding
-    never flips `allowed` to False -- it is appended to the summary purely
-    for visibility, on both the pass and fail path.
-    """
+    """Validate a Milestone's own metadata before any work is dispatched."""
     snapshot = load_snapshot(repo, number)
     errors = tracker_errors(snapshot)
     hygiene = stale_branch_detection.stale_branch_report(repo)["summary"]

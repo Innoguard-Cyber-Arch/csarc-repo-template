@@ -102,11 +102,7 @@ def _pages(raw: str) -> list[dict[str, Any]]:
 def is_protected_branch(
     name: str, *, default_branch: str = DEFAULT_BRANCH
 ) -> bool:
-    """Return whether one branch name is excluded from stale detection.
-
-    See the module docstring's Excluded section for exactly what each of
-    these three exclusions is for.
-    """
+    """Return whether one branch name is excluded from stale detection."""
     return (
         name == default_branch
         or name.startswith("csarc/")
@@ -125,13 +121,7 @@ class StaleBranchCandidate:
 
 
 def _open_pull_request_heads(repo: str, gh: RunGh) -> set[str]:
-    """Return head branch names of every open, same-repository pull request.
-
-    A cross-repository (fork) pull request's `headRefName` is a branch name
-    in the fork, not in this repository, so it is excluded here -- treating
-    it as "protecting" a same-named branch in this repository would be
-    wrong.
-    """
+    """Return head branch names of every open, same-repository pull request."""
     raw = gh(
         [
             "pr",
@@ -174,14 +164,7 @@ def find_stale_branch_candidates(
     now: datetime | None = None,
     gh: RunGh | None = None,
 ) -> list[StaleBranchCandidate]:
-    """Return remote branches idle past the threshold with no open PR.
-
-    Unprotected only (see `is_protected_branch`). Detection only:
-    candidates are review material for a human, never deleted
-    automatically. See the module docstring for exactly which branches are
-    excluded and why, and for the threshold's reasoning. Sorted with the
-    longest-idle candidate first.
-    """
+    """Return remote branches idle past the threshold with no open PR."""
     transport = gh or run_gh
     current = (now or datetime.now(UTC)).astimezone(UTC)
     branches = _remote_branches(repo, transport)
@@ -241,14 +224,7 @@ def stale_branch_report(
     now: datetime | None = None,
     gh: RunGh | None = None,
 ) -> dict[str, Any]:
-    """Return a JSON-friendly stale-branch review report; never raises.
-
-    Detection only, and always advisory/non-blocking: any transport
-    failure or unexpected GitHub response degrades to an
-    `"available": False` report instead of raising, because this check
-    must never block Milestone preflight or a release preflight report
-    (see the module docstring).
-    """
+    """Return a JSON-friendly stale-branch review report; never raises."""
     try:
         candidates = find_stale_branch_candidates(
             repo,
@@ -282,12 +258,7 @@ def stale_branch_report(
 
 
 def _cli_main(arguments: list[str] | None = None) -> int:
-    """Print the stale-branch review report for one repository, standalone.
-
-    Not wired into any workflow; a convenience for a maintainer running
-    this locally, mirroring the pattern of most other `.csarc/scripts/*.py`
-    tools in this repository.
-    """
+    """Print the stale-branch review report for one repository, standalone."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--default-branch", default=DEFAULT_BRANCH)
