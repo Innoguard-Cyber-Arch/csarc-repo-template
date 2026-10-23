@@ -106,7 +106,7 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 正式組合只有 `fast` 與 `full`；開發中的 focused check 是本機回饋，不是第三種 tier。最後要求取發布通道下限與 `.csarc/scripts/ci_tier.py` 路徑分類中較強者：{% if 'milestones' in lifecycle %}`dev/m*` 的工作 PR 下限為 fast，{% endif %}指向 `main` 的 standalone、hotfix 與 release recovery 下限為 full；分類器無法判斷時升級 full。
 
 - **focused**：實作中只跑變更 owner 的窄檢查，例如單一測試檔或 lint 路徑。
-- **fast**：`./.csarc/scripts/verify-fast` 從 `branch.<name>.gh-merge-base`（或 `CSARC_CI_BASE`）找出 base，對變更路徑跑 diff hygiene、衝突標記、secret 掃描、新增或修改訊息的句型與受影響的 owner；base 無法判定時 fail closed。
+- **fast**：`./.csarc/scripts/verify-fast` 從 `branch.<name>.gh-merge-base`（或 `CSARC_CI_BASE`）找出 base，對變更路徑跑 diff hygiene、衝突標記、secret 掃描與受影響的 owner；base 無法判定時 fail closed。
 - **full**：`./.csarc/scripts/verify` 執行共同基線、已選語言的完整品質與原生建置，以及已啟用的容器與產品 hook（`project_verification_hook` 或 `scripts/verify-product`）。
 
 `CSARC_CI_TIER`、`CSARC_CI_SCOPES` 只能增加 suite 或 scope，不能移除自動算出的要求。產品 test discovery 與 coverage 不收集 `.csarc/`，generated verify 不執行模板自測。

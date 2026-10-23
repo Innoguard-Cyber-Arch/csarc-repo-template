@@ -227,28 +227,27 @@ def test_checker_messages_follow_the_patterns() -> None:
 
 
 @pytest.mark.parametrize(
-    ("entry", "call"),
-    [
-        ("scripts/verify-fast", "./scripts/check-message-style --base"),
-        (
-            "scripts/verify-stage-repository-contracts",
-            "./scripts/check-message-style",
-        ),
-        (
-            "template/.csarc/scripts/verify-fast.jinja",
-            "./.csarc/scripts/check-message-style --base",
-        ),
-        (
-            "template/.csarc/scripts/verify.jinja",
-            "./.csarc/scripts/check-message-style",
-        ),
-    ],
+    "entry",
+    ["scripts/verify-fast", "scripts/verify-stage-repository-contracts"],
 )
-def test_verification_entry_points_run_the_check(entry: str, call: str) -> None:
-    """Fast and full verification run the check in root and generated repos."""
+def test_root_verification_runs_the_check(entry: str) -> None:
+    """Root fast and full verification run the check."""
     text = (ROOT / entry).read_text(encoding="utf-8")
     assert 'verification_step "Message pattern check"' in text
-    assert call in text
+    assert "./scripts/check-message-style" in text
+
+
+@pytest.mark.parametrize("entry", ["verify-fast.jinja", "verify.jinja"])
+def test_generated_verification_does_not_run_the_check_yet(entry: str) -> None:
+    """Generated verify gets the check in #1221; flip this test there.
+
+    Until #1220/#1221 rewrite every template message, csarc adopt and
+    update would fail on the template's own old messages.
+    """
+    text = (ROOT / "template/.csarc/scripts" / entry).read_text(
+        encoding="utf-8"
+    )
+    assert "check-message-style" not in text
 
 
 @pytest.mark.parametrize("checker", CHECKERS, ids=["root", "template"])
