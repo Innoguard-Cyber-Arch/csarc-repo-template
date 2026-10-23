@@ -25,7 +25,7 @@ grep '^languages:' -A4 .csarc/config.yml
   `go.mod` 這幾個檔案在既有專案上是**產品自己的檔案**，CSARC 只做選擇性合併、從不整檔覆寫或整檔
   刪除；見下方「產品自己的檔案：只移除 CSARC 加的部分」。
 
-`languages:` 決定下面第 3 節裡哪些語言專屬路徑存在於這個 repository。
+`languages:` 決定下面第 4 節裡哪些語言專屬路徑存在於這個 repository。
 
 ## 1. 先處理 repository 設定（GitHub 上、不在 Git 裡的部分）
 
