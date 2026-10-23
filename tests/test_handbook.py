@@ -38,7 +38,7 @@ HANDBOOK = ROOT / "docs/handbook"
 APPROVED_SHA256 = (
     "4fe3d231efa8c733d78bed4468ea4a75683c36c28777586e65debc8c895ea018"
 )
-BASELINE = HANDBOOK / "approved/261023r4_repo-template-handbook.html"
+BASELINE = HANDBOOK / "approved/261024r5_repo-template-handbook.html"
 GENERATED = HANDBOOK / "index.html"
 SHEETS = 10
 
