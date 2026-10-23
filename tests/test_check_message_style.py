@@ -302,3 +302,43 @@ def test_block_exception_covers_a_report(repo: Path, checker: Path) -> None:
             "missing ERROR, WARNING, NOTICE, or OK prefix",
         ],
     ]
+
+
+@pytest.mark.parametrize("checker", CHECKERS, ids=["root", "template"])
+def test_stream_write_messages_are_checked(repo: Path, checker: Path) -> None:
+    """Messages written with sys.stderr.write or sys.stdout.write are judged."""
+    append(
+        repo,
+        "tool.py",
+        'sys.stderr.write("ERROR: Load failed: bad JSON. Fix the file.\\n")\n'
+        'sys.stdout.write(f"OK: Wrote {count} files.\\n")\n'
+        'sys.stderr.write("lease is missing\\n")\n'
+        'sys.stdout.write("WARNING: Cache: stale. Clear it.\\n")\n'
+        'sys.stderr.write(f"NOTICE: Checking {name}.\\n")\n'
+        "sys.stdout.write(payload)\n",
+    )
+    result = run(repo, "--base", "main", checker=checker)
+    assert result.returncode == 1
+    errors = [x for x in result.stderr.splitlines() if x.startswith(".csarc")]
+    assert [x.split(": ")[0:2] for x in errors] == [
+        [
+            ".csarc/scripts/tool.py:5",
+            "missing ERROR, WARNING, NOTICE, or OK prefix",
+        ],
+        [".csarc/scripts/tool.py:6", "wrong output stream (M4)"],
+        [".csarc/scripts/tool.py:7", "wrong output stream (M4)"],
+    ]
+    assert "failed: 3 of 5 messages" in result.stderr
+
+
+def test_untouched_stream_write_is_not_checked(repo: Path) -> None:
+    """PR mode leaves an old sys.stderr.write message alone."""
+    path = repo / ".csarc" / "scripts" / "tool.py"
+    path.write_text(
+        OLD_PYTHON + 'sys.stderr.write("legacy failure\\n")\n', encoding="utf-8"
+    )
+    git(repo, "commit", "-q", "-am", "legacy write")
+    append(repo, "tool.py", 'sys.stdout.write("OK: Added a step.\\n")\n')
+    result = run(repo, "--base", "HEAD")
+    assert result.returncode == 0, result.stderr
+    assert "passed for 1 messages" in result.stdout
