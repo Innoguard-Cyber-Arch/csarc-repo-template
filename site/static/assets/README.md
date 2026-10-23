@@ -1,6 +1,6 @@
 # Bundled brand assets
 
-這些圖檔原本由簡報在 runtime 向外部網站載入；為了讓 `docs/index.html` 真正離線可用，2026-08-24 將當時版本存入 repository，renderer 會把它們轉成 data URI。商標仍屬各自權利人。
+這些圖檔原本由簡報在 runtime 向外部網站載入；為了讓 `docs/index.html` 離線可用，2026-08-24 將當時版本存入 repository，renderer 會把它們轉成 data URI。商標仍屬各自權利人。
 
 | 檔案 | 原始來源 |
 | --- | --- |
