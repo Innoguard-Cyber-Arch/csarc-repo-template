@@ -41,6 +41,7 @@ def test_generated_guidance_has_one_source_and_real_commands(
         "verification_mode": "hosted",
         "documentation_mode": "template-and-content",
         "documentation_secondary_language": "en",
+        "documentation_languages": "zh-tw+en",
         "python_floor": "latest",
         "lifecycle": ["issues", "milestones"],
         "release_ownership": "csarc-owned",

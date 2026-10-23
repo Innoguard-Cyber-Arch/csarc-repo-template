@@ -50,6 +50,10 @@ Copier update 可以更新第一層；第二層首次建立後必須保留。若
 
 README 只作為濃縮入口：標題與一句話、少量徽章、二至五項價值、安裝、最小 quick start、文件連結、相容性、支援／安全、貢獻與授權。不要放 badge wall、大型目錄、完整治理矩陣、架構全文或 changelog 副本。README 與深度文件不要求逐字或逐段一致，但公開事實、命令、連結、支援狀態與授權不得互相矛盾。
 
+## 寫作指引
+
+英文寫作指引 [`writing-guide.en.md`](writing-guide.en.md) 與中文寫作指引 `writing-guide.md`（文件語言含繁體中文時產生）和本文件放在同一目錄，屬於文件模板層：由 CSARC 公版維護，Copier update 會更新。模板產生的文字一律遵守。內容層的文件，agent 新寫或修改時依指引撰寫；既有內容不會被自動改寫。
+
 ## AI 文件一致性 review
 
 每個非 Draft 交付候選都要由本機 AI 比對 changed paths、current specs、公開介面、設定、測試與專案文件，並在 PR 的「文件一致性」區塊記錄 exact head：

@@ -103,6 +103,7 @@ typescript/tests/index.test.ts
 # path | rendered when
 .csarc/docs/documentation-policy.md | documentation_mode != 'off'
 .csarc/docs/milestone-description.md | 'milestones' in lifecycle
+.csarc/docs/writing-guide.md | 'zh-tw' in documentation_languages
 .csarc/scripts/authenticate_dependabot_hosted.py | verification_mode == 'hosted'
 .csarc/scripts/build-repo-site | documentation_mode == 'template-and-content'
 .csarc/scripts/build_repo_site.py | documentation_mode == 'template-and-content'
