@@ -127,7 +127,11 @@ def assert_schema_2(project: Path) -> dict[str, object]:
         *settings_schema.DECISION_SETTINGS,
     }
     assert keys <= allowed, keys - allowed
-    assert set(settings_schema.INTENT_SETTINGS) <= keys
+    # #1233: an empty single-writer opt-in is omitted for older readers.
+    assert set(settings_schema.INTENT_SETTINGS) - {"single_writer_merger"} <= (
+        keys
+    )
+    assert "single_writer_merger" not in keys
     provenance = json.loads(
         (project / ".csarc/provenance.json").read_text(encoding="utf-8")
     )
